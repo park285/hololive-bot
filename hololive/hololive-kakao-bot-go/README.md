@@ -2,7 +2,7 @@
 
 > 홀로라이브 VTuber 스케줄, 정보 검색 및 알림을 제공하는 고성능 카카오톡 봇 (Go 버전)
 
-카카오톡을 통해 홀로라이브 소속 VTuber들의 실시간 방송 현황, 예정된 스케줄, 공식 프로필 정보를 빠르고 편리하게 제공합니다. Go 1.25의 최신 기능과 Valkey 기반의 다층 캐싱 시스템, GORM 기반의 안정적인 데이터 관리를 통해 높은 성능과 확장성을 보장합니다.
+카카오톡을 통해 홀로라이브 소속 VTuber들의 실시간 방송 현황, 예정된 스케줄, 공식 프로필 정보를 빠르고 편리하게 제공합니다. Go 1.26의 최신 기능과 Valkey 기반의 다층 캐싱 시스템, GORM 기반의 안정적인 데이터 관리를 통해 높은 성능과 확장성을 보장합니다.
 
 ## ✨ 주요 기능
 
@@ -33,7 +33,7 @@
 
 이 프로젝트는 최신 Go 생태계와 안정적인 오픈소스를 활용하여 구축되었습니다.
 
--   **Language**: [Go](https://go.dev/) 1.25.7
+-   **Language**: [Go](https://go.dev/) 1.26.0
 -   **Web Framework**: [Gin](https://github.com/gin-gonic/gin) 1.11.0 (High-performance HTTP web framework)
     -   **Protocol**: HTTP/2 Cleartext (H2C) via `golang.org/x/net/http2/h2c`
 -   **Database**: PostgreSQL 16+
@@ -108,7 +108,7 @@ hololive-kakao-bot-go/
 
 ### 사전 요구사항
 
--   Go 1.25 이상
+-   Go 1.26 이상
 -   Valkey (또는 Redis) 서버
 -   PostgreSQL 데이터베이스
 -   Iris 메신저 서버 (카카오톡 연동용)

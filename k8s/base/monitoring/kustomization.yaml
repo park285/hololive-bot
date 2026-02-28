@@ -110,7 +110,7 @@ helmCharts:
               Label_Keys $kubernetes['namespace_name'],$kubernetes['pod_name'],$kubernetes['container_name']
               Auto_Kubernetes_Labels Off
 
-      # file OUTPUT 제거: 각 서비스가 LOG_DIR로 직접 hostPath에 기록
+      # stdout 기반 수집: /var/log/containers/*_hololive_*.log tail
       tolerations:
         - operator: Exists
 

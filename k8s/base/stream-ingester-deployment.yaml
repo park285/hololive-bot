@@ -49,12 +49,14 @@ spec:
             - name: GOMEMLIMIT
               value: "320MiB"
             - name: LOG_DIR
-              value: "/srv/hololive/logs/stream-ingester"
+              value: "/srv/hololive/logs"
+            - name: LOG_FILE
+              value: "stream-ingester.log"
           volumeMounts:
             - name: data
               mountPath: /app/data
             - name: logs
-              mountPath: /srv/hololive/logs/stream-ingester
+              mountPath: /srv/hololive/logs
           resources:
             requests:
               cpu: 200m
@@ -90,6 +92,6 @@ spec:
             type: DirectoryOrCreate
         - name: logs
           hostPath:
-            path: /srv/hololive/logs/stream-ingester
+            path: /srv/hololive/logs
             type: DirectoryOrCreate
       restartPolicy: Always

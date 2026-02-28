@@ -122,11 +122,11 @@ spec:
             - name: ALARM__LOGGING__FILE_ENABLED
               value: "true"
             - name: ALARM__LOGGING__DIR
-              value: "/srv/hololive/logs/hololive-alarm"
+              value: "/srv/hololive/logs"
             - name: ALARM__LOGGING__FILE
               value: "hololive-alarm.log"
             - name: ALARM__LOGGING__COMBINED_FILE
-              value: "combined.log"
+              value: "hololive-alarm-combined.log"
             - name: ALARM__ALARM__TWITCH_ENABLED
               valueFrom:
                 configMapKeyRef:
@@ -172,7 +172,7 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: logs
-              mountPath: /srv/hololive/logs/hololive-alarm
+              mountPath: /srv/hololive/logs
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -181,6 +181,6 @@ spec:
       volumes:
         - name: logs
           hostPath:
-            path: /srv/hololive/logs/hololive-alarm
+            path: /srv/hololive/logs
             type: DirectoryOrCreate
       restartPolicy: Always

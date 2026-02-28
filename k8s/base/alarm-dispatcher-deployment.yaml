@@ -48,10 +48,12 @@ spec:
             - name: GOMEMLIMIT
               value: "128MiB"
             - name: LOG_DIR
-              value: "/srv/hololive/logs/alarm-dispatcher"
+              value: "/srv/hololive/logs"
+            - name: LOG_FILE
+              value: "alarm-dispatcher.log"
           volumeMounts:
             - name: logs
-              mountPath: /srv/hololive/logs/alarm-dispatcher
+              mountPath: /srv/hololive/logs
           resources:
             requests:
               cpu: 100m
@@ -83,6 +85,6 @@ spec:
       volumes:
         - name: logs
           hostPath:
-            path: /srv/hololive/logs/alarm-dispatcher
+            path: /srv/hololive/logs
             type: DirectoryOrCreate
       restartPolicy: Always
