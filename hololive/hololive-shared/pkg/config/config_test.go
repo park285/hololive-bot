@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func setRequiredLoadEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("KAKAO_ROOMS", "test-room")
+	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+}
+
 func TestCollectAPIKeys(t *testing.T) {
 	prefix := "HOLODEX_API_KEY_"
 
@@ -120,8 +127,7 @@ func TestKakaoConfig_SnapshotACL_ReturnsCopy(t *testing.T) {
 }
 
 func TestLoad_IrisSharedTokenFallback(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
 	t.Setenv("IRIS_BOT_TOKEN", "")
@@ -140,8 +146,7 @@ func TestLoad_IrisSharedTokenFallback(t *testing.T) {
 }
 
 func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 	t.Setenv("OTEL_ENVIRONMENT", "production")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "false")
@@ -160,8 +165,7 @@ func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 }
 
 func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 	t.Setenv("OTEL_ENVIRONMENT", "production")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "true")
@@ -176,8 +180,7 @@ func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 }
 
 func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 	t.Setenv("OTEL_ENVIRONMENT", "production")
 	t.Setenv("CORS_ENFORCE", "false")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*,http://localhost:5173,https://admin.example.com")
@@ -194,8 +197,7 @@ func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 }
 
 func TestLoad_MajorEventScraperConfigDefaults(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 
 	cfg, err := Load()
 	if err != nil {
@@ -211,8 +213,7 @@ func TestLoad_MajorEventScraperConfigDefaults(t *testing.T) {
 }
 
 func TestLoad_MajorEventScraperConfigEnvOverride(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 	t.Setenv("MAJOREVENT_SCRAPER_ENABLED", "false")
 	t.Setenv("MAJOREVENT_SCRAPE_HOUR_KST", "4")
 
@@ -230,8 +231,7 @@ func TestLoad_MajorEventScraperConfigEnvOverride(t *testing.T) {
 }
 
 func TestLoad_MajorEventScraperConfigInvalidHourFallback(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 	t.Setenv("MAJOREVENT_SCRAPE_HOUR_KST", "99")
 
 	cfg, err := Load()
@@ -244,13 +244,37 @@ func TestLoad_MajorEventScraperConfigInvalidHourFallback(t *testing.T) {
 	}
 }
 
+func TestLoad_DeprecatedDBAliasRejected(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("DB_SSLMODE", "disable")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected deprecated env error, got nil")
+	}
+	if !strings.Contains(err.Error(), "DB_SSLMODE is no longer supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoad_DeprecatedQueryModeAliasRejected(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("DB_QUERY_EXEC_MODE", "describe_exec")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected deprecated env error, got nil")
+	}
+	if !strings.Contains(err.Error(), "DB_QUERY_EXEC_MODE is no longer supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
 func TestLoad_LLMConfig(t *testing.T) {
 	// 공통 필수 env 설정
 	setup := func(t *testing.T) {
 		t.Helper()
-		t.Setenv("HOLODEX_API_KEY_1", "test-key")
-		t.Setenv("KAKAO_ROOMS", "test-room")
+		setRequiredLoadEnv(t)
 	}
 
 	t.Run("new env only", func(t *testing.T) {
@@ -266,30 +290,30 @@ func TestLoad_LLMConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("old env only", func(t *testing.T) {
+	t.Run("old env only rejected", func(t *testing.T) {
 		setup(t)
 		t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "old-model")
 
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("Load() error = %v", err)
+		_, err := Load()
+		if err == nil {
+			t.Fatal("Load() expected deprecated env error, got nil")
 		}
-		if cfg.LLM.MemberNewsModel != "old-model" {
-			t.Errorf("MemberNewsModel = %q, want %q", cfg.LLM.MemberNewsModel, "old-model")
+		if !strings.Contains(err.Error(), "MEMBER_NEWS_CLIPROXY_MODEL is no longer supported") {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("both set prefers new", func(t *testing.T) {
+	t.Run("new and old env set rejected", func(t *testing.T) {
 		setup(t)
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
-		t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "old-model")
+		t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "new-model")
 
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("Load() error = %v", err)
+		_, err := Load()
+		if err == nil {
+			t.Fatal("Load() expected deprecated env error, got nil")
 		}
-		if cfg.LLM.MemberNewsModel != "new-model" {
-			t.Errorf("MemberNewsModel = %q, want %q", cfg.LLM.MemberNewsModel, "new-model")
+		if !strings.Contains(err.Error(), "MEMBER_NEWS_CLIPROXY_MODEL is no longer supported") {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -319,8 +343,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 }
 
 func TestLoadLLMConfig_ConsensusDefaults(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 
 	cfg, err := Load()
 	if err != nil {
@@ -348,8 +371,7 @@ func TestLoadLLMConfig_ConsensusDefaults(t *testing.T) {
 }
 
 func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 
 	t.Run("negative clamped to 0", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "-0.5")
@@ -397,8 +419,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 }
 
 func TestLoadLLMConfig_ConsensusTimeoutMinimum(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 
 	t.Run("review timeout below minimum", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_REVIEW_TIMEOUT_SEC", "2")
@@ -424,8 +445,7 @@ func TestLoadLLMConfig_ConsensusTimeoutMinimum(t *testing.T) {
 }
 
 func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
+	setRequiredLoadEnv(t)
 
 	t.Run("empty reviewer model falls back to MemberNewsModel", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "primary-model")

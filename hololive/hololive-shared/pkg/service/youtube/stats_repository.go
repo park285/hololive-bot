@@ -776,6 +776,47 @@ func (r *StatsRepository) GetNearMilestoneMembers(ctx context.Context, threshold
 	return entries, nil
 }
 
+// CountNearMilestoneMembers: 마일스톤 직전(threshold% 이상) 멤버 수를 조회한다. 졸업 멤버 제외.
+func (r *StatsRepository) CountNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64) (int, error) {
+	if len(milestones) == 0 {
+		return 0, nil
+	}
+
+	query := `
+		WITH latest_stats AS (
+			SELECT DISTINCT ON (h.channel_id)
+				h.channel_id, h.member_name, h.subscribers
+			FROM youtube_stats_history h
+			JOIN members m ON h.channel_id = m.channel_id
+			WHERE m.is_graduated = false
+			ORDER BY h.channel_id, h.time DESC
+		),
+		milestones AS (
+			SELECT unnest($1::bigint[]) as milestone
+		),
+		achieved AS (
+			SELECT channel_id, value
+			FROM youtube_milestones
+			WHERE type = 'subscribers'
+		)
+		SELECT COUNT(*)
+		FROM latest_stats ls
+		CROSS JOIN milestones m
+		LEFT JOIN achieved a ON ls.channel_id = a.channel_id AND m.milestone = a.value
+		WHERE ls.subscribers < m.milestone
+			AND ls.subscribers >= m.milestone::float8 * $2::float8
+			AND a.channel_id IS NULL
+			AND ls.member_name IS NOT NULL
+	`
+
+	var count int
+	if err := r.pool.QueryRow(ctx, query, milestones, thresholdPct).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count near milestone members: %w", err)
+	}
+
+	return count, nil
+}
+
 // GetClosestMilestoneMembers: 마일스톤 달성률이 높은 순서대로 상위 멤버를 조회한다 (threshold 없음, 졸업 멤버 자동 제외)
 // allowedChannelIDs는 더 이상 사용하지 않고 DB JOIN으로 처리함
 func (r *StatsRepository) GetClosestMilestoneMembers(ctx context.Context, limit int, milestones []uint64) ([]NearMilestoneEntry, error) {

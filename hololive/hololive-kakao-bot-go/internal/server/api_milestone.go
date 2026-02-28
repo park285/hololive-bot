@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 // GetMilestones: 달성된 마일스톤 목록을 반환합니다.
 // GET /api/milestones?limit=50&offset=0&channelId=xxx&memberName=xxx
-func (h *APIHandler) GetMilestones(c *gin.Context) {
+func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if h.statsRepo == nil {
@@ -66,7 +67,7 @@ func (h *APIHandler) GetMilestones(c *gin.Context) {
 // GetNearMilestoneMembers: 마일스톤 달성 직전의 멤버 목록을 반환합니다.
 // GET /api/milestones/near?threshold=0.9
 // 기본 threshold: 백그라운드 워커와 동일한 95% (MilestoneThresholdRatio)
-func (h *APIHandler) GetNearMilestoneMembers(c *gin.Context) {
+func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if h.statsRepo == nil {
@@ -110,7 +111,7 @@ func (h *APIHandler) GetNearMilestoneMembers(c *gin.Context) {
 
 // GetMilestoneStats: 마일스톤 관련 통계 요약을 반환합니다.
 // GET /api/milestones/stats
-func (h *APIHandler) GetMilestoneStats(c *gin.Context) {
+func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if h.statsRepo == nil {
@@ -125,14 +126,14 @@ func (h *APIHandler) GetMilestoneStats(c *gin.Context) {
 		return
 	}
 
-	// 직전 멤버 수도 함께 조회 (95% 이상)
-	nearMembers, err := h.statsRepo.GetNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones, 50)
+	// 직전 멤버 수 조회 (95% 이상)
+	nearCount, err := h.statsRepo.CountNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones)
 	if err != nil {
 		h.logger.Error("Failed to get near milestone summary", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to get near milestone summary"})
 		return
 	}
-	stats.TotalNearMilestone = len(nearMembers)
+	stats.TotalNearMilestone = nearCount
 
 	c.JSON(200, gin.H{
 		"status": "ok",
@@ -142,10 +143,18 @@ func (h *APIHandler) GetMilestoneStats(c *gin.Context) {
 
 // parseInt: 문자열을 정수로 파싱
 func parseInt(s string) (int, error) {
-	return strconv.Atoi(strings.TrimSpace(s))
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		return 0, fmt.Errorf("parseInt: %w", err)
+	}
+	return n, nil
 }
 
 // parseFloat: 문자열을 실수로 파싱
 func parseFloat(s string) (float64, error) {
-	return strconv.ParseFloat(strings.TrimSpace(s), 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0, fmt.Errorf("parseFloat: %w", err)
+	}
+	return f, nil
 }

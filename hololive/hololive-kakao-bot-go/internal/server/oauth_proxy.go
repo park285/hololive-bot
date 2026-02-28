@@ -8,7 +8,7 @@ import (
 // OAuthCallbackHandler: OAuth 프록시 콜백을 처리하여 Deep Link로 리디렉트합니다.
 // GET /oauth/callback?code=XXX&state=YYY
 // -> hololive-app://callback?code=XXX&state=YYY
-func (h *APIHandler) OAuthCallbackHandler(c *gin.Context) {
+func (h *OAuthAPIHandler) OAuthCallbackHandler(c *gin.Context) {
 	code := c.Query("code")
 	state := c.Query("state")
 	errorParam := c.Query("error")

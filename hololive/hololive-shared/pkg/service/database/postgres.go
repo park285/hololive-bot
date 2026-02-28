@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 
@@ -89,13 +88,6 @@ func NewPostgresService(ctx context.Context, cfg PostgresConfig, logger *slog.Lo
 // GetPool: pgxpool.Pool 인스턴스를 반환한다. (raw SQL 사용 시 권장)
 func (ps *PostgresService) GetPool() *pgxpool.Pool {
 	return ps.client.Pool()
-}
-
-// GetDB: database/sql 호환 인터페이스를 반환한다. (하위 호환성용, 권장하지 않음)
-//
-// Deprecated: Use GetPool() instead for better performance.
-func (ps *PostgresService) GetDB() *sql.DB {
-	return ps.client.SQL()
 }
 
 // GetGormDB: GORM DB 인스턴스를 반환한다. (ORM 기반 DB 조작 시 활용)

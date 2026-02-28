@@ -2,6 +2,7 @@ package server
 
 import (
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/kapu/hololive-admin/internal/service/acl"
@@ -55,6 +56,13 @@ type APIHandler struct {
 	majorEventScheduler        MajorEventScheduler
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler
 	startTime                  time.Time
+	channelStatsCacheLimiter   chan struct{}
+	channelStatsRefreshLimiter chan struct{}
+	memberIndexMu              sync.RWMutex
+	memberIndexExpiresAt       time.Time
+	memberChannelIDs           []string
+	memberChannelName          map[string]string
+	memberIndexReady           bool
 }
 
 // NewAPIHandler: 새로운 API 핸들러를 생성합니다.
@@ -98,5 +106,8 @@ func NewAPIHandler(
 		majorEventMonthlyScheduler: majorEventMonthlyScheduler,
 		logger:                     logger,
 		startTime:                  time.Now(),
+		channelStatsCacheLimiter:   make(chan struct{}, channelStatsCacheWorkers),
+		channelStatsRefreshLimiter: make(chan struct{}, channelStatsRefreshWorkers),
+		memberChannelName:          make(map[string]string),
 	}
 }

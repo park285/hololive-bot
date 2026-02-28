@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/tidwall/gjson"
 )
@@ -110,29 +111,11 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*Chan
 		return true
 	})
 
-	// 기존 c4TabbedHeaderRenderer 폴백 (YouTube 구버전)
-	if len(snippet.Avatar) == 0 {
-		fallbackAvatarPath := "header.c4TabbedHeaderRenderer.avatar.thumbnails"
-		data.Get(fallbackAvatarPath).ForEach(func(_, img gjson.Result) bool {
-			snippet.Avatar = append(snippet.Avatar, Thumbnail{
-				URL:    img.Get("url").String(),
-				Width:  int(img.Get("width").Int()),
-				Height: int(img.Get("height").Int()),
-			})
-			return true
-		})
-	}
-
-	if len(snippet.Banner) == 0 {
-		fallbackBannerPath := "header.c4TabbedHeaderRenderer.banner.thumbnails"
-		data.Get(fallbackBannerPath).ForEach(func(_, img gjson.Result) bool {
-			snippet.Banner = append(snippet.Banner, Thumbnail{
-				URL:    img.Get("url").String(),
-				Width:  int(img.Get("width").Int()),
-				Height: int(img.Get("height").Int()),
-			})
-			return true
-		})
+	if len(snippet.Avatar) == 0 || len(snippet.Banner) == 0 {
+		slog.Debug("channel snippet missing page header images",
+			"channel_id", channelID,
+			"avatar_count", len(snippet.Avatar),
+			"banner_count", len(snippet.Banner))
 	}
 
 	return snippet, nil

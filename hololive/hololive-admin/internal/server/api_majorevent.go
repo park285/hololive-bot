@@ -21,7 +21,7 @@ type MajorEventMonthlyScheduler interface {
 }
 
 // TriggerMajorEventNotification: 대형 행사 주간 알림을 수동으로 트리거합니다
-func (h *APIHandler) TriggerMajorEventNotification(c *gin.Context) {
+func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
 	if h.majorEventScheduler == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "major event scheduler not initialized"})
 		return
@@ -40,7 +40,7 @@ func (h *APIHandler) TriggerMajorEventNotification(c *gin.Context) {
 }
 
 // TriggerMajorEventMonthlyNotification: 대형 행사 월간 알림을 수동으로 트리거합니다
-func (h *APIHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
+func (h *MajorEventAPIHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
 	if h.majorEventMonthlyScheduler == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "major event monthly scheduler not initialized"})
 		return

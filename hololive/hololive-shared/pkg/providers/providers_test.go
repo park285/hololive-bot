@@ -283,10 +283,11 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 	})
 }
 
-func TestProvideMemberNewsLLMClient_DualReadEndToEnd(t *testing.T) {
+func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	// config.Load() 필수 env vars
 	t.Setenv("HOLODEX_API_KEY_1", "test-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
+	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 
 	// Cliproxy 활성화
 	t.Setenv("CLIPROXY_ENABLED", "true")
@@ -294,9 +295,8 @@ func TestProvideMemberNewsLLMClient_DualReadEndToEnd(t *testing.T) {
 	t.Setenv("CLIPROXY_BASE_URL", "https://example.com/v1")
 	t.Setenv("CLIPROXY_MODEL", "default-model")
 
-	// dual-read: 둘 다 설정 → new 우선 + deprecated warn
+	// 최신 env만 설정
 	t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
-	t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "old-model")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -311,11 +311,9 @@ func TestProvideMemberNewsLLMClient_DualReadEndToEnd(t *testing.T) {
 	}
 
 	logOutput := buf.String()
-	// new model 선택 확인
 	if !strings.Contains(logOutput, "new-model") {
-		t.Error("expected log with new model name (new env var takes precedence)")
+		t.Error("expected log with new model name")
 	}
-	// deprecated warn은 config.Load() 시점에 slog 글로벌로 출력되므로 providers 로거에서 검증하지 않음
 }
 
 func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {
