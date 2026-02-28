@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -19,6 +20,8 @@ func (h *APIHandler) GetStats(c *gin.Context) {
 	var (
 		members   []*domain.Member
 		alarmKeys []*domain.AlarmEntry
+		memberErr error
+		alarmErr  error
 		wg        sync.WaitGroup
 	)
 
@@ -26,13 +29,21 @@ func (h *APIHandler) GetStats(c *gin.Context) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		members, _ = h.repo.GetAllMembers(ctx)
+		members, memberErr = h.repo.GetAllMembers(ctx)
 	}()
 	go func() {
 		defer wg.Done()
-		alarmKeys, _ = h.alarm.GetAllAlarmKeys(ctx)
+		alarmKeys, alarmErr = h.alarm.GetAllAlarmKeys(ctx)
 	}()
 	wg.Wait()
+
+	if memberErr != nil || alarmErr != nil {
+		h.logger.Error("failed to collect stats",
+			slog.Any("member_error", memberErr),
+			slog.Any("alarm_error", alarmErr))
+		c.JSON(500, gin.H{"error": "failed to collect stats"})
+		return
+	}
 
 	// ACL 서비스에서 rooms 수 조회
 	var roomCount int
