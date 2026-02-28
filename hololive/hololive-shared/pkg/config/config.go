@@ -97,7 +97,6 @@ type IrisConfig struct {
 type ServerConfig struct {
 	Port   int
 	APIKey string // API 인증용 시크릿 키 (X-API-Key 헤더로 검증)
-	NoAuth bool   // 인증 비활성화 여부 (명시적 플래그)
 }
 
 // KakaoConfig: 카카오톡 채팅방 허용 목록 및 접근 제어(ACL) 설정

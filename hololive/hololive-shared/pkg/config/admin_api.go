@@ -44,7 +44,6 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 		Server: ServerConfig{
 			Port:   envutil.Int("ADMIN_API_PORT", 30002),
 			APIKey: envutil.String("API_SECRET_KEY", ""),
-			NoAuth: false,
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
