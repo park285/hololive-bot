@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
@@ -79,6 +80,12 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 func (c *LLMSchedulerConfig) validate() error {
 	if c.Server.Port == 0 {
 		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
+	}
+	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
+		return fmt.Errorf("IRIS_WEBHOOK_TOKEN (or IRIS_SHARED_TOKEN) is required")
+	}
+	if strings.TrimSpace(c.Iris.BotToken) == "" {
+		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
 	}
 	return nil
 }

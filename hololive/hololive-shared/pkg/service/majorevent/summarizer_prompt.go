@@ -61,7 +61,6 @@ type eventForPrompt struct {
 type summaryResponse struct {
 	Highlights       []eventHighlight  `json:"highlights"`
 	OngoingEvents    []ongoingEvent    `json:"ongoing_events"`
-	OngoingNote      string            `json:"ongoing_note"`
 	DiscoveredEvents []discoveredEvent `json:"discovered_events"`
 }
 
@@ -417,10 +416,6 @@ func summaryResponseSchema() map[string]any {
 					"required": []string{"name", "date", "note", "link"},
 				},
 			},
-			"ongoing_note": map[string]any{
-				"type":        "string",
-				"description": "기간 행사 fallback 단문 설명(전이 호환용, 가능하면 ongoing_events 사용)",
-			},
 			"discovered_events": map[string]any{
 				"type":        "array",
 				"description": "Google Search로 발견한 입력 목록에 없는 추가 이벤트 (최대 5건, 없으면 빈 배열)",
@@ -450,7 +445,7 @@ func summaryResponseSchema() map[string]any {
 				},
 			},
 		},
-		"required": []string{"highlights", "ongoing_events", "ongoing_note", "discovered_events"},
+		"required": []string{"highlights", "ongoing_events", "discovered_events"},
 	}
 }
 
@@ -536,7 +531,7 @@ func assembleSummaryText(resp *summaryResponse) string {
 	if resp == nil {
 		return ""
 	}
-	if len(resp.Highlights) == 0 && len(resp.OngoingEvents) == 0 && resp.OngoingNote == "" && len(resp.DiscoveredEvents) == 0 {
+	if len(resp.Highlights) == 0 && len(resp.OngoingEvents) == 0 && len(resp.DiscoveredEvents) == 0 {
 		return ""
 	}
 
@@ -545,12 +540,9 @@ func assembleSummaryText(resp *summaryResponse) string {
 	var sb strings.Builder
 	writeHighlights(&sb, resp.Highlights)
 
-	// 기간 행사: ongoing_events 우선, ongoing_note fallback (전이 호환)
 	if len(resp.OngoingEvents) > 0 {
 		appendSection(&sb, "[기간 행사]\n")
 		writeOngoingEvents(&sb, resp.OngoingEvents)
-	} else if resp.OngoingNote != "" {
-		appendSection(&sb, resp.OngoingNote)
 	}
 
 	if len(resp.DiscoveredEvents) > 0 {

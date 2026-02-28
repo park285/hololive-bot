@@ -77,7 +77,9 @@ func (h *APIHandler) handleAliasOperation(
 	}
 
 	if err := h.memberCache.InvalidateAliasCache(ctx, req.Alias); err != nil {
-		h.logger.Warn("Failed to invalidate alias cache", slog.Any("error", err))
+		h.logger.Error("Failed to invalidate alias cache", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 
 	h.logger.Info("Alias "+operationName,
@@ -99,19 +101,19 @@ func (h *APIHandler) handleAliasOperation(
 }
 
 // AddAlias: 멤버에게 별칭을 추가합니다.
-func (h *APIHandler) AddAlias(c *gin.Context) {
+func (h *MemberAPIHandler) AddAlias(c *gin.Context) {
 	h.handleAliasOperation(c, h.repo.AddAlias, "add")
 }
 
 // RemoveAlias: 멤버의 별칭을 삭제합니다.
-func (h *APIHandler) RemoveAlias(c *gin.Context) {
+func (h *MemberAPIHandler) RemoveAlias(c *gin.Context) {
 	h.handleAliasOperation(c, h.repo.RemoveAlias, "remove")
 }
 
 // SetGraduation: 졸업 상태를 갱신합니다.
 //
 //nolint:dupl // Similar patterns for different update operations
-func (h *APIHandler) SetGraduation(c *gin.Context) {
+func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
@@ -142,7 +144,10 @@ func (h *APIHandler) SetGraduation(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh cache after graduation update", slog.Any("error", err))
+		h.invalidateMemberIndex()
+		h.logger.Error("Failed to refresh cache after graduation update", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 	h.invalidateMemberIndex()
 
@@ -169,7 +174,7 @@ func (h *APIHandler) SetGraduation(c *gin.Context) {
 // UpdateChannelID: 채널 ID를 갱신합니다.
 //
 //nolint:dupl // Similar patterns for different update operations
-func (h *APIHandler) UpdateChannelID(c *gin.Context) {
+func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
@@ -200,7 +205,10 @@ func (h *APIHandler) UpdateChannelID(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh cache after channel ID update", slog.Any("error", err))
+		h.invalidateMemberIndex()
+		h.logger.Error("Failed to refresh cache after channel ID update", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 	h.invalidateMemberIndex()
 
@@ -223,7 +231,7 @@ func (h *APIHandler) UpdateChannelID(c *gin.Context) {
 // UpdateMemberName: 멤버의 이름을 업데이트합니다.
 //
 //nolint:dupl // Similar patterns for different update operations
-func (h *APIHandler) UpdateMemberName(c *gin.Context) {
+func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
@@ -254,7 +262,10 @@ func (h *APIHandler) UpdateMemberName(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh cache after member name update", slog.Any("error", err))
+		h.invalidateMemberIndex()
+		h.logger.Error("Failed to refresh cache after member name update", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 	h.invalidateMemberIndex()
 
@@ -275,7 +286,7 @@ func (h *APIHandler) UpdateMemberName(c *gin.Context) {
 }
 
 // GetMembers: 모든 멤버 목록을 JSON으로 반환합니다.
-func (h *APIHandler) GetMembers(c *gin.Context) {
+func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -293,7 +304,7 @@ func (h *APIHandler) GetMembers(c *gin.Context) {
 }
 
 // AddMember: 새로운 멤버를 추가합니다.
-func (h *APIHandler) AddMember(c *gin.Context) {
+func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	var req domain.Member
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -308,11 +319,14 @@ func (h *APIHandler) AddMember(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh member cache", slog.Any("error", err))
+		h.invalidateMemberIndex()
+		h.logger.Error("Failed to refresh member cache", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 	h.invalidateMemberIndex()
 
 	h.activity.Log("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
 
-	c.JSON(200, gin.H{"status": "ok", "message": "Member added successfully"})
+	c.JSON(201, gin.H{"status": "ok", "message": "Member added successfully"})
 }

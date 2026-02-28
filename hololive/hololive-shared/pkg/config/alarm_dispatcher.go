@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
@@ -80,6 +81,9 @@ func buildAlarmDispatcherConfig() *AlarmDispatcherConfig {
 
 // validate: 필수 설정값을 검증합니다.
 func (c *AlarmDispatcherConfig) validate() error {
+	if strings.TrimSpace(c.Iris.BotToken) == "" {
+		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
+	}
 	if len(c.Holodex.APIKeys) == 0 {
 		return fmt.Errorf("at least one HOLODEX_API_KEY is required")
 	}

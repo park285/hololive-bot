@@ -249,25 +249,7 @@ func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResul
 		return videos, nil
 	}
 
-	// 레거시 파라미터 URL 재시도: 일부 채널/리전에서 기본 /videos 응답이 responseContext-only로 내려오는 케이스 대응.
-	legacyURL := fmt.Sprintf("https://www.youtube.com/channel/%s/videos?view=0&sort=dd&shelf_id=0", channelID)
-	legacyVideos, legacyErr := c.getRecentVideosFromPage(ctx, legacyURL, channelID, maxResults)
-	if legacyErr != nil {
-		if !isRetryableVideoPageError(legacyErr) {
-			return nil, legacyErr
-		}
-		slog.Debug("recent videos legacy url fallback failed",
-			"channel_id", channelID,
-			"error", legacyErr.Error())
-	} else if len(legacyVideos) > 0 {
-		c.clearVideoRSSBackoff(ctx, channelID)
-		slog.Debug("recent videos recovered via legacy url fallback",
-			"channel_id", channelID,
-			"count", len(legacyVideos))
-		return legacyVideos, nil
-	}
-
-	if isRetryableVideoPageError(err) || isRetryableVideoPageError(legacyErr) {
+	if isRetryableVideoPageError(err) {
 		c.markVideoRSSBackoff(ctx, channelID)
 	}
 

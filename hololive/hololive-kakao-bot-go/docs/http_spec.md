@@ -1,6 +1,6 @@
 # Hololive Bot API 스펙
 
-> 마지막 업데이트: 2026-02-28
+> 마지막 업데이트: 2026-03-01
 
 클라이언트(Tauri 앱, Admin Dashboard)가 호출하는 admin-api 기준 API 명세입니다.
 
@@ -41,7 +41,10 @@
 ### 에러 응답
 ```json
 {
-  "error": "에러 메시지"
+  "error": "에러 메시지",
+  "message": "추가 설명(선택)",
+  "code": "machine_readable_code(선택)",
+  "hint": "복구 가이드(선택)"
 }
 ```
 
@@ -49,11 +52,32 @@
 | 코드 | 설명 |
 |------|------|
 | 200 | 성공 |
+| 201 | 생성 성공 |
 | 400 | 잘못된 요청 (파라미터 오류) |
 | 401 | 미인증 (API Key 없음) |
 | 403 | 권한 없음 (잘못된 API Key) |
 | 404 | 리소스 없음 |
+| 409 | 상태 충돌 (중복 생성/진행 중 작업) |
+| 410 | 제거된(legacy) API 사용 |
 | 500 | 서버 오류 |
+| 503 | 일시적 준비 안 됨 (백그라운드 동기화 대기) |
+
+**인증 실패 응답 예시:**
+```json
+{
+  "error": "unauthorized",
+  "message": "API key required"
+}
+```
+
+```json
+{
+  "error": "forbidden",
+  "message": "invalid API key"
+}
+```
+
+> `409`는 현재 중복 생성/동시 실행 충돌에 사용됩니다 (예: room 중복 생성, major event trigger 중복 실행).
 
 ---
 
@@ -71,6 +95,8 @@ GET /api/holo/streams/live?org={ORG}
 | 이름 | 타입 | 필수 | 기본값 | 설명 |
 |------|------|------|--------|------|
 | org | string | ❌ | `hololive` | 조회 대상 org (`hololive`, `vspo`, `stellive`, `indie`, `all`) |
+
+> `org` 파라미터가 전달되었는데 빈 문자열/공백이면 `400` 반환
 
 **응답:**
 ```json
@@ -114,6 +140,8 @@ GET /api/holo/streams/upcoming?org={ORG}
 |------|------|------|--------|------|
 | org | string | ❌ | `hololive` | 조회 대상 org (`hololive`, `vspo`, `stellive`, `indie`, `all`) |
 
+> `org` 파라미터가 전달되었는데 빈 문자열/공백이면 `400` 반환
+
 **응답:**
 ```json
 {
@@ -135,39 +163,7 @@ GET /api/holo/streams/upcoming?org={ORG}
 
 ## 2. 채널 API
 
-### 2.1 채널 조회 (단일)
-
-특정 채널의 상세 정보를 반환합니다.
-
-```
-GET /api/holo/channels?channelId={CHANNEL_ID}
-```
-
-**파라미터:**
-| 이름 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| channelId | string | ✅ | YouTube 채널 ID |
-
-**응답:**
-```json
-{
-  "status": "ok",
-  "channel": {
-    "id": "UC1DCedRgGHBdm81E1llLhOQ",
-    "name": "Miko Ch. さくらみこ",
-    "englishName": "Sakura Miko",
-    "photo": "https://yt3.ggpht.com/...",
-    "twitter": "sakuramiko35",
-    "subscriberCount": 2000000,
-    "org": "Hololive",
-    "suborg": "hololive JP Gen 0"
-  }
-}
-```
-
----
-
-### 2.2 채널 조회 (배치)
+### 2.1 채널 조회 (배치)
 
 여러 채널 정보를 한 번에 조회합니다. (최대 100개)
 
@@ -180,14 +176,37 @@ GET /api/holo/channels?channelIds={ID1},{ID2},{ID3}...
 |------|------|------|------|
 | channelIds | string | ✅ | 쉼표로 구분된 채널 ID 목록 |
 
+> `channelIds`는 최대 100개까지 허용되며 초과 시 `400` 반환
+
 **응답:**
 ```json
 {
   "status": "ok",
-  "channels": {
-    "UC1DCedRgGHBdm81E1llLhOQ": { ... },
-    "UCl_gCybOJRIgOXw6Qb4qJzQ": { ... }
-  }
+  "channels": [
+    {
+      "id": "UC1DCedRgGHBdm81E1llLhOQ",
+      "name": "Sakura Miko",
+      "photo": "https://yt3.ggpht.com/..."
+    }
+  ]
+}
+```
+
+---
+
+### 2.2 레거시 단일 `channelId` 동작
+
+`channelId` 단일 조회는 제거되었습니다.
+
+```
+GET /api/holo/channels?channelId={CHANNEL_ID}
+```
+
+**응답:** `410 Gone`
+```json
+{
+  "error": "Legacy channelId query is no longer supported",
+  "hint": "use channelIds query parameter"
 }
 ```
 
@@ -272,6 +291,17 @@ Content-Type: application/json
     "ko": [],
     "ja": []
   }
+}
+```
+
+**응답 코드:**
+- `201`: 생성 성공
+
+**응답 예시 (201):**
+```json
+{
+  "status": "ok",
+  "message": "Member added successfully"
 }
 ```
 
@@ -389,14 +419,11 @@ GET /api/holo/stats
 ```json
 {
   "status": "ok",
-  "stats": {
-    "totalMembers": 80,
-    "activeMembers": 75,
-    "graduatedMembers": 5,
-    "totalAlarms": 1234,
-    "totalRooms": 567,
-    "uptime": "72h30m15s"
-  }
+  "members": 80,
+  "alarms": 1234,
+  "rooms": 567,
+  "version": "1.2.0",
+  "uptime": "72h30m15s"
 }
 ```
 
@@ -421,6 +448,18 @@ GET /api/holo/stats/channels
 }
 ```
 
+**오류 응답:**
+- `500`: 캐시/DB 조회 실패
+- `503`: 스냅샷 미준비
+
+```json
+{
+  "error": "Channel stats snapshot not ready",
+  "code": "channel_stats_snapshot_not_ready",
+  "hint": "retry later after background poller sync"
+}
+```
+
 ---
 
 ### 5.3 마일스톤 목록
@@ -428,6 +467,10 @@ GET /api/holo/stats/channels
 ```
 GET /api/holo/milestones
 ```
+
+**오류 응답:**
+- `503`: Stats repository 미초기화 (`{"error":"Stats repository not available"}`)
+- `500`: 조회 처리 실패
 
 ---
 
@@ -437,6 +480,10 @@ GET /api/holo/milestones
 GET /api/holo/milestones/near
 ```
 
+**오류 응답:**
+- `503`: Stats repository 미초기화 (`{"error":"Stats repository not available"}`)
+- `500`: 조회 처리 실패
+
 ---
 
 ### 5.5 마일스톤 통계
@@ -444,6 +491,10 @@ GET /api/holo/milestones/near
 ```
 GET /api/holo/milestones/stats
 ```
+
+**오류 응답:**
+- `503`: Stats repository 미초기화 (`{"error":"Stats repository not available"}`)
+- `500`: 조회 처리 실패
 
 ---
 
@@ -484,6 +535,8 @@ GET /api/holo/profiles?channelId={CHANNEL_ID}
   }
 }
 ```
+
+> 번역 데이터 로드 실패 시 부분 성공으로 내려가지 않고 `500`을 반환합니다.
 
 ---
 
@@ -673,3 +726,4 @@ resp, _ := http.DefaultClient.Do(req)
 | 2026-01-04 | 초기 문서 작성 |
 | 2026-01-04 | `/users/live` Holodex 내부 메서드 추가 (`GetChannelsLiveStatus`) |
 | 2026-02-28 | `POST /api/holo/settings/llm` 추가 (LLM scheduler 제어) |
+| 2026-03-01 | channel 단일 `channelId` 조회 제거(410), fail-fast 응답 정책 반영 |

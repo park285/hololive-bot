@@ -40,7 +40,7 @@ type templateRevisionsResponse struct {
 	Revisions   []*domain.NotificationTemplateRevision `json:"revisions"`
 }
 
-func (h *APIHandler) GetTemplates(c *gin.Context) {
+func (h *TemplateAPIHandler) GetTemplates(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -64,7 +64,7 @@ func (h *APIHandler) GetTemplates(c *gin.Context) {
 	c.JSON(200, templateListResponse{Templates: templates})
 }
 
-func (h *APIHandler) GetTemplateByKey(c *gin.Context) {
+func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -87,7 +87,7 @@ func (h *APIHandler) GetTemplateByKey(c *gin.Context) {
 	})
 }
 
-func (h *APIHandler) UpsertTemplate(c *gin.Context) {
+func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -122,7 +122,7 @@ func (h *APIHandler) UpsertTemplate(c *gin.Context) {
 	c.JSON(200, tmpl)
 }
 
-func (h *APIHandler) DeleteTemplateOverride(c *gin.Context) {
+func (h *TemplateAPIHandler) DeleteTemplateOverride(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -139,10 +139,10 @@ func (h *APIHandler) DeleteTemplateOverride(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "override deleted, fallback to default"})
+	c.JSON(200, gin.H{"message": "override deleted; default template is now active"})
 }
 
-func (h *APIHandler) PreviewTemplate(c *gin.Context) {
+func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -175,7 +175,7 @@ func (h *APIHandler) PreviewTemplate(c *gin.Context) {
 	})
 }
 
-func (h *APIHandler) GetTemplateRevisions(c *gin.Context) {
+func (h *TemplateAPIHandler) GetTemplateRevisions(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -199,7 +199,7 @@ func (h *APIHandler) GetTemplateRevisions(c *gin.Context) {
 	})
 }
 
-func (h *APIHandler) GetTemplateRevision(c *gin.Context) {
+func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 

@@ -13,8 +13,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/health"
 )
 
+const systemStatsStreamInterval = 5 * time.Second
+
 // GetStats: 봇 통계를 반환합니다. (성능 최적화를 위해 병렬 조회)
-func (h *APIHandler) GetStats(c *gin.Context) {
+func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -64,8 +66,8 @@ func (h *APIHandler) GetStats(c *gin.Context) {
 }
 
 // StreamSystemStats: WebSocket을 통해 시스템 리소스 사용량을 실시간 스트리밍합니다.
-// 2초마다 CPU/메모리 통계를 전송합니다.
-func (h *APIHandler) StreamSystemStats(c *gin.Context) {
+// 5초마다 CPU/메모리 통계를 전송합니다.
+func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	if h.systemStats == nil {
 		c.JSON(400, gin.H{
 			"status":  "error",
@@ -88,7 +90,7 @@ func (h *APIHandler) StreamSystemStats(c *gin.Context) {
 	}()
 
 	ctx := c.Request.Context()
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(systemStatsStreamInterval)
 	defer ticker.Stop()
 
 	// 최초 1회 즉시 전송

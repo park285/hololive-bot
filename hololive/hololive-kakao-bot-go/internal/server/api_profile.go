@@ -53,7 +53,7 @@ type TranslatedData struct {
 // GetProfile: 채널 ID로 멤버 프로필을 조회합니다.
 // Query params:
 //   - channelId: YouTube 채널 ID (필수)
-func (h *APIHandler) GetProfile(c *gin.Context) {
+func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	channelID := c.Query("channelId")
 	if channelID == "" {
 		c.JSON(400, gin.H{"error": "channelId is required"})
@@ -83,11 +83,12 @@ func (h *APIHandler) GetProfile(c *gin.Context) {
 	// 번역 정보 조회
 	_, translated, err := h.profiles.GetWithTranslation(ctx, profile.EnglishName)
 	if err != nil {
-		h.logger.Warn("Translation not found",
+		h.logger.Error("Failed to load translated profile",
 			slog.String("english_name", profile.EnglishName),
 			slog.Any("error", err),
 		)
-		// 번역 실패해도 원본은 반환
+		c.JSON(500, gin.H{"error": "Failed to load translated profile"})
+		return
 	}
 
 	// 응답 구조체 변환
@@ -112,7 +113,7 @@ func (h *APIHandler) GetProfile(c *gin.Context) {
 // GetProfileByName: 영문 이름으로 멤버 프로필을 조회합니다.
 // Query params:
 //   - name: 영문 이름 (필수)
-func (h *APIHandler) GetProfileByName(c *gin.Context) {
+func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 	name := c.Query("name")
 	if name == "" {
 		c.JSON(400, gin.H{"error": "name is required"})

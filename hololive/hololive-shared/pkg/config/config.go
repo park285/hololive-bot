@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log/slog"
 	"math"
 	"os"
 	"slices"
@@ -428,11 +427,20 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 
 // Validate: 필수 설정값이 누락되지 않았는지 검증합니다.
 func (c *Config) Validate() error {
+	if err := validateDeprecatedEnvUsage(); err != nil {
+		return err
+	}
 	if c.Server.Port == 0 {
 		return fmt.Errorf("SERVER_PORT is required")
 	}
 	if len(c.Kakao.Rooms) == 0 {
 		return fmt.Errorf("KAKAO_ROOMS is required")
+	}
+	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
+		return fmt.Errorf("IRIS_WEBHOOK_TOKEN (or IRIS_SHARED_TOKEN) is required")
+	}
+	if strings.TrimSpace(c.Iris.BotToken) == "" {
+		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
 	}
 	if len(c.Holodex.APIKeys) == 0 {
 		return fmt.Errorf("at least one HOLODEX_API_KEY is required")
@@ -441,6 +449,20 @@ func (c *Config) Validate() error {
 	if isProduction && c.CORS.Enforce && len(c.CORS.AllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
+	return nil
+}
+
+func validateDeprecatedEnvUsage() error {
+	if value, exists := os.LookupEnv("MEMBER_NEWS_CLIPROXY_MODEL"); exists && stringutil.TrimSpace(value) != "" {
+		return fmt.Errorf("MEMBER_NEWS_CLIPROXY_MODEL is no longer supported; use MEMBER_NEWS_LLM_MODEL")
+	}
+	if value, exists := os.LookupEnv("DB_SSLMODE"); exists && stringutil.TrimSpace(value) != "" {
+		return fmt.Errorf("DB_SSLMODE is no longer supported; use POSTGRES_SSLMODE")
+	}
+	if value, exists := os.LookupEnv("DB_QUERY_EXEC_MODE"); exists && stringutil.TrimSpace(value) != "" {
+		return fmt.Errorf("DB_QUERY_EXEC_MODE is no longer supported; use POSTGRES_QUERY_EXEC_MODE")
+	}
+
 	return nil
 }
 
@@ -462,8 +484,8 @@ func loadPostgresConfig() PostgresConfig {
 		User:              envutil.String("POSTGRES_USER", constants.DatabaseDefaults.User),
 		Password:          envutil.String("POSTGRES_PASSWORD", constants.DatabaseDefaults.Password),
 		Database:          envutil.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
-		SSLMode:           envutil.String("POSTGRES_SSLMODE", envutil.String("DB_SSLMODE", "disable")),
-		QueryExecMode:     envutil.String("POSTGRES_QUERY_EXEC_MODE", envutil.String("DB_QUERY_EXEC_MODE", "cache_statement")),
+		SSLMode:           envutil.String("POSTGRES_SSLMODE", "disable"),
+		QueryExecMode:     envutil.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
 		PoolMinConns:      envutil.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
 		PoolMaxConns:      envutil.Int("POSTGRES_POOL_MAX_CONNS", constants.DatabaseConfig.MaxOpenConns),
 		PoolMaxIdleConns:  envutil.Int("POSTGRES_POOL_MAX_IDLE_CONNS", constants.DatabaseConfig.MaxIdleConns),
@@ -519,24 +541,8 @@ func loadConsensusLLMConfig(prefix string) ConsensusLLMConfig {
 }
 
 func loadLLMConfig() LLMConfig {
-	newModel := envutil.String("MEMBER_NEWS_LLM_MODEL", "")
-	_, oldExists := os.LookupEnv("MEMBER_NEWS_CLIPROXY_MODEL")
-	oldModel := envutil.String("MEMBER_NEWS_CLIPROXY_MODEL", "")
-
-	var memberNewsModel string
-
-	if newModel != "" {
-		memberNewsModel = newModel
-	} else if oldExists && oldModel != "" {
-		memberNewsModel = oldModel
-	}
-	if oldExists {
-		// MEMBER_NEWS_CLIPROXY_MODEL은 deprecated, MEMBER_NEWS_LLM_MODEL 사용 권장
-		slog.Warn("MEMBER_NEWS_CLIPROXY_MODEL is deprecated, use MEMBER_NEWS_LLM_MODEL instead")
-	}
-
 	return LLMConfig{
-		MemberNewsModel:       memberNewsModel,
+		MemberNewsModel:       envutil.String("MEMBER_NEWS_LLM_MODEL", ""),
 		MemberNewsTemperature: envutil.Float("MEMBER_NEWS_TEMPERATURE", 0), // GPT-5: temperature=1.0만 지원, 0=미설정(SDK 기본값)
 		MemberNews:            loadConsensusLLMConfig("MEMBER_NEWS"),
 		MajorEvent:            loadConsensusLLMConfig("MAJOREVENT"),

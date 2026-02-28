@@ -2,8 +2,8 @@ package majorevent
 
 import (
 	"context"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"fmt"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"strings"
 	"sync"
 	"testing"
@@ -45,13 +45,12 @@ func TestAssembleSummaryText_HighlightsOnly(t *testing.T) {
 		Highlights: []eventHighlight{
 			{Name: "Event A", Date: "3/1(토)", Note: "테스트 이벤트"},
 		},
-		OngoingNote: "",
 	}
 
 	result := assembleSummaryText(resp)
 	assertContains(t, result, "3/1(토) Event A")
 	assertContains(t, result, "- 테스트 이벤트")
-	assertNotContains(t, result, "\n\n") // ongoing_note 없으면 빈 줄 없음
+	assertNotContains(t, result, "\n\n")
 }
 
 func TestAssembleSummaryText_NoMembers(t *testing.T) {
@@ -164,7 +163,6 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 		OngoingEvents: []ongoingEvent{
 			{Name: "카페", Date: "2/1(토)~2/28(금)", Note: "운영 중", Link: "https://example.com/cafe"},
 		},
-		OngoingNote: "카페 (~2/28)",
 	}
 
 	data, err := json.Marshal(original)
@@ -352,21 +350,19 @@ func TestAssembleSummaryText_DiscoveredWithSource(t *testing.T) {
 	assertContains(t, result, "https://hololive.hololivepro.com/en/news/20260123-01-188/")
 }
 
-func TestAssembleSummaryText_OngoingNoteFallback(t *testing.T) {
+func TestAssembleSummaryText_NoOngoingSectionWhenEmpty(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
 			{Name: "Event A", Date: "3/1(토)", Note: "테스트"},
 		},
-		OngoingEvents: nil,
-		OngoingNote:   "DEV_IS 팝업 스토어(~2/14) 진행 중",
+		OngoingEvents: []ongoingEvent{},
 	}
 	result := assembleSummaryText(resp)
-	assertContains(t, result, "DEV_IS 팝업 스토어(~2/14) 진행 중")
 	assertNotContains(t, result, "[기간 행사]")
 }
 
-func TestEventSummarizer_Summarize_OldOngoingNoteFormat(t *testing.T) {
-	// 구형 캐시 응답: ongoing_events 없이 ongoing_note만 존재
+func TestEventSummarizer_Summarize_OldOngoingNoteIgnored(t *testing.T) {
+	// 구형 응답의 ongoing_note는 더 이상 텍스트 조립에 반영하지 않는다.
 	llmJSON := `{"highlights":[{"name":"Event A","date":"3/1(토)","members":"","note":"테스트","link":""}],"ongoing_note":"카페 (~2/28) 진행 중","discovered_events":[]}`
 
 	mock := &mockSummarizer{jsonResponse: llmJSON}
@@ -379,7 +375,7 @@ func TestEventSummarizer_Summarize_OldOngoingNoteFormat(t *testing.T) {
 		t.Fatal("expected non-empty result")
 	}
 	assertContains(t, result, "Event A")
-	assertContains(t, result, "카페 (~2/28) 진행 중")
+	assertNotContains(t, result, "카페 (~2/28) 진행 중")
 	assertNotContains(t, result, "[기간 행사]")
 }
 
@@ -711,8 +707,8 @@ func TestSummarize_KRSearchFailure_GracefulDegradation(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test Event","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
 	searcher := &mockSearcher{
-		results:   []SearchResult{{Title: "Primary Result", URL: "https://example.com/1"}},
-		krErr: fmt.Errorf("KR search timeout"),
+		results: []SearchResult{{Title: "Primary Result", URL: "https://example.com/1"}},
+		krErr:   fmt.Errorf("KR search timeout"),
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger())
@@ -730,7 +726,7 @@ func TestSummarize_PrimarySearchFailure_UsesKRResults(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test Event","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
 	searcher := &mockSearcher{
-		err:           fmt.Errorf("primary search timeout"),
+		err:       fmt.Errorf("primary search timeout"),
 		krResults: []SearchResult{{Title: "KR Result", URL: "https://aniplus.co.kr/1"}},
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
@@ -766,7 +762,7 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 	}
 
 	searcher := &mockSearcher{
-		results:       primary,
+		results:   primary,
 		krResults: secondary,
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
