@@ -52,16 +52,16 @@ spec:
             - name: BOT_INGESTION_ENABLED
               value: "false"
             - name: LOG_DIR
-              value: "/srv/hololive/logs/hololive-bot"
+              value: "/srv/hololive/logs"
             - name: LOG_FILE
-              value: "bot.log"
+              value: "hololive-bot.log"
             - name: OTEL_SERVICE_NAME
               value: "hololive-bot"
           volumeMounts:
             - name: data
               mountPath: /app/data
             - name: logs
-              mountPath: /srv/hololive/logs/hololive-bot
+              mountPath: /srv/hololive/logs
           resources:
             requests:
               cpu: 250m
@@ -97,6 +97,6 @@ spec:
             type: DirectoryOrCreate
         - name: logs
           hostPath:
-            path: /srv/hololive/logs/hololive-bot
+            path: /srv/hololive/logs
             type: DirectoryOrCreate
       restartPolicy: Always

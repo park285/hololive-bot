@@ -52,12 +52,14 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "hololive-admin-api"
             - name: LOG_DIR
-              value: "/srv/hololive/logs/admin-api"
+              value: "/srv/hololive/logs"
+            - name: LOG_FILE
+              value: "admin-api.log"
           volumeMounts:
             - name: data
               mountPath: /app/data
             - name: logs
-              mountPath: /srv/hololive/logs/admin-api
+              mountPath: /srv/hololive/logs
           resources:
             requests:
               cpu: 150m
@@ -93,6 +95,6 @@ spec:
             type: DirectoryOrCreate
         - name: logs
           hostPath:
-            path: /srv/hololive/logs/admin-api
+            path: /srv/hololive/logs
             type: DirectoryOrCreate
       restartPolicy: Always

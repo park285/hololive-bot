@@ -65,11 +65,11 @@ spec:
             - name: SCRAPER__LOGGING__FILE_ENABLED
               value: "true"
             - name: SCRAPER__LOGGING__DIR
-              value: "/srv/hololive/logs/hololive-scraper"
+              value: "/srv/hololive/logs"
             - name: SCRAPER__LOGGING__FILE
               value: "hololive-scraper.log"
             - name: SCRAPER__LOGGING__COMBINED_FILE
-              value: "combined.log"
+              value: "hololive-scraper-combined.log"
             - name: SCRAPER__LOGGING__SERVICE
               value: "hololive-scraper-rs"
             - name: SCRAPER__LOGGING__ENVIRONMENT
@@ -104,7 +104,7 @@ spec:
             failureThreshold: 3
           volumeMounts:
             - name: logs
-              mountPath: /srv/hololive/logs/hololive-scraper
+              mountPath: /srv/hololive/logs
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -113,6 +113,6 @@ spec:
       volumes:
         - name: logs
           hostPath:
-            path: /srv/hololive/logs/hololive-scraper
+            path: /srv/hololive/logs
             type: DirectoryOrCreate
       restartPolicy: Always

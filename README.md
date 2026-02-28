@@ -20,6 +20,7 @@
 1. k3s 노드에 다음 디렉터리 생성
 ```bash
 sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/data
+sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/logs
 ```
 2. 외부 PostgreSQL 접근 가능해야 함
    - Pod에서 접근 가능한 IP/Port로 노출 필요
@@ -47,11 +48,11 @@ sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/data
   - DB 비밀번호/토큰/API 키 값 실값으로 교체
 
 ## 로그 정책 (K8s prod)
-- 기본 정책: **stdout-only**
-- 운영 로그 확인: `kubectl -n hololive logs ...`
-- file 로그는 기본 비활성
-  - Go 계열: `LOG_DIR=""`
-  - Rust 계열: `SCRAPER__LOGGING__FILE_ENABLED=false`, `ALARM__LOGGING__FILE_ENABLED=false`
+- 운영 로그 경로: `/srv/hololive/logs` (단일 디렉터리)
+- 운영 로그 확인: `kubectl -n hololive logs ...` + 호스트 파일 로그 병행
+- 파일 로그 설정:
+  - Go 계열: `LOG_DIR=/srv/hololive/logs`, `LOG_FILE=<service>.log`
+  - Rust 계열: `SCRAPER__LOGGING__FILE_ENABLED=true`, `ALARM__LOGGING__FILE_ENABLED=true`
 
 ## 배포
 ```bash
