@@ -1,8 +1,9 @@
 package server
 
 import (
-	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
@@ -23,14 +24,20 @@ func (h *APIHandler) GetMilestones(c *gin.Context) {
 	offset := 0
 
 	if l := c.Query("limit"); l != "" {
-		if parsed, err := parseInt(l); err == nil && parsed > 0 && parsed <= 100 {
-			limit = parsed
+		parsed, err := parseInt(l)
+		if err != nil || parsed <= 0 || parsed > 100 {
+			c.JSON(400, gin.H{"error": "limit must be an integer between 1 and 100"})
+			return
 		}
+		limit = parsed
 	}
 	if o := c.Query("offset"); o != "" {
-		if parsed, err := parseInt(o); err == nil && parsed >= 0 {
-			offset = parsed
+		parsed, err := parseInt(o)
+		if err != nil || parsed < 0 {
+			c.JSON(400, gin.H{"error": "offset must be an integer greater than or equal to 0"})
+			return
 		}
+		offset = parsed
 	}
 
 	filter := youtube.MilestoneFilter{
@@ -70,9 +77,12 @@ func (h *APIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	// 기본값: 백그라운드 워커와 동일한 95%
 	threshold := youtube.MilestoneThresholdRatio
 	if t := c.Query("threshold"); t != "" {
-		if parsed, err := parseFloat(t); err == nil && parsed > 0 && parsed < 1 {
-			threshold = parsed
+		parsed, err := parseFloat(t)
+		if err != nil || parsed <= 0 || parsed >= 1 {
+			c.JSON(400, gin.H{"error": "threshold must be a number between 0 and 1"})
+			return
 		}
+		threshold = parsed
 	}
 
 	// 항상 6명만 조회 (졸업 멤버 제외는 Repo 내부 JOIN으로 자동 처리됨)
@@ -116,7 +126,6 @@ func (h *APIHandler) GetMilestoneStats(c *gin.Context) {
 	}
 
 	// 직전 멤버 수도 함께 조회 (95% 이상)
-	// 직전 멤버 수도 함께 조회 (95% 이상)
 	nearMembers, err := h.statsRepo.GetNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones, 50)
 	if err == nil {
 		stats.TotalNearMilestone = len(nearMembers)
@@ -130,23 +139,10 @@ func (h *APIHandler) GetMilestoneStats(c *gin.Context) {
 
 // parseInt: 문자열을 정수로 파싱
 func parseInt(s string) (int, error) {
-	var i int
-	_, err := parseWithFormat(s, "%d", &i)
-	return i, err
+	return strconv.Atoi(strings.TrimSpace(s))
 }
 
 // parseFloat: 문자열을 실수로 파싱
 func parseFloat(s string) (float64, error) {
-	var f float64
-	_, err := parseWithFormat(s, "%f", &f)
-	return f, err
-}
-
-// parseWithFormat: fmt.Sscanf 래퍼
-func parseWithFormat(s, format string, a any) (int, error) {
-	n, err := fmt.Sscanf(s, format, a)
-	if err != nil {
-		return n, fmt.Errorf("parse format error: %w", err)
-	}
-	return n, nil
+	return strconv.ParseFloat(strings.TrimSpace(s), 64)
 }
