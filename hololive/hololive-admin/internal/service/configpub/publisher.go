@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 // DefaultChannel: configsub과 동일한 Pub/Sub 채널명

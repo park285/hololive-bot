@@ -46,7 +46,7 @@ func (h *APIHandler) AddRoom(c *gin.Context) {
 	}
 
 	if !added {
-		c.JSON(200, gin.H{"status": "ok", "message": "Room already exists"})
+		c.JSON(409, gin.H{"error": "Room already exists"})
 		return
 	}
 
@@ -75,10 +75,14 @@ func (h *APIHandler) RemoveRoom(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	_, err := h.acl.RemoveRoom(ctx, req.Room)
+	removed, err := h.acl.RemoveRoom(ctx, req.Room)
 	if err != nil {
 		h.logger.Error("Failed to remove room", slog.String("room", req.Room), slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to remove room"})
+		return
+	}
+	if !removed {
+		c.JSON(404, gin.H{"error": "Room not found"})
 		return
 	}
 

@@ -1,6 +1,8 @@
-use super::{IncrementalCursor, MajorEvent};
 use std::collections::HashSet;
+
 use url::Url;
+
+use super::{IncrementalCursor, MajorEvent};
 
 pub(super) fn should_stop_incremental_scan(
     events: &[MajorEvent],

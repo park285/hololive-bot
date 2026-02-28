@@ -1,10 +1,14 @@
-use super::*;
-use alarm_core::constants::DEFAULT_TARGET_MINUTES;
-use alarm_core::error::AlarmError;
-use alarm_core::model::{Channel, StreamStatus};
+use std::{collections::HashMap, sync::Arc};
+
+use alarm_core::{
+    constants::DEFAULT_TARGET_MINUTES,
+    error::AlarmError,
+    model::{Channel, StreamStatus},
+};
 use alarm_infra::valkey::{MockValkeyClient, ValkeyClient};
 use async_trait::async_trait;
-use std::{collections::HashMap, sync::Arc};
+
+use super::*;
 
 // ── 헬퍼 ─────────────────────────────────────────────────────────────────
 

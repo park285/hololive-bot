@@ -5,6 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-admin/internal/server"
+	"github.com/kapu/hololive-admin/internal/service/acl"
+	"github.com/kapu/hololive-admin/internal/service/activity"
+	authsvc "github.com/kapu/hololive-admin/internal/service/auth"
+	"github.com/kapu/hololive-admin/internal/service/system"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -15,12 +21,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-
-	"github.com/kapu/hololive-admin/internal/server"
-	"github.com/kapu/hololive-admin/internal/service/acl"
-	"github.com/kapu/hololive-admin/internal/service/activity"
-	authsvc "github.com/kapu/hololive-admin/internal/service/auth"
-	"github.com/kapu/hololive-admin/internal/service/system"
 )
 
 // ProvideSystemCollector: 시스템 리소스 수집기를 생성하여 제공합니다.

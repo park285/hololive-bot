@@ -1,7 +1,8 @@
+use std::time::Duration;
+
 use alarm_core::error::AlarmError;
 use async_trait::async_trait;
 use sea_orm::{ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
-use std::time::Duration;
 
 use crate::config::DatabaseConfig;
 
@@ -177,8 +178,9 @@ impl AlarmRepository for MockAlarmRepository {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::collections::HashMap;
+
+    use super::*;
 
     fn make_templates() -> Vec<NotificationTemplate> {
         vec![

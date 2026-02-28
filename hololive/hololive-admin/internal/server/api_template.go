@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -139,7 +140,7 @@ func (h *APIHandler) DeleteTemplateOverride(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "override deleted, fallback to default"})
+	c.JSON(200, gin.H{"message": "override deleted; default template is now active"})
 }
 
 func (h *APIHandler) PreviewTemplate(c *gin.Context) {

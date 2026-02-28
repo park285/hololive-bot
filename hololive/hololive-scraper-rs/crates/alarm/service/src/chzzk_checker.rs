@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use tracing::warn;
-
+use alarm_core::{
+    constants::NOTIFICATION_SENT_TTL,
+    error::AlarmError,
+    keys::chzzk_live_notified_key,
+    model::{AlarmNotification, Stream},
+};
+use alarm_infra::{chzzk::ChzzkClient, valkey::ValkeyClient};
 use chrono::{DateTime, Utc};
 use futures::{StreamExt, stream};
-
-use alarm_core::constants::NOTIFICATION_SENT_TTL;
-use alarm_core::error::AlarmError;
-use alarm_core::keys::chzzk_live_notified_key;
-use alarm_core::model::{AlarmNotification, Stream};
-use alarm_infra::chzzk::ChzzkClient;
-use alarm_infra::valkey::ValkeyClient;
+use tracing::warn;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ChzzkChecker: Chzzk 라이브 상태 확인 + dedup 서비스
@@ -152,10 +150,10 @@ impl ChzzkChecker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alarm_core::model::StreamStatus;
-    use alarm_infra::chzzk::MockChzzkClient;
-    use alarm_infra::valkey::MockValkeyClient;
+    use alarm_infra::{chzzk::MockChzzkClient, valkey::MockValkeyClient};
+
+    use super::*;
 
     // ── 테스트 헬퍼 ──────────────────────────────────────────────────────────
 

@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use alarm_core::constants::TWITCH_NOTIFICATION_TTL;
-use alarm_core::error::AlarmError;
-use alarm_core::keys::TWITCH_LIVE_NOTIFIED_KEY_PREFIX;
-use alarm_core::model::{AlarmNotification, Stream};
-use alarm_infra::twitch::TwitchClient;
-use alarm_infra::valkey::ValkeyClient;
+use alarm_core::{
+    constants::TWITCH_NOTIFICATION_TTL,
+    error::AlarmError,
+    keys::TWITCH_LIVE_NOTIFIED_KEY_PREFIX,
+    model::{AlarmNotification, Stream},
+};
+use alarm_infra::{twitch::TwitchClient, valkey::ValkeyClient};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TwitchChecker: Twitch 라이브 상태 확인 + dedup 서비스
@@ -121,10 +121,10 @@ impl TwitchChecker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alarm_core::model::StreamStatus;
-    use alarm_infra::twitch::MockTwitchClient;
-    use alarm_infra::valkey::MockValkeyClient;
+    use alarm_infra::{twitch::MockTwitchClient, valkey::MockValkeyClient};
+
+    use super::*;
 
     // ── 테스트 헬퍼 ──────────────────────────────────────────────────────────
 

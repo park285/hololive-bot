@@ -1,3 +1,5 @@
+use std::{fmt, fs, path::PathBuf};
+
 use alarm_infra::config::{LoggingConfig, TelemetryConfig};
 use anyhow::{Context, Result};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
@@ -11,7 +13,6 @@ use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
     trace::{Sampler, SdkTracerProvider},
 };
-use std::{fmt, fs, path::PathBuf};
 use tracing::{Event, Subscriber, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{

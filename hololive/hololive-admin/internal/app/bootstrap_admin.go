@@ -12,6 +12,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kapu/hololive-admin/internal/server"
+	"github.com/kapu/hololive-admin/internal/service/configpub"
+	"github.com/kapu/hololive-admin/internal/service/trigger"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -25,10 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-
-	"github.com/kapu/hololive-admin/internal/server"
-	"github.com/kapu/hololive-admin/internal/service/configpub"
-	"github.com/kapu/hololive-admin/internal/service/trigger"
 )
 
 // AdminAPIRuntime: admin-api 전용 런타임

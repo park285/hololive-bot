@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -23,23 +24,28 @@ const channelStatsRefreshLockTTL = 2 * time.Minute
 // GetLiveStreams: 현재 라이브 방송 중인 스트림 목록을 반환합니다.
 func (h *APIHandler) GetLiveStreams(c *gin.Context) {
 	ctx := c.Request.Context()
-	org := strings.TrimSpace(c.DefaultQuery("org", constants.HolodexAPIParams.OrgHololive))
-	if org == "" {
-		org = constants.HolodexAPIParams.OrgHololive
-	}
-
-	streams, err := h.holodex.GetLiveStreamsByOrg(ctx, org)
-	if err != nil {
-		if stdErrors.Is(err, holodex.ErrInvalidStreamOrg) {
-			c.JSON(400, gin.H{
-				"error":          "Invalid org parameter",
+	org := constants.HolodexAPIParams.OrgHololive
+	if rawOrg, hasOrg := c.GetQuery("org"); hasOrg {
+		org = strings.TrimSpace(rawOrg)
+		if org == "" {
+			h.respondError(c, 400, "Invalid org parameter", gin.H{
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodex.SupportedStreamOrgParams(),
 			})
 			return
 		}
-		h.logger.Error("Failed to get live streams", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get live streams"})
+	}
+
+	streams, err := h.holodex.GetLiveStreamsByOrg(ctx, org)
+	if err != nil {
+		if stdErrors.Is(err, holodex.ErrInvalidStreamOrg) {
+			h.respondError(c, 400, "Invalid org parameter", gin.H{
+				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
+				"supported_orgs": holodex.SupportedStreamOrgParams(),
+			})
+			return
+		}
+		h.respondInternalError(c, "Failed to get live streams", "Failed to get live streams", err)
 		return
 	}
 	c.JSON(200, gin.H{"status": "ok", "org": org, "streams": streams})
@@ -48,23 +54,28 @@ func (h *APIHandler) GetLiveStreams(c *gin.Context) {
 // GetUpcomingStreams: 예정된 스트림 목록을 반환합니다.
 func (h *APIHandler) GetUpcomingStreams(c *gin.Context) {
 	ctx := c.Request.Context()
-	org := strings.TrimSpace(c.DefaultQuery("org", constants.HolodexAPIParams.OrgHololive))
-	if org == "" {
-		org = constants.HolodexAPIParams.OrgHololive
-	}
-
-	streams, err := h.holodex.GetUpcomingStreamsByOrg(ctx, 24, org)
-	if err != nil {
-		if stdErrors.Is(err, holodex.ErrInvalidStreamOrg) {
-			c.JSON(400, gin.H{
-				"error":          "Invalid org parameter",
+	org := constants.HolodexAPIParams.OrgHololive
+	if rawOrg, hasOrg := c.GetQuery("org"); hasOrg {
+		org = strings.TrimSpace(rawOrg)
+		if org == "" {
+			h.respondError(c, 400, "Invalid org parameter", gin.H{
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodex.SupportedStreamOrgParams(),
 			})
 			return
 		}
-		h.logger.Error("Failed to get upcoming streams", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get upcoming streams"})
+	}
+
+	streams, err := h.holodex.GetUpcomingStreamsByOrg(ctx, 24, org)
+	if err != nil {
+		if stdErrors.Is(err, holodex.ErrInvalidStreamOrg) {
+			h.respondError(c, 400, "Invalid org parameter", gin.H{
+				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
+				"supported_orgs": holodex.SupportedStreamOrgParams(),
+			})
+			return
+		}
+		h.respondInternalError(c, "Failed to get upcoming streams", "Failed to get upcoming streams", err)
 		return
 	}
 	c.JSON(200, gin.H{"status": "ok", "org": org, "streams": streams})
@@ -78,7 +89,16 @@ func (h *APIHandler) GetChannelStats(c *gin.Context) {
 	// 1. 캐시 확인 (빠른 경로)
 	if h.valkeyCache != nil {
 		var cachedStats map[string]*youtube.ChannelStats
-		if err := h.valkeyCache.Get(ctx, channelStatsCacheKey, &cachedStats); err == nil && cachedStats != nil {
+		if err := h.valkeyCache.Get(ctx, channelStatsCacheKey, &cachedStats); err != nil {
+			h.respondInternalError(
+				c,
+				"Failed to get channel stats",
+				"Failed to get channel stats from cache",
+				err,
+			)
+			return
+		}
+		if cachedStats != nil {
 			h.logger.Debug("Channel stats cache hit", slog.Int("count", len(cachedStats)))
 			c.JSON(200, gin.H{"status": "ok", "stats": cachedStats})
 			return
@@ -89,8 +109,15 @@ func (h *APIHandler) GetChannelStats(c *gin.Context) {
 	if h.statsRepo != nil {
 		stats, err := h.getChannelStatsFromDB(ctx)
 		if err != nil {
-			h.logger.Warn("Failed to get channel stats from DB", slog.Any("error", err))
-		} else if len(stats) > 0 {
+			h.respondInternalError(
+				c,
+				"Failed to get channel stats",
+				"Failed to get channel stats from DB",
+				err,
+			)
+			return
+		}
+		if len(stats) > 0 {
 			h.logger.Debug("Channel stats DB snapshot hit", slog.Int("count", len(stats)))
 
 			// 캐시에 저장 (다음 요청 가속화)
@@ -105,10 +132,9 @@ func (h *APIHandler) GetChannelStats(c *gin.Context) {
 	}
 
 	// 3. DB 스냅샷도 없으면 폴러 동기화 전 상태로 간주
-	c.JSON(503, gin.H{
-		"error": "Channel stats snapshot not ready",
-		"code":  "channel_stats_snapshot_not_ready",
-		"hint":  "retry later after background poller sync",
+	h.respondError(c, 503, "Channel stats snapshot not ready", gin.H{
+		"code": "channel_stats_snapshot_not_ready",
+		"hint": "retry later after background poller sync",
 	})
 }
 
@@ -238,20 +264,29 @@ func (h *APIHandler) GetChannel(c *gin.Context) {
 	if channelIDs != "" {
 		ids := splitChannelIDs(channelIDs)
 		if len(ids) == 0 {
-			c.JSON(400, gin.H{"error": "channelIds parameter is empty or invalid"})
+			h.respondError(c, 400, "channelIds parameter is empty or invalid", nil)
 			return
 		}
 
 		// 최대 100개로 제한
 		if len(ids) > 100 {
-			ids = ids[:100]
+			h.respondError(c, 400, "channelIds supports at most 100 values", gin.H{
+				"limit":    100,
+				"received": len(ids),
+			})
+			return
 		}
 
 		// DB에서 직접 조회 (Holodex API 호출 없음)
 		channelsMap, err := h.repo.GetMembersWithPhoto(ctx, ids)
 		if err != nil {
-			h.logger.Error("Failed to get channels from DB", slog.Any("error", err), slog.Int("count", len(ids)))
-			c.JSON(500, gin.H{"error": "Failed to get channels"})
+			h.respondInternalError(
+				c,
+				"Failed to get channels",
+				"Failed to get channels from DB",
+				err,
+				slog.Int("count", len(ids)),
+			)
 			return
 		}
 
@@ -268,13 +303,12 @@ func (h *APIHandler) GetChannel(c *gin.Context) {
 	// 레거시 단일 조회는 제거됨
 	channelID := c.Query("channelId")
 	if channelID != "" {
-		c.JSON(410, gin.H{
-			"error": "Legacy channelId query is no longer supported",
-			"hint":  "use channelIds query parameter",
+		h.respondError(c, 410, "Legacy channelId query is no longer supported", gin.H{
+			"hint": "use channelIds query parameter",
 		})
 		return
 	}
-	c.JSON(400, gin.H{"error": "channelIds parameter required"})
+	h.respondError(c, 400, "channelIds parameter required", nil)
 }
 
 // ChannelResponse: 채널 API 응답 구조체 (기존 Holodex 호환 형식)

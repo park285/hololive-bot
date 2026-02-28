@@ -1,7 +1,6 @@
+use alarm_core::model::AlarmNotification;
 use chrono::{DateTime, Utc};
 use chrono_tz::Asia::Seoul;
-
-use alarm_core::model::AlarmNotification;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 비-Hololive 조직명 태그 매핑
@@ -180,9 +179,10 @@ fn resolve_scheduled_kst(n: &AlarmNotification) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alarm_core::model::{AlarmNotification, Channel, Stream, StreamStatus};
     use chrono::{TimeZone, Utc};
+
+    use super::*;
 
     // ── 테스트 헬퍼 ──────────────────────────────────────────────────────────
 

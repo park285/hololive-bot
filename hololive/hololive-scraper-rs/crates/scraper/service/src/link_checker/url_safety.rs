@@ -1,5 +1,6 @@
-use ipnet::IpNet;
 use std::{net::IpAddr, sync::LazyLock};
+
+use ipnet::IpNet;
 use url::Url;
 
 static DENY_IP_RANGES: LazyLock<Vec<IpNet>> = LazyLock::new(|| {
@@ -92,8 +93,9 @@ pub(super) fn host_to_ip(host: url::Host<&str>) -> Option<IpAddr> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_private_or_local_ip;
     use std::net::IpAddr;
+
+    use super::is_private_or_local_ip;
 
     #[test]
     fn blocks_ipv4_private_and_reserved_ranges() {

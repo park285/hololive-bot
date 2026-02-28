@@ -1,3 +1,8 @@
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use alarm_core::{
     error::AlarmError,
     model::{Stream, StreamStatus},
@@ -6,10 +11,6 @@ use async_trait::async_trait;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 

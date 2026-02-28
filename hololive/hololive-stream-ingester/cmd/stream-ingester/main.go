@@ -7,10 +7,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 
 	"github.com/kapu/hololive-stream-ingester/internal/app"
 )

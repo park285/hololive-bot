@@ -1,12 +1,3 @@
-use crate::{date_extractor::DateExtractor, rss_parser::RssParser};
-use backon::{ExponentialBuilder, Retryable};
-use futures::{StreamExt, stream};
-use parking_lot::RwLock;
-use scraper_core::{
-    error::ScraperError,
-    model::{MajorEvent, MajorEventType},
-};
-use scraper_infra::repository::Repository;
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -15,7 +6,18 @@ use std::{
     },
     time::Duration,
 };
+
+use backon::{ExponentialBuilder, Retryable};
+use futures::{StreamExt, stream};
+use parking_lot::RwLock;
+use scraper_core::{
+    error::ScraperError,
+    model::{MajorEvent, MajorEventType},
+};
+use scraper_infra::repository::Repository;
 use tracing::{info, warn};
+
+use crate::{date_extractor::DateExtractor, rss_parser::RssParser};
 
 const DEFAULT_EVENT_FEED_URL: &str = "https://hololive.hololivepro.com/events/feed/";
 const DEFAULT_NEWS_FEED_URL: &str = "https://hololive.hololivepro.com/news/feed/";

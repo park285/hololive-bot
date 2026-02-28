@@ -1,12 +1,13 @@
-use alarm_core::error::AlarmError;
-use async_trait::async_trait;
-use dashmap::DashMap;
-use fred::prelude::*;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+
+use alarm_core::error::AlarmError;
+use async_trait::async_trait;
+use dashmap::DashMap;
+use fred::prelude::*;
 use tracing::debug;
 use url::Url;
 

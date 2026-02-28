@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use alarm_core::{
     error::AlarmError,
     model::{Stream, StreamStatus},
@@ -7,7 +9,6 @@ use reqwest::Client;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use serde::Deserialize;
-use std::time::Duration;
 use tracing::debug;
 
 use crate::{circuit_breaker::CircuitBreaker, config::ChzzkConfig};

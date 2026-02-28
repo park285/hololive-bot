@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -27,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 // streamIngesterInfrastructure: stream-ingester 전용 인프라 (alarm/ACL/activity 미포함).

@@ -1,3 +1,5 @@
+use std::{collections::HashSet, future::Future, net::IpAddr, pin::Pin, sync::Arc, time::Duration};
+
 use chrono::{DateTime, Utc};
 use futures::{StreamExt, stream};
 use hickory_resolver::{
@@ -10,8 +12,6 @@ use scraper_core::{
     model::{MajorEvent, MajorEventLinkStatus},
 };
 use scraper_infra::repository::Repository;
-use std::collections::HashSet;
-use std::{future::Future, net::IpAddr, pin::Pin, sync::Arc, time::Duration};
 use tracing::{debug, warn};
 use url::Url;
 

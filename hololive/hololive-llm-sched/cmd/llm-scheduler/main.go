@@ -7,12 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 
 	"github.com/kapu/hololive-llm-sched/internal/app"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // Version: 빌드 시 ldflags로 주입됨 (예: -ldflags="-X main.Version=1.0.0")

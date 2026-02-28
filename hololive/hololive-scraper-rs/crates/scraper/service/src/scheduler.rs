@@ -1,6 +1,7 @@
+use std::{str::FromStr, time::Duration};
+
 use chrono::{DateTime, Datelike, FixedOffset, Utc};
 use cron::Schedule;
-use std::{str::FromStr, time::Duration};
 
 const KST_OFFSET_SECS: i32 = 9 * 60 * 60;
 
@@ -69,10 +70,11 @@ pub(crate) fn build_retry_runs_from_delays(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_retry_runs_from_delays, calculate_next_regular_run_for_hour};
+    use std::{collections::VecDeque, time::Duration};
+
     use chrono::{TimeZone, Utc};
-    use std::collections::VecDeque;
-    use std::time::Duration;
+
+    use super::{build_retry_runs_from_delays, calculate_next_regular_run_for_hour};
 
     #[test]
     fn calculate_next_regular_run_uses_same_day_when_before_hour() {

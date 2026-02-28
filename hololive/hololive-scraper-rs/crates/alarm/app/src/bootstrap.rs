@@ -1,3 +1,8 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 use alarm_core::error::AlarmError;
 use alarm_infra::{
     chzzk::HttpChzzkClient,
@@ -18,10 +23,6 @@ use alarm_service::{
     twitch_checker::TwitchChecker,
 };
 use anyhow::{Context, Result};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};

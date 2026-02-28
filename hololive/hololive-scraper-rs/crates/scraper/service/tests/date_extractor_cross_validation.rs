@@ -1,10 +1,11 @@
-use scraper_service::date_extractor::DateExtractor;
-use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
 };
+
+use scraper_service::date_extractor::DateExtractor;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 struct FixtureFile {

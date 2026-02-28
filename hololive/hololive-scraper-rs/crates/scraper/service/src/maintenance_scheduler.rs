@@ -1,11 +1,12 @@
-use crate::link_checker::LinkChecker;
-use crate::scheduler::format_kst;
+use std::time::Duration;
+
 use chrono::Utc;
 use scraper_core::error::ScraperError;
 use scraper_infra::repository::Repository;
-use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
+
+use crate::{link_checker::LinkChecker, scheduler::format_kst};
 
 const DEFAULT_EXPIRED_HOUR_KST: u8 = 5;
 const DEFAULT_LINK_CHECK_INTERVAL_HOURS: u64 = 12;

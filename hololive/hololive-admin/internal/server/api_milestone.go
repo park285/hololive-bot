@@ -1,11 +1,13 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
@@ -142,10 +144,18 @@ func (h *APIHandler) GetMilestoneStats(c *gin.Context) {
 
 // parseInt: 문자열을 정수로 파싱
 func parseInt(s string) (int, error) {
-	return strconv.Atoi(strings.TrimSpace(s))
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		return 0, fmt.Errorf("parseInt: %w", err)
+	}
+	return n, nil
 }
 
 // parseFloat: 문자열을 실수로 파싱
 func parseFloat(s string) (float64, error) {
-	return strconv.ParseFloat(strings.TrimSpace(s), 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0, fmt.Errorf("parseFloat: %w", err)
+	}
+	return f, nil
 }

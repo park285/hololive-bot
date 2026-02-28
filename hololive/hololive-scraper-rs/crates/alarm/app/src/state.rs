@@ -1,3 +1,8 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 use alarm_service::scheduler::SchedulerRuntimeHealth;
 use axum::{
     Json,
@@ -8,10 +13,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use metrics_exporter_prometheus::PrometheusHandle;
 use serde::Serialize;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
 
 #[derive(Debug, Clone)]
 pub struct AppState {

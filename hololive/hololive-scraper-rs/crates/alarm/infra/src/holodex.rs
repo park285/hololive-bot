@@ -1,17 +1,3 @@
-use alarm_core::{
-    error::AlarmError,
-    model::{Channel, Stream, StreamStatus},
-};
-use async_trait::async_trait;
-use futures::{StreamExt, stream};
-use governor::{
-    Quota, RateLimiter as GovernorRateLimiter, clock::DefaultClock, state::InMemoryState,
-    state::direct::NotKeyed,
-};
-use reqwest::Client;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
-use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
-use serde::Deserialize;
 use std::{
     num::NonZeroU32,
     sync::{
@@ -20,6 +6,22 @@ use std::{
     },
     time::Duration,
 };
+
+use alarm_core::{
+    error::AlarmError,
+    model::{Channel, Stream, StreamStatus},
+};
+use async_trait::async_trait;
+use futures::{StreamExt, stream};
+use governor::{
+    Quota, RateLimiter as GovernorRateLimiter,
+    clock::DefaultClock,
+    state::{InMemoryState, direct::NotKeyed},
+};
+use reqwest::Client;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
+use serde::Deserialize;
 use tracing::{debug, warn};
 
 use crate::{circuit_breaker::CircuitBreaker, config::HolodexConfig};
@@ -414,9 +416,10 @@ impl HolodexClient for MockHolodexClient {
 
 #[cfg(test)]
 mod tests {
+    use alarm_core::model::StreamStatus;
+
     use super::*;
     use crate::circuit_breaker::CircuitState;
-    use alarm_core::model::StreamStatus;
 
     fn make_stream(channel_id: &str, status: StreamStatus) -> Stream {
         Stream {

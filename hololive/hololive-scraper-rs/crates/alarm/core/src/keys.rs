@@ -222,8 +222,9 @@ fn truncate_to_1min(dt: DateTime<Utc>) -> DateTime<Utc> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::TimeZone;
+
+    use super::*;
 
     // ─────────────────────────────────────────────────────────────────────────
     // 단순 키 빌더 테스트

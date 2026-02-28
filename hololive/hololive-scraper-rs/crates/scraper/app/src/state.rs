@@ -1,10 +1,11 @@
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
-use chrono::{DateTime, Utc};
-use serde::Serialize;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use tracing::instrument;
 
 #[derive(Debug, Clone)]
@@ -73,8 +74,9 @@ pub fn readiness_status(
 
 #[cfg(test)]
 mod tests {
-    use super::readiness_status;
     use axum::http::StatusCode;
+
+    use super::readiness_status;
 
     #[test]
     fn readiness_status_ok_when_dependencies_ready() {

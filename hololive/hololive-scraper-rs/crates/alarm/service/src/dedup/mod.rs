@@ -1,20 +1,17 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration as StdDuration;
+use std::{collections::HashMap, sync::Arc, time::Duration as StdDuration};
 
+use alarm_core::{
+    constants::{LOCAL_FALLBACK_CLEANUP_MAX_KEYS, LOCAL_FALLBACK_DEDUP_TTL, NOTIFICATION_SENT_TTL},
+    error::AlarmError,
+    keys::{
+        build_logical_event_claim_key, build_notify_claim_key, build_schedule_transition_key,
+        build_upcoming_event_key, notification_category, notified_key,
+    },
+    model::{NotifiedData, Stream, UpcomingEventNotifiedData},
+};
+use alarm_infra::valkey::ValkeyClient;
 use chrono::{DateTime, Utc};
 use moka::sync::Cache;
-
-use alarm_core::constants::{
-    LOCAL_FALLBACK_CLEANUP_MAX_KEYS, LOCAL_FALLBACK_DEDUP_TTL, NOTIFICATION_SENT_TTL,
-};
-use alarm_core::error::AlarmError;
-use alarm_core::keys::{
-    build_logical_event_claim_key, build_notify_claim_key, build_schedule_transition_key,
-    build_upcoming_event_key, notification_category, notified_key,
-};
-use alarm_core::model::{NotifiedData, Stream, UpcomingEventNotifiedData};
-use alarm_infra::valkey::ValkeyClient;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DedupService: SETNX 기반 4단계 중복 방지 서비스
