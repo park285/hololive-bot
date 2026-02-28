@@ -1,0 +1,40 @@
+{
+  "slug": "rindo-chihaya",
+  "english_name": "Rindo Chihaya",
+  "japanese_name": "Rindo Chihaya",
+  "catchphrase": "「ねえ、いっしょに向こう側の景色を見に行かない？」",
+  "description": "FLOW GLOWのDJ担当。\n自称300馬力のパワフル運転手でもあり、話も歌もブレーキ知らずのようだ。\nDJとしては駆け出しの身だが、真面目な気質にお兄譲りの好奇心も相まって絶賛成長中。\n今、大切にしているものは愛車に仲間を乗せて走る時間。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "7月8日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年11月9日"
+    },
+    {
+      "label": "身長",
+      "value": "168cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "FLOW GLOW"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "トリダモノ"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCKMWFR6lAstLa7Vbf5dH7ig?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/rindochihaya"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/rindo-chihaya/"
+}

@@ -1,0 +1,5 @@
+{{- if eq .Count 0 -}}
+{{template "empty_message" (dict "Emoji" $.Emoji.Alarm "Message" "설정된 알람이 없습니다.")}}
+{{- else -}}
+{{template "success_message" (dict "Emoji" .Emoji "Message" (printf "%d개의 알람이 모두 해제되었습니다." .Count))}}
+{{- end -}}

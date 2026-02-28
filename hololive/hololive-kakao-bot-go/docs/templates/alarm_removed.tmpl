@@ -1,0 +1,5 @@
+{{- if .Removed -}}
+{{template "success_message" (dict "Emoji" .Emoji "Message" (printf "%s 알람이 해제되었습니다." .MemberName))}}
+{{- else -}}
+{{template "error_message" (dict "Emoji" .Emoji "Message" (printf "%s 알람이 설정되어 있지 않습니다." .MemberName))}}
+{{- end -}}

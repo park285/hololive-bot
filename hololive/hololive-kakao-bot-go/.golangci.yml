@@ -1,0 +1,230 @@
+version: "2"
+
+run:
+  timeout: 5m  # 당근 설정 참고
+  tests: true
+
+linters:
+  default: none
+  enable:
+    # 기본 오류 검사
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    
+    # 리소스 관리
+    - bodyclose     #HTTP body close
+    - rowserrcheck  #DB rows.Err() 체크
+    - sqlclosecheck #SQL close 체크
+    
+    # Context 관리
+    - contextcheck  #context 사용 패턴
+    - noctx         #HTTP request context
+    
+    # 에러 처리
+    - errorlint     # 에러 처리 best practice
+    - errname       # 에러 변수 네이밍
+    - wrapcheck     # 에러 wrapping
+    
+    # 코드 품질
+    - dupl
+    - goconst
+    - gocritic
+    - misspell
+    - predeclared   # 내장 이름 재정의 방지
+    - revive
+    - wastedassign  # 사용되지 않는 할당
+    - whitespace    # 공백 문제
+    
+    # 복잡도
+    - gocyclo
+    - gocognit
+    - funlen
+    
+    # 성능
+    - prealloc
+    
+    # 보안
+    - bidichk       # 유니코드 양방향 문자
+    - gosec
+    
+    # 기타
+    - durationcheck # time.Duration 사용
+    - unconvert
+    - nakedret
+
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (*github.com/kapu/hololive-kakao-bot-go/internal/bot.Bot).sendError
+        - (*net/http.Response).Body.Close
+        - (*os.File).Close
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    gocyclo:
+      min-complexity: 20  # 엄격하게 적용 (현재 코드베이스 모두 통과)
+
+    gocognit:
+      min-complexity: 40  # 복잡한 함수 3개만 리팩토링 대상
+
+    dupl:
+      threshold: 200
+
+    goconst:
+      min-len: 3
+      min-occurrences: 5
+
+    misspell:
+      locale: US
+
+    nakedret:
+      max-func-lines: 30
+
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - exitAfterDefer
+        - paramTypeCombine
+        - unnamedResult
+        - filepathJoin
+        - hugeParam
+        - emptyStringTest
+
+    funlen:
+      lines: 100  # 적절한 함수 길이 제한
+      statements: 50
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+
+    wrapcheck:
+      extra-ignore-sigs:
+        # status.Error는 그대로 반환 (wrapping 금지)
+        - google.golang.org/grpc/status.Error
+        - google.golang.org/grpc/status.Errorf
+      ignore-package-globs:
+        - github.com/valkey-io/valkey-go
+        - github.com/valkey-io/valkey-go/*
+        - google.golang.org/grpc/status
+        - google.golang.org/grpc/status/*
+
+  exclusions:
+    rules:
+      - linters:
+          - contextcheck
+        text: 'Non-inherited new context'
+      - linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+          - funlen
+        path: _test\.go
+
+      - linters:
+          - gosec
+        text: "G404:"
+
+      - linters:
+          - gosec
+        text: "G102:"
+
+      - linters:
+          - gosec
+        text: "G115:"
+
+      - linters:
+          - gosec
+        text: "G301:"  # 디렉토리 권한 0755는 일반적
+
+      - linters:
+          - gosec
+        text: "G302:"  # 로그 파일 권한 0644는 일반적
+
+      - linters:
+          - gosec
+        text: "G304:"  # 파일 경로는 설정/환경 변수에서 옴
+
+      - linters:
+          - gosec
+        text: "G104:"  # 특정 함수의 에러 무시는 의도적
+
+      - linters:
+          - gosec
+        text: "G117:"  # config 구조체 필드명 (APIKey, Password 등)은 의도적
+
+      - linters:
+          - gosec
+        text: "G704:"  # 내부 HTTP 클라이언트 URL은 config에서 주입
+
+      - linters:
+          - gosec
+        text: "G706:"  # cmd/ 테스트 도구의 로그 메시지
+
+      - linters:
+          - funlen
+        path: cmd/
+
+    paths:
+      - '.*\.pb\.go$'
+      - '.*_test\.go$'
+      - vendor
+      - proto
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: true
+  new: false
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/kapu/hololive-kakao-bot-go)
+
+    goimports:
+      local-prefixes:
+        - github.com/kapu/hololive-kakao-bot-go
+
+  exclusions:
+    paths:
+      - '.*\.pb\.go$'
+      - '.*_test\.go$'
+      - vendor
+      - proto

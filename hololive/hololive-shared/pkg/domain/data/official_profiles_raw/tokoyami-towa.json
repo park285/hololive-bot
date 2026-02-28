@@ -1,0 +1,68 @@
+{
+  "slug": "tokoyami-towa",
+  "english_name": "Tokoyami Towa",
+  "japanese_name": "Tokoyami Towa",
+  "catchphrase": "「こんやっぴーホロライブ4期生常闇トワ様です」",
+  "description": "一人前の悪魔になる為の社会勉強として人間界にやってきた小悪魔。本来勉強をしなきゃいけないところ、ゲームに出会ってしまい、夢中になる。配信という人間達とのコミュニケーションツールを見つけそこで勉強を試みる。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "8月8日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年1月3日"
+    },
+    {
+      "label": "身長",
+      "value": "150㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ4期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "rurudo"
+    },
+    {
+      "label": "夢",
+      "value": "ソロライブ！フルアルバム発売！海外でのライブ！"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "常闇眷属"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#トワイライヴ\nファンアート：#TOWART\n切り抜き：#CUTOWA"
+    },
+    {
+      "label": "Words",
+      "value": "こんやっぴー：はじまりの挨拶に使います！\nおつやっぴー：終わりの挨拶に使います！\nビビ：トワの使い魔的なペットです。帽子になって監視されています。\n虎太郎：トワの飼っている足短猫です。愛称はこたーちです。\nTMT：Towa maji Tenshiの略らしいです。無許可\nTMD：Towa maji Devilの略。使え。\nYAB：YABAIとチャットに書こうとしたらミスった。意味はYABEと一緒\nBig草：海外ニキのLMAOってこれだよね？\nメンタル＆ゆっくり：トワが落ち着きます\nてんQ：みんないつもありがとう"
+    },
+    {
+      "label": "好きなゲームジャンル",
+      "value": "FPS、謎解き（脱出ゲームが好き！）"
+    },
+    {
+      "label": "愛称",
+      "value": "トワ様、トワしゃま"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC1uv2Oq6kNxgATlCiez59hw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/tokoyamitowa"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td84870"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/tokoyami-towa/"
+}

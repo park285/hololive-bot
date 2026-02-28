@@ -1,0 +1,20 @@
+{{- if eq (len .Groups) 0 -}}
+{{template "empty_message" (dict "Emoji" $.Emoji.Member "Message" "등록된 멤버 정보를 찾을 수 없습니다.")}}
+{{- else -}}
+{{template "counted_header" (dict "Emoji" $.Emoji.Member "Label" "멤버 목록" "Count" .Total "Unit" "명")}}
+
+{{ range $index, $group := .Groups -}}
+{{- if gt $index 0 }}
+
+{{- end -}}[{{$group.GroupName}}]
+{{- range $member := $group.Members }}
+{{- if $member.ShowBoth }}
+- {{$member.Primary}} ({{$member.Secondary}})
+{{- else if $member.Primary }}
+- {{$member.Primary}}
+{{- else if $member.Secondary }}
+- {{$member.Secondary}}
+{{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

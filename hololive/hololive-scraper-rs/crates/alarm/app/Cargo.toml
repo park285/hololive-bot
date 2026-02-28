@@ -1,0 +1,34 @@
+[package]
+name = "alarm-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "alarm-app"
+path = "src/main.rs"
+
+[dependencies]
+alarm-core = { workspace = true }
+alarm-service = { workspace = true }
+alarm-infra = { workspace = true }
+axum = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+anyhow = { workspace = true }
+time = { workspace = true }
+metrics-exporter-prometheus = "0.18.1"
+
+[dev-dependencies]

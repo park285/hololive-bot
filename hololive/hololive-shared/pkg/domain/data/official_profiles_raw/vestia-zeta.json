@@ -1,0 +1,56 @@
+{
+  "slug": "vestia-zeta",
+  "english_name": "Vestia Zeta",
+  "japanese_name": "Vestia Zeta",
+  "catchphrase": "「アァァ！ミッションスタート！ホロライブID3期生のベスティア・ゼータです！」",
+  "description": "バーチャル世界のあらゆるデータにアクセスできる組織「シークレット・アーカイブ・ユニット」の7人目の構成員。コードネーム「V.7」と呼ばれる期待の新人だが、マニュアル通りにいかないとボロが出てしまう。\nバーチャル世界への潜入は孤独な任務だったが、今では安らぎを見出し始めている。この任務が、彼女を新たな運命へと導くことになるのだろうか……？",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "11月7日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2022年3月25日"
+    },
+    {
+      "label": "身長",
+      "value": "155cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブインドネシア"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "あるてら"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Zecretary"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCTvHWSfBZgtxE4sILOaurIQ?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/vestiazeta"
+    },
+    {
+      "label": "Instagram",
+      "url": "https://instagram.com/vestiazeta"
+    },
+    {
+      "label": "TikTok",
+      "url": "https://tiktok.com/@vestiazeta"
+    },
+    {
+      "label": "Facebook",
+      "url": "https://facebook.com/VestiaZeta"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/vestia-zeta/"
+}

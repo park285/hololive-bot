@@ -1,0 +1,40 @@
+{
+  "slug": "elizabeth-rose-bloodflame",
+  "english_name": "Elizabeth Rose Bloodflame",
+  "japanese_name": "Elizabeth Rose Bloodflame",
+  "catchphrase": "「私の声が君の力になりますように」",
+  "description": "世界のため、人々のため、道を切り開く『緋色の女王』。\n最前線に立って身体を張るだけでなく、その歌声をもって皆の心に寄り添い、感情を奮い立たせる存在。\nときには傷ついてしまうほど自らを強く律する気質に、丁寧さを重んじる地域柄も相まって周囲の人々には甘くなりがち。\n結果、まとめ役としては猛省の日々を過ごしているが、ちょっといいベッドでお昼寝をすればそんな悲しみも癒せるらしい。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "4月25日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年6月22日"
+    },
+    {
+      "label": "身長",
+      "value": "171cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Justice"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "めふぃすと"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCW5uhrG1eCBYditmhL0Ykjw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/ERBloodflame"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/elizabeth-rose-bloodflame/"
+}

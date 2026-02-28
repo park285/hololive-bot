@@ -1,0 +1,79 @@
+package trigger
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/service/majorevent"
+)
+
+func TestClient_SendWeeklyNotification_Success(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewClient(srv.URL+"/", nil)
+	if err := client.SendWeeklyNotification(context.Background()); err != nil {
+		t.Fatalf("SendWeeklyNotification() error = %v, want nil", err)
+	}
+	if gotPath != "/internal/trigger/majorevent-weekly" {
+		t.Fatalf("path = %q, want %q", gotPath, "/internal/trigger/majorevent-weekly")
+	}
+}
+
+func TestClient_SendMonthlyNotification_Conflict(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewClient(srv.URL, nil)
+	err := client.SendMonthlyNotification(context.Background())
+	if !errors.Is(err, majorevent.ErrNotificationInProgress) {
+		t.Fatalf("error = %v, want ErrNotificationInProgress", err)
+	}
+}
+
+func TestClient_SendWeeklyNotification_Non2xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("upstream failed"))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewClient(srv.URL, nil)
+	err := client.SendWeeklyNotification(context.Background())
+	if err == nil {
+		t.Fatal("SendWeeklyNotification() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "status 502") {
+		t.Fatalf("error = %q, expected to contain status 502", err.Error())
+	}
+	if !strings.Contains(err.Error(), "upstream failed") {
+		t.Fatalf("error = %q, expected to contain response body", err.Error())
+	}
+}
+
+func TestClient_SendMemberNewsWeekly_Success(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewClient(srv.URL, nil)
+	if err := client.SendMemberNewsWeekly(context.Background()); err != nil {
+		t.Fatalf("SendMemberNewsWeekly() error = %v, want nil", err)
+	}
+	if gotPath != "/internal/trigger/membernews-weekly" {
+		t.Fatalf("path = %q, want %q", gotPath, "/internal/trigger/membernews-weekly")
+	}
+}

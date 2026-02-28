@@ -1,0 +1,48 @@
+{
+  "slug": "ookami-mio",
+  "english_name": "Ookami Mio",
+  "japanese_name": "Ookami Mio",
+  "catchphrase": "「こんばんみぉーん！大神ミオだよ～！」",
+  "description": "どこからともなく現れた黒髪のケモミミ少女。神社によく出没するらしい。ゲームが大好き。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "8月20日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2018年12月7日"
+    },
+    {
+      "label": "身長",
+      "value": "160cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブゲーマーズ"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "泉彩"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "ミオファ（みおーんファミリー）"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#ミオかわいい\nファンアート：#みおーん絵"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCp-5t9SrOQwXMU7iIjQfARg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/ookamimio"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/ookami-mio/"
+}

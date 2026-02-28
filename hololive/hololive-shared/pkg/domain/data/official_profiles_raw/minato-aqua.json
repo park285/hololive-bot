@@ -1,0 +1,76 @@
+{
+  "slug": "minato-aqua",
+  "english_name": "Minato Aqua",
+  "japanese_name": "Minato Aqua",
+  "catchphrase": "「皆さんどうもこんあくあー！湊あくあです！」",
+  "description": "マリンメイド服のバーチャルメイド。本人は頑張っているがおっちょこちょいでドジっ子。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "12月1日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2018年8月8日"
+    },
+    {
+      "label": "身長",
+      "value": "148㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ2期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "がおう"
+    },
+    {
+      "label": "夢",
+      "value": "銀河一最強アイドル"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "あくあクルー"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#湊あくあ生放送\nファンアート：#あくあーと"
+    },
+    {
+      "label": "Words",
+      "value": "オニオン、44.5、大天使、AMT、AKUKIN、\n( ^)o(^ )、うぱー、思い込みの狂気、ソロライブ、IQ5000、凸０、中笑い、NEKO、あくあ色"
+    },
+    {
+      "label": "Message",
+      "value": "みんなをあくあ色に染めちゃうんだから！！ついてきてね！"
+    },
+    {
+      "label": "よくやる配信",
+      "value": "オンラインゲーム中心にFPSからアクションゲームまで幅広くプレイしてます！"
+    },
+    {
+      "label": "趣味",
+      "value": "歌うこと"
+    },
+    {
+      "label": "好きなもの",
+      "value": "アニメ、漫画、オムライス"
+    },
+    {
+      "label": "特技",
+      "value": "ゲーム"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC1opHUrw8rvnsadT-iGp7Cg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/minatoaqua"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/minato-aqua/"
+}

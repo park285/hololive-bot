@@ -1,0 +1,64 @@
+{
+  "slug": "moona-hoshinova",
+  "english_name": "Moona Hoshinova",
+  "japanese_name": "Moona Hoshinova",
+  "catchphrase": "「ムーン ムーン ムーナだよ！」",
+  "description": "満月のように明るく、銀河のように美しい！ホロライブIDのムーナ・ホシノヴァだよ！\nモデル兼アイドルの大学生。バーチャル世界に興味を持ち、VTuberになった。落ち着いているように見えるが実はホラーが苦手。\nムーナの配信に、稀に別人格「ホシノヴァ」が現れ、お姉さんボイスを披露する。ムーナの配信から目を離すな！",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "2月15日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年4月11日"
+    },
+    {
+      "label": "身長",
+      "value": "165㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブインドネシア"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "により"
+    },
+    {
+      "label": "夢",
+      "value": "曲をたくさん作って自分のライブをしたい！世界トップ10の曲を作れたらいいな"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Moonafic"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#MoonA_Live\nファンアート：#HoshinovArt\n歌の感想：#MoonUtau\nミーム投稿：#GrassMoona\nマイクラ投稿：#MoonArchitect"
+    },
+    {
+      "label": "Message",
+      "value": "こんにちは！ムーナ・ホシノヴァです！ホロライブIDの１期生です！\n音楽が好きでいつも配信中に鼻歌を歌ってます！即興の詩を歌うのが大好き！\nぜひ配信にきてみてください！"
+    },
+    {
+      "label": "得意な配信/よくやる配信",
+      "value": "ゲームが好きでFPSをメインにやってます！洋楽のバラードを歌うのも、ツイッターで親父ギャグやミームを言うのも好き。気まぐれとも言うけど。笑い声がイルカに似てるって言われたりするけど、それが持ち味だと思ってます！"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCP0BspO_AMEe3aQqqpo89Dg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/moonahoshinova"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td88680"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/moona-hoshinova/"
+}

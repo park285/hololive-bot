@@ -1,0 +1,52 @@
+{
+  "slug": "watson-amelia",
+  "english_name": "Watson Amelia",
+  "japanese_name": "Watson Amelia",
+  "catchphrase": "「テステス、こんにちは～ アメリア・ワトソンです！最高の探偵にお任せあれ！」",
+  "description": "ネットで喋るキツネとか魔法リスとか超人ワンコとか、色々ホロライブにまつわる変な噂を耳にし、気になって調査に出向いたところ、彼女自身もアイドルになりたくなった。\n暇つぶしに反射神経を鍛えられるFPSやパズルゲーなどを好んでやっている。「初歩的なことなんでしょう？」",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "1月6日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年09月13日"
+    },
+    {
+      "label": "身長",
+      "value": "150㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "Myth（神話）"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "Nabi"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "teamates"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#amelive\nファンアート：#ameliaRT"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCyl1z3jo3XHR1riLFKG5UAg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/watsonameliaEN"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td88334"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/watson-amelia/"
+}

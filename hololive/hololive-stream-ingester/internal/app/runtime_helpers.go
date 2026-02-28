@@ -1,0 +1,51 @@
+package app
+
+import (
+	"fmt"
+	"log/slog"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+)
+
+// ProvideAPIAddr: 관리자 서버가 리슨할 주소를 반환합니다.
+func ProvideAPIAddr(cfg *config.Config) string {
+	return fmt.Sprintf(":%d", cfg.Server.Port)
+}
+
+// ProvideYouTubeService: YouTube 서비스 인스턴스를 제공합니다.
+func ProvideYouTubeService(ytStack *providers.YouTubeStack) *youtube.Service {
+	return ytStack.Service
+}
+
+func applyScraperProxyToggle(
+	enabled bool,
+	youtubeService *youtube.Service,
+	holodexService *holodex.Service,
+	scraperScheduler *poller.Scheduler,
+	logger *slog.Logger,
+) {
+	youtubeApplied := false
+	holodexApplied := false
+	schedulerApplied := 0
+
+	if youtubeService != nil {
+		youtubeApplied = youtubeService.SetScraperProxyEnabled(enabled)
+	}
+	if holodexService != nil {
+		holodexApplied = holodexService.SetScraperProxyEnabled(enabled)
+	}
+	if scraperScheduler != nil {
+		schedulerApplied = scraperScheduler.SetProxyEnabled(enabled)
+	}
+
+	logger.Info("Applied scraper proxy toggle",
+		slog.Bool("enabled", enabled),
+		slog.Bool("youtube_applied", youtubeApplied),
+		slog.Bool("holodex_applied", holodexApplied),
+		slog.Int("scheduler_pollers_applied", schedulerApplied),
+	)
+}

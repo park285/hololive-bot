@@ -1,0 +1,19 @@
+{{- if eq .Count 0 -}}
+{{template "empty_message" (dict "Emoji" $.Emoji.Alarm "Message" "설정된 알람이 없습니다.")}}
+
+{{template "usage_hint" (dict "Emoji" .Emoji "Prefix" .Prefix "Command" "알람 추가" "Example" "알람 추가 페코라")}}
+{{- else -}}
+{{template "counted_header" (dict "Emoji" $.Emoji.Alarm "Label" "설정된 알람" "Count" .Count)}}
+
+{{range $index, $alarm := .Alarms}}
+{{add $index 1}}. {{$alarm.MemberName}}{{if $alarm.TypesLabel}} ({{$alarm.TypesLabel}}){{end}}
+{{- if $alarm.NextStream}}
+{{template "next_stream_info" (dict "Emoji" $.Emoji "NextStream" $alarm.NextStream)}}
+{{- end}}
+{{- if lt (add $index 1) $.Count}}
+
+{{- end}}
+{{end}}
+
+{{template "emoji_hint" .}} {{.Prefix}}알람 제거 [멤버명] 으로 알람 해제
+{{- end -}}

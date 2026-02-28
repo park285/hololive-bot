@@ -1,0 +1,48 @@
+{
+  "slug": "shiori-novella",
+  "english_name": "Shiori Novella",
+  "japanese_name": "Shiori Novella",
+  "catchphrase": "「それって素敵な物語だと思わない？」",
+  "description": "知識欲に突き動かされる『収集家』。\n気に入った物語や大切な思い出を栞に変え、保管している。\n不幸にも収集した物語の中に人類の触れてはならないものが含まれていたため、投獄されていた。しかし、その経験すらも彼女にとっては魅力的な物語の一つなのかもしれない。これからの物語を知るため、脱獄を計画、実行してみせた。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月2日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年7月30日"
+    },
+    {
+      "label": "身長",
+      "value": "163cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Advent"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "かやはら"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCgnfPPb9JI3e9A4cXHnWbyg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/shiorinovella"
+    },
+    {
+      "label": "TikTok",
+      "url": "https://www.tiktok.com/@shiorinovella"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td94458"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/shiori-novella/"
+}

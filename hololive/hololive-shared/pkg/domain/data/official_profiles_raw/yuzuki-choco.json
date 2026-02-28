@@ -1,0 +1,52 @@
+{
+  "slug": "yuzuki-choco",
+  "english_name": "Yuzuki Choco",
+  "japanese_name": "Yuzuki Choco",
+  "catchphrase": "「Good evening! my cute students. ちょっこーん！」",
+  "description": "魔界学校の保健医。校内の男女からの人気は高く、特に男子からの診察依頼が絶えないという。お菓子が好きで、机の上にお菓子の袋が散乱しているのが目撃されては怒られている。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "2月14日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2018年9月4日"
+    },
+    {
+      "label": "身長",
+      "value": "165cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ2期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "桝石きのと"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "ちょこめいと"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#癒月診療所\nファンアート：#しょこらーと"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC1suqwovbL1kzsoaZgFZLKg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/yuzukichococh"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td63631"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/yuzuki-choco/"
+}

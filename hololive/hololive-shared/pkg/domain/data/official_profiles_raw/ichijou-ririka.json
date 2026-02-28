@@ -1,0 +1,52 @@
+{
+  "slug": "ichijou-ririka",
+  "english_name": "Ichijou Ririka",
+  "japanese_name": "Ichijou Ririka",
+  "catchphrase": "「かわいい！ポジティブ！ジーニアス！hololive DEV_IS ReGLOSSの一条莉々華だよ～！」",
+  "description": "新進気鋭の女社長。\n好奇心のままに立ち上げた会社だったが、今のところは順調。\n人とのコミュニケーションを得意とし、自ら海外企業との折衝もこなす。\n成功の秘訣はよく寝ること。\n一方、私生活ではガサツな一面も多く、家事全般はあまり得意とは言えない。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月12日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年9月9日"
+    },
+    {
+      "label": "身長",
+      "value": "162cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ReGLOSS"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "なかむら"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "秘書見習い"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ : #莉々華ミーティング中\nアートタグ : #ririkart"
+    },
+    {
+      "label": "推しマーク",
+      "value": "🌃"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/@IchijouRirika?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/ichijouririka"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/ichijou-ririka/"
+}

@@ -1,0 +1,52 @@
+{
+  "slug": "otonose-kanade",
+  "english_name": "Otonose Kanade",
+  "japanese_name": "Otonose Kanade",
+  "catchphrase": "「ドレミファソラシド～！hololive DEV_IS所属、ReGLOSSの音楽家の卵！音乃瀬～奏で～～～す！」",
+  "description": "クレッシェンドな日々を過ごす音楽家の卵。\nどんな時も彼女の側に音楽はある。\n喜怒哀楽が表に出やすく、好きなことのためならどこまでも頑張れるが、苦手なことにはつい眉をひそめてしまう幼さがまだ残っている。\nけれど、美味しいご褒美があれば話は別。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "4月20日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年9月9日"
+    },
+    {
+      "label": "身長",
+      "value": "153cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ReGLOSS"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "gomzi"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "音の勢"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ : #生音乃瀬\nアートタグ : #Artnose"
+    },
+    {
+      "label": "推しマーク",
+      "value": "🎹✨"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://youtube.com/@OtonoseKanade?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/otonosekanade"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/otonose-kanade/"
+}

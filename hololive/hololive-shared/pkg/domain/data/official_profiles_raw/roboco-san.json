@@ -1,0 +1,56 @@
+{
+  "slug": "roboco-san",
+  "english_name": "Robocosan",
+  "japanese_name": "Robocosan",
+  "catchphrase": "「はろーぼー！ロボ子だよー」",
+  "description": "はろ～ぼ～！！高性能といえばこのボク！ホロライブ所属のロボットVTuberロボ子だよ～！ 記憶を失ってとある荒野に現れたロボット。\n自称【高性能】だが、噂では【ポンコツ】が正しいのではといわれている模様…ｗ 人間らしい感情をもった歌声が特徴でゲームも大好きな女の子！\n本当にロボットなのだろうか…？あ、腕が外れたみたいだ。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月23日"
+    },
+    {
+      "label": "デビュー日",
+      "value": "2018年3月9日"
+    },
+    {
+      "label": "身長",
+      "value": "154㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ0期生"
+    },
+    {
+      "label": "3Dモデラー",
+      "value": "kuromaru9"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "ろぼさー"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#ロボ子生放送\nファンアート：#ロボ子Art"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCDqI2jOz0weumE8s7paEk6g?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/robocosan"
+    },
+    {
+      "label": "歌の再生リスト",
+      "url": "https://www.youtube.com/playlist?list=PLF54qiUa9cTu9eyx3Ukx88jtJUCKGFvWL"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td63645"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/roboco-san/"
+}

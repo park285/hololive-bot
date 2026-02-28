@@ -1,0 +1,22 @@
+{{- if not .ChannelName -}}
+{{template "emoji_error" .}} 채널 정보를 찾을 수 없습니다.
+{{- else if eq .Count 0 -}}
+{{template "emoji_schedule" .}} {{.ChannelName}}
+{{.Days}}일 이내 예정된 방송이 없습니다.
+{{- else -}}
+{{template "day_range_header" (dict "Emoji" $.Emoji.Schedule "ChannelName" .ChannelName "DayRange" .Days "Count" .Count)}}
+
+{{ range $index, $entry := .Streams -}}
+{{- if gt $index 0 }}
+
+{{- end -}}
+{{- if $entry.IsLive }}
+{{template "emoji_live" $}} LIVE {{$entry.Title}}
+   지금 방송 중
+{{- else }}
+{{template "emoji_time" $}} {{$entry.Title}}
+   {{$entry.TimeInfo}}
+{{- end }}
+   {{$entry.URL}}
+{{- end -}}
+{{- end -}}

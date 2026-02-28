@@ -1,0 +1,13 @@
+.git
+.idea
+.vscode
+.serena
+.claude
+logs
+tmp
+bin
+.env
+*.log
+admin-ui/node_modules
+admin-ui/logs
+node_modules

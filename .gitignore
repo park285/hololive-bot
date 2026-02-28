@@ -1,2 +1,199 @@
+# ============================================
+# Hololive Bot Root .gitignore
+# ============================================
+
+# ============================================
+# Kubernetes (기존 항목)
+# ============================================
 k8s/base/monitoring/charts/
 k8s/base/secret-app.yaml
+
+# ============================================
+# Secrets & Credentials (CRITICAL)
+# ============================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+credentials.json
+secrets.yml
+secrets.yaml
+secrets/*
+!secrets/.gitkeep
+
+# ============================================
+# Go Build Outputs
+# ============================================
+# hololive-kakao-bot-go 빌드 산출물
+hololive/hololive-kakao-bot-go/bot
+hololive/hololive-kakao-bot-go/fetch_profiles
+hololive/hololive-kakao-bot-go/config.json
+
+# ============================================
+# Rust
+# ============================================
+target/
+*.rs.bk
+
+# ============================================
+# IDE
+# ============================================
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# ============================================
+# Logs
+# ============================================
+*.log
+logs/
+!**/internal/logs/
+gc.log*
+
+# ============================================
+# OS Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================
+# Temporary Files
+# ============================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+tmp/
+backup/
+backups/
+
+# Compressed archives
+*.tar.gz
+
+# ============================================
+# AI Tooling Artifacts (Local Only)
+# ============================================
+.playwright-cli/
+.serena/
+.claude/
+.gemini/
+.codex/
+.codex-input/
+.opencode/
+*.ai.md
+*-ai-notes.md
+*.backup
+*.backup-*
+AGENTS.md
+.plan/
+.PLAN/
+CLAUDE.md
+CLAUDE_MD_ARCHITECTURE.md
+.omx/
+.omc/
+.omx-memory/
+
+# Temporary analysis files (LLM workflow)
+*_files.txt
+*_tests.txt
+*_no_tests.txt
+
+# ============================================
+# Personal/Draft Files
+# ============================================
+NOTES.md
+TODO.md
+SCRATCH.md
+*.draft.md
+.notes/
+notes/
+
+# ============================================
+# Test & Coverage
+# ============================================
+.test/
+coverage/
+*.gcov
+coverage.out
+cover.out
+coverage.html
+
+# ============================================
+# Database
+# ============================================
+*.db
+*.mv.db
+*.trace.db
+dump.rdb
+
+# ============================================
+# Node.js
+# ============================================
+node_modules/
+
+# ============================================
+# Runtime & Process Files
+# ============================================
+*.pid
+nohup.out
+
+# ============================================
+# Hololive Scraper RS Reports
+# ============================================
+hololive/hololive-scraper-rs/docs/reports/**/*.json
+hololive/hololive-scraper-rs/docs/reports/**/*.tsv
+
+# ============================================
+# Local Data & Config
+# ============================================
+/config/
+/data/
+
+# ============================================
+# VPN Config
+# ============================================
+*.ovpn
+
+# ============================================
+# IDE Agent Configs
+# ============================================
+.agents/
+.junie/
+
+# ============================================
+# Agent Workflows (Local Only)
+# ============================================
+.agent/
+
+# ============================================
+# Deploy Snapshots
+# ============================================
+.deploy-snapshots/
+
+# ============================================
+# Explicitly Include (Override)
+# ============================================
+!.env.example
+!README.md
+!LICENSE
+!CHANGELOG.md
+!docs/

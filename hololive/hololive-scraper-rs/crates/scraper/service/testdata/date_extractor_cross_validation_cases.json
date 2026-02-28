@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "generated_from": "hololive-kakao-bot-go/internal/service/majorevent/date_extractor_test.go",
+  "cases": [
+    {
+      "name": "event_date_with_ticket_date_filtered",
+      "input_html": "<h6>開催日時</h6><p>2027年2月21日（土）</p><h6>チケット販売</h6><p>2026年11月25日より</p>",
+      "expected_dates": [
+        "2027-02-21"
+      ]
+    },
+    {
+      "name": "multi_day_range_with_weekday_parentheses",
+      "input_html": "<p>開催日程：2027年3月6日（金）～8日（日）</p>",
+      "expected_dates": [
+        "2027-03-06",
+        "2027-03-08"
+      ]
+    },
+    {
+      "name": "year_rollover_multi_day_range",
+      "input_html": "<p>開催期間：2027年12月30日～1月2日</p>",
+      "expected_dates": [
+        "2027-12-30",
+        "2028-01-02"
+      ]
+    },
+    {
+      "name": "dot_style_event_date_preferred_over_archive_deadline",
+      "input_html": "<h6>開催日時</h6><p>2027.1.17 Sat - 2027.1.18 Sun</p><h6>アーカイブ視聴期限</h6><p>2027年2月18日</p>",
+      "expected_dates": [
+        "2027-01-17",
+        "2027-01-18"
+      ]
+    },
+    {
+      "name": "negative_keyword_section_suppresses_streaming_period",
+      "input_html": "<h6>開催日時</h6><p>2027年3月1日</p><h6>配信期間</h6><p>2027年3月1日～2027年4月30日</p>",
+      "expected_dates": [
+        "2027-03-01"
+      ]
+    },
+    {
+      "name": "real_html_supernova_fixture",
+      "input_file": "supernova_reboot_real.html",
+      "expected_dates": [
+        "2026-02-21"
+      ]
+    }
+  ]
+}

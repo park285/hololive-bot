@@ -1,0 +1,52 @@
+{
+  "slug": "ninomae-inanis",
+  "english_name": "Ninomae Ina'nis",
+  "japanese_name": "Ninomae Ina'nis",
+  "catchphrase": "「おはよう、こんにちは、こんばんは！WAHンダフルな一日を過ごせていますように！」",
+  "description": "こう見えても古き神の司祭である。ある日「変な本」を拾ってから触手を操れるようになった。彼女にとって触手は日常生活の一部であり、とくに何も思わない。でも、おしゃれはしてあげたい乙女心。\n力を得て以来、古き声から囁きや天啓を受け、無垢でごく普通な彼女はVTuber活動を通して人々のSAN値を削っている模様。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月20日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年9月13日"
+    },
+    {
+      "label": "身長",
+      "value": "157㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "Myth（神話）"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "黒星紅白"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Tentacult"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#TAKOTIME #タコタイム\nファンアート：#inART #いなート"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCMwGHR0BTZuLsmjY_NT5Pwg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/ninomaeinanis"
+    },
+    {
+      "label": "Takanashi Kiara / Ninomae Ina’nis1st Concert “Drawn to Dawn”",
+      "url": "https://drawn-to-dawn.hololivepro.com/"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/ninomae-inanis/"
+}

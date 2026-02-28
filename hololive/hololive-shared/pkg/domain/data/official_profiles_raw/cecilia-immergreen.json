@@ -1,0 +1,40 @@
+{
+  "slug": "cecilia-immergreen",
+  "english_name": "Cecilia Immergreen",
+  "japanese_name": "Cecilia Immergreen",
+  "catchphrase": "「こんな旋律を思いついたの。聞いてくれる？」",
+  "description": "花と紅茶、そして演奏をたしなむ『古代自動人形』。\n古き時代に作られ、元々は永遠の隷属を尽くすものとして在った。\nしかし、近頃はその責務に対しておざなり気味で、料理はジャガイモがあれば大丈夫と済ませてしまったり、業務よりも趣味に没頭したりする姿が散見されている。\n彼女にとっては出来事すべてが新鮮ゆえに、まるで無邪気な少女のような感情表現を見せることがある。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "11月11日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年6月23日"
+    },
+    {
+      "label": "身長",
+      "value": "162cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Justice"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "DSマイル"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCvN5h1ShZtc7nly3pezRayg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/ceciliaimgreen"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/cecilia-immergreen/"
+}

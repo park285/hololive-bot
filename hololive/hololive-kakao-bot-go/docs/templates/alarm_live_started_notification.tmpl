@@ -1,0 +1,11 @@
+{{template "emoji_alarm" .}} {{.ChannelName}} 방송 시작됨
+
+{{- if .ScheduledTimeKST}}
+{{template "emoji_time" .}} {{.ScheduledTimeKST}}에 시작했습니다
+{{- else}}
+{{template "emoji_time" .}} 이미 시작했습니다
+{{- end}}
+
+{{template "emoji_broadcast" .}} {{.Title}}
+
+{{template "emoji_link" .}} {{.URL}}

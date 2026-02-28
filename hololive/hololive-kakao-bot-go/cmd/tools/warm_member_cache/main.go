@@ -1,0 +1,47 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/util"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/app"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("failed to load config: %v\n", err)
+		return
+	}
+
+	logger, err := util.EnableFileLoggingWithLevel(util.LogConfig{
+		Dir:        cfg.Logging.Dir,
+		MaxSizeMB:  cfg.Logging.MaxSizeMB,
+		MaxBackups: cfg.Logging.MaxBackups,
+		MaxAgeDays: cfg.Logging.MaxAgeDays,
+		Compress:   cfg.Logging.Compress,
+	}, "warm_member_cache.log", cfg.Logging.Level)
+	if err != nil {
+		fmt.Printf("failed to initialize logger: %v\n", err)
+		return
+	}
+
+	logger.Info("Manual member list cache refresh started")
+
+	_, cleanup, err := app.InitializeWarmMemberCache(ctx, cfg, logger)
+	if err != nil {
+		logger.Error("Manual cache refresh failed", slog.Any("error", err))
+		return
+	}
+	defer cleanup()
+
+	logger.Info("Manual member list cache refresh completed successfully")
+}

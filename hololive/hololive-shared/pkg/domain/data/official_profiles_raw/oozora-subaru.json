@@ -1,0 +1,52 @@
+{
+  "slug": "oozora-subaru",
+  "english_name": "Oozora Subaru",
+  "japanese_name": "Oozora Subaru",
+  "catchphrase": "「ちわーす！ホロライブ2期生大空スバルっス！！」",
+  "description": "総合格闘技部とe-sports部のマネージャーをしている。男勝りな性格で、誰とも分け隔てなく接する、明るく元気で活発な子。ゲームは絶賛練習中。\n今日も元気にマネージャー！！！！！！！！！！！",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "7月2日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2018年9月16日"
+    },
+    {
+      "label": "身長",
+      "value": "154cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ2期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "しぐれうい"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "スバ友"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#生スバル\nファンアート：#プロテインザスバル"
+    },
+    {
+      "label": "趣味など",
+      "value": "映画鑑賞、おさんぽ"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCvzGlP9oQwU--Y0r9id_jnA?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/oozorasubaru"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/oozora-subaru/"
+}

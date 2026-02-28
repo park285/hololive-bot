@@ -1,0 +1,88 @@
+{
+  "slug": "sakuramiko",
+  "english_name": "Sakura Miko",
+  "japanese_name": "Sakura Miko",
+  "catchphrase": "「にゃっはろ～！エリート巫女アイドルのさくらみこですっ！」",
+  "description": "電脳桜神社の巫女。アイドルに憧れを抱き唯一無二のトップエリート巫女アイドルになることを目指し日々奮闘中！\n「エリート」と自称しているが、ファンの間では「ポンコツ」という噂も…｡",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "3月5日"
+    },
+    {
+      "label": "デビュー日",
+      "value": "2018年8月1日"
+    },
+    {
+      "label": "身長",
+      "value": "152㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ0期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "田中雄一"
+    },
+    {
+      "label": "新衣装デザイン",
+      "value": "おるだん"
+    },
+    {
+      "label": "夢",
+      "value": "誰からもエリートと思われるような唯一無二のトップエリート巫女アイドルになること！そしてずっとみんなを笑顔に出来るような人であり続ける事！"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "35Ｐ"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#みこなま\nファンアート：#miko_Art\nMMD作品：#さくらみこMMD"
+    },
+    {
+      "label": "Message",
+      "value": "みんなと一緒にいつまでもずっと\n咲き誇っていくVTuberを目指すにぇ！"
+    },
+    {
+      "label": "好きなもの",
+      "value": "たい焼き、シチュー、ダブチ、旅行と温泉、35Pと家族"
+    },
+    {
+      "label": "よくやる配信",
+      "value": "ゲーム実況、企画配信、映画同時視聴"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC-hM6YJuNYVAmUWxeIr9FeA?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/sakuramiko35"
+    },
+    {
+      "label": "Twitch",
+      "url": "https://www.twitch.tv/sakuramiko_hololive"
+    },
+    {
+      "label": "Tik Tok",
+      "url": "https://www.tiktok.com/@sakuramiko_hololive"
+    },
+    {
+      "label": "オリジナル楽曲リスト",
+      "url": "https://youtube.com/playlist?list=PLMF8NocLqJttJCIiUCkNXx6jW4dAYfz5G\u0026si=g2i8rWGyqBy61a9x"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td74928"
+    },
+    {
+      "label": "MMD(2)",
+      "url": "https://3d.nicovideo.jp/works/td74930"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/sakuramiko/"
+}

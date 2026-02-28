@@ -1,0 +1,40 @@
+{
+  "slug": "koganei-niko",
+  "english_name": "Koganei Niko",
+  "japanese_name": "Koganei Niko",
+  "catchphrase": "「笑えない時は、ニコたんの名を呼ぶがいいさ！」",
+  "description": "FLOW GLOWのお笑い担当。\n人を笑顔にするためならば、自分の人生すらも捧げられる情熱の持ち主。\nゴリ押しだろうがキャラ崩壊だろうが、最後に笑わせられるのなら万事OK。\n朝と動物に弱く、頭も髪もボケボケのまま、飼い猫のご飯の準備をさせられている。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "7月25日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年11月9日"
+    },
+    {
+      "label": "身長",
+      "value": "172cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "FLOW GLOW"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "鉄一"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCuI_opAVX6qbxZY-a-AxFuQ?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/koganeiniko"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/koganei-niko/"
+}

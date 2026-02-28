@@ -1,0 +1,15 @@
+{{- if eq .Count 0 -}}
+{{template "empty_message" (dict "Emoji" $.Emoji.Schedule "Message" (printf "%d시간 이내 예정된 방송이 없습니다." .Hours))}}
+{{- else -}}
+{{template "time_range_header" (dict "Emoji" $.Emoji.Schedule "Label" "예정된 방송" "TimeRange" .Hours "Count" .Count)}}
+
+{{ range $index, $stream := .Streams -}}
+{{- if gt $index 0}}
+
+{{end -}}
+{{template "emoji_broadcast" $}} {{$stream.ChannelName}}
+   {{template "emoji_video" $}} {{$stream.Title}}
+   {{template "emoji_time" $}} {{$stream.TimeInfo}}
+   {{template "emoji_link" $}} {{$stream.URL}}
+{{- end -}}
+{{- end -}}

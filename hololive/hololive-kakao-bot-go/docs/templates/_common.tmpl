@@ -1,0 +1,67 @@
+{{/* 공통 이모지 상수 */}}
+{{define "emoji_brand"}}{{$.Emoji.Brand}}{{end}}
+{{define "emoji_alarm"}}{{$.Emoji.Alarm}}{{end}}
+{{define "emoji_broadcast"}}{{$.Emoji.Broadcast}}{{end}}
+{{define "emoji_success"}}{{$.Emoji.Success}}{{end}}
+{{define "emoji_error"}}{{$.Emoji.Error}}{{end}}
+{{define "emoji_schedule"}}{{$.Emoji.Schedule}}{{end}}
+{{define "emoji_live"}}{{$.Emoji.Live}}{{end}}
+{{define "emoji_hint"}}{{$.Emoji.Hint}}{{end}}
+{{define "emoji_time"}}{{$.Emoji.Time}}{{end}}
+{{define "emoji_info"}}{{$.Emoji.Info}}{{end}}
+{{define "emoji_member"}}{{$.Emoji.Member}}{{end}}
+{{define "emoji_link"}}{{$.Emoji.Link}}{{end}}
+{{define "emoji_web"}}{{$.Emoji.Web}}{{end}}
+{{define "emoji_speech"}}{{$.Emoji.Speech}}{{end}}
+{{define "emoji_highlight"}}{{$.Emoji.Highlight}}{{end}}
+{{define "emoji_data"}}{{$.Emoji.Data}}{{end}}
+{{define "emoji_stats"}}{{$.Emoji.Stats}}{{end}}
+{{define "emoji_video"}}{{$.Emoji.Video}}{{end}}
+
+{{/* 카운트 헤더: "🔔 설정된 알람 (3개)" */}}
+{{define "counted_header"}}{{.Emoji}} {{.Label}} ({{.Count}}{{if .Unit}}{{.Unit}}{{else}}개{{end}}){{end}}
+
+{{/* 시간 범위 헤더: "📅 예정된 방송 (24시간 이내, 5개)" */}}
+{{define "time_range_header"}}{{.Emoji}} {{.Label}} ({{.TimeRange}}시간 이내, {{.Count}}개){{end}}
+
+{{/* 일 범위 헤더: "📅 멤버명 일정 (7일 이내, 3개)" */}}
+{{define "day_range_header"}}{{.Emoji}}{{if .ChannelName}} {{.ChannelName}}{{end}} 일정 ({{.DayRange}}일 이내, {{.Count}}개){{end}}
+
+{{/* 빈 메시지: "🔴 현재 방송 중인 스트림이 없습니다" */}}
+{{define "empty_message"}}{{.Emoji}} {{.Message}}{{end}}
+
+{{/* 사용법 안내 */}}
+{{define "usage_hint"}}{{template "emoji_hint" .}} 사용법:
+{{.Prefix}}{{.Command}} [멤버명]
+예) {{.Prefix}}{{.Example}}{{end}}
+
+{{/* 에러 메시지 */}}
+{{define "error_message"}}{{template "emoji_error" .}} {{.Message}}{{end}}
+
+{{/* 성공 메시지 */}}
+{{define "success_message"}}{{template "emoji_success" .}} {{.Message}}{{end}}
+
+{{/* 다음 방송 정보 */}}
+{{define "next_stream_info"}}
+{{- $ns := .NextStream }}
+{{- if not $ns }}
+{{- else if eq $ns.Status "live" }}
+   {{template "emoji_live" $}} 현재 방송 중!
+{{- if $ns.Title }}
+   {{template "emoji_broadcast" $}} {{$ns.Title}}
+{{- end }}
+{{- if $ns.URL }}
+   {{template "emoji_link" $}} {{$ns.URL}}
+{{- end }}
+{{- else if eq $ns.Status "upcoming" }}
+   {{template "emoji_time" $}} {{if $ns.StartingSoon}}곧 시작합니다!{{else}}다음 방송: {{$ns.ScheduledKST}}{{if $ns.TimeDetail}} ({{$ns.TimeDetail}}){{end}}{{end}}
+{{- if $ns.Title }}
+   {{template "emoji_broadcast" $}} {{$ns.Title}}
+{{- end }}
+{{- if $ns.URL }}
+   {{template "emoji_link" $}} {{$ns.URL}}
+{{- end }}
+{{- else }}
+   예정된 방송 없음
+{{- end }}
+{{end}}

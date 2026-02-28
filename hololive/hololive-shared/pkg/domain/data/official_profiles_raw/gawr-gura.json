@@ -1,0 +1,48 @@
+{
+  "slug": "gawr-gura",
+  "english_name": "Gawr Gura",
+  "japanese_name": "Gawr Gura",
+  "catchphrase": "「ドーモ！！サメデス！！今日はもうサメのこと、考えた？」",
+  "description": "「海底つまらんすぎてワロタ」って言いながら地上にやってきたアトランティスの末裔。\n彼女がお気に入りで着ている服は（サメの被りモノも含めて）日本で買った。本人曰く暇な時は海洋生物と会話するのが好き。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "6月20日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年09月13日"
+    },
+    {
+      "label": "身長",
+      "value": "141㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "Myth（神話）"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "甘城なつき"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "chumbuds"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#gawrgura\nファンアート：#gawrt"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCoSrY_IQQVpmIRZ9Xf-y93g?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/gawrgura"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/gawr-gura/"
+}

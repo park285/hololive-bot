@@ -1,0 +1,76 @@
+{
+  "slug": "shiranui-flare",
+  "english_name": "Shiranui Flare",
+  "japanese_name": "Shiranui Flare",
+  "catchphrase": "「こんぬいー！ホロライブ3期生の不知火フレアだよ！」",
+  "description": "人間とエルフのハーフエルフだよ！ 普段は適当～に楽しくやってるよ！君の力になりたいから困った時はいつでも頼ってね！ 情に厚く涙もろい、褒められると嬉しいけど照れちゃうじゃん！へへへ！よろしくね！",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "4月2日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2019年8月7日"
+    },
+    {
+      "label": "身長",
+      "value": "158cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ3期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "lack"
+    },
+    {
+      "label": "夢",
+      "value": "私のことをもっと知ってもらいたい、私の歌をもっともっとみんなに聞いてもらいたいな！"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "エルフレンド"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#フレアストリーム\nファンアート：#しらぬえ"
+    },
+    {
+      "label": "Message",
+      "value": "歌うの大好き！ゲームも大好き！でもまだまだゲームは下手っぴだけど楽しむことは誰にも負けない！\n苦手なゲームも死にゲーも楽しくプレイしゃうぞ！もっと私のことを知ってくれたら嬉しいな！"
+    },
+    {
+      "label": "好きなもの/よくやる配信",
+      "value": "歌・ゲーム"
+    },
+    {
+      "label": "趣味",
+      "value": "歌う、お絵描き、推しを愛でる"
+    },
+    {
+      "label": "特技",
+      "value": "裏声なしで三オクターブくらい出る"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCvInZx9h3jC2JzsIzoOebWg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/shiranuiflare"
+    },
+    {
+      "label": "歌の再生リスト",
+      "url": "https://www.youtube.com/watch?v=3y8oIuEkqQs\u0026list=PLBoFNGFmekcMIhlW5Z-umsS3VPnQx7tI8"
+    },
+    {
+      "label": "hololive 3rd Generation Live#きゅるるん大作戦〜最強アイドル、推すしかないでしょ〜",
+      "url": "https://operation-heartful-cuties.hololivepro.com/"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/shiranui-flare/"
+}

@@ -1,0 +1,21 @@
+{{- if .Headline -}}
+{{.Headline}}
+{{- else -}}
+🗞️ 구독 멤버 뉴스
+{{- end -}}
+{{- if eq (len .TopItems) 0 }}
+- 표시할 뉴스가 없습니다.
+{{- else }}
+{{range $index, $item := .TopItems}}
+{{- if gt $index 0 }}
+
+{{- end -}}
+{{add $index 1}}. [{{$item.DateText}}] {{$item.Member}} | {{$item.Category}}
+   📌 {{$item.Title}}
+   🔗 {{$item.SourceURL}}
+{{- end}}
+{{- if .MoreSummary }}
+
+{{.MoreSummary}}
+{{- end }}
+{{- end }}

@@ -1,0 +1,339 @@
+package template
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"math"
+	"net/url"
+	"reflect"
+	"strings"
+	"sync"
+	"text/template"
+	"time"
+	"unicode/utf8"
+
+	"gorm.io/gorm"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+type Renderer struct {
+	db      *gorm.DB
+	logger  *slog.Logger
+	cache   map[cacheKey]*template.Template
+	cacheMu sync.RWMutex
+}
+
+type cacheKey struct {
+	templateKey domain.TemplateKey
+	channelID   string
+}
+
+func NewRenderer(db *gorm.DB, logger *slog.Logger) *Renderer {
+	return &Renderer{
+		db:     db,
+		logger: logger,
+		cache:  make(map[cacheKey]*template.Template),
+	}
+}
+
+func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID string, data any) (string, error) {
+	tmpl, err := r.getTemplate(ctx, key, channelID)
+	if err != nil {
+		return "", fmt.Errorf("get template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, channelID string) (*template.Template, error) {
+	ck := cacheKey{templateKey: key, channelID: channelID}
+
+	r.cacheMu.RLock()
+	if tmpl, ok := r.cache[ck]; ok {
+		r.cacheMu.RUnlock()
+		return tmpl, nil
+	}
+	r.cacheMu.RUnlock()
+
+	body, err := r.loadTemplateBody(ctx, key, channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	tmpl, err := template.New(string(key)).Funcs(templateFuncs).Parse(body)
+	if err != nil {
+		return nil, fmt.Errorf("parse template: %w", err)
+	}
+
+	r.cacheMu.Lock()
+	r.cache[ck] = tmpl
+	r.cacheMu.Unlock()
+
+	return tmpl, nil
+}
+
+var ErrTemplateNotFound = errors.New("template not found in database")
+
+func (r *Renderer) loadTemplateBody(ctx context.Context, key domain.TemplateKey, channelID string) (string, error) {
+	var tmpl domain.NotificationTemplate
+
+	if channelID != "" {
+		err := r.db.WithContext(ctx).
+			Where("template_key = ? AND channel_id = ?", key, channelID).
+			First(&tmpl).Error
+		if err == nil {
+			return tmpl.Body, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", fmt.Errorf("query channel template: %w", err)
+		}
+	}
+
+	err := r.db.WithContext(ctx).
+		Where("template_key = ? AND channel_id IS NULL", key).
+		First(&tmpl).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", fmt.Errorf("%w: %s", ErrTemplateNotFound, key)
+		}
+		return "", fmt.Errorf("query default template: %w", err)
+	}
+
+	return tmpl.Body, nil
+}
+
+func (r *Renderer) InvalidateCache(key domain.TemplateKey, channelID string) {
+	r.cacheMu.Lock()
+	defer r.cacheMu.Unlock()
+
+	ck := cacheKey{templateKey: key, channelID: channelID}
+	delete(r.cache, ck)
+}
+
+func (r *Renderer) InvalidateKey(key domain.TemplateKey) {
+	r.cacheMu.Lock()
+	defer r.cacheMu.Unlock()
+
+	for ck := range r.cache {
+		if ck.templateKey == key {
+			delete(r.cache, ck)
+		}
+	}
+}
+
+var templateFuncs = template.FuncMap{
+	"truncate": func(maxLen int, s string) string {
+		runes := []rune(s)
+		if len(runes) <= maxLen {
+			return s
+		}
+		if maxLen <= 3 {
+			return string(runes[:maxLen])
+		}
+		return string(runes[:maxLen-3]) + "..."
+	},
+	"trim":           strings.TrimSpace,
+	"upper":          strings.ToUpper,
+	"lower":          strings.ToLower,
+	"title":          toTitle,
+	"replace":        strings.ReplaceAll,
+	"contains":       strings.Contains,
+	"hasPrefix":      strings.HasPrefix,
+	"hasSuffix":      strings.HasSuffix,
+	"join":           strings.Join,
+	"split":          strings.Split,
+	"formatNumber":   formatNumber,
+	"formatNumberKR": formatNumberKR,
+	"timeAgo":        timeAgo,
+	"date":           formatDate,
+	"default":        defaultValue,
+	"nl2br":          nl2br,
+	"stripTags":      stripTags,
+	"urlEncode":      urlEncode,
+	"add":            func(a, b int) int { return a + b },
+	"dict": func(values ...any) (map[string]any, error) {
+		if len(values)%2 != 0 {
+			return nil, errors.New("dict requires even number of arguments")
+		}
+		dict := make(map[string]any, len(values)/2)
+		for i := 0; i < len(values); i += 2 {
+			key, ok := values[i].(string)
+			if !ok {
+				return nil, errors.New("dict keys must be strings")
+			}
+			dict[key] = values[i+1]
+		}
+		return dict, nil
+	},
+}
+
+// toInt64는 다양한 타입의 값을 int64로 변환합니다.
+// nil이거나 변환할 수 없는 타입인 경우 (0, false)를 반환합니다.
+func toInt64(v any) (int64, bool) {
+	if v == nil {
+		return 0, false
+	}
+
+	// 포인터 타입인 경우 역참조
+	rv := reflect.ValueOf(v)
+	for rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return 0, false
+		}
+		rv = rv.Elem()
+	}
+
+	// 타입별 변환
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int(), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		u := rv.Uint()
+		if u > math.MaxInt64 {
+			return 0, false // 오버플로우
+		}
+		return int64(u), true
+	case reflect.Float32, reflect.Float64:
+		f := rv.Float()
+		if f > math.MaxInt64 || f < math.MinInt64 {
+			return 0, false // 오버플로우
+		}
+		return int64(f), true
+	default:
+		return 0, false
+	}
+}
+
+func formatNumber(v any) string {
+	if v == nil {
+		return "0"
+	}
+
+	n, ok := toInt64(v)
+	if !ok {
+		return fmt.Sprintf("%v", v)
+	}
+
+	return formatNumberInt64(n)
+}
+
+func formatNumberInt64(n int64) string {
+	if n < 0 {
+		return "-" + formatNumberInt64(-n)
+	}
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+
+	parts := make([]string, 0, 4)
+	for n > 0 {
+		parts = append([]string{fmt.Sprintf("%03d", n%1000)}, parts...)
+		n /= 1000
+	}
+	result := strings.Join(parts, ",")
+	return strings.TrimLeft(result, "0,")
+}
+
+func formatNumberKR(v any) string {
+	if v == nil {
+		return "0"
+	}
+
+	n, ok := toInt64(v)
+	if !ok {
+		return fmt.Sprintf("%v", v)
+	}
+
+	return formatNumberKRInt64(n)
+}
+
+func formatNumberKRInt64(n int64) string {
+	if n < 0 {
+		return "-" + formatNumberKRInt64(-n)
+	}
+
+	switch {
+	case n >= 100_000_000:
+		return fmt.Sprintf("%.1f억", float64(n)/100_000_000)
+	case n >= 10_000:
+		return fmt.Sprintf("%.1f만", float64(n)/10_000)
+	case n >= 1000:
+		return fmt.Sprintf("%.1f천", float64(n)/1000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+func timeAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "방금 전"
+	case d < time.Hour:
+		return fmt.Sprintf("%d분 전", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d시간 전", int(d.Hours()))
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%d일 전", int(d.Hours()/24))
+	default:
+		return t.Format("2006-01-02")
+	}
+}
+
+func formatDate(layout string, t time.Time) string {
+	return t.Format(layout)
+}
+
+func defaultValue(def, val string) string {
+	if val == "" {
+		return def
+	}
+	return val
+}
+
+func nl2br(s string) string {
+	return strings.ReplaceAll(s, "\n", "<br>")
+}
+
+func stripTags(s string) string {
+	var result strings.Builder
+	inTag := false
+	for _, r := range s {
+		if r == '<' {
+			inTag = true
+			continue
+		}
+		if r == '>' {
+			inTag = false
+			continue
+		}
+		if !inTag {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+func urlEncode(s string) string {
+	return url.QueryEscape(s)
+}
+
+func toTitle(s string) string {
+	if s == "" {
+		return ""
+	}
+	firstRune, size := utf8.DecodeRuneInString(s)
+	if firstRune == utf8.RuneError {
+		return s
+	}
+	return strings.ToUpper(string(firstRune)) + s[size:]
+}

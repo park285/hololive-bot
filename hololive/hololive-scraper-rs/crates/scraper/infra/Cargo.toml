@@ -1,0 +1,16 @@
+[package]
+name = "scraper-infra"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+config = { workspace = true }
+scraper-core = { workspace = true }
+serde = { workspace = true }
+secrecy = { workspace = true, features = ["serde"] }
+url = { workspace = true }
+sea-orm = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

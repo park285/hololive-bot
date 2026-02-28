@@ -1,0 +1,72 @@
+{
+  "slug": "natsuiro-matsuri",
+  "english_name": "Natsuiro Matsuri",
+  "japanese_name": "Natsuiro Matsuri",
+  "catchphrase": "「わっしょ～い！ホロライブの清楚担当みんなのアイドル夏色まつりです！」",
+  "description": "チア部の新入生。明るく元気で人懐っこい性格であり誰とでもすぐに仲良くなれて、友達も多い。祭りやイベントなど楽しいことが好き。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "7月22日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2018年6月1日"
+    },
+    {
+      "label": "身長",
+      "value": "152cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ1期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "皆村春樹"
+    },
+    {
+      "label": "夢",
+      "value": "最強アイドル＆声優"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "まつりす"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#夏まつch\nファンアート：＃祭絵"
+    },
+    {
+      "label": "Words",
+      "value": "Vオタ、清楚、凸待ち0人、声優、まつりす、エビフライオン、ガチャ、ドーナツ"
+    },
+    {
+      "label": "Message",
+      "value": "自分の思うアイドルらしさを全力で魅せてやるんだから！\n少しのわがままは許してねっ！"
+    },
+    {
+      "label": "得意な配信/よくやる配信",
+      "value": "歌やゲームを中心にリスナーさんと楽しめることをやっていきます！"
+    },
+    {
+      "label": "趣味/特技/好きなもの",
+      "value": "趣味⇒FPSゲーム、歌うこと\n特技⇒柔軟、声変え\n好きなもの⇒VTuber、ドーナツ"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://youtube.com/channel/UCQ0UDLQCjY0rmuxCDE38FGg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/natsuiromatsuri"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td63646"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/natsuiro-matsuri/"
+}

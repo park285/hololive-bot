@@ -1,0 +1,72 @@
+{
+  "slug": "nekomata-okayu",
+  "english_name": "Nekomata Okayu",
+  "japanese_name": "Nekomata Okayu",
+  "catchphrase": "「もぐもぐ～おかゆ～！」",
+  "description": "おにぎり屋さんを経営してるおばあさんに飼われてる猫。おばあちゃんの部屋にあるPCから配信している。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "2月22日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2019年4月6日"
+    },
+    {
+      "label": "身長",
+      "value": "152cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブゲーマーズ"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "神岡ちろる"
+    },
+    {
+      "label": "夢",
+      "value": "ゲームが大好きでホロライブにやってきたけど、大好きなみんなと一緒にいることで沢山やりたいことができた！\n歌もダンスももちろん！ゲームも！全力で毎日楽しむ！\n等身大の自分で毎日応援してくれるみんなとらぶらぶちゅっちゅしたい。\n(切実)"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "おにぎりゃー"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#生おかゆ\nファンアート：#絵かゆ"
+    },
+    {
+      "label": "Message",
+      "value": "もぐもぐおかゆ～！猫又おかゆです！\n普段はゲーム配信してたり歌を歌ったり楽しく暮らしてるよ！\nみんなからは全肯定猫って呼ばれたり、何故か有罪猫って言われたり…なんだかイメージが湧かないね！直接会いに来て～～！ばいば～い！"
+    },
+    {
+      "label": "趣味",
+      "value": "・ゲーム(せっかくなので細かい好みを書いていきます)\nローグライク、RPG、シミュレーション、レトロなゲーム大好き\n・MIX\nホロライブに入ってから歌う機会が増えてお勉強しました。ﾑｽﾞｶｼｲ\n・野球\n夏は頻繁に某チームを応援してます。\n(マスコットキャラクターが可愛くて興味を持った)\n・せく♡ら\n“気持ち悪い”その一言で元気になってしまう。"
+    },
+    {
+      "label": "好きなもの",
+      "value": "お茶漬け、紅茶、猫ミーム、ホロライブのみんな、おにぎりゃー"
+    },
+    {
+      "label": "特技",
+      "value": "70点くらいのモノマネ、ASMR、全肯定(肯定しすぎてツッコミができない)"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCvaTdHTWBGv3MKj3KVqJVCw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/nekomataokayu"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td63648"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/nekomata-okayu/"
+}

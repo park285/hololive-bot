@@ -1,0 +1,338 @@
+package outbox_test
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/iris"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+)
+
+var errSendFailed = errors.New("send failed")
+
+type fakeSender struct {
+	mu       sync.Mutex
+	messages []sentMessage
+	failNext bool
+}
+
+type sentMessage struct {
+	Room    string
+	Message string
+}
+
+func (f *fakeSender) SendMessage(_ context.Context, room, message string, _ ...iris.SendOption) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failNext {
+		f.failNext = false
+		return errSendFailed
+	}
+	f.messages = append(f.messages, sentMessage{Room: room, Message: message})
+	return nil
+}
+
+func (f *fakeSender) SendImage(_ context.Context, _, _ string) error { return nil }
+func (f *fakeSender) Ping(_ context.Context) bool                    { return true }
+func (f *fakeSender) GetConfig(_ context.Context) (*iris.Config, error) {
+	return &iris.Config{}, nil
+}
+func (f *fakeSender) Decrypt(_ context.Context, data string) (string, error) { return data, nil }
+
+func (f *fakeSender) getMessages() []sentMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	result := make([]sentMessage, len(f.messages))
+	copy(result, f.messages)
+	return result
+}
+
+func (f *fakeSender) setFailNext() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failNext = true
+}
+
+func TestDispatcher_ProcessOnce_Success(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+
+	ctx := context.Background()
+	db := setupTestDB(t)
+	cleanupOutbox(t, db)
+
+	sender := &fakeSender{}
+	cacheService := setupCacheService(t)
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	setupTestSubscribers(t, cacheService)
+
+	cfg := outbox.Config{
+		BatchSize:    10,
+		LockTimeout:  1 * time.Minute,
+		PollInterval: 100 * time.Millisecond,
+		MaxRetries:   3,
+		RetryBackoff: 1 * time.Second,
+	}
+
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+
+	payload, _ := json.Marshal(map[string]string{
+		"video_id": "test123",
+		"title":    "Test Video Title",
+	})
+
+	item := &domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewShort,
+		ChannelID:     "UCtest123",
+		ContentID:     "test_success_" + time.Now().Format("150405"),
+		Payload:       string(payload),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now(),
+	}
+
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("Failed to create test outbox item: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Delete(item)
+	})
+
+	dispatcher.ProcessOnceForTest(ctx)
+
+	var updated domain.YouTubeNotificationOutbox
+	if err := db.First(&updated, item.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated item: %v", err)
+	}
+
+	if updated.Status != domain.OutboxStatusSent {
+		t.Errorf("Expected status SENT, got %s", updated.Status)
+	}
+
+	if updated.SentAt == nil {
+		t.Error("Expected sent_at to be set")
+	}
+
+	msgs := sender.getMessages()
+	if len(msgs) != 1 {
+		t.Errorf("Expected 1 message sent, got %d", len(msgs))
+	}
+
+	if len(msgs) > 0 && msgs[0].Room != "testroom" {
+		t.Errorf("Expected room 'testroom', got %s", msgs[0].Room)
+	}
+}
+
+func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+
+	ctx := context.Background()
+	db := setupTestDB(t)
+	cleanupOutbox(t, db)
+
+	sender := &fakeSender{}
+	sender.setFailNext()
+
+	cacheService := setupCacheService(t)
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	setupTestSubscribers(t, cacheService)
+
+	cfg := outbox.Config{
+		BatchSize:    10,
+		LockTimeout:  1 * time.Minute,
+		PollInterval: 100 * time.Millisecond,
+		MaxRetries:   3,
+		RetryBackoff: 1 * time.Second,
+	}
+
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+
+	payload, _ := json.Marshal(map[string]string{
+		"video_id": "retry123",
+		"title":    "Retry Test Video",
+	})
+
+	item := &domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewVideo,
+		ChannelID:     "UCtest456",
+		ContentID:     "test_retry_" + time.Now().Format("150405"),
+		Payload:       string(payload),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now(),
+	}
+
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("Failed to create test outbox item: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Delete(item)
+	})
+
+	dispatcher.ProcessOnceForTest(ctx)
+
+	var updated domain.YouTubeNotificationOutbox
+	if err := db.First(&updated, item.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated item: %v", err)
+	}
+
+	if updated.Status != domain.OutboxStatusPending {
+		t.Errorf("Expected status PENDING (for retry), got %s", updated.Status)
+	}
+
+	if updated.AttemptCount != 1 {
+		t.Errorf("Expected attempt_count 1, got %d", updated.AttemptCount)
+	}
+
+	if updated.NextAttemptAt.Before(time.Now()) {
+		t.Error("Expected next_attempt_at to be in the future")
+	}
+
+	if updated.LockedAt != nil {
+		t.Error("Expected locked_at to be nil after failure")
+	}
+}
+
+func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+
+	ctx := context.Background()
+	db := setupTestDB(t)
+	cleanupOutbox(t, db)
+
+	sender := &fakeSender{}
+	cacheService := setupCacheService(t)
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	cfg := outbox.Config{
+		BatchSize:    10,
+		LockTimeout:  1 * time.Minute,
+		PollInterval: 100 * time.Millisecond,
+		MaxRetries:   3,
+		RetryBackoff: 1 * time.Second,
+	}
+
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+
+	payload, _ := json.Marshal(map[string]string{
+		"video_id": "nosub123",
+		"title":    "No Subscribers Test",
+	})
+
+	item := &domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewShort,
+		ChannelID:     "UCnosubscribers",
+		ContentID:     "test_nosub_" + time.Now().Format("150405"),
+		Payload:       string(payload),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now(),
+	}
+
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("Failed to create test outbox item: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Delete(item)
+	})
+
+	dispatcher.ProcessOnceForTest(ctx)
+
+	var updated domain.YouTubeNotificationOutbox
+	if err := db.First(&updated, item.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated item: %v", err)
+	}
+
+	if updated.Status != domain.OutboxStatusSent {
+		t.Errorf("Expected status SENT (no subscribers = skip), got %s", updated.Status)
+	}
+
+	msgs := sender.getMessages()
+	if len(msgs) != 0 {
+		t.Errorf("Expected 0 messages sent (no subscribers), got %d", len(msgs))
+	}
+}
+
+func setupTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "host=localhost port=5432 user=twentyq_app password=twentyq_password dbname=hololive sslmode=disable"
+	}
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to connect to test database: %v", err)
+	}
+
+	return db
+}
+
+func cleanupOutbox(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	db.Exec("DELETE FROM youtube_notification_outbox WHERE content_id LIKE 'test%'")
+}
+
+func setupCacheService(t *testing.T) *cache.Service {
+	t.Helper()
+
+	valkeyHost := os.Getenv("TEST_VALKEY_HOST")
+	if valkeyHost == "" {
+		valkeyHost = "localhost"
+	}
+
+	cfg := cache.Config{
+		Host:         valkeyHost,
+		Port:         6379,
+		DisableCache: true,
+	}
+
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	cacheService, err := cache.NewCacheService(context.Background(), cfg, testLogger)
+	if err != nil {
+		t.Fatalf("Failed to create cache service: %v", err)
+	}
+
+	t.Cleanup(func() {
+		cacheService.Close()
+	})
+
+	return cacheService
+}
+
+func setupTestSubscribers(t *testing.T, cacheService *cache.Service) {
+	t.Helper()
+	ctx := context.Background()
+
+	cacheService.SAdd(ctx, "alarm:channel_subscribers:SHORTS:UCtest123", []string{"testroom:testuser"})
+	cacheService.SAdd(ctx, "alarm:channel_subscribers:UCtest456", []string{"testroom:testuser"})
+	cacheService.HSet(ctx, "alarm:member_names", "UCtest123", "TestMember")
+	cacheService.HSet(ctx, "alarm:member_names", "UCtest456", "TestMember2")
+
+	t.Cleanup(func() {
+		cacheService.Del(ctx, "alarm:channel_subscribers:SHORTS:UCtest123")
+		cacheService.Del(ctx, "alarm:channel_subscribers:UCtest456")
+	})
+}

@@ -1,0 +1,88 @@
+{
+  "slug": "tokino-sora",
+  "english_name": "Tokino Sora",
+  "japanese_name": "Tokino Sora",
+  "catchphrase": "「そらとものみんなー！元気ー？ときのそらです！」",
+  "description": "2017年9月7日より活動を開始、ホロライブプロダクション初のバーチャルアイドル。歌とホラーゲームが大好きで、活動当初からの夢は「横浜アリーナでライブをすること」。\n2019年3月にビクターエンタテインメントからメジャーデビュー。一人前のアイドルを目指すために、女優としてTVドラマ『四月一日さん家の』に出演したり、ラジオ『そらあおと！』ではMCを務めるなど、\n様々なジャンルでアクティブに活動中。2019年10月6日にはときのそら初の単独ライブ「Dream!」を開催、自身の夢に一歩近づいた。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月15日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2017年9月7日"
+    },
+    {
+      "label": "身長",
+      "value": "160㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ0期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "おるだん"
+    },
+    {
+      "label": "夢",
+      "value": "横浜アリーナで単独ライブがしたい！"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "そらとも"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#ときのそら生放送\n#ときのそら実況するってよ\nファンアート：#そらArt"
+    },
+    {
+      "label": "Words",
+      "value": "そらとも:ファンネーム\nぬんぬん:頷きの音が定着したもの。\n(๑╹ᆺ╹)この顔でぬんぬんとコメントするのが配信待機の定番になっている。"
+    },
+    {
+      "label": "得意な配信/よくやる配信",
+      "value": "歌枠、のんびりゲーム"
+    },
+    {
+      "label": "趣味",
+      "value": "カラオケ、御朱印お参り巡り、リズムゲーム"
+    },
+    {
+      "label": "好きなもの",
+      "value": "スイーツ、中華料理、猫、ボーカロイド"
+    },
+    {
+      "label": "特技",
+      "value": "ホラーゲームを怖がらずに攻略すること"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCp6993wxpyDPHUpavwDFqgg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/tokino_sora"
+    },
+    {
+      "label": "OFFICIAL FAN CLUB",
+      "url": "https://tokinosora-fc.com/"
+    },
+    {
+      "label": "VICTOR ENTERTAINMENT",
+      "url": "https://www.jvcmusic.co.jp/-/Artist/A026407.html"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td63641"
+    },
+    {
+      "label": "ときのそら New Year’s Party 2026「Dreams in Motion」",
+      "url": "https://hololive.hololivepro.com/events/dreams-in-motion/"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/tokino-sora/"
+}

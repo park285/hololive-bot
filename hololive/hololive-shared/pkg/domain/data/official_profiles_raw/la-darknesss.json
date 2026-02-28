@@ -1,0 +1,52 @@
+{
+  "slug": "la-darknesss",
+  "english_name": "La+ Darknesss",
+  "japanese_name": "La+ Darknesss",
+  "catchphrase": "「貴様ら、刮目せよ！！」",
+  "description": "【秘密結社holoX】を設立した総帥。\n本来頭も良く、力も膨大だが、今は力の大半が封印されている。枷のせいで力の大半が封印されていることは本人も薄々感じているが、いつからかけられたのかよく覚えていない。\n側にいるカラスとは長い付き合い。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月25日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2021年11月26日"
+    },
+    {
+      "label": "身長",
+      "value": "139cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "秘密結社holoX"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "三嶋くろね"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "ぷらすめいと"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#laplus_great\nアートタグ：#Laplus_Artdesu"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCENwRMx5Yh42zWpzURebzTw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/LaplusDarknesss"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td84838"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/la-darknesss/"
+}

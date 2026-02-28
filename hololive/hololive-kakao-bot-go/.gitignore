@@ -1,0 +1,96 @@
+# Environment variables (CRITICAL: Contains API keys)
+.env
+.env.local
+.env.*.local
+
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bot
+!cmd/bot/
+!cmd/bot/**
+
+# Chess assets (exclude large engine/weights directory)
+cheese lib/
+
+# Go test binaries
+*.test
+*.out
+
+# Go dependency directories (465MB - MUST exclude)
+.gomodcache/
+.gocache/
+vendor/
+
+# Logs and runtime files
+logs/
+*.log
+bot.log
+*.pid
+.bot.pid
+
+# Runtime config (tracked file 제거는 별도 git 작업 필요)
+config.json
+fetch_profiles
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Serena AI assistant cache
+.serena/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+Thumbs.db
+.Trashes
+.Spotlight-V100
+.fseventsd
+
+# Backup files
+*.bak
+*.backup
+*.backup*
+*backup*.json
+
+# Development phase documentation
+PHASE*.md
+PHASE*_COMPLETE.md
+
+# Coverage reports
+*.coverprofile
+coverage.out
+coverage.html
+
+# Documentation build artifacts
+docs/_build/
+site/
+
+# Python artifacts (from utility scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+
+# OAuth tokens (CRITICAL: Contains credentials)
+token.json
+credentials.json
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3

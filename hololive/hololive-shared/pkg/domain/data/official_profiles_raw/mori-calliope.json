@@ -1,0 +1,48 @@
+{
+  "slug": "mori-calliope",
+  "english_name": "Mori Calliope",
+  "japanese_name": "Mori Calliope",
+  "catchphrase": "「Dead Beats、聞いてくれ！君のMoriの、君のための頑張りを！」",
+  "description": "グリム・リーパーの第一弟子。医療が発達している現代においては、死神として活躍する場面がなく、その代わりにVTuber活動で他人のソウルを収穫するつもりらしい。尊死している人のソウルも彼女の元へ行く模様。\n結局のところ、発言内容や声のイメージと違って、彼女は実は面倒見がよく、優しい心の持ち主である。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "4月4日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年9月12日"
+    },
+    {
+      "label": "身長",
+      "value": "167㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "Myth（神話）"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "雪醒"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Dead Beats (デッドビーツ)"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#calliolive #カリオライブ\nファンアート：#callillust #カリイラスト"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCL_qhgtOy0dy1Agp8vkySQg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/moricalliope"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/mori-calliope/"
+}

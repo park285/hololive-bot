@@ -1,0 +1,52 @@
+{
+  "slug": "hiodoshi-ao",
+  "english_name": "Hiodoshi Ao",
+  "japanese_name": "Hiodoshi Ao",
+  "catchphrase": "「可愛い女の子かと思った？じゃじゃーん！青くんでした。hololive DEV_IS ReGLOSSのボーイッシュ担当、火威青です！」",
+  "description": "孤独を愛する、と周囲から思われている漫画家。\nクールを装っているが、その内側にはかなりのオタクを隠している。\n自分がどう見られているのかを注意しており、外でちゃんとした格好をしているのもその影響。\n家での様子はなかなか人に伝えられるものではない。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "2月27日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年9月9日"
+    },
+    {
+      "label": "身長",
+      "value": "171cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ReGLOSS"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "むっしゅ"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "読者"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ : #青原稿中\nアートタグ : #青ペン"
+    },
+    {
+      "label": "推しマーク",
+      "value": "🖋️"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCMGfV7TVTmHhEErVJg1oHBQ?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/hiodoshiao"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/hiodoshi-ao/"
+}

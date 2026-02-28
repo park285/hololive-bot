@@ -1,0 +1,76 @@
+{
+  "slug": "momosuzu-nene",
+  "english_name": "Momosuzu Nene",
+  "japanese_name": "Momosuzu Nene",
+  "catchphrase": "「こんねね～！ホロライブ5期生、アイドルVTuberの桃鈴ねねで～す！」",
+  "description": "アイドルにあこがれて、異世界からやってきた女の子。\n歌って踊ることとお絵描きが大好き。\nたくさんの人に愛される存在になるべく、日々特訓中。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "3月2日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年8月13日"
+    },
+    {
+      "label": "身長",
+      "value": "159㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ5期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "西沢5㍉"
+    },
+    {
+      "label": "夢",
+      "value": "全宇宙から認められるアイドルになること！\n全宇宙に旦那さんを作ること！"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "ねっ子"
+    },
+    {
+      "label": "Words",
+      "value": "ねねアザラシ/NENESeal\n-ある日アザラシに似てるねって言われたことが始まり。ねねはアザラシなの…！？\nねねハズバンズコレクション\n-「結婚して下さい」のコメントに全て対応した結果、ものすごい数の旦那さんをゲットすることに成功した。旦那さんたちが浮気しないように瓶詰めにしてコレクションしている。"
+    },
+    {
+      "label": "Message",
+      "value": "こんねね！！！！ねねでーす！！！見つけてくれてありがとう(･∞･っ)Э\nねねがSUPER ULTRA ULTIMATEなアイドルになるまで、そばで成長を見守ってくれませんか？！みんなと一緒にいたらどんなことでもがんばれる気がする！！！！一緒に楽しいこと、いっぱい探しに行こう！！！！！"
+    },
+    {
+      "label": "趣味",
+      "value": "歌って踊ること！"
+    },
+    {
+      "label": "好きなもの",
+      "value": "ねっ子のみんな！"
+    },
+    {
+      "label": "特技",
+      "value": "イラストを描くこと！"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCAWSyEs_Io8MtpY3m-zqILA?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/momosuzunene"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td78505"
+    },
+    {
+      "label": "ねぽらぼライブre:VISION Holoearth Live",
+      "url": "https://holoearth.com/nepolabo-live/"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/momosuzu-nene/"
+}

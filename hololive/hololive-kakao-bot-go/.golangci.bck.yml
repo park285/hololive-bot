@@ -1,0 +1,169 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false  # 타입 어설션 체크 비활성화
+    check-blank: false
+    exclude-functions:
+      - (*database/sql.Rows).Close
+      - (*database/sql.DB).Close
+      - (*github.com/kapu/hololive-kakao-bot-go/internal/bot.Bot).sendError
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # 구조체 필드 순서 최적화는 가독성을 해칠 수 있음
+
+  gocyclo:
+    min-complexity: 35  # 현재 코드베이스 고려
+
+  gocognit:
+    min-complexity: 65  # 현재 코드베이스 고려하여 높게 설정
+
+  dupl:
+    threshold: 200  # 유사한 데이터 접근 로직은 중복 허용
+
+  goconst:
+    min-len: 3
+    min-occurrences: 5  # switch case 문자열은 상수화하지 않음
+    ignore-tests: true
+
+  misspell:
+    locale: US
+
+  lll:
+    line-length: 140
+    tab-width: 1
+
+  nakedret:
+    max-func-lines: 30
+
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - exitAfterDefer  # main 함수에서 의도적으로 사용
+      - paramTypeCombine  # 가독성을 위해 명시적 타입 유지
+      - unnamedResult  # 반환값이 명확한 경우 네이밍 생략 허용
+      - filepathJoin  # embedded FS 경로는 하드코딩 필요
+      - hugeParam  # config 구조체 전달은 의도적
+      - emptyStringTest  # len 체크는 가독성상 명확
+      - builtinShadow  # 지역 변수명은 명확한 경우 허용
+
+  funlen:
+    lines: 150
+    statements: 70
+
+  goimports:
+    local-prefixes: github.com/kapu/hololive-kakao-bot-go
+
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/kapu/hololive-kakao-bot-go)
+    skip-generated: true
+
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+      - name: package-comments
+        disabled: true
+
+  stylecheck:
+    checks: ["all", "-ST1003"]  # ST1003: 언더스코어 네이밍 허용
+
+linters:
+  disable-all: true
+  enable:
+    # 기본 오류 검사
+    - errcheck      # 에러 체크 누락 검사
+    - gosimple      # 코드 단순화 제안
+    - govet         # Go vet 검사
+    - ineffassign   # 비효율적인 할당 검사
+    - staticcheck   # 정적 분석
+    - typecheck     # 타입 체크
+    - unused        # 사용하지 않는 코드 검사
+
+    # 코드 스타일
+    - gofmt         # 코드 포맷팅
+    - goimports     # import 정리
+    - gci           # import 순서 정리
+
+    # 복잡도 검사
+    - gocyclo       # 순환 복잡도
+    - gocognit      # 인지 복잡도
+
+    # 보안
+    - gosec         # 보안 검사
+
+    # 성능
+    - prealloc      # slice preallocation
+
+    # 코드 품질
+    - dupl          # 중복 코드 검사
+    - goconst       # 상수화 가능한 문자열 검사
+    - gocritic      # 다양한 코드 개선 제안
+    - misspell      # 철자 오류 검사
+
+    # 함수 길이
+    - funlen        # 함수 길이 제한
+
+    # 기타
+    - unconvert     # 불필요한 타입 변환
+    - nakedret      # naked return 검사
+    - revive        # 다양한 린트 규칙
+
+issues:
+  exclude-dirs:
+    - vendor
+    - proto
+  exclude-files:
+    - '.*\.pb\.go$'
+    - '.*_test\.go$'
+  uniq-by-line: true
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+
+    # Exclude known issues
+    - text: "G404:"  # gosec: 랜덤 소스가 암호학적으로 안전하지 않음
+      linters:
+        - gosec
+    - text: "G102:"  # gosec: 모든 네트워크 인터페이스에 바인딩 (gRPC 서버는 의도적)
+      linters:
+        - gosec
+    - text: "G115:"  # gosec: 정수 오버플로우 (통계 데이터는 현실적으로 오버플로우되지 않음)
+      linters:
+        - gosec
+
+    # 특정 파일 제외
+    - path: cmd/
+      linters:
+        - funlen
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false

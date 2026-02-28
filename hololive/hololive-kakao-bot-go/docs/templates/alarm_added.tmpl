@@ -1,0 +1,11 @@
+{{- if .Added -}}
+{{template "success_message" (dict "Emoji" .Emoji "Message" (printf "%s 알람이 설정되었습니다!" .MemberName))}}
+
+{{- if .NextStream }}
+{{template "next_stream_info" (dict "Emoji" .Emoji "NextStream" .NextStream)}}
+
+{{- end }}
+방송 시작 5분 전에 알림을 받습니다.
+{{- else -}}
+{{template "emoji_info" .}}{{printf " %s 알람이 이미 설정되어 있습니다." .MemberName}}
+{{- end -}}

@@ -1,0 +1,122 @@
+// Package dbx: PostgreSQL 연결 공통 모듈
+// pgxpool + GORM 듀얼 지원, DSN 생성(UDS/TCP), Retry, Ping/Close 헬퍼 제공
+package dbx
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+)
+
+// Config: PostgreSQL 접속 설정
+type Config struct {
+	Host       string // TCP 호스트 (예: "localhost", "postgres")
+	Port       int    // TCP 포트 (예: 5432)
+	SocketPath string // UDS 경로 (비어있으면 TCP 사용)
+	User       string
+	Password   string //nolint:gosec // 설정 구조체 필드명이며 시크릿 값 자체를 로그/출력하지 않는다.
+	Name       string // 데이터베이스 이름
+	SSLMode    string // sslmode (기본: "disable")
+	// QueryExecMode: pgx default_query_exec_mode
+	// 허용값: cache_statement, cache_describe, describe_exec, exec, simple_protocol
+	QueryExecMode string
+}
+
+// DSN: lib/pq 스타일 DSN 문자열 반환
+// SocketPath가 설정되면 UDS 우선 사용
+func (c Config) DSN() string {
+	sslmode := c.SSLMode
+	if sslmode == "" {
+		sslmode = "disable"
+	}
+	queryExecMode := normalizeQueryExecMode(c.QueryExecMode)
+	queryExecModePart := ""
+	if queryExecMode != "" {
+		queryExecModePart = " default_query_exec_mode=" + queryExecMode
+	}
+	if c.SocketPath != "" {
+		// UDS: host에 소켓 디렉터리 경로 지정
+		return fmt.Sprintf(
+			"host=%s user=%s password=%s dbname=%s sslmode=%s%s",
+			c.SocketPath, c.User, c.Password, c.Name, sslmode, queryExecModePart,
+		)
+	}
+	// TCP fallback
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s%s",
+		c.Host, c.Port, c.User, c.Password, c.Name, sslmode, queryExecModePart,
+	)
+}
+
+func normalizeQueryExecMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "cache_statement":
+		return "cache_statement"
+	case "cache_describe":
+		return "cache_describe"
+	case "describe_exec":
+		return "describe_exec"
+	case "exec":
+		return "exec"
+	case "simple_protocol":
+		return "simple_protocol"
+	default:
+		return ""
+	}
+}
+
+// PoolConfig: 커넥션 풀 설정
+type PoolConfig struct {
+	MinConns        int           // 최소 연결 수 (pgxpool용, 기본: 5)
+	MaxConns        int           // 최대 연결 수 (기본: 20)
+	MaxIdleConns    int           // 최대 유휴 연결 수 (database/sql용, 0이면 MinConns로 fallback)
+	ConnMaxLifetime time.Duration // 연결 최대 수명 (기본: 1시간)
+	ConnMaxIdleTime time.Duration // 유휴 연결 최대 시간 (기본: 30분)
+}
+
+// DefaultPoolConfig: 기본 풀 설정 반환
+// 환경변수로 오버라이드 가능: DB_POOL_MIN_CONNS, DB_POOL_MAX_CONNS, DB_POOL_MAX_IDLE_CONNS
+func DefaultPoolConfig() PoolConfig {
+	minConns := clamp(envutil.Int("DB_POOL_MIN_CONNS", 5), 1, 100)
+	maxConns := clamp(envutil.Int("DB_POOL_MAX_CONNS", 20), 1, 200)
+	maxIdleConns := envutil.Int("DB_POOL_MAX_IDLE_CONNS", 0)
+
+	return PoolConfig{
+		MinConns:        minConns,
+		MaxConns:        maxConns,
+		MaxIdleConns:    maxIdleConns, // 0이면 MinConns 사용
+		ConnMaxLifetime: time.Hour,
+		ConnMaxIdleTime: 30 * time.Minute,
+	}
+}
+
+// clamp: 값을 minVal~maxVal 범위로 제한
+func clamp(value, minVal, maxVal int) int {
+	if value < minVal {
+		return minVal
+	}
+	if value > maxVal {
+		return maxVal
+	}
+	return value
+}
+
+// RetryConfig: 연결 재시도 설정
+type RetryConfig struct {
+	MaxAttempts int           // 최대 시도 횟수 (기본: 5)
+	BaseDelay   time.Duration // 초기 대기 시간 (기본: 2초)
+	MaxDelay    time.Duration // 최대 대기 시간 (기본: 30초)
+	PingTimeout time.Duration // Ping 타임아웃 (기본: 5초)
+}
+
+// DefaultRetryConfig: 기본 재시도 설정 반환
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxAttempts: 5,
+		BaseDelay:   2 * time.Second,
+		MaxDelay:    30 * time.Second,
+		PingTimeout: 5 * time.Second,
+	}
+}

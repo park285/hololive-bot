@@ -1,0 +1,60 @@
+{
+  "slug": "ceres-fauna",
+  "english_name": "Ceres Fauna",
+  "japanese_name": "Ceres Fauna",
+  "catchphrase": "「こんファウナ～ みんなのゲーミングアイドルキリン、セレス・ファウナです！」",
+  "description": "『自然の番人』としてVTuber活動を通じ、自然への愛を日々布教しているドルイドの麒麟。\n木漏れ日のような柔らかな声と心安らぐ空気をもつ存在だが、その一方でディープなミームを使いこなしてみせるなどお茶目な一面を持ち合わせている。\n彼女の森に足を踏み入れてしまえば、抜け出すことは難しいだろう。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "3月21日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2021年8月23日"
+    },
+    {
+      "label": "身長",
+      "value": "164cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Promise"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "遠坂あさぎ"
+    },
+    {
+      "label": "目標",
+      "value": "・日本語の勉強\n・歌のレッスンとオリジナル曲を作る\n・同期とオフコラボ\n・スピードラン系のゲームをすること！\n・ゲームキャラクターの声優をすること"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Saplings"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#faunline\nファンアート：#FineFaunart"
+    },
+    {
+      "label": "好きなもの",
+      "value": "動物、絵を描くこと、カリンバ、お茶、協力ゲーム、ホラー、猫"
+    },
+    {
+      "label": "きらいなもの",
+      "value": "きのこ（食べること）、バッタ"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCO_aKKYxn4tvrqPjcTzZ6EQ?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/ceresfauna"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/ceres-fauna/"
+}

@@ -1,0 +1,72 @@
+{
+  "slug": "omaru-polka",
+  "english_name": "Omaru Polka",
+  "japanese_name": "Omaru Polka",
+  "catchphrase": "「ポルカおるか？おるよ～！」",
+  "description": "VTuber界の座長となるべくホロライブに降り立ったサーカス団の団員。\n曲芸で人を楽しませるのが好きで、やるとなればやるっきゃない！の精神の持ち主。\n時々出るボロは、持ち前の愛嬌でごまかす。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "1月30日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年8月16日"
+    },
+    {
+      "label": "身長",
+      "value": "153㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ5期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "こう ましろ"
+    },
+    {
+      "label": "夢",
+      "value": "伝説"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "座員"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#ポルカ公演中\nファンアート：#絵まる"
+    },
+    {
+      "label": "得意な配信",
+      "value": "ゲリラ配信"
+    },
+    {
+      "label": "好きなもの",
+      "value": "アイドル、ポップコーン、ゴールド、シャインマスカット"
+    },
+    {
+      "label": "特技",
+      "value": "演技、カズー（楽器）、感情のこもった歌、コーディネート"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCK9V2B22uJYu3N7eR_BT9QA?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/omarupolka"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td78507"
+    },
+    {
+      "label": "ねぽらぼライブre:VISION Holoearth Live",
+      "url": "https://holoearth.com/nepolabo-live/"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/omaru-polka/"
+}

@@ -1,0 +1,40 @@
+{
+  "slug": "gigi-murin",
+  "english_name": "Gigi Murin",
+  "japanese_name": "Gigi Murin",
+  "catchphrase": "「え？でも面白かったじゃん！怒らないでよ！」",
+  "description": "自由の旗の下で生まれ育った自由奔放な『追跡者』であり、悪戯好きのグレムリン。\n直観的に対象を追いかけることを得意とする一方で、道順を覚えることや計算した上での判断は苦手。\n難しく考えすぎると頭が痛くなる、とよく言い訳を口にしている。\nその性格は日常生活においても変わらず、本能的に楽しいことやバカ騒ぎを好みがち。\n面白そうだからといった理由でトラブルを起こし、周囲の頭痛の種になってしまうことも多い。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "10月18日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年6月22日"
+    },
+    {
+      "label": "身長",
+      "value": "153cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Justice"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "巻羊"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCDHABijvPBnJm7F-KlNME3w?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/gigimurin"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/gigi-murin/"
+}

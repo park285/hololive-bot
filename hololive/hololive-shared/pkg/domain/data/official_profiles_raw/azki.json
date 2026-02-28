@@ -1,0 +1,64 @@
+{
+  "slug": "azki",
+  "english_name": "AZKi",
+  "japanese_name": "AZKi",
+  "catchphrase": "「Virtual Diva AZKi 仮想世界の歌姫！音楽と歌うことが大好き！」",
+  "description": "時間や場所、空間を飛び越えて出会う輝いた才能と一緒に、新しい世界を創るために転生した仮想世界の伴走する歌姫。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "7月1日"
+    },
+    {
+      "label": "身長",
+      "value": "158cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ0期生\nSorAZ\nShotgun Rose"
+    },
+    {
+      "label": "3Dモデラー",
+      "value": "加速サトウ"
+    },
+    {
+      "label": "夢",
+      "value": "誰かの記憶に残る音楽を作ること"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "開拓者"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "ファンアート：#AZKiART\n配信タグ：#あずきんち\nホロリー＆聖地巡礼：#どこAZ\n楽曲感想：#AZ歌\nボイス感想：#AZ声\nショート：#ぷちあず"
+    },
+    {
+      "label": "Words",
+      "value": "床：感情になったときに使う言葉\n天井：感情になったときに使う言葉"
+    },
+    {
+      "label": "Message",
+      "value": "こんあずきー！AZKiです！主に歌を中心とした配信を行っています！\n開拓者のみんなの心に寄り添える歌や音楽をつくれるようにこれからも頑張ります！"
+    },
+    {
+      "label": "得意な配信/よくやる配信",
+      "value": "メイン：歌枠\nたまに：ゲーム"
+    },
+    {
+      "label": "趣味/特技/好きな動物",
+      "value": "曲作り/料理/シマエナガ"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC0TXe_LYZ4scaW2XMyi5_kw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/AZKi_VDiVA"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/azki/"
+}

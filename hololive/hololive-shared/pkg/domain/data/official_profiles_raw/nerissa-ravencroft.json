@@ -1,0 +1,44 @@
+{
+  "slug": "nerissa-ravencroft",
+  "english_name": "Nerissa Ravencroft",
+  "japanese_name": "Nerissa Ravencroft",
+  "catchphrase": "「嗚呼、やはり良い響きですね――アイドルソングというものは」",
+  "description": "歌をこよなく愛する『音の魔人』。\nその愛は魔力となって歌に宿り、世界を狂わしかねないものとなった。彼女の歌声を恐れた神々により長らく封じ込められていたが、その間も人々に歌を届けたいという願いは消えることがなかった。\n封印の最中にジャパニーズオタクカルチャーと出会ったことで、今はアイドルソングやペンライトに興味津々。案外、封印生活も悪いことばかりではなかったようだ。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "11月21日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年7月31日"
+    },
+    {
+      "label": "身長",
+      "value": "175cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Advent"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "EB十"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC_sFNM0z0MWm9A6WlKPuMMg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/nerissa_en"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td94455"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/nerissa-ravencroft/"
+}

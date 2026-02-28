@@ -1,0 +1,52 @@
+{
+  "slug": "inugami-korone",
+  "english_name": "Inugami Korone",
+  "japanese_name": "Inugami Korone",
+  "catchphrase": "「ぉぁよ～！ゆびゆび～」",
+  "description": "都会にあるパン屋さんにいる犬。店番をしながら空いた時間にゲームをしている。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "10月1日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2019年4月13日"
+    },
+    {
+      "label": "身長",
+      "value": "156cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブゲーマーズ"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "フカヒレ"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "ころねすきー"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#生神もんざえもん\nファンアート：#できたてころね"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UChAnqc_AY5_I3Px5dig3X1Q?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/inugamikorone"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td63650"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/inugami-korone/"
+}

@@ -1,0 +1,44 @@
+{
+  "slug": "kaela-kovalskia",
+  "english_name": "Kaela Kovalskia",
+  "japanese_name": "Kaela Kovalskia",
+  "catchphrase": "「皆さんこんにちは、ホロライブID3期生の鍛冶屋、カエラです。」",
+  "description": "偉大なる師匠から鍛冶場を継いだものの、日々の暮らしに刺激がなさすぎることを嘆いていた彼女は、自由に生きることを決断した。\nそして、とあるアイドル（？）グループと縁の深い建物の下に埋められていると噂される、レアな鍛冶材料を探すための旅に出た。\nチャレンジ精神旺盛な性格で、食べ物には強いこだわりがある。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "8月30日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2022年3月26日"
+    },
+    {
+      "label": "身長",
+      "value": "173cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブインドネシア"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "ヤスダスズヒト"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Pemaloe"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCZLZ8Jjx_RN2CXloOmgTHVg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/kaelakovalskia"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/kaela-kovalskia/"
+}

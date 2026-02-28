@@ -1,0 +1,609 @@
+name: hololive-bot
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-security-hardening: &security-hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+# DB/Cache용 보안 설정 (setuid/setgid 필요)
+x-db-security: &db-security
+  cap_drop:
+    - ALL
+  cap_add:
+    - SETUID
+    - SETGID
+    - CHOWN
+    - FOWNER
+    - DAC_OVERRIDE
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+services:
+  # Storage & Infrastructure
+  holo-postgres:
+    image: ${POSTGRES_IMAGE:-postgres:18}
+    container_name: holo-postgres
+    restart: always
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    shm_size: 256mb
+    environment:
+      POSTGRES_DB: hololive
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
+      POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      HOLOLIVE_DB_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      HOLOLIVE_MIGRATOR_USER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
+      HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
+      HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      PGPORT: "5433"
+    volumes:
+      - holo-pg-data:/var/lib/postgresql/data
+      - ./backups:/backups
+      - ./hololive/hololive-kakao-bot-go/scripts/init-db:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/postgresql:size=16m,mode=3775
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5433 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5433 -c 'SELECT 1' -q -t" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    network_mode: host
+    logging: *default-logging
+    <<: *db-security
+
+  valkey-cache:
+    image: valkey/valkey:9.0.2-alpine3.23
+    container_name: valkey-cache
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - valkey-cache-data:/data
+      - valkey-cache-socket:/var/run/valkey
+    command: >
+      valkey-server --unixsocket /var/run/valkey/valkey-cache.sock --unixsocketperm 777 --port 6379 --appendonly no --save "" --maxmemory 384mb --maxmemory-policy allkeys-lfu --loglevel notice --io-threads 4 --io-threads-do-reads yes --activedefrag yes --active-defrag-threshold-lower 10 --active-defrag-cycle-min 1 --active-defrag-cycle-max 25
+    sysctls:
+      - net.core.somaxconn=1024
+    restart: always
+    healthcheck:
+      test: [ "CMD", "valkey-cli", "-s", "/var/run/valkey/valkey-cache.sock", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: *default-logging
+    <<: *db-security
+    networks:
+      - hololive-net
+
+  hololive-db-migrate:
+    image: ${POSTGRES_IMAGE:-postgres:18}
+    container_name: hololive-db-migrate
+    restart: "no"
+    environment:
+      PGHOST: host.docker.internal
+      PGPORT: "5433"
+      PGDATABASE: hololive
+      PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
+      PGPASSWORD: ${DB_PASSWORD}
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
+      POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD}
+      HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
+      HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
+    command:
+      - /bin/sh
+      - /migrations/bootstrap-and-apply.sh
+    volumes:
+      - ./hololive/hololive-kakao-bot-go/scripts/migrations:/migrations:ro
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - hololive-net
+
+  # Core Services
+  hololive-bot:
+    image: hololive-kakao-bot-go:prod
+    build:
+      context: .
+      dockerfile: hololive/hololive-kakao-bot-go/Dockerfile
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+    container_name: hololive-kakao-bot-go
+    restart: always
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    env_file:
+      - ./.env
+    environment:
+      GOGC: "60"
+      IRIS_BASE_URL: http://host.docker.internal:3000
+      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
+      CACHE_HOST: valkey-cache
+      CACHE_PORT: 6379
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: "5433"
+      POSTGRES_SOCKET_PATH: ""
+      POSTGRES_DB: hololive
+      POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
+      POSTGRES_AUTO_PREPARE_SCHEMA: "false"
+      MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
+      MAJOREVENT_SCRAPE_HOUR_KST: "4"
+      # alarm-dispatcher 분리: Bot은 HTTP 클라이언트로 CRUD 위임
+      ALARM_DISPATCHER_URL: http://alarm-dispatcher:30010
+      GO_ALARM_QUEUE_CONSUMER_ENABLED: "false"
+      BOT_INGESTION_ENABLED: "false"
+      SERVER_PORT: 30001
+      LOG_DIR: ""
+      GOMEMLIMIT: "450MiB"
+      # 통합 Goroutine 모니터링용 외부 서비스 Health URL (llm 레포 서비스 → host.docker.internal)
+      SERVICES_LLM_SERVER_HEALTH_URL: http://host.docker.internal:40527/health
+      SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
+      SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
+      # OpenTelemetry
+      OTEL_ENABLED: "false"
+      OTEL_SERVICE_NAME: hololive-bot
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_SAMPLE_RATE: "0.1"
+      # Docker Socket Proxy (보안: 직접 소켓 마운트 대신 제한된 API만 허용)
+      DOCKER_HOST: tcp://docker-proxy:2375
+      # CLIProxy LLM (행사 요약 + 멤버뉴스)
+      CLIPROXY_ENABLED: "true"
+      CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
+      CLIPROXY_MODEL: gpt-5.2
+      CLIPROXY_REASONING_EFFORT: xhigh
+    ports:
+      - "127.0.0.1:30001:30001"
+    volumes:
+      - ./data:/app/data
+      - valkey-cache-socket:/var/run/valkey:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+      hololive-db-migrate:
+        condition: service_completed_successfully
+      valkey-cache:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30001/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+    <<: *security-hardening
+    networks:
+      hololive-net:
+        aliases:
+          - hololive-bot
+
+  alarm-dispatcher:
+    image: hololive-alarm-dispatcher:prod
+    build:
+      context: .
+      dockerfile: hololive/hololive-alarm/Dockerfile
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+    container_name: alarm-dispatcher
+    restart: always
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    env_file:
+      - ./.env
+    environment:
+      ALARM_DISPATCHER_PORT: 30010
+      GO_ALARM_QUEUE_CONSUMER_ENABLED: "true"
+      IRIS_BASE_URL: http://host.docker.internal:3000
+      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
+      CACHE_HOST: valkey-cache
+      CACHE_PORT: 6379
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: "5433"
+      POSTGRES_SOCKET_PATH: ""
+      POSTGRES_DB: hololive
+      POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
+      GOGC: "100"
+      GOMEMLIMIT: "128MiB"
+      GIN_MODE: release
+      LOG_DIR: ""
+    volumes:
+      - valkey-cache-socket:/var/run/valkey:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+      hololive-db-migrate:
+        condition: service_completed_successfully
+      valkey-cache:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30010/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+    <<: *security-hardening
+    networks:
+      hololive-net:
+        aliases:
+          - alarm-dispatcher
+
+  stream-ingester:
+    image: hololive-stream-ingester:prod
+    build:
+      context: .
+      dockerfile: hololive/hololive-stream-ingester/Dockerfile
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+    container_name: hololive-stream-ingester
+    restart: always
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    env_file:
+      - ./.env
+    environment:
+      SERVER_PORT: 30004
+      BOT_INGESTION_ENABLED: "true"
+      IRIS_BASE_URL: http://host.docker.internal:3000
+      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
+      CACHE_HOST: valkey-cache
+      CACHE_PORT: 6379
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: "5433"
+      POSTGRES_SOCKET_PATH: ""
+      POSTGRES_DB: hololive
+      POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
+      POSTGRES_AUTO_PREPARE_SCHEMA: "false"
+      MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
+      MAJOREVENT_SCRAPE_HOUR_KST: "4"
+      ALARM_DISPATCHER_URL: http://alarm-dispatcher:30010
+      GO_ALARM_QUEUE_CONSUMER_ENABLED: "false"
+      GOGC: "100"
+      GOMEMLIMIT: "320MiB"
+      GIN_MODE: release
+      CLIPROXY_ENABLED: "true"
+      CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
+      CLIPROXY_MODEL: gpt-5.2
+      CLIPROXY_REASONING_EFFORT: xhigh
+      LOG_DIR: ""
+    ports:
+      - "127.0.0.1:30004:30004"
+    volumes:
+      - ./data:/app/data
+      - valkey-cache-socket:/var/run/valkey:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+      hololive-db-migrate:
+        condition: service_completed_successfully
+      valkey-cache:
+        condition: service_healthy
+      alarm-dispatcher:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30004/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+    <<: *security-hardening
+    networks:
+      hololive-net:
+        aliases:
+          - stream-ingester
+
+  llm-scheduler:
+    image: hololive-llm-scheduler:prod
+    build:
+      context: .
+      dockerfile: hololive/hololive-llm-sched/Dockerfile
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+    container_name: hololive-llm-scheduler
+    restart: always
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    env_file:
+      - ./.env
+    environment:
+      LLM_SCHEDULER_PORT: 30003
+      IRIS_BASE_URL: http://host.docker.internal:3000
+      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
+      CACHE_HOST: valkey-cache
+      CACHE_PORT: 6379
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: "5433"
+      POSTGRES_SOCKET_PATH: ""
+      POSTGRES_DB: hololive
+      POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
+      POSTGRES_AUTO_PREPARE_SCHEMA: "false"
+      MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
+      MAJOREVENT_SCRAPE_HOUR_KST: "4"
+      GOGC: "100"
+      GOMEMLIMIT: "256MiB"
+      GIN_MODE: release
+      CLIPROXY_ENABLED: "true"
+      CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
+      CLIPROXY_MODEL: gpt-5.2
+      CLIPROXY_REASONING_EFFORT: xhigh
+      LOG_DIR: ""
+    ports:
+      - "127.0.0.1:30003:30003"
+    volumes:
+      - ./data:/app/data
+      - valkey-cache-socket:/var/run/valkey:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+      hololive-db-migrate:
+        condition: service_completed_successfully
+      valkey-cache:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 320m
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30003/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+    <<: *security-hardening
+    networks:
+      hololive-net:
+        aliases:
+          - llm-scheduler
+
+  # Admin API (hololive-bot 관리 API 독립 바이너리)
+  admin-api:
+    image: hololive-admin-api:prod
+    build:
+      context: .
+      dockerfile: hololive/hololive-admin/Dockerfile
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+    container_name: hololive-admin-api
+    restart: always
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    env_file:
+      - ./.env
+    environment:
+      ADMIN_API_PORT: 30002
+      ALARM_DISPATCHER_URL: http://alarm-dispatcher:30010
+      LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
+      API_SECRET_KEY: ${API_SECRET_KEY:?required}
+      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
+      CACHE_HOST: valkey-cache
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: "5433"
+      POSTGRES_DB: hololive
+      POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
+      POSTGRES_AUTO_PREPARE_SCHEMA: "false"
+      GOGC: "100"
+      GOMEMLIMIT: "192MiB"
+      GIN_MODE: release
+      OTEL_ENABLED: "false"
+      OTEL_SERVICE_NAME: hololive-admin-api
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_SAMPLE_RATE: "0.1"
+      # llm 레포 서비스 → host.docker.internal 경유
+      SERVICES_LLM_SERVER_HEALTH_URL: http://host.docker.internal:40527/health
+      SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
+      SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
+      LOG_DIR: ""
+    ports:
+      - "127.0.0.1:30002:30002"
+    volumes:
+      - ./data:/app/data
+      - valkey-cache-socket:/var/run/valkey:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+      hololive-db-migrate:
+        condition: service_completed_successfully
+      valkey-cache:
+        condition: service_healthy
+      alarm-dispatcher:
+        condition: service_healthy
+      llm-scheduler:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30002/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+    <<: *security-hardening
+    networks:
+      hololive-net:
+        aliases:
+          - hololive-admin-api
+
+  # YouTube Scraper VPN Proxy (NordVPN + SOCKS5)
+  vpn-scraper-proxy:
+    image: hololive-vpn-scraper:prod
+    build: ./hololive/hololive-kakao-bot-go/dev/vpn-scraper
+    container_name: vpn-scraper-proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.fib_multipath_hash_policy=1  # L4 hash (src/dst IP+port) 기반 ECMP
+    ports:
+      - "127.0.0.1:1080:1080"
+    volumes:
+      - ${NORDVPN_OVPN_PATH_1:-./jp777.nordvpn.com.udp.ovpn}:/vpn/config1.ovpn:ro
+      - ${NORDVPN_OVPN_PATH_2:-./jp804.nordvpn.com.udp.ovpn}:/vpn/config2.ovpn:ro
+    environment:
+      OPENVPN_CONFIG_1: /vpn/config1.ovpn
+      OPENVPN_CONFIG_2: /vpn/config2.ovpn
+      DUAL_VPN: ${DUAL_VPN:-1}
+      NORDVPN_USERNAME: ${NORDVPN_USERNAME:?set NORDVPN_USERNAME in .env}
+      NORDVPN_PASSWORD: ${NORDVPN_PASSWORD:?set NORDVPN_PASSWORD in .env}
+      VPN_KILLSWITCH: ${VPN_KILLSWITCH:-1}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -x socks5://127.0.0.1:1080 -s --max-time 10 https://ifconfig.me >/dev/null"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+    logging: *default-logging
+    networks:
+      - hololive-net
+
+  # Docker Socket Proxy
+  docker-proxy:
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:-tecnativa/docker-socket-proxy:latest}
+    container_name: docker-proxy
+    restart: always
+    environment:
+      #(1=허용, 0=차단)
+      CONTAINERS: 1
+      POST: 1
+      LOGS: 1
+      BUILD: 0
+      EXEC: 0
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      SWARM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs:
+      - /run:size=16m,mode=1777
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 32m
+    logging: *default-logging
+    networks:
+      - hololive-net
+
+  # Container Health Monitor (DeUnhealth)
+  deunhealth:
+    image: ${DEUNHEALTH_IMAGE:-qmcgaw/deunhealth:latest}
+    container_name: deunhealth
+    restart: always
+    environment:
+      TZ: Asia/Seoul
+      LOG_LEVEL: info
+      DOCKER_HOST: tcp://docker-proxy:2375
+    depends_on:
+      docker-proxy:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 32m
+    logging: *default-logging
+    <<: *security-hardening
+    networks:
+      - hololive-net
+
+volumes:
+  holo-pg-data:
+  valkey-cache-data:
+  valkey-cache-socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=0777
+networks:
+  hololive-net:
+    driver: bridge

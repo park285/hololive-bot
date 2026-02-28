@@ -1,0 +1,44 @@
+{
+  "slug": "raora-panthera",
+  "english_name": "Raora Panthera",
+  "japanese_name": "Raora Panthera",
+  "catchphrase": "「え、ここ美味しそうじゃん！その情報どこから貰ったの！？」",
+  "description": "『神眼の描き手』と呼ばれる調査力と描写力の持ち主。\n情報収集の手段は多岐にわたり、自らの健脚やコミュ力を使うだけでなく、各種SNSの活用や彼女特有の手段をも有している。\nこれらの情報を元に描かれる標的の似顔絵はまるで直接、見ているかのような上手さと評判。\nしかし、その眼差しは今のところ、地元の新作ピザ情報と極東のポップカルチャーに向けられている。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月11日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年6月23日"
+    },
+    {
+      "label": "身長",
+      "value": "155cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Justice"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "Nekojira"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCl69AEx4MdqMZH7Jtsm7Tig?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/raorapanthera"
+    },
+    {
+      "label": "Instagram",
+      "url": "https://www.instagram.com/raorapanthera_hololiveen/?hl=en"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/raora-panthera/"
+}

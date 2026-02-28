@@ -1,0 +1,56 @@
+{
+  "slug": "shirakami-fubuki",
+  "english_name": "Shirakami Fubuki",
+  "japanese_name": "Shirakami Fubuki",
+  "catchphrase": "「こんこんきーつね！白上フブキです！」",
+  "description": "白髪ケモミミなオタク狐。人と話すことが好きで構ってもらえると喜ぶ。\n毎日楽しく過ごしながらトップオタクアイドルを目指している。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "10月5日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2018年6月1日"
+    },
+    {
+      "label": "身長",
+      "value": "155cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ1期生/ホロライブゲーマーズ"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "凪白みと"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "すこん部/Friends"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#フブキch\nファンアート：#絵フブキ"
+    },
+    {
+      "label": "夢",
+      "value": "みんなで沢山ライブ\nソロアルバム発売\nMC経験\nすこん部のみんなと楽しいことを沢山する！"
+    },
+    {
+      "label": "配信中に飲んだり食べたりしているもの",
+      "value": "お茶が一番好きです！特に緑茶\n紅茶とオレンジジュースも好き\n食べ物はグミやジャーキー"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCdn5BQ06XqgXoAxIhbqw5Rg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/shirakamifubuki"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/shirakami-fubuki/"
+}

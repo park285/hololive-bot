@@ -1,0 +1,11 @@
+go 1.26.0
+
+use (
+	./hololive/hololive-admin
+	./hololive/hololive-alarm
+	./hololive/hololive-kakao-bot-go
+	./hololive/hololive-llm-sched
+	./hololive/hololive-shared
+	./hololive/hololive-stream-ingester
+	./shared-go
+)

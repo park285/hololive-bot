@@ -1,0 +1,165 @@
+package adapter
+
+import (
+	"context"
+	"strings"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/membernews"
+)
+
+type memberNewsDigestTemplateData struct {
+	Emoji       UIEmoji
+	Headline    string
+	TopItems    []membernews.SummaryItem
+	MoreSummary string
+	TotalCount  int
+}
+
+type memberNewsSubscriptionTemplateData struct {
+	Emoji        UIEmoji
+	Prefix       string
+	IsSubscribed bool
+}
+
+// FormatMemberNewsDigest: 멤버 뉴스 다이제스트를 렌더링합니다.
+func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernews.Digest) string {
+	if digest == nil {
+		return ErrorMessage(ErrDisplayMemberNewsFailed)
+	}
+
+	if f == nil || f.renderer == nil {
+		return ErrorMessage(ErrDisplayMemberNewsFailed)
+	}
+
+	data := memberNewsDigestTemplateData{
+		Emoji:       DefaultEmoji,
+		Headline:    digest.Headline,
+		TopItems:    localizeMemberNewsItems(digest.TopItems),
+		MoreSummary: digest.MoreSummary,
+		TotalCount:  digest.TotalCount,
+	}
+
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsDigest, data)
+	if err != nil {
+		return ErrorMessage(ErrDisplayMemberNewsFailed)
+	}
+
+	return rendered
+}
+
+// FormatMemberNewsNoMembers: room 알람 멤버가 없는 경우 안내 메시지.
+func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) string {
+	if f == nil || f.renderer == nil {
+		return MsgMemberNewsNoMembers
+	}
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNoMembers, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	if err != nil {
+		return MsgMemberNewsNoMembers
+	}
+	return message
+}
+
+// FormatMemberNewsSubscribed: 구독 켜기 성공 메시지.
+func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) string {
+	if f == nil || f.renderer == nil {
+		return MsgMemberNewsSubscribed
+	}
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsSubscribed, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	if err != nil {
+		return MsgMemberNewsSubscribed
+	}
+	return message
+}
+
+// FormatMemberNewsAlreadySubscribed: 이미 구독 중 안내 메시지.
+func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Context) string {
+	if f == nil || f.renderer == nil {
+		return MsgMemberNewsAlreadySubscribed
+	}
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsAlreadySub, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	if err != nil {
+		return MsgMemberNewsAlreadySubscribed
+	}
+	return message
+}
+
+// FormatMemberNewsUnsubscribed: 구독 해제 성공 메시지.
+func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) string {
+	if f == nil || f.renderer == nil {
+		return MsgMemberNewsUnsubscribed
+	}
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsUnsubscribed, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	if err != nil {
+		return MsgMemberNewsUnsubscribed
+	}
+	return message
+}
+
+// FormatMemberNewsNotSubscribed: 미구독 상태 안내 메시지.
+func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) string {
+	if f == nil || f.renderer == nil {
+		return MsgMemberNewsNotSubscribed
+	}
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNotSub, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
+	if err != nil {
+		return MsgMemberNewsNotSubscribed
+	}
+	return message
+}
+
+// FormatMemberNewsStatus: 구독 상태 메시지.
+func (f *ResponseFormatter) FormatMemberNewsStatus(ctx context.Context, isSubscribed bool) string {
+	if f == nil || f.renderer == nil {
+		if isSubscribed {
+			return MsgMemberNewsStatusOn
+		}
+		return MsgMemberNewsStatusOff
+	}
+
+	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsStatus, memberNewsSubscriptionTemplateData{
+		Emoji:        DefaultEmoji,
+		Prefix:       f.prefix,
+		IsSubscribed: isSubscribed,
+	})
+	if err != nil {
+		if isSubscribed {
+			return MsgMemberNewsStatusOn
+		}
+		return MsgMemberNewsStatusOff
+	}
+	return message
+}
+
+func localizeMemberNewsItems(items []membernews.SummaryItem) []membernews.SummaryItem {
+	if len(items) == 0 {
+		return items
+	}
+
+	localized := make([]membernews.SummaryItem, len(items))
+	copy(localized, items)
+	for i := range localized {
+		localized[i].Category = memberNewsCategoryLabel(localized[i].Category)
+	}
+
+	return localized
+}
+
+func memberNewsCategoryLabel(raw string) string {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "birthday_live":
+		return "생일 라이브"
+	case "solo_live":
+		return "솔로 라이브"
+	case "collab":
+		return "콜라보"
+	case "event":
+		return "이벤트"
+	case "goods":
+		return "굿즈"
+	case "other":
+		return "기타"
+	default:
+		return raw
+	}
+}

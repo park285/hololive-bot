@@ -1,0 +1,44 @@
+{
+  "slug": "mococo-abyssgard",
+  "english_name": "Mococo Abyssgard",
+  "japanese_name": "Mococo Abyssgard",
+  "catchphrase": "「遊びの時間だー！みんな、準備は出来てるよね！」",
+  "description": "神々をも困らせる悪戯の末、大監獄『The Cell』に投獄されていた『魔界乃番犬』の暴れん坊であり、もこもこしてる方。\n元々、おしゃべりや遊びが大好き。獄中でもアニメ、ゲーム三昧の日々を過ごしており、双子の姉の『フワワ』やペットの『ペロ』をよく巻き込もうとしていた。脱獄に参加したのも遊び感覚らしい、との噂もある。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "2月2日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年7月31日"
+    },
+    {
+      "label": "身長",
+      "value": "155cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Advent"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "イコモチ"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCt9H_RpQzhxzlyBxFqrdHqA?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/fuwamoco_en"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td94450"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/mococo-abyssgard/"
+}

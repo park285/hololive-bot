@@ -1,0 +1,64 @@
+{
+  "slug": "kureiji-ollie",
+  "english_name": "Kureiji Ollie",
+  "japanese_name": "Kureiji Ollie",
+  "catchphrase": "「ゾンばんは！スーパかわいいゾンビアイドル、クククククレイジー・オリーです！！」",
+  "description": "お墓から出てきたゾンビ女子高生。\n生前の記憶を頼りに家に帰ったが知らないラーメン屋になっていた。\n彼女はラーメン屋になってしまった家を取り戻すために、VTuberになることを決めた。\n大声を出しがちなので、配信を見る時は音量を下げてください。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "10月13日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年12月4日"
+    },
+    {
+      "label": "身長",
+      "value": "162cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブインドネシア"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "LAM"
+    },
+    {
+      "label": "夢",
+      "value": "一流アイドルになる夢を叶えて家を元通りにしたい！友達と一緒にステージに立って、たくさんの人の前でオリジナルソングを歌いたい！夢に向かって頑張ります！"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "ZOMRADE"
+    },
+    {
+      "label": "Message",
+      "value": "ゾンばんは！スーパかわいいゾンビアイドル、ホロライブID２期生のクレイジー・オリーです！！\nアイドルとしてはまだ半人前だし、ゾンビだから苦労することもあるけど、夢に向かって頑張るので応援よろしくお願いします！"
+    },
+    {
+      "label": "趣味/好きなこと",
+      "value": "ゲーム、音楽、お喋り、楽しいことは全部好き！「クレイジー」なのに実はお掃除とマンガを読むのが好き。リラックスできるから！VTuberが好きで、みんなで盛り上げていきたいと思ってます！\n他には、食べるのが好きで、時々配信中にもお菓子を食べちゃう…えへへ～。"
+    },
+    {
+      "label": "得意な配信/よくやる配信",
+      "value": "配信はゲームと雑談がメイン！ゲームは面白そうならどんなゲームでもやるよ！"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCYz_5n-uDuChHtLo7My1HnQ?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/kureijiollie"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td92058"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/kureiji-ollie/"
+}

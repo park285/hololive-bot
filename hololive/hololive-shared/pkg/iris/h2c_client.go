@@ -1,0 +1,230 @@
+package iris
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+)
+
+type H2CClient struct {
+	baseURL  string
+	botToken string // X-Bot-Token for outbound auth
+	client   *http.Client
+	logger   *slog.Logger
+}
+
+const (
+	defaultHTTPTimeout            = 10 * time.Second
+	defaultHTTPDialTimeout        = 3 * time.Second
+	defaultHTTPTLSHandshake       = 5 * time.Second
+	defaultHTTPResponseHeaderWait = 5 * time.Second
+	defaultHTTPIdleConnTimeout    = 90 * time.Second
+)
+
+type H2CClientOptions struct {
+	Timeout               time.Duration
+	DialTimeout           time.Duration
+	TLSHandshakeTimeout   time.Duration
+	ResponseHeaderTimeout time.Duration
+	IdleConnTimeout       time.Duration
+}
+
+func (o H2CClientOptions) normalized() H2CClientOptions {
+	result := o
+	if result.Timeout <= 0 {
+		result.Timeout = defaultHTTPTimeout
+	}
+	if result.DialTimeout <= 0 {
+		result.DialTimeout = defaultHTTPDialTimeout
+	}
+	if result.TLSHandshakeTimeout <= 0 {
+		result.TLSHandshakeTimeout = defaultHTTPTLSHandshake
+	}
+	if result.ResponseHeaderTimeout <= 0 {
+		result.ResponseHeaderTimeout = defaultHTTPResponseHeaderWait
+	}
+	if result.IdleConnTimeout <= 0 {
+		result.IdleConnTimeout = defaultHTTPIdleConnTimeout
+	}
+	return result
+}
+
+func NewH2CClient(baseURL, botToken string, logger *slog.Logger, options ...H2CClientOptions) *H2CClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	opt := H2CClientOptions{}
+	if len(options) > 0 {
+		opt = options[0]
+	}
+	opt = opt.normalized()
+
+	transport := &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     opt.IdleConnTimeout,
+		DialContext: (&net.Dialer{
+			Timeout:   opt.DialTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   opt.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: opt.ResponseHeaderTimeout,
+	}
+
+	return &H2CClient{
+		baseURL:  baseURL,
+		botToken: botToken,
+		client: &http.Client{
+			Transport: transport,
+			Timeout:   opt.Timeout,
+		},
+		logger: logger,
+	}
+}
+
+func (c *H2CClient) SendMessage(ctx context.Context, room, message string, opts ...SendOption) error {
+	o := applySendOptions(opts)
+	reqBody := ReplyRequest{
+		Type:     "text",
+		Room:     room,
+		Data:     message,
+		ThreadID: o.ThreadID,
+	}
+	return c.postJSON(ctx, sharedirisx.PathReply, reqBody, nil)
+}
+
+func (c *H2CClient) SendImage(ctx context.Context, room, imageBase64 string) error {
+	reqBody := ReplyRequest{
+		Type: "image",
+		Room: room,
+		Data: imageBase64,
+	}
+	return c.postJSON(ctx, sharedirisx.PathReply, reqBody, nil)
+}
+
+func (c *H2CClient) Ping(ctx context.Context) bool {
+	req, err := c.newRequest(ctx, http.MethodGet, "/config", nil)
+	if err != nil {
+		return false
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+
+func (c *H2CClient) GetConfig(ctx context.Context) (*Config, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/config", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get /config: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body := readBodyForError(resp.Body)
+		return nil, fmt.Errorf("get /config: unexpected status %d: %s", resp.StatusCode, body)
+	}
+
+	var cfg Config
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("decode /config response: %w", err)
+	}
+	return &cfg, nil
+}
+
+func (c *H2CClient) Decrypt(ctx context.Context, data string) (string, error) {
+	reqBody := DecryptRequest{
+		B64Ciphertext: data,
+		Enc:           0,
+	}
+
+	var respBody DecryptResponse
+	if err := c.postJSON(ctx, "/decrypt", reqBody, &respBody); err != nil {
+		return "", err
+	}
+	return respBody.PlainText, nil
+}
+
+func (c *H2CClient) postJSON(ctx context.Context, path string, body any, out any) error {
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			return fmt.Errorf("encode request body: %w", err)
+		}
+	}
+
+	req, err := c.newRequest(ctx, http.MethodPost, path, &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("post %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bodyText := readBodyForError(resp.Body)
+		return fmt.Errorf("post %s: unexpected status %d: %s", path, resp.StatusCode, bodyText)
+	}
+
+	if out == nil {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode %s response: %w", path, err)
+	}
+	return nil
+}
+
+func (c *H2CClient) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	if c == nil {
+		return nil, fmt.Errorf("iris client is nil")
+	}
+
+	url := c.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("new request %s %s: %w", method, path, err)
+	}
+
+	// Note: Iris server may require X-Bot-Token for outbound bot calls.
+	if strings.TrimSpace(c.botToken) != "" {
+		req.Header.Set(sharedirisx.HeaderBotToken, c.botToken)
+	}
+
+	return req, nil
+}
+
+func readBodyForError(r io.Reader) string {
+	const limit = 4096
+	b, err := io.ReadAll(io.LimitReader(r, limit))
+	if err != nil {
+		return "read_body_failed"
+	}
+	return strings.TrimSpace(string(b))
+}

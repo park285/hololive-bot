@@ -1,0 +1,40 @@
+{
+  "slug": "mizumiya-su",
+  "english_name": "Mizumiya Su",
+  "japanese_name": "Mizumiya Su",
+  "catchphrase": "「しゅぴしゅわー すうの充電たりてる？」",
+  "description": "FLOW GLOWの宣伝担当。\n愛されと褒められを求め、もぐもぐしながら日々SNSで発信中。\nもっと世界は優しくあってよって思ってたら、仲間たちに出会えたので捨てたもんじゃないよね。\nありがと神様、この調子で身長ももうちょっと伸ばしてください。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "6月16日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年11月9日"
+    },
+    {
+      "label": "身長",
+      "value": "145cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "FLOW GLOW"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "ぶくろて"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCjk2nKmHzgH5Xy-C5qYRd5A?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/mizumiya_su"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/mizumiya-su/"
+}

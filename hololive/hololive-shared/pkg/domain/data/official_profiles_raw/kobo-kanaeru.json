@@ -1,0 +1,44 @@
+{
+  "slug": "kobo-kanaeru",
+  "english_name": "Kobo Kanaeru",
+  "japanese_name": "Kobo Kanaeru",
+  "catchphrase": "「ぼこぼこぼ~こぼ・かなえるアットユアサービス！」",
+  "description": "灯台の最上階に住むのんびりした少女。実はその地域で最強のレイン・シャーマンの血筋。雨を自在に操る強力な能力をもつが、他人に言われて力を使うのは好きではない。\nレイン・マスターの称号を取り戻すには、レイン・シャーマンの仕事を続けられることを家族に証明する必要がある。そのためには訓練だけでなくバーチャルマーケティング戦略も必要と考え、VTuberを目指した。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "12月12日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2022年3月27日"
+    },
+    {
+      "label": "身長",
+      "value": "150cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブインドネシア"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "ぽんかん⑧"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Kobokerz"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCjLEmnpCNeisMxy134KPwWw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/kobokanaeru"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/kobo-kanaeru/"
+}

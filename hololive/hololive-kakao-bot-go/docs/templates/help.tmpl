@@ -1,0 +1,24 @@
+{{template "emoji_brand" .}} 홀로라이브 카카오톡 봇
+
+{{template "emoji_broadcast" .}} 방송 확인
+  {{.Prefix}}라이브 - 현재 라이브 중인 방송
+  {{.Prefix}}라이브 [멤버명] - 특정 멤버 라이브 확인
+  {{.Prefix}}예정 - 24시간 이내 예정 방송
+  {{.Prefix}}예정 [숫자] - 예정 방송 상위 N개 표시 (예: {{.Prefix}}예정 30)
+  {{.Prefix}}예정 전체 - 예정 방송 전체 표시
+  {{.Prefix}}예정 [멤버명] - 특정 멤버 예정 방송
+  {{.Prefix}}멤버 [이름] - 일주일 이내의 방송일정을 조회
+
+{{template "emoji_member" .}} 멤버 정보
+  {{.Prefix}}정보 [멤버명] - 멤버 프로필 조회
+
+{{template "emoji_alarm" .}} 알람 설정
+  {{.Prefix}}알람 추가 [멤버명]
+  {{.Prefix}}알람 제거 [멤버명]
+  {{.Prefix}}알람 목록
+  {{.Prefix}}알람 초기화
+
+{{template "emoji_stats" .}} 통계 
+  {{.Prefix}}구독자 [멤버명] - 특정 멤버의 현재 구독자 수
+  {{.Prefix}}구독자순위 - 최근 10일간 구독자 증가 순위 TOP 10
+  {{.Prefix}}구독자순위 [기간]

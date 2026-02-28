@@ -1,0 +1,40 @@
+{
+  "slug": "isaki-riona",
+  "english_name": "Isaki Riona",
+  "japanese_name": "Isaki Riona",
+  "catchphrase": "「やりたいように、私は私らしく生き抜いていくんです！」",
+  "description": "FLOW GLOWのリーダー。\n自他ともに認めるストイック負けず嫌い王。\n舐められないように強そうな立ち振る舞いを意識しているが、小動物に弱く、甘やかしがち。\n少年漫画も好きらしく、クールな見た目に反して意外と熱血タイプ？",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "5月29日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年11月9日"
+    },
+    {
+      "label": "身長",
+      "value": "160cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "FLOW GLOW"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "しらび"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC9LSiN9hXI55svYEBrrK-tw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/isakiriona"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/isaki-riona/"
+}

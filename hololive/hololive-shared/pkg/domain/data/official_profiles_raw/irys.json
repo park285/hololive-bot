@@ -1,0 +1,48 @@
+{
+  "slug": "irys",
+  "english_name": "IRyS",
+  "japanese_name": "IRyS",
+  "catchphrase": "「ハイRyS！私はIRyS！世界を希望で満たす、君たちの清楚なネフィリムです！」",
+  "description": "かつて、楽園において希望の化身であった『ネフィリム』。\n彼女の歌声には今も想いが込められている。\n天使と悪魔の両面を持つ危うさ、不安定さからか、ごく稀にヤバ……突拍子のない発言をしてしまい、周囲を戸惑わせることもある。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "3月7日"
+    },
+    {
+      "label": "デビュー",
+      "value": "2021年7月11日"
+    },
+    {
+      "label": "身長",
+      "value": "166㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "Promise"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "redjuice"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "IRyStocrats"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC8rcEBzJSleTkf_-agPM20g?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/irys_en"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td94993"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/irys/"
+}

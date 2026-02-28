@@ -1,0 +1,36 @@
+[database]
+host = "holo-postgres"
+port = 5432
+name = "hololive"
+user = "hololive_scraper"
+password = ""
+sslmode = "disable"
+max_connections = 5
+
+[proxy]
+socks5_url = "socks5://vpn-scraper-proxy:1080"
+
+[scheduler]
+scrape_hour_kst = 6
+
+[scraper]
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+
+[logging]
+level = "info"
+file_enabled = true
+dir = "logs"
+file = "hololive-scraper.log"
+combined_file = "combined.log"
+
+[telemetry]
+enabled = false
+service_name = "hololive-scraper-rs"
+service_version = "0.1.0"
+environment = "production"
+otlp_endpoint = "jaeger:4317"
+otlp_insecure = true
+sample_rate = 1.0
+
+[health]
+port = 30010

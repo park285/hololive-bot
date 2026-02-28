@@ -1,0 +1,56 @@
+{
+  "slug": "hoshimachi-suisei",
+  "english_name": "Hoshimachi Suisei",
+  "japanese_name": "Hoshimachi Suisei",
+  "catchphrase": "「彗星のごとく現れたスターの原石！バーチャルアイドルの星街すいせいでーす！」",
+  "description": "歌とアイドルをこよなく愛するバーチャルアイドル。\nいつか東京ドームでライブをすることを夢見て活動している。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "3月22日"
+    },
+    {
+      "label": "デビュー日",
+      "value": "2018年3月22日"
+    },
+    {
+      "label": "身長",
+      "value": "160㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ0期生"
+    },
+    {
+      "label": "メイク担当",
+      "value": "手島nari"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "星詠み"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#ほしまちすたじお\nファンアート：#ほしまちぎゃらりー"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC5CwaMl1eIgY8h02uZw7u8A?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/suisei_hosimati"
+    },
+    {
+      "label": "歌の再生リスト",
+      "url": "https://www.youtube.com/watch?v=hAI-qjw6J-A\u0026list=PLAo9RlHR2tDZwddeEyp9nTfpaFB58DrXd\u0026index=1"
+    },
+    {
+      "label": "Hoshimachi Suisei Live“SuperNova: REBOOT”",
+      "url": "https://supernova.hololivepro.com/"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/hoshimachi-suisei/"
+}

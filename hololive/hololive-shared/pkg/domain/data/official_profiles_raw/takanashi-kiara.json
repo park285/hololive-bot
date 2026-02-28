@@ -1,0 +1,56 @@
+{
+  "slug": "takanashi-kiara",
+  "english_name": "Takanashi Kiara",
+  "japanese_name": "Takanashi Kiara",
+  "catchphrase": "「キッケリキー！！！KFPへようこそ！お食事ですか？それともご求職です？」",
+  "description": "ファストフードチェーンの店主になりたいアイドル。不死鳥であり、ニワトリや七面鳥ではない。（重要）\n彼女は命を削りながらすごく頑張って働いている、どうせ死んでも灰から蘇られるから。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "7月6日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年9月12日"
+    },
+    {
+      "label": "身長",
+      "value": "165㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "Myth（神話）"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "huke"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "KFP"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#kfp #キアライブ\nファンアート：#artsofashes #絵ニックス"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCHsx4Hqa-1ORjQTh9TYDhww?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/takanashikiara"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td88338"
+    },
+    {
+      "label": "Takanashi Kiara / Ninomae Ina’nis1st Concert “Drawn to Dawn”",
+      "url": "https://drawn-to-dawn.hololivepro.com/"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/takanashi-kiara/"
+}

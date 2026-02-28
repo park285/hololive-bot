@@ -1,0 +1,52 @@
+{
+  "slug": "akai-haato",
+  "english_name": "Akai Haato",
+  "japanese_name": "Akai Haato",
+  "catchphrase": "「こんるーじゅ！赤井はあとよ！」",
+  "description": "生意気な後輩。普段はツンツンしているが仲良くなった相手には甘えたりする。赤いリボンとハートが好きで、髪や服によくつけている。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "8月10日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2018年6月2日"
+    },
+    {
+      "label": "身長",
+      "value": "154cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ1期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "はる雪"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "はあとん"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#赤井劇場\nファンアート：#はあとart"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UC1CfXB_kRs3C-zaeTG3oGyg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/akaihaato"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td63647"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/akai-haato/"
+}

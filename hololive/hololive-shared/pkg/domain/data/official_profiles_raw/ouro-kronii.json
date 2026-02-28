@@ -1,0 +1,64 @@
+{
+  "slug": "ouro-kronii",
+  "english_name": "Ouro Kronii",
+  "japanese_name": "Ouro Kronii",
+  "catchphrase": "「クロにちは～！\"完全無欠\"、またの名を、オーロ・クロニーです！」",
+  "description": "時間とは揺るぎない正確なものであり、その典獄――監視者である彼女もまたクールで完璧な存在だ。\n時折、人知の及ばない判断や運気を見せつける様はその証明だろう。\nしかし、荒唐無稽な展開の前では『時間の典獄』である彼女の時間すら止まってしまうこともある。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "3月14日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2021年8月23日"
+    },
+    {
+      "label": "身長",
+      "value": "168cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Promise"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "ワダアルコ"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Kronies"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#krotime\nファンアート：#クロニーラ"
+    },
+    {
+      "label": "趣味",
+      "value": "ゲーム、先延ばしにすること、寝転がること、動画を見ること、歌うこと"
+    },
+    {
+      "label": "好きなこと",
+      "value": "睡眠・昼寝、夜のお散歩、実存的恐怖、水泳、アニメ、マンガ、ウェブトゥーン"
+    },
+    {
+      "label": "嫌いなこと",
+      "value": "・眠ること・昼寝をすること\n・先延ばしにすること\n・野菜\n・土壇場の作業\n・怒りを誘うゲーム"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCmbs8T6MWqUHP1tIQvSgKrg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/ourokronii"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td94992"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/ouro-kronii/"
+}

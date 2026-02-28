@@ -1,0 +1,44 @@
+{
+  "slug": "fuwawa-abyssgard",
+  "english_name": "Fuwawa Abyssgard",
+  "japanese_name": "Fuwawa Abyssgard",
+  "catchphrase": "「ふわふわに包み込んであげようかな～？」",
+  "description": "神々をも困らせる悪戯の末、大監獄『The Cell』に投獄されていた『魔界乃番犬』のまとめ役であり、ふわふわしてる方。\n双子の妹の『モココ』、ペットの『ペロ』を穏やかに見守る立場だが、あくまで相対的なもの。世間からすれば彼女だって、おしゃべりも遊びも大好きなお騒がせ者である。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "2月1日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年7月31日"
+    },
+    {
+      "label": "身長",
+      "value": "155cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Advent"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "イコモチ"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCt9H_RpQzhxzlyBxFqrdHqA?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/fuwamoco_en"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td94451"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/fuwawa-abyssgard/"
+}

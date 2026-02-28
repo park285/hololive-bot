@@ -1,0 +1,72 @@
+{
+  "slug": "ayunda-risu",
+  "english_name": "Ayunda Risu",
+  "japanese_name": "Ayunda Risu",
+  "catchphrase": "「こんちわ、みなさ～ん！ぷるぷる～がんばり～リス！」",
+  "description": "魔法の森からやってきたリスの女の子。\n人間の世界で迷子になっていたが、とある事情があって優しいお姉さんの家に住むことになる。\nその恩返しをするためVTuberになることにした。\n振る舞いはリスそのもの。人見知りだが、いたずらが好きで視聴者をからかったりする。笑い声も特徴的。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "1月15日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2020年4月10日"
+    },
+    {
+      "label": "身長",
+      "value": "153㎝"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブインドネシア"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "やとみ"
+    },
+    {
+      "label": "夢",
+      "value": "リスの目標はオリジナルソングのアルバムを作って3Dソロコンサート配信をすることと、グッズとしてぬいぐるみを作ること。"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Risuners"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#Risu_Live\nファンアート：#GambaRisu"
+    },
+    {
+      "label": "Words",
+      "value": "【Piggy Bank（豚さん貯金箱）】\n2020年5月頃のリスが硬貨を数える配信に凸してきたムーナが、硬貨を豚さん貯金箱から盗まれたと主張したのが元ネタ。"
+    },
+    {
+      "label": "Message",
+      "value": "リスの配信は元気いっぱいで楽しいよ！子どもの頃の友達と遊んでいるような気分にしてあげる！"
+    },
+    {
+      "label": "得意な配信/よくやる配信",
+      "value": "ストーリーのあるゲーム、変なASMR、アカペラや短いネタ動画など"
+    },
+    {
+      "label": "アユンダとリスの声の違い",
+      "value": "2020年9月頃、アユンダ・リスはチャンネル登録者10万人記念に新衣装で「再デビュー」した。その配信で２種類の声「アユンダ」と「リス」の違いについて語った。「アユンダ」は魔女のような低い声で、「リス」はリスのような高い声だという。"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCOyYb1c43VlX9rc_lT6NKQw?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/ayunda_risu"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td88678"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/ayunda-risu/"
+}

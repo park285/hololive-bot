@@ -1,0 +1,52 @@
+{
+  "slug": "amane-kanata",
+  "english_name": "Amane Kanata",
+  "japanese_name": "Amane Kanata",
+  "catchphrase": "「へい！みんなこんかなた～！」",
+  "description": "天界学園に通う天使。親しい人の前では元気だが、人が増えるほど静かになる陰キャ。休日は家に引きこもる。 いつか、さいたまスーパーアリーナでLIVEを開催することを目標に活動している。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "4月22日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2019年12月27日"
+    },
+    {
+      "label": "身長",
+      "value": "149cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ4期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "おしおしお"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "へい民"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#天界学園放送部\nファンアート：#かなたーと"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCZlDXzGoo7d44bwdNObFacg?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/amanekanatach"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td78501"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/amane-kanata/"
+}

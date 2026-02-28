@@ -1,0 +1,84 @@
+package config
+
+import (
+	"fmt"
+
+	"github.com/joho/godotenv"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+)
+
+// LLMSchedulerConfig: llm-scheduler 바이너리 전용 설정
+type LLMSchedulerConfig struct {
+	Server     ServerConfig
+	Iris       IrisConfig
+	Valkey     ValkeyConfig
+	Postgres   PostgresConfig
+	Logging    LoggingConfig
+	Bot        BotConfig
+	Telemetry  TelemetryConfig
+	MajorEvent MajorEventConfig
+	Cliproxy   CliproxyConfig
+	LLM        LLMConfig
+	Exa        ExaConfig
+	Version    string
+}
+
+// LoadLLMScheduler: llm-scheduler 전용 설정을 환경변수에서 로드합니다.
+func LoadLLMScheduler() (*LLMSchedulerConfig, error) {
+	_ = godotenv.Load()
+
+	cfg := buildLLMSchedulerConfig()
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("llm scheduler config validation failed: %w", err)
+	}
+	return cfg, nil
+}
+
+func buildLLMSchedulerConfig() *LLMSchedulerConfig {
+	webhookToken, botToken, _, _ := loadRuntimeTokensAndCORS()
+
+	return &LLMSchedulerConfig{
+		Server: ServerConfig{
+			Port: envutil.Int("LLM_SCHEDULER_PORT", 30003),
+		},
+		Iris: IrisConfig{
+			BaseURL:      envutil.String("IRIS_BASE_URL", "http://localhost:3000"),
+			WebhookToken: webhookToken,
+			BotToken:     botToken,
+		},
+		Valkey:   loadValkeyConfig(),
+		Postgres: loadPostgresConfig(),
+		Logging: LoggingConfig{
+			Level:      envutil.String("LOG_LEVEL", "info"),
+			Dir:        envutil.String("LOG_DIR", ""),
+			MaxSizeMB:  envutil.Int("LOG_MAX_SIZE_MB", 100),
+			MaxBackups: envutil.Int("LOG_MAX_BACKUPS", 5),
+			MaxAgeDays: envutil.Int("LOG_MAX_AGE_DAYS", 30),
+			Compress:   envutil.Bool("LOG_COMPRESS", true),
+		},
+		Bot: BotConfig{
+			Prefix:   envutil.String("BOT_PREFIX", "!"),
+			SelfUser: stringutil.TrimSpace(envutil.String("BOT_SELF_USER", "iris")),
+		},
+		Telemetry: loadTelemetryConfig(),
+		MajorEvent: MajorEventConfig{
+			ScraperEnabled: envutil.Bool("MAJOREVENT_SCRAPER_ENABLED", true),
+			ScrapeHourKST: normalizeHour(
+				envutil.Int("MAJOREVENT_SCRAPE_HOUR_KST", 4),
+				4,
+			),
+		},
+		Cliproxy: loadCliproxyConfig(),
+		LLM:      loadLLMConfig(),
+		Exa:      loadExaConfig(),
+		Version:  stringutil.TrimSpace(envutil.String("APP_VERSION", "1.0.0-llm-scheduler")),
+	}
+}
+
+func (c *LLMSchedulerConfig) validate() error {
+	if c.Server.Port == 0 {
+		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
+	}
+	return nil
+}

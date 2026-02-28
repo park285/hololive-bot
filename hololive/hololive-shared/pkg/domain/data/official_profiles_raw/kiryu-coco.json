@@ -1,0 +1,48 @@
+{
+  "slug": "kiryu-coco",
+  "english_name": "Kiryu Coco",
+  "japanese_name": "Kiryu Coco",
+  "catchphrase": "「おーはようございまーす皆さーん！起きて起きて起きて―！」",
+  "description": "人間の文化に興味を持ち、異世界から日本に語学留学中の子どものドラゴン。\n仁義と任侠を重んじる正義感あふれるドラゴンで、気合で人間の姿を保っている。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "6月17日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2019年12月28日"
+    },
+    {
+      "label": "身長",
+      "value": "180cm(ドラゴン時7ｍ)"
+    },
+    {
+      "label": "ユニット",
+      "value": "ホロライブ４期生"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "yaman**"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "たつのこ"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ：#ココここ\nファンアート：#みかじ絵"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCS9uQI-jC3DE0L4IpXyvr6w?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/kiryucoco"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/kiryu-coco/"
+}

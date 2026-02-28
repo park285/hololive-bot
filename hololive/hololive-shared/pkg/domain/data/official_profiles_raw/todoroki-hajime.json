@@ -1,0 +1,52 @@
+{
+  "slug": "todoroki-hajime",
+  "english_name": "Todoroki Hajime",
+  "japanese_name": "Todoroki Hajime",
+  "catchphrase": "「ぶんぶんぶーん！押忍！hololive DEV_IS ReGLOSSの番長！轟はじめ！」",
+  "description": "宇宙一の番長を目指すなんでも屋。\nなぜ宇宙一なのか、なぜ番長なのかは明らかにされていない。\nじっとしていられないタイプで自分の体を動かすことが好き。\n逆に道具を扱うことは苦手で料理も出来ない。\n相棒の『ばんぺん』から日々、番長たる教えを受けている。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "6月7日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2023年9月10日"
+    },
+    {
+      "label": "身長",
+      "value": "155cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "ReGLOSS"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "Aちき"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "真っす組"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "配信タグ : #ぶんぶんばんちょー\nアートタグ : #はじめ武勇伝"
+    },
+    {
+      "label": "推しマーク",
+      "value": "🐧⚡"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/@TodorokiHajime?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/todoroki_hajime"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/todoroki-hajime/"
+}

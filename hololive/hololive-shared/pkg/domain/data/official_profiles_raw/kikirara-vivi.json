@@ -1,0 +1,40 @@
+{
+  "slug": "kikirara-vivi",
+  "english_name": "Kikirara Vivi",
+  "japanese_name": "Kikirara Vivi",
+  "catchphrase": "「ちょい待ってぇな、あんたんこと変えたるから！」",
+  "description": "FLOW GLOWのメイク担当。\nより美しくなれるものを目の前にすると、じっとしていられない美の求道者。\n感情を素直に表現するタイプであり、時折ストレートな言葉が方言交じりで飛び出す。\n天敵は直射日光。インドア人生のおかげか、お肌の調子はいい感じ。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "8月27日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2024年11月9日"
+    },
+    {
+      "label": "身長",
+      "value": "161cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "FLOW GLOW"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "nonco"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCGzTVXqMQHa4AgJVJIVvtDQ?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/kikiraravivi"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/kikirara-vivi/"
+}

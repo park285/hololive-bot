@@ -1,0 +1,60 @@
+{
+  "slug": "hakos-baelz",
+  "english_name": "Hakos Baelz",
+  "japanese_name": "Hakos Baelz",
+  "catchphrase": "「WAZZUP!! 皆の世界的ネズミアイドル——ハコス・ベールズです！」",
+  "description": "『カオス』『混沌』、そのものであり前触れでもある可愛い可愛い一匹のネズミ。\n人々を楽しませるパフォーマーとして、常に次の舞台を探し回ってる。\n自らのカオスに振り回されてしまうことがあるのもまた一興。",
+  "data_entries": [
+    {
+      "label": "誕生日",
+      "value": "2月29日"
+    },
+    {
+      "label": "初配信日",
+      "value": "2021年8月23日"
+    },
+    {
+      "label": "身長",
+      "value": "149cm"
+    },
+    {
+      "label": "ユニット",
+      "value": "Promise"
+    },
+    {
+      "label": "イラストレーター",
+      "value": "Mika Pikazo"
+    },
+    {
+      "label": "ファンネーム",
+      "value": "Brats"
+    },
+    {
+      "label": "ハッシュタグ",
+      "value": "Stream Tag: #TeleBAE\nFan Art: #BaelzBrush\nMusic: #BaeBeatz\nMeme: #YABAE"
+    },
+    {
+      "label": "好きなもの",
+      "value": "コーヒー、フライドチーズ、RPG、シミュレーション、アニソン、JPOP、KPOP、EDM、ハードスタイル"
+    },
+    {
+      "label": "嫌いなもの",
+      "value": "暗闇と急な脅かし"
+    }
+  ],
+  "social_links": [
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/channel/UCgmPnx-EEeOrZSg5Tiw7ZRQ?sub_confirmation=1"
+    },
+    {
+      "label": "X",
+      "url": "https://twitter.com/hakosbaelz"
+    },
+    {
+      "label": "MMD",
+      "url": "https://3d.nicovideo.jp/works/td94990"
+    }
+  ],
+  "official_url": "https://hololive.hololivepro.com/talents/hakos-baelz/"
+}
