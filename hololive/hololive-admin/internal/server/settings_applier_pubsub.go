@@ -103,60 +103,6 @@ func (a *pubsubSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, mi
 	return runtime
 }
 
-// ApplyMajorEventScrapeHour: Pub/Sub로 major event scrape 시각 변경을 발행합니다.
-func (a *pubsubSettingsApplier) ApplyMajorEventScrapeHour(ctx context.Context, hourKST int) map[string]any {
-	runtime := map[string]any{
-		"requested_hour_kst": hourKST,
-	}
-
-	payload, err := json.Marshal(struct {
-		HourKST int `json:"hour_kst"`
-	}{HourKST: hourKST})
-	if err != nil {
-		a.logger.Error("Failed to marshal majorevent_scrape_hour_kst payload", slog.Any("error", err))
-		runtime["marshal_error"] = err.Error()
-		return runtime
-	}
-
-	err = a.publisher.Publish(ctx, configsub.ConfigUpdate{
-		Type:    "majorevent_scrape_hour_kst",
-		Payload: payload,
-	})
-	if err != nil {
-		a.logger.Error("Failed to publish majorevent_scrape_hour_kst update", slog.Any("error", err))
-		runtime["publish_error"] = err.Error()
-	} else {
-		runtime["published"] = true
-	}
-
-	return runtime
-}
-
-// ApplyMajorEventScrapeRunNow: Pub/Sub로 major event 즉시 스크래핑 실행 요청을 발행합니다.
-func (a *pubsubSettingsApplier) ApplyMajorEventScrapeRunNow(ctx context.Context) map[string]any {
-	runtime := map[string]any{}
-
-	payload, err := json.Marshal(struct{}{})
-	if err != nil {
-		a.logger.Error("Failed to marshal majorevent_scrape_run_now payload", slog.Any("error", err))
-		runtime["marshal_error"] = err.Error()
-		return runtime
-	}
-
-	err = a.publisher.Publish(ctx, configsub.ConfigUpdate{
-		Type:    "majorevent_scrape_run_now",
-		Payload: payload,
-	})
-	if err != nil {
-		a.logger.Error("Failed to publish majorevent_scrape_run_now update", slog.Any("error", err))
-		runtime["publish_error"] = err.Error()
-	} else {
-		runtime["published"] = true
-	}
-
-	return runtime
-}
-
 // ApplyMemberNewsWeeklyRunNow: Pub/Sub로 membernews 주간 다이제스트 즉시 실행 요청을 발행합니다.
 func (a *pubsubSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) map[string]any {
 	runtime := map[string]any{}

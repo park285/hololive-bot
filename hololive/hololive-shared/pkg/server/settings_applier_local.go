@@ -79,23 +79,6 @@ func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minut
 	return runtime
 }
 
-// ApplyMajorEventScrapeHour: bot 프로세스에서는 미지원(LLM scheduler 전용) 설정입니다.
-func (a *localSettingsApplier) ApplyMajorEventScrapeHour(_ context.Context, hourKST int) map[string]any {
-	return map[string]any{
-		"requested_hour_kst": hourKST,
-		"applied":            false,
-		"reason":             "llm scheduler settings are not available in local mode",
-	}
-}
-
-// ApplyMajorEventScrapeRunNow: bot 프로세스에서는 미지원(LLM scheduler 전용) 설정입니다.
-func (a *localSettingsApplier) ApplyMajorEventScrapeRunNow(_ context.Context) map[string]any {
-	return map[string]any{
-		"applied": false,
-		"reason":  "llm scheduler settings are not available in local mode",
-	}
-}
-
 // ApplyMemberNewsWeeklyRunNow: bot 프로세스에서는 미지원(LLM scheduler 전용) 설정입니다.
 func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) map[string]any {
 	return map[string]any{

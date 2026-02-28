@@ -147,6 +147,7 @@ func (h *SettingsAPIHandler) UpdateSettings(c *gin.Context) {
 // UpdateLLMSettings: llm-scheduler 런타임 설정/실행 트리거를 업데이트합니다.
 func (h *SettingsAPIHandler) UpdateLLMSettings(c *gin.Context) {
 	var req struct {
+		// deprecated: major event scraping ownership moved to hololive-scraper-rs
 		MajorEventScrapeHourKST *int  `json:"majorEventScrapeHourKST"`
 		MajorEventScrapeRunNow  *bool `json:"majorEventScrapeRunNow"`
 		MemberNewsWeeklyRunNow  *bool `json:"memberNewsWeeklyRunNow"`
@@ -156,16 +157,12 @@ func (h *SettingsAPIHandler) UpdateLLMSettings(c *gin.Context) {
 		return
 	}
 
-	if req.MajorEventScrapeHourKST == nil && req.MajorEventScrapeRunNow == nil && req.MemberNewsWeeklyRunNow == nil {
+	if req.MajorEventScrapeHourKST != nil || req.MajorEventScrapeRunNow != nil {
+		c.JSON(410, gin.H{"error": "majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-scraper-rs"})
+		return
+	}
+	if req.MemberNewsWeeklyRunNow == nil {
 		c.JSON(400, gin.H{"error": "at least one llm setting field is required"})
-		return
-	}
-	if req.MajorEventScrapeHourKST != nil && (*req.MajorEventScrapeHourKST < 0 || *req.MajorEventScrapeHourKST > 23) {
-		c.JSON(400, gin.H{"error": "majorEventScrapeHourKST must be between 0 and 23"})
-		return
-	}
-	if req.MajorEventScrapeRunNow != nil && !*req.MajorEventScrapeRunNow {
-		c.JSON(400, gin.H{"error": "majorEventScrapeRunNow must be true when provided"})
 		return
 	}
 	if req.MemberNewsWeeklyRunNow != nil && !*req.MemberNewsWeeklyRunNow {
@@ -177,21 +174,13 @@ func (h *SettingsAPIHandler) UpdateLLMSettings(c *gin.Context) {
 	defer cancel()
 
 	runtime := map[string]any{}
-	if req.MajorEventScrapeHourKST != nil {
-		runtime["majorevent_scrape_hour_kst"] = h.settingsApplier.ApplyMajorEventScrapeHour(ctx, *req.MajorEventScrapeHourKST)
-	}
-	if req.MajorEventScrapeRunNow != nil && *req.MajorEventScrapeRunNow {
-		runtime["majorevent_scrape_run_now"] = h.settingsApplier.ApplyMajorEventScrapeRunNow(ctx)
-	}
 	if req.MemberNewsWeeklyRunNow != nil && *req.MemberNewsWeeklyRunNow {
 		runtime["membernews_weekly_run_now"] = h.settingsApplier.ApplyMemberNewsWeeklyRunNow(ctx)
 	}
 
 	h.activity.Log("llm_settings_update", "LLM settings updated", map[string]any{
-		"major_event_scrape_hour_kst": req.MajorEventScrapeHourKST,
-		"major_event_scrape_run_now":  req.MajorEventScrapeRunNow,
-		"membernews_weekly_run_now":   req.MemberNewsWeeklyRunNow,
-		"runtime":                     runtime,
+		"membernews_weekly_run_now": req.MemberNewsWeeklyRunNow,
+		"runtime":                   runtime,
 	})
 
 	c.JSON(200, gin.H{

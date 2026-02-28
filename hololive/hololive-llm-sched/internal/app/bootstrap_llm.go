@@ -5,8 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/adapter"
-	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 	"github.com/kapu/hololive-shared/pkg/service/membernews"
@@ -14,7 +12,6 @@ import (
 
 func buildMajorEventComponents(
 	ctx context.Context,
-	majorEventCfg config.MajorEventConfig,
 	majorEventRepo *majorevent.Repository,
 	formatter *adapter.ResponseFormatter,
 	summarizer *majorevent.EventSummarizer,
@@ -22,7 +19,7 @@ func buildMajorEventComponents(
 	outboxRepo *delivery.OutboxRepository,
 	logger *slog.Logger,
 	autoPrepareSchema bool,
-) (*majorevent.Scheduler, *majorevent.MonthlyScheduler, *majorevent.ScraperScheduler) {
+) (*majorevent.Scheduler, *majorevent.MonthlyScheduler) {
 	majorEventScheduler := majorevent.NewScheduler(
 		majorEventRepo,
 		formatter,
@@ -47,31 +44,8 @@ func buildMajorEventComponents(
 		}
 	}
 
-	if !majorEventCfg.ScraperEnabled {
-		logger.Info("Major event scraper scheduler disabled by config",
-			slog.Int("scrape_hour_kst", majorEventCfg.ScrapeHourKST))
-		return majorEventScheduler, majorEventMonthlyScheduler, nil
-	}
-
-	majorEventScraper := majorevent.NewScraper(
-		providers.ProvideMajorEventHTTPClient(),
-		majorEventRepo,
-		majorevent.WithScraperLogger(logger),
-	)
-	linkChecker := majorevent.NewLinkChecker(
-		providers.ProvideMajorEventHTTPClient(),
-		majorEventRepo,
-		logger,
-	)
-	majorEventScraperScheduler := majorevent.NewScraperScheduler(
-		majorEventScraper,
-		majorEventRepo,
-		linkChecker,
-		logger,
-		majorevent.WithScraperSchedulerHour(majorEventCfg.ScrapeHourKST),
-	)
-
-	return majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler
+	// major event scraping ownership moved to hololive-scraper-rs.
+	return majorEventScheduler, majorEventMonthlyScheduler
 }
 
 func buildMemberNewsComponents(memberNews *membernews.Service, formatter *adapter.ResponseFormatter, locker delivery.NotificationLocker, outboxRepo *delivery.OutboxRepository, logger *slog.Logger) (*membernews.Scheduler, *membernews.MonthlyScheduler) {
