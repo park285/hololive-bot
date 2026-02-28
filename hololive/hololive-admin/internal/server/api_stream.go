@@ -104,37 +104,12 @@ func (h *APIHandler) GetChannelStats(c *gin.Context) {
 		}
 	}
 
-	// 3. DB도 없으면 실시간 스크래핑 (레거시 폴백)
-	if h.youtube == nil {
-		c.JSON(503, gin.H{"error": "YouTube service not available"})
-		return
-	}
-
-	members, err := h.repo.GetAllMembers(ctx)
-	if err != nil {
-		h.logger.Error("Failed to get members", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get members"})
-		return
-	}
-
-	var channelIDs []string
-	for _, m := range members {
-		if m.ChannelID != "" && !m.IsGraduated {
-			channelIDs = append(channelIDs, m.ChannelID)
-		}
-	}
-
-	stats, err := h.youtube.GetChannelStatistics(ctx, channelIDs)
-	if err != nil {
-		h.logger.Error("Failed to get channel stats", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get channel stats"})
-		return
-	}
-
-	// 캐시 저장 (fire-and-forget)
-	h.cacheChannelStatsAsync(ctx, stats)
-
-	c.JSON(200, gin.H{"status": "ok", "stats": stats})
+	// 3. DB 스냅샷도 없으면 폴러 동기화 전 상태로 간주
+	c.JSON(503, gin.H{
+		"error": "Channel stats snapshot not ready",
+		"code":  "channel_stats_snapshot_not_ready",
+		"hint":  "retry later after background poller sync",
+	})
 }
 
 // getChannelStatsFromDB: DB 스냅샷에서 채널 통계를 조회합니다.
@@ -252,9 +227,7 @@ func (h *APIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 	}()
 }
 
-// GetChannel: channelId로 특정 채널의 상세 정보(프로필 이미지 포함)를 반환합니다.
-// 배치 조회: channelIds 파라미터로 여러 채널을 한 번에 조회할 수 있습니다.
-// - 단일 조회: /api/holo/channels?channelId=UC...
+// GetChannel: channelIds 파라미터로 여러 채널을 한 번에 조회합니다.
 // - 배치 조회: /api/holo/channels?channelIds=UC1,UC2,UC3...
 // NOTE: DB에서 직접 조회하여 Holodex API 호출 없이 응답합니다.
 func (h *APIHandler) GetChannel(c *gin.Context) {
@@ -292,27 +265,16 @@ func (h *APIHandler) GetChannel(c *gin.Context) {
 		return
 	}
 
-	// 단일 조회 (레거시 호환성)
+	// 레거시 단일 조회는 제거됨
 	channelID := c.Query("channelId")
-	if channelID == "" {
-		c.JSON(400, gin.H{"error": "channelId or channelIds parameter required"})
+	if channelID != "" {
+		c.JSON(410, gin.H{
+			"error": "Legacy channelId query is no longer supported",
+			"hint":  "use channelIds query parameter",
+		})
 		return
 	}
-
-	// DB에서 직접 조회 (Holodex API 호출 없음)
-	member, err := h.repo.GetMemberWithPhotoByChannelID(ctx, channelID)
-	if err != nil {
-		h.logger.Error("Failed to get channel from DB", slog.String("channelId", channelID), slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get channel"})
-		return
-	}
-
-	if member == nil {
-		c.JSON(404, gin.H{"error": "Channel not found"})
-		return
-	}
-
-	c.JSON(200, gin.H{"status": "ok", "channel": memberToChannelResponse(member)})
+	c.JSON(400, gin.H{"error": "channelIds parameter required"})
 }
 
 // ChannelResponse: 채널 API 응답 구조체 (기존 Holodex 호환 형식)

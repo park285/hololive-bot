@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -165,6 +164,9 @@ func buildAdminComponents(
 	templateAdminSvc := template.NewAdminService(repository.NewTemplateRepository(postgresService.GetGormDB(), logger), templateRenderer, logger)
 
 	// AlarmCRUD: alarm-dispatcher HTTP 클라이언트
+	if strings.TrimSpace(cfg.AlarmDispatcherURL) == "" {
+		return nil, fmt.Errorf("ALARM_DISPATCHER_URL is required")
+	}
 	alarmCRUD := alarm.NewClient(cfg.AlarmDispatcherURL, logger)
 
 	// Auth 서비스
@@ -213,7 +215,10 @@ func buildAdminComponents(
 	)
 
 	// API 라우터 구성 (admin-api 전용)
-	httpServer := buildAdminHTTPServer(ctx, cfg, logger, apiHandler, authHandler)
+	httpServer, err := buildAdminHTTPServer(ctx, cfg, logger, apiHandler, authHandler)
+	if err != nil {
+		return nil, fmt.Errorf("build admin http server: %w", err)
+	}
 
 	return &AdminAPIRuntime{
 		Config:     cfg,
@@ -280,7 +285,7 @@ func buildAdminHTTPServer(
 	logger *slog.Logger,
 	apiHandler *server.APIHandler,
 	authHandler *server.AuthHandler,
-) *http.Server {
+) (*http.Server, error) {
 	// admin-api에서도 ProvideAPIRouter를 재사용하기 위해 config.Config로 변환
 	fullCfg := &config.Config{
 		Server:    cfg.Server,
@@ -290,11 +295,7 @@ func buildAdminHTTPServer(
 
 	adminRouter, err := ProvideAPIRouter(ctx, fullCfg, logger, apiHandler, authHandler, nil, nil)
 	if err != nil {
-		// 라우터 생성 실패 시 최소 라우터로 fallback
-		logger.Error("Failed to create API router, using minimal router", slog.Any("error", err))
-		gin.SetMode(gin.ReleaseMode)
-		adminRouter = gin.New()
-		adminRouter.Use(gin.Recovery())
+		return nil, fmt.Errorf("create api router: %w", err)
 	}
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -306,5 +307,5 @@ func buildAdminHTTPServer(
 		WriteTimeout:      constants.ServerTimeout.Write,
 		IdleTimeout:       constants.ServerTimeout.Idle,
 		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
-	}
+	}, nil
 }

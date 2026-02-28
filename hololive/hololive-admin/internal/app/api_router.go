@@ -72,10 +72,8 @@ func ProvideAPIRouter(
 
 	if cfg.Server.APIKey != "" {
 		logger.Info("api_key_auth_enabled")
-	} else if cfg.Server.NoAuth {
-		logger.Warn("api_key_auth_disabled", slog.String("reason", "explicit --no-auth flag used"))
 	} else {
-		return nil, fmt.Errorf("API_SECRET_KEY required (use --no-auth to bypass)")
+		return nil, fmt.Errorf("API_SECRET_KEY required")
 	}
 
 	return router, nil
