@@ -1,0 +1,228 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    # 기본 오류 검사
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # 리소스 관리
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+
+    # Context 관리
+    - contextcheck
+    - noctx
+
+    # 에러 처리
+    - errorlint
+    - errname
+    - wrapcheck
+
+    # 코드 품질
+    - dupl
+    - goconst
+    - gocritic
+    - misspell
+    - predeclared
+    - revive
+    - wastedassign
+    - whitespace
+
+    # 복잡도
+    - gocyclo
+    - gocognit
+    - funlen
+
+    # 성능
+    - prealloc
+
+    # 보안
+    - bidichk
+    - gosec
+
+    # 기타
+    - durationcheck
+    - unconvert
+    - nakedret
+
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (*net/http.Response).Body.Close
+        - (*os.File).Close
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    gocyclo:
+      min-complexity: 20
+
+    gocognit:
+      min-complexity: 40
+
+    dupl:
+      threshold: 200
+
+    goconst:
+      min-len: 3
+      min-occurrences: 5
+
+    misspell:
+      locale: US
+
+    nakedret:
+      max-func-lines: 30
+
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - exitAfterDefer
+        - paramTypeCombine
+        - unnamedResult
+        - filepathJoin
+        - hugeParam
+        - emptyStringTest
+
+    funlen:
+      lines: 100
+      statements: 50
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+
+    wrapcheck:
+      extra-ignore-sigs:
+        - google.golang.org/grpc/status.Error
+        - google.golang.org/grpc/status.Errorf
+      ignore-package-globs:
+        - github.com/valkey-io/valkey-go
+        - github.com/valkey-io/valkey-go/*
+        - google.golang.org/grpc/status
+        - google.golang.org/grpc/status/*
+
+  exclusions:
+    rules:
+      - linters:
+          - contextcheck
+        text: 'Non-inherited new context'
+      - linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+          - funlen
+        path: _test\.go
+
+      - linters:
+          - gosec
+        text: "G404:"
+
+      - linters:
+          - gosec
+        text: "G102:"
+
+      - linters:
+          - gosec
+        text: "G115:"
+
+      - linters:
+          - gosec
+        text: "G301:"
+
+      - linters:
+          - gosec
+        text: "G302:"
+
+      - linters:
+          - gosec
+        text: "G304:"
+
+      - linters:
+          - gosec
+        text: "G104:"
+
+      - linters:
+          - gosec
+        text: "G117:"
+
+      - linters:
+          - gosec
+        text: "G704:"
+
+      - linters:
+          - gosec
+        text: "G706:"
+
+      - linters:
+          - funlen
+        path: cmd/
+
+    paths:
+      - '.*\.pb\.go$'
+      - '.*_test\.go$'
+      - vendor
+      - proto
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: true
+  new: false
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/kapu/hololive-shared)
+
+    goimports:
+      local-prefixes:
+        - github.com/kapu/hololive-shared
+
+  exclusions:
+    paths:
+      - '.*\.pb\.go$'
+      - '.*_test\.go$'
+      - vendor
+      - proto
