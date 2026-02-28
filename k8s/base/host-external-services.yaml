@@ -1,5 +1,6 @@
 # 호스트에서 실행 중인 외부 의존성을 클러스터 DNS 이름으로 노출합니다.
-# 실제 호스트 게이트웨이 IP 변경 시 이 파일의 Endpoints만 수정하면 됩니다.
+# 실제 호스트 게이트웨이 IP 변경 시 이 파일의 EndpointSlice addresses만 수정하면 됩니다.
+# 포트는 base/configmap-app.yaml의 *_BASE_URL, SERVICES_*_HEALTH_URL과 일치해야 합니다.
 apiVersion: v1
 kind: Service
 metadata:
@@ -12,17 +13,22 @@ spec:
       port: 3000
       targetPort: 3000
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
-  name: iris
+  name: iris-external
   namespace: hololive
-subsets:
+  labels:
+    kubernetes.io/service-name: iris
+    endpointslice.kubernetes.io/managed-by: hololive-k8s
+addressType: IPv4
+ports:
+  - name: http
+    port: 3000
+    protocol: TCP
+endpoints:
   - addresses:
-      - ip: 10.42.0.1
-    ports:
-      - name: http
-        port: 3000
+      - 10.42.0.1
 ---
 apiVersion: v1
 kind: Service
@@ -33,20 +39,25 @@ spec:
   clusterIP: None
   ports:
     - name: http
-      port: 18787
-      targetPort: 18787
+      port: 8787
+      targetPort: 8787
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
-  name: cliproxy
+  name: cliproxy-external
   namespace: hololive
-subsets:
+  labels:
+    kubernetes.io/service-name: cliproxy
+    endpointslice.kubernetes.io/managed-by: hololive-k8s
+addressType: IPv4
+ports:
+  - name: http
+    port: 8787
+    protocol: TCP
+endpoints:
   - addresses:
-      - ip: 10.42.0.1
-    ports:
-      - name: http
-        port: 18787
+      - 10.42.0.1
 ---
 apiVersion: v1
 kind: Service
@@ -57,20 +68,25 @@ spec:
   clusterIP: None
   ports:
     - name: http
-      port: 14052
-      targetPort: 14052
+      port: 40527
+      targetPort: 40527
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
-  name: llm-server
+  name: llm-server-external
   namespace: hololive
-subsets:
+  labels:
+    kubernetes.io/service-name: llm-server
+    endpointslice.kubernetes.io/managed-by: hololive-k8s
+addressType: IPv4
+ports:
+  - name: http
+    port: 40527
+    protocol: TCP
+endpoints:
   - addresses:
-      - ip: 10.42.0.1
-    ports:
-      - name: http
-        port: 14052
+      - 10.42.0.1
 ---
 apiVersion: v1
 kind: Service
@@ -81,20 +97,25 @@ spec:
   clusterIP: None
   ports:
     - name: http
-      port: 13081
-      targetPort: 13081
+      port: 30081
+      targetPort: 30081
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
-  name: game-bot-twentyq
+  name: game-bot-twentyq-external
   namespace: hololive
-subsets:
+  labels:
+    kubernetes.io/service-name: game-bot-twentyq
+    endpointslice.kubernetes.io/managed-by: hololive-k8s
+addressType: IPv4
+ports:
+  - name: http
+    port: 30081
+    protocol: TCP
+endpoints:
   - addresses:
-      - ip: 10.42.0.1
-    ports:
-      - name: http
-        port: 13081
+      - 10.42.0.1
 ---
 apiVersion: v1
 kind: Service
@@ -105,17 +126,22 @@ spec:
   clusterIP: None
   ports:
     - name: http
-      port: 13082
-      targetPort: 13082
+      port: 30082
+      targetPort: 30082
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
-  name: game-bot-turtle
+  name: game-bot-turtle-external
   namespace: hololive
-subsets:
+  labels:
+    kubernetes.io/service-name: game-bot-turtle
+    endpointslice.kubernetes.io/managed-by: hololive-k8s
+addressType: IPv4
+ports:
+  - name: http
+    port: 30082
+    protocol: TCP
+endpoints:
   - addresses:
-      - ip: 10.42.0.1
-    ports:
-      - name: http
-        port: 13082
+      - 10.42.0.1

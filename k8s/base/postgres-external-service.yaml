@@ -11,15 +11,20 @@ spec:
       port: 5433
       targetPort: 5433
 ---
-# 실제 호스트 IP를 가리키는 엔드포인트 (K3s cni0 게이트웨이)
-apiVersion: v1
-kind: Endpoints
+# 실제 호스트 IP를 가리키는 EndpointSlice (K3s cni0 게이트웨이)
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
-  name: holo-postgres
+  name: holo-postgres-external
   namespace: hololive
-subsets:
+  labels:
+    kubernetes.io/service-name: holo-postgres
+    endpointslice.kubernetes.io/managed-by: hololive-k8s
+addressType: IPv4
+ports:
+  - name: postgres
+    port: 5433
+    protocol: TCP
+endpoints:
   - addresses:
-      - ip: 10.42.0.1
-    ports:
-      - name: postgres
-        port: 5433
+      - 10.42.0.1

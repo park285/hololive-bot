@@ -9,10 +9,12 @@ spec:
   selector:
     matchLabels:
       app: valkey-cache
+      app.kubernetes.io/part-of: hololive-stack
   template:
     metadata:
       labels:
         app: valkey-cache
+        app.kubernetes.io/part-of: hololive-stack
     spec:
       containers:
         - name: valkey-cache

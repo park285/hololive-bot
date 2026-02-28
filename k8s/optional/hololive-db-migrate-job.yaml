@@ -79,5 +79,5 @@ spec:
       volumes:
         - name: migrations
           hostPath:
-            path: /home/kapu/gemini/llm/hololive-kakao-bot-go/scripts/migrations
+            path: /home/kapu/gemini/hololive-bot/hololive/hololive-kakao-bot-go/scripts/migrations
             type: Directory

@@ -39,8 +39,8 @@ sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/data
   - `SERVICES_*_HEALTH_URL`
   - `DOCKER_HOST`
 - `base/host-external-services.yaml`
-  - 호스트 게이트웨이 IP(기본 `10.42.0.1`) 변경 시 Endpoints IP만 수정
-- `overlays/prod-dns/patch-external-services-to-externalname.yaml` (DNS 모드 사용 시)
+  - IP 직접 라우팅 모드 사용 시 EndpointSlice addresses(기본 `10.42.0.1`)만 수정
+- `overlays/prod/patch-external-services-to-externalname.yaml` (기본 DNS 모드)
   - 기본값은 현재 호스트/도커 브리지 실주소를 `*.nip.io`로 사용
   - `llm-server`, `game-bot-*`는 Docker 컨테이너 IP 기반이므로 컨테이너 재생성 시 값 재확인 필요
 - `base/secret-app.yaml`
@@ -55,13 +55,14 @@ sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/data
 
 ## 배포
 ```bash
-# 기본(IP Endpoints 모드)
-kubectl apply -k deploy/k8s/hololive/overlays/prod
+# 기본(DNS ExternalName 모드, monitoring 포함)
+kubectl kustomize k8s/overlays/prod --enable-helm | kubectl apply --server-side -f -
 
-# DNS 모드(ExternalName)
-# 1) overlays/prod-dns/patch-external-services-to-externalname.yaml 의 externalName 수정
-# 2) DNS 레코드 반영 확인 후 적용
-kubectl apply -k deploy/k8s/hololive/overlays/prod-dns
+# 대체(IP EndpointSlice 직접 라우팅 모드)
+kubectl kustomize k8s/overlays/prod-ip --enable-helm | kubectl apply --server-side -f -
+
+# 호환 별칭(= 기본과 동일)
+kubectl kustomize k8s/overlays/prod-dns --enable-helm | kubectl apply --server-side -f -
 ```
 
 ## 검증
@@ -74,23 +75,26 @@ kubectl -n hololive logs deploy/admin-api --tail=200
 ```
 
 ## 마이그레이션 Job(선택)
-- 호스트 경로 `/home/kapu/gemini/llm/hololive-kakao-bot-go/scripts/migrations` 기준 템플릿입니다.
+- 호스트 경로 `/home/kapu/gemini/hololive-bot/hololive/hololive-kakao-bot-go/scripts/migrations` 기준 템플릿입니다.
 - 경로가 다르면 `optional/hololive-db-migrate-job.yaml` 수정 후 실행하십시오.
 ```bash
-kubectl apply -k deploy/k8s/hololive/optional
+kubectl apply -k k8s/optional
 kubectl -n hololive logs job/hololive-db-migrate
 ```
 
 ## 롤백
 ```bash
 # 기본 모드 롤백
-kubectl delete -k deploy/k8s/hololive/overlays/prod
+kubectl kustomize k8s/overlays/prod --enable-helm | kubectl delete -f -
 
-# DNS 모드 롤백(사용한 경우)
-kubectl delete -k deploy/k8s/hololive/overlays/prod-dns
+# 대체(IP EndpointSlice) 모드 롤백(사용한 경우)
+kubectl kustomize k8s/overlays/prod-ip --enable-helm | kubectl delete -f -
+
+# 호환 별칭 롤백(= 기본과 동일)
+kubectl kustomize k8s/overlays/prod-dns --enable-helm | kubectl delete -f -
 
 # 필요 시 optional도 제거
-kubectl delete -k deploy/k8s/hololive/optional
+kubectl delete -k k8s/optional
 ```
 
 ## 리소스 메모
@@ -112,10 +116,10 @@ kubectl delete -k deploy/k8s/hololive/optional
 ### 배포 (--enable-helm 필수)
 ```bash
 # kustomize 빌드 검증
-kubectl kustomize deploy/k8s/hololive/overlays/prod --enable-helm | head -100
+kubectl kustomize k8s/overlays/prod --enable-helm | head -100
 
 # 배포 (kubectl apply -k는 --enable-helm 미지원 → 파이프 사용)
-kubectl kustomize deploy/k8s/hololive/overlays/prod --enable-helm | kubectl apply --server-side -f -
+kubectl kustomize k8s/overlays/prod --enable-helm | kubectl apply --server-side -f -
 ```
 
 ### 검증
