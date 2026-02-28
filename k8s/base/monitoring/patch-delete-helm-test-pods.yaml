@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fluent-bit-test-connection
+  namespace: hololive
+$patch: delete
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: grafana-test
+  namespace: hololive
+$patch: delete
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: loki-helm-test
+  namespace: hololive
+$patch: delete

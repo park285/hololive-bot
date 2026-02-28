@@ -5,6 +5,8 @@ namespace: hololive
 
 resources:
   - grafana-service.yaml
+patches:
+  - path: patch-delete-helm-test-pods.yaml
 
 helmCharts:
   - name: loki
