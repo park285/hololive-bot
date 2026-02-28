@@ -61,31 +61,9 @@ pub enum AlarmError {
 
 ## Config Keys
 
-All config uses `__` separator (e.g. `SCRAPER__DATABASE__HOST`).
+Pattern: `{APP}__{SECTION}__{KEY}` (double underscore separator). Apps: `SCRAPER`, `ALARM`.
 
-| Key | Default | Notes |
-|-----|---------|-------|
-| `SCRAPER__DATABASE__HOST` | - | PostgreSQL host |
-| `SCRAPER__DATABASE__PORT` | 5432 | |
-| `SCRAPER__DATABASE__PASSWORD` | - | SecretString |
-| `SCRAPER__SCHEDULER__SCRAPE_HOUR_KST` | - | Feed cron hour (KST) |
-| `SCRAPER__SCRAPER__USER_AGENT` | - | HTTP User-Agent |
-| `SCRAPER__HEALTH__PORT` | - | Health check port |
-| `SCRAPER__LOGGING__FILE_ENABLED` | false | file logging toggle |
-| `SCRAPER__TELEMETRY__ENABLED` | false | OTEL toggle |
-| `ALARM__VALKEY__URL` | - | `redis://` or `redis+unix://` |
-| `ALARM__HOLODEX__BASE_URL` | - | Holodex API |
-| `ALARM__HOLODEX__API_KEYS` | - | Comma-separated keys |
-| `ALARM__CHZZK__BASE_URL` | - | Chzzk API |
-| `ALARM__TWITCH__CLIENT_ID` | - | Twitch OAuth |
-| `ALARM__TWITCH__CLIENT_SECRET` | - | SecretString |
-| `ALARM__IRIS__BASE_URL` | - | Iris bot API (HTTPS required) |
-| `ALARM__IRIS__BOT_TOKEN` | - | SecretString |
-| `ALARM__ALARM__TARGET_MINUTES` | `[5,3,1]` | Notification target minutes |
-| `ALARM__ALARM__TWITCH_ENABLED` | - | Twitch alarm toggle |
-| `ALARM__HEALTH__PORT` | - | Health check port |
-| `ALARM__LOGGING__FILE_ENABLED` | false | file logging toggle |
-| `RUST_LOG` | - | tracing filter override |
+**SecretString fields** (MUST use `SecretString`): `DATABASE__PASSWORD`, `TWITCH__CLIENT_SECRET`, `IRIS__BOT_TOKEN`
 
 ---
 
@@ -177,14 +155,3 @@ fn notification_category(target_minutes, minutes_until) -> String  // "live" | "
 - Scraper: DB connection + FeedScheduler active
 - Alarm: Valkey + DB connection + Scheduler active/healthy
 
----
-
-## Forbidden Patterns
-
-| Forbidden | Use Instead |
-|-----------|-------------|
-| `println!` / `eprintln!` at runtime | `tracing::info!` / `tracing::error!` |
-| `unwrap()` / `expect()` at runtime | `?` or `.context("...")` |
-| `dbg!()` | `tracing::debug!` |
-| `unsafe` code | Forbidden (workspace lint) |
-| Hardcoded durations/keys | `alarm-core` constants / config |

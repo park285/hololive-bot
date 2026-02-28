@@ -98,6 +98,7 @@ backups/
 .gemini/
 .codex/
 .codex-input/
+.mcp.json
 .opencode/
 *.ai.md
 *-ai-notes.md

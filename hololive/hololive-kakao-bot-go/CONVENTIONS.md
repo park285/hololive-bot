@@ -35,11 +35,6 @@ StripLeadingHeader(text, header)
 
 **Constructors:** `NewRedisError(op, key, err)`, `NewDatabaseError(op, table, err)`, `NewExternalAPIError(service, statusCode, err)`, `NewAPIError(api, statusCode, message, err)`, `NewToolError(toolName, err)`
 
-### `shared-go/pkg/workerpool/`
-`New(cfg)` → `Submit(task)` → `Wait()` → `Shutdown()` / `ShutdownWait(ctx)`
-
----
-
 ## Key Constants (`internal/constants/`)
 
 | Group | Field | Value | Purpose |
@@ -73,7 +68,7 @@ StripLeadingHeader(text, header)
 
 - **Prefix**: `notified:` (YouTube, Chzzk, Twitch send history)
 - **Simple flags**: `cache.Set(ctx, key, true, ttl)` / `cache.Exists(ctx, key)` — Chzzk Live, Twitch Live, Integrated
-- **Compound flags**: `NotifiedData { StartScheduled string, SentAt map[int]bool }` — YouTube upcoming (per-minute targets). Schedule mismatch resets `SentAt`.
+- **Compound flags**: `NotifiedData { StartScheduled string, SentAt map[int]bool }` — YouTube upcoming per-minute targets
 - **Forbidden**: `"1"` string as flag value (use `true`), timestamps in flag values (log instead)
 
 ---
