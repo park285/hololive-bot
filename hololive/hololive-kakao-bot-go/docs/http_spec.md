@@ -578,8 +578,6 @@ POST /api/holo/settings/llm
 Content-Type: application/json
 
 {
-  "majorEventScrapeHourKST": 9,
-  "majorEventScrapeRunNow": true,
   "memberNewsWeeklyRunNow": true
 }
 ```
@@ -587,11 +585,9 @@ Content-Type: application/json
 **요청 필드:**
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| majorEventScrapeHourKST | number | ❌ | major event 스크랩 실행 시각(KST, 0~23) |
-| majorEventScrapeRunNow | boolean | ❌ | `true`일 때 major event 스크랩 즉시 실행 |
-| memberNewsWeeklyRunNow | boolean | ❌ | `true`일 때 member news 주간 다이제스트 즉시 실행 |
+| memberNewsWeeklyRunNow | boolean | ✅ | `true`일 때 member news 주간 다이제스트 즉시 실행 |
 
-> 최소 1개 필드는 반드시 포함해야 합니다.
+> `majorEventScrapeHourKST`, `majorEventScrapeRunNow`는 2026-03-01부터 제거되었습니다 (Rust scraper 소유).
 
 **응답 예시 (200):**
 ```json
@@ -599,13 +595,6 @@ Content-Type: application/json
   "status": "ok",
   "message": "LLM settings updated",
   "runtime": {
-    "majorevent_scrape_hour_kst": {
-      "requested_hour_kst": 9,
-      "published": true
-    },
-    "majorevent_scrape_run_now": {
-      "published": true
-    },
     "membernews_weekly_run_now": {
       "published": true
     }
@@ -614,10 +603,10 @@ Content-Type: application/json
 ```
 
 **검증 에러 예시 (400):**
-- `at least one llm setting field is required`
-- `majorEventScrapeHourKST must be between 0 and 23`
-- `majorEventScrapeRunNow must be true when provided`
 - `memberNewsWeeklyRunNow must be true when provided`
+
+**Legacy 에러 예시 (410):**
+- `majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-scraper-rs`
 
 ---
 

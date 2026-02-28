@@ -14,7 +14,7 @@ const DefaultChannel = "config:update"
 
 // ConfigUpdate: Pub/Sub로 전달되는 설정 변경 메시지
 type ConfigUpdate struct {
-	Type    string          `json:"type"`    // "scraper_proxy" | "alarm_advance_minutes" | "majorevent_scrape_hour_kst" | "majorevent_scrape_run_now" | "membernews_weekly_run_now"
+	Type    string          `json:"type"`    // "scraper_proxy" | "alarm_advance_minutes" | "membernews_weekly_run_now"
 	Payload json.RawMessage `json:"payload"` // 타입별 페이로드 (JSON)
 }
 

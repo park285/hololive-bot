@@ -11,7 +11,6 @@ P5 분리 이후 `llm-scheduler` 장애/재실행/수동 실행 절차를 표준
 
 다루는 기능:
 - Major Event 주간/월간 알림
-- Major Event 스크래퍼 시간 변경 및 즉시 실행
 - Member News 주간 다이제스트 즉시 실행
 
 ---
@@ -21,13 +20,13 @@ P5 분리 이후 `llm-scheduler` 장애/재실행/수동 실행 절차를 표준
 ### 외부(운영자) 호출
 - `POST /api/holo/majorevent/trigger` (주간 알림)
 - `POST /api/holo/majorevent/monthly-trigger` (월간 알림)
-- `POST /api/holo/settings/llm` (스크래퍼 시간 변경/즉시 실행/membernews 즉시 실행)
+- `POST /api/holo/settings/llm` (membernews 즉시 실행)
 
 ### 내부(서비스 간) 호출
 - `POST /internal/trigger/majorevent-weekly`
 - `POST /internal/trigger/majorevent-monthly`
 - `POST /internal/trigger/membernews-weekly`
-- `SUBSCRIBE config:update` (`majorevent_scrape_hour_kst`, `majorevent_scrape_run_now`, `membernews_weekly_run_now`)
+- `SUBSCRIBE config:update` (`membernews_weekly_run_now`)
 
 ---
 
@@ -96,16 +95,7 @@ curl -sS -X POST "http://127.0.0.1:30002/api/holo/majorevent/monthly-trigger" \
   -H "Content-Type: application/json"
 ```
 
-### 5.3 Major Event 스크래퍼 즉시 실행
-
-```bash
-curl -sS -X POST "http://127.0.0.1:30002/api/holo/settings/llm" \
-  -H "X-API-Key: ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"majorEventScrapeRunNow":true}'
-```
-
-### 5.4 Member News 주간 다이제스트 즉시 실행
+### 5.3 Member News 주간 다이제스트 즉시 실행
 
 ```bash
 curl -sS -X POST "http://127.0.0.1:30002/api/holo/settings/llm" \
@@ -114,14 +104,7 @@ curl -sS -X POST "http://127.0.0.1:30002/api/holo/settings/llm" \
   -d '{"memberNewsWeeklyRunNow":true}'
 ```
 
-### 5.5 Major Event 스크래퍼 정시 실행 시간 변경(KST)
-
-```bash
-curl -sS -X POST "http://127.0.0.1:30002/api/holo/settings/llm" \
-  -H "X-API-Key: ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"majorEventScrapeHourKST":9}'
-```
+> 참고: Major Event 스크래핑 실행/스케줄 제어는 Rust(`hololive-scraper-rs`) 소유이며, 본 API에서 더 이상 지원하지 않습니다.
 
 ---
 

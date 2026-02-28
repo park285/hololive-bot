@@ -10,8 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
-
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -26,9 +24,7 @@ import (
 )
 
 const (
-	configUpdateMajorEventScrapeHourKST = "majorevent_scrape_hour_kst"
-	configUpdateMajorEventScrapeRunNow  = "majorevent_scrape_run_now"
-	configUpdateMemberNewsWeeklyRunNow  = "membernews_weekly_run_now"
+	configUpdateMemberNewsWeeklyRunNow = "membernews_weekly_run_now"
 )
 
 // LLMSchedulerRuntime: llm-scheduler 전용 런타임
@@ -39,7 +35,6 @@ type LLMSchedulerRuntime struct {
 	DeliveryDispatcher         *delivery.Dispatcher
 	MajorEventScheduler        *majorevent.Scheduler
 	MajorEventMonthlyScheduler *majorevent.MonthlyScheduler
-	MajorEventScraperScheduler *majorevent.ScraperScheduler
 	MemberNewsScheduler        *membernews.Scheduler
 	MemberNewsMonthlyScheduler *membernews.MonthlyScheduler
 
@@ -133,19 +128,6 @@ func (r *LLMSchedulerRuntime) startSchedulers(ctx context.Context) {
 				constants.MajorEventConfig.MonthlyScheduleDay, constants.MajorEventConfig.MonthlyScheduleHourKST)))
 	}
 
-	if r.MajorEventScraperScheduler != nil {
-		scrapeHourKST := r.MajorEventScraperScheduler.ScrapeHourKST()
-		r.MajorEventScraperScheduler.Start(ctx)
-		r.Logger.Info("Major event scraper scheduler started",
-			slog.String("schedule", fmt.Sprintf("daily %02d:00 KST",
-				scrapeHourKST)))
-
-		go func() {
-			r.MajorEventScraperScheduler.RunNow(ctx)
-			r.Logger.Info("Initial major event scrape completed")
-		}()
-	}
-
 	if r.MemberNewsScheduler != nil {
 		r.MemberNewsScheduler.Start(ctx)
 		r.Logger.Info("Member news weekly scheduler started",
@@ -169,10 +151,6 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 	if r.MajorEventMonthlyScheduler != nil {
 		r.MajorEventMonthlyScheduler.Stop()
 		r.Logger.Info("Major event monthly scheduler stopped")
-	}
-	if r.MajorEventScraperScheduler != nil {
-		r.MajorEventScraperScheduler.Stop()
-		r.Logger.Info("Major event scraper scheduler stopped")
 	}
 	if r.MemberNewsScheduler != nil {
 		r.MemberNewsScheduler.Stop()
@@ -252,9 +230,8 @@ func buildLLMSchedulerComponents(
 	exaSearcher := providers.ProvideExaSearcher(cfg.Exa, logger)
 	summarizer := providers.ProvideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheService, exaSearcher, logger)
 
-	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
+	majorEventScheduler, majorEventMonthlyScheduler := buildMajorEventComponents(
 		ctx,
-		cfg.MajorEvent,
 		majorEventRepo,
 		msgStack.Formatter,
 		summarizer,
@@ -270,7 +247,7 @@ func buildLLMSchedulerComponents(
 	if err != nil {
 		return nil, err
 	}
-	configSubscriber := buildLLMSchedulerConfigSubscriber(ctx, cacheService, majorEventScraperScheduler, memberNewsScheduler, logger)
+	configSubscriber := buildLLMSchedulerConfigSubscriber(ctx, cacheService, memberNewsScheduler, logger)
 
 	return &LLMSchedulerRuntime{
 		Config:                     cfg,
@@ -278,7 +255,6 @@ func buildLLMSchedulerComponents(
 		DeliveryDispatcher:         deliveryDispatcher,
 		MajorEventScheduler:        majorEventScheduler,
 		MajorEventMonthlyScheduler: majorEventMonthlyScheduler,
-		MajorEventScraperScheduler: majorEventScraperScheduler,
 		MemberNewsScheduler:        memberNewsScheduler,
 		MemberNewsMonthlyScheduler: memberNewsMonthlyScheduler,
 		configSubscriber:           configSubscriber,
@@ -303,7 +279,6 @@ func buildLLMSchedulerHTTPServer(
 func buildLLMSchedulerConfigSubscriber(
 	ctx context.Context,
 	cacheService *cache.Service,
-	majorEventScraperScheduler *majorevent.ScraperScheduler,
 	memberNewsScheduler *membernews.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
@@ -314,38 +289,6 @@ func buildLLMSchedulerConfigSubscriber(
 
 	applyFn := func(update configsub.ConfigUpdate) {
 		switch update.Type {
-		case configUpdateMajorEventScrapeHourKST:
-			if majorEventScraperScheduler == nil {
-				logger.Warn("Ignored majorevent scrape hour update: scraper scheduler not initialized")
-				return
-			}
-
-			var payload struct {
-				HourKST int `json:"hour_kst"`
-			}
-			if err := json.Unmarshal(update.Payload, &payload); err != nil {
-				logger.Warn("Failed to unmarshal majorevent_scrape_hour_kst payload", slog.Any("error", err))
-				return
-			}
-			appliedHour := majorEventScraperScheduler.SetScrapeHourKST(payload.HourKST)
-			logger.Info("Applied major event scrape hour update",
-				slog.Int("requested_hour_kst", payload.HourKST),
-				slog.Int("applied_hour_kst", appliedHour),
-			)
-
-		case configUpdateMajorEventScrapeRunNow:
-			if majorEventScraperScheduler == nil {
-				logger.Warn("Ignored majorevent scrape run-now: scraper scheduler not initialized")
-				return
-			}
-
-			go func() {
-				runCtx, cancel := context.WithTimeout(baseCtx, constants.RequestTimeout.BotAlarmCheck)
-				defer cancel()
-				majorEventScraperScheduler.RunNow(runCtx)
-				logger.Info("Major event scrape run-now completed via config update")
-			}()
-
 		case configUpdateMemberNewsWeeklyRunNow:
 			if memberNewsScheduler == nil {
 				logger.Warn("Ignored membernews weekly run-now: scheduler not initialized")

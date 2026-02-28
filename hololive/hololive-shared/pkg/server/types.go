@@ -12,8 +12,6 @@ type ScraperProxyToggler interface {
 type SettingsApplier interface {
 	ApplyScraperProxy(ctx context.Context, enabled bool) map[string]any
 	ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) map[string]any
-	ApplyMajorEventScrapeHour(ctx context.Context, hourKST int) map[string]any
-	ApplyMajorEventScrapeRunNow(ctx context.Context) map[string]any
 	ApplyMemberNewsWeeklyRunNow(ctx context.Context) map[string]any
 	ScraperProxyRuntimeState(requested bool) map[string]any
 }

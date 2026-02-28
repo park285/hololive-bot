@@ -54,16 +54,18 @@ P0에서 정의한 소비자별 분리 인터페이스 (`internal/domain/interfa
 |-----------|--------|--------|
 | `AlarmCRUD` | Bot 커맨드, Admin API | `notification.AlarmService` |
 | `AlarmDispatchState` | AlarmQueueDispatcher | `notification.AlarmService` |
-| `AlarmChecker` | 레거시 (제거 예정) | `notification.AlarmService` |
 | `StreamProvider` | Bot 커맨드, Admin API | `holodex.Service` |
 
-## 5. 레거시 코드 (제거 가능)
+## 5. 레거시 코드 정리 상태
 
-Go의 alarm checking 코드 (production OFF):
-- `alarm_check.go` — `CheckUpcomingStreams`
-- `alarm_chzzk.go` — `CheckChzzkStreams`
-- `alarm_twitch.go` — `CheckTwitchStreams`
-- AlarmService의 holodex/chzzk/twitch 직접 의존성 (checking용)
+정리 완료:
+- Go alarm checking 코드 제거 (`CheckUpcomingStreams` / `CheckChzzkStreams` / `CheckTwitchStreams` 경로 삭제)
+- `AlarmChecker` 인터페이스 제거
+- Admin/Bot의 `majorEventScrape*` 설정 API(Go 스크래퍼 제어) 제거
+
+유지:
+- Rust alarm-app → Go alarm-dispatcher(queue consumer) 경계는 유지
+- Go llm-scheduler는 major event **요약/발송**만 담당 (스크래핑은 Rust 소유)
 
 ## 6. 목표 아키텍처
 
