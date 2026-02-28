@@ -1,0 +1,186 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hololive-alarm
+  namespace: hololive
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  # SETNX 중복 제거 기반 HA — 무중단 롤링 업데이트
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: hololive-alarm
+  template:
+    metadata:
+      labels:
+        app: hololive-alarm
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        # Valkey와 PostgreSQL이 모두 준비될 때까지 순차 대기
+        - name: wait-for-deps
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z valkey-cache 6379; do echo "valkey 대기 중..."; sleep 2; done && until nc -z holo-postgres 5433; do echo "postgres 대기 중..."; sleep 2; done']
+      containers:
+        - name: hololive-alarm
+          image: hololive-alarm:prod
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 30011
+              name: http
+          # Rust 서비스는 ALARM__ 접두사 환경변수를 직접 정의 (envFrom 미사용)
+          env:
+            - name: ALARM__VALKEY__URL
+              value: "redis://valkey-cache:6379"
+            - name: ALARM__VALKEY__POOL_SIZE
+              value: "4"
+            - name: ALARM__HOLODEX__BASE_URL
+              value: "https://holodex.net/api/v2"
+            - name: ALARM__HOLODEX__API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: ALARM_HOLODEX_API_KEYS
+            - name: ALARM__HOLODEX__TIMEOUT_SECS
+              value: "30"
+            - name: ALARM__HOLODEX__RATE_LIMIT_MS
+              value: "100"
+            - name: ALARM__HOLODEX__CIRCUIT_FAILURE_THRESHOLD
+              value: "5"
+            - name: ALARM__HOLODEX__CIRCUIT_RESET_SECS
+              value: "30"
+            - name: ALARM__CHZZK__BASE_URL
+              value: "https://api.chzzk.naver.com"
+            - name: ALARM__CHZZK__TIMEOUT_SECS
+              value: "10"
+            - name: ALARM__CHZZK__CIRCUIT_FAILURE_THRESHOLD
+              value: "5"
+            - name: ALARM__CHZZK__CIRCUIT_RESET_SECS
+              value: "30"
+            - name: ALARM__TWITCH__BASE_URL
+              value: "https://api.twitch.tv/helix"
+            - name: ALARM__TWITCH__AUTH_URL
+              value: "https://id.twitch.tv/oauth2/token"
+            - name: ALARM__TWITCH__CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: TWITCH_CLIENT_ID
+            - name: ALARM__TWITCH__CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: TWITCH_CLIENT_SECRET
+            - name: ALARM__TWITCH__TIMEOUT_SECS
+              value: "10"
+            - name: ALARM__TWITCH__CIRCUIT_FAILURE_THRESHOLD
+              value: "5"
+            - name: ALARM__TWITCH__CIRCUIT_RESET_SECS
+              value: "60"
+            # 클러스터 내부 DNS로 Bot 서비스 참조
+            - name: ALARM__IRIS__BASE_URL
+              value: "http://hololive-bot:30001"
+            - name: ALARM__IRIS__BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: IRIS_BOT_TOKEN
+            - name: ALARM__IRIS__TIMEOUT_SECS
+              value: "10"
+            - name: ALARM__IRIS__CIRCUIT_FAILURE_THRESHOLD
+              value: "5"
+            - name: ALARM__IRIS__CIRCUIT_RESET_SECS
+              value: "30"
+            - name: ALARM__DATABASE__HOST
+              value: "holo-postgres"
+            - name: ALARM__DATABASE__PORT
+              value: "5433"
+            - name: ALARM__DATABASE__NAME
+              value: "hololive"
+            - name: ALARM__DATABASE__USER
+              value: "hololive_runtime"
+            - name: ALARM__DATABASE__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: HOLOLIVE_ALARM_PASSWORD
+            - name: ALARM__DATABASE__SSLMODE
+              value: "disable"
+            - name: ALARM__DATABASE__MAX_CONNECTIONS
+              value: "5"
+            - name: ALARM__HEALTH__PORT
+              value: "30011"
+            - name: ALARM__LOGGING__LEVEL
+              value: "info"
+            - name: ALARM__LOGGING__FILE_ENABLED
+              value: "true"
+            - name: ALARM__LOGGING__DIR
+              value: "/srv/hololive/logs/hololive-alarm"
+            - name: ALARM__LOGGING__FILE
+              value: "hololive-alarm.log"
+            - name: ALARM__LOGGING__COMBINED_FILE
+              value: "combined.log"
+            - name: ALARM__ALARM__TWITCH_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: hololive-app-config
+                  key: ALARM_TWITCH_ENABLED
+            - name: ALARM__ALARM__CHZZK_POLL_SECS
+              value: "120"
+            - name: ALARM__ALARM__TWITCH_POLL_SECS
+              value: "120"
+            - name: ALARM__ALARM__YOUTUBE_CHECK_TIMEOUT_SECS
+              value: "45"
+            - name: ALARM__ALARM__CHZZK_CHECK_TIMEOUT_SECS
+              value: "30"
+            - name: ALARM__ALARM__TWITCH_CHECK_TIMEOUT_SECS
+              value: "30"
+            - name: RUST_LOG
+              value: "info,alarm_service=debug,sqlx=warn"
+            - name: TZ
+              value: "Asia/Seoul"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          # Rust 헬스 계약: /ready = 준비 확인, /health = 생존 확인
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: logs
+              mountPath: /srv/hololive/logs/hololive-alarm
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: logs
+          hostPath:
+            path: /srv/hololive/logs/hololive-alarm
+            type: DirectoryOrCreate
+      restartPolicy: Always

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hololive-scraper
+  namespace: hololive
+spec:
+  selector:
+    app: hololive-scraper
+  ports:
+    - name: http
+      port: 30010
+      targetPort: http
+  type: ClusterIP

@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpn-scraper-proxy
+  namespace: hololive
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpn-scraper-proxy
+  template:
+    metadata:
+      labels:
+        app: vpn-scraper-proxy
+    spec:
+      containers:
+        - name: vpn-scraper-proxy
+          image: hololive-vpn-scraper:prod
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 1080
+              name: socks5
+          env:
+            - name: OPENVPN_CONFIG_1
+              value: /vpn/config1.ovpn
+            - name: OPENVPN_CONFIG_2
+              value: /vpn/config2.ovpn
+            - name: DUAL_VPN
+              value: "1"
+            - name: VPN_KILLSWITCH
+              value: "1"
+            - name: NORDVPN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: NORDVPN_USERNAME
+            - name: NORDVPN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: NORDVPN_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 96Mi
+            limits:
+              cpu: 300m
+              memory: 192Mi
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -x socks5://127.0.0.1:1080 -s --max-time 10 https://ifconfig.me >/dev/null
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -x socks5://127.0.0.1:1080 -s --max-time 10 https://ifconfig.me >/dev/null
+            initialDelaySeconds: 45
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+                - NET_ADMIN
+              drop:
+                - ALL
+          volumeMounts:
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+            - name: ovpn-config-1
+              mountPath: /vpn/config1.ovpn
+              readOnly: true
+            - name: ovpn-config-2
+              mountPath: /vpn/config2.ovpn
+              readOnly: true
+      volumes:
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: ovpn-config-1
+          hostPath:
+            path: /home/kapu/gemini/llm/jp777.nordvpn.com.udp.ovpn
+            type: File
+        - name: ovpn-config-2
+          hostPath:
+            path: /home/kapu/gemini/llm/jp804.nordvpn.com.udp.ovpn
+            type: File

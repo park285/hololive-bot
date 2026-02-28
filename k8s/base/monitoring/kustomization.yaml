@@ -1,0 +1,150 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: hololive
+
+resources:
+  - grafana-service.yaml
+
+helmCharts:
+  - name: loki
+    repo: https://grafana.github.io/helm-charts
+    version: "6.53.0"
+    releaseName: loki
+    namespace: hololive
+    valuesInline:
+      deploymentMode: SingleBinary
+      loki:
+        auth_enabled: false
+        commonConfig:
+          replication_factor: 1
+        schemaConfig:
+          configs:
+            - from: "2024-04-01"
+              store: tsdb
+              object_store: filesystem
+              schema: v13
+              index:
+                prefix: loki_index_
+                period: 24h
+        storage:
+          type: filesystem
+        limits_config:
+          retention_period: 336h
+          allow_structured_metadata: true
+          volume_enabled: true
+        compactor:
+          retention_enabled: true
+          delete_request_store: filesystem
+      singleBinary:
+        replicas: 1
+        persistence:
+          storageClass: local-path
+          size: 10Gi
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+      gateway:
+        enabled: false
+      minio:
+        enabled: false
+      backend:
+        replicas: 0
+      read:
+        replicas: 0
+      write:
+        replicas: 0
+
+  - name: fluent-bit
+    repo: https://fluent.github.io/helm-charts
+    version: "0.56.0"
+    releaseName: fluent-bit
+    namespace: hololive
+    valuesInline:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+      config:
+        service: |
+          [SERVICE]
+              Flush        5
+              Log_Level    info
+              Daemon       off
+              Parsers_File /fluent-bit/etc/parsers.conf
+              HTTP_Server  On
+              HTTP_Listen  0.0.0.0
+              HTTP_Port    2020
+        inputs: |
+          [INPUT]
+              Name             tail
+              Tag              kube.*
+              Path             /var/log/containers/*_hololive_*.log
+              Parser           cri
+              DB               /var/log/flb_hololive.db
+              Mem_Buf_Limit    5MB
+              Skip_Long_Lines  On
+              Refresh_Interval 10
+        filters: |
+          [FILTER]
+              Name                kubernetes
+              Match               kube.*
+              Merge_Log           On
+              Keep_Log            Off
+              K8S-Logging.Parser  On
+              K8S-Logging.Exclude On
+        outputs: |
+          [OUTPUT]
+              Name   loki
+              Match  *
+              Host   loki.hololive.svc.cluster.local
+              Port   3100
+              Labels job=fluent-bit
+              Label_Keys $kubernetes['namespace_name'],$kubernetes['pod_name'],$kubernetes['container_name']
+              Auto_Kubernetes_Labels Off
+
+      # file OUTPUT 제거: 각 서비스가 LOG_DIR로 직접 hostPath에 기록
+      tolerations:
+        - operator: Exists
+
+  - name: grafana
+    repo: https://grafana.github.io/helm-charts
+    version: "10.5.15"
+    releaseName: grafana
+    namespace: hololive
+    valuesInline:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+      persistence:
+        enabled: true
+        storageClass: local-path
+        size: 1Gi
+      datasources:
+        datasources.yaml:
+          apiVersion: 1
+          datasources:
+            - name: Loki
+              type: loki
+              access: proxy
+              url: http://loki.hololive.svc.cluster.local:3100
+              isDefault: true
+              editable: true
+              jsonData:
+                maxLines: 1000
+      # fsGroup: 472가 PVC 권한을 보장하므로 init-chown-data 불필요
+      # init-chown-data는 DAC_OVERRIDE 없이 기존 0700 디렉토리 chown 실패
+      initChownData:
+        enabled: false
+      service:
+        enabled: false
+      adminUser: admin

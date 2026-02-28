@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - configmap-app.yaml
+  # secret-app.yaml: git 외부 관리 (kubectl create secret으로 직접 적용)
+  - postgres-external-service.yaml
+  - host-external-services.yaml
+  - valkey-deployment.yaml
+  - valkey-service.yaml
+  - hololive-bot-deployment.yaml
+  - hololive-bot-service.yaml
+  - alarm-dispatcher-deployment.yaml
+  - alarm-dispatcher-service.yaml
+  - stream-ingester-deployment.yaml
+  - stream-ingester-service.yaml
+  - llm-scheduler-deployment.yaml
+  - llm-scheduler-service.yaml
+  - admin-api-deployment.yaml
+  - admin-api-service.yaml
+  - hololive-scraper-deployment.yaml
+  - hololive-scraper-service.yaml
+  - hololive-alarm-deployment.yaml
+  - hololive-alarm-service.yaml
+  - monitoring/
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: hololive-stack

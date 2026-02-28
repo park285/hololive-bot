@@ -1,0 +1,121 @@
+# 호스트에서 실행 중인 외부 의존성을 클러스터 DNS 이름으로 노출합니다.
+# 실제 호스트 게이트웨이 IP 변경 시 이 파일의 Endpoints만 수정하면 됩니다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: iris
+  namespace: hololive
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: iris
+  namespace: hololive
+subsets:
+  - addresses:
+      - ip: 10.42.0.1
+    ports:
+      - name: http
+        port: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cliproxy
+  namespace: hololive
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 18787
+      targetPort: 18787
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: cliproxy
+  namespace: hololive
+subsets:
+  - addresses:
+      - ip: 10.42.0.1
+    ports:
+      - name: http
+        port: 18787
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-server
+  namespace: hololive
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 14052
+      targetPort: 14052
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: llm-server
+  namespace: hololive
+subsets:
+  - addresses:
+      - ip: 10.42.0.1
+    ports:
+      - name: http
+        port: 14052
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-bot-twentyq
+  namespace: hololive
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 13081
+      targetPort: 13081
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: game-bot-twentyq
+  namespace: hololive
+subsets:
+  - addresses:
+      - ip: 10.42.0.1
+    ports:
+      - name: http
+        port: 13081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-bot-turtle
+  namespace: hololive
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 13082
+      targetPort: 13082
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: game-bot-turtle
+  namespace: hololive
+subsets:
+  - addresses:
+      - ip: 10.42.0.1
+    ports:
+      - name: http
+        port: 13082

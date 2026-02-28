@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hololive-app-config
+  namespace: hololive
+data:
+  POSTGRES_HOST: "holo-postgres"
+  POSTGRES_PORT: "5433"
+  POSTGRES_DB: "hololive"
+  POSTGRES_SSLMODE: "disable"
+  POSTGRES_QUERY_EXEC_MODE: "exec"
+  POSTGRES_AUTO_PREPARE_SCHEMA: "false"
+  POSTGRES_SOCKET_PATH: ""
+
+  CACHE_HOST: "valkey-cache"
+  CACHE_PORT: "6379"
+  CACHE_SOCKET_PATH: ""
+
+  IRIS_BASE_URL: "http://iris:3000"
+
+  CLIPROXY_ENABLED: "true"
+  CLIPROXY_BASE_URL: "http://cliproxy:8787/v1"
+  CLIPROXY_MODEL: "gpt-5.2"
+  CLIPROXY_REASONING_EFFORT: "xhigh"
+
+  MAJOREVENT_SCRAPER_ENABLED: "false"
+  MAJOREVENT_SCRAPE_HOUR_KST: "4"
+
+  SERVICES_LLM_SERVER_HEALTH_URL: "http://llm-server:40527/health"
+  SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: "http://game-bot-twentyq:30081/health"
+  SERVICES_GAME_BOT_TURTLE_HEALTH_URL: "http://game-bot-turtle:30082/health"
+
+  DOCKER_HOST: ""
+
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_INSECURE: "true"
+  OTEL_SAMPLE_RATE: "0.1"
+
+  ALARM_TWITCH_ENABLED: "false"
+  YOUTUBE_ENABLE_QUOTA_BUILDING: "true"
+
+  CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,http://10.42.0.1:5173"
+  CORS_ENFORCE: "false"
+
+  GIN_MODE: "release"

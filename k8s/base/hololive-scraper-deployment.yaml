@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hololive-scraper
+  namespace: hololive
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  # upsert 멱등성 기반 이중화 — 무중단 롤링 업데이트
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: hololive-scraper
+  template:
+    metadata:
+      labels:
+        app: hololive-scraper
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z holo-postgres 5433; do echo "postgres 대기 중..."; sleep 2; done']
+      containers:
+        - name: hololive-scraper
+          image: hololive-scraper-rs:prod
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 30010
+              name: http
+          # Rust 서비스는 SCRAPER__ 접두사 환경변수를 직접 정의 (envFrom 미사용)
+          env:
+            - name: SCRAPER__DATABASE__HOST
+              value: "holo-postgres"
+            - name: SCRAPER__DATABASE__PORT
+              value: "5433"
+            - name: SCRAPER__DATABASE__NAME
+              value: "hololive"
+            - name: SCRAPER__DATABASE__USER
+              value: "hololive_scraper"
+            - name: SCRAPER__DATABASE__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: HOLOLIVE_SCRAPER_PASSWORD
+            - name: SCRAPER__DATABASE__SSLMODE
+              value: "disable"
+            - name: SCRAPER__DATABASE__MAX_CONNECTIONS
+              value: "5"
+            # VPN proxy 미사용 — 직접 접속
+            - name: SCRAPER__PROXY__SOCKS5_URL
+              value: ""
+            - name: SCRAPER__SCHEDULER__SCRAPE_HOUR_KST
+              value: "6"
+            - name: SCRAPER__HEALTH__PORT
+              value: "30010"
+            - name: SCRAPER__LOGGING__LEVEL
+              value: "info"
+            - name: SCRAPER__LOGGING__FILE_ENABLED
+              value: "true"
+            - name: SCRAPER__LOGGING__DIR
+              value: "/srv/hololive/logs/hololive-scraper"
+            - name: SCRAPER__LOGGING__FILE
+              value: "hololive-scraper.log"
+            - name: SCRAPER__LOGGING__COMBINED_FILE
+              value: "combined.log"
+            - name: SCRAPER__LOGGING__SERVICE
+              value: "hololive-scraper-rs"
+            - name: SCRAPER__LOGGING__ENVIRONMENT
+              value: "production"
+            - name: RUST_LOG
+              value: "info,scraper_service=info,sqlx=warn"
+            - name: TZ
+              value: "Asia/Seoul"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          # Rust 헬스 계약: /ready = 준비 확인, /health = 생존 확인
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: logs
+              mountPath: /srv/hololive/logs/hololive-scraper
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: logs
+          hostPath:
+            path: /srv/hololive/logs/hololive-scraper
+            type: DirectoryOrCreate
+      restartPolicy: Always

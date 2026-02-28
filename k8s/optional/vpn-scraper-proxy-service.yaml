@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vpn-scraper-proxy
+  namespace: hololive
+spec:
+  selector:
+    app: vpn-scraper-proxy
+  ports:
+    - name: socks5
+      port: 1080
+      targetPort: socks5
+  type: ClusterIP

@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-api
+  namespace: hololive
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: admin-api
+  template:
+    metadata:
+      labels:
+        app: admin-api
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z valkey-cache 6379; do echo "valkey 대기 중..."; sleep 2; done && until nc -z alarm-dispatcher 30010; do echo "alarm-dispatcher 대기 중..."; sleep 2; done && until nc -z llm-scheduler 30003; do echo "llm-scheduler 대기 중..."; sleep 2; done']
+      containers:
+        - name: admin-api
+          image: hololive-admin-api:prod
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 30002
+              name: http
+          envFrom:
+            - configMapRef:
+                name: hololive-app-config
+            - secretRef:
+                name: hololive-app-secret
+          env:
+            - name: ADMIN_API_PORT
+              value: "30002"
+            - name: ALARM_DISPATCHER_URL
+              value: "http://alarm-dispatcher:30010"
+            - name: LLM_SCHEDULER_INTERNAL_URL
+              value: "http://llm-scheduler:30003"
+            - name: GOGC
+              value: "100"
+            - name: GOMEMLIMIT
+              value: "192MiB"
+            - name: OTEL_SERVICE_NAME
+              value: "hololive-admin-api"
+            - name: LOG_DIR
+              value: "/srv/hololive/logs/admin-api"
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: logs
+              mountPath: /srv/hololive/logs/admin-api
+          resources:
+            requests:
+              cpu: 150m
+              memory: 128Mi
+            limits:
+              cpu: 400m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          hostPath:
+            path: /srv/hololive/data
+            type: DirectoryOrCreate
+        - name: logs
+          hostPath:
+            path: /srv/hololive/logs/admin-api
+            type: DirectoryOrCreate
+      restartPolicy: Always

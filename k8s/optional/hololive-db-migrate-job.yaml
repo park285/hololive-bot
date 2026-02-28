@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hololive-db-migrate
+  namespace: hololive
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: hololive-db-migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:18
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - /migrations/bootstrap-and-apply.sh
+          envFrom:
+            - configMapRef:
+                name: hololive-app-config
+            - secretRef:
+                name: hololive-app-secret
+          env:
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: hololive-app-config
+                  key: POSTGRES_HOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: hololive-app-config
+                  key: POSTGRES_PORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: hololive-app-config
+                  key: POSTGRES_DB
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: HOLOLIVE_MIGRATOR_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: POSTGRES_ADMIN_USER
+            - name: POSTGRES_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: POSTGRES_ADMIN_PASSWORD
+            - name: HOLOLIVE_SCRAPER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: HOLOLIVE_SCRAPER_USER
+            - name: HOLOLIVE_SCRAPER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: HOLOLIVE_SCRAPER_PASSWORD
+            - name: MIGRATIONS_DIR
+              value: /migrations
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          hostPath:
+            path: /home/kapu/gemini/llm/hololive-kakao-bot-go/scripts/migrations
+            type: Directory
