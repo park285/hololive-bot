@@ -127,9 +127,12 @@ func (h *APIHandler) GetMilestoneStats(c *gin.Context) {
 
 	// 직전 멤버 수도 함께 조회 (95% 이상)
 	nearMembers, err := h.statsRepo.GetNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones, 50)
-	if err == nil {
-		stats.TotalNearMilestone = len(nearMembers)
+	if err != nil {
+		h.logger.Error("Failed to get near milestone summary", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to get near milestone summary"})
+		return
 	}
+	stats.TotalNearMilestone = len(nearMembers)
 
 	c.JSON(200, gin.H{
 		"status": "ok",

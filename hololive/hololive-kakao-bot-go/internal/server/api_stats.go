@@ -85,8 +85,14 @@ func (h *APIHandler) StreamSystemStats(c *gin.Context) {
 	defer ticker.Stop()
 
 	// 최초 1회 즉시 전송
-	if stats, err := h.systemStats.GetCurrentStats(ctx); err == nil {
-		_ = conn.WriteJSON(stats)
+	stats, err := h.systemStats.GetCurrentStats(ctx)
+	if err != nil {
+		h.logger.Error("failed to collect initial system stats", slog.Any("error", err))
+		return
+	}
+	if err := conn.WriteJSON(stats); err != nil {
+		h.logger.Warn("failed to write initial system stats", slog.Any("error", err))
+		return
 	}
 
 	for {
@@ -96,7 +102,8 @@ func (h *APIHandler) StreamSystemStats(c *gin.Context) {
 		case <-ticker.C:
 			stats, err := h.systemStats.GetCurrentStats(ctx)
 			if err != nil {
-				continue
+				h.logger.Error("failed to collect system stats", slog.Any("error", err))
+				return
 			}
 			if err := conn.WriteJSON(stats); err != nil {
 				return
