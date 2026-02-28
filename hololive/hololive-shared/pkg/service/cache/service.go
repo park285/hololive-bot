@@ -15,8 +15,8 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/kapu/hololive-shared/pkg/errors"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 // Service: Valkey(Redis) 클라이언트를 래핑하여 캐싱 기능을 제공하는 서비스

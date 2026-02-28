@@ -29,9 +29,9 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/errors"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/kapu/hololive-shared/pkg/errors"
 )
 
 // Requester: HTTP 요청 수행 및 서킷 브레이커 상태 확인을 위한 인터페이스
