@@ -143,7 +143,7 @@ func (h *StreamAPIHandler) GetChannelStats(c *gin.Context) {
 
 // getChannelStatsFromDB: DB 스냅샷에서 채널 통계를 조회합니다.
 // domain.TimestampedStats → youtube.ChannelStats 변환
-func (h *APIHandler) getChannelStatsFromDB(ctx context.Context) (map[string]*youtube.ChannelStats, error) {
+func (h *StreamAPIHandler) getChannelStatsFromDB(ctx context.Context) (map[string]*youtube.ChannelStats, error) {
 	channelIDs, channelToName, err := h.getActiveMemberIndex(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get members: %w", err)
@@ -178,7 +178,7 @@ func (h *APIHandler) getChannelStatsFromDB(ctx context.Context) (map[string]*you
 }
 
 // cacheChannelStatsAsync: 채널 통계를 캐시에 비동기 저장합니다.
-func (h *APIHandler) cacheChannelStatsAsync(ctx context.Context, stats map[string]*youtube.ChannelStats) {
+func (h *StreamAPIHandler) cacheChannelStatsAsync(ctx context.Context, stats map[string]*youtube.ChannelStats) {
 	if h.valkeyCache == nil || stats == nil {
 		return
 	}
@@ -198,7 +198,7 @@ func (h *APIHandler) cacheChannelStatsAsync(ctx context.Context, stats map[strin
 
 // triggerChannelStatsRefreshAsync: 백그라운드에서 채널 통계 갱신을 트리거합니다.
 // Refresh Lock으로 중복 갱신(캐시 스탬피드)을 방지합니다.
-func (h *APIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
+func (h *StreamAPIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 	if h.valkeyCache == nil || h.youtube == nil {
 		return
 	}
@@ -240,7 +240,7 @@ func (h *APIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 	})
 }
 
-func (h *APIHandler) runAsyncWithLimiter(limiter chan struct{}, task string, fn func()) {
+func (h *StreamAPIHandler) runAsyncWithLimiter(limiter chan struct{}, task string, fn func()) {
 	if limiter == nil {
 		go fn()
 		return
@@ -257,7 +257,7 @@ func (h *APIHandler) runAsyncWithLimiter(limiter chan struct{}, task string, fn 
 	}
 }
 
-func (h *APIHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
+func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
 	h.memberIndexMu.RLock()
 	if h.memberIndexReady && time.Now().Before(h.memberIndexExpiresAt) {
 		channelIDs := append([]string(nil), h.memberChannelIDs...)

@@ -44,8 +44,8 @@ func ProvideSystemCollector(cfg config.ServicesConfig, telemetry config.Telemetr
 	return system.NewCollector(endpoints, telemetry.Enabled)
 }
 
-// ProvideAPIHandler: Hololive API 핸들러를 생성하여 제공한다. 모든 서비스 의존성을 주입받는다.
-func ProvideAPIHandler(
+// ProvideDomainAPIHandlers: Hololive API 도메인 핸들러 묶음을 생성하여 제공한다.
+func ProvideDomainAPIHandlers(
 	repo *member.Repository,
 	memberCache *member.Cache,
 	valkeyCache *cache.Service,
@@ -64,7 +64,7 @@ func ProvideAPIHandler(
 	majorEventScheduler server.MajorEventScheduler,
 	majorEventMonthlyScheduler server.MajorEventMonthlyScheduler,
 	logger *slog.Logger,
-) *server.APIHandler {
+) *server.DomainAPIHandlers {
 	return server.NewAPIHandler(
 		repo,
 		memberCache,
@@ -84,7 +84,7 @@ func ProvideAPIHandler(
 		majorEventScheduler,
 		majorEventMonthlyScheduler,
 		logger,
-	)
+	).DomainHandlers()
 }
 
 // ProvideAuthService: 세션 기반 인증 서비스를 생성하여 제공합니다.

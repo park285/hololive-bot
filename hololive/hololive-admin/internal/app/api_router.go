@@ -46,7 +46,7 @@ func ProvideAPIRouter(
 	ctx context.Context,
 	cfg *config.Config,
 	logger *slog.Logger,
-	apiHandler *server.APIHandler,
+	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *server.TriggerHandler,
@@ -54,6 +54,10 @@ func ProvideAPIRouter(
 	router, err := newAPIRouter(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
+	}
+
+	if domainHandlers == nil {
+		return nil, fmt.Errorf("domain handlers must not be nil")
 	}
 
 	if authHandler == nil {
@@ -69,7 +73,7 @@ func ProvideAPIRouter(
 		triggerHandler.RegisterInternalRoutes(router.Group(""))
 	}
 
-	registerAPIRoutes(router, cfg.Server.APIKey, apiHandler, authHandler)
+	registerAPIRoutes(router, cfg.Server.APIKey, domainHandlers, authHandler)
 
 	if cfg.Server.APIKey != "" {
 		logger.Info("api_key_auth_enabled")
@@ -180,12 +184,14 @@ func registerAPIHealthRoutes(router *gin.Engine) {
 func registerAPIRoutes(
 	router *gin.Engine,
 	apiKey string,
-	apiHandler *server.APIHandler,
+	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
 ) {
+	domains := domainHandlers
+
 	// OAuth 콜백 프록시 (인증 불필요 - Google에서 직접 호출)
 	// 모바일 앱에서 localhost 리디렉션이 불가능하므로 서버가 프록시 역할
-	router.GET("/oauth/callback", apiHandler.OAuthCallbackHandler)
+	router.GET("/oauth/callback", domains.OAuth.OAuthCallbackHandler)
 
 	// Session 기반 인증 API
 	authAPI := router.Group("/api/auth")
@@ -203,59 +209,15 @@ func registerAPIRoutes(
 	// API Key 인증 미들웨어 적용 (apiKey가 빈 문자열이면 인증 건너뜀)
 	holoAPI.Use(sharedserver.APIKeyAuthMiddleware(apiKey))
 
-	holoAPI.GET("/members", apiHandler.GetMembers)
-	holoAPI.POST("/members", apiHandler.AddMember)
-	holoAPI.POST("/members/:id/aliases", apiHandler.AddAlias)
-	holoAPI.DELETE("/members/:id/aliases", apiHandler.RemoveAlias)
-	holoAPI.PATCH("/members/:id/graduation", apiHandler.SetGraduation)
-	holoAPI.PATCH("/members/:id/channel", apiHandler.UpdateChannelID)
-	holoAPI.PATCH("/members/:id/name", apiHandler.UpdateMemberName)
-
-	holoAPI.GET("/alarms", apiHandler.GetAlarms)
-	holoAPI.DELETE("/alarms", apiHandler.DeleteAlarm)
-
-	holoAPI.GET("/rooms", apiHandler.GetRooms)
-	holoAPI.POST("/rooms", apiHandler.AddRoom)
-	holoAPI.DELETE("/rooms", apiHandler.RemoveRoom)
-	holoAPI.POST("/rooms/acl", apiHandler.SetACL)
-
-	holoAPI.GET("/stats", apiHandler.GetStats)
-	holoAPI.GET("/stats/channels", apiHandler.GetChannelStats)
-	holoAPI.GET("/streams/live", apiHandler.GetLiveStreams)
-	holoAPI.GET("/streams/upcoming", apiHandler.GetUpcomingStreams)
-
-	// 채널 정보 API (Holodex 기반 - 프로필 이미지 포함)
-	holoAPI.GET("/channels", apiHandler.GetChannel)
-	holoAPI.GET("/channels/search", apiHandler.SearchChannels)
-
-	holoAPI.GET("/logs", apiHandler.GetLogs)
-	holoAPI.GET("/settings", apiHandler.GetSettings)
-	holoAPI.POST("/settings", apiHandler.UpdateSettings)
-	holoAPI.POST("/settings/llm", apiHandler.UpdateLLMSettings)
-	holoAPI.POST("/names/room", apiHandler.SetRoomName)
-	holoAPI.POST("/names/user", apiHandler.SetUserName)
-	holoAPI.GET("/templates", apiHandler.GetTemplates)
-	holoAPI.GET("/templates/:key", apiHandler.GetTemplateByKey)
-
-	// 마일스톤 API
-	holoAPI.GET("/milestones", apiHandler.GetMilestones)
-	holoAPI.GET("/milestones/near", apiHandler.GetNearMilestoneMembers)
-	holoAPI.GET("/milestones/stats", apiHandler.GetMilestoneStats)
-
-	// 프로필 API (Tauri 앱 전용)
-	holoAPI.GET("/profiles", apiHandler.GetProfile)
-	holoAPI.GET("/profiles/name", apiHandler.GetProfileByName)
-
-	// 템플릿 관리 API
-	holoAPI.PUT("/templates/:key", apiHandler.UpsertTemplate)
-	holoAPI.DELETE("/templates/:key", apiHandler.DeleteTemplateOverride)
-	holoAPI.POST("/templates/:key/preview", apiHandler.PreviewTemplate)
-	holoAPI.GET("/templates/:key/revisions", apiHandler.GetTemplateRevisions)
-	holoAPI.GET("/templates/:key/revisions/:id", apiHandler.GetTemplateRevision)
-
-	// 이벤트 알림 수동 트리거 (테스트용)
-	holoAPI.POST("/majorevent/trigger", apiHandler.TriggerMajorEventNotification)
-	holoAPI.POST("/majorevent/monthly-trigger", apiHandler.TriggerMajorEventMonthlyNotification)
+	registerMemberRoutes(holoAPI, domains.Member)
+	registerAlarmRoutes(holoAPI, domains.Alarm)
+	registerRoomRoutes(holoAPI, domains.Room)
+	registerStatsRoutes(holoAPI, domains.Stats, domains.Stream)
+	registerSettingsRoutes(holoAPI, domains.Settings)
+	registerTemplateRoutes(holoAPI, domains.Template)
+	registerMilestoneRoutes(holoAPI, domains.Milestone)
+	registerProfileRoutes(holoAPI, domains.Profile)
+	registerMajorEventRoutes(holoAPI, domains.MajorEvent)
 }
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
