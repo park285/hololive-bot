@@ -16,6 +16,7 @@ func TestFailClosedAuth(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	apiHandler := &server.APIHandler{}
+	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
 	tests := []struct {
@@ -48,7 +49,7 @@ func TestFailClosedAuth(t *testing.T) {
 				},
 			}
 
-			router, err := ProvideAPIRouter(ctx, cfg, logger, apiHandler, authHandler, nil, nil)
+			router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -75,6 +76,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	apiHandler := &server.APIHandler{}
+	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
 	cfg := &config.Config{
@@ -89,7 +91,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, apiHandler, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -115,6 +117,7 @@ func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	apiHandler := &server.APIHandler{}
+	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
 
 	cfg := &config.Config{
@@ -131,11 +134,37 @@ func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, apiHandler, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() unexpected error: %v", err)
 	}
 	if router == nil {
 		t.Fatalf("ProvideAPIRouter() expected non-nil router")
+	}
+}
+
+func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	authHandler := &server.AuthHandler{}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			APIKey: "test-key",
+		},
+		CORS: config.CORSConfig{
+			AllowedOrigins: []string{"http://localhost:3000"},
+		},
+	}
+
+	router, err := ProvideAPIRouter(ctx, cfg, logger, nil, authHandler, nil, nil)
+	if err == nil {
+		t.Fatalf("ProvideAPIRouter() expected error for nil domain handlers")
+	}
+	if err.Error() != "domain handlers must not be nil" {
+		t.Fatalf("ProvideAPIRouter() error = %q, want %q", err.Error(), "domain handlers must not be nil")
+	}
+	if router != nil {
+		t.Fatalf("ProvideAPIRouter() expected nil router on error")
 	}
 }

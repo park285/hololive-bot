@@ -27,7 +27,7 @@ func normalizeAliasInput(alias string) string {
 }
 
 // handleAliasOperation: 별칭 추가/삭제 작업을 공통 로직으로 처리함
-func (h *APIHandler) handleAliasOperation(
+func (h *MemberAPIHandler) handleAliasOperation(
 	c *gin.Context,
 	repoFunc func(context.Context, int, string, string) error,
 	operationName string,

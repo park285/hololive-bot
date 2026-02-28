@@ -192,8 +192,8 @@ func buildAdminComponents(
 	// 시스템 수집기
 	systemCollector := ProvideSystemCollector(cfg.Services, cfg.Telemetry)
 
-	// API 핸들러 (youtube=nil, scraperProxyToggler=nil, scraperScheduler=nil)
-	apiHandler := ProvideAPIHandler(
+	// API 도메인 핸들러 (youtube=nil, scraperProxyToggler=nil, scraperScheduler=nil)
+	domainHandlers := ProvideDomainAPIHandlers(
 		memberRepository,
 		memberCache,
 		cacheService,
@@ -215,7 +215,7 @@ func buildAdminComponents(
 	)
 
 	// API 라우터 구성 (admin-api 전용)
-	httpServer, err := buildAdminHTTPServer(ctx, cfg, logger, apiHandler, authHandler)
+	httpServer, err := buildAdminHTTPServer(ctx, cfg, logger, domainHandlers, authHandler)
 	if err != nil {
 		return nil, fmt.Errorf("build admin http server: %w", err)
 	}
@@ -283,7 +283,7 @@ func buildAdminHTTPServer(
 	ctx context.Context,
 	cfg *config.AdminAPIConfig,
 	logger *slog.Logger,
-	apiHandler *server.APIHandler,
+	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
 ) (*http.Server, error) {
 	// admin-api에서도 ProvideAPIRouter를 재사용하기 위해 config.Config로 변환
@@ -293,7 +293,7 @@ func buildAdminHTTPServer(
 		Telemetry: cfg.Telemetry,
 	}
 
-	adminRouter, err := ProvideAPIRouter(ctx, fullCfg, logger, apiHandler, authHandler, nil, nil)
+	adminRouter, err := ProvideAPIRouter(ctx, fullCfg, logger, domainHandlers, authHandler, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create api router: %w", err)
 	}
