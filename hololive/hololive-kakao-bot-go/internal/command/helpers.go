@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -10,8 +11,8 @@ import (
 // FindMemberOrError: 멤버 이름으로 채널을 검색하고, 찾지 못한 경우 에러 메시지를 전송합니다.
 // 성공 시 (*domain.Channel, nil)을, 실패 시 (nil, error)를 반환한다.
 func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
-	if deps == nil || deps.Matcher == nil {
-		return nil, deps.SendError(ctx, room, adapter.ErrMatcherNotActivated)
+	if err := validateMemberLookupDependencies(deps); err != nil {
+		return nil, fmt.Errorf("member lookup dependencies not configured: %w", err)
 	}
 
 	member, err := deps.Matcher.FindBestMatch(ctx, memberName)
@@ -43,4 +44,20 @@ func FindActiveMemberOrError(ctx context.Context, deps *Dependencies, room, memb
 	}
 
 	return channel, nil
+}
+
+func validateMemberLookupDependencies(deps *Dependencies) error {
+	if deps == nil {
+		return fmt.Errorf("deps is nil")
+	}
+	if deps.Matcher == nil {
+		return fmt.Errorf("matcher is nil")
+	}
+	if deps.Formatter == nil {
+		return fmt.Errorf("formatter is nil")
+	}
+	if deps.SendError == nil {
+		return fmt.Errorf("send error callback is nil")
+	}
+	return nil
 }

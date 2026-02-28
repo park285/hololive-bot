@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
+	"github.com/kapu/hololive-shared/pkg/config"
 )
 
 func TestFailClosedAuth(t *testing.T) {
@@ -21,28 +21,19 @@ func TestFailClosedAuth(t *testing.T) {
 	tests := []struct {
 		name        string
 		apiKey      string
-		noAuth      bool
 		wantErr     bool
 		expectedErr string
 	}{
 		{
 			name:    "API Key provided - Success",
 			apiKey:  "test-key",
-			noAuth:  false,
 			wantErr: false,
 		},
 		{
 			name:        "API Key missing - Fail (Fail-Closed)",
 			apiKey:      "",
-			noAuth:      false,
 			wantErr:     true,
-			expectedErr: "API_SECRET_KEY required (use --no-auth to bypass)",
-		},
-		{
-			name:    "API Key missing but --no-auth flag used - Success (Explicit Bypass)",
-			apiKey:  "",
-			noAuth:  true,
-			wantErr: false,
+			expectedErr: "API_SECRET_KEY required",
 		},
 	}
 
@@ -51,7 +42,6 @@ func TestFailClosedAuth(t *testing.T) {
 			cfg := &config.Config{
 				Server: config.ServerConfig{
 					APIKey: tt.apiKey,
-					NoAuth: tt.noAuth,
 				},
 				CORS: config.CORSConfig{
 					AllowedOrigins: []string{"http://localhost:3000"},

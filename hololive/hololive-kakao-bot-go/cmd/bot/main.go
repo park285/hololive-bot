@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -25,10 +24,6 @@ func main() {
 	// automaxprocs: 컨테이너 환경에서 CPU 할당량에 맞춰 GOMAXPROCS 자동 설정
 	automaxprocs.Init(nil)
 
-	// flag 파싱: --no-auth 플래그 지원
-	noAuth := flag.Bool("no-auth", false, "Disable API Key authentication (Fail-Closed bypass)")
-	flag.Parse()
-
 	// health 패키지 초기화 (버전/uptime 추적)
 	health.Init(Version)
 
@@ -45,9 +40,6 @@ func main() {
 		return
 	}
 
-	// 플래그 값을 설정 객체에 주입
-	cfg.Server.NoAuth = *noAuth
-
 	// slog 기반 로거 초기화 (파일 로깅 포함)
 
 	logger, err := util.EnableFileLoggingWithLevel(util.LogConfig{
@@ -61,10 +53,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		exitCode = 1
 		return
-	}
-
-	if *noAuth {
-		logger.Warn("running_with_no_auth_flag")
 	}
 
 	// OpenTelemetry Provider 초기화

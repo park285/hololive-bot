@@ -151,10 +151,6 @@ func getStringParam(params map[string]any, key string) string {
 }
 
 func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	if err := c.validateDirectoryDependencies(); err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberInfoDisplayFailed)
-	}
-
 	provider := c.Deps().MembersData.WithContext(ctx)
 	activeMembers := c.filterActiveMembers(provider.GetAllMembers())
 	if len(activeMembers) == 0 {
@@ -173,19 +169,6 @@ func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *d
 	}
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
-}
-
-// 디렉토리 렌더링에 필요한 의존성 검증
-func (c *MemberInfoCommand) validateDirectoryDependencies() error {
-	if c.Deps() == nil ||
-		c.Deps().MembersData == nil ||
-		c.Deps().OfficialProfiles == nil ||
-		c.Deps().Formatter == nil ||
-		c.Deps().SendMessage == nil ||
-		c.Deps().SendError == nil {
-		return fmt.Errorf("missing dependencies")
-	}
-	return nil
 }
 
 // 활성 멤버만 필터링

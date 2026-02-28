@@ -144,6 +144,7 @@ func (h *APIHandler) SetGraduation(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.logger.Warn("Failed to refresh cache after graduation update", slog.Any("error", err))
 	}
+	h.invalidateMemberIndex()
 
 	h.logger.Info("Graduation status updated",
 		slog.Int("member_id", memberID),
@@ -201,6 +202,7 @@ func (h *APIHandler) UpdateChannelID(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.logger.Warn("Failed to refresh cache after channel ID update", slog.Any("error", err))
 	}
+	h.invalidateMemberIndex()
 
 	h.logger.Info("Channel ID updated",
 		slog.Int("member_id", memberID),
@@ -254,6 +256,7 @@ func (h *APIHandler) UpdateMemberName(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.logger.Warn("Failed to refresh cache after member name update", slog.Any("error", err))
 	}
+	h.invalidateMemberIndex()
 
 	h.logger.Info("Member name updated",
 		slog.Int("member_id", memberID),
@@ -307,6 +310,7 @@ func (h *APIHandler) AddMember(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.logger.Warn("Failed to refresh member cache", slog.Any("error", err))
 	}
+	h.invalidateMemberIndex()
 
 	h.activity.Log("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
 

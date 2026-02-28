@@ -29,9 +29,9 @@ import (
 // coreInfrastructure 는 공통 인프라 의존성을 담는다.
 type coreInfrastructure struct {
 	deps             *bot.Dependencies
-	alarmService     *notification.AlarmService // 레거시 모드에서만 non-nil (HTTP 클라이언트 모드에서 nil)
-	alarmCRUD        domain.AlarmCRUD           // AlarmCRUD 인터페이스 (HTTP client 또는 AlarmService)
-	holodexService   *holodex.Service           // 구체 타입 참조 (concrete 필요 시 사용)
+	alarmService     *notification.AlarmService
+	alarmCRUD        domain.AlarmCRUD
+	holodexService   *holodex.Service // 구체 타입 참조 (concrete 필요 시 사용)
 	ytStack          *providers.YouTubeStack
 	photoSync        *holodex.PhotoSyncService
 	templateRenderer *template.Renderer
@@ -103,14 +103,6 @@ func initAlarmModeComponents(
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*alarmModeComponents, error) {
-	if cfg.AlarmDispatcherURL != "" {
-		memberServiceAdapter2 := providers.ProvideMemberServiceAdapter(infra.memberCache, logger)
-		return &alarmModeComponents{
-			alarmCRUD:        alarm.NewClient(cfg.AlarmDispatcherURL, logger),
-			memberDataSource: providers.ProvideMembersData(memberServiceAdapter2),
-		}, nil
-	}
-
 	alarmDeps, alarmErr := initAlarmDependencies(
 		cfg.Chzzk,
 		cfg.Twitch,
@@ -197,9 +189,6 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	alarmMode, err := initAlarmModeComponents(ctx, cfg, infra, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return nil, err
-	}
-	if cfg.AlarmDispatcherURL != "" {
-		logger.Info("Alarm CRUD: HTTP client mode", slog.String("url", cfg.AlarmDispatcherURL))
 	}
 
 	memberMatcher := providers.ProvideMemberMatcher(ctx, alarmMode.memberDataSource, infra.cacheService, holodexService, logger)

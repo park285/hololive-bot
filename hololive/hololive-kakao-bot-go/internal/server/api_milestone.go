@@ -90,17 +90,6 @@ func (h *APIHandler) GetNearMilestoneMembers(c *gin.Context) {
 		members = members[:limit]
 	}
 
-	// 임박 멤버(threshold 이상)가 없으면, 기준을 없애고(threshold=0) Top 4를 다시 조회
-	if len(members) == 0 {
-		closest, err := h.statsRepo.GetClosestMilestoneMembers(ctx, limit, youtube.SubscriberMilestones)
-		if err == nil && len(closest) > 0 {
-			members = closest
-			threshold = 0 // UI에서 배지 숨김 처리
-		} else if err != nil {
-			h.logger.Warn("Failed to get closest milestone members fallback", slog.Any("error", err))
-		}
-	}
-
 	c.JSON(200, gin.H{
 		"status":    "ok",
 		"members":   members,

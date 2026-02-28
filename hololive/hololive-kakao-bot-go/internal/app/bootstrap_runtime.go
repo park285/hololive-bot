@@ -11,7 +11,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -69,13 +68,14 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		logger.Info("Bot ingestion runtime disabled by config", slog.String("env", "BOT_INGESTION_ENABLED=false"))
 	}
 
-	// alarmService가 nil이면 큐 디스패처 비활성화 (HTTP 클라이언트 모드)
-	var alarmQueueDispatcher *notification.AlarmQueueDispatcher
-	if infra.alarmService != nil {
-		alarmQueueDispatcher = providers.ProvideAlarmQueueDispatcher(cfg.Notification.AlarmQueueConsumerEnabled, deps.Cache, infra.alarmService, deps.Client, deps.Formatter, logger)
-	} else {
-		logger.Info("Alarm queue dispatcher disabled (HTTP client mode)")
-	}
+	alarmQueueDispatcher := providers.ProvideAlarmQueueDispatcher(
+		cfg.Notification.AlarmQueueConsumerEnabled,
+		deps.Cache,
+		infra.alarmService,
+		deps.Client,
+		deps.Formatter,
+		logger,
+	)
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
 	configSubscriber := buildBotConfigSubscriber(deps, infra, scraperScheduler, logger)
@@ -137,13 +137,11 @@ func buildBotConfigSubscriber(
 				logger.Warn("Failed to unmarshal alarm_advance_minutes payload", slog.Any("error", err))
 				return
 			}
-			if infra.alarmCRUD != nil {
-				targets := infra.alarmCRUD.UpdateAlarmAdvanceMinutes(payload.Minutes)
-				logger.Info("Applied alarm advance minutes via pub/sub",
-					slog.Int("minutes", payload.Minutes),
-					slog.Any("targets", targets),
-				)
-			}
+			targets := infra.alarmCRUD.UpdateAlarmAdvanceMinutes(payload.Minutes)
+			logger.Info("Applied alarm advance minutes via pub/sub",
+				slog.Int("minutes", payload.Minutes),
+				slog.Any("targets", targets),
+			)
 			// 설정 파일에도 반영
 			current := deps.Settings.Get()
 			current.AlarmAdvanceMinutes = payload.Minutes

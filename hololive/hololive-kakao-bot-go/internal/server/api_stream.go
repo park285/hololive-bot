@@ -18,7 +18,11 @@ import (
 const channelStatsCacheKey = "admin:channel_stats"
 const channelStatsCacheTTL = 10 * time.Minute
 const channelStatsRefreshLockKey = "admin:channel_stats:refresh_lock"
+const channelStatsRefreshLockValue = "locked"
 const channelStatsRefreshLockTTL = 2 * time.Minute
+const channelStatsCacheWorkers = 4
+const channelStatsRefreshWorkers = 1
+const memberIndexCacheTTL = 1 * time.Minute
 
 // GetLiveStreams: 현재 라이브 방송 중인 스트림 목록을 반환합니다.
 func (h *APIHandler) GetLiveStreams(c *gin.Context) {
@@ -104,54 +108,19 @@ func (h *APIHandler) GetChannelStats(c *gin.Context) {
 		}
 	}
 
-	// 3. DB도 없으면 실시간 스크래핑 (레거시 폴백)
-	if h.youtube == nil {
-		c.JSON(503, gin.H{"error": "YouTube service not available"})
-		return
-	}
-
-	members, err := h.repo.GetAllMembers(ctx)
-	if err != nil {
-		h.logger.Error("Failed to get members", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get members"})
-		return
-	}
-
-	var channelIDs []string
-	for _, m := range members {
-		if m.ChannelID != "" && !m.IsGraduated {
-			channelIDs = append(channelIDs, m.ChannelID)
-		}
-	}
-
-	stats, err := h.youtube.GetChannelStatistics(ctx, channelIDs)
-	if err != nil {
-		h.logger.Error("Failed to get channel stats", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get channel stats"})
-		return
-	}
-
-	// 캐시 저장 (fire-and-forget)
-	h.cacheChannelStatsAsync(ctx, stats)
-
-	c.JSON(200, gin.H{"status": "ok", "stats": stats})
+	// 3. DB 스냅샷도 없으면 폴러 동기화 전 상태로 간주
+	h.respondError(c, 503, "Channel stats snapshot not ready", gin.H{
+		"code": "channel_stats_snapshot_not_ready",
+		"hint": "retry later after background poller sync",
+	})
 }
 
 // getChannelStatsFromDB: DB 스냅샷에서 채널 통계를 조회합니다.
 // domain.TimestampedStats → youtube.ChannelStats 변환
 func (h *APIHandler) getChannelStatsFromDB(ctx context.Context) (map[string]*youtube.ChannelStats, error) {
-	members, err := h.repo.GetAllMembers(ctx)
+	channelIDs, channelToName, err := h.getActiveMemberIndex(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get members: %w", err)
-	}
-
-	var channelIDs []string
-	channelToName := make(map[string]string)
-	for _, m := range members {
-		if m.ChannelID != "" && !m.IsGraduated {
-			channelIDs = append(channelIDs, m.ChannelID)
-			channelToName[m.ChannelID] = m.Name
-		}
 	}
 
 	if len(channelIDs) == 0 {
@@ -188,7 +157,7 @@ func (h *APIHandler) cacheChannelStatsAsync(ctx context.Context, stats map[strin
 		return
 	}
 
-	go func() {
+	h.runAsyncWithLimiter(h.channelStatsCacheLimiter, "cache_channel_stats", func() {
 		cacheCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
 			constants.YouTubeConfig.CacheSaveTimeout,
@@ -198,7 +167,7 @@ func (h *APIHandler) cacheChannelStatsAsync(ctx context.Context, stats map[strin
 		if err := h.valkeyCache.Set(cacheCtx, channelStatsCacheKey, stats, channelStatsCacheTTL); err != nil {
 			h.logger.Warn("Failed to cache channel stats", slog.Any("error", err))
 		}
-	}()
+	})
 }
 
 // triggerChannelStatsRefreshAsync: 백그라운드에서 채널 통계 갱신을 트리거합니다.
@@ -208,7 +177,7 @@ func (h *APIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 		return
 	}
 
-	go func() {
+	h.runAsyncWithLimiter(h.channelStatsRefreshLimiter, "refresh_channel_stats", func() {
 		bgCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
 			constants.YouTubeConfig.ScraperPhaseTimeout,
@@ -216,7 +185,7 @@ func (h *APIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 		defer cancel()
 
 		// Refresh Lock 획득 시도 (SetNX: 락이 없을 때만 성공)
-		acquired, err := h.valkeyCache.SetNX(bgCtx, channelStatsRefreshLockKey, "1", channelStatsRefreshLockTTL)
+		acquired, err := h.valkeyCache.SetNX(bgCtx, channelStatsRefreshLockKey, channelStatsRefreshLockValue, channelStatsRefreshLockTTL)
 		if err != nil {
 			h.logger.Warn("Failed to acquire refresh lock", slog.Any("error", err))
 			return
@@ -228,17 +197,10 @@ func (h *APIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 
 		h.logger.Info("Background channel stats refresh started")
 
-		members, err := h.repo.GetAllMembers(bgCtx)
+		channelIDs, _, err := h.getActiveMemberIndex(bgCtx)
 		if err != nil {
 			h.logger.Warn("Background refresh: failed to get members", slog.Any("error", err))
 			return
-		}
-
-		var channelIDs []string
-		for _, m := range members {
-			if m.ChannelID != "" && !m.IsGraduated {
-				channelIDs = append(channelIDs, m.ChannelID)
-			}
 		}
 
 		stats, err := h.youtube.GetChannelStatistics(bgCtx, channelIDs)
@@ -249,12 +211,80 @@ func (h *APIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 
 		h.cacheChannelStatsAsync(bgCtx, stats)
 		h.logger.Info("Background channel stats refresh completed", slog.Int("count", len(stats)))
-	}()
+	})
 }
 
-// GetChannel: channelId로 특정 채널의 상세 정보(프로필 이미지 포함)를 반환합니다.
-// 배치 조회: channelIds 파라미터로 여러 채널을 한 번에 조회할 수 있습니다.
-// - 단일 조회: /api/holo/channels?channelId=UC...
+func (h *APIHandler) runAsyncWithLimiter(limiter chan struct{}, task string, fn func()) {
+	if limiter == nil {
+		go fn()
+		return
+	}
+
+	select {
+	case limiter <- struct{}{}:
+		go func() {
+			defer func() { <-limiter }()
+			fn()
+		}()
+	default:
+		h.logger.Debug("Skip async task: limiter saturated", slog.String("task", task))
+	}
+}
+
+func (h *APIHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
+	h.memberIndexMu.RLock()
+	if h.memberIndexReady && time.Now().Before(h.memberIndexExpiresAt) {
+		channelIDs := append([]string(nil), h.memberChannelIDs...)
+		channelToName := cloneChannelNameMap(h.memberChannelName)
+		h.memberIndexMu.RUnlock()
+		return channelIDs, channelToName, nil
+	}
+	h.memberIndexMu.RUnlock()
+
+	members, err := h.repo.GetAllMembers(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get all members: %w", err)
+	}
+
+	channelIDs := make([]string, 0, len(members))
+	channelToName := make(map[string]string, len(members))
+	for _, member := range members {
+		if member.ChannelID == "" || member.IsGraduated {
+			continue
+		}
+		channelIDs = append(channelIDs, member.ChannelID)
+		channelToName[member.ChannelID] = member.Name
+	}
+
+	h.memberIndexMu.Lock()
+	h.memberChannelIDs = append([]string(nil), channelIDs...)
+	h.memberChannelName = cloneChannelNameMap(channelToName)
+	h.memberIndexExpiresAt = time.Now().Add(memberIndexCacheTTL)
+	h.memberIndexReady = true
+	h.memberIndexMu.Unlock()
+
+	return channelIDs, channelToName, nil
+}
+
+func (h *APIHandler) invalidateMemberIndex() {
+	h.memberIndexMu.Lock()
+	defer h.memberIndexMu.Unlock()
+
+	h.memberChannelIDs = nil
+	h.memberChannelName = make(map[string]string)
+	h.memberIndexExpiresAt = time.Time{}
+	h.memberIndexReady = false
+}
+
+func cloneChannelNameMap(src map[string]string) map[string]string {
+	dst := make(map[string]string, len(src))
+	for key, val := range src {
+		dst[key] = val
+	}
+	return dst
+}
+
+// GetChannel: channelIds 파라미터로 여러 채널을 한 번에 조회합니다.
 // - 배치 조회: /api/holo/channels?channelIds=UC1,UC2,UC3...
 // NOTE: DB에서 직접 조회하여 Holodex API 호출 없이 응답합니다.
 func (h *APIHandler) GetChannel(c *gin.Context) {
@@ -265,7 +295,7 @@ func (h *APIHandler) GetChannel(c *gin.Context) {
 	if channelIDs != "" {
 		ids := splitChannelIDs(channelIDs)
 		if len(ids) == 0 {
-			c.JSON(400, gin.H{"error": "channelIds parameter is empty or invalid"})
+			h.respondError(c, 400, "channelIds parameter is empty or invalid", nil)
 			return
 		}
 
@@ -277,8 +307,13 @@ func (h *APIHandler) GetChannel(c *gin.Context) {
 		// DB에서 직접 조회 (Holodex API 호출 없음)
 		channelsMap, err := h.repo.GetMembersWithPhoto(ctx, ids)
 		if err != nil {
-			h.logger.Error("Failed to get channels from DB", slog.Any("error", err), slog.Int("count", len(ids)))
-			c.JSON(500, gin.H{"error": "Failed to get channels"})
+			h.respondInternalError(
+				c,
+				"Failed to get channels",
+				"Failed to get channels from DB",
+				err,
+				slog.Int("count", len(ids)),
+			)
 			return
 		}
 
@@ -292,27 +327,15 @@ func (h *APIHandler) GetChannel(c *gin.Context) {
 		return
 	}
 
-	// 단일 조회 (레거시 호환성)
+	// 레거시 단일 조회는 제거됨
 	channelID := c.Query("channelId")
-	if channelID == "" {
-		c.JSON(400, gin.H{"error": "channelId or channelIds parameter required"})
+	if channelID != "" {
+		h.respondError(c, 410, "Legacy channelId query is no longer supported", gin.H{
+			"hint": "use channelIds query parameter",
+		})
 		return
 	}
-
-	// DB에서 직접 조회 (Holodex API 호출 없음)
-	member, err := h.repo.GetMemberWithPhotoByChannelID(ctx, channelID)
-	if err != nil {
-		h.logger.Error("Failed to get channel from DB", slog.String("channelId", channelID), slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get channel"})
-		return
-	}
-
-	if member == nil {
-		c.JSON(404, gin.H{"error": "Channel not found"})
-		return
-	}
-
-	c.JSON(200, gin.H{"status": "ok", "channel": memberToChannelResponse(member)})
+	h.respondError(c, 400, "channelIds parameter required", nil)
 }
 
 // ChannelResponse: 채널 API 응답 구조체 (기존 Holodex 호환 형식)

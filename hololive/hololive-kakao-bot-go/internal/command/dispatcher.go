@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -22,7 +23,7 @@ func NewSequentialDispatcher(registry *Registry, normalize NormalizeFunc) Dispat
 
 func (d *sequentialDispatcher) Publish(ctx context.Context, cmdCtx *domain.CommandContext, events ...Event) (int, error) {
 	if d == nil || d.registry == nil || d.normalize == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dispatcher not configured")
 	}
 
 	executed := 0

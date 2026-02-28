@@ -42,6 +42,11 @@ type ServiceEndpoint struct {
 type Collector struct {
 	httpClient *http.Client
 	endpoints  []ServiceEndpoint
+	cacheTTL   time.Duration
+	cacheMu    sync.RWMutex
+	refreshMu  sync.Mutex
+	cachedAt   time.Time
+	cached     *SystemStats
 }
 
 // NewCollector: 새 Collector를 생성합니다. endpoints는 외부 서비스 health URL 목록입니다.
@@ -57,11 +62,37 @@ func NewCollector(endpoints []ServiceEndpoint, enableOTel bool) *Collector {
 			Transport: transport,
 		},
 		endpoints: endpoints,
+		cacheTTL:  2 * time.Second,
 	}
 }
 
 // GetCurrentStats: 현재 시스템 리소스 상태를 반환합니다.
 func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
+	if stats := c.getCachedStats(); stats != nil {
+		return stats, nil
+	}
+
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
+	if stats := c.getCachedStats(); stats != nil {
+		return stats, nil
+	}
+
+	stats, err := c.collectCurrentStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	c.cacheMu.Lock()
+	c.cached = cloneSystemStats(stats)
+	c.cachedAt = time.Now()
+	c.cacheMu.Unlock()
+
+	return stats, nil
+}
+
+func (c *Collector) collectCurrentStats(ctx context.Context) (*SystemStats, error) {
 	v, err := mem.VirtualMemoryWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get memory stats: %w", err)
@@ -107,6 +138,32 @@ func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
 		TotalGoroutines:   totalGoroutines,
 		ServiceGoroutines: allServices,
 	}, nil
+}
+
+func (c *Collector) getCachedStats() *SystemStats {
+	c.cacheMu.RLock()
+	defer c.cacheMu.RUnlock()
+
+	if c.cached == nil {
+		return nil
+	}
+	if time.Since(c.cachedAt) > c.cacheTTL {
+		return nil
+	}
+
+	return cloneSystemStats(c.cached)
+}
+
+func cloneSystemStats(src *SystemStats) *SystemStats {
+	if src == nil {
+		return nil
+	}
+
+	cloned := *src
+	if len(src.ServiceGoroutines) > 0 {
+		cloned.ServiceGoroutines = append([]ServiceGoroutines(nil), src.ServiceGoroutines...)
+	}
+	return &cloned
 }
 
 // fetchServiceGoroutines: 외부 서비스들의 goroutine 수를 병렬로 조회합니다.
