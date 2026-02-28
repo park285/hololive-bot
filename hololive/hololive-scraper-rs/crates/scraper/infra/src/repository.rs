@@ -1,15 +1,16 @@
-use crate::config::DatabaseConfig;
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 use scraper_core::{
     error::ScraperError,
     model::{MajorEvent, MajorEventLinkStatus, MajorEventStatus, MajorEventType},
 };
-use sea_orm::Statement;
 use sea_orm::{
     ColumnTrait, Condition, ConnectionTrait, Database, DatabaseBackend, DatabaseConnection,
-    EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Statement,
 };
-use std::time::Duration;
+
+use crate::config::DatabaseConfig;
 
 mod major_event {
     use sea_orm::entity::prelude::*;

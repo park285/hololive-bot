@@ -1,15 +1,19 @@
-use crate::scheduler::{
-    ScrapeTriggerType, build_retry_runs_from_delays, calculate_next_regular_run_for_hour,
-    format_kst,
-};
-use crate::scraper::{FeedSource, Scraper};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
+
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
 use scraper_core::error::ScraperError;
 use scraper_infra::repository::Repository;
-use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, info, info_span, warn};
+
+use crate::{
+    scheduler::{
+        ScrapeTriggerType, build_retry_runs_from_delays, calculate_next_regular_run_for_hour,
+        format_kst,
+    },
+    scraper::{FeedSource, Scraper},
+};
 
 #[derive(Debug, Clone)]
 pub struct FeedSchedulerConfig {

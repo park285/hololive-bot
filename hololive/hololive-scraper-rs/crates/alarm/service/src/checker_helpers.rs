@@ -39,8 +39,9 @@ pub fn is_target_minute(target_minutes: &[i32], minutes_until: i32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::Duration;
+
+    use super::*;
 
     // ── minutes_until_ceil 테스트 ────────────────────────────────────────────
 

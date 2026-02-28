@@ -1,7 +1,8 @@
+use std::time::Duration;
+
 use reqwest::{Client, StatusCode, header::RANGE};
 use scraper_core::model::MajorEventLinkStatus;
 use scraper_service::link_checker::{LinkChecker, LinkCheckerConfig};
-use std::time::Duration;
 
 const TARGET_URL: &str = "https://hololive.hololivepro.com/events/feed/";
 

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -25,7 +27,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 // AlarmDispatcherRuntime: alarm-dispatcher 전용 런타임

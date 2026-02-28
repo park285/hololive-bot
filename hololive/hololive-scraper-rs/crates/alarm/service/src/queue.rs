@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use alarm_core::error::AlarmError;
-use alarm_core::model::{AlarmNotification, AlarmQueueEnvelope};
+use alarm_core::{
+    error::AlarmError,
+    model::{AlarmNotification, AlarmQueueEnvelope},
+};
 use alarm_infra::valkey::ValkeyClient;
 use chrono::Utc;
 use tracing::debug;
@@ -49,9 +51,10 @@ impl QueuePublisher {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alarm_core::model::AlarmNotification;
     use alarm_infra::valkey::MockValkeyClient;
+
+    use super::*;
 
     fn make_notification(room_id: &str) -> AlarmNotification {
         AlarmNotification::new(room_id.into(), None, None, 5, vec![], String::new())

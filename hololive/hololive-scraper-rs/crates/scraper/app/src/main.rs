@@ -4,12 +4,13 @@ mod observability;
 mod shutdown;
 mod state;
 
+use std::{net::SocketAddr, sync::Arc};
+
 use anyhow::{Context, Result};
 use axum::{Router, routing::get};
 use chrono::Utc;
 use clap::Parser;
 use scraper_infra::config::AppConfig;
-use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
@@ -78,14 +79,17 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        cli::Cli, observability::normalize_otlp_endpoint, observability::resolve_telemetry_config,
-    };
-    use clap::Parser;
-    use scraper_infra::config::{LoggingConfig, TelemetryConfig};
     use std::{
         path::PathBuf,
         sync::{LazyLock, Mutex},
+    };
+
+    use clap::Parser;
+    use scraper_infra::config::{LoggingConfig, TelemetryConfig};
+
+    use super::{
+        cli::Cli,
+        observability::{normalize_otlp_endpoint, resolve_telemetry_config},
     };
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));

@@ -1,6 +1,7 @@
+use std::path::Path;
+
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
-use std::path::Path;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -205,12 +206,14 @@ fn normalize_ssl_mode(mode: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, DatabaseConfig};
-    use secrecy::SecretString;
     use std::{
         fs,
         sync::{LazyLock, Mutex},
     };
+
+    use secrecy::SecretString;
+
+    use super::{AppConfig, DatabaseConfig};
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 

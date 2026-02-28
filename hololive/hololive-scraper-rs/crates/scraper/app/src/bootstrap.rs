@@ -1,6 +1,13 @@
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
+
 use anyhow::{Context, Result};
-use scraper_core::error::ScraperError;
-use scraper_core::model::MajorEventType;
+use scraper_core::{error::ScraperError, model::MajorEventType};
 use scraper_infra::{
     config::AppConfig,
     repository::{Repository, create_pool},
@@ -10,13 +17,6 @@ use scraper_service::{
     link_checker::{LinkChecker, LinkCheckerConfig},
     maintenance_scheduler::{MaintenanceConfig, MaintenanceScheduler},
     scraper::{FeedSource, Scraper, ScraperConfig},
-};
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
 };
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;

@@ -1,6 +1,7 @@
+use std::{collections::HashSet, net::IpAddr, path::Path};
+
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Deserializer};
-use std::{collections::HashSet, net::IpAddr, path::Path};
 use thiserror::Error;
 use validator::Validate;
 
@@ -438,12 +439,14 @@ fn is_private_or_local_ip(ip: IpAddr) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{AlarmAppConfig, ConfigLoadError, validate_iris_base_url_policy};
-    use secrecy::{ExposeSecret, SecretString};
     use std::{
         fs,
         sync::{LazyLock, Mutex},
     };
+
+    use secrecy::{ExposeSecret, SecretString};
+
+    use super::{AlarmAppConfig, ConfigLoadError, validate_iris_base_url_policy};
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 

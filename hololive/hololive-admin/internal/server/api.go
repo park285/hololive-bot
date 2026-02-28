@@ -4,6 +4,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-admin/internal/service/acl"
+	"github.com/kapu/hololive-admin/internal/service/activity"
+	"github.com/kapu/hololive-admin/internal/service/system"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -12,10 +16,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-
-	"github.com/kapu/hololive-admin/internal/service/acl"
-	"github.com/kapu/hololive-admin/internal/service/activity"
-	"github.com/kapu/hololive-admin/internal/service/system"
 )
 
 // ScraperProxyToggler: 스크래퍼 스케줄러 프록시 토글 인터페이스

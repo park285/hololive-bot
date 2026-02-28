@@ -4,22 +4,22 @@ use std::{
     time::{Duration, Instant},
 };
 
+use alarm_core::{
+    constants::{FULL_REFRESH_INTERVAL, LIVE_CATCHUP_SUPPRESS_WINDOW},
+    error::AlarmError,
+    keys::{ALARM_CHANNEL_REGISTRY_KEY, CHANNEL_SUBSCRIBERS_KEY_PREFIX},
+    model::{AlarmNotification, Stream},
+};
+use alarm_infra::{holodex::HolodexClient, valkey::ValkeyClient};
 use chrono::{DateTime, Utc};
 use futures::{StreamExt, stream};
 use tracing::{debug, warn};
 
-use alarm_core::constants::{FULL_REFRESH_INTERVAL, LIVE_CATCHUP_SUPPRESS_WINDOW};
-use alarm_core::error::AlarmError;
-use alarm_core::keys::{ALARM_CHANNEL_REGISTRY_KEY, CHANNEL_SUBSCRIBERS_KEY_PREFIX};
-use alarm_core::model::{AlarmNotification, Stream};
-use alarm_infra::holodex::HolodexClient;
-use alarm_infra::valkey::ValkeyClient;
-
-use super::checker_helpers::{
-    format_schedule_change_message, is_target_minute, minutes_until_ceil,
+use super::{
+    checker_helpers::{format_schedule_change_message, is_target_minute, minutes_until_ceil},
+    dedup::DedupService,
+    tier::TieredScheduler,
 };
-use super::dedup::DedupService;
-use super::tier::TieredScheduler;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // YouTubeChecker: 예정/라이브 스트림 알림 생성 메인 로직

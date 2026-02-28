@@ -21,9 +21,26 @@ unsafe_code = "forbid"
 unused_must_use = "deny"
 
 [workspace.lints.clippy]
+# 기존 deny
 dbg_macro = "deny"
 print_stdout = "deny"
 print_stderr = "deny"
+
+# pedantic 그룹 (warn, 점진적 적용)
+pedantic = { level = "warn", priority = -1 }
+
+# pedantic 중 과도한 항목 허용
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+# 성능/품질 warn
+needless_pass_by_value = "warn"
+cloned_instead_of_copied = "warn"
+inefficient_to_string = "warn"
+manual_string_new = "warn"
+implicit_clone = "warn"
 
 [workspace.dependencies]
 # async runtime

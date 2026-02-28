@@ -1,21 +1,23 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
+use alarm_core::{error::AlarmError, keys::ALARM_CHANNEL_REGISTRY_KEY};
+use alarm_infra::valkey::ValkeyClient;
 use metrics::{counter, histogram};
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use alarm_core::error::AlarmError;
-use alarm_core::keys::ALARM_CHANNEL_REGISTRY_KEY;
-use alarm_infra::valkey::ValkeyClient;
-
-use super::checker::YouTubeChecker;
-use super::chzzk_checker::ChzzkChecker;
-use super::notifier::Notifier;
-use super::twitch_checker::TwitchChecker;
+use super::{
+    checker::YouTubeChecker, chzzk_checker::ChzzkChecker, notifier::Notifier,
+    twitch_checker::TwitchChecker,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Valkey 채널 매핑 키 상수 (Go alarm_types.go 대응)
@@ -580,18 +582,19 @@ impl AlarmScheduler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
     use alarm_core::constants::DEFAULT_TARGET_MINUTES;
-    use alarm_infra::chzzk::MockChzzkClient;
-    use alarm_infra::holodex::MockHolodexClient;
-    use alarm_infra::twitch::MockTwitchClient;
-    use alarm_infra::valkey::{MockValkeyClient, ValkeyClient};
+    use alarm_infra::{
+        chzzk::MockChzzkClient,
+        holodex::MockHolodexClient,
+        twitch::MockTwitchClient,
+        valkey::{MockValkeyClient, ValkeyClient},
+    };
     use async_trait::async_trait;
 
-    use crate::dedup::DedupService;
-    use crate::queue::QueuePublisher;
-    use crate::tier::TieredScheduler;
-    use std::sync::atomic::AtomicUsize;
+    use super::*;
+    use crate::{dedup::DedupService, queue::QueuePublisher, tier::TieredScheduler};
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────
 

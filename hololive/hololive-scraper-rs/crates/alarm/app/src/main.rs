@@ -4,12 +4,13 @@ mod observability;
 mod shutdown;
 mod state;
 
+use std::{net::SocketAddr, sync::Arc};
+
 use alarm_infra::config::AlarmAppConfig;
 use anyhow::{Context, Result};
 use axum::{Router, routing::get};
 use chrono::Utc;
 use clap::Parser;
-use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
@@ -73,10 +74,12 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cli::Cli, state::readiness_status};
+    use std::path::PathBuf;
+
     use axum::http::StatusCode;
     use clap::Parser;
-    use std::path::PathBuf;
+
+    use super::{cli::Cli, state::readiness_status};
 
     /// CLI 기본값 확인
     #[test]

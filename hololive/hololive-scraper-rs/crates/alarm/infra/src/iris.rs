@@ -1,9 +1,10 @@
+use std::time::Duration;
+
 use alarm_core::error::AlarmError;
 use async_trait::async_trait;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
-use std::time::Duration;
 use tracing::debug;
 
 use crate::{
@@ -160,9 +161,10 @@ impl IrisClient for MockIrisClient {
 
 #[cfg(test)]
 mod tests {
+    use secrecy::SecretString;
+
     use super::*;
     use crate::circuit_breaker::CircuitState;
-    use secrecy::SecretString;
 
     #[tokio::test]
     async fn mock_records_sent_messages() {

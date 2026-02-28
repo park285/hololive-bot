@@ -4,11 +4,12 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-admin/internal/service/configpub"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 // pubsubSettingsApplier: admin-api 프로세스에서 Valkey Pub/Sub를 통해 설정 변경을 전파

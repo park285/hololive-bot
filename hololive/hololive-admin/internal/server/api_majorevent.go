@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 )
 
@@ -31,7 +32,7 @@ func (h *APIHandler) TriggerMajorEventNotification(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "notification already in progress"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.respondInternalError(c, "failed to send notification", "failed to send weekly major event notification", err)
 		return
 	}
 
@@ -50,7 +51,7 @@ func (h *APIHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "notification already in progress"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.respondInternalError(c, "failed to send notification", "failed to send monthly major event notification", err)
 		return
 	}
 

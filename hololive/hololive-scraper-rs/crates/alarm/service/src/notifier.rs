@@ -1,14 +1,10 @@
 use std::sync::Arc;
 
+use alarm_core::{error::AlarmError, model::AlarmNotification};
 use futures::{StreamExt, stream};
 use tracing::{debug, warn};
 
-use alarm_core::error::AlarmError;
-use alarm_core::model::AlarmNotification;
-
-use super::dedup::DedupService;
-use super::queue::QueuePublisher;
-use super::tier::TieredScheduler;
+use super::{dedup::DedupService, queue::QueuePublisher, tier::TieredScheduler};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NotifierResult: 발송 통계
@@ -235,12 +231,16 @@ impl Notifier {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use alarm_core::constants::DEFAULT_TARGET_MINUTES;
-    use alarm_core::model::{Channel, Stream, StreamStatus};
+    use std::sync::Arc;
+
+    use alarm_core::{
+        constants::DEFAULT_TARGET_MINUTES,
+        model::{Channel, Stream, StreamStatus},
+    };
     use alarm_infra::valkey::{MockValkeyClient, ValkeyClient};
     use chrono::Utc;
-    use std::sync::Arc;
+
+    use super::*;
 
     // ── 테스트 헬퍼 ──────────────────────────────────────────────────────────
 

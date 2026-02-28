@@ -7,10 +7,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // ProvideAPIServer: HTTP 서버 인스턴스를 생성합니다.

@@ -1,13 +1,13 @@
-use parking_lot::Mutex;
-
+use alarm_core::{
+    constants::{
+        FULL_REFRESH_INTERVAL, NO_UPCOMING_INTERVAL, RECENTLY_NOTIFIED_WINDOW, TIER1_INTERVAL,
+        TIER1_WINDOW, TIER2_INTERVAL, TIER2_WINDOW, TIER3_INTERVAL, TIER3_WINDOW, TIER4_INTERVAL,
+    },
+    model::Stream,
+};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-
-use alarm_core::constants::{
-    FULL_REFRESH_INTERVAL, NO_UPCOMING_INTERVAL, RECENTLY_NOTIFIED_WINDOW, TIER1_INTERVAL,
-    TIER1_WINDOW, TIER2_INTERVAL, TIER2_WINDOW, TIER3_INTERVAL, TIER3_WINDOW, TIER4_INTERVAL,
-};
-use alarm_core::model::Stream;
+use parking_lot::Mutex;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 채널 스케줄 상태 (채널별 폴링 시각 관리)
@@ -245,12 +245,15 @@ impl Default for TieredScheduler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use alarm_core::constants::{
-        NO_UPCOMING_INTERVAL, TIER1_INTERVAL, TIER1_WINDOW, TIER2_INTERVAL, TIER2_WINDOW,
-        TIER3_INTERVAL, TIER3_WINDOW, TIER4_INTERVAL,
+    use alarm_core::{
+        constants::{
+            NO_UPCOMING_INTERVAL, TIER1_INTERVAL, TIER1_WINDOW, TIER2_INTERVAL, TIER2_WINDOW,
+            TIER3_INTERVAL, TIER3_WINDOW, TIER4_INTERVAL,
+        },
+        model::{Channel, Stream, StreamStatus},
     };
-    use alarm_core::model::{Channel, Stream, StreamStatus};
+
+    use super::*;
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────
 

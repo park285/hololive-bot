@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -83,11 +84,12 @@ func (h *APIHandler) GetProfile(c *gin.Context) {
 	// 번역 정보 조회
 	_, translated, err := h.profiles.GetWithTranslation(ctx, profile.EnglishName)
 	if err != nil {
-		h.logger.Warn("Translation not found",
+		h.logger.Error("Failed to load translated profile",
 			slog.String("english_name", profile.EnglishName),
 			slog.Any("error", err),
 		)
-		// 번역 실패해도 원본은 반환
+		c.JSON(500, gin.H{"error": "Failed to load translated profile"})
+		return
 	}
 
 	// 응답 구조체 변환

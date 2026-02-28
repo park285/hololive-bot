@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 

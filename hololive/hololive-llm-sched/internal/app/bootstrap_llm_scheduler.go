@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -21,7 +23,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 	"github.com/kapu/hololive-shared/pkg/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 const (

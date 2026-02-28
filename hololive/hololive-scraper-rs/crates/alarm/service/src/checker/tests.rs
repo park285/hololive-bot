@@ -1,14 +1,17 @@
-use super::*;
-use alarm_core::constants::DEFAULT_TARGET_MINUTES;
-use alarm_core::model::{Channel, StreamStatus};
-use alarm_infra::holodex::MockHolodexClient;
-use alarm_infra::valkey::MockValkeyClient;
-use async_trait::async_trait;
 use std::{
     collections::{HashMap, HashSet},
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::Duration,
 };
+
+use alarm_core::{
+    constants::DEFAULT_TARGET_MINUTES,
+    model::{Channel, StreamStatus},
+};
+use alarm_infra::{holodex::MockHolodexClient, valkey::MockValkeyClient};
+use async_trait::async_trait;
+
+use super::*;
 
 // ── 구독 정보를 사전 주입할 수 있는 인메모리 Valkey Mock ─────────────────
 

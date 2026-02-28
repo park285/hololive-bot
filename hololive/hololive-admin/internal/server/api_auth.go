@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kapu/hololive-shared/pkg/constants"
 
 	authsvc "github.com/kapu/hololive-admin/internal/service/auth"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 // AuthHandler: /api/auth 엔드포인트를 처리하는 핸들러

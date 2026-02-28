@@ -94,9 +94,10 @@ pub fn parse_pub_date(date_str: &str) -> Option<DateTime<Utc>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::Datelike;
     use scraper_core::model::MajorEventType;
+
+    use super::*;
 
     fn fixture_events_feed() -> Vec<u8> {
         let path = format!("{}/testdata/events_feed.xml", env!("CARGO_MANIFEST_DIR"));

@@ -1,7 +1,9 @@
-use super::{IncrementalCursor, canonical_event_link_key, should_stop_incremental_scan};
+use std::collections::HashSet;
+
 use chrono::{TimeZone, Utc};
 use scraper_core::model::{MajorEvent, MajorEventLinkStatus, MajorEventStatus, MajorEventType};
-use std::collections::HashSet;
+
+use super::{IncrementalCursor, canonical_event_link_key, should_stop_incremental_scan};
 
 fn sample_event(
     external_id: &str,

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -77,7 +78,9 @@ func (h *APIHandler) handleAliasOperation(
 	}
 
 	if err := h.memberCache.InvalidateAliasCache(ctx, req.Alias); err != nil {
-		h.logger.Warn("Failed to invalidate alias cache", slog.Any("error", err))
+		h.logger.Error("Failed to invalidate alias cache", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 
 	h.logger.Info("Alias "+operationName,
@@ -142,7 +145,9 @@ func (h *APIHandler) SetGraduation(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh cache after graduation update", slog.Any("error", err))
+		h.logger.Error("Failed to refresh cache after graduation update", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 
 	h.logger.Info("Graduation status updated",
@@ -199,7 +204,9 @@ func (h *APIHandler) UpdateChannelID(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh cache after channel ID update", slog.Any("error", err))
+		h.logger.Error("Failed to refresh cache after channel ID update", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 
 	h.logger.Info("Channel ID updated",
@@ -252,7 +259,9 @@ func (h *APIHandler) UpdateMemberName(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh cache after member name update", slog.Any("error", err))
+		h.logger.Error("Failed to refresh cache after member name update", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 
 	h.logger.Info("Member name updated",
@@ -305,10 +314,12 @@ func (h *APIHandler) AddMember(c *gin.Context) {
 	}
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
-		h.logger.Warn("Failed to refresh member cache", slog.Any("error", err))
+		h.logger.Error("Failed to refresh member cache", slog.Any("error", err))
+		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		return
 	}
 
 	h.activity.Log("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
 
-	c.JSON(200, gin.H{"status": "ok", "message": "Member added successfully"})
+	c.JSON(201, gin.H{"status": "ok", "message": "Member added successfully"})
 }

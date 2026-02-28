@@ -7,10 +7,11 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 	"gorm.io/gorm"
+
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 const (

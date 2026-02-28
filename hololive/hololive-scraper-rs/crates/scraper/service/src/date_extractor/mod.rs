@@ -1,10 +1,11 @@
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
-use chrono::NaiveDate;
-use regex::Regex;
 use std::{
     collections::{BTreeSet, HashSet},
     sync::LazyLock,
 };
+
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use chrono::NaiveDate;
+use regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 
 static JAPANESE_DATE_PATTERN: LazyLock<Regex> =

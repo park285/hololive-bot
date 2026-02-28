@@ -9,15 +9,16 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+
+	"github.com/kapu/hololive-admin/internal/server"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-
-	"github.com/kapu/hololive-admin/internal/server"
 )
 
 // ProvideAPIAddr: 관리자 서버가 리슨할 주소를 반환합니다.

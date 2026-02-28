@@ -1,19 +1,21 @@
-use super::{
-    HostResolver, HttpProbeResponse, LinkCheckRepository, LinkCheckResult, LinkChecker,
-    LinkCheckerConfig, LinkHttpClient, should_fallback_to_get,
-};
-use chrono::{DateTime, TimeZone, Utc};
-use reqwest::{Method, StatusCode};
-use scraper_core::{
-    error::ScraperError,
-    model::{MajorEvent, MajorEventLinkStatus, MajorEventStatus, MajorEventType},
-};
 use std::{
     collections::{HashMap, VecDeque},
     io,
     net::{IpAddr, Ipv4Addr},
     sync::{Arc, Mutex},
     time::Duration,
+};
+
+use chrono::{DateTime, TimeZone, Utc};
+use reqwest::{Method, StatusCode};
+use scraper_core::{
+    error::ScraperError,
+    model::{MajorEvent, MajorEventLinkStatus, MajorEventStatus, MajorEventType},
+};
+
+use super::{
+    HostResolver, HttpProbeResponse, LinkCheckRepository, LinkCheckResult, LinkChecker,
+    LinkCheckerConfig, LinkHttpClient, should_fallback_to_get,
 };
 
 #[derive(Clone, Debug)]

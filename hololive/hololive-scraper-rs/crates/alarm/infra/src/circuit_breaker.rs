@@ -1,4 +1,3 @@
-use alarm_core::error::AlarmError;
 use std::{
     sync::{
         Arc, Mutex,
@@ -6,6 +5,8 @@ use std::{
     },
     time::{Duration, Instant},
 };
+
+use alarm_core::error::AlarmError;
 
 /// 서킷 브레이커 상태
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,8 +156,9 @@ impl CircuitBreaker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{thread, time::Instant};
+
+    use super::*;
 
     fn wait_until_state(
         cb: &CircuitBreaker,

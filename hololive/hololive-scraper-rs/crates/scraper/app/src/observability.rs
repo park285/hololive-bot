@@ -1,3 +1,5 @@
+use std::{fmt, fs, path::PathBuf};
+
 use anyhow::{Context, Result};
 use opentelemetry::{
     KeyValue, global,
@@ -10,7 +12,6 @@ use opentelemetry_sdk::{
     trace::{Sampler, SdkTracerProvider},
 };
 use scraper_infra::config::{LoggingConfig, TelemetryConfig};
-use std::{fmt, fs, path::PathBuf};
 use tracing::{Event, Subscriber, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
