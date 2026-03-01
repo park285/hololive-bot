@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	appErrors "github.com/kapu/hololive-shared/pkg/errors"
 	"github.com/kapu/hololive-shared/pkg/iris"
@@ -34,10 +32,6 @@ import (
 const (
 	commandKeyAlarm            = "alarm"
 	commandKeyNewsSubscription = "news_subscription"
-)
-
-var (
-	numericRoomRegex = regexp.MustCompile(`^\d+$`)
 )
 
 type streamRuntime interface {
@@ -63,7 +57,7 @@ type Bot struct {
 	alarm            domain.AlarmCRUD
 	matcher          *matcher.MemberMatcher
 	commandRegistry  *command.Registry
-	statsRepo        *youtube.StatsRepository
+	statsRepo        youtube.StatsCommandRepository
 	acl              *acl.Service
 	majorEventRepo   *majorevent.Repository
 	memberNews       *membernews.Service
@@ -72,6 +66,10 @@ type Bot struct {
 	doneCh           chan struct{}
 	selfSender       string
 	workerPool       *workerpool.Pool
+	ingress          *MessageIngress
+	commandExecutor  *CommandRouter
+	transport        *CommandTransport
+	lifecycle        *BotLifecycle
 }
 
 // NewBot: 필요한 의존성(Dependencies)을 주입받아 새로운 Bot 인스턴스를 생성하고 초기화합니다.
@@ -80,10 +78,10 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		return nil, fmt.Errorf("bot dependencies are required")
 	}
 
-	deps.Logger.Info("Bot dependency snapshot", slog.Bool("stats_repo", deps.YouTubeStatsRepo != nil))
 	if deps.Logger == nil {
 		return nil, fmt.Errorf("logger dependency is required")
 	}
+	deps.Logger.Info("Bot dependency snapshot", slog.Bool("stats_repo", deps.YouTubeStatsRepo != nil))
 	if deps.Client == nil {
 		return nil, fmt.Errorf("iris client dependency is required")
 	}
@@ -150,9 +148,61 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		selfSender:       stringutil.Normalize(deps.BotSelfUser),
 	}
 
+	bot.transport = NewCommandTransport(bot.irisClient, bot.formatter)
+	bot.ingress = NewMessageIngress(bot.messageAdapter, bot.acl, bot.logger, bot.selfSender)
+	bot.lifecycle = NewBotLifecycle(
+		bot.logger,
+		bot.cache,
+		bot.irisClient,
+		bot.irisBaseURL,
+		bot.stopCh,
+		bot.doneCh,
+		bot.workerPool,
+		bot.holodex,
+		bot.postgres,
+	)
+
 	bot.initializeCommands()
 
 	return bot, nil
+}
+
+func (b *Bot) ensureCommandExecutor() *CommandRouter {
+	if b.commandExecutor == nil {
+		b.commandExecutor = NewCommandRouter(b.commandRegistry, b.logger, b.sendMessage)
+	}
+	return b.commandExecutor
+}
+
+func (b *Bot) ensureIngress() *MessageIngress {
+	if b.ingress == nil {
+		b.ingress = NewMessageIngress(b.messageAdapter, b.acl, b.logger, b.selfSender)
+	}
+	return b.ingress
+}
+
+func (b *Bot) ensureTransport() *CommandTransport {
+	if b.transport == nil {
+		b.transport = NewCommandTransport(b.irisClient, b.formatter)
+	}
+	return b.transport
+}
+
+func (b *Bot) ensureLifecycle() *BotLifecycle {
+	if b.lifecycle == nil {
+		b.lifecycle = NewBotLifecycle(
+			b.logger,
+			b.cache,
+			b.irisClient,
+			b.irisBaseURL,
+			b.stopCh,
+			b.doneCh,
+			b.workerPool,
+			b.holodex,
+			b.postgres,
+		)
+	}
+	return b.lifecycle
 }
 
 func (b *Bot) initializeCommands() {
@@ -176,7 +226,7 @@ func (b *Bot) initializeCommands() {
 		Logger:           b.logger,
 	}
 
-	deps.Dispatcher = command.NewSequentialDispatcher(registry, b.normalizeCommand)
+	deps.Dispatcher = command.NewSequentialDispatcher(registry, normalizeCommandKey)
 
 	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepo != nil))
 
@@ -208,118 +258,23 @@ func (b *Bot) initializeCommands() {
 		registry.Register(cmd)
 	}
 
+	b.commandExecutor = NewCommandRouter(registry, b.logger, b.sendMessage)
 	b.logger.Info("Commands initialized", slog.Int("count", registry.Count()))
 }
 
 // Start: 봇 서비스를 시작한다. Valkey/Iris 연결 확인 후 Context가 종료될 때까지 대기합니다.
 func (b *Bot) Start(ctx context.Context) error {
-	b.logger.Info("Starting Hololive KakaoTalk Bot...")
-
-	if err := b.cache.WaitUntilReady(ctx, constants.ValkeyConfig.ReadyTimeout); err != nil {
-		return fmt.Errorf("valkey connection timeout: %w", err)
-	}
-	b.logger.Info("Valkey connected")
-
-	if err := b.waitUntilIrisReady(
-		ctx,
-		constants.IrisConnection.ReadyTimeout,
-		constants.IrisConnection.RetryInterval,
-		constants.IrisConnection.PingTimeout,
-	); err != nil {
-		b.logger.Warn("Iris server not ready at startup; continuing in degraded mode",
-			slog.String("base_url", b.irisBaseURL),
-			slog.Any("error", err),
-		)
-	} else {
-		b.logger.Info("Iris server connected")
-	}
-
-	b.logger.Info("Bot started successfully")
-
-	select {
-	case <-ctx.Done():
-		b.logger.Info("Context canceled, shutting down...")
-		return fmt.Errorf("context canceled: %w", ctx.Err())
-	case <-b.stopCh:
-		b.logger.Info("Stop signal received")
-		return nil
-	}
+	return b.ensureLifecycle().Start(ctx)
 }
 
 func (b *Bot) waitUntilIrisReady(ctx context.Context, timeout, retryInterval, pingTimeout time.Duration) error {
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(retryInterval)
-	defer ticker.Stop()
-
-	attempt := 0
-	startedAt := time.Now()
-	lastWarnLoggedAt := time.Time{}
-	for {
-		attempt++
-		pingCtx, pingCancel := context.WithTimeout(waitCtx, pingTimeout)
-		ready := b.irisClient.Ping(pingCtx)
-		pingCancel()
-
-		if ready {
-			if attempt > 1 {
-				b.logger.Info("Iris server became ready after retry",
-					slog.Int("attempt", attempt),
-					slog.Duration("elapsed", time.Since(startedAt)),
-				)
-			}
-			return nil
-		}
-
-		now := time.Now()
-		// 과도한 경고 로그를 줄이기 위해 최초 1회 + 이후 분당 1회만 기록
-		if attempt == 1 || lastWarnLoggedAt.IsZero() || now.Sub(lastWarnLoggedAt) >= time.Minute {
-			b.logger.Warn("Iris server not ready, retrying",
-				slog.Int("attempt", attempt),
-				slog.Duration("retry_interval", retryInterval),
-				slog.Duration("elapsed", now.Sub(startedAt)),
-			)
-			lastWarnLoggedAt = now
-		}
-
-		select {
-		case <-waitCtx.Done():
-			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
-				return fmt.Errorf("timeout after %s", timeout)
-			}
-			return fmt.Errorf("canceled: %w", waitCtx.Err())
-		case <-ticker.C:
-		}
-	}
+	return b.ensureLifecycle().WaitUntilIrisReady(ctx, timeout, retryInterval, pingTimeout)
 }
 
 // HandleMessage: Iris webhook으로부터 수신한 메시지를 처리합니다.
 // HTTP webhook 핸들러에서 호출하기 위해 public으로 노출됩니다.
 func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 	commandType := "unknown"
-
-	isNumericRoom := message.Room != "" && numericRoomRegex.MatchString(message.Room)
-	chatID := message.Room
-	if !isNumericRoom && message.JSON != nil {
-		chatID = message.JSON.ChatID
-	}
-
-	// 한글 방 이름 유지
-	roomName := message.Room
-
-	// userID와 userName 분리
-	userID := "unknown"
-	userName := userID // 기본값
-
-	if message.JSON != nil && message.JSON.UserID != "" {
-		userID = message.JSON.UserID // 숫자 ID
-		userName = userID            // userName도 업데이트
-	}
-
-	if message.Sender != nil {
-		userName = *message.Sender // 한글 이름 우선
-	}
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -330,118 +285,44 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 		}
 	}()
 
-	if b.isSelfSender(userName) {
-		b.logger.Debug("Skipping self-issued message",
-			slog.String("user", userName),
-			slog.String("room", chatID),
-			slog.String("payload", message.Msg),
-		)
+	envelope, ok := b.ensureIngress().Prepare(message)
+	if !ok {
 		return
 	}
 
-	// ACL: 허용된 방이 아니면 메시지 무시
-	if b.acl != nil && !b.acl.IsRoomAllowed(roomName, chatID) {
-		b.logger.Debug("Room not in ACL whitelist, ignoring message",
-			slog.String("room", chatID),
-			slog.String("room_name", roomName),
-			slog.String("user_name", userName),
-		)
-		return
-	}
-
-	parsed := b.messageAdapter.ParseMessage(message)
-	commandType = parsed.Type.String()
-
-	if parsed.Type == domain.CommandUnknown {
-		b.logger.Debug("Unknown command ignored",
-			slog.String("msg", message.Msg),
-			slog.String("room", chatID),
-			slog.String("user_name", userName),
-		)
-		return // 알 수 없는 명령어는 무시함
-	}
-
-	b.logger.Info("Command received",
-		slog.String("raw", parsed.RawMessage),
-		slog.String("type", commandType),
-		slog.String("user_id", userID),
-		slog.String("user_name", userName),
-		slog.String("room", chatID),
-		slog.String("room_name", roomName),
+	commandType = envelope.CommandType
+	cmdCtx := domain.NewCommandContext(
+		envelope.ChatID,
+		envelope.RoomName,
+		envelope.UserID,
+		envelope.UserName,
+		message.Msg,
+		false,
 	)
 
-	cmdCtx := domain.NewCommandContext(chatID, roomName, userID, userName, message.Msg, false)
-
-	if err := b.executeCommand(ctx, cmdCtx, parsed.Type, parsed.Params); err != nil {
+	if err := b.executeCommand(ctx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
 		b.logger.Error("Failed to execute command", slog.Any("error", err))
 		errorMsg := b.getErrorMessage(err, commandType)
-		if chatID != "" {
-			b.sendError(ctx, chatID, errorMsg)
+		if envelope.ChatID != "" {
+			b.sendError(ctx, envelope.ChatID, errorMsg)
 		}
 	}
 }
 
 func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
-	if b.commandRegistry == nil {
-		return fmt.Errorf("command registry is not initialized")
-	}
-
-	key, normalizedParams := b.normalizeCommand(cmdType, params)
-
-	if err := b.commandRegistry.Execute(ctx, cmdCtx, key, normalizedParams); err != nil {
-		if errors.Is(err, command.ErrUnknownCommand) {
-			b.logger.Warn("Unknown command", slog.String("type", cmdType.String()))
-			if sendErr := b.sendMessage(ctx, cmdCtx.Room, adapter.ErrUnknownCommand); sendErr != nil {
-				return fmt.Errorf("failed to send unknown command message: %w", sendErr)
-			}
-			return nil
-		}
-		return fmt.Errorf("execute command: %w", err)
-	}
-
-	return nil
-}
-
-func (b *Bot) normalizeCommand(cmdType domain.CommandType, params map[string]any) (string, map[string]any) {
-	return normalizeCommandKey(cmdType, params)
-}
-
-func (b *Bot) isSelfSender(sender string) bool {
-	canonical := stringutil.Normalize(sender)
-	if canonical == "" || b.selfSender == "" {
-		return false
-	}
-	return canonical == b.selfSender
+	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)
 }
 
 func (b *Bot) sendMessage(ctx context.Context, room, message string) error {
-	ctx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
-	defer cancel()
-
-	if err := b.irisClient.SendMessage(ctx, room, message); err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send message", "iris", "send_message", err)
-		return fmt.Errorf("failed to send message to room %s: %w", room, serviceErr)
-	}
-	return nil
+	return b.ensureTransport().SendMessage(ctx, room, message)
 }
 
 func (b *Bot) sendImage(ctx context.Context, room, imageBase64 string) error {
-	ctx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
-	defer cancel()
-
-	if err := b.irisClient.SendImage(ctx, room, imageBase64); err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send image", "iris", "send_image", err)
-		return fmt.Errorf("failed to send image to room %s: %w", room, serviceErr)
-	}
-	return nil
+	return b.ensureTransport().SendImage(ctx, room, imageBase64)
 }
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
-	message := b.formatter.FormatError(errorMsg)
-	if err := b.sendMessage(ctx, room, message); err != nil {
-		return fmt.Errorf("failed to send error message: %w", err)
-	}
-	return nil
+	return b.ensureTransport().SendError(ctx, room, errorMsg)
 }
 
 func (b *Bot) getErrorMessage(err error, commandType string) string {
@@ -494,31 +375,5 @@ func (b *Bot) getErrorMessage(err error, commandType string) string {
 
 // Shutdown: 봇의 리소스를 정리하고 안전하게 종료합니다.
 func (b *Bot) Shutdown(ctx context.Context) error {
-	b.logger.Info("Shutting down bot...")
-
-	if b.workerPool != nil {
-		if err := b.workerPool.ShutdownWait(ctx); err != nil {
-			b.logger.Warn("Worker pool shutdown error", slog.Any("error", err))
-		}
-	}
-
-	if b.holodex != nil {
-		b.holodex.Stop()
-	}
-
-	if b.cache != nil {
-		if err := b.cache.Close(); err != nil {
-			b.logger.Warn("Error closing cache", slog.Any("error", err))
-		}
-	}
-
-	if b.postgres != nil {
-		if err := b.postgres.Close(); err != nil {
-			b.logger.Warn("Error closing postgres", slog.Any("error", err))
-		}
-	}
-
-	b.logger.Info("Bot shutdown complete")
-	close(b.doneCh)
-	return nil
+	return b.ensureLifecycle().Shutdown(ctx)
 }

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+project_root="$(cd -- "${script_dir}/.." && pwd)"
+repo_root="$(cd -- "${project_root}/../.." && pwd)"
+
+# --- Rust checks ---
+cd "${project_root}"
+
+echo "[pre-commit] cargo fmt --all --check"
+cargo fmt --all --check
+
+echo "[pre-commit] cargo clippy --workspace --all-targets --all-features -- -D warnings"
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# --- Go checks ---
+# go.work 기준 모듈 목록에서 go vet + golangci-lint 실행
+cd "${repo_root}"
+
+go_modules=$(grep -E '^\s+\./' go.work | sed 's/^[[:space:]]*//' | sed 's|^./||')
+
+for mod in ${go_modules}; do
+  echo "[pre-commit] go vet ./${mod}/..."
+  (cd "${repo_root}/${mod}" && go vet ./...)
+
+  if command -v golangci-lint &>/dev/null; then
+    echo "[pre-commit] golangci-lint run ./${mod}/..."
+    (cd "${repo_root}/${mod}" && golangci-lint run ./...)
+  fi
+done

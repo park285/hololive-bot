@@ -1,0 +1,14 @@
+# cognitive-complexity: 복잡한 함수 감지 임계값
+cognitive-complexity-threshold = 10
+
+# too-many-arguments: 함수 매개변수 개수 제한
+too-many-arguments-threshold = 7
+
+# too-many-lines: 함수 길이 제한
+too-many-lines-threshold = 85
+
+# type-complexity: 타입 복잡도 제한
+type-complexity-threshold = 180
+
+# large-error: Result<T, E>에서 큰 에러 타입 감지
+large-error-threshold = 64
