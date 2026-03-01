@@ -1,0 +1,16 @@
+# docs (Active)
+
+완료된 실행/회고 문서는 정리하고, 현재 운영/진행에 필요한 문서만 유지합니다.
+
+## 전환 진행
+- `GO_TO_RUST_MIGRATION_PROGRESS_20260301.md`
+- `GO_TO_RUST_MIGRATION_TODO_20260301.md`
+
+## 운영 정책/기준
+- `PROJECT_MAP.md`
+- `HOLOLIVE_K8S_LOGGING_POLICY_STDOUT_20260228.md`
+- `HOLOLIVE_CODEBASE_AUDIT_REMEDIATION_20260301.md`
+
+## K3s 실행 문서
+- `runbook_execution/HOLOLIVE_K3S_CUTOVER_RUNBOOK_20260227.md`
+- `runbook_execution/HOLOLIVE_K3S_EXTERNAL_DEPENDENCY_CHECKLIST_20260301.md`

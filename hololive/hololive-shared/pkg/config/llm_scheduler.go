@@ -41,7 +41,8 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 
 	return &LLMSchedulerConfig{
 		Server: ServerConfig{
-			Port: envutil.Int("LLM_SCHEDULER_PORT", 30003),
+			Port:   envutil.Int("LLM_SCHEDULER_PORT", 30003),
+			APIKey: envutil.String("API_SECRET_KEY", ""),
 		},
 		Iris: IrisConfig{
 			BaseURL:      envutil.String("IRIS_BASE_URL", "http://localhost:3000"),
@@ -86,6 +87,9 @@ func (c *LLMSchedulerConfig) validate() error {
 	}
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
 		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
+	}
+	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
+		return err
 	}
 	return nil
 }

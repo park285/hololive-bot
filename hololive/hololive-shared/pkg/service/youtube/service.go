@@ -226,11 +226,15 @@ func (ys *Service) GetUpcomingStreams(ctx context.Context, channelIDs []string) 
 			defer func() { <-semaphore }()
 
 			events, err := ys.scraper.GetUpcomingEvents(gctx, channelID)
-			if err != nil || len(events) == 0 {
-				// 스크래핑 실패 또는 결과 없음 -> API 폴백 대상
+			if err != nil {
+				// 스크래핑 실패 -> API 폴백 대상
 				failedMu.Lock()
 				failedIDs = append(failedIDs, channelID)
 				failedMu.Unlock()
+				return nil
+			}
+			if len(events) == 0 {
+				// 예정/라이브 방송이 없는 정상 케이스는 API 폴백하지 않음.
 				return nil
 			}
 

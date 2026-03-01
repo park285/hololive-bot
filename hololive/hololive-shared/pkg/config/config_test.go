@@ -342,6 +342,61 @@ func TestLoad_LLMConfig(t *testing.T) {
 	})
 }
 
+func TestLoad_DefaultPostgresSSLModeRequire(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Postgres.SSLMode != "require" {
+		t.Fatalf("Postgres.SSLMode = %q, want %q", cfg.Postgres.SSLMode, "require")
+	}
+}
+
+func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("POSTGRES_SSLMODE", "disable")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected production sslmode validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
+	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("POSTGRES_SSLMODE", "disable")
+
+	_, err := LoadAdminAPI()
+	if err == nil {
+		t.Fatal("LoadAdminAPI() expected production sslmode validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
+	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("POSTGRES_SSLMODE", "disable")
+
+	_, err := LoadLLMScheduler()
+	if err == nil {
+		t.Fatal("LoadLLMScheduler() expected production sslmode validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoadLLMConfig_ConsensusDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 

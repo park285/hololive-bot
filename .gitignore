@@ -160,8 +160,8 @@ nohup.out
 # ============================================
 # Hololive Scraper RS Reports
 # ============================================
-hololive/hololive-scraper-rs/docs/reports/**/*.json
-hololive/hololive-scraper-rs/docs/reports/**/*.tsv
+hololive/hololive-rs/docs/reports/**/*.json
+hololive/hololive-rs/docs/reports/**/*.tsv
 
 # ============================================
 # Local Data & Config

@@ -20,7 +20,7 @@ type Scheduler struct {
 	youtube              *Service
 	holodex              *holodex.Service
 	cache                *cache.Service
-	statsRepo            *StatsRepository
+	statsRepo            StatsSchedulerRepository
 	membersData          domain.MemberDataProvider
 	alarmService         domain.AlarmDispatchState
 	irisClient           iris.Client
@@ -55,7 +55,7 @@ func NewScheduler(
 	youtubeSvc *Service,
 	holodexSvc *holodex.Service,
 	cacheSvc *cache.Service,
-	statsRepo *StatsRepository,
+	statsRepo StatsSchedulerRepository,
 	membersData domain.MemberDataProvider,
 	alarmSvc domain.AlarmDispatchState,
 	irisClient iris.Client,

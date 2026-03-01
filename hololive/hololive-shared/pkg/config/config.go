@@ -445,6 +445,9 @@ func (c *Config) Validate() error {
 	if len(c.Holodex.APIKeys) == 0 {
 		return fmt.Errorf("at least one HOLODEX_API_KEY is required")
 	}
+	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
+		return err
+	}
 	isProduction := strings.EqualFold(strings.TrimSpace(c.Telemetry.Environment), "production")
 	if isProduction && c.CORS.Enforce && len(c.CORS.AllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
@@ -484,7 +487,7 @@ func loadPostgresConfig() PostgresConfig {
 		User:              envutil.String("POSTGRES_USER", constants.DatabaseDefaults.User),
 		Password:          envutil.String("POSTGRES_PASSWORD", constants.DatabaseDefaults.Password),
 		Database:          envutil.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
-		SSLMode:           envutil.String("POSTGRES_SSLMODE", "disable"),
+		SSLMode:           envutil.String("POSTGRES_SSLMODE", "require"),
 		QueryExecMode:     envutil.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
 		PoolMinConns:      envutil.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
 		PoolMaxConns:      envutil.Int("POSTGRES_POOL_MAX_CONNS", constants.DatabaseConfig.MaxOpenConns),
@@ -564,9 +567,37 @@ func loadTelemetryConfig() TelemetryConfig {
 		ServiceVersion: envutil.String("OTEL_SERVICE_VERSION", "1.0.0"),
 		Environment:    envutil.String("OTEL_ENVIRONMENT", "production"),
 		OTLPEndpoint:   envutil.String("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-		OTLPInsecure:   envutil.Bool("OTEL_EXPORTER_OTLP_INSECURE", true),
+		OTLPInsecure:   envutil.Bool("OTEL_EXPORTER_OTLP_INSECURE", false),
 		SampleRate:     envutil.Float("OTEL_SAMPLE_RATE", 1.0),
 	}
+}
+
+func validatePostgresSSLMode(environment, sslMode string) error {
+	mode := strings.ToLower(strings.TrimSpace(sslMode))
+	if mode == "" {
+		return fmt.Errorf("POSTGRES_SSLMODE is required")
+	}
+
+	valid := map[string]struct{}{
+		"disable":     {},
+		"allow":       {},
+		"prefer":      {},
+		"require":     {},
+		"verify-ca":   {},
+		"verify-full": {},
+	}
+	if _, ok := valid[mode]; !ok {
+		return fmt.Errorf("invalid POSTGRES_SSLMODE: %s", sslMode)
+	}
+
+	if strings.EqualFold(strings.TrimSpace(environment), "production") {
+		switch mode {
+		case "disable", "allow", "prefer":
+			return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use require, verify-ca, or verify-full", sslMode)
+		}
+	}
+
+	return nil
 }
 
 func parseCommaSeparated(value string) []string {

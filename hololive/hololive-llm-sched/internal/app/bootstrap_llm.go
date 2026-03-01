@@ -44,7 +44,7 @@ func buildMajorEventComponents(
 		}
 	}
 
-	// major event scraping ownership moved to hololive-scraper-rs.
+	// major event scraping ownership moved to hololive-rs.
 	return majorEventScheduler, majorEventMonthlyScheduler
 }
 

@@ -45,7 +45,7 @@ type Dependencies struct {
 	MembersData      domain.MemberDataProvider
 	Service          *youtube.Service
 	Scheduler        *youtube.Scheduler
-	YouTubeStatsRepo *youtube.StatsRepository
+	YouTubeStatsRepo youtube.StatsCommandRepository
 	Activity         *activity.Logger
 	Settings         *settings.Service
 	ACL              *acl.Service

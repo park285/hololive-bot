@@ -90,6 +90,16 @@ func (r *AdminAPIRuntime) Run() {
 
 // BuildAdminAPIRuntime: admin-api 런타임을 구성합니다.
 func BuildAdminAPIRuntime(ctx context.Context, cfg *config.AdminAPIConfig, logger *slog.Logger) (*AdminAPIRuntime, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("admin api config must not be nil")
+	}
+	if logger == nil {
+		return nil, fmt.Errorf("logger must not be nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// 1. Valkey 캐시 초기화
 	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, cfg.Valkey, logger)
 	if err != nil {
@@ -187,7 +197,7 @@ func buildAdminComponents(
 	}
 
 	// Trigger proxy 클라이언트 (llm-scheduler 프록시)
-	triggerClient := trigger.NewClient(cfg.LLMSchedulerURL, logger)
+	triggerClient := trigger.NewClient(cfg.LLMSchedulerURL, cfg.Server.APIKey, logger)
 
 	// 시스템 수집기
 	systemCollector := ProvideSystemCollector(cfg.Services, cfg.Telemetry)

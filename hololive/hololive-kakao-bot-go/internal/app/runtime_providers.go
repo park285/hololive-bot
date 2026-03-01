@@ -54,7 +54,7 @@ func ProvideDomainAPIHandlers(
 	holodexSvc *holodex.Service,
 	youtubeSvc *youtube.Service,
 	scraperScheduler *poller.Scheduler,
-	statsRepo *youtube.StatsRepository,
+	statsRepo youtube.StatsDashboardRepository,
 	activityLogger *activity.Logger,
 	settingsSvc *settings.Service,
 	settingsApplier server.SettingsApplier,

@@ -9,24 +9,27 @@ import (
 	"strings"
 	"time"
 
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 )
 
 // Client: llm-scheduler 내부 트리거 API를 프록시하는 HTTP 클라이언트
 type Client struct {
 	schedulerURL string
+	apiKey       string
 	httpClient   *http.Client
 	logger       *slog.Logger
 }
 
 // NewClient: trigger proxy 클라이언트를 생성합니다.
-func NewClient(schedulerURL string, logger *slog.Logger) *Client {
+func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
 	schedulerURL = strings.TrimRight(schedulerURL, "/")
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Client{
 		schedulerURL: schedulerURL,
+		apiKey:       strings.TrimSpace(apiKey),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -54,6 +57,9 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.schedulerURL+path, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("trigger proxy: new request %s: %w", path, err)
+	}
+	if c.apiKey != "" {
+		req.Header.Set(sharedserver.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)

@@ -65,7 +65,7 @@ docker exec -it hololive-kakao-bot-go sh -c \
 
 # 또는 CI/CD 환경에서 실행
 INTEGRATION_TEST=true \
-TEST_DATABASE_URL="host=llm-postgres port=5432 user=twentyq_app password=... dbname=hololive sslmode=disable" \
+TEST_DATABASE_URL="host=llm-postgres port=5432 user=twentyq_app password=... dbname=hololive sslmode=require" \
 TEST_VALKEY_HOST=valkey-cache \
 go test -v ./internal/service/youtube/outbox/...
 ```

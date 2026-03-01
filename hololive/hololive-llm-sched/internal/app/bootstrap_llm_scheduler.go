@@ -243,7 +243,7 @@ func buildLLMSchedulerComponents(
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, msgStack.Formatter, deliveryLocker, outboxRepo, logger)
 
 	triggerHandler := ProvideTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler)
+	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey)
 	if err != nil {
 		return nil, err
 	}
@@ -267,8 +267,9 @@ func buildLLMSchedulerHTTPServer(
 	port int,
 	logger *slog.Logger,
 	triggerHandler *sharedserver.TriggerHandler,
+	apiKey string,
 ) (*http.Server, error) {
-	router, err := ProvideTriggerRouter(ctx, logger, triggerHandler)
+	router, err := ProvideTriggerRouter(ctx, logger, triggerHandler, apiKey)
 	if err != nil {
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}

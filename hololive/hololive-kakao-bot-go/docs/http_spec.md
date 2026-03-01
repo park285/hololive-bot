@@ -606,7 +606,7 @@ Content-Type: application/json
 - `memberNewsWeeklyRunNow must be true when provided`
 
 **Legacy 에러 예시 (410):**
-- `majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-scraper-rs`
+- `majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-rs`
 
 ---
 

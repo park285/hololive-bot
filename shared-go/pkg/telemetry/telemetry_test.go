@@ -13,8 +13,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.SampleRate != 1.0 {
 		t.Errorf("expected sample rate 1.0, got %f", cfg.SampleRate)
 	}
-	if !cfg.OTLPInsecure {
-		t.Error("default should be insecure")
+	if cfg.OTLPInsecure {
+		t.Error("default should be secure")
 	}
 }
 

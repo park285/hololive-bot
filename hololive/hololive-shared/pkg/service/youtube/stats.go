@@ -17,7 +17,7 @@ import (
 type StatsService struct {
 	oauth     *OAuthService
 	cache     *cache.Service
-	statsRepo *StatsRepository
+	statsRepo StatsServiceRepository
 	logger    *slog.Logger
 }
 
@@ -36,7 +36,7 @@ type ChannelStatistics struct {
 }
 
 // NewStatsService: 통계 서비스 인스턴스를 생성합니다.
-func NewStatsService(oauth *OAuthService, cacheSvc *cache.Service, statsRepo *StatsRepository, logger *slog.Logger) *StatsService {
+func NewStatsService(oauth *OAuthService, cacheSvc *cache.Service, statsRepo StatsServiceRepository, logger *slog.Logger) *StatsService {
 	return &StatsService{
 		oauth:     oauth,
 		cache:     cacheSvc,

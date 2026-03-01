@@ -51,7 +51,14 @@ func NewTriggerHandler(
 
 // RegisterInternalRoutes: 내부 트리거 라우트를 등록합니다.
 func (h *TriggerHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
+	h.RegisterInternalRoutesWithAuth(rg, "")
+}
+
+// RegisterInternalRoutesWithAuth: 내부 트리거 라우트를 등록합니다.
+// apiKey가 설정된 경우 X-API-Key 미들웨어를 강제합니다.
+func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, apiKey string) {
 	internal := rg.Group("/internal/trigger")
+	internal.Use(APIKeyAuthMiddleware(apiKey))
 	internal.POST("/majorevent-weekly", h.TriggerWeeklyNotification)
 	internal.POST("/majorevent-monthly", h.TriggerMonthlyNotification)
 	internal.POST("/membernews-weekly", h.TriggerMemberNewsWeekly)

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 )
 
@@ -19,7 +20,7 @@ func TestClient_SendWeeklyNotification_Success(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL+"/", nil)
+	client := NewClient(srv.URL+"/", "", nil)
 	if err := client.SendWeeklyNotification(context.Background()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v, want nil", err)
 	}
@@ -34,7 +35,7 @@ func TestClient_SendMonthlyNotification_Conflict(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL, nil)
+	client := NewClient(srv.URL, "", nil)
 	err := client.SendMonthlyNotification(context.Background())
 	if !errors.Is(err, majorevent.ErrNotificationInProgress) {
 		t.Fatalf("error = %v, want ErrNotificationInProgress", err)
@@ -48,7 +49,7 @@ func TestClient_SendWeeklyNotification_Non2xx(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL, nil)
+	client := NewClient(srv.URL, "", nil)
 	err := client.SendWeeklyNotification(context.Background())
 	if err == nil {
 		t.Fatal("SendWeeklyNotification() error = nil, want non-nil")
@@ -69,11 +70,29 @@ func TestClient_SendMemberNewsWeekly_Success(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewClient(srv.URL, nil)
+	client := NewClient(srv.URL, "", nil)
 	if err := client.SendMemberNewsWeekly(context.Background()); err != nil {
 		t.Fatalf("SendMemberNewsWeekly() error = %v, want nil", err)
 	}
 	if gotPath != "/internal/trigger/membernews-weekly" {
 		t.Fatalf("path = %q, want %q", gotPath, "/internal/trigger/membernews-weekly")
+	}
+}
+
+func TestClient_SendWeeklyNotification_WithAPIKey(t *testing.T) {
+	const apiKey = "test-key"
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get(sharedserver.APIKeyHeader)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewClient(srv.URL, apiKey, nil)
+	if err := client.SendWeeklyNotification(context.Background()); err != nil {
+		t.Fatalf("SendWeeklyNotification() error = %v, want nil", err)
+	}
+	if gotHeader != apiKey {
+		t.Fatalf("header %s = %q, want %q", sharedserver.APIKeyHeader, gotHeader, apiKey)
 	}
 }

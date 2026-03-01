@@ -1,164 +1,94 @@
 package server
 
 import (
+	"context"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestSplitChannelIDs(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected []string
-	}{
-		{
-			name:     "single channel",
-			input:    "UC123",
-			expected: []string{"UC123"},
-		},
-		{
-			name:     "multiple channels",
-			input:    "UC123,UC456,UC789",
-			expected: []string{"UC123", "UC456", "UC789"},
-		},
-		{
-			name:     "with spaces",
-			input:    "UC123, UC456 , UC789",
-			expected: []string{"UC123", "UC456", "UC789"},
-		},
-		{
-			name:     "with tabs",
-			input:    "UC123,\tUC456",
-			expected: []string{"UC123", "UC456"},
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: []string{},
-		},
-		{
-			name:     "only commas",
-			input:    ",,,",
-			expected: []string{},
-		},
-		{
-			name:     "trailing comma",
-			input:    "UC123,UC456,",
-			expected: []string{"UC123", "UC456"},
-		},
-		{
-			name:     "leading comma",
-			input:    ",UC123,UC456",
-			expected: []string{"UC123", "UC456"},
-		},
+func TestBuildActiveMemberIndex(t *testing.T) {
+	members := []*domain.Member{
+		{ChannelID: "UC1", Name: "A"},
+		{ChannelID: "", Name: "skip-empty"},
+		{ChannelID: "UC2", Name: "B", IsGraduated: true},
+		{ChannelID: "UC3", Name: "C"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := splitChannelIDs(tt.input)
-			if len(got) != len(tt.expected) {
-				t.Errorf("splitChannelIDs(%q) = %v, want %v", tt.input, got, tt.expected)
-				return
-			}
-			for i := range got {
-				if got[i] != tt.expected[i] {
-					t.Errorf("splitChannelIDs(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.expected[i])
-				}
-			}
-		})
+	ids, names := buildActiveMemberIndex(members)
+	if len(ids) != 2 {
+		t.Fatalf("len(ids)=%d want=2 ids=%v", len(ids), ids)
+	}
+	if ids[0] != "UC1" || ids[1] != "UC3" {
+		t.Fatalf("ids=%v want=[UC1 UC3]", ids)
+	}
+	if names["UC1"] != "A" || names["UC3"] != "C" {
+		t.Fatalf("names=%v", names)
 	}
 }
 
-func TestSplitByComma(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected []string
-	}{
-		{
-			name:     "simple",
-			input:    "a,b,c",
-			expected: []string{"a", "b", "c"},
-		},
-		{
-			name:     "no comma",
-			input:    "abc",
-			expected: []string{"abc"},
-		},
-		{
-			name:     "empty",
-			input:    "",
-			expected: []string{""},
-		},
-	}
+func TestGetActiveMemberIndex_ConcurrentBuildIsCoalesced(t *testing.T) {
+	var callCount atomic.Int32
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := splitByComma(tt.input)
-			if len(got) != len(tt.expected) {
-				t.Errorf("splitByComma(%q) = %v, want %v", tt.input, got, tt.expected)
+	handler := &StreamAPIHandler{APIHandler: &APIHandler{
+		streamState: newStreamState(),
+		memberIndexLoader: func(context.Context) ([]*domain.Member, error) {
+			callCount.Add(1)
+			time.Sleep(40 * time.Millisecond)
+			return []*domain.Member{
+				{ChannelID: "UC1", Name: "A"},
+				{ChannelID: "UC2", Name: "B"},
+				{ChannelID: "", Name: "skip-empty"},
+				{ChannelID: "UCX", Name: "skip-graduated", IsGraduated: true},
+			}, nil
+		},
+	}}
+
+	const workers = 20
+	var wg sync.WaitGroup
+	errCh := make(chan error, workers)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ids, names, err := handler.getActiveMemberIndex(context.Background())
+			if err != nil {
+				errCh <- fmt.Errorf("get active member index: %w", err)
 				return
 			}
-			for i := range got {
-				if got[i] != tt.expected[i] {
-					t.Errorf("splitByComma(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.expected[i])
-				}
+			if len(ids) != 2 {
+				errCh <- fmt.Errorf("len(ids)=%d want=2", len(ids))
+				return
 			}
-		})
-	}
-}
-
-func TestTrimSpace(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "no whitespace",
-			input:    "test",
-			expected: "test",
-		},
-		{
-			name:     "leading spaces",
-			input:    "   test",
-			expected: "test",
-		},
-		{
-			name:     "trailing spaces",
-			input:    "test   ",
-			expected: "test",
-		},
-		{
-			name:     "both sides",
-			input:    "  test  ",
-			expected: "test",
-		},
-		{
-			name:     "tabs",
-			input:    "\ttest\t",
-			expected: "test",
-		},
-		{
-			name:     "empty",
-			input:    "",
-			expected: "",
-		},
-		{
-			name:     "only whitespace",
-			input:    "   ",
-			expected: "",
-		},
+			if names["UC1"] != "A" || names["UC2"] != "B" {
+				errCh <- fmt.Errorf("unexpected names map: %v", names)
+				return
+			}
+		}()
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := trimSpace(tt.input)
-			if got != tt.expected {
-				t.Errorf("trimSpace(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatal(err)
+	}
+
+	if got := callCount.Load(); got != 1 {
+		t.Fatalf("callCount=%d want=1", got)
+	}
+
+	_, _, err := handler.getActiveMemberIndex(context.Background())
+	if err != nil {
+		t.Fatalf("second cache call: %v", err)
+	}
+	if got := callCount.Load(); got != 1 {
+		t.Fatalf("callCount after cache hit=%d want=1", got)
 	}
 }
 
@@ -233,9 +163,4 @@ func TestMemberToChannelResponse(t *testing.T) {
 			}
 		})
 	}
-}
-
-//go:fix inline
-func ptrString(s string) *string {
-	return new(s)
 }

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-dispatcher
+  namespace: hololive
+spec:
+  selector:
+    app: rust-dispatcher
+  ports:
+    - name: http
+      port: 30020
+      targetPort: http
+  type: ClusterIP
