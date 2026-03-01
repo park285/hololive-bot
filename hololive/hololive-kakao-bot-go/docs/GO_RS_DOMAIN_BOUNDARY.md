@@ -1,6 +1,6 @@
 # Go/Rust 도메인 경계 문서
 
-> 2026-02-27 운영 기준. hololive-kakao-bot-go와 hololive-scraper-rs 간 역할 분류.
+> 2026-02-27 운영 기준. hololive-kakao-bot-go와 hololive-rs 간 역할 분류.
 
 ---
 
@@ -67,7 +67,7 @@ P0에서 정의한 소비자별 분리 인터페이스 (`internal/domain/interfa
 - Rust alarm-app → Go alarm-dispatcher(queue consumer) 경계는 유지
 - Go llm-scheduler는 major event **요약/발송**만 담당 (스크래핑은 Rust 소유)
 
-## 6. 목표 아키텍처
+## 6. 확정 아키텍처 (하이브리드)
 
 ```
 ┌─ Rust ──────────────────────────────────────────────┐
@@ -92,7 +92,14 @@ P0에서 정의한 소비자별 분리 인터페이스 (`internal/domain/interfa
 │  llm-scheduler (LLM 기능)                             │
 │    MajorEvent/MemberNews 스케줄러 + Delivery          │
 │                                                      │
-│  (선택) stream-ingester                               │
+│  stream-ingester (Go 유지)                            │
 │    YouTube 통계 + 스크래핑 + PhotoSync                 │
 └──────────────────────────────────────────────────────┘
 ```
+
+## 7. 아키텍처 확정 (2026-03-01)
+
+하이브리드 구조를 최종 아키텍처로 확정. Go → Rust 전면 전환 계획(Phase 2~6)은 폐기.
+- **근거**: bot/ingester/admin/llm-sched는 Go net/http 생태계(h2c, SOCKS5, HTTP/2 토글, per-host 풀)에 강하게 의존
+- **Rust 소유**: alarm-checker, scraper-rss, dispatcher (compute 집약)
+- **Go 소유**: bot, stream-ingester, admin-api, llm-scheduler, alarm-dispatcher (네트워크 집약)

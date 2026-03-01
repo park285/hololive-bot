@@ -158,7 +158,7 @@ services:
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
@@ -177,7 +177,7 @@ services:
       # OpenTelemetry
       OTEL_ENABLED: "false"
       OTEL_SERVICE_NAME: hololive-bot
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-false}"
       OTEL_SAMPLE_RATE: "0.1"
       # Docker Socket Proxy (보안: 직접 소켓 마운트 대신 제한된 API만 허용)
       DOCKER_HOST: tcp://docker-proxy:2375
@@ -218,6 +218,7 @@ services:
         aliases:
           - hololive-bot
 
+  # alarm-dispatcher: Go 큐 소비 주체, Rust dispatcher cutover 별도 결정
   alarm-dispatcher:
     image: hololive-alarm-dispatcher:prod
     build:
@@ -246,7 +247,7 @@ services:
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       GOGC: "100"
       GOMEMLIMIT: "128MiB"
@@ -307,7 +308,7 @@ services:
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
@@ -381,7 +382,7 @@ services:
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
@@ -450,7 +451,7 @@ services:
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       GOGC: "100"
@@ -458,7 +459,7 @@ services:
       GIN_MODE: release
       OTEL_ENABLED: "false"
       OTEL_SERVICE_NAME: hololive-admin-api
-      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-false}"
       OTEL_SAMPLE_RATE: "0.1"
       # llm 레포 서비스 → host.docker.internal 경유
       SERVICES_LLM_SERVER_HEALTH_URL: http://host.docker.internal:40527/health

@@ -1,3 +1,6 @@
+# alarm-dispatcher: Go 큐 소비 주체 (GO_ALARM_QUEUE_CONSUMER_ENABLED=true)
+# Rust dispatcher(hololive-rs)는 검증 완료(P1-3.5), cutover 타임라인 별도 결정
+# 큐 프로토콜: Rust alarm-checker LPUSH → alarm:dispatch:queue → Go BRPOP (AlarmQueueEnvelope v1)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
