@@ -1,0 +1,61 @@
+[valkey]
+url = "redis+unix:///var/run/valkey/valkey-cache.sock"
+pool_size = 4
+
+[holodex]
+base_url = "https://holodex.net/api/v2"
+api_keys = []
+timeout_secs = 30
+rate_limit_ms = 100
+circuit_failure_threshold = 5
+circuit_reset_secs = 30
+
+[chzzk]
+base_url = "https://api.chzzk.naver.com"
+timeout_secs = 10
+circuit_failure_threshold = 5
+circuit_reset_secs = 30
+
+[twitch]
+base_url = "https://api.twitch.tv/helix"
+auth_url = "https://id.twitch.tv/oauth2/token"
+client_id = ""
+client_secret = ""
+timeout_secs = 10
+circuit_failure_threshold = 5
+circuit_reset_secs = 60
+
+[iris]
+base_url = "http://iris:8080"
+bot_token = ""
+timeout_secs = 10
+circuit_failure_threshold = 5
+circuit_reset_secs = 30
+
+[database]
+host = "holo-postgres"
+port = 5432
+name = "hololive"
+user = "hololive_alarm"
+password = ""
+sslmode = "disable"
+max_connections = 5
+
+[health]
+port = 30011
+
+[logging]
+level = "info"
+file_enabled = true
+dir = "logs"
+file = "hololive-alarm.log"
+combined_file = "combined.log"
+
+[alarm]
+twitch_enabled = true
+target_minutes = [5, 3, 1]
+chzzk_poll_secs = 120
+twitch_poll_secs = 120
+youtube_check_timeout_secs = 45
+chzzk_check_timeout_secs = 30
+twitch_check_timeout_secs = 30

@@ -1,0 +1,39 @@
+[valkey]
+url = "redis://valkey:6379"
+pool_size = 4
+
+[db]
+host = "postgres"
+port = 5432
+user = "hololive_runtime"
+password = ""
+database = "hololive"
+max_connections = 25
+min_connections = 5
+connect_timeout_secs = 10
+idle_timeout_secs = 300
+max_lifetime_secs = 3600
+
+[iris]
+base_url = "http://iris:8080"
+bot_token = ""
+timeout_secs = 10
+
+[health]
+host = "0.0.0.0"
+port = 30020
+
+[dispatcher]
+queue_key = "alarm:dispatch:queue"
+max_batch = 50
+reconnect_backoff_ms = 1000
+
+[logging]
+level = "info"
+format = "pretty"
+
+[telemetry]
+enabled = false
+endpoint = "otel-collector:4317"
+service_name = "dispatcher-app"
+sample_ratio = 1.0

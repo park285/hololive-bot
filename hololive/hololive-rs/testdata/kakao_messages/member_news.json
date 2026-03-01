@@ -1,0 +1,35 @@
+{
+  "FormatMemberNewsDigest": {
+    "description": "구독 멤버 뉴스 다이제스트",
+    "input": {
+      "headline": "🗞️ 이번주 구독 멤버 뉴스",
+      "top_items": [
+        {
+          "date_text": "2026-02-20",
+          "member": "사쿠라 미코",
+          "category": "birthday_live",
+          "title": "생일 라이브 공지",
+          "summary": "2월 20일 생일 기념 라이브 예정",
+          "source_url": "https://hololive.hololivepro.com/news/1"
+        }
+      ],
+      "more_summary": "외 1건"
+    },
+    "expected_output": "🗞️ 이번주 구독 멤버 뉴스\n1. [2026-02-20] 사쿠라 미코 | 생일 라이브\n   📌 생일 라이브 공지\n   💬 2월 20일 생일 기념 라이브 예정\n   🔗 https://hololive.hololivepro.com/news/1\n\n외 1건"
+  },
+  "FormatMemberNewsSubscribed": {
+    "description": "뉴스 알림 구독 성공 메시지",
+    "input": {
+      "prefix": "!"
+    },
+    "expected_output": "✅ 뉴스 알림을 켰습니다.\n매주 월요일 09:00 KST에 자동 발송됩니다."
+  },
+  "FormatMemberNewsStatus": {
+    "description": "뉴스 알림 상태 메시지(ON)",
+    "input": {
+      "is_subscribed": true,
+      "prefix": "!"
+    },
+    "expected_output": "🔔 뉴스 알림 상태: ON\n- 자동 발송: 매주 월요일 09:00 KST\n- 해제: !뉴스알림 끄기"
+  }
+}

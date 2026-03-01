@@ -1,0 +1,195 @@
+{
+  "alarm_key": [
+    {
+      "input": {
+        "room_id": "12345"
+      },
+      "expected": "alarm:12345"
+    }
+  ],
+  "channel_subscribers_key": [
+    {
+      "input": {
+        "channel_id": "UCabc123"
+      },
+      "expected": "alarm:channel_subscribers:UCabc123"
+    }
+  ],
+  "channel_subscribers_key_by_type": [
+    {
+      "input": {
+        "channel_id": "UCabc123",
+        "alarm_type": "COMMUNITY"
+      },
+      "expected": "alarm:channel_subscribers:COMMUNITY:UCabc123"
+    },
+    {
+      "input": {
+        "channel_id": "UCabc123",
+        "alarm_type": "SHORTS"
+      },
+      "expected": "alarm:channel_subscribers:SHORTS:UCabc123"
+    },
+    {
+      "input": {
+        "channel_id": "UCabc123",
+        "alarm_type": "LIVE"
+      },
+      "expected": "alarm:channel_subscribers:UCabc123"
+    }
+  ],
+  "notified_key": [
+    {
+      "input": {
+        "stream_id": "vid001"
+      },
+      "expected": "notified:vid001"
+    }
+  ],
+  "next_stream_key": [
+    {
+      "input": {
+        "channel_id": "UCabc123"
+      },
+      "expected": "alarm:next_stream:UCabc123"
+    }
+  ],
+  "chzzk_live_notified_key": [
+    {
+      "input": {
+        "chzzk_channel_id": "ch_abc",
+        "detected_at": "2026-02-23T01:17:45Z"
+      },
+      "expected": "notified:chzzk:live:ch_abc:20260223T0110"
+    }
+  ],
+  "integrated_notified_key": [
+    {
+      "input": {
+        "youtube_channel_id": "UCchannel",
+        "scheduled_at": "2026-01-01T15:30:45Z"
+      },
+      "expected": "notified:integrated:UCchannel:20260101T1530"
+    }
+  ],
+  "build_notify_claim_key": [
+    {
+      "input": {
+        "room_id": "room1",
+        "stream_id": "vid1",
+        "start_scheduled": "2026-02-23T12:05:30Z",
+        "category": "target"
+      },
+      "expected": "notified:claim:room1:vid1:1771848300:target"
+    },
+    {
+      "input": {
+        "room_id": "roomA",
+        "stream_id": "vidB",
+        "start_scheduled": "2026-02-23T00:00:00Z",
+        "category": "live"
+      },
+      "expected": "notified:claim:roomA:vidB:1771804800:live"
+    }
+  ],
+  "build_logical_event_claim_key": [
+    {
+      "input": {
+        "room_id": "room1",
+        "channel_id": "UCchan",
+        "stream_id": "vid1",
+        "title": "My Stream",
+        "start_scheduled": "2026-02-23T12:00:00Z",
+        "category": "target"
+      },
+      "expected": "notified:claim:event:room1:UCchan:1771848000:5a4676a996cc6eca:target"
+    }
+  ],
+  "build_upcoming_event_key": [
+    {
+      "input": {
+        "room_id": "room2",
+        "channel_id": "UCchan2",
+        "stream_id": "vid2",
+        "title": "Upcoming Show",
+        "start_scheduled": "2026-02-23T12:00:00Z"
+      },
+      "expected": "notified:upcoming:event:room2:UCchan2:1771848000:8269c4cba876517e"
+    }
+  ],
+  "build_schedule_transition_key": [
+    {
+      "input": {
+        "stream_id": "vid1",
+        "old_minute": "2026-02-23T12:00:00Z",
+        "new_minute": "2026-02-23T13:00:00Z"
+      },
+      "expected": "notified:schedule:transition:vid1:1771848000:1771851600"
+    }
+  ],
+  "notification_category": [
+    {
+      "input": {
+        "target_minutes": [
+          5,
+          3,
+          1
+        ],
+        "minutes_until": 0
+      },
+      "expected": "live"
+    },
+    {
+      "input": {
+        "target_minutes": [
+          5,
+          3,
+          1
+        ],
+        "minutes_until": 5
+      },
+      "expected": "target"
+    },
+    {
+      "input": {
+        "target_minutes": [
+          5,
+          3,
+          1
+        ],
+        "minutes_until": 10
+      },
+      "expected": "10"
+    }
+  ],
+  "build_title_fingerprint": [
+    {
+      "input": {
+        "title": "Hello World",
+        "stream_id": "vid001"
+      },
+      "expected": "936a185caaa266bb"
+    },
+    {
+      "input": {
+        "title": "",
+        "stream_id": "myVideoId"
+      },
+      "expected": "d7fc82b47cc38bfb"
+    },
+    {
+      "input": {
+        "title": "",
+        "stream_id": ""
+      },
+      "expected": "630c74b2de456692"
+    },
+    {
+      "input": {
+        "title": "테스트 방송!",
+        "stream_id": "vid"
+      },
+      "expected": "74005bcb46a5312e"
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+[graph]
+targets = []
+all-features = false
+no-default-features = false
+
+[advisories]
+ignore = []
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "OpenSSL",
+    "Zlib",
+    "BSL-1.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+exceptions = []
+
+[licenses.private]
+ignore = false
+registries = []
+
+[[licenses.clarify]]
+crate = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+
+# 업스트림 전이 의존성 중복 — 직접 해소 불가, 업데이트 시 재검토
+skip = [
+    # hashbrown 0.14 (sea-orm/sqlx 경유) vs 0.15/0.16
+    { crate = "foldhash@0.1", reason = "hashbrown 0.15 전이 의존성" },
+    { crate = "hashbrown@0.14", reason = "sea-orm/sqlx 전이 의존성" },
+    { crate = "hashbrown@0.15", reason = "sqlx 전이 의존성" },
+    # getrandom 0.2/0.3 (rand 0.8 경유) vs 0.4
+    { crate = "getrandom@0.2", reason = "rand 0.8 전이 의존성" },
+    { crate = "getrandom@0.3", reason = "rand 0.9 전이 의존성 (getrandom 0.4 bridge)" },
+    # rand 0.8 (sea-orm 경유) vs 0.9
+    { crate = "rand@0.8", reason = "sea-orm 전이 의존성" },
+    { crate = "rand_chacha@0.3", reason = "rand 0.8 전이 의존성" },
+    { crate = "rand_core@0.6", reason = "rand 0.8 전이 의존성" },
+    # heck 0.4 (sea-orm ouroboros/sea-bae 경유) vs 0.5
+    { crate = "heck@0.4", reason = "sea-orm ouroboros_macro/sea-bae 전이 의존성" },
+    # phf 0.12 (chrono-tz 경유) vs 0.13
+    { crate = "phf@0.12", reason = "chrono-tz 전이 의존성" },
+    { crate = "phf_shared@0.12", reason = "chrono-tz 전이 의존성" },
+    # socket2 0.5 (tokio/reqwest 경유) vs 0.6
+    { crate = "socket2@0.5", reason = "tokio 전이 의존성" },
+    # thiserror 1.x (sea-orm 경유) vs 2.x
+    { crate = "thiserror@1", reason = "sea-orm 전이 의존성" },
+    { crate = "thiserror-impl@1", reason = "sea-orm 전이 의존성" },
+    # winnow 0.6 (toml_edit 경유) vs 0.7
+    { crate = "winnow@0.6", reason = "toml_edit/config 전이 의존성" },
+]
+
+# windows-sys/windows-targets 계열 — 전체 트리 skip
+skip-tree = [
+    { crate = "windows-sys@0.45", reason = "ring 전이 의존성" },
+    { crate = "windows-sys@0.48", reason = "레거시 전이 의존성" },
+    { crate = "windows-sys@0.52", reason = "tokio/mio 전이 의존성" },
+    { crate = "windows-sys@0.60", reason = "socket2/tokio 전이 의존성" },
+]
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

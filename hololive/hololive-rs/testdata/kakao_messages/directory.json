@@ -1,0 +1,10 @@
+{
+  "MemberDirectory": {
+    "description": "멤버 목록이 비어있는 경우",
+    "input": {
+      "groups": [],
+      "total": 0
+    },
+    "expected_output": "👤 등록된 멤버 정보를 찾을 수 없습니다."
+  }
+}

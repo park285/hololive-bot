@@ -1,0 +1,11 @@
+[package]
+name = "scraper-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+shared-core = { path = "../../shared/core" }

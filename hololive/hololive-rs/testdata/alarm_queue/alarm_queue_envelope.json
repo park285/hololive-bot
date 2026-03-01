@@ -1,0 +1,171 @@
+[
+  {
+    "notification": {
+      "room_id": "test_room_live_001",
+      "channel": {
+        "id": "UC_live_001",
+        "name": "사쿠라 미코",
+        "english_name": "Sakura Miko",
+        "photo": "https://img.youtube.com/live.jpg",
+        "twitter": "https://twitter.com/sakuramiko35",
+        "video_count": 1234,
+        "subscriber_count": 2300000,
+        "org": "Hololive",
+        "suborg": "JP",
+        "group": "0th Gen"
+      },
+      "stream": {
+        "id": "yt_live_001",
+        "title": "[LIVE] 마인크래프트 건축",
+        "channel_id": "UC_live_001",
+        "channel_name": "사쿠라 미코",
+        "status": "live",
+        "start_scheduled": "2026-03-01T11:55:00Z",
+        "start_actual": "2026-03-01T12:00:10Z",
+        "duration": 3600,
+        "thumbnail": "https://img.youtube.com/vi/yt_live_001/maxresdefault.jpg",
+        "link": "https://youtube.com/watch?v=yt_live_001",
+        "topic_id": "minecraft",
+        "channel": {
+          "id": "UC_live_001",
+          "name": "사쿠라 미코",
+          "english_name": "Sakura Miko",
+          "photo": "https://img.youtube.com/live.jpg",
+          "twitter": "https://twitter.com/sakuramiko35",
+          "video_count": 1234,
+          "subscriber_count": 2300000,
+          "org": "Hololive",
+          "suborg": "JP",
+          "group": "0th Gen"
+        },
+        "viewer_count": 15234,
+        "chzzk_channel_id": "",
+        "chzzk_live_id": 0,
+        "chzzk_live_url": "",
+        "is_integrated": false,
+        "is_chzzk_only": false,
+        "twitch_user_id": "",
+        "twitch_user_login": "",
+        "twitch_stream_id": "",
+        "twitch_live_url": "",
+        "is_twitch_only": false
+      },
+      "minutes_until": 0,
+      "users": [
+        "user1",
+        "user2"
+      ],
+      "schedule_change_message": ""
+    },
+    "claim_keys": [
+      "notified:claim:test_room_live_001:yt_live_001:1772366400:live",
+      "notified:claim:event:test_room_live_001:UC_live_001:1772366400:936a185caaa266bb:live"
+    ],
+    "enqueued_at": "2026-03-01T12:00:00Z",
+    "version": 1
+  },
+  {
+    "notification": {
+      "room_id": "test_room_community_001",
+      "channel": {
+        "id": "UC_comm_001",
+        "name": "쿠즈하",
+        "english_name": "Kuzuha",
+        "photo": null,
+        "twitter": null,
+        "video_count": null,
+        "subscriber_count": null,
+        "org": "Nijisanji",
+        "suborg": "JP",
+        "group": null
+      },
+      "stream": {
+        "id": "yt_comm_001",
+        "title": "커뮤니티 공지 알림",
+        "channel_id": "UC_comm_001",
+        "channel_name": "쿠즈하",
+        "status": "upcoming",
+        "start_scheduled": "2026-03-01T12:05:00Z",
+        "start_actual": null,
+        "duration": null,
+        "thumbnail": null,
+        "link": "https://youtube.com/watch?v=yt_comm_001",
+        "topic_id": "community",
+        "channel": null,
+        "viewer_count": null,
+        "chzzk_channel_id": "",
+        "chzzk_live_id": 0,
+        "chzzk_live_url": "",
+        "is_integrated": false,
+        "is_chzzk_only": false,
+        "twitch_user_id": "",
+        "twitch_user_login": "",
+        "twitch_stream_id": "",
+        "twitch_live_url": "",
+        "is_twitch_only": false
+      },
+      "minutes_until": 5,
+      "users": [
+        "user3"
+      ],
+      "schedule_change_message": "커뮤니티 새 글이 등록되었습니다."
+    },
+    "claim_keys": [
+      "notified:claim:test_room_community_001:yt_comm_001:1772366700:target"
+    ],
+    "enqueued_at": "2026-03-01T12:00:03Z",
+    "version": 1
+  },
+  {
+    "notification": {
+      "room_id": "test_room_shorts_001",
+      "channel": {
+        "id": "UC_shorts_001",
+        "name": "아카사키 치호",
+        "english_name": "Akasaki Chiho",
+        "photo": null,
+        "twitter": null,
+        "video_count": null,
+        "subscriber_count": null,
+        "org": "VSPO",
+        "suborg": null,
+        "group": null
+      },
+      "stream": {
+        "id": "yt_shorts_001",
+        "title": "신규 쇼츠 업로드",
+        "channel_id": "UC_shorts_001",
+        "channel_name": "아카사키 치호",
+        "status": "upcoming",
+        "start_scheduled": "2026-03-01T12:03:00Z",
+        "start_actual": null,
+        "duration": 45,
+        "thumbnail": "https://img.youtube.com/vi/yt_shorts_001/default.jpg",
+        "link": "https://youtube.com/watch?v=yt_shorts_001",
+        "topic_id": "shorts",
+        "channel": null,
+        "viewer_count": null,
+        "chzzk_channel_id": "",
+        "chzzk_live_id": 0,
+        "chzzk_live_url": "",
+        "is_integrated": false,
+        "is_chzzk_only": false,
+        "twitch_user_id": "",
+        "twitch_user_login": "",
+        "twitch_stream_id": "",
+        "twitch_live_url": "",
+        "is_twitch_only": false
+      },
+      "minutes_until": 3,
+      "users": [
+        "user4"
+      ],
+      "schedule_change_message": ""
+    },
+    "claim_keys": [
+      "notified:claim:test_room_shorts_001:yt_shorts_001:1772366580:target"
+    ],
+    "enqueued_at": "2026-03-01T12:00:05Z",
+    "version": 1
+  }
+]
