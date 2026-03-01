@@ -104,13 +104,29 @@ parse_ovpn_config() {
     fi
   fi
 
-  # 동적 변수 할당
-  eval "${prefix}_host='${_host}'"
-  eval "${prefix}_port='${_port}'"
-  eval "${prefix}_proto='${_proto}'"
-  eval "${prefix}_cipher='${_cipher}'"
-  eval "${prefix}_data_ciphers='${_data_ciphers}'"
-  eval "${prefix}_data_ciphers_fb='${_data_ciphers_fb}'"
+  # 동적 변수 할당 (eval 금지)
+  case "${prefix}" in
+    vpn1)
+      printf -v vpn1_host '%s' "${_host}"
+      printf -v vpn1_port '%s' "${_port}"
+      printf -v vpn1_proto '%s' "${_proto}"
+      printf -v vpn1_cipher '%s' "${_cipher}"
+      printf -v vpn1_data_ciphers '%s' "${_data_ciphers}"
+      printf -v vpn1_data_ciphers_fb '%s' "${_data_ciphers_fb}"
+      ;;
+    vpn2)
+      printf -v vpn2_host '%s' "${_host}"
+      printf -v vpn2_port '%s' "${_port}"
+      printf -v vpn2_proto '%s' "${_proto}"
+      printf -v vpn2_cipher '%s' "${_cipher}"
+      printf -v vpn2_data_ciphers '%s' "${_data_ciphers}"
+      printf -v vpn2_data_ciphers_fb '%s' "${_data_ciphers_fb}"
+      ;;
+    *)
+      echo "unsupported ovpn parse prefix: ${prefix}" >&2
+      return 1
+      ;;
+  esac
 }
 
 parse_ovpn_config "${OPENVPN_CONFIG_1}" "vpn1"

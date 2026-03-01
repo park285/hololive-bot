@@ -30,8 +30,8 @@ func NowKST() time.Time {
 	return time.Now().In(kstLocation)
 }
 
-// MinutesUntilCeil: 기준 시간(reference)으로부터 목표 시간(target)까지 남은 분(minute)을 올림하여 계산합니다.
-func MinutesUntilCeil(target *time.Time, reference time.Time) int {
+// MinutesUntilFloor: 기준 시간(reference)으로부터 목표 시간(target)까지 남은 분(minute)을 내림하여 계산합니다.
+func MinutesUntilFloor(target *time.Time, reference time.Time) int {
 	if target == nil {
 		return -1
 	}
@@ -41,7 +41,7 @@ func MinutesUntilCeil(target *time.Time, reference time.Time) int {
 	}
 
 	duration := target.Sub(reference)
-	minutesUntil := math.Ceil(duration.Minutes())
+	minutesUntil := math.Floor(duration.Minutes())
 	if minutesUntil < 0 {
 		return -1
 	}

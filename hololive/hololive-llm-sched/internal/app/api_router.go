@@ -55,6 +55,7 @@ func ProvideTriggerRouter(
 	ctx context.Context,
 	logger *slog.Logger,
 	triggerHandler *sharedserver.TriggerHandler,
+	apiKey string,
 ) (*gin.Engine, error) {
 	router, err := ProvideHealthOnlyRouter(ctx, logger)
 	if err != nil {
@@ -62,7 +63,7 @@ func ProvideTriggerRouter(
 	}
 
 	if triggerHandler != nil {
-		triggerHandler.RegisterInternalRoutes(router.Group(""))
+		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
 	}
 
 	return router, nil

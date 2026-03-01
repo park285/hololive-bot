@@ -46,7 +46,7 @@ func DefaultConfig() Config {
 	return Config{
 		Enabled:      false,
 		SampleRate:   1.0,
-		OTLPInsecure: true,
+		OTLPInsecure: false,
 	}
 }
 

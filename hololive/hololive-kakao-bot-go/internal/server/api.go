@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
@@ -45,7 +47,7 @@ type APIHandler struct {
 	holodex                    *holodex.Service
 	youtube                    *youtube.Service
 	scraperProxyToggler        ScraperProxyToggler
-	statsRepo                  *youtube.StatsRepository
+	statsRepo                  youtube.StatsDashboardRepository
 	activity                   *activity.Logger
 	settings                   *settings.Service
 	settingsApplier            SettingsApplier
@@ -56,6 +58,12 @@ type APIHandler struct {
 	majorEventScheduler        MajorEventScheduler
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler
 	startTime                  time.Time
+	streamState                *streamState
+	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
+}
+
+// streamState: stream/stat 조회 경로에서만 사용하는 내부 상태 캐시.
+type streamState struct {
 	channelStatsCacheLimiter   chan struct{}
 	channelStatsRefreshLimiter chan struct{}
 	memberIndexMu              sync.RWMutex
@@ -63,6 +71,20 @@ type APIHandler struct {
 	memberChannelIDs           []string
 	memberChannelName          map[string]string
 	memberIndexReady           bool
+	memberIndexBuildGroup      singleflight.Group
+}
+
+func newStreamState() *streamState {
+	return &streamState{
+		channelStatsCacheLimiter:   make(chan struct{}, channelStatsCacheWorkers),
+		channelStatsRefreshLimiter: make(chan struct{}, channelStatsRefreshWorkers),
+		memberChannelName:          make(map[string]string),
+	}
+}
+
+// streamState 접근자. 생성자에서 반드시 초기화되므로 nil이 될 수 없다.
+func (h *APIHandler) ensureStreamState() *streamState {
+	return h.streamState
 }
 
 // NewAPIHandler: 새로운 API 핸들러를 생성합니다.
@@ -75,7 +97,7 @@ func NewAPIHandler(
 	holodexSvc *holodex.Service,
 	youtubeSvc *youtube.Service,
 	scraperProxyToggler ScraperProxyToggler,
-	statsRepo *youtube.StatsRepository,
+	statsRepo youtube.StatsDashboardRepository,
 	activityLogger *activity.Logger,
 	settingsSvc *settings.Service,
 	settingsApplier SettingsApplier,
@@ -86,6 +108,11 @@ func NewAPIHandler(
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler,
 	logger *slog.Logger,
 ) *APIHandler {
+	var memberIndexLoader func(context.Context) ([]*domain.Member, error)
+	if repo != nil {
+		memberIndexLoader = repo.GetAllMembers
+	}
+
 	return &APIHandler{
 		repo:                       repo,
 		memberCache:                memberCache,
@@ -106,8 +133,7 @@ func NewAPIHandler(
 		majorEventMonthlyScheduler: majorEventMonthlyScheduler,
 		logger:                     logger,
 		startTime:                  time.Now(),
-		channelStatsCacheLimiter:   make(chan struct{}, channelStatsCacheWorkers),
-		channelStatsRefreshLimiter: make(chan struct{}, channelStatsRefreshWorkers),
-		memberChannelName:          make(map[string]string),
+		streamState:                newStreamState(),
+		memberIndexLoader:          memberIndexLoader,
 	}
 }

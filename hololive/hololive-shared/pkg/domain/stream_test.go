@@ -29,8 +29,10 @@ func TestStreamStatus_IsValid(t *testing.T) {
 
 func TestStream_MinutesUntilStart(t *testing.T) {
 	now := time.Now()
-	future := now.Add(10 * time.Minute)
+	// 내림이므로 정확한 분 경계 테스트 시 30초 여유를 추가하여 테스트 실행 지연의 영향을 제거
+	future := now.Add(10*time.Minute + 30*time.Second)
 	futureBoundary := now.Add(4*time.Minute + 30*time.Second)
+	futureFloorEdge := now.Add(5*time.Minute + 59*time.Second)
 	past := now.Add(-10 * time.Minute)
 
 	tests := []struct {
@@ -49,8 +51,13 @@ func TestStream_MinutesUntilStart(t *testing.T) {
 			want:   10,
 		},
 		{
-			name:   "future start rounds up",
+			name:   "future start rounds down",
 			stream: &Stream{StartScheduled: &futureBoundary},
+			want:   4,
+		},
+		{
+			name:   "5min 59sec floors to 5",
+			stream: &Stream{StartScheduled: &futureFloorEdge},
 			want:   5,
 		},
 		{

@@ -147,7 +147,7 @@ func (h *SettingsAPIHandler) UpdateSettings(c *gin.Context) {
 // UpdateLLMSettings: llm-scheduler 런타임 설정/실행 트리거를 업데이트합니다.
 func (h *SettingsAPIHandler) UpdateLLMSettings(c *gin.Context) {
 	var req struct {
-		// deprecated: major event scraping ownership moved to hololive-scraper-rs
+		// deprecated: major event scraping ownership moved to hololive-rs
 		MajorEventScrapeHourKST *int  `json:"majorEventScrapeHourKST"`
 		MajorEventScrapeRunNow  *bool `json:"majorEventScrapeRunNow"`
 		MemberNewsWeeklyRunNow  *bool `json:"memberNewsWeeklyRunNow"`
@@ -158,7 +158,7 @@ func (h *SettingsAPIHandler) UpdateLLMSettings(c *gin.Context) {
 	}
 
 	if req.MajorEventScrapeHourKST != nil || req.MajorEventScrapeRunNow != nil {
-		c.JSON(410, gin.H{"error": "majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-scraper-rs"})
+		c.JSON(410, gin.H{"error": "majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-rs"})
 		return
 	}
 	if req.MemberNewsWeeklyRunNow == nil {

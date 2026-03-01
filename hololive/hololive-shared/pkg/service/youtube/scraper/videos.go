@@ -244,7 +244,7 @@ func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResul
 		if !isRetryableVideoPageError(err) {
 			return nil, err
 		}
-	} else if len(videos) > 0 {
+	} else {
 		c.clearVideoRSSBackoff(ctx, channelID)
 		return videos, nil
 	}

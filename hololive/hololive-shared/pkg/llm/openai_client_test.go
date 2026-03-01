@@ -105,6 +105,20 @@ func TestShouldFallbackToChat_ServerError_Fallback(t *testing.T) {
 	}
 }
 
+func TestShouldFallbackToChat_NotFoundWithoutResponses_NoFallback(t *testing.T) {
+	err := fmt.Errorf("openai chat completions API: 404 not found")
+	if shouldFallbackToChat(err) {
+		t.Error("404 without responses context should not trigger fallback")
+	}
+}
+
+func TestShouldFallbackToChat_ResponsesNotFound_Fallback(t *testing.T) {
+	err := fmt.Errorf("openai responses API: 404 not found")
+	if !shouldFallbackToChat(err) {
+		t.Error("responses 404 should trigger fallback")
+	}
+}
+
 func TestShouldFallbackToChat_NilError(t *testing.T) {
 	if shouldFallbackToChat(nil) {
 		t.Error("nil error should not trigger fallback")

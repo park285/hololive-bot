@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sourcegraph/conc/pool"
-
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -101,14 +99,25 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	chunkSize := c.warmUpChunkSize
 	chunks := chunkMembers(members, chunkSize)
 
-	// Worker pool로 병렬 캐싱
-	p := pool.New().WithMaxGoroutines(c.warmUpMaxGoroutines)
-	for _, chunk := range chunks {
-		p.Go(func() {
-			c.cacheChunk(ctx, chunk)
-		})
+	maxWorkers := c.warmUpMaxGoroutines
+	if maxWorkers < 1 {
+		maxWorkers = 1
 	}
-	p.Wait()
+	semaphore := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
+	// Worker pool로 병렬 캐싱 (stdlib 기반)
+	for _, chunk := range chunks {
+		chunk := chunk
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			c.cacheChunk(ctx, chunk)
+		}()
+	}
+	wg.Wait()
 
 	// 인메모리 캐시 업데이트
 	for _, member := range members {

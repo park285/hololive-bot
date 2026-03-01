@@ -1,12 +1,12 @@
-# Podman 전용 compose: hololive-scraper-rs + hololive-alarm
+# Podman 전용 compose: hololive-rs + hololive-alarm
 # 인프라(Postgres, Valkey)는 Docker에서 실행 중 → host.containers.internal 경유 접근
 # YAML anchor/depends_on/profiles/deunhealth/deploy.resources 없음 (podman-compose 호환)
 name: holo-rs
 
 services:
   hololive-scraper:
-    container_name: hololive-scraper-rs
-    image: hololive-scraper-rs:prod
+    container_name: hololive-rs
+    image: hololive-rs:prod
     restart: always
     network_mode: "slirp4netns:allow_host_loopback=true,port_handler=slirp4netns"
     extra_hosts:

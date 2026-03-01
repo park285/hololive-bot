@@ -47,7 +47,7 @@ type Dependencies struct {
 	Alarm            domain.AlarmCRUD
 	Matcher          *matcher.MemberMatcher
 	OfficialProfiles *member.ProfileService
-	StatsRepo        *youtube.StatsRepository
+	StatsRepo        youtube.StatsCommandRepository
 	MemberNews       MemberNewsService
 	MembersData      domain.MemberDataProvider
 	Formatter        *adapter.ResponseFormatter

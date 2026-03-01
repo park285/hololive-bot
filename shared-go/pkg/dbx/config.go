@@ -18,7 +18,7 @@ type Config struct {
 	User       string
 	Password   string //nolint:gosec // 설정 구조체 필드명이며 시크릿 값 자체를 로그/출력하지 않는다.
 	Name       string // 데이터베이스 이름
-	SSLMode    string // sslmode (기본: "disable")
+	SSLMode    string // sslmode (기본: "require")
 	// QueryExecMode: pgx default_query_exec_mode
 	// 허용값: cache_statement, cache_describe, describe_exec, exec, simple_protocol
 	QueryExecMode string
@@ -29,7 +29,7 @@ type Config struct {
 func (c Config) DSN() string {
 	sslmode := c.SSLMode
 	if sslmode == "" {
-		sslmode = "disable"
+		sslmode = "require"
 	}
 	queryExecMode := normalizeQueryExecMode(c.QueryExecMode)
 	queryExecModePart := ""

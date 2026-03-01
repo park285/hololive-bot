@@ -69,7 +69,7 @@ func ProvideAPIRouter(
 
 	// 내부 트리거 라우트 등록 (admin-api에서 스케줄러 수동 실행용)
 	if triggerHandler != nil {
-		triggerHandler.RegisterInternalRoutes(router.Group(""))
+		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}
 
 	registerAPIRoutes(router, cfg.Server.APIKey, domainHandlers, authHandler)
@@ -240,14 +240,14 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 }
 
 // ProvideTriggerRouter: health + metrics + 내부 트리거 엔드포인트를 제공하는 라우터.
-func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandler *server.TriggerHandler) (*gin.Engine, error) {
+func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandler *server.TriggerHandler, apiKey string) (*gin.Engine, error) {
 	router, err := ProvideHealthOnlyRouter(ctx, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	if triggerHandler != nil {
-		triggerHandler.RegisterInternalRoutes(router.Group(""))
+		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
 	}
 
 	return router, nil
@@ -284,7 +284,7 @@ func ProvideBotRouter(
 
 	// 내부 트리거 라우트 (admin-api에서 프록시 호출)
 	if triggerHandler != nil {
-		triggerHandler.RegisterInternalRoutes(router.Group(""))
+		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}
 
 	return router, nil

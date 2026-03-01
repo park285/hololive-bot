@@ -29,7 +29,7 @@ spec:
           command: ['sh', '-c', 'until nc -z holo-postgres 5433; do echo "postgres 대기 중..."; sleep 2; done']
       containers:
         - name: hololive-scraper
-          image: hololive-scraper-rs:prod
+          image: hololive-rs:prod
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 30010
@@ -71,7 +71,7 @@ spec:
             - name: SCRAPER__LOGGING__COMBINED_FILE
               value: "hololive-scraper-combined.log"
             - name: SCRAPER__LOGGING__SERVICE
-              value: "hololive-scraper-rs"
+              value: "hololive-rs"
             - name: SCRAPER__LOGGING__ENVIRONMENT
               value: "production"
             - name: RUST_LOG

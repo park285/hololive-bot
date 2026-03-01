@@ -81,5 +81,8 @@ func (c *AdminAPIConfig) validate() error {
 	if len(c.Holodex.APIKeys) == 0 {
 		return fmt.Errorf("at least one HOLODEX_API_KEY is required")
 	}
+	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
+		return err
+	}
 	return nil
 }

@@ -248,3 +248,66 @@ func TestParseMessage_MajorEventNotMisclassifiedAsNews(t *testing.T) {
 		t.Fatalf("expected CommandMajorEvent, got %s", result.Type)
 	}
 }
+
+func TestParseMessage_MemberNewsMonthlyWithSpace(t *testing.T) {
+	adapter := NewMessageAdapter("!")
+
+	// "이번 달" — 공백 포함 입력이 monthly로 파싱되는지 검증 (회귀 방지)
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"!뉴스 이번달", "monthly"},
+		{"!뉴스 이번 달", "monthly"},
+		{"!뉴스 월간", "monthly"},
+		{"!뉴스 이번주", "weekly"},
+		{"!뉴스 이번 주", "weekly"},
+		{"!뉴스 주간", "weekly"},
+	}
+
+	for _, tt := range tests {
+		msg := &iris.Message{Msg: tt.input}
+		result := adapter.ParseMessage(msg)
+		if result == nil {
+			t.Fatalf("input %q: expected parsed command, got nil", tt.input)
+		}
+		if result.Type != domain.CommandMemberNews {
+			t.Fatalf("input %q: expected CommandMemberNews, got %s", tt.input, result.Type)
+		}
+		period, ok := result.Params["period"].(string)
+		if !ok || period != tt.want {
+			t.Fatalf("input %q: expected period=%s, got %v", tt.input, tt.want, result.Params["period"])
+		}
+	}
+}
+
+func TestParseMessage_ParserPriority_MemberInfoOverScheduleWhenNoArgs(t *testing.T) {
+	adapter := NewMessageAdapter("!")
+	msg := &iris.Message{Msg: "!멤버"}
+
+	result := adapter.ParseMessage(msg)
+	if result == nil {
+		t.Fatalf("expected parsed command, got nil")
+	}
+	if result.Type != domain.CommandMemberInfo {
+		t.Fatalf("expected CommandMemberInfo, got %s", result.Type)
+	}
+}
+
+func TestParseMessage_ParserPriority_NewsSubscriptionOverNews(t *testing.T) {
+	adapter := NewMessageAdapter("!")
+	msg := &iris.Message{Msg: "!뉴스알림"}
+
+	result := adapter.ParseMessage(msg)
+	if result == nil {
+		t.Fatalf("expected parsed command, got nil")
+	}
+	if result.Type != domain.CommandMemberNewsSubscription {
+		t.Fatalf("expected CommandMemberNewsSubscription, got %s", result.Type)
+	}
+
+	action, ok := result.Params["action"].(string)
+	if !ok || action != "status" {
+		t.Fatalf("expected action=status, got %v", result.Params["action"])
+	}
+}

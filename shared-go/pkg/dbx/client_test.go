@@ -76,7 +76,7 @@ func TestConfigDSN(t *testing.T) {
 				Password: "pass",
 				Name:     "db",
 			},
-			want: "host=localhost port=5432 user=user password=pass dbname=db sslmode=disable",
+			want: "host=localhost port=5432 user=user password=pass dbname=db sslmode=require",
 		},
 		{
 			name: "UDS connection",
@@ -86,7 +86,7 @@ func TestConfigDSN(t *testing.T) {
 				Password:   "pass",
 				Name:       "db",
 			},
-			want: "host=/var/run/postgresql user=user password=pass dbname=db sslmode=disable",
+			want: "host=/var/run/postgresql user=user password=pass dbname=db sslmode=require",
 		},
 		{
 			name: "custom SSL mode",
@@ -110,7 +110,7 @@ func TestConfigDSN(t *testing.T) {
 				Name:          "db",
 				QueryExecMode: "exec",
 			},
-			want: "host=localhost port=5432 user=user password=pass dbname=db sslmode=disable default_query_exec_mode=exec",
+			want: "host=localhost port=5432 user=user password=pass dbname=db sslmode=require default_query_exec_mode=exec",
 		},
 	}
 

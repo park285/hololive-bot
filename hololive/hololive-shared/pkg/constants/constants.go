@@ -393,6 +393,21 @@ var RequestTimeout = struct {
 	DatabasePing:      5 * time.Second,
 }
 
+// LLMHTTPTimeout: LLM HTTP 클라이언트 타임아웃 설정
+var LLMHTTPTimeout = struct {
+	Request        time.Duration
+	Dial           time.Duration
+	TLSHandshake   time.Duration
+	ResponseHeader time.Duration
+	IdleConn       time.Duration
+}{
+	Request:        2 * time.Minute,
+	Dial:           5 * time.Second,
+	TLSHandshake:   5 * time.Second,
+	ResponseHeader: 15 * time.Second,
+	IdleConn:       90 * time.Second,
+}
+
 // IrisConnection: Bot 시작 시 Iris 연결 준비 대기 설정입니다.
 var IrisConnection = struct {
 	ReadyTimeout  time.Duration

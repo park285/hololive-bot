@@ -1,14 +1,26 @@
 package scraper
 
 import (
+	"context"
 	"errors"
+	"io"
+	"net/http"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+type videosRoundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f videosRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestParseVideosFromInitialData_Normal(t *testing.T) {
 	jsonBytes, err := os.ReadFile("testdata/videos_tab_pekora.json")
@@ -281,4 +293,56 @@ func TestParseVideosFromRSSFeed_MaxResultsAndInvalidEntries(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, videos, 1)
 	assert.Equal(t, "vid001", videos[0].VideoID)
+}
+
+func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
+	jsonBytes, err := os.ReadFile("testdata/videos_tab_empty.json")
+	require.NoError(t, err)
+
+	htmlBody := "<script>var ytInitialData = " + string(jsonBytes) + ";</script>"
+	rssBody := `<?xml version="1.0" encoding="UTF-8"?><feed></feed>`
+
+	var videosPageCalls int32
+	var rssCalls int32
+
+	client := NewClient(
+		WithRateLimiter(NewRateLimiter(0)),
+		WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: videosRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				path := req.URL.Path
+				if strings.HasSuffix(path, "/videos") {
+					atomic.AddInt32(&videosPageCalls, 1)
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader(htmlBody)),
+						Header:     make(http.Header),
+						Request:    req,
+					}, nil
+				}
+				if strings.HasSuffix(path, "/feeds/videos.xml") {
+					atomic.AddInt32(&rssCalls, 1)
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader(rssBody)),
+						Header:     make(http.Header),
+						Request:    req,
+					}, nil
+				}
+
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Body:       io.NopCloser(strings.NewReader("not found")),
+					Header:     make(http.Header),
+					Request:    req,
+				}, nil
+			}),
+		}),
+	)
+
+	videos, err := client.GetRecentVideos(context.Background(), "UC_TEST", 10)
+	require.NoError(t, err)
+	require.Len(t, videos, 0)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&videosPageCalls))
+	assert.Equal(t, int32(0), atomic.LoadInt32(&rssCalls))
 }

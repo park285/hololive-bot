@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestMinutesUntilCeil(t *testing.T) {
+func TestMinutesUntilFloor(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
@@ -26,8 +26,12 @@ func TestMinutesUntilCeil(t *testing.T) {
 			target:   new(now.Add(5 * time.Minute)),
 			expected: 5,
 		},
-		"ceil boundary": {
+		"floor boundary": {
 			target:   new(now.Add(4*time.Minute + 1*time.Second)),
+			expected: 4,
+		},
+		"5min 59sec ahead": {
+			target:   new(now.Add(5*time.Minute + 59*time.Second)),
 			expected: 5,
 		},
 	}
@@ -35,8 +39,8 @@ func TestMinutesUntilCeil(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if got := MinutesUntilCeil(tc.target, now); got != tc.expected {
-				t.Fatalf("MinutesUntilCeil() = %d, expected %d", got, tc.expected)
+			if got := MinutesUntilFloor(tc.target, now); got != tc.expected {
+				t.Fatalf("MinutesUntilFloor() = %d, expected %d", got, tc.expected)
 			}
 		})
 	}
