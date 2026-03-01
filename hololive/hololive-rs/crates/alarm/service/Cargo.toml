@@ -1,0 +1,28 @@
+[package]
+name = "alarm-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+alarm-core = { workspace = true }
+alarm-infra = { workspace = true }
+shared-core = { workspace = true }
+shared-infra = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+dashmap = { workspace = true }
+futures = { workspace = true }
+moka = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+metrics = "0.24.3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

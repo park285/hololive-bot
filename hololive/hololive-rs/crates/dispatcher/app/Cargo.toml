@@ -1,0 +1,35 @@
+[package]
+name = "dispatcher-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "dispatcher-app"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+clap = { workspace = true }
+config = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+shared-formatter = { workspace = true }
+shared-notification = { workspace = true }
+shared-template = { workspace = true }
+shared-core = { workspace = true }
+shared-infra = { workspace = true }
+tera = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+secrecy = { workspace = true }
+shared-infra = { workspace = true, features = ["test-support"] }

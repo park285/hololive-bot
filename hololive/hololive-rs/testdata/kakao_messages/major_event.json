@@ -1,0 +1,40 @@
+{
+  "FormatMajorEventWeeklySummary": {
+    "description": "주간 행사 요약 메시지 (가시 문자열 기준)",
+    "input": {
+      "events": [
+        {
+          "title": "hololive SUPER EXPO 2026",
+          "date_str": "2026년 3월 7일(토) ~ 2026년 3월 8일(일)",
+          "members": "사쿠라 미코, 호시마치 스이세이",
+          "link": "https://hololive.hololivepro.com/events/"
+        }
+      ],
+      "llm_summary": ""
+    },
+    "expected_output": "📅 이번 주 행사 알림 (1개)\n1. hololive SUPER EXPO 2026\n   ⏰ 2026년 3월 7일(토) ~ 2026년 3월 8일(일)\n   👥 사쿠라 미코, 호시마치 스이세이\n   🔗 https://hololive.hololivepro.com/events/"
+  },
+  "FormatMajorEventMonthlySummary": {
+    "description": "월간 행사 요약 메시지 (가시 문자열 기준)",
+    "input": {
+      "events": [
+        {
+          "title": "Hoshimachi Suisei Live SuperNova: REBOOT",
+          "date_str": "2026년 2월 20일(금)",
+          "members": "호시마치 스이세이",
+          "link": "https://hololive.hololivepro.com/events/supernova-reboot/"
+        }
+      ],
+      "llm_summary": ""
+    },
+    "expected_output": "📅 이번 달 행사 요약 (1개)\n1. Hoshimachi Suisei Live SuperNova: REBOOT\n   ⏰ 2026년 2월 20일(금)\n   👥 호시마치 스이세이\n   🔗 https://hololive.hololivepro.com/events/supernova-reboot/"
+  },
+  "FormatMajorEventStatus": {
+    "description": "행사 알림 구독 상태 메시지",
+    "input": {
+      "is_subscribed": true,
+      "prefix": "!"
+    },
+    "expected_output": "🔔 행사 알림 상태: 구독 중\n해제: !행사알림 끄기"
+  }
+}
