@@ -536,53 +536,6 @@ func (r *Repository) GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEve
 	return r.scanEvents(rows)
 }
 
-// ListEventsNeedingLinkCheck: 링크 상태 재검증이 필요한 활성 이벤트를 조회합니다.
-func (r *Repository) ListEventsNeedingLinkCheck(ctx context.Context, staleBefore time.Time, limit int) ([]*domain.MajorEvent, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-
-	query := `
-		SELECT id, external_id, type, title, link, COALESCE(description, '') as description, COALESCE(members, '{}') as members, pub_date,
-			   event_start_date, event_end_date, status, COALESCE(link_status, 'unchecked') as link_status, link_checked_at, notified_at, COALESCE(notified_week, '') as notified_week,
-			   COALESCE(notified_month, '') as notified_month, created_at, updated_at
-		FROM major_events
-		WHERE status = $1
-		  AND COALESCE(link, '') <> ''
-		  AND (link_checked_at IS NULL OR link_checked_at < $2)
-		ORDER BY link_checked_at ASC NULLS FIRST, updated_at DESC
-		LIMIT $3
-	`
-
-	rows, err := r.pool.Query(ctx, query, domain.MajorEventStatusActive, staleBefore, limit)
-	if err != nil {
-		return nil, fmt.Errorf("list events needing link check: %w", err)
-	}
-	defer rows.Close()
-
-	return r.scanEvents(rows)
-}
-
-// UpdateEventLinkStatus: 이벤트 링크 검증 결과를 저장합니다.
-func (r *Repository) UpdateEventLinkStatus(ctx context.Context, eventID int, status domain.MajorEventLinkStatus, checkedAt time.Time) error {
-	if status == "" {
-		status = domain.MajorEventLinkStatusUnchecked
-	}
-
-	query := `
-		UPDATE major_events
-		SET link_status = $1,
-			link_checked_at = $2,
-			updated_at = NOW()
-		WHERE id = $3
-	`
-
-	if _, err := r.pool.Exec(ctx, query, status, checkedAt, eventID); err != nil {
-		return fmt.Errorf("update event link status: %w", err)
-	}
-	return nil
-}
-
 func (r *Repository) scanEvents(rows pgx.Rows) ([]*domain.MajorEvent, error) {
 	var events []*domain.MajorEvent
 

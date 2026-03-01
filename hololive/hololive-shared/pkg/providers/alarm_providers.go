@@ -5,12 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
-
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httpclient"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -90,31 +86,4 @@ func ProvideMajorEventRepository(
 		}
 	}
 	return repo
-}
-
-// ProvideMajorEventService - 대형 행사 서비스 생성
-func ProvideMajorEventService(
-	logger *slog.Logger,
-) *majorevent.Service {
-	cfg := httpclient.DefaultConfig()
-	cfg.Timeout = constants.MajorEventConfig.RequestTimeout
-	cfg.ResponseHeaderTimeout = 20 * time.Second
-	cfg.HTTP2ReadIdleTimeout = 30 * time.Second
-	cfg.HTTP2PingTimeout = 5 * time.Second
-	httpClient := httpclient.New(cfg)
-	return majorevent.NewService(
-		httpClient,
-		majorevent.WithRSSURL(constants.MajorEventConfig.EventRSSURL),
-		majorevent.WithLogger(logger),
-	)
-}
-
-// ProvideMajorEventHTTPClient - 대형 행사 HTTP 클라이언트 생성
-func ProvideMajorEventHTTPClient() *http.Client {
-	cfg := httpclient.DefaultConfig()
-	cfg.Timeout = constants.MajorEventConfig.RequestTimeout
-	cfg.ResponseHeaderTimeout = 20 * time.Second
-	cfg.HTTP2ReadIdleTimeout = 30 * time.Second
-	cfg.HTTP2PingTimeout = 5 * time.Second
-	return httpclient.New(cfg)
 }
