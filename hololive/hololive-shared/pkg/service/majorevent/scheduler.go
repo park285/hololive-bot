@@ -12,6 +12,31 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
+// kst: 한국 표준시 (UTC+9)
+var kst = time.FixedZone("KST", 9*60*60)
+
+// GetWeekRange: 이번 주 월요일 00:00 KST ~ 일요일 23:59 KST 범위를 계산합니다.
+// 월요일 발송 기준: 발송 당일(월)부터 일요일까지의 이벤트를 대상으로 합니다.
+func GetWeekRange(now time.Time) (start, end time.Time) {
+	nowKST := now.In(kst)
+
+	// 이번 주 월요일 찾기 (월요일이면 당일)
+	daysFromMonday := (int(nowKST.Weekday()) - int(time.Monday) + 7) % 7
+	monday := time.Date(
+		nowKST.Year(), nowKST.Month(), nowKST.Day()-daysFromMonday,
+		0, 0, 0, 0, kst,
+	)
+
+	// 같은 주 일요일 23:59:59
+	sunday := monday.AddDate(0, 0, 6)
+	sundayEnd := time.Date(
+		sunday.Year(), sunday.Month(), sunday.Day(),
+		23, 59, 59, 0, kst,
+	)
+
+	return monday, sundayEnd
+}
+
 type Formatter interface {
 	FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string
 	FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string
