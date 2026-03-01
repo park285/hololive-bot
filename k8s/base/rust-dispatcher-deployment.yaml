@@ -53,7 +53,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: hololive-app-secret
-                  key: DB_PASSWORD
+                  key: HOLOLIVE_ALARM_PASSWORD
             - name: DISPATCHER__DB__SSLMODE
               value: "disable"
             - name: DISPATCHER__DB__MAX_CONNECTIONS
@@ -79,14 +79,6 @@ spec:
               value: "1000"
             - name: DISPATCHER__LOGGING__LEVEL
               value: "info"
-            - name: DISPATCHER__LOGGING__FILE_ENABLED
-              value: "true"
-            - name: DISPATCHER__LOGGING__DIR
-              value: "/srv/hololive/logs"
-            - name: DISPATCHER__LOGGING__FILE
-              value: "rust-dispatcher.log"
-            - name: DISPATCHER__LOGGING__COMBINED_FILE
-              value: "rust-dispatcher-combined.log"
             - name: RUST_LOG
               value: "info,dispatcher_app=info,sqlx=warn"
             - name: TZ
@@ -114,17 +106,9 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
-          volumeMounts:
-            - name: logs
-              mountPath: /srv/hololive/logs
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
-      volumes:
-        - name: logs
-          hostPath:
-            path: /srv/hololive/logs
-            type: DirectoryOrCreate
       restartPolicy: Always

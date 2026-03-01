@@ -47,7 +47,7 @@ kubectl -n hololive logs deploy/llm-scheduler --tail=200
 kubectl -n hololive logs deploy/admin-api --tail=200
 ```
 
-> 로그 수집 정책: K8s prod 기본은 stdout-only (파일 로그 비활성)
+> 로그 수집 정책: stdout → Fluent Bit → Loki SSOT (파일 로깅 제거됨, hostPath 볼륨 없음)
 
 ### 3-2. 서비스 헬스체크
 ```bash

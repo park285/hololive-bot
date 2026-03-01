@@ -1,5 +1,5 @@
-# alarm-dispatcher: Go 큐 소비 주체 (GO_ALARM_QUEUE_CONSUMER_ENABLED=true)
-# Rust dispatcher(hololive-rs)는 검증 완료(P1-3.5), cutover 타임라인 별도 결정
+# alarm-dispatcher: cutover 단계에서 대기(Go 큐 소비 비활성화)
+# Rust dispatcher(hololive-rs)는 검증 완료(P1-3.5), cutover 절차 진행 중
 # 큐 프로토콜: Rust alarm-checker LPUSH → alarm:dispatch:queue → Go BRPOP (AlarmQueueEnvelope v1)
 apiVersion: apps/v1
 kind: Deployment
@@ -45,18 +45,13 @@ spec:
             - name: ALARM_DISPATCHER_PORT
               value: "30010"
             - name: GO_ALARM_QUEUE_CONSUMER_ENABLED
-              value: "true"
+              value: "false"
             - name: GOGC
               value: "100"
             - name: GOMEMLIMIT
               value: "128MiB"
             - name: LOG_DIR
-              value: "/srv/hololive/logs"
-            - name: LOG_FILE
-              value: "alarm-dispatcher.log"
-          volumeMounts:
-            - name: logs
-              mountPath: /srv/hololive/logs
+              value: ""
           resources:
             requests:
               cpu: 100m
@@ -85,9 +80,4 @@ spec:
             capabilities:
               drop:
                 - ALL
-      volumes:
-        - name: logs
-          hostPath:
-            path: /srv/hololive/logs
-            type: DirectoryOrCreate
       restartPolicy: Always

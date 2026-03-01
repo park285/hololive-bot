@@ -4,14 +4,13 @@
 
 - 운영 중 장애 분석 가능성 확보
 - `backend-guide`의 `Q2`(구조화 로그, 민감정보 마스킹) 준수
-- K8s 운영 기본값을 stdout-only로 통일
+- K8s 운영: **stdout → Fluent Bit → Loki** SSOT 단일 경로
 
 ## 정책
 
 1. **구조화 로그**
    - 다른 봇과 동일하게 text 기반 key=value 스타일 사용
-   - 기본은 stdout 출력
-   - `*_LOGGING__FILE_ENABLED=true`일 때만 파일(`service + combined`) 동시 기록
+   - stdout 전용 출력 (파일 로깅 제거됨)
 
 2. **로그 레벨**
    - 기본 레벨: `info`
@@ -19,18 +18,15 @@
    - 출력 표기는 기존 Go 봇과 동일하게 `INF/WRN/ERR/DBG/TRC` 약어 사용
    - 타임스탬프는 KST(`+09:00`) 기준으로 기록
 
-3. **로그 경로**
-   - stdout-only 모드: 파일 경로 미사용
-   - file 모드:
-     - 컨테이너 내부: `/app/logs/hololive-scraper.log`
-     - 통합 로그: `/app/logs/combined.log`
+3. **로그 수집 경로**
+   - stdout → Fluent Bit (DaemonSet) → Loki → Grafana
+   - kubectl logs: kubelet 버퍼 (보조)
+   - 파일 로깅: 제거됨 (`*__LOGGING__FILE_ENABLED=false`)
 
-4. **회전 정책**
-   - K8s prod 기본은 stdout-only (파일 회전 불필요)
-   - file 모드 사용 시:
-     - 기본 단일 파일: `hololive-scraper.log`
-     - 통합 파일: `combined.log`
-     - 필요 시 외부 logrotate/system 수준에서 순환
+4. **로그 조회**
+   - Grafana: `http://localhost:30090` (Loki 데이터소스)
+   - CLI: `./scripts/logs/tail.sh <service>`, `./scripts/logs/query.sh <service>`
+   - Loki 라벨: `job=fluent-bit`, `namespace_name`, `pod_name`, `container_name`
 
 5. **시간대 통일**
    - 로그 timestamp는 KST(`+09:00`) 고정
@@ -48,11 +44,9 @@
 ## 설정 키
 
 - `SCRAPER__LOGGING__LEVEL` (기본: `info`)
-- `SCRAPER__LOGGING__FILE_ENABLED` (기본: `false`)
-- `SCRAPER__LOGGING__DIR` (기본: `logs`)
-- `SCRAPER__LOGGING__FILE` (기본: `hololive-scraper.log`)
-- `SCRAPER__LOGGING__COMBINED_FILE` (기본: `combined.log`)
-- `ALARM__LOGGING__FILE_ENABLED` (기본: `false`)
+- `SCRAPER__LOGGING__FILE_ENABLED` (기본: `false`, k8s: `false` 고정)
+- `ALARM__LOGGING__LEVEL` (기본: `info`)
+- `ALARM__LOGGING__FILE_ENABLED` (기본: `false`, k8s: `false` 고정)
 - `RUST_LOG` (선택, `tracing` filter override)
 - `OTEL_ENABLED` (기본: `false`)
 - `OTEL_SERVICE_NAME` (기본: `hololive-rs`)
