@@ -46,14 +46,10 @@ spec:
             - name: GOMEMLIMIT
               value: "256MiB"
             - name: LOG_DIR
-              value: "/srv/hololive/logs"
-            - name: LOG_FILE
-              value: "llm-scheduler.log"
+              value: ""
           volumeMounts:
             - name: data
               mountPath: /app/data
-            - name: logs
-              mountPath: /srv/hololive/logs
           resources:
             requests:
               cpu: 200m
@@ -86,9 +82,5 @@ spec:
         - name: data
           hostPath:
             path: /srv/hololive/data
-            type: DirectoryOrCreate
-        - name: logs
-          hostPath:
-            path: /srv/hololive/logs
             type: DirectoryOrCreate
       restartPolicy: Always

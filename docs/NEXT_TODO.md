@@ -1,17 +1,36 @@
 # 향후 작업 TODO
 
-> 최종 갱신: 2026-03-01
+> 최종 갱신: 2026-03-02
 > 아키텍처: 하이브리드 (Rust=compute, Go=network)
+
+---
+
+## 0. 로깅 SSOT: stdout → Fluent Bit → Loki (완료, 2026-03-02)
+
+**상태**: 매니페스트/스크립트/문서 변경 완료, 배포 검증 미완료
+
+### 완료 항목
+- k8s 매니페스트 8개: hostPath 파일 로깅 제거 (Go 5개 + Rust 3개)
+- logcli 래퍼 스크립트: `scripts/logs/tail.sh`, `scripts/logs/query.sh`
+- 문서 동기화: README.md, runbook, LOGGING_POLICY.md
+- 로컬 로그 파일 삭제: `logs/alarm-dispatcher.log`, `logs/combined.log`
+
+### 배포 후 검증 (수동)
+1. `kubectl kustomize k8s/overlays/prod --enable-helm | kubectl apply --server-side -f -`
+2. pod 재시작 확인: `kubectl -n hololive rollout status deploy/<name>`
+3. Grafana(`localhost:30090`)에서 각 서비스 로그 유입 확인
+4. `./scripts/logs/tail.sh bot` 실행 테스트
+5. 호스트 `/home/kapu/gemini/hololive-bot/logs/`에 새 파일 생성 안 됨 확인
 
 ---
 
 ## 1. Rust Dispatcher Cutover (우선순위: HIGH)
 
-**현재 상태**: Rust dispatcher 검증 완료 (P1-3.5), k8s 매니페스트 준비 완료 (주석 상태)
+**현재 상태**: Rust dispatcher 검증 완료 (P1-3.5), 리포지토리 반영 완료(2026-03-01): 1) rust-dispatcher 리소스 활성화, 2) GO consumer 비활성화. 운영 단계(배포/24h 모니터링/안정화 후 replica=0)는 미완료
 
 ### 절차
-1. `k8s/base/kustomization.yaml`에서 `rust-dispatcher-*` 주석 해제
-2. Go `alarm-dispatcher`의 `GO_ALARM_QUEUE_CONSUMER_ENABLED=false` 설정
+1. `k8s/base/kustomization.yaml`에서 `rust-dispatcher-*` 주석 해제 (완료, 2026-03-01)
+2. Go `alarm-dispatcher`의 `GO_ALARM_QUEUE_CONSUMER_ENABLED=false` 설정 (완료, 2026-03-01)
 3. Rust dispatcher 배포 → health/ready 확인
 4. 모니터링: p95 latency < 1s, error rate < 0.1% (24시간)
 5. 안정 확인 후 Go alarm-dispatcher replica=0 또는 제거

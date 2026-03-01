@@ -22,9 +22,9 @@ resources:
   - hololive-scraper-service.yaml
   - hololive-alarm-deployment.yaml
   - hololive-alarm-service.yaml
-  # Rust dispatcher: cutover 시 아래 주석 해제 + alarm-dispatcher 제거
-  # - rust-dispatcher-deployment.yaml
-  # - rust-dispatcher-service.yaml
+  # Rust dispatcher: cutover 1~2단계는 동시 배포, alarm-dispatcher 제거는 후속 단계
+  - rust-dispatcher-deployment.yaml
+  - rust-dispatcher-service.yaml
   - monitoring/
 labels:
   - pairs:
