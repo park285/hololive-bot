@@ -458,36 +458,16 @@ var RedisKeys = struct {
 
 // MajorEventConfig: 대형 행사 알림 설정입니다.
 var MajorEventConfig = struct {
-	EventRSSURL             string
-	NewsRSSURL              string
-	NewsRSSURLEn            string
-	TrustedSourceDomains    []string
-	TrustedSocialAccounts   []string
-	SearchSourceSites       []string
-	SearchOfficialAccounts  []string
-	SearchPartnerKeywords   []string
-	RequestTimeout          time.Duration
-	SentKeyTTL              time.Duration
-	ScheduleHourKST         int
-	ScheduleWeekday         time.Weekday
-	MaxRetries              int
-	RetryDelay              time.Duration
-	MaxPages                int
-	IncrementalCursorLimit  int
-	PageDelay               time.Duration
-	UserAgent               string
-	LinkCheckBatchSize      int
-	LinkCheckTimeout        time.Duration
-	LinkCheckStaleAfter     time.Duration
-	ScrapeUpsertConcurrency int
-	ScrapeHourKST           int
-	ScrapeRetryDelays       []time.Duration
-	MonthlyScheduleHourKST  int
-	MonthlyScheduleDay      int
+	TrustedSourceDomains   []string
+	TrustedSocialAccounts  []string
+	SearchSourceSites      []string
+	SearchOfficialAccounts []string
+	SearchPartnerKeywords  []string
+	ScheduleHourKST        int
+	ScheduleWeekday        time.Weekday
+	MonthlyScheduleHourKST int
+	MonthlyScheduleDay     int
 }{
-	EventRSSURL:  "https://hololive.hololivepro.com/events/feed/",
-	NewsRSSURL:   "https://hololive.hololivepro.com/news/feed/",
-	NewsRSSURLEn: "https://hololive.hololivepro.com/en/news/feed/",
 	TrustedSourceDomains: []string{
 		"hololive.hololivepro.com",
 		"hololivepro.com",
@@ -537,26 +517,8 @@ var MajorEventConfig = struct {
 		"AGF Korea",
 		"collaboration cafe",
 	},
-	RequestTimeout:          30 * time.Second,
-	SentKeyTTL:              8 * 24 * time.Hour,
-	ScheduleHourKST:         9,
-	ScheduleWeekday:         time.Monday,
-	MaxRetries:              4,
-	RetryDelay:              1 * time.Second,
-	MaxPages:                20,
-	IncrementalCursorLimit:  200,
-	PageDelay:               2 * time.Second,
-	UserAgent:               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-	LinkCheckBatchSize:      200,
-	LinkCheckTimeout:        8 * time.Second,
-	LinkCheckStaleAfter:     72 * time.Hour,
-	ScrapeUpsertConcurrency: 8,
-	ScrapeHourKST:           6,
-	ScrapeRetryDelays: []time.Duration{
-		30 * time.Minute,
-		2 * time.Hour,
-		6 * time.Hour,
-	},
+	ScheduleHourKST:        9,
+	ScheduleWeekday:        time.Monday,
 	MonthlyScheduleHourKST: 10,
 	MonthlyScheduleDay:     1,
 }

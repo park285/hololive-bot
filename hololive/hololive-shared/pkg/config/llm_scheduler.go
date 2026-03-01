@@ -11,18 +11,17 @@ import (
 
 // LLMSchedulerConfig: llm-scheduler 바이너리 전용 설정
 type LLMSchedulerConfig struct {
-	Server     ServerConfig
-	Iris       IrisConfig
-	Valkey     ValkeyConfig
-	Postgres   PostgresConfig
-	Logging    LoggingConfig
-	Bot        BotConfig
-	Telemetry  TelemetryConfig
-	MajorEvent MajorEventConfig
-	Cliproxy   CliproxyConfig
-	LLM        LLMConfig
-	Exa        ExaConfig
-	Version    string
+	Server    ServerConfig
+	Iris      IrisConfig
+	Valkey    ValkeyConfig
+	Postgres  PostgresConfig
+	Logging   LoggingConfig
+	Bot       BotConfig
+	Telemetry TelemetryConfig
+	Cliproxy  CliproxyConfig
+	LLM       LLMConfig
+	Exa       ExaConfig
+	Version   string
 }
 
 // LoadLLMScheduler: llm-scheduler 전용 설정을 환경변수에서 로드합니다.
@@ -64,17 +63,10 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 			SelfUser: stringutil.TrimSpace(envutil.String("BOT_SELF_USER", "iris")),
 		},
 		Telemetry: loadTelemetryConfig(),
-		MajorEvent: MajorEventConfig{
-			ScraperEnabled: envutil.Bool("MAJOREVENT_SCRAPER_ENABLED", true),
-			ScrapeHourKST: normalizeHour(
-				envutil.Int("MAJOREVENT_SCRAPE_HOUR_KST", 4),
-				4,
-			),
-		},
-		Cliproxy: loadCliproxyConfig(),
-		LLM:      loadLLMConfig(),
-		Exa:      loadExaConfig(),
-		Version:  stringutil.TrimSpace(envutil.String("APP_VERSION", "1.0.0-llm-scheduler")),
+		Cliproxy:  loadCliproxyConfig(),
+		LLM:       loadLLMConfig(),
+		Exa:       loadExaConfig(),
+		Version:   stringutil.TrimSpace(envutil.String("APP_VERSION", "1.0.0-llm-scheduler")),
 	}
 }
 
