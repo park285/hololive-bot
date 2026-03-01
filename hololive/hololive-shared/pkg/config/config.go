@@ -37,7 +37,6 @@ type Config struct {
 	Services           ServicesConfig
 	Telemetry          TelemetryConfig // OpenTelemetry 분산 추적
 	Scraper            ScraperConfig   // YouTube 스크래퍼 프록시 설정
-	MajorEvent         MajorEventConfig
 	Webhook            WebhookConfig
 	CORS               CORSConfig // CORS 설정
 	Cliproxy           CliproxyConfig
@@ -271,12 +270,6 @@ type ScraperConfig struct {
 	ProxyURL     string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
 }
 
-// MajorEventConfig: MajorEvent 스케줄러 런타임 제어 설정
-type MajorEventConfig struct {
-	ScraperEnabled bool // MAJOREVENT_SCRAPER_ENABLED
-	ScrapeHourKST  int  // MAJOREVENT_SCRAPE_HOUR_KST
-}
-
 // CORSConfig: CORS 허용 Origin 설정
 type CORSConfig struct {
 	AllowedOrigins      []string
@@ -390,13 +383,6 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Scraper: ScraperConfig{
 			ProxyEnabled: envutil.Bool("SCRAPER_PROXY_ENABLED", false),
 			ProxyURL:     envutil.String("SCRAPER_PROXY_URL", ""),
-		},
-		MajorEvent: MajorEventConfig{
-			ScraperEnabled: envutil.Bool("MAJOREVENT_SCRAPER_ENABLED", true),
-			ScrapeHourKST: normalizeHour(
-				envutil.Int("MAJOREVENT_SCRAPE_HOUR_KST", constants.MajorEventConfig.ScrapeHourKST),
-				constants.MajorEventConfig.ScrapeHourKST,
-			),
 		},
 		Webhook: WebhookConfig{
 			WorkerCount:    envutil.Int("WEBHOOK_WORKER_COUNT", 16),
@@ -683,11 +669,4 @@ func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bo
 		filtered = append(filtered, origin)
 	}
 	return filtered, len(filtered) == 0
-}
-
-func normalizeHour(hour, fallback int) int {
-	if hour < 0 || hour > 23 {
-		return fallback
-	}
-	return hour
 }

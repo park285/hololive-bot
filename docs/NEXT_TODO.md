@@ -75,22 +75,19 @@
 - **작업**: `hololive-shared/pkg/server/` 로 공통 핸들러 추출
 - **공수**: 대 (파일 10+개 변경, 테스트 필요, 3-5시간)
 
-### 3-3. YouTube 수집 fallback 과호출 제거
+### 3-3. YouTube 수집 fallback 과호출 제거 (완료)
 - **위치**: `hololive-shared/pkg/service/youtube/scraper/videos.go`
-- **문제**: 빈 결과(성공)에도 RSS fallback 추가 호출 발생
-- **작업**: `len(events)==0` 분기 제거, 빈 결과를 정상 처리로 변경
-- **공수**: 소 (30분)
+- **상태**: 이미 수정 완료 — HTML 성공 시 빈 결과도 즉시 반환 (L248-249), RSS 미호출
+- **검증**: `TestGetRecentVideos_NoRSSFallbackOnEmptySuccess` 통과
 
-### 3-4. Go↔Rust 이중 정책 경로 정리
-- **대상**: 링크체커/날짜추출/dedup 포맷
-- **현재**: Rust cutover 완료된 영역의 Go 측 코드가 잔존
-- **작업**: Go 측 미사용 코드 제거 (scraper 관련 Go 코드는 이미 제거 완료, 나머지 확인)
-- **공수**: 소 (확인 후 삭제만 필요, 30분)
+### 3-4. Go↔Rust 이중 정책 경로 정리 (완료)
+- **상태**: 완료 (2026-03-02)
+- **삭제**: scraper, service, link_checker, date_extractor, rss_parser + 테스트/testdata/dev tool (~5,200줄)
+- **정리**: MajorEventConfig dead fields, Provider 2개, config struct/test, `golang.org/x/text` direct→indirect
+- **이동**: `kst`, `GetWeekRange()` → scheduler.go
 
-### 3-5. shared-go conc/atomic/multierr 의존성 제거
-- **현재**: `go mod tidy`로 indirect 정리 완료, direct import는 이미 제거됨
-- **작업**: 확인 후 완료 마킹 (이미 이번 세션에서 tidy 완료)
-- **공수**: 없음 (확인만)
+### 3-5. shared-go conc/atomic/multierr 의존성 제거 (완료)
+- **상태**: 완료 — `go mod tidy`로 indirect 정리 완료, direct import는 이미 제거됨
 
 ---
 

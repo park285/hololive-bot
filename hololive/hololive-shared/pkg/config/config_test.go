@@ -196,54 +196,6 @@ func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 	}
 }
 
-func TestLoad_MajorEventScraperConfigDefaults(t *testing.T) {
-	setRequiredLoadEnv(t)
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	if !cfg.MajorEvent.ScraperEnabled {
-		t.Fatalf("MajorEvent.ScraperEnabled = false, want true")
-	}
-	if cfg.MajorEvent.ScrapeHourKST != 6 {
-		t.Fatalf("MajorEvent.ScrapeHourKST = %d, want 6", cfg.MajorEvent.ScrapeHourKST)
-	}
-}
-
-func TestLoad_MajorEventScraperConfigEnvOverride(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("MAJOREVENT_SCRAPER_ENABLED", "false")
-	t.Setenv("MAJOREVENT_SCRAPE_HOUR_KST", "4")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	if cfg.MajorEvent.ScraperEnabled {
-		t.Fatalf("MajorEvent.ScraperEnabled = true, want false")
-	}
-	if cfg.MajorEvent.ScrapeHourKST != 4 {
-		t.Fatalf("MajorEvent.ScrapeHourKST = %d, want 4", cfg.MajorEvent.ScrapeHourKST)
-	}
-}
-
-func TestLoad_MajorEventScraperConfigInvalidHourFallback(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("MAJOREVENT_SCRAPE_HOUR_KST", "99")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	if cfg.MajorEvent.ScrapeHourKST != 6 {
-		t.Fatalf("MajorEvent.ScrapeHourKST = %d, want fallback 6", cfg.MajorEvent.ScrapeHourKST)
-	}
-}
-
 func TestLoad_DeprecatedDBAliasRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("DB_SSLMODE", "disable")
