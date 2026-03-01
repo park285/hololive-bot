@@ -2,11 +2,12 @@ package dbx
 
 import (
 	"encoding/base64"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 var (

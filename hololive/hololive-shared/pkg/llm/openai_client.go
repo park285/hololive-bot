@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/openai/openai-go/v3/shared"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 var _ Client = (*OpenAIClient)(nil)
@@ -34,8 +37,15 @@ type OpenAIClient struct {
 func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
 	// HTTP/2 비활성화: Cloudflare가 Go HTTP/2 fingerprint를 차단하는 문제 방지
 	httpClient := &http.Client{
+		Timeout: constants.LLMHTTPTimeout.Request,
 		Transport: &http.Transport{
-			TLSNextProto: make(map[string]func(string, *tls.Conn) http.RoundTripper),
+			DialContext: (&net.Dialer{
+				Timeout: constants.LLMHTTPTimeout.Dial,
+			}).DialContext,
+			TLSHandshakeTimeout:   constants.LLMHTTPTimeout.TLSHandshake,
+			ResponseHeaderTimeout: constants.LLMHTTPTimeout.ResponseHeader,
+			IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
+			TLSNextProto:          make(map[string]func(string, *tls.Conn) http.RoundTripper),
 		},
 	}
 	client := openai.NewClient(
@@ -222,12 +232,20 @@ func shouldFallbackToChat(err error) bool {
 	}
 
 	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "context deadline exceeded") || strings.Contains(msg, "context canceled") {
+		return false
+	}
+
+	// 404/405는 Responses 미지원과 구분이 필요하므로, responses 경로 맥락이 있을 때만 허용한다.
+	if (strings.Contains(msg, "404") || strings.Contains(msg, "405")) &&
+		(strings.Contains(msg, "/responses") || strings.Contains(msg, "responses api") || strings.Contains(msg, "responses")) {
+		return true
+	}
+
 	// 조건부 허용:
 	// - responses endpoint 미지원/일시 오류
 	// - 네트워크 계층의 일시 장애
 	fallbackHints := []string{
-		"404",
-		"405",
 		"500",
 		"502",
 		"503",

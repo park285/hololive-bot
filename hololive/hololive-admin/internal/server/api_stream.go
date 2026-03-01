@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
@@ -23,6 +25,11 @@ const channelStatsRefreshLockTTL = 5 * time.Minute
 const channelStatsCacheWorkers = 4
 const channelStatsRefreshWorkers = 1
 const memberIndexCacheTTL = 1 * time.Minute
+
+type memberIndexSnapshot struct {
+	channelIDs   []string
+	channelNames map[string]string
+}
 
 // GetLiveStreams: 현재 라이브 방송 중인 스트림 목록을 반환합니다.
 func (h *StreamAPIHandler) GetLiveStreams(c *gin.Context) {
@@ -183,7 +190,8 @@ func (h *StreamAPIHandler) cacheChannelStatsAsync(ctx context.Context, stats map
 		return
 	}
 
-	h.runAsyncWithLimiter(h.channelStatsCacheLimiter, "cache_channel_stats", func() {
+	state := h.ensureStreamState()
+	h.runAsyncWithLimiter(state.channelStatsCacheLimiter, "cache_channel_stats", func() {
 		cacheCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
 			constants.YouTubeConfig.CacheSaveTimeout,
@@ -203,7 +211,8 @@ func (h *StreamAPIHandler) triggerChannelStatsRefreshAsync(ctx context.Context) 
 		return
 	}
 
-	h.runAsyncWithLimiter(h.channelStatsRefreshLimiter, "refresh_channel_stats", func() {
+	state := h.ensureStreamState()
+	h.runAsyncWithLimiter(state.channelStatsRefreshLimiter, "refresh_channel_stats", func() {
 		bgCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
 			constants.YouTubeConfig.ScraperPhaseTimeout,
@@ -258,29 +267,73 @@ func (h *StreamAPIHandler) runAsyncWithLimiter(limiter chan struct{}, task strin
 }
 
 func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
-	h.memberIndexMu.RLock()
-	if h.memberIndexReady && time.Now().Before(h.memberIndexExpiresAt) {
-		channelIDs := append([]string(nil), h.memberChannelIDs...)
-		channelToName := cloneChannelNameMap(h.memberChannelName)
-		h.memberIndexMu.RUnlock()
+	state := h.ensureStreamState()
+	now := time.Now()
+
+	state.memberIndexMu.RLock()
+	if state.memberIndexReady && now.Before(state.memberIndexExpiresAt) {
+		channelIDs := append([]string(nil), state.memberChannelIDs...)
+		channelToName := cloneChannelNameMap(state.memberChannelName)
+		state.memberIndexMu.RUnlock()
 		return channelIDs, channelToName, nil
 	}
-	h.memberIndexMu.RUnlock()
+	state.memberIndexMu.RUnlock()
 
-	h.memberIndexMu.Lock()
-	defer h.memberIndexMu.Unlock()
+	value, err, _ := state.memberIndexBuildGroup.Do("refresh", func() (any, error) {
+		state.memberIndexMu.RLock()
+		if state.memberIndexReady && time.Now().Before(state.memberIndexExpiresAt) {
+			channelIDs := append([]string(nil), state.memberChannelIDs...)
+			channelToName := cloneChannelNameMap(state.memberChannelName)
+			state.memberIndexMu.RUnlock()
+			return memberIndexSnapshot{channelIDs: channelIDs, channelNames: channelToName}, nil
+		}
+		state.memberIndexMu.RUnlock()
 
-	if h.memberIndexReady && time.Now().Before(h.memberIndexExpiresAt) {
-		channelIDs := append([]string(nil), h.memberChannelIDs...)
-		channelToName := cloneChannelNameMap(h.memberChannelName)
-		return channelIDs, channelToName, nil
-	}
+		members, loadErr := h.fetchAllMembers(ctx)
+		if loadErr != nil {
+			return nil, loadErr
+		}
 
-	members, err := h.repo.GetAllMembers(ctx)
+		channelIDs, channelToName := buildActiveMemberIndex(members)
+
+		state.memberIndexMu.Lock()
+		state.memberChannelIDs = append([]string(nil), channelIDs...)
+		state.memberChannelName = cloneChannelNameMap(channelToName)
+		state.memberIndexExpiresAt = time.Now().Add(memberIndexCacheTTL)
+		state.memberIndexReady = true
+		state.memberIndexMu.Unlock()
+
+		return memberIndexSnapshot{channelIDs: channelIDs, channelNames: channelToName}, nil
+	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("get all members: %w", err)
+		return nil, nil, fmt.Errorf("member index singleflight: %w", err)
 	}
 
+	snapshot, ok := value.(memberIndexSnapshot)
+	if !ok {
+		return nil, nil, fmt.Errorf("member index snapshot: unexpected type")
+	}
+
+	return snapshot.channelIDs, snapshot.channelNames, nil
+}
+
+func (h *StreamAPIHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, error) {
+	if h.APIHandler == nil {
+		return nil, fmt.Errorf("load members: handler is nil")
+	}
+	if h.memberIndexLoader == nil {
+		return nil, fmt.Errorf("load members: repository loader is nil")
+	}
+
+	members, err := h.memberIndexLoader(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load members: get all members: %w", err)
+	}
+
+	return members, nil
+}
+
+func buildActiveMemberIndex(members []*domain.Member) ([]string, map[string]string) {
 	channelIDs := make([]string, 0, len(members))
 	channelToName := make(map[string]string, len(members))
 	for _, member := range members {
@@ -291,22 +344,18 @@ func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, 
 		channelToName[member.ChannelID] = member.Name
 	}
 
-	h.memberChannelIDs = append([]string(nil), channelIDs...)
-	h.memberChannelName = cloneChannelNameMap(channelToName)
-	h.memberIndexExpiresAt = time.Now().Add(memberIndexCacheTTL)
-	h.memberIndexReady = true
-
-	return channelIDs, channelToName, nil
+	return channelIDs, channelToName
 }
 
-func (h *APIHandler) invalidateMemberIndex() {
-	h.memberIndexMu.Lock()
-	defer h.memberIndexMu.Unlock()
+func (h *MemberAPIHandler) invalidateMemberIndex() {
+	state := h.ensureStreamState()
+	state.memberIndexMu.Lock()
+	defer state.memberIndexMu.Unlock()
 
-	h.memberChannelIDs = nil
-	h.memberChannelName = make(map[string]string)
-	h.memberIndexExpiresAt = time.Time{}
-	h.memberIndexReady = false
+	state.memberChannelIDs = nil
+	state.memberChannelName = make(map[string]string)
+	state.memberIndexExpiresAt = time.Time{}
+	state.memberIndexReady = false
 }
 
 func cloneChannelNameMap(src map[string]string) map[string]string {
@@ -326,7 +375,7 @@ func (h *StreamAPIHandler) GetChannel(c *gin.Context) {
 	// 배치 조회 지원: channelIds 파라미터 확인
 	channelIDs := c.Query("channelIds")
 	if channelIDs != "" {
-		ids := splitChannelIDs(channelIDs)
+		ids := sharedserver.SplitChannelIDs(channelIDs)
 		if len(ids) == 0 {
 			h.respondError(c, 400, "channelIds parameter is empty or invalid", nil)
 			return
@@ -395,43 +444,6 @@ func memberToChannelResponse(m *domain.Member) *ChannelResponse {
 		resp.Photo = &m.Photo
 	}
 	return resp
-}
-
-// splitChannelIDs: 쉼표로 구분된 채널 ID 문자열을 슬라이스로 분리합니다.
-func splitChannelIDs(ids string) []string {
-	parts := make([]string, 0)
-	for _, id := range splitByComma(ids) {
-		trimmed := trimSpace(id)
-		if trimmed != "" {
-			parts = append(parts, trimmed)
-		}
-	}
-	return parts
-}
-
-func splitByComma(s string) []string {
-	var result []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			result = append(result, s[start:i])
-			start = i + 1
-		}
-	}
-	result = append(result, s[start:])
-	return result
-}
-
-func trimSpace(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
-		end--
-	}
-	return s[start:end]
 }
 
 // SearchChannels: 이름으로 채널을 검색합니다.
