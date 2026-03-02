@@ -34,7 +34,7 @@ pub struct ValkeyConfig {
 impl Default for ValkeyConfig {
     fn default() -> Self {
         Self {
-            url: "redis://valkey:6379".to_string(),
+            url: "redis://valkey:6379".to_owned(),
             pool_size: 4,
         }
     }
@@ -52,7 +52,7 @@ pub struct IrisConfig {
 impl Default for IrisConfig {
     fn default() -> Self {
         Self {
-            base_url: "http://iris:8080".to_string(),
+            base_url: "http://iris:8080".to_owned(),
             bot_token: SecretString::from(""),
             timeout_secs: 10,
         }
@@ -69,7 +69,7 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
+            host: "0.0.0.0".to_owned(),
             port: 3000,
         }
     }

@@ -34,7 +34,7 @@ impl MockValkeyClient {
             return;
         }
 
-        self.expiry.insert(key.to_string(), Instant::now() + ttl);
+        self.expiry.insert(key.to_owned(), Instant::now() + ttl);
     }
 
     fn clear_expiry(&self, key: &str) {
@@ -83,7 +83,7 @@ impl ValkeyClient for MockValkeyClient {
     }
 
     async fn set(&self, key: &str, value: &str, ttl: Option<Duration>) -> Result<(), SharedError> {
-        self.store.insert(key.to_string(), value.to_string());
+        self.store.insert(key.to_owned(), value.to_owned());
 
         if let Some(duration) = ttl {
             self.set_expiry(key, duration);
@@ -99,7 +99,7 @@ impl ValkeyClient for MockValkeyClient {
             return Ok(false);
         }
 
-        self.store.insert(key.to_string(), value.to_string());
+        self.store.insert(key.to_owned(), value.to_owned());
         self.set_expiry(key, ttl);
         Ok(true)
     }
@@ -121,8 +121,8 @@ impl ValkeyClient for MockValkeyClient {
 
     async fn hset(&self, key: &str, field: &str, value: &str) -> Result<(), SharedError> {
         self.purge_if_expired(key);
-        let mut hash = self.hstore.entry(key.to_string()).or_default();
-        hash.insert(field.to_string(), value.to_string());
+        let mut hash = self.hstore.entry(key.to_owned()).or_default();
+        hash.insert(field.to_owned(), value.to_owned());
         Ok(())
     }
 
@@ -137,7 +137,7 @@ impl ValkeyClient for MockValkeyClient {
 
     async fn hmset(&self, key: &str, fields: &[(String, String)]) -> Result<(), SharedError> {
         self.purge_if_expired(key);
-        let mut hash = self.hstore.entry(key.to_string()).or_default();
+        let mut hash = self.hstore.entry(key.to_owned()).or_default();
         for (field, value) in fields {
             hash.insert(field.clone(), value.clone());
         }
@@ -176,8 +176,8 @@ impl ValkeyClient for MockValkeyClient {
 
     async fn lpush(&self, key: &str, value: &str) -> Result<(), SharedError> {
         self.purge_if_expired(key);
-        let mut list = self.lstore.entry(key.to_string()).or_default();
-        list.insert(0, value.to_string());
+        let mut list = self.lstore.entry(key.to_owned()).or_default();
+        list.insert(0, value.to_owned());
         Ok(())
     }
 

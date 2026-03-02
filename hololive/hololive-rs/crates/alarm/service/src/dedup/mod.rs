@@ -300,7 +300,7 @@ impl DedupService {
             return false;
         }
 
-        self.local_keys.insert(key.to_string(), ());
+        self.local_keys.insert(key.to_owned(), ());
         true
     }
 

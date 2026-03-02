@@ -67,7 +67,7 @@ impl AlarmFormatting for ResponseFormatter {
         let mut message = format!("알람이 등록되었습니다: {member_name}");
         if let Some(next_stream_info) = next_stream_info {
             let schedule = next_stream_info.start_scheduled.map_or_else(
-                || "미정".to_string(),
+                || "미정".to_owned(),
                 |value| value.format("%m-%d %H:%M UTC").to_string(),
             );
             let _ = write!(
@@ -100,7 +100,7 @@ impl AlarmFormatting for ResponseFormatter {
             .iter()
             .map(|entry| {
                 let alarm_type_names = if entry.alarm_types.is_empty() {
-                    "없음".to_string()
+                    "없음".to_owned()
                 } else {
                     entry
                         .alarm_types
@@ -129,20 +129,20 @@ impl AlarmFormatting for ResponseFormatter {
         let member_name = notification.channel.as_ref().map_or_else(
             || {
                 notification.stream.as_ref().map_or_else(
-                    || "알 수 없는 멤버".to_string(),
+                    || "알 수 없는 멤버".to_owned(),
                     |stream| stream.channel_name.clone(),
                 )
             },
-            |channel| channel.display_name().to_string(),
+            |channel| channel.display_name().to_owned(),
         );
 
         let title = notification.stream.as_ref().map_or_else(
-            || "방송 정보 없음".to_string(),
+            || "방송 정보 없음".to_owned(),
             |stream| stream.title.clone(),
         );
 
         let timing = if notification.minutes_until <= 0 {
-            "지금 시작".to_string()
+            "지금 시작".to_owned()
         } else {
             format!("{}분 후 시작", notification.minutes_until)
         };
@@ -160,7 +160,7 @@ impl AlarmFormatting for ResponseFormatter {
         }
 
         let header = if minutes_until <= 0 {
-            "곧 시작하는 방송".to_string()
+            "곧 시작하는 방송".to_owned()
         } else {
             format!("{minutes_until}분 후 시작하는 방송")
         };
@@ -169,7 +169,7 @@ impl AlarmFormatting for ResponseFormatter {
             .iter()
             .map(|notification| {
                 notification.stream.as_ref().map_or_else(
-                    || "- 방송 정보 없음".to_string(),
+                    || "- 방송 정보 없음".to_owned(),
                     |stream| format!("- {}: {}", stream.channel_name, stream.title),
                 )
             })

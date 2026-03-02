@@ -437,20 +437,16 @@ mod tests {
         let valkey = Arc::new(TrackingSmembersValkey::new(HashMap::from([
             (
                 format!("{CHANNEL_SUBSCRIBERS_KEY_PREFIX}UC_A"),
-                vec!["room1".to_string()],
+                vec!["room1".to_owned()],
             ),
             (
                 format!("{CHANNEL_SUBSCRIBERS_KEY_PREFIX}UC_B"),
-                vec!["room2".to_string(), "room3".to_string()],
+                vec!["room2".to_owned(), "room3".to_owned()],
             ),
         ])));
         let scheduler = make_scheduler_with_valkey(Arc::clone(&valkey) as Arc<dyn ValkeyClient>);
 
-        let channel_ids = [
-            "UC_A".to_string(),
-            "UC_B".to_string(),
-            "UC_EMPTY".to_string(),
-        ];
+        let channel_ids = ["UC_A".to_owned(), "UC_B".to_owned(), "UC_EMPTY".to_owned()];
         let subscriber_map = scheduler
             .fetch_subscriber_map(channel_ids.iter())
             .await
@@ -458,10 +454,10 @@ mod tests {
 
         assert_eq!(valkey.smembers_multi_calls.load(Ordering::Relaxed), 1);
         assert_eq!(valkey.smembers_calls.load(Ordering::Relaxed), 0);
-        assert_eq!(subscriber_map.get("UC_A"), Some(&vec!["room1".to_string()]));
+        assert_eq!(subscriber_map.get("UC_A"), Some(&vec!["room1".to_owned()]));
         assert_eq!(
             subscriber_map.get("UC_B"),
-            Some(&vec!["room2".to_string(), "room3".to_string()])
+            Some(&vec!["room2".to_owned(), "room3".to_owned()])
         );
         assert!(!subscriber_map.contains_key("UC_EMPTY"));
     }

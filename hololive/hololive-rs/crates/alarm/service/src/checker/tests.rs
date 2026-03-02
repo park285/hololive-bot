@@ -138,7 +138,7 @@ impl ValkeyClient for TrackingSubscriberValidationValkey {
         self.smembers_multi_calls.fetch_add(1, Ordering::Relaxed);
         if self.fail_smembers_multi {
             return Err(AlarmError::Valkey(
-                "forced smembers_multi failure".to_string(),
+                "forced smembers_multi failure".to_owned(),
             ));
         }
         Ok(keys
@@ -499,11 +499,11 @@ async fn detect_schedule_change_no_history_returns_empty() {
 #[tokio::test]
 async fn validate_subscribers_uses_smembers_multi_batch_path() {
     let valkey = Arc::new(TrackingSubscriberValidationValkey::new(HashMap::from([
-        ("alarm:room1".to_string(), vec!["UC_A".to_string()]),
-        ("alarm:room2".to_string(), vec!["UC_B".to_string()]),
+        ("alarm:room1".to_owned(), vec!["UC_A".to_owned()]),
+        ("alarm:room2".to_owned(), vec!["UC_B".to_owned()]),
         (
-            "alarm:room3".to_string(),
-            vec!["UC_A".to_string(), "UC_Z".to_string()],
+            "alarm:room3".to_owned(),
+            vec!["UC_A".to_owned(), "UC_Z".to_owned()],
         ),
     ])));
     let checker = make_checker_with_dyn(vec![], Arc::clone(&valkey) as Arc<dyn ValkeyClient>);
@@ -511,16 +511,12 @@ async fn validate_subscribers_uses_smembers_multi_batch_path() {
     let result = checker
         .validate_subscribers(
             "UC_A",
-            &[
-                "room1".to_string(),
-                "room2".to_string(),
-                "room3".to_string(),
-            ],
+            &["room1".to_owned(), "room2".to_owned(), "room3".to_owned()],
         )
         .await
         .unwrap();
 
-    assert_eq!(result, vec!["room1".to_string(), "room3".to_string()]);
+    assert_eq!(result, vec!["room1".to_owned(), "room3".to_owned()]);
     assert_eq!(valkey.smembers_multi_calls.load(Ordering::Relaxed), 1);
     assert_eq!(valkey.smembers_calls.load(Ordering::Relaxed), 0);
 }
@@ -529,9 +525,9 @@ async fn validate_subscribers_uses_smembers_multi_batch_path() {
 async fn validate_subscribers_falls_back_to_single_lookup_on_batch_error() {
     let valkey = Arc::new(
         TrackingSubscriberValidationValkey::new(HashMap::from([
-            ("alarm:room1".to_string(), vec!["UC_A".to_string()]),
-            ("alarm:room2".to_string(), vec!["UC_B".to_string()]),
-            ("alarm:room3".to_string(), vec!["UC_A".to_string()]),
+            ("alarm:room1".to_owned(), vec!["UC_A".to_owned()]),
+            ("alarm:room2".to_owned(), vec!["UC_B".to_owned()]),
+            ("alarm:room3".to_owned(), vec!["UC_A".to_owned()]),
         ]))
         .with_smembers_multi_error()
         .with_smembers_error_key("alarm:room3"),
@@ -541,16 +537,12 @@ async fn validate_subscribers_falls_back_to_single_lookup_on_batch_error() {
     let result = checker
         .validate_subscribers(
             "UC_A",
-            &[
-                "room1".to_string(),
-                "room2".to_string(),
-                "room3".to_string(),
-            ],
+            &["room1".to_owned(), "room2".to_owned(), "room3".to_owned()],
         )
         .await
         .unwrap();
 
-    assert_eq!(result, vec!["room1".to_string()]);
+    assert_eq!(result, vec!["room1".to_owned()]);
     assert_eq!(valkey.smembers_multi_calls.load(Ordering::Relaxed), 1);
     assert_eq!(valkey.smembers_calls.load(Ordering::Relaxed), 3);
 }
@@ -562,7 +554,7 @@ async fn validate_subscribers_falls_back_to_single_lookup_on_batch_error() {
 async fn create_notification_target_minute_creates_notification() {
     let mut seeded = PreseededValkeyClient::new();
     // room1이 UC_A를 구독 중 (alarm:room1 set에 UC_A 포함)
-    seeded.seed_set("alarm:room1", vec!["UC_A".to_string()]);
+    seeded.seed_set("alarm:room1", vec!["UC_A".to_owned()]);
     let valkey: Arc<dyn ValkeyClient> = Arc::new(seeded);
 
     let checker = make_checker_with_dyn(vec![], Arc::clone(&valkey));
@@ -572,7 +564,7 @@ async fn create_notification_target_minute_creates_notification() {
     let stream = make_stream("vid1", "UC_A", StreamStatus::Upcoming, Some(start), None);
 
     let result = checker
-        .create_notification(&stream, "UC_A", &["room1".to_string()])
+        .create_notification(&stream, "UC_A", &["room1".to_owned()])
         .await
         .unwrap();
 
@@ -592,7 +584,7 @@ async fn create_notification_non_target_no_change_returns_empty() {
     let stream = make_stream("vid2", "UC_A", StreamStatus::Upcoming, Some(start), None);
 
     let result = checker
-        .create_notification(&stream, "UC_A", &["room1".to_string()])
+        .create_notification(&stream, "UC_A", &["room1".to_owned()])
         .await
         .unwrap();
 
@@ -604,7 +596,7 @@ async fn check_upcoming_streams_with_zero_budget_skips_holodex_calls() {
     let mut seeded = PreseededValkeyClient::new();
     seeded.seed_set(
         alarm_core::keys::ALARM_CHANNEL_REGISTRY_KEY,
-        vec!["UC_A".to_string()],
+        vec!["UC_A".to_owned()],
     );
     seeded.seed_set(
         format!(
@@ -612,7 +604,7 @@ async fn check_upcoming_streams_with_zero_budget_skips_holodex_calls() {
             alarm_core::keys::CHANNEL_SUBSCRIBERS_KEY_PREFIX,
             "UC_A"
         ),
-        vec!["room1".to_string()],
+        vec!["room1".to_owned()],
     );
     let valkey: Arc<dyn ValkeyClient> = Arc::new(seeded);
 
@@ -640,7 +632,7 @@ async fn check_upcoming_streams_with_zero_budget_skips_holodex_calls() {
 async fn create_live_catchup_notification_not_notified_creates() {
     let mut seeded = PreseededValkeyClient::new();
     // room1이 UC_A를 구독 중
-    seeded.seed_set("alarm:room1", vec!["UC_A".to_string()]);
+    seeded.seed_set("alarm:room1", vec!["UC_A".to_owned()]);
     let valkey: Arc<dyn ValkeyClient> = Arc::new(seeded);
 
     let checker = make_checker_with_dyn(vec![], Arc::clone(&valkey));
@@ -655,7 +647,7 @@ async fn create_live_catchup_notification_not_notified_creates() {
     );
 
     let result = checker
-        .create_live_catchup_notification(&stream, "UC_A", &["room1".to_string()])
+        .create_live_catchup_notification(&stream, "UC_A", &["room1".to_owned()])
         .await
         .unwrap();
 
@@ -681,7 +673,7 @@ async fn create_live_catchup_notification_already_notified_returns_empty() {
         .unwrap();
 
     let result = checker
-        .create_live_catchup_notification(&stream, "UC_A", &["room1".to_string()])
+        .create_live_catchup_notification(&stream, "UC_A", &["room1".to_owned()])
         .await
         .unwrap();
 

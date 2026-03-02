@@ -16,9 +16,9 @@ impl CommandParser for StreamParser {
     ) -> Option<shared_core::model::ParseResult> {
         if is_live_command(command) {
             let mut params = HashMap::new();
-            let member = args.join(" ").trim().to_string();
+            let member = args.join(" ").trim().to_owned();
             if !member.is_empty() {
-                params.insert("member".to_string(), Value::String(member));
+                params.insert("member".to_owned(), Value::String(member));
             }
 
             return Some(build_result(
@@ -76,7 +76,7 @@ fn parse_upcoming_args(args: &[&str]) -> HashMap<String, Value> {
 
         let normalized = normalize_token(token);
         if ["전체", "전부", "모두", "all"].contains(&normalized.as_str()) {
-            params.insert("all".to_string(), Value::Bool(true));
+            params.insert("all".to_owned(), Value::Bool(true));
             params.remove("limit");
             continue;
         }
@@ -86,19 +86,19 @@ fn parse_upcoming_args(args: &[&str]) -> HashMap<String, Value> {
             && limit > 0
         {
             params.insert(
-                "limit".to_string(),
+                "limit".to_owned(),
                 Value::Number(serde_json::Number::from(limit)),
             );
             limit_set = true;
             continue;
         }
 
-        member_tokens.push(token.to_string());
+        member_tokens.push(token.to_owned());
     }
 
-    let member = member_tokens.join(" ").trim().to_string();
+    let member = member_tokens.join(" ").trim().to_owned();
     if !member.is_empty() {
-        params.insert("member".to_string(), Value::String(member));
+        params.insert("member".to_owned(), Value::String(member));
     }
 
     params
@@ -110,7 +110,7 @@ fn parse_schedule_args(args: &[&str]) -> HashMap<String, Value> {
     if let Some(member) = args.first() {
         let member_name = member.trim();
         if !member_name.is_empty() {
-            params.insert("member".to_string(), Value::String(member_name.to_string()));
+            params.insert("member".to_owned(), Value::String(member_name.to_owned()));
         }
     }
 
@@ -120,7 +120,7 @@ fn parse_schedule_args(args: &[&str]) -> HashMap<String, Value> {
         .map_or(7, |value| value.clamp(1, 30));
 
     params.insert(
-        "days".to_string(),
+        "days".to_owned(),
         Value::Number(serde_json::Number::from(days)),
     );
     params

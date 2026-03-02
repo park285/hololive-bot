@@ -31,11 +31,11 @@ pub struct DbConfig {
 impl Default for DbConfig {
     fn default() -> Self {
         Self {
-            host: "postgres".to_string(),
+            host: "postgres".to_owned(),
             port: 5432,
-            user: "hololive_runtime".to_string(),
+            user: "hololive_runtime".to_owned(),
             password: SecretString::from(""),
-            database: "hololive".to_string(),
+            database: "hololive".to_owned(),
             max_connections: 25,
             min_connections: 5,
             connect_timeout_secs: 10,

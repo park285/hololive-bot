@@ -134,21 +134,21 @@ mod tests {
 
         let base = TelemetryConfig {
             enabled: false,
-            service_name: "base-service".to_string(),
-            service_version: "0.0.1".to_string(),
-            environment: "production".to_string(),
-            otlp_endpoint: "otel-collector:4317".to_string(),
+            service_name: "base-service".to_owned(),
+            service_version: "0.0.1".to_owned(),
+            environment: "production".to_owned(),
+            otlp_endpoint: "otel-collector:4317".to_owned(),
             otlp_insecure: false,
             sample_rate: 1.0,
         };
         let logging = LoggingConfig {
-            level: "info".to_string(),
+            level: "info".to_owned(),
             file_enabled: false,
-            dir: "logs".to_string(),
-            file: "hololive-scraper.log".to_string(),
-            combined_file: "combined.log".to_string(),
-            service: "hololive-rs".to_string(),
-            environment: "production".to_string(),
+            dir: "logs".to_owned(),
+            file: "hololive-scraper.log".to_owned(),
+            combined_file: "combined.log".to_owned(),
+            service: "hololive-rs".to_owned(),
+            environment: "production".to_owned(),
         };
 
         let resolved = resolve_telemetry_config(&base, &logging);

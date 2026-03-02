@@ -45,7 +45,7 @@ spec:
               value: "holo-postgres"
             - name: DISPATCHER__DB__PORT
               value: "5433"
-            - name: DISPATCHER__DB__NAME
+            - name: DISPATCHER__DB__DATABASE
               value: "hololive"
             - name: DISPATCHER__DB__USER
               value: "hololive_runtime"
@@ -58,6 +58,14 @@ spec:
               value: "disable"
             - name: DISPATCHER__DB__MAX_CONNECTIONS
               value: "5"
+            - name: DISPATCHER__DB__MIN_CONNECTIONS
+              value: "1"
+            - name: DISPATCHER__DB__CONNECT_TIMEOUT_SECS
+              value: "10"
+            - name: DISPATCHER__DB__IDLE_TIMEOUT_SECS
+              value: "300"
+            - name: DISPATCHER__DB__MAX_LIFETIME_SECS
+              value: "3600"
             - name: DISPATCHER__IRIS__BASE_URL
               value: "http://host-external:3000"
             - name: DISPATCHER__IRIS__BOT_TOKEN
@@ -79,6 +87,8 @@ spec:
               value: "1000"
             - name: DISPATCHER__LOGGING__LEVEL
               value: "info"
+            - name: DISPATCHER__LOGGING__FORMAT
+              value: "pretty"
             - name: RUST_LOG
               value: "info,dispatcher_app=info,sqlx=warn"
             - name: TZ

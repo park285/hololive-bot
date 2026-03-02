@@ -48,7 +48,7 @@ impl FakeHttpClient {
             .or_default()
             .push_back(FakeHttpResponse::Status {
                 code: StatusCode::from_u16(code).expect("valid status"),
-                final_url: final_url.to_string(),
+                final_url: final_url.to_owned(),
                 redirect_location: None,
             });
     }
@@ -60,8 +60,8 @@ impl FakeHttpClient {
             .or_default()
             .push_back(FakeHttpResponse::Status {
                 code: StatusCode::from_u16(code).expect("valid status"),
-                final_url: url.to_string(),
-                redirect_location: Some(location.to_string()),
+                final_url: url.to_owned(),
+                redirect_location: Some(location.to_owned()),
             });
     }
 
@@ -70,7 +70,7 @@ impl FakeHttpClient {
         guard
             .entry(format!("{} {}", method.as_str(), url))
             .or_default()
-            .push_back(FakeHttpResponse::Error(message.to_string()));
+            .push_back(FakeHttpResponse::Error(message.to_owned()));
     }
 
     fn calls(&self) -> Vec<String> {
@@ -90,7 +90,7 @@ impl LinkHttpClient for FakeHttpClient {
         let results = Arc::clone(&self.results);
         let default_response = FakeHttpResponse::Status {
             code: StatusCode::NOT_FOUND,
-            final_url: url.to_string(),
+            final_url: url.to_owned(),
             redirect_location: None,
         };
 
@@ -140,7 +140,7 @@ impl FakeHostResolver {
             .lock()
             .expect("resolver mutex poisoned")
             .insert(
-                host.to_string(),
+                host.to_owned(),
                 VecDeque::from([FakeResolveResult::Ips(ips)]),
             );
     }
@@ -154,7 +154,7 @@ impl FakeHostResolver {
         self.results
             .lock()
             .expect("resolver mutex poisoned")
-            .insert(host.to_string(), queue);
+            .insert(host.to_owned(), queue);
     }
 
     fn set_error(&self, host: &str, message: &str) {
@@ -162,8 +162,8 @@ impl FakeHostResolver {
             .lock()
             .expect("resolver mutex poisoned")
             .insert(
-                host.to_string(),
-                VecDeque::from([FakeResolveResult::Error(message.to_string())]),
+                host.to_owned(),
+                VecDeque::from([FakeResolveResult::Error(message.to_owned())]),
             );
     }
 }
@@ -314,7 +314,7 @@ fn test_event(id: i32, link: &str) -> MajorEvent {
         external_id: format!("event-{id}"),
         event_type: MajorEventType::Event,
         title: format!("event-{id}"),
-        link: link.to_string(),
+        link: link.to_owned(),
         description: None,
         members: Vec::new(),
         pub_date: None,

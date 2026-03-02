@@ -14,7 +14,7 @@ impl Default for HttpClientConfig {
     fn default() -> Self {
         Self {
             timeout_secs: 30,
-            user_agent: "hololive-shared-infra/0.1".to_string(),
+            user_agent: "hololive-shared-infra/0.1".to_owned(),
             max_retries: 3,
         }
     }

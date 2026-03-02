@@ -65,7 +65,7 @@ pub async fn run_once(config: &AppConfig) -> Result<()> {
         maintenance
             .run_once()
             .await
-            .map(|()| "maintenance".to_string())
+            .map(|()| "maintenance".to_owned())
     });
 
     let mut has_error = false;

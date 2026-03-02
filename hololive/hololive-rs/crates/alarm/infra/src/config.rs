@@ -130,7 +130,7 @@ fn parse_api_keys_text(raw: &str) -> Result<Vec<String>, String> {
         .split(',')
         .map(|token| token.trim().trim_matches('"').trim_matches('\''))
         .filter(|token| !token.is_empty())
-        .map(std::string::ToString::to_string)
+        .map(ToOwned::to_owned)
         .collect())
 }
 
@@ -333,8 +333,8 @@ fn normalize_api_keys(keys: Vec<String>) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        if seen.insert(trimmed.to_string()) {
-            normalized.push(trimmed.to_string());
+        if seen.insert(trimmed.to_owned()) {
+            normalized.push(trimmed.to_owned());
         }
     }
     normalized
@@ -392,7 +392,7 @@ pub fn validate_iris_base_url_policy(base_url: &str) -> Result<(), String> {
 
 fn validate_http_host_is_private_or_internal(parsed: &url::Url) -> Result<(), String> {
     let Some(host) = parsed.host_str() else {
-        return Err("iris.base_url host is missing".to_string());
+        return Err("iris.base_url host is missing".to_owned());
     };
 
     // IP 호스트: 사설/루프백/링크로컬만 허용
@@ -463,10 +463,7 @@ mod tests {
     impl EnvVarGuard {
         fn new(keys: Vec<&str>) -> Self {
             Self {
-                keys: keys
-                    .into_iter()
-                    .map(std::string::ToString::to_string)
-                    .collect(),
+                keys: keys.into_iter().map(ToOwned::to_owned).collect(),
             }
         }
     }
@@ -601,7 +598,7 @@ api_keys = []
             port: 5432,
             name: "my db".into(),
             user: "user@name".into(),
-            password: SecretString::from("p@ss/word".to_string()),
+            password: SecretString::from("p@ss/word".to_owned()),
             sslmode: "disable".into(),
             max_connections: 5,
         };

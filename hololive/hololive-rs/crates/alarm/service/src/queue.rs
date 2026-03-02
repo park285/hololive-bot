@@ -66,7 +66,7 @@ mod tests {
         let publisher = QueuePublisher::new(valkey.clone() as Arc<dyn ValkeyClient>);
 
         let notification = make_notification("room1");
-        let claim_keys = vec!["claim:key1".to_string()];
+        let claim_keys = vec!["claim:key1".to_owned()];
 
         publisher.publish(&notification, claim_keys).await.unwrap();
 

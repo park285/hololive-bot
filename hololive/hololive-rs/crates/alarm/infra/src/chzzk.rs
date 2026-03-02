@@ -75,7 +75,7 @@ fn to_stream(channel_id: &str, live: &ChzzkLiveStatus) -> Stream {
         channel: None,
         viewer_count: live.concurrent_user_count,
         // Chzzk 전용 필드
-        chzzk_channel_id: channel_id.to_string(),
+        chzzk_channel_id: channel_id.to_owned(),
         chzzk_live_id: live_id,
         chzzk_live_url: live_url,
         is_integrated: false,
@@ -129,7 +129,7 @@ impl HttpChzzkClient {
 
         Ok(Self {
             http,
-            base_url: config.base_url.trim_end_matches('/').to_string(),
+            base_url: config.base_url.trim_end_matches('/').to_owned(),
             circuit,
         })
     }

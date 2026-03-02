@@ -17,8 +17,8 @@ impl CommandParser for StatsParser {
         if ["구독자", "subscriber", "subs"].contains(&command) {
             let mut params = HashMap::new();
             params.insert(
-                "member".to_string(),
-                Value::String(args.join(" ").trim().to_string()),
+                "member".to_owned(),
+                Value::String(args.join(" ").trim().to_owned()),
             );
             return Some(build_result(
                 CommandType::Subscriber,
@@ -43,7 +43,7 @@ impl CommandParser for StatsParser {
 
 fn parse_stats_args(args: &[&str]) -> HashMap<String, Value> {
     let mut params = HashMap::new();
-    params.insert("action".to_string(), Value::String("gainers".to_string()));
+    params.insert("action".to_owned(), Value::String("gainers".to_owned()));
 
     for arg in args {
         let token = arg.trim();
@@ -57,18 +57,18 @@ fn parse_stats_args(args: &[&str]) -> HashMap<String, Value> {
 
             if is_period_key(&normalized_key) {
                 let period = if normalized_period.is_empty() {
-                    value.trim().to_string()
+                    value.trim().to_owned()
                 } else {
                     normalized_period
                 };
-                params.insert("period".to_string(), Value::String(period));
+                params.insert("period".to_owned(), Value::String(period));
                 continue;
             }
         }
 
         let normalized_period = normalize_stats_period_token(token);
         if !normalized_period.is_empty() {
-            params.insert("period".to_string(), Value::String(normalized_period));
+            params.insert("period".to_owned(), Value::String(normalized_period));
         }
     }
 

@@ -87,11 +87,11 @@ impl AlarmRepository {
 
         Alarm {
             id: existing.and_then(|alarm| alarm.id),
-            room_id: room_id.to_string(),
+            room_id: room_id.to_owned(),
             user_id: existing
                 .map(|alarm| alarm.user_id.clone())
                 .unwrap_or_default(),
-            channel_id: channel_id.to_string(),
+            channel_id: channel_id.to_owned(),
             member_name: existing.and_then(|alarm| alarm.member_name.clone()),
             room_name: existing.and_then(|alarm| alarm.room_name.clone()),
             user_name: existing.and_then(|alarm| alarm.user_name.clone()),
@@ -112,11 +112,11 @@ impl AlarmCRUD for AlarmRepository {
         let mut alarms = self.load_room_alarms(room_id).await?;
         let existing = alarms.get(channel_id);
         let alarm = Self::make_alarm(room_id, channel_id, alarm_types, existing);
-        alarms.insert(channel_id.to_string(), alarm);
+        alarms.insert(channel_id.to_owned(), alarm);
         self.save_room_alarms(room_id, &alarms).await?;
 
         let mut registry = self.load_registry().await?;
-        registry.insert(room_id.to_string());
+        registry.insert(room_id.to_owned());
         self.save_registry(&registry).await
     }
 

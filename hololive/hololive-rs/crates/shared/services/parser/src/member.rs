@@ -55,9 +55,9 @@ impl CommandParser for MemberParser {
 
 fn parse_member_info_args(args: &[&str]) -> HashMap<String, Value> {
     let mut params = HashMap::new();
-    let query = args.join(" ").trim().to_string();
+    let query = args.join(" ").trim().to_owned();
     if !query.is_empty() {
-        params.insert("query".to_string(), Value::String(query));
+        params.insert("query".to_owned(), Value::String(query));
     }
     params
 }
@@ -66,15 +66,15 @@ fn parse_member_news_subscription_args(args: &[&str]) -> HashMap<String, Value> 
     let mut params = HashMap::new();
 
     let action = args.first().map(|arg| normalize_token(arg)).map_or_else(
-        || "status".to_string(),
+        || "status".to_owned(),
         |arg| match arg.as_str() {
-            "켜기" | "on" | "구독" => "on".to_string(),
-            "끄기" | "off" | "해제" => "off".to_string(),
-            _ => "status".to_string(),
+            "켜기" | "on" | "구독" => "on".to_owned(),
+            "끄기" | "off" | "해제" => "off".to_owned(),
+            _ => "status".to_owned(),
         },
     );
 
-    params.insert("action".to_string(), Value::String(action));
+    params.insert("action".to_owned(), Value::String(action));
     params
 }
 
@@ -87,6 +87,6 @@ fn parse_member_news_args(args: &[&str]) -> HashMap<String, Value> {
         _ => "weekly",
     };
 
-    params.insert("period".to_string(), Value::String(period.to_string()));
+    params.insert("period".to_owned(), Value::String(period.to_owned()));
     params
 }

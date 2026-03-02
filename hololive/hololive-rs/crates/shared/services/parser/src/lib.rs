@@ -76,7 +76,7 @@ pub(crate) fn build_result(
         command,
         params,
         confidence,
-        reasoning: reasoning.to_string(),
+        reasoning: reasoning.to_owned(),
     }
 }
 
@@ -96,9 +96,9 @@ fn unknown_result(raw: &str) -> ParseResult {
 fn normalize_prefix(prefix: &str) -> String {
     let trimmed = prefix.trim();
     if trimmed.is_empty() {
-        "!".to_string()
+        "!".to_owned()
     } else {
-        trimmed.to_string()
+        trimmed.to_owned()
     }
 }
 

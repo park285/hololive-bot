@@ -161,7 +161,7 @@ impl TieredScheduler {
         let next_at = self.compute_next_check_at(nearest, last_notified_at);
 
         self.states
-            .entry(channel_id.to_string())
+            .entry(channel_id.to_owned())
             .and_modify(|st| {
                 st.last_checked_at = now;
                 st.next_check_at = next_at;
@@ -191,7 +191,7 @@ impl TieredScheduler {
     pub fn mark_channel_due(&self, channel_id: &str) {
         let now = Utc::now();
         self.states
-            .entry(channel_id.to_string())
+            .entry(channel_id.to_owned())
             .and_modify(|st| {
                 st.force_due = true;
                 st.next_check_at = now;
@@ -212,7 +212,7 @@ impl TieredScheduler {
     pub fn mark_channel_recently_notified(&self, channel_id: &str) {
         let now = Utc::now();
         self.states
-            .entry(channel_id.to_string())
+            .entry(channel_id.to_owned())
             .and_modify(|st| {
                 st.last_notified_at = Some(now);
             })
@@ -410,7 +410,7 @@ mod tests {
             let mut r = sched.full_refresh_at.lock();
             *r = Utc::now() + chrono::Duration::hours(1);
         }
-        let ids = vec!["UC_A".to_string(), "UC_B".to_string()];
+        let ids = vec!["UC_A".to_owned(), "UC_B".to_owned()];
         let due = sched.select_due_channels(&ids);
         assert_eq!(due.len(), 2);
     }
@@ -423,7 +423,7 @@ mod tests {
             let mut r = sched.full_refresh_at.lock();
             *r = Utc::now() + chrono::Duration::hours(1);
         }
-        let id = "UC_A".to_string();
+        let id = "UC_A".to_owned();
         // 미래 next_check_at으로 등록 후 force_due 설정
         sched.states.insert(
             id.clone(),
@@ -448,7 +448,7 @@ mod tests {
             let mut r = sched.full_refresh_at.lock();
             *r = Utc::now() + chrono::Duration::hours(1);
         }
-        let id = "UC_A".to_string();
+        let id = "UC_A".to_owned();
         sched.states.insert(
             id.clone(),
             ChannelScheduleState {
@@ -490,7 +490,7 @@ mod tests {
             let mut r = sched.full_refresh_at.lock();
             *r = Utc::now() + chrono::Duration::hours(1);
         }
-        let id = "UC_A".to_string();
+        let id = "UC_A".to_owned();
         // 미래 next_check_at으로 등록
         sched.states.insert(
             id.clone(),
@@ -542,7 +542,7 @@ mod tests {
     fn full_refresh_returns_all_channels_when_expired() {
         let sched = TieredScheduler::new();
         // full_refresh_at을 과거로 설정 (epoch이 기본값이므로 이미 만료)
-        let ids: Vec<String> = vec!["UC_A".to_string(), "UC_B".to_string(), "UC_C".to_string()];
+        let ids: Vec<String> = vec!["UC_A".to_owned(), "UC_B".to_owned(), "UC_C".to_owned()];
         // 모든 채널에 미래 next_check_at 설정 (due가 아님)
         for id in &ids {
             sched.states.insert(

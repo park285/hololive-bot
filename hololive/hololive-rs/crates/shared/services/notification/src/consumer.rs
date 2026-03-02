@@ -19,8 +19,10 @@ impl ValkeyQueueConsumer {
     pub fn new(client: Arc<dyn ValkeyClient>) -> Self {
         Self {
             client,
-            queue_key: DEFAULT_QUEUE_KEY.to_string(),
-            block_timeout: 5.0,
+            queue_key: DEFAULT_QUEUE_KEY.to_owned(),
+            // fred 기본 커맨드 타임아웃(약 5s)보다 짧게 두어 BRPOP 타임아웃이
+            // 네트워크 오류로 오인되지 않도록 한다.
+            block_timeout: 1.0,
             drain_timeout: 0.05,
             max_batch: 50,
         }
@@ -28,7 +30,7 @@ impl ValkeyQueueConsumer {
 
     #[must_use]
     pub fn with_queue_key(mut self, queue_key: &str) -> Self {
-        self.queue_key = queue_key.to_string();
+        queue_key.clone_into(&mut self.queue_key);
         self
     }
 

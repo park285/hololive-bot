@@ -46,12 +46,12 @@ pub(super) fn is_position_covered(pos: usize, ranges: &[(usize, usize)]) -> bool
 pub(super) fn extract_headers(html: &str) -> Vec<HeaderInfo> {
     SECTION_HEADER_PATTERN
         .captures_iter(html)
-        .filter_map(|captures| captures.get(1).map(|inner| inner.as_str().to_string()))
+        .filter_map(|captures| captures.get(1).map(|inner| inner.as_str().to_owned()))
         .filter_map(|inner_html| {
             let text = HTML_TAG_PATTERN
                 .replace_all(&inner_html, "")
                 .trim()
-                .to_string();
+                .to_owned();
 
             if text.is_empty() {
                 None

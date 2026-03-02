@@ -29,7 +29,7 @@ impl StatsFormatting for ResponseFormatter {
         let mut lines = Vec::new();
         let period = period_label.trim();
         if period.is_empty() {
-            lines.push("구독자 증가 순위".to_string());
+            lines.push("구독자 증가 순위".to_owned());
         } else {
             lines.push(format!("구독자 증가 순위 ({period})"));
         }

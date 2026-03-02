@@ -223,7 +223,7 @@ impl HttpHolodexClient {
 
         Ok(Self {
             http,
-            base_url: config.base_url.trim_end_matches('/').to_string(),
+            base_url: config.base_url.trim_end_matches('/').to_owned(),
             api_keys: config.api_keys.clone(),
             key_index: Arc::new(AtomicUsize::new(0)),
             rate_limiter: Arc::new(Self::build_rate_limiter(config.rate_limit_ms)),
@@ -346,7 +346,7 @@ impl HolodexClient for HttpHolodexClient {
 
                 let mut all = Vec::new();
                 let fallback_ids: Vec<String> =
-                    channel_ids.iter().map(|id| (*id).to_string()).collect();
+                    channel_ids.iter().map(|id| (*id).to_owned()).collect();
                 let mut fallback_fetches =
                     stream::iter(fallback_ids.into_iter().map(|id| async move {
                         let result = self.fetch_single(&id).await;

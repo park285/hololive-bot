@@ -78,16 +78,16 @@ pub fn resolve_telemetry_config(
     }
 
     if cfg.service_name.trim().is_empty() {
-        cfg.service_name = "hololive-rs".to_string();
+        cfg.service_name = "hololive-rs".to_owned();
     }
     if cfg.service_version.trim().is_empty() {
-        cfg.service_version = env!("CARGO_PKG_VERSION").to_string();
+        cfg.service_version = env!("CARGO_PKG_VERSION").to_owned();
     }
     if cfg.environment.trim().is_empty() {
-        cfg.environment = "production".to_string();
+        cfg.environment = "production".to_owned();
     }
     if cfg.otlp_endpoint.trim().is_empty() {
-        cfg.otlp_endpoint = "otel-collector:4317".to_string();
+        cfg.otlp_endpoint = "otel-collector:4317".to_owned();
     }
     cfg.sample_rate = cfg.sample_rate.clamp(0.0, 1.0);
 

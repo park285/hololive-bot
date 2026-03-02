@@ -25,9 +25,9 @@ pub fn minutes_until_floor(start: DateTime<Utc>, now: DateTime<Utc>) -> i32 {
 /// old_time > new_time → 앞당겨짐 / old_time < new_time → 늦춰짐 / 동일 → 빈 문자열
 pub fn format_schedule_change_message(old_time: DateTime<Utc>, new_time: DateTime<Utc>) -> String {
     if old_time < new_time {
-        "일정이 늦춰졌습니다.".to_string()
+        "일정이 늦춰졌습니다.".to_owned()
     } else if old_time > new_time {
-        "일정이 앞당겨졌습니다.".to_string()
+        "일정이 앞당겨졌습니다.".to_owned()
     } else {
         String::new()
     }

@@ -60,7 +60,7 @@ impl StreamsFormatting for ResponseFormatter {
             .iter()
             .map(|stream| {
                 let scheduled = stream.start_scheduled.map_or_else(
-                    || "시간 미정".to_string(),
+                    || "시간 미정".to_owned(),
                     |value| value.format("%m-%d %H:%M UTC").to_string(),
                 );
                 format!("- {scheduled}: {}", stream.title)

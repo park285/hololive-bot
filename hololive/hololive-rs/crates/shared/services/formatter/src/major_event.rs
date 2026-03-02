@@ -78,14 +78,14 @@ fn format_event_summary(
     lines.push(format!("{label} 이벤트 요약"));
 
     if !llm_summary.trim().is_empty() {
-        lines.push(llm_summary.trim().to_string());
+        lines.push(llm_summary.trim().to_owned());
         lines.push(String::new());
     }
 
     for event in events.iter().take(10) {
         let date_text = event
             .event_start_date
-            .map_or_else(|| "TBA".to_string(), |date| date.to_string());
+            .map_or_else(|| "TBA".to_owned(), |date| date.to_string());
         lines.push(format!("- [{}] {}", date_text, event.title));
     }
 

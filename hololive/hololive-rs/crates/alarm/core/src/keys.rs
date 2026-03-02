@@ -98,7 +98,7 @@ pub fn build_title_fingerprint(title: &str, stream_id: &str) -> String {
         if !fallback.is_empty() {
             fallback
         } else {
-            "untitled".to_string()
+            "untitled".to_owned()
         }
     };
 
@@ -170,10 +170,10 @@ pub fn build_schedule_transition_key(
 /// - 그 외 → minutesUntil을 문자열로 변환
 pub fn notification_category(target_minutes: &[i32], minutes_until: i32) -> String {
     if minutes_until == 0 {
-        return "live".to_string();
+        return "live".to_owned();
     }
     if target_minutes.contains(&minutes_until) {
-        return "target".to_string();
+        return "target".to_owned();
     }
     minutes_until.to_string()
 }

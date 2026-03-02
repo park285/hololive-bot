@@ -12,7 +12,7 @@ pub struct LoggingConfig {
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
-            level: "info".to_string(),
+            level: "info".to_owned(),
             format: LogFormat::Pretty,
         }
     }

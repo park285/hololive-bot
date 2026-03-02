@@ -28,10 +28,10 @@ impl RssParser {
             .iter()
             .map(|item| MajorEvent {
                 id: 0,
-                external_id: item.link().unwrap_or_default().to_string(),
+                external_id: item.link().unwrap_or_default().to_owned(),
                 event_type: event_type.clone(),
-                title: item.title().unwrap_or_default().to_string(),
-                link: item.link().unwrap_or_default().to_string(),
+                title: item.title().unwrap_or_default().to_owned(),
+                link: item.link().unwrap_or_default().to_owned(),
                 description: if item
                     .content()
                     .or_else(|| item.description())
@@ -44,13 +44,13 @@ impl RssParser {
                         item.content()
                             .or_else(|| item.description())
                             .unwrap_or_default()
-                            .to_string(),
+                            .to_owned(),
                     )
                 },
                 members: item
                     .categories()
                     .iter()
-                    .map(|category| category.name().to_string())
+                    .map(|category| category.name().to_owned())
                     .collect(),
                 pub_date: parse_pub_date(item.pub_date().unwrap_or_default()),
                 event_start_date: None,
@@ -202,7 +202,7 @@ mod tests {
             "content:encoded namespace parsing failed"
         );
 
-        assert_eq!(events[1].members, vec!["星街すいせい".to_string()]);
+        assert_eq!(events[1].members, vec!["星街すいせい".to_owned()]);
         assert!(events[1].description.is_some());
     }
 }

@@ -36,7 +36,7 @@ pub(crate) struct HealthConfig {
 impl Default for HealthConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
+            host: "0.0.0.0".to_owned(),
             port: 30020,
         }
     }
@@ -52,7 +52,7 @@ pub(crate) struct DispatcherConfig {
 impl Default for DispatcherConfig {
     fn default() -> Self {
         Self {
-            queue_key: "alarm:dispatch:queue".to_string(),
+            queue_key: "alarm:dispatch:queue".to_owned(),
             max_batch: 50,
             reconnect_backoff_ms: 1_000,
         }
