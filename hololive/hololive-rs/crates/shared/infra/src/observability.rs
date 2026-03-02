@@ -1,7 +1,6 @@
-// 공통 observability 인프라: 로그 포매터, OTEL 런타임, tracing 초기화
-// 앱별 설정 해석(resolve_telemetry_config 등)은 각 앱 observability.rs에서 처리
+// 공통 observability 인프라: 로그 포매터, OTEL 런타임, tracing 초기화, 텔레메트리 설정 해석
 
-use std::{fmt, fs, path::PathBuf};
+use std::fmt;
 
 use anyhow::{Context, Result};
 use opentelemetry::{
@@ -15,13 +14,11 @@ use opentelemetry_sdk::{
     trace::{Sampler, SdkTracerProvider},
 };
 use tracing::{Event, Subscriber, error, info};
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
     fmt::{
         FmtContext, FormatEvent, FormatFields,
         format::Writer,
         time::{FormatTime, OffsetTime},
-        writer::{BoxMakeWriter, MakeWriterExt},
     },
     layer::SubscriberExt,
     registry::LookupSpan,
@@ -37,10 +34,6 @@ const KST_TIME_FORMAT: &[time::format_description::FormatItem<'static>] = time::
 
 pub struct TracingInitConfig<'a> {
     pub level: &'a str,
-    pub file_enabled: bool,
-    pub dir: &'a str,
-    pub file: &'a str,
-    pub combined_file: &'a str,
 }
 
 pub struct OtelInitConfig<'a> {
@@ -191,7 +184,6 @@ struct OTelRuntime {
 
 #[derive(Debug)]
 pub struct TracingRuntime {
-    _guards: Vec<WorkerGuard>,
     otel: Option<OTelRuntime>,
 }
 
@@ -220,6 +212,96 @@ pub fn parse_f64_env(name: &str) -> Option<f64> {
     std::env::var(name)
         .ok()
         .and_then(|value| value.trim().parse::<f64>().ok())
+}
+
+// ── 공유 텔레메트리 설정 구조체 (alarm/scraper 공통) ──
+
+/// alarm/scraper 양측이 공유하는 OTEL 텔레메트리 설정
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct TelemetryConfig {
+    pub enabled: bool,
+    pub service_name: String,
+    pub service_version: String,
+    pub environment: String,
+    pub otlp_endpoint: String,
+    pub otlp_insecure: bool,
+    pub sample_rate: f64,
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            service_name: String::new(),
+            service_version: env!("CARGO_PKG_VERSION").to_owned(),
+            environment: "production".to_owned(),
+            otlp_endpoint: "otel-collector:4317".to_owned(),
+            otlp_insecure: false,
+            sample_rate: 1.0,
+        }
+    }
+}
+
+/// OTEL 환경변수 오버라이드 및 빈 필드 기본값 적용.
+///
+/// - `default_service_name`: `service_name`이 비어있을 때 사용할 기본값
+/// - `default_environment`: `environment`가 비어있을 때 사용할 기본값 (None이면 "production")
+pub fn resolve_otel_env_overrides(
+    base: &TelemetryConfig,
+    default_service_name: &str,
+    default_environment: Option<&str>,
+) -> TelemetryConfig {
+    let mut cfg = base.clone();
+
+    // 환경변수 오버라이드 (비어있는 값은 무시)
+    if let Some(enabled) = parse_bool_env("OTEL_ENABLED") {
+        cfg.enabled = enabled;
+    }
+    if let Ok(value) = std::env::var("OTEL_SERVICE_NAME")
+        && !value.trim().is_empty()
+    {
+        cfg.service_name = value;
+    }
+    if let Ok(value) = std::env::var("OTEL_SERVICE_VERSION")
+        && !value.trim().is_empty()
+    {
+        cfg.service_version = value;
+    }
+    if let Ok(value) = std::env::var("OTEL_ENVIRONMENT")
+        && !value.trim().is_empty()
+    {
+        cfg.environment = value;
+    }
+    if let Ok(value) = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        && !value.trim().is_empty()
+    {
+        cfg.otlp_endpoint = value;
+    }
+    if let Some(insecure) = parse_bool_env("OTEL_EXPORTER_OTLP_INSECURE") {
+        cfg.otlp_insecure = insecure;
+    }
+    if let Some(sample_rate) = parse_f64_env("OTEL_SAMPLE_RATE") {
+        cfg.sample_rate = sample_rate;
+    }
+
+    // 빈 문자열 폴백: 호출자가 제공한 기본값 적용
+    if cfg.service_name.trim().is_empty() {
+        default_service_name.clone_into(&mut cfg.service_name);
+    }
+    if cfg.service_version.trim().is_empty() {
+        env!("CARGO_PKG_VERSION").clone_into(&mut cfg.service_version);
+    }
+    if cfg.environment.trim().is_empty() {
+        default_environment
+            .unwrap_or("production")
+            .clone_into(&mut cfg.environment);
+    }
+    if cfg.otlp_endpoint.trim().is_empty() {
+        "otel-collector:4317".clone_into(&mut cfg.otlp_endpoint);
+    }
+    cfg.sample_rate = cfg.sample_rate.clamp(0.0, 1.0);
+
+    cfg
 }
 
 // ── OTLP 엔드포인트 정규화 ──
@@ -292,9 +374,8 @@ fn init_otel_runtime(config: &OtelInitConfig<'_>) -> Result<Option<OTelRuntime>>
     }))
 }
 
-// ── 통합 tracing 초기화 ──
+// ── 통합 tracing 초기화 (stdout 전용, file logging 미지원) ──
 
-#[allow(clippy::too_many_lines)]
 pub fn init_unified_tracing(
     tracing_config: &TracingInitConfig<'_>,
     otel_config: &OtelInitConfig<'_>,
@@ -302,54 +383,11 @@ pub fn init_unified_tracing(
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(tracing_config.level));
 
-    let mut guards = Vec::new();
     let stdout_timer = build_kst_timer().context("stdout KST 타이머 초기화 실패")?;
     let stdout_layer = tracing_subscriber::fmt::layer()
         .event_format(UnifiedLogFormatter::new(stdout_timer))
         .with_ansi(false)
         .with_writer(std::io::stdout);
-
-    let (file_writer, file_logging_paths): (BoxMakeWriter, Option<(PathBuf, PathBuf)>) =
-        if tracing_config.file_enabled {
-            fs::create_dir_all(tracing_config.dir)
-                .with_context(|| format!("로그 디렉터리 생성 실패: {}", tracing_config.dir))?;
-
-            let service_appender =
-                tracing_appender::rolling::never(tracing_config.dir, tracing_config.file);
-            let (service_writer, service_guard) = tracing_appender::non_blocking(service_appender);
-            guards.push(service_guard);
-
-            let combined_file = tracing_config.combined_file.trim();
-            let combined_enabled =
-                !combined_file.is_empty() && combined_file != tracing_config.file.trim();
-            let file_writer: BoxMakeWriter = if combined_enabled {
-                let combined_appender =
-                    tracing_appender::rolling::never(tracing_config.dir, combined_file);
-                let (combined_writer, combined_guard) =
-                    tracing_appender::non_blocking(combined_appender);
-                guards.push(combined_guard);
-                BoxMakeWriter::new(service_writer.and(combined_writer))
-            } else {
-                BoxMakeWriter::new(service_writer)
-            };
-
-            let service_log_path = PathBuf::from(tracing_config.dir).join(tracing_config.file);
-            let combined_log_name = if combined_enabled {
-                combined_file.to_owned()
-            } else {
-                tracing_config.file.to_owned()
-            };
-            let combined_log_path = PathBuf::from(tracing_config.dir).join(combined_log_name);
-            (file_writer, Some((service_log_path, combined_log_path)))
-        } else {
-            (BoxMakeWriter::new(std::io::sink), None)
-        };
-
-    let file_timer = build_kst_timer().context("file KST 타이머 초기화 실패")?;
-    let file_layer = tracing_subscriber::fmt::layer()
-        .event_format(UnifiedLogFormatter::new(file_timer))
-        .with_ansi(false)
-        .with_writer(file_writer);
 
     let otel_runtime = init_otel_runtime(otel_config)?;
     let otel_layer = otel_runtime.as_ref().map(|runtime| {
@@ -360,26 +398,16 @@ pub fn init_unified_tracing(
     tracing_subscriber::registry()
         .with(env_filter)
         .with(stdout_layer)
-        .with(file_layer)
         .with(otel_layer)
         .try_init()
         .context("tracing subscriber 초기화 실패")?;
 
-    if let Some((service_log_path, combined_log_path)) = file_logging_paths {
-        info!(
-            path = %service_log_path.display(),
-            combined = %combined_log_path.display(),
-            stdout_only = false,
-            otel_correlation = otel_runtime.is_some(),
-            "file_logging_enabled"
-        );
-    } else {
-        info!(
-            stdout_only = true,
-            otel_correlation = otel_runtime.is_some(),
-            "file_logging_enabled"
-        );
-    }
+    // stdout 전용 로깅 정책 (Fluent Bit → Loki)
+    info!(
+        stdout_only = true,
+        otel_correlation = otel_runtime.is_some(),
+        "file_logging_enabled"
+    );
 
     if let Some(runtime) = &otel_runtime {
         info!(
@@ -390,8 +418,5 @@ pub fn init_unified_tracing(
         );
     }
 
-    Ok(TracingRuntime {
-        _guards: guards,
-        otel: otel_runtime,
-    })
+    Ok(TracingRuntime { otel: otel_runtime })
 }

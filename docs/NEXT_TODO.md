@@ -26,22 +26,21 @@
 
 ## 1. Rust Dispatcher Cutover (우선순위: HIGH)
 
-**현재 상태**: Rust dispatcher 검증 + 배포 정상화 완료 (2026-03-02): 1) rust-dispatcher 리소스 활성화, 2) GO consumer 비활성화, 3) rust-dispatcher `/health`·`/ready` 정상 확인. 24h 모니터링 및 최종 정리 단계는 미완료
+**상태**: 완료 (2026-03-02). Go alarm-dispatcher 바이너리 + AlarmQueueDispatcher 완전 제거 완료.
 
-### 절차
-1. `k8s/base/kustomization.yaml`에서 `rust-dispatcher-*` 주석 해제 (완료, 2026-03-01)
-2. Go `alarm-dispatcher`의 `GO_ALARM_QUEUE_CONSUMER_ENABLED=false` 설정 (완료, 2026-03-01)
-3. Rust dispatcher 배포 → health/ready 확인 (완료, 2026-03-02)
-4. 모니터링: p95 latency < 1s, error rate < 0.1% (24시간) (진행 필요)
-5. 안정 확인 후 Go alarm-dispatcher replica=0 또는 제거 (보류: admin/bot의 alarm-dispatcher HTTP 의존 정리 선행 필요)
+### 완료 항목
+1. `k8s/base/kustomization.yaml`에서 `rust-dispatcher-*` 주석 해제 (2026-03-01)
+2. Go `alarm-dispatcher` 비활성화 → 바이너리 전체 제거 (2026-03-02)
+3. Rust dispatcher 배포 → health/ready 확인 (2026-03-02)
+4. Go 큐 소비자 코드 제거: `AlarmQueueConsumer`, `AlarmQueueDispatcher`, config 플래그, Provider 함수 (2026-03-02)
+5. 인프라 설정 정리: docker-compose, k8s에서 `GO_ALARM_QUEUE_CONSUMER_ENABLED` 제거 (2026-03-02)
 
 ### Rollback
-- Rust dispatcher replica=0 + Go `GO_ALARM_QUEUE_CONSUMER_ENABLED=true` 복원
+- Rust dispatcher는 독립 운영. Go 소비자 경로는 완전 제거됨 (복원 불가, git revert 필요)
 
 ### 파일
 - `k8s/base/rust-dispatcher-deployment.yaml`
 - `k8s/base/rust-dispatcher-service.yaml`
-- `k8s/base/alarm-dispatcher-deployment.yaml` (Go, 현재 운영 주체)
 - `hololive/hololive-rs/Dockerfile.dispatcher`
 
 ---
@@ -56,8 +55,8 @@
 
 ### 작업
 - Rust fixture (`hololive-rs/testdata/alarm_queue/`) 수정
-- Go 계약 테스트 (`hololive-shared/pkg/service/notification/alarm_queue_consumer_test.go`) 동기화
-- `supportedVersions` map 갱신 (Go: `alarm_queue_consumer.go`, Rust: `queue.rs`)
+- Go 계약 테스트 (`hololive-shared/pkg/domain/alarm_test.go`) 동기화
+- Rust `queue.rs` 버전 맵 갱신
 
 ---
 
@@ -92,7 +91,32 @@
 
 ---
 
-## 4. 품질 개선 (우선순위: LOW)
+## 4. Codex 안티패턴 리팩토링 (우선순위: MED)
+
+**상태**: 17/19 완료 (2026-03-02), 잔여 2개(대기 항목)
+**상세 문서**: `docs/CODEX_ANTIPATTERN_REFACTORING.md`
+
+### 완료 (17개)
+- C1: Rust `file_enabled` 죽은 코드 완전 제거
+- C2: Go ProxyEnabled 5단계 위임 체인 해소
+- H1: Rust ValkeyClient 이중 트레이트 통합 (556줄 → 7줄 re-export)
+- H2: Rust twitch_enabled 4단계 전파 → Option 패턴
+- H3: Go MajorEvent 인터페이스 3중 복사 제거
+- H4: Go context.TODO() 핸들러 내부 사용 수정
+- M1: Go nil receiver guard 과용 제거
+- M2+M3: Rust TelemetryConfig 3개 → shared 통합
+- M5: Go CleanupEnabled → zero-value 비활성화
+- M6: Go AlarmQueueConsumerEnabled + alarm-dispatcher 바이너리 완전 제거
+- M7: Go 불가능 nil guard 삭제
+- L1/L2/L3/L5/L6: Go/Rust 래퍼 제거 + dead code 정리
+
+### 대기 (2개, 외부 의존)
+- M4: JSON 폴백 제거 (Valkey 데이터 마이그레이션 확인 후)
+- L4: Formatter 트레이트 제거 (mock 의존 확인 후)
+
+---
+
+## 5. 품질 개선 (우선순위: LOW)
 
 ### 4-1. Rust str_to_string 점진적 전환
 - **현재**: 대량 치환 완료, 잔여 약 56건(2026-03-02 기준, 일부는 포맷/에러 문자열 변환 목적)
