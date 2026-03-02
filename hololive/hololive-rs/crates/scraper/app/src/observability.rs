@@ -3,23 +3,16 @@
 use anyhow::Result;
 use scraper_infra::config::{LoggingConfig, TelemetryConfig};
 use shared_infra::observability::{
-    OtelInitConfig, TracingInitConfig, TracingRuntime, init_unified_tracing, parse_bool_env,
-    parse_f64_env,
+    OtelInitConfig, TracingInitConfig, TracingRuntime, init_unified_tracing,
+    normalize_otlp_endpoint, resolve_otel_env_overrides,
 };
 
 pub fn init_tracing(config: &LoggingConfig, telemetry: &TelemetryConfig) -> Result<TracingRuntime> {
     let tracing_config = TracingInitConfig {
         level: &config.level,
-        file_enabled: config.file_enabled,
-        dir: &config.dir,
-        file: &config.file,
-        combined_file: &config.combined_file,
     };
 
-    let endpoint = shared_infra::observability::normalize_otlp_endpoint(
-        &telemetry.otlp_endpoint,
-        telemetry.otlp_insecure,
-    );
+    let endpoint = normalize_otlp_endpoint(&telemetry.otlp_endpoint, telemetry.otlp_insecure);
     let otel_config = OtelInitConfig {
         enabled: telemetry.enabled,
         service_name: &telemetry.service_name,
@@ -34,62 +27,22 @@ pub fn init_tracing(config: &LoggingConfig, telemetry: &TelemetryConfig) -> Resu
     init_unified_tracing(&tracing_config, &otel_config)
 }
 
+/// 환경변수로 telemetry 설정 오버라이드.
+/// logging.service / logging.environment를 service_name/environment 초기값으로 사용한 뒤
+/// OTEL_ 환경변수를 적용합니다.
 pub fn resolve_telemetry_config(
     base: &TelemetryConfig,
     logging: &LoggingConfig,
 ) -> TelemetryConfig {
-    let mut cfg = base.clone();
-
-    if cfg.service_name.trim().is_empty() {
-        cfg.service_name = logging.service.clone();
+    // logging 필드를 telemetry 초기값으로 승계 (비어있는 경우만)
+    let mut seeded = base.clone();
+    if seeded.service_name.trim().is_empty() {
+        seeded.service_name = logging.service.clone();
     }
-    if cfg.environment.trim().is_empty() {
-        cfg.environment = logging.environment.clone();
-    }
-
-    if let Some(enabled) = parse_bool_env("OTEL_ENABLED") {
-        cfg.enabled = enabled;
-    }
-    if let Ok(value) = std::env::var("OTEL_SERVICE_NAME")
-        && !value.trim().is_empty()
-    {
-        cfg.service_name = value;
-    }
-    if let Ok(value) = std::env::var("OTEL_SERVICE_VERSION")
-        && !value.trim().is_empty()
-    {
-        cfg.service_version = value;
-    }
-    if let Ok(value) = std::env::var("OTEL_ENVIRONMENT")
-        && !value.trim().is_empty()
-    {
-        cfg.environment = value;
-    }
-    if let Ok(value) = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
-        && !value.trim().is_empty()
-    {
-        cfg.otlp_endpoint = value;
-    }
-    if let Some(insecure) = parse_bool_env("OTEL_EXPORTER_OTLP_INSECURE") {
-        cfg.otlp_insecure = insecure;
-    }
-    if let Some(sample_rate) = parse_f64_env("OTEL_SAMPLE_RATE") {
-        cfg.sample_rate = sample_rate;
+    if seeded.environment.trim().is_empty() {
+        seeded.environment = logging.environment.clone();
     }
 
-    if cfg.service_name.trim().is_empty() {
-        cfg.service_name = "hololive-rs".to_owned();
-    }
-    if cfg.service_version.trim().is_empty() {
-        cfg.service_version = env!("CARGO_PKG_VERSION").to_owned();
-    }
-    if cfg.environment.trim().is_empty() {
-        cfg.environment = "production".to_owned();
-    }
-    if cfg.otlp_endpoint.trim().is_empty() {
-        cfg.otlp_endpoint = "otel-collector:4317".to_owned();
-    }
-    cfg.sample_rate = cfg.sample_rate.clamp(0.0, 1.0);
-
-    cfg
+    // 공통 환경변수 오버라이드 적용: 최종 폴백은 logging에서 승계한 값
+    resolve_otel_env_overrides(&seeded, &logging.service, Some(&logging.environment))
 }

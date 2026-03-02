@@ -10,6 +10,7 @@ use alarm_core::{
 };
 use alarm_infra::{holodex::MockHolodexClient, valkey::MockValkeyClient};
 use async_trait::async_trait;
+use shared_core::error::SharedError;
 
 use super::*;
 
@@ -90,54 +91,60 @@ impl TrackingSubscriberValidationValkey {
     }
 }
 
+// shared ValkeyClient 트레이트 구현 — SharedError 반환
 #[async_trait]
 impl ValkeyClient for TrackingSubscriberValidationValkey {
-    async fn get(&self, _: &str) -> Result<Option<String>, AlarmError> {
+    async fn get(&self, _: &str) -> Result<Option<String>, SharedError> {
         Ok(None)
     }
 
-    async fn set(&self, _: &str, _: &str, _: std::time::Duration) -> Result<(), AlarmError> {
+    async fn set(
+        &self,
+        _: &str,
+        _: &str,
+        _: Option<std::time::Duration>,
+    ) -> Result<(), SharedError> {
         Ok(())
     }
 
-    async fn set_nx(&self, _: &str, _: &str, _: std::time::Duration) -> Result<bool, AlarmError> {
+    async fn set_nx(&self, _: &str, _: &str, _: std::time::Duration) -> Result<bool, SharedError> {
         Ok(true)
     }
 
-    async fn del(&self, _: &[&str]) -> Result<u64, AlarmError> {
-        Ok(0)
+    async fn del(&self, _: &[&str]) -> Result<(), SharedError> {
+        Ok(())
     }
 
-    async fn hget(&self, _: &str, _: &str) -> Result<Option<String>, AlarmError> {
+    async fn hget(&self, _: &str, _: &str) -> Result<Option<String>, SharedError> {
         Ok(None)
     }
 
-    async fn hset(&self, _: &str, _: &str, _: &str) -> Result<(), AlarmError> {
+    async fn hset(&self, _: &str, _: &str, _: &str) -> Result<(), SharedError> {
         Ok(())
     }
 
-    async fn hget_all(&self, _: &str) -> Result<HashMap<String, String>, AlarmError> {
+    async fn hget_all(&self, _: &str) -> Result<HashMap<String, String>, SharedError> {
         Ok(HashMap::new())
     }
 
-    async fn hmset(&self, _: &str, _: &HashMap<String, String>) -> Result<(), AlarmError> {
+    async fn hmset(&self, _: &str, _: &[(String, String)]) -> Result<(), SharedError> {
         Ok(())
     }
 
-    async fn smembers(&self, key: &str) -> Result<Vec<String>, AlarmError> {
+    async fn smembers(&self, key: &str) -> Result<Vec<String>, SharedError> {
         self.smembers_calls.fetch_add(1, Ordering::Relaxed);
         if self.fail_smembers_keys.contains(key) {
-            return Err(AlarmError::Valkey(format!(
+            return Err(SharedError::Valkey(format!(
                 "forced smembers failure for {key}"
             )));
         }
         Ok(self.set_data.get(key).cloned().unwrap_or_default())
     }
 
-    async fn smembers_multi(&self, keys: &[String]) -> Result<Vec<Vec<String>>, AlarmError> {
+    async fn smembers_multi(&self, keys: &[String]) -> Result<Vec<Vec<String>>, SharedError> {
         self.smembers_multi_calls.fetch_add(1, Ordering::Relaxed);
         if self.fail_smembers_multi {
-            return Err(AlarmError::Valkey(
+            return Err(SharedError::Valkey(
                 "forced smembers_multi failure".to_owned(),
             ));
         }
@@ -147,30 +154,39 @@ impl ValkeyClient for TrackingSubscriberValidationValkey {
             .collect())
     }
 
-    async fn expire(&self, _: &str, _: std::time::Duration) -> Result<bool, AlarmError> {
-        Ok(false)
-    }
-
-    async fn lpush(&self, _: &str, _: &str) -> Result<i64, AlarmError> {
-        Ok(0)
-    }
-
-    async fn ping(&self) -> Result<(), AlarmError> {
+    async fn expire(&self, _: &str, _: std::time::Duration) -> Result<(), SharedError> {
         Ok(())
+    }
+
+    async fn lpush(&self, _: &str, _: &str) -> Result<(), SharedError> {
+        Ok(())
+    }
+
+    async fn ping(&self) -> Result<(), SharedError> {
+        Ok(())
+    }
+
+    async fn brpop(&self, _: &str, _: f64) -> Result<Option<String>, SharedError> {
+        Ok(None)
+    }
+
+    async fn llen(&self, _: &str) -> Result<i64, SharedError> {
+        Ok(0)
     }
 }
 
+// shared ValkeyClient 트레이트 구현 — SharedError 반환
 #[async_trait]
 impl ValkeyClient for PreseededValkeyClient {
-    async fn get(&self, key: &str) -> Result<Option<String>, AlarmError> {
+    async fn get(&self, key: &str) -> Result<Option<String>, SharedError> {
         self.inner.get(key).await
     }
     async fn set(
         &self,
         key: &str,
         value: &str,
-        ttl: std::time::Duration,
-    ) -> Result<(), AlarmError> {
+        ttl: Option<std::time::Duration>,
+    ) -> Result<(), SharedError> {
         self.inner.set(key, value, ttl).await
     }
     async fn set_nx(
@@ -178,32 +194,32 @@ impl ValkeyClient for PreseededValkeyClient {
         key: &str,
         value: &str,
         ttl: std::time::Duration,
-    ) -> Result<bool, AlarmError> {
+    ) -> Result<bool, SharedError> {
         self.inner.set_nx(key, value, ttl).await
     }
-    async fn del(&self, keys: &[&str]) -> Result<u64, AlarmError> {
+    async fn del(&self, keys: &[&str]) -> Result<(), SharedError> {
         self.inner.del(keys).await
     }
-    async fn hget(&self, key: &str, field: &str) -> Result<Option<String>, AlarmError> {
+    async fn hget(&self, key: &str, field: &str) -> Result<Option<String>, SharedError> {
         self.inner.hget(key, field).await
     }
-    async fn hset(&self, key: &str, field: &str, value: &str) -> Result<(), AlarmError> {
+    async fn hset(&self, key: &str, field: &str, value: &str) -> Result<(), SharedError> {
         self.inner.hset(key, field, value).await
     }
-    async fn hget_all(&self, key: &str) -> Result<HashMap<String, String>, AlarmError> {
+    async fn hget_all(&self, key: &str) -> Result<HashMap<String, String>, SharedError> {
         self.inner.hget_all(key).await
     }
-    async fn hmset(&self, key: &str, fields: &HashMap<String, String>) -> Result<(), AlarmError> {
+    async fn hmset(&self, key: &str, fields: &[(String, String)]) -> Result<(), SharedError> {
         self.inner.hmset(key, fields).await
     }
-    async fn smembers(&self, key: &str) -> Result<Vec<String>, AlarmError> {
+    async fn smembers(&self, key: &str) -> Result<Vec<String>, SharedError> {
         // 사전 지정 데이터 우선, 없으면 inner 위임
         if let Some(members) = self.set_data.get(key) {
             return Ok(members.clone());
         }
         self.inner.smembers(key).await
     }
-    async fn smembers_multi(&self, keys: &[String]) -> Result<Vec<Vec<String>>, AlarmError> {
+    async fn smembers_multi(&self, keys: &[String]) -> Result<Vec<Vec<String>>, SharedError> {
         let mut out = Vec::with_capacity(keys.len());
         for key in keys {
             if let Some(members) = self.set_data.get(key) {
@@ -214,14 +230,20 @@ impl ValkeyClient for PreseededValkeyClient {
         }
         Ok(out)
     }
-    async fn expire(&self, key: &str, ttl: std::time::Duration) -> Result<bool, AlarmError> {
+    async fn expire(&self, key: &str, ttl: std::time::Duration) -> Result<(), SharedError> {
         self.inner.expire(key, ttl).await
     }
-    async fn lpush(&self, key: &str, value: &str) -> Result<i64, AlarmError> {
+    async fn lpush(&self, key: &str, value: &str) -> Result<(), SharedError> {
         self.inner.lpush(key, value).await
     }
-    async fn ping(&self) -> Result<(), AlarmError> {
+    async fn ping(&self) -> Result<(), SharedError> {
         self.inner.ping().await
+    }
+    async fn brpop(&self, key: &str, timeout: f64) -> Result<Option<String>, SharedError> {
+        self.inner.brpop(key, timeout).await
+    }
+    async fn llen(&self, key: &str) -> Result<i64, SharedError> {
+        self.inner.llen(key).await
     }
 }
 
@@ -434,7 +456,7 @@ async fn detect_schedule_change_different_schedule_returns_message() {
     let key = alarm_core::keys::notified_key("vid1");
     let json = serde_json::to_string(&data).unwrap();
     valkey
-        .set(&key, &json, std::time::Duration::from_secs(3600))
+        .set(&key, &json, Some(std::time::Duration::from_secs(3600)))
         .await
         .unwrap();
 
@@ -468,7 +490,7 @@ async fn detect_schedule_change_same_schedule_returns_empty() {
     let key = alarm_core::keys::notified_key("vid2");
     let json = serde_json::to_string(&data).unwrap();
     valkey
-        .set(&key, &json, std::time::Duration::from_secs(3600))
+        .set(&key, &json, Some(std::time::Duration::from_secs(3600)))
         .await
         .unwrap();
 

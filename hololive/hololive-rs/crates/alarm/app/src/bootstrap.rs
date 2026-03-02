@@ -126,6 +126,9 @@ async fn init_db(config: &AlarmAppConfig) -> bool {
 }
 
 /// 스케줄러 조립 — 체커/notifier/클라이언트 생성 후 AlarmScheduler 반환
+///
+/// `config.alarm.twitch_enabled`가 `false`이면 Twitch 클라이언트/체커를 생성하지 않고
+/// `twitch_poll_secs: None`을 전달하여 루프 스폰 자체를 생략한다.
 fn build_scheduler(
     valkey: Arc<dyn ValkeyClient>,
     config: &AlarmAppConfig,
@@ -134,8 +137,6 @@ fn build_scheduler(
         Arc::new(HttpHolodexClient::new(&config.holodex).context("Holodex 클라이언트 생성 실패")?);
     let chzzk =
         Arc::new(HttpChzzkClient::new(&config.chzzk).context("Chzzk 클라이언트 생성 실패")?);
-    let twitch =
-        Arc::new(HttpTwitchClient::new(&config.twitch).context("Twitch 클라이언트 생성 실패")?);
 
     let tier_sched = Arc::new(TieredScheduler::new());
     let queue = Arc::new(QueuePublisher::new(Arc::clone(&valkey)));
@@ -157,10 +158,19 @@ fn build_scheduler(
         Arc::clone(&valkey),
     ));
 
-    let twitch_checker = Arc::new(TwitchChecker::new(
-        twitch as Arc<dyn alarm_infra::twitch::TwitchClient>,
-        Arc::clone(&valkey),
-    ));
+    // Twitch 비활성화 시 클라이언트/체커 생성 생략
+    let (twitch_checker, twitch_poll_secs) = if config.alarm.twitch_enabled {
+        let twitch =
+            Arc::new(HttpTwitchClient::new(&config.twitch).context("Twitch 클라이언트 생성 실패")?);
+        let checker = Some(Arc::new(TwitchChecker::new(
+            twitch as Arc<dyn alarm_infra::twitch::TwitchClient>,
+            Arc::clone(&valkey),
+        )));
+        (checker, Some(config.alarm.twitch_poll_secs))
+    } else {
+        info!("Twitch 비활성화 설정 — 클라이언트/체커/루프 생략");
+        (None, None)
+    };
 
     let notifier = Arc::new(Notifier::new(queue, dedup, tier_sched));
 
@@ -171,9 +181,8 @@ fn build_scheduler(
         notifier,
         valkey,
         SchedulerTimingConfig {
-            twitch_enabled: config.alarm.twitch_enabled,
             chzzk_poll_secs: config.alarm.chzzk_poll_secs,
-            twitch_poll_secs: config.alarm.twitch_poll_secs,
+            twitch_poll_secs,
             youtube_check_timeout_secs: config.alarm.youtube_check_timeout_secs,
             chzzk_check_timeout_secs: config.alarm.chzzk_check_timeout_secs,
             twitch_check_timeout_secs: config.alarm.twitch_check_timeout_secs,

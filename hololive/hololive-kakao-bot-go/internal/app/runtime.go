@@ -35,8 +35,7 @@ type BotRuntime struct {
 	PhotoSync        *holodex.PhotoSyncService // 프로필 이미지 동기화 서비스
 	OutboxDispatcher *outbox.Dispatcher        // YouTube 알림 outbox 발송기
 
-	AlarmQueueDispatcher *notification.AlarmQueueDispatcher // Valkey 큐 알림 디스패처
-	ConfigSubscriber     *configsub.Subscriber              // Valkey Pub/Sub 설정 구독자
+	ConfigSubscriber *configsub.Subscriber // Valkey Pub/Sub 설정 구독자
 
 	ServerAddr string
 	HttpServer *http.Server
@@ -147,11 +146,6 @@ func (r *BotRuntime) startSchedulers(ctx context.Context, errCh chan<- error) {
 	if r.IngestionEnabled && r.ScraperScheduler != nil {
 		r.ScraperScheduler.Start(ctx)
 		r.logInfo("Scraper scheduler started")
-	}
-
-	if r.AlarmQueueDispatcher != nil {
-		go r.AlarmQueueDispatcher.Run(ctx)
-		r.logInfo("Alarm queue dispatcher started")
 	}
 
 	if r.ConfigSubscriber != nil {

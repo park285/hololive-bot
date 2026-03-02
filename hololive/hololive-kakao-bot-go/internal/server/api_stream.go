@@ -14,6 +14,9 @@ const channelStatsRefreshWorkers = sharedserver.DefaultChannelStatsRefreshWorker
 type ChannelResponse = sharedserver.ChannelResponse
 
 func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
+	if h.cachedStreamHandler != nil {
+		return h.cachedStreamHandler
+	}
 	return &sharedserver.StreamHandler{
 		Logger:               h.logger,
 		Holodex:              h.holodex,
@@ -44,11 +47,11 @@ func (h *StreamAPIHandler) GetChannelStats(c *gin.Context) {
 }
 
 func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
-	channelIDs, channelToName, err := h.sharedStreamHandler().GetActiveMemberIndex(ctx)
+	ids, names, err := h.sharedStreamHandler().GetActiveMemberIndex(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get active member index: %w", err)
 	}
-	return channelIDs, channelToName, nil
+	return ids, names, nil
 }
 
 func (h *MemberAPIHandler) invalidateMemberIndex() {

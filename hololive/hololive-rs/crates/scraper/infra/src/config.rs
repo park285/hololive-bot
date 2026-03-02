@@ -2,6 +2,8 @@ use std::path::Path;
 
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
+// 공유 텔레메트리 설정: shared-infra에서 re-export
+pub use shared_infra::observability::TelemetryConfig;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -57,26 +59,12 @@ pub struct ScraperConfig {
     pub user_agent: String,
 }
 
+/// 로깅 설정 (stdout 전용, Fluent Bit → Loki 정책)
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoggingConfig {
     pub level: String,
-    pub file_enabled: bool,
-    pub dir: String,
-    pub file: String,
-    pub combined_file: String,
     pub service: String,
     pub environment: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct TelemetryConfig {
-    pub enabled: bool,
-    pub service_name: String,
-    pub service_version: String,
-    pub environment: String,
-    pub otlp_endpoint: String,
-    pub otlp_insecure: bool,
-    pub sample_rate: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -119,10 +107,6 @@ impl AppConfig {
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
             )?
             .set_default("logging.level", "info")?
-            .set_default("logging.file_enabled", false)?
-            .set_default("logging.dir", "logs")?
-            .set_default("logging.file", "hololive-scraper.log")?
-            .set_default("logging.combined_file", "combined.log")?
             .set_default("logging.service", "hololive-rs")?
             .set_default("logging.environment", "production")?
             .set_default("telemetry.enabled", false)?
@@ -251,9 +235,6 @@ mod tests {
             "SCRAPER__DATABASE__HOST",
             "SCRAPER__HEALTH__PORT",
             "SCRAPER__LOGGING__LEVEL",
-            "SCRAPER__LOGGING__FILE_ENABLED",
-            "SCRAPER__LOGGING__FILE",
-            "SCRAPER__LOGGING__COMBINED_FILE",
             "SCRAPER__LOGGING__SERVICE",
             "SCRAPER__LOGGING__ENVIRONMENT",
             "SCRAPER__TELEMETRY__ENABLED",
@@ -276,9 +257,6 @@ mod tests {
             std::env::set_var("SCRAPER__DATABASE__HOST", "override-db-host");
             std::env::set_var("SCRAPER__HEALTH__PORT", "30123");
             std::env::set_var("SCRAPER__LOGGING__LEVEL", "debug");
-            std::env::set_var("SCRAPER__LOGGING__FILE_ENABLED", "false");
-            std::env::set_var("SCRAPER__LOGGING__FILE", "custom-scraper.log");
-            std::env::set_var("SCRAPER__LOGGING__COMBINED_FILE", "custom-combined.log");
             std::env::set_var("SCRAPER__LOGGING__SERVICE", "hololive-rs-test");
             std::env::set_var("SCRAPER__LOGGING__ENVIRONMENT", "staging");
             std::env::set_var("SCRAPER__TELEMETRY__ENABLED", "true");
@@ -294,9 +272,6 @@ mod tests {
         assert_eq!(loaded.database.host, "override-db-host");
         assert_eq!(loaded.health.port, 30123);
         assert_eq!(loaded.logging.level, "debug");
-        assert!(!loaded.logging.file_enabled);
-        assert_eq!(loaded.logging.file, "custom-scraper.log");
-        assert_eq!(loaded.logging.combined_file, "custom-combined.log");
         assert_eq!(loaded.logging.service, "hololive-rs-test");
         assert_eq!(loaded.logging.environment, "staging");
         assert!(loaded.telemetry.enabled);
