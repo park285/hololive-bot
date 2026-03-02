@@ -39,9 +39,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# --- logcli 사전 조건 확인 ---
+# --- 사전 조건 확인 ---
 if ! command -v logcli &>/dev/null; then
   echo "ERROR: logcli 미설치" >&2
+  exit 1
+fi
+if ! command -v jq &>/dev/null; then
+  echo "ERROR: jq 미설치" >&2
   exit 1
 fi
 
@@ -80,13 +84,15 @@ for SVC in "${!SERVICE_MAP[@]}"; do
     fi
   fi
 
-  # logcli query → append
+  # logcli query → jq .message 추출 → append
   LINE_COUNT=$(LOKI_ADDR="${LOKI_ADDR}" logcli query \
     --since="${SINCE}" \
     --limit="${LIMIT}" \
     --output=raw \
     --quiet \
-    "${QUERY}" 2>/dev/null | tee -a "${LOG_FILE}" | wc -l)
+    "${QUERY}" 2>/dev/null \
+    | jq -r '.message // empty' 2>/dev/null \
+    | tee -a "${LOG_FILE}" | wc -l)
 
   DUMP_COUNT=$((DUMP_COUNT + LINE_COUNT))
   echo "$(date '+%Y-%m-%d %H:%M:%S') ${SVC}: ${LINE_COUNT} lines" >&2
