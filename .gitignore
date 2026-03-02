@@ -54,6 +54,7 @@ target/
 *.log
 logs/
 !**/internal/logs/
+!scripts/logs/
 gc.log*
 
 # ============================================
