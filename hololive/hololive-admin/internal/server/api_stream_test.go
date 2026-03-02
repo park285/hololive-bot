@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 func TestBuildActiveMemberIndex(t *testing.T) {
@@ -19,7 +20,7 @@ func TestBuildActiveMemberIndex(t *testing.T) {
 		{ChannelID: "UC3", Name: "C"},
 	}
 
-	ids, names := buildActiveMemberIndex(members)
+	ids, names := sharedserver.BuildActiveMemberIndex(members)
 	if len(ids) != 2 {
 		t.Fatalf("len(ids)=%d want=2 ids=%v", len(ids), ids)
 	}
@@ -133,7 +134,7 @@ func TestMemberToChannelResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := memberToChannelResponse(tt.member)
+			got := sharedserver.MemberToChannelResponse(tt.member)
 			if tt.expected == nil {
 				if got != nil {
 					t.Errorf("memberToChannelResponse() = %+v, want nil", got)

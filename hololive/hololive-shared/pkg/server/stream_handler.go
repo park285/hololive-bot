@@ -5,6 +5,7 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -353,7 +354,7 @@ func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map
 	state.memberIndexMu.RLock()
 	if state.memberIndexReady && now.Before(state.memberIndexExpiresAt) {
 		channelIDs := append([]string(nil), state.memberChannelIDs...)
-		channelToName := cloneChannelNameMap(state.memberChannelName)
+		channelToName := maps.Clone(state.memberChannelName)
 		state.memberIndexMu.RUnlock()
 		return channelIDs, channelToName, nil
 	}
@@ -363,7 +364,7 @@ func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map
 		state.memberIndexMu.RLock()
 		if state.memberIndexReady && time.Now().Before(state.memberIndexExpiresAt) {
 			channelIDs := append([]string(nil), state.memberChannelIDs...)
-			channelToName := cloneChannelNameMap(state.memberChannelName)
+			channelToName := maps.Clone(state.memberChannelName)
 			state.memberIndexMu.RUnlock()
 			return memberIndexSnapshot{channelIDs: channelIDs, channelNames: channelToName}, nil
 		}
@@ -378,7 +379,7 @@ func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map
 
 		state.memberIndexMu.Lock()
 		state.memberChannelIDs = append([]string(nil), channelIDs...)
-		state.memberChannelName = cloneChannelNameMap(channelToName)
+		state.memberChannelName = maps.Clone(channelToName)
 		state.memberIndexExpiresAt = time.Now().Add(MemberIndexCacheTTL)
 		state.memberIndexReady = true
 		state.memberIndexMu.Unlock()
@@ -423,14 +424,6 @@ func BuildActiveMemberIndex(members []*domain.Member) ([]string, map[string]stri
 	}
 
 	return channelIDs, channelToName
-}
-
-func cloneChannelNameMap(src map[string]string) map[string]string {
-	dst := make(map[string]string, len(src))
-	for key, val := range src {
-		dst[key] = val
-	}
-	return dst
 }
 
 // GetChannel: channelIds 파라미터로 여러 채널을 한 번에 조회합니다.
@@ -511,14 +504,14 @@ func (h *StreamHandler) SearchChannels(c *gin.Context) {
 	ctx := c.Request.Context()
 	query := c.Query("q")
 	if query == "" {
-		c.JSON(400, gin.H{"error": "q parameter required"})
+		h.respondError(c, 400, "q parameter required", nil)
 		return
 	}
 
 	channels, err := h.Holodex.SearchChannels(ctx, query)
 	if err != nil {
-		h.Logger.Error("Failed to search channels", slog.String("query", query), slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to search channels"})
+		h.respondInternalError(c, "Failed to search channels", "Failed to search channels", err,
+			slog.String("query", query))
 		return
 	}
 
