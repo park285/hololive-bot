@@ -21,6 +21,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/errors"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -74,7 +75,7 @@ type Service struct {
 }
 
 // NewHolodexService: 새로운 Holodex API 서비스 인스턴스를 생성한다. (API Key 검증 포함)
-func NewHolodexService(baseURL string, apiKeys []string, cacheSvc *cache.Service, scraper *ScraperService, logger *slog.Logger) (*Service, error) {
+func NewHolodexService(baseURL string, apiKeys []string, cacheSvc *cache.Service, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
 	if len(apiKeys) == 0 {
 		return nil, fmt.Errorf("at least one Holodex API key is required")
 	}
@@ -116,7 +117,7 @@ func NewHolodexService(baseURL string, apiKeys []string, cacheSvc *cache.Service
 
 	svc := &Service{
 		requester:    requester,
-		scraper:      scraper,
+		scraper:      scraperSvc,
 		logger:       logger,
 		cacheManager: NewCacheManager(cacheSvc, logger),
 		mapper:       NewStreamMapper(logger),
@@ -131,20 +132,12 @@ func NewHolodexService(baseURL string, apiKeys []string, cacheSvc *cache.Service
 	return svc, nil
 }
 
-// SetScraperProxyEnabled: Holodex fallback 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
-func (h *Service) SetScraperProxyEnabled(enabled bool) bool {
-	if h == nil || h.scraper == nil {
-		return false
+// ScraperClient: Holodex fallback 스크래퍼의 scraper.Client를 반환합니다.
+func (h *Service) ScraperClient() *scraper.Client {
+	if h.scraper == nil {
+		return nil
 	}
-	return h.scraper.SetYouTubeProxyEnabled(enabled)
-}
-
-// ScraperProxyEnabled: Holodex fallback 스크래퍼의 프록시 활성 상태를 반환합니다.
-func (h *Service) ScraperProxyEnabled() bool {
-	if h == nil || h.scraper == nil {
-		return false
-	}
-	return h.scraper.YouTubeProxyEnabled()
+	return h.scraper.ScraperClient()
 }
 
 // Stop: 서비스 리소스를 정리합니다.

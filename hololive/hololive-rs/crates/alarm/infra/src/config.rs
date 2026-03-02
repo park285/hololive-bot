@@ -2,6 +2,8 @@ use std::{collections::HashSet, net::IpAddr, path::Path};
 
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Deserializer};
+// 공유 텔레메트리 설정: shared-infra에서 re-export
+pub use shared_infra::observability::TelemetryConfig;
 use thiserror::Error;
 use validator::Validate;
 
@@ -43,32 +45,6 @@ pub struct AlarmAppConfig {
     pub alarm: AlarmConfig,
     #[serde(default)]
     pub telemetry: TelemetryConfig,
-}
-
-/// OpenTelemetry 트레이싱 설정
-#[derive(Debug, Clone, Deserialize)]
-pub struct TelemetryConfig {
-    pub enabled: bool,
-    pub service_name: String,
-    pub service_version: String,
-    pub environment: String,
-    pub otlp_endpoint: String,
-    pub otlp_insecure: bool,
-    pub sample_rate: f64,
-}
-
-impl Default for TelemetryConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            service_name: "hololive-alarm".into(),
-            service_version: env!("CARGO_PKG_VERSION").into(),
-            environment: "production".into(),
-            otlp_endpoint: "otel-collector:4317".into(),
-            otlp_insecure: false,
-            sample_rate: 1.0,
-        }
-    }
 }
 
 /// Valkey(Redis) 연결 설정
@@ -195,14 +171,10 @@ pub struct HealthConfig {
     pub port: u16,
 }
 
-/// 로깅 설정
+/// 로깅 설정 (stdout 전용, Fluent Bit → Loki 정책)
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct LoggingConfig {
     pub level: String,
-    pub file_enabled: bool,
-    pub dir: String,
-    pub file: String,
-    pub combined_file: String,
 }
 
 /// 알람 서비스 동작 설정
@@ -280,10 +252,6 @@ impl AlarmAppConfig {
             .set_default("health.port", 30011)?
             // 로깅
             .set_default("logging.level", "info")?
-            .set_default("logging.file_enabled", false)?
-            .set_default("logging.dir", "logs")?
-            .set_default("logging.file", "hololive-alarm.log")?
-            .set_default("logging.combined_file", "combined.log")?
             // 텔레메트리 (OTEL)
             .set_default("telemetry.enabled", false)?
             .set_default("telemetry.service_name", "hololive-alarm")?
@@ -311,7 +279,7 @@ impl AlarmAppConfig {
             .build()?;
 
         let mut loaded: Self = settings.try_deserialize().map_err(ConfigLoadError::from)?;
-        loaded.holodex.api_keys = resolve_holodex_api_keys(loaded.holodex.api_keys);
+        loaded.holodex.api_keys = normalize_api_keys(loaded.holodex.api_keys);
         loaded
             .validate()
             .map_err(|e| ConfigLoadError::Validation(format!("invalid alarm config: {e}")))?;
@@ -319,10 +287,6 @@ impl AlarmAppConfig {
             .map_err(ConfigLoadError::Validation)?;
         Ok(loaded)
     }
-}
-
-fn resolve_holodex_api_keys(configured_keys: Vec<String>) -> Vec<String> {
-    normalize_api_keys(configured_keys)
 }
 
 fn normalize_api_keys(keys: Vec<String>) -> Vec<String> {
@@ -484,8 +448,6 @@ mod tests {
             "ALARM__DATABASE__HOST",
             "ALARM__HEALTH__PORT",
             "ALARM__LOGGING__LEVEL",
-            "ALARM__LOGGING__FILE_ENABLED",
-            "ALARM__LOGGING__COMBINED_FILE",
             "ALARM__VALKEY__POOL_SIZE",
             "ALARM__ALARM__YOUTUBE_CHECK_TIMEOUT_SECS",
             "ALARM__IRIS__CIRCUIT_FAILURE_THRESHOLD",
@@ -503,8 +465,6 @@ mod tests {
             std::env::set_var("ALARM__DATABASE__HOST", "override-db-host");
             std::env::set_var("ALARM__HEALTH__PORT", "30099");
             std::env::set_var("ALARM__LOGGING__LEVEL", "debug");
-            std::env::set_var("ALARM__LOGGING__FILE_ENABLED", "false");
-            std::env::set_var("ALARM__LOGGING__COMBINED_FILE", "custom-combined.log");
             std::env::set_var("ALARM__VALKEY__POOL_SIZE", "8");
             std::env::set_var("ALARM__ALARM__YOUTUBE_CHECK_TIMEOUT_SECS", "50");
             std::env::set_var("ALARM__IRIS__CIRCUIT_FAILURE_THRESHOLD", "7");
@@ -518,8 +478,6 @@ mod tests {
         assert_eq!(loaded.database.host, "override-db-host");
         assert_eq!(loaded.health.port, 30099);
         assert_eq!(loaded.logging.level, "debug");
-        assert!(!loaded.logging.file_enabled);
-        assert_eq!(loaded.logging.combined_file, "custom-combined.log");
         assert!(!loaded.alarm.twitch_enabled);
         assert_eq!(loaded.valkey.pool_size, 8);
         assert_eq!(loaded.alarm.youtube_check_timeout_secs, 50);
@@ -546,7 +504,6 @@ mod tests {
 
         assert_eq!(loaded.health.port, 30011);
         assert_eq!(loaded.valkey.pool_size, 4);
-        assert!(!loaded.logging.file_enabled);
         assert_eq!(loaded.holodex.timeout_secs, 30);
         assert_eq!(loaded.holodex.circuit_failure_threshold, 5);
         assert_eq!(loaded.iris.circuit_reset_secs, 30);

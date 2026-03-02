@@ -224,9 +224,8 @@ type PostgresConfig struct {
 
 // NotificationConfig: 방송 알림 스케줄링(미리 알림 시간, 체크 주기) 설정
 type NotificationConfig struct {
-	AdvanceMinutes            []int
-	CheckInterval             time.Duration
-	AlarmQueueConsumerEnabled bool // GO_ALARM_QUEUE_CONSUMER_ENABLED
+	AdvanceMinutes []int
+	CheckInterval  time.Duration
 }
 
 // LoggingConfig: 애플리케이션 로그 설정 (레벨, 디렉토리, 로테이션 정책)
@@ -357,9 +356,8 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Notification: NotificationConfig{
-			AdvanceMinutes:            parseIntList(envutil.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
-			CheckInterval:             time.Duration(envutil.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
-			AlarmQueueConsumerEnabled: envutil.Bool("GO_ALARM_QUEUE_CONSUMER_ENABLED", false),
+			AdvanceMinutes: parseIntList(envutil.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
+			CheckInterval:  time.Duration(envutil.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
 		},
 		Logging: LoggingConfig{
 			Level:      envutil.String("LOG_LEVEL", "info"),

@@ -7,8 +7,10 @@ import (
 	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	alarmsvc "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
@@ -68,19 +70,10 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		logger.Info("Bot ingestion runtime disabled by config", slog.String("env", "BOT_INGESTION_ENABLED=false"))
 	}
 
-	alarmQueueDispatcher := providers.ProvideAlarmQueueDispatcher(
-		cfg.Notification.AlarmQueueConsumerEnabled,
-		deps.Cache,
-		infra.alarmService,
-		deps.Client,
-		deps.Formatter,
-		logger,
-	)
-
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
 	configSubscriber := buildBotConfigSubscriber(deps, infra, scraperScheduler, logger)
 
-	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, logger)
+	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +88,6 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		PhotoSync:            photoSyncService,
 		OutboxDispatcher:     outboxDispatcher,
 		ingestionLease:       ingestionLeaseRef,
-		AlarmQueueDispatcher: alarmQueueDispatcher,
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           ProvideAPIAddr(cfg),
 		HttpServer:           botServer,
@@ -158,11 +150,24 @@ func buildBotConfigSubscriber(
 }
 
 // buildBotServer: Bot 전용 HTTP 서버를 구성합니다. (webhook + trigger + health만)
-func buildBotServer(ctx context.Context, cfg *config.Config, webhookHandler *iris.WebhookHandler, triggerHandler *server.TriggerHandler, logger *slog.Logger) (*http.Server, error) {
+func buildBotServer(
+	ctx context.Context,
+	cfg *config.Config,
+	webhookHandler *iris.WebhookHandler,
+	triggerHandler *server.TriggerHandler,
+	alarmCRUD domain.AlarmCRUD,
+	logger *slog.Logger,
+) (*http.Server, error) {
 	botRouter, err := ProvideBotRouter(ctx, cfg, logger, webhookHandler, triggerHandler)
 	if err != nil {
 		return nil, err
 	}
+
+	if alarmCRUD != nil {
+		alarmAPI := alarmsvc.NewAPIHandler(alarmCRUD, logger)
+		alarmAPI.RegisterInternalRoutes(botRouter.Group(""))
+	}
+
 	addr := ProvideAPIAddr(cfg)
 	return ProvideAPIServer(addr, botRouter), nil
 }
@@ -179,10 +184,14 @@ func applyScraperProxyToggle(
 	schedulerApplied := 0
 
 	if youtubeService != nil {
-		youtubeApplied = youtubeService.SetScraperProxyEnabled(enabled)
+		if client := youtubeService.ScraperClient(); client != nil {
+			youtubeApplied = client.SetProxyEnabled(enabled)
+		}
 	}
 	if holodexService != nil {
-		holodexApplied = holodexService.SetScraperProxyEnabled(enabled)
+		if client := holodexService.ScraperClient(); client != nil {
+			holodexApplied = client.SetProxyEnabled(enabled)
+		}
 	}
 	if scraperScheduler != nil {
 		schedulerApplied = scraperScheduler.SetProxyEnabled(enabled)
