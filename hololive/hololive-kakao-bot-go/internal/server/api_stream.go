@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
@@ -52,10 +51,6 @@ func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, 
 	return channelIDs, channelToName, nil
 }
 
-func buildActiveMemberIndex(members []*domain.Member) ([]string, map[string]string) {
-	return sharedserver.BuildActiveMemberIndex(members)
-}
-
 func (h *MemberAPIHandler) invalidateMemberIndex() {
 	h.ensureStreamState().InvalidateMemberIndex()
 }
@@ -63,11 +58,6 @@ func (h *MemberAPIHandler) invalidateMemberIndex() {
 // GetChannel: channelIds 파라미터로 여러 채널을 한 번에 조회합니다.
 func (h *StreamAPIHandler) GetChannel(c *gin.Context) {
 	h.sharedStreamHandler().GetChannel(c)
-}
-
-// memberToChannelResponse: domain.Member를 API 응답 형식으로 변환
-func memberToChannelResponse(m *domain.Member) *ChannelResponse {
-	return sharedserver.MemberToChannelResponse(m)
 }
 
 // SearchChannels: 이름으로 채널을 검색합니다.
