@@ -155,21 +155,21 @@ impl AppConfig {
         // fallback: 기존 기본 피드 3개를 scheduler.scrape_hour_kst 기반으로 생성
         vec![
             FeedConfig {
-                name: "event".to_string(),
-                event_type: "event".to_string(),
-                urls: vec!["https://hololive.hololivepro.com/events/feed/".to_string()],
+                name: "event".to_owned(),
+                event_type: "event".to_owned(),
+                urls: vec!["https://hololive.hololivepro.com/events/feed/".to_owned()],
                 scrape_hour_kst: Some(self.scheduler.scrape_hour_kst),
             },
             FeedConfig {
-                name: "news".to_string(),
-                event_type: "news".to_string(),
-                urls: vec!["https://hololive.hololivepro.com/news/feed/".to_string()],
+                name: "news".to_owned(),
+                event_type: "news".to_owned(),
+                urls: vec!["https://hololive.hololivepro.com/news/feed/".to_owned()],
                 scrape_hour_kst: Some(self.scheduler.scrape_hour_kst),
             },
             FeedConfig {
-                name: "en-news".to_string(),
-                event_type: "news".to_string(),
-                urls: vec!["https://hololive.hololivepro.com/en/news/feed/".to_string()],
+                name: "en-news".to_owned(),
+                event_type: "news".to_owned(),
+                urls: vec!["https://hololive.hololivepro.com/en/news/feed/".to_owned()],
                 scrape_hour_kst: Some(self.scheduler.scrape_hour_kst),
             },
         ]
@@ -230,10 +230,7 @@ mod tests {
     impl EnvVarGuard {
         fn new(keys: Vec<&str>) -> Self {
             Self {
-                keys: keys
-                    .into_iter()
-                    .map(std::string::ToString::to_string)
-                    .collect(),
+                keys: keys.into_iter().map(ToOwned::to_owned).collect(),
             }
         }
     }
@@ -321,7 +318,7 @@ mod tests {
             port: 5432,
             name: "my db".into(),
             user: "user@name".into(),
-            password: SecretString::from("p@ss/word".to_string()),
+            password: SecretString::from("p@ss/word".to_owned()),
             sslmode: "disable".into(),
             max_connections: 5,
         };

@@ -119,13 +119,13 @@ mod tests {
     ) -> AlarmQueueEnvelope {
         AlarmQueueEnvelope {
             notification: shared_core::model::AlarmNotification {
-                room_id: room_id.to_string(),
+                room_id: room_id.to_owned(),
                 channel: None,
                 stream: Some(Stream {
-                    id: stream_id.to_string(),
+                    id: stream_id.to_owned(),
                     title: format!("title-{stream_id}"),
-                    channel_id: "channel-id".to_string(),
-                    channel_name: "channel-name".to_string(),
+                    channel_id: "channel-id".to_owned(),
+                    channel_name: "channel-name".to_owned(),
                     status: StreamStatus::Upcoming,
                     start_scheduled,
                     start_actual: None,

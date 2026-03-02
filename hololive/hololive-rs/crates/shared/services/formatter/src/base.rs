@@ -6,7 +6,7 @@ pub struct ResponseFormatter {
 impl ResponseFormatter {
     pub fn new(prefix: &str) -> Self {
         Self {
-            prefix: prefix.trim().to_string(),
+            prefix: prefix.trim().to_owned(),
         }
     }
 
@@ -24,7 +24,7 @@ impl ResponseFormatter {
 
     pub(crate) fn decorate(&self, body: &str) -> String {
         if self.prefix.is_empty() {
-            body.to_string()
+            body.to_owned()
         } else {
             format!("{} {}", self.prefix, body)
         }

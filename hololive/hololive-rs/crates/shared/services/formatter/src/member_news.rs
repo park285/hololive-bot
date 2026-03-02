@@ -41,7 +41,7 @@ impl MemberNewsFormatting for ResponseFormatter {
         }
         if !digest.more_summary.trim().is_empty() {
             lines.push(String::new());
-            lines.push(digest.more_summary.trim().to_string());
+            lines.push(digest.more_summary.trim().to_owned());
         }
 
         self.decorate(&lines.join("\n"))

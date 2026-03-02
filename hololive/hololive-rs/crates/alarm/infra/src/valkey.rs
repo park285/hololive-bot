@@ -82,7 +82,7 @@ impl FredValkeyClient {
 
 fn redact_valkey_endpoint(raw: &str) -> String {
     let Ok(parsed) = Url::parse(raw) else {
-        return "<invalid-valkey-url>".to_string();
+        return "<invalid-valkey-url>".to_owned();
     };
 
     let scheme = parsed.scheme();
@@ -297,9 +297,9 @@ impl ValkeyClient for MockValkeyClient {
             Some(Instant::now() + ttl)
         };
         self.store.insert(
-            key.to_string(),
+            key.to_owned(),
             MockEntry {
-                value: value.to_string(),
+                value: value.to_owned(),
                 expires_at,
             },
         );
@@ -337,9 +337,9 @@ impl ValkeyClient for MockValkeyClient {
 
     async fn hset(&self, key: &str, field: &str, value: &str) -> Result<(), AlarmError> {
         self.hstore
-            .entry(key.to_string())
+            .entry(key.to_owned())
             .or_default()
-            .insert(field.to_string(), value.to_string());
+            .insert(field.to_owned(), value.to_owned());
         Ok(())
     }
 
@@ -357,7 +357,7 @@ impl ValkeyClient for MockValkeyClient {
     }
 
     async fn hmset(&self, key: &str, fields: &HashMap<String, String>) -> Result<(), AlarmError> {
-        let hash = self.hstore.entry(key.to_string()).or_default();
+        let hash = self.hstore.entry(key.to_owned()).or_default();
         for (f, v) in fields {
             hash.insert(f.clone(), v.clone());
         }
@@ -381,14 +381,14 @@ impl ValkeyClient for MockValkeyClient {
         let exists = self.store.contains_key(key);
         if exists {
             let expires_at = Instant::now() + ttl;
-            self.ttl.lock().unwrap().insert(key.to_string(), expires_at);
+            self.ttl.lock().unwrap().insert(key.to_owned(), expires_at);
         }
         Ok(exists)
     }
 
     async fn lpush(&self, key: &str, value: &str) -> Result<i64, AlarmError> {
-        let mut entry = self.lstore.entry(key.to_string()).or_default();
-        entry.insert(0, value.to_string());
+        let mut entry = self.lstore.entry(key.to_owned()).or_default();
+        entry.insert(0, value.to_owned());
         Ok(entry.len() as i64)
     }
 
@@ -503,18 +503,14 @@ mod tests {
             .insert("set:a".into(), vec!["room1".into(), "room2".into()]);
         client.sstore.insert("set:b".into(), vec!["room9".into()]);
 
-        let keys = vec![
-            "set:a".to_string(),
-            "set:b".to_string(),
-            "set:c".to_string(),
-        ];
+        let keys = vec!["set:a".to_owned(), "set:b".to_owned(), "set:c".to_owned()];
         let values = client.smembers_multi(&keys).await.unwrap();
 
         assert_eq!(
             values,
             vec![
-                vec!["room1".to_string(), "room2".to_string()],
-                vec!["room9".to_string()],
+                vec!["room1".to_owned(), "room2".to_owned()],
+                vec!["room9".to_owned()],
                 Vec::<String>::new(),
             ]
         );
@@ -543,7 +539,7 @@ mod tests {
         assert_eq!(count2, 2);
         // LPUSH는 리스트 앞에 삽입 → ["second", "first"]
         let list = client.lstore.get("mylist").unwrap();
-        assert_eq!(*list, vec!["second".to_string(), "first".to_string()]);
+        assert_eq!(*list, vec!["second".to_owned(), "first".to_owned()]);
     }
 
     #[tokio::test]

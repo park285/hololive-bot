@@ -60,7 +60,7 @@ pub(super) fn redact_url_for_log(raw: &str) -> String {
             parsed.set_fragment(None);
             parsed.to_string()
         }
-        Err(_) => raw.split('?').next().unwrap_or(raw).to_string(),
+        Err(_) => raw.split('?').next().unwrap_or(raw).to_owned(),
     }
 }
 

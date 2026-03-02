@@ -3,10 +3,7 @@ package server
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-admin/internal/service/acl"
 	"github.com/kapu/hololive-admin/internal/service/activity"
@@ -63,24 +60,10 @@ type APIHandler struct {
 	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
 }
 
-// streamState: stream/stat 조회 경로에서만 사용하는 내부 상태 캐시.
-type streamState struct {
-	channelStatsCacheLimiter   chan struct{}
-	channelStatsRefreshLimiter chan struct{}
-	memberIndexMu              sync.RWMutex
-	memberIndexExpiresAt       time.Time
-	memberChannelIDs           []string
-	memberChannelName          map[string]string
-	memberIndexReady           bool
-	memberIndexBuildGroup      singleflight.Group
-}
+type streamState = sharedserver.StreamState
 
 func newStreamState() *streamState {
-	return &streamState{
-		channelStatsCacheLimiter:   make(chan struct{}, channelStatsCacheWorkers),
-		channelStatsRefreshLimiter: make(chan struct{}, channelStatsRefreshWorkers),
-		memberChannelName:          make(map[string]string),
-	}
+	return sharedserver.NewStreamState(channelStatsCacheWorkers, channelStatsRefreshWorkers)
 }
 
 // streamState 접근자. 생성자에서 반드시 초기화되므로 nil이 될 수 없다.

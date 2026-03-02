@@ -57,7 +57,7 @@ impl FredValkeyClient {
 
 fn redact_valkey_endpoint(raw: &str) -> String {
     let Ok(parsed) = Url::parse(raw) else {
-        return "<invalid-valkey-url>".to_string();
+        return "<invalid-valkey-url>".to_owned();
     };
 
     let scheme = parsed.scheme();

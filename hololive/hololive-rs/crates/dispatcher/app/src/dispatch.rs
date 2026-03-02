@@ -7,7 +7,7 @@ use shared_infra::iris::IrisClient;
 use shared_notification::{QueueConsumer, ValkeyQueueConsumer};
 use shared_template::Renderer;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     grouping::group_queue_envelopes,
@@ -41,6 +41,13 @@ pub(crate) async fn run_dispatch_loop(
         match drain_result {
             Ok(()) => {}
             Err(error) => {
+                if is_valkey_timeout_error(&error) {
+                    update_valkey_connection(&state, true);
+                    clear_last_error(&state);
+                    debug!("dispatch queue poll timeout");
+                    continue;
+                }
+
                 update_valkey_connection(&state, false);
                 set_last_error(&state, format!("drain batch failed: {error}"));
                 warn!(error = %error, "failed to consume dispatch queue");
@@ -57,6 +64,10 @@ pub(crate) async fn run_dispatch_loop(
     }
 
     Ok(())
+}
+
+fn is_valkey_timeout_error(error: &SharedError) -> bool {
+    matches!(error, SharedError::Valkey(message) if message.contains("Timeout Error: Request timed out."))
 }
 
 pub(crate) async fn run_dispatch_once(
@@ -263,21 +274,21 @@ mod tests {
         let claim_key = "notified:claim:room-recover:stream-recover:1740811200:live";
         let envelope = AlarmQueueEnvelope {
             notification: AlarmNotification::new(
-                "room-recover".to_string(),
+                "room-recover".to_owned(),
                 None,
                 Some(make_stream("stream-recover")),
                 5,
                 Vec::new(),
                 String::new(),
             ),
-            claim_keys: vec![claim_key.to_string()],
+            claim_keys: vec![claim_key.to_owned()],
             enqueued_at: Utc::now().to_rfc3339(),
             version: 1,
         };
         let payload = serde_json::to_string(&envelope).expect("serialize recovery envelope");
 
         let scripted_client = Arc::new(ScriptedValkeyClient::new(vec![
-            BrpopStep::Error("simulated valkey outage".to_string()),
+            BrpopStep::Error("simulated valkey outage".to_owned()),
             BrpopStep::Payload(payload),
             BrpopStep::Empty,
         ]));
@@ -384,14 +395,14 @@ mod tests {
     ) {
         let envelope = AlarmQueueEnvelope {
             notification: AlarmNotification::new(
-                room_id.to_string(),
+                room_id.to_owned(),
                 None,
                 Some(make_stream(stream_id)),
                 minutes_until,
                 Vec::new(),
                 String::new(),
             ),
-            claim_keys: vec![claim_key.to_string()],
+            claim_keys: vec![claim_key.to_owned()],
             enqueued_at: Utc::now().to_rfc3339(),
             version: 1,
         };
@@ -405,10 +416,10 @@ mod tests {
 
     fn make_stream(stream_id: &str) -> Stream {
         Stream {
-            id: stream_id.to_string(),
+            id: stream_id.to_owned(),
             title: format!("title-{stream_id}"),
-            channel_id: "channel-id".to_string(),
-            channel_name: "channel-name".to_string(),
+            channel_id: "channel-id".to_owned(),
+            channel_name: "channel-name".to_owned(),
             status: StreamStatus::Upcoming,
             start_scheduled: Utc.with_ymd_and_hms(2026, 3, 1, 12, 0, 0).single(),
             start_actual: None,
@@ -696,14 +707,14 @@ mod tests {
         let claim_key = "notified:claim:room-outage:stream-outage:1740811200:live";
         let envelope = AlarmQueueEnvelope {
             notification: AlarmNotification::new(
-                "room-outage".to_string(),
+                "room-outage".to_owned(),
                 None,
                 Some(make_stream("stream-outage")),
                 5,
                 Vec::new(),
                 String::new(),
             ),
-            claim_keys: vec![claim_key.to_string()],
+            claim_keys: vec![claim_key.to_owned()],
             enqueued_at: Utc::now().to_rfc3339(),
             version: 1,
         };
@@ -712,9 +723,7 @@ mod tests {
         // 300회 연속 에러 → 정상 payload → empty (종료 유도)
         let mut steps: Vec<BrpopStep> = Vec::with_capacity(OUTAGE_STEPS + 2);
         for _ in 0..OUTAGE_STEPS {
-            steps.push(BrpopStep::Error(
-                "simulated 5-min valkey outage".to_string(),
-            ));
+            steps.push(BrpopStep::Error("simulated 5-min valkey outage".to_owned()));
         }
         steps.push(BrpopStep::Payload(payload));
         steps.push(BrpopStep::Empty);

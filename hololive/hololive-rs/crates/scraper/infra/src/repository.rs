@@ -112,7 +112,7 @@ impl Repository {
             "#,
             vec![
                 event.external_id.clone().into(),
-                event.event_type.as_str().to_string().into(),
+                event.event_type.as_str().to_owned().into(),
                 event.title.clone().into(),
                 event.link.clone().into(),
                 event.description.clone().into(),
@@ -120,8 +120,8 @@ impl Repository {
                 event.pub_date.into(),
                 event.event_start_date.into(),
                 event.event_end_date.into(),
-                event.status.as_str().to_string().into(),
-                event.link_status.as_str().to_string().into(),
+                event.status.as_str().to_owned().into(),
+                event.link_status.as_str().to_owned().into(),
             ],
         );
 
@@ -131,7 +131,7 @@ impl Repository {
             .await
             .map_err(db_error)?
             .ok_or_else(|| {
-                ScraperError::Database("upsert major_events returned no row".to_string())
+                ScraperError::Database("upsert major_events returned no row".to_owned())
             })?;
 
         row.try_get::<i32>("", "id")

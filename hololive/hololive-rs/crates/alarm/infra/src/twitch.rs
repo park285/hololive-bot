@@ -230,7 +230,7 @@ impl HttpTwitchClient {
 
         Ok(Self {
             http,
-            base_url: config.base_url.trim_end_matches('/').to_string(),
+            base_url: config.base_url.trim_end_matches('/').to_owned(),
             client_id: config.client_id.clone(),
             token_manager,
             circuit,

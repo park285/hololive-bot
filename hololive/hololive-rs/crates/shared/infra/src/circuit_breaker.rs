@@ -92,7 +92,7 @@ impl CircuitBreaker {
             CircuitState::Open => Err(SharedError::CircuitOpen {
                 platform: self.platform.clone(),
             }),
-            _ => Ok(()),
+            CircuitState::Closed | CircuitState::HalfOpen => Ok(()),
         }
     }
 

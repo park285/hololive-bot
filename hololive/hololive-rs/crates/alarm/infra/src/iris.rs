@@ -55,7 +55,7 @@ impl HttpIrisClient {
 
         Ok(Self {
             http,
-            base_url: config.base_url.trim_end_matches('/').to_string(),
+            base_url: config.base_url.trim_end_matches('/').to_owned(),
             bot_token: config.bot_token.clone(),
             circuit,
         })
@@ -156,7 +156,7 @@ impl IrisClient for MockIrisClient {
         self.sent
             .lock()
             .await
-            .push((room_id.to_string(), message.to_string()));
+            .push((room_id.to_owned(), message.to_owned()));
         Ok(())
     }
 }
@@ -200,7 +200,7 @@ mod tests {
     fn make_http_config() -> IrisConfig {
         IrisConfig {
             base_url: "http://127.0.0.1:9".into(),
-            bot_token: SecretString::from("dummy-token".to_string()),
+            bot_token: SecretString::from("dummy-token".to_owned()),
             timeout_secs: 1,
             circuit_failure_threshold: 1,
             circuit_reset_secs: 60,

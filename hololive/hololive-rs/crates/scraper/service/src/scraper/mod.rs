@@ -41,11 +41,11 @@ pub struct ScraperConfig {
 impl Default for ScraperConfig {
     fn default() -> Self {
         Self {
-            user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36".to_string(),
-            event_feed_url: DEFAULT_EVENT_FEED_URL.to_string(),
+            user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36".to_owned(),
+            event_feed_url: DEFAULT_EVENT_FEED_URL.to_owned(),
             news_feed_urls: vec![
-                DEFAULT_NEWS_FEED_URL.to_string(),
-                DEFAULT_EN_NEWS_FEED_URL.to_string(),
+                DEFAULT_NEWS_FEED_URL.to_owned(),
+                DEFAULT_EN_NEWS_FEED_URL.to_owned(),
             ],
             max_retries: 4,
             retry_delay: Duration::from_secs(1),
@@ -126,7 +126,7 @@ impl Scraper {
     /// 설정에서 기본 피드 소스 목록을 생성
     fn build_default_feed_sources(&self) -> Vec<FeedSource> {
         let mut sources = vec![FeedSource {
-            name: "event".to_string(),
+            name: "event".to_owned(),
             event_type: MajorEventType::Event,
             feed_url: self.config.event_feed_url.clone(),
         }];
@@ -134,7 +134,7 @@ impl Scraper {
         for (index, feed_url) in self.config.news_feed_urls.iter().enumerate() {
             let name = if index == 1 { "en-news" } else { "news" };
             sources.push(FeedSource {
-                name: name.to_string(),
+                name: name.to_owned(),
                 event_type: MajorEventType::News,
                 feed_url: feed_url.clone(),
             });
@@ -160,7 +160,7 @@ impl Scraper {
             let scraper = self.clone();
             let repository = repository.clone();
             async move {
-                let normalized_url = source.feed_url.trim().to_string();
+                let normalized_url = source.feed_url.trim().to_owned();
                 if normalized_url.is_empty() {
                     return None;
                 }
@@ -201,7 +201,7 @@ impl Scraper {
 
         if attempted_feeds > 0 && attempted_feeds == failed_feeds {
             return Err(ScraperError::AllFeedsFailed(
-                "all configured feeds failed".to_string(),
+                "all configured feeds failed".to_owned(),
             ));
         }
 
@@ -414,7 +414,7 @@ impl Scraper {
         event_type: MajorEventType,
     ) -> Result<Vec<MajorEvent>, ScraperError> {
         let page_url = if page == 1 {
-            base_url.to_string()
+            base_url.to_owned()
         } else {
             format!("{base_url}?paged={page}")
         };
@@ -484,7 +484,7 @@ impl Scraper {
                 continue;
             }
 
-            known_external_ids.insert(normalized.to_string());
+            known_external_ids.insert(normalized.to_owned());
             if let Some(key) = canonical_event_link_key(normalized) {
                 known_canonical_links.insert(key);
             }
@@ -532,7 +532,7 @@ impl Scraper {
                 .and_then(|header| header.to_str().ok())
                 .unwrap_or_default()
                 .trim()
-                .to_string()
+                .to_owned()
         };
 
         let normalized_e_tag = normalize_header(e_tag);
@@ -543,7 +543,7 @@ impl Scraper {
         }
 
         let mut guard = self.feed_metadata_by_page_url.write();
-        let entry = guard.entry(page_url.to_string()).or_default();
+        let entry = guard.entry(page_url.to_owned()).or_default();
 
         if !normalized_e_tag.is_empty() {
             entry.e_tag = normalized_e_tag;

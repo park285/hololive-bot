@@ -48,7 +48,7 @@ impl Renderer {
         let mut tera = self
             .tera
             .write()
-            .map_err(|_| SharedError::Config("tera lock poisoned".to_string()))?;
+            .map_err(|_| SharedError::Config("tera lock poisoned".to_owned()))?;
         tera.add_raw_template(template_key, body)
             .map_err(|error| SharedError::Config(format!("parse template: {error}")))?;
 
@@ -59,8 +59,8 @@ impl Renderer {
         let mut cache = self
             .cache
             .write()
-            .map_err(|_| SharedError::Config("template cache lock poisoned".to_string()))?;
-        cache.insert(template_key.to_string(), body.to_string());
+            .map_err(|_| SharedError::Config("template cache lock poisoned".to_owned()))?;
+        cache.insert(template_key.to_owned(), body.to_owned());
 
         Ok(())
     }
@@ -71,7 +71,7 @@ impl Renderer {
         let mut tera = self
             .tera
             .write()
-            .map_err(|_| SharedError::Config("tera lock poisoned".to_string()))?;
+            .map_err(|_| SharedError::Config("tera lock poisoned".to_owned()))?;
 
         if tera.get_template(template_key).is_err() {
             tera.add_raw_template(template_key, &body)
@@ -159,7 +159,7 @@ impl Renderer {
             let cache = self
                 .cache
                 .read()
-                .map_err(|_| SharedError::Config("template cache lock poisoned".to_string()))?;
+                .map_err(|_| SharedError::Config("template cache lock poisoned".to_owned()))?;
             cache.get(template_key).cloned()
         };
 
@@ -179,7 +179,7 @@ fn try_render_go_template(
 ) -> Result<String, SharedError> {
     if !body.is_ascii() {
         return Err(SharedError::Config(
-            "skip gtmpl renderer for non-ascii template".to_string(),
+            "skip gtmpl renderer for non-ascii template".to_owned(),
         ));
     }
 
@@ -188,7 +188,7 @@ fn try_render_go_template(
         gtmpl_ng::template(body, go_value).map_err(|error| error.to_string())
     })
     .map_err(|_| {
-        SharedError::Config("render go template panic (likely utf8 lexer boundary)".to_string())
+        SharedError::Config("render go template panic (likely utf8 lexer boundary)".to_owned())
     })?;
 
     rendered.map_err(SharedError::Config)

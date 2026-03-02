@@ -38,7 +38,13 @@ impl ScraperError {
                 let lower = msg.to_lowercase();
                 is_transient_signature(&lower)
             }
-            _ => false,
+            Self::XmlParse(_)
+            | Self::Database(_)
+            | Self::Config(_)
+            | Self::AllFeedsFailed(_)
+            | Self::LinkBlocked(_)
+            | Self::LinkFailed(_)
+            | Self::Io(_) => false,
         }
     }
 }

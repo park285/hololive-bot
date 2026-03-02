@@ -1,10 +1,18 @@
 package llm
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
+	"syscall"
 	"testing"
+
+	"github.com/openai/openai-go/v3"
 )
 
 func TestNewClient_DefaultOptions(t *testing.T) {
@@ -84,50 +92,135 @@ func TestOpenAIClient_ImplementsClient(t *testing.T) {
 	var _ Client = NewClient("https://example.com/v1", "key", "model", nil)
 }
 
-func TestShouldFallbackToChat_ContextDeadline_NoFallback(t *testing.T) {
-	err := fmt.Errorf("openai responses API: context deadline exceeded")
-	if shouldFallbackToChat(err) {
-		t.Error("context deadline exceeded should NOT trigger fallback (handled by ctx.Err() check)")
-	}
-}
-
-func TestShouldFallbackToChat_NetworkTimeout_Fallback(t *testing.T) {
-	err := fmt.Errorf("openai responses API: timeout")
-	if !shouldFallbackToChat(err) {
-		t.Error("network timeout should trigger fallback")
-	}
-}
-
-func TestShouldFallbackToChat_ServerError_Fallback(t *testing.T) {
-	err := fmt.Errorf("openai responses API: 502 bad gateway")
-	if !shouldFallbackToChat(err) {
-		t.Error("502 bad gateway should trigger fallback")
-	}
-}
-
-func TestShouldFallbackToChat_NotFoundWithoutResponses_NoFallback(t *testing.T) {
-	err := fmt.Errorf("openai chat completions API: 404 not found")
-	if shouldFallbackToChat(err) {
-		t.Error("404 without responses context should not trigger fallback")
-	}
-}
-
-func TestShouldFallbackToChat_ResponsesNotFound_Fallback(t *testing.T) {
-	err := fmt.Errorf("openai responses API: 404 not found")
-	if !shouldFallbackToChat(err) {
-		t.Error("responses 404 should trigger fallback")
-	}
-}
-
 func TestShouldFallbackToChat_NilError(t *testing.T) {
 	if shouldFallbackToChat(nil) {
 		t.Error("nil error should not trigger fallback")
 	}
 }
 
-func TestShouldFallbackToChat_UnknownError_NoFallback(t *testing.T) {
-	err := fmt.Errorf("openai: rate limit exceeded")
-	if shouldFallbackToChat(err) {
-		t.Error("unknown error type should not trigger fallback")
+func TestShouldFallbackToChat_OpenAIStatusAndCode(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "responses_not_supported_404",
+			err:  wrappedResponsesAPIError(http.StatusNotFound, ""),
+			want: true,
+		},
+		{
+			name: "responses_not_supported_405",
+			err:  wrappedResponsesAPIError(http.StatusMethodNotAllowed, ""),
+			want: true,
+		},
+		{
+			name: "temporary_server_error_503",
+			err:  wrappedResponsesAPIError(http.StatusServiceUnavailable, ""),
+			want: true,
+		},
+		{
+			name: "unsupported_code_400",
+			err:  wrappedResponsesAPIError(http.StatusBadRequest, "unsupported_endpoint"),
+			want: true,
+		},
+		{
+			name: "invalid_request_400",
+			err:  wrappedResponsesAPIError(http.StatusBadRequest, "invalid_request_error"),
+			want: false,
+		},
+		{
+			name: "unauthorized_401",
+			err:  wrappedResponsesAPIError(http.StatusUnauthorized, "invalid_api_key"),
+			want: false,
+		},
+		{
+			name: "rate_limit_429",
+			err:  wrappedResponsesAPIError(http.StatusTooManyRequests, "rate_limit_exceeded"),
+			want: false,
+		},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldFallbackToChat(tt.err); got != tt.want {
+				t.Fatalf("shouldFallbackToChat() = %v, want %v (err=%v)", got, tt.want, tt.err)
+			}
+		})
+	}
+}
+
+func TestShouldFallbackToChat_ContextCanceledOrDeadline_NoFallback(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "context_canceled",
+			err:  fmt.Errorf("openai responses API: %w", context.Canceled),
+		},
+		{
+			name: "context_deadline",
+			err:  fmt.Errorf("openai responses API: %w", context.DeadlineExceeded),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if shouldFallbackToChat(tt.err) {
+				t.Fatalf("%s should not fallback", tt.name)
+			}
+		})
+	}
+}
+
+func TestShouldFallbackToChat_NetworkErrors(t *testing.T) {
+	timeoutErr := fmt.Errorf("openai responses API: %w", &url.Error{
+		Op:  "POST",
+		URL: "https://example.com/v1/responses",
+		Err: &net.DNSError{IsTimeout: true},
+	})
+	if !shouldFallbackToChat(timeoutErr) {
+		t.Fatal("timeout network error should fallback")
+	}
+
+	connRefusedErr := fmt.Errorf("openai responses API: %w", &net.OpError{
+		Op:  "dial",
+		Net: "tcp",
+		Err: syscall.ECONNREFUSED,
+	})
+	if !shouldFallbackToChat(connRefusedErr) {
+		t.Fatal("connection refused error should fallback")
+	}
+
+	nonRetryableNetErr := fmt.Errorf("openai responses API: %w", &url.Error{
+		Op:  "POST",
+		URL: "https://example.com/v1/responses",
+		Err: errors.New("tls handshake failed"),
+	})
+	if shouldFallbackToChat(nonRetryableNetErr) {
+		t.Fatal("non-timeout/non-conn-refused network error should not fallback")
+	}
+}
+
+func wrappedResponsesAPIError(statusCode int, code string) error {
+	requestURL := &url.URL{
+		Scheme: "https",
+		Host:   "example.com",
+		Path:   "/v1/responses",
+	}
+
+	apiErr := &openai.Error{
+		Code:       code,
+		StatusCode: statusCode,
+		Request: &http.Request{
+			Method: http.MethodPost,
+			URL:    requestURL,
+		},
+		Response: &http.Response{
+			StatusCode: statusCode,
+			Status:     fmt.Sprintf("%d %s", statusCode, http.StatusText(statusCode)),
+		},
+	}
+	return fmt.Errorf("openai responses API: %w", apiErr)
 }

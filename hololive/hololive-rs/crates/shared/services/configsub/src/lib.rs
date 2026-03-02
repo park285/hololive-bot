@@ -22,14 +22,14 @@ impl Subscriber {
     pub fn new(client: Arc<dyn ValkeyClient>) -> Self {
         Self {
             client,
-            channel: DEFAULT_CHANNEL.to_string(),
+            channel: DEFAULT_CHANNEL.to_owned(),
             poll_timeout: 5.0,
         }
     }
 
     #[must_use]
     pub fn with_channel(mut self, channel: &str) -> Self {
-        self.channel = channel.to_string();
+        channel.clone_into(&mut self.channel);
         self
     }
 

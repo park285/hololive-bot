@@ -113,7 +113,7 @@ impl EventFieldVisitor {
             self.message = Some(value);
             return;
         }
-        self.fields.push((name.to_string(), value));
+        self.fields.push((name.to_owned(), value));
     }
 
     #[allow(clippy::useless_let_if_seq)]
@@ -165,7 +165,7 @@ fn format_string_value(value: &str) -> String {
     if value.is_empty() || value.contains(char::is_whitespace) || value.contains('=') {
         format!("{value:?}")
     } else {
-        value.to_string()
+        value.to_owned()
     }
 }
 
@@ -227,7 +227,7 @@ pub fn parse_f64_env(name: &str) -> Option<f64> {
 pub fn normalize_otlp_endpoint(endpoint: &str, insecure: bool) -> String {
     let trimmed = endpoint.trim();
     if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-        return trimmed.to_string();
+        return trimmed.to_owned();
     }
 
     let scheme = if insecure { "http" } else { "https" };
@@ -260,9 +260,9 @@ fn init_otel_runtime(config: &OtelInitConfig<'_>) -> Result<Option<OTelRuntime>>
     let sample_rate = config.sample_rate.clamp(0.0, 1.0);
     let resource = Resource::builder_empty()
         .with_attributes(vec![
-            KeyValue::new("service.name", config.service_name.to_string()),
-            KeyValue::new("service.version", config.service_version.to_string()),
-            KeyValue::new("deployment.environment", config.environment.to_string()),
+            KeyValue::new("service.name", config.service_name.to_owned()),
+            KeyValue::new("service.version", config.service_version.to_owned()),
+            KeyValue::new("deployment.environment", config.environment.to_owned()),
         ])
         .build();
 
@@ -276,8 +276,8 @@ fn init_otel_runtime(config: &OtelInitConfig<'_>) -> Result<Option<OTelRuntime>>
     global::set_tracer_provider(provider.clone());
 
     // startup span flush (exporter 연결 확인)
-    let tracer = provider.tracer(config.service_name.to_string());
-    let span_name = config.startup_span_name.to_string();
+    let tracer = provider.tracer(config.service_name.to_owned());
+    let span_name = config.startup_span_name.to_owned();
     let mut startup_span = tracer.start(span_name);
     startup_span.end();
     if let Err(err) = provider.force_flush() {
@@ -286,7 +286,7 @@ fn init_otel_runtime(config: &OtelInitConfig<'_>) -> Result<Option<OTelRuntime>>
 
     Ok(Some(OTelRuntime {
         provider,
-        service_name: config.service_name.to_string(),
+        service_name: config.service_name.to_owned(),
         endpoint,
         sample_rate,
     }))
@@ -335,9 +335,9 @@ pub fn init_unified_tracing(
 
             let service_log_path = PathBuf::from(tracing_config.dir).join(tracing_config.file);
             let combined_log_name = if combined_enabled {
-                combined_file.to_string()
+                combined_file.to_owned()
             } else {
-                tracing_config.file.to_string()
+                tracing_config.file.to_owned()
             };
             let combined_log_path = PathBuf::from(tracing_config.dir).join(combined_log_name);
             (file_writer, Some((service_log_path, combined_log_path)))

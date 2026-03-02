@@ -34,13 +34,13 @@ impl SlidingWindowLimiter {
     pub fn new(client: Arc<dyn ValkeyClient>) -> Self {
         Self {
             client,
-            key_prefix: DEFAULT_KEY_PREFIX.to_string(),
+            key_prefix: DEFAULT_KEY_PREFIX.to_owned(),
         }
     }
 
     #[must_use]
     pub fn with_key_prefix(mut self, key_prefix: &str) -> Self {
-        self.key_prefix = key_prefix.to_string();
+        key_prefix.clone_into(&mut self.key_prefix);
         self
     }
 
@@ -52,17 +52,17 @@ impl SlidingWindowLimiter {
     ) -> Result<Decision, SharedError> {
         if bucket.trim().is_empty() {
             return Err(SharedError::Config(
-                "allow: bucket must not be empty".to_string(),
+                "allow: bucket must not be empty".to_owned(),
             ));
         }
         if limit <= 0 {
             return Err(SharedError::Config(
-                "allow: limit must be greater than zero".to_string(),
+                "allow: limit must be greater than zero".to_owned(),
             ));
         }
         if window.is_zero() {
             return Err(SharedError::Config(
-                "allow: window must be greater than zero".to_string(),
+                "allow: window must be greater than zero".to_owned(),
             ));
         }
 

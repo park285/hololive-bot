@@ -99,7 +99,7 @@ impl LinkHttpClient for ReqwestLinkHttpClient {
         timeout: Duration,
     ) -> BoxFuture<'_, Result<HttpProbeResponse, String>> {
         let client = self.client.clone();
-        let target_url = url.to_string();
+        let target_url = url.to_owned();
 
         Box::pin(async move {
             let mut request = client.request(method.clone(), &target_url).timeout(timeout);
@@ -115,7 +115,7 @@ impl LinkHttpClient for ReqwestLinkHttpClient {
                 .headers()
                 .get(reqwest::header::LOCATION)
                 .and_then(|value| value.to_str().ok())
-                .map(ToString::to_string);
+                .map(ToOwned::to_owned);
 
             Ok(HttpProbeResponse {
                 status,
@@ -149,7 +149,7 @@ impl Default for TokioHostResolver {
 
 impl HostResolver for TokioHostResolver {
     fn resolve(&self, host: &str, _port: u16) -> BoxFuture<'_, Result<Vec<IpAddr>, String>> {
-        let target_host = host.to_string();
+        let target_host = host.to_owned();
         let resolver = self.resolver.clone();
 
         Box::pin(async move {
@@ -262,7 +262,9 @@ impl LinkChecker {
             match link_status {
                 MajorEventLinkStatus::Ok => result.ok += 1,
                 MajorEventLinkStatus::Blocked => result.blocked += 1,
-                _ => result.failed += 1,
+                MajorEventLinkStatus::Unchecked | MajorEventLinkStatus::Failed => {
+                    result.failed += 1;
+                }
             }
 
             if let Some(err_msg) = check_error {
@@ -284,7 +286,7 @@ impl LinkChecker {
         if trimmed.is_empty() {
             return (
                 MajorEventLinkStatus::Failed,
-                Some("link is empty".to_string()),
+                Some("link is empty".to_owned()),
             );
         }
 
@@ -389,12 +391,12 @@ impl LinkChecker {
         let final_host = parsed_final.host_str();
         if final_host.is_none() {
             return Err(ScraperError::LinkBlocked(
-                "missing host in final redirect url".to_string(),
+                "missing host in final redirect url".to_owned(),
             ));
         }
         if original_host.is_none() {
             return Err(ScraperError::LinkBlocked(
-                "missing host in original redirect url".to_string(),
+                "missing host in original redirect url".to_owned(),
             ));
         }
 
@@ -410,7 +412,7 @@ impl LinkChecker {
         let mut current =
             Url::parse(parsed_url).map_err(|err| ProbeError::Failed(err.to_string()))?;
         let mut visited_urls = HashSet::new();
-        visited_urls.insert(current.as_str().to_string());
+        visited_urls.insert(current.as_str().to_owned());
         let mut hop = 0usize;
 
         loop {
@@ -456,7 +458,7 @@ impl LinkChecker {
                 )));
             }
 
-            let next_key = next.as_str().to_string();
+            let next_key = next.as_str().to_owned();
             if !visited_urls.insert(next_key.clone()) {
                 return Err(ProbeError::Failed(format!(
                     "redirect loop detected for {next_key}"
@@ -470,7 +472,7 @@ impl LinkChecker {
     async fn validate_host(&self, parsed_url: &Url) -> Result<(), ScraperError> {
         let host = parsed_url
             .host_str()
-            .ok_or_else(|| ScraperError::LinkBlocked("missing host in url".to_string()))?;
+            .ok_or_else(|| ScraperError::LinkBlocked("missing host in url".to_owned()))?;
 
         if is_blocked_hostname(host) {
             return Err(ScraperError::LinkBlocked(format!(
@@ -518,7 +520,14 @@ impl LinkChecker {
     fn to_probe_error(err: ScraperError) -> ProbeError {
         match err {
             ScraperError::LinkBlocked(reason) => ProbeError::Blocked(reason),
-            other => ProbeError::Failed(other.to_string()),
+            other @ (ScraperError::Http(_)
+            | ScraperError::HttpStatus { .. }
+            | ScraperError::XmlParse(_)
+            | ScraperError::Database(_)
+            | ScraperError::Config(_)
+            | ScraperError::AllFeedsFailed(_)
+            | ScraperError::LinkFailed(_)
+            | ScraperError::Io(_)) => ProbeError::Failed(other.to_string()),
         }
     }
 }

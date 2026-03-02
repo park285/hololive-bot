@@ -13,10 +13,10 @@ fn sample_event(
     let now = Utc::now();
     MajorEvent {
         id: 0,
-        external_id: external_id.to_string(),
+        external_id: external_id.to_owned(),
         event_type: MajorEventType::Event,
-        title: "sample".to_string(),
-        link: link.to_string(),
+        title: "sample".to_owned(),
+        link: link.to_owned(),
         description: None,
         members: Vec::new(),
         pub_date,
@@ -54,7 +54,7 @@ fn canonical_link_handles_non_url_input() {
 #[test]
 fn should_stop_incremental_scan_when_all_events_are_known() {
     let mut known_external_ids = HashSet::new();
-    known_external_ids.insert("ext-1".to_string());
+    known_external_ids.insert("ext-1".to_owned());
 
     let cursor = IncrementalCursor {
         known_external_ids,
@@ -69,7 +69,7 @@ fn should_stop_incremental_scan_when_all_events_are_known() {
 #[test]
 fn should_not_stop_incremental_scan_when_any_event_is_new() {
     let mut known_external_ids = HashSet::new();
-    known_external_ids.insert("ext-1".to_string());
+    known_external_ids.insert("ext-1".to_owned());
 
     let cursor = IncrementalCursor {
         known_external_ids,
@@ -109,7 +109,7 @@ fn should_stop_incremental_scan_by_pub_date_signal() {
 #[test]
 fn should_stop_incremental_scan_by_canonical_link_signal() {
     let mut known_canonical_links = HashSet::new();
-    known_canonical_links.insert("hololive.hololivepro.com/news/item-1".to_string());
+    known_canonical_links.insert("hololive.hololivepro.com/news/item-1".to_owned());
 
     let cursor = IncrementalCursor {
         known_external_ids: HashSet::new(),

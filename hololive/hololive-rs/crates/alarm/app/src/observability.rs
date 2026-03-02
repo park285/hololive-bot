@@ -69,16 +69,16 @@ pub fn resolve_telemetry_config(base: &TelemetryConfig) -> TelemetryConfig {
 
     // 빈 문자열 폴백: alarm 서비스 고정값
     if cfg.service_name.trim().is_empty() {
-        cfg.service_name = "hololive-alarm".to_string();
+        cfg.service_name = "hololive-alarm".to_owned();
     }
     if cfg.service_version.trim().is_empty() {
-        cfg.service_version = env!("CARGO_PKG_VERSION").to_string();
+        cfg.service_version = env!("CARGO_PKG_VERSION").to_owned();
     }
     if cfg.environment.trim().is_empty() {
-        cfg.environment = "production".to_string();
+        cfg.environment = "production".to_owned();
     }
     if cfg.otlp_endpoint.trim().is_empty() {
-        cfg.otlp_endpoint = "otel-collector:4317".to_string();
+        cfg.otlp_endpoint = "otel-collector:4317".to_owned();
     }
     cfg.sample_rate = cfg.sample_rate.clamp(0.0, 1.0);
 

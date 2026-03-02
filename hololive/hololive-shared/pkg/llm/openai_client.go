@@ -3,11 +3,13 @@ package llm
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"strings"
+	"syscall"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -231,37 +233,50 @@ func shouldFallbackToChat(err error) bool {
 		return false
 	}
 
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "context deadline exceeded") || strings.Contains(msg, "context canceled") {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 
-	// 404/405는 Responses 미지원과 구분이 필요하므로, responses 경로 맥락이 있을 때만 허용한다.
-	if (strings.Contains(msg, "404") || strings.Contains(msg, "405")) &&
-		(strings.Contains(msg, "/responses") || strings.Contains(msg, "responses api") || strings.Contains(msg, "responses")) {
+	var apiErr *openai.Error
+	if errors.As(err, &apiErr) {
+		if shouldFallbackOpenAIStatus(apiErr.StatusCode) {
+			return true
+		}
+
+		switch strings.ToLower(apiErr.Code) {
+		case "unsupported", "unsupported_endpoint", "unsupported_api", "not_implemented":
+			return true
+		default:
+			return false
+		}
+	}
+
+	// 최소 허용 네트워크 오류:
+	// - dial refused (일시적 라우팅/프록시 장애 가능성)
+	// - 명시적 timeout 계열
+	if errors.Is(err, syscall.ECONNREFUSED) {
 		return true
 	}
 
-	// 조건부 허용:
-	// - responses endpoint 미지원/일시 오류
-	// - 네트워크 계층의 일시 장애
-	fallbackHints := []string{
-		"500",
-		"502",
-		"503",
-		"504",
-		"connection refused",
-		"timeout",
-		"unsupported",
-		"not implemented",
-		"bad gateway",
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
 	}
-	for _, hint := range fallbackHints {
-		if strings.Contains(msg, hint) {
-			return true
-		}
-	}
+
 	return false
+}
+
+func shouldFallbackOpenAIStatus(statusCode int) bool {
+	switch statusCode {
+	// responses 엔드포인트 미지원/미구현
+	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
+		return true
+	// 일시 서버 장애
+	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 func suppressDiscoveredEvents(rawJSON string) (string, error) {

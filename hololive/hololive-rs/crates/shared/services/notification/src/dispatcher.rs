@@ -15,13 +15,13 @@ impl ValkeyQueueDispatcher {
     pub fn new(client: Arc<dyn ValkeyClient>) -> Self {
         Self {
             client,
-            queue_key: DEFAULT_QUEUE_KEY.to_string(),
+            queue_key: DEFAULT_QUEUE_KEY.to_owned(),
         }
     }
 
     #[must_use]
     pub fn with_queue_key(mut self, queue_key: &str) -> Self {
-        self.queue_key = queue_key.to_string();
+        queue_key.clone_into(&mut self.queue_key);
         self
     }
 }

@@ -27,8 +27,8 @@ impl Default for TelemetryConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            endpoint: "otel-collector:4317".to_string(),
-            service_name: "hololive-shared".to_string(),
+            endpoint: "otel-collector:4317".to_owned(),
+            service_name: "hololive-shared".to_owned(),
             sample_ratio: 1.0,
         }
     }
@@ -69,7 +69,7 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<(), SharedError> {
     let slot = TELEMETRY_PROVIDER.get_or_init(|| Mutex::new(None));
     let mut guard = slot
         .lock()
-        .map_err(|_| SharedError::Config("telemetry provider lock poisoned".to_string()))?;
+        .map_err(|_| SharedError::Config("telemetry provider lock poisoned".to_owned()))?;
 
     if let Some(previous) = guard.take()
         && let Err(err) = previous.shutdown()
@@ -100,7 +100,7 @@ pub fn shutdown_telemetry() {
 fn normalize_endpoint(endpoint: &str) -> String {
     let trimmed = endpoint.trim();
     if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-        return trimmed.to_string();
+        return trimmed.to_owned();
     }
     format!("http://{trimmed}")
 }

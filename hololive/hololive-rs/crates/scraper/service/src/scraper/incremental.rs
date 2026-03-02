@@ -83,14 +83,14 @@ pub(super) fn canonical_event_link_key(raw_url: &str) -> Option<String> {
 
     let parsed = match Url::parse(trimmed) {
         Ok(url) => url,
-        Err(_) => return Some(trimmed.trim_end_matches('/').to_string()),
+        Err(_) => return Some(trimmed.trim_end_matches('/').to_owned()),
     };
 
     let host = parsed.host_str()?.to_ascii_lowercase();
-    let mut path = parsed.path().trim().to_string();
+    let mut path = parsed.path().trim().to_owned();
 
     if path.is_empty() {
-        path = "/".to_string();
+        path = "/".to_owned();
     }
 
     if host == "hololive.hololivepro.com"
@@ -100,9 +100,9 @@ pub(super) fn canonical_event_link_key(raw_url: &str) -> Option<String> {
     }
 
     if path != "/" {
-        path = path.trim_end_matches('/').to_string();
+        path = path.trim_end_matches('/').to_owned();
         if path.is_empty() {
-            path = "/".to_string();
+            path = "/".to_owned();
         }
     }
 

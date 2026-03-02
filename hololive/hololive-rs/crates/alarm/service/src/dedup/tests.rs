@@ -351,7 +351,7 @@ async fn local_fallback_when_valkey_fails() {
 async fn local_fallback_release_claims_unblocks_reclaim() {
     let failing: Arc<dyn ValkeyClient> = Arc::new(FallbackValkeyClient::with_del_success());
     let svc = DedupService::new(failing, DEFAULT_TARGET_MINUTES.to_vec());
-    let key = "alarm:local_fallback:release".to_string();
+    let key = "alarm:local_fallback:release".to_owned();
 
     assert!(svc.try_claim_key(&key, StdDuration::from_secs(30)).await);
     assert!(!svc.try_claim_key(&key, StdDuration::from_secs(30)).await);
@@ -370,7 +370,7 @@ async fn local_fallback_release_claims_unblocks_reclaim() {
 async fn local_fallback_claim_expires_after_ttl() {
     let failing: Arc<dyn ValkeyClient> = Arc::new(FallbackValkeyClient::with_del_success());
     let svc = DedupService::new(failing, DEFAULT_TARGET_MINUTES.to_vec());
-    let key = "alarm:local_fallback:ttl".to_string();
+    let key = "alarm:local_fallback:ttl".to_owned();
 
     assert!(svc.try_claim_key(&key, StdDuration::from_millis(30)).await);
     assert!(!svc.try_claim_key(&key, StdDuration::from_millis(30)).await);

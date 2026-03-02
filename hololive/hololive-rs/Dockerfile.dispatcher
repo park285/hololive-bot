@@ -17,7 +17,7 @@ RUN apk add --no-cache musl-dev pkgconfig openssl-dev && \
     rustup default ${RUST_TOOLCHAIN}
 
 WORKDIR /app
-COPY hololive/hololive-rs/ .
+COPY . .
 RUN --mount=type=cache,id=hololive-rs-cargo-registry-v2,target=/usr/local/cargo/registry \
     --mount=type=cache,id=hololive-rs-cargo-git-v2,target=/usr/local/cargo/git \
     --mount=type=cache,id=hololive-rs-target-dispatcher-v1,target=/app/target \

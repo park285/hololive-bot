@@ -24,9 +24,9 @@ impl CommandParser for AlarmParser {
         if ["추가", "설정", "set", "add"].contains(&normalized_sub_command.as_str()) {
             let mut params = HashMap::new();
             let (member, alarm_type) = extract_member_and_type(&rest_args);
-            params.insert("action".to_string(), Value::String("add".to_string()));
-            params.insert("member".to_string(), Value::String(member));
-            params.insert("type".to_string(), Value::String(alarm_type));
+            params.insert("action".to_owned(), Value::String("add".to_owned()));
+            params.insert("member".to_owned(), Value::String(member));
+            params.insert("type".to_owned(), Value::String(alarm_type));
             return Some(build_result(
                 CommandType::AlarmAdd,
                 params,
@@ -39,9 +39,9 @@ impl CommandParser for AlarmParser {
         {
             let mut params = HashMap::new();
             let (member, alarm_type) = extract_member_and_type(&rest_args);
-            params.insert("action".to_string(), Value::String("remove".to_string()));
-            params.insert("member".to_string(), Value::String(member));
-            params.insert("type".to_string(), Value::String(alarm_type));
+            params.insert("action".to_owned(), Value::String("remove".to_owned()));
+            params.insert("member".to_owned(), Value::String(member));
+            params.insert("type".to_owned(), Value::String(alarm_type));
             return Some(build_result(
                 CommandType::AlarmRemove,
                 params,
@@ -52,7 +52,7 @@ impl CommandParser for AlarmParser {
 
         if ["목록", "list", "show"].contains(&normalized_sub_command.as_str()) {
             let mut params = HashMap::new();
-            params.insert("action".to_string(), Value::String("list".to_string()));
+            params.insert("action".to_owned(), Value::String("list".to_owned()));
             return Some(build_result(
                 CommandType::AlarmList,
                 params,
@@ -63,7 +63,7 @@ impl CommandParser for AlarmParser {
 
         if ["초기화", "clear", "reset"].contains(&normalized_sub_command.as_str()) {
             let mut params = HashMap::new();
-            params.insert("action".to_string(), Value::String("clear".to_string()));
+            params.insert("action".to_owned(), Value::String("clear".to_owned()));
             return Some(build_result(
                 CommandType::AlarmClear,
                 params,
@@ -73,9 +73,9 @@ impl CommandParser for AlarmParser {
         }
 
         let mut params = HashMap::new();
-        params.insert("action".to_string(), Value::String("invalid".to_string()));
+        params.insert("action".to_owned(), Value::String("invalid".to_owned()));
         params.insert(
-            "sub_command".to_string(),
+            "sub_command".to_owned(),
             Value::String(normalized_sub_command),
         );
 
@@ -128,12 +128,12 @@ fn compact_alarm_tokens(command: &str, args: &[&str]) -> (String, Vec<String>) {
 
     if let Some(mapped_sub_command) = mapped {
         let mut rest = Vec::new();
-        rest.extend(args.iter().map(|arg| (*arg).to_string()));
-        return (mapped_sub_command.to_string(), rest);
+        rest.extend(args.iter().map(|arg| (*arg).to_owned()));
+        return (mapped_sub_command.to_owned(), rest);
     }
 
-    let sub_command = args.first().map_or("목록", |arg| *arg).to_string();
-    let rest = args.iter().skip(1).map(|arg| (*arg).to_string()).collect();
+    let sub_command = args.first().map_or("목록", |arg| *arg).to_owned();
+    let rest = args.iter().skip(1).map(|arg| (*arg).to_owned()).collect();
     (sub_command, rest)
 }
 
@@ -159,8 +159,8 @@ fn extract_member_and_type(args: &[String]) -> (String, String) {
         && args.len() > 1
     {
         let member = args[..args.len() - 1].join(" ");
-        return (member.trim().to_string(), alarm_type.to_string());
+        return (member.trim().to_owned(), alarm_type.to_owned());
     }
 
-    (args.join(" ").trim().to_string(), String::new())
+    (args.join(" ").trim().to_owned(), String::new())
 }

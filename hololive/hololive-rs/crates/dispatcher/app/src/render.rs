@@ -24,20 +24,20 @@ pub(crate) fn render_message(
     let member_name = notification.channel.as_ref().map_or_else(
         || {
             notification.stream.as_ref().map_or_else(
-                || "알 수 없는 멤버".to_string(),
+                || "알 수 없는 멤버".to_owned(),
                 |stream| stream.channel_name.clone(),
             )
         },
-        |channel| channel.display_name().to_string(),
+        |channel| channel.display_name().to_owned(),
     );
 
     let title = notification.stream.as_ref().map_or_else(
-        || "방송 정보 없음".to_string(),
+        || "방송 정보 없음".to_owned(),
         |stream| stream.title.clone(),
     );
 
     let stream_url = resolve_stream_url(notification);
-    let schedule_message = notification.schedule_change_message.trim().to_string();
+    let schedule_message = notification.schedule_change_message.trim().to_owned();
     let scheduled_time_kst = resolve_scheduled_time_kst(notification);
 
     let context = build_go_template_context(
@@ -128,54 +128,54 @@ fn build_go_template_context(
     let mut context = HashMap::new();
 
     context.insert(
-        "ChannelName".to_string(),
-        serde_json::Value::String(member_name.to_string()),
+        "ChannelName".to_owned(),
+        serde_json::Value::String(member_name.to_owned()),
     );
     context.insert(
-        "Title".to_string(),
-        serde_json::Value::String(title.to_string()),
+        "Title".to_owned(),
+        serde_json::Value::String(title.to_owned()),
     );
     context.insert(
-        "URL".to_string(),
-        serde_json::Value::String(stream_url.to_string()),
+        "URL".to_owned(),
+        serde_json::Value::String(stream_url.to_owned()),
     );
     context.insert(
-        "MinutesUntil".to_string(),
+        "MinutesUntil".to_owned(),
         serde_json::Value::Number(minutes_until.into()),
     );
     context.insert(
-        "ScheduleMessage".to_string(),
-        serde_json::Value::String(schedule_message.to_string()),
+        "ScheduleMessage".to_owned(),
+        serde_json::Value::String(schedule_message.to_owned()),
     );
     context.insert(
-        "ScheduledTimeKST".to_string(),
-        serde_json::Value::String(scheduled_time_kst.to_string()),
+        "ScheduledTimeKST".to_owned(),
+        serde_json::Value::String(scheduled_time_kst.to_owned()),
     );
 
     // 기본 템플릿 호환용 snake_case 필드
     context.insert(
-        "channel_name".to_string(),
-        serde_json::Value::String(member_name.to_string()),
+        "channel_name".to_owned(),
+        serde_json::Value::String(member_name.to_owned()),
     );
     context.insert(
-        "title".to_string(),
-        serde_json::Value::String(title.to_string()),
+        "title".to_owned(),
+        serde_json::Value::String(title.to_owned()),
     );
     context.insert(
-        "url".to_string(),
-        serde_json::Value::String(stream_url.to_string()),
+        "url".to_owned(),
+        serde_json::Value::String(stream_url.to_owned()),
     );
     context.insert(
-        "minutes_until".to_string(),
+        "minutes_until".to_owned(),
         serde_json::Value::Number(minutes_until.into()),
     );
     context.insert(
-        "schedule_message".to_string(),
-        serde_json::Value::String(schedule_message.to_string()),
+        "schedule_message".to_owned(),
+        serde_json::Value::String(schedule_message.to_owned()),
     );
     context.insert(
-        "scheduled_time_kst".to_string(),
-        serde_json::Value::String(scheduled_time_kst.to_string()),
+        "scheduled_time_kst".to_owned(),
+        serde_json::Value::String(scheduled_time_kst.to_owned()),
     );
 
     context
@@ -261,12 +261,12 @@ mod tests {
             .and_then(parse_scheduled_time_kst);
 
         AlarmNotification::new(
-            "room-1".to_string(),
+            "room-1".to_owned(),
             None,
             Some(Stream {
-                id: "stream-id".to_string(),
+                id: "stream-id".to_owned(),
                 title: input.title.clone(),
-                channel_id: "channel-id".to_string(),
+                channel_id: "channel-id".to_owned(),
                 channel_name: input.channel_name.clone(),
                 status: if input.minutes_until <= 0 {
                     StreamStatus::Live
