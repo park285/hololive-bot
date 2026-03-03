@@ -14,8 +14,8 @@ import (
 
 // infraResources 는 캐시/DB 리소스를 담습니다.
 type infraResources struct {
-	cacheService    *cache.Service
-	postgresService *database.PostgresService
+	cacheService    cache.Client
+	postgresService database.Client
 	memberRepo      *member.Repository
 	memberCache     *member.Cache
 	cleanupCache    func()

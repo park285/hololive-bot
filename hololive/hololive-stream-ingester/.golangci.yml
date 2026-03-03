@@ -55,6 +55,9 @@ linters:
     - unconvert
     - nakedret
 
+    # 교차 서비스 의존 금지
+    - depguard
+
   settings:
     errcheck:
       check-type-assertions: false
@@ -123,6 +126,17 @@ linters:
           disabled: true
         - name: package-comments
           disabled: true
+
+    depguard:
+      rules:
+        cross-service-boundary:
+          deny:
+            - pkg: "github.com/kapu/hololive-admin"
+              desc: "stream-ingester -> admin 교차 의존 금지"
+            - pkg: "github.com/kapu/hololive-kakao-bot-go"
+              desc: "stream-ingester -> kakao-bot 교차 의존 금지"
+            - pkg: "github.com/kapu/hololive-llm-sched"
+              desc: "stream-ingester -> llm-sched 교차 의존 금지"
 
     wrapcheck:
       extra-ignore-sigs:

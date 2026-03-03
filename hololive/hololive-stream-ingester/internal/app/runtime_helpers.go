@@ -17,13 +17,16 @@ func ProvideAPIAddr(cfg *config.Config) string {
 }
 
 // ProvideYouTubeService: YouTube 서비스 인스턴스를 제공합니다.
-func ProvideYouTubeService(ytStack *providers.YouTubeStack) *youtube.Service {
+func ProvideYouTubeService(ytStack *providers.YouTubeStack) youtube.Service {
+	if ytStack == nil {
+		return nil
+	}
 	return ytStack.Service
 }
 
 func applyScraperProxyToggle(
 	enabled bool,
-	youtubeService *youtube.Service,
+	youtubeService youtube.Service,
 	holodexService *holodex.Service,
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
