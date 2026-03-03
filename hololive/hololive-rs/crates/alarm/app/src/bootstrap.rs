@@ -9,7 +9,7 @@ use alarm_infra::{
     config::AlarmAppConfig,
     holodex::HttpHolodexClient,
     repository::{PgAlarmRepository, create_pool},
-    twitch::HttpTwitchClient,
+    twitch::{HttpTwitchClient, MockTwitchClient},
     valkey::{FredValkeyClient, ValkeyClient},
 };
 use alarm_service::{
@@ -158,18 +158,22 @@ fn build_scheduler(
         Arc::clone(&valkey),
     ));
 
-    // Twitch 비활성화 시 클라이언트/체커 생성 생략
-    let (twitch_checker, twitch_poll_secs) = if config.alarm.twitch_enabled {
+    // Twitch 비활성화 시: 인증/외부 호출이 없는 Noop 클라이언트를 주입한다.
+    // (스케줄러 루프는 timing.twitch_enabled로 비활성화됨)
+    let twitch_checker = if config.alarm.twitch_enabled {
         let twitch =
             Arc::new(HttpTwitchClient::new(&config.twitch).context("Twitch 클라이언트 생성 실패")?);
-        let checker = Some(Arc::new(TwitchChecker::new(
+        Arc::new(TwitchChecker::new(
             twitch as Arc<dyn alarm_infra::twitch::TwitchClient>,
             Arc::clone(&valkey),
-        )));
-        (checker, Some(config.alarm.twitch_poll_secs))
+        ))
     } else {
-        info!("Twitch 비활성화 설정 — 클라이언트/체커/루프 생략");
-        (None, None)
+        info!("Twitch 비활성화 설정 — Twitch 루프는 건너뜁니다");
+        let twitch = Arc::new(MockTwitchClient::new(vec![]));
+        Arc::new(TwitchChecker::new(
+            twitch as Arc<dyn alarm_infra::twitch::TwitchClient>,
+            Arc::clone(&valkey),
+        ))
     };
 
     let notifier = Arc::new(Notifier::new(queue, dedup, tier_sched));
@@ -181,8 +185,9 @@ fn build_scheduler(
         notifier,
         valkey,
         SchedulerTimingConfig {
+            twitch_enabled: config.alarm.twitch_enabled,
             chzzk_poll_secs: config.alarm.chzzk_poll_secs,
-            twitch_poll_secs,
+            twitch_poll_secs: config.alarm.twitch_poll_secs,
             youtube_check_timeout_secs: config.alarm.youtube_check_timeout_secs,
             chzzk_check_timeout_secs: config.alarm.chzzk_check_timeout_secs,
             twitch_check_timeout_secs: config.alarm.twitch_check_timeout_secs,

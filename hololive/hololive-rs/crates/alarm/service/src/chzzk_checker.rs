@@ -117,7 +117,10 @@ impl ChzzkChecker {
         detected_at: DateTime<Utc>,
     ) -> Result<bool, AlarmError> {
         let key = chzzk_live_notified_key(chzzk_channel_id, detected_at);
-        self.valkey.set_nx(&key, "1", NOTIFICATION_SENT_TTL).await
+        self.valkey
+            .set_nx(&key, "1", NOTIFICATION_SENT_TTL)
+            .await
+            .map_err(Into::into)
     }
 
     // ── 비공개 헬퍼 ──────────────────────────────────────────────────────────

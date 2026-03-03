@@ -89,6 +89,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "shared-infra",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -3504,6 +3505,7 @@ dependencies = [
  "sea-orm",
  "secrecy",
  "serde",
+ "shared-infra",
  "thiserror 2.0.18",
  "tracing",
  "url",
@@ -3798,30 +3800,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared-cache"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "shared-core",
- "shared-infra",
- "tracing",
-]
-
-[[package]]
-name = "shared-configsub"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "shared-core",
- "shared-infra",
- "tracing",
-]
-
-[[package]]
 name = "shared-core"
 version = "0.1.0"
 dependencies = [
@@ -3875,39 +3853,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared-member"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "shared-core",
- "shared-infra",
- "tracing",
-]
-
-[[package]]
 name = "shared-notification"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "shared-core",
- "shared-infra",
- "tracing",
-]
-
-[[package]]
-name = "shared-parser"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "shared-core",
-]
-
-[[package]]
-name = "shared-ratelimit"
 version = "0.1.0"
 dependencies = [
  "async-trait",
