@@ -46,7 +46,7 @@ func (c *Container) NewBot() (*bot.Bot, error) {
 }
 
 // GetYouTubeScheduler: 유튜버 스케줄러 인스턴스를 반환합니다.
-func (c *Container) GetYouTubeScheduler() *youtube.Scheduler {
+func (c *Container) GetYouTubeScheduler() youtube.Scheduler {
 	if c.botDeps == nil {
 		return nil
 	}
@@ -78,7 +78,7 @@ func (c *Container) GetAlarmService() domain.AlarmCRUD {
 }
 
 // GetCache: 전역 캐시 서비스를 반환합니다.
-func (c *Container) GetCache() *cache.Service {
+func (c *Container) GetCache() cache.Client {
 	if c.botDeps == nil {
 		return nil
 	}
@@ -94,7 +94,7 @@ func (c *Container) GetHolodexService() domain.StreamProvider {
 }
 
 // GetYouTubeService: YouTube API 서비스를 반환합니다.
-func (c *Container) GetYouTubeService() *youtube.Service {
+func (c *Container) GetYouTubeService() youtube.Service {
 	if c.botDeps == nil {
 		return nil
 	}
@@ -110,7 +110,7 @@ func (c *Container) GetActivityLogger() *activity.Logger {
 }
 
 // GetSettingsService: 봇 설정 관리 서비스를 반환합니다.
-func (c *Container) GetSettingsService() *settings.Service {
+func (c *Container) GetSettingsService() settings.ReadWriter {
 	if c.botDeps == nil {
 		return nil
 	}

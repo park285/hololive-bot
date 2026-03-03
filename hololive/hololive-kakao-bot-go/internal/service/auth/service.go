@@ -35,13 +35,13 @@ type Session struct {
 // Service: DB(유저) + Valkey(세션/레이트리밋) 기반 인증 서비스
 type Service struct {
 	db       *gorm.DB
-	cacheSvc *cache.Service
+	cacheSvc cache.Client
 	logger   *slog.Logger
 	cfg      Config
 }
 
 // NewService: 인증 서비스를 생성하고 필요한 테이블을 준비합니다.
-func NewService(ctx context.Context, db *gorm.DB, cacheSvc *cache.Service, logger *slog.Logger, cfg Config) (*Service, error) {
+func NewService(ctx context.Context, db *gorm.DB, cacheSvc cache.Client, logger *slog.Logger, cfg Config) (*Service, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("ctx must not be nil")
 	}
@@ -550,7 +550,7 @@ func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
 	_ = s.cacheSvc.Del(ctx, accountLockKeyPrefix+email)
 }
 
-func incrWithTTL(ctx context.Context, cacheSvc *cache.Service, key string, ttl time.Duration) (int64, error) {
+func incrWithTTL(ctx context.Context, cacheSvc cache.Client, key string, ttl time.Duration) (int64, error) {
 	client := cacheSvc.GetClient()
 	resp := client.Do(ctx, client.B().Incr().Key(key).Build())
 	if resp.Error() != nil {

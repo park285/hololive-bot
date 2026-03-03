@@ -1,0 +1,10 @@
+{
+  "code": 200,
+  "content": {
+    "liveTitle": "",
+    "status": "CLOSE",
+    "concurrentUserCount": 0,
+    "liveCategoryValue": "",
+    "chatChannelId": ""
+  }
+}

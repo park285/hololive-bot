@@ -1,23 +1,23 @@
 package app
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/config"
+	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
-	"github.com/kapu/hololive-shared/pkg/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
@@ -25,14 +25,49 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
+type mockYouTubeService struct{}
+
+func (s *mockYouTubeService) SetScraperProxyEnabled(enabled bool) bool { return false }
+func (s *mockYouTubeService) ScraperProxyEnabled() bool                { return false }
+func (s *mockYouTubeService) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*youtube.ChannelStats, error) {
+	return nil, nil
+}
+func (s *mockYouTubeService) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
+	return nil, nil
+}
+
+type mockYouTubeScheduler struct{}
+
+func (s *mockYouTubeScheduler) Start(ctx context.Context) {}
+func (s *mockYouTubeScheduler) Stop()                     {}
+
+type stubMajorEventRepo struct{}
+
+func (s *stubMajorEventRepo) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
+	return false, nil
+}
+func (s *stubMajorEventRepo) Subscribe(ctx context.Context, roomID, roomName string) error {
+	return nil
+}
+func (s *stubMajorEventRepo) Unsubscribe(ctx context.Context, roomID string) error { return nil }
+
+type stubMemberNewsService struct{}
+
+func (s *stubMemberNewsService) GenerateRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (*membernewscontracts.Digest, error) {
+	return nil, nil
+}
+func (s *stubMemberNewsService) SubscribeRoom(ctx context.Context, roomID, roomName string) error {
+	return nil
+}
+func (s *stubMemberNewsService) UnsubscribeRoom(ctx context.Context, roomID string) error { return nil }
+func (s *stubMemberNewsService) IsRoomSubscribed(ctx context.Context, roomID string) (bool, error) {
+	return false, nil
+}
+
 func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
-	msgStack := &providers.MessageStack{
-		Adapter:   messageAdapter,
-		Formatter: formatter,
-	}
 
 	cacheSvc := &cache.Service{}
 	postgres := &database.PostgresService{}
@@ -43,8 +78,8 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	twitchClient := &twitch.Client{}
 	profiles := &member.ProfileService{}
 	memberMatcher := &matcher.MemberMatcher{}
-	ytService := &youtube.Service{}
-	ytScheduler := &youtube.Scheduler{}
+	var ytService youtube.Service = &mockYouTubeService{}
+	var ytScheduler youtube.Scheduler = &mockYouTubeScheduler{}
 	ytStatsRepo := &youtube.StatsRepository{}
 	ytStack := &providers.YouTubeStack{
 		Service:   ytService,
@@ -54,8 +89,8 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	activityLogger := &activity.Logger{}
 	settingsSvc := &settings.Service{}
 	aclSvc := &acl.Service{}
-	majorEventRepo := &majorevent.Repository{}
-	memberNewsSvc := &membernews.Service{}
+	majorEventRepo := &stubMajorEventRepo{}
+	memberNewsSvc := &stubMemberNewsService{}
 	workerPool := &workerpool.Pool{}
 
 	deps := ProvideBotDependencies(
@@ -64,7 +99,8 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 		config.NotificationConfig{},
 		logger,
 		nil, // irisClient
-		msgStack,
+		messageAdapter,
+		formatter,
 		cacheSvc,
 		postgres,
 		memberRepo,

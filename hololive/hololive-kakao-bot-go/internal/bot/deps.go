@@ -3,24 +3,23 @@ package bot
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
-	"github.com/kapu/hololive-shared/pkg/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
 // Dependencies: 봇 실행에 필요한 모든 의존성을 담는 구조체 (Service Locator 패턴)
@@ -32,8 +31,8 @@ type Dependencies struct {
 	Client           iris.Client
 	MessageAdapter   *adapter.MessageAdapter
 	Formatter        *adapter.ResponseFormatter
-	Cache            *cache.Service
-	Postgres         *database.PostgresService
+	Cache            cache.Client
+	Postgres         database.Client
 	MemberRepo       *member.Repository
 	MemberCache      *member.Cache
 	Holodex          domain.StreamProvider
@@ -42,14 +41,14 @@ type Dependencies struct {
 	Profiles         *member.ProfileService
 	Alarm            domain.AlarmCRUD
 	Matcher          *matcher.MemberMatcher
-	MembersData      domain.MemberDataProvider
-	Service          *youtube.Service
-	Scheduler        *youtube.Scheduler
+	MembersData      member.DataProvider
+	Service          youtube.Service
+	Scheduler        youtube.Scheduler
 	YouTubeStatsRepo youtube.StatsCommandRepository
 	Activity         *activity.Logger
-	Settings         *settings.Service
+	Settings         settings.ReadWriter
 	ACL              *acl.Service
-	MajorEventRepo   *majorevent.Repository
-	MemberNews       *membernews.Service
+	MajorEventRepo   command.MajorEventRepository
+	MemberNews       command.MemberNewsService
 	WorkerPool       *workerpool.Pool
 }

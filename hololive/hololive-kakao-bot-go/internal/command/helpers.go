@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/domain"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
 // FindMemberOrError: 멤버 이름으로 채널을 검색하고, 찾지 못한 경우 에러 메시지를 전송합니다.

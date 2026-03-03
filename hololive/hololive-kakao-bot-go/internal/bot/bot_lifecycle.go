@@ -2,11 +2,9 @@ package bot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/iris"
@@ -18,7 +16,7 @@ import (
 // BotLifecycle: 봇의 시작/준비대기/종료 수명주기를 담당합니다.
 type BotLifecycle struct {
 	logger      *slog.Logger
-	cache       *cache.Service
+	cache       cache.Client
 	irisClient  iris.Client
 	irisBaseURL string
 	stopCh      chan struct{}
@@ -26,19 +24,19 @@ type BotLifecycle struct {
 	doneOnce    sync.Once
 	workerPool  *workerpool.Pool
 	holodex     streamRuntime
-	postgres    *database.PostgresService
+	postgres    database.Client
 }
 
 func NewBotLifecycle(
 	logger *slog.Logger,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	irisClient iris.Client,
 	irisBaseURL string,
 	stopCh chan struct{},
 	doneCh chan struct{},
 	workerPool *workerpool.Pool,
 	holodex streamRuntime,
-	postgres *database.PostgresService,
+	postgres database.Client,
 ) *BotLifecycle {
 	return &BotLifecycle{
 		logger:      logger,
@@ -89,62 +87,6 @@ func (l *BotLifecycle) Start(ctx context.Context) error {
 	case <-l.stopCh:
 		l.logInfo("Stop signal received")
 		return nil
-	}
-}
-
-func (l *BotLifecycle) WaitUntilIrisReady(
-	ctx context.Context,
-	timeout, retryInterval, pingTimeout time.Duration,
-) error {
-	if l == nil || l.irisClient == nil {
-		return fmt.Errorf("wait for iris ready: iris client is not configured")
-	}
-
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(retryInterval)
-	defer ticker.Stop()
-
-	attempt := 0
-	startedAt := time.Now()
-	lastWarnLoggedAt := time.Time{}
-	for {
-		attempt++
-		pingCtx, pingCancel := context.WithTimeout(waitCtx, pingTimeout)
-		ready := l.irisClient.Ping(pingCtx)
-		pingCancel()
-
-		if ready {
-			if attempt > 1 {
-				l.logInfo(
-					"Iris server became ready after retry",
-					slog.Int("attempt", attempt),
-					slog.Duration("elapsed", time.Since(startedAt)),
-				)
-			}
-			return nil
-		}
-
-		now := time.Now()
-		if attempt == 1 || lastWarnLoggedAt.IsZero() || now.Sub(lastWarnLoggedAt) >= time.Minute {
-			l.logWarn(
-				"Iris server not ready, retrying",
-				slog.Int("attempt", attempt),
-				slog.Duration("retry_interval", retryInterval),
-				slog.Duration("elapsed", now.Sub(startedAt)),
-			)
-			lastWarnLoggedAt = now
-		}
-
-		select {
-		case <-waitCtx.Done():
-			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
-				return fmt.Errorf("wait for iris ready: timeout after %s", timeout)
-			}
-			return fmt.Errorf("wait for iris ready: canceled: %w", waitCtx.Err())
-		case <-ticker.C:
-		}
 	}
 }
 

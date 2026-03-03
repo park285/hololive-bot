@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 const systemStatsStreamInterval = 5 * time.Second
@@ -76,7 +77,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	}
 
 	// WebSocket 업그레이드
-	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := sharedserver.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.logger.Warn("failed to upgrade websocket", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "failed to upgrade websocket connection"})

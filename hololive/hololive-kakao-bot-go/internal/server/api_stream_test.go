@@ -97,7 +97,7 @@ func TestMemberToChannelResponse(t *testing.T) {
 	tests := []struct {
 		name     string
 		member   *domain.Member
-		expected *ChannelResponse
+		expected *sharedserver.ChannelResponse
 	}{
 		{
 			name:     "nil member",
@@ -111,7 +111,7 @@ func TestMemberToChannelResponse(t *testing.T) {
 				Name:      "Test Member",
 				Photo:     "https://example.com/photo.jpg",
 			},
-			expected: &ChannelResponse{
+			expected: &sharedserver.ChannelResponse{
 				ID:    "UC123",
 				Name:  "Test Member",
 				Photo: new("https://example.com/photo.jpg"),
@@ -124,7 +124,7 @@ func TestMemberToChannelResponse(t *testing.T) {
 				Name:      "No Photo Member",
 				Photo:     "",
 			},
-			expected: &ChannelResponse{
+			expected: &sharedserver.ChannelResponse{
 				ID:    "UC456",
 				Name:  "No Photo Member",
 				Photo: nil,

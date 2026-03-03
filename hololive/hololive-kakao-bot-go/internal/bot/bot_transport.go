@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	appErrors "github.com/kapu/hololive-shared/pkg/errors"
 	"github.com/kapu/hololive-shared/pkg/iris"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
 
 // CommandTransport: 명령 실행 결과(텍스트/이미지/에러)를 Iris로 전달합니다.
