@@ -14,7 +14,7 @@ type DBIntegrationRuntime struct {
 	Logger        *slog.Logger
 	Repository    *member.Repository
 	Cache         *member.Cache
-	MemberAdapter *member.ServiceAdapter
+	MemberAdapter member.DataProvider
 
 	cleanup func()
 }

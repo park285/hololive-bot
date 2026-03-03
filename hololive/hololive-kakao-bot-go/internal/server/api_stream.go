@@ -11,12 +11,7 @@ import (
 const channelStatsCacheWorkers = sharedserver.DefaultChannelStatsCacheWorkers
 const channelStatsRefreshWorkers = sharedserver.DefaultChannelStatsRefreshWorkers
 
-type ChannelResponse = sharedserver.ChannelResponse
-
 func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
-	if h.cachedStreamHandler != nil {
-		return h.cachedStreamHandler
-	}
 	return &sharedserver.StreamHandler{
 		Logger:               h.logger,
 		Holodex:              h.holodex,
