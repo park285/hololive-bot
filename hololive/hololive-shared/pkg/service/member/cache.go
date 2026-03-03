@@ -24,7 +24,7 @@ const (
 // DB 부하를 줄이고 빠른 조회를 지원하며, 워밍업(Warm-up) 기능을 제공합니다.
 type Cache struct {
 	repo   *Repository
-	cache  *cache.Service
+	cache  cache.Client
 	logger *slog.Logger
 
 	// 인메모리 캐시
@@ -51,7 +51,7 @@ type CacheConfig struct {
 
 // NewMemberCache: 새로운 멤버 캐시 서비스 인스턴스를 생성하고 초기화합니다.
 // 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
-func NewMemberCache(ctx context.Context, repo *Repository, cacheService *cache.Service, logger *slog.Logger, cfg CacheConfig) (*Cache, error) {
+func NewMemberCache(ctx context.Context, repo *Repository, cacheService cache.Client, logger *slog.Logger, cfg CacheConfig) (*Cache, error) {
 	if cfg.ValkeyTTL == 0 {
 		cfg.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
 	}

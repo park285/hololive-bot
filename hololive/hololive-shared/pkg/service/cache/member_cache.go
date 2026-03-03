@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/valkey-io/valkey-go"
-
-	"github.com/kapu/hololive-shared/pkg/errors"
 )
 
 const memberHashKey = "hololive:members"
@@ -17,7 +15,7 @@ const memberHashKey = "hololive:members"
 func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[string]string) error {
 	if err := c.client.Do(ctx, c.client.B().Del().Key(memberHashKey).Build()).Error(); err != nil {
 		c.logger.Error("Failed to clear member database", slog.Any("error", err))
-		return errors.NewCacheError("del failed", "del", memberHashKey, err)
+		return NewCacheError("del failed", "del", memberHashKey, err)
 	}
 
 	if len(memberData) == 0 {
@@ -32,7 +30,7 @@ func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[s
 
 	if err := c.client.Do(ctx, builder.Build()).Error(); err != nil {
 		c.logger.Error("Failed to initialize member database", slog.Any("error", err))
-		return errors.NewCacheError("hset failed", "hset", memberHashKey, err)
+		return NewCacheError("hset failed", "hset", memberHashKey, err)
 	}
 
 	c.logger.Info("Member database initialized",
@@ -64,12 +62,12 @@ func (c *Service) GetMemberChannelID(ctx context.Context, memberName string) (st
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Failed to get member channel ID", slog.String("member", memberName), slog.Any("error", resp.Error()))
-		return "", errors.NewCacheError("hget failed", "hget", memberHashKey, resp.Error())
+		return "", NewCacheError("hget failed", "hget", memberHashKey, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
-		return "", errors.NewCacheError("hget conversion failed", "hget", memberHashKey, err)
+		return "", NewCacheError("hget conversion failed", "hget", memberHashKey, err)
 	}
 
 	return value, nil
@@ -80,12 +78,12 @@ func (c *Service) GetAllMembers(ctx context.Context) (map[string]string, error) 
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(memberHashKey).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Failed to get all members", slog.Any("error", resp.Error()))
-		return map[string]string{}, errors.NewCacheError("hgetall failed", "hgetall", memberHashKey, resp.Error())
+		return map[string]string{}, NewCacheError("hgetall failed", "hgetall", memberHashKey, resp.Error())
 	}
 
 	values, err := resp.AsStrMap()
 	if err != nil {
-		return map[string]string{}, errors.NewCacheError("hgetall conversion failed", "hgetall", memberHashKey, err)
+		return map[string]string{}, NewCacheError("hgetall conversion failed", "hgetall", memberHashKey, err)
 	}
 
 	return values, nil
@@ -111,12 +109,12 @@ func (c *Service) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org
 			slog.String("member", memberName),
 			slog.String("org", org),
 			slog.Any("error", resp.Error()))
-		return "", errors.NewCacheError("hget failed", "hget", memberHashKey, resp.Error())
+		return "", NewCacheError("hget failed", "hget", memberHashKey, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
-		return "", errors.NewCacheError("hget conversion failed", "hget", memberHashKey, err)
+		return "", NewCacheError("hget conversion failed", "hget", memberHashKey, err)
 	}
 
 	return value, nil
@@ -157,7 +155,7 @@ func (c *Service) AddMember(ctx context.Context, memberName, channelID string) e
 
 	if err := c.client.Do(ctx, c.client.B().Hset().Key(memberHashKey).FieldValue().FieldValue(memberName, channelID).Build()).Error(); err != nil {
 		c.logger.Error("Failed to add member", slog.String("member", memberName), slog.String("channel_id", channelID), slog.Any("error", err))
-		return errors.NewCacheError("hset failed", "hset", memberHashKey, err)
+		return NewCacheError("hset failed", "hset", memberHashKey, err)
 	}
 	c.logger.Info("Member added/updated",
 		slog.String("member", memberName),

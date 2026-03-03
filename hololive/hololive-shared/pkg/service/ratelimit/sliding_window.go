@@ -44,14 +44,14 @@ type Decision struct {
 
 // SlidingWindowLimiter: Valkey ZSET 기반 분산 슬라이딩 윈도우 레이트 리미터
 type SlidingWindowLimiter struct {
-	cacheSvc  *cache.Service
+	cacheSvc  cache.Client
 	keyPrefix string
 	logger    *slog.Logger
 	sequence  atomic.Uint64
 }
 
 // NewSlidingWindowLimiter: 분산 슬라이딩 윈도우 레이트 리미터를 생성합니다.
-func NewSlidingWindowLimiter(cacheSvc *cache.Service, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
+func NewSlidingWindowLimiter(cacheSvc cache.Client, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
 	if cacheSvc == nil {
 		return nil, fmt.Errorf("new sliding window limiter: cache service must not be nil")
 	}

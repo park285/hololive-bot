@@ -26,7 +26,7 @@ type SettingsHandler struct {
 	Alarm          domain.AlarmCRUD
 	Activity       SettingsActivityLogger
 	ReadRecentLogs SettingsReadRecentLogsFunc
-	Settings       *settings.Service
+	Settings       settings.ReadWriter
 	SettingsApplier
 }
 

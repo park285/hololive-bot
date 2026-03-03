@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
@@ -25,8 +24,8 @@ func ProvideHolodexAPIKeys(cfg config.HolodexConfig) []string {
 
 // ProvideScraperService - 스크래퍼 서비스 생성
 func ProvideScraperService(
-	cacheSvc *cache.Service,
-	members *member.ServiceAdapter,
+	cacheSvc cache.Client,
+	members member.DataProvider,
 	proxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
@@ -38,7 +37,7 @@ func ProvideScraperService(
 func ProvideHolodexService(
 	baseURL string,
 	apiKeys []string,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	scraperSvc *holodex.ScraperService,
 	logger *slog.Logger,
 ) (*holodex.Service, error) {
@@ -51,7 +50,7 @@ func ProvideHolodexService(
 
 // ProvideYouTubeStatsRepository - YouTube 통계 저장소 생성
 func ProvideYouTubeStatsRepository(
-	postgres *database.PostgresService,
+	postgres database.Client,
 	logger *slog.Logger,
 ) *youtube.StatsRepository {
 	return youtube.NewYouTubeStatsRepository(postgres, logger)
@@ -62,13 +61,13 @@ func ProvideYouTubeStack(
 	ctx context.Context,
 	ytCfg config.YouTubeConfig,
 	scraperCfg config.ScraperConfig,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	holodexSvc *holodex.Service,
-	members *member.ServiceAdapter,
+	members member.DataProvider,
 	statsRepo *youtube.StatsRepository,
 	alarmSvc domain.AlarmDispatchState,
 	irisClient iris.Client,
-	formatter *adapter.ResponseFormatter,
+	formatter youtube.MilestoneMessageFormatter,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) *YouTubeStack {
@@ -101,13 +100,13 @@ func ProvideYouTubeStack(
 // ProvideScraperScheduler - YouTube HTML 스크래퍼 기반 폴러 스케줄러 생성
 // 멤버 채널 목록을 조회하여 모든 폴러를 스케줄러에 등록한다.
 func ProvideScraperScheduler(
-	postgres *database.PostgresService,
+	postgres database.Client,
 	membersData domain.MemberDataProvider,
 	intervals PollerIntervals,
 	communityKeywords []string,
 	proxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	logger *slog.Logger,
 ) *poller.Scheduler {
 	// 스크래퍼 클라이언트 생성 (공유 RateLimiter 주입)

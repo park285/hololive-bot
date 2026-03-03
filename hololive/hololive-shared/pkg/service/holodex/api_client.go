@@ -29,7 +29,6 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/errors"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -231,7 +230,7 @@ func (c *APIClient) rejectIfCircuitOpen() error {
 	c.circuitMu.RUnlock()
 
 	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remainingMs))
-	return errors.NewAPIError("Circuit breaker open", 503, map[string]any{
+	return NewAPIError("Circuit breaker open", 503, map[string]any{
 		"retry_after_ms": remainingMs,
 	})
 }
@@ -335,13 +334,13 @@ func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body
 		if attempt < maxAttempts-1 {
 			return nil, false, nil
 		}
-		return nil, true, errors.NewKeyRotationError("All API keys rate limited", status, map[string]any{
+		return nil, true, NewKeyRotationError("All API keys rate limited", status, map[string]any{
 			"url": reqURL,
 		})
 	case status >= 500:
 		return c.handleServerError(ctx, status, attempt, maxAttempts)
 	case status >= 400:
-		return nil, true, errors.NewAPIError(fmt.Sprintf("Client error: %d", status), status, map[string]any{
+		return nil, true, NewAPIError(fmt.Sprintf("Client error: %d", status), status, map[string]any{
 			"url":  reqURL,
 			"body": string(body),
 		})
@@ -359,14 +358,14 @@ func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAtt
 
 	if count >= constants.CircuitBreakerConfig.FailureThreshold {
 		c.openCircuit()
-		return nil, true, errors.NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
+		return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
 	}
 
 	if attempt < maxAttempts-1 {
-		return nil, false, errors.NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
+		return nil, false, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
 	}
 
-	return nil, true, errors.NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
+	return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
 }
 
 // IsCircuitOpen: 현재 서킷 브레이커가 열려있는지(요청 차단 상태인지) 확인합니다.

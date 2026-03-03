@@ -19,7 +19,7 @@ const (
 // ProfileService: 탤런트 상세 프로필 정보를 관리하는 서비스
 // 로컬 파일에서 데이터를 로드하고, 번역 정보를 관리하며 캐싱을 지원한다.
 type ProfileService struct {
-	cache         *cache.Service
+	cache         cache.Client
 	logger        *slog.Logger
 	membersData   domain.MemberDataProvider
 	profiles      map[string]*domain.TalentProfile // slug -> profile
@@ -30,7 +30,7 @@ type ProfileService struct {
 
 // NewProfileService: 프로필 데이터와 번역 데이터를 로드하여 서비스 인스턴스를 초기화합니다.
 // 검색 최적화를 위한 인덱싱 작업도 수행한다.
-func NewProfileService(cacheSvc *cache.Service, membersData domain.MemberDataProvider, logger *slog.Logger) (*ProfileService, error) {
+func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger) (*ProfileService, error) {
 	if membersData == nil {
 		return nil, fmt.Errorf("members data is nil")
 	}

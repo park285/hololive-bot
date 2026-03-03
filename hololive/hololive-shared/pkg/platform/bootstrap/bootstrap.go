@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -41,11 +39,6 @@ func NewLogger(cfg *config.Config) (*slog.Logger, error) {
 		return nil, fmt.Errorf("create logger: %w", err)
 	}
 	return logger, nil
-}
-
-// NewMessageStack: 메시지 파싱(Adapter) 및 포맷팅(Formatter) 유틸리티 인스턴스를 생성하여 반환합니다.
-func NewMessageStack(prefix string, renderer *template.Renderer) (*adapter.MessageAdapter, *adapter.ResponseFormatter) {
-	return adapter.NewMessageAdapter(prefix), adapter.NewResponseFormatter(prefix, renderer)
 }
 
 // NewCacheResources: Redis(Valkey) 설정을 기반으로 캐시 서비스를 초기화하고 리소스 객체를 반환합니다.
