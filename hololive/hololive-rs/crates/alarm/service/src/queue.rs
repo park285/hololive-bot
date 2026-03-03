@@ -70,7 +70,7 @@ mod tests {
 
         publisher.publish(&notification, claim_keys).await.unwrap();
 
-        let list = valkey.lstore.get(ALARM_DISPATCH_QUEUE).unwrap();
+        let list = valkey.list_items(ALARM_DISPATCH_QUEUE);
         assert_eq!(list.len(), 1);
 
         // 역직렬화 가능 확인
@@ -94,7 +94,7 @@ mod tests {
             .await
             .unwrap();
 
-        let list = valkey.lstore.get(ALARM_DISPATCH_QUEUE).unwrap();
+        let list = valkey.list_items(ALARM_DISPATCH_QUEUE);
         assert_eq!(list.len(), 2);
 
         // LPUSH이므로 최신이 앞에

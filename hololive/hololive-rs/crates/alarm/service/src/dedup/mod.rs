@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration as StdDuration};
 
 use alarm_core::{
-    constants::{LOCAL_FALLBACK_CLEANUP_MAX_KEYS, LOCAL_FALLBACK_DEDUP_TTL, NOTIFICATION_SENT_TTL},
+    constants::NOTIFICATION_SENT_TTL,
     error::AlarmError,
     keys::{
         build_logical_event_claim_key, build_notify_claim_key, build_schedule_transition_key,
@@ -11,21 +11,23 @@ use alarm_core::{
 };
 use alarm_infra::valkey::ValkeyClient;
 use chrono::{DateTime, Utc};
-use moka::sync::Cache;
+
+mod fallback;
+use fallback::LocalDedupFallback;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DedupService: SETNX 기반 4단계 중복 방지 서비스
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// SETNX 기반 알림 중복 방지 서비스
-/// Valkey 장애 시 로컬 HashMap 폴백으로 dedup을 유지한다.
+/// Valkey 장애 시 로컬 in-memory 폴백으로 dedup을 유지한다.
 pub struct DedupService {
     /// Valkey 클라이언트 (DI)
     valkey: Arc<dyn ValkeyClient>,
     /// 알림 대상 분 목록 (예: [5, 3, 1])
     target_minutes: Vec<i32>,
-    /// Valkey 장애 시 로컬 폴백 dedup TTL 캐시 (존재 여부만 추적, TTL은 moka가 관리)
-    local_keys: Cache<String, ()>,
+    /// Valkey 장애 시 로컬 in-memory 폴백
+    fallback: LocalDedupFallback,
 }
 
 impl DedupService {
@@ -34,10 +36,7 @@ impl DedupService {
         Self {
             valkey,
             target_minutes,
-            local_keys: Cache::builder()
-                .max_capacity(LOCAL_FALLBACK_CLEANUP_MAX_KEYS as u64)
-                .time_to_live(LOCAL_FALLBACK_DEDUP_TTL)
-                .build(),
+            fallback: LocalDedupFallback::new(),
         }
     }
 
@@ -111,7 +110,7 @@ impl DedupService {
             return Ok(());
         }
         // 로컬 폴백 해제
-        self.release_local_dedup_claims(keys);
+        self.fallback.release_claims(keys);
 
         // Valkey DEL
         let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
@@ -224,7 +223,9 @@ impl DedupService {
             notified_at: Utc::now().to_rfc3339(),
         };
         let json = serde_json::to_string(&data)?;
-        self.valkey.set(&key, &json, NOTIFICATION_SENT_TTL).await?;
+        self.valkey
+            .set(&key, &json, Some(NOTIFICATION_SENT_TTL))
+            .await?;
         Ok(())
     }
 
@@ -274,40 +275,7 @@ impl DedupService {
     async fn try_claim_key(&self, key: &str, ttl: StdDuration) -> bool {
         match self.valkey.set_nx(key, "1", ttl).await {
             Ok(acquired) => acquired,
-            Err(e) => {
-                // Valkey 장애 → 로컬 폴백
-                let fallback_ttl = if ttl.is_zero() || ttl > LOCAL_FALLBACK_DEDUP_TTL {
-                    LOCAL_FALLBACK_DEDUP_TTL
-                } else {
-                    ttl
-                };
-                let local_ok = self.try_local_dedup_claim(key, fallback_ttl);
-                tracing::warn!(
-                    key,
-                    fallback_acquired = local_ok,
-                    error = %e,
-                    "SETNX claim 실패, 로컬 폴백 사용"
-                );
-                local_ok
-            }
-        }
-    }
-
-    /// 로컬 dedup 클레임 시도
-    /// moka의 time_to_live가 TTL을 관리하므로 Instant 비교 불필요
-    fn try_local_dedup_claim(&self, key: &str, _ttl: StdDuration) -> bool {
-        if self.local_keys.contains_key(key) {
-            return false;
-        }
-
-        self.local_keys.insert(key.to_owned(), ());
-        true
-    }
-
-    /// 로컬 dedup claim 해제
-    fn release_local_dedup_claims(&self, keys: &[String]) {
-        for key in keys {
-            self.local_keys.invalidate(key);
+            Err(e) => self.fallback.try_claim_on_outage(key, ttl, &e),
         }
     }
 

@@ -8,14 +8,10 @@ use shared_infra::observability::{
     normalize_otlp_endpoint, parse_bool_env, parse_f64_env,
 };
 
-/// stdout 기본 + file logging 선택적 출력 (KST 기준), OTEL 선택적 활성화
+/// stdout 로그 기본(KST 기준), OTEL 선택적 활성화
 pub fn init_tracing(config: &LoggingConfig, telemetry: &TelemetryConfig) -> Result<TracingRuntime> {
     let tracing_config = TracingInitConfig {
         level: &config.level,
-        file_enabled: config.file_enabled,
-        dir: &config.dir,
-        file: &config.file,
-        combined_file: &config.combined_file,
     };
 
     let endpoint = normalize_otlp_endpoint(&telemetry.otlp_endpoint, telemetry.otlp_insecure);

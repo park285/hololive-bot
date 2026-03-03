@@ -1,22 +1,43 @@
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
-use dashmap::DashMap;
 use shared_core::error::SharedError;
 
-use super::ValkeyClient;
+#[async_trait]
+pub trait ValkeyClient: Send + Sync {
+    async fn get(&self, key: &str) -> Result<Option<String>, SharedError>;
+    async fn set(&self, key: &str, value: &str, ttl: Option<Duration>) -> Result<(), SharedError>;
+    async fn set_nx(&self, key: &str, value: &str, ttl: Duration) -> Result<bool, SharedError>;
+    async fn del(&self, keys: &[&str]) -> Result<(), SharedError>;
+    async fn hget(&self, key: &str, field: &str) -> Result<Option<String>, SharedError>;
+    async fn hset(&self, key: &str, field: &str, value: &str) -> Result<(), SharedError>;
+    async fn hget_all(&self, key: &str) -> Result<HashMap<String, String>, SharedError>;
+    async fn hmset(&self, key: &str, fields: &[(String, String)]) -> Result<(), SharedError>;
+    async fn smembers(&self, key: &str) -> Result<Vec<String>, SharedError>;
+    async fn smembers_multi(&self, keys: &[String]) -> Result<Vec<Vec<String>>, SharedError>;
+    async fn expire(&self, key: &str, ttl: Duration) -> Result<(), SharedError>;
+    async fn lpush(&self, key: &str, value: &str) -> Result<(), SharedError>;
+    async fn ping(&self) -> Result<(), SharedError>;
+    async fn brpop(&self, key: &str, timeout: f64) -> Result<Option<String>, SharedError>;
+    async fn llen(&self, key: &str) -> Result<i64, SharedError>;
+}
 
+#[cfg(test)]
+use std::time::Instant;
+
+#[cfg(test)]
+use dashmap::DashMap;
+
+#[cfg(test)]
 pub struct MockValkeyClient {
     store: DashMap<String, String>,
     hstore: DashMap<String, HashMap<String, String>>,
-    sstore: DashMap<String, Vec<String>>,
-    lstore: DashMap<String, Vec<String>>,
+    pub sstore: DashMap<String, Vec<String>>,
+    pub lstore: DashMap<String, Vec<String>>,
     expiry: DashMap<String, Instant>,
 }
 
+#[cfg(test)]
 impl MockValkeyClient {
     pub fn new() -> Self {
         Self {
@@ -26,14 +47,6 @@ impl MockValkeyClient {
             lstore: DashMap::new(),
             expiry: DashMap::new(),
         }
-    }
-
-    pub fn list_items(&self, key: &str) -> Vec<String> {
-        self.purge_if_expired(key);
-        self.lstore
-            .get(key)
-            .map(|items| items.clone())
-            .unwrap_or_default()
     }
 
     fn set_expiry(&self, key: &str, ttl: Duration) {
@@ -77,12 +90,14 @@ impl MockValkeyClient {
     }
 }
 
+#[cfg(test)]
 impl Default for MockValkeyClient {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(test)]
 #[async_trait]
 impl ValkeyClient for MockValkeyClient {
     async fn get(&self, key: &str) -> Result<Option<String>, SharedError> {

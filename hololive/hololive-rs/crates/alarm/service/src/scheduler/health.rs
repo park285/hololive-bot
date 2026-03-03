@@ -1,6 +1,9 @@
 use std::{sync::atomic::Ordering, time::Duration};
 
-use super::{SchedulerHealthSnapshot, SchedulerRuntimeHealth, duration_to_ms, now_ms};
+use super::{
+    SchedulerHealthSnapshot, SchedulerRuntimeHealth,
+    timing::{duration_to_ms, now_ms},
+};
 
 impl SchedulerHealthSnapshot {
     pub fn overall_healthy(self) -> bool {

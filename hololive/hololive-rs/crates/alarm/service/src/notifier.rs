@@ -343,7 +343,7 @@ mod tests {
         assert_eq!(result.failed, 0);
 
         // 큐에 envelope가 존재해야 함
-        let list = valkey.lstore.get("alarm:dispatch:queue").unwrap();
+        let list = valkey.list_items("alarm:dispatch:queue");
         assert_eq!(list.len(), 1);
 
         let envelope: alarm_core::model::AlarmQueueEnvelope =

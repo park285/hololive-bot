@@ -143,10 +143,6 @@ mod tests {
         };
         let logging = LoggingConfig {
             level: "info".to_owned(),
-            file_enabled: false,
-            dir: "logs".to_owned(),
-            file: "hololive-scraper.log".to_owned(),
-            combined_file: "combined.log".to_owned(),
             service: "hololive-rs".to_owned(),
             environment: "production".to_owned(),
         };
