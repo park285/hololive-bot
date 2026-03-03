@@ -4,22 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/llm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
-	"github.com/kapu/hololive-shared/pkg/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/membernews"
 )
 
 // ProvideMemberRepository - 멤버 저장소 생성
-func ProvideMemberRepository(postgres *database.PostgresService, logger *slog.Logger) *member.Repository {
+func ProvideMemberRepository(postgres database.Client, logger *slog.Logger) *member.Repository {
 	return member.NewMemberRepository(postgres, logger)
 }
 
@@ -27,7 +20,7 @@ func ProvideMemberRepository(postgres *database.PostgresService, logger *slog.Lo
 func ProvideMemberCache(
 	ctx context.Context,
 	repo *member.Repository,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
 	memberCache, err := buildMemberCache(ctx, repo, cacheSvc, logger)
@@ -72,20 +65,20 @@ func ProvideMemberCacheWithoutValkey(
 }
 
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성
-func ProvideMemberServiceAdapter(memberCache *member.Cache, logger *slog.Logger) *member.ServiceAdapter {
+func ProvideMemberServiceAdapter(memberCache *member.Cache, logger *slog.Logger) member.DataProvider {
 	return member.NewMemberServiceAdapter(memberCache, logger)
 }
 
 // ProvideMembersData - 도메인 인터페이스로 바인딩
-func ProvideMembersData(adapterSvc *member.ServiceAdapter) domain.MemberDataProvider {
+func ProvideMembersData(adapterSvc member.DataProvider) member.DataProvider {
 	return adapterSvc
 }
 
 // ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함)
 func ProvideProfileService(
 	ctx context.Context,
-	cacheSvc *cache.Service,
-	members *member.ServiceAdapter,
+	cacheSvc cache.Client,
+	members member.DataProvider,
 	logger *slog.Logger,
 ) (*member.ProfileService, error) {
 	svc, err := member.NewProfileService(cacheSvc, members, logger)
@@ -94,75 +87,4 @@ func ProvideProfileService(
 	}
 	svc.PreloadTranslations(ctx)
 	return svc, nil
-}
-
-// ProvideMemberMatcher - 멤버 매칭 서비스 생성
-func ProvideMemberMatcher(
-	ctx context.Context,
-	membersData domain.MemberDataProvider,
-	cacheSvc *cache.Service,
-	holodexSvc *holodex.Service,
-	logger *slog.Logger,
-) *matcher.MemberMatcher {
-	// selector는 nil (Gemini AI 채널 선택 미사용)
-	return matcher.NewMemberMatcher(ctx, membersData, cacheSvc, holodexSvc, nil, logger)
-}
-
-// ProvideMemberNewsRepository: 구독 멤버 뉴스 저장소 생성
-func ProvideMemberNewsRepository(
-	postgres *database.PostgresService,
-	cacheSvc *cache.Service,
-	logger *slog.Logger,
-) *membernews.Repository {
-	return membernews.NewRepository(postgres, cacheSvc, logger)
-}
-
-// ProvideMemberNewsService: 구독 멤버 뉴스 서비스 생성
-func ProvideMemberNewsService(
-	ctx context.Context,
-	repo *membernews.Repository,
-	llmClient llm.Client,
-	reviewerClient llm.Client,
-	adjudicatorClient llm.Client,
-	searcher majorevent.WebSearcher,
-	membersData domain.MemberDataProvider,
-	memberNewsCfg config.ConsensusLLMConfig,
-	logger *slog.Logger,
-) *membernews.Service {
-	allowlistPath := resolveMemberNewsXAllowlistPath()
-	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
-	if err != nil {
-		logger.Warn("Failed to load member news x allowlist, fallback to empty allowlist",
-			slog.String("path", allowlistPath),
-			slog.String("error", err.Error()),
-		)
-		validator, _ = membernews.NewSourceValidator("", membersData, logger)
-	}
-
-	adaptedSearcher := &memberNewsSearcherAdapter{base: searcher}
-	baseSummarizer := membernews.NewSummarizer(llmClient, adaptedSearcher, validator, logger)
-
-	var summarizer membernews.Summarizer = baseSummarizer
-	if memberNewsCfg.Enabled && reviewerClient != nil {
-		summarizer = membernews.NewConsensusSummarizer(
-			baseSummarizer, reviewerClient, adjudicatorClient, validator,
-			membernews.ConsensusConfig{
-				ConfidenceThreshold: memberNewsCfg.Confidence,
-				ReviewTimeout:       time.Duration(memberNewsCfg.ReviewTimeout) * time.Second,
-				AdjudicateTimeout:   time.Duration(memberNewsCfg.AdjudicateTimeout) * time.Second,
-			},
-			logger,
-		)
-		logger.Info("Consensus summarizer enabled",
-			slog.Float64("confidence_threshold", memberNewsCfg.Confidence),
-			slog.Int("review_timeout_sec", memberNewsCfg.ReviewTimeout),
-			slog.Int("adjudicate_timeout_sec", memberNewsCfg.AdjudicateTimeout),
-		)
-	}
-
-	service := membernews.NewService(repo, summarizer, validator, membersData, logger)
-	if warmErr := service.WarmupSubscriptionCache(ctx); warmErr != nil {
-		logger.Warn("Member news subscription warmup failed", slog.String("error", warmErr.Error()))
-	}
-	return service
 }

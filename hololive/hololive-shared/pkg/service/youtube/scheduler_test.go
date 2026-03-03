@@ -70,11 +70,21 @@ func testMembers() []*domain.Member {
 	}
 }
 
+func requireSchedulerImpl(t *testing.T, s Scheduler) *schedulerImpl {
+	t.Helper()
+
+	impl, ok := s.(*schedulerImpl)
+	if !ok || impl == nil {
+		t.Fatalf("expected *schedulerImpl, got %T", s)
+	}
+	return impl
+}
+
 func TestNewScheduler(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
 
 	if scheduler == nil {
 		t.Fatal("expected scheduler to be created, got nil")
@@ -91,7 +101,7 @@ func TestScheduler_CheckMilestones(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
 
 	testCases := []struct {
 		name         string
@@ -175,7 +185,7 @@ func TestScheduler_GetRotatingBatch(t *testing.T) {
 		},
 	}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, smallMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, smallMembers, nil, nil, nil, logger))
 
 	testCases := []struct {
 		name      string
@@ -230,7 +240,7 @@ func TestScheduler_GetRotatingBatch_EmptyMembers(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	emptyMembers := &mockMemberDataProvider{members: []*domain.Member{}}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, emptyMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, emptyMembers, nil, nil, nil, logger))
 
 	batch := scheduler.getRotatingBatch(0, 10)
 	if len(batch) != 0 {
@@ -242,7 +252,7 @@ func TestScheduler_BuildChannelMaps(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
 
 	channelIDs, channelToMember := scheduler.buildChannelMaps()
 
@@ -264,7 +274,7 @@ func TestScheduler_StartStop(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
 
 	ctx := t.Context()
 
@@ -293,7 +303,7 @@ func TestScheduler_IsSignificantChange(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
 
 	testCases := []struct {
 		name   string
@@ -350,7 +360,7 @@ func TestScheduler_FormatChangeMessage(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
 
 	testCases := []struct {
 		name      string
@@ -627,7 +637,7 @@ func TestSendMilestoneAlerts_Integration(t *testing.T) {
 
 	// 실제 Scheduler 대신 mock repo를 사용하는 테스트용 구조체 필요
 	// 여기서는 로직만 테스트
-	scheduler := &Scheduler{
+	scheduler := &schedulerImpl{
 		membersData: mockMembers,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
@@ -723,7 +733,7 @@ func TestMilestoneDetectionFlow(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
 
-	scheduler := NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger)
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
 
 	testCases := []struct {
 		name            string

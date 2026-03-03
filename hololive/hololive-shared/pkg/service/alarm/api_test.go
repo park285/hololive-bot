@@ -30,7 +30,7 @@ type mockAlarmCRUD struct {
 	getTargetMinutesFn          func() []int
 	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
 	setUserNameFn               func(ctx context.Context, userID, userName string) error
-	getAllAlarmKeysFn            func(ctx context.Context) ([]*domain.AlarmEntry, error)
+	getAllAlarmKeysFn           func(ctx context.Context) ([]*domain.AlarmEntry, error)
 	warmCacheFromDBFn           func(ctx context.Context) error
 }
 

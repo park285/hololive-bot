@@ -22,7 +22,7 @@ import (
 // 폴백 순서: YouTube HTML 스크래핑 → 홀로라이브 공식 스케줄 페이지
 type ScraperService struct {
 	httpClient     *http.Client
-	cache          *cache.Service
+	cache          cache.Client
 	membersData    domain.MemberDataProvider
 	memberNameMap  map[string]string // memberName -> channelID
 	logger         *slog.Logger
@@ -37,7 +37,7 @@ const (
 // NewScraperService: 새로운 ScraperService 인스턴스를 생성합니다.
 // 멤버 정보와 매핑 데이터를 초기화하여 크롤링 데이터 파싱에 활용한다.
 func NewScraperService(
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	membersData domain.MemberDataProvider,
 	youtubeProxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
@@ -195,6 +195,14 @@ func (s *ScraperService) mapEventStatus(status string) domain.StreamStatus {
 // FetchAllStreams: 전체 방송 일정을 공식 홈페이지에서 크롤링하여 가져온다.
 func (s *ScraperService) FetchAllStreams(ctx context.Context) ([]*domain.Stream, error) {
 	return s.fetchAllStreams(ctx)
+}
+
+// ScraperClient: Holodex fallback 스크래퍼의 YouTube HTML scraper.Client를 반환합니다.
+func (s *ScraperService) ScraperClient() *scraper.Client {
+	if s == nil {
+		return nil
+	}
+	return s.youtubeScraper
 }
 
 // SetYouTubeProxyEnabled: YouTube HTML fallback 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.

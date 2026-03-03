@@ -18,7 +18,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/errors"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -75,7 +74,7 @@ type Service struct {
 }
 
 // NewHolodexService: 새로운 Holodex API 서비스 인스턴스를 생성한다. (API Key 검증 포함)
-func NewHolodexService(baseURL string, apiKeys []string, cacheSvc *cache.Service, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
+func NewHolodexService(baseURL string, apiKeys []string, cacheSvc cache.Client, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
 	if len(apiKeys) == 0 {
 		return nil, fmt.Errorf("at least one Holodex API key is required")
 	}
@@ -138,6 +137,22 @@ func (h *Service) ScraperClient() *scraper.Client {
 		return nil
 	}
 	return h.scraper.ScraperClient()
+}
+
+// SetScraperProxyEnabled: Holodex fallback 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
+func (h *Service) SetScraperProxyEnabled(enabled bool) bool {
+	if h == nil || h.scraper == nil {
+		return false
+	}
+	return h.scraper.SetYouTubeProxyEnabled(enabled)
+}
+
+// ScraperProxyEnabled: Holodex fallback 스크래퍼의 현재 프록시 활성 상태를 반환합니다.
+func (h *Service) ScraperProxyEnabled() bool {
+	if h == nil || h.scraper == nil {
+		return false
+	}
+	return h.scraper.YouTubeProxyEnabled()
 }
 
 // Stop: 서비스 리소스를 정리합니다.
@@ -561,7 +576,7 @@ func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Cha
 
 	body, err := h.requester.DoRequest(ctx, "GET", "/channels/"+channelID, nil)
 	if err != nil {
-		apiErr := &errors.APIError{}
+		apiErr := &APIError{}
 		if stdErrors.As(err, &apiErr) || h.shouldUseFallback(ctx, err) {
 			// Holodex API 실패 시 YouTube 스크래퍼 폴백
 			return h.getChannelFromScraper(ctx, channelID)
@@ -880,7 +895,7 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 		return true
 	}
 
-	apiErr := &errors.APIError{}
+	apiErr := &APIError{}
 	if stdErrors.As(err, &apiErr) {
 		if apiErr.StatusCode >= 500 {
 			return true
@@ -890,7 +905,7 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 		}
 	}
 
-	keyRotationError := &errors.KeyRotationError{}
+	keyRotationError := &KeyRotationError{}
 	if stdErrors.As(err, &keyRotationError) {
 		return true
 	}

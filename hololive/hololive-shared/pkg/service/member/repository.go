@@ -50,7 +50,7 @@ type Repository struct {
 }
 
 // NewMemberRepository: 새로운 MemberRepository 인스턴스를 생성합니다.
-func NewMemberRepository(postgres *database.PostgresService, logger *slog.Logger) *Repository {
+func NewMemberRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	return &Repository{
 		pool:   postgres.GetPool(),
 		gormDB: postgres.GetGormDB(),

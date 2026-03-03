@@ -10,16 +10,14 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 func buildMemberCache(
 	ctx context.Context,
 	repo *member.Repository,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	logger *slog.Logger,
 ) (*member.Cache, error) {
 	memberCache, err := member.NewMemberCache(ctx, repo, cacheSvc, logger, member.CacheConfig{
@@ -90,23 +88,6 @@ func resolveAlarmAdvanceMinutes(advanceMinutes []int, scraperProxyEnabled bool, 
 	return []int{alarmAdvanceMinutes, 3, 1}
 }
 
-func resolveMemberNewsXAllowlistPath() string {
-	if envPath := os.Getenv("MEMBER_NEWS_X_ALLOWLIST_PATH"); strings.TrimSpace(envPath) != "" {
-		return envPath
-	}
-
-	candidates := []string{
-		filepath.Join("configs", "hololive_official_x_accounts.json"),
-		filepath.Join("..", "configs", "hololive_official_x_accounts.json"),
-	}
-	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-	return ""
-}
-
 func resolveSettingsFilePath() string {
 	// SETTINGS_DIR 환경변수로 오버라이드 가능 (기본: data)
 	dir := strings.TrimSpace(os.Getenv("SETTINGS_DIR"))
@@ -114,29 +95,4 @@ func resolveSettingsFilePath() string {
 		dir = "data"
 	}
 	return filepath.Join(dir, "settings.json")
-}
-
-// memberNewsSearcherAdapter: majorevent.WebSearcher를 membernews.WebSearcher로 변환
-type memberNewsSearcherAdapter struct {
-	base majorevent.WebSearcher
-}
-
-func (a *memberNewsSearcherAdapter) Search(ctx context.Context, query string) ([]membernews.SearchResult, error) {
-	if a == nil || a.base == nil {
-		return nil, nil
-	}
-	results, err := a.base.Search(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("search member news context: %w", err)
-	}
-	converted := make([]membernews.SearchResult, 0, len(results))
-	for _, item := range results {
-		converted = append(converted, membernews.SearchResult{
-			Title:         item.Title,
-			URL:           item.URL,
-			Content:       item.Content,
-			PublishedDate: item.PublishedDate,
-		})
-	}
-	return converted, nil
 }

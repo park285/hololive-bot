@@ -12,12 +12,12 @@ import (
 )
 
 // ProvideDeliveryLocker - 분산 락 인스턴스 생성
-func ProvideDeliveryLocker(cacheSvc *cache.Service, logger *slog.Logger) delivery.NotificationLocker {
+func ProvideDeliveryLocker(cacheSvc cache.Client, logger *slog.Logger) delivery.NotificationLocker {
 	return delivery.NewLocker(cacheSvc, logger)
 }
 
 // ProvideOutboxRepository - 알림 delivery outbox 저장소 생성
-func ProvideOutboxRepository(postgres *database.PostgresService, logger *slog.Logger) *delivery.OutboxRepository {
+func ProvideOutboxRepository(postgres database.Client, logger *slog.Logger) *delivery.OutboxRepository {
 	return delivery.NewOutboxRepository(postgres.GetGormDB(), logger)
 }
 

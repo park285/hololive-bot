@@ -3,20 +3,13 @@ package providers
 import (
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
-// MessageStack - 메시지 어댑터와 포매터 묶음
-type MessageStack struct {
-	Adapter   *adapter.MessageAdapter
-	Formatter *adapter.ResponseFormatter
-}
-
 // YouTubeStack - YouTube 관련 서비스 묶음 (선택적 활성화)
 type YouTubeStack struct {
-	Service   *youtube.Service
-	Scheduler *youtube.Scheduler
+	Service   youtube.Service
+	Scheduler youtube.Scheduler
 	StatsRepo *youtube.StatsRepository
 }
 

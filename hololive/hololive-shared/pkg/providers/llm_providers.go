@@ -2,14 +2,9 @@ package providers
 
 import (
 	"log/slog"
-	"time"
-
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httpclient"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/llm"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 )
 
 // ProvideMajorEventLLMClient - MajorEvent 전용 LLM 클라이언트 생성 (비활성 시 nil)
@@ -181,49 +176,4 @@ func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg c
 	client := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger, opts...)
 	logger.Info("Consensus adjudicator LLM enabled", slog.String("model", model))
 	return client
-}
-
-// ProvideExaSearcher - Exa MCP 검색 클라이언트 생성 (비활성 시 nil)
-func ProvideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) majorevent.WebSearcher {
-	if !cfg.Enabled || cfg.APIKey == "" {
-		logger.Info("Exa search disabled")
-		return nil
-	}
-	httpCfg := httpclient.DefaultConfig()
-	httpCfg.Timeout = 15 * time.Second
-	httpClient := httpclient.New(httpCfg)
-	client := majorevent.NewExaMCPClient(cfg.Endpoint, cfg.APIKey, httpClient, logger)
-	logger.Info("Exa search enabled", slog.String("endpoint", cfg.Endpoint))
-	return client
-}
-
-// ProvideEventSummarizer - LLM 이벤트 요약 서비스 생성 (nil 허용)
-func ProvideEventSummarizer(
-	majorEventCfg config.ConsensusLLMConfig,
-	llmClient majorevent.LLMClient,
-	reviewerClient majorevent.LLMClient,
-	adjudicatorClient majorevent.LLMClient,
-	cacheSvc *cache.Service,
-	searcher majorevent.WebSearcher,
-	logger *slog.Logger,
-) *majorevent.EventSummarizer {
-	opts := make([]majorevent.SummarizerOption, 0, 1)
-	if majorEventCfg.Enabled && reviewerClient != nil {
-		opts = append(opts, majorevent.WithSummarizerConsensus(
-			reviewerClient,
-			adjudicatorClient,
-			majorevent.SummarizerConsensusConfig{
-				Enabled:             true,
-				ConfidenceThreshold: majorEventCfg.Confidence,
-				ReviewTimeout:       time.Duration(majorEventCfg.ReviewTimeout) * time.Second,
-				AdjudicateTimeout:   time.Duration(majorEventCfg.AdjudicateTimeout) * time.Second,
-			},
-		))
-		logger.Info("Major event consensus summarizer enabled",
-			slog.Float64("confidence_threshold", majorEventCfg.Confidence),
-			slog.Int("review_timeout_sec", majorEventCfg.ReviewTimeout),
-			slog.Int("adjudicate_timeout_sec", majorEventCfg.AdjudicateTimeout),
-		)
-	}
-	return majorevent.NewEventSummarizer(llmClient, cacheSvc, searcher, logger, opts...)
 }

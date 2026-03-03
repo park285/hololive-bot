@@ -13,11 +13,11 @@ import (
 )
 
 type CacheManager struct {
-	cache  *cache.Service
+	cache  cache.Client
 	logger *slog.Logger
 }
 
-func NewCacheManager(cacheSvc *cache.Service, logger *slog.Logger) *CacheManager {
+func NewCacheManager(cacheSvc cache.Client, logger *slog.Logger) *CacheManager {
 	return &CacheManager{
 		cache:  cacheSvc,
 		logger: logger,

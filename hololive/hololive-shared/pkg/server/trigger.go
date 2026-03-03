@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 // MajorEventScheduler: 대형 행사 주간 스케줄러 인터페이스
@@ -72,7 +72,7 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 	}
 
 	if err := h.majorEvent.SendWeeklyNotification(c.Request.Context()); err != nil {
-		if errors.Is(err, majorevent.ErrNotificationInProgress) {
+		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			c.JSON(http.StatusConflict, gin.H{"error": "notification already in progress"})
 			return
 		}
@@ -92,7 +92,7 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 	}
 
 	if err := h.majorEventMonthly.SendMonthlyNotification(c.Request.Context()); err != nil {
-		if errors.Is(err, majorevent.ErrNotificationInProgress) {
+		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			c.JSON(http.StatusConflict, gin.H{"error": "notification already in progress"})
 			return
 		}

@@ -10,7 +10,7 @@ import (
 
 // localSettingsApplier: Bot 프로세스 내 직접 설정 적용 (in-process)
 type localSettingsApplier struct {
-	youtube             *youtube.Service
+	youtube             youtube.Service
 	holodex             *holodex.Service
 	scraperProxyToggler ScraperProxyToggler
 	alarm               domain.AlarmCRUD
@@ -20,7 +20,7 @@ var _ SettingsApplier = (*localSettingsApplier)(nil)
 
 // NewLocalSettingsApplier: Bot 프로세스용 SettingsApplier를 생성합니다.
 func NewLocalSettingsApplier(
-	youtubeSvc *youtube.Service,
+	youtubeSvc youtube.Service,
 	holodexSvc *holodex.Service,
 	scraperProxyToggler ScraperProxyToggler,
 	alarm domain.AlarmCRUD,

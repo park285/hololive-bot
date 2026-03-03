@@ -44,7 +44,7 @@ func DefaultConfig() Config {
 // Dispatcher: Outbox 알림 발송 처리기
 type Dispatcher struct {
 	db       *gorm.DB
-	cache    *cache.Service
+	cache    cache.Client
 	sender   iris.Client
 	renderer *template.Renderer
 	logger   *slog.Logger
@@ -52,7 +52,7 @@ type Dispatcher struct {
 }
 
 // NewDispatcher: 새 Dispatcher 생성
-func NewDispatcher(db *gorm.DB, cacheSvc *cache.Service, sender iris.Client, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
+func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender iris.Client, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = DefaultConfig().BatchSize
 	}

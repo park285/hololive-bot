@@ -20,7 +20,7 @@ type Repository struct {
 }
 
 // NewRepository: 새로운 알람 Repository를 생성합니다.
-func NewRepository(postgres *database.PostgresService, logger *slog.Logger) *Repository {
+func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	return &Repository{
 		pool:   postgres.GetPool(),
 		logger: logger,

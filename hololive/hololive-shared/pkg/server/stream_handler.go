@@ -91,8 +91,8 @@ type StreamRespondInternalErrorFunc func(c *gin.Context, userMessage, logMessage
 type StreamHandler struct {
 	Logger               *slog.Logger
 	Holodex              *holodex.Service
-	YouTube              *youtube.Service
-	ValkeyCache          *cache.Service
+	YouTube              youtube.Service
+	ValkeyCache          cache.Client
 	StatsRepo            youtube.StatsDashboardRepository
 	MemberRepo           StreamMemberRepository
 	MemberIndexLoader    func(context.Context) ([]*domain.Member, error)

@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 // ProvideValkeyConfig - 설정에서 Valkey 캐시 설정 추출
@@ -34,7 +33,7 @@ func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger 
 }
 
 // ProvideCacheService - 캐시 리소스에서 서비스 추출
-func ProvideCacheService(resources *bootstrap.CacheResources) *cache.Service {
+func ProvideCacheService(resources *bootstrap.CacheResources) cache.Client {
 	return resources.Service
 }
 
@@ -48,7 +47,7 @@ func ProvideDatabaseResources(ctx context.Context, cfg config.PostgresConfig, lo
 }
 
 // ProvidePostgresService - 데이터베이스 리소스에서 서비스 추출
-func ProvidePostgresService(resources *bootstrap.DatabaseResources) *database.PostgresService {
+func ProvidePostgresService(resources *bootstrap.DatabaseResources) database.Client {
 	return resources.Service
 }
 
@@ -62,7 +61,7 @@ func ProvideIrisClient(cfg config.IrisConfig, logger *slog.Logger) iris.Client {
 }
 
 // ProvideSettingsService - 설정 서비스 생성
-func ProvideSettingsService(advanceMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) *settings.Service {
+func ProvideSettingsService(advanceMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) settings.ReadWriter {
 	settingsPath := resolveSettingsFilePath()
 	if logger != nil {
 		logger.Info("Using settings file path", slog.String("path", settingsPath))
@@ -72,13 +71,4 @@ func ProvideSettingsService(advanceMinutes []int, scraperProxyEnabled bool, logg
 		AlarmAdvanceMinutes: defaultAlarmAdvanceMinute(advanceMinutes),
 		ScraperProxyEnabled: scraperProxyEnabled,
 	}, logger)
-}
-
-// ProvideMessageStack - 메시지 어댑터 및 포매터 생성
-func ProvideMessageStack(botPrefix string, renderer *template.Renderer) *MessageStack {
-	msgAdapter, formatter := bootstrap.NewMessageStack(botPrefix, renderer)
-	return &MessageStack{
-		Adapter:   msgAdapter,
-		Formatter: formatter,
-	}
 }
