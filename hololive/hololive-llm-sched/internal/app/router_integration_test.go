@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
@@ -32,7 +33,7 @@ func TestProvideTriggerRouter_Integration(t *testing.T) {
 		t.Fatalf("/health status = %d, want %d", healthResp.StatusCode, http.StatusOK)
 	}
 
-	triggerResp, err := http.Post(server.URL+"/internal/trigger/membernews-weekly", "application/json", nil)
+	triggerResp, err := http.Post(server.URL+triggercontracts.MemberNewsWeeklyPath, "application/json", nil)
 	if err != nil {
 		t.Fatalf("POST /internal/trigger/membernews-weekly error = %v", err)
 	}
@@ -54,7 +55,7 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	req, err := http.NewRequest(http.MethodPost, server.URL+"/internal/trigger/membernews-weekly", http.NoBody)
+	req, err := http.NewRequest(http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	if err != nil {
 		t.Fatalf("new request error = %v", err)
 	}
@@ -68,7 +69,7 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 		t.Fatalf("status without API key = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 
-	reqWithKey, err := http.NewRequest(http.MethodPost, server.URL+"/internal/trigger/membernews-weekly", http.NoBody)
+	reqWithKey, err := http.NewRequest(http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	if err != nil {
 		t.Fatalf("new request with key error = %v", err)
 	}

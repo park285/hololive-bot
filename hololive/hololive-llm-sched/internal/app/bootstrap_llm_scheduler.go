@@ -10,6 +10,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
+	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -18,8 +22,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
-	"github.com/kapu/hololive-shared/pkg/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -33,8 +35,8 @@ type LLMSchedulerRuntime struct {
 	Logger *slog.Logger
 
 	DeliveryDispatcher         *delivery.Dispatcher
-	MajorEventScheduler        *majorevent.Scheduler
-	MajorEventMonthlyScheduler *majorevent.MonthlyScheduler
+	MajorEventScheduler        *mescheduler.Scheduler
+	MajorEventMonthlyScheduler *mescheduler.MonthlyScheduler
 	MemberNewsScheduler        *membernews.Scheduler
 	MemberNewsMonthlyScheduler *membernews.MonthlyScheduler
 
@@ -202,8 +204,8 @@ func buildLLMSchedulerComponents(
 	ctx context.Context,
 	cfg *config.LLMSchedulerConfig,
 	logger *slog.Logger,
-	cacheService *cache.Service,
-	postgresService *database.PostgresService,
+	cacheService cache.Client,
+	postgresService database.Client,
 ) (*LLMSchedulerRuntime, error) {
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
@@ -214,8 +216,13 @@ func buildLLMSchedulerComponents(
 	memberDataProvider := providers.ProvideMembersData(memberServiceAdapter)
 
 	templateRenderer := template.NewRenderer(postgresService.GetGormDB(), logger)
-	msgStack := providers.ProvideMessageStack(cfg.Bot.Prefix, templateRenderer)
-	majorEventRepo := providers.ProvideMajorEventRepository(ctx, postgresService, logger, cfg.Postgres.AutoPrepareSchema)
+	formatter := newLLMSchedulerFormatter(cfg.Bot.Prefix, templateRenderer, logger)
+	majorEventRepo := majorevent.NewRepository(postgresService, logger)
+	if cfg.Postgres.AutoPrepareSchema {
+		if createErr := majorEventRepo.CreateTable(ctx); createErr != nil {
+			logger.Error("Failed to create major_event_subscriptions table", slog.String("error", createErr.Error()))
+		}
+	}
 	memberNewsService := initMemberNewsService(ctx, cfg.Cliproxy, cfg.LLM, cfg.Exa, postgresService, cacheService, memberDataProvider, logger)
 
 	deliveryLocker := providers.ProvideDeliveryLocker(cacheService, logger)
@@ -227,23 +234,23 @@ func buildLLMSchedulerComponents(
 	majorEventLLMClient := providers.ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
 	majorEventReviewer := providers.ProvideMajorEventReviewerClient(cfg.Cliproxy, cfg.LLM, logger)
 	majorEventAdjudicator := providers.ProvideMajorEventAdjudicatorClient(cfg.Cliproxy, cfg.LLM, logger)
-	exaSearcher := providers.ProvideExaSearcher(cfg.Exa, logger)
-	summarizer := providers.ProvideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheService, exaSearcher, logger)
+	exaSearcher := provideExaSearcher(cfg.Exa, logger)
+	summarizer := provideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheService, exaSearcher, logger)
 
 	majorEventScheduler, majorEventMonthlyScheduler := buildMajorEventComponents(
 		ctx,
 		majorEventRepo,
-		msgStack.Formatter,
+		formatter,
 		summarizer,
 		deliveryLocker,
 		outboxRepo,
 		logger,
 		cfg.Postgres.AutoPrepareSchema,
 	)
-	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, msgStack.Formatter, deliveryLocker, outboxRepo, logger)
+	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryLocker, outboxRepo, logger)
 
 	triggerHandler := ProvideTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
-	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey)
+	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey, majorEventRepo, memberNewsService)
 	if err != nil {
 		return nil, err
 	}
@@ -268,18 +275,26 @@ func buildLLMSchedulerHTTPServer(
 	logger *slog.Logger,
 	triggerHandler *sharedserver.TriggerHandler,
 	apiKey string,
+	majorEventRepo *majorevent.Repository,
+	memberNewsService *membernews.Service,
 ) (*http.Server, error) {
 	router, err := ProvideTriggerRouter(ctx, logger, triggerHandler, apiKey)
 	if err != nil {
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}
+
+	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
+	registerMajorEventInternalRoutes(router, apiKey, majorEventRepo)
+	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
+	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
+
 	addr := fmt.Sprintf(":%d", port)
 	return ProvideAPIServer(addr, router), nil
 }
 
 func buildLLMSchedulerConfigSubscriber(
 	ctx context.Context,
-	cacheService *cache.Service,
+	cacheService cache.Client,
 	memberNewsScheduler *membernews.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
