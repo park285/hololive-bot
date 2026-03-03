@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 type stubMajorEventScheduler struct {
@@ -39,7 +41,7 @@ func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	handler := NewTriggerHandler(
+	handler := sharedserver.NewTriggerHandler(
 		&stubMajorEventScheduler{},
 		&stubMajorEventMonthlyScheduler{},
 		nil,
@@ -47,7 +49,7 @@ func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {
 	)
 	handler.RegisterInternalRoutes(router.Group(""))
 
-	req := httptest.NewRequest(http.MethodPost, "/internal/trigger/membernews-weekly", http.NoBody)
+	req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -60,7 +62,7 @@ func TestTriggerHandler_MemberNewsWeekly_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	handler := NewTriggerHandler(
+	handler := sharedserver.NewTriggerHandler(
 		&stubMajorEventScheduler{},
 		&stubMajorEventMonthlyScheduler{},
 		&stubMemberNewsWeeklyScheduler{},
@@ -68,7 +70,7 @@ func TestTriggerHandler_MemberNewsWeekly_Success(t *testing.T) {
 	)
 	handler.RegisterInternalRoutes(router.Group(""))
 
-	req := httptest.NewRequest(http.MethodPost, "/internal/trigger/membernews-weekly", http.NoBody)
+	req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

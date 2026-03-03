@@ -11,8 +11,6 @@ import (
 const channelStatsCacheWorkers = sharedserver.DefaultChannelStatsCacheWorkers
 const channelStatsRefreshWorkers = sharedserver.DefaultChannelStatsRefreshWorkers
 
-type ChannelResponse = sharedserver.ChannelResponse
-
 func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 	return &sharedserver.StreamHandler{
 		Logger:               h.logger,

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
 )
 
 // Client: llm-scheduler 내부 트리거 API를 프록시하는 HTTP 클라이언트
@@ -39,17 +39,17 @@ func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
 
 // SendWeeklyNotification: llm-scheduler의 /internal/trigger/majorevent-weekly 엔드포인트를 호출합니다.
 func (c *Client) SendWeeklyNotification(ctx context.Context) error {
-	return c.postTrigger(ctx, "/internal/trigger/majorevent-weekly")
+	return c.postTrigger(ctx, triggercontracts.MajorEventWeeklyPath)
 }
 
 // SendMonthlyNotification: llm-scheduler의 /internal/trigger/majorevent-monthly 엔드포인트를 호출합니다.
 func (c *Client) SendMonthlyNotification(ctx context.Context) error {
-	return c.postTrigger(ctx, "/internal/trigger/majorevent-monthly")
+	return c.postTrigger(ctx, triggercontracts.MajorEventMonthlyPath)
 }
 
 // SendMemberNewsWeekly: llm-scheduler의 /internal/trigger/membernews-weekly 엔드포인트를 호출합니다.
 func (c *Client) SendMemberNewsWeekly(ctx context.Context) error {
-	return c.postTrigger(ctx, "/internal/trigger/membernews-weekly")
+	return c.postTrigger(ctx, triggercontracts.MemberNewsWeeklyPath)
 }
 
 // postTrigger: 지정된 경로에 POST 요청을 보내고 결과를 처리합니다.
@@ -69,7 +69,7 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
-		return majorevent.ErrNotificationInProgress
+		return triggercontracts.ErrNotificationInProgress
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
