@@ -4,23 +4,25 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/adapter"
+	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
+	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
+	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
+
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
-	"github.com/kapu/hololive-shared/pkg/service/membernews"
 )
 
 func buildMajorEventComponents(
 	ctx context.Context,
 	majorEventRepo *majorevent.Repository,
-	formatter *adapter.ResponseFormatter,
-	summarizer *majorevent.EventSummarizer,
+	formatter mescheduler.Formatter,
+	summarizer *mesummarizer.EventSummarizer,
 	locker delivery.NotificationLocker,
 	outboxRepo *delivery.OutboxRepository,
 	logger *slog.Logger,
 	autoPrepareSchema bool,
-) (*majorevent.Scheduler, *majorevent.MonthlyScheduler) {
-	majorEventScheduler := majorevent.NewScheduler(
+) (*mescheduler.Scheduler, *mescheduler.MonthlyScheduler) {
+	majorEventScheduler := mescheduler.NewScheduler(
 		majorEventRepo,
 		formatter,
 		summarizer,
@@ -29,7 +31,7 @@ func buildMajorEventComponents(
 		logger,
 	)
 
-	majorEventMonthlyScheduler := majorevent.NewMonthlyScheduler(
+	majorEventMonthlyScheduler := mescheduler.NewMonthlyScheduler(
 		majorEventRepo,
 		formatter,
 		summarizer,
@@ -48,7 +50,7 @@ func buildMajorEventComponents(
 	return majorEventScheduler, majorEventMonthlyScheduler
 }
 
-func buildMemberNewsComponents(memberNews *membernews.Service, formatter *adapter.ResponseFormatter, locker delivery.NotificationLocker, outboxRepo *delivery.OutboxRepository, logger *slog.Logger) (*membernews.Scheduler, *membernews.MonthlyScheduler) {
+func buildMemberNewsComponents(memberNews *membernews.Service, formatter membernews.DigestFormatter, locker delivery.NotificationLocker, outboxRepo *delivery.OutboxRepository, logger *slog.Logger) (*membernews.Scheduler, *membernews.MonthlyScheduler) {
 	if memberNews == nil {
 		logger.Info("Member news scheduler disabled: service unavailable")
 		return nil, nil
