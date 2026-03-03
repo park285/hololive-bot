@@ -1,0 +1,157 @@
+package notification
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+func (as *AlarmService) submitPersistTask(action string, task func()) {
+	if as.persistPool == nil {
+		if as.logger != nil {
+			as.logger.Error("Persist pool is not initialized",
+				slog.String("action", action),
+			)
+		}
+		return
+	}
+
+	if err := as.persistPool.Submit(task); err != nil {
+		if as.logger != nil {
+			as.logger.Warn("Failed to submit persist task to pool",
+				slog.String("action", action),
+				slog.Any("error", err),
+			)
+		}
+	}
+}
+
+// persistAlarmAsync: 알람을 DB에 비동기로 저장한다. (Write-Through)
+// 사용자 응답을 지연시키지 않기 위해 goroutine으로 실행한다.
+//
+//nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
+func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
+	if as.alarmRepo == nil {
+		return
+	}
+
+	as.submitPersistTask("persist_alarm", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := as.alarmRepo.Add(ctx, alarm); err != nil {
+			as.logger.Warn("Failed to persist alarm to DB (async)",
+				slog.String("room_id", alarm.RoomID),
+				slog.String("channel_id", alarm.ChannelID),
+				slog.Any("error", err),
+			)
+		}
+	})
+}
+
+// removeAlarmAsync: 알람을 DB에서 비동기로 삭제한다. (Write-Through, 방 기반)
+//
+//nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
+func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
+	if as.alarmRepo == nil {
+		return
+	}
+
+	as.submitPersistTask("remove_alarm", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := as.alarmRepo.Remove(ctx, roomID, channelID); err != nil {
+			as.logger.Warn("Failed to remove alarm from DB (async)",
+				slog.String("room_id", roomID),
+				slog.String("channel_id", channelID),
+				slog.Any("error", err),
+			)
+		}
+	})
+}
+
+// clearRoomAlarmsAsync: 방의 모든 알람을 DB에서 비동기로 삭제한다. (Write-Through)
+//
+//nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
+func (as *AlarmService) clearRoomAlarmsAsync(roomID string) {
+	if as.alarmRepo == nil {
+		return
+	}
+
+	as.submitPersistTask("clear_room_alarms", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if _, err := as.alarmRepo.ClearByRoom(ctx, roomID); err != nil {
+			as.logger.Warn("Failed to clear room alarms from DB (async)",
+				slog.String("room_id", roomID),
+				slog.Any("error", err),
+			)
+		}
+	})
+}
+
+// WarmCacheFromDB: 앱 시작 시 DB에서 모든 알람을 로드하여 Valkey 캐시를 워밍합니다.
+// 이 메서드는 앱 시작 시 한 번만 호출되며, 이후 런타임 중에는 Valkey만 사용한다.
+func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
+	if as.alarmRepo == nil {
+		as.logger.Info("Alarm repository not configured, skipping cache warming")
+		return nil
+	}
+
+	alarms, err := as.alarmRepo.LoadAll(ctx)
+	if err != nil {
+		return fmt.Errorf("load alarms from DB: %w", err)
+	}
+
+	if len(alarms) == 0 {
+		as.logger.Info("No alarms found in DB, cache warming skipped")
+		return nil
+	}
+
+	for _, a := range alarms {
+		// 방 기반 키: alarm:{roomID}
+		alarmKey := as.getAlarmKey(a.RoomID)
+		registryKey := a.RegistryKey()
+		channelSubsKey := as.channelSubscribersKey(a.ChannelID)
+
+		if _, err := as.cache.SAdd(ctx, alarmKey, []string{a.ChannelID}); err != nil {
+			as.logger.Warn("Failed to warm alarm cache",
+				slog.String("alarm_key", alarmKey),
+				slog.Any("error", err),
+			)
+		}
+
+		_, _ = as.cache.SAdd(ctx, AlarmRegistryKey, []string{registryKey})
+		_, _ = as.cache.SAdd(ctx, channelSubsKey, []string{registryKey})
+		_, _ = as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{a.ChannelID})
+
+		for _, alarmType := range a.AlarmTypes {
+			typeKey := as.channelSubscribersKeyByType(a.ChannelID, alarmType)
+			if typeKey != channelSubsKey {
+				_, _ = as.cache.SAdd(ctx, typeKey, []string{registryKey})
+			}
+		}
+
+		if a.MemberName != "" {
+			_ = as.CacheMemberName(ctx, a.ChannelID, a.MemberName)
+		}
+
+		if a.RoomName != "" {
+			_ = as.cache.HSet(ctx, RoomNamesCacheKey, a.RoomID, a.RoomName)
+		}
+		if a.UserName != "" {
+			_ = as.cache.HSet(ctx, UserNamesCacheKey, a.UserID, a.UserName)
+		}
+	}
+
+	as.logger.Info("Cache warmed from DB",
+		slog.Int("alarms_loaded", len(alarms)),
+	)
+
+	return nil
+}

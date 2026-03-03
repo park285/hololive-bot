@@ -46,7 +46,7 @@ func (Room) TableName() string {
 // PostgreSQL을 영구 저장소로 사용하고, 성능을 위해 인메모리 및 Valkey 캐시를 활용한다.
 type Service struct {
 	db     *gorm.DB
-	cache  *cache.Service
+	cache  cache.Client
 	logger *slog.Logger
 
 	// 메모리 캐시 (빠른 조회용)
@@ -58,8 +58,8 @@ type Service struct {
 // NewACLService ACL 서비스 생성 및 초기화
 func NewACLService(
 	ctx context.Context,
-	postgres *database.PostgresService,
-	cacheSvc *cache.Service,
+	postgres database.Client,
+	cacheSvc cache.Client,
 	logger *slog.Logger,
 	defaultEnabled bool,
 	defaultRooms []string,

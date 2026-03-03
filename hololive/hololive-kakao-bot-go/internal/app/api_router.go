@@ -48,7 +48,7 @@ func ProvideAPIRouter(
 	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
-	triggerHandler *server.TriggerHandler,
+	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	router, err := newAPIRouter(ctx, cfg, logger)
 	if err != nil {
@@ -240,7 +240,7 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 }
 
 // ProvideTriggerRouter: health + metrics + 내부 트리거 엔드포인트를 제공하는 라우터.
-func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandler *server.TriggerHandler, apiKey string) (*gin.Engine, error) {
+func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandler *sharedserver.TriggerHandler, apiKey string) (*gin.Engine, error) {
 	router, err := ProvideHealthOnlyRouter(ctx, logger)
 	if err != nil {
 		return nil, err
@@ -260,7 +260,7 @@ func ProvideBotRouter(
 	cfg *config.Config,
 	logger *slog.Logger,
 	webhookHandler *iris.WebhookHandler,
-	triggerHandler *server.TriggerHandler,
+	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()

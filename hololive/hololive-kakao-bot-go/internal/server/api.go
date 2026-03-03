@@ -19,12 +19,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/system"
 )
 
-// ScraperProxyToggler: 스크래퍼 스케줄러 프록시 토글 인터페이스
-type ScraperProxyToggler = sharedserver.ScraperProxyToggler
-
-// SettingsApplier: 설정 변경을 런타임에 적용하는 인터페이스
-type SettingsApplier = sharedserver.SettingsApplier
-
 // APIHandler: Hololive API 요청을 처리하는 핸들러입니다.
 // Admin Dashboard와 Tauri 앱 모두에서 사용됩니다.
 // 핸들러 메서드는 도메인별 파일로 분리됨:
@@ -39,16 +33,16 @@ type SettingsApplier = sharedserver.SettingsApplier
 type APIHandler struct {
 	repo                       *member.Repository
 	memberCache                *member.Cache
-	valkeyCache                *cache.Service
+	valkeyCache                cache.Client
 	profiles                   *member.ProfileService
 	alarm                      domain.AlarmCRUD
 	holodex                    *holodex.Service
-	youtube                    *youtube.Service
-	scraperProxyToggler        ScraperProxyToggler
+	youtube                    youtube.Service
+	scraperProxyToggler        sharedserver.ScraperProxyToggler
 	statsRepo                  youtube.StatsDashboardRepository
 	activity                   *activity.Logger
-	settings                   *settings.Service
-	settingsApplier            SettingsApplier
+	settings                   settings.ReadWriter
+	settingsApplier            sharedserver.SettingsApplier
 	acl                        *acl.Service
 	logger                     *slog.Logger
 	systemStats                *system.Collector
@@ -56,18 +50,16 @@ type APIHandler struct {
 	majorEventScheduler        MajorEventScheduler
 	majorEventMonthlyScheduler MajorEventMonthlyScheduler
 	startTime                  time.Time
-	streamState                *streamState
+	streamState                *sharedserver.StreamState
 	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
 }
 
-type streamState = sharedserver.StreamState
-
-func newStreamState() *streamState {
+func newStreamState() *sharedserver.StreamState {
 	return sharedserver.NewStreamState(channelStatsCacheWorkers, channelStatsRefreshWorkers)
 }
 
 // streamState 접근자. 생성자에서 반드시 초기화되므로 nil이 될 수 없다.
-func (h *APIHandler) ensureStreamState() *streamState {
+func (h *APIHandler) ensureStreamState() *sharedserver.StreamState {
 	return h.streamState
 }
 
@@ -75,16 +67,16 @@ func (h *APIHandler) ensureStreamState() *streamState {
 func NewAPIHandler(
 	repo *member.Repository,
 	memberCache *member.Cache,
-	valkeyCache *cache.Service,
+	valkeyCache cache.Client,
 	profilesSvc *member.ProfileService,
 	alarm domain.AlarmCRUD,
 	holodexSvc *holodex.Service,
-	youtubeSvc *youtube.Service,
-	scraperProxyToggler ScraperProxyToggler,
+	youtubeSvc youtube.Service,
+	scraperProxyToggler sharedserver.ScraperProxyToggler,
 	statsRepo youtube.StatsDashboardRepository,
 	activityLogger *activity.Logger,
-	settingsSvc *settings.Service,
-	settingsApplier SettingsApplier,
+	settingsSvc settings.ReadWriter,
+	settingsApplier sharedserver.SettingsApplier,
 	aclSvc *acl.Service,
 	systemSvc *system.Collector,
 	templateAdmin *template.AdminService,
