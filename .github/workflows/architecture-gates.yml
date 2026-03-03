@@ -1,0 +1,44 @@
+name: Architecture Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: architecture-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  architecture-gates:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+
+      - name: Setup Rust (nightly)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-02-23
+          components: rustfmt, clippy
+
+      - name: Run architecture boundary gates (M0 + M1)
+        run: ./scripts/architecture/ci-boundary-gate.sh
+
+      - name: Upload Go import graph artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-workspace-import-graph
+          path: artifacts/architecture/go-workspace-import-graph.txt

@@ -1,0 +1,38 @@
+# M0 baseline (2026-03-02)
+# format: relative path rooted at internal/*
+# 2026-03-03 Phase 7 반영: admin/bot 구조 분할로 현재 중복 파일 34개 (신규 중복 금지 유지)
+
+internal/app/api_router_test.go
+internal/app/api_routes_domain_test.go
+internal/app/bootstrap_services.go
+internal/app/router_integration_test.go
+internal/app/runtime_build_test.go
+internal/server/api.go
+internal/server/api_alarm.go
+internal/server/api_auth.go
+internal/server/api_domains.go
+internal/server/api_majorevent.go
+internal/server/api_member.go
+internal/server/api_member_test.go
+internal/server/api_milestone.go
+internal/server/api_profile.go
+internal/server/api_response.go
+internal/server/api_room.go
+internal/server/api_settings.go
+internal/server/api_stats.go
+internal/server/api_stream.go
+internal/server/api_stream_test.go
+internal/server/api_template.go
+internal/server/api_trigger_compat.go
+internal/server/api_trigger_test.go
+internal/server/httputil/response.go
+internal/server/oauth_proxy.go
+internal/server/shared_compat.go
+internal/service/auth/config.go
+internal/service/auth/db.go
+internal/service/auth/errors.go
+internal/service/auth/models.go
+internal/service/auth/service.go
+internal/service/auth/service_test.go
+internal/service/auth/tokens.go
+internal/service/auth/validation.go
