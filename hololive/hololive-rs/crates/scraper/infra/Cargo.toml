@@ -12,5 +12,6 @@ serde = { workspace = true }
 secrecy = { workspace = true, features = ["serde"] }
 url = { workspace = true }
 sea-orm = { workspace = true }
+shared-infra = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

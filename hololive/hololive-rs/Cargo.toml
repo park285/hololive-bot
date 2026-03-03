@@ -10,16 +10,11 @@ members = [
     "crates/alarm/infra",
     "crates/alarm/app",
     "crates/dispatcher/app",
+    "crates/dispatcher/formatter",
+    "crates/dispatcher/notification",
+    "crates/dispatcher/template",
     "crates/shared/core",
     "crates/shared/infra",
-    "crates/shared/services/formatter",
-    "crates/shared/services/parser",
-    "crates/shared/services/cache",
-    "crates/shared/services/configsub",
-    "crates/shared/services/member",
-    "crates/shared/services/notification",
-    "crates/shared/services/ratelimit",
-    "crates/shared/services/template",
 ]
 
 [workspace.package]
@@ -162,11 +157,6 @@ alarm-service = { path = "crates/alarm/service" }
 alarm-infra = { path = "crates/alarm/infra" }
 shared-core = { path = "crates/shared/core" }
 shared-infra = { path = "crates/shared/infra" }
-shared-formatter = { path = "crates/shared/services/formatter" }
-shared-parser = { path = "crates/shared/services/parser" }
-shared-cache = { path = "crates/shared/services/cache" }
-shared-configsub = { path = "crates/shared/services/configsub" }
-shared-member = { path = "crates/shared/services/member" }
-shared-notification = { path = "crates/shared/services/notification" }
-shared-ratelimit = { path = "crates/shared/services/ratelimit" }
-shared-template = { path = "crates/shared/services/template" }
+shared-formatter = { path = "crates/dispatcher/formatter" }
+shared-notification = { path = "crates/dispatcher/notification" }
+shared-template = { path = "crates/dispatcher/template" }

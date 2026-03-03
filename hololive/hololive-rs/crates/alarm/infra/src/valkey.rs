@@ -1,4 +1,4 @@
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(feature = "test-support")]
 pub use shared_infra::valkey::MockValkeyClient;
 /// Valkey 클라이언트 — shared_infra::valkey 재내보내기
 ///

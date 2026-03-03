@@ -1,3 +1,4 @@
+use shared_core::error::SharedError;
 use thiserror::Error;
 
 /// 알람 도메인 에러 카테고리
@@ -30,6 +31,28 @@ pub enum AlarmError {
     /// JSON 직렬화/역직렬화 오류
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+}
+
+impl From<SharedError> for AlarmError {
+    fn from(err: SharedError) -> Self {
+        match err {
+            SharedError::Valkey(msg) => Self::Valkey(msg),
+            SharedError::Http(msg) => Self::Http(msg),
+            SharedError::HttpStatus { code, message } => {
+                Self::Http(format!("status {code}: {message}"))
+            }
+            SharedError::Database(msg) => Self::Database(msg),
+            SharedError::Config(msg) => Self::Config(msg),
+            SharedError::Serialization(err) => Self::Serialization(err),
+            SharedError::Api { platform, message } => Self::Api { platform, message },
+            SharedError::CircuitOpen { platform } => Self::CircuitOpen { platform },
+            SharedError::NotFound(msg) => Self::Http(format!("not found: {msg}")),
+            SharedError::Unauthorized(msg) => Self::Http(format!("unauthorized: {msg}")),
+            SharedError::Forbidden(msg) => Self::Http(format!("forbidden: {msg}")),
+            SharedError::Conflict(msg) => Self::Http(format!("conflict: {msg}")),
+            SharedError::Io(err) => Self::Http(format!("io: {err}")),
+        }
+    }
 }
 
 #[cfg(test)]

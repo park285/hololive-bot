@@ -89,7 +89,10 @@ impl TwitchChecker {
         stream_id: &str,
     ) -> Result<bool, AlarmError> {
         let key = format!("{}{user_id}:{stream_id}", TWITCH_LIVE_NOTIFIED_KEY_PREFIX);
-        self.valkey.set_nx(&key, "1", TWITCH_NOTIFICATION_TTL).await
+        self.valkey
+            .set_nx(&key, "1", TWITCH_NOTIFICATION_TTL)
+            .await
+            .map_err(Into::into)
     }
 
     // ── 비공개 헬퍼 ──────────────────────────────────────────────────────────

@@ -2,11 +2,11 @@ use std::{collections::HashMap, sync::Arc};
 
 use alarm_core::{
     constants::DEFAULT_TARGET_MINUTES,
-    error::AlarmError,
     model::{Channel, StreamStatus},
 };
 use alarm_infra::valkey::{MockValkeyClient, ValkeyClient};
 use async_trait::async_trait;
+use shared_core::error::SharedError;
 
 use super::*;
 
@@ -79,60 +79,69 @@ impl FallbackValkeyClient {
 
 #[async_trait]
 impl ValkeyClient for FallbackValkeyClient {
-    async fn get(&self, _: &str) -> Result<Option<String>, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn get(&self, _: &str) -> Result<Option<String>, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn set(&self, _: &str, _: &str, _: StdDuration) -> Result<(), AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn set(&self, _: &str, _: &str, _: Option<StdDuration>) -> Result<(), SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn set_nx(&self, _: &str, _: &str, _: StdDuration) -> Result<bool, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn set_nx(&self, _: &str, _: &str, _: StdDuration) -> Result<bool, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn del(&self, keys: &[&str]) -> Result<u64, AlarmError> {
+    async fn del(&self, keys: &[&str]) -> Result<(), SharedError> {
         if self.fail_del {
-            Err(AlarmError::Valkey("강제 실패".into()))
+            Err(SharedError::Valkey("강제 실패".into()))
         } else {
-            Ok(keys.len() as u64)
+            let _ = keys;
+            Ok(())
         }
     }
 
-    async fn hget(&self, _: &str, _: &str) -> Result<Option<String>, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn hget(&self, _: &str, _: &str) -> Result<Option<String>, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn hset(&self, _: &str, _: &str, _: &str) -> Result<(), AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn hset(&self, _: &str, _: &str, _: &str) -> Result<(), SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn hget_all(&self, _: &str) -> Result<HashMap<String, String>, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn hget_all(&self, _: &str) -> Result<HashMap<String, String>, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn hmset(&self, _: &str, _: &HashMap<String, String>) -> Result<(), AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn hmset(&self, _: &str, _: &[(String, String)]) -> Result<(), SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn smembers(&self, _: &str) -> Result<Vec<String>, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn smembers(&self, _: &str) -> Result<Vec<String>, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn smembers_multi(&self, _: &[String]) -> Result<Vec<Vec<String>>, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn smembers_multi(&self, _: &[String]) -> Result<Vec<Vec<String>>, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn expire(&self, _: &str, _: StdDuration) -> Result<bool, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn expire(&self, _: &str, _: StdDuration) -> Result<(), SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn lpush(&self, _: &str, _: &str) -> Result<i64, AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn lpush(&self, _: &str, _: &str) -> Result<(), SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 
-    async fn ping(&self) -> Result<(), AlarmError> {
-        Err(AlarmError::Valkey("강제 실패".into()))
+    async fn ping(&self) -> Result<(), SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
+    }
+
+    async fn brpop(&self, _: &str, _: f64) -> Result<Option<String>, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
+    }
+
+    async fn llen(&self, _: &str) -> Result<i64, SharedError> {
+        Err(SharedError::Valkey("강제 실패".into()))
     }
 }
 
