@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/service/majorevent"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 func TestClient_SendWeeklyNotification_Success(t *testing.T) {
@@ -24,8 +24,8 @@ func TestClient_SendWeeklyNotification_Success(t *testing.T) {
 	if err := client.SendWeeklyNotification(context.Background()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v, want nil", err)
 	}
-	if gotPath != "/internal/trigger/majorevent-weekly" {
-		t.Fatalf("path = %q, want %q", gotPath, "/internal/trigger/majorevent-weekly")
+	if gotPath != triggercontracts.MajorEventWeeklyPath {
+		t.Fatalf("path = %q, want %q", gotPath, triggercontracts.MajorEventWeeklyPath)
 	}
 }
 
@@ -37,7 +37,7 @@ func TestClient_SendMonthlyNotification_Conflict(t *testing.T) {
 
 	client := NewClient(srv.URL, "", nil)
 	err := client.SendMonthlyNotification(context.Background())
-	if !errors.Is(err, majorevent.ErrNotificationInProgress) {
+	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 		t.Fatalf("error = %v, want ErrNotificationInProgress", err)
 	}
 }
@@ -74,8 +74,8 @@ func TestClient_SendMemberNewsWeekly_Success(t *testing.T) {
 	if err := client.SendMemberNewsWeekly(context.Background()); err != nil {
 		t.Fatalf("SendMemberNewsWeekly() error = %v, want nil", err)
 	}
-	if gotPath != "/internal/trigger/membernews-weekly" {
-		t.Fatalf("path = %q, want %q", gotPath, "/internal/trigger/membernews-weekly")
+	if gotPath != triggercontracts.MemberNewsWeeklyPath {
+		t.Fatalf("path = %q, want %q", gotPath, triggercontracts.MemberNewsWeeklyPath)
 	}
 }
 

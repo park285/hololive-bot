@@ -21,6 +21,38 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
+// buildAdminHTTPServer: admin-api 전용 HTTP 서버를 구성합니다.
+func buildAdminHTTPServer(
+	ctx context.Context,
+	cfg *config.AdminAPIConfig,
+	logger *slog.Logger,
+	domainHandlers *server.DomainAPIHandlers,
+	authHandler *server.AuthHandler,
+) (*http.Server, error) {
+	// admin-api에서도 ProvideAPIRouter를 재사용하기 위해 config.Config로 변환
+	fullCfg := &config.Config{
+		Server:    cfg.Server,
+		CORS:      cfg.CORS,
+		Telemetry: cfg.Telemetry,
+	}
+
+	adminRouter, err := ProvideAPIRouter(ctx, fullCfg, logger, domainHandlers, authHandler, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create api router: %w", err)
+	}
+
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	return &http.Server{
+		Addr:              addr,
+		Handler:           sharedserver.WrapH2C(adminRouter),
+		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
+		ReadTimeout:       constants.ServerTimeout.Read,
+		WriteTimeout:      constants.ServerTimeout.Write,
+		IdleTimeout:       constants.ServerTimeout.Idle,
+		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
+	}, nil
+}
+
 // ProvideAPIAddr: 관리자 서버가 리슨할 주소를 반환합니다.
 func ProvideAPIAddr(cfg *config.Config) string {
 	return fmt.Sprintf(":%d", cfg.Server.Port)
@@ -49,7 +81,7 @@ func ProvideAPIRouter(
 	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
-	triggerHandler *server.TriggerHandler,
+	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	router, err := newAPIRouter(ctx, cfg, logger)
 	if err != nil {
@@ -241,7 +273,7 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 }
 
 // ProvideTriggerRouter: health + metrics + 내부 트리거 엔드포인트를 제공하는 라우터.
-func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandler *server.TriggerHandler, apiKey string) (*gin.Engine, error) {
+func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandler *sharedserver.TriggerHandler, apiKey string) (*gin.Engine, error) {
 	router, err := ProvideHealthOnlyRouter(ctx, logger)
 	if err != nil {
 		return nil, err
@@ -261,7 +293,7 @@ func ProvideBotRouter(
 	cfg *config.Config,
 	logger *slog.Logger,
 	webhookHandler *iris.WebhookHandler,
-	triggerHandler *server.TriggerHandler,
+	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
@@ -289,4 +321,77 @@ func ProvideBotRouter(
 	}
 
 	return router, nil
+}
+
+func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *server.AlarmAPIHandler) {
+	holoAPI.GET("/alarms", handler.GetAlarms)
+	holoAPI.DELETE("/alarms", handler.DeleteAlarm)
+}
+
+func registerMajorEventRoutes(holoAPI *gin.RouterGroup, handler *server.MajorEventAPIHandler) {
+	// 이벤트 알림 수동 트리거 (테스트용)
+	holoAPI.POST("/majorevent/trigger", handler.TriggerMajorEventNotification)
+	holoAPI.POST("/majorevent/monthly-trigger", handler.TriggerMajorEventMonthlyNotification)
+}
+
+func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *server.MemberAPIHandler) {
+	holoAPI.GET("/members", handler.GetMembers)
+	holoAPI.POST("/members", handler.AddMember)
+	holoAPI.POST("/members/:id/aliases", handler.AddAlias)
+	holoAPI.DELETE("/members/:id/aliases", handler.RemoveAlias)
+	holoAPI.PATCH("/members/:id/graduation", handler.SetGraduation)
+	holoAPI.PATCH("/members/:id/channel", handler.UpdateChannelID)
+	holoAPI.PATCH("/members/:id/name", handler.UpdateMemberName)
+}
+
+func registerMilestoneRoutes(holoAPI *gin.RouterGroup, handler *server.MilestoneAPIHandler) {
+	// 마일스톤 API
+	holoAPI.GET("/milestones", handler.GetMilestones)
+	holoAPI.GET("/milestones/near", handler.GetNearMilestoneMembers)
+	holoAPI.GET("/milestones/stats", handler.GetMilestoneStats)
+}
+
+func registerProfileRoutes(holoAPI *gin.RouterGroup, handler *server.ProfileAPIHandler) {
+	// 프로필 API (Tauri 앱 전용)
+	holoAPI.GET("/profiles", handler.GetProfile)
+	holoAPI.GET("/profiles/name", handler.GetProfileByName)
+}
+
+func registerRoomRoutes(holoAPI *gin.RouterGroup, handler *server.RoomAPIHandler) {
+	holoAPI.GET("/rooms", handler.GetRooms)
+	holoAPI.POST("/rooms", handler.AddRoom)
+	holoAPI.DELETE("/rooms", handler.RemoveRoom)
+	holoAPI.POST("/rooms/acl", handler.SetACL)
+}
+
+func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *server.SettingsAPIHandler) {
+	holoAPI.GET("/logs", handler.GetLogs)
+	holoAPI.GET("/settings", handler.GetSettings)
+	holoAPI.POST("/settings", handler.UpdateSettings)
+	holoAPI.POST("/settings/llm", handler.UpdateLLMSettings)
+	holoAPI.POST("/names/room", handler.SetRoomName)
+	holoAPI.POST("/names/user", handler.SetUserName)
+}
+
+func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsAPIHandler, streamHandler *server.StreamAPIHandler) {
+	holoAPI.GET("/stats", statsHandler.GetStats)
+	holoAPI.GET("/stats/channels", streamHandler.GetChannelStats)
+	holoAPI.GET("/streams/live", streamHandler.GetLiveStreams)
+	holoAPI.GET("/streams/upcoming", streamHandler.GetUpcomingStreams)
+
+	// 채널 정보 API (Holodex 기반 - 프로필 이미지 포함)
+	holoAPI.GET("/channels", streamHandler.GetChannel)
+	holoAPI.GET("/channels/search", streamHandler.SearchChannels)
+}
+
+func registerTemplateRoutes(holoAPI *gin.RouterGroup, handler *server.TemplateAPIHandler) {
+	holoAPI.GET("/templates", handler.GetTemplates)
+	holoAPI.GET("/templates/:key", handler.GetTemplateByKey)
+
+	// 템플릿 관리 API
+	holoAPI.PUT("/templates/:key", handler.UpsertTemplate)
+	holoAPI.DELETE("/templates/:key", handler.DeleteTemplateOverride)
+	holoAPI.POST("/templates/:key/preview", handler.PreviewTemplate)
+	holoAPI.GET("/templates/:key/revisions", handler.GetTemplateRevisions)
+	holoAPI.GET("/templates/:key/revisions/:id", handler.GetTemplateRevision)
 }

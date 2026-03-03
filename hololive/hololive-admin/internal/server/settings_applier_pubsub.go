@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-admin/internal/service/configpub"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
@@ -19,14 +20,14 @@ type pubsubSettingsApplier struct {
 	logger    *slog.Logger
 }
 
-var _ SettingsApplier = (*pubsubSettingsApplier)(nil)
+var _ sharedserver.SettingsApplier = (*pubsubSettingsApplier)(nil)
 
 // NewPubSubSettingsApplier: admin-api용 SettingsApplier를 생성합니다.
 func NewPubSubSettingsApplier(
 	publisher *configpub.Publisher,
 	alarm domain.AlarmCRUD,
 	logger *slog.Logger,
-) SettingsApplier {
+) sharedserver.SettingsApplier {
 	return &pubsubSettingsApplier{
 		publisher: publisher,
 		alarm:     alarm,
