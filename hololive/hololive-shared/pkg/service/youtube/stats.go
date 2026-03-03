@@ -16,7 +16,7 @@ import (
 // StatsService: 상위 수준의 통계 서비스로, Repository와 YouTube Service를 조합하여 통계 데이터를 제공합니다.
 type StatsService struct {
 	oauth     *OAuthService
-	cache     *cache.Service
+	cache     cache.Client
 	statsRepo StatsServiceRepository
 	logger    *slog.Logger
 }
@@ -36,7 +36,7 @@ type ChannelStatistics struct {
 }
 
 // NewStatsService: 통계 서비스 인스턴스를 생성합니다.
-func NewStatsService(oauth *OAuthService, cacheSvc *cache.Service, statsRepo StatsServiceRepository, logger *slog.Logger) *StatsService {
+func NewStatsService(oauth *OAuthService, cacheSvc cache.Client, statsRepo StatsServiceRepository, logger *slog.Logger) *StatsService {
 	return &StatsService{
 		oauth:     oauth,
 		cache:     cacheSvc,

@@ -14,6 +14,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func newTestCacheForLock(t *testing.T) *cache.Service {
@@ -54,7 +55,36 @@ func newTestCacheForLockWithMini(t *testing.T) (*cache.Service, *miniredis.Minir
 }
 
 func TestAcquireIngestionLeaseExclusive(t *testing.T) {
-	cacheSvc := newTestCacheForLock(t)
+	// 샘플: cache.Client interface 기반 mock 주입
+	var held bool
+	var owner string
+	cacheSvc := &cachemocks.Client{
+		SetNXFunc: func(_ context.Context, key, value string, _ time.Duration) (bool, error) {
+			if key != IngestionLeaseKey {
+				return false, errors.New("unexpected key")
+			}
+			if held {
+				return false, nil
+			}
+			held = true
+			owner = value
+			return true, nil
+		},
+		CompareAndDeleteFunc: func(_ context.Context, key, expectedValue string) (bool, error) {
+			if key != IngestionLeaseKey {
+				return false, errors.New("unexpected key")
+			}
+			if !held {
+				return false, nil
+			}
+			if expectedValue != owner {
+				return false, nil
+			}
+			held = false
+			owner = ""
+			return true, nil
+		},
+	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	first, err := AcquireIngestionLease(context.Background(), cacheSvc, "bot", logger)

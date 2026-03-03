@@ -24,7 +24,7 @@ var errIngestionLeaseOwnershipLost = errors.New("ingestion lease ownership lost"
 
 // IngestionLease - 분산 락 기반 ingestion 리스 (단일 인스턴스 보장)
 type IngestionLease struct {
-	cacheSvc      *cache.Service
+	cacheSvc      cache.Client
 	key           string
 	owner         string
 	role          string
@@ -38,7 +38,7 @@ type IngestionLease struct {
 // AcquireIngestionLease - ingestion 리스를 획득한다. 이미 다른 프로세스가 소유 중이면 에러 반환.
 func AcquireIngestionLease(
 	ctx context.Context,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	role string,
 	logger *slog.Logger,
 ) (*IngestionLease, error) {

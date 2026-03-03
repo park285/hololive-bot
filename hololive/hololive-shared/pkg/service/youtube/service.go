@@ -24,10 +24,10 @@ import (
 )
 
 // Service: YouTube API와 상호작용하여 채널 및 영상 정보를 제공하는 서비스
-type Service struct {
+type serviceImpl struct {
 	service       *youtube.Service
 	scraper       *scraper.Client // HTML 스크래퍼 (quota 절약용)
-	cache         *cache.Service
+	cache         cache.Client
 	logger        *slog.Logger
 	quotaUsed     int
 	quotaMu       sync.Mutex
@@ -40,11 +40,11 @@ type Service struct {
 func NewYouTubeService(
 	ctx context.Context,
 	apiKey string,
-	cacheSvc *cache.Service,
+	cacheSvc cache.Client,
 	scraperProxyConfig scraper.ProxyConfig,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
-) (*Service, error) {
+) (Service, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("YouTube API key is required")
 	}
@@ -54,7 +54,7 @@ func NewYouTubeService(
 		return nil, fmt.Errorf("failed to create YouTube service: %w", err)
 	}
 
-	ys := &Service{
+	ys := &serviceImpl{
 		service:       service,
 		scraper:       scraper.NewClient(scraper.WithProxy(scraperProxyConfig), scraper.WithRateLimiter(sharedRL)),
 		cache:         cacheSvc,
@@ -76,7 +76,7 @@ func NewYouTubeService(
 }
 
 // SetScraperProxyEnabled: YouTube 서비스 내부 HTML 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
-func (ys *Service) SetScraperProxyEnabled(enabled bool) bool {
+func (ys *serviceImpl) SetScraperProxyEnabled(enabled bool) bool {
 	if ys == nil || ys.scraper == nil {
 		return false
 	}
@@ -84,7 +84,7 @@ func (ys *Service) SetScraperProxyEnabled(enabled bool) bool {
 }
 
 // ScraperProxyEnabled: YouTube 서비스 내부 HTML 스크래퍼의 프록시 활성 상태를 반환합니다.
-func (ys *Service) ScraperProxyEnabled() bool {
+func (ys *serviceImpl) ScraperProxyEnabled() bool {
 	if ys == nil || ys.scraper == nil {
 		return false
 	}
@@ -111,7 +111,7 @@ func getNextQuotaReset() time.Time {
 }
 
 // loadChannelNameMap: 캐시에서 멤버 정보를 읽어 channelID -> memberName 맵을 구성
-func (ys *Service) loadChannelNameMap(ctx context.Context) {
+func (ys *serviceImpl) loadChannelNameMap(ctx context.Context) {
 	if ys.cache == nil {
 		return
 	}
@@ -141,13 +141,13 @@ func (ys *Service) loadChannelNameMap(ctx context.Context) {
 }
 
 // getChannelName: channelID로 멤버 이름 조회 (없으면 빈 문자열)
-func (ys *Service) getChannelName(channelID string) string {
+func (ys *serviceImpl) getChannelName(channelID string) string {
 	ys.channelMu.RLock()
 	defer ys.channelMu.RUnlock()
 	return ys.channelToName[channelID]
 }
 
-func (ys *Service) checkQuota(cost int) error {
+func (ys *serviceImpl) checkQuota(cost int) error {
 	ys.quotaMu.Lock()
 	defer ys.quotaMu.Unlock()
 
@@ -171,7 +171,7 @@ func (ys *Service) checkQuota(cost int) error {
 	return nil
 }
 
-func (ys *Service) consumeQuota(cost int) {
+func (ys *serviceImpl) consumeQuota(cost int) {
 	ys.quotaMu.Lock()
 	defer ys.quotaMu.Unlock()
 
@@ -193,7 +193,7 @@ func (ys *Service) consumeQuota(cost int) {
 
 // GetUpcomingStreams: 지정된 채널들의 예정된 방송(라이브 예정) 목록을 조회합니다.
 // 스크래퍼를 우선 사용하고, 실패한 채널만 YouTube API로 폴백합니다.
-func (ys *Service) GetUpcomingStreams(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
+func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
 	if len(channelIDs) > constants.YouTubeConfig.MaxChannelsPerCall {
 		ys.logger.Warn("Too many channels requested, limiting to max",
 			slog.Int("requested", len(channelIDs)),
@@ -292,7 +292,7 @@ func (ys *Service) GetUpcomingStreams(ctx context.Context, channelIDs []string) 
 }
 
 // convertScrapedEvents: 스크래핑된 UpcomingEvent를 domain.Stream으로 변환
-func (ys *Service) convertScrapedEvents(events []*scraper.UpcomingEvent, channelID string) []*domain.Stream {
+func (ys *serviceImpl) convertScrapedEvents(events []*scraper.UpcomingEvent, channelID string) []*domain.Stream {
 	streams := make([]*domain.Stream, 0, len(events))
 
 	channelName := ys.getChannelName(channelID)
@@ -340,7 +340,7 @@ func (ys *Service) convertScrapedEvents(events []*scraper.UpcomingEvent, channel
 }
 
 // mapEventStatus: 스크래퍼 상태를 domain.StreamStatus로 변환
-func (ys *Service) mapEventStatus(status string) domain.StreamStatus {
+func (ys *serviceImpl) mapEventStatus(status string) domain.StreamStatus {
 	switch status {
 	case "LIVE":
 		return domain.StreamStatusLive
@@ -352,7 +352,7 @@ func (ys *Service) mapEventStatus(status string) domain.StreamStatus {
 }
 
 // fetchUpcomingFromAPI: YouTube API로 예정 방송 조회 (내부 폴백용)
-func (ys *Service) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) ([]*domain.Stream, int) {
+func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) ([]*domain.Stream, int) {
 	results := make([]*domain.Stream, 0, len(channelIDs))
 	var mu sync.Mutex
 
@@ -390,7 +390,7 @@ func (ys *Service) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string
 }
 
 // processUpcomingStreams: YouTube API 응답에서 예정된 방송 정보를 추출하고 가공한다.
-func (ys *Service) getChannelUpcomingStreams(ctx context.Context, channelID string) ([]*domain.Stream, error) {
+func (ys *serviceImpl) getChannelUpcomingStreams(ctx context.Context, channelID string) ([]*domain.Stream, error) {
 	call := ys.service.Search.List([]string{"snippet"}).
 		ChannelId(channelID).
 		Type("video").
@@ -476,7 +476,7 @@ func extractThumbnail(thumbnails *youtube.ThumbnailDetails) *string {
 }
 
 // GetQuotaStatus: 현재 API 할당량 사용량, 잔여량, 초기화 예정 시간을 반환합니다.
-func (ys *Service) GetQuotaStatus() (used int, remaining int, resetTime time.Time) {
+func (ys *serviceImpl) GetQuotaStatus() (used int, remaining int, resetTime time.Time) {
 	ys.quotaMu.Lock()
 	defer ys.quotaMu.Unlock()
 
@@ -488,7 +488,7 @@ func (ys *Service) GetQuotaStatus() (used int, remaining int, resetTime time.Tim
 }
 
 // IsQuotaAvailable: 지정된 채널 수만큼 조회할 수 있는 API 할당량이 남아있는지 확인합니다.
-func (ys *Service) IsQuotaAvailable(channelCount int) bool {
+func (ys *serviceImpl) IsQuotaAvailable(channelCount int) bool {
 	estimatedCost := channelCount * constants.YouTubeConfig.SearchQuotaCost
 	err := ys.checkQuota(estimatedCost)
 	return err == nil
@@ -510,7 +510,7 @@ func (e *QuotaExceededError) Error() string {
 // GetChannelStatistics: 지정된 채널들의 통계(구독자 수, 조회수 등)를 조회합니다.
 // 스크래퍼를 우선 사용하고, 실패한 채널만 YouTube API로 폴백합니다.
 // 이 방식으로 YouTube API quota를 절약합니다.
-func (ys *Service) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
+func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
 	if len(channelIDs) == 0 {
 		return make(map[string]*ChannelStats), nil
 	}
@@ -604,7 +604,7 @@ func (ys *Service) GetChannelStatistics(ctx context.Context, channelIDs []string
 }
 
 // getChannelStatsFromAPI: YouTube Data API를 사용하여 채널 통계 조회 (내부 폴백용)
-func (ys *Service) getChannelStatsFromAPI(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
+func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
 	if len(channelIDs) == 0 {
 		return make(map[string]*ChannelStats), nil
 	}
@@ -670,7 +670,7 @@ func (ys *Service) getChannelStatsFromAPI(ctx context.Context, channelIDs []stri
 
 // GetRecentVideos: 특정 채널의 최근 업로드된 비디오 목록을 조회합니다.
 // 스크래퍼를 우선 사용하고, 실패 시 YouTube API로 폴백합니다.
-func (ys *Service) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
+func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
 	// Phase 1: 스크래퍼로 우선 시도 (quota 0)
 	videos, err := ys.scraper.GetRecentVideos(ctx, channelID, int(maxResults))
 	if err == nil && len(videos) > 0 {
@@ -733,7 +733,7 @@ type ChannelStats struct {
 	Timestamp       time.Time
 }
 
-func (ys *Service) isRetryableError(err error) bool {
+func (ys *serviceImpl) isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -762,7 +762,7 @@ func (ys *Service) isRetryableError(err error) bool {
 	return true
 }
 
-func (ys *Service) withRetry(ctx context.Context, fn func(context.Context) error) error {
+func (ys *serviceImpl) withRetry(ctx context.Context, fn func(context.Context) error) error {
 	err := retry.WithRetry(ctx, retry.RetryOptions{
 		MaxAttempts: constants.RetryConfig.MaxAttempts,
 		BaseDelay:   constants.RetryConfig.BaseDelay,

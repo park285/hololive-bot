@@ -15,7 +15,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/errors"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -77,7 +76,7 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 
 	client, err := valkey.NewClient(opts)
 	if err != nil {
-		return nil, errors.NewCacheError("failed to create cache client", "init", "", err)
+		return nil, NewCacheError("failed to create cache client", "init", "", err)
 	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, constants.ValkeyConfig.ReadyTimeout)
@@ -86,7 +85,7 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 	// Ping 테스트
 	if err := client.Do(pingCtx, client.B().Ping().Build()).Error(); err != nil {
 		client.Close()
-		return nil, errors.NewCacheError("failed to connect to cache store", "ping", "", err)
+		return nil, NewCacheError("failed to connect to cache store", "ping", "", err)
 	}
 
 	logger.Info("Cache store connected",
@@ -110,19 +109,19 @@ func (c *Service) Get(ctx context.Context, key string, dest any) error {
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Cache get operation failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return errors.NewCacheError("get failed", "get", key, resp.Error())
+		return NewCacheError("get failed", "get", key, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
 		c.logger.Error("Cache value conversion failed", slog.String("key", key), slog.Any("error", err))
-		return errors.NewCacheError("conversion failed", "get", key, err)
+		return NewCacheError("conversion failed", "get", key, err)
 	}
 
 	if dest != nil {
 		if err := json.Unmarshal([]byte(value), dest); err != nil {
 			c.logger.Error("Cache value unmarshal failed", slog.String("key", key), slog.Any("error", err))
-			return errors.NewCacheError("unmarshal failed", "get", key, err)
+			return NewCacheError("unmarshal failed", "get", key, err)
 		}
 	}
 
@@ -138,12 +137,12 @@ func (c *Service) MGet(ctx context.Context, keys []string) (map[string]string, e
 	resp := c.client.Do(ctx, c.client.B().Mget().Key(keys...).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache mget failed", slog.Int("keys", len(keys)), slog.Any("error", resp.Error()))
-		return nil, errors.NewCacheError("mget failed", "mget", fmt.Sprintf("%d keys", len(keys)), resp.Error())
+		return nil, NewCacheError("mget failed", "mget", fmt.Sprintf("%d keys", len(keys)), resp.Error())
 	}
 
 	values, err := resp.AsStrSlice()
 	if err != nil {
-		return nil, errors.NewCacheError("mget conversion failed", "mget", "", err)
+		return nil, NewCacheError("mget conversion failed", "mget", "", err)
 	}
 
 	result := make(map[string]string, len(keys))
@@ -160,7 +159,7 @@ func (c *Service) MGet(ctx context.Context, keys []string) (map[string]string, e
 func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	jsonData, err := json.Marshal(value)
 	if err != nil {
-		return errors.NewCacheError("marshal failed", "set", key, err)
+		return NewCacheError("marshal failed", "set", key, err)
 	}
 
 	var cmd valkey.Completed
@@ -172,7 +171,7 @@ func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Durat
 
 	if err := c.client.Do(ctx, cmd).Error(); err != nil {
 		c.logger.Error("Cache set failed", slog.String("key", key), slog.Any("error", err))
-		return errors.NewCacheError("set failed", "set", key, err)
+		return NewCacheError("set failed", "set", key, err)
 	}
 
 	return nil
@@ -206,7 +205,7 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 	for _, resp := range c.client.DoMulti(ctx, cmds...) {
 		if resp.Error() != nil {
 			c.logger.Error("MSet command failed", slog.Any("error", resp.Error()))
-			return errors.NewCacheError("mset failed", "mset", "", resp.Error())
+			return NewCacheError("mset failed", "mset", "", resp.Error())
 		}
 	}
 
@@ -217,7 +216,7 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 func (c *Service) Del(ctx context.Context, key string) error {
 	if err := c.client.Do(ctx, c.client.B().Del().Key(key).Build()).Error(); err != nil {
 		c.logger.Error("Cache delete failed", slog.String("key", key), slog.Any("error", err))
-		return errors.NewCacheError("delete failed", "del", key, err)
+		return NewCacheError("delete failed", "del", key, err)
 	}
 	return nil
 }
@@ -231,12 +230,12 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 	resp := c.client.Do(ctx, c.client.B().Del().Key(keys...).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache delete many failed", slog.Int("count", len(keys)), slog.Any("error", resp.Error()))
-		return 0, errors.NewCacheError("delete many failed", "del", fmt.Sprintf("%d keys", len(keys)), resp.Error())
+		return 0, NewCacheError("delete many failed", "del", fmt.Sprintf("%d keys", len(keys)), resp.Error())
 	}
 
 	deleted, err := resp.AsInt64()
 	if err != nil {
-		return 0, errors.NewCacheError("delete many conversion failed", "del", "", err)
+		return 0, NewCacheError("delete many conversion failed", "del", "", err)
 	}
 
 	return deleted, nil
@@ -258,12 +257,12 @@ func (c *Service) ScanKeys(ctx context.Context, pattern string, batchSize int64)
 		resp := c.client.Do(ctx, cmd)
 		if resp.Error() != nil {
 			c.logger.Error("Cache scan failed", slog.String("pattern", pattern), slog.Any("error", resp.Error()))
-			return keys, errors.NewCacheError("scan failed", "scan", pattern, resp.Error())
+			return keys, NewCacheError("scan failed", "scan", pattern, resp.Error())
 		}
 
 		entry, err := resp.AsScanEntry()
 		if err != nil {
-			return keys, errors.NewCacheError("scan parse failed", "scan", pattern, err)
+			return keys, NewCacheError("scan parse failed", "scan", pattern, err)
 		}
 
 		keys = append(keys, entry.Elements...)
@@ -286,12 +285,12 @@ func (c *Service) SAdd(ctx context.Context, key string, members []string) (int64
 	resp := c.client.Do(ctx, c.client.B().Sadd().Key(key).Member(members...).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache sadd failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return 0, errors.NewCacheError("sadd failed", "sadd", key, resp.Error())
+		return 0, NewCacheError("sadd failed", "sadd", key, resp.Error())
 	}
 
 	added, err := resp.AsInt64()
 	if err != nil {
-		return 0, errors.NewCacheError("sadd conversion failed", "sadd", key, err)
+		return 0, NewCacheError("sadd conversion failed", "sadd", key, err)
 	}
 
 	return added, nil
@@ -306,12 +305,12 @@ func (c *Service) SRem(ctx context.Context, key string, members []string) (int64
 	resp := c.client.Do(ctx, c.client.B().Srem().Key(key).Member(members...).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache srem failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return 0, errors.NewCacheError("srem failed", "srem", key, resp.Error())
+		return 0, NewCacheError("srem failed", "srem", key, resp.Error())
 	}
 
 	removed, err := resp.AsInt64()
 	if err != nil {
-		return 0, errors.NewCacheError("srem conversion failed", "srem", key, err)
+		return 0, NewCacheError("srem conversion failed", "srem", key, err)
 	}
 
 	return removed, nil
@@ -322,12 +321,12 @@ func (c *Service) SMembers(ctx context.Context, key string) ([]string, error) {
 	resp := c.client.Do(ctx, c.client.B().Smembers().Key(key).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache smembers failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return []string{}, errors.NewCacheError("smembers failed", "smembers", key, resp.Error())
+		return []string{}, NewCacheError("smembers failed", "smembers", key, resp.Error())
 	}
 
 	members, err := resp.AsStrSlice()
 	if err != nil {
-		return []string{}, errors.NewCacheError("smembers conversion failed", "smembers", key, err)
+		return []string{}, NewCacheError("smembers conversion failed", "smembers", key, err)
 	}
 
 	return members, nil
@@ -338,12 +337,12 @@ func (c *Service) SIsMember(ctx context.Context, key, member string) (bool, erro
 	resp := c.client.Do(ctx, c.client.B().Sismember().Key(key).Member(member).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache sismember failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, errors.NewCacheError("sismember failed", "sismember", key, resp.Error())
+		return false, NewCacheError("sismember failed", "sismember", key, resp.Error())
 	}
 
 	exists, err := resp.AsBool()
 	if err != nil {
-		return false, errors.NewCacheError("sismember conversion failed", "sismember", key, err)
+		return false, NewCacheError("sismember conversion failed", "sismember", key, err)
 	}
 
 	return exists, nil
@@ -353,7 +352,7 @@ func (c *Service) SIsMember(ctx context.Context, key, member string) (bool, erro
 func (c *Service) HSet(ctx context.Context, key, field, value string) error {
 	if err := c.client.Do(ctx, c.client.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()).Error(); err != nil {
 		c.logger.Error("Cache hset failed", slog.String("key", key), slog.String("field", field), slog.Any("error", err))
-		return errors.NewCacheError("hset failed", "hset", key, err)
+		return NewCacheError("hset failed", "hset", key, err)
 	}
 	return nil
 }
@@ -371,7 +370,7 @@ func (c *Service) HMSet(ctx context.Context, key string, fields map[string]any) 
 
 	if err := c.client.Do(ctx, builder.Build()).Error(); err != nil {
 		c.logger.Error("Cache hmset failed", slog.String("key", key), slog.Int("fields", len(fields)), slog.Any("error", err))
-		return errors.NewCacheError("hmset failed", "hmset", key, err)
+		return NewCacheError("hmset failed", "hmset", key, err)
 	}
 	return nil
 }
@@ -384,12 +383,12 @@ func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Cache hash get failed", slog.String("key", key), slog.String("field", field), slog.Any("error", resp.Error()))
-		return "", errors.NewCacheError("hget failed", "hget", key, resp.Error())
+		return "", NewCacheError("hget failed", "hget", key, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
-		return "", errors.NewCacheError("hget conversion failed", "hget", key, err)
+		return "", NewCacheError("hget conversion failed", "hget", key, err)
 	}
 
 	return value, nil
@@ -403,7 +402,7 @@ func (c *Service) HDel(ctx context.Context, key string, fields ...string) error 
 	cmd := c.client.B().Hdel().Key(key).Field(fields...).Build()
 	if err := c.client.Do(ctx, cmd).Error(); err != nil {
 		c.logger.Error("Cache hdel failed", slog.String("key", key), slog.Int("fields", len(fields)), slog.Any("error", err))
-		return errors.NewCacheError("hdel failed", "hdel", key, err)
+		return NewCacheError("hdel failed", "hdel", key, err)
 	}
 	return nil
 }
@@ -413,12 +412,12 @@ func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, e
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(key).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache hgetall failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return map[string]string{}, errors.NewCacheError("hgetall failed", "hgetall", key, resp.Error())
+		return map[string]string{}, NewCacheError("hgetall failed", "hgetall", key, resp.Error())
 	}
 
 	values, err := resp.AsStrMap()
 	if err != nil {
-		return map[string]string{}, errors.NewCacheError("hgetall conversion failed", "hgetall", key, err)
+		return map[string]string{}, NewCacheError("hgetall conversion failed", "hgetall", key, err)
 	}
 
 	return values, nil
@@ -428,7 +427,7 @@ func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, e
 func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	if err := c.client.Do(ctx, c.client.B().Expire().Key(key).Seconds(int64(ttl.Seconds())).Build()).Error(); err != nil {
 		c.logger.Error("Cache expire failed", slog.String("key", key), slog.Any("error", err))
-		return errors.NewCacheError("expire failed", "expire", key, err)
+		return NewCacheError("expire failed", "expire", key, err)
 	}
 	return nil
 }
@@ -438,12 +437,12 @@ func (c *Service) Exists(ctx context.Context, key string) (bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Exists().Key(key).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Cache exists failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, errors.NewCacheError("exists failed", "exists", key, resp.Error())
+		return false, NewCacheError("exists failed", "exists", key, resp.Error())
 	}
 
 	count, err := resp.AsInt64()
 	if err != nil {
-		return false, errors.NewCacheError("exists conversion failed", "exists", key, err)
+		return false, NewCacheError("exists conversion failed", "exists", key, err)
 	}
 
 	return count > 0, nil
@@ -511,7 +510,7 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Cache setnx failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, errors.NewCacheError("setnx failed", "setnx", key, resp.Error())
+		return false, NewCacheError("setnx failed", "setnx", key, resp.Error())
 	}
 
 	return true, nil
@@ -550,12 +549,12 @@ func (c *Service) CompareAndDelete(ctx context.Context, key, expectedValue strin
 	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {
 		c.logger.Error("Cache compare-and-delete failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, errors.NewCacheError("compare-and-delete failed", "cas", key, resp.Error())
+		return false, NewCacheError("compare-and-delete failed", "cas", key, resp.Error())
 	}
 
 	result, err := resp.AsInt64()
 	if err != nil {
-		return false, errors.NewCacheError("compare-and-delete conversion failed", "cas", key, err)
+		return false, NewCacheError("compare-and-delete conversion failed", "cas", key, err)
 	}
 
 	return result == 1, nil
@@ -590,12 +589,12 @@ func (c *Service) CompareAndExpire(ctx context.Context, key, expectedValue strin
 	resp := c.client.Do(ctx, cmd)
 	if resp.Error() != nil {
 		c.logger.Error("Cache compare-and-expire failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return false, errors.NewCacheError("compare-and-expire failed", "cas-expire", key, resp.Error())
+		return false, NewCacheError("compare-and-expire failed", "cas-expire", key, resp.Error())
 	}
 
 	result, err := resp.AsInt64()
 	if err != nil {
-		return false, errors.NewCacheError("compare-and-expire conversion failed", "cas-expire", key, err)
+		return false, NewCacheError("compare-and-expire conversion failed", "cas-expire", key, err)
 	}
 
 	return result == 1, nil

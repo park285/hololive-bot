@@ -15,11 +15,11 @@ import (
 
 // mockDeliveryRepo: deliveryRepository mock 구현
 type mockDeliveryRepo struct {
-	fetchAndLockFn func(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error)
-	markSentFn     func(ctx context.Context, id int64) error
-	markFailedFn   func(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error
+	fetchAndLockFn  func(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	markSentFn      func(ctx context.Context, id int64) error
+	markFailedFn    func(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error
 	countByStatusFn func(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
-	cleanupFn      func(ctx context.Context, olderThan time.Duration) (int64, error)
+	cleanupFn       func(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
 func (m *mockDeliveryRepo) FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
