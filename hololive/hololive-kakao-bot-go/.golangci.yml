@@ -50,6 +50,9 @@ linters:
     - bidichk       # 유니코드 양방향 문자
     - gosec
     
+    # 로깅
+    - sloglint
+
     # 기타
     - durationcheck # time.Duration 사용
     - unconvert
@@ -75,10 +78,10 @@ linters:
         - fieldalignment
 
     gocyclo:
-      min-complexity: 20  # 엄격하게 적용 (현재 코드베이스 모두 통과)
+      min-complexity: 17  # 엄격하게 적용 (현재 코드베이스 모두 통과)
 
     gocognit:
-      min-complexity: 40  # 복잡한 함수 3개만 리팩토링 대상
+      min-complexity: 31  # 복잡한 함수 3개만 리팩토링 대상
 
     dupl:
       threshold: 200
@@ -118,8 +121,8 @@ linters:
         - emptyStringTest
 
     funlen:
-      lines: 100  # 적절한 함수 길이 제한
-      statements: 50
+      lines: 90  # 적절한 함수 길이 제한
+      statements: 45
 
     revive:
       rules:
@@ -159,17 +162,8 @@ linters:
           - gocyclo
           - errcheck
           - dupl
-          - gosec
           - funlen
         path: _test\.go
-
-      - linters:
-          - gosec
-        text: "G404:"
-
-      - linters:
-          - gosec
-        text: "G102:"
 
       - linters:
           - gosec
@@ -177,31 +171,11 @@ linters:
 
       - linters:
           - gosec
-        text: "G301:"  # 디렉토리 권한 0755는 일반적
+        text: "G117:"
 
       - linters:
           - gosec
-        text: "G302:"  # 로그 파일 권한 0644는 일반적
-
-      - linters:
-          - gosec
-        text: "G304:"  # 파일 경로는 설정/환경 변수에서 옴
-
-      - linters:
-          - gosec
-        text: "G104:"  # 특정 함수의 에러 무시는 의도적
-
-      - linters:
-          - gosec
-        text: "G117:"  # config 구조체 필드명 (APIKey, Password 등)은 의도적
-
-      - linters:
-          - gosec
-        text: "G704:"  # 내부 HTTP 클라이언트 URL은 config에서 주입
-
-      - linters:
-          - gosec
-        text: "G706:"  # cmd/ 테스트 도구의 로그 메시지
+        text: "G704:"
 
       - linters:
           - funlen

@@ -135,11 +135,13 @@ linters:
         cross-service-boundary:
           deny:
             - pkg: "github.com/kapu/hololive-admin"
-              desc: "llm-sched -> admin 교차 의존 금지"
+              desc: "dispatcher -> admin 교차 의존 금지"
             - pkg: "github.com/kapu/hololive-kakao-bot-go"
-              desc: "llm-sched -> kakao-bot 교차 의존 금지"
+              desc: "dispatcher -> kakao-bot 교차 의존 금지"
+            - pkg: "github.com/kapu/hololive-llm-sched"
+              desc: "dispatcher -> llm-sched 교차 의존 금지"
             - pkg: "github.com/kapu/hololive-stream-ingester"
-              desc: "llm-sched -> stream-ingester 교차 의존 금지"
+              desc: "dispatcher -> stream-ingester 교차 의존 금지"
 
     wrapcheck:
       extra-ignore-sigs:
@@ -147,6 +149,7 @@ linters:
         - google.golang.org/grpc/status.Errorf
       ignore-package-globs:
         - github.com/kapu/hololive-shared/*
+        - github.com/park285/llm-kakao-bots/shared-go/*
         - github.com/valkey-io/valkey-go
         - github.com/valkey-io/valkey-go/*
         - google.golang.org/grpc/status
@@ -157,6 +160,7 @@ linters:
       - linters:
           - contextcheck
         text: 'Non-inherited new context'
+
       - linters:
           - gocyclo
           - errcheck
@@ -191,28 +195,3 @@ issues:
   max-same-issues: 0
   uniq-by-line: true
   new: false
-
-formatters:
-  enable:
-    - gci
-    - gofmt
-    - goimports
-
-  settings:
-    gci:
-      sections:
-        - standard
-        - default
-        - prefix(github.com/kapu/hololive-llm-sched)
-        - prefix(github.com/kapu/hololive-shared)
-
-    goimports:
-      local-prefixes:
-        - github.com/kapu/hololive-llm-sched
-
-  exclusions:
-    paths:
-      - '.*\.pb\.go$'
-      - '.*_test\.go$'
-      - vendor
-      - proto

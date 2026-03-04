@@ -50,6 +50,9 @@ linters:
     - bidichk
     - gosec
 
+    # 로깅
+    - sloglint
+
     # 기타
     - durationcheck
     - unconvert
@@ -74,10 +77,10 @@ linters:
         - fieldalignment
 
     gocyclo:
-      min-complexity: 20
+      min-complexity: 17
 
     gocognit:
-      min-complexity: 40
+      min-complexity: 31
 
     dupl:
       threshold: 200
@@ -117,8 +120,8 @@ linters:
         - emptyStringTest
 
     funlen:
-      lines: 100
-      statements: 50
+      lines: 90
+      statements: 45
 
     revive:
       rules:
@@ -158,37 +161,12 @@ linters:
           - gocyclo
           - errcheck
           - dupl
-          - gosec
           - funlen
         path: _test\.go
 
       - linters:
           - gosec
-        text: "G404:"
-
-      - linters:
-          - gosec
-        text: "G102:"
-
-      - linters:
-          - gosec
         text: "G115:"
-
-      - linters:
-          - gosec
-        text: "G301:"
-
-      - linters:
-          - gosec
-        text: "G302:"
-
-      - linters:
-          - gosec
-        text: "G304:"
-
-      - linters:
-          - gosec
-        text: "G104:"
 
       - linters:
           - gosec
@@ -197,10 +175,6 @@ linters:
       - linters:
           - gosec
         text: "G704:"
-
-      - linters:
-          - gosec
-        text: "G706:"
 
       - linters:
           - funlen
