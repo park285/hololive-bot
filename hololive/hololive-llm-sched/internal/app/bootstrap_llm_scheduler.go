@@ -12,6 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
+	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
+	mescraper "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scraper"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -21,11 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-
-	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
-	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
-	mescraper "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scraper"
-	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
 )
 
 // LLMSchedulerRuntime: llm-scheduler 전용 런타임
@@ -431,6 +431,7 @@ func newLLMSchedulerConfigApplyFn(
 	executor := newMemberNewsRunNowExecutor(ctx, memberNewsScheduler, constants.RequestTimeout.BotAlarmCheck, logger)
 
 	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{
+		//nolint:contextcheck // handler signature is func(); executor captures and propagates parent ctx.
 		MemberNewsWeeklyNow: func() {
 			executor.Trigger()
 		},
