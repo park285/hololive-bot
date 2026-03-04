@@ -268,7 +268,7 @@ func buildBotServer(
 
 	if alarmCRUD != nil {
 		alarmAPI := alarmsvc.NewAPIHandler(alarmCRUD, logger)
-		alarmAPI.RegisterRoutes(botRouter.Group(""))
+		alarmAPI.RegisterInternalRoutes(botRouter.Group(""))
 	}
 
 	addr := ProvideAPIAddr(cfg)
