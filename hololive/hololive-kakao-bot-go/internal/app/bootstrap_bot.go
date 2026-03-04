@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -267,8 +268,13 @@ func buildBotServer(
 	}
 
 	if alarmCRUD != nil {
+		if strings.TrimSpace(cfg.Server.APIKey) == "" {
+			return nil, fmt.Errorf("build bot server: internal alarm API requires API_SECRET_KEY")
+		}
 		alarmAPI := alarmsvc.NewAPIHandler(alarmCRUD, logger)
-		alarmAPI.RegisterInternalRoutes(botRouter.Group(""))
+		internalAlarmGroup := botRouter.Group("")
+		internalAlarmGroup.Use(sharedserver.APIKeyAuthMiddleware(cfg.Server.APIKey))
+		alarmAPI.RegisterInternalRoutes(internalAlarmGroup)
 	}
 
 	addr := ProvideAPIAddr(cfg)

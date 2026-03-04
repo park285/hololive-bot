@@ -1,7 +1,7 @@
 # Hololive Bot 전체 모듈 분할화 실행 계획
 
 > 작성일: 2026-03-02 | 갱신: 2026-03-03 (Kickoff 반영, Phase 0~6 확정)
-> 범위: `/home/kapu/gemini/hololive-bot` 전체 (Go 6 모듈 + Rust 19 crates)
+> 범위: `/home/kapu/gemini/hololive-bot` 전체 (Go 6 모듈 + Rust 14 crates, Phase 0 완료 후)
 > 전략: Incremental Strangler (빅뱅 금지, Phase별 독립 PR)
 
 ---

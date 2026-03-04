@@ -276,6 +276,32 @@ func TestClient_ClearRoomAlarms(t *testing.T) {
 	}
 }
 
+func TestClient_AddAlarm_WithAPIKeyHeader(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/alarm/add", func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.Header.Get("X-API-Key"), "secret-key"; got != want {
+			t.Fatalf("X-API-Key = %q, want %q", got, want)
+		}
+		writeJSON(w, http.StatusOK, boolResp{Result: true})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := NewClientWithAPIKey(srv.URL, "secret-key", nil)
+
+	got, err := client.AddAlarm(context.Background(), domain.AddAlarmRequest{
+		RoomID:    "room1",
+		UserID:    "user1",
+		ChannelID: "ch1",
+	})
+	if err != nil {
+		t.Fatalf("AddAlarm() error = %v", err)
+	}
+	if !got {
+		t.Fatalf("AddAlarm() result = %v, want true", got)
+	}
+}
+
 func TestClient_GetNextStreamInfo(t *testing.T) {
 	now := time.Now().Truncate(time.Second)
 	nowStr := now.Format(time.RFC3339)

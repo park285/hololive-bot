@@ -20,7 +20,10 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-const alarmServiceCloseTimeout = 3 * time.Second
+const (
+	alarmServiceCloseTimeout = 3 * time.Second
+	alarmPersistTaskTimeout  = alarmServiceCloseTimeout
+)
 
 // alarmServiceCloseOnce: 생성된 AlarmService 인스턴스 레지스트리 (CloseAllAlarmServices 용)
 var alarmServiceCloseOnce sync.Map // map[*AlarmService]struct{}

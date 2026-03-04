@@ -54,25 +54,25 @@
 서비스별 엔트리포인트는 별도 모듈로 분리되었습니다.
 
 ```
-llm/
+hololive/
 ├── hololive-kakao-bot-go/       # bot 전용
 │   ├── cmd/bot
 │   ├── cmd/tools
 │   └── internal/{app,bot,command,server,service/{acl,activity,auth,system}}
-├── hololive-alarm/              # alarm-dispatcher
 ├── hololive-admin/              # admin-api
 ├── hololive-llm-sched/          # llm-scheduler
 ├── hololive-stream-ingester/    # stream-ingester
-└── hololive-shared/             # 공통 domain/service/providers/server
+├── hololive-shared/             # 공통 domain/service/providers/server
+└── hololive-rs/                 # Rust (scraper, alarm, dispatcher)
 ```
 
-### 기존 경로 → 신규 경로
+### 마이그레이션 이력 (Phase 3, 완료)
 
-- `hololive-kakao-bot-go/cmd/alarm-dispatcher` → `hololive-alarm/cmd/alarm-dispatcher`
-- `hololive-kakao-bot-go/cmd/admin-api` → `hololive-admin/cmd/admin-api`
-- `hololive-kakao-bot-go/cmd/llm-scheduler` → `hololive-llm-sched/cmd/llm-scheduler`
-- `hololive-kakao-bot-go/cmd/stream-ingester` → `hololive-stream-ingester/cmd/stream-ingester`
-- `hololive-kakao-bot-go/Dockerfile.admin-api` 등 서비스별 Dockerfile → 각 모듈 루트 `Dockerfile`
+- `cmd/admin-api` → `hololive-admin/cmd/admin-api`
+- `cmd/llm-scheduler` → `hololive-llm-sched/cmd/llm-scheduler`
+- `cmd/stream-ingester` → `hololive-stream-ingester/cmd/stream-ingester`
+- `cmd/alarm-dispatcher` → `hololive-alarm/` → Rust dispatcher로 대체 후 Go 모듈 완전 제거 (M6, 2026-03-02)
+- 서비스별 Dockerfile → 각 모듈 루트 `Dockerfile`
 
 ## 📂 (레거시) 단일 모듈 구조 스냅샷
 

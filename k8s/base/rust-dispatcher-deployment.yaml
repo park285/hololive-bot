@@ -1,6 +1,5 @@
-# Rust dispatcher: alarm:dispatch:queue 소비 → Iris h2c 발송
-# cutover 전까지 비활성 — kustomization.yaml에서 주석 해제 시 활성화
-# Go alarm-dispatcher와 동시 운영 금지 (큐 소비 경합)
+# Rust dispatcher: alarm:dispatch:queue BRPOP → Iris h2c 발송
+# Cutover 완료 (2026-03-02), Go alarm-dispatcher 완전 제거됨
 apiVersion: apps/v1
 kind: Deployment
 metadata:

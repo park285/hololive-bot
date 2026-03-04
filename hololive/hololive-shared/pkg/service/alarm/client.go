@@ -19,6 +19,7 @@ import (
 // Client: alarm-dispatcher HTTP 클라이언트 (domain.AlarmCRUD 구현)
 type Client struct {
 	baseURL    string
+	apiKey     string
 	httpClient *http.Client
 	logger     *slog.Logger
 
@@ -31,12 +32,18 @@ var _ domain.AlarmCRUD = (*Client)(nil)
 
 // NewClient: alarm-dispatcher 클라이언트를 생성합니다.
 func NewClient(baseURL string, logger *slog.Logger) *Client {
+	return NewClientWithAPIKey(baseURL, "", logger)
+}
+
+// NewClientWithAPIKey: alarm-dispatcher 클라이언트를 생성합니다. apiKey가 있으면 X-API-Key 헤더를 포함합니다.
+func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Client{
 		baseURL: baseURL,
+		apiKey:  strings.TrimSpace(apiKey),
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -307,6 +314,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
