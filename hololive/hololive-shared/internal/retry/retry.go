@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/ctxutil"
+	"github.com/kapu/hololive-shared/internal/ctxutil"
 )
 
 // RetryOptions: 재시도 로직의 설정 옵션

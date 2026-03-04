@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
+	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/joho/godotenv"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 
+	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 

@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/retry"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 
+	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"

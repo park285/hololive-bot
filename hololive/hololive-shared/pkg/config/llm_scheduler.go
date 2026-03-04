@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/internal/envutil"
 )
 
 // LLMSchedulerConfig: llm-scheduler 바이너리 전용 설정

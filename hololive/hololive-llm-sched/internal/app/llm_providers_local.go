@@ -1,10 +1,11 @@
-package providers
+package app
 
 import (
 	"log/slog"
 
+	"github.com/kapu/hololive-llm-sched/internal/llm"
+
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/llm"
 )
 
 // ProvideMajorEventLLMClient - MajorEvent 전용 LLM 클라이언트 생성 (비활성 시 nil)

@@ -99,7 +99,7 @@ func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresCo
 	postgresService := providers.ProvidePostgresService(databaseResources)
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 
-	memberCache, err := providers.ProvideMemberCacheWithoutValkey(ctx, memberRepository, logger)
+	memberCache, err := ProvideMemberCacheWithoutValkey(ctx, memberRepository, logger)
 	if err != nil {
 		cleanupDB()
 		return nil, nil, fmt.Errorf("provide member cache without valkey: %w", err)
@@ -119,12 +119,12 @@ func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresCo
 
 // InitializeFetchProfilesRuntime - cmd/tools/fetch_profiles 전용
 func InitializeFetchProfilesRuntime(_ context.Context) (*FetchProfilesRuntime, func(), error) {
-	logger, cleanupLogger, err := providers.ProvideFetchProfilesLogger()
+	logger, cleanupLogger, err := ProvideFetchProfilesLogger()
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide fetch profiles logger: %w", err)
 	}
 
-	httpClient := providers.ProvideFetchProfilesHTTPClient()
+	httpClient := ProvideFetchProfilesHTTPClient()
 
 	runtime := &FetchProfilesRuntime{
 		Logger:     logger,

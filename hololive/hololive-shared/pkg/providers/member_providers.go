@@ -55,15 +55,6 @@ func ProvideMemberCache(
 	return memberCache, nil
 }
 
-// ProvideMemberCacheWithoutValkey - Valkey 없이 멤버 캐시만 구성
-func ProvideMemberCacheWithoutValkey(
-	ctx context.Context,
-	repo *member.Repository,
-	logger *slog.Logger,
-) (*member.Cache, error) {
-	return buildMemberCache(ctx, repo, nil, logger)
-}
-
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성
 func ProvideMemberServiceAdapter(memberCache *member.Cache, logger *slog.Logger) member.DataProvider {
 	return member.NewMemberServiceAdapter(memberCache, logger)

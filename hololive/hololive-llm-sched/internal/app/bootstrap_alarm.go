@@ -13,7 +13,6 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -30,9 +29,9 @@ func initMemberNewsService(
 	logger *slog.Logger,
 ) *membernews.Service {
 	repo := membernews.NewRepository(postgres, cacheSvc, logger)
-	llmClient := providers.ProvideMemberNewsLLMClient(cliproxy, llmCfg, logger)
-	reviewer := providers.ProvideMemberNewsReviewerClient(cliproxy, llmCfg, logger)
-	adjudicator := providers.ProvideMemberNewsAdjudicatorClient(cliproxy, llmCfg, logger)
+	llmClient := ProvideMemberNewsLLMClient(cliproxy, llmCfg, logger)
+	reviewer := ProvideMemberNewsReviewerClient(cliproxy, llmCfg, logger)
+	adjudicator := ProvideMemberNewsAdjudicatorClient(cliproxy, llmCfg, logger)
 
 	searcher := provideExaSearcher(exaCfg, logger)
 
