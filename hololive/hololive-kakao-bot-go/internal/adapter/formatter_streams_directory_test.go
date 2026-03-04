@@ -1,0 +1,170 @@
+package adapter
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/util"
+)
+
+func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
+	t.Parallel()
+
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdLiveStreams:     "라이브 목록\n{{range .Streams}}{{.ChannelName}}|{{.Title}}|{{.URL}}|{{.ViewerCount}}\n{{end}}",
+		domain.TemplateKeyCmdUpcomingStreams: "예정 목록\n{{range .Streams}}{{.ChannelName}}|{{.TimeInfo}}|{{.URL}}\n{{end}}",
+		domain.TemplateKeyCmdChannelSchedule: "채널 일정\n{{range .Streams}}{{if .IsLive}}LIVE{{else}}{{.TimeInfo}}{{end}}|{{.Title}}|{{.URL}}\n{{end}}",
+	})
+	formatter := NewResponseFormatter("!", renderer)
+
+	orgHololive := "Hololive"
+	future := time.Now().Add(2 * time.Hour)
+	viewer := 1234
+	longTitle := strings.Repeat("가", constants.StringLimits.StreamTitle+20)
+	streams := []*domain.Stream{
+		{
+			ID:             "abc123",
+			Title:          longTitle,
+			ChannelName:    "사쿠라 미코",
+			StartScheduled: &future,
+			ViewerCount:    &viewer,
+			Channel:        &domain.Channel{Name: "사쿠라 미코", Org: &orgHololive},
+			Status:         domain.StreamStatusUpcoming,
+		},
+	}
+
+	live := formatter.FormatLiveStreams(context.Background(), streams)
+	assert.Contains(t, live, "라이브 목록")
+	assert.Contains(t, live, "[Holo] 사쿠라 미코")
+	assert.Contains(t, live, "https://youtube.com/watch?v=abc123")
+	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(live, util.KakaoZeroWidthSpace))
+
+	upcoming := formatter.UpcomingStreams(context.Background(), streams, 12)
+	assert.Contains(t, upcoming, "예정 목록")
+	assert.Contains(t, upcoming, "https://youtube.com/watch?v=abc123")
+	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(upcoming, util.KakaoZeroWidthSpace))
+
+	channel := &domain.Channel{Name: "사쿠라 미코"}
+	schedule := formatter.ChannelSchedule(context.Background(), channel, streams, 7)
+	assert.Contains(t, schedule, "채널 일정")
+	assert.Contains(t, schedule, "https://youtube.com/watch?v=abc123")
+	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(schedule, util.KakaoZeroWidthSpace))
+
+	emptyLive := formatter.FormatLiveStreams(context.Background(), nil)
+	assert.Equal(t, "라이브 목록", emptyLive)
+
+	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
+	errorFormatter := NewResponseFormatter("!", errorRenderer)
+	assert.Equal(t, ErrorMessage(ErrDisplayLiveStreamsFailed), errorFormatter.FormatLiveStreams(context.Background(), streams))
+	assert.Equal(t, ErrorMessage(ErrDisplayUpcomingFailed), errorFormatter.UpcomingStreams(context.Background(), streams, 12))
+	assert.Equal(t, ErrorMessage(ErrDisplayScheduleFailed), errorFormatter.ChannelSchedule(context.Background(), channel, streams, 7))
+}
+
+func TestStreamHelpers(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewResponseFormatter("!", nil)
+
+	t.Run("truncate title", func(t *testing.T) {
+		t.Parallel()
+		input := strings.Repeat("A", constants.StringLimits.StreamTitle+30)
+		got := formatter.truncateTitle(input)
+		assert.LessOrEqual(t, len([]rune(got)), constants.StringLimits.StreamTitle+3)
+	})
+
+	t.Run("streamTimeInfo branches", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, MsgTimeUnknown, formatter.streamTimeInfo(nil))
+		assert.Equal(t, MsgTimeUnknown, formatter.streamTimeInfo(&domain.Stream{}))
+
+		futureDays := time.Now().Add(50 * time.Hour)
+		assert.Contains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &futureDays}), "일 후")
+
+		futureHours := time.Now().Add(3*time.Hour + 10*time.Minute)
+		assert.Contains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &futureHours}), "시간")
+
+		futureMinutes := time.Now().Add(20 * time.Minute)
+		assert.Contains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &futureMinutes}), "분 후")
+
+		past := time.Now().Add(-10 * time.Minute)
+		assert.NotContains(t, formatter.streamTimeInfo(&domain.Stream{StartScheduled: &past}), "후")
+	})
+
+	t.Run("formatChannelName", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "", formatter.formatChannelName(nil))
+
+		org := "Nijisanji"
+		stream := &domain.Stream{ChannelName: "쿠제 혼마", Channel: &domain.Channel{Org: &org}}
+		assert.Equal(t, "[니지산지] 쿠제 혼마", formatter.formatChannelName(stream))
+
+		unknownOrg := "NewOrg"
+		stream = &domain.Stream{ChannelName: "테스트", Channel: &domain.Channel{Org: &unknownOrg}}
+		assert.Equal(t, "[NewOrg] 테스트", formatter.formatChannelName(stream))
+
+		stream = &domain.Stream{ChannelName: "채널명"}
+		assert.Equal(t, "채널명", formatter.formatChannelName(stream))
+	})
+
+	assert.Equal(t, "미코은(는) 현재 방송 중이 아닙니다.", formatter.FormatMemberNotLive("미코"))
+	assert.Equal(t, "\n\n외 3개의 방송이 있습니다.", formatter.FormatLiveOverflowCount(3))
+	assert.Equal(t, "미코은(는) 12시간 이내 예정된 방송이 없습니다.", formatter.FormatMemberNoUpcoming("미코", 12))
+	assert.Equal(t, "\n\n외 4개의 방송이 예정되어 있습니다.", formatter.FormatUpcomingOverflowCount(4))
+}
+
+func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
+	t.Parallel()
+
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+		domain.TemplateKeyCmdMemberDirectory: "멤버 목록\n{{range .Groups}}{{.GroupName}}:{{range .Members}}{{.Primary}}{{if .ShowBoth}}({{.Secondary}}){{end}},{{end}}\n{{end}}",
+	})
+	formatter := NewResponseFormatter("!", renderer)
+
+	groups := []MemberDirectoryGroup{
+		{
+			GroupName: "  JP 1기생  ",
+			Members: []MemberDirectoryEntry{
+				{PrimaryName: "사쿠라 미코", SecondaryName: "Sakura Miko"},
+				{PrimaryName: "  ", SecondaryName: ""},
+			},
+		},
+		{
+			GroupName: "",
+			Members: []MemberDirectoryEntry{
+				{PrimaryName: "fubuki", SecondaryName: "FUBUKI"}, // ShowBoth false (equal fold)
+			},
+		},
+	}
+
+	prepared := prepareMemberDirectoryGroups(groups)
+	require.Len(t, prepared, 2)
+	assert.Equal(t, "JP 1기생", prepared[0].GroupName)
+	assert.Equal(t, "기타", prepared[1].GroupName)
+	require.Len(t, prepared[0].Members, 1)
+	assert.True(t, prepared[0].Members[0].ShowBoth)
+	require.Len(t, prepared[1].Members, 1)
+	assert.False(t, prepared[1].Members[0].ShowBoth)
+
+	message := formatter.MemberDirectory(context.Background(), groups, 0)
+	assert.Contains(t, message, "멤버 목록")
+	assert.Contains(t, message, "JP 1기생")
+	assert.Contains(t, message, "사쿠라 미코(Sakura Miko)")
+	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(message, util.KakaoZeroWidthSpace))
+
+	emptyPrepared := prepareMemberDirectoryGroups(nil)
+	assert.Nil(t, emptyPrepared)
+
+	emptyMessage := formatter.MemberDirectory(context.Background(), nil, 0)
+	assert.Equal(t, "멤버 목록", emptyMessage)
+
+	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
+	errorFormatter := NewResponseFormatter("!", errorRenderer)
+	assert.Equal(t, ErrorMessage(ErrDisplayMemberListFailed), errorFormatter.MemberDirectory(context.Background(), groups, 1))
+}
