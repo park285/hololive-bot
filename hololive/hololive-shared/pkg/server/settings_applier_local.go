@@ -34,78 +34,82 @@ func NewLocalSettingsApplier(
 }
 
 // ApplyScraperProxy: YouTube/Holodex/스케줄러 프록시 설정을 직접 적용합니다.
-func (a *localSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) map[string]any {
-	runtime := map[string]any{
-		"requested": enabled,
+func (a *localSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) ScraperProxyApplyResult {
+	runtime := ScraperProxyApplyResult{
+		Requested: enabled,
 	}
 
 	if a.youtube != nil {
 		applied := a.youtube.SetScraperProxyEnabled(enabled)
-		runtime["youtube_applied"] = applied
-		runtime["youtube_enabled"] = a.youtube.ScraperProxyEnabled()
+		youtubeEnabled := a.youtube.ScraperProxyEnabled()
+		runtime.YoutubeApplied = &applied
+		runtime.YoutubeEnabled = &youtubeEnabled
 	}
 	if a.holodex != nil {
 		applied := a.holodex.SetScraperProxyEnabled(enabled)
-		runtime["holodex_applied"] = applied
-		runtime["holodex_enabled"] = a.holodex.ScraperProxyEnabled()
+		holodexEnabled := a.holodex.ScraperProxyEnabled()
+		runtime.HolodexApplied = &applied
+		runtime.HolodexEnabled = &holodexEnabled
 	}
 	if a.scraperProxyToggler != nil {
 		applied := a.scraperProxyToggler.SetProxyEnabled(enabled)
 		schedulerEnabled, known := a.scraperProxyToggler.ProxyEnabled()
-		runtime["scheduler_pollers_applied"] = applied
-		runtime["scheduler_enabled"] = schedulerEnabled
-		runtime["scheduler_known"] = known
+		runtime.SchedulerPollersApplied = &applied
+		runtime.SchedulerEnabled = &schedulerEnabled
+		runtime.SchedulerKnown = &known
 	}
 
 	return runtime
 }
 
 // ApplyAlarmAdvanceMinutes: 알람 사전 알림 시간을 직접 적용합니다.
-func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) map[string]any {
-	runtime := map[string]any{
-		"alarm_requested_advance_minutes": minutes,
+func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) AlarmAdvanceMinutesApplyResult {
+	runtime := AlarmAdvanceMinutesApplyResult{
+		AlarmRequestedAdvanceMinutes: minutes,
 	}
 
 	if a.alarm == nil {
-		runtime["alarm_applied"] = false
-		runtime["alarm_reason"] = "alarm service not configured"
+		runtime.AlarmApplied = false
+		runtime.AlarmReason = "alarm service not configured"
 		return runtime
 	}
 
 	targetMinutes := a.alarm.UpdateAlarmAdvanceMinutes(minutes)
-	runtime["alarm_applied"] = true
-	runtime["alarm_target_minutes"] = targetMinutes
+	runtime.AlarmApplied = true
+	runtime.AlarmTargetMinutes = targetMinutes
 
 	return runtime
 }
 
 // ApplyMemberNewsWeeklyRunNow: bot 프로세스에서는 미지원(LLM scheduler 전용) 설정입니다.
-func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) map[string]any {
-	return map[string]any{
-		"applied": false,
-		"reason":  "llm scheduler settings are not available in local mode",
+func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) MemberNewsWeeklyRunNowResult {
+	return MemberNewsWeeklyRunNowResult{
+		Applied: false,
+		Reason:  "llm scheduler settings are not available in local mode",
 	}
 }
 
 // ScraperProxyRuntimeState: 현재 프록시 런타임 상태를 반환합니다.
-func (a *localSettingsApplier) ScraperProxyRuntimeState(requested bool) map[string]any {
-	runtime := map[string]any{
-		"requested": requested,
+func (a *localSettingsApplier) ScraperProxyRuntimeState(requested bool) ScraperProxyRuntimeStateResult {
+	runtime := ScraperProxyRuntimeStateResult{
+		Requested: requested,
 	}
 
 	if a.youtube != nil {
-		runtime["youtube_enabled"] = a.youtube.ScraperProxyEnabled()
+		youtubeEnabled := a.youtube.ScraperProxyEnabled()
+		runtime.YoutubeEnabled = &youtubeEnabled
 	}
 	if a.holodex != nil {
-		runtime["holodex_enabled"] = a.holodex.ScraperProxyEnabled()
+		holodexEnabled := a.holodex.ScraperProxyEnabled()
+		runtime.HolodexEnabled = &holodexEnabled
 	}
 	if a.scraperProxyToggler != nil {
 		schedulerEnabled, known := a.scraperProxyToggler.ProxyEnabled()
-		runtime["scheduler_enabled"] = schedulerEnabled
-		runtime["scheduler_known"] = known
+		runtime.SchedulerEnabled = &schedulerEnabled
+		runtime.SchedulerKnown = &known
 	}
 	if a.alarm != nil {
-		runtime["alarm_target_minutes"] = a.alarm.GetTargetMinutes()
+		runtime.AlarmTargetMinutes = a.alarm.GetTargetMinutes()
 	}
 
 	return runtime

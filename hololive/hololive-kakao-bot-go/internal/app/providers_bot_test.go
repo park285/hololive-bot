@@ -93,33 +93,45 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	memberNewsSvc := &stubMemberNewsService{}
 	workerPool := &workerpool.Pool{}
 
-	deps := ProvideBotDependencies(
-		"bot-self",
-		"https://iris.internal",
-		config.NotificationConfig{},
-		logger,
-		nil, // irisClient
-		messageAdapter,
-		formatter,
-		cacheSvc,
-		postgres,
-		memberRepo,
-		memberCache,
-		holodexSvc,
-		chzzkClient,
-		twitchClient,
-		profiles,
-		nil, // alarmSvc
-		memberMatcher,
-		nil, // membersData
-		ytStack,
-		activityLogger,
-		settingsSvc,
-		aclSvc,
-		majorEventRepo,
-		memberNewsSvc,
-		workerPool,
-	)
+	deps := ProvideBotDependencies(botDependencyModules{
+		core: botCoreModule{
+			botSelfUser:  "bot-self",
+			irisBaseURL:  "https://iris.internal",
+			notification: config.NotificationConfig{},
+			logger:       logger,
+		},
+		messaging: botMessagingModule{
+			client:         nil,
+			messageAdapter: messageAdapter,
+			formatter:      formatter,
+		},
+		data: botDataModule{
+			cacheSvc:    cacheSvc,
+			postgres:    postgres,
+			memberRepo:  memberRepo,
+			memberCache: memberCache,
+			profiles:    profiles,
+			membersData: nil,
+		},
+		stream: botStreamModule{
+			holodexSvc:   holodexSvc,
+			chzzkClient:  chzzkClient,
+			twitchClient: twitchClient,
+			alarmSvc:     nil,
+			memberMatch:  memberMatcher,
+			ytStack:      ytStack,
+		},
+		support: botSupportModule{
+			activityLogger: activityLogger,
+			settingsSvc:    settingsSvc,
+			aclSvc:         aclSvc,
+			workerPool:     workerPool,
+		},
+		feature: botFeatureModule{
+			majorEventRepo: majorEventRepo,
+			memberNewsSvc:  memberNewsSvc,
+		},
+	})
 
 	if deps == nil {
 		t.Fatal("ProvideBotDependencies() returned nil")
@@ -153,5 +165,27 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	}
 	if deps.WorkerPool != workerPool {
 		t.Fatal("worker pool wiring mismatch")
+	}
+}
+
+func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
+	t.Parallel()
+
+	deps := ProvideBotDependencies(botDependencyModules{
+		stream: botStreamModule{
+			ytStack: nil,
+		},
+	})
+	if deps == nil {
+		t.Fatal("ProvideBotDependencies() returned nil")
+	}
+	if deps.Service != nil {
+		t.Fatal("Service must be nil when ytStack is nil")
+	}
+	if deps.Scheduler != nil {
+		t.Fatal("Scheduler must be nil when ytStack is nil")
+	}
+	if deps.YouTubeStatsRepo != nil {
+		t.Fatal("YouTubeStatsRepo must be nil when ytStack is nil")
 	}
 }

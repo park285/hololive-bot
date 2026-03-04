@@ -9,11 +9,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	alarmsvc "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
@@ -64,57 +66,59 @@ func newBotSettingsApplier(
 	}
 }
 
-func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool) map[string]any {
+func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool) sharedserver.ScraperProxyApplyResult {
 	if a.base == nil {
-		return map[string]any{
-			"requested": enabled,
-			"applied":   false,
-			"reason":    "settings applier not configured",
+		applied := false
+		return sharedserver.ScraperProxyApplyResult{
+			Requested: enabled,
+			Applied:   &applied,
+			Reason:    "settings applier not configured",
 		}
 	}
 	return a.base.ApplyScraperProxy(ctx, enabled)
 }
 
-func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) map[string]any {
+func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) sharedserver.AlarmAdvanceMinutesApplyResult {
 	if a.base == nil {
-		return map[string]any{
-			"alarm_requested_advance_minutes": minutes,
-			"alarm_applied":                   false,
-			"alarm_reason":                    "settings applier not configured",
+		return sharedserver.AlarmAdvanceMinutesApplyResult{
+			AlarmRequestedAdvanceMinutes: minutes,
+			AlarmApplied:                 false,
+			AlarmReason:                  "settings applier not configured",
 		}
 	}
 	return a.base.ApplyAlarmAdvanceMinutes(ctx, minutes)
 }
 
-func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) map[string]any {
+func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sharedserver.MemberNewsWeeklyRunNowResult {
 	if a.memberNewsRunNow == nil {
-		return map[string]any{
-			"applied": false,
-			"reason":  "member news trigger is not configured",
+		return sharedserver.MemberNewsWeeklyRunNowResult{
+			Applied: false,
+			Reason:  "member news trigger is not configured",
 		}
 	}
 
 	if err := a.memberNewsRunNow.SendMemberNewsWeekly(ctx); err != nil {
 		a.logger.Warn("Failed to trigger member news weekly run-now", slog.Any("error", err))
-		return map[string]any{
-			"applied": false,
-			"reason":  "member news trigger failed",
-			"error":   err.Error(),
+		return sharedserver.MemberNewsWeeklyRunNowResult{
+			Applied: false,
+			Reason:  "member news trigger failed",
+			Error:   err.Error(),
 		}
 	}
 
-	return map[string]any{
-		"applied": true,
-		"source":  "member_news_trigger",
+	return sharedserver.MemberNewsWeeklyRunNowResult{
+		Applied: true,
+		Source:  "member_news_trigger",
 	}
 }
 
-func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) map[string]any {
+func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedserver.ScraperProxyRuntimeStateResult {
 	if a.base == nil {
-		return map[string]any{
-			"requested": requested,
-			"known":     false,
-			"reason":    "settings applier not configured",
+		known := false
+		return sharedserver.ScraperProxyRuntimeStateResult{
+			Requested: requested,
+			Known:     &known,
+			Reason:    "settings applier not configured",
 		}
 	}
 	return a.base.ScraperProxyRuntimeState(requested)
@@ -149,30 +153,18 @@ func buildBotAdminServerDependencies(
 		return nil, fmt.Errorf("build bot admin server dependencies: create auth service: %w", err)
 	}
 
-	settingsApplier := newBotSettingsApplier(
-		sharedserver.NewLocalSettingsApplier(
-			deps.Service,
-			infra.holodexService,
-			scraperScheduler,
-			infra.alarmCRUD,
-		),
-		nil,
-		logger,
+	localSettingsApplier := sharedserver.NewLocalSettingsApplier(
+		deps.Service,
+		infra.holodexService,
+		scraperScheduler,
+		infra.alarmCRUD,
 	)
+	settingsApplier := newBotSettingsApplier(localSettingsApplier, nil, logger)
 
 	var majorEventTriggerClient *triggerclient.Client
 	if strings.TrimSpace(cfg.LLMSchedulerURL) != "" {
 		majorEventTriggerClient = triggerclient.NewClient(cfg.LLMSchedulerURL, cfg.Server.APIKey, logger)
-		settingsApplier = newBotSettingsApplier(
-			sharedserver.NewLocalSettingsApplier(
-				deps.Service,
-				infra.holodexService,
-				scraperScheduler,
-				infra.alarmCRUD,
-			),
-			majorEventTriggerClient,
-			logger,
-		)
+		settingsApplier = newBotSettingsApplier(localSettingsApplier, majorEventTriggerClient, logger)
 	} else {
 		logger.Warn("LLM scheduler URL not configured; trigger routes and membernews run-now are disabled",
 			slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"),
@@ -297,16 +289,17 @@ func buildYouTubeComponents(scraperCfg config.ScraperConfig, deps *bot.Dependenc
 		Enabled: scraperCfg.ProxyEnabled,
 		URL:     scraperCfg.ProxyURL,
 	}
-
-	scraperScheduler := providers.ProvideScraperScheduler(
+	pollerRegistrations := buildBotChannelPollerRegistrations(
 		deps.Postgres,
-		deps.MembersData,
-		providers.DefaultPollerIntervals(),
-		[]string{},
 		scraperProxyConfig,
 		infra.sharedRL,
 		deps.Cache,
+	)
+
+	scraperScheduler := providers.ProvideScraperScheduler(
+		deps.MembersData,
 		logger,
+		providers.WithChannelPollerRegistrations(pollerRegistrations),
 	)
 
 	outboxDispatcher := outbox.NewDispatcher(
@@ -382,7 +375,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		}
 	}
 
-	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, adminServerDeps, logger)
+	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, adminServerDeps, infra.deps.Cache, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -427,10 +420,8 @@ func buildBotConfigSubscriber(
 ) *configsub.Subscriber {
 	applyFn := func(update configsub.ConfigUpdate) {
 		switch update.Type {
-		case "scraper_proxy":
-			var payload struct {
-				Enabled bool `json:"enabled"`
-			}
+		case contractssettings.UpdateTypeScraperProxy:
+			var payload contractssettings.ScraperProxyPayloadV1
 			if err := json.Unmarshal(update.Payload, &payload); err != nil {
 				logger.Warn("Failed to unmarshal scraper_proxy payload", slog.Any("error", err))
 				return
@@ -443,10 +434,8 @@ func buildBotConfigSubscriber(
 				logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
 			}
 
-		case "alarm_advance_minutes":
-			var payload struct {
-				Minutes int `json:"minutes"`
-			}
+		case contractssettings.UpdateTypeAlarmAdvanceMinutes:
+			var payload contractssettings.AlarmAdvanceMinutesPayloadV1
 			if err := json.Unmarshal(update.Payload, &payload); err != nil {
 				logger.Warn("Failed to unmarshal alarm_advance_minutes payload", slog.Any("error", err))
 				return
@@ -481,6 +470,7 @@ func buildBotServer(
 	triggerHandler *sharedserver.TriggerHandler,
 	alarmCRUD domain.AlarmCRUD,
 	adminDeps *botAdminServerDependencies,
+	cacheSvc cache.Client,
 	logger *slog.Logger,
 ) (*http.Server, error) {
 	var (
@@ -500,6 +490,7 @@ func buildBotServer(
 			adminDeps.authHandler,
 			webhookHandler,
 			triggerHandler,
+			cacheSvc,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("build bot server: provide api router: %w", err)

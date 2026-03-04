@@ -30,16 +30,17 @@ func buildStreamIngesterYouTubeComponents(
 		Enabled: scraperCfg.ProxyEnabled,
 		URL:     scraperCfg.ProxyURL,
 	}
-
-	scraperScheduler := providers.ProvideScraperScheduler(
+	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(
 		postgresService,
-		membersData,
-		providers.DefaultPollerIntervals(),
-		[]string{},
 		scraperProxyConfig,
 		sharedRL,
 		cacheService,
+	)
+
+	scraperScheduler := providers.ProvideScraperScheduler(
+		membersData,
 		logger,
+		providers.WithChannelPollerRegistrations(pollerRegistrations),
 	)
 
 	outboxDispatcher := outbox.NewDispatcher(
