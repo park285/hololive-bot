@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -101,9 +102,7 @@ func TestNormalizeCommandKey(t *testing.T) {
 
 			// 원본 params 복사 (불변성 검증용)
 			origParams := make(map[string]any, len(tc.params))
-			for k, v := range tc.params {
-				origParams[k] = v
-			}
+			maps.Copy(origParams, tc.params)
 
 			gotKey, gotParams := normalizeCommandKey(tc.cmdType, tc.params)
 
@@ -203,7 +202,7 @@ func TestCloneParamsWithAction(t *testing.T) {
 			}
 
 			// 반환된 맵이 원본과 다른 포인터인지 검증 (진짜 복제인지)
-			if tc.params != nil && len(tc.params) > 0 {
+			if len(tc.params) > 0 {
 				// 반환된 맵을 수정해도 원본에 영향 없어야 한다
 				got["__test_isolation__"] = true
 				if _, leaked := tc.params["__test_isolation__"]; leaked {
