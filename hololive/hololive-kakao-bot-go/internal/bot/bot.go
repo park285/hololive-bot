@@ -55,6 +55,7 @@ type Bot struct {
 	acl              *acl.Service
 	majorEventRepo   command.MajorEventRepository
 	memberNews       command.MemberNewsService
+	commandFactories []command.Factory
 	membersData      member.DataProvider
 	stopCh           chan struct{}
 	doneCh           chan struct{}
@@ -93,6 +94,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		acl:              deps.ACL,
 		majorEventRepo:   deps.MajorEventRepo,
 		memberNews:       deps.MemberNews,
+		commandFactories: append([]command.Factory(nil), deps.CommandFactories...),
 		membersData:      deps.MembersData,
 		workerPool:       deps.WorkerPool,
 		stopCh:           make(chan struct{}),
@@ -144,30 +146,24 @@ func (b *Bot) initializeCommands() {
 
 	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepo != nil))
 
-	commandsList := []command.Command{
-		command.NewHelpCommand(deps),
-		command.NewLiveCommand(deps),
-		command.NewUpcomingCommand(deps),
-		command.NewScheduleCommand(deps),
-		command.NewAlarmCommand(deps),
-		command.NewMemberInfoCommand(deps),
-		command.NewSubscriberCommand(deps),
-		command.NewStatsCommand(deps),
-	}
+	factories := append([]command.Factory{}, command.DefaultFactories()...)
 
 	if b.majorEventRepo != nil {
 		b.logger.Info("MajorEvent command enabled")
-		commandsList = append(commandsList, command.NewMajorEventCommand(deps, b.majorEventRepo))
+		factories = append(factories, command.NewMajorEventFactory(b.majorEventRepo))
 	}
 
 	if deps.MemberNews != nil {
 		b.logger.Info("MemberNews commands enabled")
-		commandsList = append(commandsList,
-			command.NewMemberNewsCommand(deps),
-			command.NewMemberNewsSubscriptionCommand(deps),
-		)
+		factories = append(factories, command.MemberNewsFactories()...)
 	}
 
+	if len(b.commandFactories) > 0 {
+		b.logger.Info("External command factories enabled", slog.Int("count", len(b.commandFactories)))
+		factories = append(factories, b.commandFactories...)
+	}
+
+	commandsList := command.BuildCommands(deps, factories...)
 	for _, cmd := range commandsList {
 		registry.Register(cmd)
 	}

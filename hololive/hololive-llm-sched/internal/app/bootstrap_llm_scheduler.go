@@ -17,6 +17,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -24,10 +25,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-)
-
-const (
-	configUpdateMemberNewsWeeklyRunNow = "membernews_weekly_run_now"
 )
 
 // LLMSchedulerRuntime: llm-scheduler 전용 런타임
@@ -90,11 +87,8 @@ func (r *LLMSchedulerRuntime) Run() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
 	defer shutdownCancel()
 
-	r.stopSchedulers()
-	if err := r.httpServer.Shutdown(shutdownCtx); err != nil {
-		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
-	} else {
-		r.Logger.Info("HTTP server stopped")
+	if err := r.Shutdown(shutdownCtx); err != nil {
+		r.Logger.Error("Shutdown completed with errors", slog.Any("error", err))
 	}
 
 	r.Logger.Info("Shutdown complete")
@@ -176,6 +170,23 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 		r.MemberNewsMonthlyScheduler.Stop()
 		r.Logger.Info("Member news monthly scheduler stopped")
 	}
+}
+
+// Shutdown: 모든 스케줄러와 HTTP 서버를 안전하게 종료하고 발생한 에러를 누적 반환합니다.
+func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+
+	var errs []error
+	r.stopSchedulers()
+	if err := r.httpServer.Shutdown(ctx); err != nil {
+		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
+		errs = append(errs, err)
+	} else {
+		r.Logger.Info("HTTP server stopped")
+	}
+	return errors.Join(errs...)
 }
 
 // BuildLLMSchedulerRuntime: llm-scheduler 런타임을 구성합니다.
@@ -320,7 +331,7 @@ func buildLLMSchedulerConfigSubscriber(
 
 	applyFn := func(update configsub.ConfigUpdate) {
 		switch update.Type {
-		case configUpdateMemberNewsWeeklyRunNow:
+		case contractssettings.UpdateTypeMemberNewsRunNow:
 			if memberNewsScheduler == nil {
 				logger.Warn("Ignored membernews weekly run-now: scheduler not initialized")
 				return

@@ -115,7 +115,7 @@ func (h *SettingsHandler) GetLogs(c *gin.Context) {
 // GetSettings: 현재 설정을 반환합니다.
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	s := h.Settings.Get()
-	runtime := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled)
+	runtime := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled).AsMap()
 	c.JSON(200, gin.H{"status": "ok", "settings": s, "runtime": runtime})
 }
 
@@ -146,9 +146,9 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	runtime := h.ApplyScraperProxy(c.Request.Context(), current.ScraperProxyEnabled)
+	runtime := h.ApplyScraperProxy(c.Request.Context(), current.ScraperProxyEnabled).AsMap()
 	if alarmAdvanceUpdated {
-		for k, v := range h.ApplyAlarmAdvanceMinutes(c.Request.Context(), current.AlarmAdvanceMinutes) {
+		for k, v := range h.ApplyAlarmAdvanceMinutes(c.Request.Context(), current.AlarmAdvanceMinutes).AsMap() {
 			runtime[k] = v
 		}
 	}
@@ -192,7 +192,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 
 	runtime := map[string]any{}
 	if req.MemberNewsWeeklyRunNow != nil && *req.MemberNewsWeeklyRunNow {
-		runtime["membernews_weekly_run_now"] = h.ApplyMemberNewsWeeklyRunNow(ctx)
+		runtime["membernews_weekly_run_now"] = h.ApplyMemberNewsWeeklyRunNow(ctx).AsMap()
 	}
 
 	h.Activity.Log("llm_settings_update", "LLM settings updated", map[string]any{

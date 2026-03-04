@@ -5,6 +5,7 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
@@ -25,10 +26,8 @@ func buildStreamIngesterConfigSubscriber(
 ) *configsub.Subscriber {
 	applyFn := func(update configsub.ConfigUpdate) {
 		switch update.Type {
-		case "scraper_proxy":
-			var payload struct {
-				Enabled bool `json:"enabled"`
-			}
+		case contractssettings.UpdateTypeScraperProxy:
+			var payload contractssettings.ScraperProxyPayloadV1
 			if err := json.Unmarshal(update.Payload, &payload); err != nil {
 				logger.Warn("Failed to unmarshal scraper_proxy payload", slog.Any("error", err))
 				return
@@ -40,7 +39,7 @@ func buildStreamIngesterConfigSubscriber(
 				logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
 			}
 
-		case "alarm_advance_minutes":
+		case contractssettings.UpdateTypeAlarmAdvanceMinutes:
 			// stream-ingester는 alarm dispatch를 담당하지 않으므로 무시
 			logger.Debug("Ignoring alarm_advance_minutes config update (stream-ingester)")
 
