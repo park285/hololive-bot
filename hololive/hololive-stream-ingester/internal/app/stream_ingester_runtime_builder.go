@@ -4,17 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -61,24 +58,9 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		URL:     cfg.Scraper.ProxyURL,
 	}
 
-	// YouTube 전역 RateLimiter 생성 (1요청/3초 = 20요청/분)
-	sharedRL := scraper.NewRateLimiter(3 * time.Second)
-	if constants.YouTubeScraperDistributedRateLimitConfig.Enabled {
-		distributedLimiter, distErr := ratelimit.NewSlidingWindowLimiter(
-			infra.cacheService,
-			constants.YouTubeScraperDistributedRateLimitConfig.KeyPrefix,
-			logger,
-		)
-		if distErr != nil {
-			return nil, fmt.Errorf("initialize scraper distributed rate limiter: %w", distErr)
-		}
-		if distErr := sharedRL.ConfigureDistributed(
-			distributedLimiter,
-			constants.YouTubeScraperDistributedRateLimitConfig.Limit,
-			constants.YouTubeScraperDistributedRateLimitConfig.Window,
-		); distErr != nil {
-			return nil, fmt.Errorf("configure scraper distributed rate limiter: %w", distErr)
-		}
+	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.cacheService, logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
 	}
 
 	scraperService := providers.ProvideScraperService(infra.cacheService, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
