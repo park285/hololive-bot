@@ -78,6 +78,9 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 
 // validate: 필수 설정값을 검증합니다.
 func (c *AdminAPIConfig) validate() error {
+	if err := validateAPISecretKey(c.Telemetry.Environment, c.Server.APIKey); err != nil {
+		return err
+	}
 	if len(c.Holodex.APIKeys) == 0 {
 		return fmt.Errorf("at least one HOLODEX_API_KEY is required")
 	}

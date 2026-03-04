@@ -11,6 +11,7 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY_1", "test-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
 }
 
 func TestCollectAPIKeys(t *testing.T) {
@@ -307,6 +308,20 @@ func TestLoad_DefaultPostgresSSLModeRequire(t *testing.T) {
 	}
 }
 
+func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("API_SECRET_KEY", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected production API key validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("OTEL_ENVIRONMENT", "production")
@@ -323,6 +338,7 @@ func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 
 func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("OTEL_ENVIRONMENT", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
 
@@ -335,8 +351,23 @@ func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	}
 }
 
+func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
+	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("API_SECRET_KEY", "")
+
+	_, err := LoadAdminAPI()
+	if err == nil {
+		t.Fatal("LoadAdminAPI() expected production API key validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("OTEL_ENVIRONMENT", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
 
@@ -345,6 +376,20 @@ func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T)
 		t.Fatal("LoadLLMScheduler() expected production sslmode validation error, got nil")
 	}
 	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadLLMScheduler_ProductionRequiresAPISecretKey(t *testing.T) {
+	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("API_SECRET_KEY", "")
+
+	_, err := LoadLLMScheduler()
+	if err == nil {
+		t.Fatal("LoadLLMScheduler() expected production API key validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

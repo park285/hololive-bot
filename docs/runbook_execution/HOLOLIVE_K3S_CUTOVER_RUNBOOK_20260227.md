@@ -5,15 +5,15 @@
 
 ## 0) 변경 범위
 
-- 배포 대상: `valkey-cache`, `hololive-bot`, `alarm-dispatcher`, `stream-ingester`, `llm-scheduler`, `admin-api`
+- 배포 대상: `valkey-cache`, `hololive-bot`, `rust-dispatcher`, `hololive-alarm`, `hololive-scraper`, `stream-ingester`, `llm-scheduler`, `admin-api`
 - 미포함: game-bot 계열, Postgres 내부화
 
 ## 1) Pre-deploy Checklist
 
 - [ ] k3s 노드 자원 정상 (`CPU`, `Memory`, `Disk`)
 - [ ] 이미지 pull 가능
-- [ ] `deploy/k8s/hololive/base/configmap-app.yaml` 실값 반영 완료
-- [ ] `deploy/k8s/hololive/base/secret-app.yaml` 실값 반영 완료
+- [ ] `k8s/base/configmap-app.yaml` 실값 반영 완료
+- [ ] `k8s/base/secret-app.yaml` 실값 반영 완료
 - [ ] `/srv/hololive/data` 생성
 - [ ] 외부 Postgres 접근 확인 (Pod 기준)
 - [ ] 변경 시간대 및 롤백 담당자 지정
@@ -27,7 +27,7 @@ sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/data
 
 ### 2-1. 전체 적용
 ```bash
-kubectl apply -k deploy/k8s/hololive/overlays/prod
+kubectl kustomize k8s/overlays/prod --enable-helm | kubectl apply --server-side -f -
 ```
 
 ### 2-2. 상태 확인
@@ -41,7 +41,7 @@ kubectl -n hololive get svc
 ### 3-1. 앱 로그 확인
 ```bash
 kubectl -n hololive logs deploy/hololive-bot --tail=200
-kubectl -n hololive logs deploy/alarm-dispatcher --tail=200
+kubectl -n hololive logs deploy/rust-dispatcher --tail=200
 kubectl -n hololive logs deploy/stream-ingester --tail=200
 kubectl -n hololive logs deploy/llm-scheduler --tail=200
 kubectl -n hololive logs deploy/admin-api --tail=200
@@ -72,21 +72,21 @@ curl -fsS http://127.0.0.1:30002/health
 
 ### 4-1. DB 마이그레이션 Job 실행(필요 시)
 ```bash
-kubectl apply -f deploy/k8s/hololive/optional/hololive-db-migrate-job.yaml
+kubectl apply -f k8s/optional/hololive-db-migrate-job.yaml
 kubectl -n hololive logs job/hololive-db-migrate
 ```
 
 ### 4-2. VPN scraper proxy(필요 시)
 ```bash
-kubectl apply -f deploy/k8s/hololive/optional/vpn-scraper-proxy-deployment.yaml
-kubectl apply -f deploy/k8s/hololive/optional/vpn-scraper-proxy-service.yaml
+kubectl apply -f k8s/optional/vpn-scraper-proxy-deployment.yaml
+kubectl apply -f k8s/optional/vpn-scraper-proxy-service.yaml
 ```
 
 ## 5) 롤백 절차
 
 ### 5-1. k3s 워크로드 제거
 ```bash
-kubectl delete -k deploy/k8s/hololive/overlays/prod
+kubectl kustomize k8s/overlays/prod --enable-helm | kubectl delete -f -
 ```
 
 ### 5-2. 기존 Docker 구성 복구
