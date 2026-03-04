@@ -229,7 +229,10 @@ func (s *EventSummarizer) buildSummaryResponse(
 	summaryType SummaryType,
 	periodKey, searchContext string,
 ) (*summaryResponse, error) {
-	sysPrompt := getSystemPrompt(summaryType)
+	sysPrompt, err := getSystemPrompt(summaryType)
+	if err != nil {
+		return nil, fmt.Errorf("get system prompt: %w", err)
+	}
 	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext)
 	schema := summaryResponseSchema()
 
