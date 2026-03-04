@@ -42,13 +42,7 @@ func main() {
 
 	// slog 기반 로거 초기화 (파일 로깅 포함)
 
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
-		Dir:        cfg.Logging.Dir,
-		MaxSizeMB:  cfg.Logging.MaxSizeMB,
-		MaxBackups: cfg.Logging.MaxBackups,
-		MaxAgeDays: cfg.Logging.MaxAgeDays,
-		Compress:   cfg.Logging.Compress,
-	}, "bot.log", cfg.Logging.Level)
+	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{}, "bot.log", cfg.Logging.Level)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		exitCode = 1
@@ -57,13 +51,15 @@ func main() {
 
 	// OpenTelemetry Provider 초기화
 	otelProvider, err := telemetry.NewProvider(context.Background(), telemetry.Config{
-		Enabled:        cfg.Telemetry.Enabled,
-		ServiceName:    cfg.Telemetry.ServiceName,
-		ServiceVersion: cfg.Telemetry.ServiceVersion,
-		Environment:    cfg.Telemetry.Environment,
-		OTLPEndpoint:   cfg.Telemetry.OTLPEndpoint,
-		OTLPInsecure:   cfg.Telemetry.OTLPInsecure,
-		SampleRate:     cfg.Telemetry.SampleRate,
+		Enabled:               cfg.Telemetry.Enabled,
+		MetricsEnabled:        cfg.Telemetry.MetricsEnabled,
+		MetricsExportInterval: cfg.Telemetry.MetricsExportInterval,
+		ServiceName:           cfg.Telemetry.ServiceName,
+		ServiceVersion:        cfg.Telemetry.ServiceVersion,
+		Environment:           cfg.Telemetry.Environment,
+		OTLPEndpoint:          cfg.Telemetry.OTLPEndpoint,
+		OTLPInsecure:          cfg.Telemetry.OTLPInsecure,
+		SampleRate:            cfg.Telemetry.SampleRate,
 	})
 	if err != nil {
 		logger.Error("otel_init_failed", slog.Any("err", err))
@@ -82,6 +78,9 @@ func main() {
 		logger.Info("otel_enabled",
 			slog.String("service", cfg.Telemetry.ServiceName),
 			slog.String("endpoint", cfg.Telemetry.OTLPEndpoint),
+			slog.Bool("tracing_enabled", otelProvider.IsTracingEnabled()),
+			slog.Bool("metrics_enabled", otelProvider.IsMetricsEnabled()),
+			slog.Duration("metrics_export_interval", cfg.Telemetry.MetricsExportInterval),
 			slog.Float64("sample_rate", cfg.Telemetry.SampleRate),
 		)
 	}
