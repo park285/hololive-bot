@@ -42,8 +42,6 @@ spec:
               value: "true"
             - name: ALARM_DISPATCHER_URL
               value: "http://hololive-bot:30001"
-            - name: POSTGRES_SSLMODE
-              value: "disable"
             - name: GOGC
               value: "100"
             - name: GOMEMLIMIT
