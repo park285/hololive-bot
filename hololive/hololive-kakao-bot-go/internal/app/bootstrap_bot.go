@@ -21,7 +21,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
@@ -419,14 +418,8 @@ func buildBotConfigSubscriber(
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
-	applyFn := func(update configsub.ConfigUpdate) {
-		switch update.Type {
-		case contractssettings.UpdateTypeScraperProxy:
-			var payload contractssettings.ScraperProxyPayloadV1
-			if err := json.Unmarshal(update.Payload, &payload); err != nil {
-				logger.Warn("Failed to unmarshal scraper_proxy payload", slog.Any("error", err))
-				return
-			}
+	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
+		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
 			applyScraperProxyToggle(payload.Enabled, ProvideYouTubeService(infra.ytStack), infra.holodexService, scraperScheduler, logger)
 			// 설정 파일에도 반영
 			current := deps.Settings.Get()
@@ -434,13 +427,8 @@ func buildBotConfigSubscriber(
 			if err := deps.Settings.Update(current); err != nil {
 				logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
 			}
-
-		case contractssettings.UpdateTypeAlarmAdvanceMinutes:
-			var payload contractssettings.AlarmAdvanceMinutesPayloadV1
-			if err := json.Unmarshal(update.Payload, &payload); err != nil {
-				logger.Warn("Failed to unmarshal alarm_advance_minutes payload", slog.Any("error", err))
-				return
-			}
+		},
+		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
 			targets := infra.alarmCRUD.UpdateAlarmAdvanceMinutes(payload.Minutes)
 			logger.Info("Applied alarm advance minutes via pub/sub",
 				slog.Int("minutes", payload.Minutes),
@@ -452,11 +440,8 @@ func buildBotConfigSubscriber(
 			if err := deps.Settings.Update(current); err != nil {
 				logger.Warn("Failed to persist alarm_advance_minutes setting", slog.Any("error", err))
 			}
-
-		default:
-			logger.Warn("Unknown config update type", slog.String("type", update.Type))
-		}
-	}
+		},
+	})
 
 	return configsub.New(deps.Cache.GetClient(), applyFn, logger)
 }
