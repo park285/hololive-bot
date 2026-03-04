@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -18,19 +17,13 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Printf("failed to load config: %v\n", err)
+		slog.Error("load_config_failed", slog.Any("error", err))
 		return
 	}
 
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
-		Dir:        cfg.Logging.Dir,
-		MaxSizeMB:  cfg.Logging.MaxSizeMB,
-		MaxBackups: cfg.Logging.MaxBackups,
-		MaxAgeDays: cfg.Logging.MaxAgeDays,
-		Compress:   cfg.Logging.Compress,
-	}, "warm_member_cache.log", cfg.Logging.Level)
+	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{}, "warm_member_cache.log", cfg.Logging.Level)
 	if err != nil {
-		fmt.Printf("failed to initialize logger: %v\n", err)
+		slog.Error("init_logger_failed", slog.Any("error", err))
 		return
 	}
 

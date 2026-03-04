@@ -573,7 +573,10 @@ func TestSystemPrompt_NoRealEventNamesInExample(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prompt := getSystemPrompt(tt.promptType)
+			prompt, err := getSystemPrompt(tt.promptType)
+			if err != nil {
+				t.Fatalf("getSystemPrompt 실패: %v", err)
+			}
 
 			// <example> 블록만 추출
 			exampleStart := strings.Index(prompt, "<example>")
@@ -695,7 +698,10 @@ func TestSystemPrompt_ContainsKRPartnerHint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prompt := getSystemPrompt(tt.promptType)
+			prompt, err := getSystemPrompt(tt.promptType)
+			if err != nil {
+				t.Fatalf("getSystemPrompt 실패: %v", err)
+			}
 			if !strings.Contains(prompt, "Korean partner events") && !strings.Contains(prompt, "ANIPLUS") {
 				t.Error("prompt should contain Korean partner hint (ANIPLUS or Korean partner events)")
 			}
@@ -863,7 +869,10 @@ func TestSystemPrompt_ContainsDateAuthority(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prompt := getSystemPrompt(tt.promptType)
+			prompt, err := getSystemPrompt(tt.promptType)
+			if err != nil {
+				t.Fatalf("getSystemPrompt 실패: %v", err)
+			}
 
 			if !strings.Contains(prompt, "date_authority") {
 				t.Error("prompt should contain date_authority block")
