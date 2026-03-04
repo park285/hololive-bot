@@ -31,7 +31,9 @@ import (
 	triggerclient "github.com/kapu/hololive-kakao-bot-go/internal/service/trigger"
 )
 
-var runtimeAlarmSchedulerFactory = func(context.Context, *config.Config, *coreInfrastructure, *slog.Logger) runtimeAlarmScheduler {
+type runtimeAlarmSchedulerBuilder func(context.Context, *config.Config, *coreInfrastructure, *slog.Logger) runtimeAlarmScheduler
+
+func defaultRuntimeAlarmSchedulerBuilder(context.Context, *config.Config, *coreInfrastructure, *slog.Logger) runtimeAlarmScheduler {
 	return nil
 }
 
@@ -404,10 +406,10 @@ func buildRuntimeAlarmScheduler(
 	infra *coreInfrastructure,
 	logger *slog.Logger,
 ) runtimeAlarmScheduler {
-	if runtimeAlarmSchedulerFactory == nil {
+	if infra == nil || infra.runtimeAlarmSchedulerBuilder == nil {
 		return nil
 	}
-	return runtimeAlarmSchedulerFactory(ctx, cfg, infra, logger)
+	return infra.runtimeAlarmSchedulerBuilder(ctx, cfg, infra, logger)
 }
 
 // buildBotConfigSubscriber: Bot용 ConfigSubscriber를 생성합니다.
