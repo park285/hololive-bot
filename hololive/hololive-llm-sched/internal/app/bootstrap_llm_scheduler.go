@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
+	mescraper "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scraper"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -37,6 +38,7 @@ type LLMSchedulerRuntime struct {
 	DeliveryDispatcher         *delivery.Dispatcher
 	MajorEventScheduler        *mescheduler.Scheduler
 	MajorEventMonthlyScheduler *mescheduler.MonthlyScheduler
+	MajorEventScraperScheduler *mescraper.RuntimeScheduler
 	MemberNewsScheduler        *membernews.Scheduler
 	MemberNewsMonthlyScheduler *membernews.MonthlyScheduler
 
@@ -130,6 +132,14 @@ func (r *LLMSchedulerRuntime) startSchedulers(ctx context.Context) {
 				constants.MajorEventConfig.MonthlyScheduleDay, constants.MajorEventConfig.MonthlyScheduleHourKST)))
 	}
 
+	if r.MajorEventScraperScheduler != nil {
+		r.MajorEventScraperScheduler.Start(ctx)
+		r.Logger.Info("Major event scraper runtime scheduler started",
+			slog.String("feed_schedule", "daily 04:00 KST"),
+			slog.String("maintenance_expire_schedule", "daily 05:00 KST"),
+			slog.String("maintenance_link_check_interval", "12h"))
+	}
+
 	if r.MemberNewsScheduler != nil {
 		r.MemberNewsScheduler.Start(ctx)
 		r.Logger.Info("Member news weekly scheduler started",
@@ -153,6 +163,10 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 	if r.MajorEventMonthlyScheduler != nil {
 		r.MajorEventMonthlyScheduler.Stop()
 		r.Logger.Info("Major event monthly scheduler stopped")
+	}
+	if r.MajorEventScraperScheduler != nil {
+		r.MajorEventScraperScheduler.Stop()
+		r.Logger.Info("Major event scraper runtime scheduler stopped")
 	}
 	if r.MemberNewsScheduler != nil {
 		r.MemberNewsScheduler.Stop()
@@ -237,7 +251,7 @@ func buildLLMSchedulerComponents(
 	exaSearcher := provideExaSearcher(cfg.Exa, logger)
 	summarizer := provideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheService, exaSearcher, logger)
 
-	majorEventScheduler, majorEventMonthlyScheduler := buildMajorEventComponents(
+	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
 		ctx,
 		majorEventRepo,
 		formatter,
@@ -262,6 +276,7 @@ func buildLLMSchedulerComponents(
 		DeliveryDispatcher:         deliveryDispatcher,
 		MajorEventScheduler:        majorEventScheduler,
 		MajorEventMonthlyScheduler: majorEventMonthlyScheduler,
+		MajorEventScraperScheduler: majorEventScraperScheduler,
 		MemberNewsScheduler:        memberNewsScheduler,
 		MemberNewsMonthlyScheduler: memberNewsMonthlyScheduler,
 		configSubscriber:           configSubscriber,

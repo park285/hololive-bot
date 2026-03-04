@@ -47,8 +47,12 @@ spec:
               value: "450MiB"
             - name: ALARM_DISPATCHER_URL
               value: "http://hololive-bot:30001"
+            - name: LLM_SCHEDULER_INTERNAL_URL
+              value: "http://llm-scheduler:30003"
             - name: BOT_INGESTION_ENABLED
               value: "false"
+            - name: BOT_ADMIN_ENABLED
+              value: "true"
             - name: LOG_DIR
               value: ""
             - name: OTEL_SERVICE_NAME

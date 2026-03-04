@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// AdminAPIConfig: admin-api 바이너리 전용 설정
+// AdminAPIConfig: 운영 API(호환) 설정
 type AdminAPIConfig struct {
 	Server             ServerConfig
 	Valkey             ValkeyConfig
@@ -24,7 +24,7 @@ type AdminAPIConfig struct {
 	Version            string
 }
 
-// LoadAdminAPI: admin-api 전용 설정을 환경변수에서 로드합니다.
+// LoadAdminAPI: 운영 API(호환) 설정을 환경변수에서 로드합니다.
 func LoadAdminAPI() (*AdminAPIConfig, error) {
 	_ = godotenv.Load()
 
@@ -72,7 +72,7 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 		},
 		AlarmDispatcherURL: envutil.String("ALARM_DISPATCHER_URL", ""),
 		LLMSchedulerURL:    envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		Version:            envutil.String("APP_VERSION", "1.0.0-admin-api"),
+		Version:            envutil.String("APP_VERSION", "1.0.0-bot-admin"),
 	}
 }
 

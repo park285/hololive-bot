@@ -6,6 +6,7 @@ import (
 
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
+	mescraper "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scraper"
 	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
 
@@ -21,7 +22,7 @@ func buildMajorEventComponents(
 	outboxRepo *delivery.OutboxRepository,
 	logger *slog.Logger,
 	autoPrepareSchema bool,
-) (*mescheduler.Scheduler, *mescheduler.MonthlyScheduler) {
+) (*mescheduler.Scheduler, *mescheduler.MonthlyScheduler, *mescraper.RuntimeScheduler) {
 	majorEventScheduler := mescheduler.NewScheduler(
 		majorEventRepo,
 		formatter,
@@ -46,8 +47,13 @@ func buildMajorEventComponents(
 		}
 	}
 
-	// major event scraping ownership moved to hololive-rs.
-	return majorEventScheduler, majorEventMonthlyScheduler
+	majorEventScraperScheduler, err := mescraper.NewRuntimeScheduler(majorEventRepo, logger)
+	if err != nil {
+		logger.Error("Failed to initialize major event scraper runtime scheduler", slog.String("error", err.Error()))
+		majorEventScraperScheduler = nil
+	}
+
+	return majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler
 }
 
 func buildMemberNewsComponents(memberNews *membernews.Service, formatter membernews.DigestFormatter, locker delivery.NotificationLocker, outboxRepo *delivery.OutboxRepository, logger *slog.Logger) (*membernews.Scheduler, *membernews.MonthlyScheduler) {

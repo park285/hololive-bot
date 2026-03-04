@@ -1,0 +1,135 @@
+package dedup
+
+import (
+	"log/slog"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
+)
+
+// fallbackEntry: 로컬 dedup 엔트리
+type fallbackEntry struct {
+	expiresAtUnixNano int64
+}
+
+func (e fallbackEntry) isExpired(now time.Time) bool {
+	return now.UnixNano() >= e.expiresAtUnixNano
+}
+
+// LocalFallback: Valkey 장애 시 로컬 in-memory dedup 폴백
+type LocalFallback struct {
+	logger   *slog.Logger
+	keys     sync.Map
+	keyCount atomic.Int64
+	now      func() time.Time
+}
+
+// NewLocalFallback: 새 로컬 폴백 생성
+func NewLocalFallback(logger ...*slog.Logger) *LocalFallback {
+	log := slog.Default()
+	if len(logger) > 0 && logger[0] != nil {
+		log = logger[0]
+	}
+
+	return &LocalFallback{
+		logger: log,
+		now:    time.Now,
+	}
+}
+
+// TryClaimOnOutage: Valkey SETNX 실패 시 로컬 폴백으로 claim 시도
+func (f *LocalFallback) TryClaimOnOutage(key string, ttl time.Duration, err error) bool {
+	normalizedTTL := normalizeFallbackTTL(ttl)
+	acquired := f.tryClaim(key, normalizedTTL)
+
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+
+	f.logger.Warn("SETNX claim 실패, 로컬 폴백 사용",
+		slog.String("key", key),
+		slog.Bool("fallback_acquired", acquired),
+		slog.String("error", errMsg),
+	)
+	return acquired
+}
+
+// ReleaseClaims: 로컬 dedup claim 해제
+func (f *LocalFallback) ReleaseClaims(claimKeys []string) {
+	for _, key := range claimKeys {
+		if _, loaded := f.keys.LoadAndDelete(key); loaded {
+			f.keyCount.Add(-1)
+		}
+	}
+}
+
+// tryClaim: 로컬 dedup claim 시도
+func (f *LocalFallback) tryClaim(key string, ttl time.Duration) bool {
+	now := f.now()
+	expiresAt := now.Add(ttl).UnixNano()
+
+	// 용량 초과 시 만료 항목 정리
+	if f.keyCount.Load() >= int64(constants.LocalFallbackCleanupMaxKeys) {
+		f.cleanupExpired(now)
+	}
+
+	newEntry := fallbackEntry{expiresAtUnixNano: expiresAt}
+
+	for {
+		loadedEntry, exists := f.keys.Load(key)
+		if !exists {
+			if _, loaded := f.keys.LoadOrStore(key, newEntry); !loaded {
+				f.keyCount.Add(1)
+				return true
+			}
+			continue
+		}
+
+		entry, ok := loadedEntry.(fallbackEntry)
+		if !ok {
+			if f.keys.CompareAndDelete(key, loadedEntry) {
+				f.keyCount.Add(-1)
+			}
+			continue
+		}
+
+		if !entry.isExpired(now) {
+			return false
+		}
+
+		if f.keys.CompareAndSwap(key, entry, newEntry) {
+			return true
+		}
+	}
+}
+
+// cleanupExpired: 만료된 항목 정리 (잠금 보유 상태에서 호출)
+func (f *LocalFallback) cleanupExpired(now time.Time) {
+	f.keys.Range(func(key, value any) bool {
+		entry, ok := value.(fallbackEntry)
+		if !ok {
+			if f.keys.CompareAndDelete(key, value) {
+				f.keyCount.Add(-1)
+			}
+			return true
+		}
+
+		if entry.isExpired(now) {
+			if f.keys.CompareAndDelete(key, entry) {
+				f.keyCount.Add(-1)
+			}
+		}
+		return true
+	})
+}
+
+// normalizeFallbackTTL: TTL 정규화 (0 또는 최대치 초과 시 기본값 적용)
+func normalizeFallbackTTL(ttl time.Duration) time.Duration {
+	if ttl == 0 || ttl > constants.LocalFallbackDedupTTL {
+		return constants.LocalFallbackDedupTTL
+	}
+	return ttl
+}
