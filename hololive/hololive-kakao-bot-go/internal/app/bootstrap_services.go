@@ -40,17 +40,18 @@ import (
 
 // coreInfrastructure 는 Bot 런타임 구성에 필요한 의존성/서비스 묶음을 담는다.
 type coreInfrastructure struct {
-	deps             *bot.Dependencies
-	alarmService     *notification.AlarmService
-	alarmCRUD        domain.AlarmCRUD
-	holodexService   *holodex.Service // 구체 타입 참조 (concrete 필요 시 사용)
-	ytStack          *providers.YouTubeStack
-	photoSync        *holodex.PhotoSyncService
-	templateRenderer *template.Renderer
-	templateAdminSvc *template.AdminService
-	sharedRL         *scraper.RateLimiter // YouTube 전역 RateLimiter
-	cleanupCache     func()
-	cleanupDB        func()
+	deps                         *bot.Dependencies
+	alarmService                 *notification.AlarmService
+	alarmCRUD                    domain.AlarmCRUD
+	holodexService               *holodex.Service // 구체 타입 참조 (concrete 필요 시 사용)
+	ytStack                      *providers.YouTubeStack
+	photoSync                    *holodex.PhotoSyncService
+	templateRenderer             *template.Renderer
+	templateAdminSvc             *template.AdminService
+	sharedRL                     *scraper.RateLimiter // YouTube 전역 RateLimiter
+	runtimeAlarmSchedulerBuilder runtimeAlarmSchedulerBuilder
+	cleanupCache                 func()
+	cleanupDB                    func()
 }
 
 type alarmModeComponents struct {
@@ -366,17 +367,18 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	deps := ProvideBotDependencies(modules)
 
 	return &coreInfrastructure{
-		deps:             deps,
-		alarmService:     alarmMode.alarmService,
-		alarmCRUD:        alarmMode.alarmCRUD,
-		holodexService:   holodexService,
-		ytStack:          youTubeStack,
-		photoSync:        holodex.NewPhotoSyncService(holodexService, infra.memberRepo, logger),
-		templateRenderer: templateRenderer,
-		templateAdminSvc: template.NewAdminService(repository.NewTemplateRepository(infra.postgresService.GetGormDB(), logger), templateRenderer, logger),
-		sharedRL:         sharedRL,
-		cleanupCache:     infra.cleanupCache,
-		cleanupDB:        infra.cleanupDB,
+		deps:                         deps,
+		alarmService:                 alarmMode.alarmService,
+		alarmCRUD:                    alarmMode.alarmCRUD,
+		holodexService:               holodexService,
+		ytStack:                      youTubeStack,
+		photoSync:                    holodex.NewPhotoSyncService(holodexService, infra.memberRepo, logger),
+		templateRenderer:             templateRenderer,
+		templateAdminSvc:             template.NewAdminService(repository.NewTemplateRepository(infra.postgresService.GetGormDB(), logger), templateRenderer, logger),
+		sharedRL:                     sharedRL,
+		runtimeAlarmSchedulerBuilder: defaultRuntimeAlarmSchedulerBuilder,
+		cleanupCache:                 infra.cleanupCache,
+		cleanupDB:                    infra.cleanupDB,
 	}, nil
 }
 
