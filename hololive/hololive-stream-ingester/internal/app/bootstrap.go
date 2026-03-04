@@ -24,35 +24,17 @@ type infraResources struct {
 
 // initInfraResources 는 stream-ingester에 필요한 캐시/DB 리소스를 초기화합니다.
 func initInfraResources(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*infraResources, error) {
-	valkeyConfig := providers.ProvideValkeyConfig(cfg)
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, valkeyConfig, logger)
+	resources, err := providers.ProvideInfraResources(ctx, cfg, logger)
 	if err != nil {
-		return nil, fmt.Errorf("provide cache resources: %w", err)
-	}
-	cacheService := providers.ProvideCacheService(cacheResources)
-
-	postgresConfig := providers.ProvidePostgresConfig(cfg)
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, postgresConfig, logger)
-	if err != nil {
-		cleanupCache()
-		return nil, fmt.Errorf("provide database resources: %w", err)
-	}
-	postgresService := providers.ProvidePostgresService(databaseResources)
-
-	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
-	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
-	if err != nil {
-		cleanupDB()
-		cleanupCache()
-		return nil, fmt.Errorf("provide member cache: %w", err)
+		return nil, fmt.Errorf("provide infra resources: %w", err)
 	}
 
 	return &infraResources{
-		cacheService:    cacheService,
-		postgresService: postgresService,
-		memberRepo:      memberRepository,
-		memberCache:     memberCache,
-		cleanupCache:    cleanupCache,
-		cleanupDB:       cleanupDB,
+		cacheService:    resources.CacheService,
+		postgresService: resources.PostgresService,
+		memberRepo:      resources.MemberRepository,
+		memberCache:     resources.MemberCache,
+		cleanupCache:    resources.CleanupCache,
+		cleanupDB:       resources.CleanupDB,
 	}, nil
 }

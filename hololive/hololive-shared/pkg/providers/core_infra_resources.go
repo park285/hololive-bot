@@ -1,0 +1,61 @@
+package providers
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+)
+
+// InfraResources: 캐시/DB/멤버 리소스와 정리 함수를 캡슐화한 구조체.
+type InfraResources struct {
+	CacheService     cache.Client
+	PostgresService  database.Client
+	MemberRepository *member.Repository
+	MemberCache      *member.Cache
+	CleanupCache     func()
+	CleanupDB        func()
+}
+
+// ProvideInfraResources: 캐시/DB/멤버 리소스를 공통 규약으로 초기화합니다.
+func ProvideInfraResources(
+	ctx context.Context,
+	cfg *config.Config,
+	logger *slog.Logger,
+) (*InfraResources, error) {
+	valkeyConfig := ProvideValkeyConfig(cfg)
+	cacheResources, cleanupCache, err := ProvideCacheResources(ctx, valkeyConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide cache resources: %w", err)
+	}
+	cacheService := ProvideCacheService(cacheResources)
+
+	postgresConfig := ProvidePostgresConfig(cfg)
+	databaseResources, cleanupDB, err := ProvideDatabaseResources(ctx, postgresConfig, logger)
+	if err != nil {
+		cleanupCache()
+		return nil, fmt.Errorf("provide database resources: %w", err)
+	}
+	postgresService := ProvidePostgresService(databaseResources)
+
+	memberRepository := ProvideMemberRepository(postgresService, logger)
+	memberCache, err := ProvideMemberCache(ctx, memberRepository, cacheService, logger)
+	if err != nil {
+		cleanupDB()
+		cleanupCache()
+		return nil, fmt.Errorf("provide member cache: %w", err)
+	}
+
+	return &InfraResources{
+		CacheService:     cacheService,
+		PostgresService:  postgresService,
+		MemberRepository: memberRepository,
+		MemberCache:      memberCache,
+		CleanupCache:     cleanupCache,
+		CleanupDB:        cleanupDB,
+	}, nil
+}

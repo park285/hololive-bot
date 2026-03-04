@@ -50,5 +50,6 @@ type Dependencies struct {
 	ACL              *acl.Service
 	MajorEventRepo   command.MajorEventRepository
 	MemberNews       command.MemberNewsService
+	CommandFactories []command.Factory
 	WorkerPool       *workerpool.Pool
 }
