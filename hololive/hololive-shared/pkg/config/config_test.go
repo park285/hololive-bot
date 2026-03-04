@@ -4,6 +4,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func setRequiredLoadEnv(t *testing.T) {
@@ -521,4 +524,133 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 			t.Errorf("ConsensusReviewerModel = %q, want gpt-4.1-mini", cfg.LLM.MemberNews.ReviewerModel)
 		}
 	})
+}
+
+func TestLoad_TelemetryMetricsDefaults(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Telemetry.MetricsEnabled {
+		t.Fatalf("Telemetry.MetricsEnabled = true, want false")
+	}
+	if cfg.Telemetry.MetricsExportInterval != 30*time.Second {
+		t.Fatalf("Telemetry.MetricsExportInterval = %v, want %v", cfg.Telemetry.MetricsExportInterval, 30*time.Second)
+	}
+}
+
+func TestLoad_TelemetryMetricsInterval_FallbackToDefault(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("OTEL_METRICS_EXPORT_INTERVAL_SECONDS", "-10")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Telemetry.MetricsExportInterval != 30*time.Second {
+		t.Fatalf("Telemetry.MetricsExportInterval = %v, want %v", cfg.Telemetry.MetricsExportInterval, 30*time.Second)
+	}
+}
+
+func TestLoadAdminAPI_EnvconfigApplied(t *testing.T) {
+	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("ADMIN_API_PORT", "39002")
+	t.Setenv("LOG_LEVEL", "")
+
+	cfg, err := LoadAdminAPI()
+	if err != nil {
+		t.Fatalf("LoadAdminAPI() error = %v", err)
+	}
+	if cfg.Server.Port != 39002 {
+		t.Fatalf("Server.Port = %d, want %d", cfg.Server.Port, 39002)
+	}
+	if cfg.Logging.Level != "info" {
+		t.Fatalf("Logging.Level = %q, want %q", cfg.Logging.Level, "info")
+	}
+}
+
+func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
+	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("CORS_ENFORCE", "yes")
+
+	cfg, err := LoadAdminAPI()
+	if err != nil {
+		t.Fatalf("LoadAdminAPI() error = %v", err)
+	}
+	if !cfg.CORS.Enforce {
+		t.Fatal("CORS.Enforce = false, want true")
+	}
+}
+
+func TestLoadLLMScheduler_EnvconfigApplied(t *testing.T) {
+	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("LLM_SCHEDULER_PORT", "39003")
+	t.Setenv("BOT_PREFIX", "#")
+
+	cfg, err := LoadLLMScheduler()
+	if err != nil {
+		t.Fatalf("LoadLLMScheduler() error = %v", err)
+	}
+	if cfg.Server.Port != 39003 {
+		t.Fatalf("Server.Port = %d, want %d", cfg.Server.Port, 39003)
+	}
+	if cfg.Bot.Prefix != "#" {
+		t.Fatalf("Bot.Prefix = %q, want %q", cfg.Bot.Prefix, "#")
+	}
+}
+
+func TestLoad_EnvconfigFallback_InvalidNumericStillUsesDefault(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("POSTGRES_PORT", "not-a-number")
+	t.Setenv("CACHE_PORT", "invalid")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Postgres.Port != constants.DatabaseDefaults.Port {
+		t.Fatalf("Postgres.Port = %d, want %d", cfg.Postgres.Port, constants.DatabaseDefaults.Port)
+	}
+	if cfg.Valkey.Port != 6379 {
+		t.Fatalf("Valkey.Port = %d, want %d", cfg.Valkey.Port, 6379)
+	}
+}
+
+func TestLoad_TelemetryLooseBoolParsing(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("OTEL_ENABLED", "yes")
+	t.Setenv("OTEL_METRICS_ENABLED", "y")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Telemetry.Enabled {
+		t.Fatal("Telemetry.Enabled = false, want true")
+	}
+	if !cfg.Telemetry.MetricsEnabled {
+		t.Fatal("Telemetry.MetricsEnabled = false, want true")
+	}
+}
+
+func TestLoad_EnvconfigFallback_InvalidCoreNumeric(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SERVER_PORT", "invalid")
+	t.Setenv("WEBHOOK_WORKER_COUNT", "NaN")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Server.Port != 30001 {
+		t.Fatalf("Server.Port = %d, want %d", cfg.Server.Port, 30001)
+	}
+	if cfg.Webhook.WorkerCount != 16 {
+		t.Fatalf("Webhook.WorkerCount = %d, want %d", cfg.Webhook.WorkerCount, 16)
+	}
 }

@@ -11,14 +11,139 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/kelseyhightower/envconfig"
 	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 const maxHolodexAPIKeySlots = 5
+
+type valkeyEnvConfig struct {
+	Host       string `envconfig:"CACHE_HOST" default:"localhost"`
+	Port       string `envconfig:"CACHE_PORT" default:"6379"`
+	Password   string `envconfig:"CACHE_PASSWORD"`
+	DB         string `envconfig:"CACHE_DB" default:"0"`
+	SocketPath string `envconfig:"CACHE_SOCKET_PATH"`
+}
+
+type postgresEnvConfig struct {
+	Host              string `envconfig:"POSTGRES_HOST"`
+	Port              string `envconfig:"POSTGRES_PORT"`
+	SocketPath        string `envconfig:"POSTGRES_SOCKET_PATH"`
+	User              string `envconfig:"POSTGRES_USER"`
+	Password          string `envconfig:"POSTGRES_PASSWORD"`
+	Database          string `envconfig:"POSTGRES_DB"`
+	SSLMode           string `envconfig:"POSTGRES_SSLMODE" default:"require"`
+	QueryExecMode     string `envconfig:"POSTGRES_QUERY_EXEC_MODE" default:"cache_statement"`
+	PoolMinConns      string `envconfig:"POSTGRES_POOL_MIN_CONNS"`
+	PoolMaxConns      string `envconfig:"POSTGRES_POOL_MAX_CONNS"`
+	PoolMaxIdleConns  string `envconfig:"POSTGRES_POOL_MAX_IDLE_CONNS"`
+	AutoPrepareSchema string `envconfig:"POSTGRES_AUTO_PREPARE_SCHEMA" default:"true"`
+}
+
+type telemetryEnvConfig struct {
+	Enabled                  string `envconfig:"OTEL_ENABLED" default:"false"`
+	MetricsEnabled           string `envconfig:"OTEL_METRICS_ENABLED" default:"false"`
+	MetricsExportIntervalSec string `envconfig:"OTEL_METRICS_EXPORT_INTERVAL_SECONDS" default:"30"`
+	ServiceName              string `envconfig:"OTEL_SERVICE_NAME" default:"hololive-bot"`
+	ServiceVersion           string `envconfig:"OTEL_SERVICE_VERSION" default:"1.0.0"`
+	Environment              string `envconfig:"OTEL_ENVIRONMENT" default:"production"`
+	OTLPEndpoint             string `envconfig:"OTEL_EXPORTER_OTLP_ENDPOINT" default:"otel-collector:4317"`
+	OTLPInsecure             string `envconfig:"OTEL_EXPORTER_OTLP_INSECURE" default:"false"`
+	SampleRate               string `envconfig:"OTEL_SAMPLE_RATE" default:"1.0"`
+}
+
+type appCoreEnvConfig struct {
+	IrisBaseURL                  string `envconfig:"IRIS_BASE_URL" default:"http://localhost:3000"`
+	IrisHTTPTimeoutSeconds       string `envconfig:"IRIS_HTTP_TIMEOUT_SECONDS" default:"10"`
+	IrisHTTPDialTimeoutSeconds   string `envconfig:"IRIS_HTTP_DIAL_TIMEOUT_SECONDS" default:"3"`
+	IrisHTTPRespHeaderTimeoutSec string `envconfig:"IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS" default:"5"`
+
+	ServerPort   string `envconfig:"SERVER_PORT" default:"30001"`
+	APISecretKey string `envconfig:"API_SECRET_KEY"`
+
+	KakaoRooms      string `envconfig:"KAKAO_ROOMS" default:"홀로라이브 알림방"`
+	KakaoACLEnabled string `envconfig:"KAKAO_ACL_ENABLED" default:"true"`
+
+	HolodexBaseURL string `envconfig:"HOLODEX_BASE_URL"`
+
+	YouTubeAPIKey              string `envconfig:"YOUTUBE_API_KEY"`
+	YouTubeEnableQuotaBuilding string `envconfig:"YOUTUBE_ENABLE_QUOTA_BUILDING" default:"false"`
+
+	NotificationAdvanceMinutes string `envconfig:"NOTIFICATION_ADVANCE_MINUTES" default:"5"`
+	CheckIntervalSeconds       string `envconfig:"CHECK_INTERVAL_SECONDS" default:"60"`
+
+	LogLevel string `envconfig:"LOG_LEVEL" default:"info"`
+
+	BotPrefix           string `envconfig:"BOT_PREFIX" default:"!"`
+	BotSelfUser         string `envconfig:"BOT_SELF_USER" default:"iris"`
+	BotIngestionEnabled string `envconfig:"BOT_INGESTION_ENABLED" default:"true"`
+	BotAdminEnabled     string `envconfig:"BOT_ADMIN_ENABLED" default:"true"`
+
+	ServicesLLMServerHealthURL      string `envconfig:"SERVICES_LLM_SERVER_HEALTH_URL"`
+	ServicesGameBotTwentyQHealthURL string `envconfig:"SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL"`
+	ServicesGameBotTurtleHealthURL  string `envconfig:"SERVICES_GAME_BOT_TURTLE_HEALTH_URL"`
+
+	ScraperProxyEnabled string `envconfig:"SCRAPER_PROXY_ENABLED" default:"false"`
+	ScraperProxyURL     string `envconfig:"SCRAPER_PROXY_URL"`
+
+	WebhookWorkerCount       string `envconfig:"WEBHOOK_WORKER_COUNT" default:"16"`
+	WebhookQueueSize         string `envconfig:"WEBHOOK_QUEUE_SIZE" default:"1000"`
+	WebhookEnqueueTimeoutMS  string `envconfig:"WEBHOOK_ENQUEUE_TIMEOUT_MS" default:"50"`
+	WebhookHandlerTimeoutSec string `envconfig:"WEBHOOK_HANDLER_TIMEOUT_SECONDS" default:"30"`
+
+	ChzzkClientID     string `envconfig:"CHZZK_CLIENT_ID"`
+	ChzzkClientSecret string `envconfig:"CHZZK_CLIENT_SECRET"`
+
+	TwitchClientID     string `envconfig:"TWITCH_CLIENT_ID"`
+	TwitchClientSecret string `envconfig:"TWITCH_CLIENT_SECRET"`
+
+	AlarmDispatcherURL string `envconfig:"ALARM_DISPATCHER_URL"`
+	LLMSchedulerURL    string `envconfig:"LLM_SCHEDULER_INTERNAL_URL"`
+	AppVersion         string `envconfig:"APP_VERSION" default:"1.1.0-go"`
+	CORSEnforce        string `envconfig:"CORS_ENFORCE" default:"false"`
+}
+
+type runtimeTokenEnvConfig struct {
+	IrisSharedToken  string `envconfig:"IRIS_SHARED_TOKEN"`
+	IrisWebhookToken string `envconfig:"IRIS_WEBHOOK_TOKEN"`
+	IrisBotToken     string `envconfig:"IRIS_BOT_TOKEN"`
+
+	AppEnv          string `envconfig:"APP_ENV"`
+	OTELEnvironment string `envconfig:"OTEL_ENVIRONMENT" default:"production"`
+
+	CORSAllowedOrigins string `envconfig:"CORS_ALLOWED_ORIGINS"`
+}
+
+type cliproxyEnvConfig struct {
+	BaseURL         string `envconfig:"CLIPROXY_BASE_URL" default:"https://cliproxy.capu.blog/v1"`
+	APIKey          string `envconfig:"CLIPROXY_API_KEY"`
+	Model           string `envconfig:"CLIPROXY_MODEL" default:"gpt-5.3-codex"`
+	Enabled         string `envconfig:"CLIPROXY_ENABLED" default:"false"`
+	ReasoningEffort string `envconfig:"CLIPROXY_REASONING_EFFORT" default:"high"`
+}
+
+type llmEnvConfig struct {
+	MemberNewsModel       string `envconfig:"MEMBER_NEWS_LLM_MODEL"`
+	MemberNewsTemperature string `envconfig:"MEMBER_NEWS_TEMPERATURE" default:"0"`
+}
+
+type consensusLLMEnvConfig struct {
+	ConsensusEnabled     string `envconfig:"CONSENSUS_ENABLED" default:"false"`
+	ConsensusConfidence  string `envconfig:"CONSENSUS_CONFIDENCE" default:"0.85"`
+	ReviewerModel        string `envconfig:"REVIEWER_MODEL"`
+	AdjudicatorModel     string `envconfig:"ADJUDICATOR_MODEL"`
+	ReviewTimeoutSec     string `envconfig:"REVIEW_TIMEOUT_SEC" default:"30"`
+	AdjudicateTimeoutSec string `envconfig:"ADJUDICATE_TIMEOUT_SEC" default:"45"`
+}
+
+type exaEnvConfig struct {
+	Endpoint string `envconfig:"EXA_MCP_ENDPOINT" default:"https://mcp.exa.ai/mcp"`
+	APIKey   string `envconfig:"EXA_API_KEY"`
+	Enabled  string `envconfig:"EXA_ENABLED" default:"false"`
+}
 
 // Config: 홀로라이브 봇의 전체 동작에 필요한 설정을 담는 구조체
 type Config struct {
@@ -229,14 +354,9 @@ type NotificationConfig struct {
 	CheckInterval  time.Duration
 }
 
-// LoggingConfig: 애플리케이션 로그 설정 (레벨, 디렉토리, 로테이션 정책)
+// LoggingConfig: 애플리케이션 로그 설정 (레벨)
 type LoggingConfig struct {
-	Level      string
-	Dir        string
-	MaxSizeMB  int
-	MaxBackups int
-	MaxAgeDays int
-	Compress   bool
+	Level string
 }
 
 // BotConfig: 봇의 기본 동작(명령어 접두사, 자기 자신 식별자) 설정
@@ -256,13 +376,15 @@ type ServicesConfig struct {
 
 // TelemetryConfig: OpenTelemetry 분산 추적 설정
 type TelemetryConfig struct {
-	Enabled        bool    // 트레이싱 활성화 여부
-	ServiceName    string  // 서비스 식별자 (ex "hololive-bot")
-	ServiceVersion string  // 서비스 버전 (ex "1.0.0")
-	Environment    string  // 배포 환경 (ex "production")
-	OTLPEndpoint   string  // OTLP collector 주소 (ex "otel-collector:4317")
-	OTLPInsecure   bool    // TLS 없이 연결 (내부망 전용)
-	SampleRate     float64 // 샘플링 비율 (0.0 ~ 1.0)
+	Enabled               bool          // 트레이싱 활성화 여부
+	MetricsEnabled        bool          // OTel metrics export 활성화 여부 (Prometheus와 병행 가능)
+	MetricsExportInterval time.Duration // OTel metrics export 주기
+	ServiceName           string        // 서비스 식별자 (ex "hololive-bot")
+	ServiceVersion        string        // 서비스 버전 (ex "1.0.0")
+	Environment           string        // 배포 환경 (ex "production")
+	OTLPEndpoint          string        // OTLP collector 주소 (ex "otel-collector:4317")
+	OTLPInsecure          bool          // TLS 없이 연결 (내부망 전용)
+	SampleRate            float64       // 샘플링 비율 (0.0 ~ 1.0)
 }
 
 // ScraperConfig: YouTube 스크래퍼 프록시 설정 (SOCKS5)
@@ -302,7 +424,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
-	cfg := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
+	cfg, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
+	if err != nil {
+		return nil, fmt.Errorf("build config: %w", err)
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
@@ -312,105 +437,113 @@ func Load() (*Config, error) {
 }
 
 func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
-	sharedIrisToken := envutil.String("IRIS_SHARED_TOKEN", "")
+	var raw runtimeTokenEnvConfig
+	_ = envconfig.Process("", &raw)
+
+	sharedIrisToken := strings.TrimSpace(raw.IrisSharedToken)
 	webhookToken, botToken := sharedirisx.ResolveTokens(
-		envutil.String("IRIS_WEBHOOK_TOKEN", ""),
-		envutil.String("IRIS_BOT_TOKEN", ""),
+		strings.TrimSpace(raw.IrisWebhookToken),
+		strings.TrimSpace(raw.IrisBotToken),
 		sharedIrisToken,
 	)
 
-	runtimeEnv := strings.TrimSpace(envutil.String("APP_ENV", envutil.String("OTEL_ENVIRONMENT", "production")))
+	runtimeEnv := strings.TrimSpace(raw.AppEnv)
+	if runtimeEnv == "" {
+		runtimeEnv = parseStringWithDefault(raw.OTELEnvironment, "production")
+	}
 	isProduction := strings.EqualFold(runtimeEnv, "production")
 	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
-		envutil.String("CORS_ALLOWED_ORIGINS", ""),
+		strings.TrimSpace(raw.CORSAllowedOrigins),
 		isProduction,
 	)
 
 	return webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction
 }
 
-func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) *Config {
+func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) (*Config, error) {
+	var raw appCoreEnvConfig
+	if err := envconfig.Process("", &raw); err != nil {
+		return nil, fmt.Errorf("process env: %w", err)
+	}
+
+	holodexBaseURL := parseStringWithDefault(raw.HolodexBaseURL, constants.APIConfig.HolodexBaseURL)
+
 	return &Config{
 		Iris: IrisConfig{
-			BaseURL:                   envutil.String("IRIS_BASE_URL", "http://localhost:3000"),
+			BaseURL:                   parseStringWithDefault(raw.IrisBaseURL, "http://localhost:3000"),
 			WebhookToken:              webhookToken,
 			BotToken:                  botToken,
-			HTTPTimeout:               time.Duration(envutil.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
-			HTTPDialTimeout:           time.Duration(envutil.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
-			HTTPResponseHeaderTimeout: time.Duration(envutil.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
+			HTTPTimeout:               time.Duration(parseIntWithDefault(raw.IrisHTTPTimeoutSeconds, 10)) * time.Second,
+			HTTPDialTimeout:           time.Duration(parseIntWithDefault(raw.IrisHTTPDialTimeoutSeconds, 3)) * time.Second,
+			HTTPResponseHeaderTimeout: time.Duration(parseIntWithDefault(raw.IrisHTTPRespHeaderTimeoutSec, 5)) * time.Second,
 		},
 		Server: ServerConfig{
-			Port:   envutil.Int("SERVER_PORT", 30001),
-			APIKey: envutil.String("API_SECRET_KEY", ""),
+			Port:   parseIntWithDefault(raw.ServerPort, 30001),
+			APIKey: strings.TrimSpace(raw.APISecretKey),
 		},
 		Kakao: KakaoConfig{
-			Rooms:      parseCommaSeparated(envutil.String("KAKAO_ROOMS", "홀로라이브 알림방")),
-			ACLEnabled: envutil.Bool("KAKAO_ACL_ENABLED", true),
+			Rooms:      parseCommaSeparated(parseStringWithDefault(raw.KakaoRooms, "홀로라이브 알림방")),
+			ACLEnabled: parseBoolWithDefault(raw.KakaoACLEnabled, true),
 		},
 		Holodex: HolodexConfig{
-			BaseURL: envutil.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
+			BaseURL: holodexBaseURL,
 			APIKeys: collectAPIKeys("HOLODEX_API_KEY_"),
 		},
 		YouTube: YouTubeConfig{
-			APIKey:              envutil.String("YOUTUBE_API_KEY", ""),
-			EnableQuotaBuilding: envutil.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
+			APIKey:              strings.TrimSpace(raw.YouTubeAPIKey),
+			EnableQuotaBuilding: parseBoolWithDefault(raw.YouTubeEnableQuotaBuilding, false),
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Notification: NotificationConfig{
-			AdvanceMinutes: parseIntList(envutil.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
-			CheckInterval:  time.Duration(envutil.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
+			AdvanceMinutes: parseIntList(parseStringWithDefault(raw.NotificationAdvanceMinutes, "5")),
+			CheckInterval:  time.Duration(parseIntWithDefault(raw.CheckIntervalSeconds, 60)) * time.Second,
 		},
 		Logging: LoggingConfig{
-			Level:      envutil.String("LOG_LEVEL", "info"),
-			Dir:        envutil.String("LOG_DIR", ""),
-			MaxSizeMB:  envutil.Int("LOG_MAX_SIZE_MB", 100),
-			MaxBackups: envutil.Int("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: envutil.Int("LOG_MAX_AGE_DAYS", 30),
-			Compress:   envutil.Bool("LOG_COMPRESS", true),
+			Level: parseStringWithDefault(raw.LogLevel, "info"),
 		},
 		Bot: BotConfig{
-			Prefix:           envutil.String("BOT_PREFIX", "!"),
-			SelfUser:         stringutil.TrimSpace(envutil.String("BOT_SELF_USER", "iris")),
-			IngestionEnabled: envutil.Bool("BOT_INGESTION_ENABLED", true),
-			AdminEnabled:     envutil.Bool("BOT_ADMIN_ENABLED", true),
+			Prefix:           parseStringWithDefault(raw.BotPrefix, "!"),
+			SelfUser:         stringutil.TrimSpace(parseStringWithDefault(raw.BotSelfUser, "iris")),
+			IngestionEnabled: parseBoolWithDefault(raw.BotIngestionEnabled, true),
+			AdminEnabled:     parseBoolWithDefault(raw.BotAdminEnabled, true),
 		},
 		Services: ServicesConfig{
-			LLMServerHealthURL:      envutil.String("SERVICES_LLM_SERVER_HEALTH_URL", ""),
-			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-			GameBotTurtleHealthURL:  envutil.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+			LLMServerHealthURL:      strings.TrimSpace(raw.ServicesLLMServerHealthURL),
+			GameBotTwentyQHealthURL: strings.TrimSpace(raw.ServicesGameBotTwentyQHealthURL),
+			GameBotTurtleHealthURL:  strings.TrimSpace(raw.ServicesGameBotTurtleHealthURL),
 		},
 		Telemetry: loadTelemetryConfig(),
 		Scraper: ScraperConfig{
-			ProxyEnabled: envutil.Bool("SCRAPER_PROXY_ENABLED", false),
-			ProxyURL:     envutil.String("SCRAPER_PROXY_URL", ""),
+			ProxyEnabled: parseBoolWithDefault(raw.ScraperProxyEnabled, false),
+			ProxyURL:     strings.TrimSpace(raw.ScraperProxyURL),
 		},
 		Webhook: WebhookConfig{
-			WorkerCount:    envutil.Int("WEBHOOK_WORKER_COUNT", 16),
-			QueueSize:      envutil.Int("WEBHOOK_QUEUE_SIZE", 1000),
-			EnqueueTimeout: time.Duration(envutil.Int("WEBHOOK_ENQUEUE_TIMEOUT_MS", 50)) * time.Millisecond,
-			HandlerTimeout: time.Duration(envutil.Int("WEBHOOK_HANDLER_TIMEOUT_SECONDS", 30)) * time.Second,
+			WorkerCount:    parseIntWithDefault(raw.WebhookWorkerCount, 16),
+			QueueSize:      parseIntWithDefault(raw.WebhookQueueSize, 1000),
+			EnqueueTimeout: time.Duration(parseIntWithDefault(raw.WebhookEnqueueTimeoutMS, 50)) * time.Millisecond,
+			HandlerTimeout: time.Duration(parseIntWithDefault(raw.WebhookHandlerTimeoutSec, 30)) * time.Second,
 		},
 		Chzzk: ChzzkConfig{
-			ClientID:     envutil.String("CHZZK_CLIENT_ID", ""),
-			ClientSecret: envutil.String("CHZZK_CLIENT_SECRET", ""),
+			ClientID:     strings.TrimSpace(raw.ChzzkClientID),
+			ClientSecret: strings.TrimSpace(raw.ChzzkClientSecret),
 		},
 		Twitch: TwitchConfig{
-			ClientID:     envutil.String("TWITCH_CLIENT_ID", ""),
-			ClientSecret: envutil.String("TWITCH_CLIENT_SECRET", ""),
+			ClientID:     strings.TrimSpace(raw.TwitchClientID),
+			ClientSecret: strings.TrimSpace(raw.TwitchClientSecret),
 		},
 		Cliproxy:           loadCliproxyConfig(),
 		LLM:                loadLLMConfig(),
 		Exa:                loadExaConfig(),
-		AlarmDispatcherURL: envutil.String("ALARM_DISPATCHER_URL", ""),
-		LLMSchedulerURL:    envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
+		AlarmDispatcherURL: strings.TrimSpace(raw.AlarmDispatcherURL),
+		LLMSchedulerURL:    strings.TrimSpace(raw.LLMSchedulerURL),
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,
-			Enforce:             envutil.Bool("CORS_ENFORCE", false),
+			Enforce:             parseBoolWithDefault(raw.CORSEnforce, false),
 			MissingInProduction: corsMissingInProduction,
 		},
-		Version: stringutil.TrimSpace(envutil.String("APP_VERSION", "1.1.0-go")),
-	}
+		Version: stringutil.TrimSpace(parseStringWithDefault(raw.AppVersion, "1.1.0-go")),
+	}, nil
 }
 
 // Validate: 필수 설정값이 누락되지 않았는지 검증합니다.
@@ -461,39 +594,65 @@ func validateDeprecatedEnvUsage() error {
 }
 
 func loadValkeyConfig() ValkeyConfig {
+	var raw valkeyEnvConfig
+	_ = envconfig.Process("", &raw)
+
 	return ValkeyConfig{
-		Host:       envutil.String("CACHE_HOST", "localhost"),
-		Port:       envutil.Int("CACHE_PORT", 6379),
-		Password:   envutil.String("CACHE_PASSWORD", ""),
-		DB:         envutil.Int("CACHE_DB", 0),
-		SocketPath: envutil.String("CACHE_SOCKET_PATH", ""),
+		Host:       parseStringWithDefault(raw.Host, "localhost"),
+		Port:       parseIntWithDefault(raw.Port, 6379),
+		Password:   raw.Password,
+		DB:         parseIntWithDefault(raw.DB, 0),
+		SocketPath: strings.TrimSpace(raw.SocketPath),
 	}
 }
 
 func loadPostgresConfig() PostgresConfig {
+	var raw postgresEnvConfig
+	_ = envconfig.Process("", &raw)
+
+	host := strings.TrimSpace(raw.Host)
+	if host == "" {
+		host = constants.DatabaseDefaults.Host
+	}
+	user := strings.TrimSpace(raw.User)
+	if user == "" {
+		user = constants.DatabaseDefaults.User
+	}
+	password := raw.Password
+	if strings.TrimSpace(password) == "" {
+		password = constants.DatabaseDefaults.Password
+	}
+	database := strings.TrimSpace(raw.Database)
+	if database == "" {
+		database = constants.DatabaseDefaults.Database
+	}
+
 	return PostgresConfig{
-		Host:              envutil.String("POSTGRES_HOST", constants.DatabaseDefaults.Host),
-		Port:              envutil.Int("POSTGRES_PORT", constants.DatabaseDefaults.Port),
-		SocketPath:        envutil.String("POSTGRES_SOCKET_PATH", ""),
-		User:              envutil.String("POSTGRES_USER", constants.DatabaseDefaults.User),
-		Password:          envutil.String("POSTGRES_PASSWORD", constants.DatabaseDefaults.Password),
-		Database:          envutil.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
-		SSLMode:           envutil.String("POSTGRES_SSLMODE", "require"),
-		QueryExecMode:     envutil.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
-		PoolMinConns:      envutil.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
-		PoolMaxConns:      envutil.Int("POSTGRES_POOL_MAX_CONNS", constants.DatabaseConfig.MaxOpenConns),
-		PoolMaxIdleConns:  envutil.Int("POSTGRES_POOL_MAX_IDLE_CONNS", constants.DatabaseConfig.MaxIdleConns),
-		AutoPrepareSchema: envutil.Bool("POSTGRES_AUTO_PREPARE_SCHEMA", true),
+		Host:              host,
+		Port:              parseIntWithDefault(raw.Port, constants.DatabaseDefaults.Port),
+		SocketPath:        strings.TrimSpace(raw.SocketPath),
+		User:              user,
+		Password:          password,
+		Database:          database,
+		SSLMode:           parseStringWithDefault(raw.SSLMode, "require"),
+		QueryExecMode:     parseStringWithDefault(raw.QueryExecMode, "cache_statement"),
+		PoolMinConns:      parseIntWithDefault(raw.PoolMinConns, constants.DatabaseConfig.MaxIdleConns),
+		PoolMaxConns:      parseIntWithDefault(raw.PoolMaxConns, constants.DatabaseConfig.MaxOpenConns),
+		PoolMaxIdleConns:  parseIntWithDefault(raw.PoolMaxIdleConns, constants.DatabaseConfig.MaxIdleConns),
+		AutoPrepareSchema: parseBoolWithDefault(raw.AutoPrepareSchema, true),
 	}
 }
 
 func loadCliproxyConfig() CliproxyConfig {
+	var raw cliproxyEnvConfig
+	_ = envconfig.Process("", &raw)
+
 	return CliproxyConfig{
-		BaseURL:         envutil.String("CLIPROXY_BASE_URL", "https://cliproxy.capu.blog/v1"),
-		APIKey:          envutil.String("CLIPROXY_API_KEY", ""),
-		Model:           envutil.String("CLIPROXY_MODEL", "gpt-5.3-codex"),
-		Enabled:         envutil.Bool("CLIPROXY_ENABLED", false),
-		ReasoningEffort: envutil.String("CLIPROXY_REASONING_EFFORT", "high"),
+		BaseURL:         parseStringWithDefault(raw.BaseURL, "https://cliproxy.capu.blog/v1"),
+		APIKey:          strings.TrimSpace(raw.APIKey),
+		Model:           parseStringWithDefault(raw.Model, "gpt-5.3-codex"),
+		Enabled:         parseBoolWithDefault(raw.Enabled, false),
+		ReasoningEffort: parseStringWithDefault(raw.ReasoningEffort, "high"),
 	}
 }
 
@@ -515,51 +674,70 @@ func clampConfidence(v float64) float64 {
 // loadConsensusLLMConfig: prefix 기반 환경변수에서 ConsensusLLMConfig를 로드한다.
 // prefix 예: "MEMBER_NEWS" -> MEMBER_NEWS_CONSENSUS_ENABLED, MEMBER_NEWS_CONSENSUS_CONFIDENCE, ...
 func loadConsensusLLMConfig(prefix string) ConsensusLLMConfig {
-	reviewTimeout := envutil.Int(prefix+"_REVIEW_TIMEOUT_SEC", 30)
+	var raw consensusLLMEnvConfig
+	_ = envconfig.Process(prefix, &raw)
+
+	reviewTimeout := parseIntWithDefault(raw.ReviewTimeoutSec, 30)
 	if reviewTimeout < 5 {
 		reviewTimeout = 30
 	}
-	adjudicateTimeout := envutil.Int(prefix+"_ADJUDICATE_TIMEOUT_SEC", 45)
+	adjudicateTimeout := parseIntWithDefault(raw.AdjudicateTimeoutSec, 45)
 	if adjudicateTimeout < 5 {
 		adjudicateTimeout = 45
 	}
 
 	return ConsensusLLMConfig{
-		Enabled:           envutil.Bool(prefix+"_CONSENSUS_ENABLED", false),
-		Confidence:        clampConfidence(envutil.Float(prefix+"_CONSENSUS_CONFIDENCE", 0.85)),
-		ReviewerModel:     envutil.String(prefix+"_REVIEWER_MODEL", ""),
-		AdjudicatorModel:  envutil.String(prefix+"_ADJUDICATOR_MODEL", ""),
+		Enabled:           parseBoolWithDefault(raw.ConsensusEnabled, false),
+		Confidence:        clampConfidence(parseFloatWithDefault(raw.ConsensusConfidence, 0.85)),
+		ReviewerModel:     strings.TrimSpace(raw.ReviewerModel),
+		AdjudicatorModel:  strings.TrimSpace(raw.AdjudicatorModel),
 		ReviewTimeout:     reviewTimeout,
 		AdjudicateTimeout: adjudicateTimeout,
 	}
 }
 
 func loadLLMConfig() LLMConfig {
+	var raw llmEnvConfig
+	_ = envconfig.Process("", &raw)
+
 	return LLMConfig{
-		MemberNewsModel:       envutil.String("MEMBER_NEWS_LLM_MODEL", ""),
-		MemberNewsTemperature: envutil.Float("MEMBER_NEWS_TEMPERATURE", 0), // GPT-5: temperature=1.0만 지원, 0=미설정(SDK 기본값)
+		MemberNewsModel:       strings.TrimSpace(raw.MemberNewsModel),
+		MemberNewsTemperature: parseFloatWithDefault(raw.MemberNewsTemperature, 0), // GPT-5: temperature=1.0만 지원, 0=미설정(SDK 기본값)
 		MemberNews:            loadConsensusLLMConfig("MEMBER_NEWS"),
 		MajorEvent:            loadConsensusLLMConfig("MAJOREVENT"),
 	}
 }
 
 func loadExaConfig() ExaConfig {
+	var raw exaEnvConfig
+	_ = envconfig.Process("", &raw)
+
 	return ExaConfig{
-		Endpoint: envutil.String("EXA_MCP_ENDPOINT", "https://mcp.exa.ai/mcp"),
-		APIKey:   envutil.String("EXA_API_KEY", ""),
-		Enabled:  envutil.Bool("EXA_ENABLED", false),
+		Endpoint: parseStringWithDefault(raw.Endpoint, "https://mcp.exa.ai/mcp"),
+		APIKey:   strings.TrimSpace(raw.APIKey),
+		Enabled:  parseBoolWithDefault(raw.Enabled, false),
 	}
 }
 
 func loadTelemetryConfig() TelemetryConfig {
+	var raw telemetryEnvConfig
+	_ = envconfig.Process("", &raw)
+
+	metricsExportIntervalSeconds := parseIntWithDefault(raw.MetricsExportIntervalSec, 30)
+	if metricsExportIntervalSeconds <= 0 {
+		metricsExportIntervalSeconds = 30
+	}
+
 	return TelemetryConfig{
-		Enabled:        envutil.Bool("OTEL_ENABLED", false),
-		ServiceName:    envutil.String("OTEL_SERVICE_NAME", "hololive-bot"),
-		ServiceVersion: envutil.String("OTEL_SERVICE_VERSION", "1.0.0"),
-		Environment:    envutil.String("OTEL_ENVIRONMENT", "production"),
-		OTLPEndpoint:   envutil.String("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-		OTLPInsecure:   envutil.Bool("OTEL_EXPORTER_OTLP_INSECURE", false),
-		SampleRate:     envutil.Float("OTEL_SAMPLE_RATE", 1.0),
+		Enabled:               parseBoolWithDefault(raw.Enabled, false),
+		MetricsEnabled:        parseBoolWithDefault(raw.MetricsEnabled, false),
+		MetricsExportInterval: time.Duration(metricsExportIntervalSeconds) * time.Second,
+		ServiceName:           parseStringWithDefault(raw.ServiceName, "hololive-bot"),
+		ServiceVersion:        parseStringWithDefault(raw.ServiceVersion, "1.0.0"),
+		Environment:           parseStringWithDefault(raw.Environment, "production"),
+		OTLPEndpoint:          parseStringWithDefault(raw.OTLPEndpoint, "otel-collector:4317"),
+		OTLPInsecure:          parseBoolWithDefault(raw.OTLPInsecure, false),
+		SampleRate:            parseFloatWithDefault(raw.SampleRate, 1.0),
 	}
 }
 
@@ -599,6 +777,46 @@ func validateAPISecretKey(environment, apiKey string) error {
 		return nil
 	}
 	return fmt.Errorf("API_SECRET_KEY is required in production")
+}
+
+func parseStringWithDefault(value, def string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return def
+	}
+	return trimmed
+}
+
+func parseIntWithDefault(value string, def int) int {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return def
+	}
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return def
+	}
+	return parsed
+}
+
+func parseFloatWithDefault(value string, def float64) float64 {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return def
+	}
+	parsed, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil {
+		return def
+	}
+	return parsed
+}
+
+func parseBoolWithDefault(value string, def bool) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(value))
+	if trimmed == "" {
+		return def
+	}
+	return trimmed == "true" || trimmed == "1" || trimmed == "yes" || trimmed == "y"
 }
 
 func parseCommaSeparated(value string) []string {

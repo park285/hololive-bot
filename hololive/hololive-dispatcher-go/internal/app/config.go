@@ -2,33 +2,72 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/kelseyhightower/envconfig"
 
+	sharedconfig "github.com/kapu/hololive-shared/pkg/config"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 const (
-	defaultDispatcherPort = 30020
-	defaultValkeyHost     = "localhost"
-	defaultValkeyPort     = 6379
-	defaultValkeyDB       = 0
-	defaultMaxBatch       = 50
+	defaultMaxBatch           = 50
+	defaultReconnectBackoffMS = 1000
+	defaultLoggingLevel       = "info"
+	defaultMetricsIntervalSec = 30
 )
+
+type envConfig struct {
+	DispatcherPort int `envconfig:"DISPATCHER_PORT" default:"30020"`
+
+	IrisBaseURL     string `envconfig:"IRIS_BASE_URL" default:"http://localhost:3000"`
+	IrisBotToken    string `envconfig:"IRIS_BOT_TOKEN"`
+	IrisSharedToken string `envconfig:"IRIS_SHARED_TOKEN"`
+
+	// CACHE_* 접두사: 나머지 Go 서비스(hololive-shared ValkeyConfig)와 동일 규칙
+	ValkeyHost       string `envconfig:"CACHE_HOST"`
+	ValkeyPort       string `envconfig:"CACHE_PORT"`
+	ValkeyPassword   string `envconfig:"CACHE_PASSWORD"`
+	ValkeyDB         string `envconfig:"CACHE_DB"`
+	ValkeySocketPath string `envconfig:"CACHE_SOCKET_PATH"`
+
+	// VALKEY_* 접두사: dispatcher 기존 환경변수 (하위호환)
+	LegacyValkeyHost       string `envconfig:"VALKEY_HOST"`
+	LegacyValkeyPort       string `envconfig:"VALKEY_PORT"`
+	LegacyValkeyPassword   string `envconfig:"VALKEY_PASSWORD"`
+	LegacyValkeyDB         string `envconfig:"VALKEY_DB"`
+	LegacyValkeySocketPath string `envconfig:"VALKEY_SOCKET_PATH"`
+
+	DispatchQueueKey             string `envconfig:"ALARM_DISPATCH_QUEUE_KEY" default:"alarm:dispatch:queue"`
+	DispatchMaxBatch             int    `envconfig:"ALARM_DISPATCH_MAX_BATCH" default:"50"`
+	DispatcherReconnectBackoffMS int    `envconfig:"DISPATCHER_RECONNECT_BACKOFF_MS" default:"1000"`
+
+	LogLevel string `envconfig:"LOG_LEVEL" default:"info"`
+
+	OTELEnabled                  bool    `envconfig:"OTEL_ENABLED" default:"false"`
+	OTELMetricsEnabled           bool    `envconfig:"OTEL_METRICS_ENABLED" default:"false"`
+	OTELMetricsExportIntervalSec int     `envconfig:"OTEL_METRICS_EXPORT_INTERVAL_SECONDS" default:"30"`
+	OTELServiceName              string  `envconfig:"OTEL_SERVICE_NAME" default:"hololive-dispatcher-go"`
+	OTELServiceVersion           string  `envconfig:"OTEL_SERVICE_VERSION" default:"1.0.0"`
+	OTELEnvironment              string  `envconfig:"OTEL_ENVIRONMENT" default:"production"`
+	OTELExporterOTLPEndpoint     string  `envconfig:"OTEL_EXPORTER_OTLP_ENDPOINT" default:"otel-collector:4317"`
+	OTELExporterOTLPInsecure     bool    `envconfig:"OTEL_EXPORTER_OTLP_INSECURE" default:"false"`
+	OTELSampleRate               float64 `envconfig:"OTEL_SAMPLE_RATE" default:"1.0"`
+}
 
 // Config: dispatcher-go 런타임 설정.
 type Config struct {
-	Server   ServerConfig
-	Iris     IrisConfig
-	Valkey   cache.Config
-	Dispatch DispatchConfig
-	Logging  sharedlogging.Config
+	Server    ServerConfig
+	Iris      IrisConfig
+	Valkey    cache.Config
+	Dispatch  DispatchConfig
+	Logging   sharedlogging.Config
+	Telemetry sharedconfig.TelemetryConfig
 }
 
 // ServerConfig: HTTP 서버 설정.
@@ -53,44 +92,72 @@ type DispatchConfig struct {
 func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
-	botToken := strings.TrimSpace(envString("IRIS_BOT_TOKEN", ""))
-	if botToken == "" {
-		botToken = strings.TrimSpace(envString("IRIS_SHARED_TOKEN", ""))
+	var raw envConfig
+	if err := envconfig.Process("", &raw); err != nil {
+		return nil, fmt.Errorf("load dispatcher config: process env: %w", err)
 	}
 
-	maxBatch := envInt("ALARM_DISPATCH_MAX_BATCH", defaultMaxBatch)
+	botToken := strings.TrimSpace(raw.IrisBotToken)
+	if botToken == "" {
+		botToken = strings.TrimSpace(raw.IrisSharedToken)
+	}
+
+	maxBatch := raw.DispatchMaxBatch
 	if maxBatch <= 0 {
 		maxBatch = defaultMaxBatch
+	}
+	reconnectBackoffMS := raw.DispatcherReconnectBackoffMS
+	if reconnectBackoffMS <= 0 {
+		reconnectBackoffMS = defaultReconnectBackoffMS
+	}
+	metricsExportIntervalSec := raw.OTELMetricsExportIntervalSec
+	if metricsExportIntervalSec <= 0 {
+		metricsExportIntervalSec = defaultMetricsIntervalSec
 	}
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: envInt("DISPATCHER_PORT", defaultDispatcherPort),
+			Port: raw.DispatcherPort,
 		},
 		Iris: IrisConfig{
-			BaseURL:  envString("IRIS_BASE_URL", "http://localhost:3000"),
+			BaseURL:  raw.IrisBaseURL,
 			BotToken: botToken,
 		},
 		Valkey: cache.Config{
-			Host:       envString("VALKEY_HOST", defaultValkeyHost),
-			Port:       envInt("VALKEY_PORT", defaultValkeyPort),
-			Password:   envString("VALKEY_PASSWORD", ""),
-			DB:         envInt("VALKEY_DB", defaultValkeyDB),
-			SocketPath: envString("VALKEY_SOCKET_PATH", ""),
+			Host:       pickTrimmed(raw.ValkeyHost, raw.LegacyValkeyHost, "localhost"),
+			Port:       parseIntWithFallback(raw.ValkeyPort, raw.LegacyValkeyPort, 6379),
+			Password:   pickTrimmed(raw.ValkeyPassword, raw.LegacyValkeyPassword, ""),
+			DB:         parseIntWithFallback(raw.ValkeyDB, raw.LegacyValkeyDB, 0),
+			SocketPath: pickTrimmed(raw.ValkeySocketPath, raw.LegacyValkeySocketPath, ""),
 		},
 		Dispatch: DispatchConfig{
-			QueueKey:         envString("ALARM_DISPATCH_QUEUE_KEY", contractsalarm.DispatchQueueKey),
+			QueueKey:         strings.TrimSpace(raw.DispatchQueueKey),
 			MaxBatch:         maxBatch,
-			ReconnectBackoff: time.Duration(envInt("DISPATCHER_RECONNECT_BACKOFF_MS", 1000)) * time.Millisecond,
+			ReconnectBackoff: time.Duration(reconnectBackoffMS) * time.Millisecond,
 		},
 		Logging: sharedlogging.Config{
-			Level:      envString("LOG_LEVEL", "info"),
-			Dir:        envString("LOG_DIR", ""),
-			MaxSizeMB:  envInt("LOG_MAX_SIZE_MB", 100),
-			MaxBackups: envInt("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: envInt("LOG_MAX_AGE_DAYS", 30),
-			Compress:   envBool("LOG_COMPRESS", true),
+			Level: strings.TrimSpace(raw.LogLevel),
 		},
+		Telemetry: sharedconfig.TelemetryConfig{
+			Enabled:               raw.OTELEnabled,
+			MetricsEnabled:        raw.OTELMetricsEnabled,
+			MetricsExportInterval: time.Duration(metricsExportIntervalSec) * time.Second,
+			ServiceName:           strings.TrimSpace(raw.OTELServiceName),
+			ServiceVersion:        strings.TrimSpace(raw.OTELServiceVersion),
+			Environment:           strings.TrimSpace(raw.OTELEnvironment),
+			OTLPEndpoint:          strings.TrimSpace(raw.OTELExporterOTLPEndpoint),
+			OTLPInsecure:          raw.OTELExporterOTLPInsecure,
+			SampleRate:            raw.OTELSampleRate,
+		},
+	}
+	if cfg.Dispatch.QueueKey == "" {
+		cfg.Dispatch.QueueKey = contractsalarm.DispatchQueueKey
+	}
+	if cfg.Logging.Level == "" {
+		cfg.Logging.Level = defaultLoggingLevel
+	}
+	if cfg.Telemetry.MetricsExportInterval <= 0 {
+		cfg.Telemetry.MetricsExportInterval = defaultMetricsIntervalSec * time.Second
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -121,40 +188,29 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("validate config: DISPATCHER_RECONNECT_BACKOFF_MS must be positive")
 	}
 	if strings.TrimSpace(c.Valkey.SocketPath) == "" && strings.TrimSpace(c.Valkey.Host) == "" {
-		return fmt.Errorf("validate config: VALKEY_HOST is required when VALKEY_SOCKET_PATH is empty")
+		return fmt.Errorf("validate config: CACHE_HOST is required when CACHE_SOCKET_PATH is empty")
 	}
 	return nil
 }
 
-func envString(key, defaultValue string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return strings.TrimSpace(value)
+func pickTrimmed(primary, secondary, def string) string {
+	if trimmed := strings.TrimSpace(primary); trimmed != "" {
+		return trimmed
 	}
-	return defaultValue
+	if trimmed := strings.TrimSpace(secondary); trimmed != "" {
+		return trimmed
+	}
+	return def
 }
 
-func envInt(key string, defaultValue int) int {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return defaultValue
+func parseIntWithFallback(primary, secondary string, def int) int {
+	raw := pickTrimmed(primary, secondary, "")
+	if raw == "" {
+		return def
 	}
-
-	parsed, err := strconv.Atoi(value)
+	parsed, err := strconv.Atoi(raw)
 	if err != nil {
-		return defaultValue
-	}
-	return parsed
-}
-
-func envBool(key string, defaultValue bool) bool {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return defaultValue
-	}
-
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return defaultValue
+		return def
 	}
 	return parsed
 }
