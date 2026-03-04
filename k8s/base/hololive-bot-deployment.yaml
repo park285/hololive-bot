@@ -47,8 +47,6 @@ spec:
               value: "450MiB"
             - name: ALARM_DISPATCHER_URL
               value: "http://hololive-bot:30001"
-            - name: POSTGRES_SSLMODE
-              value: "disable"
             - name: BOT_INGESTION_ENABLED
               value: "false"
             - name: LOG_DIR
