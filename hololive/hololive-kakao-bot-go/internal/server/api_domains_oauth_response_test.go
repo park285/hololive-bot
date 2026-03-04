@@ -1,0 +1,148 @@
+package server
+
+import (
+	"bytes"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+)
+
+func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
+	// nil receiver도 안전하게 동작해야 함
+	var nilHandler *APIHandler
+	got := nilHandler.DomainHandlers()
+	if got == nil {
+		t.Fatal("DomainHandlers returned nil")
+	}
+	if got.Member == nil || got.Alarm == nil || got.OAuth == nil {
+		t.Fatal("domain sub-handlers must not be nil")
+	}
+	if got.Member.APIHandler == nil {
+		t.Fatal("embedded APIHandler should be initialized")
+	}
+	if got.Member.APIHandler != got.Alarm.APIHandler || got.Member.APIHandler != got.OAuth.APIHandler {
+		t.Fatal("all domain handlers should share same APIHandler instance")
+	}
+
+	base := &APIHandler{}
+	wired := base.DomainHandlers()
+	if wired.Member.APIHandler != base || wired.Template.APIHandler != base {
+		t.Fatal("expected all domain handlers to reference original APIHandler")
+	}
+}
+
+func TestNewAPIHandler_BasicInitialization(t *testing.T) {
+	h := NewAPIHandler(
+		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	if h == nil {
+		t.Fatal("NewAPIHandler returned nil")
+	}
+	if h.streamState == nil {
+		t.Fatal("streamState should be initialized")
+	}
+	if h.memberIndexLoader != nil {
+		t.Fatal("memberIndexLoader should be nil when repo is nil")
+	}
+	if h.ensureStreamState() != h.streamState {
+		t.Fatal("ensureStreamState should return same streamState pointer")
+	}
+
+	repoBacked := NewAPIHandler(
+		&member.Repository{}, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil,
+		nil,
+	)
+	if repoBacked.memberIndexLoader == nil {
+		t.Fatal("memberIndexLoader should be set when repo is provided")
+	}
+}
+
+func TestAPIHandler_RespondHelpers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := &APIHandler{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+
+	t.Run("respondError", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(rec)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+		h.respondError(ctx, http.StatusBadRequest, "bad request", gin.H{"field": "email"})
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d want=%d", rec.Code, http.StatusBadRequest)
+		}
+		body := rec.Body.String()
+		if !bytes.Contains([]byte(body), []byte(`"error":"bad request"`)) || !bytes.Contains([]byte(body), []byte(`"field":"email"`)) {
+			t.Fatalf("unexpected body: %s", body)
+		}
+	})
+
+	t.Run("respondInternalError", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(rec)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+		h.respondInternalError(ctx, "internal", "log-message", io.EOF)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status=%d want=%d", rec.Code, http.StatusInternalServerError)
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"error":"internal"`)) {
+			t.Fatalf("unexpected body: %s", rec.Body.String())
+		}
+	})
+}
+
+func TestOAuthCallbackHandler_HTMLResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	oauth := &OAuthAPIHandler{}
+	router.GET("/oauth/callback", oauth.OAuthCallbackHandler)
+
+	t.Run("success path", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/oauth/callback?code=abc&state=xyz", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d want=%d", rec.Code, http.StatusOK)
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+			t.Fatalf("content-type=%q", ct)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "window.location.href") || !strings.Contains(body, "code=abc") || !strings.Contains(body, "state=xyz") {
+			t.Fatalf("expected deep-link script fields in body, got: %s", body)
+		}
+	})
+
+	t.Run("error path", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/oauth/callback?error=access_denied&error_description=denied", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d want=%d", rec.Code, http.StatusOK)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "window.location.href") || !strings.Contains(body, "error=access_denied") || !strings.Contains(body, "error_description=denied") {
+			t.Fatalf("expected error deep-link script fields in body, got: %s", body)
+		}
+		if !strings.Contains(body, "로그인 실패") {
+			t.Fatalf("expected error page status label, got: %s", body)
+		}
+	})
+}
