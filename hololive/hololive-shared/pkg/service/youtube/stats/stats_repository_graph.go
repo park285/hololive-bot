@@ -11,6 +11,54 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
+const subscriberGraphQuery = `
+	WITH daily_stats AS (
+		SELECT 
+			DATE(time) as date,
+			MAX(subscribers) as subscribers,
+			MAX(member_name) as member_name
+		FROM youtube_stats_history
+		WHERE channel_id = $1 AND time >= NOW() - ($2 || ' days')::interval
+		GROUP BY DATE(time)
+		ORDER BY date ASC
+	),
+	current_stats AS (
+		SELECT subscribers, member_name
+		FROM youtube_stats_history
+		WHERE channel_id = $1
+		ORDER BY time DESC
+		LIMIT 1
+	),
+	stats_7d AS (
+		SELECT subscribers
+		FROM youtube_stats_history
+		WHERE channel_id = $1 AND time >= NOW() - INTERVAL '7 days'
+		ORDER BY time ASC
+		LIMIT 1
+	),
+	stats_30d AS (
+		SELECT subscribers
+		FROM youtube_stats_history
+		WHERE channel_id = $1 AND time >= NOW() - INTERVAL '30 days'
+		ORDER BY time ASC
+		LIMIT 1
+	)
+	SELECT 
+		COALESCE(c.member_name, '') as member_name,
+		COALESCE(c.subscribers, 0) as current_subs,
+		COALESCE(c.subscribers - s7.subscribers, 0) as change_7d,
+		COALESCE(c.subscribers - s30.subscribers, 0) as change_30d,
+		COALESCE(
+			(SELECT json_agg(json_build_object('date', date, 'subscribers', subscribers) ORDER BY date)
+			 FROM daily_stats),
+			'[]'::json
+		) as points,
+		(SELECT COUNT(*) FROM daily_stats) as sample_count
+	FROM current_stats c
+	LEFT JOIN stats_7d s7 ON true
+	LEFT JOIN stats_30d s30 ON true
+`
+
 // SubscriberGraphPoint: 구독자 그래프 데이터 포인트 (일별 다운샘플링)
 type SubscriberGraphPoint struct {
 	Date        time.Time `json:"date"`
@@ -38,60 +86,12 @@ func (r *StatsRepository) GetSubscriberGraph(ctx context.Context, channelID stri
 		days = 90
 	}
 
-	query := `
-		WITH daily_stats AS (
-			SELECT 
-				DATE(time) as date,
-				MAX(subscribers) as subscribers,
-				MAX(member_name) as member_name
-			FROM youtube_stats_history
-			WHERE channel_id = $1 AND time >= NOW() - ($2 || ' days')::interval
-			GROUP BY DATE(time)
-			ORDER BY date ASC
-		),
-		current_stats AS (
-			SELECT subscribers, member_name
-			FROM youtube_stats_history
-			WHERE channel_id = $1
-			ORDER BY time DESC
-			LIMIT 1
-		),
-		stats_7d AS (
-			SELECT subscribers
-			FROM youtube_stats_history
-			WHERE channel_id = $1 AND time >= NOW() - INTERVAL '7 days'
-			ORDER BY time ASC
-			LIMIT 1
-		),
-		stats_30d AS (
-			SELECT subscribers
-			FROM youtube_stats_history
-			WHERE channel_id = $1 AND time >= NOW() - INTERVAL '30 days'
-			ORDER BY time ASC
-			LIMIT 1
-		)
-		SELECT 
-			COALESCE(c.member_name, '') as member_name,
-			COALESCE(c.subscribers, 0) as current_subs,
-			COALESCE(c.subscribers - s7.subscribers, 0) as change_7d,
-			COALESCE(c.subscribers - s30.subscribers, 0) as change_30d,
-			COALESCE(
-				(SELECT json_agg(json_build_object('date', date, 'subscribers', subscribers) ORDER BY date)
-				 FROM daily_stats),
-				'[]'::json
-			) as points,
-			(SELECT COUNT(*) FROM daily_stats) as sample_count
-		FROM current_stats c
-		LEFT JOIN stats_7d s7 ON true
-		LEFT JOIN stats_30d s30 ON true
-	`
-
 	var memberName string
 	var currentSubs, change7d, change30d int64
 	var pointsJSON []byte
 	var sampleCount int
 
-	err := r.pool.QueryRow(ctx, query, channelID, days).Scan(
+	err := r.pool.QueryRow(ctx, subscriberGraphQuery, channelID, days).Scan(
 		&memberName,
 		&currentSubs,
 		&change7d,

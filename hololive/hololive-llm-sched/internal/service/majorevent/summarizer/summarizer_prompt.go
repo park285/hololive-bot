@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -248,17 +249,23 @@ func getDomainContext() string {
 	return domainContextPart1 + buildMemberFilterSection() + "\n\n" + domainContextPart2
 }
 
-// weeklySystemPrompt / monthlySystemPrompt: init()에서 동적 초기화
-var weeklySystemPrompt string
-var monthlySystemPrompt string
+// promptsResult: 지연 초기화된 시스템 프롬프트 결과 (값 + 에러 포함)
+type promptsResult struct {
+	weekly  string
+	monthly string
+	err     error
+}
 
-func init() {
+// initPrompts: graduated_members.json 파싱 및 프롬프트 초기화 (lazy, 한 번만 실행)
+var initPrompts = sync.OnceValue(func() promptsResult {
+	var r promptsResult
 	if err := json.Unmarshal(graduatedMembersJSON, &parsedGraduatedData); err != nil {
-		panic("failed to parse graduated_members.json: " + err.Error())
+		r.err = fmt.Errorf("parse graduated_members.json: %w", err)
+		return r
 	}
 
 	dc := getDomainContext()
-	weeklySystemPrompt = `<role>You are an event curator for a hololive fan community.</role>
+	r.weekly = `<role>You are an event curator for a hololive fan community.</role>
 <task>Analyze upcoming week's event data and produce a structured summary.</task>
 
 ` + dc + `
@@ -299,7 +306,7 @@ func init() {
   Key points: メンバーD(卒業済) removed, discovered_events from Google Search with source, dates include weekday, link copied from input
 </example>`
 
-	monthlySystemPrompt = `<role>You are an event curator for a hololive fan community.</role>
+	r.monthly = `<role>You are an event curator for a hololive fan community.</role>
 <task>Analyze this month's event data and produce a structured summary.</task>
 
 ` + dc + `
@@ -336,17 +343,23 @@ func init() {
   "discovered_events":[]}
   Key points: large group abbreviated to "JP/EN 다수", discovered_events empty when no additional events found, link copied from input
 </example>`
-}
+
+	return r
+})
 
 // --- Schema / Prompt 빌더 ---
 
-// getSystemPrompt: summaryType에 따라 적절한 system prompt를 반환합니다.
-func getSystemPrompt(summaryType SummaryType) string {
+// getSystemPrompt: summaryType에 따른 system prompt 반환, 초기화 실패 시 error를 반환합니다.
+func getSystemPrompt(summaryType SummaryType) (string, error) {
+	r := initPrompts()
+	if r.err != nil {
+		return "", fmt.Errorf("system prompt init: %w", r.err)
+	}
 	switch summaryType {
 	case SummaryTypeMonthly:
-		return monthlySystemPrompt
+		return r.monthly, nil
 	default:
-		return weeklySystemPrompt
+		return r.weekly, nil
 	}
 }
 
@@ -359,93 +372,105 @@ func summaryResponseSchema() map[string]any {
 			"highlights": map[string]any{
 				"type":        "array",
 				"description": "행사별 하이라이트 (날짜순 정렬)",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"name": map[string]any{
-							"type":        "string",
-							"description": "행사명 — 일본어 원제 유지, 번역 금지",
-						},
-						"date": map[string]any{
-							"type":        "string",
-							"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-						},
-						"members": map[string]any{
-							"type":        "string",
-							"description": "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
-						},
-						"note": map[string]any{
-							"type":        "string",
-							"description": "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
-							"maxLength":   30,
-						},
-						"link": map[string]any{
-							"type":        "string",
-							"description": "입력 행사 link 그대로 전달",
-						},
-					},
-					"required": []string{"name", "date", "members", "note", "link"},
-				},
+				"items":       summaryHighlightItemSchema(),
 			},
 			"ongoing_events": map[string]any{
 				"type":        "array",
 				"description": "기간 행사(팝업/카페/굿즈) 목록",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"name": map[string]any{
-							"type":        "string",
-							"description": "행사명",
-						},
-						"date": map[string]any{
-							"type":        "string",
-							"description": "날짜 — M/D(요일)~M/D(요일)",
-						},
-						"note": map[string]any{
-							"type":        "string",
-							"description": "행사 설명 — 30자 이내 한국어",
-							"maxLength":   30,
-						},
-						"link": map[string]any{
-							"type":        "string",
-							"description": "입력 행사 link 그대로 전달",
-						},
-					},
-					"required": []string{"name", "date", "note", "link"},
-				},
+				"items":       summaryOngoingItemSchema(),
 			},
 			"discovered_events": map[string]any{
 				"type":        "array",
 				"description": "Google Search로 발견한 입력 목록에 없는 추가 이벤트 (최대 5건, 없으면 빈 배열)",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"name": map[string]any{
-							"type":        "string",
-							"description": "행사명 — 공식 명칭 사용",
-						},
-						"date": map[string]any{
-							"type":        "string",
-							"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-						},
-						"note": map[string]any{
-							"type":        "string",
-							"description": "행사 설명 — 30자 이내 한국어",
-							"maxLength":   30,
-						},
-						"source": map[string]any{
-							"type":        "string",
-							"description": "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
-						},
-					},
-					"required": []string{"name", "date", "note", "source"},
-				},
+				"items":       summaryDiscoveredItemSchema(),
 			},
 		},
 		"required": []string{"highlights", "ongoing_events", "discovered_events"},
+	}
+}
+
+func summaryHighlightItemSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type":        "string",
+				"description": "행사명 — 일본어 원제 유지, 번역 금지",
+			},
+			"date": map[string]any{
+				"type":        "string",
+				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
+			},
+			"members": map[string]any{
+				"type":        "string",
+				"description": "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
+			},
+			"note": map[string]any{
+				"type":        "string",
+				"description": "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
+				"maxLength":   30,
+			},
+			"link": map[string]any{
+				"type":        "string",
+				"description": "입력 행사 link 그대로 전달",
+			},
+		},
+		"required": []string{"name", "date", "members", "note", "link"},
+	}
+}
+
+func summaryOngoingItemSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type":        "string",
+				"description": "행사명",
+			},
+			"date": map[string]any{
+				"type":        "string",
+				"description": "날짜 — M/D(요일)~M/D(요일)",
+			},
+			"note": map[string]any{
+				"type":        "string",
+				"description": "행사 설명 — 30자 이내 한국어",
+				"maxLength":   30,
+			},
+			"link": map[string]any{
+				"type":        "string",
+				"description": "입력 행사 link 그대로 전달",
+			},
+		},
+		"required": []string{"name", "date", "note", "link"},
+	}
+}
+
+func summaryDiscoveredItemSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type":        "string",
+				"description": "행사명 — 공식 명칭 사용",
+			},
+			"date": map[string]any{
+				"type":        "string",
+				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
+			},
+			"note": map[string]any{
+				"type":        "string",
+				"description": "행사 설명 — 30자 이내 한국어",
+				"maxLength":   30,
+			},
+			"source": map[string]any{
+				"type":        "string",
+				"description": "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
+			},
+		},
+		"required": []string{"name", "date", "note", "source"},
 	}
 }
 

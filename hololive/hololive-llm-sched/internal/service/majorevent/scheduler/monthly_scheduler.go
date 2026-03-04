@@ -171,12 +171,7 @@ func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 		return nil
 	}
 
-	domainEvents := make([]domain.MajorEvent, len(events))
-	eventIDs := make([]int, len(events))
-	for i, e := range events {
-		domainEvents[i] = *e
-		eventIDs[i] = e.ID
-	}
+	domainEvents, eventIDs := toDomainEventsAndIDs(events)
 
 	// LLM 요약 시도
 	var llmSummary string
@@ -187,10 +182,7 @@ func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 	message := s.formatter.FormatMajorEventMonthlySummary(ctx, domainEvents, llmSummary)
 
 	// Room별 outbox enqueue
-	targets := make([]roomTarget, len(rooms))
-	for i, room := range rooms {
-		targets[i] = roomTarget{roomID: room.RoomID}
-	}
+	targets := toRoomTargets(rooms)
 
 	result := enqueueToRooms(ctx, s.outboxRepo, targets, domain.DeliveryKindMajorEventMonthly, monthKey, message, s.logger)
 
@@ -217,6 +209,24 @@ func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func toDomainEventsAndIDs(events []*domain.MajorEvent) ([]domain.MajorEvent, []int) {
+	domainEvents := make([]domain.MajorEvent, len(events))
+	eventIDs := make([]int, len(events))
+	for i, e := range events {
+		domainEvents[i] = *e
+		eventIDs[i] = e.ID
+	}
+	return domainEvents, eventIDs
+}
+
+func toRoomTargets(rooms []*domain.EventRoomSubscription) []roomTarget {
+	targets := make([]roomTarget, len(rooms))
+	for i, room := range rooms {
+		targets[i] = roomTarget{roomID: room.RoomID}
+	}
+	return targets
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {
