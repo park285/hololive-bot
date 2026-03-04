@@ -1,6 +1,0 @@
-[advisories]
-# NOTE:
-# - RUSTSEC-2023-0071 (rsa): 현재 upstream fixed release가 없습니다.
-# - 본 워크스페이스는 PostgreSQL 경로만 사용하지만, lockfile 상 optional sqlx-mysql 경로가 남아 감지됩니다.
-# - upstream fixed release 확인 즉시 ignore를 제거하고 재검증해야 합니다.
-ignore = ["RUSTSEC-2023-0071"]

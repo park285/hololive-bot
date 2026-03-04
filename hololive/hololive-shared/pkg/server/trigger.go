@@ -26,7 +26,7 @@ type MemberNewsWeeklyScheduler interface {
 	SendWeeklyDigest(ctx context.Context) error
 }
 
-// TriggerHandler: 내부 트리거 API 핸들러 (admin-api에서 스케줄러 수동 실행용)
+// TriggerHandler: 내부 트리거 API 핸들러 (운영 API에서 스케줄러 수동 실행용)
 type TriggerHandler struct {
 	majorEvent        MajorEventScheduler
 	majorEventMonthly MajorEventMonthlyScheduler
