@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -39,7 +38,7 @@ func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
 	}
 
 	as.submitPersistTask("persist_alarm", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
 		defer cancel()
 
 		if err := as.alarmRepo.Add(ctx, alarm); err != nil {
@@ -61,7 +60,7 @@ func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
 	}
 
 	as.submitPersistTask("remove_alarm", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
 		defer cancel()
 
 		if err := as.alarmRepo.Remove(ctx, roomID, channelID); err != nil {
@@ -83,7 +82,7 @@ func (as *AlarmService) clearRoomAlarmsAsync(roomID string) {
 	}
 
 	as.submitPersistTask("clear_room_alarms", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
 		defer cancel()
 
 		if _, err := as.alarmRepo.ClearByRoom(ctx, roomID); err != nil {
