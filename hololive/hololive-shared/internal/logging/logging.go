@@ -75,7 +75,7 @@ func NewLogger() *slog.Logger {
 // NewTestLogger: 테스트용 로거를 생성합니다. 모든 출력을 폐기하여 테스트 로그를 깔끔하게 유지합니다.
 // 테스트에서 로거가 필요하지만 출력은 필요 없는 경우 사용하세요.
 func NewTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 // NewTestLoggerWithOutput: 테스트용 로거를 생성합니다. 제공된 Writer로 로그를 출력합니다.
