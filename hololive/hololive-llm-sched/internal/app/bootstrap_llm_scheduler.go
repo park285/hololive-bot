@@ -8,12 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
-
-	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
-	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
-	mescraper "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scraper"
-	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -25,6 +22,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+
+	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
+	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
+	mescraper "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scraper"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
 )
 
 // LLMSchedulerRuntime: llm-scheduler 전용 런타임
@@ -42,6 +44,93 @@ type LLMSchedulerRuntime struct {
 	configSubscriber *configsub.Subscriber
 	httpServer       *http.Server
 	cleanup          func()
+}
+
+type memberNewsWeeklyDigestSender interface {
+	SendWeeklyDigest(ctx context.Context) error
+}
+
+type memberNewsRunNowExecutor struct {
+	baseCtx context.Context
+	timeout time.Duration
+	sender  memberNewsWeeklyDigestSender
+	logger  *slog.Logger
+	stateMu sync.Mutex
+	running bool
+	pending bool
+}
+
+func newMemberNewsRunNowExecutor(
+	baseCtx context.Context,
+	sender memberNewsWeeklyDigestSender,
+	timeout time.Duration,
+	logger *slog.Logger,
+) *memberNewsRunNowExecutor {
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	return &memberNewsRunNowExecutor{
+		baseCtx: baseCtx,
+		timeout: timeout,
+		sender:  sender,
+		logger:  logger,
+	}
+}
+
+func (e *memberNewsRunNowExecutor) Trigger() {
+	if e == nil {
+		return
+	}
+
+	e.stateMu.Lock()
+	if e.running {
+		e.pending = true
+		e.stateMu.Unlock()
+		e.logger.Info("Member news weekly run-now coalesced: run already in progress")
+		return
+	}
+	e.running = true
+	e.stateMu.Unlock()
+
+	go e.runLoop()
+}
+
+func (e *memberNewsRunNowExecutor) runLoop() {
+	for {
+		e.runOnce()
+
+		e.stateMu.Lock()
+		if !e.pending {
+			e.running = false
+			e.stateMu.Unlock()
+			return
+		}
+		e.pending = false
+		e.stateMu.Unlock()
+
+		e.logger.Info("Member news weekly run-now processing coalesced trigger")
+	}
+}
+
+func (e *memberNewsRunNowExecutor) runOnce() {
+	if e.sender == nil {
+		e.logger.Warn("Ignored membernews weekly run-now: scheduler not initialized")
+		return
+	}
+
+	runCtx, cancel := context.WithTimeout(e.baseCtx, e.timeout)
+	defer cancel()
+
+	if err := e.sender.SendWeeklyDigest(runCtx); err != nil {
+		e.logger.Error("Member news weekly run-now failed", slog.Any("error", err))
+		return
+	}
+
+	e.logger.Info("Member news weekly run-now completed via config update")
 }
 
 // Close: 리소스를 정리합니다.
@@ -321,36 +410,33 @@ func buildLLMSchedulerHTTPServer(
 func buildLLMSchedulerConfigSubscriber(
 	ctx context.Context,
 	cacheService cache.Client,
-	memberNewsScheduler *membernews.Scheduler,
+	memberNewsScheduler memberNewsWeeklyDigestSender,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
-	baseCtx := ctx
-	if baseCtx == nil {
-		baseCtx = context.Background()
+	return configsub.New(
+		cacheService.GetClient(),
+		newLLMSchedulerConfigApplyFn(ctx, memberNewsScheduler, logger),
+		logger,
+	)
+}
+
+func newLLMSchedulerConfigApplyFn(
+	ctx context.Context,
+	memberNewsScheduler memberNewsWeeklyDigestSender,
+	logger *slog.Logger,
+) func(configsub.ConfigUpdate) {
+	if logger == nil {
+		logger = slog.Default()
 	}
 
-	applyFn := func(update configsub.ConfigUpdate) {
+	executor := newMemberNewsRunNowExecutor(ctx, memberNewsScheduler, constants.RequestTimeout.BotAlarmCheck, logger)
+
+	return func(update configsub.ConfigUpdate) { //nolint:contextcheck // configsub callback signature is fixed: func(ConfigUpdate)
 		switch update.Type {
 		case contractssettings.UpdateTypeMemberNewsRunNow:
-			if memberNewsScheduler == nil {
-				logger.Warn("Ignored membernews weekly run-now: scheduler not initialized")
-				return
-			}
-
-			go func() {
-				runCtx, cancel := context.WithTimeout(baseCtx, constants.RequestTimeout.BotAlarmCheck)
-				defer cancel()
-				if err := memberNewsScheduler.SendWeeklyDigest(runCtx); err != nil {
-					logger.Error("Member news weekly run-now failed", slog.Any("error", err))
-					return
-				}
-				logger.Info("Member news weekly run-now completed via config update")
-			}()
-
+			executor.Trigger()
 		default:
 			logger.Debug("Ignoring config update type for llm scheduler", slog.String("type", update.Type))
 		}
 	}
-
-	return configsub.New(cacheService.GetClient(), applyFn, logger)
 }
