@@ -2,12 +2,30 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/kelseyhightower/envconfig"
 
-	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
+
+type adminAPIEnvConfig struct {
+	AdminAPIPort int    `envconfig:"ADMIN_API_PORT" default:"30002"`
+	APISecretKey string `envconfig:"API_SECRET_KEY"`
+
+	HolodexBaseURL string `envconfig:"HOLODEX_BASE_URL"`
+
+	ServicesLLMServerHealthURL      string `envconfig:"SERVICES_LLM_SERVER_HEALTH_URL"`
+	ServicesGameBotTwentyQHealthURL string `envconfig:"SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL"`
+	ServicesGameBotTurtleHealthURL  string `envconfig:"SERVICES_GAME_BOT_TURTLE_HEALTH_URL"`
+
+	LogLevel           string `envconfig:"LOG_LEVEL" default:"info"`
+	AlarmDispatcherURL string `envconfig:"ALARM_DISPATCHER_URL"`
+	LLMSchedulerURL    string `envconfig:"LLM_SCHEDULER_INTERNAL_URL"`
+	AppVersion         string `envconfig:"APP_VERSION" default:"1.0.0-bot-admin"`
+	CORSEnforce        string `envconfig:"CORS_ENFORCE" default:"false"`
+}
 
 // AdminAPIConfig: 운영 API(호환) 설정
 type AdminAPIConfig struct {
@@ -28,7 +46,10 @@ type AdminAPIConfig struct {
 func LoadAdminAPI() (*AdminAPIConfig, error) {
 	_ = godotenv.Load()
 
-	cfg := buildAdminAPIConfig()
+	cfg, err := buildAdminAPIConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build admin api config: %w", err)
+	}
 
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("admin api config validation failed: %w", err)
@@ -37,43 +58,56 @@ func LoadAdminAPI() (*AdminAPIConfig, error) {
 	return cfg, nil
 }
 
-func buildAdminAPIConfig() *AdminAPIConfig {
+func buildAdminAPIConfig() (*AdminAPIConfig, error) {
 	_, _, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
+
+	var raw adminAPIEnvConfig
+	if err := envconfig.Process("", &raw); err != nil {
+		return nil, fmt.Errorf("process env: %w", err)
+	}
+
+	holodexBaseURL := strings.TrimSpace(raw.HolodexBaseURL)
+	if holodexBaseURL == "" {
+		holodexBaseURL = constants.APIConfig.HolodexBaseURL
+	}
+	logLevel := strings.TrimSpace(raw.LogLevel)
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	version := strings.TrimSpace(raw.AppVersion)
+	if version == "" {
+		version = "1.0.0-bot-admin"
+	}
 
 	return &AdminAPIConfig{
 		Server: ServerConfig{
-			Port:   envutil.Int("ADMIN_API_PORT", 30002),
-			APIKey: envutil.String("API_SECRET_KEY", ""),
+			Port:   raw.AdminAPIPort,
+			APIKey: strings.TrimSpace(raw.APISecretKey),
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Holodex: HolodexConfig{
-			BaseURL: envutil.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
+			BaseURL: holodexBaseURL,
 			APIKeys: collectAPIKeys("HOLODEX_API_KEY_"),
 		},
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,
-			Enforce:             envutil.Bool("CORS_ENFORCE", false),
+			Enforce:             parseBoolWithDefault(raw.CORSEnforce, false),
 			MissingInProduction: corsMissingInProduction,
 		},
 		Telemetry: loadTelemetryConfig(),
 		Services: ServicesConfig{
-			LLMServerHealthURL:      envutil.String("SERVICES_LLM_SERVER_HEALTH_URL", ""),
-			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-			GameBotTurtleHealthURL:  envutil.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+			LLMServerHealthURL:      strings.TrimSpace(raw.ServicesLLMServerHealthURL),
+			GameBotTwentyQHealthURL: strings.TrimSpace(raw.ServicesGameBotTwentyQHealthURL),
+			GameBotTurtleHealthURL:  strings.TrimSpace(raw.ServicesGameBotTurtleHealthURL),
 		},
 		Logging: LoggingConfig{
-			Level:      envutil.String("LOG_LEVEL", "info"),
-			Dir:        envutil.String("LOG_DIR", ""),
-			MaxSizeMB:  envutil.Int("LOG_MAX_SIZE_MB", 100),
-			MaxBackups: envutil.Int("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: envutil.Int("LOG_MAX_AGE_DAYS", 30),
-			Compress:   envutil.Bool("LOG_COMPRESS", true),
+			Level: logLevel,
 		},
-		AlarmDispatcherURL: envutil.String("ALARM_DISPATCHER_URL", ""),
-		LLMSchedulerURL:    envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		Version:            envutil.String("APP_VERSION", "1.0.0-bot-admin"),
-	}
+		AlarmDispatcherURL: strings.TrimSpace(raw.AlarmDispatcherURL),
+		LLMSchedulerURL:    strings.TrimSpace(raw.LLMSchedulerURL),
+		Version:            version,
+	}, nil
 }
 
 // validate: 필수 설정값을 검증합니다.
