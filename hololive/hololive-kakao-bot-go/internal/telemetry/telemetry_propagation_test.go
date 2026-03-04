@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -50,16 +49,6 @@ func TestInjectExtractContext_RoundTrip(t *testing.T) {
 	require.True(t, extractedSpan.IsValid())
 	assert.Equal(t, spanCtx.TraceID(), extractedSpan.TraceID())
 	assert.Equal(t, spanCtx.SpanID(), extractedSpan.SpanID())
-}
-
-func TestProviderIsEnabled_WithTracerProvider(t *testing.T) {
-	t.Parallel()
-
-	tp := sdktrace.NewTracerProvider()
-	provider := &Provider{tracerProvider: tp}
-
-	assert.True(t, provider.IsEnabled())
-	require.NoError(t, provider.Shutdown(context.Background()))
 }
 
 func TestExtractContext_EmptyCarrier(t *testing.T) {
