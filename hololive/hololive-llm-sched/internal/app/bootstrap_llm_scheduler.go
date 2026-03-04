@@ -14,7 +14,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -431,12 +430,12 @@ func newLLMSchedulerConfigApplyFn(
 
 	executor := newMemberNewsRunNowExecutor(ctx, memberNewsScheduler, constants.RequestTimeout.BotAlarmCheck, logger)
 
-	return func(update configsub.ConfigUpdate) { //nolint:contextcheck // configsub callback signature is fixed: func(ConfigUpdate)
-		switch update.Type {
-		case contractssettings.UpdateTypeMemberNewsRunNow:
+	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{
+		MemberNewsWeeklyNow: func() {
 			executor.Trigger()
-		default:
-			logger.Debug("Ignoring config update type for llm scheduler", slog.String("type", update.Type))
-		}
-	}
+		},
+		Unknown: func(updateType string) {
+			logger.Debug("Ignoring config update type for llm scheduler", slog.String("type", updateType))
+		},
+	})
 }
