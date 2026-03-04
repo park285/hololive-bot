@@ -1,8 +1,8 @@
-# Go → Rust 전환 진행 상황 (Active)
+# Go → Rust 전환 진행 상황 (Archived)
 
+> **상태**: 아카이브 (2026-03-04) — 전환 완료, 하이브리드 아키텍처 확정
 > 최종 갱신: 2026-03-01 (Session 6 — Phase 1 DONE, P1-3.4/P1-3.5 검증 완료)
 > 관련 문서: [TODO LIST](GO_TO_RUST_MIGRATION_TODO_20260301.md)
-> 원칙: **상세 완료 내역은 축약하고, 현재 진행/잔여 항목 중심으로 유지**
 
 ---
 
@@ -39,9 +39,9 @@
 
 ---
 
-## 다음 우선순위
-- Rust dispatcher cutover 타임라인 결정
-- 교차언어 큐 계약 테스트 유지보수
+## 완료된 후속 작업
+- Rust dispatcher cutover 완료 (2026-03-02, M6)
+- 교차언어 큐 계약 테스트 유지보수 → `docs/NEXT_TODO.md` 섹션 1로 이관
 
 ---
 
@@ -50,6 +50,6 @@
 | 영역 | 언어 | 근거 |
 |------|------|------|
 | alarm-checker, scraper-rss, dispatcher | Rust | compute 집약, 순수 데이터 처리 |
-| bot, ingester, admin, llm-sched, alarm-dispatcher | Go | h2c/SOCKS5/HTTP2 네트워크 복잡도, Go net/http 생태계 의존 |
+| bot, ingester, admin, llm-sched | Go | h2c/SOCKS5/HTTP2 네트워크 복잡도, Go net/http 생태계 의존 |
 
 Phase 2~6 (ingester/llm-sched/admin/bot/통합배포)은 Go 유지로 결정, Rust 전환 불요.

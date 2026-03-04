@@ -419,6 +419,9 @@ func (c *Config) Validate() error {
 	if c.Server.Port == 0 {
 		return fmt.Errorf("SERVER_PORT is required")
 	}
+	if err := validateAPISecretKey(c.Telemetry.Environment, c.Server.APIKey); err != nil {
+		return err
+	}
 	if len(c.Kakao.Rooms) == 0 {
 		return fmt.Errorf("KAKAO_ROOMS is required")
 	}
@@ -584,6 +587,16 @@ func validatePostgresSSLMode(environment, sslMode string) error {
 	}
 
 	return nil
+}
+
+func validateAPISecretKey(environment, apiKey string) error {
+	if !strings.EqualFold(strings.TrimSpace(environment), "production") {
+		return nil
+	}
+	if strings.TrimSpace(apiKey) != "" {
+		return nil
+	}
+	return fmt.Errorf("API_SECRET_KEY is required in production")
 }
 
 func parseCommaSeparated(value string) []string {

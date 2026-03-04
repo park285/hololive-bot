@@ -3,7 +3,6 @@
 ## 모듈 경로 정리 (Phase 3 완료)
 
 - `hololive-kakao-bot-go` : bot 전용
-- `hololive-alarm` : alarm-dispatcher
 - `hololive-admin` : admin-api
 - `hololive-llm-sched` : llm-scheduler
 - `hololive-stream-ingester` : stream-ingester

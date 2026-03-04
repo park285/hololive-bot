@@ -1,9 +1,9 @@
-# Go → Rust 전면 전환 TODO LIST (Active)
+# Go → Rust 전면 전환 TODO LIST (Archived)
 
+> **상태**: 아카이브 (2026-03-04) — 전환 완료, 하이브리드 아키텍처 확정
 > 생성일: 2026-03-01
 > 정리일: 2026-03-01
 > 진행 상황: [PROGRESS](GO_TO_RUST_MIGRATION_PROGRESS_20260301.md)
-> 원칙: **완료([x]) 항목은 본 문서에서 제거**
 
 ---
 
@@ -32,8 +32,6 @@
 - stream-ingester: YouTube/Holodex/Chzzk/Twitch 폴링 + SOCKS5 프록시
 - admin: REST API + Auth + WebSocket
 - llm-sched: OpenAI/Exa LLM 호출 + 스케줄링 + delivery outbox
-- alarm-dispatcher: 큐 소비 주체 (Rust dispatcher cutover 별도 결정)
-
-### 잔여 TODO
-- [ ] Rust dispatcher cutover 타임라인 결정
-- [ ] 교차언어 큐 계약 테스트 유지보수
+### 완료된 후속 작업
+- [x] Rust dispatcher cutover 완료 (2026-03-02, M6) — Go alarm-dispatcher 완전 제거
+- [x] 교차언어 큐 계약 테스트 유지보수 → `docs/NEXT_TODO.md` 섹션 1로 이관

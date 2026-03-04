@@ -10,8 +10,6 @@ resources:
   - valkey-service.yaml
   - hololive-bot-deployment.yaml
   - hololive-bot-service.yaml
-  - alarm-dispatcher-deployment.yaml
-  - alarm-dispatcher-service.yaml
   - stream-ingester-deployment.yaml
   - stream-ingester-service.yaml
   - llm-scheduler-deployment.yaml
@@ -22,7 +20,6 @@ resources:
   - hololive-scraper-service.yaml
   - hololive-alarm-deployment.yaml
   - hololive-alarm-service.yaml
-  # Rust dispatcher: cutover 1~2단계는 동시 배포, alarm-dispatcher 제거는 후속 단계
   - rust-dispatcher-deployment.yaml
   - rust-dispatcher-service.yaml
   - monitoring/
