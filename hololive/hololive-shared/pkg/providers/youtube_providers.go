@@ -100,35 +100,22 @@ func ProvideYouTubeStack(
 // ProvideScraperScheduler - YouTube HTML 스크래퍼 기반 폴러 스케줄러 생성
 // 멤버 채널 목록을 조회하여 모든 폴러를 스케줄러에 등록한다.
 func ProvideScraperScheduler(
-	postgres database.Client,
 	membersData domain.MemberDataProvider,
-	intervals PollerIntervals,
-	communityKeywords []string,
-	proxyConfig scraper.ProxyConfig,
-	sharedRL *scraper.RateLimiter,
-	cacheSvc cache.Client,
 	logger *slog.Logger,
+	opts ...ScraperSchedulerOption,
 ) *poller.Scheduler {
-	// 스크래퍼 클라이언트 생성 (공유 RateLimiter 주입)
-	scraperClient := scraper.NewClient(
-		scraper.WithProxy(proxyConfig),
-		scraper.WithRateLimiter(sharedRL),
-		scraper.WithStateStore(cacheSvc),
-	)
-	db := postgres.GetGormDB()
-
-	// 폴러 생성
-	videosPoller := poller.NewVideosPoller(scraperClient, db, 10)
-	shortsPoller := poller.NewShortsPoller(scraperClient, db, 10)
-	communityPoller := poller.NewCommunityPoller(scraperClient, db, 10, communityKeywords)
-	statsPoller := poller.NewChannelStatsPoller(scraperClient, db)
-	livePoller := poller.NewLivePoller(scraperClient, db)
-
 	// 스케줄러 생성 (RequestInterval=0: 외부 sharedRL에 rate limiting 위임)
 	scheduler := poller.NewScheduler(poller.SchedulerConfig{
 		WorkerCount:     2,
 		RequestInterval: 0,
 	})
+
+	resolvedOpts := resolveScraperSchedulerOptions(opts...)
+	channelPollerRegistrations := resolvedOpts.channelPollerRegistrations
+	if len(channelPollerRegistrations) == 0 {
+		logger.Warn("Scraper scheduler initialized without poller registrations")
+		return scheduler
+	}
 
 	// 모든 멤버 채널에 대해 폴러 등록
 	members := membersData.GetAllMembers()
@@ -139,25 +126,18 @@ func ProvideScraperScheduler(
 
 		channelID := m.ChannelID
 
-		// 영상 폴러 (일반 우선순위)
-		scheduler.Register(channelID, videosPoller, poller.PriorityNormal, intervals.Videos)
-
-		// 쇼츠 폴러 (낮은 우선순위)
-		scheduler.Register(channelID, shortsPoller, poller.PriorityLow, intervals.Shorts)
-
-		// 커뮤니티 폴러 (낮은 우선순위)
-		scheduler.Register(channelID, communityPoller, poller.PriorityLow, intervals.Community)
-
-		// 채널 통계 폴러 (낮은 우선순위)
-		scheduler.Register(channelID, statsPoller, poller.PriorityLow, intervals.Stats)
-
-		// 라이브 폴러 (높은 우선순위)
-		scheduler.Register(channelID, livePoller, poller.PriorityHigh, intervals.Live)
+		for _, registration := range channelPollerRegistrations {
+			if registration.Poller == nil || registration.Interval <= 0 {
+				continue
+			}
+			scheduler.Register(channelID, registration.Poller, registration.Priority, registration.Interval)
+		}
 	}
 
 	logger.Info("Scraper scheduler initialized",
 		slog.Int("members", len(members)),
-		slog.Int("total_jobs", len(members)*5)) // 5 pollers per member
+		slog.Int("poller_templates", len(channelPollerRegistrations)),
+		slog.Int("total_jobs", len(members)*len(channelPollerRegistrations)))
 
 	return scheduler
 }

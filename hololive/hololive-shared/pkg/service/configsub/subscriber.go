@@ -7,14 +7,16 @@ import (
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
+
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
 
 // DefaultChannel: 설정 변경 Pub/Sub 채널 기본 이름
-const DefaultChannel = "config:update"
+const DefaultChannel = contractssettings.PubSubChannelV1
 
 // ConfigUpdate: Pub/Sub로 전달되는 설정 변경 메시지
 type ConfigUpdate struct {
-	Type    string          `json:"type"`    // "scraper_proxy" | "alarm_advance_minutes" | "membernews_weekly_run_now"
+	Type    string          `json:"type"`    // contracts/settings UpdateType* 상수 사용
 	Payload json.RawMessage `json:"payload"` // 타입별 페이로드 (JSON)
 }
 
