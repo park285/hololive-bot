@@ -1,0 +1,139 @@
+package app
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+)
+
+func testRuntimeLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func TestLLMSchedulerRuntimeClose(t *testing.T) {
+	t.Run("nil runtime", func(t *testing.T) {
+		var runtime *LLMSchedulerRuntime
+		assert.NotPanics(t, func() { runtime.Close() })
+	})
+
+	t.Run("invokes cleanup", func(t *testing.T) {
+		calls := 0
+		runtime := &LLMSchedulerRuntime{
+			cleanup: func() { calls++ },
+		}
+
+		runtime.Close()
+		assert.Equal(t, 1, calls)
+	})
+}
+
+func TestLLMSchedulerRuntimeStartStopSchedulers_NoPanic(t *testing.T) {
+	runtime := &LLMSchedulerRuntime{Logger: testRuntimeLogger()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assert.NotPanics(t, func() { runtime.startSchedulers(ctx) })
+	assert.NotPanics(t, runtime.stopSchedulers)
+}
+
+func TestLLMSchedulerRuntimeStartHTTPServer_ReportsError(t *testing.T) {
+	runtime := &LLMSchedulerRuntime{
+		Logger: testRuntimeLogger(),
+		httpServer: &http.Server{
+			Addr:    "invalid-address",
+			Handler: http.NewServeMux(),
+		},
+	}
+
+	errCh := make(chan error, 1)
+	runtime.startHTTPServer(errCh)
+
+	select {
+	case err := <-errCh:
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "HTTP server error")
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected server error from startHTTPServer, got timeout")
+	}
+}
+
+func TestLLMSchedulerRuntimeRun_ReturnsOnServerError(t *testing.T) {
+	runtime := &LLMSchedulerRuntime{
+		Logger: testRuntimeLogger(),
+		httpServer: &http.Server{
+			Addr:    "invalid-address",
+			Handler: http.NewServeMux(),
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runtime.Run()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// success
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run() did not return on server error")
+	}
+}
+
+func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
+	server, err := buildLLMSchedulerHTTPServer(
+		context.Background(),
+		32077,
+		testRuntimeLogger(),
+		nil,
+		"",
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, server)
+	assert.Equal(t, ":32077", server.Addr)
+
+	t.Run("health available", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		rr := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+	})
+
+	t.Run("trigger route not registered", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+		rr := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusNotFound, rr.Code)
+	})
+}
+
+func TestProvideTriggerRouter_NoTriggerHandler(t *testing.T) {
+	router, err := ProvideTriggerRouter(context.Background(), testRuntimeLogger(), nil, "")
+	require.NoError(t, err)
+	require.NotNil(t, router)
+
+	req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthRR := httptest.NewRecorder()
+	router.ServeHTTP(healthRR, healthReq)
+	assert.Equal(t, http.StatusOK, healthRR.Code)
+	assert.True(t, strings.Contains(healthRR.Body.String(), "status"))
+}
