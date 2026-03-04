@@ -10,13 +10,9 @@ LOG_DIR="${REPO_ROOT}/logs"
 # --- 서비스명 → container_name 매핑 ---
 declare -A SERVICE_MAP=(
   [bot]="hololive-bot"
-  [admin]="admin-api"
-  [dispatcher]="alarm-dispatcher"
-  [ingester]="stream-ingester"
-  [llm]="llm-scheduler"
-  [alarm]="hololive-alarm"
-  [scraper]="hololive-scraper"
-  [rust-dispatcher]="rust-dispatcher"
+  [dispatcher-go]="dispatcher-go"
+  [stream-ingester]="stream-ingester"
+  [llm-scheduler]="llm-scheduler"
 )
 
 LOKI_PORT=3100

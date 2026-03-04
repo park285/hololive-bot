@@ -1,0 +1,172 @@
+package scraper
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+type maintenanceRepository interface {
+	UpdateExpiredEvents(ctx context.Context) (int64, error)
+	GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEvent, error)
+}
+
+// MaintenanceScheduler는 만료 상태 업데이트와 링크 검증을 주기적으로 수행한다.
+type MaintenanceScheduler struct {
+	repository  maintenanceRepository
+	linkChecker *LinkChecker
+	config      MaintenanceConfig
+	logger      *slog.Logger
+	nowFn       func() time.Time
+
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
+}
+
+// NewMaintenanceScheduler는 MaintenanceScheduler를 생성한다.
+func NewMaintenanceScheduler(
+	repository maintenanceRepository,
+	linkChecker *LinkChecker,
+	cfg MaintenanceConfig,
+	logger *slog.Logger,
+) (*MaintenanceScheduler, error) {
+	if repository == nil {
+		return nil, fmt.Errorf("new maintenance scheduler: repository is nil")
+	}
+	if linkChecker == nil {
+		return nil, fmt.Errorf("new maintenance scheduler: link checker is nil")
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	normalized := cfg
+	defaults := DefaultMaintenanceConfig()
+	if normalized.RunTimeout <= 0 {
+		normalized.RunTimeout = defaults.RunTimeout
+	}
+	if normalized.LinkCheckInterval <= 0 {
+		normalized.LinkCheckInterval = defaults.LinkCheckInterval
+	}
+
+	return &MaintenanceScheduler{
+		repository:  repository,
+		linkChecker: linkChecker,
+		config:      normalized,
+		logger:      logger,
+		nowFn:       time.Now,
+		stopCh:      make(chan struct{}),
+	}, nil
+}
+
+// Start는 유지보수 스케줄러를 시작한다.
+func (s *MaintenanceScheduler) Start(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	s.wg.Add(1)
+	go s.run(ctx)
+}
+
+// Stop은 유지보수 스케줄러를 종료한다.
+func (s *MaintenanceScheduler) Stop() {
+	if s == nil {
+		return
+	}
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+	})
+	s.wg.Wait()
+}
+
+func (s *MaintenanceScheduler) run(ctx context.Context) {
+	defer s.wg.Done()
+
+	linkTicker := time.NewTicker(s.config.LinkCheckInterval)
+	defer linkTicker.Stop()
+
+	for {
+		nextExpiredRun := calculateNextRunAtHour(s.now(), s.config.ExpireHourKST)
+		waitDuration := time.Until(nextExpiredRun)
+		if waitDuration < 0 {
+			waitDuration = 0
+		}
+
+		s.logger.Info(
+			"Major event maintenance scheduler waiting",
+			slog.String("next_expired_run_kst", formatKST(nextExpiredRun)),
+			slog.Duration("wait_duration", waitDuration),
+		)
+
+		expiredTimer := time.NewTimer(waitDuration)
+		select {
+		case <-ctx.Done():
+			expiredTimer.Stop()
+			s.logger.Info("Major event maintenance scheduler stopped by context")
+			return
+		case <-s.stopCh:
+			expiredTimer.Stop()
+			s.logger.Info("Major event maintenance scheduler stopped")
+			return
+		case <-expiredTimer.C:
+			s.runExpiredUpdate(ctx)
+		case <-linkTicker.C:
+			expiredTimer.Stop()
+			s.runLinkCheck(ctx)
+		}
+	}
+}
+
+func (s *MaintenanceScheduler) runExpiredUpdate(ctx context.Context) {
+	runCtx, cancel := context.WithTimeout(ctx, s.config.RunTimeout)
+	defer cancel()
+
+	updated, err := s.repository.UpdateExpiredEvents(runCtx)
+	if err != nil {
+		s.logger.Warn("Major event expired update failed", slog.String("error", err.Error()))
+		return
+	}
+	if updated > 0 {
+		s.logger.Info("Major event expired rows updated", slog.Int64("updated_rows", updated))
+	}
+}
+
+func (s *MaintenanceScheduler) runLinkCheck(ctx context.Context) {
+	runCtx, cancel := context.WithTimeout(ctx, s.config.RunTimeout)
+	defer cancel()
+
+	events, err := s.repository.GetAllActiveEvents(runCtx)
+	if err != nil {
+		s.logger.Warn("Major event active event load failed for link check", slog.String("error", err.Error()))
+		return
+	}
+	if len(events) == 0 {
+		return
+	}
+
+	result, err := s.linkChecker.CheckEvents(runCtx, events)
+	if err != nil {
+		s.logger.Warn("Major event link check failed", slog.String("error", err.Error()))
+		return
+	}
+
+	s.logger.Info(
+		"Major event link check completed",
+		slog.Int("checked", result.Checked),
+		slog.Int("ok", result.OK),
+		slog.Int("failed", result.Failed),
+		slog.Int("blocked", result.Blocked),
+	)
+}
+
+func (s *MaintenanceScheduler) now() time.Time {
+	if s.nowFn != nil {
+		return s.nowFn().UTC()
+	}
+	return time.Now().UTC()
+}

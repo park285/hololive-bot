@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dispatcher-go
+  namespace: hololive
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: dispatcher-go
+  template:
+    metadata:
+      labels:
+        app: dispatcher-go
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: wait-for-valkey
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z valkey-cache 6379; do echo "valkey 대기 중..."; sleep 2; done']
+      containers:
+        - name: dispatcher-go
+          image: hololive-dispatcher-go:prod
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 30020
+              name: http
+          envFrom:
+            - configMapRef:
+                name: hololive-app-config
+            - secretRef:
+                name: hololive-app-secret
+          env:
+            - name: DISPATCHER_PORT
+              value: "30020"
+            - name: CACHE_HOST
+              value: "valkey-cache"
+            - name: CACHE_PORT
+              value: "6379"
+            - name: CACHE_SOCKET_PATH
+              value: ""
+            - name: IRIS_BASE_URL
+              value: "http://host-external:3000"
+            - name: IRIS_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: IRIS_BOT_TOKEN
+            - name: ALARM_DISPATCH_QUEUE_KEY
+              value: "alarm:dispatch:queue"
+            - name: ALARM_DISPATCH_MAX_BATCH
+              value: "50"
+            - name: DISPATCHER_RECONNECT_BACKOFF_MS
+              value: "1000"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: LOG_DIR
+              value: ""
+            - name: TZ
+              value: "Asia/Seoul"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      restartPolicy: Always

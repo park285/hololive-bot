@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -23,6 +24,10 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
+type runtimeAlarmScheduler interface {
+	Start(ctx context.Context)
+}
+
 // BotRuntime: 봇 애플리케이션의 전체 실행 환경 및 상태를 관리하는 구조체
 type BotRuntime struct {
 	Config *config.Config
@@ -34,6 +39,7 @@ type BotRuntime struct {
 	ScraperScheduler *poller.Scheduler         // YouTube HTML 스크래퍼 기반 폴러 스케줄러
 	PhotoSync        *holodex.PhotoSyncService // 프로필 이미지 동기화 서비스
 	OutboxDispatcher *outbox.Dispatcher        // YouTube 알림 outbox 발송기
+	AlarmScheduler   runtimeAlarmScheduler     // Alarm runtime scheduler
 
 	ConfigSubscriber *configsub.Subscriber // Valkey Pub/Sub 설정 구독자
 
@@ -42,6 +48,8 @@ type BotRuntime struct {
 
 	webhookHandlerCloser interface{ Close() error }
 	ingestionLease       *providers.IngestionLease
+	alarmSchedulerMu     sync.Mutex
+	alarmSchedulerCancel context.CancelFunc
 	cleanup              func()
 }
 
@@ -148,10 +156,56 @@ func (r *BotRuntime) startSchedulers(ctx context.Context, errCh chan<- error) {
 		r.logInfo("Scraper scheduler started")
 	}
 
+	r.startAlarmScheduler(ctx)
+
 	if r.ConfigSubscriber != nil {
 		go r.ConfigSubscriber.Run(ctx)
 		r.logInfo("Config subscriber started")
 	}
+}
+
+func (r *BotRuntime) startAlarmScheduler(ctx context.Context) {
+	if r.AlarmScheduler == nil {
+		r.logInfo("Alarm runtime scheduler not configured")
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	alarmCtx, alarmCancel := context.WithCancel(ctx)
+	r.setAlarmSchedulerCancel(alarmCancel)
+
+	go r.AlarmScheduler.Start(alarmCtx)
+	r.logInfo("Alarm runtime scheduler started")
+}
+
+func (r *BotRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) {
+	if cancel == nil {
+		return
+	}
+
+	r.alarmSchedulerMu.Lock()
+	prevCancel := r.alarmSchedulerCancel
+	r.alarmSchedulerCancel = cancel
+	r.alarmSchedulerMu.Unlock()
+
+	if prevCancel != nil {
+		prevCancel()
+	}
+}
+
+func (r *BotRuntime) clearAlarmSchedulerCancel() bool {
+	r.alarmSchedulerMu.Lock()
+	cancel := r.alarmSchedulerCancel
+	r.alarmSchedulerCancel = nil
+	r.alarmSchedulerMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+		return true
+	}
+	return false
 }
 
 func (r *BotRuntime) startBot(ctx context.Context) {
@@ -185,6 +239,10 @@ func (r *BotRuntime) logError(msg string, err error) {
 func (r *BotRuntime) Shutdown(ctx context.Context) {
 	if r == nil {
 		return
+	}
+
+	if r.clearAlarmSchedulerCancel() {
+		r.logInfo("Alarm runtime scheduler cancellation signaled")
 	}
 
 	if r.Scheduler != nil {

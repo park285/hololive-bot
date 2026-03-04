@@ -5,11 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 GO_GRAPH_OUT="${1:-${ROOT_DIR}/artifacts/architecture/go-workspace-import-graph.txt}"
 
-echo "[M0] rust service->infra gate"
+echo "[M0] legacy service->infra gate"
 "${SCRIPT_DIR}/check-rust-service-infra.sh"
 echo
 
-echo "[M0] admin↔kakao duplicate gate"
+echo "[M0] legacy duplicate gate"
 "${SCRIPT_DIR}/check-admin-kakao-duplicates.sh"
 echo
 
@@ -29,5 +29,5 @@ echo "[M0] go workspace import graph export"
 "${SCRIPT_DIR}/export-go-workspace-import-graph.sh" "${GO_GRAPH_OUT}"
 echo
 
-echo "[M0] admin↔kakao duplicate report"
+echo "[M0] legacy duplicate report"
 "${SCRIPT_DIR}/report-admin-kakao-duplicates.sh"

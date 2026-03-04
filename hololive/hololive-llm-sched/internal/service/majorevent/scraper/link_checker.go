@@ -1,0 +1,203 @@
+package scraper
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/sync/errgroup"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+// LinkChecker는 링크 유효성 검증(HEAD 후 GET fallback)을 수행한다.
+type LinkChecker struct {
+	client *http.Client
+	config LinkCheckerConfig
+	logger *slog.Logger
+}
+
+// NewLinkChecker는 LinkChecker를 생성한다.
+func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Logger) *LinkChecker {
+	if client == nil {
+		client = &http.Client{
+			Timeout: 15 * time.Second,
+		}
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	normalized := cfg
+	defaults := DefaultLinkCheckerConfig()
+	if normalized.Timeout <= 0 {
+		normalized.Timeout = defaults.Timeout
+	}
+	if normalized.Concurrency < 1 {
+		normalized.Concurrency = defaults.Concurrency
+	}
+
+	return &LinkChecker{
+		client: client,
+		config: normalized,
+		logger: logger,
+	}
+}
+
+// CheckEvents는 이벤트 링크를 병렬 검증한다.
+func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEvent) (LinkCheckResult, error) {
+	result := LinkCheckResult{}
+	if len(events) == 0 {
+		return result, nil
+	}
+
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(c.config.Concurrency)
+
+	var mu sync.Mutex
+
+	for _, event := range events {
+		event := event
+		if event == nil {
+			continue
+		}
+
+		eg.Go(func() error {
+			status, checkErr := c.CheckLink(egCtx, event.Link)
+			checkedAt := time.Now().UTC()
+
+			mu.Lock()
+			event.LinkStatus = status
+			event.LinkCheckedAt = &checkedAt
+			result.Checked++
+			switch status {
+			case domain.MajorEventLinkStatusOK:
+				result.OK++
+			case domain.MajorEventLinkStatusBlocked:
+				result.Blocked++
+			default:
+				result.Failed++
+			}
+			mu.Unlock()
+
+			if checkErr != nil {
+				c.logger.Debug(
+					"Major event link check failed",
+					slog.String("link", redactLinkForLog(event.Link)),
+					slog.String("status", string(status)),
+					slog.String("error", checkErr.Error()),
+				)
+			}
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return result, fmt.Errorf("check links: wait workers: %w", err)
+	}
+
+	return result, nil
+}
+
+// CheckLink는 단일 링크를 검증한다.
+func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.MajorEventLinkStatus, error) {
+	parsed, err := parseAndValidateLink(rawURL)
+	if err != nil {
+		if strings.Contains(err.Error(), "scheme") {
+			return domain.MajorEventLinkStatusBlocked, err
+		}
+		return domain.MajorEventLinkStatusFailed, err
+	}
+
+	headStatus, headErr := c.probe(ctx, http.MethodHead, parsed.String())
+	if headErr == nil {
+		if isSuccessStatus(headStatus) {
+			return domain.MajorEventLinkStatusOK, nil
+		}
+		if !shouldFallbackToGET(headStatus, nil) {
+			return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: head status %d", headStatus)
+		}
+	} else if !shouldFallbackToGET(0, headErr) {
+		return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: head request failed: %w", headErr)
+	}
+
+	getStatus, getErr := c.probe(ctx, http.MethodGet, parsed.String())
+	if getErr != nil {
+		return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: get request failed: %w", getErr)
+	}
+	if isSuccessStatus(getStatus) {
+		return domain.MajorEventLinkStatusOK, nil
+	}
+	return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: get status %d", getStatus)
+}
+
+func (c *LinkChecker) probe(ctx context.Context, method, targetURL string) (int, error) {
+	requestCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, method, targetURL, http.NoBody)
+	if err != nil {
+		return 0, fmt.Errorf("probe link: build request: %w", err)
+	}
+	if method == http.MethodGet {
+		req.Header.Set("Range", "bytes=0-0")
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("probe link: do request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return resp.StatusCode, nil
+}
+
+func parseAndValidateLink(rawURL string) (*url.URL, error) {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return nil, fmt.Errorf("parse link: empty url")
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("parse link: %w", err)
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return nil, fmt.Errorf("parse link: unsupported scheme %q", parsed.Scheme)
+	}
+	return parsed, nil
+}
+
+func isSuccessStatus(code int) bool {
+	return code >= http.StatusOK && code < http.StatusMultipleChoices
+}
+
+func shouldFallbackToGET(statusCode int, probeErr error) bool {
+	if probeErr != nil {
+		normalized := strings.ToLower(probeErr.Error())
+		return strings.Contains(normalized, "timeout") ||
+			strings.Contains(normalized, "connection reset") ||
+			strings.Contains(normalized, "method not allowed")
+	}
+
+	switch statusCode {
+	case http.StatusMethodNotAllowed, http.StatusForbidden, http.StatusNotFound, http.StatusNotImplemented:
+		return true
+	default:
+		return false
+	}
+}
+
+func redactLinkForLog(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host
+}
