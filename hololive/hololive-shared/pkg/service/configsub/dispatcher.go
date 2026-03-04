@@ -3,8 +3,9 @@ package configsub
 import (
 	"log/slog"
 
-	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
 
 // ApplyHandlers: 설정 업데이트 타입별 적용 핸들러 집합.
