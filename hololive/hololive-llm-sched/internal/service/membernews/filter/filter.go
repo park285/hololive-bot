@@ -206,31 +206,7 @@ func buildMemberProfiles(roomMembers []string, membersData domain.MemberDataProv
 		}
 
 		appendToken(display)
-
-		if membersData != nil {
-			member := membersData.FindMemberByName(display)
-			if member == nil {
-				member = membersData.FindMemberByAlias(display)
-			}
-			if member != nil {
-				if member.NameKo != "" {
-					display = member.NameKo
-				} else if member.Name != "" {
-					display = member.Name
-				}
-				appendToken(member.Name)
-				appendToken(member.NameKo)
-				appendToken(member.NameJa)
-				if member.Aliases != nil {
-					for _, alias := range member.Aliases.Ko {
-						appendToken(alias)
-					}
-					for _, alias := range member.Aliases.Ja {
-						appendToken(alias)
-					}
-				}
-			}
-		}
+		display = enrichMemberProfile(display, membersData, appendToken)
 
 		tokens := make([]string, 0, len(tokenSet))
 		for token := range tokenSet {
@@ -241,6 +217,45 @@ func buildMemberProfiles(roomMembers []string, membersData domain.MemberDataProv
 	}
 
 	return profiles
+}
+
+func enrichMemberProfile(display string, membersData domain.MemberDataProvider, appendToken func(string)) string {
+	if membersData == nil {
+		return display
+	}
+
+	member := membersData.FindMemberByName(display)
+	if member == nil {
+		member = membersData.FindMemberByAlias(display)
+	}
+	if member == nil {
+		return display
+	}
+
+	if member.NameKo != "" {
+		display = member.NameKo
+	} else if member.Name != "" {
+		display = member.Name
+	}
+
+	appendToken(member.Name)
+	appendToken(member.NameKo)
+	appendToken(member.NameJa)
+	appendMemberAliasTokens(member, appendToken)
+
+	return display
+}
+
+func appendMemberAliasTokens(member *domain.Member, appendToken func(string)) {
+	if member == nil || member.Aliases == nil {
+		return
+	}
+	for _, alias := range member.Aliases.Ko {
+		appendToken(alias)
+	}
+	for _, alias := range member.Aliases.Ja {
+		appendToken(alias)
+	}
 }
 
 func matchMembers(candidate model.Candidate, profiles []memberProfile) []string {
@@ -292,20 +307,31 @@ func matchMembers(candidate model.Candidate, profiles []memberProfile) []string 
 func classifyCategory(candidate model.Candidate) model.Category {
 	text := strings.ToLower(candidate.Title + " " + candidate.Description)
 
-	if strings.Contains(text, "生誕") || strings.Contains(text, "생일") || strings.Contains(text, "birthday") {
-		return model.CategoryBirthdayLive
+	keywordRules := []struct {
+		category model.Category
+		keywords []string
+	}{
+		{category: model.CategoryBirthdayLive, keywords: []string{"生誕", "생일", "birthday"}},
+		{category: model.CategorySoloLive, keywords: []string{"ソロライブ", "solo live", "단독 라이브"}},
+		{category: model.CategoryCollab, keywords: []string{"コラボ", "콜라보", "collaboration"}},
+		{category: model.CategoryGoods, keywords: []string{"グッズ", "굿즈", "merchandise"}},
+		{category: model.CategoryEvent, keywords: []string{"fes", "expo", "live", "concert", "event"}},
 	}
-	if strings.Contains(text, "ソロライブ") || strings.Contains(text, "solo live") || strings.Contains(text, "단독 라이브") {
-		return model.CategorySoloLive
+
+	for _, rule := range keywordRules {
+		if containsAny(text, rule.keywords) {
+			return rule.category
+		}
 	}
-	if strings.Contains(text, "コラボ") || strings.Contains(text, "콜라보") || strings.Contains(text, "collaboration") {
-		return model.CategoryCollab
-	}
-	if strings.Contains(text, "グッズ") || strings.Contains(text, "굿즈") || strings.Contains(text, "merchandise") {
-		return model.CategoryGoods
-	}
-	if strings.Contains(text, "fes") || strings.Contains(text, "expo") || strings.Contains(text, "live") || strings.Contains(text, "concert") || strings.Contains(text, "event") {
-		return model.CategoryEvent
-	}
+
 	return model.CategoryOther
+}
+
+func containsAny(text string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
 }

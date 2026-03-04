@@ -97,38 +97,44 @@ func (l *IngestionLease) StartRenewLoop(ctx context.Context, errCh chan<- error)
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := l.renew(ctx); err != nil {
-				if errors.Is(err, errIngestionLeaseOwnershipLost) {
-					l.logger.Error("Ingestion lease ownership lost",
-						slog.String("event", "ingestion_lease_lost"),
-						slog.String("role", l.role),
-						slog.String("key", l.key),
-						slog.String("owner", l.owner),
-						slog.Any("error", err),
-					)
-					if errCh != nil {
-						select {
-						case errCh <- fmt.Errorf("ingestion lease ownership lost: %w", err):
-						default:
-						}
-					}
-					return
-				}
-				l.logger.Error("Ingestion lease renew exhausted all retries",
-					slog.String("event", "ingestion_lease_renew_failed"),
-					slog.String("role", l.role),
-					slog.String("key", l.key),
-					slog.Any("error", err),
-				)
-				if errCh != nil {
-					select {
-					case errCh <- fmt.Errorf("ingestion lease renew failed: %w", err):
-					default:
-					}
-				}
+			if err := l.renew(ctx); err != nil && l.handleRenewError(errCh, err) {
 				return
 			}
 		}
+	}
+}
+
+func (l *IngestionLease) handleRenewError(errCh chan<- error, err error) bool {
+	if errors.Is(err, errIngestionLeaseOwnershipLost) {
+		l.logger.Error("Ingestion lease ownership lost",
+			slog.String("event", "ingestion_lease_lost"),
+			slog.String("role", l.role),
+			slog.String("key", l.key),
+			slog.String("owner", l.owner),
+			slog.Any("error", err),
+		)
+		l.reportRenewLoopError(errCh, fmt.Errorf("ingestion lease ownership lost: %w", err))
+		return true
+	}
+
+	l.logger.Error("Ingestion lease renew exhausted all retries",
+		slog.String("event", "ingestion_lease_renew_failed"),
+		slog.String("role", l.role),
+		slog.String("key", l.key),
+		slog.Any("error", err),
+	)
+	l.reportRenewLoopError(errCh, fmt.Errorf("ingestion lease renew failed: %w", err))
+	return true
+}
+
+func (l *IngestionLease) reportRenewLoopError(errCh chan<- error, err error) {
+	if errCh == nil {
+		return
+	}
+
+	select {
+	case errCh <- err:
+	default:
 	}
 }
 

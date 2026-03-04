@@ -12,8 +12,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/util"
 )
 
 // MatchCacheEntry: 멤버 매칭 결과를 캐싱하기 위한 구조체 (채널 정보 + 타임스탬프)

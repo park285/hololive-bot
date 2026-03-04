@@ -359,9 +359,6 @@ func NewClient(opts ...ClientOption) *Client {
 // SetProxyEnabled: 런타임에 프록시 사용 여부를 토글합니다.
 // proxy client가 준비되지 않았으면 true 요청은 적용되지 않고 direct 모드로 유지됩니다.
 func (c *Client) SetProxyEnabled(enabled bool) bool {
-	if c == nil {
-		return false
-	}
 	if c.httpClient != nil {
 		// 외부 주입 클라이언트는 런타임 토글 대상이 아님
 		return false
@@ -390,9 +387,6 @@ func (c *Client) SetProxyEnabled(enabled bool) bool {
 
 // ProxyEnabled: 현재 런타임 프록시 활성 상태를 반환합니다.
 func (c *Client) ProxyEnabled() bool {
-	if c == nil {
-		return false
-	}
 	return c.proxyEnabled.Load()
 }
 
@@ -571,6 +565,7 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, error) {
 		}
 	}
 
+	// #nosec G706 -- proxy host is loaded from trusted runtime configuration.
 	slog.Info("Scraper using SOCKS5 proxy",
 		"host", parsedURL.Host,
 		"has_auth", auth != nil)
@@ -706,22 +701,7 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 
 	// 헤더 스냅샷 기반 설정
 	snap := c.uaProvider.Headers(ctx)
-	req.Header.Set("User-Agent", snap.UserAgent)
-	if snap.SecChUA != "" {
-		req.Header.Set("Sec-CH-UA", snap.SecChUA)
-		req.Header.Set("Sec-CH-UA-Mobile", "?0")
-		req.Header.Set("Sec-CH-UA-Platform", snap.SecChUAPlatform)
-	}
-
-	req.Header.Set("Accept-Language", "en")
-	req.Header.Set("Accept", snap.Accept)
-	req.Header.Set("Cookie", "SOCS=CAI")
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	req.Header.Set("Cache-Control", "max-age=0")
+	applyScraperHeaders(req, snap)
 
 	httpClient := c.currentHTTPClient()
 	resp, err := httpClient.Do(req)
@@ -758,6 +738,25 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 
 	c.backoffState.RecordSuccess()
 	return string(body), nil
+}
+
+func applyScraperHeaders(req *http.Request, snap ua.HeaderSnapshot) {
+	req.Header.Set("User-Agent", snap.UserAgent)
+	if snap.SecChUA != "" {
+		req.Header.Set("Sec-CH-UA", snap.SecChUA)
+		req.Header.Set("Sec-CH-UA-Mobile", "?0")
+		req.Header.Set("Sec-CH-UA-Platform", snap.SecChUAPlatform)
+	}
+
+	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("Accept", snap.Accept)
+	req.Header.Set("Cookie", "SOCS=CAI")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Cache-Control", "max-age=0")
 }
 
 // RateLimiter: 간격 기반 레이트 리미터 (slot 예약 패턴, 취소 시 rollback)
