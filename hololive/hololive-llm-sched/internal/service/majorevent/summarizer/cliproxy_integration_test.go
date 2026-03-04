@@ -68,7 +68,10 @@ func TestIntegration_Summarize_RawJSON_GPT(t *testing.T) {
 	client := newTestClient(t, model)
 	events := feb2026Events()
 
-	sysPrompt := getSystemPrompt(SummaryTypeWeekly)
+	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
+	if err != nil {
+		t.Fatalf("getSystemPrompt 실패: %v", err)
+	}
 	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
 	schema := summaryResponseSchema()
 
@@ -186,7 +189,10 @@ func TestIntegration_Summarize_RawJSON_GPT_WebSearch(t *testing.T) {
 	client := newTestClient(t, model)
 	events := feb2026Events()
 
-	sysPrompt := getSystemPrompt(SummaryTypeWeekly)
+	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
+	if err != nil {
+		t.Fatalf("getSystemPrompt 실패: %v", err)
+	}
 	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
 	schema := summaryResponseSchema()
 
@@ -364,7 +370,10 @@ func TestIntegration_Summarize_Weekly_ExaPlusWebSearch(t *testing.T) {
 	client := newTestClient(t, model)
 	events := feb2026Events()
 
-	sysPrompt := getSystemPrompt(SummaryTypeWeekly)
+	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
+	if err != nil {
+		t.Fatalf("getSystemPrompt 실패: %v", err)
+	}
 	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21", exaFeb2026Context)
 	schema := summaryResponseSchema()
 
@@ -431,7 +440,10 @@ func TestIntegration_Summarize_Monthly_ExaPlusWebSearch(t *testing.T) {
 	client := newTestClient(t, model)
 	events := mar2026Events()
 
-	sysPrompt := getSystemPrompt(SummaryTypeMonthly)
+	sysPrompt, err := getSystemPrompt(SummaryTypeMonthly)
+	if err != nil {
+		t.Fatalf("getSystemPrompt 실패: %v", err)
+	}
 	userPrompt := buildUserPrompt(events, SummaryTypeMonthly, "2026-03", exaMar2026Context)
 	schema := summaryResponseSchema()
 
@@ -523,7 +535,10 @@ func TestIntegration_Summarize_DateAccuracy(t *testing.T) {
 	client := newTestClient(t, model)
 	events := feb2026Events()
 
-	sysPrompt := getSystemPrompt(SummaryTypeWeekly)
+	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
+	if err != nil {
+		t.Fatalf("getSystemPrompt 실패: %v", err)
+	}
 	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
 	schema := summaryResponseSchema()
 
@@ -579,7 +594,10 @@ func TestIntegration_Summarize_ANIPLUSDiscovery(t *testing.T) {
 	client := newTestClient(t, model)
 	events := feb2026Events()
 
-	sysPrompt := getSystemPrompt(SummaryTypeWeekly)
+	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
+	if err != nil {
+		t.Fatalf("getSystemPrompt 실패: %v", err)
+	}
 	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21", exaFeb2026WithANIPLUS)
 	schema := summaryResponseSchema()
 
