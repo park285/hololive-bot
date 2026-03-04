@@ -21,7 +21,7 @@
 3. **로그 수집 경로**
    - stdout → Fluent Bit (DaemonSet) → Loki → Grafana
    - kubectl logs: kubelet 버퍼 (보조)
-   - 파일 로깅: 제거됨 (`*__LOGGING__FILE_ENABLED=false`)
+   - 파일 로깅: 제거됨 (코드에서 `file_enabled` 설정 키 자체가 삭제됨, C1 완료)
 
 4. **로그 조회**
    - Grafana: `http://localhost:30090` (Loki 데이터소스)
@@ -44,9 +44,7 @@
 ## 설정 키
 
 - `SCRAPER__LOGGING__LEVEL` (기본: `info`)
-- `SCRAPER__LOGGING__FILE_ENABLED` (기본: `false`, k8s: `false` 고정)
 - `ALARM__LOGGING__LEVEL` (기본: `info`)
-- `ALARM__LOGGING__FILE_ENABLED` (기본: `false`, k8s: `false` 고정)
 - `RUST_LOG` (선택, `tracing` filter override)
 - `OTEL_ENABLED` (기본: `false`)
 - `OTEL_SERVICE_NAME` (기본: `hololive-rs`)

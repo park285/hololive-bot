@@ -1,4 +1,6 @@
-# Alarm Rust Cutover (Broadcast Alarm)
+# Alarm Rust Cutover (Broadcast Alarm) — Archived
+
+> 발송은 dispatcher-app으로 분리됨 (M6 cutover 2026-03-02, Go alarm-dispatcher 완전 제거)
 
 ## 현재 상태 (2026-02-27)
 - Alarm Phase 3(A~G) 구현 완료 + 프로덕션 cutover 완료

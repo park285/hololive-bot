@@ -13,8 +13,6 @@ services:
       - "host.containers.internal:10.0.2.2"
     ports:
       - "127.0.0.1:30010:30010"
-    volumes:
-      - ./logs:/app/logs:rw
     environment:
       SCRAPER__DATABASE__HOST: host.containers.internal
       SCRAPER__DATABASE__PORT: "5433"
@@ -27,9 +25,6 @@ services:
       SCRAPER__SCHEDULER__SCRAPE_HOUR_KST: "6"
       SCRAPER__HEALTH__PORT: "30010"
       SCRAPER__LOGGING__LEVEL: info
-      SCRAPER__LOGGING__DIR: /app/logs
-      SCRAPER__LOGGING__FILE: hololive-scraper.log
-      SCRAPER__LOGGING__COMBINED_FILE: combined.log
       RUST_LOG: "info,scraper_service=info,sqlx=warn"
       TZ: Asia/Seoul
       OTEL_ENABLED: "false"
@@ -58,8 +53,6 @@ services:
       - "host.containers.internal:10.0.2.2"
     ports:
       - "127.0.0.1:30011:30011"
-    volumes:
-      - ./logs:/app/logs:rw
     environment:
       ALARM__VALKEY__URL: "redis://host.containers.internal:6379"
       ALARM__VALKEY__POOL_SIZE: "4"
@@ -95,9 +88,6 @@ services:
       ALARM__DATABASE__MAX_CONNECTIONS: "5"
       ALARM__HEALTH__PORT: "30011"
       ALARM__LOGGING__LEVEL: info
-      ALARM__LOGGING__DIR: /app/logs
-      ALARM__LOGGING__FILE: hololive-alarm.log
-      ALARM__LOGGING__COMBINED_FILE: combined.log
       ALARM__ALARM__TWITCH_ENABLED: "${ALARM_TWITCH_ENABLED:-false}"
       ALARM__ALARM__CHZZK_POLL_SECS: "120"
       ALARM__ALARM__TWITCH_POLL_SECS: "120"

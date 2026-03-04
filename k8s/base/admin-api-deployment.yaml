@@ -25,7 +25,7 @@ spec:
       initContainers:
         - name: wait-for-deps
           image: busybox:1.37
-          command: ['sh', '-c', 'until nc -z valkey-cache 6379; do echo "valkey 대기 중..."; sleep 2; done && until nc -z alarm-dispatcher 30010; do echo "alarm-dispatcher 대기 중..."; sleep 2; done && until nc -z llm-scheduler 30003; do echo "llm-scheduler 대기 중..."; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z valkey-cache 6379; do echo "valkey 대기 중..."; sleep 2; done && until nc -z llm-scheduler 30003; do echo "llm-scheduler 대기 중..."; sleep 2; done']
       containers:
         - name: admin-api
           image: hololive-admin-api:prod
@@ -42,7 +42,7 @@ spec:
             - name: ADMIN_API_PORT
               value: "30002"
             - name: ALARM_DISPATCHER_URL
-              value: "http://alarm-dispatcher:30010"
+              value: "http://rust-dispatcher:30020"
             - name: LLM_SCHEDULER_INTERNAL_URL
               value: "http://llm-scheduler:30003"
             - name: GOGC
