@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	botserver "github.com/kapu/hololive-kakao-bot-go/internal/server"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -39,6 +40,14 @@ func (testAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, err
 }
 func (testAlarmCRUD) WarmCacheFromDB(context.Context) error { return nil }
 
+func testAdminDependencies() *botAdminServerDependencies {
+	apiHandler := &botserver.APIHandler{}
+	return &botAdminServerDependencies{
+		domainHandlers: apiHandler.DomainHandlers(),
+		authHandler:    &botserver.AuthHandler{},
+	}
+}
+
 func TestBuildBotServer_InternalAlarmRoutesRequireAPIKey(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := &config.Config{
@@ -48,7 +57,7 @@ func TestBuildBotServer_InternalAlarmRoutesRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, logger)
+	server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 	if err != nil {
 		t.Fatalf("buildBotServer() error = %v", err)
 	}
@@ -81,11 +90,66 @@ func TestBuildBotServer_InternalAlarmRoutesRequireConfiguredAPIKey(t *testing.T)
 		},
 	}
 
-	_, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, logger)
+	_, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 	if err == nil {
 		t.Fatal("buildBotServer() error = nil, want non-nil")
 	}
 	if !strings.Contains(err.Error(), "API_SECRET_KEY") {
 		t.Fatalf("buildBotServer() error = %v, want contains API_SECRET_KEY", err)
 	}
+}
+
+func TestBuildBotServer_AdminRoutesToggleByConfig(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	t.Run("admin enabled exposes admin routes", func(t *testing.T) {
+		cfg := &config.Config{
+			Server: config.ServerConfig{
+				Port:   30001,
+				APIKey: "test-secret",
+			},
+			Bot: config.BotConfig{
+				AdminEnabled: true,
+			},
+			CORS: config.CORSConfig{
+				AllowedOrigins: []string{"http://localhost:3000"},
+			},
+		}
+
+		server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, testAdminDependencies(), logger)
+		if err != nil {
+			t.Fatalf("buildBotServer() error = %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/holo/members", nil)
+		w := httptest.NewRecorder()
+		server.Handler.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("admin disabled hides admin routes", func(t *testing.T) {
+		cfg := &config.Config{
+			Server: config.ServerConfig{
+				Port:   30001,
+				APIKey: "test-secret",
+			},
+			Bot: config.BotConfig{
+				AdminEnabled: false,
+			},
+		}
+
+		server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
+		if err != nil {
+			t.Fatalf("buildBotServer() error = %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/holo/members", nil)
+		w := httptest.NewRecorder()
+		server.Handler.ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+		}
+	})
 }

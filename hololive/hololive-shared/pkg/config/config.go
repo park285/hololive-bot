@@ -244,6 +244,7 @@ type BotConfig struct {
 	Prefix           string
 	SelfUser         string
 	IngestionEnabled bool
+	AdminEnabled     bool
 }
 
 // ServicesConfig: 외부 Go 서비스 연결 설정 (goroutine 통합 모니터링용)
@@ -372,6 +373,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			Prefix:           envutil.String("BOT_PREFIX", "!"),
 			SelfUser:         stringutil.TrimSpace(envutil.String("BOT_SELF_USER", "iris")),
 			IngestionEnabled: envutil.Bool("BOT_INGESTION_ENABLED", true),
+			AdminEnabled:     envutil.Bool("BOT_ADMIN_ENABLED", true),
 		},
 		Services: ServicesConfig{
 			LLMServerHealthURL:      envutil.String("SERVICES_LLM_SERVER_HEALTH_URL", ""),

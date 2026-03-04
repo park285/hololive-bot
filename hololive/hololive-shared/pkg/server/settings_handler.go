@@ -175,7 +175,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 	}
 
 	if req.MajorEventScrapeHourKST != nil || req.MajorEventScrapeRunNow != nil {
-		c.JSON(410, gin.H{"error": "majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-rs"})
+		c.JSON(410, gin.H{"error": "majorEventScrape* controls are no longer supported; major event scraping is owned by llm-scheduler"})
 		return
 	}
 	if req.MemberNewsWeeklyRunNow == nil {
