@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/llm"
+	"github.com/kapu/hololive-llm-sched/internal/llm"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 

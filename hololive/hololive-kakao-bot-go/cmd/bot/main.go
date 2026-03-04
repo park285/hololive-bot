@@ -10,11 +10,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/util"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/telemetry"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/app"
+	"github.com/kapu/hololive-kakao-bot-go/internal/telemetry"
 )
 
 // Version: 빌드 시 ldflags로 주입됨 (예: -ldflags="-X main.Version=1.0.0")
@@ -42,7 +42,7 @@ func main() {
 
 	// slog 기반 로거 초기화 (파일 로깅 포함)
 
-	logger, err := util.EnableFileLoggingWithLevel(util.LogConfig{
+	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
 		Dir:        cfg.Logging.Dir,
 		MaxSizeMB:  cfg.Logging.MaxSizeMB,
 		MaxBackups: cfg.Logging.MaxBackups,

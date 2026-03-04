@@ -23,11 +23,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/ctxutil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/retry"
 	"golang.org/x/time/rate"
 
+	"github.com/kapu/hololive-shared/internal/ctxutil"
+	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/util"

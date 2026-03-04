@@ -7,11 +7,13 @@ import (
 	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
@@ -95,4 +97,32 @@ func ProvideMemberMatcher(
 ) *matcher.MemberMatcher {
 	// selector는 nil (Gemini AI 채널 선택 미사용)
 	return matcher.NewMemberMatcher(ctx, membersData, cacheSvc, holodexSvc, nil, logger)
+}
+
+// ProvideMemberCacheWithoutValkey - Valkey 없이 멤버 캐시만 구성
+func ProvideMemberCacheWithoutValkey(
+	ctx context.Context,
+	repo *member.Repository,
+	logger *slog.Logger,
+) (*member.Cache, error) {
+	memberCache, err := member.NewMemberCache(ctx, repo, nil, logger, member.CacheConfig{
+		WarmUp:    true,
+		ValkeyTTL: constants.MemberCacheDefaults.ValkeyTTL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create member cache: %w", err)
+	}
+	return memberCache, nil
+}
+
+// ProvideFetchProfilesLogger - fetch_profiles 전용 로거
+func ProvideFetchProfilesLogger() (*slog.Logger, func(), error) {
+	logger := slog.Default()
+	cleanup := func() {} // slog는 Sync 필요 없음
+	return logger, cleanup, nil
+}
+
+// ProvideFetchProfilesHTTPClient - fetch_profiles 전용 HTTP 클라이언트
+func ProvideFetchProfilesHTTPClient() *http.Client {
+	return &http.Client{Timeout: constants.OfficialProfileConfig.RequestTimeout}
 }

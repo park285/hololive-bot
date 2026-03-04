@@ -11,7 +11,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/util"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 
 	"github.com/kapu/hololive-stream-ingester/internal/app"
 )
@@ -35,7 +35,7 @@ func main() {
 		return
 	}
 
-	logger, err := util.EnableFileLoggingWithLevel(util.LogConfig{
+	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
 		Dir:        cfg.Logging.Dir,
 		MaxSizeMB:  cfg.Logging.MaxSizeMB,
 		MaxBackups: cfg.Logging.MaxBackups,

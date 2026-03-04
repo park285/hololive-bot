@@ -1,4 +1,4 @@
-package providers
+package app
 
 import (
 	"log/slog"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/llm"
+	"github.com/kapu/hololive-llm-sched/internal/llm"
 )
 
 // --- 테스트 헬퍼 ---
