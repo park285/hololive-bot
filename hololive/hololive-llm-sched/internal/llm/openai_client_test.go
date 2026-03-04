@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -83,6 +84,62 @@ func TestNewClient_MultipleOptions(t *testing.T) {
 	}
 	if client.temperature == nil || *client.temperature != 0.3 {
 		t.Errorf("temperature should be 0.3")
+	}
+}
+
+func TestNewClient_WithWebSearch(t *testing.T) {
+	tests := []struct {
+		name    string
+		opt     Option
+		wantWeb bool
+	}{
+		{
+			name:    "enable",
+			opt:     WithWebSearch(true),
+			wantWeb: true,
+		},
+		{
+			name:    "disable",
+			opt:     WithWebSearch(false),
+			wantWeb: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient("https://example.com/v1", "key", "model", nil, tt.opt)
+			if client.webSearch != tt.wantWeb {
+				t.Fatalf("webSearch = %v, want %v", client.webSearch, tt.wantWeb)
+			}
+		})
+	}
+}
+
+func TestNewClient_WithChatCompletions(t *testing.T) {
+	client := NewClient("https://example.com/v1", "key", "model", nil, WithChatCompletions())
+
+	if !client.chatCompletions {
+		t.Fatal("chatCompletions should be enabled")
+	}
+	if client.webSearch {
+		t.Fatal("chatCompletions mode should disable webSearch")
+	}
+}
+
+func TestNewClient_WithReasoningEffort(t *testing.T) {
+	client := NewClient("https://example.com/v1", "key", "model", nil, WithReasoningEffort("high"))
+	if client.reasoningEffort != "high" {
+		t.Fatalf("reasoningEffort = %q, want %q", client.reasoningEffort, "high")
+	}
+}
+
+func TestNewClient_WithReasoningEffort_EmptyIgnored(t *testing.T) {
+	client := NewClient("https://example.com/v1", "key", "model", nil,
+		WithReasoningEffort("high"),
+		WithReasoningEffort(""),
+	)
+	if client.reasoningEffort != "high" {
+		t.Fatalf("empty reasoning effort should be ignored, got %q", client.reasoningEffort)
 	}
 }
 
@@ -200,6 +257,51 @@ func TestShouldFallbackToChat_NetworkErrors(t *testing.T) {
 	})
 	if shouldFallbackToChat(nonRetryableNetErr) {
 		t.Fatal("non-timeout/non-conn-refused network error should not fallback")
+	}
+}
+
+func TestSuppressDiscoveredEvents_NoField(t *testing.T) {
+	raw := `{"summary":"ok","items":[1,2,3]}`
+
+	sanitized, err := suppressDiscoveredEvents(raw)
+	if err != nil {
+		t.Fatalf("suppressDiscoveredEvents() error = %v", err)
+	}
+	if sanitized != raw {
+		t.Fatalf("suppressDiscoveredEvents() = %q, want original %q", sanitized, raw)
+	}
+}
+
+func TestSuppressDiscoveredEvents_WithField(t *testing.T) {
+	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
+
+	sanitized, err := suppressDiscoveredEvents(raw)
+	if err != nil {
+		t.Fatalf("suppressDiscoveredEvents() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(sanitized), &payload); err != nil {
+		t.Fatalf("unmarshal sanitized json: %v", err)
+	}
+
+	if payload["summary"] != "ok" {
+		t.Fatalf("summary = %v, want %q", payload["summary"], "ok")
+	}
+
+	events, ok := payload["discovered_events"].([]any)
+	if !ok {
+		t.Fatalf("discovered_events type = %T, want []any", payload["discovered_events"])
+	}
+	if len(events) != 0 {
+		t.Fatalf("discovered_events length = %d, want 0", len(events))
+	}
+}
+
+func TestSuppressDiscoveredEvents_InvalidJSON(t *testing.T) {
+	_, err := suppressDiscoveredEvents(`{"summary":`)
+	if err == nil {
+		t.Fatal("invalid json should return error")
 	}
 }
 
