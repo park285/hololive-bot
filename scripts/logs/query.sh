@@ -6,13 +6,12 @@ set -euo pipefail
 # --- 서비스명 → container_name 매핑 ---
 declare -A SERVICE_MAP=(
   [bot]="hololive-bot"
-  [admin]="admin-api"
-  [dispatcher]="alarm-dispatcher"
+  [dispatcher]="dispatcher-go"
+  [dispatcher-go]="dispatcher-go"
   [ingester]="stream-ingester"
+  [stream-ingester]="stream-ingester"
   [llm]="llm-scheduler"
-  [alarm]="hololive-alarm"
-  [scraper]="hololive-scraper"
-  [rust-dispatcher]="rust-dispatcher"
+  [llm-scheduler]="llm-scheduler"
 )
 
 LOKI_PORT=3100
@@ -34,9 +33,9 @@ Options:
   -h, --help           도움말
 
 Examples:
-  $(basename "$0") alarm --since 2h --grep "ERROR"
+  $(basename "$0") dispatcher --since 2h --grep "ERROR"
   $(basename "$0") bot --limit 500
-  $(basename "$0") scraper --since 1d --grep "failed"
+  $(basename "$0") ingester --since 1d --grep "failed"
 EOF
   exit 0
 }

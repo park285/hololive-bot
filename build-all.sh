@@ -50,9 +50,6 @@ VERSION_DIRS=(
     "hololive/hololive-kakao-bot-go"
 )
 
-# Rust 서비스 목록 (Podman 직접 빌드)
-HOLO_RS_SERVICES=("hololive-scraper" "hololive-alarm")
-
 # 인자 파싱
 NO_BUMP=false
 TARGET_SERVICES=()
@@ -125,19 +122,6 @@ else
     echo "  Target: All Services"
     echo "  [Docker] docker-compose.prod.yml"
     "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml up -d --build
-fi
-
-# Step 3: Rust 서비스 Podman 빌드 (CONTAINER_CLI=podman 일 때만)
-if [ "${CONTAINER_CLI}" = "podman" ]; then
-    echo ""
-    echo "[BUILD] Building Rust services with Podman..."
-    for svc in "${HOLO_RS_SERVICES[@]}"; do
-        if [ ${#TARGET_SERVICES[@]} -eq 0 ] || [[ " ${TARGET_SERVICES[*]} " == *" $svc "* ]]; then
-            echo "  [Podman] Building $svc..."
-            podman build -t "$svc:${HOLO_BOT_VERSION}" -f "hololive/${svc}-rs/Dockerfile" "hololive/${svc}-rs" || \
-                echo "  [WARN] $svc build failed or Dockerfile not found, skipping"
-        fi
-    done
 fi
 
 echo ""

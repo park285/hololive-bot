@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: admin-api
+  name: dispatcher-go
   namespace: hololive
 spec:
   replicas: 1
@@ -13,25 +13,25 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: admin-api
+      app: dispatcher-go
   template:
     metadata:
       labels:
-        app: admin-api
+        app: dispatcher-go
     spec:
       automountServiceAccountToken: false
       securityContext:
         fsGroup: 1000
       initContainers:
-        - name: wait-for-deps
+        - name: wait-for-valkey
           image: busybox:1.37
-          command: ['sh', '-c', 'until nc -z valkey-cache 6379; do echo "valkey 대기 중..."; sleep 2; done && until nc -z llm-scheduler 30003; do echo "llm-scheduler 대기 중..."; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z valkey-cache 6379; do echo "valkey 대기 중..."; sleep 2; done']
       containers:
-        - name: admin-api
-          image: hololive-admin-api:prod
+        - name: dispatcher-go
+          image: hololive-dispatcher-go:prod
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 30002
+            - containerPort: 30020
               name: http
           envFrom:
             - configMapRef:
@@ -39,33 +39,43 @@ spec:
             - secretRef:
                 name: hololive-app-secret
           env:
-            - name: ADMIN_API_PORT
-              value: "30002"
-            - name: ALARM_DISPATCHER_URL
-              value: "http://hololive-bot:30001"
-            - name: LLM_SCHEDULER_INTERNAL_URL
-              value: "http://llm-scheduler:30003"
-            - name: GOGC
-              value: "100"
-            - name: GOMEMLIMIT
-              value: "192MiB"
-            - name: OTEL_SERVICE_NAME
-              value: "hololive-admin-api"
+            - name: DISPATCHER_PORT
+              value: "30020"
+            - name: CACHE_HOST
+              value: "valkey-cache"
+            - name: CACHE_PORT
+              value: "6379"
+            - name: CACHE_SOCKET_PATH
+              value: ""
+            - name: IRIS_BASE_URL
+              value: "http://host-external:3000"
+            - name: IRIS_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hololive-app-secret
+                  key: IRIS_BOT_TOKEN
+            - name: ALARM_DISPATCH_QUEUE_KEY
+              value: "alarm:dispatch:queue"
+            - name: ALARM_DISPATCH_MAX_BATCH
+              value: "50"
+            - name: DISPATCHER_RECONNECT_BACKOFF_MS
+              value: "1000"
+            - name: LOG_LEVEL
+              value: "info"
             - name: LOG_DIR
               value: ""
-          volumeMounts:
-            - name: data
-              mountPath: /app/data
+            - name: TZ
+              value: "Asia/Seoul"
           resources:
             requests:
-              cpu: 150m
-              memory: 128Mi
+              cpu: 50m
+              memory: 64Mi
             limits:
-              cpu: 400m
+              cpu: 300m
               memory: 256Mi
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 15
@@ -84,9 +94,4 @@ spec:
             capabilities:
               drop:
                 - ALL
-      volumes:
-        - name: data
-          hostPath:
-            path: /srv/hololive/data
-            type: DirectoryOrCreate
       restartPolicy: Always

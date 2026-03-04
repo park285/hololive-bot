@@ -8,8 +8,8 @@ OUTPUT_FILE="${1:-${ROOT_DIR}/artifacts/architecture/go-workspace-import-graph.t
 MODULE_DIRS=(
   "shared-go"
   "hololive/hololive-shared"
-  "hololive/hololive-admin"
   "hololive/hololive-kakao-bot-go"
+  "hololive/hololive-dispatcher-go"
   "hololive/hololive-llm-sched"
   "hololive/hololive-stream-ingester"
 )

@@ -14,14 +14,8 @@ resources:
   - stream-ingester-service.yaml
   - llm-scheduler-deployment.yaml
   - llm-scheduler-service.yaml
-  - admin-api-deployment.yaml
-  - admin-api-service.yaml
-  - hololive-scraper-deployment.yaml
-  - hololive-scraper-service.yaml
-  - hololive-alarm-deployment.yaml
-  - hololive-alarm-service.yaml
-  - rust-dispatcher-deployment.yaml
-  - rust-dispatcher-service.yaml
+  - dispatcher-go-deployment.yaml
+  - dispatcher-go-service.yaml
   - monitoring/
 labels:
   - pairs:
