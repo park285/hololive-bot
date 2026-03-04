@@ -42,7 +42,7 @@ spec:
             - name: ADMIN_API_PORT
               value: "30002"
             - name: ALARM_DISPATCHER_URL
-              value: "http://rust-dispatcher:30020"
+              value: "http://hololive-bot:30001"
             - name: LLM_SCHEDULER_INTERNAL_URL
               value: "http://llm-scheduler:30003"
             - name: GOGC

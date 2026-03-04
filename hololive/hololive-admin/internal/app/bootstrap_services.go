@@ -82,7 +82,7 @@ func buildAdminComponents(
 	if strings.TrimSpace(cfg.AlarmDispatcherURL) == "" {
 		return nil, fmt.Errorf("ALARM_DISPATCHER_URL is required")
 	}
-	alarmCRUD := alarm.NewClient(cfg.AlarmDispatcherURL, logger)
+	alarmCRUD := alarm.NewClientWithAPIKey(cfg.AlarmDispatcherURL, cfg.Server.APIKey, logger)
 
 	// Auth 서비스
 	authService, err := ProvideAuthService(ctx, cfg.Postgres.AutoPrepareSchema, postgresService, cacheService, logger)
