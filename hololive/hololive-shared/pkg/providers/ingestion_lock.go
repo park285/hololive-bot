@@ -8,8 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/retry"
-
+	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 

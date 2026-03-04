@@ -225,15 +225,15 @@ func buildLLMSchedulerComponents(
 	}
 	memberNewsService := initMemberNewsService(ctx, cfg.Cliproxy, cfg.LLM, cfg.Exa, postgresService, cacheService, memberDataProvider, logger)
 
-	deliveryLocker := providers.ProvideDeliveryLocker(cacheService, logger)
-	outboxRepo := providers.ProvideOutboxRepository(postgresService, logger)
+	deliveryLocker := ProvideDeliveryLocker(cacheService, logger)
+	outboxRepo := ProvideOutboxRepository(postgresService, logger)
 	irisClient := providers.ProvideIrisClient(cfg.Iris, logger)
 	deliverySender := providers.NewIrisMessageSender(irisClient)
-	deliveryDispatcher := providers.ProvideDeliveryDispatcher(outboxRepo, deliverySender, logger)
+	deliveryDispatcher := ProvideDeliveryDispatcher(outboxRepo, deliverySender, logger)
 
-	majorEventLLMClient := providers.ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
-	majorEventReviewer := providers.ProvideMajorEventReviewerClient(cfg.Cliproxy, cfg.LLM, logger)
-	majorEventAdjudicator := providers.ProvideMajorEventAdjudicatorClient(cfg.Cliproxy, cfg.LLM, logger)
+	majorEventLLMClient := ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
+	majorEventReviewer := ProvideMajorEventReviewerClient(cfg.Cliproxy, cfg.LLM, logger)
+	majorEventAdjudicator := ProvideMajorEventAdjudicatorClient(cfg.Cliproxy, cfg.LLM, logger)
 	exaSearcher := provideExaSearcher(cfg.Exa, logger)
 	summarizer := provideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheService, exaSearcher, logger)
 

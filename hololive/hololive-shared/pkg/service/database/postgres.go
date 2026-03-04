@@ -6,14 +6,14 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/dbx"
 	"gorm.io/gorm"
 
+	"github.com/kapu/hololive-shared/internal/dbx"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 // PostgresService: PostgreSQL 데이터베이스 연결 및 GORM 인스턴스를 관리하는 서비스
-// 내부적으로 shared-go/pkg/dbx.Client를 사용한다.
+// 내부적으로 hololive-shared/internal/dbx.Client를 사용한다.
 type PostgresService struct {
 	client *dbx.Client
 	logger *slog.Logger
@@ -35,7 +35,7 @@ type PostgresConfig struct {
 }
 
 // NewPostgresService: 주어진 설정을 사용하여 PostgreSQL 연결을 수립하고 서비스를 초기화합니다.
-// shared-go/pkg/dbx.Client를 사용하여 pgxpool + GORM 듀얼 구조를 제공한다.
+// hololive-shared/internal/dbx.Client를 사용하여 pgxpool + GORM 듀얼 구조를 제공한다.
 func NewPostgresService(ctx context.Context, cfg PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
 	dbxCfg := dbx.Config{
 		Host:          cfg.Host,

@@ -10,13 +10,13 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/util"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/app"
 )
 
 func main() {
-	logger := util.NewLoggerWithLevel("info")
+	logger := sharedlogging.NewLoggerWithLevel("info")
 
 	log.Println("=== PostgreSQL Member Data Integration Test ===")
 	log.Println()

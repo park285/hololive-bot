@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+	"github.com/kapu/hololive-shared/internal/envutil"
 )
 
 // Config: PostgreSQL 접속 설정

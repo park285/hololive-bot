@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/ctxutil"
+	"github.com/kapu/hololive-shared/internal/ctxutil"
 )
 
 func TestSleepWithContext(t *testing.T) {

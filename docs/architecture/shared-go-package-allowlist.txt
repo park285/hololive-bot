@@ -3,16 +3,10 @@
 # - 신규 패키지가 필요하면 사유/영향/롤백 포함 PR에서 이 파일을 함께 갱신
 # - 제거된 패키지는 이 파일에서도 즉시 삭제
 
-ctxutil
-dbx
-envutil
 ginjson
 irisx
 json
 jsonutil
-logging
-retry
 runtime/automaxprocs
 stringutil
-telemetry
 workerpool
