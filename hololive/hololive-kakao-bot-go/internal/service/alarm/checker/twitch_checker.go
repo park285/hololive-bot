@@ -1,0 +1,202 @@
+package checker
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+
+	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
+)
+
+const twitchLiveNotifiedKeyPrefix = "notified:twitch:live:"
+
+// TwitchChecker는 Twitch 라이브 상태를 배치 조회해 알림 후보를 만든다.
+type TwitchChecker struct {
+	cacheSvc     cache.Client
+	twitchClient *twitch.Client
+	logger       *slog.Logger
+}
+
+// NewTwitchChecker는 Twitch 체커를 생성한다.
+func NewTwitchChecker(cacheSvc cache.Client, twitchClient *twitch.Client, logger *slog.Logger) (*TwitchChecker, error) {
+	if cacheSvc == nil {
+		return nil, fmt.Errorf("new twitch checker: cache service is nil")
+	}
+	if twitchClient == nil {
+		return nil, fmt.Errorf("new twitch checker: twitch client is nil")
+	}
+	return &TwitchChecker{
+		cacheSvc:     cacheSvc,
+		twitchClient: twitchClient,
+		logger:       safeLogger(logger),
+	}, nil
+}
+
+// Check는 alarm:twitch_logins 매핑 기반으로 Twitch 라이브 알림 후보를 생성한다.
+func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
+	loginMappingsRaw, err := c.cacheSvc.HGetAll(ctx, notification.TwitchLoginMapKey)
+	if err != nil {
+		return nil, fmt.Errorf("check twitch streams: read login mappings: %w", err)
+	}
+	loginMappings, youtubeChannelIDs := normalizeTwitchLoginMappings(loginMappingsRaw)
+	if len(loginMappings) == 0 {
+		return []*domain.AlarmNotification{}, nil
+	}
+
+	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("check twitch streams: load subscriber rooms: %w", err)
+	}
+
+	loginsToLookup := buildTwitchLookupLogins(loginMappings, subscriberMap)
+	if len(loginsToLookup) == 0 {
+		return []*domain.AlarmNotification{}, nil
+	}
+
+	streamsResponse, err := c.twitchClient.GetStreams(ctx, loginsToLookup)
+	if err != nil {
+		return nil, fmt.Errorf("check twitch streams: get streams batch: %w", err)
+	}
+	if streamsResponse == nil || len(streamsResponse.Data) == 0 {
+		return []*domain.AlarmNotification{}, nil
+	}
+
+	notifications, err := c.buildLiveNotifications(ctx, loginMappings, subscriberMap, streamsResponse)
+	if err != nil {
+		return nil, fmt.Errorf("check twitch streams: build live notifications: %w", err)
+	}
+
+	return notifications, nil
+}
+
+func normalizeTwitchLoginMappings(loginMappingsRaw map[string]string) (map[string]string, []string) {
+	if len(loginMappingsRaw) == 0 {
+		return map[string]string{}, []string{}
+	}
+
+	loginMappings := make(map[string]string, len(loginMappingsRaw))
+	youtubeChannelIDs := make([]string, 0, len(loginMappingsRaw))
+	for login, channelID := range loginMappingsRaw {
+		normalizedLogin := stringutil.Normalize(login)
+		trimmedChannelID := strings.TrimSpace(channelID)
+		if normalizedLogin == "" || trimmedChannelID == "" {
+			continue
+		}
+		loginMappings[normalizedLogin] = trimmedChannelID
+		youtubeChannelIDs = append(youtubeChannelIDs, trimmedChannelID)
+	}
+	return loginMappings, youtubeChannelIDs
+}
+
+func buildTwitchLookupLogins(loginMappings map[string]string, subscriberMap map[string][]string) []string {
+	loginsToLookup := make([]string, 0, len(loginMappings))
+	for login, channelID := range loginMappings {
+		if len(subscriberMap[channelID]) == 0 {
+			continue
+		}
+		loginsToLookup = append(loginsToLookup, login)
+	}
+	return uniqueStrings(loginsToLookup)
+}
+
+func (c *TwitchChecker) buildLiveNotifications(
+	ctx context.Context,
+	loginMappings map[string]string,
+	subscriberMap map[string][]string,
+	streamsResponse *twitch.StreamsResponse,
+) ([]*domain.AlarmNotification, error) {
+	notifications := make([]*domain.AlarmNotification, 0)
+	for idx := range streamsResponse.Data {
+		streamData := &streamsResponse.Data[idx]
+		if !streamData.IsLive() {
+			continue
+		}
+
+		normalizedLogin := stringutil.Normalize(streamData.UserLogin)
+		youtubeChannelID, ok := loginMappings[normalizedLogin]
+		if !ok {
+			continue
+		}
+
+		subscriberRooms := subscriberMap[youtubeChannelID]
+		if len(subscriberRooms) == 0 {
+			continue
+		}
+
+		dedupKey := buildTwitchLiveDedupKey(streamData.UserID, streamData.ID)
+		claimed, claimErr := c.cacheSvc.SetNX(ctx, dedupKey, "1", sharedconstants.CacheTTL.TwitchNotification)
+		if claimErr != nil {
+			return nil, fmt.Errorf("check twitch streams: claim dedup key %s: %w", dedupKey, claimErr)
+		}
+		if !claimed {
+			continue
+		}
+
+		stream := buildTwitchLiveStream(youtubeChannelID, streamData)
+		channelNotifications := roomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
+		notifications = append(notifications, channelNotifications...)
+	}
+
+	return notifications, nil
+}
+
+func buildTwitchLiveDedupKey(userID, streamID string) string {
+	return fmt.Sprintf("%s%s:%s", twitchLiveNotifiedKeyPrefix, userID, streamID)
+}
+
+func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamData) *domain.Stream {
+	if streamData == nil {
+		return nil
+	}
+
+	startAt := streamData.StartedAt.UTC()
+	startScheduled := startAt
+	channelName := strings.TrimSpace(streamData.UserName)
+	if channelName == "" {
+		channelName = strings.TrimSpace(streamData.UserLogin)
+	}
+
+	title := strings.TrimSpace(streamData.Title)
+	if title == "" {
+		title = "Twitch 라이브"
+	}
+
+	normalizedLogin := stringutil.Normalize(streamData.UserLogin)
+	twitchUserID := strings.TrimSpace(streamData.UserID)
+	if twitchUserID == "" {
+		twitchUserID = normalizedLogin
+	}
+
+	viewerCount := streamData.ViewerCount
+	liveURL := ""
+	if normalizedLogin != "" {
+		liveURL = fmt.Sprintf("https://twitch.tv/%s", normalizedLogin)
+	}
+
+	return &domain.Stream{
+		ID:             fmt.Sprintf("twitch:%s:%s", twitchUserID, streamData.ID),
+		Title:          title,
+		ChannelID:      youtubeChannelID,
+		ChannelName:    channelName,
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &startScheduled,
+		StartActual:    &startAt,
+		ViewerCount:    &viewerCount,
+		Channel: &domain.Channel{
+			ID:   youtubeChannelID,
+			Name: channelName,
+		},
+		TwitchUserID:    twitchUserID,
+		TwitchUserLogin: normalizedLogin,
+		TwitchStreamID:  streamData.ID,
+		TwitchLiveURL:   liveURL,
+		IsTwitchOnly:    true,
+	}
+}

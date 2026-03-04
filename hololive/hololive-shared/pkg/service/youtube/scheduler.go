@@ -552,9 +552,9 @@ func (ys *schedulerImpl) isSignificantChange(change *domain.StatsChange) bool {
 	return false
 }
 
-// formatChangeMessage: 마일스톤 달성 메시지만 생성 (구독자 증가 알람은 제거됨)
+// formatChangeMessage: 마일스톤 달성 메시지만 생성 (테스트 전용, 프로덕션은 SendMilestoneAlerts 사용)
 func (ys *schedulerImpl) formatChangeMessage(change *domain.StatsChange) string {
-	return ys.formatChangeMessageWithContext(context.TODO(), change)
+	return ys.formatChangeMessageWithContext(context.Background(), change)
 }
 
 func (ys *schedulerImpl) formatChangeMessageWithContext(ctx context.Context, change *domain.StatsChange) string {
@@ -571,7 +571,7 @@ func (ys *schedulerImpl) formatChangeMessageWithContext(ctx context.Context, cha
 				util.FormatKoreanNumber(int64(milestone)))
 		}
 		if ctx == nil {
-			ctx = context.TODO()
+			ctx = context.Background()
 		}
 		msg, err := ys.formatter.FormatMilestoneAchieved(
 			context.WithoutCancel(ctx),
