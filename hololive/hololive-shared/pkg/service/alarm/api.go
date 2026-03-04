@@ -25,6 +25,14 @@ func NewAPIHandler(alarm domain.AlarmCRUD, logger *slog.Logger) *APIHandler {
 
 // RegisterRoutes: 라우터 그룹에 알람 internal API 엔드포인트를 등록합니다.
 func (h *APIHandler) RegisterRoutes(rg *gin.RouterGroup) {
+	h.RegisterInternalRoutes(rg)
+
+	rg.GET("/health", h.Health)
+	rg.GET("/ready", h.Ready)
+}
+
+// RegisterInternalRoutes: 알람 internal API 엔드포인트만 등록합니다. (/health, /ready 제외)
+func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal := rg.Group("/internal/alarm")
 	internal.POST("/add", h.AddAlarm)
 	internal.POST("/remove", h.RemoveAlarm)
@@ -36,9 +44,6 @@ func (h *APIHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	internal.PUT("/room-name", h.SetRoomName)
 	internal.PUT("/user-name", h.SetUserName)
 	internal.GET("/keys", h.GetAllAlarmKeys)
-
-	rg.GET("/health", h.Health)
-	rg.GET("/ready", h.Ready)
 }
 
 // AddAlarm: 알람을 추가합니다.
