@@ -15,7 +15,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	alarmsvc "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
@@ -375,7 +374,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		}
 	}
 
-	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, adminServerDeps, infra.deps.Cache, logger)
+	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, adminServerDeps, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -470,7 +469,6 @@ func buildBotServer(
 	triggerHandler *sharedserver.TriggerHandler,
 	alarmCRUD domain.AlarmCRUD,
 	adminDeps *botAdminServerDependencies,
-	cacheSvc cache.Client,
 	logger *slog.Logger,
 ) (*http.Server, error) {
 	var (
@@ -490,7 +488,6 @@ func buildBotServer(
 			adminDeps.authHandler,
 			webhookHandler,
 			triggerHandler,
-			cacheSvc,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("build bot server: provide api router: %w", err)
