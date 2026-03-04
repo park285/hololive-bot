@@ -1,0 +1,167 @@
+package adapter
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"strings"
+	"testing"
+
+	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/util"
+)
+
+func setupFormatterTestRenderer(t *testing.T, templates map[domain.TemplateKey]string) *serviceTemplate.Renderer {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.NotificationTemplate{}))
+
+	for key, body := range templates {
+		err := db.Create(&domain.NotificationTemplate{
+			TemplateKey: key,
+			Body:        body,
+		}).Error
+		require.NoError(t, err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return serviceTemplate.NewRenderer(db, logger)
+}
+
+func TestSplitTemplateInstruction(t *testing.T) {
+	t.Parallel()
+
+	t.Run("blank string", func(t *testing.T) {
+		t.Parallel()
+
+		instruction, body := splitTemplateInstruction("\n\r\n")
+		assert.Equal(t, "", instruction)
+		assert.Equal(t, "", body)
+	})
+
+	t.Run("single line only", func(t *testing.T) {
+		t.Parallel()
+
+		instruction, body := splitTemplateInstruction("사용법 안내만")
+		assert.Equal(t, "사용법 안내만", instruction)
+		assert.Equal(t, "", body)
+	})
+
+	t.Run("instruction and body", func(t *testing.T) {
+		t.Parallel()
+
+		instruction, body := splitTemplateInstruction("\n\r\n안내\r\n\r\n본문 첫줄\n본문 둘째줄")
+		assert.Equal(t, "안내", instruction)
+		assert.Equal(t, "본문 첫줄\n본문 둘째줄", body)
+	})
+}
+
+func TestNewResponseFormatterAndPrefix(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default prefix when blank", func(t *testing.T) {
+		t.Parallel()
+
+		formatter := NewResponseFormatter("   ", nil)
+		require.NotNil(t, formatter)
+		assert.Equal(t, "!", formatter.Prefix())
+	})
+
+	t.Run("trimmed custom prefix", func(t *testing.T) {
+		t.Parallel()
+
+		formatter := NewResponseFormatter("  #  ", nil)
+		assert.Equal(t, "#", formatter.Prefix())
+	})
+
+	t.Run("nil formatter", func(t *testing.T) {
+		t.Parallel()
+
+		var formatter *ResponseFormatter
+		assert.Equal(t, "!", formatter.Prefix())
+	})
+}
+
+func TestResponseFormatterRender(t *testing.T) {
+	t.Parallel()
+
+	t.Run("render success with trailing newline trim", func(t *testing.T) {
+		t.Parallel()
+
+		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+			domain.TemplateKeyCmdHelp: "Hello {{.Name}}\n",
+		})
+		formatter := NewResponseFormatter("!", renderer)
+
+		got, err := formatter.render(context.Background(), domain.TemplateKeyCmdHelp, map[string]string{"Name": "Kapu"})
+		require.NoError(t, err)
+		assert.Equal(t, "Hello Kapu", got)
+	})
+
+	t.Run("render missing template", func(t *testing.T) {
+		t.Parallel()
+
+		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
+		formatter := NewResponseFormatter("!", renderer)
+
+		_, err := formatter.render(context.Background(), domain.TemplateKeyCmdHelp, nil)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "render template")
+	})
+}
+
+func TestFormatHelp(t *testing.T) {
+	t.Parallel()
+
+	t.Run("template with instruction and body applies see-more padding", func(t *testing.T) {
+		t.Parallel()
+
+		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+			domain.TemplateKeyCmdHelp: "도움말 안내\n사용 가능한 명령어 목록",
+		})
+		formatter := NewResponseFormatter("!", renderer)
+
+		got := formatter.FormatHelp(context.Background())
+		assert.True(t, strings.HasPrefix(got, "도움말 안내"))
+		assert.Contains(t, got, "\n사용 가능한 명령어 목록")
+		assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(got, util.KakaoZeroWidthSpace))
+	})
+
+	t.Run("single line template returns original render", func(t *testing.T) {
+		t.Parallel()
+
+		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
+			domain.TemplateKeyCmdHelp: "한 줄 도움말",
+		})
+		formatter := NewResponseFormatter("!", renderer)
+
+		got := formatter.FormatHelp(context.Background())
+		assert.Equal(t, "한 줄 도움말", got)
+	})
+
+	t.Run("render failure returns fallback error message", func(t *testing.T) {
+		t.Parallel()
+
+		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
+		formatter := NewResponseFormatter("!", renderer)
+
+		got := formatter.FormatHelp(context.Background())
+		assert.Equal(t, ErrorMessage(ErrDisplayHelpFailed), got)
+	})
+}
+
+func TestFormatErrorAndMemberNotFound(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewResponseFormatter("!", nil)
+	assert.Equal(t, ErrorMessage("테스트 오류"), formatter.FormatError("테스트 오류"))
+	assert.Equal(t, ErrorMessage("'후부키' 멤버를 찾을 수 없습니다."), formatter.MemberNotFound("후부키"))
+}
