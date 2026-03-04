@@ -13,6 +13,30 @@ type YouTubeStack struct {
 	StatsRepo *youtube.StatsRepository
 }
 
+// GetService: nil-safe YouTube Service 반환.
+func (s *YouTubeStack) GetService() youtube.Service {
+	if s == nil {
+		return nil
+	}
+	return s.Service
+}
+
+// GetScheduler: nil-safe YouTube Scheduler 반환.
+func (s *YouTubeStack) GetScheduler() youtube.Scheduler {
+	if s == nil {
+		return nil
+	}
+	return s.Scheduler
+}
+
+// GetStatsRepo: nil-safe YouTube StatsRepository 반환.
+func (s *YouTubeStack) GetStatsRepo() *youtube.StatsRepository {
+	if s == nil {
+		return nil
+	}
+	return s.StatsRepo
+}
+
 // PollerIntervals - 폴러별 실행 간격 설정
 type PollerIntervals struct {
 	Videos    time.Duration // 영상 감지 (기본: 10분)
