@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
+	"strings"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
@@ -59,19 +59,15 @@ func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]SearchResult
 		return nil, fmt.Errorf("marshal exa request: %w", err)
 	}
 
-	endpointURL, err := url.Parse(c.endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("parse exa endpoint: %w", err)
-	}
-	queryValues := endpointURL.Query()
-	queryValues.Set("exaApiKey", c.apiKey)
-	endpointURL.RawQuery = queryValues.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL.String(), bytes.NewReader(bodyJSON))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(bodyJSON))
 	if err != nil {
 		return nil, fmt.Errorf("create exa request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if apiKey := strings.TrimSpace(c.apiKey); apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Set("X-Exa-Api-Key", apiKey)
+	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {

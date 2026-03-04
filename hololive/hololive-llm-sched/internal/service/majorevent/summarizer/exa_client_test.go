@@ -1,9 +1,57 @@
 package summarizer
 
 import (
+	"context"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func TestExaMCPClientSearch_SendsAPIKeyViaHeaderNotQuery(t *testing.T) {
+	var (
+		gotAuthorization string
+		gotHeaderKey     string
+		gotRawQuery      string
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthorization = r.Header.Get("Authorization")
+		gotHeaderKey = r.Header.Get("X-Exa-Api-Key")
+		gotRawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(buildExaRPCBody(t, []string{
+			mustJSONString(t, []map[string]any{
+				{
+					"title":         "sample",
+					"url":           "https://example.com",
+					"text":          "sample text",
+					"publishedDate": "2026-03-04",
+				},
+			}),
+		}))
+	}))
+	defer server.Close()
+
+	client := NewExaMCPClient(server.URL+"?existing=1", "secret-key", server.Client(), nil)
+	results, err := client.Search(context.Background(), "hololive")
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if gotAuthorization != "Bearer secret-key" {
+		t.Fatalf("Authorization = %q, want %q", gotAuthorization, "Bearer secret-key")
+	}
+	if gotHeaderKey != "secret-key" {
+		t.Fatalf("X-Exa-Api-Key = %q, want %q", gotHeaderKey, "secret-key")
+	}
+	if strings.Contains(gotRawQuery, "exaApiKey=") {
+		t.Fatalf("query should not include exaApiKey, got: %q", gotRawQuery)
+	}
+}
 
 func TestParseExaResponse_WrappedResults(t *testing.T) {
 	body := buildExaRPCBody(t, []string{

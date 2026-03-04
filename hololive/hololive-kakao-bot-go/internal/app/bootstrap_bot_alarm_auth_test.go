@@ -1,0 +1,91 @@
+package app
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+type testAlarmCRUD struct{}
+
+func (testAlarmCRUD) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
+	return true, nil
+}
+func (testAlarmCRUD) RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error) {
+	return true, nil
+}
+func (testAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) { return []string{}, nil }
+func (testAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
+	return []*domain.Alarm{}, nil
+}
+func (testAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
+func (testAlarmCRUD) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
+	return nil, nil
+}
+func (testAlarmCRUD) GetMemberNameWithFallback(context.Context, string) string { return "" }
+func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(int) []int                      { return []int{5} }
+func (testAlarmCRUD) GetTargetMinutes() []int                                  { return []int{5} }
+func (testAlarmCRUD) SetRoomName(context.Context, string, string) error        { return nil }
+func (testAlarmCRUD) SetUserName(context.Context, string, string) error        { return nil }
+func (testAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
+	return []*domain.AlarmEntry{}, nil
+}
+func (testAlarmCRUD) WarmCacheFromDB(context.Context) error { return nil }
+
+func TestBuildBotServer_InternalAlarmRoutesRequireAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Port:   30001,
+			APIKey: "test-secret",
+		},
+	}
+
+	server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, logger)
+	if err != nil {
+		t.Fatalf("buildBotServer() error = %v", err)
+	}
+
+	t.Run("missing api key", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/internal/alarm/keys", nil)
+		w := httptest.NewRecorder()
+		server.Handler.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("valid api key", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/internal/alarm/keys", nil)
+		req.Header.Set("X-API-Key", "test-secret")
+		w := httptest.NewRecorder()
+		server.Handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
+}
+
+func TestBuildBotServer_InternalAlarmRoutesRequireConfiguredAPIKey(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Port: 30001,
+		},
+	}
+
+	_, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, logger)
+	if err == nil {
+		t.Fatal("buildBotServer() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "API_SECRET_KEY") {
+		t.Fatalf("buildBotServer() error = %v, want contains API_SECRET_KEY", err)
+	}
+}

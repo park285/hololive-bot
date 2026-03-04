@@ -75,6 +75,9 @@ func (c *LLMSchedulerConfig) validate() error {
 	if c.Server.Port == 0 {
 		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
 	}
+	if err := validateAPISecretKey(c.Telemetry.Environment, c.Server.APIKey); err != nil {
+		return err
+	}
 	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
 		return fmt.Errorf("IRIS_WEBHOOK_TOKEN (or IRIS_SHARED_TOKEN) is required")
 	}
