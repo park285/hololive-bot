@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -822,24 +823,32 @@ func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Chann
 // fetchChannelsIndividually: 개별 /channels/{id} API로 채널을 조회합니다. (폴백용)
 func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []string, result map[string]*domain.Channel, missedIDs []string) (map[string]*domain.Channel, error) {
 	const maxConcurrent = 5
-	semaphore := make(chan struct{}, maxConcurrent)
+	if len(missedIDs) == 0 {
+		return result, nil
+	}
+
+	workerCount := maxConcurrent
+	if len(missedIDs) < workerCount {
+		workerCount = len(missedIDs)
+	}
+
+	jobs := make(chan string)
 	resultChan := make(chan struct {
 		id      string
 		channel *domain.Channel
 	}, len(missedIDs))
 
-	for _, id := range missedIDs {
-		go func(channelID string) {
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
+	var workerWG sync.WaitGroup
+	worker := func() {
+		defer workerWG.Done()
+		for channelID := range jobs {
 			select {
 			case <-ctx.Done():
 				resultChan <- struct {
 					id      string
 					channel *domain.Channel
 				}{channelID, nil}
-				return
+				continue
 			default:
 			}
 
@@ -853,32 +862,54 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 					id      string
 					channel *domain.Channel
 				}{channelID, nil}
-				return
+				continue
 			}
+
 			resultChan <- struct {
 				id      string
 				channel *domain.Channel
 			}{channelID, channel}
-		}(id)
+		}
 	}
 
-	for range missedIDs {
+	workerWG.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go worker()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, id := range missedIDs {
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- id:
+			}
+		}
+	}()
+
+	go func() {
+		workerWG.Wait()
+		close(resultChan)
+	}()
+
+	for {
 		select {
 		case <-ctx.Done():
 			return result, fmt.Errorf("batch channel fetch canceled: %w", ctx.Err())
-		case r := <-resultChan:
+		case r, ok := <-resultChan:
+			if !ok {
+				h.logger.Info("GetChannels batch complete (fallback)",
+					slog.Int("requested", len(channelIDs)),
+					slog.Int("returned", len(result)),
+				)
+				return result, nil
+			}
 			if r.channel != nil {
 				result[r.id] = r.channel
 			}
 		}
 	}
-
-	h.logger.Info("GetChannels batch complete (fallback)",
-		slog.Int("requested", len(channelIDs)),
-		slog.Int("returned", len(result)),
-	)
-
-	return result, nil
 }
 
 func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
