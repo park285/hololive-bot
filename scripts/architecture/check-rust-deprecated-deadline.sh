@@ -6,10 +6,11 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TODAY="${1:-$(date -u +%F)}"
 
 python3 - "$TODAY" \
-    "${ROOT_DIR}/hololive/hololive-rs/crates" \
     "${ROOT_DIR}/hololive/hololive-shared/pkg" \
-    "${ROOT_DIR}/hololive/hololive-admin/internal" \
-    "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal" <<'PY'
+    "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal" \
+    "${ROOT_DIR}/hololive/hololive-dispatcher-go/internal" \
+    "${ROOT_DIR}/hololive/hololive-llm-sched/internal" \
+    "${ROOT_DIR}/hololive/hololive-stream-ingester/internal" <<'PY'
 import datetime
 import re
 import sys
@@ -30,7 +31,7 @@ patterns = [
     ("todo", re.compile(r"TODO\((\d{4}-\d{2}-\d{2})\)")),
     ("remove_after", re.compile(r"remove_after\s*=\s*\"(\d{4}-\d{2}-\d{2})\"")),
 ]
-allowed_suffixes = {".rs", ".go"}
+allowed_suffixes = {".go"}
 
 overdue = []
 invalid = []

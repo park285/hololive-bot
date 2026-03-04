@@ -165,7 +165,9 @@ services:
       MAJOREVENT_SCRAPE_HOUR_KST: "4"
       # alarm CRUD는 hololive-bot 내부 /internal/alarm/* 경로 사용
       ALARM_DISPATCHER_URL: http://hololive-bot:30001
+      LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
       BOT_INGESTION_ENABLED: "false"
+      BOT_ADMIN_ENABLED: "true"
       SERVER_PORT: 30001
       LOG_DIR: ""
       GOMEMLIMIT: "450MiB"
@@ -217,59 +219,48 @@ services:
         aliases:
           - hololive-bot
 
-  # rust-dispatcher: alarm:dispatch:queue 소비 + Iris 발송
-  rust-dispatcher:
-    image: hololive-dispatcher:prod
+  # dispatcher-go: alarm:dispatch:queue 소비 + Iris 발송
+  dispatcher-go:
+    image: hololive-dispatcher-go:prod
     build:
-      context: ./hololive/hololive-rs
-      dockerfile: Dockerfile.dispatcher
-    container_name: rust-dispatcher
+      context: .
+      dockerfile: hololive/hololive-dispatcher-go/Dockerfile
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+    container_name: hololive-dispatcher-go
     restart: always
     labels:
       deunhealth.restart.on.unhealthy: "true"
     env_file:
       - ./.env
     environment:
-      DISPATCHER__VALKEY__URL: redis://valkey-cache:6379
-      DISPATCHER__VALKEY__POOL_SIZE: "4"
-      DISPATCHER__DB__HOST: host.docker.internal
-      DISPATCHER__DB__PORT: "5433"
-      DISPATCHER__DB__DATABASE: hololive
-      DISPATCHER__DB__USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
-      DISPATCHER__DB__PASSWORD: ${DB_PASSWORD}
-      DISPATCHER__DB__SSLMODE: ${POSTGRES_SSLMODE:-require}
-      DISPATCHER__DB__MAX_CONNECTIONS: "5"
-      DISPATCHER__DB__MIN_CONNECTIONS: "1"
-      DISPATCHER__DB__CONNECT_TIMEOUT_SECS: "10"
-      DISPATCHER__DB__IDLE_TIMEOUT_SECS: "300"
-      DISPATCHER__DB__MAX_LIFETIME_SECS: "3600"
-      DISPATCHER__IRIS__BASE_URL: http://host.docker.internal:3000
-      DISPATCHER__IRIS__BOT_TOKEN: ${IRIS_SHARED_TOKEN}
-      DISPATCHER__IRIS__TIMEOUT_SECS: "10"
-      DISPATCHER__HEALTH__HOST: 0.0.0.0
-      DISPATCHER__HEALTH__PORT: "30020"
-      DISPATCHER__DISPATCHER__QUEUE_KEY: alarm:dispatch:queue
-      DISPATCHER__DISPATCHER__MAX_BATCH: "50"
-      DISPATCHER__DISPATCHER__RECONNECT_BACKOFF_MS: "1000"
-      DISPATCHER__LOGGING__LEVEL: info
-      DISPATCHER__LOGGING__FORMAT: pretty
-      RUST_LOG: "info,dispatcher_app=info,sqlx=warn"
+      DISPATCHER_PORT: "30020"
+      IRIS_BASE_URL: http://host.docker.internal:3000
+      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      CACHE_HOST: valkey-cache
+      CACHE_PORT: 6379
+      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
+      ALARM_DISPATCH_QUEUE_KEY: alarm:dispatch:queue
+      ALARM_DISPATCH_MAX_BATCH: "50"
+      DISPATCHER_RECONNECT_BACKOFF_MS: "1000"
+      LOG_LEVEL: info
+      LOG_DIR: ""
       TZ: Asia/Seoul
     ports:
       - "127.0.0.1:30020:30020"
+    volumes:
+      - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      holo-postgres:
-        condition: service_healthy
-      hololive-db-migrate:
-        condition: service_completed_successfully
       valkey-cache:
+        condition: service_healthy
+      hololive-bot:
         condition: service_healthy
     deploy:
       resources:
         limits:
-          memory: 192m
+          memory: 256m
     healthcheck:
       test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30020/ready || exit 1" ]
       interval: 30s
@@ -280,7 +271,7 @@ services:
     networks:
       hololive-net:
         aliases:
-          - rust-dispatcher
+          - dispatcher-go
 
   stream-ingester:
     image: hololive-stream-ingester:prod
@@ -423,79 +414,6 @@ services:
       hololive-net:
         aliases:
           - llm-scheduler
-
-  # Admin API (hololive-bot 관리 API 독립 바이너리)
-  admin-api:
-    image: hololive-admin-api:prod
-    build:
-      context: .
-      dockerfile: hololive/hololive-admin/Dockerfile
-      args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-    container_name: hololive-admin-api
-    restart: always
-    labels:
-      deunhealth.restart.on.unhealthy: "true"
-    env_file:
-      - ./.env
-    environment:
-      ADMIN_API_PORT: 30002
-      ALARM_DISPATCHER_URL: http://hololive-bot:30001
-      LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
-      API_SECRET_KEY: ${API_SECRET_KEY:?required}
-      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
-      CACHE_HOST: valkey-cache
-      POSTGRES_HOST: host.docker.internal
-      POSTGRES_PORT: "5433"
-      POSTGRES_DB: hololive
-      POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
-      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
-      POSTGRES_AUTO_PREPARE_SCHEMA: "false"
-      GOGC: "100"
-      GOMEMLIMIT: "192MiB"
-      GIN_MODE: release
-      OTEL_ENABLED: "false"
-      OTEL_SERVICE_NAME: hololive-admin-api
-      OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-false}"
-      OTEL_SAMPLE_RATE: "0.1"
-      # llm 레포 서비스 → host.docker.internal 경유
-      SERVICES_LLM_SERVER_HEALTH_URL: http://host.docker.internal:40527/health
-      SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
-      SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
-      LOG_DIR: ""
-    ports:
-      - "127.0.0.1:30002:30002"
-    volumes:
-      - ./data:/app/data
-      - valkey-cache-socket:/var/run/valkey:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      holo-postgres:
-        condition: service_healthy
-      hololive-db-migrate:
-        condition: service_completed_successfully
-      valkey-cache:
-        condition: service_healthy
-      llm-scheduler:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30002/health || exit 1" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    logging: *default-logging
-    <<: *security-hardening
-    networks:
-      hololive-net:
-        aliases:
-          - hololive-admin-api
 
   # YouTube Scraper VPN Proxy (NordVPN + SOCKS5)
   vpn-scraper-proxy:

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "[M1] Go↔Rust alarm contract parity check"
+echo "[M1] Go alarm contract sanity check"
 "${SCRIPT_DIR}/check-go-rust-alarm-contracts.sh"
 echo
 

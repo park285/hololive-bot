@@ -5,8 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 forbidden_files=(
-  "${ROOT_DIR}/hololive/hololive-admin/internal/server/shared_compat.go"
-  "${ROOT_DIR}/hololive/hololive-admin/internal/server/api_trigger_compat.go"
   "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server/shared_compat.go"
   "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server/api_trigger_compat.go"
 )
@@ -33,7 +31,6 @@ cleanup() {
 trap cleanup EXIT
 
 rg -n 'type\s+[A-Za-z0-9_]+\s*=\s*sharedserver\.' \
-  "${ROOT_DIR}/hololive/hololive-admin/internal/server" \
   "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server" \
   -g '*.go' > "${tmp_alias_hits}" || true
 

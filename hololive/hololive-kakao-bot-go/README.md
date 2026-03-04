@@ -12,7 +12,7 @@
 -   **스마트 알림 시스템**:
     -   방송 시작 전 알림 (5분, 15분, 30분 전 등 설정 가능)
     -   개인화된 멤버별 알림 구독/해제 (`!알람`)
--   **관리자 대시보드**: 웹 기반 관리자 패널을 통한 봇 상태 모니터링 및 설정 관리
+-   **관리 API**: `/api/holo/*`, `/api/auth/*` 엔드포인트로 운영/설정 제어
 -   **동적 ACL (접근 제어)**: 카카오톡 채팅방 별 접근 허용/차단 동적 관리
 -   **멀티 플랫폼 방송 감지**:
     -   **YouTube**: Holodex API 연동, OAuth 폴링, 구독자 통계
@@ -59,19 +59,19 @@ hololive/
 │   ├── cmd/bot
 │   ├── cmd/tools
 │   └── internal/{app,bot,command,server,service/{acl,activity,auth,system}}
-├── hololive-admin/              # admin-api
+├── hololive-dispatcher-go/      # dispatcher-go
 ├── hololive-llm-sched/          # llm-scheduler
 ├── hololive-stream-ingester/    # stream-ingester
 ├── hololive-shared/             # 공통 domain/service/providers/server
-└── hololive-rs/                 # Rust (scraper, alarm, dispatcher)
+└── shared-go/                   # 공통 유틸리티
 ```
 
-### 마이그레이션 이력 (Phase 3, 완료)
+### 마이그레이션 이력 (Phase 3~6)
 
-- `cmd/admin-api` → `hololive-admin/cmd/admin-api`
+- `cmd/admin-api` → bot 런타임(30001)으로 통합 (Phase 5)
 - `cmd/llm-scheduler` → `hololive-llm-sched/cmd/llm-scheduler`
 - `cmd/stream-ingester` → `hololive-stream-ingester/cmd/stream-ingester`
-- `cmd/alarm-dispatcher` → `hololive-alarm/` → Rust dispatcher로 대체 후 Go 모듈 완전 제거 (M6, 2026-03-02)
+- `cmd/alarm-dispatcher` → `hololive-dispatcher-go/cmd/dispatcher`로 전환 (Phase 6)
 - 서비스별 Dockerfile → 각 모듈 루트 `Dockerfile`
 
 ## 📂 (레거시) 단일 모듈 구조 스냅샷
@@ -176,7 +176,7 @@ services:
 | **MQ** | `MQ_HOST`, `_PORT` | ValkeyMQ 서버 정보 | `localhost`, `1833` |
 | **Logging** | `LOG_LEVEL` | 로그 레벨 (`debug`, `info`, `warn`, `error`) | `info` |
 
-> 참고: 관리자 콘솔(Auth/Docker/Logs/Traces)은 `admin-dashboard`로 분리되었으며, `hololive-bot`은 `/api/holo/*` 도메인 API만 제공합니다.
+> 참고: 관리자 콘솔(Auth/Docker/Logs/Traces)은 `admin-dashboard`로 분리되었고, `hololive-bot`은 `/api/holo/*`, `/api/auth/*` 운영 API를 제공합니다.
 
 ## 🌐 지원 그룹
 

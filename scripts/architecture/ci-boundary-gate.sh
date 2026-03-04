@@ -24,7 +24,7 @@ echo "[CI] Run M6 deprecated deadline gate"
 "${SCRIPT_DIR}/m6-gate.sh"
 echo
 
-echo "[CI] Run Rust cross-dependency gate"
+echo "[CI] Run runtime cross-dependency gate"
 "${SCRIPT_DIR}/check-rust-cross-deps.sh"
 echo
 
