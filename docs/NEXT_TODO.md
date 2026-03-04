@@ -1,6 +1,6 @@
 # 향후 작업 TODO
 
-> 최종 갱신: 2026-03-04
+> 최종 갱신: 2026-03-05
 > 아키텍처: 하이브리드 (Rust=compute, Go=network)
 
 ---
@@ -58,3 +58,15 @@
 ### 5-3. Go 테스트 커버리지 확대
 - **대상**: hololive-shared 핵심 패키지 (adapter, service/notification, service/youtube)
 - **상태**: 진행 중 (2026-03-02)
+
+---
+
+## 6. 후속 분리 작업 (2개)
+
+- [x] 이번 작업 범위에서 후속 작업으로 분리 처리 (2026-03-05)
+  - [x] **#15 envconfig 도입**
+    - 사유: Config 구조체 전면 리팩토링 필요
+    - 완료: dispatcher-go `LoadConfig`, shared `LoadAdminAPI`/`LoadLLMScheduler`, shared `buildConfig`/`loadRuntimeTokensAndCORS`/`loadValkeyConfig`/`loadPostgresConfig`/`loadTelemetryConfig`/`loadCliproxyConfig`/`loadLLMConfig`/`loadExaConfig` envconfig 전환 + CORS loose bool 파싱 정합성 테스트 보강 (2026-03-05)
+  - [x] **#16 OTel Metrics 통합**
+    - 사유: 기존 Prometheus와 점진적 전환 필요
+    - 완료: 공용 telemetry 패키지 도입 + bot/dispatcher-go/llm-sched/stream-ingester metrics export 초기화 경로 연결 + bot telemetry 래퍼 단순화 + MetricsEnabled/ExportInterval 환경변수 경로 검증 (2026-03-05)

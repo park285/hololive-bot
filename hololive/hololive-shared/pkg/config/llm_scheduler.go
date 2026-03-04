@@ -5,10 +5,22 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/kelseyhightower/envconfig"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
-
-	"github.com/kapu/hololive-shared/internal/envutil"
 )
+
+type llmSchedulerEnvConfig struct {
+	LLMSchedulerPort int    `envconfig:"LLM_SCHEDULER_PORT" default:"30003"`
+	APISecretKey     string `envconfig:"API_SECRET_KEY"`
+	IrisBaseURL      string `envconfig:"IRIS_BASE_URL" default:"http://localhost:3000"`
+
+	LogLevel string `envconfig:"LOG_LEVEL" default:"info"`
+
+	BotPrefix   string `envconfig:"BOT_PREFIX" default:"!"`
+	BotSelfUser string `envconfig:"BOT_SELF_USER" default:"iris"`
+
+	AppVersion string `envconfig:"APP_VERSION" default:"1.0.0-llm-scheduler"`
+}
 
 // LLMSchedulerConfig: llm-scheduler 바이너리 전용 설정
 type LLMSchedulerConfig struct {
@@ -29,46 +41,69 @@ type LLMSchedulerConfig struct {
 func LoadLLMScheduler() (*LLMSchedulerConfig, error) {
 	_ = godotenv.Load()
 
-	cfg := buildLLMSchedulerConfig()
+	cfg, err := buildLLMSchedulerConfig()
+	if err != nil {
+		return nil, fmt.Errorf("build llm scheduler config: %w", err)
+	}
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("llm scheduler config validation failed: %w", err)
 	}
 	return cfg, nil
 }
 
-func buildLLMSchedulerConfig() *LLMSchedulerConfig {
+func buildLLMSchedulerConfig() (*LLMSchedulerConfig, error) {
 	webhookToken, botToken, _, _ := loadRuntimeTokensAndCORS()
+
+	var raw llmSchedulerEnvConfig
+	if err := envconfig.Process("", &raw); err != nil {
+		return nil, fmt.Errorf("process env: %w", err)
+	}
+	logLevel := strings.TrimSpace(raw.LogLevel)
+	if logLevel == "" {
+		logLevel = "info"
+	}
+	baseURL := strings.TrimSpace(raw.IrisBaseURL)
+	if baseURL == "" {
+		baseURL = "http://localhost:3000"
+	}
+	botPrefix := strings.TrimSpace(raw.BotPrefix)
+	if botPrefix == "" {
+		botPrefix = "!"
+	}
+	botSelfUser := stringutil.TrimSpace(raw.BotSelfUser)
+	if botSelfUser == "" {
+		botSelfUser = "iris"
+	}
+	version := strings.TrimSpace(raw.AppVersion)
+	if version == "" {
+		version = "1.0.0-llm-scheduler"
+	}
 
 	return &LLMSchedulerConfig{
 		Server: ServerConfig{
-			Port:   envutil.Int("LLM_SCHEDULER_PORT", 30003),
-			APIKey: envutil.String("API_SECRET_KEY", ""),
+			Port:   raw.LLMSchedulerPort,
+			APIKey: strings.TrimSpace(raw.APISecretKey),
 		},
 		Iris: IrisConfig{
-			BaseURL:      envutil.String("IRIS_BASE_URL", "http://localhost:3000"),
+			BaseURL:      baseURL,
 			WebhookToken: webhookToken,
 			BotToken:     botToken,
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Logging: LoggingConfig{
-			Level:      envutil.String("LOG_LEVEL", "info"),
-			Dir:        envutil.String("LOG_DIR", ""),
-			MaxSizeMB:  envutil.Int("LOG_MAX_SIZE_MB", 100),
-			MaxBackups: envutil.Int("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: envutil.Int("LOG_MAX_AGE_DAYS", 30),
-			Compress:   envutil.Bool("LOG_COMPRESS", true),
+			Level: logLevel,
 		},
 		Bot: BotConfig{
-			Prefix:   envutil.String("BOT_PREFIX", "!"),
-			SelfUser: stringutil.TrimSpace(envutil.String("BOT_SELF_USER", "iris")),
+			Prefix:   botPrefix,
+			SelfUser: botSelfUser,
 		},
 		Telemetry: loadTelemetryConfig(),
 		Cliproxy:  loadCliproxyConfig(),
 		LLM:       loadLLMConfig(),
 		Exa:       loadExaConfig(),
-		Version:   stringutil.TrimSpace(envutil.String("APP_VERSION", "1.0.0-llm-scheduler")),
-	}
+		Version:   version,
+	}, nil
 }
 
 func (c *LLMSchedulerConfig) validate() error {
