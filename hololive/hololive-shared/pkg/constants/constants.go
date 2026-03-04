@@ -61,6 +61,15 @@ var AIInputLimits = struct {
 	MaxQueryLength: 500,
 }
 
+// RetryBudgetConfig: 전역 재시도 예산 설정입니다.
+var RetryBudgetConfig = struct {
+	MaxRetriesPerMinute int
+	Enabled             bool
+}{
+	MaxRetriesPerMinute: 100,
+	Enabled:             true,
+}
+
 // RetryConfig: 패키지 변수다.
 var RetryConfig = struct {
 	MaxAttempts int
@@ -159,6 +168,13 @@ var HolodexDistributedRateLimitConfig = struct {
 	BucketBase: "holodex:api",
 }
 
+// YouTubeScraperRateLimitConfig: 단일 인스턴스 기준 YouTube HTML 스크래퍼 요청 간격입니다.
+var YouTubeScraperRateLimitConfig = struct {
+	RequestInterval time.Duration
+}{
+	RequestInterval: 3 * time.Second,
+}
+
 // YouTubeScraperDistributedRateLimitConfig: 멀티 인스턴스 환경에서 YouTube HTML 스크래퍼 총량을 제한합니다.
 var YouTubeScraperDistributedRateLimitConfig = struct {
 	Enabled    bool
@@ -169,7 +185,7 @@ var YouTubeScraperDistributedRateLimitConfig = struct {
 }{
 	Enabled:    true,
 	Limit:      1,
-	Window:     3 * time.Second,
+	Window:     YouTubeScraperRateLimitConfig.RequestInterval,
 	KeyPrefix:  "ratelimit:sliding",
 	BucketBase: "youtube:scraper",
 }
@@ -357,8 +373,10 @@ var ServerTimeout = struct {
 // ServerConfig: 서버 기본 설정입니다.
 var ServerConfig = struct {
 	TrustedProxies []string
+	MaxBodyBytes   int64 // 요청 본문 최대 크기 (바이트)
 }{
 	TrustedProxies: []string{"127.0.0.1", "::1"},
+	MaxBodyBytes:   1 << 20, // 1MiB
 }
 
 // CORSConfig: CORS 기본 설정입니다.
@@ -432,6 +450,15 @@ var DatabaseConfig = struct {
 	MaxOpenConns:    25,
 	MaxIdleConns:    5,
 	ConnMaxLifetime: 5 * time.Minute,
+}
+
+// QueryTimeout: DB 쿼리 타임아웃 기본값입니다.
+var QueryTimeout = struct {
+	Default time.Duration
+	Long    time.Duration
+}{
+	Default: 5 * time.Second,
+	Long:    30 * time.Second,
 }
 
 // DatabaseDefaults: PostgreSQL 기본값이다. (env 미설정 시)
@@ -521,6 +548,17 @@ var MajorEventConfig = struct {
 	ScheduleWeekday:        time.Monday,
 	MonthlyScheduleHourKST: 10,
 	MonthlyScheduleDay:     1,
+}
+
+// APIRateLimitConfig: /api/holo 엔드포인트에 적용되는 IP 기반 슬라이딩 윈도우 레이트 리밋 설정입니다.
+var APIRateLimitConfig = struct {
+	Enabled bool
+	Limit   int
+	Window  time.Duration
+}{
+	Enabled: true,
+	Limit:   60, // 분당 60회
+	Window:  time.Minute,
 }
 
 // TwitchConfig: Twitch API 설정입니다.
