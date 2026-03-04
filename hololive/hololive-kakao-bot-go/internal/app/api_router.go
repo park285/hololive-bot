@@ -67,7 +67,7 @@ func ProvideAPIRouter(
 		router.POST("/webhook/iris", webhookHandler.Handle)
 	}
 
-	// 내부 트리거 라우트 등록 (admin-api에서 스케줄러 수동 실행용)
+	// 내부 트리거 라우트 등록 (운영 API에서 스케줄러 수동 실행용)
 	if triggerHandler != nil {
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}
@@ -254,7 +254,7 @@ func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandl
 }
 
 // ProvideBotRouter: Bot 전용 라우터를 구성합니다. (webhook + internal trigger + health만)
-// Admin API 라우트(members, alarms, rooms, stats, settings 등)는 admin-api에서만 서빙합니다.
+// Admin API 라우트(members, alarms, rooms, stats, settings 등)는 이 라우터에서 제외합니다.
 func ProvideBotRouter(
 	ctx context.Context,
 	cfg *config.Config,
@@ -282,7 +282,7 @@ func ProvideBotRouter(
 		router.POST("/webhook/iris", webhookHandler.Handle)
 	}
 
-	// 내부 트리거 라우트 (admin-api에서 프록시 호출)
+	// 내부 트리거 라우트 (운영 API에서 내부 호출)
 	if triggerHandler != nil {
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}

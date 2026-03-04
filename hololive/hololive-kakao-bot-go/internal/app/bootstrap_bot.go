@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
@@ -23,7 +24,201 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
+	authsvc "github.com/kapu/hololive-kakao-bot-go/internal/service/auth"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/system"
+	triggerclient "github.com/kapu/hololive-kakao-bot-go/internal/service/trigger"
 )
+
+var runtimeAlarmSchedulerFactory = func(context.Context, *config.Config, *coreInfrastructure, *slog.Logger) runtimeAlarmScheduler {
+	return nil
+}
+
+type memberNewsWeeklyRunNowTrigger interface {
+	SendMemberNewsWeekly(ctx context.Context) error
+}
+
+type botAdminServerDependencies struct {
+	domainHandlers *server.DomainAPIHandlers
+	authHandler    *server.AuthHandler
+}
+
+type botSettingsApplier struct {
+	base             sharedserver.SettingsApplier
+	memberNewsRunNow memberNewsWeeklyRunNowTrigger
+	logger           *slog.Logger
+}
+
+func newBotSettingsApplier(
+	base sharedserver.SettingsApplier,
+	memberNewsRunNow memberNewsWeeklyRunNowTrigger,
+	logger *slog.Logger,
+) sharedserver.SettingsApplier {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	return &botSettingsApplier{
+		base:             base,
+		memberNewsRunNow: memberNewsRunNow,
+		logger:           logger,
+	}
+}
+
+func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool) map[string]any {
+	if a.base == nil {
+		return map[string]any{
+			"requested": enabled,
+			"applied":   false,
+			"reason":    "settings applier not configured",
+		}
+	}
+	return a.base.ApplyScraperProxy(ctx, enabled)
+}
+
+func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) map[string]any {
+	if a.base == nil {
+		return map[string]any{
+			"alarm_requested_advance_minutes": minutes,
+			"alarm_applied":                   false,
+			"alarm_reason":                    "settings applier not configured",
+		}
+	}
+	return a.base.ApplyAlarmAdvanceMinutes(ctx, minutes)
+}
+
+func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) map[string]any {
+	if a.memberNewsRunNow == nil {
+		return map[string]any{
+			"applied": false,
+			"reason":  "member news trigger is not configured",
+		}
+	}
+
+	if err := a.memberNewsRunNow.SendMemberNewsWeekly(ctx); err != nil {
+		a.logger.Warn("Failed to trigger member news weekly run-now", slog.Any("error", err))
+		return map[string]any{
+			"applied": false,
+			"reason":  "member news trigger failed",
+			"error":   err.Error(),
+		}
+	}
+
+	return map[string]any{
+		"applied": true,
+		"source":  "member_news_trigger",
+	}
+}
+
+func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) map[string]any {
+	if a.base == nil {
+		return map[string]any{
+			"requested": requested,
+			"known":     false,
+			"reason":    "settings applier not configured",
+		}
+	}
+	return a.base.ScraperProxyRuntimeState(requested)
+}
+
+func buildBotAdminServerDependencies(
+	ctx context.Context,
+	cfg *config.Config,
+	infra *coreInfrastructure,
+	scraperScheduler *poller.Scheduler,
+	logger *slog.Logger,
+) (*botAdminServerDependencies, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("build bot admin server dependencies: config is nil")
+	}
+	if infra == nil || infra.deps == nil {
+		return nil, fmt.Errorf("build bot admin server dependencies: infra dependencies are nil")
+	}
+
+	deps := infra.deps
+
+	authCfg := authsvc.DefaultConfig()
+	authCfg.AutoPrepareSchema = cfg.Postgres.AutoPrepareSchema
+	authService, err := authsvc.NewService(
+		ctx,
+		deps.Postgres.GetGormDB(),
+		deps.Cache,
+		logger,
+		authCfg,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build bot admin server dependencies: create auth service: %w", err)
+	}
+
+	settingsApplier := newBotSettingsApplier(
+		sharedserver.NewLocalSettingsApplier(
+			deps.Service,
+			infra.holodexService,
+			scraperScheduler,
+			infra.alarmCRUD,
+		),
+		nil,
+		logger,
+	)
+
+	var majorEventTriggerClient *triggerclient.Client
+	if strings.TrimSpace(cfg.LLMSchedulerURL) != "" {
+		majorEventTriggerClient = triggerclient.NewClient(cfg.LLMSchedulerURL, cfg.Server.APIKey, logger)
+		settingsApplier = newBotSettingsApplier(
+			sharedserver.NewLocalSettingsApplier(
+				deps.Service,
+				infra.holodexService,
+				scraperScheduler,
+				infra.alarmCRUD,
+			),
+			majorEventTriggerClient,
+			logger,
+		)
+	} else {
+		logger.Warn("LLM scheduler URL not configured; trigger routes and membernews run-now are disabled",
+			slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"),
+		)
+	}
+
+	systemCollector := system.NewCollector(
+		[]system.ServiceEndpoint{
+			{Name: "llm-server", URL: cfg.Services.LLMServerHealthURL},
+			{Name: "twentyq", URL: cfg.Services.GameBotTwentyQHealthURL},
+			{Name: "turtlesoup", URL: cfg.Services.GameBotTurtleHealthURL},
+		},
+		cfg.Telemetry.Enabled,
+	)
+
+	var statsRepo youtube.StatsDashboardRepository
+	if infra.ytStack != nil {
+		statsRepo = infra.ytStack.StatsRepo
+	}
+
+	domainHandlers := server.NewAPIHandler(
+		deps.MemberRepo,
+		deps.MemberCache,
+		deps.Cache,
+		deps.Profiles,
+		infra.alarmCRUD,
+		infra.holodexService,
+		deps.Service,
+		scraperScheduler,
+		statsRepo,
+		deps.Activity,
+		deps.Settings,
+		settingsApplier,
+		deps.ACL,
+		systemCollector,
+		infra.templateAdminSvc,
+		majorEventTriggerClient,
+		majorEventTriggerClient,
+		logger,
+	).DomainHandlers()
+
+	return &botAdminServerDependencies{
+		domainHandlers: domainHandlers,
+		authHandler:    server.NewAuthHandler(authService, logger),
+	}, nil
+}
 
 // InitializeBotDependencies - 봇 의존성을 초기화합니다.
 func InitializeBotDependencies(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*bot.Dependencies, func(), error) {
@@ -148,6 +343,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		scraperScheduler  *poller.Scheduler
 		photoSyncService  *holodex.PhotoSyncService
 		outboxDispatcher  *outbox.Dispatcher
+		alarmScheduler    runtimeAlarmScheduler
 		ingestionLeaseRef *providers.IngestionLease
 		desiredProxyState bool
 	)
@@ -176,8 +372,17 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
 	configSubscriber := buildBotConfigSubscriber(deps, infra, scraperScheduler, logger)
+	alarmScheduler = buildRuntimeAlarmScheduler(ctx, cfg, infra, logger)
 
-	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, logger)
+	var adminServerDeps *botAdminServerDependencies
+	if cfg.Bot.AdminEnabled {
+		adminServerDeps, err = buildBotAdminServerDependencies(ctx, cfg, infra, scraperScheduler, logger)
+		if err != nil {
+			return nil, fmt.Errorf("build bot runtime: admin server dependencies: %w", err)
+		}
+	}
+
+	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, adminServerDeps, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -191,12 +396,25 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		ScraperScheduler:     scraperScheduler,
 		PhotoSync:            photoSyncService,
 		OutboxDispatcher:     outboxDispatcher,
+		AlarmScheduler:       alarmScheduler,
 		ingestionLease:       ingestionLeaseRef,
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           ProvideAPIAddr(cfg),
 		HttpServer:           botServer,
 		webhookHandlerCloser: webhookHandler,
 	}, nil
+}
+
+func buildRuntimeAlarmScheduler(
+	ctx context.Context,
+	cfg *config.Config,
+	infra *coreInfrastructure,
+	logger *slog.Logger,
+) runtimeAlarmScheduler {
+	if runtimeAlarmSchedulerFactory == nil {
+		return nil
+	}
+	return runtimeAlarmSchedulerFactory(ctx, cfg, infra, logger)
 }
 
 // buildBotConfigSubscriber: Bot용 ConfigSubscriber를 생성합니다.
@@ -253,18 +471,44 @@ func buildBotConfigSubscriber(
 	return configsub.New(deps.Cache.GetClient(), applyFn, logger)
 }
 
-// buildBotServer: Bot 전용 HTTP 서버를 구성합니다. (webhook + trigger + health만)
+// buildBotServer: Bot HTTP 서버를 구성합니다.
+// - AdminEnabled=true: webhook + trigger + health + admin API
+// - AdminEnabled=false: webhook + trigger + health
 func buildBotServer(
 	ctx context.Context,
 	cfg *config.Config,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	alarmCRUD domain.AlarmCRUD,
+	adminDeps *botAdminServerDependencies,
 	logger *slog.Logger,
 ) (*http.Server, error) {
-	botRouter, err := ProvideBotRouter(ctx, cfg, logger, webhookHandler, triggerHandler)
-	if err != nil {
-		return nil, err
+	var (
+		botRouter *gin.Engine
+		err       error
+	)
+
+	if cfg.Bot.AdminEnabled {
+		if adminDeps == nil || adminDeps.domainHandlers == nil || adminDeps.authHandler == nil {
+			return nil, fmt.Errorf("build bot server: admin routes enabled but dependencies are incomplete")
+		}
+		botRouter, err = ProvideAPIRouter(
+			ctx,
+			cfg,
+			logger,
+			adminDeps.domainHandlers,
+			adminDeps.authHandler,
+			webhookHandler,
+			triggerHandler,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("build bot server: provide api router: %w", err)
+		}
+	} else {
+		botRouter, err = ProvideBotRouter(ctx, cfg, logger, webhookHandler, triggerHandler)
+		if err != nil {
+			return nil, fmt.Errorf("build bot server: provide bot router: %w", err)
+		}
 	}
 
 	if alarmCRUD != nil {

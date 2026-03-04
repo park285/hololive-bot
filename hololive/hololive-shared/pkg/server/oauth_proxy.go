@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"net/url"
 )
 
@@ -35,19 +37,8 @@ func BuildOAuthDeepLinkURL(code, state, errorParam, errorDesc string) string {
 	return baseURL
 }
 
-// BuildOAuthRedirectHTML: Deep Link로 리디렉트하는 HTML 페이지를 생성합니다.
-func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
-	status := "로그인 처리 중..."
-	icon := "⏳"
-	color := "#667eea"
-
-	if isError {
-		status = "로그인 실패"
-		icon = "❌"
-		color = "#e74c3c"
-	}
-
-	return fmt.Sprintf(`<!DOCTYPE html>
+// oauthRedirectTmpl: Deep Link 리디렉트 HTML 템플릿 (XSS 방어를 위해 html/template 사용)
+var oauthRedirectTmpl = template.Must(template.New("oauth").Parse(`<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -61,7 +52,7 @@ func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background: linear-gradient(135deg, %s 0%%, #764ba2 100%%);
+            background: linear-gradient(135deg, {{.Color}} 0%, #764ba2 100%);
         }
         .container {
             text-align: center;
@@ -97,24 +88,49 @@ func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
 </head>
 <body>
     <div class="container">
-        <div class="icon">%s</div>
-        <h1>%s</h1>
+        <div class="icon">{{.Icon}}</div>
+        <h1>{{.Status}}</h1>
         <p>앱이 자동으로 열리지 않으면 아래 버튼을 눌러주세요.</p>
-        <a href="%s" class="button" id="openApp">앱 열기</a>
+        <a href="{{.DeepLinkURL}}" class="button" id="openApp">앱 열기</a>
         <div class="help">
             <p>문제가 계속되면 앱을 다시 설치해주세요.</p>
         </div>
     </div>
     <script>
-        // 자동으로 Deep Link 열기 시도
-        window.location.href = '%s';
-        
-        // 3초 후에도 이 페이지가 보이면 수동 버튼 강조
+        window.location.href = {{.DeepLinkURL}};
         setTimeout(function() {
             document.getElementById('openApp').style.background = 'rgba(255,255,255,0.4)';
             document.getElementById('openApp').style.transform = 'scale(1.05)';
         }, 3000);
     </script>
 </body>
-</html>`, color, icon, status, deepLinkURL, deepLinkURL)
+</html>`))
+
+type oauthRedirectData struct {
+	Color       string
+	Icon        string
+	Status      string
+	DeepLinkURL string
+}
+
+// BuildOAuthRedirectHTML: Deep Link로 리디렉트하는 HTML 페이지를 생성합니다.
+func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
+	data := oauthRedirectData{
+		Color:       "#667eea",
+		Icon:        "⏳",
+		Status:      "로그인 처리 중...",
+		DeepLinkURL: deepLinkURL,
+	}
+
+	if isError {
+		data.Color = "#e74c3c"
+		data.Icon = "❌"
+		data.Status = "로그인 실패"
+	}
+
+	var buf bytes.Buffer
+	if err := oauthRedirectTmpl.Execute(&buf, data); err != nil {
+		return "<!DOCTYPE html><html><body><p>렌더링 오류</p></body></html>"
+	}
+	return buf.String()
 }
