@@ -1,9 +1,87 @@
 package dbx
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestSafeDSN(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      Config
+		wantSafe string
+	}{
+		{
+			name: "TCP with password masked",
+			cfg: Config{
+				Host:     "localhost",
+				Port:     5432,
+				User:     "admin",
+				Password: "x",
+				Name:     "mydb",
+				SSLMode:  "disable",
+			},
+			wantSafe: "host=localhost port=5432 user=admin password=*** dbname=mydb sslmode=disable",
+		},
+		{
+			name: "UDS with password masked",
+			cfg: Config{
+				SocketPath: "/var/run/postgresql",
+				User:       "admin",
+				Password:   "x",
+				Name:       "mydb",
+				SSLMode:    "disable",
+			},
+			wantSafe: "host=/var/run/postgresql user=admin password=*** dbname=mydb sslmode=disable",
+		},
+		{
+			name: "empty password stays empty",
+			cfg: Config{
+				Host:     "localhost",
+				Port:     5432,
+				User:     "admin",
+				Password: "",
+				Name:     "mydb",
+				SSLMode:  "disable",
+			},
+			wantSafe: "host=localhost port=5432 user=admin password= dbname=mydb sslmode=disable",
+		},
+		{
+			name: "password not in SafeDSN output",
+			cfg: Config{
+				Host:     "db.prod",
+				Port:     5432,
+				User:     "app",
+				Password: "z",
+				Name:     "prod",
+			},
+			wantSafe: "host=db.prod port=5432 user=app password=*** dbname=prod sslmode=require",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			safe := tt.cfg.SafeDSN()
+			if safe != tt.wantSafe {
+				t.Errorf("SafeDSN() = %q, want %q", safe, tt.wantSafe)
+			}
+			// DSN은 원본 비밀번호 유지 확인
+			if tt.cfg.Password != "" {
+				dsn := tt.cfg.DSN()
+				if dsn == safe {
+					t.Error("DSN() should differ from SafeDSN() when password is set")
+				}
+				if !strings.Contains(dsn, tt.cfg.Password) {
+					t.Error("DSN() should contain the original password")
+				}
+				if strings.Contains(safe, tt.cfg.Password) {
+					t.Errorf("SafeDSN() must not contain the original password %q", tt.cfg.Password)
+				}
+			}
+		})
+	}
+}
 
 func TestDefaultPoolConfig(t *testing.T) {
 	tests := []struct {

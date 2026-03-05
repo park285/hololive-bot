@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 // MajorEventScheduler: 대형 행사 주간 스케줄러 인터페이스
@@ -58,7 +59,7 @@ func (h *TriggerHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 // apiKey가 설정된 경우 X-API-Key 미들웨어를 강제합니다.
 func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, apiKey string) {
 	internal := rg.Group("/internal/trigger")
-	internal.Use(APIKeyAuthMiddleware(apiKey))
+	internal.Use(middleware.APIKeyAuthMiddleware(apiKey))
 	internal.POST("/majorevent-weekly", h.TriggerWeeklyNotification)
 	internal.POST("/majorevent-monthly", h.TriggerMonthlyNotification)
 	internal.POST("/membernews-weekly", h.TriggerMemberNewsWeekly)
@@ -77,7 +78,7 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 			return
 		}
 		h.logger.Error("Failed to trigger weekly notification", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -97,7 +98,7 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 			return
 		}
 		h.logger.Error("Failed to trigger monthly notification", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -113,7 +114,7 @@ func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 
 	if err := h.memberNewsWeekly.SendWeeklyDigest(c.Request.Context()); err != nil {
 		h.logger.Error("Failed to trigger member news weekly", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 

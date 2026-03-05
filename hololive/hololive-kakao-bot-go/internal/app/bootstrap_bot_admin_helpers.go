@@ -40,6 +40,7 @@ func buildBotAdminAuthService(
 	if err != nil {
 		return nil, fmt.Errorf("create auth service: %w", err)
 	}
+
 	return authService, nil
 }
 
@@ -87,7 +88,8 @@ func buildBotAdminSystemCollector(cfg *config.Config) *system.Collector {
 func buildBotAdminAPIHandlers(
 	deps botAdminRuntimeDependencies,
 	scraperScheduler *poller.Scheduler,
-	settingsComponents botAdminSettingsComponents,
+	settingsApplier sharedserver.SettingsApplier,
+	majorEventTriggerClient *triggerclient.Client,
 	systemCollector *system.Collector,
 	logger *slog.Logger,
 ) *server.DomainAPIHandlers {
@@ -103,12 +105,12 @@ func buildBotAdminAPIHandlers(
 		deps.statsRepo,
 		deps.activityLogger,
 		deps.settings,
-		settingsComponents.settingsApplier,
+		settingsApplier,
 		deps.acl,
 		systemCollector,
 		deps.templateAdminSvc,
-		settingsComponents.majorEventTriggerClient,
-		settingsComponents.majorEventTriggerClient,
+		majorEventTriggerClient,
+		majorEventTriggerClient,
 		logger,
 	).DomainHandlers()
 }

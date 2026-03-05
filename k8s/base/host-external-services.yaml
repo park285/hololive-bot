@@ -1,6 +1,7 @@
 # 호스트에서 실행 중인 외부 의존성을 클러스터 DNS 이름으로 노출합니다.
 # 실제 호스트 게이트웨이 IP 변경 시 이 파일의 EndpointSlice addresses만 수정하면 됩니다.
-# 포트는 base/configmap-app.yaml의 *_BASE_URL, SERVICES_*_HEALTH_URL과 일치해야 합니다.
+# 포트는 base/configmap-bot.yaml, base/configmap-llm.yaml, base/configmap-dispatcher.yaml의 *_BASE_URL 및
+# base/configmap-bot.yaml의 SERVICES_*_HEALTH_URL과 일치해야 합니다.
 apiVersion: v1
 kind: Service
 metadata:

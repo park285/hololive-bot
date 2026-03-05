@@ -8,10 +8,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
+	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
@@ -26,23 +26,11 @@ func New(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL:    baseURL,
 		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httputil.NewClient(30 * time.Second),
+		httpClient: httputil.DefaultClient(),
 	}
-}
-
-type subscriptionStatusResponse struct {
-	Subscribed bool `json:"subscribed"`
-}
-
-type subscribeRequest struct {
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
 }
 
 func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
-	if c == nil {
-		return false, fmt.Errorf("majorevent client is nil")
-	}
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
 		return false, fmt.Errorf("room id is required")
@@ -52,7 +40,7 @@ func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) 
 		return false, fmt.Errorf("new request: %w", err)
 	}
 	if c.apiKey != "" {
-		req.Header.Set(sharedserver.APIKeyHeader, c.apiKey)
+		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -65,7 +53,7 @@ func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) 
 		return false, fmt.Errorf("check status: %w", err)
 	}
 
-	var parsed subscriptionStatusResponse
+	var parsed subscription.SubscriptionStatusResponse
 	if err := httputil.DecodeJSON(resp, &parsed); err != nil {
 		return false, fmt.Errorf("decode response: %w", err)
 	}
@@ -73,16 +61,13 @@ func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) 
 }
 
 func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
-	if c == nil {
-		return fmt.Errorf("majorevent client is nil")
-	}
 	roomID = strings.TrimSpace(roomID)
 	roomName = strings.TrimSpace(roomName)
 	if roomID == "" {
 		return fmt.Errorf("room id is required")
 	}
 
-	body, err := json.Marshal(subscribeRequest{RoomID: roomID, RoomName: roomName})
+	body, err := json.Marshal(subscription.SubscribeRequest{RoomID: roomID, RoomName: roomName})
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
@@ -93,7 +78,7 @@ func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
-		req.Header.Set(sharedserver.APIKeyHeader, c.apiKey)
+		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -106,16 +91,11 @@ func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
 		return fmt.Errorf("check status: %w", err)
 	}
 
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		return fmt.Errorf("drain response body: %w", err)
-	}
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
 
 func (c *Client) Unsubscribe(ctx context.Context, roomID string) error {
-	if c == nil {
-		return fmt.Errorf("majorevent client is nil")
-	}
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
 		return fmt.Errorf("room id is required")
@@ -126,7 +106,7 @@ func (c *Client) Unsubscribe(ctx context.Context, roomID string) error {
 		return fmt.Errorf("new request: %w", err)
 	}
 	if c.apiKey != "" {
-		req.Header.Set(sharedserver.APIKeyHeader, c.apiKey)
+		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -139,8 +119,6 @@ func (c *Client) Unsubscribe(ctx context.Context, roomID string) error {
 		return fmt.Errorf("check status: %w", err)
 	}
 
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		return fmt.Errorf("drain response body: %w", err)
-	}
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
