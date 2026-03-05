@@ -110,6 +110,18 @@ type botServerRuntimeDependencies struct {
 	alarmCRUD domain.AlarmCRUD
 }
 
+// botRuntimeDependencyViews: buildBotRuntime에서 소비하는 의존성 뷰 집합.
+type botRuntimeDependencyViews struct {
+	botDeps                 *bot.Dependencies
+	ingestion               botIngestionRuntimeDependencies
+	webhook                 botWebhookRuntimeDependencies
+	configSubscriber        botConfigSubscriberDependencies
+	configSubscriberRuntime botConfigSubscriberRuntimeDependencies
+	youtubeRuntime          botYouTubeRuntimeDependencies
+	adminRuntime            botAdminRuntimeDependencies
+	serverRuntime           botServerRuntimeDependencies
+}
+
 type botSettingsApplier struct {
 	base             sharedserver.SettingsApplier
 	memberNewsRunNow memberNewsWeeklyRunNowTrigger
@@ -434,6 +446,23 @@ func buildBotServerRuntimeDependencies(infra *coreInfrastructure) botServerRunti
 	}
 }
 
+func buildBotRuntimeDependencyViews(infra *coreInfrastructure) botRuntimeDependencyViews {
+	if infra == nil {
+		return botRuntimeDependencyViews{}
+	}
+
+	return botRuntimeDependencyViews{
+		botDeps:                 infra.deps,
+		ingestion:               buildBotIngestionRuntimeDependencies(infra.deps),
+		webhook:                 buildBotWebhookRuntimeDependencies(infra.deps),
+		configSubscriber:        buildBotConfigSubscriberDependencies(infra.deps),
+		configSubscriberRuntime: buildBotConfigSubscriberRuntimeDependencies(infra),
+		youtubeRuntime:          buildBotYouTubeRuntimeDependencies(infra),
+		adminRuntime:            buildBotAdminRuntimeDependencies(infra),
+		serverRuntime:           buildBotServerRuntimeDependencies(infra),
+	}
+}
+
 // ProvideTriggerHandler: 내부 트리거 핸들러를 생성하여 제공합니다.
 func ProvideTriggerHandler(
 	majorEventScheduler server.MajorEventScheduler,
@@ -496,15 +525,14 @@ func buildBotWebhookHandler(
 
 // buildBotRuntime 는 런타임 구성요소를 조립한다.
 func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *coreInfrastructure) (*BotRuntime, error) {
-	deps := infra.deps
+	runtimeViews := buildBotRuntimeDependencyViews(infra)
 
-	botBot, err := ProvideBot(deps)
+	botBot, err := ProvideBot(runtimeViews.botDeps)
 	if err != nil {
 		return nil, err
 	}
 
-	webhookDeps := buildBotWebhookRuntimeDependencies(deps)
-	webhookHandler := buildBotWebhookHandler(cfg, botBot, webhookDeps, logger)
+	webhookHandler := buildBotWebhookHandler(cfg, botBot, runtimeViews.webhook, logger)
 
 	var (
 		youtubeScheduler  youtube.Scheduler
@@ -523,8 +551,8 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 			slog.String("note", "when stream-ingester is deployed, bot should usually run with BOT_INGESTION_ENABLED=false"),
 		)
 
-		ingestionDeps := buildBotIngestionRuntimeDependencies(deps)
-		youTubeRuntimeDeps := buildBotYouTubeRuntimeDependencies(infra)
+		ingestionDeps := runtimeViews.ingestion
+		youTubeRuntimeDeps := runtimeViews.youtubeRuntime
 		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, ingestionDeps.cache, "bot", logger)
 		if err != nil {
 			return nil, fmt.Errorf("acquire ingestion lease: %w", err)
@@ -541,21 +569,18 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 	}
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
-	configSubscriberDeps := buildBotConfigSubscriberRuntimeDependencies(infra)
-	configSubscriber := buildBotConfigSubscriber(buildBotConfigSubscriberDependencies(deps), configSubscriberDeps, scraperScheduler, logger)
+	configSubscriber := buildBotConfigSubscriber(runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, scraperScheduler, logger)
 	alarmScheduler = buildRuntimeAlarmScheduler(ctx, cfg, infra, logger)
 
 	var adminServerDeps *botAdminServerDependencies
 	if cfg.Bot.AdminEnabled {
-		adminDepsView := buildBotAdminRuntimeDependencies(infra)
-		adminServerDeps, err = buildBotAdminServerDependencies(ctx, cfg, adminDepsView, scraperScheduler, logger)
+		adminServerDeps, err = buildBotAdminServerDependencies(ctx, cfg, runtimeViews.adminRuntime, scraperScheduler, logger)
 		if err != nil {
 			return nil, fmt.Errorf("build bot runtime: admin server dependencies: %w", err)
 		}
 	}
 
-	serverRuntimeDeps := buildBotServerRuntimeDependencies(infra)
-	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, serverRuntimeDeps.alarmCRUD, adminServerDeps, logger)
+	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, runtimeViews.serverRuntime.alarmCRUD, adminServerDeps, logger)
 	if err != nil {
 		return nil, err
 	}
