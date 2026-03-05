@@ -15,8 +15,12 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	alarmsvc "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -42,6 +46,21 @@ type memberNewsWeeklyRunNowTrigger interface {
 type botAdminServerDependencies struct {
 	domainHandlers *server.DomainAPIHandlers
 	authHandler    *server.AuthHandler
+}
+
+// botIngestionRuntimeDependencies: ingestion 런타임 조립에 필요한 최소 의존성 뷰.
+type botIngestionRuntimeDependencies struct {
+	cache      cache.Client
+	postgres   database.Client
+	irisClient iris.Client
+	members    member.DataProvider
+	scheduler  youtube.Scheduler
+}
+
+// botConfigSubscriberDependencies: 설정 구독 적용에 필요한 최소 의존성 뷰.
+type botConfigSubscriberDependencies struct {
+	cache    cache.Client
+	settings settings.ReadWriter
 }
 
 type botSettingsApplier struct {
@@ -274,6 +293,29 @@ func ProvideYouTubeScheduler(deps *bot.Dependencies) youtube.Scheduler {
 	return deps.Scheduler
 }
 
+func buildBotIngestionRuntimeDependencies(deps *bot.Dependencies) botIngestionRuntimeDependencies {
+	if deps == nil {
+		return botIngestionRuntimeDependencies{}
+	}
+	return botIngestionRuntimeDependencies{
+		cache:      deps.Cache,
+		postgres:   deps.Postgres,
+		irisClient: deps.Client,
+		members:    deps.MembersData,
+		scheduler:  deps.Scheduler,
+	}
+}
+
+func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubscriberDependencies {
+	if deps == nil {
+		return botConfigSubscriberDependencies{}
+	}
+	return botConfigSubscriberDependencies{
+		cache:    deps.Cache,
+		settings: deps.Settings,
+	}
+}
+
 // ProvideTriggerHandler: 내부 트리거 핸들러를 생성하여 제공합니다.
 func ProvideTriggerHandler(
 	majorEventScheduler server.MajorEventScheduler,
@@ -284,28 +326,33 @@ func ProvideTriggerHandler(
 	return sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsWeeklyScheduler, logger)
 }
 
-func buildYouTubeComponents(scraperCfg config.ScraperConfig, deps *bot.Dependencies, infra *coreInfrastructure, logger *slog.Logger) (*poller.Scheduler, *outbox.Dispatcher) {
+func buildYouTubeComponents(
+	scraperCfg config.ScraperConfig,
+	deps botIngestionRuntimeDependencies,
+	infra *coreInfrastructure,
+	logger *slog.Logger,
+) (*poller.Scheduler, *outbox.Dispatcher) {
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: scraperCfg.ProxyEnabled,
 		URL:     scraperCfg.ProxyURL,
 	}
 	pollerRegistrations := buildBotChannelPollerRegistrations(
-		deps.Postgres,
+		deps.postgres,
 		scraperProxyConfig,
 		infra.sharedRL,
-		deps.Cache,
+		deps.cache,
 	)
 
 	scraperScheduler := providers.ProvideScraperScheduler(
-		deps.MembersData,
+		deps.members,
 		logger,
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
 	)
 
 	outboxDispatcher := outbox.NewDispatcher(
-		deps.Postgres.GetGormDB(),
-		deps.Cache,
-		deps.Client,
+		deps.postgres.GetGormDB(),
+		deps.cache,
+		deps.irisClient,
 		infra.templateRenderer,
 		logger,
 		outbox.DefaultConfig(),
@@ -353,8 +400,9 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 			return nil, fmt.Errorf("acquire ingestion lease: %w", err)
 		}
 
-		scraperScheduler, outboxDispatcher = buildYouTubeComponents(cfg.Scraper, deps, infra, logger)
-		youtubeScheduler = ProvideYouTubeScheduler(deps)
+		ingestionDeps := buildBotIngestionRuntimeDependencies(deps)
+		scraperScheduler, outboxDispatcher = buildYouTubeComponents(cfg.Scraper, ingestionDeps, infra, logger)
+		youtubeScheduler = ingestionDeps.scheduler
 		photoSyncService = infra.photoSync
 
 		desiredProxyState = deps.Settings.Get().ScraperProxyEnabled
@@ -364,7 +412,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 	}
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
-	configSubscriber := buildBotConfigSubscriber(deps, infra, scraperScheduler, logger)
+	configSubscriber := buildBotConfigSubscriber(buildBotConfigSubscriberDependencies(deps), infra, scraperScheduler, logger)
 	alarmScheduler = buildRuntimeAlarmScheduler(ctx, cfg, infra, logger)
 
 	var adminServerDeps *botAdminServerDependencies
@@ -413,7 +461,7 @@ func buildRuntimeAlarmScheduler(
 // buildBotConfigSubscriber: Bot용 ConfigSubscriber를 생성합니다.
 // scraper_proxy / alarm_advance_minutes 두 가지 설정 변경을 수신하여 적용합니다.
 func buildBotConfigSubscriber(
-	deps *bot.Dependencies,
+	deps botConfigSubscriberDependencies,
 	infra *coreInfrastructure,
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
@@ -422,9 +470,9 @@ func buildBotConfigSubscriber(
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
 			applyScraperProxyToggle(payload.Enabled, ProvideYouTubeService(infra.ytStack), infra.holodexService, scraperScheduler, logger)
 			// 설정 파일에도 반영
-			current := deps.Settings.Get()
+			current := deps.settings.Get()
 			current.ScraperProxyEnabled = payload.Enabled
-			if err := deps.Settings.Update(current); err != nil {
+			if err := deps.settings.Update(current); err != nil {
 				logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
 			}
 		},
@@ -435,15 +483,15 @@ func buildBotConfigSubscriber(
 				slog.Any("targets", targets),
 			)
 			// 설정 파일에도 반영
-			current := deps.Settings.Get()
+			current := deps.settings.Get()
 			current.AlarmAdvanceMinutes = payload.Minutes
-			if err := deps.Settings.Update(current); err != nil {
+			if err := deps.settings.Update(current); err != nil {
 				logger.Warn("Failed to persist alarm_advance_minutes setting", slog.Any("error", err))
 			}
 		},
 	})
 
-	return configsub.New(deps.Cache.GetClient(), applyFn, logger)
+	return configsub.New(deps.cache.GetClient(), applyFn, logger)
 }
 
 // buildBotServer: Bot HTTP 서버를 구성합니다.
