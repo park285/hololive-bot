@@ -73,6 +73,12 @@ type botConfigSubscriberRuntimeDependencies struct {
 	alarmCRUD      domain.AlarmCRUD
 }
 
+// botYouTubeRuntimeDependencies: YouTube 수집 컴포넌트 조립에서 참조하는 런타임 의존성 뷰.
+type botYouTubeRuntimeDependencies struct {
+	sharedRateLimiter *scraper.RateLimiter
+	templateRenderer  *template.Renderer
+}
+
 // botAdminRuntimeDependencies: admin API 조립에 필요한 최소 의존성 뷰.
 type botAdminRuntimeDependencies struct {
 	cache            cache.Client
@@ -347,6 +353,16 @@ func buildBotConfigSubscriberRuntimeDependencies(infra *coreInfrastructure) botC
 	}
 }
 
+func buildBotYouTubeRuntimeDependencies(infra *coreInfrastructure) botYouTubeRuntimeDependencies {
+	if infra == nil {
+		return botYouTubeRuntimeDependencies{}
+	}
+	return botYouTubeRuntimeDependencies{
+		sharedRateLimiter: infra.sharedRL,
+		templateRenderer:  infra.templateRenderer,
+	}
+}
+
 func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntimeDependencies {
 	if infra == nil || infra.deps == nil {
 		return botAdminRuntimeDependencies{}
@@ -387,7 +403,7 @@ func ProvideTriggerHandler(
 func buildYouTubeComponents(
 	scraperCfg config.ScraperConfig,
 	deps botIngestionRuntimeDependencies,
-	infra *coreInfrastructure,
+	runtimeDeps botYouTubeRuntimeDependencies,
 	logger *slog.Logger,
 ) (*poller.Scheduler, *outbox.Dispatcher) {
 	scraperProxyConfig := scraper.ProxyConfig{
@@ -397,7 +413,7 @@ func buildYouTubeComponents(
 	pollerRegistrations := buildBotChannelPollerRegistrations(
 		deps.postgres,
 		scraperProxyConfig,
-		infra.sharedRL,
+		runtimeDeps.sharedRateLimiter,
 		deps.cache,
 	)
 
@@ -411,7 +427,7 @@ func buildYouTubeComponents(
 		deps.postgres.GetGormDB(),
 		deps.cache,
 		deps.irisClient,
-		infra.templateRenderer,
+		runtimeDeps.templateRenderer,
 		logger,
 		outbox.DefaultConfig(),
 	)
@@ -459,7 +475,8 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		}
 
 		ingestionDeps := buildBotIngestionRuntimeDependencies(deps)
-		scraperScheduler, outboxDispatcher = buildYouTubeComponents(cfg.Scraper, ingestionDeps, infra, logger)
+		youTubeRuntimeDeps := buildBotYouTubeRuntimeDependencies(infra)
+		scraperScheduler, outboxDispatcher = buildYouTubeComponents(cfg.Scraper, ingestionDeps, youTubeRuntimeDeps, logger)
 		youtubeScheduler = ingestionDeps.scheduler
 		photoSyncService = infra.photoSync
 
