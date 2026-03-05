@@ -118,9 +118,7 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 
 	roomsByChannel := d.collectRoomsByChannel(ctx, outboxItems)
 	if len(roomsByChannel) == 0 {
-		for i := range outboxItems {
-			d.markSent(ctx, outboxItems[i].ID)
-		}
+		d.markSentBatch(ctx, collectOutboxIDs(outboxItems))
 		return
 	}
 
@@ -457,19 +455,38 @@ func (d *Dispatcher) getMemberName(ctx context.Context, channelID string) (strin
 
 // markSent: 발송 완료 처리
 func (d *Dispatcher) markSent(ctx context.Context, id int64) {
+	d.markSentBatch(ctx, []int64{id})
+}
+
+const markSentBatchChunkSize = 500
+
+func (d *Dispatcher) markSentBatch(ctx context.Context, ids []int64) {
+	uniqueIDs := uniqueInt64s(ids)
+	if len(uniqueIDs) == 0 {
+		return
+	}
+
 	now := time.Now()
-	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"status":    domain.OutboxStatusSent,
-			"sent_at":   now,
-			"locked_at": nil,
-			"error":     "",
-		})
-	if result.Error != nil {
-		d.logger.Error("Failed to mark outbox item as sent",
-			slog.Int64("id", id),
-			slog.Any("error", result.Error))
+	for start := 0; start < len(uniqueIDs); start += markSentBatchChunkSize {
+		end := start + markSentBatchChunkSize
+		if end > len(uniqueIDs) {
+			end = len(uniqueIDs)
+		}
+		chunk := uniqueIDs[start:end]
+
+		result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
+			Where("id IN ? AND status = ?", chunk, domain.OutboxStatusPending).
+			Updates(map[string]any{
+				"status":    domain.OutboxStatusSent,
+				"sent_at":   now,
+				"locked_at": nil,
+				"error":     "",
+			})
+		if result.Error != nil {
+			d.logger.Error("Failed to mark outbox items as sent",
+				slog.Int("batch_size", len(chunk)),
+				slog.Any("error", result.Error))
+		}
 	}
 }
 
@@ -670,15 +687,40 @@ func (d *Dispatcher) processGroupedItems(ctx context.Context, group *outboxItemG
 		return
 	}
 
-	for i := range group.items {
-		d.markSent(ctx, group.items[i].ID)
-	}
+	d.markSentBatch(ctx, collectOutboxIDs(group.items))
 
 	d.logger.Info("Outbox grouped notification sent",
 		slog.String("kind", string(group.kind)),
 		slog.String("channel_id", group.channelID),
 		slog.String("room_id", group.roomID),
 		slog.Int("count", len(group.items)))
+}
+
+func collectOutboxIDs(items []domain.YouTubeNotificationOutbox) []int64 {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(items))
+	for i := range items {
+		ids = append(ids, items[i].ID)
+	}
+	return ids
+}
+
+func uniqueInt64s(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	unique := make([]int64, 0, len(ids))
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	return unique
 }
 
 // truncateString: 문자열 길이 제한
