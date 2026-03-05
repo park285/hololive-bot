@@ -1,0 +1,269 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+)
+
+type trackingSettingsApplier struct {
+	lastScraperProxyEnabled bool
+	lastAlarmMinutes        int
+	scraperResult           sharedserver.ScraperProxyApplyResult
+	alarmResult             sharedserver.AlarmAdvanceMinutesApplyResult
+	runtimeResult           sharedserver.ScraperProxyRuntimeStateResult
+}
+
+func (a *trackingSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) sharedserver.ScraperProxyApplyResult {
+	a.lastScraperProxyEnabled = enabled
+	return a.scraperResult
+}
+
+func (a *trackingSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedserver.AlarmAdvanceMinutesApplyResult {
+	a.lastAlarmMinutes = minutes
+	return a.alarmResult
+}
+
+func (a *trackingSettingsApplier) ApplyMemberNewsWeeklyRunNow(context.Context) sharedserver.MemberNewsWeeklyRunNowResult {
+	return sharedserver.MemberNewsWeeklyRunNowResult{
+		Applied: false,
+		Reason:  "not used in delegation test",
+	}
+}
+
+func (a *trackingSettingsApplier) ScraperProxyRuntimeState(_ bool) sharedserver.ScraperProxyRuntimeStateResult {
+	return a.runtimeResult
+}
+
+type trackingMemberNewsRunNowTrigger struct {
+	called int
+	err    error
+}
+
+func (t *trackingMemberNewsRunNowTrigger) SendMemberNewsWeekly(context.Context) error {
+	t.called++
+	return t.err
+}
+
+type trackingYouTubeSvc struct {
+	proxyEnabled bool
+}
+
+func (s *trackingYouTubeSvc) SetScraperProxyEnabled(enabled bool) bool {
+	s.proxyEnabled = enabled
+	return true
+}
+
+func (s *trackingYouTubeSvc) ScraperProxyEnabled() bool {
+	return s.proxyEnabled
+}
+
+func (s *trackingYouTubeSvc) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
+	return nil, nil
+}
+
+func (s *trackingYouTubeSvc) GetRecentVideos(context.Context, string, int64) ([]string, error) {
+	return nil, nil
+}
+
+type trackingProxyTogglePoller struct {
+	enabled bool
+}
+
+func (p *trackingProxyTogglePoller) Name() string { return "tracking-proxy-poller" }
+func (p *trackingProxyTogglePoller) Poll(context.Context, string) error {
+	return nil
+}
+func (p *trackingProxyTogglePoller) SetProxyEnabled(enabled bool) bool {
+	p.enabled = enabled
+	return true
+}
+func (p *trackingProxyTogglePoller) ProxyEnabled() bool {
+	return p.enabled
+}
+
+func testAppLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func TestNewBotSettingsApplier_DefaultLogger(t *testing.T) {
+	t.Parallel()
+
+	base := &trackingSettingsApplier{}
+
+	applier := newBotSettingsApplier(base, nil, nil)
+	wrapped, ok := applier.(*botSettingsApplier)
+	require.True(t, ok)
+	require.NotNil(t, wrapped)
+	assert.Same(t, base, wrapped.base)
+	assert.NotNil(t, wrapped.logger)
+}
+
+func TestBotSettingsApplier_NilBaseBranches(t *testing.T) {
+	t.Parallel()
+
+	applier := &botSettingsApplier{
+		base:   nil,
+		logger: testAppLogger(),
+	}
+
+	scraperResult := applier.ApplyScraperProxy(context.Background(), true)
+	require.NotNil(t, scraperResult.Applied)
+	assert.True(t, scraperResult.Requested)
+	assert.False(t, *scraperResult.Applied)
+	assert.Equal(t, "settings applier not configured", scraperResult.Reason)
+
+	alarmResult := applier.ApplyAlarmAdvanceMinutes(context.Background(), 20)
+	assert.Equal(t, 20, alarmResult.AlarmRequestedAdvanceMinutes)
+	assert.False(t, alarmResult.AlarmApplied)
+	assert.Equal(t, "settings applier not configured", alarmResult.AlarmReason)
+
+	runtimeResult := applier.ScraperProxyRuntimeState(true)
+	require.NotNil(t, runtimeResult.Known)
+	assert.True(t, runtimeResult.Requested)
+	assert.False(t, *runtimeResult.Known)
+	assert.Equal(t, "settings applier not configured", runtimeResult.Reason)
+}
+
+func TestBotSettingsApplier_DelegatesToBase(t *testing.T) {
+	t.Parallel()
+
+	expectedScraper := sharedserver.ScraperProxyApplyResult{Requested: true}
+	expectedAlarm := sharedserver.AlarmAdvanceMinutesApplyResult{
+		AlarmRequestedAdvanceMinutes: 15,
+		AlarmApplied:                 true,
+		AlarmTargetMinutes:           []int{5, 15},
+	}
+	known := true
+	expectedRuntime := sharedserver.ScraperProxyRuntimeStateResult{
+		Requested: true,
+		Known:     &known,
+	}
+	base := &trackingSettingsApplier{
+		scraperResult: expectedScraper,
+		alarmResult:   expectedAlarm,
+		runtimeResult: expectedRuntime,
+	}
+	applier := &botSettingsApplier{
+		base:   base,
+		logger: testAppLogger(),
+	}
+
+	assert.Equal(t, expectedScraper, applier.ApplyScraperProxy(context.Background(), true))
+	assert.True(t, base.lastScraperProxyEnabled)
+
+	assert.Equal(t, expectedAlarm, applier.ApplyAlarmAdvanceMinutes(context.Background(), 15))
+	assert.Equal(t, 15, base.lastAlarmMinutes)
+
+	assert.Equal(t, expectedRuntime, applier.ScraperProxyRuntimeState(true))
+}
+
+func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil trigger", func(t *testing.T) {
+		applier := &botSettingsApplier{
+			base:             nil,
+			memberNewsRunNow: nil,
+			logger:           testAppLogger(),
+		}
+
+		result := applier.ApplyMemberNewsWeeklyRunNow(context.Background())
+		assert.False(t, result.Applied)
+		assert.Equal(t, "member news trigger is not configured", result.Reason)
+		assert.Empty(t, result.Error)
+	})
+
+	t.Run("trigger failure", func(t *testing.T) {
+		trigger := &trackingMemberNewsRunNowTrigger{err: errors.New("request failed")}
+		applier := &botSettingsApplier{
+			memberNewsRunNow: trigger,
+			logger:           testAppLogger(),
+		}
+
+		result := applier.ApplyMemberNewsWeeklyRunNow(context.Background())
+		assert.Equal(t, 1, trigger.called)
+		assert.False(t, result.Applied)
+		assert.Equal(t, "member news trigger failed", result.Reason)
+		assert.Equal(t, "request failed", result.Error)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		trigger := &trackingMemberNewsRunNowTrigger{}
+		applier := &botSettingsApplier{
+			memberNewsRunNow: trigger,
+			logger:           testAppLogger(),
+		}
+
+		result := applier.ApplyMemberNewsWeeklyRunNow(context.Background())
+		assert.Equal(t, 1, trigger.called)
+		assert.True(t, result.Applied)
+		assert.Equal(t, "member_news_trigger", result.Source)
+		assert.Empty(t, result.Error)
+	})
+}
+
+func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
+	t.Parallel()
+
+	logger := testAppLogger()
+	youtubeSvc := &trackingYouTubeSvc{}
+	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: time.Millisecond,
+	})
+	trackingPoller := &trackingProxyTogglePoller{}
+	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
+
+	applyScraperProxyToggle(true, youtubeSvc, nil, scheduler, logger)
+	assert.True(t, youtubeSvc.proxyEnabled)
+	assert.True(t, trackingPoller.enabled)
+	enabled, known := scheduler.ProxyEnabled()
+	assert.True(t, known)
+	assert.True(t, enabled)
+
+	applyScraperProxyToggle(false, youtubeSvc, nil, scheduler, logger)
+	assert.False(t, youtubeSvc.proxyEnabled)
+	assert.False(t, trackingPoller.enabled)
+	enabled, known = scheduler.ProxyEnabled()
+	assert.True(t, known)
+	assert.False(t, enabled)
+}
+
+func TestProvideYouTubeServiceAndScheduler_Defaults(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, ProvideYouTubeService(nil))
+	assert.Nil(t, ProvideYouTubeScheduler(nil))
+
+	svc := &trackingYouTubeSvc{}
+	scheduler := &stubYouTubeScheduler{}
+	stack := &providers.YouTubeStack{Service: svc}
+	deps := &bot.Dependencies{Scheduler: scheduler}
+
+	assert.Same(t, svc, ProvideYouTubeService(stack))
+	assert.Same(t, scheduler, ProvideYouTubeScheduler(deps))
+}
+
+func TestDefaultRuntimeAlarmSchedulerBuilder_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, defaultRuntimeAlarmSchedulerBuilder(context.Background(), nil, nil, nil))
+}
+
+var _ sharedserver.SettingsApplier = (*trackingSettingsApplier)(nil)
+var _ memberNewsWeeklyRunNowTrigger = (*trackingMemberNewsRunNowTrigger)(nil)
+var _ youtube.Service = (*trackingYouTubeSvc)(nil)
