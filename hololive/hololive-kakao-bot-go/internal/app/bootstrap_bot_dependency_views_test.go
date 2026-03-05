@@ -69,7 +69,7 @@ func (s *stubSettingsReadWriter) Update(newSettings settings.Settings) error {
 func TestBuildBotIngestionRuntimeDependencies(t *testing.T) {
 	t.Run("nil dependencies", func(t *testing.T) {
 		view := buildBotIngestionRuntimeDependencies(nil)
-		if view.cache != nil || view.postgres != nil || view.irisClient != nil || view.members != nil || view.scheduler != nil {
+		if view.cache != nil || view.postgres != nil || view.irisClient != nil || view.members != nil || view.scheduler != nil || view.settings != nil {
 			t.Fatal("nil deps must yield zero-value ingestion dependency view")
 		}
 	})
@@ -80,6 +80,7 @@ func TestBuildBotIngestionRuntimeDependencies(t *testing.T) {
 		irisClient := &stubIrisClient{}
 		membersData := &stubMemberDataProvider{}
 		scheduler := &stubYouTubeScheduler{}
+		settingsSvc := &stubSettingsReadWriter{}
 
 		deps := &bot.Dependencies{
 			Cache:       cacheSvc,
@@ -87,6 +88,7 @@ func TestBuildBotIngestionRuntimeDependencies(t *testing.T) {
 			Client:      irisClient,
 			MembersData: membersData,
 			Scheduler:   scheduler,
+			Settings:    settingsSvc,
 		}
 
 		view := buildBotIngestionRuntimeDependencies(deps)
@@ -104,6 +106,9 @@ func TestBuildBotIngestionRuntimeDependencies(t *testing.T) {
 		}
 		if view.scheduler != scheduler {
 			t.Fatal("scheduler mapping mismatch")
+		}
+		if view.settings != settingsSvc {
+			t.Fatal("settings mapping mismatch")
 		}
 	})
 }
@@ -170,7 +175,8 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 func TestBuildBotYouTubeRuntimeDependencies(t *testing.T) {
 	t.Run("nil infra", func(t *testing.T) {
 		view := buildBotYouTubeRuntimeDependencies(nil)
-		if view.sharedRateLimiter != nil || view.templateRenderer != nil {
+		if view.sharedRateLimiter != nil || view.templateRenderer != nil || view.youtubeService != nil ||
+			view.holodexService != nil || view.photoSyncService != nil {
 			t.Fatal("nil infra must yield zero-value youtube runtime dependency view")
 		}
 	})
@@ -178,9 +184,17 @@ func TestBuildBotYouTubeRuntimeDependencies(t *testing.T) {
 	t.Run("maps runtime fields", func(t *testing.T) {
 		rateLimiter := &scraper.RateLimiter{}
 		templateRenderer := &template.Renderer{}
+		youtubeSvc := &stubYouTubeService{}
+		holodexSvc := &holodex.Service{}
+		photoSyncSvc := &holodex.PhotoSyncService{}
 		infra := &coreInfrastructure{
+			deps: &bot.Dependencies{
+				Service: youtubeSvc,
+			},
 			sharedRL:         rateLimiter,
 			templateRenderer: templateRenderer,
+			holodexService:   holodexSvc,
+			photoSync:        photoSyncSvc,
 		}
 
 		view := buildBotYouTubeRuntimeDependencies(infra)
@@ -189,6 +203,29 @@ func TestBuildBotYouTubeRuntimeDependencies(t *testing.T) {
 		}
 		if view.templateRenderer != templateRenderer {
 			t.Fatal("template renderer mapping mismatch")
+		}
+		if view.youtubeService != youtubeSvc {
+			t.Fatal("youtube service mapping mismatch")
+		}
+		if view.holodexService != holodexSvc {
+			t.Fatal("holodex service mapping mismatch")
+		}
+		if view.photoSyncService != photoSyncSvc {
+			t.Fatal("photo sync service mapping mismatch")
+		}
+	})
+
+	t.Run("falls back to yt stack service when deps service is nil", func(t *testing.T) {
+		stackService := &stubYouTubeService{}
+		infra := &coreInfrastructure{
+			ytStack: &providers.YouTubeStack{
+				Service: stackService,
+			},
+		}
+
+		view := buildBotYouTubeRuntimeDependencies(infra)
+		if view.youtubeService != stackService {
+			t.Fatal("youtube service must fallback to yt stack service")
 		}
 	})
 }

@@ -58,6 +58,7 @@ type botIngestionRuntimeDependencies struct {
 	irisClient iris.Client
 	members    member.DataProvider
 	scheduler  youtube.Scheduler
+	settings   settings.ReadWriter
 }
 
 // botConfigSubscriberDependencies: 설정 구독 적용에 필요한 최소 의존성 뷰.
@@ -77,6 +78,9 @@ type botConfigSubscriberRuntimeDependencies struct {
 type botYouTubeRuntimeDependencies struct {
 	sharedRateLimiter *scraper.RateLimiter
 	templateRenderer  *template.Renderer
+	youtubeService    youtube.Service
+	holodexService    *holodex.Service
+	photoSyncService  *holodex.PhotoSyncService
 }
 
 // botAdminRuntimeDependencies: admin API 조립에 필요한 최소 의존성 뷰.
@@ -329,6 +333,7 @@ func buildBotIngestionRuntimeDependencies(deps *bot.Dependencies) botIngestionRu
 		irisClient: deps.Client,
 		members:    deps.MembersData,
 		scheduler:  deps.Scheduler,
+		settings:   deps.Settings,
 	}
 }
 
@@ -357,9 +362,20 @@ func buildBotYouTubeRuntimeDependencies(infra *coreInfrastructure) botYouTubeRun
 	if infra == nil {
 		return botYouTubeRuntimeDependencies{}
 	}
+	var youtubeService youtube.Service
+	if infra.deps != nil {
+		youtubeService = infra.deps.Service
+	}
+	if youtubeService == nil && infra.ytStack != nil {
+		youtubeService = infra.ytStack.Service
+	}
+
 	return botYouTubeRuntimeDependencies{
 		sharedRateLimiter: infra.sharedRL,
 		templateRenderer:  infra.templateRenderer,
+		youtubeService:    youtubeService,
+		holodexService:    infra.holodexService,
+		photoSyncService:  infra.photoSync,
 	}
 }
 
@@ -469,19 +485,19 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 			slog.String("note", "when stream-ingester is deployed, bot should usually run with BOT_INGESTION_ENABLED=false"),
 		)
 
-		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, deps.Cache, "bot", logger)
+		ingestionDeps := buildBotIngestionRuntimeDependencies(deps)
+		youTubeRuntimeDeps := buildBotYouTubeRuntimeDependencies(infra)
+		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, ingestionDeps.cache, "bot", logger)
 		if err != nil {
 			return nil, fmt.Errorf("acquire ingestion lease: %w", err)
 		}
 
-		ingestionDeps := buildBotIngestionRuntimeDependencies(deps)
-		youTubeRuntimeDeps := buildBotYouTubeRuntimeDependencies(infra)
 		scraperScheduler, outboxDispatcher = buildYouTubeComponents(cfg.Scraper, ingestionDeps, youTubeRuntimeDeps, logger)
 		youtubeScheduler = ingestionDeps.scheduler
-		photoSyncService = infra.photoSync
+		photoSyncService = youTubeRuntimeDeps.photoSyncService
 
-		desiredProxyState = deps.Settings.Get().ScraperProxyEnabled
-		applyScraperProxyToggle(desiredProxyState, ProvideYouTubeService(infra.ytStack), infra.holodexService, scraperScheduler, logger)
+		desiredProxyState = ingestionDeps.settings.Get().ScraperProxyEnabled
+		applyScraperProxyToggle(desiredProxyState, youTubeRuntimeDeps.youtubeService, youTubeRuntimeDeps.holodexService, scraperScheduler, logger)
 	} else {
 		logger.Info("Bot ingestion runtime disabled by config", slog.String("env", "BOT_INGESTION_ENABLED=false"))
 	}
