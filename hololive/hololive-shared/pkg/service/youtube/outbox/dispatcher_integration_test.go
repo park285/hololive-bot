@@ -509,6 +509,85 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 	}
 }
 
+func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+
+	ctx := context.Background()
+	db := setupTestDB(t)
+	cleanupOutbox(t, db)
+
+	sender := &fakeSender{}
+	sender.setFailRoom("roomB")
+	cacheService := setupCacheService(t)
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_terminal_fail", []string{
+		"roomA:user1",
+		"roomB:user2",
+	})
+	setupMemberName(t, cacheService, "UCperroom_terminal_fail", "PerRoomTerminalFailMember")
+
+	cfg := outbox.Config{
+		BatchSize:    10,
+		LockTimeout:  1 * time.Minute,
+		PollInterval: 100 * time.Millisecond,
+		MaxRetries:   1,
+		RetryBackoff: 30 * time.Millisecond,
+		PerRoomMode:  true,
+	}
+
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+
+	payload, _ := json.Marshal(map[string]string{
+		"video_id": "perroom_terminal_fail_video",
+		"title":    "PerRoom Terminal Fail Video",
+	})
+
+	item := &domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewVideo,
+		ChannelID:     "UCperroom_terminal_fail",
+		ContentID:     "test_perroom_terminal_fail_" + time.Now().Format("150405"),
+		Payload:       string(payload),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now(),
+	}
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("Failed to create test outbox item: %v", err)
+	}
+	t.Cleanup(func() { db.Delete(item) })
+
+	dispatcher.ProcessOnceForTest(ctx)
+
+	var updated domain.YouTubeNotificationOutbox
+	if err := db.First(&updated, item.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated outbox: %v", err)
+	}
+	if updated.Status != domain.OutboxStatusFailed {
+		t.Fatalf("Expected outbox status FAILED, got %s", updated.Status)
+	}
+
+	deliveries := fetchDeliveryRows(t, db, item.ID)
+	if len(deliveries) != 2 {
+		t.Fatalf("Expected 2 delivery rows, got %d", len(deliveries))
+	}
+	failedCount := 0
+	sentCount := 0
+	for i := range deliveries {
+		switch deliveries[i].Status {
+		case domain.OutboxStatusFailed:
+			failedCount++
+		case domain.OutboxStatusSent:
+			sentCount++
+		}
+	}
+	if failedCount != 1 || sentCount != 1 {
+		t.Fatalf("Expected 1 failed + 1 sent delivery, got failed=%d sent=%d", failedCount, sentCount)
+	}
+}
+
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
