@@ -10,7 +10,7 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
-	schedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
@@ -23,12 +23,11 @@ type LLMClient interface {
 	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
 }
 
-type (
-	// SearchResult: Exa 검색 결과.
-	SearchResult = schedmodel.SearchResult
-	// WebSearcher: 외부 검색 인터페이스.
-	WebSearcher = schedmodel.WebSearcher
-)
+// SearchResult: sharedmodel.SearchResult의 별칭 (패키지 내 참조 호환)
+type SearchResult = sharedmodel.SearchResult
+
+// WebSearcher: sharedmodel.WebSearcher의 별칭 (패키지 내 참조 호환)
+type WebSearcher = sharedmodel.WebSearcher
 
 // Summarizer: LLM + hard validator + deterministic fallback 요약기.
 type SummarizerImpl struct {
@@ -73,7 +72,7 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input SummarizeInput) (*
 		query := buildSearchQuery(input.Period, input.RoomMembers, input.Now)
 		results, err := s.searcher.Search(ctx, query)
 		if err != nil {
-			s.logger.Warn("MemberNews Exa search failed (graceful)", slog.String("error", err.Error()))
+			s.logger.Warn("MemberNews Exa search failed (graceful)", slog.Any("error", err))
 		} else {
 			searchContext = formatSearchContext(results)
 		}

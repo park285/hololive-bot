@@ -203,11 +203,13 @@ func (c *Client) Connected() bool {
 }
 
 func (c *Client) tryConnect(ctx context.Context, cfg Config, pool PoolConfig, retry RetryConfig) (*Client, error) {
-	dsn := cfg.DSN()
-	poolConfig, err := pgxpool.ParseConfig(dsn)
+	// ParseConfig 에러 문자열에 DSN이 포함될 수 있으므로,
+	// 파싱 단계에서는 마스킹된 DSN을 사용하고 실제 비밀번호는 이후에 주입한다.
+	poolConfig, err := pgxpool.ParseConfig(cfg.SafeDSN())
 	if err != nil {
 		return nil, fmt.Errorf("parse postgres config: %w", err)
 	}
+	poolConfig.ConnConfig.Password = cfg.Password
 	if cfg.QueryExecMode != "" {
 		mode, modeErr := parseQueryExecMode(cfg.QueryExecMode)
 		if modeErr != nil {

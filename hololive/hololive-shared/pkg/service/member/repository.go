@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -200,7 +199,7 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	}
 	defer rows.Close()
 
-	var channelIDs []string
+	channelIDs := make([]string, 0, 256)
 	for rows.Next() {
 		var channelID string
 		if err := rows.Scan(&channelID); err != nil {
@@ -431,40 +430,26 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType strin
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	var member Model
-	if err := r.gormDB.WithContext(ctx).First(&member, memberID).Error; err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+	path := fmt.Sprintf("{%s}", aliasType)
+	result := r.gormDB.WithContext(ctx).
+		Model(&Model{}).
+		Where("id = ?", memberID).
+		Update("aliases", gorm.Expr(`
+			jsonb_set(
+				COALESCE(aliases::jsonb, '{}'::jsonb),
+				CAST(? AS text[]),
+				CASE
+					WHEN COALESCE(aliases::jsonb -> ?, '[]'::jsonb) ? ? THEN COALESCE(aliases::jsonb -> ?, '[]'::jsonb)
+					ELSE COALESCE(aliases::jsonb -> ?, '[]'::jsonb) || jsonb_build_array(?)
+				END,
+				true
+			)
+		`, path, aliasType, alias, aliasType, aliasType, alias))
+	if result.Error != nil {
+		return fmt.Errorf("failed to add alias: %w", result.Error)
 	}
-
-	var aliases domain.Aliases
-	if err := json.Unmarshal(member.Aliases, &aliases); err != nil {
-		return fmt.Errorf("failed to unmarshal aliases: %w", err)
-	}
-
-	// 별칭 중복 여부 확인함
-	existing := aliases.Ko
-	if aliasType == "ja" {
-		existing = aliases.Ja
-	}
-
-	if slices.Contains(existing, alias) {
-		return nil
-	}
-
-	// 새 별칭 추가함
-	if aliasType == "ko" {
-		aliases.Ko = append(aliases.Ko, alias)
-	} else {
-		aliases.Ja = append(aliases.Ja, alias)
-	}
-
-	updatedJSON, err := json.Marshal(aliases)
-	if err != nil {
-		return fmt.Errorf("failed to marshal aliases: %w", err)
-	}
-
-	if err := r.gormDB.WithContext(ctx).Model(&member).Update("aliases", updatedJSON).Error; err != nil {
-		return fmt.Errorf("failed to update aliases: %w", err)
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("member %d not found", memberID)
 	}
 
 	return nil
@@ -476,42 +461,30 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType st
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
 	}
 
-	var member Model
-	if err := r.gormDB.WithContext(ctx).First(&member, memberID).Error; err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+	path := fmt.Sprintf("{%s}", aliasType)
+	result := r.gormDB.WithContext(ctx).
+		Model(&Model{}).
+		Where("id = ?", memberID).
+		Update("aliases", gorm.Expr(`
+			jsonb_set(
+				COALESCE(aliases::jsonb, '{}'::jsonb),
+				CAST(? AS text[]),
+				COALESCE(
+					(
+						SELECT jsonb_agg(elem)
+						FROM jsonb_array_elements(COALESCE(aliases::jsonb -> ?, '[]'::jsonb)) AS elem
+						WHERE elem <> to_jsonb(CAST(? AS text))
+					),
+					'[]'::jsonb
+				),
+				true
+			)
+		`, path, aliasType, alias))
+	if result.Error != nil {
+		return fmt.Errorf("failed to remove alias: %w", result.Error)
 	}
-
-	var aliases domain.Aliases
-	if err := json.Unmarshal(member.Aliases, &aliases); err != nil {
-		return fmt.Errorf("failed to unmarshal aliases: %w", err)
-	}
-
-	// 별칭 제거함
-	original := aliases.Ko
-	if aliasType == "ja" {
-		original = aliases.Ja
-	}
-
-	updated := make([]string, 0, len(original))
-	for _, a := range original {
-		if a != alias {
-			updated = append(updated, a)
-		}
-	}
-
-	if aliasType == "ko" {
-		aliases.Ko = updated
-	} else {
-		aliases.Ja = updated
-	}
-
-	updatedJSON, err := json.Marshal(aliases)
-	if err != nil {
-		return fmt.Errorf("failed to marshal aliases: %w", err)
-	}
-
-	if err := r.gormDB.WithContext(ctx).Model(&member).Update("aliases", updatedJSON).Error; err != nil {
-		return fmt.Errorf("failed to update aliases: %w", err)
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("member %d not found", memberID)
 	}
 
 	return nil
@@ -519,43 +492,46 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType st
 
 // SetGraduation: 멤버의 졸업 여부를 설정합니다.
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
-	var member Model
-	if err := r.gormDB.WithContext(ctx).First(&member, memberID).Error; err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+	result := r.gormDB.WithContext(ctx).
+		Model(&Model{}).
+		Where("id = ?", memberID).
+		Update("is_graduated", isGraduated)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update graduation status: %w", result.Error)
 	}
-
-	if err := r.gormDB.WithContext(ctx).Model(&member).Update("is_graduated", isGraduated).Error; err != nil {
-		return fmt.Errorf("failed to update graduation status: %w", err)
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("member %d not found", memberID)
 	}
-
 	return nil
 }
 
 // UpdateChannelID: 멤버의 YouTube 채널 ID를 업데이트합니다.
 func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelID string) error {
-	var member Model
-	if err := r.gormDB.WithContext(ctx).First(&member, memberID).Error; err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+	result := r.gormDB.WithContext(ctx).
+		Model(&Model{}).
+		Where("id = ?", memberID).
+		Update("channel_id", channelID)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update channel ID: %w", result.Error)
 	}
-
-	if err := r.gormDB.WithContext(ctx).Model(&member).Update("channel_id", channelID).Error; err != nil {
-		return fmt.Errorf("failed to update channel ID: %w", err)
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("member %d not found", memberID)
 	}
-
 	return nil
 }
 
 // UpdateMemberName: 멤버의 영어 이름을 업데이트합니다.
 func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name string) error {
-	var member Model
-	if err := r.gormDB.WithContext(ctx).First(&member, memberID).Error; err != nil {
-		return fmt.Errorf("failed to find member: %w", err)
+	result := r.gormDB.WithContext(ctx).
+		Model(&Model{}).
+		Where("id = ?", memberID).
+		Update("english_name", name)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update member name: %w", result.Error)
 	}
-
-	if err := r.gormDB.WithContext(ctx).Model(&member).Update("english_name", name).Error; err != nil {
-		return fmt.Errorf("failed to update member name: %w", err)
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("member %d not found", memberID)
 	}
-
 	return nil
 }
 

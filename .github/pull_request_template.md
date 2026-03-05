@@ -11,6 +11,10 @@
 - [ ] 로컬 테스트/검증 실행
 - [ ] 관련 서비스 로그/메트릭 확인
 
+## 라벨/태그
+
+- [ ] PR 라벨(태그) 설정 완료 (`bug` / `enhancement` / `documentation` 중 해당 항목)
+
 ## Architecture Gate / Release 체크리스트 (아키텍처·릴리즈 영향 PR 필수)
 
 - [ ] `./scripts/architecture/ci-boundary-gate.sh` 실행 성공

@@ -10,6 +10,7 @@ import (
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 func TestProvideTriggerRouter_Integration(t *testing.T) {
@@ -73,7 +74,7 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new request with key error = %v", err)
 	}
-	reqWithKey.Header.Set(sharedserver.APIKeyHeader, "test-key")
+	reqWithKey.Header.Set(middleware.APIKeyHeader, "test-key")
 	respWithKey, err := http.DefaultClient.Do(reqWithKey)
 	if err != nil {
 		t.Fatalf("POST with API key error = %v", err)

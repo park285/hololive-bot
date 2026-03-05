@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const (
+	// saveBatchMaxSize: 한 번의 INSERT에 포함할 최대 레코드 수 (PostgreSQL 파라미터 한도 방어)
 	saveBatchMaxSize = 100
-	columnsPerRow    = 6
+	// columnsPerRow: INSERT VALUES 절 한 행의 파라미터 수
+	columnsPerRow = 6
 )
 
 // SaveStats: 채널 통계 데이터를 저장합니다.
@@ -57,71 +60,6 @@ func (r *StatsRepository) SaveStats(ctx context.Context, stats *domain.Timestamp
 	return nil
 }
 
-// SaveStatsBatch: 채널 통계 데이터를 배치로 저장합니다.
-func (r *StatsRepository) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
-	if len(stats) == 0 {
-		return nil
-	}
-
-	for start := 0; start < len(stats); start += saveBatchMaxSize {
-		end := start + saveBatchMaxSize
-		if end > len(stats) {
-			end = len(stats)
-		}
-		chunk := stats[start:end]
-
-		historyQuery, historyArgs := buildStatsHistoryBatchQuery(chunk)
-		if _, err := r.pool.Exec(ctx, historyQuery, historyArgs...); err != nil {
-			return fmt.Errorf("failed to batch save stats: %w", err)
-		}
-
-		if !r.isLatestTableAvailable() {
-			continue
-		}
-
-		if err := r.upsertLatestStatsBatch(ctx, chunk); err != nil {
-			if isUndefinedTableError(err) {
-				r.markLatestTableUnavailable()
-				continue
-			}
-			return fmt.Errorf("failed to save latest stats snapshot batch: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func buildStatsHistoryBatchQuery(stats []*domain.TimestampedStats) (string, []any) {
-	placeholders := make([]string, 0, len(stats))
-	args := make([]any, 0, len(stats)*columnsPerRow)
-
-	for i, stat := range stats {
-		argBase := i*columnsPerRow + 1
-		placeholders = append(placeholders,
-			fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", argBase, argBase+1, argBase+2, argBase+3, argBase+4, argBase+5),
-		)
-		args = append(args,
-			stat.Timestamp,
-			stat.ChannelID,
-			stat.MemberName,
-			stat.SubscriberCount,
-			stat.VideoCount,
-			stat.ViewCount,
-		)
-	}
-
-	query := `
-		INSERT INTO youtube_stats_history (time, channel_id, member_name, subscribers, videos, views)
-		VALUES ` + strings.Join(placeholders, ",") + `
-		ON CONFLICT (time, channel_id) DO UPDATE
-		SET subscribers = EXCLUDED.subscribers,
-		    videos = EXCLUDED.videos,
-		    views = EXCLUDED.views
-	`
-
-	return query, args
-}
-
 func (r *StatsRepository) upsertLatestStats(ctx context.Context, stats *domain.TimestampedStats) error {
 	query := `
 		INSERT INTO youtube_channel_latest_stats
@@ -151,41 +89,102 @@ func (r *StatsRepository) upsertLatestStats(ctx context.Context, stats *domain.T
 	return nil
 }
 
-func (r *StatsRepository) upsertLatestStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
-	placeholders := make([]string, 0, len(stats))
-	args := make([]any, 0, len(stats)*columnsPerRow)
-
-	for i, stat := range stats {
-		argBase := i*columnsPerRow + 1
-		placeholders = append(placeholders,
-			fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, NOW())", argBase, argBase+1, argBase+2, argBase+3, argBase+4, argBase+5),
-		)
-		args = append(args,
-			stat.ChannelID,
-			stat.MemberName,
-			stat.SubscriberCount,
-			stat.VideoCount,
-			stat.ViewCount,
-			stat.Timestamp,
-		)
+// SaveStatsBatch: 여러 채널의 통계 데이터를 배치 INSERT 합니다.
+// saveBatchMaxSize 단위로 분할하여 PostgreSQL 파라미터 한도를 초과하지 않도록 합니다.
+func (r *StatsRepository) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
+	if len(stats) == 0 {
+		return nil
 	}
 
-	query := `
-		INSERT INTO youtube_channel_latest_stats
-			(channel_id, member_name, subscribers, videos, views, time, updated_at)
-		VALUES ` + strings.Join(placeholders, ",") + `
-		ON CONFLICT (channel_id) DO UPDATE
-		SET member_name = EXCLUDED.member_name,
-		    subscribers = EXCLUDED.subscribers,
-		    videos = EXCLUDED.videos,
-		    views = EXCLUDED.views,
-		    time = EXCLUDED.time,
-		    updated_at = NOW()
-		WHERE youtube_channel_latest_stats.time <= EXCLUDED.time
-	`
+	for batchStart := 0; batchStart < len(stats); batchStart += saveBatchMaxSize {
+		batchEnd := batchStart + saveBatchMaxSize
+		if batchEnd > len(stats) {
+			batchEnd = len(stats)
+		}
+		chunk := stats[batchStart:batchEnd]
+		if err := r.saveStatsBatchChunk(ctx, chunk); err != nil {
+			return err
+		}
+		if !r.isLatestTableAvailable() {
+			continue
+		}
 
-	if _, err := r.pool.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("upsert latest stats batch: %w", err)
+		if latestErr := r.upsertLatestStatsBatch(ctx, chunk); latestErr != nil {
+			if isUndefinedTableError(latestErr) {
+				r.markLatestTableUnavailable()
+				continue
+			}
+			return fmt.Errorf("failed to save latest stats snapshot batch: %w", latestErr)
+		}
+	}
+
+	r.logger.Debug("Stats batch saved to TimescaleDB",
+		slog.Int("count", len(stats)),
+	)
+	return nil
+}
+
+// saveStatsBatchChunk: 단일 청크에 대한 multi-value INSERT 실행
+func (r *StatsRepository) saveStatsBatchChunk(ctx context.Context, stats []*domain.TimestampedStats) error {
+	var sb strings.Builder
+	sb.WriteString(`INSERT INTO youtube_stats_history (time, channel_id, member_name, subscribers, videos, views) VALUES `)
+
+	args := make([]any, 0, len(stats)*columnsPerRow)
+	for i, s := range stats {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		base := i * columnsPerRow
+		sb.WriteByte('(')
+		for j := 0; j < columnsPerRow; j++ {
+			if j > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteByte('$')
+			sb.WriteString(strconv.Itoa(base + j + 1))
+		}
+		sb.WriteByte(')')
+
+		args = append(args, s.Timestamp, s.ChannelID, s.MemberName, s.SubscriberCount, s.VideoCount, s.ViewCount)
+	}
+
+	sb.WriteString(` ON CONFLICT (time, channel_id) DO UPDATE SET subscribers = EXCLUDED.subscribers, videos = EXCLUDED.videos, views = EXCLUDED.views`)
+
+	_, err := r.pool.Exec(ctx, sb.String(), args...)
+	if err != nil {
+		return fmt.Errorf("failed to batch save stats (%d rows): %w", len(stats), err)
+	}
+	return nil
+}
+
+func (r *StatsRepository) upsertLatestStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
+	var sb strings.Builder
+	sb.WriteString(`INSERT INTO youtube_channel_latest_stats (channel_id, member_name, subscribers, videos, views, time, updated_at) VALUES `)
+
+	args := make([]any, 0, len(stats)*columnsPerRow)
+	for i, s := range stats {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		base := i * columnsPerRow
+		sb.WriteByte('(')
+		for j := 0; j < columnsPerRow; j++ {
+			if j > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteByte('$')
+			sb.WriteString(strconv.Itoa(base + j + 1))
+		}
+		sb.WriteString(`,NOW())`)
+
+		args = append(args, s.ChannelID, s.MemberName, s.SubscriberCount, s.VideoCount, s.ViewCount, s.Timestamp)
+	}
+
+	sb.WriteString(` ON CONFLICT (channel_id) DO UPDATE SET member_name = EXCLUDED.member_name, subscribers = EXCLUDED.subscribers, videos = EXCLUDED.videos, views = EXCLUDED.views, time = EXCLUDED.time, updated_at = NOW() WHERE youtube_channel_latest_stats.time <= EXCLUDED.time`)
+
+	_, err := r.pool.Exec(ctx, sb.String(), args...)
+	if err != nil {
+		return fmt.Errorf("upsert latest stats batch (%d rows): %w", len(stats), err)
 	}
 	return nil
 }

@@ -44,15 +44,9 @@
 **Phase 0~10 완료**: `docs/modularization/TODO.md`, `docs/modularization/TODO_EXTENDED.md`
 **Phase 11 (품질 강화)**: `docs/modularization/TODO_PHASE11.md`
 - **2026-03-05 스냅샷**
-  - 완료(코드 반영): A1/A2/A3, B1~B9, C1~C4, D1~D5, E1~E4
-  - llm-sched 최종 동기화(phase11-15): memberNewsSearcherAdapter 변환 경로 단순화 + X allowlist 로딩 gosec 예외 사유 명시 + `go vet/lint/test` 검증 PASS
-  - llm-sched round5 재검증(2026-03-05): `go test ./... -run TestDoesNotExist`, `go vet ./...`, `golangci-lint run ./...`, `go test -count=1 ./...` 전체 PASS
-  - 진행중: 전체 모듈 `go vet + golangci-lint + go test` 통합 green 정리
-  - 잔여 핵심: global lint/typecheck debt 분리 트랙 처리(shared/contracts, websocket test, youtube stats 계열)
-  - 라운드4 검증 요약:
-    - 타입체크 최신: shared/kakao/stream-ingester/llm-sched PASS (`go test ./... -run TestDoesNotExist`)
-    - lint: 변경 영역 기준 PASS, 전체 모듈 통합 lint debt는 별도 트랙 유지
-    - coverage 최신: kakao internal/app 65.7%, alarm/checker 89.9%, stream-ingester internal/app 63.9%, shared cache 42.0%
+  - 완료(코드 반영): A1/A2/A3, B1/B2/B3, C1/C2/C3/C4, D3, E2/E3/E4
+  - 진행중: B8, D1, D4, D5, E1
+  - 잔여 핵심: B4/B5/B6/B7/B9, D2
 
 ---
 
@@ -69,7 +63,8 @@
 ### 5-3. Go 테스트 커버리지 확대
 - **대상**: hololive-shared 핵심 패키지 (adapter, service/notification, service/youtube)
 - **상태**: 진행 중 (2026-03-02)
-- **추가**: Phase 11-D 상세 계획 추적 중 (알람 체커/인증/ingester/scraper)
+- **추가**: Phase 11-D 상세 계획 수립 완료 (알람 체커 0%, Auth 6/7 미테스트, Notification 핵심 미테스트)
+- **상세**: `docs/modularization/TODO_PHASE11.md` P11-D 섹션
 
 ---
 

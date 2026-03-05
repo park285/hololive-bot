@@ -35,9 +35,13 @@ spec:
               name: http
           envFrom:
             - configMapRef:
-                name: hololive-app-config
+                name: hololive-common-config
+            - configMapRef:
+                name: hololive-llm-config
             - secretRef:
-                name: hololive-app-secret
+                name: hololive-common-secret
+            - secretRef:
+                name: hololive-llm-secret
           env:
             - name: LLM_SCHEDULER_PORT
               value: "30003"

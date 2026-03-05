@@ -7,15 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
+	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
-)
-
-const (
-	defaultTriggerHTTPTimeout = 30 * time.Second
 )
 
 // Client는 llm-scheduler 내부 트리거 API를 호출한다.
@@ -35,7 +30,7 @@ func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
 	return &Client{
 		schedulerURL: strings.TrimRight(strings.TrimSpace(schedulerURL), "/"),
 		apiKey:       strings.TrimSpace(apiKey),
-		httpClient:   httputil.NewClient(defaultTriggerHTTPTimeout),
+		httpClient:   httputil.DefaultClient(),
 		logger:       logger,
 	}
 }
@@ -74,7 +69,7 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 		return fmt.Errorf("post trigger: build request %s: %w", path, err)
 	}
 	if c.apiKey != "" {
-		req.Header.Set(sharedserver.APIKeyHeader, c.apiKey)
+		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -89,7 +84,11 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	}
 
 	if err := httputil.CheckStatus(resp); err != nil {
-		return fmt.Errorf("post trigger: request failed %s: %w", path, err)
+		return fmt.Errorf(
+			"post trigger: request failed %s: %w",
+			path,
+			err,
+		)
 	}
 
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {

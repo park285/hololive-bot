@@ -4,35 +4,22 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
-// ReviewIssue: 리뷰어가 발견한 개별 이슈.
-type ReviewIssue struct {
-	Field       string `json:"field"`      // member, category, source_url 등
-	ItemIndex   int    `json:"item_index"` // -1이면 전체 관련
-	Severity    string `json:"severity"`   // critical, warning, info
-	Description string `json:"description"`
-}
+// ReviewIssue: consensus.ReviewIssue의 별칭 (API 호환)
+type ReviewIssue = consensus.ReviewIssue
 
-// ReviewVerdict: 리뷰어의 검증 결과.
-type ReviewVerdict struct {
-	Approved   bool          `json:"approved"`
-	Issues     []ReviewIssue `json:"issues"`
-	Confidence float64       `json:"confidence"` // 0.0 ~ 1.0
-}
+// ReviewVerdict: consensus.ReviewVerdict의 별칭 (API 호환)
+type ReviewVerdict = consensus.ReviewVerdict
 
-// ConsensusConfig: consensus 파이프라인 설정.
-type ConsensusConfig struct {
-	ConfidenceThreshold float64       // 기본 0.85, 범위 0.0~1.0
-	ReviewTimeout       time.Duration // 기본 30s, 최소 5s
-	AdjudicateTimeout   time.Duration // 기본 45s, 최소 5s
-}
+// ConsensusConfig: consensus.Config의 별칭 (API 호환)
+type ConsensusConfig = consensus.Config
 
 // ConsensusSummarizer: Primary → Reviewer → Adjudicator(조건부) 3단계 consensus wrapper.
 type ConsensusSummarizer struct {
@@ -97,7 +84,7 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input SummarizeInpu
 	}
 
 	// 결정표 우선순위 3, 6: adjudication 불필요
-	if !c.needsAdjudication(verdict) {
+	if !consensus.NeedsAdjudication(verdict, c.config.ConfidenceThreshold) {
 		c.logger.Info("Consensus pipeline: review passed, returning primary",
 			slog.Duration("total_latency", time.Since(pipelineStart)),
 			slog.Int("stages_used", 2),
@@ -155,7 +142,7 @@ func (c *ConsensusSummarizer) runAdjudication(
 	pipelineStart time.Time,
 ) *Digest {
 	triggerReason := "low_confidence"
-	if c.hasCriticalIssues(verdict.Issues) {
+	if consensus.HasCriticalIssues(verdict.Issues) {
 		triggerReason = "critical_issues"
 	}
 	c.logger.Info("Consensus stage 3: adjudication triggered", slog.String("reason", triggerReason))
@@ -220,7 +207,7 @@ func (c *ConsensusSummarizer) review(ctx context.Context, input SummarizeInput, 
 
 	// severity 정규화
 	for i := range verdict.Issues {
-		verdict.Issues[i].Severity = normalizeSeverity(verdict.Issues[i].Severity)
+		verdict.Issues[i].Severity = consensus.NormalizeSeverity(verdict.Issues[i].Severity)
 	}
 
 	return &verdict, nil
@@ -247,41 +234,6 @@ func (c *ConsensusSummarizer) adjudicate(ctx context.Context, input SummarizeInp
 	}
 
 	return &response, nil
-}
-
-// needsAdjudication: 결정표 우선순위 4-5 판정.
-func (c *ConsensusSummarizer) needsAdjudication(verdict *ReviewVerdict) bool {
-	// 우선순위 4: critical severity 이슈 ≥ 1개
-	if c.hasCriticalIssues(verdict.Issues) {
-		return true
-	}
-	// 우선순위 5: confidence < threshold (critical 0개)
-	if verdict.Confidence < c.config.ConfidenceThreshold {
-		return true
-	}
-	// 우선순위 3, 6: 그 외 → adjudication 불필요
-	return false
-}
-
-// hasCriticalIssues: critical severity 존재 여부.
-func (c *ConsensusSummarizer) hasCriticalIssues(issues []ReviewIssue) bool {
-	for i := range issues {
-		if issues[i].Severity == "critical" {
-			return true
-		}
-	}
-	return false
-}
-
-// normalizeSeverity: 유효하지 않은 severity를 info로 정규화.
-func normalizeSeverity(s string) string {
-	normalized := strings.TrimSpace(strings.ToLower(s))
-	switch normalized {
-	case "critical", "warning", "info":
-		return normalized
-	default:
-		return "info"
-	}
 }
 
 // --- 프롬프트 함수 ---

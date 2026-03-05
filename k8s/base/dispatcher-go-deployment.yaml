@@ -35,9 +35,11 @@ spec:
               name: http
           envFrom:
             - configMapRef:
-                name: hololive-app-config
+                name: hololive-common-config
+            - configMapRef:
+                name: hololive-dispatcher-config
             - secretRef:
-                name: hololive-app-secret
+                name: hololive-dispatcher-secret
           env:
             - name: DISPATCHER_PORT
               value: "30020"
@@ -52,7 +54,7 @@ spec:
             - name: IRIS_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: hololive-app-secret
+                  name: hololive-dispatcher-secret
                   key: IRIS_BOT_TOKEN
             - name: ALARM_DISPATCH_QUEUE_KEY
               value: "alarm:dispatch:queue"

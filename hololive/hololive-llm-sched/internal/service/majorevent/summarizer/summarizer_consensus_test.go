@@ -1,11 +1,15 @@
 package summarizer
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
+)
 
 func TestNeedsSummaryAdjudication(t *testing.T) {
 	tests := []struct {
 		name      string
-		verdict   *summaryReviewVerdict
+		verdict   *consensus.ReviewVerdict
 		threshold float64
 		want      bool
 	}{
@@ -17,7 +21,7 @@ func TestNeedsSummaryAdjudication(t *testing.T) {
 		},
 		{
 			name: "not approved",
-			verdict: &summaryReviewVerdict{
+			verdict: &consensus.ReviewVerdict{
 				Approved:   false,
 				Confidence: 0.99,
 			},
@@ -26,10 +30,10 @@ func TestNeedsSummaryAdjudication(t *testing.T) {
 		},
 		{
 			name: "critical issue",
-			verdict: &summaryReviewVerdict{
+			verdict: &consensus.ReviewVerdict{
 				Approved:   true,
 				Confidence: 0.99,
-				Issues: []summaryReviewIssue{
+				Issues: []consensus.ReviewIssue{
 					{Severity: "critical"},
 				},
 			},
@@ -38,7 +42,7 @@ func TestNeedsSummaryAdjudication(t *testing.T) {
 		},
 		{
 			name: "low confidence",
-			verdict: &summaryReviewVerdict{
+			verdict: &consensus.ReviewVerdict{
 				Approved:   true,
 				Confidence: 0.7,
 			},
@@ -47,7 +51,7 @@ func TestNeedsSummaryAdjudication(t *testing.T) {
 		},
 		{
 			name: "approved and confident",
-			verdict: &summaryReviewVerdict{
+			verdict: &consensus.ReviewVerdict{
 				Approved:   true,
 				Confidence: 0.92,
 			},
@@ -58,9 +62,9 @@ func TestNeedsSummaryAdjudication(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := needsSummaryAdjudication(tt.verdict, tt.threshold)
+			got := consensus.NeedsAdjudication(tt.verdict, tt.threshold)
 			if got != tt.want {
-				t.Fatalf("needsSummaryAdjudication() = %v, want %v", got, tt.want)
+				t.Fatalf("NeedsAdjudication() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -79,9 +83,9 @@ func TestNormalizeSummarySeverity(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := normalizeSeverity(tt.in)
+		got := consensus.NormalizeSeverity(tt.in)
 		if got != tt.want {
-			t.Errorf("normalizeSeverity(%q) = %q, want %q", tt.in, got, tt.want)
+			t.Errorf("NormalizeSeverity(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

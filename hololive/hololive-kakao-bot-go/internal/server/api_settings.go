@@ -2,11 +2,11 @@ package server
 
 import (
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 )
 
-func (h *SettingsAPIHandler) sharedSettingsHandler() *sharedserver.SettingsHandler {
-	return &sharedserver.SettingsHandler{
+func (h *SettingsAPIHandler) sharedSettingsHandler() *sharedsettings.SettingsHandler {
+	return &sharedsettings.SettingsHandler{
 		Logger:   h.logger,
 		Alarm:    h.alarm,
 		Activity: h.activity,

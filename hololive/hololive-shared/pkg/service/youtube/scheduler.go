@@ -186,20 +186,55 @@ func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 	totalMilestoneCheckErrors := 0
 	totalMilestoneSaveErrors := 0
 
+	type channelStatsWorkItem struct {
+		channelID        string
+		member           *domain.Member
+		currentStats     *ChannelStats
+		prevStats        *domain.TimestampedStats
+		timestampedStats *domain.TimestampedStats
+	}
+
+	workItems := make([]channelStatsWorkItem, 0, len(stats))
+	statsBatch := make([]*domain.TimestampedStats, 0, len(stats))
+
 	for channelID, currentStats := range stats {
 		member := channelToMember[channelID]
 		if member == nil {
 			continue
 		}
 
-		r := ys.processChannelStats(ctx, channelID, member, currentStats, now)
-		totalChanges += r.changesDetected
-		totalMilestones += r.milestonesAchieved
-		totalRecordErrors += r.recordErrors
-		totalSaveErrors += r.saveErrors
-		totalGetLatestErrors += r.latestStatsErrors
-		totalMilestoneCheckErrors += r.milestoneCheckErrors
-		totalMilestoneSaveErrors += r.milestoneSaveErrors
+		prevStats, latestErr := ys.statsRepo.GetLatestStats(ctx, channelID)
+		if latestErr != nil {
+			totalGetLatestErrors++
+		}
+
+		timestampedStats := createTimestampedStats(channelID, member, currentStats, now)
+		workItems = append(workItems, channelStatsWorkItem{
+			channelID:        channelID,
+			member:           member,
+			currentStats:     currentStats,
+			prevStats:        prevStats,
+			timestampedStats: timestampedStats,
+		})
+		statsBatch = append(statsBatch, timestampedStats)
+	}
+
+	if len(statsBatch) > 0 {
+		if err := ys.statsRepo.SaveStatsBatch(ctx, statsBatch); err != nil {
+			totalSaveErrors = len(statsBatch)
+			ys.logger.Warn("Failed to batch save subscriber stats",
+				slog.Int("count", len(statsBatch)),
+				slog.Any("error", err))
+		} else {
+			for _, item := range workItems {
+				r := ys.processChannelStats(ctx, item.channelID, item.member, item.currentStats, item.prevStats, item.timestampedStats, now)
+				totalChanges += r.changesDetected
+				totalMilestones += r.milestonesAchieved
+				totalRecordErrors += r.recordErrors
+				totalMilestoneCheckErrors += r.milestoneCheckErrors
+				totalMilestoneSaveErrors += r.milestoneSaveErrors
+			}
+		}
 	}
 
 	ys.logger.Info("Subscriber tracking completed",
@@ -295,27 +330,21 @@ type channelStatsResult struct {
 	changesDetected      int
 	milestonesAchieved   int
 	recordErrors         int
-	saveErrors           int
-	latestStatsErrors    int
 	milestoneCheckErrors int
 	milestoneSaveErrors  int
 }
 
 // 단일 채널의 통계 처리 (저장, 변경 기록, 마일스톤)
-func (ys *schedulerImpl) processChannelStats(ctx context.Context, channelID string, member *domain.Member, currentStats *ChannelStats, now time.Time) channelStatsResult {
+func (ys *schedulerImpl) processChannelStats(
+	ctx context.Context,
+	channelID string,
+	member *domain.Member,
+	currentStats *ChannelStats,
+	prevStats *domain.TimestampedStats,
+	timestampedStats *domain.TimestampedStats,
+	now time.Time,
+) channelStatsResult {
 	var r channelStatsResult
-
-	prevStats, err := ys.statsRepo.GetLatestStats(ctx, channelID)
-	if err != nil {
-		r.latestStatsErrors++
-	}
-
-	timestampedStats := createTimestampedStats(channelID, member, currentStats, now)
-
-	if err := ys.statsRepo.SaveStats(ctx, timestampedStats); err != nil {
-		r.saveErrors = 1
-		return r
-	}
 
 	if prevStats != nil {
 		subChange, vidChange, viewChange := calculateStatsChanges(prevStats, currentStats)

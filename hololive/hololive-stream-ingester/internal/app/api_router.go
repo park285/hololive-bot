@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 // ProvideAPIServer: 관리자용 HTTP 서버 인스턴스를 생성합니다.
@@ -37,7 +39,8 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	router.Use(gin.Recovery())
-	router.Use(sharedserver.LoggerMiddleware(ctx, logger,
+	router.Use(gzip.Gzip(gzip.DefaultCompression)) // 응답 압축 (HTTP/2 호환)
+	router.Use(middleware.LoggerMiddleware(ctx, logger,
 		"/health",
 		"/metrics",
 	))

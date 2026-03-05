@@ -8,25 +8,10 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
-
-type summaryReviewIssue struct {
-	Field       string `json:"field"`
-	ItemIndex   int    `json:"item_index"`
-	Severity    string `json:"severity"` // critical, warning, info
-	Description string `json:"description"`
-}
-
-type summaryReviewVerdict struct {
-	Approved   bool                 `json:"approved"`
-	Confidence float64              `json:"confidence"`
-	Issues     []summaryReviewIssue `json:"issues"`
-}
-
-type finalOutputReviewResponse struct {
-	Summary string `json:"summary"`
-}
 
 func (s *EventSummarizer) runConsensus(
 	ctx context.Context,
@@ -53,7 +38,7 @@ func (s *EventSummarizer) runConsensus(
 		return primary, false
 	}
 
-	if !needsSummaryAdjudication(verdict, s.consensus.ConfidenceThreshold) {
+	if !consensus.NeedsAdjudication(verdict, s.consensus.ConfidenceThreshold) {
 		s.logger.Info("major event consensus review passed",
 			slog.Bool("approved", verdict.Approved),
 			slog.Float64("confidence", verdict.Confidence))
@@ -90,7 +75,7 @@ func (s *EventSummarizer) reviewSummary(
 	summaryType SummaryType,
 	periodKey string,
 	primary *summaryResponse,
-) (*summaryReviewVerdict, error) {
+) (*consensus.ReviewVerdict, error) {
 	primaryJSON, _ := json.Marshal(primary)
 
 	raw, err := s.reviewer.GenerateJSON(
@@ -103,13 +88,13 @@ func (s *EventSummarizer) reviewSummary(
 		return nil, fmt.Errorf("reviewer llm call: %w", err)
 	}
 
-	var verdict summaryReviewVerdict
+	var verdict consensus.ReviewVerdict
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
 		return nil, fmt.Errorf("parse reviewer verdict: %w", err)
 	}
 
 	for i := range verdict.Issues {
-		verdict.Issues[i].Severity = normalizeSeverity(verdict.Issues[i].Severity)
+		verdict.Issues[i].Severity = consensus.NormalizeSeverity(verdict.Issues[i].Severity)
 	}
 	return &verdict, nil
 }
@@ -120,7 +105,7 @@ func (s *EventSummarizer) adjudicateSummary(
 	summaryType SummaryType,
 	periodKey, searchContext string,
 	primary *summaryResponse,
-	verdict *summaryReviewVerdict,
+	verdict *consensus.ReviewVerdict,
 ) (*summaryResponse, error) {
 	primaryJSON, _ := json.Marshal(primary)
 	verdictJSON, _ := json.Marshal(verdict)
@@ -168,7 +153,7 @@ func (s *EventSummarizer) runFinalOutputReview(
 		return assembled, false
 	}
 
-	var reviewed finalOutputReviewResponse
+	var reviewed consensus.FinalOutputReviewResponse
 	if err := json.Unmarshal([]byte(raw), &reviewed); err != nil {
 		s.logger.Warn("major event final output review parse failed; keep assembled",
 			slog.String("error", err.Error()))
@@ -184,30 +169,6 @@ func (s *EventSummarizer) runFinalOutputReview(
 		slog.Int("before_length", len(trimmed)),
 		slog.Int("after_length", len(reviewedSummary)))
 	return reviewedSummary, true
-}
-
-func needsSummaryAdjudication(verdict *summaryReviewVerdict, confidenceThreshold float64) bool {
-	if verdict == nil {
-		return false
-	}
-	if !verdict.Approved {
-		return true
-	}
-	for _, issue := range verdict.Issues {
-		if issue.Severity == "critical" {
-			return true
-		}
-	}
-	return verdict.Confidence < confidenceThreshold
-}
-
-func normalizeSeverity(severity string) string {
-	switch strings.ToLower(strings.TrimSpace(severity)) {
-	case "critical", "warning", "info":
-		return strings.ToLower(strings.TrimSpace(severity))
-	default:
-		return "info"
-	}
 }
 
 func reviewSummarySystemPrompt() string {
