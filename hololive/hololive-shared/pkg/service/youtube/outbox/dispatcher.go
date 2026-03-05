@@ -92,7 +92,8 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 	d.logger.Info("Outbox dispatcher started",
 		slog.Duration("poll_interval", d.cfg.PollInterval),
-		slog.Int("batch_size", d.cfg.BatchSize))
+		slog.Int("batch_size", d.cfg.BatchSize),
+		slog.Bool("per_room_mode", d.cfg.PerRoomMode))
 
 	for {
 		select {
@@ -152,10 +153,16 @@ func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []doma
 }
 
 func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]map[string]bool) {
+	enqueuedOutboxes := 0
+	noSubscriberOutboxes := 0
+	enqueueFailures := 0
+	totalTargetRooms := 0
+
 	for i := range outboxItems {
 		item := &outboxItems[i]
 		rooms, ok := roomsByChannel[item.ChannelID]
 		if !ok || len(rooms) == 0 {
+			noSubscriberOutboxes++
 			d.markSent(ctx, item.ID)
 			continue
 		}
@@ -166,6 +173,7 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 		}
 
 		if err := d.delivery.EnqueueBatch(ctx, item.ID, roomIDs); err != nil {
+			enqueueFailures++
 			d.logger.Warn("Failed to enqueue room deliveries",
 				slog.Int64("outbox_id", item.ID),
 				slog.Any("error", err))
@@ -173,8 +181,17 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 			continue
 		}
 
+		enqueuedOutboxes++
+		totalTargetRooms += len(roomIDs)
 		d.releaseOutboxLock(ctx, item.ID)
 	}
+
+	d.logger.Info("Outbox per-room enqueue completed",
+		slog.Int("outbox_claimed", len(outboxItems)),
+		slog.Int("outbox_enqueued", enqueuedOutboxes),
+		slog.Int("outbox_no_subscribers", noSubscriberOutboxes),
+		slog.Int("enqueue_failures", enqueueFailures),
+		slog.Int("target_rooms", totalTargetRooms))
 }
 
 func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
@@ -203,10 +220,12 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 
 	successDeliveryIDs := make([]int64, 0, len(rows))
 	touchedOutboxIDs := make([]int64, 0, len(rows))
+	failedDeliveries := 0
 	for i := range rows {
 		row := rows[i]
 		item, ok := outboxByID[row.OutboxID]
 		if !ok {
+			failedDeliveries++
 			_ = d.delivery.MarkFailed(ctx, row.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, "outbox row not found")
 			touchedOutboxIDs = append(touchedOutboxIDs, row.OutboxID)
 			continue
@@ -214,12 +233,23 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 
 		message, formatErr := d.formatMessage(ctx, item)
 		if formatErr != nil {
+			failedDeliveries++
+			d.logger.Warn("Failed to format delivery message",
+				slog.Int64("delivery_id", row.ID),
+				slog.Int64("outbox_id", row.OutboxID),
+				slog.Any("error", formatErr))
 			_ = d.delivery.MarkFailed(ctx, row.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, fmt.Sprintf("format message: %v", formatErr))
 			touchedOutboxIDs = append(touchedOutboxIDs, row.OutboxID)
 			continue
 		}
 
 		if sendErr := d.sender.SendMessage(ctx, row.RoomID, message); sendErr != nil {
+			failedDeliveries++
+			d.logger.Warn("Failed to send per-room delivery",
+				slog.Int64("delivery_id", row.ID),
+				slog.Int64("outbox_id", row.OutboxID),
+				slog.String("room_id", row.RoomID),
+				slog.Any("error", sendErr))
 			_ = d.delivery.MarkFailed(ctx, row.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, fmt.Sprintf("send message: %v", sendErr))
 			touchedOutboxIDs = append(touchedOutboxIDs, row.OutboxID)
 			continue
@@ -233,13 +263,22 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
 	}
 
+	aggregateFailures := 0
 	for _, outboxID := range uniqueInt64s(touchedOutboxIDs) {
 		if err := d.delivery.UpdateOutboxAggregateStatus(ctx, outboxID); err != nil {
+			aggregateFailures++
 			d.logger.Warn("Failed to update outbox aggregate status",
 				slog.Int64("outbox_id", outboxID),
 				slog.Any("error", err))
 		}
 	}
+
+	d.logger.Info("Outbox per-room dispatch completed",
+		slog.Int("delivery_claimed", len(rows)),
+		slog.Int("delivery_sent", len(successDeliveryIDs)),
+		slog.Int("delivery_failed", failedDeliveries),
+		slog.Int("outbox_touched", len(uniqueInt64s(touchedOutboxIDs))),
+		slog.Int("aggregate_failures", aggregateFailures))
 }
 
 func (d *Dispatcher) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (map[int64]domain.YouTubeNotificationOutbox, error) {
