@@ -48,10 +48,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 		errorMsg := b.getErrorMessage(err, commandType)
 		if envelope.ChatID != "" {
 			if sendErr := b.sendError(ctx, envelope.ChatID, errorMsg); sendErr != nil {
-				b.logger.Error("Failed to send command error message",
-					slog.Any("error", sendErr),
-					slog.String("chat_id", envelope.ChatID),
-				)
+				b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", envelope.ChatID))
 			}
 		}
 	}
