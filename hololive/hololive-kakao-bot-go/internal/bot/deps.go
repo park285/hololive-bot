@@ -53,3 +53,125 @@ type Dependencies struct {
 	CommandFactories []command.Factory
 	WorkerPool       *workerpool.Pool
 }
+
+type coreDependencies struct {
+	botSelfUser  string
+	irisBaseURL  string
+	notification config.NotificationConfig
+	logger       *slog.Logger
+}
+
+type messagingDependencies struct {
+	client         iris.Client
+	messageAdapter *adapter.MessageAdapter
+	formatter      *adapter.ResponseFormatter
+}
+
+type dataDependencies struct {
+	cache       cache.Client
+	postgres    database.Client
+	memberRepo  *member.Repository
+	memberCache *member.Cache
+}
+
+type streamDependencies struct {
+	holodex          domain.StreamProvider
+	chzzk            *chzzk.Client
+	twitch           *twitch.Client
+	profiles         *member.ProfileService
+	alarm            domain.AlarmCRUD
+	matcher          *matcher.MemberMatcher
+	membersData      member.DataProvider
+	service          youtube.Service
+	scheduler        youtube.Scheduler
+	youTubeStatsRepo youtube.StatsCommandRepository
+}
+
+type supportDependencies struct {
+	activity   *activity.Logger
+	settings   settings.ReadWriter
+	acl        *acl.Service
+	workerPool *workerpool.Pool
+}
+
+type featureDependencies struct {
+	majorEventRepo   command.MajorEventRepository
+	memberNews       command.MemberNewsService
+	commandFactories []command.Factory
+}
+
+func (d *Dependencies) coreDeps() coreDependencies {
+	if d == nil {
+		return coreDependencies{}
+	}
+	return coreDependencies{
+		botSelfUser:  d.BotSelfUser,
+		irisBaseURL:  d.IrisBaseURL,
+		notification: d.Notification,
+		logger:       d.Logger,
+	}
+}
+
+func (d *Dependencies) messagingDeps() messagingDependencies {
+	if d == nil {
+		return messagingDependencies{}
+	}
+	return messagingDependencies{
+		client:         d.Client,
+		messageAdapter: d.MessageAdapter,
+		formatter:      d.Formatter,
+	}
+}
+
+func (d *Dependencies) dataDeps() dataDependencies {
+	if d == nil {
+		return dataDependencies{}
+	}
+	return dataDependencies{
+		cache:       d.Cache,
+		postgres:    d.Postgres,
+		memberRepo:  d.MemberRepo,
+		memberCache: d.MemberCache,
+	}
+}
+
+func (d *Dependencies) streamDeps() streamDependencies {
+	if d == nil {
+		return streamDependencies{}
+	}
+	return streamDependencies{
+		holodex:          d.Holodex,
+		chzzk:            d.Chzzk,
+		twitch:           d.Twitch,
+		profiles:         d.Profiles,
+		alarm:            d.Alarm,
+		matcher:          d.Matcher,
+		membersData:      d.MembersData,
+		service:          d.Service,
+		scheduler:        d.Scheduler,
+		youTubeStatsRepo: d.YouTubeStatsRepo,
+	}
+}
+
+func (d *Dependencies) supportDeps() supportDependencies {
+	if d == nil {
+		return supportDependencies{}
+	}
+	return supportDependencies{
+		activity:   d.Activity,
+		settings:   d.Settings,
+		acl:        d.ACL,
+		workerPool: d.WorkerPool,
+	}
+}
+
+func (d *Dependencies) featureDeps() featureDependencies {
+	if d == nil {
+		return featureDependencies{}
+	}
+	return featureDependencies{
+		majorEventRepo:   d.MajorEventRepo,
+		memberNews:       d.MemberNews,
+		commandFactories: append([]command.Factory(nil), d.CommandFactories...),
+	}
+}
