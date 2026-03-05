@@ -61,6 +61,11 @@ type botIngestionRuntimeDependencies struct {
 	settings   settings.ReadWriter
 }
 
+// botWebhookRuntimeDependencies: webhook 핸들러 조립에 필요한 최소 의존성 뷰.
+type botWebhookRuntimeDependencies struct {
+	cache cache.Client
+}
+
 // botConfigSubscriberDependencies: 설정 구독 적용에 필요한 최소 의존성 뷰.
 type botConfigSubscriberDependencies struct {
 	cache    cache.Client
@@ -98,6 +103,11 @@ type botAdminRuntimeDependencies struct {
 	settings         settings.ReadWriter
 	acl              *acl.Service
 	templateAdminSvc *template.AdminService
+}
+
+// botServerRuntimeDependencies: HTTP 서버 조립에서 필요한 런타임 의존성 뷰.
+type botServerRuntimeDependencies struct {
+	alarmCRUD domain.AlarmCRUD
 }
 
 type botSettingsApplier struct {
@@ -337,6 +347,15 @@ func buildBotIngestionRuntimeDependencies(deps *bot.Dependencies) botIngestionRu
 	}
 }
 
+func buildBotWebhookRuntimeDependencies(deps *bot.Dependencies) botWebhookRuntimeDependencies {
+	if deps == nil {
+		return botWebhookRuntimeDependencies{}
+	}
+	return botWebhookRuntimeDependencies{
+		cache: deps.Cache,
+	}
+}
+
 func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubscriberDependencies {
 	if deps == nil {
 		return botConfigSubscriberDependencies{}
@@ -406,6 +425,15 @@ func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntime
 	}
 }
 
+func buildBotServerRuntimeDependencies(infra *coreInfrastructure) botServerRuntimeDependencies {
+	if infra == nil {
+		return botServerRuntimeDependencies{}
+	}
+	return botServerRuntimeDependencies{
+		alarmCRUD: infra.alarmCRUD,
+	}
+}
+
 // ProvideTriggerHandler: 내부 트리거 핸들러를 생성하여 제공합니다.
 func ProvideTriggerHandler(
 	majorEventScheduler server.MajorEventScheduler,
@@ -451,6 +479,21 @@ func buildYouTubeComponents(
 	return scraperScheduler, outboxDispatcher
 }
 
+func buildBotWebhookHandler(
+	cfg *config.Config,
+	messageHandler iris.MessageHandler,
+	deps botWebhookRuntimeDependencies,
+	logger *slog.Logger,
+) *iris.WebhookHandler {
+	//nolint:contextcheck // worker goroutine은 task별 request context를 사용하므로 construction-time context 불필요
+	return iris.NewWebhookHandler(cfg.Iris.WebhookToken, messageHandler, deps.cache.GetClient(), logger, iris.WebhookHandlerOptions{
+		WorkerCount:    cfg.Webhook.WorkerCount,
+		QueueSize:      cfg.Webhook.QueueSize,
+		EnqueueTimeout: cfg.Webhook.EnqueueTimeout,
+		HandlerTimeout: cfg.Webhook.HandlerTimeout,
+	})
+}
+
 // buildBotRuntime 는 런타임 구성요소를 조립한다.
 func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *coreInfrastructure) (*BotRuntime, error) {
 	deps := infra.deps
@@ -460,13 +503,8 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		return nil, err
 	}
 
-	//nolint:contextcheck // worker goroutine은 task별 request context를 사용하므로 construction-time context 불필요
-	webhookHandler := iris.NewWebhookHandler(cfg.Iris.WebhookToken, botBot, deps.Cache.GetClient(), logger, iris.WebhookHandlerOptions{
-		WorkerCount:    cfg.Webhook.WorkerCount,
-		QueueSize:      cfg.Webhook.QueueSize,
-		EnqueueTimeout: cfg.Webhook.EnqueueTimeout,
-		HandlerTimeout: cfg.Webhook.HandlerTimeout,
-	})
+	webhookDeps := buildBotWebhookRuntimeDependencies(deps)
+	webhookHandler := buildBotWebhookHandler(cfg, botBot, webhookDeps, logger)
 
 	var (
 		youtubeScheduler  youtube.Scheduler
@@ -516,7 +554,8 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		}
 	}
 
-	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, infra.alarmCRUD, adminServerDeps, logger)
+	serverRuntimeDeps := buildBotServerRuntimeDependencies(infra)
+	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, serverRuntimeDeps.alarmCRUD, adminServerDeps, logger)
 	if err != nil {
 		return nil, err
 	}
