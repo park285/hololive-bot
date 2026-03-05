@@ -6,6 +6,7 @@
 - `PROJECT_MAP.md` — 모듈 인벤토리
 - `NEXT_TODO.md` — 향후 작업
 - `20260305/OUTBOX_MARKSENT_BATCH_PLAN_20260305.md` — outbox markSent 배치화 사전 설계
+- `20260305/OUTBOX_PER_ROOM_DELIVERY_MODEL_PLAN_20260305.md` — outbox per-room 전달 정합성 개선안
 
 ## 전환 (Archived — 하이브리드 아키텍처 확정, 2026-03-01)
 - `GO_TO_RUST_MIGRATION_PROGRESS_20260301.md`
