@@ -439,7 +439,7 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType strin
 				COALESCE(aliases::jsonb, '{}'::jsonb),
 				CAST(? AS text[]),
 				CASE
-					WHEN COALESCE(aliases::jsonb -> ?, '[]'::jsonb) ? ? THEN COALESCE(aliases::jsonb -> ?, '[]'::jsonb)
+					WHEN jsonb_exists(COALESCE(aliases::jsonb -> ?, '[]'::jsonb), CAST(? AS text)) THEN COALESCE(aliases::jsonb -> ?, '[]'::jsonb)
 					ELSE COALESCE(aliases::jsonb -> ?, '[]'::jsonb) || jsonb_build_array(?)
 				END,
 				true
