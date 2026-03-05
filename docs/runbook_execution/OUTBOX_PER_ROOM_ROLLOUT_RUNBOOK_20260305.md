@@ -38,6 +38,9 @@
    - delivery row 생성량
    - 실패율/재시도율
    - DB claim 지연
+   - per-room 로그 필드
+     - `outbox_claimed`, `outbox_enqueued`, `enqueue_failures`, `target_rooms`
+     - `delivery_claimed`, `delivery_sent`, `delivery_failed`, `aggregate_failures`
 3. 이상 없으면 점진 확대
 
 ### Phase D: 전체 전환
