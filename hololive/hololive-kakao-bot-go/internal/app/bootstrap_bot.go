@@ -19,12 +19,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
-type runtimeAlarmSchedulerBuilder func(context.Context, *config.Config, *coreInfrastructure, *slog.Logger) runtimeAlarmScheduler
-
-func defaultRuntimeAlarmSchedulerBuilder(context.Context, *config.Config, *coreInfrastructure, *slog.Logger) runtimeAlarmScheduler {
-	return nil
-}
-
 // InitializeBotDependencies - 봇 의존성을 초기화합니다.
 func InitializeBotDependencies(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*bot.Dependencies, func(), error) {
 	infra, err := initCoreInfrastructure(ctx, cfg, logger)
@@ -209,16 +203,4 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		HttpServer:           botServer,
 		webhookHandlerCloser: webhookHandler,
 	}, nil
-}
-
-func buildRuntimeAlarmScheduler(
-	ctx context.Context,
-	cfg *config.Config,
-	infra *coreInfrastructure,
-	logger *slog.Logger,
-) runtimeAlarmScheduler {
-	if infra == nil || infra.runtimeAlarmSchedulerBuilder == nil {
-		return nil
-	}
-	return infra.runtimeAlarmSchedulerBuilder(ctx, cfg, infra, logger)
 }
