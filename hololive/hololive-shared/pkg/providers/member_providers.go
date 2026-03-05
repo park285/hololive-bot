@@ -60,11 +60,6 @@ func ProvideMemberServiceAdapter(memberCache *member.Cache, logger *slog.Logger)
 	return member.NewMemberServiceAdapter(memberCache, logger)
 }
 
-// ProvideMembersData - 도메인 인터페이스로 바인딩
-func ProvideMembersData(adapterSvc member.DataProvider) member.DataProvider {
-	return adapterSvc
-}
-
 // ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함)
 func ProvideProfileService(
 	ctx context.Context,

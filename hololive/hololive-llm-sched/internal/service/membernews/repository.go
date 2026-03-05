@@ -12,7 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-var _ subscription.Repository = (*Repository)(nil)
+var _ subscription.SubscriptionRepository[SubscribedRoom] = (*Repository)(nil)
 
 const (
 	memberNewsRoomsKey     = "membernews:rooms"
@@ -61,7 +61,7 @@ func NewRepository(postgres database.Client, cacheSvc cache.Client, logger *slog
 
 // Subscribe: 뉴스 알림 구독 등록/갱신.
 func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) error {
-	if r == nil || r.pool == nil {
+	if r.pool == nil {
 		return fmt.Errorf("membernews repository pool is nil")
 	}
 
@@ -83,7 +83,7 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 
 // Unsubscribe: 뉴스 알림 구독 해제.
 func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
-	if r == nil || r.pool == nil {
+	if r.pool == nil {
 		return fmt.Errorf("membernews repository pool is nil")
 	}
 
@@ -98,7 +98,7 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 
 // IsSubscribed: 구독 여부 조회.
 func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
-	if r == nil || r.pool == nil {
+	if r.pool == nil {
 		return false, fmt.Errorf("membernews repository pool is nil")
 	}
 
@@ -112,7 +112,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 
 // ListSubscribedRooms: 구독 방 목록 조회(created_at 오름차순).
 func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]SubscribedRoom, error) {
-	if r == nil || r.pool == nil {
+	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
 

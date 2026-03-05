@@ -12,6 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	alarmsvc "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
@@ -61,7 +62,7 @@ func buildBotServer(
 		}
 		alarmAPI := alarmsvc.NewAPIHandler(alarmCRUD, logger)
 		internalAlarmGroup := botRouter.Group("")
-		internalAlarmGroup.Use(sharedserver.APIKeyAuthMiddleware(cfg.Server.APIKey))
+		internalAlarmGroup.Use(middleware.APIKeyAuthMiddleware(cfg.Server.APIKey))
 		alarmAPI.RegisterInternalRoutes(internalAlarmGroup)
 	}
 

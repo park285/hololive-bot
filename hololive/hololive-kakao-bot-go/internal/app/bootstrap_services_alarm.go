@@ -29,7 +29,7 @@ func initAlarmDependencies(
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	chzzkClient := ProvideChzzkClient(httpClient, chzzkCfg, logger)
 	twitchClient := ProvideTwitchClient(twitchCfg, logger)
-	memberDataProvider := providers.ProvideMembersData(memberServiceAdapter)
+	memberDataProvider := memberServiceAdapter
 
 	resolved := providers.ResolveAlarmAdvanceMinutes(advanceMinutes, scraperProxyEnabled, logger)
 	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, chzzkClient, twitchClient, memberDataProvider, alarmRepository, logger)

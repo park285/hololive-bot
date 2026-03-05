@@ -47,9 +47,6 @@ type SummarizerOption func(*EventSummarizer)
 
 func WithSummarizerConsensus(reviewer, adjudicator LLMClient, cfg SummarizerConsensusConfig) SummarizerOption {
 	return func(s *EventSummarizer) {
-		if s == nil {
-			return
-		}
 		s.reviewer = reviewer
 		s.adjudicator = adjudicator
 		s.consensus = normalizeConsensusConfig(cfg)
@@ -91,7 +88,7 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher WebSearcher, l
 // Summarize: 이벤트 목록을 LLM 구조화 출력으로 요약합니다.
 // LLM 비활성 또는 실패 시 빈 문자열을 반환합니다 (호출부에서 fallback 처리).
 func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
-	if s == nil || s.llm == nil || len(events) == 0 {
+	if s.llm == nil || len(events) == 0 {
 		return ""
 	}
 
@@ -122,7 +119,7 @@ func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEv
 	resp.DiscoveredEvents = filterTrustedDiscoveredEvents(resp.DiscoveredEvents)
 
 	// consensus: primary -> reviewer -> adjudicator(조건부)
-	if s.consensus.Enabled && s.reviewer != nil {
+	if s.consensus.Enabled {
 		consensusResp, consensusUsed := s.runConsensus(ctx, events, summaryType, periodKey, searchContext, resp)
 		if consensusResp != nil {
 			resp = consensusResp

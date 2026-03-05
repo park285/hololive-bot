@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -245,96 +244,3 @@ func validateAPISecretKey(environment, apiKey string) error {
 	return fmt.Errorf("API_SECRET_KEY is required in production")
 }
 
-func parseCommaSeparated(value string) []string {
-	if value == "" {
-		return []string{}
-	}
-	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := stringutil.TrimSpace(part); trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
-
-func parseIntList(value string) []int {
-	if value == "" {
-		return []int{}
-	}
-	parts := strings.Split(value, ",")
-	result := make([]int, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := stringutil.TrimSpace(part); trimmed != "" {
-			if intVal, err := strconv.Atoi(trimmed); err == nil {
-				result = append(result, intVal)
-			}
-		}
-	}
-	return result
-}
-
-func collectAPIKeys(prefix string) []string {
-	keys := make([]string, 0)
-	seen := make(map[string]struct{})
-
-	addKey := func(raw string) {
-		trimmed := stringutil.TrimSpace(raw)
-		if trimmed == "" {
-			return
-		}
-		if _, exists := seen[trimmed]; exists {
-			return
-		}
-		seen[trimmed] = struct{}{}
-		keys = append(keys, trimmed)
-	}
-
-	for i := 1; i <= maxHolodexAPIKeySlots; i++ {
-		envKey := fmt.Sprintf("%s%d", prefix, i)
-		addKey(os.Getenv(envKey))
-	}
-
-	if base := strings.TrimSuffix(prefix, "_"); base != "" {
-		if bulk := os.Getenv(base + "S"); bulk != "" {
-			parts := strings.SplitSeq(bulk, ",")
-			for part := range parts {
-				addKey(part)
-			}
-		}
-	}
-
-	return keys
-}
-
-func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bool) {
-	origins := parseCommaSeparated(rawOrigins)
-	if !isProduction {
-		if len(origins) == 0 {
-			return []string{"http://localhost:5173"}, false
-		}
-		return origins, false
-	}
-
-	filtered := make([]string, 0, len(origins))
-	for _, origin := range origins {
-		if origin == "*" {
-			continue
-		}
-		if strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "https://localhost") {
-			continue
-		}
-		filtered = append(filtered, origin)
-	}
-	return filtered, len(filtered) == 0
-}
-
-// parseBoolWithDefault: 문자열을 bool로 파싱합니다. "true", "1", "yes", "y"는 true.
-func parseBoolWithDefault(value string, def bool) bool {
-	v := strings.ToLower(strings.TrimSpace(value))
-	if v == "" {
-		return def
-	}
-	return v == "true" || v == "1" || v == "yes" || v == "y"
-}

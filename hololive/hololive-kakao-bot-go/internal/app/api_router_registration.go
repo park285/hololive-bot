@@ -2,7 +2,7 @@ package app
 
 import (
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
@@ -33,7 +33,7 @@ func registerAPIRoutes(
 	holoAPI := router.Group("/api/holo")
 
 	// API Key 인증 미들웨어 적용 (apiKey가 빈 문자열이면 인증 건너뜀)
-	holoAPI.Use(sharedserver.APIKeyAuthMiddleware(apiKey))
+	holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
 	registerMemberRoutes(holoAPI, domains.Member)
 	registerAlarmRoutes(holoAPI, domains.Alarm)

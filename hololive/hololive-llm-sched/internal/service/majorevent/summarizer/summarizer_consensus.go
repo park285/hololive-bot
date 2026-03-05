@@ -34,10 +34,6 @@ func (s *EventSummarizer) runConsensus(
 			slog.String("error", err.Error()))
 		return primary, false
 	}
-	if verdict == nil {
-		return primary, false
-	}
-
 	if !consensus.NeedsAdjudication(verdict, s.consensus.ConfidenceThreshold) {
 		s.logger.Info("major event consensus review passed",
 			slog.Bool("approved", verdict.Approved),
@@ -59,10 +55,6 @@ func (s *EventSummarizer) runConsensus(
 			slog.String("error", err.Error()))
 		return primary, false
 	}
-	if adjusted == nil {
-		return primary, false
-	}
-
 	s.logger.Info("major event consensus adjudication applied",
 		slog.Float64("confidence", verdict.Confidence),
 		slog.Int("issues", len(verdict.Issues)))

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 
