@@ -260,6 +260,41 @@ func TestGroupOutboxItems(t *testing.T) {
 	}
 }
 
+func TestCollectOutboxIDs(t *testing.T) {
+	t.Parallel()
+
+	items := []domain.YouTubeNotificationOutbox{
+		{ID: 10},
+		{ID: 20},
+		{ID: 30},
+	}
+
+	got := collectOutboxIDs(items)
+	want := []int64{10, 20, 30}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("collectOutboxIDs() = %#v, want %#v", got, want)
+	}
+
+	if out := collectOutboxIDs(nil); out != nil {
+		t.Fatalf("collectOutboxIDs(nil) = %#v, want nil", out)
+	}
+}
+
+func TestUniqueInt64s(t *testing.T) {
+	t.Parallel()
+
+	in := []int64{1, 2, 1, 3, 2, 4, 4}
+	got := uniqueInt64s(in)
+	want := []int64{1, 2, 3, 4}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("uniqueInt64s() = %#v, want %#v", got, want)
+	}
+
+	if out := uniqueInt64s(nil); out != nil {
+		t.Fatalf("uniqueInt64s(nil) = %#v, want nil", out)
+	}
+}
+
 func TestFormatGroupedMessageErrors(t *testing.T) {
 	t.Parallel()
 
