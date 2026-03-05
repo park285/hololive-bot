@@ -2,8 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
-  - configmap-app.yaml
-  # secret-app.yaml: git 외부 관리 (kubectl create secret으로 직접 적용)
+  - configmap-common.yaml
+  - configmap-bot.yaml
+  - configmap-dispatcher.yaml
+  - configmap-llm.yaml
+  # secret-*.yaml: git 외부 관리 (kubectl create secret으로 직접 적용)
   - postgres-external-service.yaml
   - host-external-services.yaml
   - valkey-deployment.yaml

@@ -57,7 +57,7 @@ func NewCollector(endpoints []ServiceEndpoint, enableOTel bool) *Collector {
 		transport = otelhttp.NewTransport(http.DefaultTransport)
 	}
 	return &Collector{
-		httpClient: &http.Client{ // nolint:exhaustruct // Timeout/Transport만 필요
+		httpClient: &http.Client{
 			Timeout:   2 * time.Second,
 			Transport: transport,
 		},
@@ -155,14 +155,8 @@ func (c *Collector) getCachedStats() *SystemStats {
 }
 
 func cloneSystemStats(src *SystemStats) *SystemStats {
-	if src == nil {
-		return nil
-	}
-
 	cloned := *src
-	if len(src.ServiceGoroutines) > 0 {
-		cloned.ServiceGoroutines = append([]ServiceGoroutines(nil), src.ServiceGoroutines...)
-	}
+	cloned.ServiceGoroutines = append([]ServiceGoroutines(nil), src.ServiceGoroutines...)
 	return &cloned
 }
 
@@ -216,9 +210,9 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 	if err != nil {
 		return 0, false
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if err := httputil.CheckStatus(resp); err != nil || resp.StatusCode != http.StatusOK {
+	if err := httputil.CheckStatus(resp); err != nil {
+		_ = resp.Body.Close()
 		return 0, false
 	}
 

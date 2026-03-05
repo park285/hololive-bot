@@ -325,13 +325,11 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	defer func() { _ = resp.Body.Close() }()
 
 	if err := httputil.CheckStatus(resp); err != nil {
-		return fmt.Errorf("alarm-dispatcher: %s: %w", path, err)
+		return fmt.Errorf("alarm-dispatcher: %s: check status: %w", path, err)
 	}
 
 	if out == nil {
-		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-			return fmt.Errorf("alarm-dispatcher: %s: drain response: %w", path, err)
-		}
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil
 	}
 

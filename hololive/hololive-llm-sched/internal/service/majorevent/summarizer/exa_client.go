@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -28,7 +27,7 @@ type ExaMCPClient struct {
 // NewExaMCPClient: Exa MCP 클라이언트를 생성합니다.
 func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *slog.Logger) *ExaMCPClient {
 	if httpClient == nil {
-		httpClient = httputil.NewClient(30 * time.Second)
+		httpClient = httputil.DefaultClient()
 	}
 
 	return &ExaMCPClient{
@@ -77,17 +76,13 @@ func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]SearchResult
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if statusErr := httputil.CheckStatus(resp); statusErr != nil {
-		return nil, fmt.Errorf("exa request status: %w", statusErr)
+	if checkErr := httputil.CheckStatus(resp); checkErr != nil {
+		return nil, fmt.Errorf("exa request: %w", checkErr)
 	}
 
 	respBody, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read exa response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("exa mcp http %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	results, err := parseExaResponse(respBody)

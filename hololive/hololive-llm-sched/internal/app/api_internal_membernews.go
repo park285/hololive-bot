@@ -10,13 +10,9 @@ import (
 	membernewssvc "github.com/kapu/hololive-llm-sched/internal/service/membernews"
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
-
-type memberNewsSubscribeRequest struct {
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
-}
 
 type memberNewsDigestRequest struct {
 	RoomID string `json:"room_id"`
@@ -29,7 +25,7 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 	}
 
 	rg := router.Group(membernewscontracts.BasePath)
-	rg.Use(sharedserver.APIKeyAuthMiddleware(apiKey))
+	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
 	rg.GET(membernewscontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
@@ -44,11 +40,11 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 			return
 		}
 
-		c.JSON(http.StatusOK, subscriptionStatusResponse{Subscribed: subscribed})
+		c.JSON(http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
 	})
 
 	rg.POST(membernewscontracts.SubscriptionsRoute, func(c *gin.Context) {
-		var req memberNewsSubscribeRequest
+		var req subscription.SubscribeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 			return

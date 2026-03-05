@@ -40,6 +40,11 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-func newError(code ErrorCode, message string, err error) *Error {
+// NewError: exported 생성자 (외부 모듈에서 사용 가능)
+func NewError(code ErrorCode, message string, err error) *Error {
 	return &Error{Code: code, Message: message, Err: err}
+}
+
+func newError(code ErrorCode, message string, err error) *Error {
+	return NewError(code, message, err)
 }
