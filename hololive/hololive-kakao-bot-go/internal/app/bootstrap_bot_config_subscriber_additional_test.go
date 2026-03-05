@@ -234,7 +234,9 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 		return calls >= 1 && last == 30
 	}, 2*time.Second, 50*time.Millisecond)
 
-	assert.GreaterOrEqual(t, settingsSvc.calls(), 1)
+	require.Eventually(t, func() bool {
+		return settingsSvc.calls() >= 1
+	}, 2*time.Second, 50*time.Millisecond)
 	assert.Equal(t, 5, settingsSvc.Get().AlarmAdvanceMinutes)
 
 	cancel()
