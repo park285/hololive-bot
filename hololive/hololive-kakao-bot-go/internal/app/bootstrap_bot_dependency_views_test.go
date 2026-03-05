@@ -5,12 +5,17 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
@@ -41,6 +46,17 @@ type stubYouTubeScheduler struct{}
 
 func (s *stubYouTubeScheduler) Start(ctx context.Context) {}
 func (s *stubYouTubeScheduler) Stop()                     {}
+
+type stubYouTubeService struct{}
+
+func (s *stubYouTubeService) SetScraperProxyEnabled(enabled bool) bool { return enabled }
+func (s *stubYouTubeService) ScraperProxyEnabled() bool                { return false }
+func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
+	return nil, nil
+}
+func (s *stubYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
+	return nil, nil
+}
 
 type stubSettingsReadWriter struct{}
 
@@ -117,6 +133,93 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 	})
 }
 
+func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
+	t.Run("nil infra", func(t *testing.T) {
+		view := buildBotAdminRuntimeDependencies(nil)
+		if view.cache != nil || view.postgres != nil || view.memberRepo != nil || view.memberCache != nil ||
+			view.profiles != nil || view.alarmCRUD != nil || view.holodexService != nil || view.youtubeService != nil ||
+			view.statsRepo != nil || view.activityLogger != nil || view.settings != nil || view.acl != nil || view.templateAdminSvc != nil {
+			t.Fatal("nil infra must yield zero-value admin dependency view")
+		}
+	})
+
+	t.Run("maps required fields only", func(t *testing.T) {
+		cacheSvc := &cache.Service{}
+		postgresSvc := &database.PostgresService{}
+		memberRepo := &member.Repository{}
+		memberCache := &member.Cache{}
+		profiles := &member.ProfileService{}
+		holodexSvc := &holodex.Service{}
+		youtubeSvc := &stubYouTubeService{}
+		statsRepo := &youtube.StatsRepository{}
+		activityLogger := &activity.Logger{}
+		settingsSvc := &stubSettingsReadWriter{}
+		aclSvc := &acl.Service{}
+		templateAdminSvc := &template.AdminService{}
+		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+
+		infra := &coreInfrastructure{
+			deps: &bot.Dependencies{
+				Cache:       cacheSvc,
+				Postgres:    postgresSvc,
+				MemberRepo:  memberRepo,
+				MemberCache: memberCache,
+				Profiles:    profiles,
+				Service:     youtubeSvc,
+				Activity:    activityLogger,
+				Settings:    settingsSvc,
+				ACL:         aclSvc,
+			},
+			alarmCRUD:        alarmCRUD,
+			holodexService:   holodexSvc,
+			ytStack:          &providers.YouTubeStack{StatsRepo: statsRepo},
+			templateAdminSvc: templateAdminSvc,
+		}
+
+		view := buildBotAdminRuntimeDependencies(infra)
+		if view.cache != cacheSvc {
+			t.Fatal("cache mapping mismatch")
+		}
+		if view.postgres != postgresSvc {
+			t.Fatal("postgres mapping mismatch")
+		}
+		if view.memberRepo != memberRepo {
+			t.Fatal("member repo mapping mismatch")
+		}
+		if view.memberCache != memberCache {
+			t.Fatal("member cache mapping mismatch")
+		}
+		if view.profiles != profiles {
+			t.Fatal("profiles mapping mismatch")
+		}
+		if view.alarmCRUD != alarmCRUD {
+			t.Fatal("alarm CRUD mapping mismatch")
+		}
+		if view.holodexService != holodexSvc {
+			t.Fatal("holodex service mapping mismatch")
+		}
+		if view.youtubeService != youtubeSvc {
+			t.Fatal("youtube service mapping mismatch")
+		}
+		if view.statsRepo != statsRepo {
+			t.Fatal("stats repo mapping mismatch")
+		}
+		if view.activityLogger != activityLogger {
+			t.Fatal("activity logger mapping mismatch")
+		}
+		if view.settings != settingsSvc {
+			t.Fatal("settings mapping mismatch")
+		}
+		if view.acl != aclSvc {
+			t.Fatal("acl mapping mismatch")
+		}
+		if view.templateAdminSvc != templateAdminSvc {
+			t.Fatal("template admin service mapping mismatch")
+		}
+	})
+}
+
 var _ member.DataProvider = (*stubMemberDataProvider)(nil)
 var _ youtube.Scheduler = (*stubYouTubeScheduler)(nil)
+var _ youtube.Service = (*stubYouTubeService)(nil)
 var _ settings.ReadWriter = (*stubSettingsReadWriter)(nil)
