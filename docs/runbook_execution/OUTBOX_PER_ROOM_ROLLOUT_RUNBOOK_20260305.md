@@ -98,3 +98,4 @@ cron 환경 변수(선택):
 - [ ] canary 1차 성공
 - [ ] 전체 전환 성공
 - [ ] 롤백 절차 리허설 완료
+- [ ] outbox cleanup에서 stale FAILED row 정리 동작 확인 (`COALESCE(sent_at, created_at)`)
