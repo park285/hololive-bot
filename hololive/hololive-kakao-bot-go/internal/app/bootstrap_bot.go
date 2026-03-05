@@ -21,6 +21,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -28,6 +29,8 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	authsvc "github.com/kapu/hololive-kakao-bot-go/internal/service/auth"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/system"
 	triggerclient "github.com/kapu/hololive-kakao-bot-go/internal/service/trigger"
@@ -61,6 +64,23 @@ type botIngestionRuntimeDependencies struct {
 type botConfigSubscriberDependencies struct {
 	cache    cache.Client
 	settings settings.ReadWriter
+}
+
+// botAdminRuntimeDependencies: admin API 조립에 필요한 최소 의존성 뷰.
+type botAdminRuntimeDependencies struct {
+	cache            cache.Client
+	postgres         database.Client
+	memberRepo       *member.Repository
+	memberCache      *member.Cache
+	profiles         *member.ProfileService
+	alarmCRUD        domain.AlarmCRUD
+	holodexService   *holodex.Service
+	youtubeService   youtube.Service
+	statsRepo        youtube.StatsDashboardRepository
+	activityLogger   *activity.Logger
+	settings         settings.ReadWriter
+	acl              *acl.Service
+	templateAdminSvc *template.AdminService
 }
 
 type botSettingsApplier struct {
@@ -146,25 +166,23 @@ func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedserv
 func buildBotAdminServerDependencies(
 	ctx context.Context,
 	cfg *config.Config,
-	infra *coreInfrastructure,
+	deps botAdminRuntimeDependencies,
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
 ) (*botAdminServerDependencies, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("build bot admin server dependencies: config is nil")
 	}
-	if infra == nil || infra.deps == nil {
-		return nil, fmt.Errorf("build bot admin server dependencies: infra dependencies are nil")
+	if deps.cache == nil || deps.postgres == nil {
+		return nil, fmt.Errorf("build bot admin server dependencies: admin dependency view is incomplete")
 	}
-
-	deps := infra.deps
 
 	authCfg := authsvc.DefaultConfig()
 	authCfg.AutoPrepareSchema = cfg.Postgres.AutoPrepareSchema
 	authService, err := authsvc.NewService(
 		ctx,
-		deps.Postgres.GetGormDB(),
-		deps.Cache,
+		deps.postgres.GetGormDB(),
+		deps.cache,
 		logger,
 		authCfg,
 	)
@@ -173,10 +191,10 @@ func buildBotAdminServerDependencies(
 	}
 
 	localSettingsApplier := sharedserver.NewLocalSettingsApplier(
-		deps.Service,
-		infra.holodexService,
+		deps.youtubeService,
+		deps.holodexService,
 		scraperScheduler,
-		infra.alarmCRUD,
+		deps.alarmCRUD,
 	)
 	settingsApplier := newBotSettingsApplier(localSettingsApplier, nil, logger)
 
@@ -199,27 +217,22 @@ func buildBotAdminServerDependencies(
 		cfg.Telemetry.Enabled,
 	)
 
-	var statsRepo youtube.StatsDashboardRepository
-	if infra.ytStack != nil {
-		statsRepo = infra.ytStack.StatsRepo
-	}
-
 	domainHandlers := server.NewAPIHandler(
-		deps.MemberRepo,
-		deps.MemberCache,
-		deps.Cache,
-		deps.Profiles,
-		infra.alarmCRUD,
-		infra.holodexService,
-		deps.Service,
+		deps.memberRepo,
+		deps.memberCache,
+		deps.cache,
+		deps.profiles,
+		deps.alarmCRUD,
+		deps.holodexService,
+		deps.youtubeService,
 		scraperScheduler,
-		statsRepo,
-		deps.Activity,
-		deps.Settings,
+		deps.statsRepo,
+		deps.activityLogger,
+		deps.settings,
 		settingsApplier,
-		deps.ACL,
+		deps.acl,
 		systemCollector,
-		infra.templateAdminSvc,
+		deps.templateAdminSvc,
 		majorEventTriggerClient,
 		majorEventTriggerClient,
 		logger,
@@ -313,6 +326,33 @@ func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubsc
 	return botConfigSubscriberDependencies{
 		cache:    deps.Cache,
 		settings: deps.Settings,
+	}
+}
+
+func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntimeDependencies {
+	if infra == nil || infra.deps == nil {
+		return botAdminRuntimeDependencies{}
+	}
+
+	var statsRepo youtube.StatsDashboardRepository
+	if infra.ytStack != nil {
+		statsRepo = infra.ytStack.StatsRepo
+	}
+
+	return botAdminRuntimeDependencies{
+		cache:            infra.deps.Cache,
+		postgres:         infra.deps.Postgres,
+		memberRepo:       infra.deps.MemberRepo,
+		memberCache:      infra.deps.MemberCache,
+		profiles:         infra.deps.Profiles,
+		alarmCRUD:        infra.alarmCRUD,
+		holodexService:   infra.holodexService,
+		youtubeService:   infra.deps.Service,
+		statsRepo:        statsRepo,
+		activityLogger:   infra.deps.Activity,
+		settings:         infra.deps.Settings,
+		acl:              infra.deps.ACL,
+		templateAdminSvc: infra.templateAdminSvc,
 	}
 }
 
@@ -417,7 +457,8 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 
 	var adminServerDeps *botAdminServerDependencies
 	if cfg.Bot.AdminEnabled {
-		adminServerDeps, err = buildBotAdminServerDependencies(ctx, cfg, infra, scraperScheduler, logger)
+		adminDepsView := buildBotAdminRuntimeDependencies(infra)
+		adminServerDeps, err = buildBotAdminServerDependencies(ctx, cfg, adminDepsView, scraperScheduler, logger)
 		if err != nil {
 			return nil, fmt.Errorf("build bot runtime: admin server dependencies: %w", err)
 		}
