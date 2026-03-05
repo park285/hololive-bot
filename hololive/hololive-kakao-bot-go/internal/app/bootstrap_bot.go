@@ -66,6 +66,13 @@ type botConfigSubscriberDependencies struct {
 	settings settings.ReadWriter
 }
 
+// botConfigSubscriberRuntimeDependencies: 설정 적용 핸들러가 참조하는 런타임 의존성 뷰.
+type botConfigSubscriberRuntimeDependencies struct {
+	youtubeService youtube.Service
+	holodexService *holodex.Service
+	alarmCRUD      domain.AlarmCRUD
+}
+
 // botAdminRuntimeDependencies: admin API 조립에 필요한 최소 의존성 뷰.
 type botAdminRuntimeDependencies struct {
 	cache            cache.Client
@@ -329,6 +336,17 @@ func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubsc
 	}
 }
 
+func buildBotConfigSubscriberRuntimeDependencies(infra *coreInfrastructure) botConfigSubscriberRuntimeDependencies {
+	if infra == nil || infra.deps == nil {
+		return botConfigSubscriberRuntimeDependencies{}
+	}
+	return botConfigSubscriberRuntimeDependencies{
+		youtubeService: infra.deps.Service,
+		holodexService: infra.holodexService,
+		alarmCRUD:      infra.alarmCRUD,
+	}
+}
+
 func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntimeDependencies {
 	if infra == nil || infra.deps == nil {
 		return botAdminRuntimeDependencies{}
@@ -452,7 +470,8 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 	}
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
-	configSubscriber := buildBotConfigSubscriber(buildBotConfigSubscriberDependencies(deps), infra, scraperScheduler, logger)
+	configSubscriberDeps := buildBotConfigSubscriberRuntimeDependencies(infra)
+	configSubscriber := buildBotConfigSubscriber(buildBotConfigSubscriberDependencies(deps), configSubscriberDeps, scraperScheduler, logger)
 	alarmScheduler = buildRuntimeAlarmScheduler(ctx, cfg, infra, logger)
 
 	var adminServerDeps *botAdminServerDependencies
@@ -503,13 +522,13 @@ func buildRuntimeAlarmScheduler(
 // scraper_proxy / alarm_advance_minutes 두 가지 설정 변경을 수신하여 적용합니다.
 func buildBotConfigSubscriber(
 	deps botConfigSubscriberDependencies,
-	infra *coreInfrastructure,
+	runtimeDeps botConfigSubscriberRuntimeDependencies,
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
-			applyScraperProxyToggle(payload.Enabled, ProvideYouTubeService(infra.ytStack), infra.holodexService, scraperScheduler, logger)
+			applyScraperProxyToggle(payload.Enabled, runtimeDeps.youtubeService, runtimeDeps.holodexService, scraperScheduler, logger)
 			// 설정 파일에도 반영
 			current := deps.settings.Get()
 			current.ScraperProxyEnabled = payload.Enabled
@@ -518,7 +537,7 @@ func buildBotConfigSubscriber(
 			}
 		},
 		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
-			targets := infra.alarmCRUD.UpdateAlarmAdvanceMinutes(payload.Minutes)
+			targets := runtimeDeps.alarmCRUD.UpdateAlarmAdvanceMinutes(payload.Minutes)
 			logger.Info("Applied alarm advance minutes via pub/sub",
 				slog.Int("minutes", payload.Minutes),
 				slog.Any("targets", targets),
