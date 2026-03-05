@@ -2,6 +2,8 @@ package app
 
 import (
 	"log/slog"
+	"os"
+	"strconv"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/iris"
@@ -49,8 +51,22 @@ func buildStreamIngesterYouTubeComponents(
 		irisClient,
 		templateRenderer,
 		logger,
-		outbox.DefaultConfig(),
+		outboxConfigFromEnv(),
 	)
 
 	return scraperScheduler, outboxDispatcher
+}
+
+func outboxConfigFromEnv() outbox.Config {
+	cfg := outbox.DefaultConfig()
+	raw := os.Getenv("YOUTUBE_OUTBOX_PER_ROOM_MODE")
+	if raw == "" {
+		return cfg
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return cfg
+	}
+	cfg.PerRoomMode = enabled
+	return cfg
 }
