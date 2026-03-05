@@ -588,6 +588,80 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 	}
 }
 
+func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+
+	ctx := context.Background()
+	db := setupTestDB(t)
+	cleanupOutbox(t, db)
+
+	sender := &fakeSender{}
+	cacheService := setupCacheService(t)
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	cfg := outbox.Config{
+		BatchSize:      10,
+		LockTimeout:    1 * time.Minute,
+		PollInterval:   100 * time.Millisecond,
+		MaxRetries:     3,
+		RetryBackoff:   1 * time.Second,
+		CleanupAfter:   1 * time.Hour,
+		CleanupEnabled: false,
+	}
+
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+
+	oldFailed := &domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewVideo,
+		ChannelID:     "UCcleanup_old_failed",
+		ContentID:     "test_cleanup_old_failed_" + time.Now().Format("150405"),
+		Payload:       `{"video_id":"cleanup_old_failed","title":"cleanup old failed"}`,
+		Status:        domain.OutboxStatusFailed,
+		AttemptCount:  3,
+		NextAttemptAt: time.Now().Add(-24 * time.Hour),
+		CreatedAt:     time.Now().Add(-48 * time.Hour),
+		Error:         "old failed",
+	}
+	recentFailed := &domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewVideo,
+		ChannelID:     "UCcleanup_recent_failed",
+		ContentID:     "test_cleanup_recent_failed_" + time.Now().Format("150405"),
+		Payload:       `{"video_id":"cleanup_recent_failed","title":"cleanup recent failed"}`,
+		Status:        domain.OutboxStatusFailed,
+		AttemptCount:  1,
+		NextAttemptAt: time.Now(),
+		CreatedAt:     time.Now(),
+		Error:         "recent failed",
+	}
+
+	if err := db.Create(oldFailed).Error; err != nil {
+		t.Fatalf("Failed to create old failed outbox item: %v", err)
+	}
+	if err := db.Create(recentFailed).Error; err != nil {
+		t.Fatalf("Failed to create recent failed outbox item: %v", err)
+	}
+
+	dispatcher.CleanupForTest(ctx)
+
+	var oldCount int64
+	if err := db.Model(&domain.YouTubeNotificationOutbox{}).Where("id = ?", oldFailed.ID).Count(&oldCount).Error; err != nil {
+		t.Fatalf("Failed to count old failed item: %v", err)
+	}
+	if oldCount != 0 {
+		t.Fatalf("Expected old failed item to be deleted, still exists")
+	}
+
+	var recentCount int64
+	if err := db.Model(&domain.YouTubeNotificationOutbox{}).Where("id = ?", recentFailed.ID).Count(&recentCount).Error; err != nil {
+		t.Fatalf("Failed to count recent failed item: %v", err)
+	}
+	if recentCount != 1 {
+		t.Fatalf("Expected recent failed item to remain, count=%d", recentCount)
+	}
+}
+
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
