@@ -1,11 +1,7 @@
 package summarizer
 
 import (
-	"io"
-	"log/slog"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 )
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
+var testLogger = sharedlogging.NewLogger

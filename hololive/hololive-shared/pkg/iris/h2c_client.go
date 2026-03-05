@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
@@ -82,14 +83,14 @@ func NewH2CClient(baseURL, botToken string, logger *slog.Logger, options ...H2CC
 		ResponseHeaderTimeout: opt.ResponseHeaderTimeout,
 	}
 
+	client := httputil.NewClient(opt.Timeout)
+	client.Transport = transport
+
 	return &H2CClient{
 		baseURL:  baseURL,
 		botToken: botToken,
-		client: &http.Client{
-			Transport: transport,
-			Timeout:   opt.Timeout,
-		},
-		logger: logger,
+		client:   client,
+		logger:   logger,
 	}
 }
 
@@ -140,13 +141,12 @@ func (c *H2CClient) GetConfig(ctx context.Context) (*Config, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body := readBodyForError(resp.Body)
-		return nil, fmt.Errorf("get /config: unexpected status %d: %s", resp.StatusCode, body)
+	if err := httputil.CheckStatus(resp); err != nil {
+		return nil, fmt.Errorf("get /config: %w", err)
 	}
 
 	var cfg Config
-	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+	if err := httputil.DecodeJSON(resp, &cfg); err != nil {
 		return nil, fmt.Errorf("decode /config response: %w", err)
 	}
 	return &cfg, nil
@@ -185,17 +185,18 @@ func (c *H2CClient) postJSON(ctx context.Context, path string, body any, out any
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bodyText := readBodyForError(resp.Body)
-		return fmt.Errorf("post %s: unexpected status %d: %s", path, resp.StatusCode, bodyText)
+	if err := httputil.CheckStatus(resp); err != nil {
+		return fmt.Errorf("post %s: %w", path, err)
 	}
 
 	if out == nil {
-		_, _ = io.Copy(io.Discard, resp.Body)
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			return fmt.Errorf("drain %s response body: %w", path, err)
+		}
 		return nil
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := httputil.DecodeJSON(resp, out); err != nil {
 		return fmt.Errorf("decode %s response: %w", path, err)
 	}
 	return nil
@@ -218,13 +219,4 @@ func (c *H2CClient) newRequest(ctx context.Context, method, path string, body io
 	}
 
 	return req, nil
-}
-
-func readBodyForError(r io.Reader) string {
-	const limit = 4096
-	b, err := io.ReadAll(io.LimitReader(r, limit))
-	if err != nil {
-		return "read_body_failed"
-	}
-	return strings.TrimSpace(string(b))
 }

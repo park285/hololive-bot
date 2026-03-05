@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hololive-dispatcher-config
+  namespace: hololive
+data:
+  # --- Iris (dispatcher-go) ---
+  IRIS_BASE_URL: "http://host-external:3000"
+
+  # --- Dispatch queue ---
+  ALARM_DISPATCH_QUEUE_KEY: "alarm:dispatch:queue"
+  ALARM_DISPATCH_MAX_BATCH: "50"

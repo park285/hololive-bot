@@ -13,6 +13,7 @@ import (
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 type Client struct {
@@ -24,11 +25,9 @@ type Client struct {
 func New(baseURL, apiKey string) *Client {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	return &Client{
-		baseURL: baseURL,
-		apiKey:  strings.TrimSpace(apiKey),
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
-		},
+		baseURL:    baseURL,
+		apiKey:     strings.TrimSpace(apiKey),
+		httpClient: httputil.NewClient(60 * time.Second),
 	}
 }
 
@@ -81,20 +80,24 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 
 	if resp.StatusCode == http.StatusNotFound {
 		var parsed errorResponse
-		_ = json.NewDecoder(resp.Body).Decode(&parsed)
+		if err := httputil.DecodeJSON(resp, &parsed); err != nil && !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("decode not found response: %w", err)
+		}
 		if strings.EqualFold(strings.TrimSpace(parsed.Error), "no_subscribed_members") {
 			return nil, membernewscontracts.ErrNoSubscribedMembers
 		}
+		if msg := strings.TrimSpace(parsed.Error); msg != "" {
+			return nil, fmt.Errorf("status %d: %s", resp.StatusCode, msg)
+		}
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		const maxBodyLen = 4096
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyLen))
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	if err := httputil.CheckStatus(resp); err != nil {
+		return nil, fmt.Errorf("check status: %w", err)
 	}
 
 	var digest membernewscontracts.Digest
-	if err := json.NewDecoder(resp.Body).Decode(&digest); err != nil {
+	if err := httputil.DecodeJSON(resp, &digest); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &digest, nil
@@ -127,13 +130,13 @@ func (c *Client) UnsubscribeRoom(ctx context.Context, roomID string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		const maxBodyLen = 4096
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyLen))
-		return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	if err := httputil.CheckStatus(resp); err != nil {
+		return fmt.Errorf("check status: %w", err)
 	}
 
-	_, _ = io.Copy(io.Discard, resp.Body)
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		return fmt.Errorf("drain response body: %w", err)
+	}
 	return nil
 }
 
@@ -159,14 +162,12 @@ func (c *Client) IsRoomSubscribed(ctx context.Context, roomID string) (bool, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		const maxBodyLen = 4096
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyLen))
-		return false, fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	if err := httputil.CheckStatus(resp); err != nil {
+		return false, fmt.Errorf("check status: %w", err)
 	}
 
 	var parsed subscriptionStatusResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+	if err := httputil.DecodeJSON(resp, &parsed); err != nil {
 		return false, fmt.Errorf("decode response: %w", err)
 	}
 	return parsed.Subscribed, nil
@@ -202,13 +203,13 @@ func (c *Client) postSubscription(ctx context.Context, payload subscribeRequest)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		const maxBodyLen = 4096
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyLen))
-		return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	if err := httputil.CheckStatus(resp); err != nil {
+		return fmt.Errorf("check status: %w", err)
 	}
 
-	_, _ = io.Copy(io.Discard, resp.Body)
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		return fmt.Errorf("drain response body: %w", err)
+	}
 	return nil
 }
 

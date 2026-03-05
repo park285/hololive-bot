@@ -2,6 +2,7 @@ package logging
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 
 	internallogging "github.com/kapu/hololive-shared/internal/logging"
@@ -23,6 +24,16 @@ func NewLoggerWithLevel(level string) *slog.Logger {
 		return internallogging.NewLogger()
 	}
 	return logger
+}
+
+// NewTestLogger: 테스트용 로거를 생성합니다. 기본 출력은 버립니다.
+func NewTestLogger() *slog.Logger {
+	return internallogging.NewTestLogger()
+}
+
+// NewTestLoggerWithOutput: 테스트용 로거를 생성합니다. 제공된 Writer로 로그를 출력합니다.
+func NewTestLoggerWithOutput(w io.Writer) *slog.Logger {
+	return internallogging.NewTestLoggerWithOutput(w)
 }
 
 // EnableFileLogging: 파일 로깅을 활성화하고, 로그 로테이션이 적용된 로거를 반환합니다.

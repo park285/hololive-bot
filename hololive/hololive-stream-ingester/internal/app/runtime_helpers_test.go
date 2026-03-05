@@ -2,12 +2,11 @@ package app
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
@@ -43,9 +42,7 @@ type fakeScheduler struct {
 func (f *fakeScheduler) Start(context.Context) { f.startCalls++ }
 func (f *fakeScheduler) Stop()                 { f.stopCalls++ }
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+var testLogger = sharedlogging.NewLogger
 
 func TestProvideAPIAddr(t *testing.T) {
 	t.Parallel()

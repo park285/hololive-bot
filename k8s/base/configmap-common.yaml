@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hololive-common-config
+  namespace: hololive
+data:
+  # --- DB (kakao-bot, llm-sched, stream-ingester) ---
+  POSTGRES_HOST: "holo-postgres"
+  POSTGRES_PORT: "5433"
+  POSTGRES_DB: "hololive"
+  POSTGRES_SSLMODE: "require"
+  POSTGRES_QUERY_EXEC_MODE: "exec"
+  POSTGRES_AUTO_PREPARE_SCHEMA: "false"
+  POSTGRES_SOCKET_PATH: ""
+
+  # --- Cache (kakao-bot, llm-sched, stream-ingester, dispatcher-go) ---
+  CACHE_HOST: "valkey-cache"
+  CACHE_PORT: "6379"
+  CACHE_SOCKET_PATH: ""
+
+  # --- Observability (all services) ---
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_INSECURE: "false"
+  OTEL_SAMPLE_RATE: "0.1"

@@ -46,7 +46,7 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	var req aliasRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -126,7 +126,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -187,7 +187,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -244,7 +244,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -307,7 +307,8 @@ func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	var req domain.Member
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 

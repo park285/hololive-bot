@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -42,12 +43,10 @@ func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 		logger = slog.Default()
 	}
 	return &Client{
-		baseURL: baseURL,
-		apiKey:  strings.TrimSpace(apiKey),
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		logger: logger,
+		baseURL:    baseURL,
+		apiKey:     strings.TrimSpace(apiKey),
+		httpClient: httputil.NewClient(10 * time.Second),
+		logger:     logger,
 	}
 }
 
@@ -325,18 +324,18 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		const maxBodyLen = 4096
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyLen))
-		return fmt.Errorf("alarm-dispatcher: %s: status %d: %s", path, resp.StatusCode, strings.TrimSpace(string(b)))
+	if err := httputil.CheckStatus(resp); err != nil {
+		return fmt.Errorf("alarm-dispatcher: %s: %w", path, err)
 	}
 
 	if out == nil {
-		_, _ = io.Copy(io.Discard, resp.Body)
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			return fmt.Errorf("alarm-dispatcher: %s: drain response: %w", path, err)
+		}
 		return nil
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := httputil.DecodeJSON(resp, out); err != nil {
 		return fmt.Errorf("alarm-dispatcher: %s: decode response: %w", path, err)
 	}
 	return nil

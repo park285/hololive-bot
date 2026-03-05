@@ -5,11 +5,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
 const (
-	// APIKeyHeader: API 인증에 사용되는 HTTP 헤더 이름
-	APIKeyHeader = "X-API-Key" //nolint:gosec // G101: 헤더 이름일 뿐 실제 credentials가 아님
+	// APIKeyHeader: 하위 호환성을 위한 재수출. 실제 정의는 contracts/common 패키지에 있습니다.
+	APIKeyHeader = common.APIKeyHeader //nolint:gosec // G101: 헤더 이름일 뿐 실제 credentials가 아님
 )
 
 // APIKeyAuthMiddleware: X-API-Key 헤더를 검증하는 인증 미들웨어를 반환합니다.

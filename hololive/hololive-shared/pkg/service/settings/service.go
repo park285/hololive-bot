@@ -35,7 +35,7 @@ func ensureParentDir(filePath string) error {
 		return nil
 	}
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create settings directory: %w", err)
 	}
 	return nil

@@ -92,56 +92,88 @@ func ResolveStatsPeriod(now time.Time, raw string) (time.Time, string) {
 		normalized = "days:10"
 	}
 
-	switch normalized {
-	case "today":
-		return now.Add(-24 * time.Hour), "오늘"
-	case "week":
-		return now.AddDate(0, 0, -7), "최근 7일"
-	case "month":
-		return now.AddDate(0, -1, 0), "최근 1개월"
-	case "quarter":
-		return now.AddDate(0, -3, 0), "최근 1분기"
-	case "year":
-		return now.AddDate(-1, 0, 0), "최근 1년"
+	if start, label, ok := resolveNamedStatsPeriod(now, normalized); ok {
+		return start, label
 	}
 
-	if strings.HasPrefix(normalized, "days:") {
-		if days, ok := parsePositiveInt(normalized[5:]); ok {
-			return now.AddDate(0, 0, -days), formatRelativeLabel(days, "일")
-		}
-	}
-
-	if strings.HasPrefix(normalized, "weeks:") {
-		if weeks, ok := parsePositiveInt(normalized[6:]); ok {
-			return now.AddDate(0, 0, -7*weeks), formatRelativeLabel(weeks, "주")
-		}
-	}
-
-	if strings.HasPrefix(normalized, "months:") {
-		if months, ok := parsePositiveInt(normalized[7:]); ok {
-			return now.AddDate(0, -months, 0), formatRelativeLabel(months, "개월")
-		}
-	}
-
-	if strings.HasPrefix(normalized, "quarters:") {
-		if quarters, ok := parsePositiveInt(normalized[9:]); ok {
-			return now.AddDate(0, -3*quarters, 0), formatRelativeLabel(quarters, "분기")
-		}
-	}
-
-	if strings.HasPrefix(normalized, "years:") {
-		if years, ok := parsePositiveInt(normalized[6:]); ok {
-			return now.AddDate(-years, 0, 0), formatRelativeLabel(years, "년")
-		}
-	}
-
-	if strings.HasPrefix(normalized, "hours:") {
-		if hours, ok := parsePositiveInt(normalized[6:]); ok {
-			return now.Add(-time.Duration(hours) * time.Hour), formatRelativeLabel(hours, "시간")
-		}
+	if start, label, ok := resolvePrefixedStatsPeriod(now, normalized); ok {
+		return start, label
 	}
 
 	return now.AddDate(0, 0, -10), "최근 10일"
+}
+
+func resolveNamedStatsPeriod(now time.Time, normalized string) (time.Time, string, bool) {
+	switch normalized {
+	case "today":
+		return now.Add(-24 * time.Hour), "오늘", true
+	case "week":
+		return now.AddDate(0, 0, -7), "최근 7일", true
+	case "month":
+		return now.AddDate(0, -1, 0), "최근 1개월", true
+	case "quarter":
+		return now.AddDate(0, -3, 0), "최근 1분기", true
+	case "year":
+		return now.AddDate(-1, 0, 0), "최근 1년", true
+	default:
+		return time.Time{}, "", false
+	}
+}
+
+func resolvePrefixedStatsPeriod(now time.Time, normalized string) (time.Time, string, bool) {
+	if start, label, ok := resolveRelativeStatsPeriod(normalized, "days:", 5, "일", func(value int) time.Time {
+		return now.AddDate(0, 0, -value)
+	}); ok {
+		return start, label, true
+	}
+
+	if start, label, ok := resolveRelativeStatsPeriod(normalized, "weeks:", 6, "주", func(value int) time.Time {
+		return now.AddDate(0, 0, -7*value)
+	}); ok {
+		return start, label, true
+	}
+
+	if start, label, ok := resolveRelativeStatsPeriod(normalized, "months:", 7, "개월", func(value int) time.Time {
+		return now.AddDate(0, -value, 0)
+	}); ok {
+		return start, label, true
+	}
+
+	if start, label, ok := resolveRelativeStatsPeriod(normalized, "quarters:", 9, "분기", func(value int) time.Time {
+		return now.AddDate(0, -3*value, 0)
+	}); ok {
+		return start, label, true
+	}
+
+	if start, label, ok := resolveRelativeStatsPeriod(normalized, "years:", 6, "년", func(value int) time.Time {
+		return now.AddDate(-value, 0, 0)
+	}); ok {
+		return start, label, true
+	}
+
+	if start, label, ok := resolveRelativeStatsPeriod(normalized, "hours:", 6, "시간", func(value int) time.Time {
+		return now.Add(-time.Duration(value) * time.Hour)
+	}); ok {
+		return start, label, true
+	}
+
+	return time.Time{}, "", false
+}
+
+func resolveRelativeStatsPeriod(
+	normalized, prefix string,
+	prefixLen int,
+	unit string,
+	calcStart func(value int) time.Time,
+) (time.Time, string, bool) {
+	if !strings.HasPrefix(normalized, prefix) {
+		return time.Time{}, "", false
+	}
+	value, ok := parsePositiveInt(normalized[prefixLen:])
+	if !ok {
+		return time.Time{}, "", false
+	}
+	return calcStart(value), formatRelativeLabel(value, unit), true
 }
 
 func parsePositiveInt(raw string) (int, bool) {
