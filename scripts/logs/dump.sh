@@ -3,6 +3,9 @@
 # cron: 0 */2 * * * /home/kapu/gemini/hololive-bot/scripts/logs/dump.sh >> /home/kapu/gemini/hololive-bot/logs/dump-cron.log 2>&1
 set -euo pipefail
 
+# cron 환경에서 go/bin PATH 보장
+export PATH="${HOME}/go/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 LOG_DIR="${REPO_ROOT}/logs"
