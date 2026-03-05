@@ -133,6 +133,39 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 	})
 }
 
+func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
+	t.Run("nil infra", func(t *testing.T) {
+		view := buildBotConfigSubscriberRuntimeDependencies(nil)
+		if view.youtubeService != nil || view.holodexService != nil || view.alarmCRUD != nil {
+			t.Fatal("nil infra must yield zero-value config subscriber runtime dependency view")
+		}
+	})
+
+	t.Run("maps runtime fields", func(t *testing.T) {
+		youtubeSvc := &stubYouTubeService{}
+		holodexSvc := &holodex.Service{}
+		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+		infra := &coreInfrastructure{
+			deps: &bot.Dependencies{
+				Service: youtubeSvc,
+			},
+			holodexService: holodexSvc,
+			alarmCRUD:      alarmCRUD,
+		}
+
+		view := buildBotConfigSubscriberRuntimeDependencies(infra)
+		if view.youtubeService != youtubeSvc {
+			t.Fatal("youtube service mapping mismatch")
+		}
+		if view.holodexService != holodexSvc {
+			t.Fatal("holodex service mapping mismatch")
+		}
+		if view.alarmCRUD != alarmCRUD {
+			t.Fatal("alarm CRUD mapping mismatch")
+		}
+	})
+}
+
 func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 	t.Run("nil infra", func(t *testing.T) {
 		view := buildBotAdminRuntimeDependencies(nil)
