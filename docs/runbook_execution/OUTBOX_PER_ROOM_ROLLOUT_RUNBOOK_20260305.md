@@ -43,6 +43,12 @@
      - `delivery_claimed`, `delivery_sent`, `delivery_failed`, `aggregate_failures`
 3. 이상 없으면 점진 확대
 
+권장 점검 커맨드:
+
+```bash
+./scripts/logs/check-outbox-per-room.sh --since 30m
+```
+
 ### Phase D: 전체 전환
 
 1. 모든 stream-ingester에서 토글 ON
