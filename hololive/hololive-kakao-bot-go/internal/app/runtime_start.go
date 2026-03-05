@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 // Start: 봇의 모든 구성 요소(스케줄러, 알람 체커, 관리자 서버)를 시작합니다.
@@ -118,61 +116,4 @@ func (r *BotRuntime) startBot(ctx context.Context) {
 			}
 		}
 	}()
-}
-
-func (r *BotRuntime) logInfo(msg string, attrs ...any) {
-	if r.Logger != nil {
-		r.Logger.Info(msg, attrs...)
-	}
-}
-
-func (r *BotRuntime) logError(msg string, err error) {
-	if r.Logger != nil {
-		r.Logger.Error(msg, slog.Any("error", err))
-	}
-}
-
-// Shutdown: 봇의 모든 구성 요소를 안전하게 종료하고 리소스를 정리합니다.
-func (r *BotRuntime) Shutdown(ctx context.Context) {
-	if r == nil {
-		return
-	}
-
-	if r.clearAlarmSchedulerCancel() {
-		r.logInfo("Alarm runtime scheduler cancellation signaled")
-	}
-
-	if r.Scheduler != nil {
-		r.Scheduler.Stop()
-		r.logInfo("YouTube ingestion scheduler stopped")
-	}
-	if r.ScraperScheduler != nil {
-		r.ScraperScheduler.Stop()
-		r.logInfo("Scraper scheduler stopped")
-	}
-	if err := r.ShutdownHTTPServer(ctx); err != nil {
-		r.logError("HTTP server shutdown error", err)
-	}
-	if r.webhookHandlerCloser != nil {
-		if err := r.webhookHandlerCloser.Close(); err != nil {
-			r.logError("Iris webhook handler shutdown error", err)
-		} else {
-			r.logInfo("Iris webhook handler stopped")
-		}
-	}
-	if err := notification.CloseAllAlarmServices(ctx); err != nil {
-		r.logError("Alarm service shutdown error", err)
-	} else {
-		r.logInfo("Alarm services stopped")
-	}
-	if r.Bot != nil {
-		if err := r.Bot.Shutdown(ctx); err != nil {
-			r.logError("Error during shutdown", err)
-		}
-	}
-	if r.ingestionLease != nil {
-		if err := r.ingestionLease.Release(ctx); err != nil {
-			r.logError("Ingestion lease release failed", err)
-		}
-	}
 }
