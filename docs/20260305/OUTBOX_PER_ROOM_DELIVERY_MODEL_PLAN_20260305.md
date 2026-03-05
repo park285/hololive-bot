@@ -3,6 +3,19 @@
 > 작성일: 2026-03-05  
 > 범위: `youtube_notification_outbox` 기반 fan-out 전달 정합성
 
+## 진행 상태 (2026-03-05)
+
+- [x] PR-2A 초안 구현
+  - `036_create_youtube_notification_delivery.sql` 추가
+  - `YouTubeNotificationDelivery` 도메인 모델 추가
+  - `DeliveryRepository` (enqueue/claim/mark/update aggregate) 추가
+- [x] PR-2B 1차 구현
+  - Dispatcher에 `PerRoomMode` 분기 추가 (기본값 `false`)
+  - PerRoomMode에서 delivery row 기반 send/retry/aggregate 갱신 경로 추가
+- [ ] PR-2C
+  - PerRoomMode 전용 통합 테스트 강화
+  - 운영 토글(환경설정) 연결 및 단계적 롤아웃 절차 문서화
+
 ## 1) 문제 정의
 
 현재 outbox row는 `content` 단위 1행이며, 실제 발송은 여러 room으로 fan-out 된다.
@@ -99,4 +112,3 @@ room fan-out은 신규 테이블로 분리한다.
 - PR-2A: 스키마 + 모델 + repository
 - PR-2B: dispatcher 경로 전환
 - PR-2C: aggregate reconciler + 관측(로그/메트릭)
-
