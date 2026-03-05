@@ -186,10 +186,10 @@ func resolveOutboxStatus(pending int64, sent int64, failed int64) domain.OutboxS
 	switch {
 	case pending > 0:
 		return domain.OutboxStatusPending
-	case sent > 0:
-		return domain.OutboxStatusSent
 	case failed > 0:
 		return domain.OutboxStatusFailed
+	case sent > 0:
+		return domain.OutboxStatusSent
 	default:
 		return domain.OutboxStatusPending
 	}
