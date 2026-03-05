@@ -2,15 +2,12 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/repository"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
@@ -36,82 +33,60 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	messageAdapter := adapter.NewMessageAdapter(cfg.Bot.Prefix)
 	formatter := adapter.NewResponseFormatter(cfg.Bot.Prefix, templateRenderer)
 
-	holodexAPIKeys := providers.ProvideHolodexAPIKeys(cfg.Holodex)
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(infra.memberCache, logger)
-	scraperProxyConfig := scraper.ProxyConfig{
-		Enabled: cfg.Scraper.ProxyEnabled,
-		URL:     cfg.Scraper.ProxyURL,
-	}
-	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.cacheService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
-	}
-	scraperService := providers.ProvideScraperService(infra.cacheService, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
-	holodexService, err := providers.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKeys, infra.cacheService, scraperService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide holodex service: %w", err)
-	}
-
-	profileService, err := providers.ProvideProfileService(ctx, infra.cacheService, memberServiceAdapter, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide profile service: %w", err)
-	}
-
-	alarmRepository := ProvideAlarmRepository(infra.postgresService, logger)
-	alarmMode, err := initAlarmModeComponents(ctx, cfg, infra, holodexService, memberServiceAdapter, alarmRepository, logger)
+	foundation, err := initScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	memberMatcher := ProvideMemberMatcher(ctx, alarmMode.memberDataSource, infra.cacheService, holodexService, logger)
-	youTubeStatsRepository := providers.ProvideYouTubeStatsRepository(infra.postgresService, logger)
-	youTubeStack := providers.ProvideYouTubeStack(ctx, cfg.YouTube, cfg.Scraper, infra.cacheService, holodexService, memberServiceAdapter, youTubeStatsRepository, alarmMode.alarmService, irisClient, formatter, sharedRL, logger)
-	activityLogger := ProvideActivityLogger(logger)
-	settingsService := providers.ProvideSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
-
-	aclService, err := ProvideACLService(ctx, cfg.Kakao.ACLEnabled, cfg.Kakao.Rooms, infra.postgresService, infra.cacheService, logger)
+	alarmAndStack, err := initAlarmYouTubeStack(
+		ctx,
+		cfg,
+		infra,
+		foundation,
+		irisClient,
+		formatter,
+		logger,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	majorEventRepo, memberNewsService := resolveLLMSchedulerClients(cfg, logger)
-
-	workerPool, err := ProvideAlarmWorkerPool()
+	integrationServices, err := initCoreIntegrationServices(ctx, cfg, infra, logger)
 	if err != nil {
-		return nil, fmt.Errorf("provide alarm worker pool: %w", err)
+		return nil, err
 	}
 
 	modules := buildBotDependencyModules(
 		cfg,
 		infra,
-		alarmMode,
-		holodexService,
+		alarmAndStack.alarmMode,
+		foundation.holodexService,
 		messageAdapter,
 		formatter,
 		irisClient,
-		profileService,
-		memberMatcher,
-		youTubeStack,
-		activityLogger,
-		settingsService,
-		aclService,
-		majorEventRepo,
-		memberNewsService,
-		workerPool,
+		foundation.profileService,
+		alarmAndStack.memberMatcher,
+		alarmAndStack.youTubeStack,
+		alarmAndStack.activityLogger,
+		alarmAndStack.settingsService,
+		integrationServices.aclService,
+		integrationServices.majorEventRepo,
+		integrationServices.memberNewsService,
+		integrationServices.workerPool,
 		logger,
 	)
 	deps := ProvideBotDependencies(modules)
 
 	return &coreInfrastructure{
 		deps:                         deps,
-		alarmService:                 alarmMode.alarmService,
-		alarmCRUD:                    alarmMode.alarmCRUD,
-		holodexService:               holodexService,
-		ytStack:                      youTubeStack,
-		photoSync:                    holodex.NewPhotoSyncService(holodexService, infra.memberRepo, logger),
+		alarmService:                 alarmAndStack.alarmMode.alarmService,
+		alarmCRUD:                    alarmAndStack.alarmMode.alarmCRUD,
+		holodexService:               foundation.holodexService,
+		ytStack:                      alarmAndStack.youTubeStack,
+		photoSync:                    holodex.NewPhotoSyncService(foundation.holodexService, infra.memberRepo, logger),
 		templateRenderer:             templateRenderer,
-		templateAdminSvc:             template.NewAdminService(repository.NewTemplateRepository(infra.postgresService.GetGormDB(), logger), templateRenderer, logger),
-		sharedRL:                     sharedRL,
+		templateAdminSvc:             buildTemplateAdminService(infra, templateRenderer, logger),
+		sharedRL:                     foundation.sharedRL,
 		runtimeAlarmSchedulerBuilder: defaultRuntimeAlarmSchedulerBuilder,
 		cleanupCache:                 infra.cleanupCache,
 		cleanupDB:                    infra.cleanupDB,
