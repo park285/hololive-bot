@@ -1,6 +1,8 @@
 package dbx
 
 import (
+	"context"
+	"strings"
 	"testing"
 )
 
@@ -120,5 +122,30 @@ func TestConfigDSN(t *testing.T) {
 				t.Errorf("DSN() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTryConnect_ParseConfigError_MasksPassword(t *testing.T) {
+	client := &Client{opt: DefaultOpenOptions()}
+	cfg := Config{
+		Host:     "localhost",
+		Port:     5432,
+		User:     "user",
+		Password: "super-secret-password",
+		Name:     "db",
+		SSLMode:  "invalid",
+	}
+
+	_, err := client.tryConnect(context.Background(), cfg, DefaultPoolConfig(), DefaultRetryConfig())
+	if err == nil {
+		t.Fatal("expected parse config error, got nil")
+	}
+
+	errMsg := err.Error()
+	if strings.Contains(errMsg, cfg.Password) {
+		t.Fatalf("error message must not leak raw password: %q", errMsg)
+	}
+	if !strings.Contains(errMsg, "sslmode is invalid") {
+		t.Fatalf("expected sslmode parse error, got: %q", errMsg)
 	}
 }

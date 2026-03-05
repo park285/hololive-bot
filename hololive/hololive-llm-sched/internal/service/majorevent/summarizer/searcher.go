@@ -4,17 +4,16 @@ import (
 	"fmt"
 	"strings"
 
-	schedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+	"github.com/kapu/hololive-llm-sched/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-type (
-	// WebSearcher: 외부 검색 추상화 인터페이스
-	WebSearcher = schedmodel.WebSearcher
-	// SearchResult: 웹 검색 결과 단일 항목
-	SearchResult = schedmodel.SearchResult
-)
+// WebSearcher: model.WebSearcher의 별칭 (패키지 내 참조 호환)
+type WebSearcher = model.WebSearcher
+
+// SearchResult: model.SearchResult의 별칭 (패키지 내 참조 호환)
+type SearchResult = model.SearchResult
 
 func buildSearchQuery(summaryType SummaryType, periodKey string) string {
 	sourceScope := buildORScope("site:", constants.MajorEventConfig.SearchSourceSites)

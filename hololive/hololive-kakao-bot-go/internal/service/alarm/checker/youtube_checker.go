@@ -92,7 +92,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 	}
 
 	now := time.Now().UTC()
-	notifications := make([]*domain.AlarmNotification, 0)
+	notifications := make([]*domain.AlarmNotification, 0, len(dueChannels)*5)
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -148,7 +148,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 	streams []*domain.Stream,
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
-	notifications := make([]*domain.AlarmNotification, 0)
+	notifications := make([]*domain.AlarmNotification, 0, len(streams)*len(subscriberRooms))
 	for _, stream := range streams {
 		if stream == nil {
 			continue

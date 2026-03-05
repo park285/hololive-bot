@@ -9,6 +9,8 @@ import (
 	"time"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 )
 
 // fakeLLMWithCounter: 호출 횟수를 추적하는 LLM 모의 클라이언트.
@@ -110,7 +112,7 @@ func lowConfidenceVerdictJSON() string {
 
 func warningOnlyVerdictJSON() string {
 	v := ReviewVerdict{
-		Approved: false,
+		Approved: true,
 		Issues: []ReviewIssue{
 			{Field: "category", ItemIndex: 0, Severity: "warning", Description: "minor mismatch"},
 		},
@@ -396,7 +398,7 @@ func TestConsensus_ReviewerTimeout(t *testing.T) {
 func TestConsensus_UnknownSeverity_TreatedAsInfo(t *testing.T) {
 	// unknown severity → info로 정규화 → adjudication 미트리거
 	v := ReviewVerdict{
-		Approved: false,
+		Approved: true,
 		Issues: []ReviewIssue{
 			{Field: "category", ItemIndex: 0, Severity: "unknown", Description: "test"},
 			{Field: "title", ItemIndex: 0, Severity: "", Description: "empty"},
@@ -513,9 +515,9 @@ func TestNormalizeSeverity(t *testing.T) {
 		{"error", "info"},
 	}
 	for _, tt := range tests {
-		got := normalizeSeverity(tt.input)
+		got := consensus.NormalizeSeverity(tt.input)
 		if got != tt.want {
-			t.Errorf("normalizeSeverity(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("NormalizeSeverity(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }

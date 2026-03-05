@@ -13,8 +13,6 @@ import (
 )
 
 // initCoreInfrastructure 는 공통 인프라를 초기화한다.
-//
-//nolint:funlen // bootstrap wiring; keep the dependency graph visible in one place
 func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *coreInfrastructure, retErr error) {
 	irisClient := providers.ProvideIrisClient(cfg.Iris, logger)
 
@@ -33,20 +31,12 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	messageAdapter := adapter.NewMessageAdapter(cfg.Bot.Prefix)
 	formatter := adapter.NewResponseFormatter(cfg.Bot.Prefix, templateRenderer)
 
-	foundation, err := initScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
+	streamFoundation, err := initScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	alarmAndStack, err := initAlarmYouTubeStack(
-		ctx,
-		cfg,
-		infra,
-		foundation,
-		irisClient,
-		formatter,
-		logger,
-	)
+	alarmYouTubeStack, err := initAlarmYouTubeStack(ctx, cfg, infra, streamFoundation, irisClient, formatter, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -59,16 +49,16 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	modules := buildBotDependencyModules(
 		cfg,
 		infra,
-		alarmAndStack.alarmMode,
-		foundation.holodexService,
+		alarmYouTubeStack.alarmMode,
+		streamFoundation.holodexService,
 		messageAdapter,
 		formatter,
 		irisClient,
-		foundation.profileService,
-		alarmAndStack.memberMatcher,
-		alarmAndStack.youTubeStack,
-		alarmAndStack.activityLogger,
-		alarmAndStack.settingsService,
+		streamFoundation.profileService,
+		alarmYouTubeStack.memberMatcher,
+		alarmYouTubeStack.youTubeStack,
+		alarmYouTubeStack.activityLogger,
+		alarmYouTubeStack.settingsService,
 		integrationServices.aclService,
 		integrationServices.majorEventRepo,
 		integrationServices.memberNewsService,
@@ -79,14 +69,14 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 
 	return &coreInfrastructure{
 		deps:                         deps,
-		alarmService:                 alarmAndStack.alarmMode.alarmService,
-		alarmCRUD:                    alarmAndStack.alarmMode.alarmCRUD,
-		holodexService:               foundation.holodexService,
-		ytStack:                      alarmAndStack.youTubeStack,
-		photoSync:                    holodex.NewPhotoSyncService(foundation.holodexService, infra.memberRepo, logger),
+		alarmService:                 alarmYouTubeStack.alarmMode.alarmService,
+		alarmCRUD:                    alarmYouTubeStack.alarmMode.alarmCRUD,
+		holodexService:               streamFoundation.holodexService,
+		ytStack:                      alarmYouTubeStack.youTubeStack,
+		photoSync:                    holodex.NewPhotoSyncService(streamFoundation.holodexService, infra.memberRepo, logger),
 		templateRenderer:             templateRenderer,
-		templateAdminSvc:             buildTemplateAdminService(infra, templateRenderer, logger),
-		sharedRL:                     foundation.sharedRL,
+		templateAdminSvc:             buildTemplateAdminService(infra.postgresService, templateRenderer, logger),
+		sharedRL:                     streamFoundation.sharedRL,
 		runtimeAlarmSchedulerBuilder: defaultRuntimeAlarmSchedulerBuilder,
 		cleanupCache:                 infra.cleanupCache,
 		cleanupDB:                    infra.cleanupDB,

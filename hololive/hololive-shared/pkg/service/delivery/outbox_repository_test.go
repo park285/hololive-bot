@@ -4,6 +4,7 @@ package delivery
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -67,6 +68,32 @@ func testRepo(t *testing.T) *OutboxRepository {
 	return NewOutboxRepository(db, logger)
 }
 
+func buildOutboxBatchItems(count int) []OutboxItem {
+	items := make([]OutboxItem, 0, count)
+	for i := 0; i < count; i++ {
+		items = append(items, OutboxItem{
+			Kind:      domain.DeliveryKindMemberNewsWeekly,
+			PeriodKey: "2026-W08",
+			RoomID:    fmt.Sprintf("room-batch-%d", i),
+			Message:   fmt.Sprintf("batch-msg-%d", i),
+		})
+	}
+	return items
+}
+
+func fetchLockedIDs(t *testing.T, repo *OutboxRepository, ctx context.Context, batchSize int) []int64 {
+	t.Helper()
+	locked, err := repo.FetchAndLock(ctx, batchSize, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("fetch and lock: %v", err)
+	}
+	ids := make([]int64, 0, len(locked))
+	for _, item := range locked {
+		ids = append(ids, item.ID)
+	}
+	return ids
+}
+
 func TestEnqueue_Idempotent_PendingNoOp(t *testing.T) {
 	repo := testRepo(t)
 	ctx := context.Background()
@@ -107,6 +134,36 @@ func TestEnqueue_FailedRetry(t *testing.T) {
 	cnt, _ := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
 	if cnt != 1 {
 		t.Fatalf("expected 1 pending after retry, got %d", cnt)
+	}
+}
+
+func TestEnqueueBatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		count int
+	}{
+		{name: "empty", count: 0},
+		{name: "single", count: 1},
+		{name: "fifty", count: 50},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := testRepo(t)
+			ctx := context.Background()
+
+			if err := repo.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
+				t.Fatalf("enqueue batch: %v", err)
+			}
+
+			pending, err := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
+			if err != nil {
+				t.Fatalf("count pending: %v", err)
+			}
+			if pending != int64(tc.count) {
+				t.Fatalf("pending count = %d, want %d", pending, tc.count)
+			}
+		})
 	}
 }
 
@@ -180,6 +237,89 @@ func TestMarkFailed_WithBackoff(t *testing.T) {
 	pending, _ := repo.CountByStatus(ctx, domain.DeliveryStatusPending)
 	if pending != 1 {
 		t.Fatalf("expected 1 pending after first failure, got %d", pending)
+	}
+}
+
+func TestMarkSentBatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		count int
+	}{
+		{name: "empty", count: 0},
+		{name: "single", count: 1},
+		{name: "fifty", count: 50},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := testRepo(t)
+			ctx := context.Background()
+
+			ids := make([]int64, 0)
+			if tc.count > 0 {
+				if err := repo.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
+					t.Fatalf("enqueue batch: %v", err)
+				}
+				ids = fetchLockedIDs(t, repo, ctx, tc.count+1)
+				if len(ids) != tc.count {
+					t.Fatalf("locked ids = %d, want %d", len(ids), tc.count)
+				}
+			}
+
+			if err := repo.MarkSentBatch(ctx, ids); err != nil {
+				t.Fatalf("mark sent batch: %v", err)
+			}
+
+			sent, err := repo.CountByStatus(ctx, domain.DeliveryStatusSent)
+			if err != nil {
+				t.Fatalf("count sent: %v", err)
+			}
+			if sent != int64(tc.count) {
+				t.Fatalf("sent count = %d, want %d", sent, tc.count)
+			}
+		})
+	}
+}
+
+func TestMarkFailedBatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		count int
+	}{
+		{name: "empty", count: 0},
+		{name: "single", count: 1},
+		{name: "fifty", count: 50},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := testRepo(t)
+			ctx := context.Background()
+			reason := "batch send failed"
+
+			ids := make([]int64, 0)
+			if tc.count > 0 {
+				if err := repo.EnqueueBatch(ctx, buildOutboxBatchItems(tc.count)); err != nil {
+					t.Fatalf("enqueue batch: %v", err)
+				}
+				ids = fetchLockedIDs(t, repo, ctx, tc.count+1)
+				if len(ids) != tc.count {
+					t.Fatalf("locked ids = %d, want %d", len(ids), tc.count)
+				}
+			}
+
+			if err := repo.MarkFailedBatch(ctx, ids, reason); err != nil {
+				t.Fatalf("mark failed batch: %v", err)
+			}
+
+			failed, err := repo.CountByStatus(ctx, domain.DeliveryStatusFailed)
+			if err != nil {
+				t.Fatalf("count failed: %v", err)
+			}
+			if failed != int64(tc.count) {
+				t.Fatalf("failed count = %d, want %d", failed, tc.count)
+			}
+		})
 	}
 }
 

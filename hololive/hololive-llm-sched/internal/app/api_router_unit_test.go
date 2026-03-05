@@ -17,6 +17,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 func newDiscardLogger() *slog.Logger {
@@ -153,7 +154,7 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, withoutKeyRR.Code)
 
 	withKeyReq := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	withKeyReq.Header.Set(sharedserver.APIKeyHeader, "test-key")
+	withKeyReq.Header.Set(middleware.APIKeyHeader, "test-key")
 	withKeyRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(withKeyRR, withKeyReq)
 	assert.Equal(t, http.StatusServiceUnavailable, withKeyRR.Code)

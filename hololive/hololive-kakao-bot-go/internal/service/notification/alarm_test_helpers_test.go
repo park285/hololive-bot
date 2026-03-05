@@ -2,10 +2,11 @@ package notification
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
@@ -53,7 +54,7 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 	ctx := context.Background()
 	cacheSvc := newTestCacheService(t, ctx)
-	logger := logging.NewTestLogger()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	return &AlarmService{
 		cache:         cacheSvc,
 		logger:        logger,

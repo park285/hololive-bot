@@ -10,6 +10,7 @@ import (
 // StatsWriteRepository: 통계 쓰기 경로를 담당한다.
 type StatsWriteRepository interface {
 	SaveStats(ctx context.Context, stats *domain.TimestampedStats) error
+	SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error
 	RecordChange(ctx context.Context, change *domain.StatsChange) error
 }
 
@@ -58,6 +59,7 @@ type StatsServiceRepository interface {
 // StatsSchedulerRepository: Scheduler가 요구하는 최소 계약.
 type StatsSchedulerRepository interface {
 	GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error)
+	SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error
 	SaveStats(ctx context.Context, stats *domain.TimestampedStats) error
 	RecordChange(ctx context.Context, change *domain.StatsChange) error
 	HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error)
