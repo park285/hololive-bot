@@ -118,7 +118,7 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 			h := NewTriggerHandler(tt.scheduler, nil, nil, newDiscardLogger())
 			r := newTriggerRouter(h)
 
-			rec := postTrigger(t, r, "/internal/trigger/majorevent-weekly")
+			rec := postTrigger(t, r, triggercontracts.MajorEventWeeklyPath)
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
@@ -180,7 +180,7 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 			h := NewTriggerHandler(nil, tt.scheduler, nil, newDiscardLogger())
 			r := newTriggerRouter(h)
 
-			rec := postTrigger(t, r, "/internal/trigger/majorevent-monthly")
+			rec := postTrigger(t, r, triggercontracts.MajorEventMonthlyPath)
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
@@ -235,7 +235,7 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 			h := NewTriggerHandler(nil, nil, tt.scheduler, newDiscardLogger())
 			r := newTriggerRouter(h)
 
-			rec := postTrigger(t, r, "/internal/trigger/membernews-weekly")
+			rec := postTrigger(t, r, triggercontracts.MemberNewsWeeklyPath)
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
@@ -301,7 +301,7 @@ func TestRegisterInternalRoutesWithAuth(t *testing.T) {
 			r := gin.New()
 			h.RegisterInternalRoutesWithAuth(r.Group("/"), tt.apiKey)
 
-			req := httptest.NewRequest(http.MethodPost, "/internal/trigger/majorevent-weekly", nil)
+			req := httptest.NewRequest(http.MethodPost, triggercontracts.MajorEventWeeklyPath, nil)
 			if tt.headerVal != "" {
 				req.Header.Set(middleware.APIKeyHeader, tt.headerVal)
 			}
