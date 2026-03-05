@@ -49,6 +49,11 @@
 ./scripts/logs/check-outbox-per-room.sh --since 30m
 ```
 
+- 종료 코드:
+  - `0`: 정상
+  - `1`: 경고(실패율/집계 실패 등)
+  - `2`: 데이터 없음
+
 주기 점검(cron) 예시:
 
 ```bash
