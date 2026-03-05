@@ -16,6 +16,12 @@
   - PerRoomMode 전용 통합 테스트 강화
   - 운영 토글(환경설정) 연결 및 단계적 롤아웃 절차 문서화
 
+현재 운영 토글:
+
+- `YOUTUBE_OUTBOX_PER_ROOM_MODE=true|false`
+  - 적용 지점: `hololive-stream-ingester` outbox dispatcher 구성
+  - 기본값: `false` (기존 동작 유지)
+
 ## 1) 문제 정의
 
 현재 outbox row는 `content` 단위 1행이며, 실제 발송은 여러 room으로 fan-out 된다.
