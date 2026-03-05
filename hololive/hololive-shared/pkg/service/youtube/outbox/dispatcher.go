@@ -26,6 +26,7 @@ type Config struct {
 	RetryBackoff   time.Duration // 재시도 간격
 	CleanupAfter   time.Duration // 완료된 알림 정리 기간
 	CleanupEnabled bool          // 정리 활성화 여부
+	PerRoomMode    bool          // room 단위 전달 상태 모드 (PR-2 단계적 전환용)
 }
 
 // DefaultConfig: 기본 설정
@@ -38,6 +39,7 @@ func DefaultConfig() Config {
 		RetryBackoff:   1 * time.Minute,
 		CleanupAfter:   7 * 24 * time.Hour, // 7일
 		CleanupEnabled: true,
+		PerRoomMode:    false,
 	}
 }
 
@@ -49,6 +51,7 @@ type Dispatcher struct {
 	renderer *template.Renderer
 	logger   *slog.Logger
 	cfg      Config
+	delivery *DeliveryRepository
 }
 
 // NewDispatcher: 새 Dispatcher 생성
@@ -70,6 +73,7 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender iris.Client, rende
 		renderer: renderer,
 		logger:   logger,
 		cfg:      cfg,
+		delivery: NewDeliveryRepository(db, logger),
 	}
 }
 
@@ -115,6 +119,10 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 	}
 
 	d.logger.Debug("Processing outbox batch", slog.Int("count", len(outboxItems)))
+	if d.cfg.PerRoomMode {
+		d.processPerRoomBatch(ctx, outboxItems)
+		return
+	}
 
 	roomsByChannel := d.collectRoomsByChannel(ctx, outboxItems)
 	if len(roomsByChannel) == 0 {
@@ -134,6 +142,134 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 		} else {
 			d.processGroupedItems(ctx, group)
 		}
+	}
+}
+
+func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) {
+	roomsByChannel := d.collectRoomsByChannel(ctx, outboxItems)
+	d.enqueueDeliveries(ctx, outboxItems, roomsByChannel)
+	d.processPendingDeliveries(ctx)
+}
+
+func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]map[string]bool) {
+	for i := range outboxItems {
+		item := &outboxItems[i]
+		rooms, ok := roomsByChannel[item.ChannelID]
+		if !ok || len(rooms) == 0 {
+			d.markSent(ctx, item.ID)
+			continue
+		}
+
+		roomIDs := make([]string, 0, len(rooms))
+		for roomID := range rooms {
+			roomIDs = append(roomIDs, roomID)
+		}
+
+		if err := d.delivery.EnqueueBatch(ctx, item.ID, roomIDs); err != nil {
+			d.logger.Warn("Failed to enqueue room deliveries",
+				slog.Int64("outbox_id", item.ID),
+				slog.Any("error", err))
+			d.markFailed(ctx, item.ID, fmt.Sprintf("enqueue delivery rows: %v", err))
+			continue
+		}
+
+		d.releaseOutboxLock(ctx, item.ID)
+	}
+}
+
+func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
+	rows, err := d.delivery.FetchAndLock(ctx, d.cfg.BatchSize, d.cfg.LockTimeout)
+	if err != nil {
+		d.logger.Error("Failed to fetch delivery rows", slog.Any("error", err))
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+
+	outboxIDs := make([]int64, 0, len(rows))
+	for i := range rows {
+		outboxIDs = append(outboxIDs, rows[i].OutboxID)
+	}
+
+	outboxByID, err := d.loadOutboxItemsByIDs(ctx, outboxIDs)
+	if err != nil {
+		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
+		for i := range rows {
+			_ = d.delivery.MarkFailed(ctx, rows[i].ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, "load outbox rows")
+		}
+		return
+	}
+
+	successDeliveryIDs := make([]int64, 0, len(rows))
+	touchedOutboxIDs := make([]int64, 0, len(rows))
+	for i := range rows {
+		row := rows[i]
+		item, ok := outboxByID[row.OutboxID]
+		if !ok {
+			_ = d.delivery.MarkFailed(ctx, row.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, "outbox row not found")
+			touchedOutboxIDs = append(touchedOutboxIDs, row.OutboxID)
+			continue
+		}
+
+		message, formatErr := d.formatMessage(ctx, item)
+		if formatErr != nil {
+			_ = d.delivery.MarkFailed(ctx, row.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, fmt.Sprintf("format message: %v", formatErr))
+			touchedOutboxIDs = append(touchedOutboxIDs, row.OutboxID)
+			continue
+		}
+
+		if sendErr := d.sender.SendMessage(ctx, row.RoomID, message); sendErr != nil {
+			_ = d.delivery.MarkFailed(ctx, row.ID, d.cfg.MaxRetries, d.cfg.RetryBackoff, fmt.Sprintf("send message: %v", sendErr))
+			touchedOutboxIDs = append(touchedOutboxIDs, row.OutboxID)
+			continue
+		}
+
+		successDeliveryIDs = append(successDeliveryIDs, row.ID)
+		touchedOutboxIDs = append(touchedOutboxIDs, row.OutboxID)
+	}
+
+	if err := d.delivery.MarkSentBatch(ctx, successDeliveryIDs); err != nil {
+		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
+	}
+
+	for _, outboxID := range uniqueInt64s(touchedOutboxIDs) {
+		if err := d.delivery.UpdateOutboxAggregateStatus(ctx, outboxID); err != nil {
+			d.logger.Warn("Failed to update outbox aggregate status",
+				slog.Int64("outbox_id", outboxID),
+				slog.Any("error", err))
+		}
+	}
+}
+
+func (d *Dispatcher) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (map[int64]domain.YouTubeNotificationOutbox, error) {
+	uniqueIDs := uniqueInt64s(ids)
+	if len(uniqueIDs) == 0 {
+		return map[int64]domain.YouTubeNotificationOutbox{}, nil
+	}
+
+	var rows []domain.YouTubeNotificationOutbox
+	if err := d.db.WithContext(ctx).
+		Where("id IN ?", uniqueIDs).
+		Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("load outbox rows by ids: %w", err)
+	}
+
+	result := make(map[int64]domain.YouTubeNotificationOutbox, len(rows))
+	for i := range rows {
+		result[rows[i].ID] = rows[i]
+	}
+	return result, nil
+}
+
+func (d *Dispatcher) releaseOutboxLock(ctx context.Context, id int64) {
+	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
+		Where("id = ? AND status = ?", id, domain.OutboxStatusPending).
+		Update("locked_at", nil)
+	if result.Error != nil {
+		d.logger.Warn("Failed to release outbox lock",
+			slog.Int64("id", id),
+			slog.Any("error", result.Error))
 	}
 }
 
