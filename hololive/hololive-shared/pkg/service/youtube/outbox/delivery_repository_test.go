@@ -33,7 +33,8 @@ func TestResolveOutboxStatus(t *testing.T) {
 		want    domain.OutboxStatus
 	}{
 		{name: "pending has priority", pending: 1, sent: 10, failed: 10, want: domain.OutboxStatusPending},
-		{name: "sent when no pending", pending: 0, sent: 1, failed: 9, want: domain.OutboxStatusSent},
+		{name: "failed when mixed sent and failed", pending: 0, sent: 1, failed: 9, want: domain.OutboxStatusFailed},
+		{name: "sent when only sent", pending: 0, sent: 1, failed: 0, want: domain.OutboxStatusSent},
 		{name: "failed when only failed", pending: 0, sent: 0, failed: 2, want: domain.OutboxStatusFailed},
 		{name: "empty fallback pending", pending: 0, sent: 0, failed: 0, want: domain.OutboxStatusPending},
 	}
