@@ -3,11 +3,11 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 )
 
 // --- mock OutboxRepository (enqueue 기록용) ---
@@ -83,9 +83,7 @@ func (m *mockNotifSender) SendMessage(_ context.Context, roomID, _ string) error
 	return nil
 }
 
-func testLogger() *slog.Logger {
-	return slog.Default()
-}
+var testLogger = sharedlogging.NewLogger
 
 // === enqueueToRooms 단위 테스트 ===
 

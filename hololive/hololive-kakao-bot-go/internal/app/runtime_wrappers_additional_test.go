@@ -13,16 +13,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-func TestDBIntegrationRuntime_CloseIsNilSafe(t *testing.T) {
+func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
 	t.Parallel()
 
-	cleanupCalls := 0
+	calls := 0
 	runtime := &DBIntegrationRuntime{
-		cleanup: func() { cleanupCalls++ },
+		cleanup: func() { calls++ },
 	}
 
 	runtime.Close()
-	assert.Equal(t, 1, cleanupCalls)
+	assert.Equal(t, 1, calls)
 
 	var nilRuntime *DBIntegrationRuntime
 	require.NotPanics(t, func() {
@@ -30,7 +30,7 @@ func TestDBIntegrationRuntime_CloseIsNilSafe(t *testing.T) {
 	})
 }
 
-func TestBuildDBIntegrationRuntime_RequiresLogger(t *testing.T) {
+func TestBuildDBIntegrationRuntime_ReturnsErrorOnNilLogger(t *testing.T) {
 	t.Parallel()
 
 	runtime, err := BuildDBIntegrationRuntime(context.Background(), config.PostgresConfig{}, nil)
@@ -39,7 +39,24 @@ func TestBuildDBIntegrationRuntime_RequiresLogger(t *testing.T) {
 	assert.Contains(t, err.Error(), "logger must not be nil")
 }
 
-func TestFetchProfilesRuntime_BuildAndClose(t *testing.T) {
+func TestFetchProfilesRuntimeClose_CallsCleanupOnce(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	runtime := &FetchProfilesRuntime{
+		cleanup: func() { calls++ },
+	}
+
+	runtime.Close()
+	assert.Equal(t, 1, calls)
+
+	var nilRuntime *FetchProfilesRuntime
+	require.NotPanics(t, func() {
+		nilRuntime.Close()
+	})
+}
+
+func TestBuildFetchProfilesRuntime_WithNilContext(t *testing.T) {
 	t.Parallel()
 
 	runtime, err := BuildFetchProfilesRuntime(nil)
@@ -49,15 +66,7 @@ func TestFetchProfilesRuntime_BuildAndClose(t *testing.T) {
 	require.NotNil(t, runtime.HTTPClient)
 	assert.Equal(t, constants.OfficialProfileConfig.RequestTimeout, runtime.HTTPClient.Timeout)
 
-	closed := false
-	runtime.cleanup = func() { closed = true }
 	runtime.Close()
-	assert.True(t, closed)
-
-	var nilRuntime *FetchProfilesRuntime
-	require.NotPanics(t, func() {
-		nilRuntime.Close()
-	})
 }
 
 func TestBuildDBIntegrationRuntime_InitializesContextWhenNil(t *testing.T) {

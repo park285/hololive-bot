@@ -1,7 +1,9 @@
 package logging_test
 
 import (
+	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/logging"
@@ -78,4 +80,28 @@ func TestEnableFileLogging(t *testing.T) {
 			t.Fatal("EnableFileLogging이 오류를 반환해야 하지만 nil을 반환했습니다")
 		}
 	})
+}
+
+func TestNewTestLogger(t *testing.T) {
+	t.Parallel()
+
+	logger := logging.NewTestLogger()
+	if logger == nil {
+		t.Fatal("NewTestLogger()가 nil을 반환했습니다")
+	}
+}
+
+func TestNewTestLoggerWithOutput(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	logger := logging.NewTestLoggerWithOutput(&buf)
+	if logger == nil {
+		t.Fatal("NewTestLoggerWithOutput()가 nil을 반환했습니다")
+	}
+
+	logger.Info("test-log", "k", "v")
+	if !strings.Contains(buf.String(), "test-log") {
+		t.Fatal("로그 출력 버퍼에 test-log가 포함되어야 합니다")
+	}
 }

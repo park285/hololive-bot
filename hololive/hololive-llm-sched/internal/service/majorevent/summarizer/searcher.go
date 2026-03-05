@@ -1,25 +1,20 @@
 package summarizer
 
 import (
-	"context"
 	"fmt"
 	"strings"
+
+	schedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// WebSearcher: 외부 검색 추상화 인터페이스
-type WebSearcher interface {
-	Search(ctx context.Context, query string) ([]SearchResult, error)
-}
-
-// SearchResult: 웹 검색 결과 단일 항목
-type SearchResult struct {
-	Title         string
-	URL           string
-	Content       string
-	PublishedDate string
-}
+type (
+	// WebSearcher: 외부 검색 추상화 인터페이스
+	WebSearcher = schedmodel.WebSearcher
+	// SearchResult: 웹 검색 결과 단일 항목
+	SearchResult = schedmodel.SearchResult
+)
 
 func buildSearchQuery(summaryType SummaryType, periodKey string) string {
 	sourceScope := buildORScope("site:", constants.MajorEventConfig.SearchSourceSites)

@@ -3,9 +3,10 @@ package retry
 
 import (
 	"context"
+	crand "crypto/rand"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/big"
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/ctxutil"
@@ -33,9 +34,20 @@ type RetryOptions struct {
 func ComputeBackoffDelay(attempt int, base, jitter time.Duration) time.Duration {
 	delay := base * time.Duration(math.Pow(2, float64(attempt)))
 	if jitter > 0 {
-		delay += time.Duration(rand.Float64() * float64(jitter))
+		delay += randomJitter(jitter)
 	}
 	return delay
+}
+
+func randomJitter(maxDuration time.Duration) time.Duration {
+	if maxDuration <= 0 {
+		return 0
+	}
+	n, err := crand.Int(crand.Reader, big.NewInt(int64(maxDuration)))
+	if err != nil {
+		return 0
+	}
+	return time.Duration(n.Int64())
 }
 
 // WithRetry: 주어진 함수를 재시도 로직으로 감싸서 실행합니다.

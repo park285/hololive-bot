@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sort"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/subscription"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -39,6 +41,8 @@ type Repository struct {
 	cache cache.Client
 	log   *slog.Logger
 }
+
+var _ subscription.SubscriptionRepository[SubscribedRoom] = (*Repository)(nil)
 
 // NewRepository: 저장소 생성.
 func NewRepository(postgres database.Client, cacheSvc cache.Client, logger *slog.Logger) *Repository {

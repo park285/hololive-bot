@@ -3,9 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
-	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -17,41 +15,6 @@ import (
 )
 
 const maxHolodexAPIKeySlots = 5
-
-type valkeyEnvConfig struct {
-	Host       string `envconfig:"CACHE_HOST" default:"localhost"`
-	Port       string `envconfig:"CACHE_PORT" default:"6379"`
-	Password   string `envconfig:"CACHE_PASSWORD"`
-	DB         string `envconfig:"CACHE_DB" default:"0"`
-	SocketPath string `envconfig:"CACHE_SOCKET_PATH"`
-}
-
-type postgresEnvConfig struct {
-	Host              string `envconfig:"POSTGRES_HOST"`
-	Port              string `envconfig:"POSTGRES_PORT"`
-	SocketPath        string `envconfig:"POSTGRES_SOCKET_PATH"`
-	User              string `envconfig:"POSTGRES_USER"`
-	Password          string `envconfig:"POSTGRES_PASSWORD"`
-	Database          string `envconfig:"POSTGRES_DB"`
-	SSLMode           string `envconfig:"POSTGRES_SSLMODE" default:"require"`
-	QueryExecMode     string `envconfig:"POSTGRES_QUERY_EXEC_MODE" default:"cache_statement"`
-	PoolMinConns      string `envconfig:"POSTGRES_POOL_MIN_CONNS"`
-	PoolMaxConns      string `envconfig:"POSTGRES_POOL_MAX_CONNS"`
-	PoolMaxIdleConns  string `envconfig:"POSTGRES_POOL_MAX_IDLE_CONNS"`
-	AutoPrepareSchema string `envconfig:"POSTGRES_AUTO_PREPARE_SCHEMA" default:"true"`
-}
-
-type telemetryEnvConfig struct {
-	Enabled                  string `envconfig:"OTEL_ENABLED" default:"false"`
-	MetricsEnabled           string `envconfig:"OTEL_METRICS_ENABLED" default:"false"`
-	MetricsExportIntervalSec string `envconfig:"OTEL_METRICS_EXPORT_INTERVAL_SECONDS" default:"30"`
-	ServiceName              string `envconfig:"OTEL_SERVICE_NAME" default:"hololive-bot"`
-	ServiceVersion           string `envconfig:"OTEL_SERVICE_VERSION" default:"1.0.0"`
-	Environment              string `envconfig:"OTEL_ENVIRONMENT" default:"production"`
-	OTLPEndpoint             string `envconfig:"OTEL_EXPORTER_OTLP_ENDPOINT" default:"otel-collector:4317"`
-	OTLPInsecure             string `envconfig:"OTEL_EXPORTER_OTLP_INSECURE" default:"false"`
-	SampleRate               string `envconfig:"OTEL_SAMPLE_RATE" default:"1.0"`
-}
 
 type appCoreEnvConfig struct {
 	IrisBaseURL                  string `envconfig:"IRIS_BASE_URL" default:"http://localhost:3000"`
@@ -115,34 +78,6 @@ type runtimeTokenEnvConfig struct {
 	CORSAllowedOrigins string `envconfig:"CORS_ALLOWED_ORIGINS"`
 }
 
-type cliproxyEnvConfig struct {
-	BaseURL         string `envconfig:"CLIPROXY_BASE_URL" default:"https://cliproxy.capu.blog/v1"`
-	APIKey          string `envconfig:"CLIPROXY_API_KEY"`
-	Model           string `envconfig:"CLIPROXY_MODEL" default:"gpt-5.3-codex"`
-	Enabled         string `envconfig:"CLIPROXY_ENABLED" default:"false"`
-	ReasoningEffort string `envconfig:"CLIPROXY_REASONING_EFFORT" default:"high"`
-}
-
-type llmEnvConfig struct {
-	MemberNewsModel       string `envconfig:"MEMBER_NEWS_LLM_MODEL"`
-	MemberNewsTemperature string `envconfig:"MEMBER_NEWS_TEMPERATURE" default:"0"`
-}
-
-type consensusLLMEnvConfig struct {
-	ConsensusEnabled     string `envconfig:"CONSENSUS_ENABLED" default:"false"`
-	ConsensusConfidence  string `envconfig:"CONSENSUS_CONFIDENCE" default:"0.85"`
-	ReviewerModel        string `envconfig:"REVIEWER_MODEL"`
-	AdjudicatorModel     string `envconfig:"ADJUDICATOR_MODEL"`
-	ReviewTimeoutSec     string `envconfig:"REVIEW_TIMEOUT_SEC" default:"30"`
-	AdjudicateTimeoutSec string `envconfig:"ADJUDICATE_TIMEOUT_SEC" default:"45"`
-}
-
-type exaEnvConfig struct {
-	Endpoint string `envconfig:"EXA_MCP_ENDPOINT" default:"https://mcp.exa.ai/mcp"`
-	APIKey   string `envconfig:"EXA_API_KEY"`
-	Enabled  string `envconfig:"EXA_ENABLED" default:"false"`
-}
-
 // Config: 홀로라이브 봇의 전체 동작에 필요한 설정을 담는 구조체
 type Config struct {
 	Iris               IrisConfig
@@ -170,143 +105,10 @@ type Config struct {
 	Version            string
 }
 
-// CliproxyConfig: Cliproxy API 직접 호출 설정 (이벤트 요약용)
-type CliproxyConfig struct {
-	BaseURL         string
-	APIKey          string
-	Model           string
-	Enabled         bool
-	ReasoningEffort string // reasoning 모델용 사고 깊이 (high, xhigh 등)
-}
-
-// ConsensusLLMConfig: dual-agent review(consensus) 공통 설정
-type ConsensusLLMConfig struct {
-	Enabled           bool
-	Confidence        float64
-	ReviewerModel     string
-	AdjudicatorModel  string
-	ReviewTimeout     int
-	AdjudicateTimeout int
-}
-
-// LLMConfig: LLM 서비스별 모델 설정
-type LLMConfig struct {
-	MemberNewsModel       string  // 최종 모델명 (dual-read 해결 완료, 빈 문자열이면 Cliproxy.Model 사용)
-	MemberNewsTemperature float64 // MEMBER_NEWS_TEMPERATURE
-
-	MemberNews ConsensusLLMConfig // MEMBER_NEWS_CONSENSUS_* 환경변수 그룹
-	MajorEvent ConsensusLLMConfig // MAJOREVENT_CONSENSUS_* 환경변수 그룹
-}
-
-// ExaConfig: Exa MCP 검색 설정 (이벤트 요약용)
-type ExaConfig struct {
-	Endpoint string
-	APIKey   string
-	Enabled  bool
-}
-
-// IrisConfig: Iris 웹훅 서버 연결 및 메시지 전송 관련 설정
-type IrisConfig struct {
-	BaseURL                   string
-	WebhookToken              string // env: IRIS_WEBHOOK_TOKEN
-	BotToken                  string // env: IRIS_BOT_TOKEN
-	HTTPTimeout               time.Duration
-	HTTPDialTimeout           time.Duration
-	HTTPResponseHeaderTimeout time.Duration
-}
-
 // ServerConfig: HTTP 서버 설정
 type ServerConfig struct {
 	Port   int
 	APIKey string // API 인증용 시크릿 키 (X-API-Key 헤더로 검증)
-}
-
-// KakaoConfig: 카카오톡 채팅방 허용 목록 및 접근 제어(ACL) 설정
-type KakaoConfig struct {
-	Rooms      []string
-	ACLEnabled bool
-
-	mu sync.RWMutex
-}
-
-// SnapshotACL: 현재 ACL 설정 상태(활성화 여부 및 허용된 방 목록)의 스냅샷을 반환합니다.
-// Thread-safe하게 읽기 락을 사용한다.
-func (c *KakaoConfig) SnapshotACL() (enabled bool, rooms []string) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	rooms = append([]string(nil), c.Rooms...)
-	return c.ACLEnabled, rooms
-}
-
-// SetACLEnabled: ACL(접근 제어) 기능의 활성화 여부를 '동적으로' 설정합니다.
-func (c *KakaoConfig) SetACLEnabled(enabled bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.ACLEnabled = enabled
-}
-
-// AddRoom: 허용 목록에 새로운 채팅방을 추가한다. 이미 존재하면 false를 반환합니다.
-func (c *KakaoConfig) AddRoom(room string) bool {
-	room = stringutil.TrimSpace(room)
-	if room == "" {
-		return false
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if slices.Contains(c.Rooms, room) {
-		return false
-	}
-
-	c.Rooms = append(c.Rooms, room)
-	return true
-}
-
-// RemoveRoom: 허용 목록에서 특정 채팅방을 제거합니다.
-func (c *KakaoConfig) RemoveRoom(room string) bool {
-	room = stringutil.TrimSpace(room)
-	if room == "" {
-		return false
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	removed := false
-	rooms := make([]string, 0, len(c.Rooms))
-	for _, existing := range c.Rooms {
-		if existing == room {
-			removed = true
-			continue
-		}
-		rooms = append(rooms, existing)
-	}
-
-	c.Rooms = rooms
-	return removed
-}
-
-// IsRoomAllowed: 해당 채팅방(chatID)이 봇 사용이 허용된 곳인지 확인합니다.
-// ACL이 비활성화되어 있으면 모든 방을 허용한다.
-func (c *KakaoConfig) IsRoomAllowed(roomName, chatID string) bool {
-	chatID = stringutil.TrimSpace(chatID)
-
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if !c.ACLEnabled {
-		return true
-	}
-
-	// chatID 기반으로만 검증 (roomName은 참고용으로만 유지)
-	if chatID == "" {
-		return false // chatID가 없으면 거부
-	}
-
-	return slices.Contains(c.Rooms, chatID)
 }
 
 // HolodexConfig: Holodex API 키 및 호출 관련 설정
@@ -319,37 +121,6 @@ type HolodexConfig struct {
 type YouTubeConfig struct {
 	APIKey              string
 	EnableQuotaBuilding bool
-}
-
-// ValkeyConfig: 데이터 캐싱 용도의 Redis(Valkey) 연결 설정
-type ValkeyConfig struct {
-	Host       string
-	Port       int
-	Password   string
-	DB         int
-	SocketPath string // UDS 경로 (비어있으면 TCP 사용)
-}
-
-// PostgresConfig: 메인 데이터베이스(PostgreSQL) 연결 설정
-type PostgresConfig struct {
-	Host              string
-	Port              int
-	SocketPath        string // UDS 경로 (비어있으면 TCP 사용)
-	User              string
-	Password          string
-	Database          string
-	SSLMode           string
-	QueryExecMode     string
-	PoolMinConns      int
-	PoolMaxConns      int
-	PoolMaxIdleConns  int
-	AutoPrepareSchema bool
-}
-
-// NotificationConfig: 방송 알림 스케줄링(미리 알림 시간, 체크 주기) 설정
-type NotificationConfig struct {
-	AdvanceMinutes []int
-	CheckInterval  time.Duration
 }
 
 // LoggingConfig: 애플리케이션 로그 설정 (레벨)
@@ -370,19 +141,6 @@ type ServicesConfig struct {
 	LLMServerHealthURL      string // mcp-llm-server-go health URL
 	GameBotTwentyQHealthURL string // game-bot-go twentyq health URL
 	GameBotTurtleHealthURL  string // game-bot-go turtlesoup health URL
-}
-
-// TelemetryConfig: OpenTelemetry 분산 추적 설정
-type TelemetryConfig struct {
-	Enabled               bool          // 트레이싱 활성화 여부
-	MetricsEnabled        bool          // OTel metrics export 활성화 여부 (Prometheus와 병행 가능)
-	MetricsExportInterval time.Duration // OTel metrics export 주기
-	ServiceName           string        // 서비스 식별자 (ex "hololive-bot")
-	ServiceVersion        string        // 서비스 버전 (ex "1.0.0")
-	Environment           string        // 배포 환경 (ex "production")
-	OTLPEndpoint          string        // OTLP collector 주소 (ex "otel-collector:4317")
-	OTLPInsecure          bool          // TLS 없이 연결 (내부망 전용)
-	SampleRate            float64       // 샘플링 비율 (0.0 ~ 1.0)
 }
 
 // ScraperConfig: YouTube 스크래퍼 프록시 설정 (SOCKS5)

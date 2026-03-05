@@ -2,20 +2,16 @@ package app
 
 import (
 	"bytes"
-	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/logging"
 )
-
-func testLogger(buf *bytes.Buffer) *slog.Logger {
-	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-}
 
 func TestProvideMajorEventLLMClient_Disabled(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMajorEventLLMClient(config.CliproxyConfig{Enabled: false, APIKey: "key"}, logger)
 	if client != nil {
@@ -28,7 +24,7 @@ func TestProvideMajorEventLLMClient_Disabled(t *testing.T) {
 
 func TestProvideMajorEventLLMClient_NoAPIKey(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMajorEventLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, logger)
 	if client != nil {
@@ -38,7 +34,7 @@ func TestProvideMajorEventLLMClient_NoAPIKey(t *testing.T) {
 
 func TestProvideMajorEventLLMClient_EmptyBaseURL(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMajorEventLLMClient(config.CliproxyConfig{
 		Enabled: true,
@@ -56,7 +52,7 @@ func TestProvideMajorEventLLMClient_EmptyBaseURL(t *testing.T) {
 
 func TestProvideMajorEventLLMClient_EmptyModel(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMajorEventLLMClient(config.CliproxyConfig{
 		Enabled: true,
@@ -71,7 +67,7 @@ func TestProvideMajorEventLLMClient_EmptyModel(t *testing.T) {
 
 func TestProvideMajorEventLLMClient_Success(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMajorEventLLMClient(config.CliproxyConfig{
 		Enabled: true,
@@ -89,7 +85,7 @@ func TestProvideMajorEventLLMClient_Success(t *testing.T) {
 
 func TestProvideMemberNewsLLMClient_Disabled(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: false}, config.LLMConfig{}, logger)
 	if client != nil {
@@ -102,7 +98,7 @@ func TestProvideMemberNewsLLMClient_Disabled(t *testing.T) {
 
 func TestProvideMemberNewsLLMClient_NoAPIKey(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsLLMClient(config.CliproxyConfig{Enabled: true, APIKey: ""}, config.LLMConfig{}, logger)
 	if client != nil {
@@ -115,7 +111,7 @@ func TestProvideMemberNewsLLMClient_NoAPIKey(t *testing.T) {
 
 func TestProvideMemberNewsLLMClient_EmptyBaseURL(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsLLMClient(
 		config.CliproxyConfig{
@@ -138,7 +134,7 @@ func TestProvideMemberNewsLLMClient_EmptyBaseURL(t *testing.T) {
 
 func TestProvideMemberNewsLLMClient_ModelFallback(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsLLMClient(
 		config.CliproxyConfig{
@@ -162,7 +158,7 @@ func TestProvideMemberNewsLLMClient_ModelFallback(t *testing.T) {
 
 func TestProvideMemberNewsLLMClient_DeprecatedModel(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsLLMClient(
 		config.CliproxyConfig{
@@ -183,7 +179,7 @@ func TestProvideMemberNewsLLMClient_DeprecatedModel(t *testing.T) {
 
 func TestProvideMemberNewsLLMClient_NewModel_NoDeprecationWarn(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsLLMClient(
 		config.CliproxyConfig{
@@ -210,7 +206,7 @@ func TestProvideMemberNewsLLMClient_NewModel_NoDeprecationWarn(t *testing.T) {
 
 func TestProvideMemberNewsLLMClient_TemperatureZero_LogShowsNotApplied(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsLLMClient(
 		config.CliproxyConfig{
@@ -240,7 +236,7 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 
 	t.Run("MajorEvent error path", func(t *testing.T) {
 		var buf bytes.Buffer
-		logger := testLogger(&buf)
+		logger := logging.NewTestLoggerWithOutput(&buf)
 
 		ProvideMajorEventLLMClient(config.CliproxyConfig{
 			Enabled: true,
@@ -259,7 +255,7 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 
 	t.Run("MemberNews error path", func(t *testing.T) {
 		var buf bytes.Buffer
-		logger := testLogger(&buf)
+		logger := logging.NewTestLoggerWithOutput(&buf)
 
 		ProvideMemberNewsLLMClient(
 			config.CliproxyConfig{
@@ -305,7 +301,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 	client := ProvideMemberNewsLLMClient(cfg.Cliproxy, cfg.LLM, logger)
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -319,7 +315,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 
 func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "m"},
@@ -333,7 +329,7 @@ func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {
 
 func TestProvideMemberNewsReviewerClient_Enabled(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "default"},
@@ -350,7 +346,7 @@ func TestProvideMemberNewsReviewerClient_Enabled(t *testing.T) {
 
 func TestProvideMemberNewsReviewerClient_ModelFallback(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsReviewerClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
@@ -367,7 +363,7 @@ func TestProvideMemberNewsReviewerClient_ModelFallback(t *testing.T) {
 
 func TestProvideMemberNewsAdjudicatorClient_ConsensusDisabled(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsAdjudicatorClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "m"},
@@ -381,7 +377,7 @@ func TestProvideMemberNewsAdjudicatorClient_ConsensusDisabled(t *testing.T) {
 
 func TestProvideMemberNewsAdjudicatorClient_Enabled(t *testing.T) {
 	var buf bytes.Buffer
-	logger := testLogger(&buf)
+	logger := logging.NewTestLoggerWithOutput(&buf)
 
 	client := ProvideMemberNewsAdjudicatorClient(
 		config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "default"},
@@ -399,7 +395,7 @@ func TestProvideMemberNewsAdjudicatorClient_Enabled(t *testing.T) {
 func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 	t.Run("falls back to MemberNewsModel", func(t *testing.T) {
 		var buf bytes.Buffer
-		logger := testLogger(&buf)
+		logger := logging.NewTestLoggerWithOutput(&buf)
 
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
@@ -416,7 +412,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 
 	t.Run("falls back to Cliproxy.Model", func(t *testing.T) {
 		var buf bytes.Buffer
-		logger := testLogger(&buf)
+		logger := logging.NewTestLoggerWithOutput(&buf)
 
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: "cliproxy-default"},
@@ -433,7 +429,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 
 	t.Run("all empty returns nil", func(t *testing.T) {
 		var buf bytes.Buffer
-		logger := testLogger(&buf)
+		logger := logging.NewTestLoggerWithOutput(&buf)
 
 		client := ProvideMemberNewsAdjudicatorClient(
 			config.CliproxyConfig{Enabled: true, APIKey: "key", BaseURL: "https://example.com/v1", Model: ""},

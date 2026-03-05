@@ -175,6 +175,7 @@ func ensureLogFilePerm(path string) error {
 		if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("stat log file failed: %w", err)
 		}
+		// #nosec G304 -- path is constructed from controlled log directory and filename.
 		file, createErr := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, logFilePerm)
 		if createErr != nil {
 			return fmt.Errorf("create log file failed: %w", createErr)

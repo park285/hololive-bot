@@ -30,6 +30,7 @@ type Logger struct {
 
 var activityLogRotateMaxBytes int64 = 10 * 1024 * 1024 // 10MB
 var activityLogReadMaxLineBytes = 16 * 1024 * 1024     // 16MB
+const activityLogFilePerm = 0o600
 
 // NewActivityLogger: 새로운 활동 로그 기록기를 생성합니다.
 func NewActivityLogger(filePath string, logger *slog.Logger) *Logger {
@@ -65,7 +66,7 @@ func (l *Logger) Log(entryType, summary string, details map[string]any) {
 		l.logger.Error("Failed to rotate activity log", slog.Any("error", err))
 	}
 
-	f, err := os.OpenFile(l.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(l.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, activityLogFilePerm)
 	if err != nil {
 		l.logger.Error("Failed to open activity log file", slog.Any("error", err))
 		return

@@ -11,6 +11,7 @@ import (
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 const (
@@ -34,10 +35,8 @@ func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
 	return &Client{
 		schedulerURL: strings.TrimRight(strings.TrimSpace(schedulerURL), "/"),
 		apiKey:       strings.TrimSpace(apiKey),
-		httpClient: &http.Client{
-			Timeout: defaultTriggerHTTPTimeout,
-		},
-		logger: logger,
+		httpClient:   httputil.NewClient(defaultTriggerHTTPTimeout),
+		logger:       logger,
 	}
 }
 
@@ -89,15 +88,8 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 		return triggercontracts.ErrNotificationInProgress
 	}
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		const maxBodyLen = 4096
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyLen))
-		return fmt.Errorf(
-			"post trigger: request failed %s: status %d: %s",
-			path,
-			resp.StatusCode,
-			strings.TrimSpace(string(body)),
-		)
+	if err := httputil.CheckStatus(resp); err != nil {
+		return fmt.Errorf("post trigger: request failed %s: %w", path, err)
 	}
 
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {

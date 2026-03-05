@@ -6,7 +6,7 @@
 # Kubernetes (기존 항목)
 # ============================================
 k8s/base/monitoring/charts/
-k8s/base/secret-app.yaml
+k8s/base/secret-*.yaml
 
 # ============================================
 # Secrets & Credentials (CRITICAL)

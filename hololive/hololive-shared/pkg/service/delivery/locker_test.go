@@ -3,10 +3,10 @@ package delivery
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
+
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 )
 
 // mockLockCache: lockCache mock 구현
@@ -37,9 +37,7 @@ func (m *mockLockCache) DelMany(ctx context.Context, keys []string) (int64, erro
 	return int64(len(keys)), nil
 }
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+var testLogger = sharedlogging.NewLogger
 
 func TestNewLocker_NilCache_ReturnsNoop(t *testing.T) {
 	locker := NewLocker(nil, testLogger())

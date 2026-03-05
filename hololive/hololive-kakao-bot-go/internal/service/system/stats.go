@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -57,7 +57,7 @@ func NewCollector(endpoints []ServiceEndpoint, enableOTel bool) *Collector {
 		transport = otelhttp.NewTransport(http.DefaultTransport)
 	}
 	return &Collector{
-		httpClient: &http.Client{
+		httpClient: &http.Client{ // nolint:exhaustruct // Timeout/Transport만 필요
 			Timeout:   2 * time.Second,
 			Transport: transport,
 		},
@@ -218,12 +218,12 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
+	if err := httputil.CheckStatus(resp); err != nil || resp.StatusCode != http.StatusOK {
 		return 0, false
 	}
 
 	var hr healthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&hr); err != nil {
+	if err := httputil.DecodeJSON(resp, &hr); err != nil {
 		return 0, false
 	}
 

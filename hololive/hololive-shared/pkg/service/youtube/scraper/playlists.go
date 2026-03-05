@@ -4,11 +4,16 @@ import (
 	"context"
 	"fmt"
 
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/tidwall/gjson"
 )
 
 // GetPlaylists: 채널의 플레이리스트 목록 조회 (/channel/{id}/playlists)
 func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults int) ([]*Playlist, error) {
+	if maxResults <= 0 {
+		return []*Playlist{}, nil
+	}
+
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/playlists", channelID)
 	html, err := c.fetchPage(ctx, url)
 	if err != nil {
@@ -19,50 +24,16 @@ func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults 
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
+	if !json.Valid([]byte(jsonStr)) {
+		return nil, fmt.Errorf("invalid ytInitialData JSON")
+	}
 
 	data := gjson.Parse(jsonStr)
 	if err := checkAlerts(data); err != nil {
 		return nil, err
 	}
 
-	// Playlists 탭 찾기
-	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
-	var playlistItems []gjson.Result
-
-	data.Get(tabPath).ForEach(func(_, tab gjson.Result) bool {
-		tabTitle := tab.Get("tabRenderer.title").String()
-		if tabTitle == "Playlists" {
-			// gridRenderer 또는 sectionListRenderer 탐색
-			content := tab.Get("tabRenderer.content")
-
-			// gridRenderer 먼저 시도
-			content.Get("sectionListRenderer.contents").ForEach(func(_, section gjson.Result) bool {
-				// gridRenderer
-				gridItems := section.Get("itemSectionRenderer.contents.0.gridRenderer.items")
-				if gridItems.Exists() {
-					gridItems.ForEach(func(_, item gjson.Result) bool {
-						if item.Get("gridPlaylistRenderer").Exists() {
-							playlistItems = append(playlistItems, item.Get("gridPlaylistRenderer"))
-						}
-						return true
-					})
-				}
-				// shelfRenderer (Created playlists 등)
-				shelfItems := section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.horizontalListRenderer.items")
-				if shelfItems.Exists() {
-					shelfItems.ForEach(func(_, item gjson.Result) bool {
-						if item.Get("gridPlaylistRenderer").Exists() {
-							playlistItems = append(playlistItems, item.Get("gridPlaylistRenderer"))
-						}
-						return true
-					})
-				}
-				return true
-			})
-			return false
-		}
-		return true
-	})
+	playlistItems := collectPlaylistItemsFromBrowseData(data)
 
 	playlists := make([]*Playlist, 0, min(len(playlistItems), maxResults))
 	for i, item := range playlistItems {
@@ -76,6 +47,47 @@ func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults 
 	}
 
 	return playlists, nil
+}
+
+func collectPlaylistItemsFromBrowseData(data gjson.Result) []gjson.Result {
+	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
+	playlistItems := make([]gjson.Result, 0)
+
+	data.Get(tabPath).ForEach(func(_, tab gjson.Result) bool {
+		if tab.Get("tabRenderer.title").String() != "Playlists" {
+			return true
+		}
+
+		content := tab.Get("tabRenderer.content")
+		content.Get("sectionListRenderer.contents").ForEach(func(_, section gjson.Result) bool {
+			appendGridPlaylistRenderers(
+				&playlistItems,
+				section.Get("itemSectionRenderer.contents.0.gridRenderer.items"),
+			)
+			appendGridPlaylistRenderers(
+				&playlistItems,
+				section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.horizontalListRenderer.items"),
+			)
+			return true
+		})
+		return false
+	})
+
+	return playlistItems
+}
+
+func appendGridPlaylistRenderers(target *[]gjson.Result, items gjson.Result) {
+	if !items.Exists() {
+		return
+	}
+
+	items.ForEach(func(_, item gjson.Result) bool {
+		renderer := item.Get("gridPlaylistRenderer")
+		if renderer.Exists() {
+			*target = append(*target, renderer)
+		}
+		return true
+	})
 }
 
 // parseGridPlaylistRenderer: gridPlaylistRenderer JSON을 Playlist 구조체로 변환

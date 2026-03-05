@@ -33,7 +33,7 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
