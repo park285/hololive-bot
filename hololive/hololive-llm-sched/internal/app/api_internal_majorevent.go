@@ -9,17 +9,9 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
 
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
-
-type majorEventSubscribeRequest struct {
-	RoomID   string `json:"room_id"`
-	RoomName string `json:"room_name"`
-}
-
-type subscriptionStatusResponse struct {
-	Subscribed bool `json:"subscribed"`
-}
 
 func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *majorevent.Repository) {
 	if router == nil || repo == nil {
@@ -27,7 +19,7 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 	}
 
 	rg := router.Group(majoreventcontracts.BasePath)
-	rg.Use(sharedserver.APIKeyAuthMiddleware(apiKey))
+	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
 	rg.GET(majoreventcontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
@@ -42,11 +34,11 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 			return
 		}
 
-		c.JSON(http.StatusOK, subscriptionStatusResponse{Subscribed: subscribed})
+		c.JSON(http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
 	})
 
 	rg.POST(majoreventcontracts.SubscriptionsRoute, func(c *gin.Context) {
-		var req majorEventSubscribeRequest
+		var req subscription.SubscribeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
 			return

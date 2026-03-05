@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net"
 	"strconv"
 	"testing"
@@ -12,14 +13,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/logging"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-var newTestLogger = sharedlogging.NewLogger
+func newTestLogger() *slog.Logger {
+	return logging.NewTestLogger()
+}
 
 func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	t.Helper()

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -73,9 +74,10 @@ func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
 	defaultTmpl, overrides, err := h.templateAdmin.GetByKey(ctx, key)
 	if err != nil {
 		if errors.Is(err, template.ErrTemplateKeyNotFound) {
-			c.JSON(404, gin.H{"error": "template key not found"})
+			c.JSON(404, gin.H{"error": "template not found"})
 			return
 		}
+		h.logger.Error("Failed to get template", slog.String("key", string(key)), slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "failed to get template"})
 		return
 	}
@@ -95,6 +97,7 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 
 	var req templateUpsertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
@@ -106,9 +109,10 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 
 	tmpl, err := h.templateAdmin.Save(ctx, key, channelPtr, req.Body)
 	if err != nil {
+		h.logger.Warn("Failed to save template", slog.String("key", string(key)), slog.Any("error", err))
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
-			c.JSON(404, gin.H{"error": "template key not found"})
+			c.JSON(404, gin.H{"error": "template not found"})
 		case errors.Is(err, template.ErrTemplateParseError):
 			c.JSON(400, gin.H{"error": "template parse error"})
 		case errors.Is(err, template.ErrTemplateRenderError):
@@ -150,15 +154,17 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 
 	var req templatePreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
 	rendered, sampleData, err := h.templateAdmin.Preview(ctx, key, req.Body)
 	if err != nil {
+		h.logger.Warn("Failed to preview template", slog.String("key", string(key)), slog.Any("error", err))
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
-			c.JSON(404, gin.H{"error": "template key not found"})
+			c.JSON(404, gin.H{"error": "template not found"})
 		case errors.Is(err, template.ErrTemplateParseError):
 			c.JSON(400, gin.H{"error": "template parse error"})
 		case errors.Is(err, template.ErrTemplateRenderError):
@@ -216,6 +222,7 @@ func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "revision not found"})
 			return
 		}
+		h.logger.Error("Failed to get revision", slog.Int64("id", id), slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "failed to get revision"})
 		return
 	}

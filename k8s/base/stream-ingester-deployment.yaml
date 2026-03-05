@@ -32,9 +32,9 @@ spec:
               name: http
           envFrom:
             - configMapRef:
-                name: hololive-app-config
+                name: hololive-common-config
             - secretRef:
-                name: hololive-app-secret
+                name: hololive-common-secret
           env:
             - name: SERVER_PORT
               value: "30004"

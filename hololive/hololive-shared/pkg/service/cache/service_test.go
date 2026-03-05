@@ -2,6 +2,9 @@ package cache
 
 import (
 	"context"
+	"io"
+	"log/slog"
+	"net"
 	"testing"
 	"time"
 
@@ -9,8 +12,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-shared/internal/logging"
-	cachetestutil "github.com/kapu/hololive-shared/internal/testutil/cacheclient"
+	"github.com/kapu/hololive-shared/internal/testredis"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -21,9 +23,28 @@ type testPayload struct {
 func newTestCacheService(t *testing.T) (*Service, *miniredis.Miniredis) {
 	t.Helper()
 
-	client, mini := cachetestutil.NewValkeyClientWithMini(t)
+	host, _, mini := testredis.StartMiniRedis(t)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	addr := net.JoinHostPort(host, mini.Port())
 
-	svc := &Service{client: client, logger: logging.NewTestLogger()}
+	client, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:  []string{addr},
+		DisableCache: true,
+		// 테스트에서 cluster slot 체크로 인한 multi-key 제약을 피하기 위해 단일 클라이언트를 강제합니다.
+		ForceSingleClient: true,
+	})
+	if err != nil {
+		mini.Close()
+		t.Fatalf("failed to create valkey client: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
+		client.Close()
+		mini.Close()
+		t.Fatalf("failed to ping miniredis: %v", err)
+	}
+	svc := &Service{client: client, logger: logger}
 
 	t.Cleanup(func() {
 		_ = svc.Close()

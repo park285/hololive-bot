@@ -24,6 +24,7 @@ func newTestCacheForLock(t *testing.T) *cache.Service {
 
 func newTestCacheForLockWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis) {
 	t.Helper()
+
 	return internaltestutil.NewTestCacheServiceWithMini(t, context.Background())
 }
 

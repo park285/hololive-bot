@@ -180,7 +180,7 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	}
 	defer rows.Close()
 
-	var channelIDs []string
+	channelIDs := make([]string, 0, 64)
 	for rows.Next() {
 		var channelID string
 		if err := rows.Scan(&channelID); err != nil {

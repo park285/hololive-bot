@@ -2,6 +2,7 @@ package youtube
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -582,6 +583,10 @@ func (m *mockStatsRepository) SaveStats(ctx context.Context, stats *domain.Times
 	return nil
 }
 
+func (m *mockStatsRepository) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
+	return nil
+}
+
 func (m *mockStatsRepository) RecordChange(ctx context.Context, change *domain.StatsChange) error {
 	return nil
 }
@@ -811,5 +816,175 @@ func TestMilestoneDetectionFlow(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type mockTrackAllSubscribersService struct {
+	stats map[string]*ChannelStats
+	err   error
+}
+
+func (m *mockTrackAllSubscribersService) SetScraperProxyEnabled(enabled bool) bool { return enabled }
+func (m *mockTrackAllSubscribersService) ScraperProxyEnabled() bool                { return false }
+func (m *mockTrackAllSubscribersService) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
+	return m.stats, m.err
+}
+func (m *mockTrackAllSubscribersService) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
+	return nil, nil
+}
+
+type mockTrackAllSubscribersRepo struct {
+	latestByChannel   map[string]*domain.TimestampedStats
+	saveBatchErr      error
+	saveBatchCalls    int
+	saveBatchRows     int
+	saveSingleCalls   int
+	recordChangeCalls int
+}
+
+func (m *mockTrackAllSubscribersRepo) GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
+	return m.latestByChannel[channelID], nil
+}
+
+func (m *mockTrackAllSubscribersRepo) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
+	m.saveBatchCalls++
+	m.saveBatchRows += len(stats)
+	return m.saveBatchErr
+}
+
+func (m *mockTrackAllSubscribersRepo) SaveStats(ctx context.Context, stats *domain.TimestampedStats) error {
+	m.saveSingleCalls++
+	return nil
+}
+
+func (m *mockTrackAllSubscribersRepo) RecordChange(ctx context.Context, change *domain.StatsChange) error {
+	m.recordChangeCalls++
+	return nil
+}
+
+func (m *mockTrackAllSubscribersRepo) HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error) {
+	return false, nil
+}
+
+func (m *mockTrackAllSubscribersRepo) SaveMilestone(ctx context.Context, milestone *domain.Milestone) error {
+	return nil
+}
+
+func (m *mockTrackAllSubscribersRepo) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]NearMilestoneEntry, error) {
+	return nil, nil
+}
+
+func (m *mockTrackAllSubscribersRepo) HasApproachingNotified(ctx context.Context, channelID string, milestoneValue uint64) (bool, error) {
+	return false, nil
+}
+
+func (m *mockTrackAllSubscribersRepo) SaveApproachingNotification(ctx context.Context, channelID string, milestoneValue, currentSubs uint64, notifiedAt time.Time) error {
+	return nil
+}
+
+func (m *mockTrackAllSubscribersRepo) GetUnnotifiedMilestones(ctx context.Context, limit int) ([]MilestoneNotification, error) {
+	return nil, nil
+}
+
+func (m *mockTrackAllSubscribersRepo) MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error {
+	return nil
+}
+
+func (m *mockTrackAllSubscribersRepo) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ApproachingNotification, error) {
+	return nil, nil
+}
+
+func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error {
+	return nil
+}
+
+func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	members := &mockMemberDataProvider{
+		members: []*domain.Member{
+			{ChannelID: "UC1", Name: "A"},
+			{ChannelID: "UC2", Name: "B"},
+		},
+	}
+
+	youtubeSvc := &mockTrackAllSubscribersService{
+		stats: map[string]*ChannelStats{
+			"UC1": {SubscriberCount: 1100, VideoCount: 11, ViewCount: 10001},
+			"UC2": {SubscriberCount: 2200, VideoCount: 22, ViewCount: 20002},
+		},
+	}
+
+	repo := &mockTrackAllSubscribersRepo{
+		latestByChannel: map[string]*domain.TimestampedStats{
+			"UC1": {SubscriberCount: 1000, VideoCount: 10, ViewCount: 10000},
+			"UC2": {SubscriberCount: 2000, VideoCount: 20, ViewCount: 20000},
+		},
+	}
+
+	scheduler := &schedulerImpl{
+		youtube:     youtubeSvc,
+		statsRepo:   repo,
+		membersData: members,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+	}
+
+	scheduler.trackAllSubscribers(context.Background())
+
+	if repo.saveBatchCalls != 1 {
+		t.Fatalf("saveBatchCalls = %d, want 1", repo.saveBatchCalls)
+	}
+	if repo.saveBatchRows != 2 {
+		t.Fatalf("saveBatchRows = %d, want 2", repo.saveBatchRows)
+	}
+	if repo.saveSingleCalls != 0 {
+		t.Fatalf("saveSingleCalls = %d, want 0", repo.saveSingleCalls)
+	}
+	if repo.recordChangeCalls != 2 {
+		t.Fatalf("recordChangeCalls = %d, want 2", repo.recordChangeCalls)
+	}
+}
+
+func TestTrackAllSubscribers_SkipsChangeProcessingWhenBatchSaveFails(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	members := &mockMemberDataProvider{
+		members: []*domain.Member{
+			{ChannelID: "UC1", Name: "A"},
+		},
+	}
+
+	youtubeSvc := &mockTrackAllSubscribersService{
+		stats: map[string]*ChannelStats{
+			"UC1": {SubscriberCount: 1100, VideoCount: 11, ViewCount: 10001},
+		},
+	}
+
+	repo := &mockTrackAllSubscribersRepo{
+		latestByChannel: map[string]*domain.TimestampedStats{
+			"UC1": {SubscriberCount: 1000, VideoCount: 10, ViewCount: 10000},
+		},
+		saveBatchErr: errors.New("insert failure"),
+	}
+
+	scheduler := &schedulerImpl{
+		youtube:     youtubeSvc,
+		statsRepo:   repo,
+		membersData: members,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+	}
+
+	scheduler.trackAllSubscribers(context.Background())
+
+	if repo.saveBatchCalls != 1 {
+		t.Fatalf("saveBatchCalls = %d, want 1", repo.saveBatchCalls)
+	}
+	if repo.saveSingleCalls != 0 {
+		t.Fatalf("saveSingleCalls = %d, want 0", repo.saveSingleCalls)
+	}
+	if repo.recordChangeCalls != 0 {
+		t.Fatalf("recordChangeCalls = %d, want 0", repo.recordChangeCalls)
 	}
 }

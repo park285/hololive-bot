@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,8 +18,7 @@ import (
 
 	membernewssvc "github.com/kapu/hololive-llm-sched/internal/service/membernews"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -37,7 +38,9 @@ type fakeSender struct{}
 
 func (fakeSender) SendMessage(context.Context, string, string) error { return nil }
 
-var newTestLogger = sharedlogging.NewLogger
+func newTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func TestProvideDeliveryAndTriggerProviders(t *testing.T) {
 	t.Parallel()
@@ -119,7 +122,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 
 		req = httptest.NewRequest(http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"r1"}`))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set(sharedserver.APIKeyHeader, "wrong")
+		req.Header.Set(middleware.APIKeyHeader, "wrong")
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusForbidden, rr.Code)

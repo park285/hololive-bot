@@ -24,6 +24,15 @@ type Config struct {
 	QueryExecMode string
 }
 
+// SafeDSN: 비밀번호를 마스킹한 DSN 문자열 반환 (로깅/에러 메시지용)
+func (c Config) SafeDSN() string {
+	masked := c
+	if masked.Password != "" {
+		masked.Password = "***"
+	}
+	return masked.DSN()
+}
+
 // DSN: lib/pq 스타일 DSN 문자열 반환
 // SocketPath가 설정되면 UDS 우선 사용
 func (c Config) DSN() string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -23,6 +24,14 @@ type OutboxRepository struct {
 	logger *slog.Logger
 }
 
+// OutboxItem: 배치 enqueue 입력 항목
+type OutboxItem struct {
+	Kind      domain.DeliveryOutboxKind
+	PeriodKey string
+	RoomID    string
+	Message   string
+}
+
 // NewOutboxRepository: OutboxRepository 생성
 func NewOutboxRepository(db *gorm.DB, logger *slog.Logger) *OutboxRepository {
 	return &OutboxRepository{db: db, logger: logger}
@@ -30,18 +39,43 @@ func NewOutboxRepository(db *gorm.DB, logger *slog.Logger) *OutboxRepository {
 
 // Enqueue: outbox 항목 삽입. PENDING 중복은 무시, FAILED는 재시도로 갱신.
 func (r *OutboxRepository) Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
-	payload, _ := json.Marshal(outboxPayload{Message: message})
-	contentID := periodKey + ":" + roomID
+	return r.EnqueueBatch(ctx, []OutboxItem{
+		{
+			Kind:      kind,
+			PeriodKey: periodKey,
+			RoomID:    roomID,
+			Message:   message,
+		},
+	})
+}
+
+// EnqueueBatch: outbox 항목을 배치 삽입. PENDING 중복은 무시, FAILED는 재시도로 갱신.
+func (r *OutboxRepository) EnqueueBatch(ctx context.Context, items []OutboxItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	valueExprs := make([]string, 0, len(items))
+	args := make([]any, 0, len(items)*5)
+	for _, item := range items {
+		payload, err := json.Marshal(outboxPayload{Message: item.Message})
+		if err != nil {
+			return fmt.Errorf("enqueue batch: marshal payload: %w", err)
+		}
+		contentID := item.PeriodKey + ":" + item.RoomID
+		valueExprs = append(valueExprs, "(?, ?, ?, ?, ?, 'PENDING', 0, NOW())")
+		args = append(args, item.Kind, item.PeriodKey, item.RoomID, contentID, string(payload))
+	}
 
 	sql := `INSERT INTO notification_delivery_outbox (kind, period_key, room_id, content_id, payload, status, attempt_count, next_attempt_at)
-            VALUES (?, ?, ?, ?, ?, 'PENDING', 0, NOW())
-            ON CONFLICT (kind, content_id) DO UPDATE
-            SET payload = EXCLUDED.payload, status = 'PENDING', attempt_count = 0, next_attempt_at = NOW(), error = NULL
-            WHERE notification_delivery_outbox.status = 'FAILED'`
+		VALUES ` + strings.Join(valueExprs, ",") + `
+		ON CONFLICT (kind, content_id) DO UPDATE
+		SET payload = EXCLUDED.payload, status = 'PENDING', attempt_count = 0, next_attempt_at = NOW(), error = NULL
+		WHERE notification_delivery_outbox.status = 'FAILED'`
 
-	result := r.db.WithContext(ctx).Exec(sql, kind, periodKey, roomID, contentID, string(payload))
+	result := r.db.WithContext(ctx).Exec(sql, args...)
 	if result.Error != nil {
-		return fmt.Errorf("enqueue delivery: %w", result.Error)
+		return fmt.Errorf("enqueue batch: %w", result.Error)
 	}
 	return nil
 }
@@ -94,6 +128,48 @@ func (r *OutboxRepository) MarkFailed(ctx context.Context, id int64, maxRetries 
             WHERE id = ?`
 
 	return r.db.WithContext(ctx).Exec(sql, errMsg, maxRetries, maxRetries, now.Add(backoff), id).Error
+}
+
+// MarkSentBatch: 여러 항목을 한 번에 발송 완료 상태로 갱신합니다.
+func (r *OutboxRepository) MarkSentBatch(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	now := time.Now()
+	result := r.db.WithContext(ctx).
+		Model(&domain.NotificationDeliveryOutbox{}).
+		Where("id IN ? AND status = ?", ids, domain.DeliveryStatusPending).
+		Updates(map[string]any{
+			"status":    domain.DeliveryStatusSent,
+			"sent_at":   now,
+			"locked_at": nil,
+			"error":     nil,
+		})
+	if result.Error != nil {
+		return fmt.Errorf("mark sent batch: %w", result.Error)
+	}
+	return nil
+}
+
+// MarkFailedBatch: 여러 항목을 한 번에 실패 처리합니다.
+func (r *OutboxRepository) MarkFailedBatch(ctx context.Context, ids []int64, reason string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	result := r.db.WithContext(ctx).
+		Model(&domain.NotificationDeliveryOutbox{}).
+		Where("id IN ?", ids).
+		Updates(map[string]any{
+			"status":    domain.DeliveryStatusFailed,
+			"error":     reason,
+			"locked_at": nil,
+		})
+	if result.Error != nil {
+		return fmt.Errorf("mark failed batch: %w", result.Error)
+	}
+	return nil
 }
 
 // Cleanup: 오래된 SENT/FAILED 항목 삭제
