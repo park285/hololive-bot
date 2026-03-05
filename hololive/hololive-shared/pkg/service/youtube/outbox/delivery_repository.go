@@ -156,6 +156,8 @@ func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, ou
 	if nextStatus == domain.OutboxStatusSent {
 		updates["sent_at"] = time.Now()
 		updates["error"] = ""
+	} else if nextStatus == domain.OutboxStatusFailed {
+		updates["error"] = "per-room delivery failed"
 	}
 
 	result := r.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
