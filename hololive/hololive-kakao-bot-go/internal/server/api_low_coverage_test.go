@@ -393,12 +393,12 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 		}
 	})
 
-	t.Run("get rooms zero value acl service", func(t *testing.T) {
+	t.Run("get rooms zero value acl service is unavailable", func(t *testing.T) {
 		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/rooms", nil)
 		handler.GetRooms(ctx)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 		}
 	})
 
