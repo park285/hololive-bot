@@ -345,32 +345,16 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		outboxDispatcher  *outbox.Dispatcher
 		alarmScheduler    runtimeAlarmScheduler
 		ingestionLeaseRef *providers.IngestionLease
-		desiredProxyState bool
 	)
-	if cfg.Bot.IngestionEnabled {
-		logger.Warn("Bot ingestion runtime enabled",
-			slog.String("event", "bot_ingestion_enabled"),
-			slog.String("env", "BOT_INGESTION_ENABLED=true"),
-			slog.String("lock_key", providers.IngestionLeaseKey),
-			slog.String("note", "when stream-ingester is deployed, bot should usually run with BOT_INGESTION_ENABLED=false"),
-		)
-
-		ingestionDeps := runtimeViews.ingestion
-		youTubeRuntimeDeps := runtimeViews.youtubeRuntime
-		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, ingestionDeps.cache, "bot", logger)
-		if err != nil {
-			return nil, fmt.Errorf("acquire ingestion lease: %w", err)
-		}
-
-		scraperScheduler, outboxDispatcher = buildYouTubeComponents(cfg.Scraper, ingestionDeps, youTubeRuntimeDeps, logger)
-		youtubeScheduler = ingestionDeps.scheduler
-		photoSyncService = youTubeRuntimeDeps.photoSyncService
-
-		desiredProxyState = ingestionDeps.settings.Get().ScraperProxyEnabled
-		applyScraperProxyToggle(desiredProxyState, youTubeRuntimeDeps.youtubeService, youTubeRuntimeDeps.holodexService, scraperScheduler, logger)
-	} else {
-		logger.Info("Bot ingestion runtime disabled by config", slog.String("env", "BOT_INGESTION_ENABLED=false"))
+	ingestionComponents, err := buildBotRuntimeIngestion(ctx, cfg, runtimeViews, logger)
+	if err != nil {
+		return nil, err
 	}
+	youtubeScheduler = ingestionComponents.scheduler
+	scraperScheduler = ingestionComponents.scraperScheduler
+	photoSyncService = ingestionComponents.photoSyncService
+	outboxDispatcher = ingestionComponents.outboxDispatcher
+	ingestionLeaseRef = ingestionComponents.ingestionLease
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
 	configSubscriber := buildBotConfigSubscriber(runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, scraperScheduler, logger)
