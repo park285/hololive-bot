@@ -736,7 +736,7 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 	cutoff := time.Now().Add(-d.cfg.CleanupAfter)
 
 	result := d.db.WithContext(ctx).
-		Where("status = ? AND sent_at < ?", domain.OutboxStatusSent, cutoff).
+		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, cutoff).
 		Delete(&domain.YouTubeNotificationOutbox{})
 
 	if result.Error != nil {
@@ -991,4 +991,9 @@ func (d *Dispatcher) buildGroupedTemplateData(memberName string, kind domain.Out
 // ProcessOnceForTest: 테스트용 - 한 번의 폴링 사이클 실행
 func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {
 	d.processOnce(ctx)
+}
+
+// CleanupForTest: 테스트용 - 정리 루프 본문 실행
+func (d *Dispatcher) CleanupForTest(ctx context.Context) {
+	d.cleanup(ctx)
 }
