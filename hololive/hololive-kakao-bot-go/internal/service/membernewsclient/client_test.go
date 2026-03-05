@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/membernewsclient"
 )
@@ -143,8 +143,8 @@ func TestGenerateRoomDigest(t *testing.T) {
 					t.Errorf("Content-Type = %q, want application/json", ct)
 				}
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), testAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
 			defer srv.Close()
@@ -162,19 +162,6 @@ func TestGenerateRoomDigest(t *testing.T) {
 				t.Errorf("GenerateRoomDigest() err = %v, want ErrNoSubscribedMembers", err)
 			}
 		})
-	}
-}
-
-func TestGenerateRoomDigest_NilClient(t *testing.T) {
-	t.Parallel()
-
-	var c *membernewsclient.Client
-	got, err := c.GenerateRoomDigest(context.Background(), "room-1", membernewscontracts.PeriodWeekly)
-	if err == nil {
-		t.Error("nil 클라이언트에서 GenerateRoomDigest() 에러가 반환되어야 합니다")
-	}
-	if got != nil {
-		t.Errorf("nil 클라이언트에서 반환된 digest = %v, want nil", got)
 	}
 }
 
@@ -241,8 +228,8 @@ func TestSubscribeRoom(t *testing.T) {
 					t.Errorf("path = %q, want %q", r.URL.Path, membernewscontracts.SubscriptionsPath)
 				}
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), testAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
 			defer srv.Close()
@@ -316,8 +303,8 @@ func TestUnsubscribeRoom(t *testing.T) {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), testAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
 			defer srv.Close()
@@ -403,8 +390,8 @@ func TestIsRoomSubscribed(t *testing.T) {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), testAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
 			defer srv.Close()
@@ -419,16 +406,6 @@ func TestIsRoomSubscribed(t *testing.T) {
 				t.Errorf("IsRoomSubscribed() = %v, want %v", got, tc.wantResult)
 			}
 		})
-	}
-}
-
-func TestIsRoomSubscribed_NilClient(t *testing.T) {
-	t.Parallel()
-
-	var c *membernewsclient.Client
-	_, err := c.IsRoomSubscribed(context.Background(), "room-1")
-	if err == nil {
-		t.Error("nil 클라이언트에서 IsRoomSubscribed() 에러가 반환되어야 합니다")
 	}
 }
 

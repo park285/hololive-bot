@@ -97,7 +97,7 @@ type memberNewsSearcherAdapter struct {
 }
 
 func (a *memberNewsSearcherAdapter) Search(ctx context.Context, query string) ([]membernews.SearchResult, error) {
-	if a == nil || a.base == nil {
+	if a.base == nil {
 		return nil, nil
 	}
 	results, err := a.base.Search(ctx, query)

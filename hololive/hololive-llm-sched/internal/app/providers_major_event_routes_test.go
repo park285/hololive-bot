@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
+	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
@@ -42,7 +42,7 @@ func TestRegisterMajorEventInternalRoutes_AuthMiddleware(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
 	req = httptest.NewRequest(http.MethodGet, majoreventcontracts.SubscriptionsPath+"/room-1", nil)
-	req.Header.Set(sharedserver.APIKeyHeader, "wrong")
+	req.Header.Set(commoncontracts.APIKeyHeader, "wrong")
 	rr = httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusForbidden, rr.Code)

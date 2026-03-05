@@ -75,7 +75,7 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 		ytStack:                      alarmYouTubeStack.youTubeStack,
 		photoSync:                    holodex.NewPhotoSyncService(streamFoundation.holodexService, infra.memberRepo, logger),
 		templateRenderer:             templateRenderer,
-		templateAdminSvc:             buildTemplateAdminService(infra.postgresService, templateRenderer, logger),
+		templateAdminSvc:             buildTemplateAdminService(infra, templateRenderer, logger),
 		sharedRL:                     streamFoundation.sharedRL,
 		runtimeAlarmSchedulerBuilder: defaultRuntimeAlarmSchedulerBuilder,
 		cleanupCache:                 infra.cleanupCache,

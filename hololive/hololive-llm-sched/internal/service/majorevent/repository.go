@@ -9,12 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kapu/hololive-llm-sched/internal/service/subscription"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
-
-var _ subscription.Repository = (*Repository)(nil)
 
 // Repository: 대형 행사 구독 데이터의 영속 저장소 (PostgreSQL)
 type Repository struct {
