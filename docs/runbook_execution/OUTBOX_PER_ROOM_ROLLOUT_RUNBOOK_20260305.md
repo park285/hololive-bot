@@ -49,6 +49,17 @@
 ./scripts/logs/check-outbox-per-room.sh --since 30m
 ```
 
+임계치 조정 예시:
+
+```bash
+./scripts/logs/check-outbox-per-room.sh \
+  --since 30m \
+  --warn-failure-rate 0.05 \
+  --max-aggregate-failures 0 \
+  --max-enqueue-failures 0 \
+  --min-delivery-claimed 10
+```
+
 - 종료 코드:
   - `0`: 정상
   - `1`: 경고(실패율/집계 실패 등)
@@ -59,6 +70,14 @@
 ```bash
 */10 * * * * /home/kapu/gemini/hololive-bot/scripts/logs/check-outbox-per-room-cron.sh >> /home/kapu/gemini/hololive-bot/logs/outbox-per-room-canary-cron.log 2>&1
 ```
+
+cron 환경 변수(선택):
+
+- `OUTBOX_CANARY_WARN_FAILURE_RATE` (기본 `0.10`)
+- `OUTBOX_CANARY_MAX_AGGREGATE_FAILURES` (기본 `0`)
+- `OUTBOX_CANARY_MAX_ENQUEUE_FAILURES` (기본 `0`)
+- `OUTBOX_CANARY_MIN_DELIVERY_CLAIMED` (기본 `10`)
+- `OUTBOX_CANARY_ALLOW_NO_DATA` (기본 `true`)
 
 ### Phase D: 전체 전환
 
