@@ -17,6 +17,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 type stubIrisClient struct{}
@@ -162,6 +163,32 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 		}
 		if view.alarmCRUD != alarmCRUD {
 			t.Fatal("alarm CRUD mapping mismatch")
+		}
+	})
+}
+
+func TestBuildBotYouTubeRuntimeDependencies(t *testing.T) {
+	t.Run("nil infra", func(t *testing.T) {
+		view := buildBotYouTubeRuntimeDependencies(nil)
+		if view.sharedRateLimiter != nil || view.templateRenderer != nil {
+			t.Fatal("nil infra must yield zero-value youtube runtime dependency view")
+		}
+	})
+
+	t.Run("maps runtime fields", func(t *testing.T) {
+		rateLimiter := &scraper.RateLimiter{}
+		templateRenderer := &template.Renderer{}
+		infra := &coreInfrastructure{
+			sharedRL:         rateLimiter,
+			templateRenderer: templateRenderer,
+		}
+
+		view := buildBotYouTubeRuntimeDependencies(infra)
+		if view.sharedRateLimiter != rateLimiter {
+			t.Fatal("rate limiter mapping mismatch")
+		}
+		if view.templateRenderer != templateRenderer {
+			t.Fatal("template renderer mapping mismatch")
 		}
 	})
 }
