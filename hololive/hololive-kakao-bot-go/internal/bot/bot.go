@@ -131,43 +131,11 @@ func (b *Bot) initializeCommands() {
 	registry := command.NewRegistry()
 	b.commandRegistry = registry
 
-	deps := &command.Dependencies{
-		Holodex:          b.holodex,
-		Chzzk:            b.chzzk,
-		Cache:            b.cache,
-		Alarm:            b.alarm,
-		Matcher:          b.matcher,
-		OfficialProfiles: b.officialProfiles,
-		StatsRepo:        b.statsRepo,
-		MemberNews:       b.memberNews,
-		MembersData:      b.membersData,
-		Formatter:        b.formatter,
-		SendMessage:      b.sendMessage,
-		SendImage:        b.sendImage,
-		SendError:        b.sendError,
-		Logger:           b.logger,
-	}
-
-	deps.Dispatcher = command.NewSequentialDispatcher(registry, normalizeCommandKey)
+	view := b.commandInitView()
+	deps := view.toCommandDependencies(registry)
 
 	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepo != nil))
-
-	factories := append([]command.Factory{}, command.DefaultFactories()...)
-
-	if b.majorEventRepo != nil {
-		b.logger.Info("MajorEvent command enabled")
-		factories = append(factories, command.NewMajorEventFactory(b.majorEventRepo))
-	}
-
-	if deps.MemberNews != nil {
-		b.logger.Info("MemberNews commands enabled")
-		factories = append(factories, command.MemberNewsFactories()...)
-	}
-
-	if len(b.commandFactories) > 0 {
-		b.logger.Info("External command factories enabled", slog.Int("count", len(b.commandFactories)))
-		factories = append(factories, b.commandFactories...)
-	}
+	factories := view.buildFactories()
 
 	commandsList := command.BuildCommands(deps, factories...)
 	for _, cmd := range commandsList {
