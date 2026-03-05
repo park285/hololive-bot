@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -59,15 +60,26 @@ func (t *trackingMemberNewsRunNowTrigger) SendMemberNewsWeekly(context.Context) 
 }
 
 type trackingYouTubeSvc struct {
+	mu           sync.Mutex
 	proxyEnabled bool
 }
 
 func (s *trackingYouTubeSvc) SetScraperProxyEnabled(enabled bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.proxyEnabled = enabled
 	return true
 }
 
 func (s *trackingYouTubeSvc) ScraperProxyEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.proxyEnabled
+}
+
+func (s *trackingYouTubeSvc) isProxyEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.proxyEnabled
 }
 
@@ -80,6 +92,7 @@ func (s *trackingYouTubeSvc) GetRecentVideos(context.Context, string, int64) ([]
 }
 
 type trackingProxyTogglePoller struct {
+	mu      sync.Mutex
 	enabled bool
 }
 
@@ -88,10 +101,20 @@ func (p *trackingProxyTogglePoller) Poll(context.Context, string) error {
 	return nil
 }
 func (p *trackingProxyTogglePoller) SetProxyEnabled(enabled bool) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.enabled = enabled
 	return true
 }
 func (p *trackingProxyTogglePoller) ProxyEnabled() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.enabled
+}
+
+func (p *trackingProxyTogglePoller) isEnabled() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.enabled
 }
 
@@ -229,15 +252,15 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
 	applyScraperProxyToggle(true, youtubeSvc, nil, scheduler, logger)
-	assert.True(t, youtubeSvc.proxyEnabled)
-	assert.True(t, trackingPoller.enabled)
+	assert.True(t, youtubeSvc.isProxyEnabled())
+	assert.True(t, trackingPoller.isEnabled())
 	enabled, known := scheduler.ProxyEnabled()
 	assert.True(t, known)
 	assert.True(t, enabled)
 
 	applyScraperProxyToggle(false, youtubeSvc, nil, scheduler, logger)
-	assert.False(t, youtubeSvc.proxyEnabled)
-	assert.False(t, trackingPoller.enabled)
+	assert.False(t, youtubeSvc.isProxyEnabled())
+	assert.False(t, trackingPoller.isEnabled())
 	enabled, known = scheduler.ProxyEnabled()
 	assert.True(t, known)
 	assert.False(t, enabled)

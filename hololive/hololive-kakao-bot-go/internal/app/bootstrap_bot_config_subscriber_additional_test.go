@@ -166,15 +166,14 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(50 * time.Millisecond)
-	publishConfigUpdate(t, publisher, contractssettings.UpdateTypeScraperProxy, contractssettings.ScraperProxyPayloadV1{Enabled: true})
-
+	// subscriber가 subscribe 핸드셰이크를 완료할 때까지 반복 publish (비결정적 sleep 제거)
 	require.Eventually(t, func() bool {
+		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeScraperProxy, contractssettings.ScraperProxyPayloadV1{Enabled: true})
 		got := settingsSvc.Get()
-		return got.ScraperProxyEnabled && youtubeSvc.proxyEnabled && trackingPoller.enabled
+		return got.ScraperProxyEnabled && youtubeSvc.isProxyEnabled() && trackingPoller.isEnabled()
 	}, 2*time.Second, 50*time.Millisecond)
 
-	assert.Equal(t, 1, settingsSvc.calls())
+	assert.GreaterOrEqual(t, settingsSvc.calls(), 1)
 
 	cancel()
 	select {
@@ -228,15 +227,14 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(50 * time.Millisecond)
-	publishConfigUpdate(t, publisher, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 30})
-
+	// subscriber가 subscribe 핸드셰이크를 완료할 때까지 반복 publish (비결정적 sleep 제거)
 	require.Eventually(t, func() bool {
+		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 30})
 		calls, last := alarmSvc.callSnapshot()
-		return calls == 1 && last == 30
+		return calls >= 1 && last == 30
 	}, 2*time.Second, 50*time.Millisecond)
 
-	assert.Equal(t, 1, settingsSvc.calls())
+	assert.GreaterOrEqual(t, settingsSvc.calls(), 1)
 	assert.Equal(t, 5, settingsSvc.Get().AlarmAdvanceMinutes)
 
 	cancel()
