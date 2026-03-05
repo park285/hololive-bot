@@ -3,8 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,6 +16,7 @@ import (
 
 	membernewssvc "github.com/kapu/hololive-llm-sched/internal/service/membernews"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -38,9 +37,7 @@ type fakeSender struct{}
 
 func (fakeSender) SendMessage(context.Context, string, string) error { return nil }
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+var newTestLogger = sharedlogging.NewLogger
 
 func TestProvideDeliveryAndTriggerProviders(t *testing.T) {
 	t.Parallel()

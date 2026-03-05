@@ -4,6 +4,7 @@
 # - 제거된 패키지는 이 파일에서도 즉시 삭제
 
 ginjson
+httputil
 irisx
 json
 jsonutil

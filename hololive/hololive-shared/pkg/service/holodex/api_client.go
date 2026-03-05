@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 	"golang.org/x/time/rate"
 
@@ -72,6 +73,9 @@ func NewHolodexAPIClient(
 	logger *slog.Logger,
 	distributed distributedRateLimiter,
 ) *APIClient {
+	if httpClient == nil {
+		httpClient = httputil.NewClient(constants.APIConfig.HolodexTimeout)
+	}
 	return &APIClient{
 		httpClient:  httpClient,
 		baseURL:     baseURL,

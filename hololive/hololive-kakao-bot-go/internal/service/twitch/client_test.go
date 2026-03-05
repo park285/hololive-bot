@@ -1,17 +1,14 @@
 package twitch
 
 import (
-	"io"
-	"log/slog"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 )
 
 // newTestLogger: 테스트용 무음 slog 로거를 반환합니다.
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
-}
+var newTestLogger = sharedlogging.NewLogger
 
 // newTestClient: 테스트용 Client를 생성합니다.
 func newTestClient(clientID, clientSecret string) *Client {

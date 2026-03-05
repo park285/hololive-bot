@@ -234,6 +234,7 @@ func defaultMediaDomains() map[string]struct{} {
 }
 
 func loadXAllowlist(path string) ([]string, error) {
+	// #nosec G304 -- allowlist path is operator-provided config/env input, not user request data.
 	bytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read allowlist file: %w", err)

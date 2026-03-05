@@ -2,9 +2,6 @@ package cache
 
 import (
 	"context"
-	"io"
-	"log/slog"
-	"net"
 	"testing"
 	"time"
 
@@ -12,6 +9,8 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-shared/internal/logging"
+	cachetestutil "github.com/kapu/hololive-shared/internal/testutil/cacheclient"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -22,27 +21,9 @@ type testPayload struct {
 func newTestCacheService(t *testing.T) (*Service, *miniredis.Miniredis) {
 	t.Helper()
 
-	mini := miniredis.RunT(t)
-	host, portStr, err := net.SplitHostPort(mini.Addr())
-	if err != nil {
-		t.Fatalf("failed to split address: %v", err)
-	}
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress:       []string{net.JoinHostPort(host, portStr)},
-		DisableCache:      true,
-		ForceSingleClient: true,
-	})
-	if err != nil {
-		t.Fatalf("failed to create valkey client: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
-		client.Close()
-		t.Fatalf("failed to ping miniredis: %v", err)
-	}
-	svc := &Service{client: client, logger: logger}
+	client, mini := cachetestutil.NewValkeyClientWithMini(t)
+
+	svc := &Service{client: client, logger: logging.NewTestLogger()}
 
 	t.Cleanup(func() {
 		_ = svc.Close()

@@ -128,7 +128,7 @@ func envOrDefaultInt(key string, fallback int) int {
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
-		log.Printf("⚠ Invalid value for %s (%s), using default %d\n", key, value, fallback)
+		log.Printf("⚠ Invalid integer environment value for %s, using default %d\n", key, fallback)
 		return fallback
 	}
 	return parsed

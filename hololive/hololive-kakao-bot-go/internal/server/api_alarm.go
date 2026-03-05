@@ -36,7 +36,8 @@ func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 

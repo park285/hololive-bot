@@ -10,6 +10,7 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	schedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
@@ -22,18 +23,12 @@ type LLMClient interface {
 	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
 }
 
-// SearchResult: Exa 검색 결과.
-type SearchResult struct {
-	Title         string
-	URL           string
-	Content       string
-	PublishedDate string
-}
-
-// WebSearcher: 외부 검색 인터페이스.
-type WebSearcher interface {
-	Search(ctx context.Context, query string) ([]SearchResult, error)
-}
+type (
+	// SearchResult: Exa 검색 결과.
+	SearchResult = schedmodel.SearchResult
+	// WebSearcher: 외부 검색 인터페이스.
+	WebSearcher = schedmodel.WebSearcher
+)
 
 // Summarizer: LLM + hard validator + deterministic fallback 요약기.
 type SummarizerImpl struct {

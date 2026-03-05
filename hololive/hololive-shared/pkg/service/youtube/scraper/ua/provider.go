@@ -291,6 +291,8 @@ func randInt(r *rand.Rand, minVal, maxVal int) int {
 }
 
 // newRand: crypto/rand로 시드된 새 rand.Rand 생성
+//
+//nolint:gosec // UA 회전용 비보안 난수로, 보안 경계(토큰/암호화)에 사용되지 않음.
 func newRand() *rand.Rand {
 	var b [8]byte
 	if _, err := crand.Read(b[:]); err != nil {

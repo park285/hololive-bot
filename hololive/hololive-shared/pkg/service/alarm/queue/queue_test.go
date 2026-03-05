@@ -3,8 +3,6 @@ package queue
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net"
 	"strconv"
 	"testing"
@@ -16,13 +14,12 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+var newTestLogger = sharedlogging.NewLogger
 
 func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	t.Helper()

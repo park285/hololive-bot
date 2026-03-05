@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/subscription"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
@@ -18,6 +20,8 @@ type Repository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
+
+var _ subscription.SubscriptionRepository[*domain.EventRoomSubscription] = (*Repository)(nil)
 
 // NewRepository: 새로운 Repository를 생성합니다.
 func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
@@ -65,8 +69,8 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 	return exists, nil
 }
 
-// GetSubscribedRooms: 구독 중인 모든 방 목록을 조회합니다.
-func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error) {
+// ListSubscribedRooms: 구독 중인 모든 방 목록을 조회합니다.
+func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error) {
 	query := `
 		SELECT id, room_id, COALESCE(room_name, '') as room_name, created_at
 		FROM major_event_subscriptions
@@ -80,6 +84,11 @@ func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoo
 	defer rows.Close()
 
 	return r.scanSubscriptions(rows)
+}
+
+// GetSubscribedRooms: 기존 호출부 호환을 위한 alias 메서드입니다.
+func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error) {
+	return r.ListSubscribedRooms(ctx)
 }
 
 func (r *Repository) scanSubscriptions(rows pgx.Rows) ([]*domain.EventRoomSubscription, error) {
