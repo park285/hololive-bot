@@ -113,6 +113,27 @@ func TestBuildBotIngestionRuntimeDependencies(t *testing.T) {
 	})
 }
 
+func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {
+	t.Run("nil dependencies", func(t *testing.T) {
+		view := buildBotWebhookRuntimeDependencies(nil)
+		if view.cache != nil {
+			t.Fatal("nil deps must yield zero-value webhook dependency view")
+		}
+	})
+
+	t.Run("maps cache", func(t *testing.T) {
+		cacheSvc := &cache.Service{}
+		deps := &bot.Dependencies{
+			Cache: cacheSvc,
+		}
+
+		view := buildBotWebhookRuntimeDependencies(deps)
+		if view.cache != cacheSvc {
+			t.Fatal("cache mapping mismatch")
+		}
+	})
+}
+
 func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 	t.Run("nil dependencies", func(t *testing.T) {
 		view := buildBotConfigSubscriberDependencies(nil)
@@ -312,6 +333,27 @@ func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 		}
 		if view.templateAdminSvc != templateAdminSvc {
 			t.Fatal("template admin service mapping mismatch")
+		}
+	})
+}
+
+func TestBuildBotServerRuntimeDependencies(t *testing.T) {
+	t.Run("nil infra", func(t *testing.T) {
+		view := buildBotServerRuntimeDependencies(nil)
+		if view.alarmCRUD != nil {
+			t.Fatal("nil infra must yield zero-value server runtime dependency view")
+		}
+	})
+
+	t.Run("maps alarm CRUD", func(t *testing.T) {
+		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+		infra := &coreInfrastructure{
+			alarmCRUD: alarmCRUD,
+		}
+
+		view := buildBotServerRuntimeDependencies(infra)
+		if view.alarmCRUD != alarmCRUD {
+			t.Fatal("alarm CRUD mapping mismatch")
 		}
 	})
 }
