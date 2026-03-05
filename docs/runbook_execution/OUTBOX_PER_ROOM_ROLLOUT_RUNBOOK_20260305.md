@@ -49,6 +49,12 @@
 ./scripts/logs/check-outbox-per-room.sh --since 30m
 ```
 
+주기 점검(cron) 예시:
+
+```bash
+*/10 * * * * /home/kapu/gemini/hololive-bot/scripts/logs/check-outbox-per-room-cron.sh >> /home/kapu/gemini/hololive-bot/logs/outbox-per-room-canary-cron.log 2>&1
+```
+
 ### Phase D: 전체 전환
 
 1. 모든 stream-ingester에서 토글 ON
