@@ -358,6 +358,84 @@ func TestBuildBotServerRuntimeDependencies(t *testing.T) {
 	})
 }
 
+func TestBuildBotRuntimeDependencyViews(t *testing.T) {
+	t.Run("nil infra", func(t *testing.T) {
+		views := buildBotRuntimeDependencyViews(nil)
+		if views.botDeps != nil {
+			t.Fatal("nil infra must yield nil bot deps")
+		}
+		if views.ingestion.cache != nil || views.webhook.cache != nil ||
+			views.configSubscriber.cache != nil || views.configSubscriberRuntime.alarmCRUD != nil ||
+			views.youtubeRuntime.templateRenderer != nil || views.adminRuntime.cache != nil ||
+			views.serverRuntime.alarmCRUD != nil {
+			t.Fatal("nil infra must yield zero-value runtime dependency views")
+		}
+	})
+
+	t.Run("maps composed runtime views", func(t *testing.T) {
+		cacheSvc := &cache.Service{}
+		postgresSvc := &database.PostgresService{}
+		irisClient := &stubIrisClient{}
+		membersData := &stubMemberDataProvider{}
+		scheduler := &stubYouTubeScheduler{}
+		settingsSvc := &stubSettingsReadWriter{}
+		youtubeSvc := &stubYouTubeService{}
+		holodexSvc := &holodex.Service{}
+		photoSyncSvc := &holodex.PhotoSyncService{}
+		rateLimiter := &scraper.RateLimiter{}
+		templateRenderer := &template.Renderer{}
+		templateAdminSvc := &template.AdminService{}
+		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+
+		deps := &bot.Dependencies{
+			Cache:       cacheSvc,
+			Postgres:    postgresSvc,
+			Client:      irisClient,
+			MembersData: membersData,
+			Scheduler:   scheduler,
+			Settings:    settingsSvc,
+			Service:     youtubeSvc,
+		}
+
+		infra := &coreInfrastructure{
+			deps:             deps,
+			alarmCRUD:        alarmCRUD,
+			holodexService:   holodexSvc,
+			photoSync:        photoSyncSvc,
+			sharedRL:         rateLimiter,
+			templateRenderer: templateRenderer,
+			templateAdminSvc: templateAdminSvc,
+		}
+
+		views := buildBotRuntimeDependencyViews(infra)
+		if views.botDeps != deps {
+			t.Fatal("bot deps mapping mismatch")
+		}
+		if views.ingestion.cache != cacheSvc || views.ingestion.settings != settingsSvc {
+			t.Fatal("ingestion view mapping mismatch")
+		}
+		if views.webhook.cache != cacheSvc {
+			t.Fatal("webhook view mapping mismatch")
+		}
+		if views.configSubscriber.cache != cacheSvc || views.configSubscriber.settings != settingsSvc {
+			t.Fatal("config subscriber view mapping mismatch")
+		}
+		if views.configSubscriberRuntime.alarmCRUD != alarmCRUD || views.configSubscriberRuntime.holodexService != holodexSvc {
+			t.Fatal("config subscriber runtime view mapping mismatch")
+		}
+		if views.youtubeRuntime.sharedRateLimiter != rateLimiter || views.youtubeRuntime.templateRenderer != templateRenderer ||
+			views.youtubeRuntime.youtubeService != youtubeSvc || views.youtubeRuntime.photoSyncService != photoSyncSvc {
+			t.Fatal("youtube runtime view mapping mismatch")
+		}
+		if views.adminRuntime.cache != cacheSvc || views.adminRuntime.templateAdminSvc != templateAdminSvc {
+			t.Fatal("admin runtime view mapping mismatch")
+		}
+		if views.serverRuntime.alarmCRUD != alarmCRUD {
+			t.Fatal("server runtime view mapping mismatch")
+		}
+	})
+}
+
 var _ member.DataProvider = (*stubMemberDataProvider)(nil)
 var _ youtube.Scheduler = (*stubYouTubeScheduler)(nil)
 var _ youtube.Service = (*stubYouTubeService)(nil)
