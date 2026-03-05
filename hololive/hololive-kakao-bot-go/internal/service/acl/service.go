@@ -55,6 +55,18 @@ type Service struct {
 	rooms   map[string]struct{}
 }
 
+// IsReady: ACL 서비스의 필수 의존성이 초기화되었는지 확인합니다.
+func (s *Service) IsReady() bool {
+	if s == nil {
+		return false
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.db != nil && s.cache != nil && s.logger != nil && s.rooms != nil
+}
+
 // NewACLService ACL 서비스 생성 및 초기화
 func NewACLService(
 	ctx context.Context,
