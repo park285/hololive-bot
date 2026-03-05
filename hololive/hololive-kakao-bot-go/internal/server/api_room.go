@@ -9,7 +9,7 @@ import (
 
 // GetRooms: 설정된 방 목록을 반환합니다.
 func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
-	if h.acl == nil {
+	if h.acl == nil || !h.acl.IsReady() {
 		c.JSON(503, gin.H{"error": "ACL service not available"})
 		return
 	}
