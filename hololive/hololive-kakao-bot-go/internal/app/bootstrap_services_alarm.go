@@ -8,32 +8,12 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
-
-type alarmModeComponents struct {
-	alarmCRUD        domain.AlarmCRUD
-	alarmService     *notification.AlarmService
-	chzzkClient      *chzzk.Client
-	twitchClient     *twitch.Client
-	memberDataSource member.DataProvider
-}
-
-type alarmDependencies struct {
-	alarmService       *notification.AlarmService
-	memberDataProvider member.DataProvider
-	chzzkClient        *chzzk.Client
-	twitchClient       *twitch.Client
-}
 
 func initAlarmDependencies(
 	chzzkCfg config.ChzzkConfig,
