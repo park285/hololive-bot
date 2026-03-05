@@ -5,14 +5,13 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 
+	internaltestutil "github.com/kapu/hololive-shared/internal/testutil"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
@@ -25,33 +24,7 @@ func newTestCacheForLock(t *testing.T) *cache.Service {
 
 func newTestCacheForLockWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis) {
 	t.Helper()
-
-	mini := miniredis.RunT(t)
-	host, portStr, err := net.SplitHostPort(mini.Addr())
-	if err != nil {
-		t.Fatalf("split host/port: %v", err)
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		t.Fatalf("parse port: %v", err)
-	}
-
-	svc, err := cache.NewCacheService(context.Background(), cache.Config{
-		Host:         host,
-		Port:         port,
-		DB:           0,
-		DisableCache: true,
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err != nil {
-		t.Fatalf("new cache service: %v", err)
-	}
-
-	t.Cleanup(func() {
-		_ = svc.Close()
-		mini.Close()
-	})
-
-	return svc, mini
+	return internaltestutil.NewTestCacheServiceWithMini(t, context.Background())
 }
 
 func TestAcquireIngestionLeaseExclusive(t *testing.T) {

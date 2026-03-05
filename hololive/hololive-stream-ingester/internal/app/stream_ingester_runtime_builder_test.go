@@ -1,0 +1,246 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
+	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
+)
+
+func TestBuildStreamIngesterHTTPServer_Success(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Port: 30123,
+		},
+	}
+
+	server, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger())
+	require.NoError(t, err)
+	require.NotNil(t, server)
+	assert.Equal(t, ":30123", server.Addr)
+	require.NotNil(t, server.Handler)
+}
+
+func TestBuildStreamIngesterHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvalid(t *testing.T) {
+	originalTrustedProxies := constants.ServerConfig.TrustedProxies
+	constants.ServerConfig.TrustedProxies = []string{"not-a-valid-proxy-entry"}
+	t.Cleanup(func() {
+		constants.ServerConfig.TrustedProxies = originalTrustedProxies
+	})
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Port: 30123,
+		},
+	}
+
+	server, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger())
+	require.Error(t, err)
+	assert.Nil(t, server)
+	assert.Contains(t, err.Error(), "build stream ingester router: set trusted proxies")
+}
+
+func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T) {
+	tests := map[string]struct {
+		initialProxyEnabled bool
+		updatedProxyEnabled bool
+	}{
+		"proxy enabled -> disabled": {initialProxyEnabled: true, updatedProxyEnabled: false},
+		"proxy disabled -> enabled": {initialProxyEnabled: false, updatedProxyEnabled: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cfg := &config.Config{
+				Server: config.ServerConfig{Port: 30123},
+				Scraper: config.ScraperConfig{
+					ProxyEnabled: true,
+					ProxyURL:     "socks5://127.0.0.1:1080",
+				},
+			}
+
+			cacheService := &cachemocks.Client{
+				GetClientFunc: func() valkey.Client { return nil },
+			}
+
+			currentSettings := settings.Settings{
+				AlarmAdvanceMinutes: 5,
+				ScraperProxyEnabled: tc.initialProxyEnabled,
+			}
+			updateCalls := 0
+			settingsService := &settingsmocks.ReadWriter{
+				GetFunc: func() settings.Settings {
+					return currentSettings
+				},
+				UpdateFunc: func(newSettings settings.Settings) error {
+					updateCalls++
+					currentSettings = newSettings
+					return nil
+				},
+			}
+
+			youtubeService := &fakeYouTubeService{}
+			youtubeScheduler := &fakeScheduler{}
+
+			cleanupDBCalls := 0
+			cleanupCacheCalls := 0
+			infra := &streamIngesterInfrastructure{
+				cacheService:    cacheService,
+				postgresService: &databasemocks.Client{},
+				membersData: &fakeMemberDataProvider{
+					members: []*domain.Member{
+						{ChannelID: "active-channel", Name: "active", IsGraduated: false},
+						{ChannelID: "graduated-channel", Name: "graduated", IsGraduated: true},
+					},
+				},
+				settingsService: settingsService,
+				holodexService:  &holodex.Service{},
+				ytStack: &providers.YouTubeStack{
+					Service:   youtubeService,
+					Scheduler: youtubeScheduler,
+				},
+				photoSync:    &holodex.PhotoSyncService{},
+				cleanupDB:    func() { cleanupDBCalls++ },
+				cleanupCache: func() { cleanupCacheCalls++ },
+			}
+
+			scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
+				cfg.Scraper,
+				infra.postgresService,
+				infra.membersData,
+				infra.cacheService,
+				infra.irisClient,
+				infra.templateRenderer,
+				infra.sharedRL,
+				testLogger(),
+			)
+			require.NotNil(t, scraperScheduler)
+			require.NotNil(t, outboxDispatcher)
+			assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
+
+			configSubscriber := buildStreamIngesterConfigSubscriber(
+				infra.cacheService,
+				infra.settingsService,
+				infra.holodexService,
+				infra.ytStack,
+				scraperScheduler,
+				testLogger(),
+			)
+			require.NotNil(t, configSubscriber)
+
+			desiredProxyState := infra.settingsService.Get().ScraperProxyEnabled
+			applyScraperProxyToggle(
+				desiredProxyState,
+				ProvideYouTubeService(infra.ytStack),
+				infra.holodexService,
+				scraperScheduler,
+				testLogger(),
+			)
+			assert.Equal(t, tc.initialProxyEnabled, youtubeService.ScraperProxyEnabled())
+
+			updatePayload := []byte(`{"enabled":false}`)
+			if tc.updatedProxyEnabled {
+				updatePayload = []byte(`{"enabled":true}`)
+			}
+			applyFn := extractSubscriberApplyFn(t, configSubscriber)
+			applyFn(configsub.ConfigUpdate{
+				Type:    contractssettings.UpdateTypeScraperProxy,
+				Payload: updatePayload,
+			})
+
+			assert.Equal(t, 1, updateCalls)
+			assert.Equal(t, tc.updatedProxyEnabled, currentSettings.ScraperProxyEnabled)
+			assert.Equal(t, tc.updatedProxyEnabled, youtubeService.ScraperProxyEnabled())
+
+			httpServer, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger())
+			require.NoError(t, err)
+			require.NotNil(t, httpServer)
+
+			runtime := &StreamIngesterRuntime{
+				Config:           cfg,
+				Logger:           testLogger(),
+				Scheduler:        youtubeScheduler,
+				ScraperScheduler: scraperScheduler,
+				PhotoSync:        infra.photoSync,
+				OutboxDispatcher: outboxDispatcher,
+				ConfigSubscriber: configSubscriber,
+				ServerAddr:       ProvideAPIAddr(cfg),
+				HttpServer:       httpServer,
+				cleanup: func() {
+					infra.cleanupDB()
+					infra.cleanupCache()
+				},
+			}
+
+			require.NotNil(t, runtime)
+			assert.Equal(t, ":30123", runtime.ServerAddr)
+			assert.NotNil(t, runtime.Scheduler)
+			assert.NotNil(t, runtime.ScraperScheduler)
+			assert.NotNil(t, runtime.OutboxDispatcher)
+			assert.NotNil(t, runtime.ConfigSubscriber)
+			assert.NotNil(t, runtime.PhotoSync)
+			assert.NotNil(t, runtime.HttpServer)
+			assert.Equal(t, 0, cleanupDBCalls)
+			assert.Equal(t, 0, cleanupCacheCalls)
+
+			runtime.Close()
+			assert.Equal(t, 1, cleanupDBCalls)
+			assert.Equal(t, 1, cleanupCacheCalls)
+		})
+	}
+}
+
+func TestBuildStreamIngesterConfigSubscriber_ScraperProxyUpdateFailure(t *testing.T) {
+	currentSettings := settings.Settings{
+		AlarmAdvanceMinutes: 5,
+		ScraperProxyEnabled: false,
+	}
+	updateCalls := 0
+
+	settingsService := &settingsmocks.ReadWriter{
+		GetFunc: func() settings.Settings {
+			return currentSettings
+		},
+		UpdateFunc: func(settings.Settings) error {
+			updateCalls++
+			return errors.New("write failed")
+		},
+	}
+	cacheService := &cachemocks.Client{
+		GetClientFunc: func() valkey.Client { return nil },
+	}
+	youtubeService := &fakeYouTubeService{}
+
+	subscriber := buildStreamIngesterConfigSubscriber(
+		cacheService,
+		settingsService,
+		nil,
+		&providers.YouTubeStack{Service: youtubeService},
+		nil,
+		testLogger(),
+	)
+	applyFn := extractSubscriberApplyFn(t, subscriber)
+	applyFn(configsub.ConfigUpdate{
+		Type:    contractssettings.UpdateTypeScraperProxy,
+		Payload: []byte(`{"enabled":true}`),
+	})
+
+	assert.Equal(t, 1, updateCalls)
+	assert.True(t, youtubeService.ScraperProxyEnabled())
+	assert.False(t, currentSettings.ScraperProxyEnabled)
+}

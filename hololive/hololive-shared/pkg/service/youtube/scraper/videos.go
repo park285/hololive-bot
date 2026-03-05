@@ -397,49 +397,71 @@ func parseVideosFromInitialData(
 		return nil, err
 	}
 
-	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
-	tabs := data.Get(tabPath)
-
+	tabs := data.Get("contents.twoColumnBrowseResultsRenderer.tabs")
 	if !tabs.Exists() {
-		hasContents := data.Get("contents").Exists()
-		hasAlerts := data.Get("alerts").Exists()
-		fallbackVideos := parseVideosFromContentsFallback(data.Get("contents"), channelID, maxResults, videoParser)
+		return parseVideosFromInitialDataWithoutTabs(data, channelID, maxResults, videoParser), nil
+	}
 
-		// 디버깅: 구조 변경 감지 시 최상위 contents 키 기록
-		var topKeys []string
-		data.Get("contents").ForEach(func(key, _ gjson.Result) bool {
-			topKeys = append(topKeys, key.String())
-			return true
-		})
-
-		// tabs 경로가 사라져도 contents 내부에서 videoRenderer를 찾을 수 있으면 복구한다.
-		if len(fallbackVideos) > 0 {
-			slog.Info("ytInitialData tabs missing but recovered via contents fallback",
-				"channel_id", channelID,
-				"fallback_videos", len(fallbackVideos),
-				"contents_keys", strings.Join(topKeys, ", "))
-			return fallbackVideos, nil
-		}
-
-		if !hasContents && !hasAlerts {
-			slog.Debug("ytInitialData responseContext-only payload",
-				"channel_id", channelID,
-				"raw_len", len(data.Raw))
-			return []*Video{}, nil
-		}
-
-		slog.Warn("ytInitialData tabs missing and no recoverable videos",
+	videosContent, foundTabTitles := findVideosTabContent(tabs)
+	if !videosContent.Exists() {
+		slog.Debug("channel has no videos tab",
 			"channel_id", channelID,
-			"contents_keys", strings.Join(topKeys, ", "),
-			"has_contents", hasContents,
-			"has_alerts", hasAlerts,
-			"raw_len", len(data.Raw))
-
-		// YouTube가 responseContext-only payload를 주거나 구조가 부분적으로 바뀐 경우,
-		// 전체 폴러 실패 대신 빈 결과를 반환해 다음 주기에서 재시도한다.
+			"found_tabs", strings.Join(foundTabTitles, ", "))
 		return []*Video{}, nil
 	}
 
+	return parseVideosFromRichGrid(videosContent, channelID, maxResults, videoParser), nil
+}
+
+func parseVideosFromInitialDataWithoutTabs(
+	data gjson.Result,
+	channelID string,
+	maxResults int,
+	videoParser func(gjson.Result, string) *Video,
+) []*Video {
+	hasContents := data.Get("contents").Exists()
+	hasAlerts := data.Get("alerts").Exists()
+	fallbackVideos := parseVideosFromContentsFallback(data.Get("contents"), channelID, maxResults, videoParser)
+	topKeys := collectTopLevelKeys(data.Get("contents"))
+
+	// tabs 경로가 사라져도 contents 내부에서 videoRenderer를 찾을 수 있으면 복구한다.
+	if len(fallbackVideos) > 0 {
+		slog.Info("ytInitialData tabs missing but recovered via contents fallback",
+			"channel_id", channelID,
+			"fallback_videos", len(fallbackVideos),
+			"contents_keys", strings.Join(topKeys, ", "))
+		return fallbackVideos
+	}
+
+	if !hasContents && !hasAlerts {
+		slog.Debug("ytInitialData responseContext-only payload",
+			"channel_id", channelID,
+			"raw_len", len(data.Raw))
+		return []*Video{}
+	}
+
+	slog.Warn("ytInitialData tabs missing and no recoverable videos",
+		"channel_id", channelID,
+		"contents_keys", strings.Join(topKeys, ", "),
+		"has_contents", hasContents,
+		"has_alerts", hasAlerts,
+		"raw_len", len(data.Raw))
+
+	// YouTube가 responseContext-only payload를 주거나 구조가 부분적으로 바뀐 경우,
+	// 전체 폴러 실패 대신 빈 결과를 반환해 다음 주기에서 재시도한다.
+	return []*Video{}
+}
+
+func collectTopLevelKeys(contents gjson.Result) []string {
+	var topKeys []string
+	contents.ForEach(func(key, _ gjson.Result) bool {
+		topKeys = append(topKeys, key.String())
+		return true
+	})
+	return topKeys
+}
+
+func findVideosTabContent(tabs gjson.Result) (gjson.Result, []string) {
 	var videosContent gjson.Result
 	var foundTabTitles []string
 
@@ -453,32 +475,24 @@ func parseVideosFromInitialData(
 
 		isVideosTab := tabTitle == "Videos" || tabTitle == "동영상" || tabTitle == "動画" ||
 			strings.Contains(tabURL, "/videos")
-
-		if isVideosTab {
-			videosContent = tab.Get("tabRenderer.content")
-			return false
+		if !isVideosTab {
+			return true
 		}
-		return true
+
+		videosContent = tab.Get("tabRenderer.content")
+		return false
 	})
 
-	if !videosContent.Exists() {
-		slog.Debug("channel has no videos tab",
-			"channel_id", channelID,
-			"found_tabs", strings.Join(foundTabTitles, ", "))
-		return []*Video{}, nil
-	}
+	return videosContent, foundTabTitles
+}
 
-	var items []gjson.Result
-	richGridItems := videosContent.Get("richGridRenderer.contents")
-	if richGridItems.Exists() {
-		richGridItems.ForEach(func(_, item gjson.Result) bool {
-			if item.Get("richItemRenderer.content.videoRenderer").Exists() {
-				items = append(items, item.Get("richItemRenderer.content.videoRenderer"))
-			}
-			return true
-		})
-	}
-
+func parseVideosFromRichGrid(
+	videosContent gjson.Result,
+	channelID string,
+	maxResults int,
+	videoParser func(gjson.Result, string) *Video,
+) []*Video {
+	items := collectVideoRendererItems(videosContent.Get("richGridRenderer.contents"))
 	videos := make([]*Video, 0, min(len(items), maxResults))
 	for i, item := range items {
 		if i >= maxResults {
@@ -489,8 +503,22 @@ func parseVideosFromInitialData(
 			videos = append(videos, video)
 		}
 	}
+	return videos
+}
 
-	return videos, nil
+func collectVideoRendererItems(richGridItems gjson.Result) []gjson.Result {
+	var items []gjson.Result
+	if !richGridItems.Exists() {
+		return items
+	}
+	richGridItems.ForEach(func(_, item gjson.Result) bool {
+		videoRenderer := item.Get("richItemRenderer.content.videoRenderer")
+		if videoRenderer.Exists() {
+			items = append(items, videoRenderer)
+		}
+		return true
+	})
+	return items
 }
 
 // parseVideosFromContentsFallback: tabs 경로가 없을 때 contents 내부 전체에서 videoRenderer를 탐색한다.

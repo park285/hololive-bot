@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -16,13 +14,12 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-}
+var newTestLogger = sharedlogging.NewLogger
 
 type mockDedupCacheState struct {
 	mu      sync.Mutex

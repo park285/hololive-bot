@@ -4,8 +4,6 @@ import (
 	"context"
 	stdErrors "errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -17,12 +15,11 @@ import (
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
-}
+var newTestLogger = sharedlogging.NewLogger
 
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()

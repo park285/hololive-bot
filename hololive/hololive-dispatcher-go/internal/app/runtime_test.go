@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -15,6 +13,7 @@ import (
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
+	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
@@ -48,9 +47,7 @@ func (s *testMessageSender) SendMessage(ctx context.Context, room, message strin
 	return nil
 }
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+var testLogger = sharedlogging.NewLogger
 
 func newTestRuntimeForReadiness(connected bool) *Runtime {
 	return &Runtime{

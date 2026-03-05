@@ -73,7 +73,7 @@ func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
 	defaultTmpl, overrides, err := h.templateAdmin.GetByKey(ctx, key)
 	if err != nil {
 		if errors.Is(err, template.ErrTemplateKeyNotFound) {
-			c.JSON(404, gin.H{"error": err.Error()})
+			c.JSON(404, gin.H{"error": "template key not found"})
 			return
 		}
 		c.JSON(500, gin.H{"error": "failed to get template"})
@@ -95,7 +95,7 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 
 	var req templateUpsertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -108,11 +108,11 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
-			c.JSON(404, gin.H{"error": err.Error()})
+			c.JSON(404, gin.H{"error": "template key not found"})
 		case errors.Is(err, template.ErrTemplateParseError):
-			c.JSON(400, gin.H{"error": "template parse error", "details": err.Error()})
+			c.JSON(400, gin.H{"error": "template parse error"})
 		case errors.Is(err, template.ErrTemplateRenderError):
-			c.JSON(400, gin.H{"error": "template render error", "details": err.Error()})
+			c.JSON(400, gin.H{"error": "template render error"})
 		default:
 			c.JSON(500, gin.H{"error": "failed to save template"})
 		}
@@ -150,7 +150,7 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 
 	var req templatePreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -158,11 +158,11 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
-			c.JSON(404, gin.H{"error": err.Error()})
+			c.JSON(404, gin.H{"error": "template key not found"})
 		case errors.Is(err, template.ErrTemplateParseError):
-			c.JSON(400, gin.H{"error": "template parse error", "details": err.Error()})
+			c.JSON(400, gin.H{"error": "template parse error"})
 		case errors.Is(err, template.ErrTemplateRenderError):
-			c.JSON(400, gin.H{"error": "template render error", "details": err.Error()})
+			c.JSON(400, gin.H{"error": "template render error"})
 		default:
 			c.JSON(500, gin.H{"error": "failed to preview template"})
 		}
@@ -213,7 +213,7 @@ func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
 	revision, err := h.templateAdmin.GetRevisionByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, template.ErrRevisionNotFound) {
-			c.JSON(404, gin.H{"error": err.Error()})
+			c.JSON(404, gin.H{"error": "revision not found"})
 			return
 		}
 		c.JSON(500, gin.H{"error": "failed to get revision"})

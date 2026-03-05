@@ -106,13 +106,6 @@ func (a *memberNewsSearcherAdapter) Search(ctx context.Context, query string) ([
 	}
 
 	converted := make([]membernews.SearchResult, 0, len(results))
-	for _, item := range results {
-		converted = append(converted, membernews.SearchResult{
-			Title:         item.Title,
-			URL:           item.URL,
-			Content:       item.Content,
-			PublishedDate: item.PublishedDate,
-		})
-	}
+	converted = append(converted, results...)
 	return converted, nil
 }
