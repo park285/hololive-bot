@@ -108,8 +108,16 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 // processOnce: 한 번의 폴링 사이클
 func (d *Dispatcher) processOnce(ctx context.Context) {
+	var (
+		outboxItems []domain.YouTubeNotificationOutbox
+		err         error
+	)
 	// PENDING 상태인 알림 조회 (락 획득)
-	outboxItems, err := d.fetchAndLock(ctx)
+	if d.cfg.PerRoomMode {
+		outboxItems, err = d.fetchAndLockForPerRoom(ctx)
+	} else {
+		outboxItems, err = d.fetchAndLock(ctx)
+	}
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 		return
@@ -144,6 +152,46 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 			d.processGroupedItems(ctx, group)
 		}
 	}
+}
+
+// fetchAndLockForPerRoom: delivery row가 아직 없는 outbox만 claim
+func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
+	var items []domain.YouTubeNotificationOutbox
+	now := time.Now()
+	lockExpiry := now.Add(-d.cfg.LockTimeout)
+
+	if err := d.db.WithContext(ctx).Raw(`
+		WITH claim AS (
+			SELECT o.id
+			FROM youtube_notification_outbox o
+			WHERE o.status = ?
+			  AND (o.locked_at IS NULL OR o.locked_at < ?)
+			  AND o.next_attempt_at <= ?
+			  AND NOT EXISTS (
+				SELECT 1 FROM youtube_notification_delivery d
+				WHERE d.outbox_id = o.id
+			  )
+			ORDER BY o.created_at ASC
+			LIMIT ?
+			FOR UPDATE SKIP LOCKED
+		),
+		updated AS (
+			UPDATE youtube_notification_outbox o
+			SET locked_at = ?
+			FROM claim
+			WHERE o.id = claim.id
+			RETURNING o.id, o.kind, o.channel_id, o.content_id, o.payload, o.status,
+			          o.attempt_count, o.next_attempt_at, o.created_at, o.locked_at, o.sent_at, o.error
+		)
+		SELECT id, kind, channel_id, content_id, payload, status,
+		       attempt_count, next_attempt_at, created_at, locked_at, sent_at, error
+		FROM updated
+		ORDER BY created_at ASC
+	`, domain.OutboxStatusPending, lockExpiry, now, d.cfg.BatchSize, now).Scan(&items).Error; err != nil {
+		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
+	}
+
+	return items, nil
 }
 
 func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) {
