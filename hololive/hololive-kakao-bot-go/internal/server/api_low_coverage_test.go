@@ -384,35 +384,8 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("get rooms nil acl", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{}}
-		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/rooms", nil)
-		handler.GetRooms(ctx)
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
-	})
-
-	t.Run("get rooms zero value acl service is unavailable", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}}}
-		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/rooms", nil)
-		handler.GetRooms(ctx)
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
-	})
-
-	t.Run("add room nil acl", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte(`{"room":"a"}`))
-		handler.AddRoom(ctx)
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
-	})
-
 	t.Run("add room bad json", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}}}
+		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte("{"))
 		handler.AddRoom(ctx)
 		if rec.Code != http.StatusBadRequest {
@@ -420,17 +393,8 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 		}
 	})
 
-	t.Run("remove room nil acl", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{}}
-		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/rooms", []byte(`{"room":"a"}`))
-		handler.RemoveRoom(ctx)
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
-	})
-
 	t.Run("remove room bad json", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}}}
+		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/rooms", []byte("{"))
 		handler.RemoveRoom(ctx)
 		if rec.Code != http.StatusBadRequest {
@@ -438,17 +402,8 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 		}
 	})
 
-	t.Run("set acl nil acl service", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/acl", []byte(`{"enabled":true}`))
-		handler.SetACL(ctx)
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
-	})
-
 	t.Run("set acl bad json", func(t *testing.T) {
-		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}}}
+		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/acl", []byte("{"))
 		handler.SetACL(ctx)
 		if rec.Code != http.StatusBadRequest {

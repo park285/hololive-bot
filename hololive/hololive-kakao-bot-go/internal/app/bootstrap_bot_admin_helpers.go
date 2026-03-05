@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
@@ -17,7 +17,7 @@ import (
 )
 
 type botAdminSettingsComponents struct {
-	settingsApplier         sharedserver.SettingsApplier
+	settingsApplier         sharedsettings.SettingsApplier
 	majorEventTriggerClient *triggerclient.Client
 }
 
@@ -50,7 +50,7 @@ func buildBotAdminSettingsComponents(
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
 ) botAdminSettingsComponents {
-	localSettingsApplier := sharedserver.NewLocalSettingsApplier(
+	localSettingsApplier := sharedsettings.NewLocalSettingsApplier(
 		deps.youtubeService,
 		deps.holodexService,
 		scraperScheduler,
@@ -88,7 +88,7 @@ func buildBotAdminSystemCollector(cfg *config.Config) *system.Collector {
 func buildBotAdminAPIHandlers(
 	deps botAdminRuntimeDependencies,
 	scraperScheduler *poller.Scheduler,
-	settingsApplier sharedserver.SettingsApplier,
+	settingsApplier sharedsettings.SettingsApplier,
 	majorEventTriggerClient *triggerclient.Client,
 	systemCollector *system.Collector,
 	logger *slog.Logger,

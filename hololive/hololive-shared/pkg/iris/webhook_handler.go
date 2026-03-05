@@ -202,10 +202,6 @@ func NewWebhookHandler(
 }
 
 func (h *WebhookHandler) Close() error {
-	if h == nil {
-		return nil
-	}
-
 	h.closeOnce.Do(func() {
 		h.queueLock.Lock()
 		h.closed = true
@@ -233,24 +229,10 @@ func (h *WebhookHandler) Close() error {
 // 5. Enqueue to bounded queue
 // 6. Return 200 on enqueue success, 503 on timeout/full
 func (h *WebhookHandler) Handle(c *gin.Context) {
-	if c == nil {
-		return
-	}
-
 	// gin 라우팅이 POST로 제한되더라도, 외부 호출 경로이므로 방어적으로 체크합니다.
 	if c.Request.Method != http.MethodPost {
 		h.incRequest("method_not_allowed")
 		c.Status(http.StatusMethodNotAllowed)
-		return
-	}
-
-	if h == nil {
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-	if h.logger == nil {
-		h.incRequest("internal_error")
-		c.Status(http.StatusInternalServerError)
 		return
 	}
 

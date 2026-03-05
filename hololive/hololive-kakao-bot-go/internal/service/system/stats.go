@@ -155,6 +155,9 @@ func (c *Collector) getCachedStats() *SystemStats {
 }
 
 func cloneSystemStats(src *SystemStats) *SystemStats {
+	if src == nil {
+		return nil
+	}
 	cloned := *src
 	cloned.ServiceGoroutines = append([]ServiceGoroutines(nil), src.ServiceGoroutines...)
 	return &cloned

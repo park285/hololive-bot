@@ -52,7 +52,7 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 
 	holodexAPIKeys := providers.ProvideHolodexAPIKeys(cfg.Holodex)
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(infra.memberCache, logger)
-	membersData := providers.ProvideMembersData(memberServiceAdapter)
+	membersData := memberServiceAdapter
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: cfg.Scraper.ProxyEnabled,
 		URL:     cfg.Scraper.ProxyURL,

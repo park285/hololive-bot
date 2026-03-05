@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 )
 
 type memberNewsWeeklyRunNowTrigger interface {
@@ -12,16 +12,16 @@ type memberNewsWeeklyRunNowTrigger interface {
 }
 
 type botSettingsApplier struct {
-	base             sharedserver.SettingsApplier
+	base             sharedsettings.SettingsApplier
 	memberNewsRunNow memberNewsWeeklyRunNowTrigger
 	logger           *slog.Logger
 }
 
 func newBotSettingsApplier(
-	base sharedserver.SettingsApplier,
+	base sharedsettings.SettingsApplier,
 	memberNewsRunNow memberNewsWeeklyRunNowTrigger,
 	logger *slog.Logger,
-) sharedserver.SettingsApplier {
+) sharedsettings.SettingsApplier {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -33,10 +33,10 @@ func newBotSettingsApplier(
 	}
 }
 
-func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool) sharedserver.ScraperProxyApplyResult {
+func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool) sharedsettings.ScraperProxyApplyResult {
 	if a.base == nil {
 		applied := false
-		return sharedserver.ScraperProxyApplyResult{
+		return sharedsettings.ScraperProxyApplyResult{
 			Requested: enabled,
 			Applied:   &applied,
 			Reason:    "settings applier not configured",
@@ -45,9 +45,9 @@ func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool
 	return a.base.ApplyScraperProxy(ctx, enabled)
 }
 
-func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) sharedserver.AlarmAdvanceMinutesApplyResult {
+func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
 	if a.base == nil {
-		return sharedserver.AlarmAdvanceMinutesApplyResult{
+		return sharedsettings.AlarmAdvanceMinutesApplyResult{
 			AlarmRequestedAdvanceMinutes: minutes,
 			AlarmApplied:                 false,
 			AlarmReason:                  "settings applier not configured",
@@ -56,9 +56,9 @@ func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minut
 	return a.base.ApplyAlarmAdvanceMinutes(ctx, minutes)
 }
 
-func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sharedserver.MemberNewsWeeklyRunNowResult {
+func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {
 	if a.memberNewsRunNow == nil {
-		return sharedserver.MemberNewsWeeklyRunNowResult{
+		return sharedsettings.MemberNewsWeeklyRunNowResult{
 			Applied: false,
 			Reason:  "member news trigger is not configured",
 		}
@@ -66,23 +66,23 @@ func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sh
 
 	if err := a.memberNewsRunNow.SendMemberNewsWeekly(ctx); err != nil {
 		a.logger.Warn("Failed to trigger member news weekly run-now", slog.Any("error", err))
-		return sharedserver.MemberNewsWeeklyRunNowResult{
+		return sharedsettings.MemberNewsWeeklyRunNowResult{
 			Applied: false,
 			Reason:  "member news trigger failed",
 			Error:   err.Error(),
 		}
 	}
 
-	return sharedserver.MemberNewsWeeklyRunNowResult{
+	return sharedsettings.MemberNewsWeeklyRunNowResult{
 		Applied: true,
 		Source:  "member_news_trigger",
 	}
 }
 
-func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedserver.ScraperProxyRuntimeStateResult {
+func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedsettings.ScraperProxyRuntimeStateResult {
 	if a.base == nil {
 		known := false
-		return sharedserver.ScraperProxyRuntimeStateResult{
+		return sharedsettings.ScraperProxyRuntimeStateResult{
 			Requested: requested,
 			Known:     &known,
 			Reason:    "settings applier not configured",

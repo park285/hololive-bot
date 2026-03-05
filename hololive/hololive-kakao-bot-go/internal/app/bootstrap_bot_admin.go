@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"

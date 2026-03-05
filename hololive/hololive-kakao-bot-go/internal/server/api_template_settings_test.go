@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -16,27 +16,27 @@ type stubSettingsApplier struct {
 	memberNewsApplied bool
 }
 
-func (s *stubSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) sharedserver.ScraperProxyApplyResult {
-	return sharedserver.ScraperProxyApplyResult{
+func (s *stubSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) sharedsettings.ScraperProxyApplyResult {
+	return sharedsettings.ScraperProxyApplyResult{
 		Requested: enabled,
 		Reason:    "test",
 	}
 }
 
-func (s *stubSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedserver.AlarmAdvanceMinutesApplyResult {
-	return sharedserver.AlarmAdvanceMinutesApplyResult{
+func (s *stubSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
+	return sharedsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 		AlarmApplied:                 true,
 	}
 }
 
-func (s *stubSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) sharedserver.MemberNewsWeeklyRunNowResult {
+func (s *stubSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {
 	s.memberNewsApplied = true
-	return sharedserver.MemberNewsWeeklyRunNowResult{Applied: true, Source: "test"}
+	return sharedsettings.MemberNewsWeeklyRunNowResult{Applied: true, Source: "test"}
 }
 
-func (s *stubSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedserver.ScraperProxyRuntimeStateResult {
-	return sharedserver.ScraperProxyRuntimeStateResult{
+func (s *stubSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedsettings.ScraperProxyRuntimeStateResult {
+	return sharedsettings.ScraperProxyRuntimeStateResult{
 		Requested: requested,
 		Reason:    "test",
 	}

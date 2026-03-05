@@ -48,10 +48,6 @@ func defaultAlarmAdvanceMinute(advanceMinutes []int) int {
 // ResolveAlarmAdvanceMinutes - 설정 파일의 알람 사전 알림 분을 로드하여 반환한다.
 // 설정 파일이 없거나 값이 0 이하이면 인자로 받은 advanceMinutes를 그대로 반환한다.
 func ResolveAlarmAdvanceMinutes(advanceMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) []int {
-	return resolveAlarmAdvanceMinutes(advanceMinutes, scraperProxyEnabled, logger)
-}
-
-func resolveAlarmAdvanceMinutes(advanceMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) []int {
 	settingsPath := resolveSettingsFilePath()
 
 	if _, err := os.Stat(settingsPath); err != nil {

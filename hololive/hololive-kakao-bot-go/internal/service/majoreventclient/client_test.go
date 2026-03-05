@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/majoreventclient"
 )
@@ -83,8 +83,8 @@ func TestNew(t *testing.T) {
 			// baseURL 및 apiKey 검증: 실제 요청을 통해 간접 확인
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != tc.wantAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), tc.wantAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != tc.wantAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), tc.wantAPIKey)
 				}
 				w.WriteHeader(http.StatusOK)
 				_ = json.NewEncoder(w).Encode(map[string]bool{"subscribed": false})
@@ -207,8 +207,8 @@ func TestIsSubscribed(t *testing.T) {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), testAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
 			defer srv.Close()
@@ -223,16 +223,6 @@ func TestIsSubscribed(t *testing.T) {
 				t.Errorf("IsSubscribed() = %v, want %v", got, tc.wantResult)
 			}
 		})
-	}
-}
-
-func TestIsSubscribed_NilClient(t *testing.T) {
-	t.Parallel()
-
-	var c *majoreventclient.Client
-	_, err := c.IsSubscribed(context.Background(), "room-1")
-	if err == nil {
-		t.Error("nil 클라이언트에서 IsSubscribed() 에러가 반환되어야 합니다")
 	}
 }
 
@@ -310,8 +300,8 @@ func TestSubscribe(t *testing.T) {
 					t.Errorf("Content-Type = %q, want application/json", ct)
 				}
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), testAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
 			defer srv.Close()
@@ -323,16 +313,6 @@ func TestSubscribe(t *testing.T) {
 				t.Errorf("Subscribe() err = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
-	}
-}
-
-func TestSubscribe_NilClient(t *testing.T) {
-	t.Parallel()
-
-	var c *majoreventclient.Client
-	err := c.Subscribe(context.Background(), "room-1", "방")
-	if err == nil {
-		t.Error("nil 클라이언트에서 Subscribe() 에러가 반환되어야 합니다")
 	}
 }
 
@@ -395,8 +375,8 @@ func TestUnsubscribe(t *testing.T) {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
 				// API 키 헤더 검증
-				if r.Header.Get(sharedserver.APIKeyHeader) != testAPIKey {
-					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(sharedserver.APIKeyHeader), testAPIKey)
+				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
+					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
 			})
 			defer srv.Close()
@@ -411,12 +391,3 @@ func TestUnsubscribe(t *testing.T) {
 	}
 }
 
-func TestUnsubscribe_NilClient(t *testing.T) {
-	t.Parallel()
-
-	var c *majoreventclient.Client
-	err := c.Unsubscribe(context.Background(), "room-1")
-	if err == nil {
-		t.Error("nil 클라이언트에서 Unsubscribe() 에러가 반환되어야 합니다")
-	}
-}
