@@ -73,33 +73,39 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	if err != nil {
 		return nil, err
 	}
+	core := deps.coreDeps()
+	messaging := deps.messagingDeps()
+	data := deps.dataDeps()
+	stream := deps.streamDeps()
+	support := deps.supportDeps()
+	feature := deps.featureDeps()
 
 	bot := &Bot{
-		botSelfUser:      deps.BotSelfUser,
-		irisBaseURL:      deps.IrisBaseURL,
-		notification:     deps.Notification,
-		logger:           deps.Logger,
-		irisClient:       deps.Client,
-		messageAdapter:   deps.MessageAdapter,
-		formatter:        deps.Formatter,
-		cache:            deps.Cache,
-		postgres:         deps.Postgres,
+		botSelfUser:      core.botSelfUser,
+		irisBaseURL:      core.irisBaseURL,
+		notification:     core.notification,
+		logger:           core.logger,
+		irisClient:       messaging.client,
+		messageAdapter:   messaging.messageAdapter,
+		formatter:        messaging.formatter,
+		cache:            data.cache,
+		postgres:         data.postgres,
 		holodex:          holodexRuntime,
-		chzzk:            deps.Chzzk,
-		twitch:           deps.Twitch,
-		officialProfiles: deps.Profiles,
-		alarm:            deps.Alarm,
-		matcher:          deps.Matcher,
-		statsRepo:        deps.YouTubeStatsRepo,
-		acl:              deps.ACL,
-		majorEventRepo:   deps.MajorEventRepo,
-		memberNews:       deps.MemberNews,
-		commandFactories: append([]command.Factory(nil), deps.CommandFactories...),
-		membersData:      deps.MembersData,
-		workerPool:       deps.WorkerPool,
+		chzzk:            stream.chzzk,
+		twitch:           stream.twitch,
+		officialProfiles: stream.profiles,
+		alarm:            stream.alarm,
+		matcher:          stream.matcher,
+		statsRepo:        stream.youTubeStatsRepo,
+		acl:              support.acl,
+		majorEventRepo:   feature.majorEventRepo,
+		memberNews:       feature.memberNews,
+		commandFactories: feature.commandFactories,
+		membersData:      stream.membersData,
+		workerPool:       support.workerPool,
 		stopCh:           make(chan struct{}),
 		doneCh:           make(chan struct{}),
-		selfSender:       stringutil.Normalize(deps.BotSelfUser),
+		selfSender:       stringutil.Normalize(core.botSelfUser),
 	}
 
 	bot.transport = NewCommandTransport(bot.irisClient, bot.formatter)
