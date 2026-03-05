@@ -272,6 +272,7 @@ var YouTubeModels = []any{
 	&YouTubeCommunityPost{},
 	&YouTubeContentWatermark{},
 	&YouTubeNotificationOutbox{},
+	&YouTubeNotificationDelivery{},
 	&YouTubeLiveSession{},
 	&YouTubeLiveViewerSample{},
 	&YouTubeStreamStats{},
