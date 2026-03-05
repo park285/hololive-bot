@@ -10,47 +10,52 @@ func validateBotDependencies(deps *Dependencies) (streamRuntime, error) {
 		return nil, fmt.Errorf("bot dependencies are required")
 	}
 
-	if deps.Logger == nil {
+	core := deps.coreDeps()
+	messaging := deps.messagingDeps()
+	data := deps.dataDeps()
+	stream := deps.streamDeps()
+
+	if core.logger == nil {
 		return nil, fmt.Errorf("logger dependency is required")
 	}
 
-	deps.Logger.Info("Bot dependency snapshot", slog.Bool("stats_repo", deps.YouTubeStatsRepo != nil))
+	core.logger.Info("Bot dependency snapshot", slog.Bool("stats_repo", stream.youTubeStatsRepo != nil))
 
-	if deps.Client == nil {
+	if messaging.client == nil {
 		return nil, fmt.Errorf("iris client dependency is required")
 	}
-	if deps.MessageAdapter == nil {
+	if messaging.messageAdapter == nil {
 		return nil, fmt.Errorf("message adapter dependency is required")
 	}
-	if deps.Formatter == nil {
+	if messaging.formatter == nil {
 		return nil, fmt.Errorf("response formatter dependency is required")
 	}
-	if deps.Cache == nil {
+	if data.cache == nil {
 		return nil, fmt.Errorf("cache dependency is required")
 	}
-	if deps.Postgres == nil {
+	if data.postgres == nil {
 		return nil, fmt.Errorf("postgres dependency is required")
 	}
-	if deps.Holodex == nil {
+	if stream.holodex == nil {
 		return nil, fmt.Errorf("holodex dependency is required")
 	}
-	if deps.Profiles == nil {
+	if stream.profiles == nil {
 		return nil, fmt.Errorf("profile service dependency is required")
 	}
-	if deps.Alarm == nil {
+	if stream.alarm == nil {
 		return nil, fmt.Errorf("alarm service dependency is required")
 	}
-	if deps.Matcher == nil {
+	if stream.matcher == nil {
 		return nil, fmt.Errorf("matcher dependency is required")
 	}
-	if deps.MembersData == nil {
+	if stream.membersData == nil {
 		return nil, fmt.Errorf("member data dependency is required")
 	}
-	if deps.YouTubeStatsRepo == nil {
+	if stream.youTubeStatsRepo == nil {
 		return nil, fmt.Errorf("youtube stats repository dependency is required")
 	}
 
-	holodexRuntime, ok := deps.Holodex.(streamRuntime)
+	holodexRuntime, ok := stream.holodex.(streamRuntime)
 	if !ok {
 		return nil, fmt.Errorf("holodex dependency does not implement stream runtime interface")
 	}
