@@ -4,25 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/repository"
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
 // coreInfrastructure 는 Bot 런타임 구성에 필요한 의존성/서비스 묶음을 담는다.
@@ -39,88 +32,6 @@ type coreInfrastructure struct {
 	runtimeAlarmSchedulerBuilder runtimeAlarmSchedulerBuilder
 	cleanupCache                 func()
 	cleanupDB                    func()
-}
-
-type alarmModeComponents struct {
-	alarmCRUD        domain.AlarmCRUD
-	alarmService     *notification.AlarmService
-	chzzkClient      *chzzk.Client
-	twitchClient     *twitch.Client
-	memberDataSource member.DataProvider
-}
-
-type alarmDependencies struct {
-	alarmService       *notification.AlarmService
-	memberDataProvider member.DataProvider
-	chzzkClient        *chzzk.Client
-	twitchClient       *twitch.Client
-}
-
-func initAlarmDependencies(
-	chzzkCfg config.ChzzkConfig,
-	twitchCfg config.TwitchConfig,
-	advanceMinutes []int,
-	scraperProxyEnabled bool,
-	cacheService cache.Client,
-	holodexService *holodex.Service,
-	memberServiceAdapter member.DataProvider,
-	alarmRepository *alarm.Repository,
-	logger *slog.Logger,
-) (*alarmDependencies, error) {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	chzzkClient := ProvideChzzkClient(httpClient, chzzkCfg, logger)
-	twitchClient := ProvideTwitchClient(twitchCfg, logger)
-	memberDataProvider := providers.ProvideMembersData(memberServiceAdapter)
-
-	resolved := providers.ResolveAlarmAdvanceMinutes(advanceMinutes, scraperProxyEnabled, logger)
-	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, chzzkClient, twitchClient, memberDataProvider, alarmRepository, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide alarm service: %w", err)
-	}
-
-	return &alarmDependencies{
-		alarmService:       alarmService,
-		memberDataProvider: memberDataProvider,
-		chzzkClient:        chzzkClient,
-		twitchClient:       twitchClient,
-	}, nil
-}
-
-func initAlarmModeComponents(
-	ctx context.Context,
-	cfg *config.Config,
-	infra *infraResources,
-	holodexService *holodex.Service,
-	memberServiceAdapter member.DataProvider,
-	alarmRepository *alarm.Repository,
-	logger *slog.Logger,
-) (*alarmModeComponents, error) {
-	alarmDeps, alarmErr := initAlarmDependencies(
-		cfg.Chzzk,
-		cfg.Twitch,
-		cfg.Notification.AdvanceMinutes,
-		cfg.Scraper.ProxyEnabled,
-		infra.cacheService,
-		holodexService,
-		memberServiceAdapter,
-		alarmRepository,
-		logger,
-	)
-	if alarmErr != nil {
-		return nil, alarmErr
-	}
-
-	if warnErr := alarmDeps.alarmService.WarmCacheFromDB(ctx); warnErr != nil {
-		logger.Warn("Failed to warm alarm cache from DB", "error", warnErr)
-	}
-
-	return &alarmModeComponents{
-		alarmCRUD:        alarmDeps.alarmService,
-		alarmService:     alarmDeps.alarmService,
-		chzzkClient:      alarmDeps.chzzkClient,
-		twitchClient:     alarmDeps.twitchClient,
-		memberDataSource: alarmDeps.memberDataProvider,
-	}, nil
 }
 
 // initCoreInfrastructure 는 공통 인프라를 초기화한다.
