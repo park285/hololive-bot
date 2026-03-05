@@ -12,6 +12,7 @@
 - [x] PR-2B 1차 구현
   - Dispatcher에 `PerRoomMode` 분기 추가 (기본값 `false`)
   - PerRoomMode에서 delivery row 기반 send/retry/aggregate 갱신 경로 추가
+  - delivery row가 이미 존재하는 outbox는 재-claim하지 않도록 필터링(`NOT EXISTS delivery`)
 - [ ] PR-2C
   - PerRoomMode 전용 통합 테스트 강화
   - 운영 토글(환경설정) 연결 및 단계적 롤아웃 절차 문서화
