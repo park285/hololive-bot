@@ -44,13 +44,6 @@ func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
 }
 
 func TestMemberNewsSearcherAdapterSearch_NilBase(t *testing.T) {
-	t.Run("nil adapter and base", func(t *testing.T) {
-		var adapter *memberNewsSearcherAdapter
-		results, err := adapter.Search(context.Background(), "query")
-		require.NoError(t, err)
-		assert.Nil(t, results)
-	})
-
 	t.Run("nil base", func(t *testing.T) {
 		adapter := &memberNewsSearcherAdapter{base: nil}
 		results, err := adapter.Search(context.Background(), "query")

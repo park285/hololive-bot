@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 func TestClientSendWeeklyNotificationSuccess(t *testing.T) {
@@ -94,7 +94,7 @@ func TestClientSendWeeklyNotificationWithAPIKey(t *testing.T) {
 	const apiKey = "test-key"
 	var gotHeader string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotHeader = r.Header.Get(sharedserver.APIKeyHeader)
+		gotHeader = r.Header.Get(commoncontracts.APIKeyHeader)
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
@@ -104,6 +104,6 @@ func TestClientSendWeeklyNotificationWithAPIKey(t *testing.T) {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 	if gotHeader != apiKey {
-		t.Fatalf("%s header = %q, want %q", sharedserver.APIKeyHeader, gotHeader, apiKey)
+		t.Fatalf("%s header = %q, want %q", commoncontracts.APIKeyHeader, gotHeader, apiKey)
 	}
 }

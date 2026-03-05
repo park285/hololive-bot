@@ -81,10 +81,6 @@ func newMemberNewsRunNowExecutor(
 }
 
 func (e *memberNewsRunNowExecutor) Trigger() {
-	if e == nil {
-		return
-	}
-
 	e.stateMu.Lock()
 	if e.running {
 		e.pending = true
@@ -141,10 +137,6 @@ func (r *LLMSchedulerRuntime) Close() {
 
 // Run: SIGINT/SIGTERM 신호를 대기하며 graceful shutdown을 수행합니다. (블로킹)
 func (r *LLMSchedulerRuntime) Run() {
-	if r == nil {
-		return
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -262,10 +254,6 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 
 // Shutdown: 모든 스케줄러와 HTTP 서버를 안전하게 종료하고 발생한 에러를 누적 반환합니다.
 func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
-	if r == nil {
-		return nil
-	}
-
 	var errs []error
 	r.stopSchedulers()
 	if err := r.httpServer.Shutdown(ctx); err != nil {
@@ -326,7 +314,7 @@ func buildLLMSchedulerComponents(
 		return nil, fmt.Errorf("init member cache: %w", err)
 	}
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(memberCache, logger)
-	memberDataProvider := providers.ProvideMembersData(memberServiceAdapter)
+	memberDataProvider := memberServiceAdapter
 
 	templateRenderer := template.NewRenderer(postgresService.GetGormDB(), logger)
 	formatter := newLLMSchedulerFormatter(cfg.Bot.Prefix, templateRenderer, logger)
@@ -424,10 +412,6 @@ func newLLMSchedulerConfigApplyFn(
 	memberNewsScheduler memberNewsWeeklyDigestSender,
 	logger *slog.Logger,
 ) func(configsub.ConfigUpdate) {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
 	executor := newMemberNewsRunNowExecutor(ctx, memberNewsScheduler, constants.RequestTimeout.BotAlarmCheck, logger)
 
 	return configsub.NewApplyFn(logger, configsub.ApplyHandlers{

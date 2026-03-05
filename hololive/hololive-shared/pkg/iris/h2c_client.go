@@ -203,10 +203,6 @@ func (c *H2CClient) postJSON(ctx context.Context, path string, body any, out any
 }
 
 func (c *H2CClient) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	if c == nil {
-		return nil, fmt.Errorf("iris client is nil")
-	}
-
 	url := c.baseURL + path
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
