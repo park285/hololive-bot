@@ -32,3 +32,4 @@
 - `runbook_execution/HOLOLIVE_K3S_CUTOVER_RUNBOOK_20260227.md`
 - `runbook_execution/HOLOLIVE_K3S_EXTERNAL_DEPENDENCY_CHECKLIST_20260301.md`
 - `runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`
+- `runbook_execution/OUTBOX_PER_ROOM_ROLLOUT_RUNBOOK_20260305.md` — outbox per-room 모드 전환 런북
