@@ -445,6 +445,70 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 	}
 }
 
+func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+
+	ctx := context.Background()
+	db := setupTestDB(t)
+	cleanupOutbox(t, db)
+
+	sender := &fakeSender{}
+	cacheService := setupCacheService(t)
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	cfg := outbox.Config{
+		BatchSize:    10,
+		LockTimeout:  1 * time.Minute,
+		PollInterval: 100 * time.Millisecond,
+		MaxRetries:   3,
+		RetryBackoff: 50 * time.Millisecond,
+		PerRoomMode:  true,
+	}
+
+	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
+
+	payload, _ := json.Marshal(map[string]string{
+		"video_id": "perroom_no_sub_video",
+		"title":    "PerRoom No Subscribers Video",
+	})
+
+	item := &domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewVideo,
+		ChannelID:     "UCperroom_nosub",
+		ContentID:     "test_perroom_nosub_" + time.Now().Format("150405"),
+		Payload:       string(payload),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now(),
+	}
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("Failed to create test outbox item: %v", err)
+	}
+	t.Cleanup(func() { db.Delete(item) })
+
+	dispatcher.ProcessOnceForTest(ctx)
+
+	var updated domain.YouTubeNotificationOutbox
+	if err := db.First(&updated, item.ID).Error; err != nil {
+		t.Fatalf("Failed to fetch updated item: %v", err)
+	}
+	if updated.Status != domain.OutboxStatusSent {
+		t.Fatalf("Expected status SENT, got %s", updated.Status)
+	}
+
+	deliveries := fetchDeliveryRows(t, db, item.ID)
+	if len(deliveries) != 0 {
+		t.Fatalf("Expected 0 delivery rows, got %d", len(deliveries))
+	}
+
+	msgs := sender.getMessages()
+	if len(msgs) != 0 {
+		t.Fatalf("Expected 0 sent messages, got %d", len(msgs))
+	}
+}
+
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
