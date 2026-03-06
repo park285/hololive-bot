@@ -127,7 +127,6 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			AdminEnabled:     envutil.Bool("BOT_ADMIN_ENABLED", true),
 		},
 		Services: ServicesConfig{
-			LLMServerHealthURL:      llmSchedulerHealthURL,
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
 			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
 			GameBotTurtleHealthURL:  envutil.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),

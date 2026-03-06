@@ -40,7 +40,6 @@ type BotConfig struct {
 
 // ServicesConfig: 외부 Go 서비스 연결 설정 (goroutine 통합 모니터링용)
 type ServicesConfig struct {
-	LLMServerHealthURL      string // legacy key alias for llm-scheduler health URL
 	LLMSchedulerHealthURL   string // llm-scheduler health URL
 	GameBotTwentyQHealthURL string // game-bot-go twentyq health URL
 	GameBotTurtleHealthURL  string // game-bot-go turtlesoup health URL
