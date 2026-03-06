@@ -148,13 +148,15 @@ var YouTubeScraperDistributedRateLimitConfig = struct {
 
 // OfficialScheduleConfig: 패키지 변수다.
 var OfficialScheduleConfig = struct {
-	BaseURL     string
-	Timeout     time.Duration
-	CacheExpiry time.Duration
+	BaseURL      string
+	Timeout      time.Duration
+	CacheExpiry  time.Duration
+	PageCacheTTL time.Duration
 }{
-	BaseURL:     "https://schedule.hololive.tv",
-	Timeout:     15 * time.Second,
-	CacheExpiry: 30 * time.Minute,
+	BaseURL:      "https://schedule.hololive.tv",
+	Timeout:      15 * time.Second,
+	CacheExpiry:  30 * time.Minute,
+	PageCacheTTL: 15 * time.Second,
 }
 
 // OfficialProfileConfig: 패키지 변수다.
