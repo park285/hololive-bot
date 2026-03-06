@@ -48,16 +48,16 @@ func (s *stubAlarmCRUDForServer) GetRoomAlarmsWithTypes(context.Context, string)
 	return nil, nil
 }
 
+func (s *stubAlarmCRUDForServer) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
+	return nil, nil
+}
+
 func (s *stubAlarmCRUDForServer) ClearRoomAlarms(context.Context, string) (int, error) {
 	return 0, nil
 }
 
 func (s *stubAlarmCRUDForServer) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
 	return nil, nil
-}
-
-func (s *stubAlarmCRUDForServer) GetMemberNameWithFallback(context.Context, string) string {
-	return ""
 }
 
 func (s *stubAlarmCRUDForServer) UpdateAlarmAdvanceMinutes(int) []int {

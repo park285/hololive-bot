@@ -10,8 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
-
-	authsvc "github.com/kapu/hololive-kakao-bot-go/internal/service/auth"
+	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 )
 
 // AuthHandler: /api/auth 엔드포인트를 처리하는 핸들러
