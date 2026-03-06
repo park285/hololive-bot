@@ -910,16 +910,30 @@ func (ys *schedulerImpl) getNearMilestoneChannelMap(
 	}
 
 	channelMap, err := ys.holodex.GetChannels(ctx, channelIDs)
-	if err != nil {
-		ys.logger.Warn("Failed to batch fetch near-milestone channels; using per-channel fallback",
-			slog.Int("count", len(channelIDs)),
-			slog.Any("error", err),
-		)
-		return make(map[string]*domain.Channel)
+	return finalizeNearMilestoneChannelMap(ys.logger, len(channelIDs), channelMap, err)
+}
+
+func finalizeNearMilestoneChannelMap(
+	logger *slog.Logger,
+	requested int,
+	channelMap map[string]*domain.Channel,
+	err error,
+) map[string]*domain.Channel {
+	if channelMap == nil {
+		channelMap = make(map[string]*domain.Channel)
 	}
 
-	ys.logger.Debug("Near-milestone channel batch fetched",
-		slog.Int("requested", len(channelIDs)),
+	if err != nil {
+		logger.Warn("Failed to batch fetch near-milestone channels; keeping partial results",
+			slog.Int("requested", requested),
+			slog.Int("available", len(channelMap)),
+			slog.Any("error", err),
+		)
+		return channelMap
+	}
+
+	logger.Debug("Near-milestone channel batch fetched",
+		slog.Int("requested", requested),
 		slog.Int("fetched", len(channelMap)),
 	)
 	return channelMap
