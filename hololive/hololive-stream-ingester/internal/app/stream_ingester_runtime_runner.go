@@ -47,10 +47,6 @@ func (r *StreamIngesterRuntime) Close() {
 
 // Run: SIGINT/SIGTERM 신호를 대기하며 graceful shutdown을 수행합니다. (블로킹)
 func (r *StreamIngesterRuntime) Run() {
-	if r == nil {
-		return
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
