@@ -204,18 +204,24 @@ func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 	r.tracked = len(stats)
 
 	now := time.Now()
-	workItems, statsBatch, latestErrors, milestoneCheckErrors, milestonesByChannel := ys.prepareWorkItems(ctx, stats, channelToMember, now)
-	r.totalGetLatestErrors = latestErrors
-	r.totalMilestoneCheckErrors = milestoneCheckErrors
+	prepared := ys.prepareWorkItems(ctx, stats, channelToMember, now)
+	r.totalGetLatestErrors = prepared.latestErrors
+	r.totalMilestoneCheckErrors = prepared.milestoneCheckErrors
 
-	if len(statsBatch) > 0 {
-		if err := ys.statsRepo.SaveStatsBatch(ctx, statsBatch); err != nil {
-			r.totalSaveErrors = len(statsBatch)
+	if len(prepared.statsBatch) > 0 {
+		if err := ys.statsRepo.SaveStatsBatch(ctx, prepared.statsBatch); err != nil {
+			r.totalSaveErrors = len(prepared.statsBatch)
 			ys.logger.Warn("Failed to batch save subscriber stats",
-				slog.Int("count", len(statsBatch)),
+				slog.Int("count", len(prepared.statsBatch)),
 				slog.Any("error", err))
 		} else {
-			cr := ys.processAndRecordChanges(ctx, workItems, milestonesByChannel, now)
+			cr := ys.processAndRecordChanges(
+				ctx,
+				prepared.workItems,
+				prepared.milestonesByChannel,
+				prepared.milestonePreloadAvailable,
+				now,
+			)
 			r.totalChanges = cr.changes
 			r.totalMilestones = cr.milestones
 			r.totalRecordErrors = cr.recordErrors
@@ -236,14 +242,24 @@ func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 		slog.Int("fetch_errors", r.fetchErrors))
 }
 
+type preparedWorkItemsResult struct {
+	workItems                 []channelStatsWorkItem
+	statsBatch                []*domain.TimestampedStats
+	latestErrors              int
+	milestoneCheckErrors      int
+	milestonesByChannel       map[string][]uint64
+	milestonePreloadAvailable bool
+}
+
 // prepareWorkItems: 통계 데이터를 work item과 batch 저장 대상으로 준비한다.
 func (ys *schedulerImpl) prepareWorkItems(
 	ctx context.Context,
 	stats map[string]*ChannelStats,
 	channelToMember map[string]*domain.Member,
 	now time.Time,
-) ([]channelStatsWorkItem, []*domain.TimestampedStats, int, int, map[string][]uint64) {
+) preparedWorkItemsResult {
 	var latestErrors, milestoneCheckErrors int
+	milestonePreloadAvailable := true
 
 	latestStatsByChannel, latestErr := ys.statsRepo.GetLatestStatsForChannels(ctx, mapKeys(stats))
 	if latestErr != nil {
@@ -255,6 +271,7 @@ func (ys *schedulerImpl) prepareWorkItems(
 	if milestoneBatchErr != nil {
 		milestoneCheckErrors = len(stats)
 		milestonesByChannel = make(map[string][]uint64)
+		milestonePreloadAvailable = false
 	}
 
 	workItems := make([]channelStatsWorkItem, 0, len(stats))
@@ -278,7 +295,14 @@ func (ys *schedulerImpl) prepareWorkItems(
 		statsBatch = append(statsBatch, timestampedStats)
 	}
 
-	return workItems, statsBatch, latestErrors, milestoneCheckErrors, milestonesByChannel
+	return preparedWorkItemsResult{
+		workItems:                 workItems,
+		statsBatch:                statsBatch,
+		latestErrors:              latestErrors,
+		milestoneCheckErrors:      milestoneCheckErrors,
+		milestonesByChannel:       milestonesByChannel,
+		milestonePreloadAvailable: milestonePreloadAvailable,
+	}
 }
 
 // changeProcessingResult: processAndRecordChanges의 결과
@@ -295,6 +319,7 @@ func (ys *schedulerImpl) processAndRecordChanges(
 	ctx context.Context,
 	workItems []channelStatsWorkItem,
 	milestonesByChannel map[string][]uint64,
+	milestonePreloadAvailable bool,
 	now time.Time,
 ) changeProcessingResult {
 	var cr changeProcessingResult
@@ -309,6 +334,7 @@ func (ys *schedulerImpl) processAndRecordChanges(
 			item.prevStats,
 			item.timestampedStats,
 			milestonesByChannel[item.channelID],
+			milestonePreloadAvailable,
 			now,
 		)
 		if r.change != nil {
@@ -391,15 +417,37 @@ func buildMilestoneSet(values []uint64) map[uint64]struct{} {
 }
 
 // 달성된 마일스톤들을 저장하고 달성 개수 반환 (이미 달성한 마일스톤은 건너뜀)
-func (ys *schedulerImpl) processMilestones(ctx context.Context, channelID string, member *domain.Member, milestones []uint64, achievedMilestones []uint64, now time.Time) (achieved int, checkErrors int, saveErrors int) {
+func (ys *schedulerImpl) processMilestones(
+	ctx context.Context,
+	channelID string,
+	member *domain.Member,
+	milestones []uint64,
+	achievedMilestones []uint64,
+	milestonePreloadAvailable bool,
+	now time.Time,
+) (achieved int, checkErrors int, saveErrors int) {
 	achieved = 0
 	achievedSet := buildMilestoneSet(achievedMilestones)
 	for _, milestone := range milestones {
-		if _, exists := achievedSet[milestone]; exists {
-			ys.logger.Debug("Milestone already achieved, skipping",
-				slog.String("member", member.Name),
-				slog.Any("value", milestone))
-			continue
+		if milestonePreloadAvailable {
+			if _, exists := achievedSet[milestone]; exists {
+				ys.logger.Debug("Milestone already achieved, skipping",
+					slog.String("member", member.Name),
+					slog.Any("value", milestone))
+				continue
+			}
+		} else {
+			alreadyAchieved, err := ys.statsRepo.HasAchievedMilestone(ctx, channelID, domain.MilestoneSubscribers, milestone)
+			if err != nil {
+				checkErrors++
+				continue
+			}
+			if alreadyAchieved {
+				ys.logger.Debug("Milestone already achieved, skipping",
+					slog.String("member", member.Name),
+					slog.Any("value", milestone))
+				continue
+			}
 		}
 
 		milestoneRecord := &domain.Milestone{
@@ -441,6 +489,7 @@ func (ys *schedulerImpl) processChannelStats(
 	prevStats *domain.TimestampedStats,
 	timestampedStats *domain.TimestampedStats,
 	achievedMilestones []uint64,
+	milestonePreloadAvailable bool,
 	now time.Time,
 ) channelStatsResult {
 	var r channelStatsResult
@@ -462,7 +511,15 @@ func (ys *schedulerImpl) processChannelStats(
 			r.changesDetected = 1
 
 			milestones := ys.checkMilestones(prevStats.SubscriberCount, currentStats.SubscriberCount)
-			r.milestonesAchieved, r.milestoneCheckErrors, r.milestoneSaveErrors = ys.processMilestones(ctx, channelID, member, milestones, achievedMilestones, now)
+			r.milestonesAchieved, r.milestoneCheckErrors, r.milestoneSaveErrors = ys.processMilestones(
+				ctx,
+				channelID,
+				member,
+				milestones,
+				achievedMilestones,
+				milestonePreloadAvailable,
+				now,
+			)
 		}
 	}
 
@@ -492,20 +549,24 @@ func (ys *schedulerImpl) fetchRecentVideosRotation(ctx context.Context, batchNum
 	for _, channelID := range channels {
 		eg.Go(func() error {
 			videos, err := ys.youtube.GetRecentVideos(egCtx, channelID, 10)
-			mu.Lock()
-			defer mu.Unlock()
 			if err != nil {
+				mu.Lock()
 				errorCount++
+				mu.Unlock()
 				return nil
 			}
 
 			cacheKey := "youtube:recent_videos:" + channelID
 			if cacheErr := ys.cache.Set(egCtx, cacheKey, videos, 24*time.Hour); cacheErr != nil {
+				mu.Lock()
 				errorCount++
+				mu.Unlock()
 				return nil
 			}
 
+			mu.Lock()
 			successCount++
+			mu.Unlock()
 			return nil
 		})
 	}
@@ -804,7 +865,7 @@ func (ys *schedulerImpl) watchNearMilestoneMembers(ctx context.Context) {
 		// 마일스톤 달성 여부 확인
 		milestones := ys.checkMilestones(prevSubs, currentSubs)
 		if len(milestones) > 0 {
-			achieved, _, _ := ys.processMilestones(ctx, nm.ChannelID, member, milestones, nil, now)
+			achieved, _, _ := ys.processMilestones(ctx, nm.ChannelID, member, milestones, nil, false, now)
 			if achieved > 0 {
 				ys.logger.Info("Milestone detected via Holodex watcher",
 					slog.String("member", member.Name),
