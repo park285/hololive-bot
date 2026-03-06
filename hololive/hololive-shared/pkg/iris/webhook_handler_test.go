@@ -37,6 +37,17 @@ type noopMessageHandler struct{}
 
 func (h *noopMessageHandler) HandleMessage(_ context.Context, _ *Message) {}
 
+type contextCaptureMessageHandler struct {
+	ctxCh chan context.Context
+}
+
+func (h *contextCaptureMessageHandler) HandleMessage(ctx context.Context, _ *Message) {
+	select {
+	case h.ctxCh <- ctx:
+	default:
+	}
+}
+
 func (h *countingBlockOnceMessageHandler) HandleMessage(_ context.Context, _ *Message) {
 	call := h.calls.Add(1)
 	if call == 1 {
@@ -245,6 +256,46 @@ func TestWebhookHandler_EnqueueCloseRaceSafe(t *testing.T) {
 
 	if err := webhookHandler.enqueue(task); !errors.Is(err, errWebhookClosed) {
 		t.Fatalf("enqueue() after Close error = %v, want %v", err, errWebhookClosed)
+	}
+}
+
+func TestWebhookHandler_NilTaskContextFallsBackToBaseContext(t *testing.T) {
+	t.Parallel()
+
+	handlerImpl := &contextCaptureMessageHandler{
+		ctxCh: make(chan context.Context, 1),
+	}
+	webhookHandler := NewWebhookHandler(
+		"token",
+		handlerImpl,
+		nil,
+		nil,
+		WebhookHandlerOptions{
+			WorkerCount:    1,
+			QueueSize:      1,
+			EnqueueTimeout: 20 * time.Millisecond,
+			HandlerTimeout: 1 * time.Second,
+		},
+	)
+	defer func() {
+		if err := webhookHandler.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	if err := webhookHandler.enqueue(webhookTask{
+		msg: &Message{Msg: "msg"},
+	}); err != nil {
+		t.Fatalf("enqueue() error = %v", err)
+	}
+
+	select {
+	case gotCtx := <-handlerImpl.ctxCh:
+		if gotCtx == nil {
+			t.Fatal("handler context = nil, want non-nil base context")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("handler did not receive task in time")
 	}
 }
 
