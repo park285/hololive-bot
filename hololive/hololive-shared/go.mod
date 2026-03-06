@@ -12,7 +12,6 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
-	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lmittmann/tint v1.1.3
 	github.com/park285/llm-kakao-bots/shared-go v0.0.0
 	github.com/prometheus/client_golang v1.23.2

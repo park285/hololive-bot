@@ -1,37 +1,5 @@
 package config
 
-// cliproxyEnvConfig: CLIPROXY_* 환경변수 로딩용 내부 구조체
-type cliproxyEnvConfig struct {
-	BaseURL         string `envconfig:"CLIPROXY_BASE_URL" default:"https://cliproxy.capu.blog/v1"`
-	APIKey          string `envconfig:"CLIPROXY_API_KEY"`
-	Model           string `envconfig:"CLIPROXY_MODEL" default:"gpt-5.3-codex"`
-	Enabled         string `envconfig:"CLIPROXY_ENABLED" default:"false"`
-	ReasoningEffort string `envconfig:"CLIPROXY_REASONING_EFFORT" default:"high"`
-}
-
-// llmEnvConfig: LLM 관련 환경변수 로딩용 내부 구조체
-type llmEnvConfig struct {
-	MemberNewsModel       string `envconfig:"MEMBER_NEWS_LLM_MODEL"`
-	MemberNewsTemperature string `envconfig:"MEMBER_NEWS_TEMPERATURE" default:"0"`
-}
-
-// consensusLLMEnvConfig: prefix 기반 CONSENSUS_* 환경변수 로딩용 내부 구조체
-type consensusLLMEnvConfig struct {
-	ConsensusEnabled     string `envconfig:"CONSENSUS_ENABLED" default:"false"`
-	ConsensusConfidence  string `envconfig:"CONSENSUS_CONFIDENCE" default:"0.85"`
-	ReviewerModel        string `envconfig:"REVIEWER_MODEL"`
-	AdjudicatorModel     string `envconfig:"ADJUDICATOR_MODEL"`
-	ReviewTimeoutSec     string `envconfig:"REVIEW_TIMEOUT_SEC" default:"30"`
-	AdjudicateTimeoutSec string `envconfig:"ADJUDICATE_TIMEOUT_SEC" default:"45"`
-}
-
-// exaEnvConfig: EXA_* 환경변수 로딩용 내부 구조체
-type exaEnvConfig struct {
-	Endpoint string `envconfig:"EXA_MCP_ENDPOINT" default:"https://mcp.exa.ai/mcp"`
-	APIKey   string `envconfig:"EXA_API_KEY"`
-	Enabled  string `envconfig:"EXA_ENABLED" default:"false"`
-}
-
 // CliproxyConfig: Cliproxy API 직접 호출 설정 (이벤트 요약용)
 type CliproxyConfig struct {
 	BaseURL         string
