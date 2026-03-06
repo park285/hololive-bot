@@ -8,9 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// NotificationLocker: delivery.NotificationLocker의 type alias (패키지 내부 호환용)
-type NotificationLocker = delivery.NotificationLocker
-
 // outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도)
 type outboxEnqueuer interface {
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error

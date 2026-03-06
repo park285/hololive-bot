@@ -9,6 +9,7 @@ import (
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type mockFormatter struct {
@@ -216,7 +217,7 @@ func (m *mockEventRepository) MarkEventsAsMonthlyNotified(_ context.Context, eve
 
 // === SendWeeklyNotification 통합 테스트 ===
 
-func newTestScheduler(repo EventRepository, outbox outboxEnqueuer, locker NotificationLocker) *Scheduler {
+func newTestScheduler(repo EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *Scheduler {
 	return NewScheduler(
 		repo,
 		&mockFormatter{message: "test message"},
@@ -342,7 +343,7 @@ func TestSendWeeklyNotification_NoRooms_ReturnsNil(t *testing.T) {
 
 // === SendMonthlyNotification 통합 테스트 ===
 
-func newTestMonthlyScheduler(repo EventRepository, outbox outboxEnqueuer, locker NotificationLocker) *MonthlyScheduler {
+func newTestMonthlyScheduler(repo EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *MonthlyScheduler {
 	return NewMonthlyScheduler(
 		repo,
 		&mockFormatter{message: "monthly message"},
