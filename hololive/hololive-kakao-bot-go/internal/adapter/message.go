@@ -23,8 +23,6 @@ const (
 	memberNewsActionOff    = "off"
 )
 
-var legacyMQPrefixes = []string{"!", "/", "！"}
-
 func normalizeCommandPrefix(prefix string) string {
 	trimmed := stringutil.TrimSpace(prefix)
 	if trimmed == "" {
@@ -54,25 +52,16 @@ func (ma *MessageAdapter) extractCommandText(raw string) (normalized string, com
 		return text, "", false
 	}
 
-	prefixes := []string{normalizeCommandPrefix(ma.prefix)}
-	for _, p := range legacyMQPrefixes {
-		if p != prefixes[0] {
-			prefixes = append(prefixes, p)
-		}
+	prefix := normalizeCommandPrefix(ma.prefix)
+	if !strings.HasPrefix(text, prefix) {
+		return text, "", false
 	}
 
-	for _, p := range prefixes {
-		if !strings.HasPrefix(text, p) {
-			continue
-		}
-		cmd := stringutil.TrimSpace(text[len(p):])
-		if cmd == "" {
-			return text, "", false
-		}
-		return text, cmd, true
+	cmd := stringutil.TrimSpace(text[len(prefix):])
+	if cmd == "" {
+		return text, "", false
 	}
-
-	return text, "", false
+	return text, cmd, true
 }
 
 // NewMessageAdapter: MessageAdapter 인스턴스를 생성합니다.
