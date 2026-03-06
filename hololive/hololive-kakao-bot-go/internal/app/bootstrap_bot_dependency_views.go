@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -64,7 +65,7 @@ type botAdminRuntimeDependencies struct {
 	alarmCRUD        domain.AlarmCRUD
 	holodexService   *holodex.Service
 	youtubeService   youtube.Service
-	statsRepo        youtube.StatsDashboardRepository
+	statsRepo        stats.StatsDashboardRepository
 	activityLogger   *activity.Logger
 	settings         settings.ReadWriter
 	acl              *acl.Service
@@ -176,7 +177,7 @@ func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntime
 		return botAdminRuntimeDependencies{}
 	}
 
-	var statsRepo youtube.StatsDashboardRepository
+	var statsRepo stats.StatsDashboardRepository
 	if infra.ytStack != nil {
 		statsRepo = infra.ytStack.StatsRepo
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
@@ -44,7 +45,7 @@ type Dependencies struct {
 	MembersData      member.DataProvider
 	Service          youtube.Service
 	Scheduler        youtube.Scheduler
-	YouTubeStatsRepo youtube.StatsCommandRepository
+	YouTubeStatsRepo stats.StatsCommandRepository
 	Activity         *activity.Logger
 	Settings         settings.ReadWriter
 	ACL              *acl.Service
@@ -84,7 +85,7 @@ type streamDependencies struct {
 	membersData      member.DataProvider
 	service          youtube.Service
 	scheduler        youtube.Scheduler
-	youTubeStatsRepo youtube.StatsCommandRepository
+	youTubeStatsRepo stats.StatsCommandRepository
 }
 
 type supportDependencies struct {

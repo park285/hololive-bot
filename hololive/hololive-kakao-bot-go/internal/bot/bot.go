@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
@@ -51,7 +51,7 @@ type Bot struct {
 	alarm            domain.AlarmCRUD
 	matcher          *matcher.MemberMatcher
 	commandRegistry  *command.Registry
-	statsRepo        youtube.StatsCommandRepository
+	statsRepo        stats.StatsCommandRepository
 	acl              *acl.Service
 	majorEventRepo   command.MajorEventRepository
 	memberNews       command.MemberNewsService

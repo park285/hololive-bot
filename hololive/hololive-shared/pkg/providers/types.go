@@ -4,13 +4,14 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 // YouTubeStack - YouTube 관련 서비스 묶음 (선택적 활성화)
 type YouTubeStack struct {
 	Service   youtube.Service
 	Scheduler youtube.Scheduler
-	StatsRepo *youtube.StatsRepository
+	StatsRepo *ytstats.StatsRepository
 }
 
 // GetService: nil-safe YouTube Service 반환.
@@ -30,7 +31,7 @@ func (s *YouTubeStack) GetScheduler() youtube.Scheduler {
 }
 
 // GetStatsRepo: nil-safe YouTube StatsRepository 반환.
-func (s *YouTubeStack) GetStatsRepo() *youtube.StatsRepository {
+func (s *YouTubeStack) GetStatsRepo() *ytstats.StatsRepository {
 	if s == nil {
 		return nil
 	}
