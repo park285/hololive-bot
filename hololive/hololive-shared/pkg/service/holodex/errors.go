@@ -11,9 +11,6 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	if e == nil {
-		return "holodex: api: <nil>"
-	}
 	if e.Err == nil {
 		return fmt.Sprintf("holodex: api: %s: status=%d", e.Operation, e.StatusCode)
 	}
@@ -46,9 +43,6 @@ type KeyRotationError struct {
 }
 
 func (e *KeyRotationError) Error() string {
-	if e == nil {
-		return "holodex: key rotation: <nil>"
-	}
 	if e.Err == nil {
 		return fmt.Sprintf("holodex: key rotation exhausted: %s: status=%d", e.Operation, e.StatusCode)
 	}
