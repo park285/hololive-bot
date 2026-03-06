@@ -281,31 +281,6 @@ func TestCacheMemberName_RoundTrip(t *testing.T) {
 	assert.Equal(t, "페코라", name)
 }
 
-func TestGetMemberNameWithFallback_CacheHit(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := context.Background()
-
-	// 캐시에 미리 설정
-	err := as.CacheMemberName(ctx, "UC_TEST", "캐시 이름")
-	require.NoError(t, err)
-
-	name := as.GetMemberNameWithFallback(ctx, "UC_TEST")
-	assert.Equal(t, "캐시 이름", name)
-}
-
-func TestGetMemberNameWithFallback_NoCache_ReturnsChannelID(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	ctx := context.Background()
-
-	// 캐시에 없고, alarmRepo도 nil
-	name := as.GetMemberNameWithFallback(ctx, "UC_UNKNOWN")
-	assert.Equal(t, "UC_UNKNOWN", name)
-}
-
 // -- SetRoomName / SetUserName --
 
 func TestSetRoomName(t *testing.T) {

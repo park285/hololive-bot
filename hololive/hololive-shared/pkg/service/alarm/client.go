@@ -3,6 +3,7 @@ package alarm
 import (
 	"bytes"
 	"context"
+	stdjson "encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -102,11 +103,6 @@ type intResp struct {
 	Count int `json:"count"`
 }
 
-// stringResp: string 단일 값 응답
-type stringResp struct {
-	Value string `json:"value"`
-}
-
 // minutesResp: []int 응답
 type minutesResp struct {
 	Minutes []int `json:"minutes"`
@@ -172,6 +168,53 @@ func (c *Client) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*
 	return alarms, nil
 }
 
+type apiEnvelope struct {
+	Success bool                `json:"success"`
+	Message string              `json:"message,omitempty"`
+	Data    *stdjson.RawMessage `json:"data,omitempty"`
+}
+
+// ListRoomAlarmsView: GET /internal/alarm/room/:id/view — 방의 알람 목록 표시용 조합 조회
+func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/internal/alarm/room/"+roomID+"/view", http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: new request: %w", roomID, err)
+	}
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: %w", roomID, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if err := httputil.CheckStatus(resp); err != nil {
+		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: check status: %w", roomID, err)
+	}
+
+	var envelope apiEnvelope
+	if err := stdjson.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: decode envelope: %w", roomID, err)
+	}
+	if !envelope.Success {
+		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: %s", roomID, envelope.Message)
+	}
+	if envelope.Data == nil {
+		return []domain.AlarmListView{}, nil
+	}
+
+	var entries []domain.AlarmListView
+	if err := stdjson.Unmarshal(*envelope.Data, &entries); err != nil {
+		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: decode entries: %w", roomID, err)
+	}
+	if entries == nil {
+		return []domain.AlarmListView{}, nil
+	}
+	return entries, nil
+}
+
 // ClearRoomAlarms: POST /internal/alarm/clear — 방의 모든 알람 삭제
 func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	body := clearRoomReq{RoomID: roomID}
@@ -199,23 +242,6 @@ func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*doma
 		return nil, nil
 	}
 	return &info, nil
-}
-
-// GetMemberNameWithFallback: GET /internal/alarm/member-name/:id — 멤버 이름 조회
-// 에러 시 channelID를 폴백으로 반환합니다.
-func (c *Client) GetMemberNameWithFallback(ctx context.Context, channelID string) string {
-	var resp stringResp
-	if err := c.getJSON(ctx, "/internal/alarm/member-name/"+channelID, &resp); err != nil {
-		c.logger.Warn("GetMemberNameWithFallback 실패, channelID로 폴백",
-			slog.String("channel_id", channelID),
-			slog.Any("error", err),
-		)
-		return channelID
-	}
-	if strings.TrimSpace(resp.Value) == "" {
-		return channelID
-	}
-	return resp.Value
 }
 
 // UpdateAlarmAdvanceMinutes: PUT /internal/alarm/settings — 알림 사전 시간 업데이트
