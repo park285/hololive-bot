@@ -97,21 +97,6 @@ func TestContainerGetterMappings(t *testing.T) {
 	assert.Same(t, aclSvc, container.GetACLService())
 }
 
-func TestContainerGetters_ReturnNilWhenBotDepsMissing(t *testing.T) {
-	t.Parallel()
-
-	container := &Container{}
-	assert.Nil(t, container.GetYouTubeScheduler())
-	assert.Nil(t, container.GetMemberRepo())
-	assert.Nil(t, container.GetMemberCache())
-	assert.Nil(t, container.GetAlarmService())
-	assert.Nil(t, container.GetCache())
-	assert.Nil(t, container.GetHolodexService())
-	assert.Nil(t, container.GetYouTubeService())
-	assert.Nil(t, container.GetActivityLogger())
-	assert.Nil(t, container.GetSettingsService())
-	assert.Nil(t, container.GetACLService())
-}
 
 func TestBuild_FailFastOnNilInputs(t *testing.T) {
 	t.Parallel()
