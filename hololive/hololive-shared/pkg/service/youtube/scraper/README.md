@@ -123,11 +123,11 @@ for _, e := range events {
 ## 테스트
 
 ```bash
-# 단위 테스트 (숫자 파싱 로직)
-go test ./internal/service/youtube/scraper/... -v
+# 단위 테스트 (scraper 패키지 전체)
+go test ./pkg/service/youtube/scraper/... -v
 
 # 통합 테스트 (실제 YouTube 호출)
-go test -tags=integration -v ./internal/service/youtube/scraper/...
+go test -tags=integration -v ./pkg/service/youtube/scraper/...
 ```
 
 ---
@@ -160,12 +160,20 @@ scraper/
 ├── client.go      # HTTP 클라이언트 (Client 구조체, fetchPage)
 ├── channel.go     # GetChannelStats, GetChannelSnippet
 ├── videos.go      # GetUpcomingEvents, GetRecentVideos, GetPopularVideos
+├── yt_initial_data_extractor.go # ytInitialData 추출
+├── yt_initial_data_scorer.go    # ytInitialData 후보 점수화
+├── alerts.go      # alertRenderer 처리
+├── stats_parser.go # 채널 통계/스니펫 파서
+├── upcoming_parser.go # 예정/라이브 이벤트 파서
+├── recent_videos_parser.go # recent videos 파서
 ├── community.go   # GetCommunityPosts
 ├── playlists.go   # GetPlaylists
 ├── shorts.go      # GetShorts
-├── parser.go      # ytInitialData 추출 및 숫자 파싱 헬퍼
 ├── types.go       # 타입 정의 (ChannelStats, Video, CommunityPost, Playlist, Short)
-├── parser_test.go # 단위 테스트 (숫자 파싱)
+├── parser_test.go # ytInitialData/숫자 파싱 테스트
+├── stats_parser_test.go # 채널 통계/스니펫 파서 테스트
+├── upcoming_parser_test.go # 예정/라이브 이벤트 파서 테스트
+├── recent_videos_parser_test.go # bounded scan 회귀 테스트
 ├── client_test.go # 통합 테스트 (실제 YouTube 호출, -tags=integration)
 └── README.md      # 이 문서
 ```
@@ -215,4 +223,3 @@ Holodex API 실패 시 3단계 폴백 체계로 안정성 확보:
   - `aboutChannelViewModel`: 구독자 수, 조회수, 비디오 수
   - `pageHeaderRenderer`: 아바타, 배너
   - `channelFeaturedContentRenderer`: 라이브/예정 방송
-
