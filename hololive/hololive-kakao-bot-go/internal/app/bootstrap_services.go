@@ -68,17 +68,16 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	deps := ProvideBotDependencies(modules)
 
 	return &coreInfrastructure{
-		deps:                         deps,
-		alarmService:                 alarmYouTubeStack.alarmMode.alarmService,
-		alarmCRUD:                    alarmYouTubeStack.alarmMode.alarmCRUD,
-		holodexService:               streamFoundation.holodexService,
-		ytStack:                      alarmYouTubeStack.youTubeStack,
-		photoSync:                    holodex.NewPhotoSyncService(streamFoundation.holodexService, infra.memberRepo, logger),
-		templateRenderer:             templateRenderer,
-		templateAdminSvc:             buildTemplateAdminService(infra, templateRenderer, logger),
-		sharedRL:                     streamFoundation.sharedRL,
-		runtimeAlarmSchedulerBuilder: defaultRuntimeAlarmSchedulerBuilder,
-		cleanupCache:                 infra.cleanupCache,
-		cleanupDB:                    infra.cleanupDB,
+		deps:             deps,
+		alarmService:     alarmYouTubeStack.alarmMode.alarmService,
+		alarmCRUD:        alarmYouTubeStack.alarmMode.alarmCRUD,
+		holodexService:   streamFoundation.holodexService,
+		ytStack:          alarmYouTubeStack.youTubeStack,
+		photoSync:        holodex.NewPhotoSyncService(streamFoundation.holodexService, infra.memberRepo, logger),
+		templateRenderer: templateRenderer,
+		templateAdminSvc: buildTemplateAdminService(infra, templateRenderer, logger),
+		sharedRL:         streamFoundation.sharedRL,
+		cleanupCache:     infra.cleanupCache,
+		cleanupDB:        infra.cleanupDB,
 	}, nil
 }
