@@ -15,8 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/config"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
 )
 
 func TestProvideBot_ErrorWrapped(t *testing.T) {
@@ -104,4 +109,28 @@ func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to create bot")
+}
+
+func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := &config.Config{
+		Notification: config.NotificationConfig{
+			AdvanceMinutes: []int{5, 3, 1},
+		},
+	}
+	infra := &coreInfrastructure{
+		deps: &bot.Dependencies{
+			Cache:  &cachemocks.Client{},
+			Chzzk:  &chzzk.Client{},
+			Twitch: &twitch.Client{},
+		},
+		holodexService: &holodex.Service{},
+		alarmService:   &notification.AlarmService{},
+	}
+
+	scheduler, err := buildAlarmRuntimeScheduler(cfg, infra, logger)
+	require.NoError(t, err)
+	assert.NotNil(t, scheduler)
 }
