@@ -58,5 +58,6 @@ func buildBotWebhookHandler(
 		QueueSize:      cfg.Webhook.QueueSize,
 		EnqueueTimeout: cfg.Webhook.EnqueueTimeout,
 		HandlerTimeout: cfg.Webhook.HandlerTimeout,
+		RequireHTTP2:   cfg.Webhook.RequireHTTP2,
 	})
 }

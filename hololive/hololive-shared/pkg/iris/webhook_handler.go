@@ -115,6 +115,7 @@ type WebhookHandlerOptions struct {
 	QueueSize      int
 	EnqueueTimeout time.Duration
 	HandlerTimeout time.Duration
+	RequireHTTP2   bool
 }
 
 func (o WebhookHandlerOptions) normalized() WebhookHandlerOptions {
@@ -233,6 +234,18 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 	if c.Request.Method != http.MethodPost {
 		h.incRequest("method_not_allowed")
 		c.Status(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.options.RequireHTTP2 && c.Request.ProtoMajor != 2 {
+		h.logger.Warn(
+			"iris_webhook_http2_required",
+			slog.String("proto", c.Request.Proto),
+			slog.Int("proto_major", c.Request.ProtoMajor),
+			slog.Int("proto_minor", c.Request.ProtoMinor),
+		)
+		h.incRequest("http_version_not_supported")
+		c.Status(http.StatusHTTPVersionNotSupported)
 		return
 	}
 

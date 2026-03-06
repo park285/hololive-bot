@@ -57,6 +57,8 @@ spec:
               value: "false"
             - name: BOT_ADMIN_ENABLED
               value: "true"
+            - name: WEBHOOK_REQUIRE_HTTP2
+              value: "true"
             - name: LOG_DIR
               value: ""
             - name: OTEL_SERVICE_NAME
