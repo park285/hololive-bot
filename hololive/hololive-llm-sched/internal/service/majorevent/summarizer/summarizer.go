@@ -11,6 +11,8 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -34,6 +36,11 @@ type EventSummarizer struct {
 	adjudicator LLMClient
 	consensus   SummarizerConsensusConfig
 	logger      *slog.Logger
+}
+
+type SummaryResult struct {
+	Text       string
+	ResultType sharedmodel.SummaryResultType
 }
 
 type SummarizerConsensusConfig struct {
@@ -88,8 +95,13 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher WebSearcher, l
 // Summarize: 이벤트 목록을 LLM 구조화 출력으로 요약합니다.
 // LLM 비활성 또는 실패 시 빈 문자열을 반환합니다 (호출부에서 fallback 처리).
 func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
+	return s.SummarizeResult(ctx, events, summaryType, periodKey).Text
+}
+
+// SummarizeResult: 이벤트 목록을 요약하고 결과 출처(primary/fallback/empty)를 함께 반환합니다.
+func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) SummaryResult {
 	if s.llm == nil || len(events) == 0 {
-		return ""
+		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
 	cacheKey := fmt.Sprintf("majorevent:summary:%s:%s:%s", promptVersion, summaryType, periodKey)
@@ -101,7 +113,7 @@ func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEv
 			s.logger.Info("LLM 요약 캐시 히트",
 				slog.String("type", string(summaryType)),
 				slog.String("period", periodKey))
-			return cached
+			return SummaryResult{Text: cached, ResultType: sharedmodel.SummaryResultPrimary}
 		}
 	}
 
@@ -112,14 +124,14 @@ func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEv
 		s.logger.Error("LLM 요약 실패 (fallback 사용)",
 			slog.String("type", string(summaryType)),
 			slog.String("error", err.Error()))
-		return ""
+		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
 	// post validation: trusted source 기반 discovered_events 정리
 	resp.DiscoveredEvents = filterTrustedDiscoveredEvents(resp.DiscoveredEvents)
 
 	// consensus: primary -> reviewer -> adjudicator(조건부)
-	if s.consensus.Enabled {
+	if s.consensus.Enabled && shouldRunConsensusReview(resp) {
 		consensusResp, consensusUsed := s.runConsensus(ctx, events, summaryType, periodKey, searchContext, resp)
 		if consensusResp != nil {
 			resp = consensusResp
@@ -133,11 +145,11 @@ func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEv
 	if result == "" {
 		s.logger.Warn("LLM 요약 결과가 비어있음",
 			slog.String("type", string(summaryType)))
-		return ""
+		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
-	// 최종 출력 취합 리뷰: 리뷰어가 있으면 텍스트 레벨 중복/형식 점검 후 보정
-	if s.reviewer != nil {
+	// 최종 출력 취합 리뷰: 단순 출력은 건너뛰고, 다중 섹션/복합 출력일 때만 보정
+	if s.reviewer != nil && shouldRunFinalOutputReview(resp, result) {
 		if reviewed, applied := s.runFinalOutputReview(ctx, events, summaryType, periodKey, result); applied {
 			result = reviewed
 		}
@@ -157,7 +169,27 @@ func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEv
 		slog.Int("discovered_count", len(resp.DiscoveredEvents)),
 		slog.Int("summary_length", len(result)))
 
-	return result
+	return SummaryResult{
+		Text:       result,
+		ResultType: sharedmodel.SummaryResultPrimary,
+	}
+}
+
+func shouldRunConsensusReview(resp *summaryResponse) bool {
+	if resp == nil {
+		return false
+	}
+	return len(resp.Highlights) > 1 || len(resp.OngoingEvents) > 0 || len(resp.DiscoveredEvents) > 0
+}
+
+func shouldRunFinalOutputReview(resp *summaryResponse, assembled string) bool {
+	if resp == nil || strings.TrimSpace(assembled) == "" {
+		return false
+	}
+	if len(resp.OngoingEvents) > 0 || len(resp.DiscoveredEvents) > 0 {
+		return true
+	}
+	return len(resp.Highlights) > 1
 }
 
 // runDualSearch: 1차 범용 + 2차 KR 파트너 검색을 병렬 실행하고 병합된 결과를 포맷팅합니다.

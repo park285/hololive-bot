@@ -53,14 +53,7 @@ func NewSummarizer(llm LLMClient, searcher WebSearcher, validator model.SourceUR
 // Summarize: 요약 생성(실패 시 deterministic fallback).
 func (s *SummarizerImpl) Summarize(ctx context.Context, input SummarizeInput) (*Digest, error) {
 	if len(input.Candidates) == 0 {
-		return &Digest{
-			Period:       input.Period,
-			Headline:     model.DefaultHeadline(input.Period),
-			TopItems:     []SummaryItem{},
-			MoreSummary:  "",
-			OmittedCount: 0,
-			TotalCount:   0,
-		}, nil
+		return newEmptyDigest(input.Period, 0), nil
 	}
 
 	if s == nil || s.llm == nil {
@@ -97,6 +90,18 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input SummarizeInput) (*
 	}
 
 	return digest, nil
+}
+
+func newEmptyDigest(period Period, totalCount int) *Digest {
+	return &Digest{
+		ResultType:   SummaryResultEmpty,
+		Period:       period,
+		Headline:     model.DefaultHeadline(period),
+		TopItems:     []SummaryItem{},
+		MoreSummary:  "",
+		OmittedCount: 0,
+		TotalCount:   totalCount,
+	}
 }
 
 // validateAndBuildDigest: LLM 출력을 재검증합니다.
@@ -169,6 +174,7 @@ func validateAndBuildDigestFromResponse(
 	}
 
 	return &Digest{
+		ResultType:   SummaryResultPrimary,
 		Period:       model.NormalizePeriod(Period(response.Period)),
 		Headline:     headline,
 		TopItems:     validatedItems,
@@ -232,6 +238,7 @@ func BuildDeterministicFallback(period Period, candidates []FilteredCandidate) *
 	}
 
 	return &Digest{
+		ResultType:   SummaryResultFallback,
 		Period:       model.NormalizePeriod(period),
 		Headline:     model.DefaultHeadline(period),
 		TopItems:     items,

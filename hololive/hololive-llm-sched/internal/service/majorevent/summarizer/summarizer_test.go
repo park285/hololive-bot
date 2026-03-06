@@ -3,13 +3,14 @@ package summarizer
 import (
 	"context"
 	"fmt"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 // --- assembleSummaryText 단위 테스트 ---
@@ -202,9 +203,11 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 type mockSummarizer struct {
 	jsonResponse string
 	err          error
+	callCount    int
 }
 
 func (m *mockSummarizer) GenerateJSON(_ context.Context, _, _ string, _ map[string]any) (string, error) {
+	m.callCount++
 	return m.jsonResponse, m.err
 }
 
@@ -226,8 +229,25 @@ func TestEventSummarizer_Summarize_StructuredOutput(t *testing.T) {
 	assertContains(t, result, "[기간 행사]")
 }
 
+func TestEventSummarizer_SummarizeResult_Primary(t *testing.T) {
+	llmJSON := `{"highlights":[{"name":"hololive fes","date":"2/15(토)","members":"","note":"최대 규모 페스티벌","link":"https://example.com/fes"}],"ongoing_events":[],"discovered_events":[]}`
+
+	mock := &mockSummarizer{jsonResponse: llmJSON}
+	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
+
+	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: "https://example.com/fes"}}
+	result := summarizer.SummarizeResult(context.Background(), events, SummaryTypeWeekly, "2026-02-15")
+
+	if result.ResultType != sharedmodel.SummaryResultPrimary {
+		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultPrimary)
+	}
+	if result.Text == "" {
+		t.Fatal("expected non-empty result text")
+	}
+}
+
 func TestEventSummarizer_Summarize_FinalOutputReviewApplied(t *testing.T) {
-	llmJSON := `{"highlights":[{"name":"Hoshimachi Suisei Live \"SuperNova: REBOOT\"","date":"2/20(금)","members":"星街すいせい","note":"솔로 라이브 공연","link":"https://hololive.hololivepro.com/events/supernova-reboot/"}],"ongoing_events":[],"discovered_events":[]}`
+	llmJSON := `{"highlights":[{"name":"Hoshimachi Suisei Live \"SuperNova: REBOOT\"","date":"2/20(금)","members":"星街すいせい","note":"솔로 라이브 공연","link":"https://hololive.hololivepro.com/events/supernova-reboot/"}],"ongoing_events":[{"name":"카페","date":"2/1(토)~2/28(금)","note":"카페 운영 중","link":""}],"discovered_events":[]}`
 
 	primary := &mockSummarizer{jsonResponse: llmJSON}
 	reviewer := &mockSummarizer{jsonResponse: `{"summary":"[리뷰 완료]\n2/20(금) Hoshimachi Suisei Live \"SuperNova: REBOOT\" (星街すいせい)\n- 솔로 라이브 공연\nhttps://hololive.hololivepro.com/events/supernova-reboot/"}`}
@@ -252,6 +272,57 @@ func TestEventSummarizer_Summarize_FinalOutputReviewApplied(t *testing.T) {
 	assertContains(t, result, "Hoshimachi Suisei Live")
 }
 
+func TestEventSummarizer_Summarize_CacheHitSkipsSearchAndLLM(t *testing.T) {
+	cache := &mockCache{getData: "cached summary"}
+	llm := &mockSummarizer{jsonResponse: `{"highlights":[{"name":"unused","date":"3/1(토)","members":"","note":"unused","link":""}]}`}
+	searcher := &mockSearcher{
+		results:   []SearchResult{{Title: "unused", URL: "https://example.com/1"}},
+		krResults: []SearchResult{{Title: "unused-kr", URL: "https://example.com/2"}},
+	}
+	summarizer := NewEventSummarizer(llm, cache, searcher, testLogger())
+
+	result := summarizer.SummarizeResult(context.Background(), []domain.MajorEvent{{ID: 1, Title: "cached"}}, SummaryTypeWeekly, "2026-03-02")
+
+	if result.Text != "cached summary" {
+		t.Fatalf("Text = %q, want cached summary", result.Text)
+	}
+	if result.ResultType != sharedmodel.SummaryResultPrimary {
+		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultPrimary)
+	}
+	if llm.callCount != 0 {
+		t.Fatalf("llm callCount = %d, want 0", llm.callCount)
+	}
+	if searcher.callCount != 0 {
+		t.Fatalf("searcher callCount = %d, want 0", searcher.callCount)
+	}
+}
+
+func TestEventSummarizer_Summarize_SimpleOutputSkipsFinalReview(t *testing.T) {
+	llmJSON := `{"highlights":[{"name":"Simple Event","date":"2/20(금)","members":"","note":"단일 항목","link":"https://example.com/simple"}],"ongoing_events":[],"discovered_events":[]}`
+
+	primary := &mockSummarizer{jsonResponse: llmJSON}
+	reviewer := &mockSummarizer{jsonResponse: `{"summary":"[리뷰 완료]\nshould-not-apply"}`}
+	summarizer := NewEventSummarizer(
+		primary,
+		nil,
+		nil,
+		testLogger(),
+		WithSummarizerConsensus(reviewer, nil, SummarizerConsensusConfig{
+			Enabled:             false,
+			ConfidenceThreshold: 0.85,
+			ReviewTimeout:       30 * time.Second,
+			AdjudicateTimeout:   45 * time.Second,
+		}),
+	)
+
+	result := summarizer.Summarize(context.Background(), []domain.MajorEvent{{ID: 1, Title: "Simple Event"}}, SummaryTypeWeekly, "2026-02-15")
+	if reviewer.callCount != 0 {
+		t.Fatalf("reviewer callCount = %d, want 0", reviewer.callCount)
+	}
+	assertNotContains(t, result, "[리뷰 완료]")
+	assertContains(t, result, "Simple Event")
+}
+
 func TestEventSummarizer_Summarize_InvalidJSON_ReturnsEmpty(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "not json"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
@@ -261,6 +332,19 @@ func TestEventSummarizer_Summarize_InvalidJSON_ReturnsEmpty(t *testing.T) {
 
 	if result != "" {
 		t.Errorf("expected empty on invalid JSON, got %q", result)
+	}
+}
+
+func TestEventSummarizer_SummarizeResult_InvalidJSON_IsEmpty(t *testing.T) {
+	mock := &mockSummarizer{jsonResponse: "not json"}
+	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
+
+	result := summarizer.SummarizeResult(context.Background(), []domain.MajorEvent{{ID: 1, Title: "test"}}, SummaryTypeWeekly, "2026-02-15")
+	if result.ResultType != sharedmodel.SummaryResultEmpty {
+		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultEmpty)
+	}
+	if result.Text != "" {
+		t.Fatalf("Text = %q, want empty", result.Text)
 	}
 }
 
@@ -284,6 +368,15 @@ func TestEventSummarizer_Summarize_NilLLM_ReturnsEmpty(t *testing.T) {
 
 	if result != "" {
 		t.Errorf("expected empty for nil LLM, got %q", result)
+	}
+}
+
+func TestEventSummarizer_SummarizeResult_NilLLM_IsEmpty(t *testing.T) {
+	summarizer := NewEventSummarizer(nil, nil, nil, testLogger())
+
+	result := summarizer.SummarizeResult(context.Background(), []domain.MajorEvent{{ID: 1}}, SummaryTypeWeekly, "key")
+	if result.ResultType != sharedmodel.SummaryResultEmpty {
+		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultEmpty)
 	}
 }
 
