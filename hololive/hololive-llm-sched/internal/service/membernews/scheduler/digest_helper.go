@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -13,7 +15,7 @@ import (
 // processDigestForRoom: 단일 room의 다이제스트 생성 + outbox enqueue (weekly/monthly 공용).
 func processDigestForRoom(
 	ctx context.Context,
-	svc digestService,
+	svc model.DigestService,
 	fmtr DigestFormatter,
 	outbox outboxEnqueuer,
 	logger *slog.Logger,

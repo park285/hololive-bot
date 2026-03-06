@@ -40,7 +40,6 @@ type (
 	SummaryItem     = model.SummaryItem
 	SubscribedRoom  = model.SubscribedRoom
 	DigestFormatter = model.DigestFormatter
-	digestService   = model.DigestService
 )
 
 // outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도)
@@ -50,7 +49,7 @@ type outboxEnqueuer interface {
 
 // Scheduler: 주간 뉴스 자동 발송 스케줄러.
 type Scheduler struct {
-	service    digestService
+	service    model.DigestService
 	formatter  DigestFormatter
 	locker     delivery.NotificationLocker
 	outboxRepo outboxEnqueuer
@@ -64,7 +63,7 @@ type Scheduler struct {
 
 // NewScheduler: 스케줄러 생성.
 func NewScheduler(
-	service digestService,
+	service model.DigestService,
 	formatter DigestFormatter,
 	locker delivery.NotificationLocker,
 	outboxRepo outboxEnqueuer,
