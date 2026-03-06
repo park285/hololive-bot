@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -47,9 +49,10 @@ const (
 	MilestoneThresholdRatio   = 0.95          // 95% 이상이면 마일스톤 직전으로 간주
 	ApproachingThresholdRatio = 0.99          // 99% 이상이면 예고 알람 발송
 
-	channelsPerBatch = 30 // 30 channels × 100 units = 3,000 units per batch
-	batchesPerDay    = 2  // 2 batches × 3,000 = 6,000 units
-	totalDailyQuota  = 6000
+	channelsPerBatch             = 30 // 30 channels × 100 units = 3,000 units per batch
+	batchesPerDay                = 2  // 2 batches × 3,000 = 6,000 units
+	totalDailyQuota              = 6000
+	recentVideosFetchParallelism = 4
 )
 
 // SubscriberMilestones: 구독자 수 마일스톤 목록 (중복 정의 방지)
@@ -163,6 +166,28 @@ func (ys *schedulerImpl) runBatch(ctx context.Context) {
 	go ys.fetchRecentVideosRotation(ctx, batchNum)
 }
 
+// channelStatsWorkItem: trackAllSubscribers에서 채널별 처리를 위한 작업 단위
+type channelStatsWorkItem struct {
+	channelID        string
+	member           *domain.Member
+	currentStats     *ChannelStats
+	prevStats        *domain.TimestampedStats
+	timestampedStats *domain.TimestampedStats
+}
+
+// subscriberTrackingResult: trackAllSubscribers 전체 결과
+type subscriberTrackingResult struct {
+	totalChanges              int
+	totalMilestones           int
+	totalRecordErrors         int
+	totalSaveErrors           int
+	totalGetLatestErrors      int
+	totalMilestoneCheckErrors int
+	totalMilestoneSaveErrors  int
+	fetchErrors               int
+	tracked                   int
+}
+
 func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 	channelIDs, channelToMember := ys.buildChannelMaps()
 
@@ -171,27 +196,65 @@ func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 		slog.Int("quota_cost", len(channelIDs)))
 
 	stats, err := ys.youtube.GetChannelStatistics(ctx, channelIDs)
-	fetchErrors := 0
+	var r subscriberTrackingResult
 	if err != nil {
-		fetchErrors = len(channelIDs)
+		r.fetchErrors = len(channelIDs)
 		stats = make(map[string]*ChannelStats, 0)
 	}
+	r.tracked = len(stats)
 
 	now := time.Now()
-	totalChanges := 0
-	totalMilestones := 0
-	totalRecordErrors := 0
-	totalSaveErrors := 0
-	totalGetLatestErrors := 0
-	totalMilestoneCheckErrors := 0
-	totalMilestoneSaveErrors := 0
+	workItems, statsBatch, latestErrors, milestoneCheckErrors, milestonesByChannel := ys.prepareWorkItems(ctx, stats, channelToMember, now)
+	r.totalGetLatestErrors = latestErrors
+	r.totalMilestoneCheckErrors = milestoneCheckErrors
 
-	type channelStatsWorkItem struct {
-		channelID        string
-		member           *domain.Member
-		currentStats     *ChannelStats
-		prevStats        *domain.TimestampedStats
-		timestampedStats *domain.TimestampedStats
+	if len(statsBatch) > 0 {
+		if err := ys.statsRepo.SaveStatsBatch(ctx, statsBatch); err != nil {
+			r.totalSaveErrors = len(statsBatch)
+			ys.logger.Warn("Failed to batch save subscriber stats",
+				slog.Int("count", len(statsBatch)),
+				slog.Any("error", err))
+		} else {
+			cr := ys.processAndRecordChanges(ctx, workItems, milestonesByChannel, now)
+			r.totalChanges = cr.changes
+			r.totalMilestones = cr.milestones
+			r.totalRecordErrors = cr.recordErrors
+			r.totalMilestoneCheckErrors += cr.milestoneCheckErrors
+			r.totalMilestoneSaveErrors = cr.milestoneSaveErrors
+		}
+	}
+
+	ys.logger.Info("Subscriber tracking completed",
+		slog.Int("tracked", r.tracked),
+		slog.Int("changes", r.totalChanges),
+		slog.Int("milestones", r.totalMilestones),
+		slog.Int("record_errors", r.totalRecordErrors),
+		slog.Int("save_errors", r.totalSaveErrors),
+		slog.Int("latest_stats_errors", r.totalGetLatestErrors),
+		slog.Int("milestone_check_errors", r.totalMilestoneCheckErrors),
+		slog.Int("milestone_save_errors", r.totalMilestoneSaveErrors),
+		slog.Int("fetch_errors", r.fetchErrors))
+}
+
+// prepareWorkItems: 통계 데이터를 work item과 batch 저장 대상으로 준비한다.
+func (ys *schedulerImpl) prepareWorkItems(
+	ctx context.Context,
+	stats map[string]*ChannelStats,
+	channelToMember map[string]*domain.Member,
+	now time.Time,
+) ([]channelStatsWorkItem, []*domain.TimestampedStats, int, int, map[string][]uint64) {
+	var latestErrors, milestoneCheckErrors int
+
+	latestStatsByChannel, latestErr := ys.statsRepo.GetLatestStatsForChannels(ctx, mapKeys(stats))
+	if latestErr != nil {
+		latestErrors = len(stats)
+		latestStatsByChannel = make(map[string]*domain.TimestampedStats)
+	}
+
+	milestonesByChannel, milestoneBatchErr := ys.statsRepo.GetAchievedMilestones(ctx, mapKeys(stats), domain.MilestoneSubscribers)
+	if milestoneBatchErr != nil {
+		milestoneCheckErrors = len(stats)
+		milestonesByChannel = make(map[string][]uint64)
 	}
 
 	workItems := make([]channelStatsWorkItem, 0, len(stats))
@@ -203,11 +266,7 @@ func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 			continue
 		}
 
-		prevStats, latestErr := ys.statsRepo.GetLatestStats(ctx, channelID)
-		if latestErr != nil {
-			totalGetLatestErrors++
-		}
-
+		prevStats := latestStatsByChannel[channelID]
 		timestampedStats := createTimestampedStats(channelID, member, currentStats, now)
 		workItems = append(workItems, channelStatsWorkItem{
 			channelID:        channelID,
@@ -219,34 +278,58 @@ func (ys *schedulerImpl) trackAllSubscribers(ctx context.Context) {
 		statsBatch = append(statsBatch, timestampedStats)
 	}
 
-	if len(statsBatch) > 0 {
-		if err := ys.statsRepo.SaveStatsBatch(ctx, statsBatch); err != nil {
-			totalSaveErrors = len(statsBatch)
-			ys.logger.Warn("Failed to batch save subscriber stats",
-				slog.Int("count", len(statsBatch)),
+	return workItems, statsBatch, latestErrors, milestoneCheckErrors, milestonesByChannel
+}
+
+// changeProcessingResult: processAndRecordChanges의 결과
+type changeProcessingResult struct {
+	changes              int
+	milestones           int
+	recordErrors         int
+	milestoneCheckErrors int
+	milestoneSaveErrors  int
+}
+
+// processAndRecordChanges: work item들의 변경을 감지하고 batch INSERT한다.
+func (ys *schedulerImpl) processAndRecordChanges(
+	ctx context.Context,
+	workItems []channelStatsWorkItem,
+	milestonesByChannel map[string][]uint64,
+	now time.Time,
+) changeProcessingResult {
+	var cr changeProcessingResult
+	var changeBatch []*domain.StatsChange
+
+	for _, item := range workItems {
+		r := ys.processChannelStats(
+			ctx,
+			item.channelID,
+			item.member,
+			item.currentStats,
+			item.prevStats,
+			item.timestampedStats,
+			milestonesByChannel[item.channelID],
+			now,
+		)
+		if r.change != nil {
+			changeBatch = append(changeBatch, r.change)
+		}
+		cr.changes += r.changesDetected
+		cr.milestones += r.milestonesAchieved
+		cr.milestoneCheckErrors += r.milestoneCheckErrors
+		cr.milestoneSaveErrors += r.milestoneSaveErrors
+	}
+
+	if len(changeBatch) > 0 {
+		if err := ys.statsRepo.RecordChangeBatch(ctx, changeBatch); err != nil {
+			cr.recordErrors = len(changeBatch)
+			ys.logger.Warn("Failed to batch record changes",
+				slog.Int("count", len(changeBatch)),
 				slog.Any("error", err))
-		} else {
-			for _, item := range workItems {
-				r := ys.processChannelStats(ctx, item.channelID, item.member, item.currentStats, item.prevStats, item.timestampedStats, now)
-				totalChanges += r.changesDetected
-				totalMilestones += r.milestonesAchieved
-				totalRecordErrors += r.recordErrors
-				totalMilestoneCheckErrors += r.milestoneCheckErrors
-				totalMilestoneSaveErrors += r.milestoneSaveErrors
-			}
 		}
 	}
 
-	ys.logger.Info("Subscriber tracking completed",
-		slog.Int("tracked", len(stats)),
-		slog.Int("changes", totalChanges),
-		slog.Int("milestones", totalMilestones),
-		slog.Int("record_errors", totalRecordErrors),
-		slog.Int("save_errors", totalSaveErrors),
-		slog.Int("latest_stats_errors", totalGetLatestErrors),
-		slog.Int("milestone_check_errors", totalMilestoneCheckErrors),
-		slog.Int("milestone_save_errors", totalMilestoneSaveErrors),
-		slog.Int("fetch_errors", fetchErrors))
+	return cr
 }
 
 // 멤버 데이터에서 채널 ID 리스트와 채널-멤버 맵 생성 (졸업 멤버 제외)
@@ -287,17 +370,32 @@ func calculateStatsChanges(prev *domain.TimestampedStats, current *ChannelStats)
 	return
 }
 
+func mapKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func buildMilestoneSet(values []uint64) map[uint64]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make(map[uint64]struct{}, len(values))
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
+	return result
+}
+
 // 달성된 마일스톤들을 저장하고 달성 개수 반환 (이미 달성한 마일스톤은 건너뜀)
-func (ys *schedulerImpl) processMilestones(ctx context.Context, channelID string, member *domain.Member, milestones []uint64, now time.Time) (achieved int, checkErrors int, saveErrors int) {
+func (ys *schedulerImpl) processMilestones(ctx context.Context, channelID string, member *domain.Member, milestones []uint64, achievedMilestones []uint64, now time.Time) (achieved int, checkErrors int, saveErrors int) {
 	achieved = 0
+	achievedSet := buildMilestoneSet(achievedMilestones)
 	for _, milestone := range milestones {
-		// 이미 달성한 마일스톤인지 확인 (재달성 방지)
-		alreadyAchieved, err := ys.statsRepo.HasAchievedMilestone(ctx, channelID, domain.MilestoneSubscribers, milestone)
-		if err != nil {
-			checkErrors++
-			continue
-		}
-		if alreadyAchieved {
+		if _, exists := achievedSet[milestone]; exists {
 			ys.logger.Debug("Milestone already achieved, skipping",
 				slog.String("member", member.Name),
 				slog.Any("value", milestone))
@@ -329,12 +427,12 @@ func (ys *schedulerImpl) processMilestones(ctx context.Context, channelID string
 type channelStatsResult struct {
 	changesDetected      int
 	milestonesAchieved   int
-	recordErrors         int
 	milestoneCheckErrors int
 	milestoneSaveErrors  int
+	change               *domain.StatsChange // batch INSERT를 위해 수집
 }
 
-// 단일 채널의 통계 처리 (저장, 변경 기록, 마일스톤)
+// 단일 채널의 통계 처리 (변경 감지, 마일스톤 체크). RecordChange는 caller가 batch 처리.
 func (ys *schedulerImpl) processChannelStats(
 	ctx context.Context,
 	channelID string,
@@ -342,6 +440,7 @@ func (ys *schedulerImpl) processChannelStats(
 	currentStats *ChannelStats,
 	prevStats *domain.TimestampedStats,
 	timestampedStats *domain.TimestampedStats,
+	achievedMilestones []uint64,
 	now time.Time,
 ) channelStatsResult {
 	var r channelStatsResult
@@ -350,7 +449,7 @@ func (ys *schedulerImpl) processChannelStats(
 		subChange, vidChange, viewChange := calculateStatsChanges(prevStats, currentStats)
 
 		if subChange != 0 || vidChange != 0 {
-			change := &domain.StatsChange{
+			r.change = &domain.StatsChange{
 				ChannelID:        channelID,
 				MemberName:       member.Name,
 				SubscriberChange: subChange,
@@ -360,15 +459,10 @@ func (ys *schedulerImpl) processChannelStats(
 				CurrentStats:     timestampedStats,
 				DetectedAt:       now,
 			}
-
-			if err := ys.statsRepo.RecordChange(ctx, change); err != nil {
-				r.recordErrors++
-			} else {
-				r.changesDetected = 1
-			}
+			r.changesDetected = 1
 
 			milestones := ys.checkMilestones(prevStats.SubscriberCount, currentStats.SubscriberCount)
-			r.milestonesAchieved, r.milestoneCheckErrors, r.milestoneSaveErrors = ys.processMilestones(ctx, channelID, member, milestones, now)
+			r.milestonesAchieved, r.milestoneCheckErrors, r.milestoneSaveErrors = ys.processMilestones(ctx, channelID, member, milestones, achievedMilestones, now)
 		}
 	}
 
@@ -391,19 +485,31 @@ func (ys *schedulerImpl) fetchRecentVideosRotation(ctx context.Context, batchNum
 
 	successCount := 0
 	errorCount := 0
+	var mu sync.Mutex
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(recentVideosFetchParallelism)
 
 	for _, channelID := range channels {
-		videos, err := ys.youtube.GetRecentVideos(ctx, channelID, 10)
-		if err != nil {
-			errorCount++
-			continue
-		}
+		eg.Go(func() error {
+			videos, err := ys.youtube.GetRecentVideos(egCtx, channelID, 10)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errorCount++
+				return nil
+			}
 
-		cacheKey := "youtube:recent_videos:" + channelID
-		_ = ys.cache.Set(ctx, cacheKey, videos, 24*time.Hour)
+			cacheKey := "youtube:recent_videos:" + channelID
+			if cacheErr := ys.cache.Set(egCtx, cacheKey, videos, 24*time.Hour); cacheErr != nil {
+				errorCount++
+				return nil
+			}
 
-		successCount++
+			successCount++
+			return nil
+		})
 	}
+	_ = eg.Wait()
 
 	ys.logger.Info("Recent videos batch completed",
 		slog.Int("batch", batchNum),
@@ -437,7 +543,7 @@ func (ys *schedulerImpl) getRotatingBatch(batchNum int, size int) []string {
 
 // checkSubscriberMilestones: 구독자 수가 마일스톤을 넘었는지 확인한다.
 func (ys *schedulerImpl) checkMilestones(previous, current uint64) []uint64 {
-	var achieved []uint64
+	achieved := make([]uint64, 0, len(SubscriberMilestones))
 	for _, milestone := range SubscriberMilestones {
 		if previous < milestone && current >= milestone {
 			achieved = append(achieved, milestone)
@@ -486,7 +592,12 @@ func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage fu
 		ys.logger.Warn("Failed to get unnotified milestones", slog.Any("error", err))
 	}
 
-	milestoneSent := 0
+	// 메시지 포맷 + 병렬 발송
+	type milestoneWork struct {
+		notification MilestoneNotification
+		message      string
+	}
+	works := make([]milestoneWork, 0, len(milestones))
 	for _, m := range milestones {
 		var msg string
 		if ys.formatter == nil {
@@ -494,33 +605,46 @@ func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage fu
 				m.MemberName,
 				util.FormatKoreanNumber(int64(m.Value)))
 		} else {
-			formatted, err := ys.formatter.FormatMilestoneAchieved(ctx, m.MemberName, util.FormatKoreanNumber(int64(m.Value)))
-			if err != nil {
-				ys.logger.Warn("마일스톤 달성 메시지 포맷 오류", slog.Any("error", err))
+			formatted, fmtErr := ys.formatter.FormatMilestoneAchieved(ctx, m.MemberName, util.FormatKoreanNumber(int64(m.Value)))
+			if fmtErr != nil {
+				ys.logger.Warn("마일스톤 달성 메시지 포맷 오류", slog.Any("error", fmtErr))
 				continue
 			}
 			msg = formatted
 		}
+		works = append(works, milestoneWork{notification: m, message: msg})
+	}
 
+	// errgroup 병렬 발송 (milestone × room)
+	sentNotifications := make([]MilestoneNotification, 0, len(works))
+	eg, _ := errgroup.WithContext(ctx)
+	eg.SetLimit(4)
+	for _, w := range works {
 		for _, room := range rooms {
-			if err := sendMessage(room, msg); err != nil {
-				ys.logger.Error("Failed to send milestone notification",
-					slog.String("room", room),
-					slog.String("member", m.MemberName),
-					slog.Any("error", err))
-				continue
-			}
+			eg.Go(func() error {
+				if err := sendMessage(room, w.message); err != nil {
+					ys.logger.Error("Failed to send milestone notification",
+						slog.String("room", room),
+						slog.String("member", w.notification.MemberName),
+						slog.Any("error", err))
+				}
+				return nil
+			})
 		}
+		sentNotifications = append(sentNotifications, w.notification)
+	}
+	_ = eg.Wait()
 
-		if err := ys.statsRepo.MarkMilestoneNotified(ctx, m.ChannelID, m.Type, m.Value); err != nil {
-			ys.logger.Warn("Failed to mark milestone notified",
-				slog.String("channel", m.ChannelID),
+	// batch 마킹
+	if len(sentNotifications) > 0 {
+		if err := ys.statsRepo.MarkMilestonesNotifiedBatch(ctx, sentNotifications); err != nil {
+			ys.logger.Warn("Failed to batch mark milestones notified",
+				slog.Int("count", len(sentNotifications)),
 				slog.Any("error", err))
-		} else {
-			milestoneSent++
 		}
 	}
 
+	milestoneSent := len(sentNotifications)
 	totalSent := milestoneSent + approachingSent
 	if totalSent > 0 {
 		ys.logger.Info("Milestone notifications sent",
@@ -543,30 +667,46 @@ func (ys *schedulerImpl) sendApproachingAlerts(ctx context.Context, sendMessage 
 		return 0
 	}
 
-	sentCount := 0
+	// 메시지 포맷 + 병렬 발송
+	type approachingWork struct {
+		notification ApproachingNotification
+		message      string
+	}
+	works := make([]approachingWork, 0, len(notifications))
 	for _, n := range notifications {
-		message := ys.formatApproachingMessage(ctx, n.MemberName, n.MilestoneValue, n.CurrentSubs)
-
-		for _, room := range rooms {
-			if err := sendMessage(room, message); err != nil {
-				ys.logger.Error("Failed to send approaching notification",
-					slog.String("room", room),
-					slog.String("member", n.MemberName),
-					slog.Any("error", err))
-				continue
-			}
-		}
-
-		if err := ys.statsRepo.MarkApproachingChatNotified(ctx, n.ChannelID, n.MilestoneValue); err != nil {
-			ys.logger.Warn("Failed to mark approaching notified",
-				slog.String("channel", n.ChannelID),
-				slog.Any("error", err))
-		} else {
-			sentCount++
-		}
+		msg := ys.formatApproachingMessage(ctx, n.MemberName, n.MilestoneValue, n.CurrentSubs)
+		works = append(works, approachingWork{notification: n, message: msg})
 	}
 
-	return sentCount
+	eg, _ := errgroup.WithContext(ctx)
+	eg.SetLimit(4)
+	for _, w := range works {
+		for _, room := range rooms {
+			eg.Go(func() error {
+				if err := sendMessage(room, w.message); err != nil {
+					ys.logger.Error("Failed to send approaching notification",
+						slog.String("room", room),
+						slog.String("member", w.notification.MemberName),
+						slog.Any("error", err))
+				}
+				return nil
+			})
+		}
+	}
+	_ = eg.Wait()
+
+	// batch 마킹
+	sentNotifications := make([]ApproachingNotification, len(works))
+	for i, w := range works {
+		sentNotifications[i] = w.notification
+	}
+	if err := ys.statsRepo.MarkApproachingChatNotifiedBatch(ctx, sentNotifications); err != nil {
+		ys.logger.Warn("Failed to batch mark approaching notified",
+			slog.Int("count", len(sentNotifications)),
+			slog.Any("error", err))
+	}
+
+	return len(sentNotifications)
 }
 
 // isSignificantChange: 마일스톤 달성 여부만 체크 (구독자 증가량은 알람 대상 아님)
@@ -598,9 +738,6 @@ func (ys *schedulerImpl) formatChangeMessageWithContext(ctx context.Context, cha
 			return fmt.Sprintf("🎉 %s님이 구독자 %s명을 달성했습니다!\n축하합니다! 🎊",
 				change.MemberName,
 				util.FormatKoreanNumber(int64(milestone)))
-		}
-		if ctx == nil {
-			ctx = context.Background()
 		}
 		msg, err := ys.formatter.FormatMilestoneAchieved(
 			context.WithoutCancel(ctx),
@@ -667,7 +804,7 @@ func (ys *schedulerImpl) watchNearMilestoneMembers(ctx context.Context) {
 		// 마일스톤 달성 여부 확인
 		milestones := ys.checkMilestones(prevSubs, currentSubs)
 		if len(milestones) > 0 {
-			achieved, _, _ := ys.processMilestones(ctx, nm.ChannelID, member, milestones, now)
+			achieved, _, _ := ys.processMilestones(ctx, nm.ChannelID, member, milestones, nil, now)
 			if achieved > 0 {
 				ys.logger.Info("Milestone detected via Holodex watcher",
 					slog.String("member", member.Name),
