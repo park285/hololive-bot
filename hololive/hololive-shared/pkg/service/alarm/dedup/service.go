@@ -2,7 +2,6 @@ package dedup
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -211,16 +210,7 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 
 	var data UpcomingEventNotifiedData
 	if err := s.cache.Get(ctx, key, &data); err != nil {
-		var raw string
-		if rawErr := s.cache.Get(ctx, key, &raw); rawErr != nil {
-			return false, fmt.Errorf("was upcoming event notified recently: unmarshal data: %w", rawErr)
-		}
-		if raw == "" {
-			return false, nil
-		}
-		if err := json.Unmarshal([]byte(raw), &data); err != nil {
-			return false, fmt.Errorf("was upcoming event notified recently: unmarshal data: %w", err)
-		}
+		return false, fmt.Errorf("was upcoming event notified recently: get cache data: %w", err)
 	}
 	if data.NotifiedAt == "" {
 		return false, nil
@@ -249,9 +239,8 @@ func (s *Service) isTargetMinute(minutesUntil int) bool {
 	return slices.Contains(s.targetMinutes, minutesUntil)
 }
 
-// readNotifiedData: Valkey에서 NotifiedData 조회 (HGETALL 우선, 기존 JSON 폴백)
+// readNotifiedData: Valkey에서 NotifiedData 해시를 조회합니다.
 func (s *Service) readNotifiedData(ctx context.Context, key string) *NotifiedData {
-	// HGETALL로 해시 데이터 조회 시도
 	fields, err := s.cache.HGetAll(ctx, key)
 	if err == nil && len(fields) > 0 {
 		startScheduled := fields["start_scheduled"]
@@ -269,22 +258,5 @@ func (s *Service) readNotifiedData(ctx context.Context, key string) *NotifiedDat
 			SentAt:         sentAt,
 		}
 	}
-
-	// 폴백: 기존 JSON 형식 (GET -> parse)
-	var data NotifiedData
-	if err := s.cache.Get(ctx, key, &data); err == nil {
-		if data.StartScheduled != "" || len(data.SentAt) > 0 {
-			return &data
-		}
-	}
-
-	// 2차 폴백: JSON 문자열로 감싼 legacy 포맷
-	var raw string
-	if err := s.cache.Get(ctx, key, &raw); err != nil || raw == "" {
-		return nil
-	}
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return nil
-	}
-	return &data
+	return nil
 }
