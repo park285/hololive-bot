@@ -24,7 +24,7 @@ PASS 기준:
 
 ### 2-1. ExternalName 대상 재확인 (`prod`)
 - [ ] `k8s/overlays/prod/patch-external-services-to-externalname.yaml`의 `externalName`이 최신 대상과 일치
-- [ ] 컨테이너 재생성/재할당이 잦은 대상(`llm-server`, `game-bot-*`) 변경 여부 확인
+- [ ] 컨테이너 재생성/재할당이 잦은 대상(`game-bot-*`) 변경 여부 확인
 
 ### 2-2. EndpointSlice 대상 재확인 (`prod-ip`)
 - [ ] `k8s/base/postgres-external-service.yaml`, `k8s/base/host-external-services.yaml`의 `endpoints.addresses` 최신화
@@ -34,8 +34,6 @@ PASS 기준:
 - [ ] `POSTGRES_HOST/POSTGRES_PORT`가 `holo-postgres:5433` 유지
 - [ ] 아래 key host/port가 서비스 정의와 일치
   - `IRIS_BASE_URL`
-  - `CLIPROXY_BASE_URL`
-  - `SERVICES_LLM_SERVER_HEALTH_URL`
   - `SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL`
   - `SERVICES_GAME_BOT_TURTLE_HEALTH_URL`
 
