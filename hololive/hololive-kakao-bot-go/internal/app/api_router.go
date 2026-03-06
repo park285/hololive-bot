@@ -142,4 +142,3 @@ func registerAPIHealthRoutes(router *gin.Engine) {
 	// Prometheus 메트릭 (장기 히스토리 분석용)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
-

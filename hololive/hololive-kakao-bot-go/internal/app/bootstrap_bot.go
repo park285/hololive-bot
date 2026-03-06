@@ -85,5 +85,3 @@ func ProvideTriggerHandler(
 ) *sharedserver.TriggerHandler {
 	return sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsWeeklyScheduler, logger)
 }
-
-
