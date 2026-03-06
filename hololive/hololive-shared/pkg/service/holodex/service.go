@@ -8,13 +8,13 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
@@ -84,17 +84,12 @@ func NewHolodexService(baseURL string, apiKeys []string, cacheSvc cache.Client, 
 	apiKey := apiKeys[0]
 	logger.Info("Holodex API key configured")
 
-	// DefaultTransport 복제: TCP Keep-Alive(30s), TLSHandshakeTimeout(10s), Proxy 지원 등 안전장치 유지
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.MaxConnsPerHost = constants.HolodexTransportConfig.MaxConnsPerHost
-	transport.MaxIdleConnsPerHost = constants.HolodexTransportConfig.MaxIdleConnsPerHost
-	transport.IdleConnTimeout = constants.HolodexTransportConfig.IdleConnTimeout
-	// HTTP/2 활성화 유지 (DefaultTransport 기본값): Cloudflare가 HTTP/2 응답을 보내므로 필수
-
-	httpClient := &http.Client{
-		Timeout:   constants.APIConfig.HolodexTimeout,
-		Transport: transport,
-	}
+	httpClient := httputil.NewProfiledClient(httputil.TransportProfile{
+		Timeout:             constants.APIConfig.HolodexTimeout,
+		MaxConnsPerHost:     constants.HolodexTransportConfig.MaxConnsPerHost,
+		MaxIdleConnsPerHost: constants.HolodexTransportConfig.MaxIdleConnsPerHost,
+		IdleConnTimeout:     constants.HolodexTransportConfig.IdleConnTimeout,
+	})
 
 	var distributedLimiter *ratelimit.SlidingWindowLimiter
 	if constants.HolodexDistributedRateLimitConfig.Enabled {
