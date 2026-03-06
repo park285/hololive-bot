@@ -179,3 +179,20 @@ func TestReleaseClaimKeysNoPrefixSkipsDel(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, called)
 }
+
+func TestConsumerDrainBatch_UsesBatchedDrain(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	publisher := NewPublisher(cacheClient, newTestLogger())
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	for _, roomID := range []string{"room-1", "room-2", "room-3"} {
+		require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{RoomID: roomID}, nil))
+	}
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 3)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 3)
+	assert.Equal(t, "room-1", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "room-2", envelopes[1].Notification.RoomID)
+	assert.Equal(t, "room-3", envelopes[2].Notification.RoomID)
+}
