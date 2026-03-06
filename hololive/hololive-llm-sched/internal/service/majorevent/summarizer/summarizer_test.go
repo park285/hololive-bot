@@ -276,8 +276,8 @@ func TestEventSummarizer_Summarize_CacheHitSkipsSearchAndLLM(t *testing.T) {
 	cache := &mockCache{getData: "cached summary"}
 	llm := &mockSummarizer{jsonResponse: `{"highlights":[{"name":"unused","date":"3/1(토)","members":"","note":"unused","link":""}]}`}
 	searcher := &mockSearcher{
-		results:   []SearchResult{{Title: "unused", URL: "https://example.com/1"}},
-		krResults: []SearchResult{{Title: "unused-kr", URL: "https://example.com/2"}},
+		results:   []sharedmodel.SearchResult{{Title: "unused", URL: "https://example.com/1"}},
+		krResults: []sharedmodel.SearchResult{{Title: "unused-kr", URL: "https://example.com/2"}},
 	}
 	summarizer := NewEventSummarizer(llm, cache, searcher, testLogger())
 
@@ -759,16 +759,16 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 
 // mockSearcher: 검색 결과 mock (병렬 호출 안전 — 쿼리 문자열로 1차/2차 분기)
 type mockSearcher struct {
-	results   []SearchResult
+	results   []sharedmodel.SearchResult
 	err       error
 	mu        sync.Mutex
 	callCount int
 	// KR 쿼리("ANIPLUS" 포함) 시 다른 결과 반환
-	krResults []SearchResult
+	krResults []sharedmodel.SearchResult
 	krErr     error
 }
 
-func (m *mockSearcher) Search(_ context.Context, query string) ([]SearchResult, error) {
+func (m *mockSearcher) Search(_ context.Context, query string) ([]sharedmodel.SearchResult, error) {
 	m.mu.Lock()
 	m.callCount++
 	m.mu.Unlock()
@@ -806,7 +806,7 @@ func TestSummarize_KRSearchFailure_GracefulDegradation(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test Event","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
 	searcher := &mockSearcher{
-		results: []SearchResult{{Title: "Primary Result", URL: "https://example.com/1"}},
+		results: []sharedmodel.SearchResult{{Title: "Primary Result", URL: "https://example.com/1"}},
 		krErr:   fmt.Errorf("KR search timeout"),
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
@@ -826,7 +826,7 @@ func TestSummarize_PrimarySearchFailure_UsesKRResults(t *testing.T) {
 
 	searcher := &mockSearcher{
 		err:       fmt.Errorf("primary search timeout"),
-		krResults: []SearchResult{{Title: "KR Result", URL: "https://aniplus.co.kr/1"}},
+		krResults: []sharedmodel.SearchResult{{Title: "KR Result", URL: "https://aniplus.co.kr/1"}},
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger())
@@ -844,19 +844,19 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
 	// 1차 5건
-	primary := make([]SearchResult, 5)
+	primary := make([]sharedmodel.SearchResult, 5)
 	for i := range primary {
-		primary[i] = SearchResult{Title: fmt.Sprintf("Primary %d", i), URL: fmt.Sprintf("https://primary.com/%d", i)}
+		primary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("Primary %d", i), URL: fmt.Sprintf("https://primary.com/%d", i)}
 	}
 
 	// 2차 8건 (중복 2건)
-	secondary := make([]SearchResult, 8)
+	secondary := make([]sharedmodel.SearchResult, 8)
 	for i := range secondary {
 		if i < 2 {
 			// 1차와 중복
-			secondary[i] = SearchResult{Title: fmt.Sprintf("Primary %d", i), URL: fmt.Sprintf("https://primary.com/%d", i)}
+			secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("Primary %d", i), URL: fmt.Sprintf("https://primary.com/%d", i)}
 		} else {
-			secondary[i] = SearchResult{Title: fmt.Sprintf("KR %d", i), URL: fmt.Sprintf("https://kr.com/%d", i)}
+			secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("KR %d", i), URL: fmt.Sprintf("https://kr.com/%d", i)}
 		}
 	}
 
@@ -888,16 +888,16 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 func TestRunDualSearch_DirectVerification(t *testing.T) {
 	t.Run("deduplication and cap", func(t *testing.T) {
 		// 1차 5건 + 2차 8건 (중복 2건) → dedupe 11건 → cap 10건
-		primary := make([]SearchResult, 5)
+		primary := make([]sharedmodel.SearchResult, 5)
 		for i := range primary {
-			primary[i] = SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
+			primary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
 		}
-		secondary := make([]SearchResult, 8)
+		secondary := make([]sharedmodel.SearchResult, 8)
 		for i := range secondary {
 			if i < 2 {
-				secondary[i] = SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
+				secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
 			} else {
-				secondary[i] = SearchResult{Title: fmt.Sprintf("K%d", i), URL: fmt.Sprintf("https://k.com/%d", i)}
+				secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("K%d", i), URL: fmt.Sprintf("https://k.com/%d", i)}
 			}
 		}
 
