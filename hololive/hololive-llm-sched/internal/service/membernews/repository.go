@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/subscription"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -195,7 +196,7 @@ func (r *Repository) WarmupCacheFromDB(ctx context.Context) error {
 
 // GetRoomMembers: alarms 기반 room 구독 멤버 목록 조회.
 func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]string, error) {
-	if r == nil || r.pool == nil {
+	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
 
@@ -245,7 +246,7 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 
 // ListActiveMajorEvents: major_events(active)에서 뉴스/행사 후보를 모두 읽습니다.
 func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]Candidate, error) {
-	if r == nil || r.pool == nil {
+	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
 

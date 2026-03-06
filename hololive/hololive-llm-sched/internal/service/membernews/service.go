@@ -84,6 +84,7 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 	filtered := FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
 	if len(filtered) == 0 {
 		return &Digest{
+			ResultType:   SummaryResultEmpty,
 			Period:       normalizedPeriod,
 			Headline:     defaultHeadline(normalizedPeriod),
 			TopItems:     []SummaryItem{},

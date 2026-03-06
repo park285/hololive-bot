@@ -7,6 +7,8 @@ import (
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -88,12 +90,13 @@ type SummaryItem struct {
 
 // Digest: 룸별 뉴스 결과.
 type Digest struct {
-	Period       Period        `json:"period"`
-	Headline     string        `json:"headline"`
-	TopItems     []SummaryItem `json:"top_items"`
-	MoreSummary  string        `json:"more_summary"`
-	OmittedCount int           `json:"omitted_count"`
-	TotalCount   int           `json:"total_count"`
+	ResultType   sharedmodel.SummaryResultType `json:"result_type,omitempty"`
+	Period       Period                        `json:"period"`
+	Headline     string                        `json:"headline"`
+	TopItems     []SummaryItem                 `json:"top_items"`
+	MoreSummary  string                        `json:"more_summary"`
+	OmittedCount int                           `json:"omitted_count"`
+	TotalCount   int                           `json:"total_count"`
 }
 
 // SummarizeInput: 요약기에 전달하는 입력.

@@ -3,6 +3,15 @@ package model
 
 import "context"
 
+// SummaryResultType: 요약/폴백 결과 출처 구분.
+type SummaryResultType string
+
+const (
+	SummaryResultPrimary  SummaryResultType = "primary"
+	SummaryResultFallback SummaryResultType = "fallback"
+	SummaryResultEmpty    SummaryResultType = "empty"
+)
+
 // SearchResult: 웹 검색 결과 단일 항목
 type SearchResult struct {
 	Title         string

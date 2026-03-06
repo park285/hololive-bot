@@ -105,6 +105,9 @@ func TestSummarizer_SchemaSuccess(t *testing.T) {
 	if len(digest.TopItems) != 1 {
 		t.Fatalf("expected 1 top item, got %d", len(digest.TopItems))
 	}
+	if digest.ResultType != SummaryResultPrimary {
+		t.Fatalf("result_type = %q, want %q", digest.ResultType, SummaryResultPrimary)
+	}
 	if digest.TopItems[0].SourceURL == "" {
 		t.Fatalf("expected non-empty source url")
 	}
@@ -148,6 +151,9 @@ func TestSummarizer_LLMFailureUsesFallback(t *testing.T) {
 	}
 	if len(digest.TopItems) == 0 {
 		t.Fatalf("fallback should provide non-empty top items")
+	}
+	if digest.ResultType != SummaryResultFallback {
+		t.Fatalf("result_type = %q, want %q", digest.ResultType, SummaryResultFallback)
 	}
 }
 
@@ -224,6 +230,9 @@ func mustValidatorWithAllowlist(t *testing.T) model.SourceURLValidator {
 func TestBuildDeterministicFallback_NaturalFormat(t *testing.T) {
 	candidates := sampleCandidates()
 	digest := BuildDeterministicFallback(PeriodWeekly, candidates)
+	if digest.ResultType != SummaryResultFallback {
+		t.Fatalf("result_type = %q, want %q", digest.ResultType, SummaryResultFallback)
+	}
 	for _, item := range digest.TopItems {
 		if strings.Contains(item.Summary, "[") {
 			t.Errorf("Summary should not contain brackets, got %q", item.Summary)
@@ -241,6 +250,22 @@ func TestBuildDeterministicFallback_NaturalFormat(t *testing.T) {
 		if !matched {
 			t.Errorf("Summary should contain M/D( date pattern, got %q", item.Summary)
 		}
+	}
+}
+
+func TestSummarizer_EmptyCandidatesUsesEmptyResultType(t *testing.T) {
+	validator := mustValidatorWithAllowlist(t)
+	s := NewSummarizer(&fakeLLM{response: "{}"}, nil, validator, nil)
+
+	digest, err := s.Summarize(context.Background(), SummarizeInput{Period: PeriodWeekly})
+	if err != nil {
+		t.Fatalf("summarize error: %v", err)
+	}
+	if digest.ResultType != SummaryResultEmpty {
+		t.Fatalf("result_type = %q, want %q", digest.ResultType, SummaryResultEmpty)
+	}
+	if len(digest.TopItems) != 0 {
+		t.Fatalf("expected empty top items, got %d", len(digest.TopItems))
 	}
 }
 
