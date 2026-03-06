@@ -78,6 +78,8 @@ kubectl kustomize k8s/overlays/prod --enable-helm | kubectl apply --server-side 
 - SSOT: **stdout → Fluent Bit → Loki** 단일 경로
 - Grafana: `http://localhost:30090`
 - CLI: `./scripts/logs/tail.sh <service>`, `./scripts/logs/query.sh <service>`
+- 로컬 `logs/*.log` 미러링: `./scripts/logs/stream.sh start` (자동 복구형 supervisor)
+- 부팅 후 자동 시작: `systemctl --user enable --now hololive-log-stream.service` (foreground supervisor)
 - 서비스 키: `bot`, `dispatcher`(=`dispatcher-go`), `llm`(=`llm-scheduler`), `ingester`(=`stream-ingester`)
 
 ## 문서
