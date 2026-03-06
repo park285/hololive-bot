@@ -1,8 +1,12 @@
 package outbox
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -63,5 +67,81 @@ func TestParseStatusCounts(t *testing.T) {
 	pending, sent, failed := parseStatusCounts(counts)
 	if pending != 3 || sent != 5 || failed != 1 {
 		t.Fatalf("parseStatusCounts() = (%d,%d,%d), want (3,5,1)", pending, sent, failed)
+	}
+}
+
+func TestGroupOutboxIDsByAggregateStatus(t *testing.T) {
+	t.Parallel()
+
+	grouped := groupOutboxIDsByAggregateStatus([]int64{1, 2, 3}, []deliveryStatusCount{
+		{OutboxID: 1, Status: domain.OutboxStatusSent, Count: 2},
+		{OutboxID: 2, Status: domain.OutboxStatusPending, Count: 1},
+		{OutboxID: 2, Status: domain.OutboxStatusSent, Count: 1},
+		{OutboxID: 3, Status: domain.OutboxStatusFailed, Count: 1},
+	})
+
+	if !reflect.DeepEqual(grouped[domain.OutboxStatusSent], []int64{1}) {
+		t.Fatalf("sent group = %#v, want [1]", grouped[domain.OutboxStatusSent])
+	}
+	if !reflect.DeepEqual(grouped[domain.OutboxStatusPending], []int64{2}) {
+		t.Fatalf("pending group = %#v, want [2]", grouped[domain.OutboxStatusPending])
+	}
+	if !reflect.DeepEqual(grouped[domain.OutboxStatusFailed], []int64{3}) {
+		t.Fatalf("failed group = %#v, want [3]", grouped[domain.OutboxStatusFailed])
+	}
+}
+
+func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cacheSvc, mini := newDispatcherTestCache(t)
+	defer mini.Close()
+	defer func() {
+		if err := cacheSvc.Close(); err != nil {
+			t.Fatalf("close cache service: %v", err)
+		}
+	}()
+
+	dispatcher := NewDispatcher(nil, cacheSvc, &testSender{
+		failRoom: map[string]bool{"room-fail": true},
+	}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		DeliveryParallelism: 1,
+	})
+
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 1, OutboxID: 100, RoomID: "room-ok"},
+		{ID: 2, OutboxID: 100, RoomID: "room-fail"},
+		{ID: 3, OutboxID: 999, RoomID: "room-missing"},
+	}
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		100: {
+			ID:            100,
+			Kind:          domain.OutboxKindNewVideo,
+			ChannelID:     "UC_dispatch_delivery",
+			ContentID:     "video_dispatch_delivery",
+			Payload:       `{"video_id":"vid1","title":"dispatch test"}`,
+			Status:        domain.OutboxStatusPending,
+			AttemptCount:  0,
+			NextAttemptAt: time.Now(),
+		},
+	}
+
+	result := dispatcher.dispatchDeliveryRows(ctx, rows, outboxByID)
+
+	if !reflect.DeepEqual(result.successDeliveryIDs, []int64{1}) {
+		t.Fatalf("successDeliveryIDs = %#v, want []int64{1}", result.successDeliveryIDs)
+	}
+	if result.failedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.failedDeliveries)
+	}
+	if !reflect.DeepEqual(result.failureBuckets["send message"], []int64{2}) {
+		t.Fatalf("send message failures = %#v, want []int64{2}", result.failureBuckets["send message"])
+	}
+	if !reflect.DeepEqual(result.failureBuckets["outbox row not found"], []int64{3}) {
+		t.Fatalf("outbox row not found failures = %#v, want []int64{3}", result.failureBuckets["outbox row not found"])
+	}
+	if !reflect.DeepEqual(result.touchedOutboxIDs, []int64{100, 100, 999}) {
+		t.Fatalf("touchedOutboxIDs = %#v, want []int64{100, 100, 999}", result.touchedOutboxIDs)
 	}
 }
