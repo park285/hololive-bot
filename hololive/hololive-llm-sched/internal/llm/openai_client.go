@@ -91,14 +91,28 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 		return c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
 	}
 
+	text, usedFallback, err := c.generateJSONWithTransportFallback(ctx, systemPrompt, userPrompt, schema)
+	if err != nil {
+		return "", err
+	}
+
+	text, err = c.applyFallbackPostProcess(text, usedFallback)
+	if err != nil {
+		return "", err
+	}
+
+	return text, nil
+}
+
+func (c *OpenAIClient) generateJSONWithTransportFallback(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, bool, error) {
 	// 기본 경로: Responses API (web_search/tooling 지원)
 	text, err := c.generateJSONResponses(ctx, systemPrompt, userPrompt, schema)
 	if err == nil {
-		return text, nil
+		return text, false, nil
 	}
 
 	if !shouldFallbackToChat(err) {
-		return "", err
+		return "", false, err
 	}
 
 	if ctx != nil && ctx.Err() != nil {
@@ -108,7 +122,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 				slog.String("context_error", ctx.Err().Error()),
 				slog.String("model", c.model))
 		}
-		return "", err
+		return "", false, err
 	}
 
 	// 조건부 fallback: Responses API 미지원/일시 오류 시 Chat Completions 재시도
@@ -120,24 +134,30 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 
 	fallbackText, fallbackErr := c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
 	if fallbackErr != nil {
-		return "", fmt.Errorf("responses failed (%w) and fallback failed: %w", err, fallbackErr)
+		return "", true, fmt.Errorf("responses failed (%w) and fallback failed: %w", err, fallbackErr)
 	}
 
-	// major-event 요약의 경우 fallback 경로에서는 discovered_events를 비활성화하여
-	// 근거 없는 추가 발견 항목 생성 가능성을 줄입니다.
-	if c.schemaName == "event_summary" {
-		sanitized, sanitizeErr := suppressDiscoveredEvents(fallbackText)
-		if sanitizeErr != nil {
-			if c.logger != nil {
-				c.logger.Warn("failed to sanitize discovered_events on fallback",
-					slog.String("error", sanitizeErr.Error()))
-			}
-		} else {
-			fallbackText = sanitized
+	return fallbackText, true, nil
+}
+
+func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) (string, error) {
+	if !usedFallback {
+		return text, nil
+	}
+	if c.schemaName != "event_summary" {
+		return text, nil
+	}
+
+	sanitized, err := suppressDiscoveredEvents(text)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Warn("failed to sanitize discovered_events on fallback",
+				slog.String("error", err.Error()))
 		}
+		return text, nil
 	}
 
-	return fallbackText, nil
+	return sanitized, nil
 }
 
 // generateJSONResponses: Responses API + JSON Schema로 구조화 출력을 생성합니다.

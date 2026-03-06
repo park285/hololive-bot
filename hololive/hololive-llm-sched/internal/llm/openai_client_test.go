@@ -305,6 +305,36 @@ func TestSuppressDiscoveredEvents_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestApplyFallbackPostProcess_SkipsWhenNoFallback(t *testing.T) {
+	client := &OpenAIClient{schemaName: "event_summary"}
+
+	raw := `{"summary":"ok","discovered_events":[{"id":"a"}]}`
+	got, err := client.applyFallbackPostProcess(raw, false)
+	if err != nil {
+		t.Fatalf("applyFallbackPostProcess() error = %v", err)
+	}
+	if got != raw {
+		t.Fatalf("applyFallbackPostProcess() = %q, want original %q", got, raw)
+	}
+}
+
+func TestApplyFallbackPostProcess_SanitizesEventSummary(t *testing.T) {
+	client := &OpenAIClient{schemaName: "event_summary"}
+
+	got, err := client.applyFallbackPostProcess(`{"summary":"ok","discovered_events":[{"id":"a"}]}`, true)
+	if err != nil {
+		t.Fatalf("applyFallbackPostProcess() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(got), &payload); err != nil {
+		t.Fatalf("unmarshal sanitized json: %v", err)
+	}
+	if events, ok := payload["discovered_events"].([]any); !ok || len(events) != 0 {
+		t.Fatalf("discovered_events = %#v, want empty array", payload["discovered_events"])
+	}
+}
+
 func wrappedResponsesAPIError(statusCode int, code string) error {
 	requestURL := &url.URL{
 		Scheme: "https",
