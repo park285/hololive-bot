@@ -20,8 +20,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -132,17 +132,9 @@ func NewHolodexService(baseURL string, apiKeys []string, cacheSvc cache.Client, 
 	return svc, nil
 }
 
-// ScraperClient: Holodex fallback 스크래퍼의 scraper.Client를 반환합니다.
-func (h *Service) ScraperClient() *scraper.Client {
-	if h.scraper == nil {
-		return nil
-	}
-	return h.scraper.ScraperClient()
-}
-
 // SetScraperProxyEnabled: Holodex fallback 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
 func (h *Service) SetScraperProxyEnabled(enabled bool) bool {
-	if h == nil || h.scraper == nil {
+	if h.scraper == nil {
 		return false
 	}
 	return h.scraper.SetYouTubeProxyEnabled(enabled)
@@ -150,7 +142,7 @@ func (h *Service) SetScraperProxyEnabled(enabled bool) bool {
 
 // ScraperProxyEnabled: Holodex fallback 스크래퍼의 현재 프록시 활성 상태를 반환합니다.
 func (h *Service) ScraperProxyEnabled() bool {
-	if h == nil || h.scraper == nil {
+	if h.scraper == nil {
 		return false
 	}
 	return h.scraper.YouTubeProxyEnabled()
@@ -204,15 +196,14 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 
 	var allStreams []*domain.Stream
 	seen := make(map[string]bool)
-	failedOrgs := 0
 
-	for _, targetOrg := range streamTargetOrgs(resolvedOrg) {
-		streams, fetchErr := h.fetchStreamsByOrg(ctx, targetOrg, constants.HolodexAPIParams.StatusLive, 0)
+	targetOrgs := streamTargetOrgs(resolvedOrg)
+	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: 1}, func(fetchCtx context.Context, targetOrg string) error {
+		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusLive, 0)
 		if fetchErr != nil {
 			h.logger.Warn("Failed to get live streams for org",
 				slog.String("org", targetOrg), slog.Any("error", fetchErr))
-			failedOrgs++
-			continue
+			return fetchErr
 		}
 
 		filtered := h.filter.FilterHololiveStreams(streams)
@@ -225,23 +216,37 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 				allStreams = append(allStreams, s)
 			}
 		}
-	}
+		return nil
+	})
+	fallback.ObservePrimaryPhase("holodex", "live_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
 
-	if failedOrgs > 0 {
+	if primary.HasFailures() {
 		h.scheduleRetryIfNeeded(ctx, fmt.Sprintf("live_streams_%s", strings.ToLower(resolvedOrg)), func(retryCtx context.Context) {
 			_, _ = h.GetLiveStreamsByOrg(retryCtx, resolvedOrg)
 		})
 	}
 
 	// Hololive 전용 스크래퍼 폴백
-	if len(allStreams) == 0 && h.scraper != nil && supportsScraperFallback(resolvedOrg) {
-		h.logger.Warn("All orgs failed, using scraper fallback for live streams")
+	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
+	runScraperFallback := h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
+		scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed))
+	if runScraperFallback {
+		h.logger.Warn("Primary org fetch returned no live streams, using scraper fallback",
+			slog.Int("failed_orgs", len(primary.Failed)))
 		scraperStreams, scraperErr := h.scraper.FetchAllStreams(ctx)
 		if scraperErr == nil {
 			liveStreams := filterStreamsByStatus(scraperStreams, domain.StreamStatusLive)
+			if len(liveStreams) > 0 {
+				fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "hit")
+			} else {
+				fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "miss")
+			}
 			h.cacheManager.SetLiveStreamsByOrg(ctx, resolvedOrg, liveStreams)
 			return liveStreams, nil
 		}
+		fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "error")
+	} else {
+		fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "skipped")
 	}
 
 	h.cacheManager.SetLiveStreamsByOrg(ctx, resolvedOrg, allStreams)
@@ -267,15 +272,14 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 
 	var allStreams []*domain.Stream
 	seen := make(map[string]bool)
-	failedOrgs := 0
 
-	for _, targetOrg := range streamTargetOrgs(resolvedOrg) {
-		streams, fetchErr := h.fetchStreamsByOrg(ctx, targetOrg, constants.HolodexAPIParams.StatusUpcoming, hours)
+	targetOrgs := streamTargetOrgs(resolvedOrg)
+	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: 1}, func(fetchCtx context.Context, targetOrg string) error {
+		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusUpcoming, hours)
 		if fetchErr != nil {
 			h.logger.Warn("Failed to get upcoming streams for org",
 				slog.String("org", targetOrg), slog.Any("error", fetchErr))
-			failedOrgs++
-			continue
+			return fetchErr
 		}
 
 		filtered := h.filter.FilterHololiveStreams(streams)
@@ -288,23 +292,37 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 				allStreams = append(allStreams, s)
 			}
 		}
-	}
+		return nil
+	})
+	fallback.ObservePrimaryPhase("holodex", "upcoming_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
 
-	if failedOrgs > 0 {
+	if primary.HasFailures() {
 		h.scheduleRetryIfNeeded(ctx, fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours), func(retryCtx context.Context) {
 			_, _ = h.GetUpcomingStreamsByOrg(retryCtx, hours, resolvedOrg)
 		})
 	}
 
 	// Hololive 전용 스크래퍼 폴백
-	if len(allStreams) == 0 && h.scraper != nil && supportsScraperFallback(resolvedOrg) {
-		h.logger.Warn("All orgs failed, using scraper fallback for upcoming streams")
+	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
+	runScraperFallback := h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
+		scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed))
+	if runScraperFallback {
+		h.logger.Warn("Primary org fetch returned no upcoming streams, using scraper fallback",
+			slog.Int("failed_orgs", len(primary.Failed)))
 		scraperStreams, scraperErr := h.scraper.FetchAllStreams(ctx)
 		if scraperErr == nil {
 			upcomingStreams := h.filter.FilterUpcomingStreams(scraperStreams)
+			if len(upcomingStreams) > 0 {
+				fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "hit")
+			} else {
+				fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "miss")
+			}
 			h.cacheManager.SetUpcomingStreamsByOrg(ctx, resolvedOrg, hours, upcomingStreams)
 			return upcomingStreams, nil
 		}
+		fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "error")
+	} else {
+		fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "skipped")
 	}
 
 	h.cacheManager.SetUpcomingStreamsByOrg(ctx, resolvedOrg, hours, allStreams)
@@ -477,10 +495,10 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 
 	slices.SortFunc(hololiveOnly, func(a, b *domain.Stream) int {
 		aTime := int64(0)
-		bTime := int64(0)
 		if a.StartScheduled != nil {
 			aTime = a.StartScheduled.Unix()
 		}
+		bTime := int64(0)
 		if b.StartScheduled != nil {
 			bTime = b.StartScheduled.Unix()
 		}
@@ -569,21 +587,43 @@ func buildSearchChannelsCacheKey(query string) string {
 }
 
 // GetChannel: 채널 ID로 특정 채널의 상세 정보를 조회합니다.
-// Holodex API 실패 시 YouTube 스크래퍼로 폴백합니다.
+// retryable Holodex 오류(5xx/timeout/circuit/key rotation)에서만 YouTube 스크래퍼로 폴백하고,
+// non-retryable 오류는 그대로 반환합니다.
 func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Channel, error) {
 	if cached, found := h.cacheManager.GetChannel(ctx, channelID); found {
 		return cached, nil
 	}
 
+	channel, err := h.fetchChannelDirect(ctx, channelID)
+	if err == nil {
+		return channel, nil
+	}
+
+	if h.shouldUseFallback(ctx, err) {
+		h.logger.Warn("Using scraper fallback for channel",
+			slog.String("channel_id", channelID),
+			slog.Any("error", err),
+		)
+
+		channel, fallbackErr := h.getChannelFromScraper(ctx, channelID)
+		if fallbackErr == nil {
+			return channel, nil
+		}
+
+		return nil, fmt.Errorf(
+			"get channel: primary and scraper fallback failed: %w",
+			stdErrors.Join(err, fallbackErr),
+		)
+	}
+
+	h.logger.Error("Failed to get channel", slog.String("channel_id", channelID), slog.Any("error", err))
+	return nil, fmt.Errorf("get channel: %w", err)
+}
+
+func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*domain.Channel, error) {
 	body, err := h.requester.DoRequest(ctx, "GET", "/channels/"+channelID, nil)
 	if err != nil {
-		apiErr := &APIError{}
-		if stdErrors.As(err, &apiErr) || h.shouldUseFallback(ctx, err) {
-			// Holodex API 실패 시 YouTube 스크래퍼 폴백
-			return h.getChannelFromScraper(ctx, channelID)
-		}
-		h.logger.Error("Failed to get channel", slog.String("channel_id", channelID), slog.Any("error", err))
-		return nil, fmt.Errorf("get channel: %w", err)
+		return nil, fmt.Errorf("fetch channel direct: %w", err)
 	}
 
 	var rawChannel ChannelRaw
@@ -600,7 +640,7 @@ func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Cha
 // getChannelFromScraper: YouTube 스크래퍼를 사용하여 채널 정보를 조회합니다. (Holodex 폴백)
 func (h *Service) getChannelFromScraper(ctx context.Context, channelID string) (*domain.Channel, error) {
 	if h.scraper == nil {
-		return nil, nil
+		return nil, fmt.Errorf("scraper fallback not configured")
 	}
 
 	stats, err := h.scraper.GetChannelStats(ctx, channelID)
@@ -608,7 +648,7 @@ func (h *Service) getChannelFromScraper(ctx context.Context, channelID string) (
 		h.logger.Warn("Scraper fallback also failed for channel",
 			slog.String("channel", channelID),
 			slog.Any("error", err))
-		return nil, nil
+		return nil, fmt.Errorf("get channel stats from scraper: %w", err)
 	}
 
 	// 스크래퍼 데이터로 채널 정보 구성
@@ -703,7 +743,8 @@ func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[str
 }
 
 // GetChannelsLiveStatus: 특정 채널들의 현재 생방송/예정 상태를 빠르게 조회합니다.
-// /users/live 엔드포인트를 사용하여 캐시된 결과를 반환합니다.
+// /users/live 엔드포인트를 우선 사용하고, retryable 오류에서만 채널별 YouTube scraper 경로로 제한 폴백합니다.
+// 이 경로는 공식 스케줄 페이지 재조회 없이 YouTube scraper 결과만 사용합니다.
 // 주의: org, status, sort 필터링 미지원 - live+upcoming 모두 반환됨
 // 사용 시나리오: 알림 체크, 대시보드 상태 표시 등 빠른 상태 확인
 func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
@@ -728,12 +769,12 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 		// 스크래퍼 폴백 시도 (각 채널별로 YouTube 스크래핑)
 		if h.shouldUseFallback(ctx, err) && h.scraper != nil {
 			h.logger.Warn("Using scraper fallback for channels live status", slog.Any("error", err))
-			var allStreams []*domain.Stream
-			for _, channelID := range channelIDs {
-				streams, scraperErr := h.scraper.FetchChannel(ctx, channelID)
-				if scraperErr == nil {
-					allStreams = append(allStreams, streams...)
-				}
+			allStreams, fallbackErr := h.getChannelsLiveStatusFromScraper(ctx, channelIDs)
+			if fallbackErr != nil {
+				h.logger.Warn("Scraper live status fallback failed",
+					slog.Int("channel_count", len(channelIDs)),
+					slog.Any("error", fallbackErr),
+				)
 			}
 			if len(allStreams) > 0 {
 				h.cacheManager.SetChannelsLiveStatusStreams(ctx, channelIDs, allStreams, 30*time.Second)
@@ -761,6 +802,26 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 	)
 
 	return filtered, nil
+}
+
+func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
+	allStreams := make([]*domain.Stream, 0, len(channelIDs))
+	var lastErr error
+
+	for _, channelID := range channelIDs {
+		streams, err := h.scraper.fetchFromYouTubeScraper(ctx, channelID)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		allStreams = append(allStreams, streams...)
+	}
+
+	if lastErr != nil {
+		return allStreams, fmt.Errorf("fetch channels live status from scraper: %w", lastErr)
+	}
+
+	return allStreams, nil
 }
 
 // fetchHololiveChannelList: Hololive 채널 목록을 /channels API로 조회합니다.
@@ -852,7 +913,7 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 			default:
 			}
 
-			channel, err := h.GetChannel(ctx, channelID)
+			channel, err := h.fetchChannelDirect(ctx, channelID)
 			if err != nil {
 				h.logger.Warn("Failed to get channel in batch",
 					slog.String("channel_id", channelID),
@@ -873,7 +934,7 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 	}
 
 	workerWG.Add(workerCount)
-	for i := 0; i < workerCount; i++ {
+	for range workerCount {
 		go worker()
 	}
 
