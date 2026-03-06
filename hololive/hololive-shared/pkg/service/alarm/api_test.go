@@ -23,9 +23,9 @@ type mockAlarmCRUD struct {
 	removeAlarmFn               func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
 	getRoomAlarmsFn             func(ctx context.Context, roomID string) ([]string, error)
 	getRoomAlarmsWithTypesFn    func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
+	listRoomAlarmsViewFn        func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
 	clearRoomAlarmsFn           func(ctx context.Context, roomID string) (int, error)
 	getNextStreamInfoFn         func(ctx context.Context, channelID string) (*domain.NextStreamInfo, error)
-	getMemberNameWithFallbackFn func(ctx context.Context, channelID string) string
 	updateAlarmAdvanceMinutesFn func(minutes int) []int
 	getTargetMinutesFn          func() []int
 	setRoomNameFn               func(ctx context.Context, roomID, roomName string) error
@@ -50,16 +50,16 @@ func (m *mockAlarmCRUD) GetRoomAlarmsWithTypes(ctx context.Context, roomID strin
 	return m.getRoomAlarmsWithTypesFn(ctx, roomID)
 }
 
+func (m *mockAlarmCRUD) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
+	return m.listRoomAlarmsViewFn(ctx, roomID)
+}
+
 func (m *mockAlarmCRUD) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	return m.clearRoomAlarmsFn(ctx, roomID)
 }
 
 func (m *mockAlarmCRUD) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
 	return m.getNextStreamInfoFn(ctx, channelID)
-}
-
-func (m *mockAlarmCRUD) GetMemberNameWithFallback(ctx context.Context, channelID string) string {
-	return m.getMemberNameWithFallbackFn(ctx, channelID)
 }
 
 func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(minutes int) []int {
@@ -285,6 +285,58 @@ func TestGetRoomAlarmsWithTypes(t *testing.T) {
 	}
 }
 
+func TestGetRoomAlarmsView(t *testing.T) {
+	tests := []struct {
+		name       string
+		roomID     string
+		mockFn     func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
+		wantStatus int
+		wantOK     bool
+	}{
+		{
+			name:   "성공",
+			roomID: "room1",
+			mockFn: func(_ context.Context, _ string) ([]domain.AlarmListView, error) {
+				return []domain.AlarmListView{{
+					ChannelID:  "ch1",
+					MemberName: "Pekora",
+					AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				}}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+		{
+			name:   "서비스 에러",
+			roomID: "room2",
+			mockFn: func(_ context.Context, _ string) ([]domain.AlarmListView, error) {
+				return nil, errors.New("db error")
+			},
+			wantStatus: http.StatusInternalServerError,
+			wantOK:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockAlarmCRUD{listRoomAlarmsViewFn: tt.mockFn}
+			_, r := newTestHandler(t, mock)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/internal/alarm/room/"+tt.roomID+"/view", nil)
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			resp := decodeResponse(t, rec.Body)
+			if resp.Success != tt.wantOK {
+				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
+			}
+		})
+	}
+}
+
 // ---- ClearRoomAlarms ----
 
 func TestClearRoomAlarms(t *testing.T) {
@@ -380,47 +432,6 @@ func TestGetNextStreamInfo(t *testing.T) {
 
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/internal/alarm/next-stream/"+tt.channelID, nil)
-			r.ServeHTTP(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
-			}
-			resp := decodeResponse(t, rec.Body)
-			if resp.Success != tt.wantOK {
-				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
-			}
-		})
-	}
-}
-
-// ---- GetMemberNameWithFallback ----
-
-func TestGetMemberNameWithFallback(t *testing.T) {
-	tests := []struct {
-		name       string
-		channelID  string
-		mockFn     func(ctx context.Context, channelID string) string
-		wantStatus int
-		wantOK     bool
-	}{
-		{
-			name:      "성공",
-			channelID: "ch1",
-			mockFn: func(_ context.Context, _ string) string {
-				return "아쿠아"
-			},
-			wantStatus: http.StatusOK,
-			wantOK:     true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockAlarmCRUD{getMemberNameWithFallbackFn: tt.mockFn}
-			_, r := newTestHandler(t, mock)
-
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/internal/alarm/member-name/"+tt.channelID, nil)
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {

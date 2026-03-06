@@ -224,6 +224,94 @@ func TestClient_GetRoomAlarms(t *testing.T) {
 	}
 }
 
+func TestClient_ListRoomAlarmsView(t *testing.T) {
+	now := time.Now()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/alarm/room/room1/view", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, APIResponse{
+			Success: true,
+			Data: []domain.AlarmListView{{
+				ChannelID:  "ch1",
+				MemberName: "Pekora",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				NextStream: &domain.NextStreamInfo{
+					Status:         domain.NextStreamStatusUpcoming,
+					Title:          "Test Stream",
+					VideoID:        "vid1",
+					StartScheduled: &now,
+				},
+			}},
+		})
+	})
+	client, _ := newTestClient(t, mux)
+
+	got, err := client.ListRoomAlarmsView(context.Background(), "room1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	if got[0].MemberName != "Pekora" {
+		t.Fatalf("member_name = %q, want Pekora", got[0].MemberName)
+	}
+	if got[0].NextStream == nil || got[0].NextStream.VideoID != "vid1" {
+		t.Fatalf("next_stream = %#v, want video_id vid1", got[0].NextStream)
+	}
+}
+
+func TestClient_ListRoomAlarmsView_RequiresViewEndpoint(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/alarm/room/room1/view", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	client, _ := newTestClient(t, mux)
+
+	if _, err := client.ListRoomAlarmsView(context.Background(), "room1"); err == nil {
+		t.Fatal("error를 기대했지만 nil이 반환됨")
+	}
+}
+
+func TestClient_ListRoomAlarmsView_WithAPIHandler(t *testing.T) {
+	now := time.Now()
+	mock := &mockAlarmCRUD{
+		listRoomAlarmsViewFn: func(_ context.Context, roomID string) ([]domain.AlarmListView, error) {
+			if roomID != "room1" {
+				t.Fatalf("roomID = %q, want room1", roomID)
+			}
+			return []domain.AlarmListView{{
+				ChannelID:  "ch1",
+				MemberName: "Miko",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				NextStream: &domain.NextStreamInfo{
+					Status:         domain.NextStreamStatusUpcoming,
+					Title:          "API Handler Stream",
+					VideoID:        "api1",
+					StartScheduled: &now,
+				},
+			}}, nil
+		},
+	}
+	_, router := newTestHandler(t, mock)
+	srv := httptest.NewServer(router)
+	t.Cleanup(srv.Close)
+	client := NewClient(srv.URL, nil)
+
+	got, err := client.ListRoomAlarmsView(context.Background(), "room1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	if got[0].MemberName != "Miko" {
+		t.Fatalf("member_name = %q, want Miko", got[0].MemberName)
+	}
+	if got[0].NextStream == nil || got[0].NextStream.VideoID != "api1" {
+		t.Fatalf("next_stream = %#v, want video_id api1", got[0].NextStream)
+	}
+}
+
 func TestClient_ClearRoomAlarms(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -378,49 +466,6 @@ func TestClient_GetNextStreamInfo(t *testing.T) {
 			}
 			if got.Status != tt.wantStatus {
 				t.Errorf("status = %s, want %s", got.Status, tt.wantStatus)
-			}
-		})
-	}
-}
-
-func TestClient_GetMemberNameWithFallback(t *testing.T) {
-	tests := []struct {
-		name       string
-		serverCode int
-		serverResp any
-		wantName   string
-	}{
-		{
-			name:       "성공 - 멤버 이름 반환",
-			serverCode: http.StatusOK,
-			serverResp: stringResp{Value: "Pekora"},
-			wantName:   "Pekora",
-		},
-		{
-			name:       "서버 에러 - channelID 폴백",
-			serverCode: http.StatusInternalServerError,
-			serverResp: map[string]string{"error": "error"},
-			wantName:   "ch1",
-		},
-		{
-			name:       "빈 이름 - channelID 폴백",
-			serverCode: http.StatusOK,
-			serverResp: stringResp{Value: ""},
-			wantName:   "ch1",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mux := http.NewServeMux()
-			mux.HandleFunc("/internal/alarm/member-name/ch1", func(w http.ResponseWriter, r *http.Request) {
-				writeJSON(w, tt.serverCode, tt.serverResp)
-			})
-			client, _ := newTestClient(t, mux)
-
-			got := client.GetMemberNameWithFallback(context.Background(), "ch1")
-			if got != tt.wantName {
-				t.Errorf("name = %q, want %q", got, tt.wantName)
 			}
 		})
 	}

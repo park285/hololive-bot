@@ -84,11 +84,6 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "alarm repository not configured")
 
-	// 캐시 hit 경로
-	assert.Equal(t, "Miko", as.GetMemberNameWithFallback(ctx, "ch-1"))
-	// cache+repo miss 경로
-	assert.Equal(t, "unknown-channel", as.GetMemberNameWithFallback(ctx, "unknown-channel"))
-
 	removed, err := as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
 	require.NoError(t, err)
 	assert.True(t, removed)

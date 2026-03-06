@@ -10,6 +10,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestChannelSubscribersKeyByType(t *testing.T) {
@@ -305,6 +307,84 @@ func TestGetNextStreamInfo(t *testing.T) {
 			tt.assert(t, got, err)
 		})
 	}
+}
+
+func TestGetNextStreamInfosBatch(t *testing.T) {
+	t.Parallel()
+
+	as := newTestAlarmService(t)
+	ctx := context.Background()
+
+	require.NoError(t, as.cache.HMSet(ctx, NextStreamKeyPrefix+"UC_ok", map[string]any{
+		"status":          "upcoming",
+		"video_id":        "vid-ok",
+		"title":           "배치 방송",
+		"start_scheduled": "2026-03-06T00:00:00Z",
+	}))
+	require.NoError(t, as.cache.HMSet(ctx, NextStreamKeyPrefix+"UC_invalid", map[string]any{
+		"status": "broken",
+	}))
+	require.NoError(t, as.cache.HSet(ctx, MemberNameKey, "UC_ok", "미코"))
+
+	names, err := as.getMemberNamesBatch(ctx, []string{"UC_ok", "UC_missing"})
+	require.NoError(t, err)
+	assert.Equal(t, "미코", names["UC_ok"])
+	assert.Empty(t, names["UC_missing"])
+
+	infos, err := as.getNextStreamInfosBatch(ctx, []string{"UC_ok", "UC_invalid", "UC_missing"})
+	require.NoError(t, err)
+	require.NotNil(t, infos["UC_ok"])
+	assert.Equal(t, "vid-ok", infos["UC_ok"].VideoID)
+	assert.Nil(t, infos["UC_invalid"])
+	assert.Nil(t, infos["UC_missing"])
+}
+
+func TestBuildAlarmListViews(t *testing.T) {
+	t.Parallel()
+
+	nextStream := &domain.NextStreamInfo{
+		Status:  domain.NextStreamStatusUpcoming,
+		Title:   "테스트 방송",
+		VideoID: "vid1",
+	}
+
+	entries := buildAlarmListViews(
+		[]*domain.Alarm{
+			{
+				ChannelID:  "ch-1",
+				MemberName: "DB 이름",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+			},
+			{
+				ChannelID:  "ch-2",
+				MemberName: "  ",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
+			},
+			{
+				ChannelID:  "ch-3",
+				MemberName: "",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
+			},
+		},
+		map[string]string{
+			"ch-1": "캐시 이름",
+			"ch-2": " ",
+		},
+		map[string]*domain.NextStreamInfo{
+			"ch-1": nextStream,
+		},
+	)
+
+	require.Len(t, entries, 3)
+	assert.Equal(t, "캐시 이름", entries[0].MemberName)
+	assert.Equal(t, nextStream, entries[0].NextStream)
+	assert.Equal(t, "ch-1", entries[0].ChannelID)
+
+	assert.Equal(t, "ch-2", entries[1].MemberName)
+	assert.Nil(t, entries[1].NextStream)
+
+	assert.Equal(t, "ch-3", entries[2].MemberName)
+	assert.Nil(t, entries[2].NextStream)
 }
 
 func TestNormalizeScheduledMinute(t *testing.T) {

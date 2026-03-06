@@ -37,9 +37,9 @@ func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal.POST("/add", h.AddAlarm)
 	internal.POST("/remove", h.RemoveAlarm)
 	internal.GET("/room/:id", h.GetRoomAlarmsWithTypes)
+	internal.GET("/room/:id/view", h.GetRoomAlarmsView)
 	internal.POST("/clear", h.ClearRoomAlarms)
 	internal.GET("/next-stream/:id", h.GetNextStreamInfo)
-	internal.GET("/member-name/:id", h.GetMemberNameWithFallback)
 	internal.PUT("/settings", h.UpdateAlarmAdvanceMinutes)
 	internal.PUT("/room-name", h.SetRoomName)
 	internal.PUT("/user-name", h.SetUserName)
@@ -122,6 +122,21 @@ func (h *APIHandler) GetRoomAlarmsWithTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: alarms})
 }
 
+// GetRoomAlarmsView: 방의 알람 목록 표시용 조합 조회 결과를 반환합니다.
+func (h *APIHandler) GetRoomAlarmsView(c *gin.Context) {
+	roomID := c.Param("id")
+	ctx := c.Request.Context()
+
+	entries, err := h.alarm.ListRoomAlarmsView(ctx, roomID)
+	if err != nil {
+		h.logger.Error("방 알람 표시 조회 실패", slog.String("room_id", roomID), slog.Any("error", err))
+		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "get room alarms view failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, APIResponse{Success: true, Data: entries})
+}
+
 // ClearRoomAlarms: 방의 모든 알람을 삭제합니다.
 func (h *APIHandler) ClearRoomAlarms(c *gin.Context) {
 	var req ClearAlarmsRequest
@@ -161,15 +176,6 @@ func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: info})
-}
-
-// GetMemberNameWithFallback: 채널 ID에 대한 멤버 이름을 조회합니다 (fallback 포함).
-func (h *APIHandler) GetMemberNameWithFallback(c *gin.Context) {
-	channelID := c.Param("id")
-	ctx := c.Request.Context()
-
-	name := h.alarm.GetMemberNameWithFallback(ctx, channelID)
-	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"member_name": name}})
 }
 
 // UpdateAlarmAdvanceMinutes: 알림 발송 시간(분)을 업데이트합니다.

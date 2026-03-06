@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/valkey-io/valkey-go"
 )
 
 // CacheMemberName: 채널 ID에 해당하는 멤버 이름을 Redis에 캐싱한다. (표시 이름 최적화)
@@ -37,42 +38,6 @@ func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channel
 		return nil, fmt.Errorf("get channel subscribers by type: %w", err)
 	}
 	return subscribers, nil
-}
-
-// GetMemberNameWithFallback: 2-layer fallback으로 멤버 이름을 조회합니다.
-// 1. Cache (Valkey) → 2. Database (alarms 테이블)
-// DB 조회 성공 시 Valkey에 캐싱하여 다음 요청은 Valkey에서 처리.
-func (as *AlarmService) GetMemberNameWithFallback(ctx context.Context, channelID string) string {
-	// Layer 1: Valkey Cache (빠름)
-	name, err := as.cache.HGet(ctx, MemberNameKey, channelID)
-	if err == nil && stringutil.TrimSpace(name) != "" {
-		return name
-	}
-
-	// Layer 2: alarms 테이블 (영속 저장소)
-	if as.alarmRepo != nil {
-		displayName, err := as.alarmRepo.GetMemberName(ctx, channelID)
-		if err == nil && displayName != "" {
-			// DB 조회 성공 시 Valkey에 캐싱 (다음 요청은 빠르게)
-			if cacheErr := as.CacheMemberName(ctx, channelID, displayName); cacheErr != nil {
-				as.logger.Warn("Failed to cache member name from DB",
-					slog.String("channel_id", channelID),
-					slog.Any("error", cacheErr),
-				)
-			}
-			as.logger.Debug("Member name resolved from alarms DB",
-				slog.String("channel_id", channelID),
-				slog.String("name", displayName),
-			)
-			return displayName
-		}
-	}
-
-	// 모든 레이어 실패: 채널 ID 반환
-	as.logger.Warn("Failed to resolve member name from cache/DB",
-		slog.String("channel_id", channelID),
-	)
-	return channelID
 }
 
 // SetRoomName: 방 ID에 대한 표시 이름을 설정합니다.
@@ -238,9 +203,6 @@ func (as *AlarmService) WasUpcomingEventNotifiedRecently(
 
 // GetNextStreamInfo: 특정 채널의 다음 방송 정보(예정 또는 라이브)를 캐시에서 조회합니다.
 func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	as.cacheMutex.RLock()
-	defer as.cacheMutex.RUnlock()
-
 	key := NextStreamKeyPrefix + channelID
 	data, err := as.cache.HGetAll(ctx, key)
 	if err != nil {
@@ -251,8 +213,125 @@ func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string)
 		return nil, fmt.Errorf("get next stream info: %w", err)
 	}
 
+	return as.parseNextStreamInfo(channelID, data), nil
+}
+
+func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
+	startedAt := time.Now()
+	var opErr error
+	defer func() {
+		observeAlarmServiceOperation("list_view", startedAt, opErr)
+	}()
+
+	alarms, err := as.GetRoomAlarmsWithTypes(ctx, roomID)
+	if err != nil {
+		opErr = fmt.Errorf("list room alarms view: %w", err)
+		return nil, opErr
+	}
+	if len(alarms) == 0 {
+		return []domain.AlarmListView{}, nil
+	}
+
+	channelIDs := make([]string, 0, len(alarms))
+	for _, alarm := range alarms {
+		channelIDs = append(channelIDs, alarm.ChannelID)
+	}
+
+	memberNames, err := as.getMemberNamesBatch(ctx, channelIDs)
+	if err != nil {
+		opErr = fmt.Errorf("list room alarms view: get member names batch: %w", err)
+		return nil, opErr
+	}
+
+	nextStreams, err := as.getNextStreamInfosBatch(ctx, channelIDs)
+	if err != nil {
+		opErr = fmt.Errorf("list room alarms view: get next stream info batch: %w", err)
+		return nil, opErr
+	}
+
+	return buildAlarmListViews(alarms, memberNames, nextStreams), nil
+}
+
+func buildAlarmListViews(
+	alarms []*domain.Alarm,
+	memberNames map[string]string,
+	nextStreams map[string]*domain.NextStreamInfo,
+) []domain.AlarmListView {
+	entries := make([]domain.AlarmListView, 0, len(alarms))
+	for _, alarm := range alarms {
+		memberName := stringutil.TrimSpace(memberNames[alarm.ChannelID])
+		if memberName == "" {
+			memberName = stringutil.TrimSpace(alarm.MemberName)
+		}
+		if memberName == "" {
+			memberName = alarm.ChannelID
+		}
+		entries = append(entries, domain.AlarmListView{
+			ChannelID:  alarm.ChannelID,
+			MemberName: memberName,
+			AlarmTypes: alarm.AlarmTypes,
+			NextStream: nextStreams[alarm.ChannelID],
+		})
+	}
+	return entries
+}
+
+func (as *AlarmService) getMemberNamesBatch(ctx context.Context, channelIDs []string) (map[string]string, error) {
+	if len(channelIDs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	builder := as.cache.Builder()
+	cmds := make([]valkey.Completed, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		cmds = append(cmds, builder.Hget().Key(MemberNameKey).Field(channelID).Build())
+	}
+
+	results := as.cache.DoMulti(ctx, cmds...)
+	names := make(map[string]string, len(channelIDs))
+	for i, result := range results {
+		if err := result.Error(); err != nil {
+			continue
+		}
+		name, err := result.ToString()
+		if err != nil || stringutil.TrimSpace(name) == "" {
+			continue
+		}
+		names[channelIDs[i]] = name
+	}
+
+	return names, nil
+}
+
+func (as *AlarmService) getNextStreamInfosBatch(ctx context.Context, channelIDs []string) (map[string]*domain.NextStreamInfo, error) {
+	if len(channelIDs) == 0 {
+		return map[string]*domain.NextStreamInfo{}, nil
+	}
+
+	builder := as.cache.Builder()
+	cmds := make([]valkey.Completed, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		cmds = append(cmds, builder.Hgetall().Key(NextStreamKeyPrefix+channelID).Build())
+	}
+
+	results := as.cache.DoMulti(ctx, cmds...)
+	infos := make(map[string]*domain.NextStreamInfo, len(channelIDs))
+	for i, result := range results {
+		data, err := result.AsStrMap()
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		if info := as.parseNextStreamInfo(channelIDs[i], data); info != nil {
+			infos[channelIDs[i]] = info
+		}
+	}
+
+	return infos, nil
+}
+
+func (as *AlarmService) parseNextStreamInfo(channelID string, data map[string]string) *domain.NextStreamInfo {
 	if len(data) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	info := &domain.NextStreamInfo{
@@ -266,7 +345,7 @@ func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string)
 			slog.String("channel_id", channelID),
 			slog.String("status", info.Status.String()),
 		)
-		return nil, nil
+		return nil
 	}
 
 	startScheduledStr := stringutil.TrimSpace(data["start_scheduled"])
@@ -278,7 +357,7 @@ func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string)
 				slog.String("start_scheduled", startScheduledStr),
 				slog.Any("error", err),
 			)
-			return nil, nil
+			return nil
 		}
 		info.StartScheduled = &scheduledDate
 	}
@@ -291,9 +370,9 @@ func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string)
 				slog.Bool("has_start", startScheduledStr != ""),
 				slog.Bool("has_video_id", info.VideoID != ""),
 			)
-			return nil, nil
+			return nil
 		}
 	}
 
-	return info, nil
+	return info
 }
