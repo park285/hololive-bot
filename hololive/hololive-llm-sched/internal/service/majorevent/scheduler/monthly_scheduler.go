@@ -21,7 +21,7 @@ type MonthlyScheduler struct {
 	outboxRepo outboxEnqueuer
 	formatter  Formatter
 	summarizer *mesummarizer.EventSummarizer
-	locker     NotificationLocker
+	locker     delivery.NotificationLocker
 	logger     *slog.Logger
 	now        func() time.Time
 
@@ -35,7 +35,7 @@ func NewMonthlyScheduler(
 	repository EventRepository,
 	formatter Formatter,
 	summarizer *mesummarizer.EventSummarizer,
-	locker NotificationLocker,
+	locker delivery.NotificationLocker,
 	outboxRepo outboxEnqueuer,
 	logger *slog.Logger,
 ) *MonthlyScheduler {

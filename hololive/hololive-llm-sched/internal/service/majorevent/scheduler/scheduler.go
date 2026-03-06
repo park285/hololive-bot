@@ -59,7 +59,7 @@ type Scheduler struct {
 	outboxRepo outboxEnqueuer
 	formatter  Formatter
 	summarizer *mesummarizer.EventSummarizer // nil 허용
-	locker     NotificationLocker
+	locker     delivery.NotificationLocker
 	logger     *slog.Logger
 	now        func() time.Time
 
@@ -72,7 +72,7 @@ func NewScheduler(
 	repository EventRepository,
 	formatter Formatter,
 	summarizer *mesummarizer.EventSummarizer,
-	locker NotificationLocker,
+	locker delivery.NotificationLocker,
 	outboxRepo outboxEnqueuer,
 	logger *slog.Logger,
 ) *Scheduler {
