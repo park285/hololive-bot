@@ -13,6 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -363,16 +364,87 @@ func (c *Client) GetLivesByChannelIDs(ctx context.Context, channelIDs []string) 
 		return nil, fmt.Errorf("chzzk open API credentials not configured")
 	}
 
-	targets := make(map[string]struct{}, len(channelIDs))
+	targets := normalizeChannelTargets(channelIDs)
+	if len(targets) == 0 {
+		return []LiveData{}, nil
+	}
+
+	if len(targets) <= constants.ChzzkConfig.BatchLookupThreshold {
+		return c.getLivesByStatusChecks(ctx, targets)
+	}
+
+	return c.getLivesByPageScan(ctx, targets)
+}
+
+func normalizeChannelTargets(channelIDs []string) []string {
+	targetSet := make(map[string]struct{}, len(channelIDs))
 	for _, channelID := range channelIDs {
 		channelID = strings.TrimSpace(channelID)
 		if channelID == "" {
 			continue
 		}
-		targets[channelID] = struct{}{}
+		targetSet[channelID] = struct{}{}
 	}
-	if len(targets) == 0 {
-		return []LiveData{}, nil
+
+	targets := make([]string, 0, len(targetSet))
+	for channelID := range targetSet {
+		targets = append(targets, channelID)
+	}
+
+	return targets
+}
+
+func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string) ([]LiveData, error) {
+	var (
+		mu      sync.Mutex
+		g       errgroup.Group
+		liveMap = make(map[string]LiveData, len(channelIDs))
+	)
+	g.SetLimit(constants.ChzzkConfig.MaxConcurrentStatusChecks)
+
+	for _, channelID := range channelIDs {
+		channelID := channelID
+		g.Go(func() error {
+			status, err := c.GetLiveStatus(ctx, channelID)
+			if err != nil {
+				return fmt.Errorf("get live status for %s: %w", channelID, err)
+			}
+			if status == nil || !strings.EqualFold(status.Status, "OPEN") {
+				return nil
+			}
+
+			mu.Lock()
+			liveMap[channelID] = LiveData{
+				ChannelID:           channelID,
+				LiveTitle:           status.LiveTitle,
+				ConcurrentUserCount: status.ConcurrentUserCount,
+				LiveCategoryValue:   status.LiveCategoryValue,
+			}
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("get lives by status checks: %w", err)
+	}
+
+	result := make([]LiveData, 0, len(liveMap))
+	for _, channelID := range channelIDs {
+		live, ok := liveMap[channelID]
+		if !ok {
+			continue
+		}
+		result = append(result, live)
+	}
+
+	return result, nil
+}
+
+func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([]LiveData, error) {
+	targets := make(map[string]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		targets[channelID] = struct{}{}
 	}
 
 	result := make([]LiveData, 0, len(targets))
@@ -380,7 +452,7 @@ func (c *Client) GetLivesByChannelIDs(ctx context.Context, channelIDs []string) 
 	next := ""
 
 	for {
-		resp, err := c.GetLives(ctx, 20, next)
+		resp, err := c.GetLives(ctx, constants.ChzzkConfig.MaxLivesPageSize, next)
 		if err != nil {
 			return nil, fmt.Errorf("get lives page: %w", err)
 		}
