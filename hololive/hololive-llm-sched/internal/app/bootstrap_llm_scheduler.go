@@ -329,7 +329,7 @@ func buildLLMSchedulerComponents(
 	deliveryLocker := ProvideDeliveryLocker(cacheService, logger)
 	outboxRepo := ProvideOutboxRepository(postgresService, logger)
 	irisClient := providers.ProvideIrisClient(cfg.Iris, logger)
-	deliverySender := providers.NewIrisMessageSender(irisClient)
+	deliverySender := ProvideDeliverySender(irisClient)
 	deliveryDispatcher := ProvideDeliveryDispatcher(outboxRepo, deliverySender, logger)
 
 	majorEventLLMClient := ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
