@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,6 +66,9 @@ func TestAllowEnforcesLimit(t *testing.T) {
 	if !first.Allowed {
 		t.Fatalf("first call should be allowed")
 	}
+	if first.Current != 1 || first.Remaining != 1 {
+		t.Fatalf("unexpected first decision: %+v", first)
+	}
 
 	second, err := limiter.Allow(ctx, "youtube:channels", 2, window)
 	if err != nil {
@@ -71,6 +76,9 @@ func TestAllowEnforcesLimit(t *testing.T) {
 	}
 	if !second.Allowed {
 		t.Fatalf("second call should be allowed")
+	}
+	if second.Current != 2 || second.Remaining != 0 {
+		t.Fatalf("unexpected second decision: %+v", second)
 	}
 
 	third, err := limiter.Allow(ctx, "youtube:channels", 2, window)
@@ -82,6 +90,9 @@ func TestAllowEnforcesLimit(t *testing.T) {
 	}
 	if third.RetryAfter <= 0 {
 		t.Fatalf("retry after should be positive: %v", third.RetryAfter)
+	}
+	if third.Current != 2 || third.Remaining != 0 {
+		t.Fatalf("unexpected third decision: %+v", third)
 	}
 }
 
@@ -115,6 +126,9 @@ func TestAllowAfterWindowExpires(t *testing.T) {
 	}
 	if !third.Allowed {
 		t.Fatalf("third call should be allowed after window")
+	}
+	if third.Current != 1 || third.Remaining != 0 {
+		t.Fatalf("unexpected third decision after expiry: %+v", third)
 	}
 }
 
@@ -177,6 +191,12 @@ func TestAllowValidation(t *testing.T) {
 			limit:  1,
 			window: 0,
 		},
+		{
+			name:   "sub millisecond window",
+			bucket: "bucket",
+			limit:  1,
+			window: 500 * time.Microsecond,
+		},
 	}
 
 	for _, tt := range tests {
@@ -185,5 +205,63 @@ func TestAllowValidation(t *testing.T) {
 				t.Fatalf("expected error but got nil")
 			}
 		})
+	}
+}
+
+func TestAllowConcurrentLimit(t *testing.T) {
+	limiter := newTestLimiter(t)
+	ctx := context.Background()
+
+	const (
+		limit       = 3
+		concurrency = 10
+	)
+
+	window := 250 * time.Millisecond
+
+	var allowedCount atomic.Int64
+	var deniedCount atomic.Int64
+	results := make(chan Decision, concurrency)
+
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			decision, err := limiter.Allow(ctx, "youtube:concurrent", limit, window)
+			if err != nil {
+				t.Errorf("allow concurrently: %v", err)
+				return
+			}
+			if decision.Allowed {
+				allowedCount.Add(1)
+			} else {
+				deniedCount.Add(1)
+			}
+			results <- decision
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+
+	if got := allowedCount.Load(); got != limit {
+		t.Fatalf("allowed count = %d, want %d", got, limit)
+	}
+	if got := deniedCount.Load(); got != concurrency-limit {
+		t.Fatalf("denied count = %d, want %d", got, concurrency-limit)
+	}
+
+	for decision := range results {
+		if decision.Current <= 0 || decision.Current > limit {
+			t.Fatalf("unexpected current count: %+v", decision)
+		}
+		if decision.Remaining < 0 || decision.Remaining > limit {
+			t.Fatalf("unexpected remaining count: %+v", decision)
+		}
+		if !decision.Allowed && decision.RetryAfter <= 0 {
+			t.Fatalf("denied decision should include retry_after: %+v", decision)
+		}
 	}
 }

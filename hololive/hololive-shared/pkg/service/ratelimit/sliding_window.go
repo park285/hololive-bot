@@ -24,12 +24,21 @@ local ttl_sec = tonumber(ARGV[5])
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms - window_ms)
 local count = redis.call('ZCARD', key)
 if count >= limit then
-  return 0
+  local retry_after_ms = 0
+  local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+  if oldest[2] ~= nil then
+    local oldest_ms = tonumber(oldest[2])
+    retry_after_ms = window_ms - (now_ms - oldest_ms)
+    if retry_after_ms < 0 then
+      retry_after_ms = 0
+    end
+  end
+  return {0, count, retry_after_ms}
 end
 
 redis.call('ZADD', key, now_ms, member)
 redis.call('EXPIRE', key, ttl_sec)
-return 1
+return {1, count + 1, 0}
 `
 
 // Decision: 분산 슬라이딩 윈도우 판정 결과
@@ -90,14 +99,9 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit i
 	member := l.memberID(nowMS)
 	ttlSeconds := ttlSecondsFromWindow(window)
 
-	allowed, err := l.allowByScript(ctx, key, nowMS, windowMS, limit, member, ttlSeconds)
+	allowed, current, retryAfter, err := l.allowByScript(ctx, key, nowMS, windowMS, limit, member, ttlSeconds)
 	if err != nil {
 		return Decision{}, fmt.Errorf("allow: evaluate script: %w", err)
-	}
-
-	current, err := l.currentCount(ctx, key, nowMS, windowMS)
-	if err != nil {
-		return Decision{}, fmt.Errorf("allow: read current count: %w", err)
 	}
 
 	remaining := limit - current
@@ -114,11 +118,6 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit i
 	}
 	if allowed {
 		return result, nil
-	}
-
-	retryAfter, err := l.retryAfter(ctx, key, nowMS, windowMS)
-	if err != nil {
-		return Decision{}, fmt.Errorf("allow: calculate retry after: %w", err)
 	}
 	result.RetryAfter = retryAfter
 
@@ -141,7 +140,7 @@ func (l *SlidingWindowLimiter) allowByScript(
 	limit int,
 	member string,
 	ttlSeconds int64,
-) (bool, error) {
+) (bool, int, time.Duration, error) {
 	cmd := l.cacheSvc.B().
 		Eval().
 		Script(allowScript).
@@ -157,61 +156,36 @@ func (l *SlidingWindowLimiter) allowByScript(
 		Build()
 	resp := l.cacheSvc.GetClient().Do(ctx, cmd)
 	if resp.Error() != nil {
-		return false, fmt.Errorf("eval allow script: %w", resp.Error())
+		return false, 0, 0, fmt.Errorf("eval allow script: %w", resp.Error())
 	}
 
-	flag, err := resp.AsInt64()
+	values, err := resp.ToArray()
 	if err != nil {
-		return false, fmt.Errorf("parse allow flag: %w", err)
+		return false, 0, 0, fmt.Errorf("parse allow script result: %w", err)
 	}
-	return flag == 1, nil
-}
-
-func (l *SlidingWindowLimiter) currentCount(ctx context.Context, key string, nowMS, windowMS int64) (int, error) {
-	minScore := strconv.FormatInt(nowMS-windowMS, 10)
-	cmd := l.cacheSvc.B().Zcount().Key(key).Min(minScore).Max("+inf").Build()
-	resp := l.cacheSvc.GetClient().Do(ctx, cmd)
-	if resp.Error() != nil {
-		return 0, fmt.Errorf("zcount: %w", resp.Error())
+	if len(values) != 3 {
+		return false, 0, 0, fmt.Errorf("invalid allow script result length: %d", len(values))
 	}
 
-	count, err := resp.AsInt64()
+	flag, err := values[0].AsInt64()
 	if err != nil {
-		return 0, fmt.Errorf("parse zcount: %w", err)
+		return false, 0, 0, fmt.Errorf("parse allow flag: %w", err)
+	}
+	count, err := values[1].AsInt64()
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("parse current count: %w", err)
 	}
 	if count < 0 {
-		return 0, fmt.Errorf("invalid zcount result: %d", count)
+		return false, 0, 0, fmt.Errorf("invalid current count result: %d", count)
 	}
-	return int(count), nil
-}
-
-func (l *SlidingWindowLimiter) retryAfter(ctx context.Context, key string, nowMS, windowMS int64) (time.Duration, error) {
-	cmd := l.cacheSvc.B().Zrange().Key(key).Min("0").Max("0").Withscores().Build()
-	resp := l.cacheSvc.GetClient().Do(ctx, cmd)
-	if resp.Error() != nil {
-		return 0, fmt.Errorf("zrange oldest entry: %w", resp.Error())
-	}
-
-	values, err := resp.AsStrSlice()
+	retryAfterMS, err := values[2].AsInt64()
 	if err != nil {
-		return 0, fmt.Errorf("parse oldest entry: %w", err)
+		return false, 0, 0, fmt.Errorf("parse retry after: %w", err)
 	}
-	if len(values) < 2 {
-		return 0, nil
+	if retryAfterMS < 0 {
+		return false, 0, 0, fmt.Errorf("invalid retry after result: %d", retryAfterMS)
 	}
-
-	oldestScoreFloat, err := strconv.ParseFloat(values[1], 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse oldest score: %w", err)
-	}
-	oldestMS := int64(oldestScoreFloat)
-
-	retryMS := windowMS - (nowMS - oldestMS)
-	if retryMS < 0 {
-		retryMS = 0
-	}
-
-	return time.Duration(retryMS) * time.Millisecond, nil
+	return flag == 1, int(count), time.Duration(retryAfterMS) * time.Millisecond, nil
 }
 
 func (l *SlidingWindowLimiter) buildKey(bucket string) string {
