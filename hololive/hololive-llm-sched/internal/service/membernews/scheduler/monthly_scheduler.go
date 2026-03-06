@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -22,7 +24,7 @@ const (
 
 // MonthlyScheduler: 월간 뉴스 자동 발송 스케줄러.
 type MonthlyScheduler struct {
-	service    digestService
+	service    model.DigestService
 	formatter  DigestFormatter
 	locker     delivery.NotificationLocker
 	outboxRepo outboxEnqueuer
@@ -36,7 +38,7 @@ type MonthlyScheduler struct {
 
 // NewMonthlyScheduler: 월간 스케줄러 생성.
 func NewMonthlyScheduler(
-	service digestService,
+	service model.DigestService,
 	formatter DigestFormatter,
 	locker delivery.NotificationLocker,
 	outboxRepo outboxEnqueuer,
