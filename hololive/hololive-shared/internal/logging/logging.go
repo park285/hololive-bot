@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lmittmann/tint"
+	"github.com/mattn/go-isatty"
 	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -69,6 +70,7 @@ func NewLogger() *slog.Logger {
 		Level:      slog.LevelInfo,
 		TimeFormat: time.RFC3339,
 		AddSource:  true,
+		NoColor:    shouldDisableColor(os.Stdout),
 	}))
 }
 
@@ -100,6 +102,7 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 			Level:      level,
 			TimeFormat: time.RFC3339,
 			AddSource:  true,
+			NoColor:    shouldDisableColor(os.Stdout),
 		})
 		handler = NewSanitizeHandler(handler)
 		if enableOTel {
@@ -198,6 +201,20 @@ func ensureLogFilePerm(path string) error {
 		return fmt.Errorf("chmod log file failed: %w", chmodErr)
 	}
 	return nil
+}
+
+func shouldDisableColor(w io.Writer) bool {
+	file, ok := w.(*os.File)
+	if !ok {
+		return true
+	}
+
+	if os.Getenv("NO_COLOR") != "" {
+		return true
+	}
+
+	fd := file.Fd()
+	return !isatty.IsTerminal(fd) && !isatty.IsCygwinTerminal(fd)
 }
 
 // OTelHandler: slog.Handler를 래핑하여 trace_id/span_id를 자동으로 로그에 추가합니다.
