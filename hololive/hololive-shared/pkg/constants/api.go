@@ -195,6 +195,17 @@ var TwitchConfig = struct {
 	MaxUsersPerRequest: 100,
 }
 
+// ChzzkConfig: Chzzk API 조회 전략 설정입니다.
+var ChzzkConfig = struct {
+	MaxLivesPageSize          int
+	BatchLookupThreshold      int
+	MaxConcurrentStatusChecks int
+}{
+	MaxLivesPageSize:          20,
+	BatchLookupThreshold:      4,
+	MaxConcurrentStatusChecks: 4,
+}
+
 // IndieChannelIDs: 개인세 VTuber 채널 ID 목록 (Holodex /users/live API용)
 var IndieChannelIDs = []string{
 	"UCrV1Hf5r8P148idjoSfrGEQ", // 結城さくな (Yuuki Sakuna)
