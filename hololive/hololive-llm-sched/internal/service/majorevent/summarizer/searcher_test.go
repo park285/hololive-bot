@@ -3,6 +3,8 @@ package summarizer
 import (
 	"fmt"
 	"testing"
+
+	"github.com/kapu/hololive-llm-sched/internal/model"
 )
 
 func TestBuildSearchQuery_ContainsExpandedScopes(t *testing.T) {
@@ -33,13 +35,13 @@ func TestBuildKRPartnerSearchQuery(t *testing.T) {
 func TestDedupeSearchResults(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    []SearchResult
+		input    []model.SearchResult
 		wantLen  int
 		wantURLs []string
 	}{
 		{
 			name: "duplicate URL removed",
-			input: []SearchResult{
+			input: []model.SearchResult{
 				{Title: "A", URL: "https://example.com/1"},
 				{Title: "B", URL: "https://example.com/1"},
 				{Title: "C", URL: "https://example.com/2"},
@@ -49,7 +51,7 @@ func TestDedupeSearchResults(t *testing.T) {
 		},
 		{
 			name: "empty URL uses title+date composite key",
-			input: []SearchResult{
+			input: []model.SearchResult{
 				{Title: "Same Title", URL: "", PublishedDate: "2026-02-01"},
 				{Title: "Same Title", URL: "", PublishedDate: "2026-02-01"},
 			},
@@ -57,7 +59,7 @@ func TestDedupeSearchResults(t *testing.T) {
 		},
 		{
 			name: "same title different date kept separate",
-			input: []SearchResult{
+			input: []model.SearchResult{
 				{Title: "Event", URL: "", PublishedDate: "2026-02-01"},
 				{Title: "Event", URL: "", PublishedDate: "2026-03-01"},
 			},
@@ -65,7 +67,7 @@ func TestDedupeSearchResults(t *testing.T) {
 		},
 		{
 			name:    "empty input",
-			input:   []SearchResult{},
+			input:   []model.SearchResult{},
 			wantLen: 0,
 		},
 	}
@@ -87,9 +89,9 @@ func TestDedupeSearchResults(t *testing.T) {
 
 func TestDedupeSearchResults_MaxCap(t *testing.T) {
 	// 15건 입력 → maxSearchResults(10) 이하 반환
-	input := make([]SearchResult, 15)
+	input := make([]model.SearchResult, 15)
 	for i := range input {
-		input[i] = SearchResult{
+		input[i] = model.SearchResult{
 			Title: fmt.Sprintf("Result %d", i),
 			URL:   fmt.Sprintf("https://example.com/%d", i),
 		}

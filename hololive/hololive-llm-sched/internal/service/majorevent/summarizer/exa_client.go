@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
@@ -39,7 +40,7 @@ func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *s
 }
 
 // Search: web_search_exa 도구를 호출해 검색 결과를 반환합니다.
-func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]SearchResult, error) {
+func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.SearchResult, error) {
 	requestBody := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "tools/call",
@@ -100,7 +101,7 @@ func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]SearchResult
 }
 
 // parseExaResponse: JSON-RPC 응답을 파싱하여 검색 결과를 추출합니다.
-func parseExaResponse(respBody []byte) ([]SearchResult, error) {
+func parseExaResponse(respBody []byte) ([]model.SearchResult, error) {
 	var rpcResp struct {
 		Result struct {
 			Content []struct {
@@ -125,8 +126,8 @@ func parseExaResponse(respBody []byte) ([]SearchResult, error) {
 		PublishedDate string `json:"publishedDate"`
 		Text          string `json:"text"`
 	}
-	toResult := func(item exaItem) SearchResult {
-		return SearchResult{
+	toResult := func(item exaItem) model.SearchResult {
+		return model.SearchResult{
 			Title:         item.Title,
 			URL:           item.URL,
 			Content:       item.Text,
@@ -134,7 +135,7 @@ func parseExaResponse(respBody []byte) ([]SearchResult, error) {
 		}
 	}
 
-	results := make([]SearchResult, 0)
+	results := make([]model.SearchResult, 0)
 	var parseErr error
 	for i, content := range rpcResp.Result.Content {
 		if content.Text == "" {
