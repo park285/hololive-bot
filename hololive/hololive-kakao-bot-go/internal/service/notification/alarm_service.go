@@ -47,6 +47,7 @@ func NewAlarmService(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	initAlarmMetrics()
 
 	targetMinutes := buildTargetMinutes(advanceMinutes)
 
@@ -185,6 +186,12 @@ func CloseAllAlarmServices(ctx context.Context) error {
 // AddAlarm: 특정 채팅방에 대해 특정 멤버(채널)의 방송 알림을 추가합니다.
 // 방 기반 시스템: room_id가 PRIMARY 키, user_id는 감사(audit) 목적으로 DB에만 기록
 func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool, error) {
+	startedAt := time.Now()
+	var opErr error
+	defer func() {
+		observeAlarmServiceOperation("add", startedAt, opErr)
+	}()
+
 	roomID := req.RoomID
 	channelID := req.ChannelID
 	memberName := req.MemberName
@@ -198,8 +205,9 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 	alarmKey := as.getAlarmKey(roomID)
 	added, err := as.cache.SAdd(ctx, alarmKey, []string{channelID})
 	if err != nil {
+		opErr = fmt.Errorf("add alarm: %w", err)
 		as.logger.Error("Failed to add alarm", slog.Any("error", err))
-		return false, fmt.Errorf("add alarm: %w", err)
+		return false, opErr
 	}
 
 	registryKey := as.getRegistryKey(roomID)
@@ -258,9 +266,9 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 		slog.Any("alarm_types", alarmTypes),
 	)
 
-	if syncErr := as.SyncPlatformMappings(ctx); syncErr != nil {
+	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil {
 		if as.logger != nil {
-			as.logger.Warn("Failed to sync platform alarm mappings after add",
+			as.logger.Warn("Failed to sync platform alarm mapping after add",
 				slog.Any("error", syncErr),
 				slog.String("channel_id", channelID),
 				slog.String("room_id", roomID),
@@ -273,6 +281,12 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 
 // RemoveAlarm: 특정 채팅방에서 특정 멤버(채널)의 방송 알림을 해제합니다. (방 기반)
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	startedAt := time.Now()
+	var opErr error
+	defer func() {
+		observeAlarmServiceOperation("remove", startedAt, opErr)
+	}()
+
 	if len(alarmTypes) == 0 {
 		alarmTypes = domain.AllAlarmTypes
 	}
@@ -280,12 +294,50 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 	alarmKey := as.getAlarmKey(roomID)
 	removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
 	if err != nil {
+		opErr = fmt.Errorf("remove alarm: %w", err)
 		as.logger.Error("Failed to remove alarm", slog.Any("error", err))
-		return false, fmt.Errorf("remove alarm: %w", err)
+		return false, opErr
 	}
 
 	registryKey := as.getRegistryKey(roomID)
+	as.removeChannelSubscribers(ctx, channelID, registryKey, alarmTypes)
 
+	as.cleanupChannelRegistryIfEmpty(ctx, channelID)
+
+	remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
+	if err == nil && len(remainingAlarms) == 0 {
+		_, _ = as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey})
+		as.logger.Info("Room removed from registry (no alarms left)",
+			slog.String("room_id", roomID),
+		)
+	}
+
+	as.removeAlarmAsync(roomID, channelID)
+
+	as.logger.Info("Alarm removed",
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
+		slog.Any("alarm_types", alarmTypes),
+	)
+
+	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil {
+		if as.logger != nil {
+			as.logger.Warn("Failed to sync platform alarm mapping after remove",
+				slog.Any("error", syncErr),
+				slog.String("channel_id", channelID),
+				slog.String("room_id", roomID),
+			)
+		}
+	}
+
+	return removed > 0, nil
+}
+
+func (as *AlarmService) removeChannelSubscribers(
+	ctx context.Context,
+	channelID, registryKey string,
+	alarmTypes domain.AlarmTypes,
+) {
 	builder := as.cache.Builder()
 	sremCmds := make([]valkey.Completed, 0, len(alarmTypes))
 	for _, alarmType := range alarmTypes {
@@ -309,52 +361,23 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
 		smembersCmds = append(smembersCmds, builder.Smembers().Key(subsKey).Build())
 	}
+	if len(smembersCmds) == 0 {
+		return
+	}
 
-	if len(smembersCmds) > 0 {
-		smembersResults := as.cache.DoMulti(ctx, smembersCmds...)
-		cleanupCmds := make([]valkey.Completed, 0, len(smembersResults))
-		for i, res := range smembersResults {
-			members, memErr := res.AsStrSlice()
-			if memErr == nil && len(members) == 0 {
-				subsKey := as.channelSubscribersKeyByType(channelID, alarmTypes[i])
-				cleanupCmds = append(cleanupCmds, builder.Del().Key(subsKey).Build())
-			}
-		}
-
-		if len(cleanupCmds) > 0 {
-			_ = as.cache.DoMulti(ctx, cleanupCmds...)
+	smembersResults := as.cache.DoMulti(ctx, smembersCmds...)
+	cleanupCmds := make([]valkey.Completed, 0, len(smembersResults))
+	for i, res := range smembersResults {
+		members, memErr := res.AsStrSlice()
+		if memErr == nil && len(members) == 0 {
+			subsKey := as.channelSubscribersKeyByType(channelID, alarmTypes[i])
+			cleanupCmds = append(cleanupCmds, builder.Del().Key(subsKey).Build())
 		}
 	}
 
-	as.cleanupChannelRegistryIfEmpty(ctx, channelID)
-
-	remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
-	if err == nil && len(remainingAlarms) == 0 {
-		_, _ = as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey})
-		as.logger.Info("Room removed from registry (no alarms left)",
-			slog.String("room_id", roomID),
-		)
+	if len(cleanupCmds) > 0 {
+		_ = as.cache.DoMulti(ctx, cleanupCmds...)
 	}
-
-	as.removeAlarmAsync(roomID, channelID)
-
-	as.logger.Info("Alarm removed",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-		slog.Any("alarm_types", alarmTypes),
-	)
-
-	if syncErr := as.SyncPlatformMappings(ctx); syncErr != nil {
-		if as.logger != nil {
-			as.logger.Warn("Failed to sync platform alarm mappings after remove",
-				slog.Any("error", syncErr),
-				slog.String("channel_id", channelID),
-				slog.String("room_id", roomID),
-			)
-		}
-	}
-
-	return removed > 0, nil
 }
 
 // GetRoomAlarms: 해당 방이 구독 중인 모든 채널 ID 목록을 반환합니다.
@@ -382,8 +405,15 @@ func (as *AlarmService) GetRoomAlarmsWithTypes(ctx context.Context, roomID strin
 
 // ClearRoomAlarms: 해당 방의 모든 알림 설정을 삭제(초기화)합니다.
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
+	startedAt := time.Now()
+	var opErr error
+	defer func() {
+		observeAlarmServiceOperation("clear", startedAt, opErr)
+	}()
+
 	alarms, err := as.GetRoomAlarms(ctx, roomID)
 	if err != nil {
+		opErr = err
 		return 0, err
 	}
 
@@ -394,13 +424,24 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 	alarmKey := as.getAlarmKey(roomID)
 	removed, err := as.cache.SRem(ctx, alarmKey, alarms)
 	if err != nil {
+		opErr = fmt.Errorf("clear room alarms: %w", err)
 		as.logger.Error("Failed to clear room alarms", slog.Any("error", err))
-		return 0, fmt.Errorf("clear room alarms: %w", err)
+		return 0, opErr
 	}
 
 	registryKey := as.getRegistryKey(roomID)
 
 	as.clearChannelSubscribersPipeline(ctx, alarms, registryKey)
+	for _, channelID := range alarms {
+		as.cleanupChannelRegistryIfEmpty(ctx, channelID)
+		if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
+			as.logger.Warn("Failed to sync platform alarm mapping after clear",
+				slog.Any("error", syncErr),
+				slog.String("room_id", roomID),
+				slog.String("channel_id", channelID),
+			)
+		}
+	}
 
 	_, _ = as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey})
 
@@ -410,15 +451,6 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 		slog.String("room_id", roomID),
 		slog.Int("count", int(removed)),
 	)
-
-	if syncErr := as.SyncPlatformMappings(ctx); syncErr != nil {
-		if as.logger != nil {
-			as.logger.Warn("Failed to sync platform alarm mappings after clear",
-				slog.Any("error", syncErr),
-				slog.String("room_id", roomID),
-			)
-		}
-	}
 
 	return int(removed), nil
 }
@@ -430,30 +462,30 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 
 	client := as.cache.GetClient()
 
-	sremCmds := make([]valkey.Completed, len(alarms))
-	channelSubsKeys := make([]string, len(alarms))
-	for i, channelID := range alarms {
-		channelSubsKeys[i] = as.channelSubscribersKey(channelID)
-		sremCmds[i] = client.B().Srem().Key(channelSubsKeys[i]).Member(registryKey).Build()
+	channelSubsKeys := make([]string, 0, len(alarms)*len(domain.AllAlarmTypes))
+	sremCmds := make([]valkey.Completed, 0, len(alarms)*len(domain.AllAlarmTypes))
+	for _, channelID := range alarms {
+		for _, alarmType := range domain.AllAlarmTypes {
+			key := as.channelSubscribersKeyByType(channelID, alarmType)
+			channelSubsKeys = append(channelSubsKeys, key)
+			sremCmds = append(sremCmds, client.B().Srem().Key(key).Member(registryKey).Build())
+		}
 	}
 	_ = as.cache.DoMulti(ctx, sremCmds...)
 
-	smembersCmds := make([]valkey.Completed, len(alarms))
+	smembersCmds := make([]valkey.Completed, len(channelSubsKeys))
 	for i, key := range channelSubsKeys {
 		smembersCmds[i] = client.B().Smembers().Key(key).Build()
 	}
 	smembersResults := as.cache.DoMulti(ctx, smembersCmds...)
 
-	cleanupCmds := make([]valkey.Completed, 0, len(smembersResults)*2)
+	cleanupCmds := make([]valkey.Completed, 0, len(smembersResults))
 	for i, result := range smembersResults {
 		members, err := result.AsStrSlice()
 		if err != nil || len(members) > 0 {
 			continue
 		}
-		cleanupCmds = append(cleanupCmds,
-			client.B().Srem().Key(AlarmChannelRegistryKey).Member(alarms[i]).Build(),
-			client.B().Del().Key(channelSubsKeys[i]).Build(),
-		)
+		cleanupCmds = append(cleanupCmds, client.B().Del().Key(channelSubsKeys[i]).Build())
 	}
 
 	if len(cleanupCmds) > 0 {

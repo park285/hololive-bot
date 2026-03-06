@@ -11,6 +11,7 @@ import (
 // SyncPlatformMappings: Rust 알람 서비스가 참조하는 플랫폼 매핑 해시를 현재 구독 채널 기준으로 동기화합니다.
 // - alarm:chzzk_channels (youtube_channel_id -> chzzk_channel_id)
 // - alarm:twitch_logins  (twitch_user_login -> youtube_channel_id)
+// - alarm:twitch_channel_logins (youtube_channel_id -> twitch_user_login)
 func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 	if as.cache == nil {
 		return fmt.Errorf("cache service not configured")
@@ -18,6 +19,8 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 	if as.memberData == nil {
 		return fmt.Errorf("member data provider not configured")
 	}
+	as.platformMapMu.Lock()
+	defer as.platformMapMu.Unlock()
 
 	channelIDs, err := as.cache.SMembers(ctx, AlarmChannelRegistryKey)
 	if err != nil {
@@ -26,6 +29,7 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 
 	chzzkMappings := make(map[string]string, len(channelIDs))
 	twitchMappings := make(map[string]string, len(channelIDs))
+	twitchChannelMappings := make(map[string]string, len(channelIDs))
 
 	for _, channelID := range channelIDs {
 		member := as.memberData.FindMemberByChannelID(channelID)
@@ -54,6 +58,7 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 				continue
 			}
 			twitchMappings[twitchLogin] = channelID
+			twitchChannelMappings[channelID] = twitchLogin
 		}
 	}
 
@@ -64,6 +69,9 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 	if err := as.replaceHashMappings(ctx, TwitchLoginMapKey, twitchMappings); err != nil {
 		return fmt.Errorf("sync twitch login mappings: %w", err)
 	}
+	if err := as.replaceHashMappings(ctx, TwitchChannelLoginMapKey, twitchChannelMappings); err != nil {
+		return fmt.Errorf("sync twitch channel login mappings: %w", err)
+	}
 
 	if as.logger != nil {
 		as.logger.Info("Platform alarm mappings synchronized",
@@ -71,6 +79,56 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 			slog.Int("chzzk_mappings", len(chzzkMappings)),
 			slog.Int("twitch_mappings", len(twitchMappings)),
 		)
+	}
+
+	return nil
+}
+
+func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, channelID string) error {
+	if as.cache == nil {
+		return fmt.Errorf("cache service not configured")
+	}
+	if as.memberData == nil {
+		return fmt.Errorf("member data provider not configured")
+	}
+	as.platformMapMu.Lock()
+	defer as.platformMapMu.Unlock()
+
+	registered, err := as.cache.SIsMember(ctx, AlarmChannelRegistryKey, channelID)
+	if err != nil {
+		return fmt.Errorf("check channel registry membership: %w", err)
+	}
+	if !registered {
+		if err := as.removePlatformMappingsForChannel(ctx, channelID); err != nil {
+			return fmt.Errorf("remove stale platform mappings: %w", err)
+		}
+		return nil
+	}
+
+	member := as.memberData.FindMemberByChannelID(channelID)
+	if member == nil {
+		if as.logger != nil {
+			as.logger.Warn("Skip platform mapping update for unknown channel",
+				slog.String("channel_id", channelID),
+			)
+		}
+		if err := as.removePlatformMappingsForChannel(ctx, channelID); err != nil {
+			return fmt.Errorf("remove unknown channel platform mappings: %w", err)
+		}
+		return nil
+	}
+
+	if chzzkChannelID := stringutil.TrimSpace(member.ChzzkChannelID); chzzkChannelID != "" {
+		if err := as.cache.HSet(ctx, ChzzkChannelMapKey, channelID, chzzkChannelID); err != nil {
+			return fmt.Errorf("upsert chzzk mapping: %w", err)
+		}
+	} else if err := as.cache.HDel(ctx, ChzzkChannelMapKey, channelID); err != nil {
+		return fmt.Errorf("delete missing chzzk mapping: %w", err)
+	}
+
+	twitchLogin := stringutil.Normalize(member.TwitchUserID)
+	if err := as.reconcileTwitchMappingsForChannel(ctx, channelID, twitchLogin); err != nil {
+		return fmt.Errorf("reconcile twitch mapping: %w", err)
 	}
 
 	return nil
@@ -85,10 +143,73 @@ func (as *AlarmService) replaceHashMappings(
 		return fmt.Errorf("delete key %s: %w", key, err)
 	}
 
+	if len(mappings) == 0 {
+		return nil
+	}
+
+	fields := make(map[string]any, len(mappings))
 	for field, value := range mappings {
-		if err := as.cache.HSet(ctx, key, field, value); err != nil {
-			return fmt.Errorf("hset key %s field %s: %w", key, field, err)
+		fields[field] = value
+	}
+	if err := as.cache.HMSet(ctx, key, fields); err != nil {
+		return fmt.Errorf("hmset key %s: %w", key, err)
+	}
+
+	return nil
+}
+
+func (as *AlarmService) removePlatformMappingsForChannel(ctx context.Context, channelID string) error {
+	if err := as.cache.HDel(ctx, ChzzkChannelMapKey, channelID); err != nil {
+		return fmt.Errorf("delete chzzk mapping: %w", err)
+	}
+	if err := as.reconcileTwitchMappingsForChannel(ctx, channelID, ""); err != nil {
+		return fmt.Errorf("delete twitch mapping: %w", err)
+	}
+	return nil
+}
+
+func (as *AlarmService) reconcileTwitchMappingsForChannel(ctx context.Context, channelID, desiredLogin string) error {
+	currentLogin, err := as.cache.HGet(ctx, TwitchChannelLoginMapKey, channelID)
+	if err != nil {
+		return fmt.Errorf("get current twitch channel login: %w", err)
+	}
+
+	if currentLogin != "" && currentLogin != desiredLogin {
+		if delErr := as.cache.HDel(ctx, TwitchLoginMapKey, currentLogin); delErr != nil {
+			return fmt.Errorf("delete stale twitch login mapping: %w", delErr)
 		}
+	}
+
+	if desiredLogin == "" {
+		if delErr := as.cache.HDel(ctx, TwitchChannelLoginMapKey, channelID); delErr != nil {
+			return fmt.Errorf("delete twitch channel login mapping: %w", delErr)
+		}
+		return nil
+	}
+
+	existingChannelID, err := as.cache.HGet(ctx, TwitchLoginMapKey, desiredLogin)
+	if err != nil {
+		return fmt.Errorf("get desired twitch login mapping: %w", err)
+	}
+	if existingChannelID != "" && existingChannelID != channelID {
+		if err := as.cache.HDel(ctx, TwitchChannelLoginMapKey, channelID); err != nil {
+			return fmt.Errorf("clear conflicting twitch channel login mapping: %w", err)
+		}
+		if as.logger != nil {
+			as.logger.Warn("Duplicate Twitch login detected while incrementally syncing platform mappings",
+				slog.String("twitch_login", desiredLogin),
+				slog.String("kept_channel_id", existingChannelID),
+				slog.String("ignored_channel_id", channelID),
+			)
+		}
+		return nil
+	}
+
+	if err := as.cache.HSet(ctx, TwitchLoginMapKey, desiredLogin, channelID); err != nil {
+		return fmt.Errorf("upsert twitch mapping: %w", err)
+	}
+	if err := as.cache.HSet(ctx, TwitchChannelLoginMapKey, channelID, desiredLogin); err != nil {
+		return fmt.Errorf("upsert twitch channel login mapping: %w", err)
 	}
 
 	return nil
