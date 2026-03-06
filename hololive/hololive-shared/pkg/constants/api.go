@@ -31,9 +31,11 @@ var HolodexTransportConfig = struct {
 
 var HolodexConcurrencyConfig = struct {
 	MaxConcurrentRequests int
+	OrgAllParallelism     int
 	RequestDelay          time.Duration
 }{
 	MaxConcurrentRequests: 2,
+	OrgAllParallelism:     2,
 	RequestDelay:          500 * time.Millisecond,
 }
 
