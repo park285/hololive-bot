@@ -17,6 +17,12 @@ type fakeYouTubeService struct {
 	proxyEnabled bool
 }
 
+type fakeHolodexProxyService struct {
+	setCalls     int
+	lastEnabled  bool
+	proxyEnabled bool
+}
+
 func (f *fakeYouTubeService) SetScraperProxyEnabled(enabled bool) bool {
 	f.setCalls++
 	f.lastEnabled = enabled
@@ -25,6 +31,15 @@ func (f *fakeYouTubeService) SetScraperProxyEnabled(enabled bool) bool {
 }
 
 func (f *fakeYouTubeService) ScraperProxyEnabled() bool { return f.proxyEnabled }
+
+func (f *fakeHolodexProxyService) SetScraperProxyEnabled(enabled bool) bool {
+	f.setCalls++
+	f.lastEnabled = enabled
+	f.proxyEnabled = enabled
+	return true
+}
+
+func (f *fakeHolodexProxyService) ScraperProxyEnabled() bool { return f.proxyEnabled }
 
 func (f *fakeYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return map[string]*youtube.ChannelStats{}, nil
@@ -101,6 +116,18 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 
 	t.Run("nil dependencies do not panic", func(t *testing.T) {
 		applyScraperProxyToggle(true, nil, nil, nil, testLogger())
+	})
+
+	t.Run("applies toggle to holodex proxy service", func(t *testing.T) {
+		service := &fakeHolodexProxyService{}
+
+		applyScraperProxyToggle(true, nil, service, nil, testLogger())
+		if service.setCalls != 1 {
+			t.Fatalf("SetScraperProxyEnabled calls = %d, want 1", service.setCalls)
+		}
+		if !service.lastEnabled {
+			t.Fatal("lastEnabled = false, want true")
+		}
 	})
 }
 
