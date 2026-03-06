@@ -58,7 +58,7 @@ func TestParseMessage_InvalidAlarmCommand(t *testing.T) {
 	}
 }
 
-func TestParseMessage_LegacyMQSlashPrefixHelp(t *testing.T) {
+func TestParseMessage_UsesConfiguredPrefixOnly(t *testing.T) {
 	adapter := NewMessageAdapter("!")
 	msg := &iris.Message{Msg: "/도움"}
 
@@ -66,8 +66,8 @@ func TestParseMessage_LegacyMQSlashPrefixHelp(t *testing.T) {
 	if result == nil {
 		t.Fatalf("expected parsed command, got nil")
 	}
-	if result.Type != domain.CommandHelp {
-		t.Fatalf("expected CommandHelp, got %s", result.Type)
+	if result.Type != domain.CommandUnknown {
+		t.Fatalf("expected CommandUnknown, got %s", result.Type)
 	}
 }
 
