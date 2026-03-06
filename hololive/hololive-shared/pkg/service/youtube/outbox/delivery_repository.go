@@ -19,8 +19,9 @@ type DeliveryRepository struct {
 }
 
 type deliveryStatusCount struct {
-	Status domain.OutboxStatus
-	Count  int64
+	OutboxID int64
+	Status   domain.OutboxStatus
+	Count    int64
 }
 
 func NewDeliveryRepository(db *gorm.DB, logger *slog.Logger) *DeliveryRepository {
@@ -134,40 +135,106 @@ func (r *DeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetrie
 	return nil
 }
 
+// MarkFailedRetryBatch: 전달 실패 row들을 retry-aware semantics로 배치 갱신한다.
+func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int64, maxRetries int, backoff time.Duration, errMsg string) error {
+	uniqueIDs := uniqueInt64s(ids)
+	if len(uniqueIDs) == 0 {
+		return nil
+	}
+
+	now := time.Now()
+	nextAttempt := now.Add(backoff)
+
+	err := r.db.WithContext(ctx).Exec(`
+		UPDATE youtube_notification_delivery
+		SET attempt_count = attempt_count + 1,
+		    error = ?,
+		    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END,
+		    next_attempt_at = CASE WHEN attempt_count + 1 >= ? THEN next_attempt_at ELSE ? END,
+		    locked_at = NULL
+		WHERE id IN ?
+	`, truncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, uniqueIDs).Error
+	if err != nil {
+		return fmt.Errorf("mark delivery rows failed batch: %w", err)
+	}
+
+	return nil
+}
+
 // UpdateOutboxAggregateStatus: delivery 상태를 집계해 outbox 상태를 갱신한다.
 func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, outboxID int64) error {
+	return r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID})
+}
+
+// UpdateOutboxAggregateStatuses: 여러 outbox의 delivery 상태를 한 번에 집계해 갱신한다.
+func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, outboxIDs []int64) error {
+	uniqueIDs := uniqueInt64s(outboxIDs)
+	if len(uniqueIDs) == 0 {
+		return nil
+	}
+
 	var counts []deliveryStatusCount
 	if err := r.db.WithContext(ctx).
 		Model(&domain.YouTubeNotificationDelivery{}).
-		Select("status, COUNT(*) AS count").
-		Where("outbox_id = ?", outboxID).
-		Group("status").
+		Select("outbox_id, status, COUNT(*) AS count").
+		Where("outbox_id IN ?", uniqueIDs).
+		Group("outbox_id, status").
 		Scan(&counts).Error; err != nil {
-		return fmt.Errorf("update outbox aggregate status: count delivery statuses: %w", err)
+		return fmt.Errorf("update outbox aggregate statuses: count delivery statuses: %w", err)
 	}
 
-	pendingCount, sentCount, failedCount := parseStatusCounts(counts)
-	nextStatus := resolveOutboxStatus(pendingCount, sentCount, failedCount)
+	statusGroups := groupOutboxIDsByAggregateStatus(uniqueIDs, counts)
+	for status, ids := range statusGroups {
+		if err := r.updateOutboxStatusBatch(ctx, ids, status); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outboxIDs []int64, status domain.OutboxStatus) error {
+	uniqueIDs := uniqueInt64s(outboxIDs)
+	if len(uniqueIDs) == 0 {
+		return nil
+	}
 
 	updates := map[string]any{
-		"status":    nextStatus,
+		"status":    status,
 		"locked_at": nil,
 	}
-	if nextStatus == domain.OutboxStatusSent {
+	switch status {
+	case domain.OutboxStatusSent:
 		updates["sent_at"] = time.Now()
 		updates["error"] = ""
-	} else if nextStatus == domain.OutboxStatusFailed {
+	case domain.OutboxStatusFailed:
 		updates["error"] = "per-room delivery failed"
 	}
 
 	result := r.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-		Where("id = ?", outboxID).
+		Where("id IN ?", uniqueIDs).
 		Updates(updates)
 	if result.Error != nil {
-		return fmt.Errorf("update outbox aggregate status: apply update: %w", result.Error)
+		return fmt.Errorf("update outbox aggregate statuses: apply update: %w", result.Error)
 	}
 
 	return nil
+}
+
+func groupOutboxIDsByAggregateStatus(outboxIDs []int64, counts []deliveryStatusCount) map[domain.OutboxStatus][]int64 {
+	perOutboxCounts := make(map[int64][]deliveryStatusCount, len(outboxIDs))
+	for _, item := range counts {
+		perOutboxCounts[item.OutboxID] = append(perOutboxCounts[item.OutboxID], item)
+	}
+
+	grouped := make(map[domain.OutboxStatus][]int64, 3)
+	for _, outboxID := range outboxIDs {
+		pendingCount, sentCount, failedCount := parseStatusCounts(perOutboxCounts[outboxID])
+		status := resolveOutboxStatus(pendingCount, sentCount, failedCount)
+		grouped[status] = append(grouped[status], outboxID)
+	}
+
+	return grouped
 }
 
 func parseStatusCounts(counts []deliveryStatusCount) (pending int64, sent int64, failed int64) {
