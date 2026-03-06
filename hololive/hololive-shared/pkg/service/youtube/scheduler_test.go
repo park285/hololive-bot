@@ -1259,3 +1259,33 @@ func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T
 		t.Fatalf("cacheMaxConcurrent = %d, want <= %d", cacheMaxConcurrent, recentVideosFetchParallelism)
 	}
 }
+
+func TestFinalizeNearMilestoneChannelMap_KeepsPartialResultsOnError(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	partial := map[string]*domain.Channel{
+		"UC1": {ID: "UC1"},
+	}
+
+	got := finalizeNearMilestoneChannelMap(logger, 2, partial, errors.New("batch failure"))
+	if len(got) != 1 {
+		t.Fatalf("len(got) = %d, want 1", len(got))
+	}
+	if got["UC1"] == nil || got["UC1"].ID != "UC1" {
+		t.Fatalf("expected partial result for UC1 to be preserved, got %#v", got["UC1"])
+	}
+}
+
+func TestFinalizeNearMilestoneChannelMap_InitializesNilMapOnError(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	got := finalizeNearMilestoneChannelMap(logger, 2, nil, errors.New("batch failure"))
+	if got == nil {
+		t.Fatal("expected non-nil map")
+	}
+	if len(got) != 0 {
+		t.Fatalf("len(got) = %d, want 0", len(got))
+	}
+}
