@@ -45,6 +45,11 @@ type memberMatcherSnapshot struct {
 	dynamicLoadErr error
 }
 
+type snapshotMatchStrategy struct {
+	name string
+	find func(*memberMatcherSnapshot, string) *matchCandidate
+}
+
 // ChannelSelector: 모호한 검색어에 대해 모호성 해소를 돕는 채널 선택 인터페이스
 type ChannelSelector interface {
 	SelectBestChannel(ctx context.Context, query string, candidates []*domain.Channel) (*domain.Channel, error)
@@ -447,6 +452,92 @@ func pickPreferredSnapshotCandidate(entries []*snapshotEntry) *matchCandidate {
 	return entries[0].candidate
 }
 
+func (mm *MemberMatcher) snapshotMatchStrategies() []snapshotMatchStrategy {
+	return []snapshotMatchStrategy{
+		{
+			name: "exact-alias",
+			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+				if snapshot == nil {
+					return nil
+				}
+				return pickPreferredSnapshotCandidate(snapshot.exactAliases[queryNorm])
+			},
+		},
+		{
+			name: "exact-name",
+			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+				if snapshot == nil {
+					return nil
+				}
+				return pickPreferredSnapshotCandidate(snapshot.exactNames[queryNorm])
+			},
+		},
+		{
+			name: "partial-name",
+			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+				return mm.trySnapshotPartialNameMatch(snapshot, queryNorm)
+			},
+		},
+		{
+			name: "partial-alias",
+			find: func(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+				return mm.trySnapshotPartialAliasMatch(snapshot, queryNorm)
+			},
+		},
+	}
+}
+
+func cloneCandidateWithStrategy(candidate *matchCandidate, strategy string) *matchCandidate {
+	if candidate == nil {
+		return nil
+	}
+
+	cloned := *candidate
+	if strategy == "" {
+		return &cloned
+	}
+	if cloned.source == "" {
+		cloned.source = strategy
+		return &cloned
+	}
+	cloned.source = fmt.Sprintf("%s:%s", cloned.source, strategy)
+	return &cloned
+}
+
+func (mm *MemberMatcher) resolveSnapshotCandidate(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+	for _, strategy := range mm.snapshotMatchStrategies() {
+		if strategy.find == nil {
+			continue
+		}
+		if candidate := strategy.find(snapshot, queryNorm); candidate != nil {
+			return cloneCandidateWithStrategy(candidate, strategy.name)
+		}
+	}
+	return nil
+}
+
+func (mm *MemberMatcher) exactNameMembers(snapshot *memberMatcherSnapshot, nameNorm, org string) []*domain.Member {
+	if snapshot == nil || nameNorm == "" {
+		return nil
+	}
+
+	candidates := make([]*domain.Member, 0, len(snapshot.exactNames[nameNorm]))
+	for _, entry := range snapshot.exactNames[nameNorm] {
+		if entry == nil || entry.candidate == nil {
+			continue
+		}
+		if org != "" && entry.candidate.org != org {
+			continue
+		}
+		candidates = append(candidates, &domain.Member{
+			Name:      entry.candidate.memberName,
+			ChannelID: entry.candidate.channelID,
+			Org:       entry.candidate.org,
+		})
+	}
+	return candidates
+}
+
 func (mm *MemberMatcher) findSnapshotCandidates(snapshot *memberMatcherSnapshot, queryNorm string) []*snapshotEntry {
 	if snapshot == nil || queryNorm == "" {
 		return nil
@@ -648,23 +739,7 @@ func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*
 		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
 	}
 
-	// Strategy 1: 정확한 별칭 매칭 (가장 빠름)
-	if channel, err := mm.finalizeCandidate(ctx, pickPreferredSnapshotCandidate(snapshot.exactAliases[queryNorm])); err != nil || channel != nil {
-		return channel, err
-	}
-
-	// Strategy 2: exact name snapshot
-	if channel, err := mm.finalizeCandidate(ctx, pickPreferredSnapshotCandidate(snapshot.exactNames[queryNorm])); err != nil || channel != nil {
-		return channel, err
-	}
-
-	// Strategy 3: snapshot token/name 부분 매칭
-	if channel, err := mm.finalizeCandidate(ctx, mm.trySnapshotPartialNameMatch(snapshot, queryNorm)); err != nil || channel != nil {
-		return channel, err
-	}
-
-	// Strategy 4: snapshot alias 부분 매칭
-	if channel, err := mm.finalizeCandidate(ctx, mm.trySnapshotPartialAliasMatch(snapshot, queryNorm)); err != nil || channel != nil {
+	if channel, err := mm.finalizeCandidate(ctx, mm.resolveSnapshotCandidate(snapshot, queryNorm)); err != nil || channel != nil {
 		return channel, err
 	}
 
@@ -705,20 +780,7 @@ func (mm *MemberMatcher) FindBestMatchWithCandidates(ctx context.Context, query 
 		return nil, snapshot.dynamicLoadErr
 	}
 
-	var candidates []*domain.Member
-	for _, entry := range snapshot.exactNames[nameNorm] {
-		if entry == nil || entry.candidate == nil {
-			continue
-		}
-		if org != "" && entry.candidate.org != org {
-			continue
-		}
-		candidates = append(candidates, &domain.Member{
-			Name:      entry.candidate.memberName,
-			ChannelID: entry.candidate.channelID,
-			Org:       entry.candidate.org,
-		})
-	}
+	candidates := mm.exactNameMembers(snapshot, nameNorm, org)
 
 	if len(candidates) == 0 {
 		return mm.FindBestMatch(ctx, query)
