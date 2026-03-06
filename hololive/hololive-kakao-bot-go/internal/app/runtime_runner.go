@@ -12,10 +12,6 @@ import (
 
 // Run: 봇 애플리케이션을 실행하고 종료 신호(SIGINT, SIGTERM)를 대기한다. (블로킹)
 func (r *BotRuntime) Run() {
-	if r == nil {
-		return
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -25,24 +21,16 @@ func (r *BotRuntime) Run() {
 
 	errCh := make(chan error, 1)
 	r.Start(ctx, errCh)
-	if r.Logger != nil {
-		r.Logger.Info("Bot started, waiting for signals...")
-	}
+	r.Logger.Info("Bot started, waiting for signals...")
 
 	select {
 	case sig := <-sigCh:
-		if r.Logger != nil {
-			r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
-		}
+		r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
 	case err := <-errCh:
-		if r.Logger != nil {
-			r.Logger.Error("Server error", slog.Any("error", err))
-		}
+		r.Logger.Error("Server error", slog.Any("error", err))
 	}
 
-	if r.Logger != nil {
-		r.Logger.Info("Shutting down gracefully...")
-	}
+	r.Logger.Info("Shutting down gracefully...")
 	cancel()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
@@ -50,7 +38,5 @@ func (r *BotRuntime) Run() {
 
 	r.Shutdown(shutdownCtx)
 
-	if r.Logger != nil {
-		r.Logger.Info("Shutdown complete")
-	}
+	r.Logger.Info("Shutdown complete")
 }

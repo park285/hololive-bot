@@ -34,25 +34,10 @@ func newBotSettingsApplier(
 }
 
 func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool) sharedsettings.ScraperProxyApplyResult {
-	if a.base == nil {
-		applied := false
-		return sharedsettings.ScraperProxyApplyResult{
-			Requested: enabled,
-			Applied:   &applied,
-			Reason:    "settings applier not configured",
-		}
-	}
 	return a.base.ApplyScraperProxy(ctx, enabled)
 }
 
 func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
-	if a.base == nil {
-		return sharedsettings.AlarmAdvanceMinutesApplyResult{
-			AlarmRequestedAdvanceMinutes: minutes,
-			AlarmApplied:                 false,
-			AlarmReason:                  "settings applier not configured",
-		}
-	}
 	return a.base.ApplyAlarmAdvanceMinutes(ctx, minutes)
 }
 
@@ -80,13 +65,5 @@ func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sh
 }
 
 func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedsettings.ScraperProxyRuntimeStateResult {
-	if a.base == nil {
-		known := false
-		return sharedsettings.ScraperProxyRuntimeStateResult{
-			Requested: requested,
-			Known:     &known,
-			Reason:    "settings applier not configured",
-		}
-	}
 	return a.base.ScraperProxyRuntimeState(requested)
 }

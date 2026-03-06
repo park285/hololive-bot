@@ -64,6 +64,11 @@ type trackingYouTubeSvc struct {
 	proxyEnabled bool
 }
 
+type trackingHolodexProxySvc struct {
+	mu           sync.Mutex
+	proxyEnabled bool
+}
+
 func (s *trackingYouTubeSvc) SetScraperProxyEnabled(enabled bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,6 +83,25 @@ func (s *trackingYouTubeSvc) ScraperProxyEnabled() bool {
 }
 
 func (s *trackingYouTubeSvc) isProxyEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.proxyEnabled
+}
+
+func (s *trackingHolodexProxySvc) SetScraperProxyEnabled(enabled bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.proxyEnabled = enabled
+	return true
+}
+
+func (s *trackingHolodexProxySvc) ScraperProxyEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.proxyEnabled
+}
+
+func (s *trackingHolodexProxySvc) isProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.proxyEnabled
@@ -133,32 +157,6 @@ func TestNewBotSettingsApplier_DefaultLogger(t *testing.T) {
 	require.NotNil(t, wrapped)
 	assert.Same(t, base, wrapped.base)
 	assert.NotNil(t, wrapped.logger)
-}
-
-func TestBotSettingsApplier_NilBaseBranches(t *testing.T) {
-	t.Parallel()
-
-	applier := &botSettingsApplier{
-		base:   nil,
-		logger: testAppLogger(),
-	}
-
-	scraperResult := applier.ApplyScraperProxy(context.Background(), true)
-	require.NotNil(t, scraperResult.Applied)
-	assert.True(t, scraperResult.Requested)
-	assert.False(t, *scraperResult.Applied)
-	assert.Equal(t, "settings applier not configured", scraperResult.Reason)
-
-	alarmResult := applier.ApplyAlarmAdvanceMinutes(context.Background(), 20)
-	assert.Equal(t, 20, alarmResult.AlarmRequestedAdvanceMinutes)
-	assert.False(t, alarmResult.AlarmApplied)
-	assert.Equal(t, "settings applier not configured", alarmResult.AlarmReason)
-
-	runtimeResult := applier.ScraperProxyRuntimeState(true)
-	require.NotNil(t, runtimeResult.Known)
-	assert.True(t, runtimeResult.Requested)
-	assert.False(t, *runtimeResult.Known)
-	assert.Equal(t, "settings applier not configured", runtimeResult.Reason)
 }
 
 func TestBotSettingsApplier_DelegatesToBase(t *testing.T) {
@@ -266,6 +264,19 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	assert.False(t, enabled)
 }
 
+func TestApplyScraperProxyToggle_UpdatesHolodexProxyService(t *testing.T) {
+	t.Parallel()
+
+	logger := testAppLogger()
+	holodexSvc := &trackingHolodexProxySvc{}
+
+	applyScraperProxyToggle(true, nil, holodexSvc, nil, logger)
+	assert.True(t, holodexSvc.isProxyEnabled())
+
+	applyScraperProxyToggle(false, nil, holodexSvc, nil, logger)
+	assert.False(t, holodexSvc.isProxyEnabled())
+}
+
 func TestProvideYouTubeServiceAndScheduler_Defaults(t *testing.T) {
 	t.Parallel()
 
@@ -279,12 +290,6 @@ func TestProvideYouTubeServiceAndScheduler_Defaults(t *testing.T) {
 
 	assert.Same(t, svc, ProvideYouTubeService(stack))
 	assert.Same(t, scheduler, ProvideYouTubeScheduler(deps))
-}
-
-func TestDefaultRuntimeAlarmSchedulerBuilder_ReturnsNil(t *testing.T) {
-	t.Parallel()
-
-	assert.Nil(t, defaultRuntimeAlarmSchedulerBuilder(context.Background(), nil, nil, nil))
 }
 
 var _ sharedserver.SettingsApplier = (*trackingSettingsApplier)(nil)
