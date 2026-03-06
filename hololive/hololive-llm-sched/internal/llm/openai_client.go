@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +14,7 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 
@@ -38,18 +38,14 @@ type OpenAIClient struct {
 // NewClient: OpenAI 호환 endpoint를 사용하는 LLM 클라이언트를 생성합니다.
 func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
 	// HTTP/2 비활성화: Cloudflare가 Go HTTP/2 fingerprint를 차단하는 문제 방지
-	httpClient := &http.Client{
-		Timeout: constants.LLMHTTPTimeout.Request,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout: constants.LLMHTTPTimeout.Dial,
-			}).DialContext,
-			TLSHandshakeTimeout:   constants.LLMHTTPTimeout.TLSHandshake,
-			ResponseHeaderTimeout: constants.LLMHTTPTimeout.ResponseHeader,
-			IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
-			TLSNextProto:          make(map[string]func(string, *tls.Conn) http.RoundTripper),
-		},
-	}
+	httpClient := httputil.NewProfiledClient(httputil.TransportProfile{
+		Timeout:               constants.LLMHTTPTimeout.Request,
+		DialTimeout:           constants.LLMHTTPTimeout.Dial,
+		TLSHandshakeTimeout:   constants.LLMHTTPTimeout.TLSHandshake,
+		ResponseHeaderTimeout: constants.LLMHTTPTimeout.ResponseHeader,
+		IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
+		DisableHTTP2:          true,
+	})
 	client := openai.NewClient(
 		option.WithBaseURL(baseURL),
 		option.WithAPIKey(apiKey),
