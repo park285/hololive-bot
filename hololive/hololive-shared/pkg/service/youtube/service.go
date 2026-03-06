@@ -20,6 +20,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -213,42 +214,28 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 
 	var allStreams []*domain.Stream
 	var mu sync.Mutex
-	var failedIDs []string
-	var failedMu sync.Mutex
 
 	// Phase 1: 스크래퍼로 우선 시도 (quota 0)
-	g, gctx := errgroup.WithContext(ctx)
-	semaphore := make(chan struct{}, 5) // 동시 요청 제한
-
-	for _, channelID := range channelIDs {
-		g.Go(func() error {
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			events, err := ys.scraper.GetUpcomingEvents(gctx, channelID)
-			if err != nil {
-				// 스크래핑 실패 -> API 폴백 대상
-				failedMu.Lock()
-				failedIDs = append(failedIDs, channelID)
-				failedMu.Unlock()
-				return nil
-			}
-			if len(events) == 0 {
-				// 예정/라이브 방송이 없는 정상 케이스는 API 폴백하지 않음.
-				return nil
-			}
-
-			// 스크래핑 결과를 domain.Stream으로 변환
-			streams := ys.convertScrapedEvents(events, channelID)
-			mu.Lock()
-			allStreams = append(allStreams, streams...)
-			mu.Unlock()
+	primary := fallback.RunPrimary(ctx, channelIDs, fallback.FetchPlan[string, struct{}]{Parallelism: 5}, func(gctx context.Context, channelID string) error {
+		events, err := ys.scraper.GetUpcomingEvents(gctx, channelID)
+		if err != nil {
+			return fmt.Errorf("scraper upcoming events for %s: %w", channelID, err)
+		}
+		if len(events) == 0 {
+			// 예정/라이브 방송이 없는 정상 케이스는 API 폴백하지 않음.
 			return nil
-		})
-	}
-	_ = g.Wait()
+		}
 
-	scraped := len(channelIDs) - len(failedIDs)
+		streams := ys.convertScrapedEvents(events, channelID)
+		mu.Lock()
+		allStreams = append(allStreams, streams...)
+		mu.Unlock()
+		return nil
+	})
+	fallback.ObservePrimaryPhase("youtube", "upcoming_streams", len(channelIDs), primary.Succeeded, len(primary.Failed))
+
+	failedIDs := primary.Failed
+	scraped := primary.Succeeded
 	ys.logger.Info("Scraper phase completed (upcoming streams)",
 		slog.Int("total", len(channelIDs)),
 		slog.Int("scraped", scraped),
@@ -258,6 +245,7 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 	if len(failedIDs) > 0 {
 		estimatedCost := len(failedIDs) * constants.YouTubeConfig.SearchQuotaCost
 		if err := ys.checkQuota(estimatedCost); err != nil {
+			fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "blocked")
 			ys.logger.Warn("Quota exceeded for API fallback, returning partial results",
 				slog.Int("scraped_count", len(allStreams)),
 				slog.Any("error", err))
@@ -273,11 +261,18 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 			slog.Int("estimatedCost", estimatedCost))
 
 		apiStreams, apiCost := ys.fetchUpcomingFromAPI(ctx, failedIDs)
+		if len(apiStreams) > 0 {
+			fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "hit")
+		} else {
+			fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "miss")
+		}
 		mu.Lock()
 		allStreams = append(allStreams, apiStreams...)
 		mu.Unlock()
 
 		ys.consumeQuota(apiCost)
+	} else {
+		fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "skipped")
 	}
 
 	ys.cache.SetStreams(ctx, cacheKey, allStreams, constants.YouTubeConfig.CacheExpiration)
@@ -517,8 +512,6 @@ func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []st
 
 	result := make(map[string]*ChannelStats)
 	var mu sync.Mutex
-	var failedIDs []string
-	var failedMu sync.Mutex
 
 	// Phase 1: 병렬 스크래핑으로 우선 시도
 	// HTTP context 취소와 독립적으로 실행 (WithoutCancel + 자체 타임아웃)
@@ -528,46 +521,35 @@ func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []st
 	)
 	defer scraperCancel()
 
-	g, gctx := errgroup.WithContext(scraperCtx)
-	semaphore := make(chan struct{}, 5) // 동시 요청 제한 (rate limiting 방지)
+	primary := fallback.RunPrimary(scraperCtx, channelIDs, fallback.FetchPlan[string, struct{}]{Parallelism: 5}, func(gctx context.Context, channelID string) error {
+		stats, err := ys.scraper.GetChannelStats(gctx, channelID)
+		if err != nil {
+			ys.logger.Debug("Scraper failed, will fallback to API",
+				slog.String("channelID", channelID),
+				slog.Any("error", err))
+			return fmt.Errorf("scraper channel stats for %s: %w", channelID, err)
+		}
 
-	for _, channelID := range channelIDs {
-		g.Go(func() error {
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
+		mu.Lock()
+		channelTitle := ys.getChannelName(channelID)
+		if channelTitle == "" {
+			channelTitle = stats.Handle
+		}
+		result[channelID] = &ChannelStats{
+			ChannelID:       stats.ChannelID,
+			ChannelTitle:    channelTitle,
+			SubscriberCount: uint64(stats.SubscriberCount),
+			VideoCount:      uint64(stats.VideoCount),
+			ViewCount:       uint64(stats.ViewCount),
+			Timestamp:       time.Now(),
+		}
+		mu.Unlock()
+		return nil
+	})
+	fallback.ObservePrimaryPhase("youtube", "channel_statistics", len(channelIDs), primary.Succeeded, len(primary.Failed))
 
-			stats, err := ys.scraper.GetChannelStats(gctx, channelID)
-			if err != nil {
-				ys.logger.Debug("Scraper failed, will fallback to API",
-					slog.String("channelID", channelID),
-					slog.Any("error", err))
-				failedMu.Lock()
-				failedIDs = append(failedIDs, channelID)
-				failedMu.Unlock()
-				return nil
-			}
-
-			mu.Lock()
-			// 캐시에서 채널 이름 조회, 없으면 Handle 사용
-			channelTitle := ys.getChannelName(channelID)
-			if channelTitle == "" {
-				channelTitle = stats.Handle
-			}
-			result[channelID] = &ChannelStats{
-				ChannelID:       stats.ChannelID,
-				ChannelTitle:    channelTitle,
-				SubscriberCount: uint64(stats.SubscriberCount),
-				VideoCount:      uint64(stats.VideoCount),
-				ViewCount:       uint64(stats.ViewCount),
-				Timestamp:       time.Now(),
-			}
-			mu.Unlock()
-			return nil
-		})
-	}
-	_ = g.Wait()
-
-	scraped := len(channelIDs) - len(failedIDs)
+	failedIDs := primary.Failed
+	scraped := primary.Succeeded
 	ys.logger.Info("Scraper phase completed",
 		slog.Int("total", len(channelIDs)),
 		slog.Int("scraped", scraped),
@@ -583,15 +565,23 @@ func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []st
 
 		apiResult, err := ys.getChannelStatsFromAPI(apiCtx, failedIDs)
 		if err != nil {
+			fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "error")
 			ys.logger.Warn("API fallback failed",
 				slog.Int("channels", len(failedIDs)),
 				slog.Any("error", err))
 			// 부분 결과라도 반환
 		} else {
+			if len(apiResult) > 0 {
+				fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "hit")
+			} else {
+				fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "miss")
+			}
 			mu.Lock()
 			maps.Copy(result, apiResult)
 			mu.Unlock()
 		}
+	} else {
+		fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "skipped")
 	}
 
 	ys.logger.Info("Channel statistics fetched (scraper+API)",
