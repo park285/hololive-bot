@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -405,9 +406,20 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 		return nil, newError(CodeInternal, "userID is empty", nil)
 	}
 
+	now := time.Now().UTC()
+	expiresAt := now.Add(s.cfg.SessionTTL)
+	data := sessionData{
+		UserID:    userID,
+		ExpiresAt: expiresAt,
+		CreatedAt: now,
+	}
+	payload, err := json.Marshal(&data)
+	if err != nil {
+		return nil, newError(CodeInternal, "failed to marshal session", err)
+	}
+
 	var token string
 	var sessionHash string
-	var key string
 
 	for range 3 {
 		raw, err := generateToken(sessionTokenPrefix, 32)
@@ -417,31 +429,18 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 		hash := sha256Hex(raw)
 		k := sessionKeyPrefix + hash
 
-		exists, err := s.cacheSvc.Exists(ctx, k)
+		acquired, err := s.cacheSvc.SetNX(ctx, k, string(payload), s.cfg.SessionTTL)
 		if err != nil {
-			return nil, newError(CodeInternal, "failed to check session existence", err)
+			return nil, newError(CodeInternal, "failed to store session", err)
 		}
-		if !exists {
+		if acquired {
 			token = raw
 			sessionHash = hash
-			key = k
 			break
 		}
 	}
 	if token == "" {
 		return nil, newError(CodeInternal, "failed to allocate unique session token", nil)
-	}
-
-	now := time.Now().UTC()
-	expiresAt := now.Add(s.cfg.SessionTTL)
-	data := sessionData{
-		UserID:    userID,
-		ExpiresAt: expiresAt,
-		CreatedAt: now,
-	}
-
-	if err := s.cacheSvc.Set(ctx, key, &data, s.cfg.SessionTTL); err != nil {
-		return nil, newError(CodeInternal, "failed to store session", err)
 	}
 
 	// 유저별 세션 인덱스 유지 (비밀번호 변경 시 전체 폐기 용도)
