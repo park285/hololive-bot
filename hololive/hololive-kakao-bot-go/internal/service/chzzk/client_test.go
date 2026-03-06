@@ -3,11 +3,14 @@ package chzzk
 import (
 	"context"
 	"fmt"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -519,7 +522,7 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 	})
 	client.openAPIBaseURL = server.URL
 
-	lives, err := client.GetLivesByChannelIDs(context.Background(), []string{"target-1", "target-2"})
+	lives, err := client.GetLivesByChannelIDs(context.Background(), []string{"target-1", "target-2", "target-3", "target-4", "target-5"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -528,6 +531,123 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 	}
 	if lives[0].ChannelID != "target-1" || lives[1].ChannelID != "target-2" {
 		t.Fatalf("unexpected lives: %#v", lives)
+	}
+}
+
+func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
+	var (
+		liveStatusCalls atomic.Int32
+		pageCalls       atomic.Int32
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/polling/v2/channels/") && strings.HasSuffix(r.URL.Path, "/live-status"):
+			liveStatusCalls.Add(1)
+			channelID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/polling/v2/channels/"), "/live-status")
+			response := LiveStatusResponse{
+				Code: 200,
+				Content: &LiveStatusContent{
+					Status:    "CLOSE",
+					LiveTitle: "closed",
+				},
+			}
+			if channelID == "target-1" {
+				response.Content.Status = "OPEN"
+				response.Content.LiveTitle = "target-live-1"
+				response.Content.ConcurrentUserCount = 123
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+		case r.URL.Path == "/open/v1/lives":
+			pageCalls.Add(1)
+			t.Fatalf("unexpected page scan request for small target set")
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+	client.openAPIBaseURL = server.URL
+
+	lives, err := client.GetLivesByChannelIDs(context.Background(), []string{"target-1", "target-2"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(lives) != 1 {
+		t.Fatalf("expected 1 live, got %d", len(lives))
+	}
+	if lives[0].ChannelID != "target-1" {
+		t.Fatalf("unexpected live result: %#v", lives)
+	}
+	if got := liveStatusCalls.Load(); got != 2 {
+		t.Fatalf("live status calls = %d, want 2", got)
+	}
+	if got := pageCalls.Load(); got != 0 {
+		t.Fatalf("page scan calls = %d, want 0", got)
+	}
+}
+
+func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
+	var (
+		liveStatusCalls atomic.Int32
+		pageCalls       atomic.Int32
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/polling/v2/channels/"):
+			liveStatusCalls.Add(1)
+			t.Fatalf("unexpected live status request for large target set")
+		case r.URL.Path == "/open/v1/lives":
+			pageCalls.Add(1)
+			response := OpenAPIResponse[LivesResponse]{
+				Code: http.StatusOK,
+				Content: LivesResponse{
+					Data: []LiveData{{ChannelID: "target-1", LiveTitle: "target-live-1"}},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+	client.openAPIBaseURL = server.URL
+
+	channelIDs := make([]string, 0, constants.ChzzkConfig.BatchLookupThreshold+1)
+	for i := 0; i < constants.ChzzkConfig.BatchLookupThreshold+1; i++ {
+		channelIDs = append(channelIDs, fmt.Sprintf("target-%d", i+1))
+	}
+
+	lives, err := client.GetLivesByChannelIDs(context.Background(), channelIDs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(lives) != 1 {
+		t.Fatalf("expected 1 live, got %d", len(lives))
+	}
+	if got := pageCalls.Load(); got != 1 {
+		t.Fatalf("page scan calls = %d, want 1", got)
+	}
+	if got := liveStatusCalls.Load(); got != 0 {
+		t.Fatalf("live status calls = %d, want 0", got)
 	}
 }
 
