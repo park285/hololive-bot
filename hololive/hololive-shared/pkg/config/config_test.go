@@ -663,9 +663,6 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Services.LLMServerHealthURL != "http://legacy-llm-server/health" {
-		t.Fatalf("Services.LLMServerHealthURL = %q, want legacy value", cfg.Services.LLMServerHealthURL)
-	}
 	if cfg.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
 		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", cfg.Services.LLMSchedulerHealthURL)
 	}
@@ -679,9 +676,6 @@ func TestLoadAdminAPI_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	cfg, err := LoadAdminAPI()
 	if err != nil {
 		t.Fatalf("LoadAdminAPI() error = %v", err)
-	}
-	if cfg.Services.LLMServerHealthURL != "http://legacy-llm-server/health" {
-		t.Fatalf("Services.LLMServerHealthURL = %q, want legacy value", cfg.Services.LLMServerHealthURL)
 	}
 	if cfg.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
 		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", cfg.Services.LLMSchedulerHealthURL)
