@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	authsvc "github.com/kapu/hololive-kakao-bot-go/internal/service/auth"
+	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 )
 
 func TestNewAuthHandler(t *testing.T) {
