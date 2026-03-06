@@ -471,6 +471,84 @@ func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 	}
 }
 
+func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if r.URL.Path != "/open/v1/lives" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		var response OpenAPIResponse[LivesResponse]
+		switch callCount {
+		case 1:
+			response = OpenAPIResponse[LivesResponse]{
+				Code: http.StatusOK,
+				Content: LivesResponse{
+					Data: []LiveData{
+						{ChannelID: "other", LiveTitle: "other-live"},
+						{ChannelID: "target-1", LiveTitle: "target-live-1"},
+					},
+					Page: PageInfo{Next: "page-2"},
+				},
+			}
+		case 2:
+			response = OpenAPIResponse[LivesResponse]{
+				Code: http.StatusOK,
+				Content: LivesResponse{
+					Data: []LiveData{
+						{ChannelID: "target-2", LiveTitle: "target-live-2"},
+					},
+				},
+			}
+		default:
+			t.Fatalf("unexpected extra call: %d", callCount)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+	client.openAPIBaseURL = server.URL
+
+	lives, err := client.GetLivesByChannelIDs(context.Background(), []string{"target-1", "target-2"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(lives) != 2 {
+		t.Fatalf("expected 2 lives, got %d", len(lives))
+	}
+	if lives[0].ChannelID != "target-1" || lives[1].ChannelID != "target-2" {
+		t.Fatalf("unexpected lives: %#v", lives)
+	}
+}
+
+func TestGetLivesByChannelIDs_EmptyTargets(t *testing.T) {
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      DefaultBaseURL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+
+	lives, err := client.GetLivesByChannelIDs(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(lives) != 0 {
+		t.Fatalf("expected empty result, got %#v", lives)
+	}
+}
+
 func BenchmarkGetLiveStatus(b *testing.B) {
 	response := LiveStatusResponse{
 		Code: 200,
