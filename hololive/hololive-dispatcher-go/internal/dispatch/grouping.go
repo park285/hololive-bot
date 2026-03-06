@@ -23,7 +23,8 @@ func GroupEnvelopes(envelopes []domain.AlarmQueueEnvelope) []NotificationGroup {
 	groups := make([]NotificationGroup, 0, len(envelopes))
 	index := make(map[string]int, len(envelopes))
 
-	for _, envelope := range envelopes {
+	for i := range envelopes {
+		envelope := envelopes[i]
 		key := buildGroupKey(envelope.Notification)
 		groupIndex, exists := index[key]
 		if !exists {
