@@ -41,6 +41,11 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 	outboxDispatcher = ingestionComponents.outboxDispatcher
 	ingestionLeaseRef = ingestionComponents.ingestionLease
 
+	alarmScheduler, err := buildAlarmRuntimeScheduler(cfg, infra, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build bot runtime: alarm runtime scheduler: %w", err)
+	}
+
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
 	configSubscriber := buildBotConfigSubscriber(runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, scraperScheduler, logger)
 
@@ -66,6 +71,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		ScraperScheduler:     scraperScheduler,
 		PhotoSync:            photoSyncService,
 		OutboxDispatcher:     outboxDispatcher,
+		AlarmScheduler:       alarmScheduler,
 		ingestionLease:       ingestionLeaseRef,
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           ProvideAPIAddr(cfg),
