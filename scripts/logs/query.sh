@@ -30,6 +30,7 @@ Options:
   --limit <n>          최대 결과 수 (기본: 1000)
   --grep <pattern>     Loki 서버사이드 정규식 필터 (|~ "pattern")
   --pod <pod_name>     특정 pod 지정 (container_name 대신 pod_name 필터)
+  --quiet              진행 로그 숨김
   -h, --help           도움말
 
 Examples:
@@ -61,6 +62,7 @@ SINCE="1h"
 LIMIT="1000"
 GREP=""
 POD=""
+QUIET="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -69,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     --limit) LIMIT="$2"; shift 2 ;;
     --grep) GREP="$2"; shift 2 ;;
     --pod) POD="$2"; shift 2 ;;
+    --quiet) QUIET="true"; shift ;;
     *)
       if [[ -z "${SERVICE}" ]]; then
         SERVICE="$1"; shift
@@ -93,7 +96,9 @@ fi
 
 # --- port-forward 시작 (이미 열려있으면 스킵) ---
 if ! curl -sf "${LOKI_ADDR}/ready" &>/dev/null; then
-  echo "port-forward 시작: svc/loki ${LOKI_PORT}:${LOKI_PORT}" >&2
+  if [[ "${QUIET}" != "true" ]]; then
+    echo "port-forward 시작: svc/loki ${LOKI_PORT}:${LOKI_PORT}" >&2
+  fi
   kubectl port-forward -n "${NAMESPACE}" svc/loki "${LOKI_PORT}:${LOKI_PORT}" &>/dev/null &
   PF_PID=$!
   # port-forward 준비 대기 (최대 10초)
@@ -105,7 +110,9 @@ if ! curl -sf "${LOKI_ADDR}/ready" &>/dev/null; then
     fi
     sleep 0.5
   done
-  echo "port-forward 준비 완료" >&2
+  if [[ "${QUIET}" != "true" ]]; then
+    echo "port-forward 준비 완료" >&2
+  fi
 fi
 
 # --- Loki 쿼리 구성 ---
@@ -119,7 +126,13 @@ if [[ -n "${GREP}" ]]; then
   QUERY="${QUERY} |~ \"${GREP}\""
 fi
 
-echo "query: ${QUERY} (since ${SINCE}, limit ${LIMIT})" >&2
+if [[ "${QUIET}" != "true" ]]; then
+  echo "query: ${QUERY} (since ${SINCE}, limit ${LIMIT})" >&2
+fi
 
 # --- logcli query 실행 ---
-LOKI_ADDR="${LOKI_ADDR}" logcli query --since="${SINCE}" --limit="${LIMIT}" "${QUERY}"
+if [[ "${QUIET}" == "true" ]]; then
+  LOKI_ADDR="${LOKI_ADDR}" logcli query --quiet --since="${SINCE}" --limit="${LIMIT}" "${QUERY}" 2>/dev/null
+else
+  LOKI_ADDR="${LOKI_ADDR}" logcli query --since="${SINCE}" --limit="${LIMIT}" "${QUERY}"
+fi

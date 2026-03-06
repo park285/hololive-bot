@@ -34,7 +34,7 @@ EXIT_CODE=$?
 set -e
 
 if [[ "${EXIT_CODE}" -eq 2 && "${ALLOW_NO_DATA}" == "true" ]]; then
-  RESULT="NO_DATA allowed: ${RESULT}"
+  RESULT="NO_DATA allowed: service=${SERVICE} since=${SINCE}"
   EXIT_CODE=0
 fi
 
