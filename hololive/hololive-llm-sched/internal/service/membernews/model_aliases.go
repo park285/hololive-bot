@@ -1,6 +1,9 @@
 package membernews
 
-import "github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
+import (
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
+)
 
 // NOTE: membernews는 외부 소비자(봇/스케줄러/어드민) 호환을 위해 root 패키지 API를 유지합니다.
 
@@ -10,6 +13,7 @@ var (
 
 type (
 	Period            = model.Period
+	SummaryResultType = sharedmodel.SummaryResultType
 	SourceTier        = model.SourceTier
 	Category          = model.Category
 	Candidate         = model.Candidate
@@ -20,6 +24,12 @@ type (
 	Summarizer        = model.Summarizer
 	DigestFormatter   = model.DigestFormatter
 	SubscribedRoom    = model.SubscribedRoom
+)
+
+const (
+	SummaryResultPrimary  = sharedmodel.SummaryResultPrimary
+	SummaryResultFallback = sharedmodel.SummaryResultFallback
+	SummaryResultEmpty    = sharedmodel.SummaryResultEmpty
 )
 
 const (
