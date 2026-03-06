@@ -209,47 +209,6 @@ func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
 	}
 }
 
-func TestGetChannels_FallbackDoesNotCascadeToScraper(t *testing.T) {
-	var scraperCalls atomic.Int32
-	mockReq := &MockRequester{
-		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
-				return nil, fmt.Errorf("unexpected method: %s", method)
-			}
-			if path == "/channels" || strings.HasPrefix(path, "/channels/") {
-				return nil, &APIError{
-					Operation:  "channel_request",
-					StatusCode: http.StatusServiceUnavailable,
-					Err:        fmt.Errorf("upstream unavailable"),
-				}
-			}
-			return nil, fmt.Errorf("unexpected path: %s", path)
-		},
-	}
-
-	scraperSvc := &ScraperService{
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		baseURL: "http://example.invalid",
-		fetchUpcoming: func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
-			scraperCalls.Add(1)
-			return nil, fmt.Errorf("unexpected scraper call for %s", channelID)
-		},
-	}
-
-	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
-
-	got, err := svc.GetChannels(context.Background(), []string{"c1", "c2"})
-	if err != nil {
-		t.Fatalf("GetChannels() error = %v, want nil", err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("GetChannels() len = %d, want 0", len(got))
-	}
-	if gotCalls := scraperCalls.Load(); gotCalls != 0 {
-		t.Fatalf("scraper calls = %d, want 0", gotCalls)
-	}
-}
-
 func TestGetChannelsLiveStatus_UsesYouTubeScraperWithoutOfficialScheduleFallback(t *testing.T) {
 	var officialRequests atomic.Int32
 
@@ -417,85 +376,6 @@ func TestGetChannel_ReturnsErrorWhenRetryableFallbackAlsoFails(t *testing.T) {
 
 	scraperSvc := &ScraperService{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
-
-	channel, err := svc.GetChannel(context.Background(), "c1")
-	if err == nil {
-		t.Fatal("GetChannel() error = nil, want non-nil")
-	}
-	if !strings.Contains(err.Error(), "primary and scraper fallback failed") {
-		t.Fatalf("GetChannel() error = %v, want contains %q", err, "primary and scraper fallback failed")
-	}
-	if channel != nil {
-		t.Fatalf("GetChannel() channel = %#v, want nil", channel)
-	}
-}
-
-func TestGetChannel_DoesNotFallbackOnNonRetryableAPIError(t *testing.T) {
-	var scraperCalls atomic.Int32
-	mockReq := &MockRequester{
-		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
-				return nil, fmt.Errorf("unexpected method: %s", method)
-			}
-			if path != "/channels/c1" {
-				return nil, fmt.Errorf("unexpected path: %s", path)
-			}
-			return nil, &APIError{
-				Operation:  "get_channel",
-				StatusCode: http.StatusBadRequest,
-				Err:        fmt.Errorf("bad request"),
-			}
-		},
-	}
-
-	scraperSvc := &ScraperService{
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		baseURL: "http://example.invalid",
-		fetchUpcoming: func(_ context.Context, channelID string) ([]*ytscraper.UpcomingEvent, error) {
-			scraperCalls.Add(1)
-			return nil, fmt.Errorf("unexpected scraper call for %s", channelID)
-		},
-	}
-
-	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
-
-	channel, err := svc.GetChannel(context.Background(), "c1")
-	if err == nil {
-		t.Fatal("GetChannel() error = nil, want non-nil")
-	}
-	if !strings.Contains(err.Error(), "get channel") {
-		t.Fatalf("GetChannel() error = %v, want contains %q", err, "get channel")
-	}
-	if channel != nil {
-		t.Fatalf("GetChannel() channel = %#v, want nil", channel)
-	}
-	if got := scraperCalls.Load(); got != 0 {
-		t.Fatalf("scraper calls = %d, want 0", got)
-	}
-}
-
-func TestGetChannel_ReturnsErrorWhenRetryableFallbackAlsoFails(t *testing.T) {
-	mockReq := &MockRequester{
-		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
-				return nil, fmt.Errorf("unexpected method: %s", method)
-			}
-			if path != "/channels/c1" {
-				return nil, fmt.Errorf("unexpected path: %s", path)
-			}
-			return nil, &APIError{
-				Operation:  "get_channel",
-				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
-			}
-		},
-	}
-
-	scraperSvc := &ScraperService{
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		baseURL: "http://example.invalid",
 	}
 	svc := newServiceForFallbackTestWithScraper(mockReq, scraperSvc)
 

@@ -1,6 +1,7 @@
 package holodex
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -80,13 +81,8 @@ func NewHolodexService(baseURL string, apiKeys []string, cacheSvc cache.Client, 
 		return nil, fmt.Errorf("at least one Holodex API key is required")
 	}
 
-	if len(apiKeys) > 1 {
-		logger.Warn("Multiple Holodex API keys configured; enforcing single-key mode",
-			slog.Int("configured_keys", len(apiKeys)),
-		)
-		apiKeys = apiKeys[:1]
-	}
-	logger.Info("Holodex API key pool configured", slog.Int("active_keys", len(apiKeys)))
+	apiKey := apiKeys[0]
+	logger.Info("Holodex API key configured")
 
 	// DefaultTransport 복제: TCP Keep-Alive(30s), TLSHandshakeTimeout(10s), Proxy 지원 등 안전장치 유지
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -113,7 +109,7 @@ func NewHolodexService(baseURL string, apiKeys []string, cacheSvc cache.Client, 
 		}
 	}
 
-	requester := NewHolodexAPIClient(httpClient, baseURL, apiKeys, logger, distributedLimiter)
+	requester := NewHolodexAPIClient(httpClient, baseURL, apiKey, logger, distributedLimiter)
 
 	svc := &Service{
 		requester:    requester,
@@ -502,13 +498,7 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 		if b.StartScheduled != nil {
 			bTime = b.StartScheduled.Unix()
 		}
-		if aTime < bTime {
-			return -1
-		}
-		if aTime > bTime {
-			return 1
-		}
-		return 0
+		return cmp.Compare(aTime, bTime)
 	})
 
 	result := hololiveOnly
@@ -711,6 +701,10 @@ func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[str
 	// Holodex /channels API는 ID 필터를 지원하지 않으므로 org로 전체 조회 후 필터링
 	allChannels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
+		if !h.shouldUseFallback(ctx, err) {
+			return result, fmt.Errorf("get channels batch list: %w", err)
+		}
+
 		h.logger.Warn("Failed to fetch channel list, falling back to individual queries",
 			slog.Any("error", err),
 			slog.Int("missed_count", len(missedIDs)),
@@ -834,9 +828,6 @@ func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Chann
 
 	var allChannels []*domain.Channel
 	pageSize := constants.HolodexAPIParams.DefaultChannelLimit
-	if pageSize <= 0 {
-		pageSize = 50
-	}
 	offset := 0
 
 	for {
@@ -888,10 +879,7 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 		return result, nil
 	}
 
-	workerCount := maxConcurrent
-	if len(missedIDs) < workerCount {
-		workerCount = len(missedIDs)
-	}
+	workerCount := min(maxConcurrent, len(missedIDs))
 
 	jobs := make(chan string)
 	resultChan := make(chan struct {
@@ -988,13 +976,8 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 	}
 
 	apiErr := &APIError{}
-	if stdErrors.As(err, &apiErr) {
-		if apiErr.StatusCode >= 500 {
-			return true
-		}
-		if apiErr.StatusCode == 503 {
-			return true
-		}
+	if stdErrors.As(err, &apiErr) && apiErr.StatusCode >= 500 {
+		return true
 	}
 
 	keyRotationError := &KeyRotationError{}
