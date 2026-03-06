@@ -554,7 +554,7 @@ func TestLoad_TelemetryMetricsInterval_FallbackToDefault(t *testing.T) {
 	}
 }
 
-func TestLoadAdminAPI_EnvconfigApplied(t *testing.T) {
+func TestLoadAdminAPI_EnvApplied(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY_1", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("ADMIN_API_PORT", "39002")
@@ -586,7 +586,7 @@ func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
 	}
 }
 
-func TestLoadLLMScheduler_EnvconfigApplied(t *testing.T) {
+func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("LLM_SCHEDULER_PORT", "39003")
@@ -604,7 +604,7 @@ func TestLoadLLMScheduler_EnvconfigApplied(t *testing.T) {
 	}
 }
 
-func TestLoad_EnvconfigFallback_InvalidNumericStillUsesDefault(t *testing.T) {
+func TestLoad_InvalidNumericStillUsesDefault(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("POSTGRES_PORT", "not-a-number")
 	t.Setenv("CACHE_PORT", "invalid")
@@ -638,7 +638,7 @@ func TestLoad_TelemetryLooseBoolParsing(t *testing.T) {
 	}
 }
 
-func TestLoad_EnvconfigFallback_InvalidCoreNumeric(t *testing.T) {
+func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVER_PORT", "invalid")
 	t.Setenv("WEBHOOK_WORKER_COUNT", "NaN")
@@ -652,5 +652,51 @@ func TestLoad_EnvconfigFallback_InvalidCoreNumeric(t *testing.T) {
 	}
 	if cfg.Webhook.WorkerCount != 16 {
 		t.Fatalf("Webhook.WorkerCount = %d, want %d", cfg.Webhook.WorkerCount, 16)
+	}
+}
+
+func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Services.LLMServerHealthURL != "http://legacy-llm-server/health" {
+		t.Fatalf("Services.LLMServerHealthURL = %q, want legacy value", cfg.Services.LLMServerHealthURL)
+	}
+	if cfg.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
+		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", cfg.Services.LLMSchedulerHealthURL)
+	}
+}
+
+func TestLoadAdminAPI_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
+	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
+
+	cfg, err := LoadAdminAPI()
+	if err != nil {
+		t.Fatalf("LoadAdminAPI() error = %v", err)
+	}
+	if cfg.Services.LLMServerHealthURL != "http://legacy-llm-server/health" {
+		t.Fatalf("Services.LLMServerHealthURL = %q, want legacy value", cfg.Services.LLMServerHealthURL)
+	}
+	if cfg.Services.LLMSchedulerHealthURL != "http://legacy-llm-server/health" {
+		t.Fatalf("Services.LLMSchedulerHealthURL = %q, want legacy value", cfg.Services.LLMSchedulerHealthURL)
+	}
+}
+
+func TestLoad_WebhookRequireHTTP2(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("WEBHOOK_REQUIRE_HTTP2", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Webhook.RequireHTTP2 {
+		t.Fatal("Webhook.RequireHTTP2 = false, want true")
 	}
 }

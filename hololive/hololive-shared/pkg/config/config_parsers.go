@@ -25,46 +25,6 @@ func clampConfidence(v float64) float64 {
 	return v
 }
 
-func parseStringWithDefault(value, def string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return def
-	}
-	return trimmed
-}
-
-func parseIntWithDefault(value string, def int) int {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return def
-	}
-	parsed, err := strconv.Atoi(trimmed)
-	if err != nil {
-		return def
-	}
-	return parsed
-}
-
-func parseFloatWithDefault(value string, def float64) float64 {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return def
-	}
-	parsed, err := strconv.ParseFloat(trimmed, 64)
-	if err != nil {
-		return def
-	}
-	return parsed
-}
-
-func parseBoolWithDefault(value string, def bool) bool {
-	trimmed := strings.ToLower(strings.TrimSpace(value))
-	if trimmed == "" {
-		return def
-	}
-	return trimmed == "true" || trimmed == "1" || trimmed == "yes" || trimmed == "y"
-}
-
 func parseCommaSeparated(value string) []string {
 	if value == "" {
 		return []string{}

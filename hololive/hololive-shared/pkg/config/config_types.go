@@ -40,7 +40,8 @@ type BotConfig struct {
 
 // ServicesConfig: 외부 Go 서비스 연결 설정 (goroutine 통합 모니터링용)
 type ServicesConfig struct {
-	LLMServerHealthURL      string // mcp-llm-server-go health URL
+	LLMServerHealthURL      string // legacy key alias for llm-scheduler health URL
+	LLMSchedulerHealthURL   string // llm-scheduler health URL
 	GameBotTwentyQHealthURL string // game-bot-go twentyq health URL
 	GameBotTurtleHealthURL  string // game-bot-go turtlesoup health URL
 }
@@ -64,6 +65,7 @@ type WebhookConfig struct {
 	QueueSize      int
 	EnqueueTimeout time.Duration
 	HandlerTimeout time.Duration
+	RequireHTTP2   bool
 }
 
 // ChzzkConfig: 치지직 Open API 설정 (Client 인증 방식)
