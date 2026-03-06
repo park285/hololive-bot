@@ -22,6 +22,7 @@ const (
 	ChannelSubscribersKeyPrefix = "alarm:channel_subscribers:"
 	ChzzkChannelMapKey          = "alarm:chzzk_channels"
 	TwitchLoginMapKey           = "alarm:twitch_logins"
+	TwitchChannelLoginMapKey    = "alarm:twitch_channel_logins"
 	MemberNameKey               = "alarm:member_names"
 	RoomNamesCacheKey           = "alarm:room_names"
 	UserNamesCacheKey           = "alarm:user_names"
@@ -65,6 +66,7 @@ type AlarmService struct {
 	logger          *slog.Logger
 	targetMinutes   []int
 	targetMinutesMu sync.RWMutex
+	platformMapMu   sync.Mutex
 	persistPool     *workerpool.Pool
 	closeOnce       sync.Once
 }
