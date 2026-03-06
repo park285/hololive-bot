@@ -29,7 +29,6 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		scraperScheduler  *poller.Scheduler
 		photoSyncService  *holodex.PhotoSyncService
 		outboxDispatcher  *outbox.Dispatcher
-		alarmScheduler    runtimeAlarmScheduler
 		ingestionLeaseRef *providers.IngestionLease
 	)
 	ingestionComponents, err := buildBotRuntimeIngestion(ctx, cfg, runtimeViews, logger)
@@ -44,7 +43,6 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
 	configSubscriber := buildBotConfigSubscriber(runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, scraperScheduler, logger)
-	alarmScheduler = buildRuntimeAlarmScheduler(ctx, cfg, infra, logger)
 
 	var adminServerDeps *botAdminServerDependencies
 	if cfg.Bot.AdminEnabled {
@@ -68,7 +66,6 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		ScraperScheduler:     scraperScheduler,
 		PhotoSync:            photoSyncService,
 		OutboxDispatcher:     outboxDispatcher,
-		AlarmScheduler:       alarmScheduler,
 		ingestionLease:       ingestionLeaseRef,
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           ProvideAPIAddr(cfg),
