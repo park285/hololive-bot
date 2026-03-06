@@ -56,6 +56,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, added)
+	assertPlatformMappings(t, as, ctx, "ch-1", "chzzk-1", "miko_live")
 
 	// 중복 등록은 false여야 한다.
 	added, err = as.AddAlarm(ctx, domain.AddAlarmRequest{
@@ -87,6 +88,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	removed, err := as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
 	require.NoError(t, err)
 	assert.True(t, removed)
+	assertPlatformMappings(t, as, ctx, "ch-1", "", "")
 
 	removed, err = as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
 	require.NoError(t, err)
@@ -102,8 +104,8 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	as := newTestAlarmService(t)
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
-			{ChannelID: "ch-1", Name: "A"},
-			{ChannelID: "ch-2", Name: "B"},
+			{ChannelID: "ch-1", Name: "A", ChzzkChannelID: "chzzk-1", TwitchUserID: "a_live"},
+			{ChannelID: "ch-2", Name: "B", ChzzkChannelID: "chzzk-2", TwitchUserID: "b_live"},
 		},
 	}
 
@@ -131,6 +133,8 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	count, err = as.ClearRoomAlarms(ctx, "room-1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
+	assertPlatformMappings(t, as, ctx, "ch-1", "", "")
+	assertPlatformMappings(t, as, ctx, "ch-2", "", "")
 
 	alarms, err := as.GetRoomAlarms(ctx, "room-1")
 	require.NoError(t, err)
@@ -143,6 +147,24 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	channelRegistry, err := as.cache.SMembers(ctx, AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.Empty(t, channelRegistry)
+}
+
+func assertPlatformMappings(t *testing.T, as *AlarmService, ctx context.Context, channelID, wantChzzk, wantTwitchLogin string) {
+	t.Helper()
+
+	chzzkMap, err := as.cache.HGetAll(ctx, ChzzkChannelMapKey)
+	require.NoError(t, err)
+	assert.Equal(t, wantChzzk, chzzkMap[channelID])
+
+	twitchMap, err := as.cache.HGetAll(ctx, TwitchLoginMapKey)
+	require.NoError(t, err)
+	if wantTwitchLogin == "" {
+		for _, mappedChannelID := range twitchMap {
+			assert.NotEqual(t, channelID, mappedChannelID)
+		}
+		return
+	}
+	assert.Equal(t, channelID, twitchMap[wantTwitchLogin])
 }
 
 func TestAlarmService_SubmitPersistTaskAndWarmCache_NoRepository(t *testing.T) {
