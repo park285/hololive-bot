@@ -224,25 +224,30 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 
 	// Hololive 전용 스크래퍼 폴백
 	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
-	runScraperFallback := h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
-		scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed))
-	if runScraperFallback {
-		h.logger.Warn("Primary org fetch returned no live streams, using scraper fallback",
-			slog.Int("failed_orgs", len(primary.Failed)))
-		scraperStreams, scraperErr := h.scraper.FetchAllStreams(ctx)
-		if scraperErr == nil {
-			liveStreams := filterStreamsByStatus(scraperStreams, domain.StreamStatusLive)
-			if len(liveStreams) > 0 {
-				fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "hit")
-			} else {
-				fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "miss")
+	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+		Service:   "holodex",
+		Operation: "live_streams",
+		Trigger:   scraperFallbackPolicy.Trigger,
+		ShouldRun: h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
+			scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed)),
+		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
+			h.logger.Warn("Primary org fetch returned no live streams, using scraper fallback",
+				slog.Int("failed_orgs", len(primary.Failed)))
+			scraperStreams, scraperErr := h.scraper.FetchAllStreams(runCtx)
+			if scraperErr != nil {
+				return fallback.SecondaryResult{}, scraperErr
 			}
-			h.cacheManager.SetLiveStreamsByOrg(ctx, resolvedOrg, liveStreams)
-			return liveStreams, nil
-		}
-		fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "error")
-	} else {
-		fallback.ObserveExecution("holodex", "live_streams", scraperFallbackPolicy.Trigger, "skipped")
+			liveStreams := filterStreamsByStatus(scraperStreams, domain.StreamStatusLive)
+			h.cacheManager.SetLiveStreamsByOrg(runCtx, resolvedOrg, liveStreams)
+			allStreams = liveStreams
+			return fallback.SecondaryResult{
+				Items:     len(liveStreams),
+				Successes: 1,
+			}, nil
+		},
+	})
+	if err == nil && secondary.Outcome == "hit" {
+		return allStreams, nil
 	}
 
 	h.cacheManager.SetLiveStreamsByOrg(ctx, resolvedOrg, allStreams)
@@ -300,25 +305,30 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 
 	// Hololive 전용 스크래퍼 폴백
 	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
-	runScraperFallback := h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
-		scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed))
-	if runScraperFallback {
-		h.logger.Warn("Primary org fetch returned no upcoming streams, using scraper fallback",
-			slog.Int("failed_orgs", len(primary.Failed)))
-		scraperStreams, scraperErr := h.scraper.FetchAllStreams(ctx)
-		if scraperErr == nil {
-			upcomingStreams := h.filter.FilterUpcomingStreams(scraperStreams)
-			if len(upcomingStreams) > 0 {
-				fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "hit")
-			} else {
-				fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "miss")
+	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+		Service:   "holodex",
+		Operation: "upcoming_streams",
+		Trigger:   scraperFallbackPolicy.Trigger,
+		ShouldRun: h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
+			scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed)),
+		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
+			h.logger.Warn("Primary org fetch returned no upcoming streams, using scraper fallback",
+				slog.Int("failed_orgs", len(primary.Failed)))
+			scraperStreams, scraperErr := h.scraper.FetchAllStreams(runCtx)
+			if scraperErr != nil {
+				return fallback.SecondaryResult{}, scraperErr
 			}
-			h.cacheManager.SetUpcomingStreamsByOrg(ctx, resolvedOrg, hours, upcomingStreams)
-			return upcomingStreams, nil
-		}
-		fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "error")
-	} else {
-		fallback.ObserveExecution("holodex", "upcoming_streams", scraperFallbackPolicy.Trigger, "skipped")
+			upcomingStreams := h.filter.FilterUpcomingStreams(scraperStreams)
+			h.cacheManager.SetUpcomingStreamsByOrg(runCtx, resolvedOrg, hours, upcomingStreams)
+			allStreams = upcomingStreams
+			return fallback.SecondaryResult{
+				Items:     len(upcomingStreams),
+				Successes: 1,
+			}, nil
+		},
+	})
+	if err == nil && secondary.Outcome == "hit" {
+		return allStreams, nil
 	}
 
 	h.cacheManager.SetUpcomingStreamsByOrg(ctx, resolvedOrg, hours, allStreams)
