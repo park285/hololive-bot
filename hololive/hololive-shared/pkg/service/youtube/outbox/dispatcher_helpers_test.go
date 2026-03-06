@@ -53,7 +53,7 @@ func TestGroupByRoom(t *testing.T) {
 func TestBuildTemplateData(t *testing.T) {
 	t.Parallel()
 
-	d := &Dispatcher{}
+	mf := &MessageFormatter{}
 	tests := []struct {
 		name      string
 		item      domain.YouTubeNotificationOutbox
@@ -112,7 +112,7 @@ func TestBuildTemplateData(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := d.buildTemplateData("멤버", tt.item)
+			got, err := mf.buildTemplateData("멤버", tt.item)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -132,13 +132,13 @@ func TestBuildTemplateData(t *testing.T) {
 func TestFormatMessageFallbackFailures(t *testing.T) {
 	t.Parallel()
 
-	d := &Dispatcher{}
+	mf := &MessageFormatter{}
 
-	if _, err := d.formatMessageFallback("멤버", domain.YouTubeNotificationOutbox{Kind: domain.OutboxKind("UNKNOWN")}); err == nil {
+	if _, err := mf.formatMessageFallback("멤버", domain.YouTubeNotificationOutbox{Kind: domain.OutboxKind("UNKNOWN")}); err == nil {
 		t.Fatalf("expected unknown kind error")
 	}
 
-	if _, err := d.formatMessageFallback("멤버", domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: "{"}); err == nil {
+	if _, err := mf.formatMessageFallback("멤버", domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: "{"}); err == nil {
 		t.Fatalf("expected invalid payload error")
 	}
 }
@@ -173,7 +173,7 @@ func TestTruncateString(t *testing.T) {
 func TestGetGroupedTemplateKeyAndHeader(t *testing.T) {
 	t.Parallel()
 
-	d := &Dispatcher{}
+	mf := &MessageFormatter{}
 	tests := []struct {
 		name       string
 		kind       domain.OutboxKind
@@ -190,7 +190,7 @@ func TestGetGroupedTemplateKeyAndHeader(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotKey, gotHeader := d.getGroupedTemplateKeyAndHeader("멤버", tt.kind, 2)
+			gotKey, gotHeader := mf.getGroupedTemplateKeyAndHeader("멤버", tt.kind, 2)
 			if gotKey != tt.wantKey || gotHeader != tt.wantPrefix {
 				t.Fatalf("getGroupedTemplateKeyAndHeader() = (%s, %q), want (%s, %q)", gotKey, gotHeader, tt.wantKey, tt.wantPrefix)
 			}
@@ -201,14 +201,14 @@ func TestGetGroupedTemplateKeyAndHeader(t *testing.T) {
 func TestBuildGroupedTemplateData(t *testing.T) {
 	t.Parallel()
 
-	d := &Dispatcher{}
+	mf := &MessageFormatter{}
 	items := []domain.YouTubeNotificationOutbox{
 		{Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"영상1"}`},
 		{Kind: domain.OutboxKindNewShort, Payload: `{invalid}`},
 		{Kind: domain.OutboxKindCommunityPost, Payload: `{"post_id":"p1","content_text":"내용"}`},
 	}
 
-	got := d.buildGroupedTemplateData("멤버", domain.OutboxKindNewVideo, items)
+	got := mf.buildGroupedTemplateData("멤버", domain.OutboxKindNewVideo, items)
 	if got.MemberName != "멤버" || got.Count != 3 || len(got.Items) != 3 {
 		t.Fatalf("unexpected grouped template header: %#v", got)
 	}
@@ -298,11 +298,11 @@ func TestUniqueInt64s(t *testing.T) {
 func TestFormatGroupedMessageErrors(t *testing.T) {
 	t.Parallel()
 
-	d := &Dispatcher{}
-	if _, err := d.formatGroupedMessage(context.Background(), "멤버", "ch1", domain.OutboxKindNewVideo, nil); err == nil {
+	mf := &MessageFormatter{}
+	if _, err := mf.formatGroupedMessage(context.Background(), "멤버", "ch1", domain.OutboxKindNewVideo, nil); err == nil {
 		t.Fatalf("expected empty items error")
 	}
-	if _, err := d.formatGroupedMessage(context.Background(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{{}}); err == nil {
+	if _, err := mf.formatGroupedMessage(context.Background(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{{}}); err == nil {
 		t.Fatalf("expected nil renderer error")
 	}
 }
