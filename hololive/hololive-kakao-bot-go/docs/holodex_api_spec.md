@@ -1,6 +1,6 @@
 # Holodex API 엔드포인트 스펙 문서
 
-> 마지막 업데이트: 2026-01-04
+> 마지막 업데이트: 2026-03-06
 
 ## 목차
 1. [개요](#개요)
@@ -105,6 +105,11 @@
 - 항상 `live`와 `upcoming` 상태 모두 반환
 - 클라이언트에서 추가 필터링 필요 시 직접 구현
 
+⚠️ **fallback 동작**
+- `/users/live` 호출 실패 시 **retryable 오류(5xx/timeout/circuit/key rotation)** 에서만 fallback 시도
+- fallback은 채널별 **YouTube scraper** 결과만 사용
+- live-status batch fallback에서는 **공식 스케줄 페이지를 재조회하지 않음**
+
 ---
 
 ### 2. `/live` - 스트림 조회
@@ -155,6 +160,10 @@
 - `type`: `stream`
 - `max_upcoming_hours`: 시간
 
+**fallback 메모:**
+- Holodex `/live` 호출이 retryable 오류로 실패하면 scraper fallback 사용
+- scraper는 **YouTube scraper 우선**, 해당 scraper 오류일 때만 **공식 스케줄 페이지**로 한 번 더 내려감
+
 ---
 
 ### 3. `/channels` - 채널 조회
@@ -197,6 +206,11 @@
 | Endpoint | `/channels/{channelId}` |
 | Go 함수 | `holodex.Service.GetChannel(ctx, channelID)` |
 | 캐시 TTL | `constants.CacheTTL.ChannelInfo` |
+
+**fallback 메모:**
+- retryable 오류(5xx/timeout/circuit/key rotation)에서만 YouTube scraper fallback 시도
+- 4xx 등 non-retryable 오류는 그대로 반환
+- fallback 자체가 실패하면 `(nil, nil)`로 숨기지 않고 명시적 에러 반환
 
 ---
 

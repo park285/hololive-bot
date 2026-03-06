@@ -5,6 +5,9 @@
 ## 프로젝트 구조
 - `PROJECT_MAP.md` — 모듈 인벤토리
 - `NEXT_TODO.md` — 향후 작업
+- `20260306/CODEBASE_REFACTOR_AUDIT_20260306.md` — 현재 코드베이스 리팩토링 감사 보고서
+- `20260306/CODEBASE_REFACTOR_TODO_20260306.md` — 실행용 리팩토링 TODO
+- `20260306/AUTH_CORE_UNIFICATION_DRAFT_20260306.md` — auth core 단일화 초안
 - `20260305/OUTBOX_MARKSENT_BATCH_PLAN_20260305.md` — outbox markSent 배치화 사전 설계
 - `20260305/OUTBOX_PER_ROOM_DELIVERY_MODEL_PLAN_20260305.md` — outbox per-room 전달 정합성 개선안
 
