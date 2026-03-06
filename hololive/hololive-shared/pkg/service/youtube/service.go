@@ -37,6 +37,17 @@ type serviceImpl struct {
 	channelMu     sync.RWMutex
 }
 
+type upcomingAPIFallbackResult struct {
+	streams            []*domain.Stream
+	quotaCost          int
+	successfulChannels int
+}
+
+type channelStatsAPIFallbackResult struct {
+	stats             map[string]*ChannelStats
+	successfulBatches int
+}
+
 // NewService: YouTube 서비스 인스턴스를 생성합니다.
 func NewYouTubeService(
 	ctx context.Context,
@@ -202,10 +213,7 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 		channelIDs = channelIDs[:constants.YouTubeConfig.MaxChannelsPerCall]
 	}
 
-	sortedIDs := make([]string, len(channelIDs))
-	copy(sortedIDs, channelIDs)
-	slices.Sort(sortedIDs)
-	cacheKey := fmt.Sprintf("youtube:upcoming:%s", strings.Join(sortedIDs, ","))
+	cacheKey := upcomingCacheKey(channelIDs)
 	if cached, found := ys.cache.GetStreams(ctx, cacheKey); found {
 		ys.logger.Debug("YouTube cache hit (backup avoided)",
 			slog.Int("streams", len(cached)))
@@ -252,25 +260,31 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 			// 부분 결과라도 캐시하고 반환
 			if len(allStreams) > 0 {
 				ys.cache.SetStreams(ctx, cacheKey, allStreams, constants.YouTubeConfig.CacheExpiration)
+				return allStreams, nil
 			}
-			return allStreams, nil
+			return nil, fmt.Errorf("get upcoming streams: api fallback blocked after scraper failures: %w", err)
 		}
 
 		ys.logger.Info("Fetching from YouTube API (fallback for failed scrapers)",
 			slog.Int("channels", len(failedIDs)),
 			slog.Int("estimatedCost", estimatedCost))
 
-		apiStreams, apiCost := ys.fetchUpcomingFromAPI(ctx, failedIDs)
-		if len(apiStreams) > 0 {
+		apiResult := ys.fetchUpcomingFromAPI(ctx, failedIDs)
+		if apiResult.successfulChannels == 0 {
+			fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "error")
+		} else if len(apiResult.streams) > 0 {
 			fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "hit")
 		} else {
 			fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "miss")
 		}
 		mu.Lock()
-		allStreams = append(allStreams, apiStreams...)
+		allStreams = append(allStreams, apiResult.streams...)
 		mu.Unlock()
 
-		ys.consumeQuota(apiCost)
+		ys.consumeQuota(apiResult.quotaCost)
+		if shouldReturnFallbackError(len(allStreams), len(failedIDs), apiResult.successfulChannels) {
+			return nil, fmt.Errorf("get upcoming streams: scraper and api fallback failed for %d channels", len(failedIDs))
+		}
 	} else {
 		fallback.ObserveExecution("youtube", "upcoming_streams", fallback.TriggerOnFailures, "skipped")
 	}
@@ -284,6 +298,17 @@ func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []stri
 		slog.Int("api_fallback", len(failedIDs)))
 
 	return allStreams, nil
+}
+
+func shouldReturnFallbackError(currentResults int, failedTargets int, fallbackSuccesses int) bool {
+	return currentResults == 0 && failedTargets > 0 && fallbackSuccesses == 0
+}
+
+func upcomingCacheKey(channelIDs []string) string {
+	sortedIDs := make([]string, len(channelIDs))
+	copy(sortedIDs, channelIDs)
+	slices.Sort(sortedIDs)
+	return fmt.Sprintf("youtube:upcoming:%s", strings.Join(sortedIDs, ","))
 }
 
 // convertScrapedEvents: 스크래핑된 UpcomingEvent를 domain.Stream으로 변환
@@ -347,15 +372,16 @@ func (ys *serviceImpl) mapEventStatus(status string) domain.StreamStatus {
 }
 
 // fetchUpcomingFromAPI: YouTube API로 예정 방송 조회 (내부 폴백용)
-func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) ([]*domain.Stream, int) {
-	results := make([]*domain.Stream, 0, len(channelIDs))
+func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) upcomingAPIFallbackResult {
+	result := upcomingAPIFallbackResult{
+		streams: make([]*domain.Stream, 0, len(channelIDs)),
+	}
 	var mu sync.Mutex
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(constants.YouTubeConfig.MaxConcurrentRequests)
 
-	actualCost := 0
-	costMu := sync.Mutex{}
+	var costMu sync.Mutex
 
 	for _, channelID := range channelIDs {
 		g.Go(func() error {
@@ -368,11 +394,12 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 			}
 
 			mu.Lock()
-			results = append(results, streams...)
+			result.streams = append(result.streams, streams...)
+			result.successfulChannels++
 			mu.Unlock()
 
 			costMu.Lock()
-			actualCost += constants.YouTubeConfig.SearchQuotaCost
+			result.quotaCost += constants.YouTubeConfig.SearchQuotaCost
 			costMu.Unlock()
 
 			return nil
@@ -381,7 +408,7 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 
 	_ = g.Wait()
 
-	return results, actualCost
+	return result
 }
 
 // processUpcomingStreams: YouTube API 응답에서 예정된 방송 정보를 추출하고 가공한다.
@@ -569,16 +596,23 @@ func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []st
 			ys.logger.Warn("API fallback failed",
 				slog.Int("channels", len(failedIDs)),
 				slog.Any("error", err))
-			// 부분 결과라도 반환
+			if shouldReturnFallbackError(len(result), len(failedIDs), 0) {
+				return nil, fmt.Errorf("get channel statistics: api fallback unavailable after scraper failures: %w", err)
+			}
 		} else {
-			if len(apiResult) > 0 {
+			if apiResult.successfulBatches == 0 {
+				fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "error")
+			} else if len(apiResult.stats) > 0 {
 				fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "hit")
 			} else {
 				fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "miss")
 			}
 			mu.Lock()
-			maps.Copy(result, apiResult)
+			maps.Copy(result, apiResult.stats)
 			mu.Unlock()
+			if shouldReturnFallbackError(len(result), len(failedIDs), apiResult.successfulBatches) {
+				return nil, fmt.Errorf("get channel statistics: scraper and api fallback failed for %d channels", len(failedIDs))
+			}
 		}
 	} else {
 		fallback.ObserveExecution("youtube", "channel_statistics", fallback.TriggerOnFailures, "skipped")
@@ -594,14 +628,14 @@ func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []st
 }
 
 // getChannelStatsFromAPI: YouTube Data API를 사용하여 채널 통계 조회 (내부 폴백용)
-func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
+func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []string) (channelStatsAPIFallbackResult, error) {
 	if len(channelIDs) == 0 {
-		return make(map[string]*ChannelStats), nil
+		return channelStatsAPIFallbackResult{stats: make(map[string]*ChannelStats)}, nil
 	}
 
 	cost := len(channelIDs) * constants.YouTubeConfig.ChannelsQuotaCost
 	if err := ys.checkQuota(cost); err != nil {
-		return nil, err
+		return channelStatsAPIFallbackResult{}, err
 	}
 
 	// 배치로 분할
@@ -614,6 +648,7 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 
 	result := make(map[string]*ChannelStats)
 	var mu sync.Mutex
+	successfulBatches := 0
 
 	g, gctx := errgroup.WithContext(ctx)
 
@@ -632,6 +667,7 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 
 			now := time.Now()
 			mu.Lock()
+			successfulBatches++
 			for _, channel := range response.Items {
 				result[channel.Id] = &ChannelStats{
 					ChannelID:       channel.Id,
@@ -655,7 +691,10 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 		slog.Int("results", len(result)),
 		slog.Int("quota_used", cost))
 
-	return result, nil
+	return channelStatsAPIFallbackResult{
+		stats:             result,
+		successfulBatches: successfulBatches,
+	}, nil
 }
 
 // GetRecentVideos: 특정 채널의 최근 업로드된 비디오 목록을 조회합니다.
