@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -28,6 +29,7 @@ type ScraperService struct {
 	logger         *slog.Logger
 	baseURL        string
 	youtubeScraper *scraper.Client // YouTube HTML 스크래퍼 (1차 폴백)
+	fetchUpcoming  func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error)
 }
 
 const (
@@ -79,8 +81,8 @@ func NewScraperService(
 	}
 }
 
-// FetchChannel: 특정 채널의 방송 일정을 폴백 소스에서 가져온다. (캐시 우선 확인)
-// 폴백 순서: 1) YouTube HTML 스크래핑 → 2) 홀로라이브 공식 스케줄 페이지
+// FetchChannel: 특정 채널의 방송 일정을 보조 소스에서 가져온다. (캐시 우선 확인)
+// 우선 YouTube HTML 스크래핑을 사용하고, 스크래퍼 오류 시에만 공식 스케줄 페이지로 전환한다.
 func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]*domain.Stream, error) {
 	cacheKey := scraperChannelCacheKeyPrefix + channelID
 	if cached, found := s.cache.GetStreams(ctx, cacheKey); found {
@@ -88,12 +90,15 @@ func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]
 		return cached, nil
 	}
 
-	// Phase 1: YouTube HTML 스크래핑 시도 (1차 폴백)
-	if s.youtubeScraper != nil {
+	// Phase 1: YouTube HTML 스크래핑 시도
+	if s.youtubeScraper != nil || s.fetchUpcoming != nil {
+		policy := fallback.Policy{Trigger: fallback.TriggerOnFailures}
 		streams, err := s.fetchFromYouTubeScraper(ctx, channelID)
-		if err == nil && len(streams) > 0 {
+		fallback.ObservePrimaryPhase("holodex", "channel_schedule", 1, boolToInt(len(streams) > 0), boolToInt(err != nil))
+		if !policy.ShouldRun(len(streams), boolToInt(err != nil)) {
+			fallback.ObserveExecution("holodex", "channel_schedule", policy.Trigger, "skipped")
 			s.cache.SetStreams(ctx, cacheKey, streams, constants.OfficialScheduleConfig.CacheExpiry)
-			s.logger.Info("YouTube scraper fallback success",
+			s.logger.Info("YouTube scraper channel schedule resolved",
 				slog.String("channel", channelID),
 				slog.Int("streams", len(streams)))
 			return streams, nil
@@ -105,13 +110,14 @@ func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]
 		}
 	}
 
-	// Phase 2: 홀로라이브 공식 스케줄 페이지 (2차 폴백)
+	// Phase 2: 홀로라이브 공식 스케줄 페이지 (스크래퍼 오류 시에만 사용)
 	s.logger.Info("Fetching from official schedule (FALLBACK MODE)",
 		slog.String("channel", channelID),
 		slog.String("url", s.baseURL))
 
 	allStreams, err := s.fetchAllStreams(ctx)
 	if err != nil {
+		fallback.ObserveExecution("holodex", "channel_schedule", fallback.TriggerOnFailures, "error")
 		return nil, fmt.Errorf("all fallback sources failed: %w", err)
 	}
 
@@ -123,6 +129,11 @@ func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]
 	}
 
 	s.cache.SetStreams(ctx, cacheKey, channelStreams, constants.OfficialScheduleConfig.CacheExpiry)
+	if len(channelStreams) > 0 {
+		fallback.ObserveExecution("holodex", "channel_schedule", fallback.TriggerOnFailures, "hit")
+	} else {
+		fallback.ObserveExecution("holodex", "channel_schedule", fallback.TriggerOnFailures, "miss")
+	}
 
 	s.logger.Info("Official schedule scraper completed",
 		slog.String("channel", channelID),
@@ -131,9 +142,27 @@ func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]
 	return channelStreams, nil
 }
 
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 // fetchFromYouTubeScraper: YouTube HTML 직접 스크래핑으로 예정/라이브 방송 조회
 func (s *ScraperService) fetchFromYouTubeScraper(ctx context.Context, channelID string) ([]*domain.Stream, error) {
-	events, err := s.youtubeScraper.GetUpcomingEvents(ctx, channelID)
+	var (
+		events []*scraper.UpcomingEvent
+		err    error
+	)
+	switch {
+	case s.fetchUpcoming != nil:
+		events, err = s.fetchUpcoming(ctx, channelID)
+	case s.youtubeScraper != nil:
+		events, err = s.youtubeScraper.GetUpcomingEvents(ctx, channelID)
+	default:
+		return nil, fmt.Errorf("youtube scraper not configured")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("youtube scraper error: %w", err)
 	}
@@ -195,14 +224,6 @@ func (s *ScraperService) mapEventStatus(status string) domain.StreamStatus {
 // FetchAllStreams: 전체 방송 일정을 공식 홈페이지에서 크롤링하여 가져온다.
 func (s *ScraperService) FetchAllStreams(ctx context.Context) ([]*domain.Stream, error) {
 	return s.fetchAllStreams(ctx)
-}
-
-// ScraperClient: Holodex fallback 스크래퍼의 YouTube HTML scraper.Client를 반환합니다.
-func (s *ScraperService) ScraperClient() *scraper.Client {
-	if s == nil {
-		return nil
-	}
-	return s.youtubeScraper
 }
 
 // SetYouTubeProxyEnabled: YouTube HTML fallback 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
