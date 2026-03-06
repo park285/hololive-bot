@@ -3,12 +3,15 @@ package youtube
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 // mockMemberDataProvider: 테스트용 MemberDataProvider 구현
@@ -835,6 +838,13 @@ func (m *mockTrackAllSubscribersService) GetRecentVideos(ctx context.Context, ch
 
 type mockTrackAllSubscribersRepo struct {
 	latestByChannel   map[string]*domain.TimestampedStats
+	latestBatchErr    error
+	latestBatchCalls  int
+	latestBatchKeys   []string
+	achievedByChannel map[string][]uint64
+	achievedErr       error
+	achievedCalls     int
+	hasAchievedCalls  int
 	saveBatchErr      error
 	saveBatchCalls    int
 	saveBatchRows     int
@@ -844,6 +854,15 @@ type mockTrackAllSubscribersRepo struct {
 
 func (m *mockTrackAllSubscribersRepo) GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
 	return m.latestByChannel[channelID], nil
+}
+
+func (m *mockTrackAllSubscribersRepo) GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error) {
+	m.latestBatchCalls++
+	m.latestBatchKeys = append([]string(nil), channelIDs...)
+	if m.latestBatchErr != nil {
+		return nil, m.latestBatchErr
+	}
+	return m.latestByChannel, nil
 }
 
 func (m *mockTrackAllSubscribersRepo) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
@@ -862,7 +881,24 @@ func (m *mockTrackAllSubscribersRepo) RecordChange(ctx context.Context, change *
 	return nil
 }
 
+func (m *mockTrackAllSubscribersRepo) RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error {
+	m.recordChangeCalls += len(changes)
+	return nil
+}
+
+func (m *mockTrackAllSubscribersRepo) GetAchievedMilestones(ctx context.Context, channelIDs []string, milestoneType domain.MilestoneType) (map[string][]uint64, error) {
+	m.achievedCalls++
+	if m.achievedErr != nil {
+		return nil, m.achievedErr
+	}
+	if m.achievedByChannel == nil {
+		return map[string][]uint64{}, nil
+	}
+	return m.achievedByChannel, nil
+}
+
 func (m *mockTrackAllSubscribersRepo) HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error) {
+	m.hasAchievedCalls++
 	return false, nil
 }
 
@@ -890,11 +926,19 @@ func (m *mockTrackAllSubscribersRepo) MarkMilestoneNotified(ctx context.Context,
 	return nil
 }
 
+func (m *mockTrackAllSubscribersRepo) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []MilestoneNotification) error {
+	return nil
+}
+
 func (m *mockTrackAllSubscribersRepo) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ApproachingNotification, error) {
 	return nil, nil
 }
 
 func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error {
+	return nil
+}
+
+func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error {
 	return nil
 }
 
@@ -935,6 +979,12 @@ func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
 	if repo.saveBatchCalls != 1 {
 		t.Fatalf("saveBatchCalls = %d, want 1", repo.saveBatchCalls)
 	}
+	if repo.latestBatchCalls != 1 {
+		t.Fatalf("latestBatchCalls = %d, want 1", repo.latestBatchCalls)
+	}
+	if repo.achievedCalls != 1 {
+		t.Fatalf("achievedCalls = %d, want 1", repo.achievedCalls)
+	}
 	if repo.saveBatchRows != 2 {
 		t.Fatalf("saveBatchRows = %d, want 2", repo.saveBatchRows)
 	}
@@ -943,6 +993,9 @@ func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
 	}
 	if repo.recordChangeCalls != 2 {
 		t.Fatalf("recordChangeCalls = %d, want 2", repo.recordChangeCalls)
+	}
+	if repo.hasAchievedCalls != 0 {
+		t.Fatalf("hasAchievedCalls = %d, want 0", repo.hasAchievedCalls)
 	}
 }
 
@@ -981,10 +1034,78 @@ func TestTrackAllSubscribers_SkipsChangeProcessingWhenBatchSaveFails(t *testing.
 	if repo.saveBatchCalls != 1 {
 		t.Fatalf("saveBatchCalls = %d, want 1", repo.saveBatchCalls)
 	}
+	if repo.latestBatchCalls != 1 {
+		t.Fatalf("latestBatchCalls = %d, want 1", repo.latestBatchCalls)
+	}
 	if repo.saveSingleCalls != 0 {
 		t.Fatalf("saveSingleCalls = %d, want 0", repo.saveSingleCalls)
 	}
 	if repo.recordChangeCalls != 0 {
 		t.Fatalf("recordChangeCalls = %d, want 0", repo.recordChangeCalls)
+	}
+}
+
+type mockRecentVideosService struct {
+	maxConcurrent int
+	current       int
+	mu            sync.Mutex
+}
+
+func (m *mockRecentVideosService) SetScraperProxyEnabled(enabled bool) bool { return enabled }
+func (m *mockRecentVideosService) ScraperProxyEnabled() bool                { return false }
+
+func (m *mockRecentVideosService) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
+	return nil, nil
+}
+
+func (m *mockRecentVideosService) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
+	m.mu.Lock()
+	m.current++
+	if m.current > m.maxConcurrent {
+		m.maxConcurrent = m.current
+	}
+	m.mu.Unlock()
+
+	time.Sleep(10 * time.Millisecond)
+
+	m.mu.Lock()
+	m.current--
+	m.mu.Unlock()
+
+	return []string{channelID + "-video"}, nil
+}
+
+func TestFetchRecentVideosRotation_UsesBoundedParallelism(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	youtubeSvc := &mockRecentVideosService{}
+	cacheSvc := &cachemocks.Client{
+		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
+			return nil
+		},
+	}
+
+	members := &mockMemberDataProvider{members: make([]*domain.Member, channelsPerBatch+5)}
+	for i := range members.members {
+		members.members[i] = &domain.Member{
+			ChannelID: fmt.Sprintf("UC%d", i+1),
+			Name:      fmt.Sprintf("M%d", i+1),
+		}
+	}
+
+	scheduler := &schedulerImpl{
+		youtube:     youtubeSvc,
+		cache:       cacheSvc,
+		membersData: members,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+	}
+
+	scheduler.fetchRecentVideosRotation(context.Background(), 0)
+
+	if youtubeSvc.maxConcurrent <= 1 {
+		t.Fatalf("maxConcurrent = %d, want > 1", youtubeSvc.maxConcurrent)
+	}
+	if youtubeSvc.maxConcurrent > recentVideosFetchParallelism {
+		t.Fatalf("maxConcurrent = %d, want <= %d", youtubeSvc.maxConcurrent, recentVideosFetchParallelism)
 	}
 }
