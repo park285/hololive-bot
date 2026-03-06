@@ -5,7 +5,7 @@ metadata:
   namespace: hololive
 data:
   # --- Iris (dispatcher-go) ---
-  IRIS_BASE_URL: "http://host-external:3000"
+  IRIS_BASE_URL: "http://iris:3000"
 
   # --- Dispatch queue ---
   ALARM_DISPATCH_QUEUE_KEY: "alarm:dispatch:queue"
