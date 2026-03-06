@@ -12,10 +12,6 @@ type CacheError struct {
 }
 
 func (e *CacheError) Error() string {
-	if e == nil {
-		return "cache: <nil>"
-	}
-
 	if e.Err == nil {
 		if e.Key == "" {
 			return fmt.Sprintf("cache: %s", e.Operation)
