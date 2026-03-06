@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -244,5 +246,71 @@ func (r *StatsRepository) MarkMilestoneNotified(ctx context.Context, channelID s
 		return fmt.Errorf("failed to mark milestone notified: %w", err)
 	}
 
+	return nil
+}
+
+// MarkMilestonesNotifiedBatch: 여러 마일스톤의 알림 발송 완료를 한 번에 처리합니다.
+func (r *StatsRepository) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []MilestoneNotification) error {
+	if len(milestones) == 0 {
+		return nil
+	}
+
+	// (channel_id, type, value) 튜플 기반 IN 절 구성
+	const colsPerRow = 3
+	var sb strings.Builder
+	sb.WriteString(`UPDATE youtube_milestones SET notified = true WHERE (channel_id, type, value) IN (`)
+	args := make([]any, 0, len(milestones)*colsPerRow)
+	for i, m := range milestones {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		base := i * colsPerRow
+		sb.WriteString("($")
+		sb.WriteString(strconv.Itoa(base + 1))
+		sb.WriteString(",$")
+		sb.WriteString(strconv.Itoa(base + 2))
+		sb.WriteString(",$")
+		sb.WriteString(strconv.Itoa(base + 3))
+		sb.WriteByte(')')
+		args = append(args, m.ChannelID, m.Type, m.Value)
+	}
+	sb.WriteByte(')')
+
+	_, err := r.pool.Exec(ctx, sb.String(), args...)
+	if err != nil {
+		return fmt.Errorf("failed to batch mark milestones notified (%d rows): %w", len(milestones), err)
+	}
+	return nil
+}
+
+// MarkApproachingChatNotifiedBatch: 여러 예고 알림의 채팅방 발송 완료를 한 번에 처리합니다.
+func (r *StatsRepository) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error {
+	if len(notifications) == 0 {
+		return nil
+	}
+
+	// (channel_id, milestone_value) 튜플 기반 IN 절 구성
+	const colsPerRow = 2
+	var sb strings.Builder
+	sb.WriteString(`UPDATE youtube_milestone_approaching SET chat_notified = true WHERE (channel_id, milestone_value) IN (`)
+	args := make([]any, 0, len(notifications)*colsPerRow)
+	for i, n := range notifications {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		base := i * colsPerRow
+		sb.WriteString("($")
+		sb.WriteString(strconv.Itoa(base + 1))
+		sb.WriteString(",$")
+		sb.WriteString(strconv.Itoa(base + 2))
+		sb.WriteByte(')')
+		args = append(args, n.ChannelID, n.MilestoneValue)
+	}
+	sb.WriteByte(')')
+
+	_, err := r.pool.Exec(ctx, sb.String(), args...)
+	if err != nil {
+		return fmt.Errorf("failed to batch mark approaching notified (%d rows): %w", len(notifications), err)
+	}
 	return nil
 }
