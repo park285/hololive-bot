@@ -29,6 +29,7 @@ EXPECTED_PORTS = {
 
 URL_KEYS = {
     "IRIS_BASE_URL": ("iris", 3000),
+    "SERVICES_LLM_SCHEDULER_HEALTH_URL": ("llm-scheduler", 30003),
     "SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL": ("game-bot-twentyq", 30081),
     "SERVICES_GAME_BOT_TURTLE_HEALTH_URL": ("game-bot-turtle", 30082),
 }
