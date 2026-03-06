@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	ytscraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -247,5 +249,141 @@ func TestScraperFetchChannel_FallbacksToOfficialOnYouTubeError(t *testing.T) {
 	}
 	if got := officialRequests.Load(); got != 1 {
 		t.Fatalf("official schedule requests = %d, want 1", got)
+	}
+}
+
+func TestScraperFetchAllStreams_DeduplicatesConcurrentRequests(t *testing.T) {
+	var officialRequests atomic.Int32
+
+	html := `
+<div class="container">
+  <div class="col-12">
+    <div class="navbar-inverse">
+      <span class="holodule navbar-text">09/10 (Wed)</span>
+    </div>
+  </div>
+  <div class="col-12">
+    <a class="thumbnail" href="https://www.youtube.com/watch?v=video123">
+      <div class="datetime">12:34</div>
+      <div class="name">Member One</div>
+    </a>
+  </div>
+</div>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		officialRequests.Add(1)
+		time.Sleep(25 * time.Millisecond)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	t.Cleanup(server.Close)
+
+	now := time.Date(2026, 3, 6, 23, 40, 0, 0, time.UTC)
+	svc := &ScraperService{
+		httpClient: server.Client(),
+		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		baseURL:    server.URL,
+		memberNameMap: map[string]string{
+			stringutil.Normalize("Member One"): "channel-1",
+		},
+		nowFunc: func() time.Time { return now },
+	}
+
+	const concurrency = 6
+	results := make(chan []*domain.Stream, concurrency)
+
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			streams, err := svc.FetchAllStreams(context.Background())
+			if err != nil {
+				t.Errorf("FetchAllStreams() error = %v", err)
+				return
+			}
+			results <- streams
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+
+	if got := officialRequests.Load(); got != 1 {
+		t.Fatalf("official schedule requests = %d, want 1", got)
+	}
+
+	for streams := range results {
+		if len(streams) != 1 {
+			t.Fatalf("len(streams) = %d, want 1", len(streams))
+		}
+	}
+}
+
+func TestScraperFetchAllStreams_UsesShortTTLCacheAndClonesResults(t *testing.T) {
+	var officialRequests atomic.Int32
+
+	html := `
+<div class="container">
+  <div class="col-12">
+    <div class="navbar-inverse">
+      <span class="holodule navbar-text">09/10 (Wed)</span>
+    </div>
+  </div>
+  <div class="col-12">
+    <a class="thumbnail" href="https://www.youtube.com/watch?v=video123">
+      <div class="datetime">12:34</div>
+      <div class="name">Member One</div>
+    </a>
+  </div>
+</div>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		officialRequests.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(html))
+	}))
+	t.Cleanup(server.Close)
+
+	currentTime := time.Date(2026, 3, 6, 23, 45, 0, 0, time.UTC)
+	svc := &ScraperService{
+		httpClient: server.Client(),
+		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		baseURL:    server.URL,
+		memberNameMap: map[string]string{
+			stringutil.Normalize("Member One"): "channel-1",
+		},
+		nowFunc: func() time.Time { return currentTime },
+	}
+
+	first, err := svc.FetchAllStreams(context.Background())
+	if err != nil {
+		t.Fatalf("first FetchAllStreams() error = %v", err)
+	}
+	first[0].Title = "mutated"
+
+	second, err := svc.FetchAllStreams(context.Background())
+	if err != nil {
+		t.Fatalf("second FetchAllStreams() error = %v", err)
+	}
+
+	if got := officialRequests.Load(); got != 1 {
+		t.Fatalf("official schedule requests = %d, want 1", got)
+	}
+	if second[0].Title == "mutated" {
+		t.Fatalf("cached result should be cloned, got mutated title")
+	}
+
+	currentTime = currentTime.Add(constants.OfficialScheduleConfig.PageCacheTTL + time.Second)
+
+	third, err := svc.FetchAllStreams(context.Background())
+	if err != nil {
+		t.Fatalf("third FetchAllStreams() error = %v", err)
+	}
+	if len(third) != 1 {
+		t.Fatalf("len(third) = %d, want 1", len(third))
+	}
+	if got := officialRequests.Load(); got != 2 {
+		t.Fatalf("official schedule requests after TTL expiry = %d, want 2", got)
 	}
 }
