@@ -37,12 +37,25 @@ EOF
   exit 0
 }
 
-ensure_logcli() {
-  if ! command -v logcli &>/dev/null; then
-    echo "ERROR: logcli 미설치" >&2
-    echo "설치: go install github.com/grafana/loki/v3/cmd/logcli@latest" >&2
-    exit 1
+require_command() {
+  local name="$1"
+  local install_hint="${2:-}"
+  if command -v "${name}" &>/dev/null; then
+    return 0
   fi
+
+  echo "ERROR: ${name} 미설치" >&2
+  if [[ -n "${install_hint}" ]]; then
+    echo "설치: ${install_hint}" >&2
+  fi
+  exit 1
+}
+
+ensure_start_dependencies() {
+  require_command "logcli" "go install github.com/grafana/loki/v3/cmd/logcli@latest"
+  require_command "kubectl"
+  require_command "curl"
+  require_command "sed"
 }
 
 ensure_port_forward() {
@@ -70,7 +83,7 @@ ensure_port_forward() {
 }
 
 do_start() {
-  ensure_logcli
+  ensure_start_dependencies
   mkdir -p "${LOG_DIR}" "${PID_DIR}"
 
   # 이미 실행 중인 프로세스 확인
@@ -101,7 +114,8 @@ do_start() {
 
     local query="{kubernetes_namespace_name=\"${NAMESPACE}\", kubernetes_container_name=\"${container}\"}"
 
-    # logcli tail → jq(message 추출) → sed(ANSI 제거) → 파일 append
+    # logcli raw line → sed(ANSI 제거) → 파일 append
+    # raw 출력은 JSON/text 모두 그대로 보존해야 하므로 jq를 거치지 않는다.
     # setsid로 새 프로세스 그룹 생성 → stop 시 PGID 기반 kill로 파이프라인 전체 정리
     setsid bash -c "
       LOKI_ADDR=\"${LOKI_ADDR}\" logcli query \
@@ -110,7 +124,6 @@ do_start() {
         --output=raw \
         --quiet \
         '${query}' 2>/dev/null \
-        | jq -r --unbuffered '.message // .' 2>/dev/null \
         | sed -u 's/\x1b\[[0-9;]*m//g' \
         >> '${log_file}'
     " &
