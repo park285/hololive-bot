@@ -9,12 +9,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// WebSearcher: model.WebSearcher의 별칭 (패키지 내 참조 호환)
-type WebSearcher = model.WebSearcher
-
-// SearchResult: model.SearchResult의 별칭 (패키지 내 참조 호환)
-type SearchResult = model.SearchResult
-
 func buildSearchQuery(summaryType SummaryType, periodKey string) string {
 	sourceScope := buildORScope("site:", constants.MajorEventConfig.SearchSourceSites)
 	accountScope := buildORScope("", constants.MajorEventConfig.SearchOfficialAccounts)
@@ -54,7 +48,7 @@ func buildKRPartnerSearchQuery(periodKey string) string {
 const maxSearchResults = 10
 
 // capSearchResults: 검색 결과를 최대 개수로 제한
-func capSearchResults(results []SearchResult, limit int) []SearchResult {
+func capSearchResults(results []model.SearchResult, limit int) []model.SearchResult {
 	if len(results) <= limit {
 		return results
 	}
@@ -62,9 +56,9 @@ func capSearchResults(results []SearchResult, limit int) []SearchResult {
 }
 
 // dedupeSearchResults: URL 기반 중복 제거 (URL 없으면 Title+PublishedDate 복합키)
-func dedupeSearchResults(results []SearchResult) []SearchResult {
+func dedupeSearchResults(results []model.SearchResult) []model.SearchResult {
 	seen := make(map[string]struct{}, len(results))
-	deduped := make([]SearchResult, 0, len(results))
+	deduped := make([]model.SearchResult, 0, len(results))
 	for _, r := range results {
 		key := r.URL
 		if key == "" {
@@ -80,7 +74,7 @@ func dedupeSearchResults(results []SearchResult) []SearchResult {
 	return deduped
 }
 
-func formatSearchResults(results []SearchResult) string {
+func formatSearchResults(results []model.SearchResult) string {
 	if len(results) == 0 {
 		return ""
 	}

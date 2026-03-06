@@ -30,8 +30,8 @@ type CacheStore interface {
 type EventSummarizer struct {
 	llm      LLMClient // nil이면 비활성
 	cache    CacheStore
-	searcher WebSearcher // nil 허용
-	reviewer LLMClient   // nil이면 consensus stage2 비활성
+	searcher sharedmodel.WebSearcher // nil 허용
+	reviewer LLMClient               // nil이면 consensus stage2 비활성
 	// nil이면 stage3(adjudication) 비활성
 	adjudicator LLMClient
 	consensus   SummarizerConsensusConfig
@@ -73,7 +73,7 @@ func normalizeConsensusConfig(cfg SummarizerConsensusConfig) SummarizerConsensus
 
 // NewEventSummarizer: 이벤트 요약 서비스를 생성합니다.
 // llm이 nil이면 Summarize()는 항상 빈 문자열을 반환합니다.
-func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher WebSearcher, logger *slog.Logger, opts ...SummarizerOption) *EventSummarizer {
+func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.WebSearcher, logger *slog.Logger, opts ...SummarizerOption) *EventSummarizer {
 	s := &EventSummarizer{
 		llm:      llm,
 		cache:    cache,
@@ -199,8 +199,8 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 	}
 
 	var (
-		results   []SearchResult
-		krResults []SearchResult
+		results   []sharedmodel.SearchResult
+		krResults []sharedmodel.SearchResult
 		mu        sync.Mutex
 		wg        sync.WaitGroup
 	)
@@ -236,7 +236,7 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 	wg.Wait()
 
 	// 병합 파이프라인: append → dedupe → cap
-	combined := make([]SearchResult, 0, len(results)+len(krResults))
+	combined := make([]sharedmodel.SearchResult, 0, len(results)+len(krResults))
 	combined = append(combined, results...)
 	combined = append(combined, krResults...)
 	deduped := dedupeSearchResults(combined)
