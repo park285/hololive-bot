@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
@@ -40,7 +41,7 @@ type APIHandler struct {
 	holodex                    *holodex.Service
 	youtube                    youtube.Service
 	scraperProxyToggler        sharedsettings.ScraperProxyToggler
-	statsRepo                  youtube.StatsDashboardRepository
+	statsRepo                  stats.StatsDashboardRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
 	settingsApplier            sharedsettings.SettingsApplier
@@ -74,7 +75,7 @@ func NewAPIHandler(
 	holodexSvc *holodex.Service,
 	youtubeSvc youtube.Service,
 	scraperProxyToggler sharedsettings.ScraperProxyToggler,
-	statsRepo youtube.StatsDashboardRepository,
+	statsRepo stats.StatsDashboardRepository,
 	activityLogger *activity.Logger,
 	settingsSvc settings.ReadWriter,
 	settingsApplier sharedsettings.SettingsApplier,

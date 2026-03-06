@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
@@ -54,7 +54,7 @@ type Dependencies struct {
 	Alarm            domain.AlarmCRUD
 	Matcher          *matcher.MemberMatcher
 	OfficialProfiles *member.ProfileService
-	StatsRepo        youtube.StatsCommandRepository
+	StatsRepo        stats.StatsCommandRepository
 	MemberNews       MemberNewsService
 	MembersData      member.DataProvider
 	Formatter        *adapter.ResponseFormatter

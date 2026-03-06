@@ -13,6 +13,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -30,7 +31,7 @@ type schedulerImpl struct {
 	youtube              Service
 	holodex              *holodex.Service
 	cache                cache.Client
-	statsRepo            StatsSchedulerRepository
+	statsRepo            ytstats.StatsSchedulerRepository
 	membersData          domain.MemberDataProvider
 	alarmService         domain.AlarmDispatchState
 	irisClient           iris.Client
@@ -66,7 +67,7 @@ func NewScheduler(
 	youtubeSvc Service,
 	holodexSvc *holodex.Service,
 	cacheSvc cache.Client,
-	statsRepo StatsSchedulerRepository,
+	statsRepo ytstats.StatsSchedulerRepository,
 	membersData domain.MemberDataProvider,
 	alarmSvc domain.AlarmDispatchState,
 	irisClient iris.Client,
@@ -656,7 +657,7 @@ func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage fu
 
 	// 메시지 포맷 + 병렬 발송
 	type milestoneWork struct {
-		notification MilestoneNotification
+		notification ytstats.MilestoneNotification
 		message      string
 	}
 	works := make([]milestoneWork, 0, len(milestones))
@@ -678,7 +679,7 @@ func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage fu
 	}
 
 	// errgroup 병렬 발송 (milestone × room)
-	sentNotifications := make([]MilestoneNotification, 0, len(works))
+	sentNotifications := make([]ytstats.MilestoneNotification, 0, len(works))
 	eg, _ := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
 	for _, w := range works {
@@ -733,7 +734,7 @@ func (ys *schedulerImpl) sendApproachingAlerts(ctx context.Context, sendMessage 
 
 	// 메시지 포맷 + 병렬 발송
 	type approachingWork struct {
-		notification ApproachingNotification
+		notification ytstats.ApproachingNotification
 		message      string
 	}
 	works := make([]approachingWork, 0, len(notifications))
@@ -762,7 +763,7 @@ func (ys *schedulerImpl) sendApproachingAlerts(ctx context.Context, sendMessage 
 	_ = eg.Wait()
 
 	// batch 마킹
-	sentNotifications := make([]ApproachingNotification, len(works))
+	sentNotifications := make([]ytstats.ApproachingNotification, len(works))
 	for i, w := range works {
 		sentNotifications[i] = w.notification
 	}
@@ -899,7 +900,7 @@ func (ys *schedulerImpl) watchNearMilestoneMembers(ctx context.Context) {
 
 func (ys *schedulerImpl) getNearMilestoneChannelMap(
 	ctx context.Context,
-	nearMembers []NearMilestoneEntry,
+	nearMembers []ytstats.NearMilestoneEntry,
 	channelToMember map[string]*domain.Member,
 ) map[string]*domain.Channel {
 	channelIDs := make([]string, 0, len(nearMembers))
@@ -945,7 +946,7 @@ func finalizeNearMilestoneChannelMap(
 }
 
 // checkApproachingAlert: 99% 이상 도달 시 예고 알람을 발송한다 (중복 방지)
-func (ys *schedulerImpl) checkApproachingAlert(ctx context.Context, nm NearMilestoneEntry, member *domain.Member, currentSubs uint64, now time.Time) {
+func (ys *schedulerImpl) checkApproachingAlert(ctx context.Context, nm ytstats.NearMilestoneEntry, member *domain.Member, currentSubs uint64, now time.Time) {
 	// 현재 진행률 계산 (최신 구독자 수 기준)
 	progressPct := float64(currentSubs) / float64(nm.NextMilestone)
 	if progressPct < ApproachingThresholdRatio {

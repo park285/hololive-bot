@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 // mockMemberDataProvider: 테스트용 MemberDataProvider 구현
@@ -909,7 +910,7 @@ func (m *mockTrackAllSubscribersRepo) SaveMilestone(ctx context.Context, milesto
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]NearMilestoneEntry, error) {
+func (m *mockTrackAllSubscribersRepo) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]ytstats.NearMilestoneEntry, error) {
 	return nil, nil
 }
 
@@ -921,7 +922,7 @@ func (m *mockTrackAllSubscribersRepo) SaveApproachingNotification(ctx context.Co
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetUnnotifiedMilestones(ctx context.Context, limit int) ([]MilestoneNotification, error) {
+func (m *mockTrackAllSubscribersRepo) GetUnnotifiedMilestones(ctx context.Context, limit int) ([]ytstats.MilestoneNotification, error) {
 	return nil, nil
 }
 
@@ -929,11 +930,11 @@ func (m *mockTrackAllSubscribersRepo) MarkMilestoneNotified(ctx context.Context,
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []MilestoneNotification) error {
+func (m *mockTrackAllSubscribersRepo) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []ytstats.MilestoneNotification) error {
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ApproachingNotification, error) {
+func (m *mockTrackAllSubscribersRepo) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ytstats.ApproachingNotification, error) {
 	return nil, nil
 }
 
@@ -941,7 +942,7 @@ func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotified(ctx context.Co
 	return nil
 }
 
-func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error {
+func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ytstats.ApproachingNotification) error {
 	return nil
 }
 

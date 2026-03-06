@@ -9,13 +9,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 type stubStatsDashboardRepository struct {
-	getAllMilestones       func(context.Context, youtube.MilestoneFilter) (*youtube.MilestoneResult, error)
-	getNearMilestoneMember func(context.Context, float64, []uint64, int) ([]youtube.NearMilestoneEntry, error)
-	getMilestoneStats      func(context.Context) (*youtube.MilestoneStats, error)
+	getAllMilestones       func(context.Context, stats.MilestoneFilter) (*stats.MilestoneResult, error)
+	getNearMilestoneMember func(context.Context, float64, []uint64, int) ([]stats.NearMilestoneEntry, error)
+	getMilestoneStats      func(context.Context) (*stats.MilestoneStats, error)
 	countNearMembers       func(context.Context, float64, []uint64) (int, error)
 }
 
@@ -23,9 +23,9 @@ func (s *stubStatsDashboardRepository) GetLatestStatsForChannels(context.Context
 	return nil, nil
 }
 
-func (s *stubStatsDashboardRepository) GetAllMilestones(ctx context.Context, filter youtube.MilestoneFilter) (*youtube.MilestoneResult, error) {
+func (s *stubStatsDashboardRepository) GetAllMilestones(ctx context.Context, filter stats.MilestoneFilter) (*stats.MilestoneResult, error) {
 	if s.getAllMilestones == nil {
-		return &youtube.MilestoneResult{}, nil
+		return &stats.MilestoneResult{}, nil
 	}
 	return s.getAllMilestones(ctx, filter)
 }
@@ -35,16 +35,16 @@ func (s *stubStatsDashboardRepository) GetNearMilestoneMembers(
 	thresholdPct float64,
 	milestones []uint64,
 	limit int,
-) ([]youtube.NearMilestoneEntry, error) {
+) ([]stats.NearMilestoneEntry, error) {
 	if s.getNearMilestoneMember == nil {
 		return nil, nil
 	}
 	return s.getNearMilestoneMember(ctx, thresholdPct, milestones, limit)
 }
 
-func (s *stubStatsDashboardRepository) GetMilestoneStats(ctx context.Context) (*youtube.MilestoneStats, error) {
+func (s *stubStatsDashboardRepository) GetMilestoneStats(ctx context.Context) (*stats.MilestoneStats, error) {
 	if s.getMilestoneStats == nil {
-		return &youtube.MilestoneStats{}, nil
+		return &stats.MilestoneStats{}, nil
 	}
 	return s.getMilestoneStats(ctx)
 }
@@ -127,7 +127,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 	t.Run("repo error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
 			statsRepo: &stubStatsDashboardRepository{
-				getAllMilestones: func(context.Context, youtube.MilestoneFilter) (*youtube.MilestoneResult, error) {
+				getAllMilestones: func(context.Context, stats.MilestoneFilter) (*stats.MilestoneResult, error) {
 					return nil, errors.New("query failed")
 				},
 			},
@@ -143,9 +143,9 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
 			statsRepo: &stubStatsDashboardRepository{
-				getAllMilestones: func(context.Context, youtube.MilestoneFilter) (*youtube.MilestoneResult, error) {
-					return &youtube.MilestoneResult{
-						Milestones: []youtube.MilestoneEntry{
+				getAllMilestones: func(context.Context, stats.MilestoneFilter) (*stats.MilestoneResult, error) {
+					return &stats.MilestoneResult{
+						Milestones: []stats.MilestoneEntry{
 							{
 								ChannelID:  "UC1",
 								MemberName: "Sora",
@@ -198,7 +198,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 	t.Run("repo error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
 			statsRepo: &stubStatsDashboardRepository{
-				getNearMilestoneMember: func(context.Context, float64, []uint64, int) ([]youtube.NearMilestoneEntry, error) {
+				getNearMilestoneMember: func(context.Context, float64, []uint64, int) ([]stats.NearMilestoneEntry, error) {
 					return nil, errors.New("query failed")
 				},
 			},
@@ -214,10 +214,10 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 	t.Run("success and trim to limit", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
 			statsRepo: &stubStatsDashboardRepository{
-				getNearMilestoneMember: func(context.Context, float64, []uint64, int) ([]youtube.NearMilestoneEntry, error) {
-					out := make([]youtube.NearMilestoneEntry, 0, 8)
+				getNearMilestoneMember: func(context.Context, float64, []uint64, int) ([]stats.NearMilestoneEntry, error) {
+					out := make([]stats.NearMilestoneEntry, 0, 8)
 					for i := 0; i < 8; i++ {
-						out = append(out, youtube.NearMilestoneEntry{
+						out = append(out, stats.NearMilestoneEntry{
 							ChannelID:     "UC",
 							MemberName:    "member",
 							CurrentSubs:   900000,
@@ -255,7 +255,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 	t.Run("milestone stats error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
 			statsRepo: &stubStatsDashboardRepository{
-				getMilestoneStats: func(context.Context) (*youtube.MilestoneStats, error) {
+				getMilestoneStats: func(context.Context) (*stats.MilestoneStats, error) {
 					return nil, errors.New("stats failed")
 				},
 			},
@@ -271,8 +271,8 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 	t.Run("near summary error", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
 			statsRepo: &stubStatsDashboardRepository{
-				getMilestoneStats: func(context.Context) (*youtube.MilestoneStats, error) {
-					return &youtube.MilestoneStats{TotalAchieved: 5, RecentAchievements: 1}, nil
+				getMilestoneStats: func(context.Context) (*stats.MilestoneStats, error) {
+					return &stats.MilestoneStats{TotalAchieved: 5, RecentAchievements: 1}, nil
 				},
 				countNearMembers: func(context.Context, float64, []uint64) (int, error) {
 					return 0, errors.New("count failed")
@@ -290,8 +290,8 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{
 			statsRepo: &stubStatsDashboardRepository{
-				getMilestoneStats: func(context.Context) (*youtube.MilestoneStats, error) {
-					return &youtube.MilestoneStats{
+				getMilestoneStats: func(context.Context) (*stats.MilestoneStats, error) {
+					return &stats.MilestoneStats{
 						TotalAchieved:      10,
 						RecentAchievements: 2,
 						NotNotifiedCount:   1,

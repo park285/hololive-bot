@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 // GetMilestones: 달성된 마일스톤 목록을 반환합니다.
@@ -41,7 +42,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 		offset = parsed
 	}
 
-	filter := youtube.MilestoneFilter{
+	filter := stats.MilestoneFilter{
 		Limit:      limit,
 		Offset:     offset,
 		ChannelID:  c.Query("channelId"),

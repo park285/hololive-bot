@@ -7,7 +7,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -44,7 +44,7 @@ func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
 
 // ProvideBotDependencies - 모든 의존성을 bot.Dependencies로 조립
 func ProvideBotDependencies(modules botDependencyModules) *bot.Dependencies {
-	var youTubeStatsRepo youtube.StatsCommandRepository
+	var youTubeStatsRepo stats.StatsCommandRepository
 	if statsRepo := modules.stream.ytStack.GetStatsRepo(); statsRepo != nil {
 		youTubeStatsRepo = statsRepo
 	}
