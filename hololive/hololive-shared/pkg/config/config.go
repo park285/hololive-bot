@@ -65,7 +65,7 @@ func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
 		sharedIrisToken,
 	)
 
-	runtimeEnv := strings.TrimSpace(envutil.String("APP_ENV", envutil.String("OTEL_ENVIRONMENT", "production")))
+	runtimeEnv := envutil.String("APP_ENV", envutil.String("OTEL_ENVIRONMENT", "production"))
 	isProduction := strings.EqualFold(runtimeEnv, "production")
 	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
 		envutil.String("CORS_ALLOWED_ORIGINS", ""),
@@ -76,6 +76,11 @@ func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
 }
 
 func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) *Config {
+	llmSchedulerHealthURL := envutil.StringAny(
+		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
+		"SERVICES_LLM_SERVER_HEALTH_URL",
+	)
+
 	return &Config{
 		Iris: IrisConfig{
 			BaseURL:                   envutil.String("IRIS_BASE_URL", "http://localhost:3000"),
@@ -117,12 +122,13 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		},
 		Bot: BotConfig{
 			Prefix:           envutil.String("BOT_PREFIX", "!"),
-			SelfUser:         stringutil.TrimSpace(envutil.String("BOT_SELF_USER", "iris")),
+			SelfUser:         envutil.String("BOT_SELF_USER", "iris"),
 			IngestionEnabled: envutil.Bool("BOT_INGESTION_ENABLED", true),
 			AdminEnabled:     envutil.Bool("BOT_ADMIN_ENABLED", true),
 		},
 		Services: ServicesConfig{
-			LLMServerHealthURL:      envutil.String("SERVICES_LLM_SERVER_HEALTH_URL", ""),
+			LLMServerHealthURL:      llmSchedulerHealthURL,
+			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
 			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
 			GameBotTurtleHealthURL:  envutil.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
 		},
@@ -136,6 +142,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			QueueSize:      envutil.Int("WEBHOOK_QUEUE_SIZE", 1000),
 			EnqueueTimeout: time.Duration(envutil.Int("WEBHOOK_ENQUEUE_TIMEOUT_MS", 50)) * time.Millisecond,
 			HandlerTimeout: time.Duration(envutil.Int("WEBHOOK_HANDLER_TIMEOUT_SECONDS", 30)) * time.Second,
+			RequireHTTP2:   envutil.Bool("WEBHOOK_REQUIRE_HTTP2", false),
 		},
 		Chzzk: ChzzkConfig{
 			ClientID:     envutil.String("CHZZK_CLIENT_ID", ""),
@@ -155,7 +162,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			Enforce:             envutil.Bool("CORS_ENFORCE", false),
 			MissingInProduction: corsMissingInProduction,
 		},
-		Version: stringutil.TrimSpace(envutil.String("APP_VERSION", "1.1.0-go")),
+		Version: envutil.String("APP_VERSION", "1.1.0-go"),
 	}
 }
 
@@ -243,4 +250,3 @@ func validateAPISecretKey(environment, apiKey string) error {
 	}
 	return fmt.Errorf("API_SECRET_KEY is required in production")
 }
-
