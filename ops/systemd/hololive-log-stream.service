@@ -1,0 +1,14 @@
+[Unit]
+Description=Hololive Loki log mirror stream
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kapu/gemini/hololive-bot
+ExecStart=/home/kapu/gemini/hololive-bot/scripts/logs/stream.sh daemon
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
