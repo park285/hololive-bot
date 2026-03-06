@@ -179,19 +179,17 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 }
 
 func (c *AlarmCommand) handleList(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	alarms, err := c.Deps().Alarm.GetRoomAlarmsWithTypes(ctx, cmdCtx.Room)
+	entries, err := c.Deps().Alarm.ListRoomAlarmsView(ctx, cmdCtx.Room)
 	if err != nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrAlarmListFailed)
 	}
 
-	alarmInfos := make([]adapter.AlarmListEntry, 0, len(alarms))
-	for _, alarm := range alarms {
-		memberName := c.Deps().Alarm.GetMemberNameWithFallback(ctx, alarm.ChannelID)
-		nextStreamInfo, _ := c.Deps().Alarm.GetNextStreamInfo(ctx, alarm.ChannelID)
+	alarmInfos := make([]adapter.AlarmListEntry, 0, len(entries))
+	for _, entry := range entries {
 		alarmInfos = append(alarmInfos, adapter.AlarmListEntry{
-			MemberName: memberName,
-			AlarmTypes: alarm.AlarmTypes,
-			NextStream: nextStreamInfo,
+			MemberName: entry.MemberName,
+			AlarmTypes: entry.AlarmTypes,
+			NextStream: entry.NextStream,
 		})
 	}
 
