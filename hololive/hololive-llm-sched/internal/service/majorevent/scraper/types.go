@@ -7,12 +7,14 @@ import (
 )
 
 const (
-	defaultEventFeedURL   = "https://hololive.hololivepro.com/events/feed/"
-	defaultNewsFeedURL    = "https://hololive.hololivepro.com/news/feed/"
-	defaultENNewsFeedURL  = "https://hololive.hololivepro.com/en/news/feed/"
-	defaultFeedUserAgent  = "hololive-llm-sched/majorevent-scraper"
-	defaultMaxBodyBytes   = 4 * 1024 * 1024
-	defaultIncrementalMax = 200
+	defaultEventFeedURL          = "https://hololive.hololivepro.com/events/feed/"
+	defaultNewsFeedURL           = "https://hololive.hololivepro.com/news/feed/"
+	defaultENNewsFeedURL         = "https://hololive.hololivepro.com/en/news/feed/"
+	defaultFeedUserAgent         = "hololive-llm-sched/majorevent-scraper"
+	defaultMaxBodyBytes          = 4 * 1024 * 1024
+	defaultIncrementalMax        = 200
+	defaultFeedHTTPTimeout       = 20 * time.Second
+	defaultLinkCheckerHTTPClient = 15 * time.Second
 )
 
 // FeedSource는 RSS 피드 소스 정보를 정의한다.

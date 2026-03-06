@@ -6,7 +6,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 // FeedFetcher는 RSS 원문을 HTTP로 가져온다.
@@ -19,9 +20,7 @@ type FeedFetcher struct {
 // NewFeedFetcher는 FeedFetcher를 생성한다.
 func NewFeedFetcher(client *http.Client, cfg FeedFetcherConfig) *FeedFetcher {
 	if client == nil {
-		client = &http.Client{
-			Timeout: 20 * time.Second,
-		}
+		client = httputil.NewExternalAPIClient(defaultFeedHTTPTimeout)
 	}
 
 	userAgent := strings.TrimSpace(cfg.UserAgent)

@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"time"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 // RuntimeScheduler는 RSS 수집/유지보수 스케줄러를 통합 실행한다.
@@ -26,9 +25,7 @@ func NewRuntimeScheduler(repository *majorevent.Repository, logger *slog.Logger)
 		logger = slog.Default()
 	}
 
-	httpClient := &http.Client{
-		Timeout: 20 * time.Second,
-	}
+	httpClient := httputil.NewExternalAPIClient(defaultFeedHTTPTimeout)
 
 	fetcher := NewFeedFetcher(httpClient, DefaultFeedFetcherConfig())
 	parser := NewRSSParser()

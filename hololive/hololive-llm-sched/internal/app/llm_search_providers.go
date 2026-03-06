@@ -2,7 +2,6 @@ package app
 
 import (
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 func provideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) mesummarizer.WebSearcher {
@@ -22,7 +22,7 @@ func provideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) mesummarizer.
 		return nil
 	}
 
-	httpClient := &http.Client{Timeout: 15 * time.Second}
+	httpClient := httputil.NewExternalAPIClient(15 * time.Second)
 	client := mesummarizer.NewExaMCPClient(cfg.Endpoint, cfg.APIKey, httpClient, logger)
 	logger.Info("Exa search enabled", slog.String("endpoint", cfg.Endpoint))
 	return client
