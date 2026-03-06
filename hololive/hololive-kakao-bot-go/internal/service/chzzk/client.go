@@ -358,6 +358,53 @@ func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*Channel
 	return &apiResp.Content, nil
 }
 
+func (c *Client) GetLivesByChannelIDs(ctx context.Context, channelIDs []string) ([]LiveData, error) {
+	if !c.HasOpenAPICredentials() {
+		return nil, fmt.Errorf("chzzk open API credentials not configured")
+	}
+
+	targets := make(map[string]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		channelID = strings.TrimSpace(channelID)
+		if channelID == "" {
+			continue
+		}
+		targets[channelID] = struct{}{}
+	}
+	if len(targets) == 0 {
+		return []LiveData{}, nil
+	}
+
+	result := make([]LiveData, 0, len(targets))
+	found := make(map[string]struct{}, len(targets))
+	next := ""
+
+	for {
+		resp, err := c.GetLives(ctx, 20, next)
+		if err != nil {
+			return nil, fmt.Errorf("get lives page: %w", err)
+		}
+
+		for i := range resp.Data {
+			if _, ok := targets[resp.Data[i].ChannelID]; !ok {
+				continue
+			}
+			if _, exists := found[resp.Data[i].ChannelID]; exists {
+				continue
+			}
+			found[resp.Data[i].ChannelID] = struct{}{}
+			result = append(result, resp.Data[i])
+		}
+
+		if len(found) == len(targets) || resp.Page.Next == "" {
+			break
+		}
+		next = resp.Page.Next
+	}
+
+	return result, nil
+}
+
 func (c *Client) newOpenAPIRequest(ctx context.Context, method, reqURL string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, http.NoBody)
 	if err != nil {
