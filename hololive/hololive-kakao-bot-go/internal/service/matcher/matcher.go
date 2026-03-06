@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"golang.org/x/sync/singleflight"
 )
 
 // MatchCacheEntry: 멤버 매칭 결과를 캐싱하기 위한 구조체 (채널 정보 + 타임스탬프)
@@ -25,7 +26,23 @@ type MatchCacheEntry struct {
 type matchCandidate struct {
 	channelID  string
 	memberName string
+	org        string
 	source     string
+}
+
+type snapshotEntry struct {
+	candidate  *matchCandidate
+	nameNorm   string
+	aliasNorms []string
+}
+
+type memberMatcherSnapshot struct {
+	builtAt        time.Time
+	exactNames     map[string][]*snapshotEntry
+	exactAliases   map[string][]*snapshotEntry
+	tokenIndex     map[string][]*snapshotEntry
+	entries        []*snapshotEntry
+	dynamicLoadErr error
 }
 
 // ChannelSelector: 모호한 검색어에 대해 모호성 해소를 돕는 채널 선택 인터페이스
@@ -46,6 +63,10 @@ type MemberMatcher struct {
 	matchCacheMu          sync.RWMutex
 	matchCacheTTL         time.Duration
 	matchCacheLastCleanup time.Time
+	snapshotMu            sync.RWMutex
+	snapshot              *memberMatcherSnapshot
+	snapshotTTL           time.Duration
+	snapshotGroup         singleflight.Group
 }
 
 // NewMemberMatcher: 새로운 MemberMatcher 인스턴스를 생성합니다.
@@ -57,10 +78,6 @@ func NewMemberMatcher(
 	selector ChannelSelector,
 	logger *slog.Logger,
 ) *MemberMatcher {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	mm := &MemberMatcher{
 		ctx:                   ctx,
 		membersData:           membersData,
@@ -71,25 +88,30 @@ func NewMemberMatcher(
 		matchCache:            make(map[string]*MatchCacheEntry),
 		matchCacheTTL:         1 * time.Minute,
 		matchCacheLastCleanup: time.Now(),
+		snapshotTTL:           1 * time.Minute,
 	}
 
-	provider := membersData.WithContext(ctx)
+	provider := mm.providerWithContext(ctx)
+	memberCount := 0
+	if provider != nil {
+		memberCount = len(provider.GetAllMembers())
+	}
 
 	logger.Info("MemberMatcher initialized",
-		slog.Int("members", len(provider.GetAllMembers())),
+		slog.Int("members", memberCount),
 	)
 
 	return mm
 }
 
-// tryExactAliasMatch: 데이터베이스 별칭을 통한 정확한 매칭을 시도함 (PostgreSQL Lazy Loading)
-func (mm *MemberMatcher) tryExactAliasMatch(_ context.Context, provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
-	// Provider(PostgreSQL + Valkey 캐시)에서 먼저 조회함
-	if member := provider.FindMemberByAlias(queryNorm); member != nil && member.ChannelID != "" {
-		return mm.candidateFromMember(member, "alias-db")
+func (mm *MemberMatcher) providerWithContext(ctx context.Context) domain.MemberDataProvider {
+	if mm == nil || mm.membersData == nil {
+		return nil
 	}
-
-	return nil
+	if ctx == nil {
+		return mm.membersData
+	}
+	return mm.membersData.WithContext(ctx)
 }
 
 // tryExactValkeyMatch: 동적 Valkey 데이터에서 정확한 매칭을 시도함 (Holodex 호출 없이)
@@ -179,6 +201,7 @@ func (mm *MemberMatcher) candidateFromMember(member *domain.Member, source strin
 	return &matchCandidate{
 		channelID:  member.ChannelID,
 		memberName: name,
+		org:        member.GetOrg(),
 		source:     source,
 	}
 }
@@ -204,8 +227,261 @@ func (mm *MemberMatcher) candidateFromDynamic(provider domain.MemberDataProvider
 	return &matchCandidate{
 		channelID:  channelID,
 		memberName: displayName,
+		org:        "",
 		source:     source,
 	}
+}
+
+func (mm *MemberMatcher) getSnapshot(ctx context.Context) (*memberMatcherSnapshot, error) {
+	mm.snapshotMu.RLock()
+	snapshot := mm.snapshot
+	mm.snapshotMu.RUnlock()
+
+	if snapshot != nil && time.Since(snapshot.builtAt) < mm.snapshotTTL {
+		return snapshot, nil
+	}
+
+	value, err, _ := mm.snapshotGroup.Do("member-snapshot", func() (any, error) {
+		built, buildErr := mm.buildSnapshot(ctx)
+		if buildErr != nil {
+			return nil, buildErr
+		}
+
+		if built.dynamicLoadErr == nil {
+			mm.snapshotMu.Lock()
+			mm.snapshot = built
+			mm.snapshotMu.Unlock()
+		}
+		return built, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build member matcher snapshot: %w", err)
+	}
+
+	rebuilt, _ := value.(*memberMatcherSnapshot)
+	if rebuilt == nil {
+		return nil, fmt.Errorf("build member matcher snapshot: empty snapshot")
+	}
+	return rebuilt, nil
+}
+
+func (mm *MemberMatcher) buildSnapshot(ctx context.Context) (*memberMatcherSnapshot, error) {
+	provider := mm.providerWithContext(ctx)
+	snapshot := &memberMatcherSnapshot{
+		builtAt:      time.Now(),
+		exactNames:   make(map[string][]*snapshotEntry),
+		exactAliases: make(map[string][]*snapshotEntry),
+		tokenIndex:   make(map[string][]*snapshotEntry),
+	}
+	if provider == nil {
+		return snapshot, nil
+	}
+
+	entriesByChannel := make(map[string]*snapshotEntry)
+	for _, member := range provider.GetAllMembers() {
+		entry := mm.snapshotEntryFromMember(member)
+		if entry == nil {
+			continue
+		}
+		mm.storeSnapshotEntry(snapshot, entriesByChannel, entry)
+	}
+
+	if mm.cache != nil {
+		dynamicMembers, err := mm.cache.GetAllMembers(ctx)
+		if err != nil {
+			snapshot.dynamicLoadErr = fmt.Errorf("get all members: %w", err)
+		} else {
+			for key, channelID := range dynamicMembers {
+				entry := mm.snapshotEntryFromDynamic(provider, key, channelID)
+				if entry == nil {
+					continue
+				}
+				mm.storeSnapshotEntry(snapshot, entriesByChannel, entry)
+			}
+		}
+	}
+
+	return snapshot, nil
+}
+
+func (mm *MemberMatcher) snapshotEntryFromMember(member *domain.Member) *snapshotEntry {
+	candidate := mm.candidateFromMember(member, "snapshot")
+	if candidate == nil {
+		return nil
+	}
+
+	entry := &snapshotEntry{
+		candidate:  candidate,
+		nameNorm:   normalizeMatcherTerm(member.Name),
+		aliasNorms: make([]string, 0, len(member.GetAllAliases())+2),
+	}
+	for _, alias := range member.GetAllAliases() {
+		if aliasNorm := normalizeMatcherTerm(alias); aliasNorm != "" {
+			entry.aliasNorms = append(entry.aliasNorms, aliasNorm)
+		}
+	}
+	if nameJaNorm := normalizeMatcherTerm(member.NameJa); nameJaNorm != "" {
+		entry.aliasNorms = append(entry.aliasNorms, nameJaNorm)
+	}
+	if nameKoNorm := normalizeMatcherTerm(member.NameKo); nameKoNorm != "" {
+		entry.aliasNorms = append(entry.aliasNorms, nameKoNorm)
+	}
+	if entry.nameNorm == "" {
+		entry.nameNorm = normalizeMatcherTerm(candidate.memberName)
+	}
+	return entry
+}
+
+func (mm *MemberMatcher) snapshotEntryFromDynamic(provider domain.MemberDataProvider, key, channelID string) *snapshotEntry {
+	name, org := splitMemberKey(key)
+	candidate := mm.candidateFromDynamic(provider, name, channelID, "snapshot-dynamic")
+	if candidate == nil {
+		return nil
+	}
+	if candidate.org == "" {
+		candidate.org = org
+	}
+	return &snapshotEntry{
+		candidate: candidate,
+		nameNorm:  normalizeMatcherTerm(name),
+	}
+}
+
+func (mm *MemberMatcher) storeSnapshotEntry(
+	snapshot *memberMatcherSnapshot,
+	entriesByChannel map[string]*snapshotEntry,
+	entry *snapshotEntry,
+) {
+	if entry == nil || entry.candidate == nil || entry.candidate.channelID == "" {
+		return
+	}
+
+	current, exists := entriesByChannel[entry.candidate.channelID]
+	if !exists {
+		entriesByChannel[entry.candidate.channelID] = entry
+		snapshot.entries = append(snapshot.entries, entry)
+		current = entry
+	}
+
+	if entry.nameNorm != "" {
+		current.nameNorm = chooseSnapshotString(current.nameNorm, entry.nameNorm)
+		appendSnapshotEntry(snapshot.exactNames, entry.nameNorm, current)
+	}
+
+	for _, aliasNorm := range entry.aliasNorms {
+		appendSnapshotEntry(snapshot.exactAliases, aliasNorm, current)
+	}
+
+	for _, token := range snapshotTokens(entry.nameNorm, entry.aliasNorms) {
+		appendSnapshotEntry(snapshot.tokenIndex, token, current)
+	}
+}
+
+func chooseSnapshotString(current, next string) string {
+	if current != "" {
+		return current
+	}
+	return next
+}
+
+func appendSnapshotEntry(target map[string][]*snapshotEntry, key string, entry *snapshotEntry) {
+	if key == "" || entry == nil {
+		return
+	}
+	for _, existing := range target[key] {
+		if existing == entry || (existing.candidate != nil && entry.candidate != nil && existing.candidate.channelID == entry.candidate.channelID) {
+			return
+		}
+	}
+	target[key] = append(target[key], entry)
+}
+
+func splitMemberKey(key string) (name, org string) {
+	name = key
+	if idx := strings.LastIndex(key, ":"); idx > 0 {
+		name = key[:idx]
+		org = key[idx+1:]
+	}
+	return name, org
+}
+
+func normalizeMatcherTerm(value string) string {
+	return util.NormalizeSuffix(value)
+}
+
+func snapshotTokens(nameNorm string, aliasNorms []string) []string {
+	values := make([]string, 0, 1+len(aliasNorms))
+	if nameNorm != "" {
+		values = append(values, nameNorm)
+	}
+	values = append(values, aliasNorms...)
+
+	seen := make(map[string]struct{})
+	tokens := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		tokens = append(tokens, value)
+	}
+	return tokens
+}
+
+func pickPreferredSnapshotCandidate(entries []*snapshotEntry) *matchCandidate {
+	if len(entries) == 0 {
+		return nil
+	}
+	if len(entries) == 1 {
+		return entries[0].candidate
+	}
+
+	for _, entry := range entries {
+		if entry != nil && entry.candidate != nil && entry.candidate.org == "Hololive" {
+			return entry.candidate
+		}
+	}
+	return entries[0].candidate
+}
+
+func (mm *MemberMatcher) findSnapshotCandidates(snapshot *memberMatcherSnapshot, queryNorm string) []*snapshotEntry {
+	if snapshot == nil || queryNorm == "" {
+		return nil
+	}
+	candidates := snapshot.tokenIndex[queryNorm]
+	if len(candidates) > 0 {
+		return candidates
+	}
+	return snapshot.entries
+}
+
+func (mm *MemberMatcher) trySnapshotPartialNameMatch(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+	for _, entry := range mm.findSnapshotCandidates(snapshot, queryNorm) {
+		if entry == nil || entry.candidate == nil || entry.nameNorm == "" {
+			continue
+		}
+		if strings.Contains(entry.nameNorm, queryNorm) || strings.Contains(queryNorm, entry.nameNorm) {
+			return entry.candidate
+		}
+	}
+	return nil
+}
+
+func (mm *MemberMatcher) trySnapshotPartialAliasMatch(snapshot *memberMatcherSnapshot, queryNorm string) *matchCandidate {
+	for _, entry := range mm.findSnapshotCandidates(snapshot, queryNorm) {
+		if entry == nil || entry.candidate == nil {
+			continue
+		}
+		for _, aliasNorm := range entry.aliasNorms {
+			if strings.Contains(aliasNorm, queryNorm) || strings.Contains(queryNorm, aliasNorm) {
+				return entry.candidate
+			}
+		}
+	}
+	return nil
 }
 
 func (mm *MemberMatcher) hydrateChannel(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {
@@ -366,34 +642,29 @@ func (mm *MemberMatcher) FindBestMatch(ctx context.Context, query string) (*doma
 }
 
 func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, error) {
-	provider := mm.membersData.WithContext(ctx)
 	queryNorm := util.NormalizeSuffix(query)
+	snapshot, err := mm.getSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+	}
 
 	// Strategy 1: 정확한 별칭 매칭 (가장 빠름)
-	if channel, err := mm.finalizeCandidate(ctx, mm.tryExactAliasMatch(ctx, provider, queryNorm)); err != nil || channel != nil {
+	if channel, err := mm.finalizeCandidate(ctx, pickPreferredSnapshotCandidate(snapshot.exactAliases[queryNorm])); err != nil || channel != nil {
 		return channel, err
 	}
 
-	// Strategy 2, 4번에서 사용할 동적 멤버를 한 번만 로드함
-	dynamicMembers := mm.loadDynamicMembers(ctx)
-
-	// Strategy 2: Valkey에서 정확한 매칭
-	if channel, err := mm.finalizeCandidate(ctx, mm.tryExactValkeyMatch(provider, query, dynamicMembers)); err != nil || channel != nil {
+	// Strategy 2: exact name snapshot
+	if channel, err := mm.finalizeCandidate(ctx, pickPreferredSnapshotCandidate(snapshot.exactNames[queryNorm])); err != nil || channel != nil {
 		return channel, err
 	}
 
-	// Strategy 3: 정적 데이터에서 부분 매칭
-	if channel, err := mm.finalizeCandidate(ctx, mm.tryPartialStaticMatch(provider, queryNorm)); err != nil || channel != nil {
+	// Strategy 3: snapshot token/name 부분 매칭
+	if channel, err := mm.finalizeCandidate(ctx, mm.trySnapshotPartialNameMatch(snapshot, queryNorm)); err != nil || channel != nil {
 		return channel, err
 	}
 
-	// Strategy 4: Valkey에서 부분 매칭
-	if channel, err := mm.finalizeCandidate(ctx, mm.tryPartialValkeyMatch(provider, queryNorm, dynamicMembers)); err != nil || channel != nil {
-		return channel, err
-	}
-
-	// Strategy 5: 별칭에서 부분 매칭
-	if channel, err := mm.finalizeCandidate(ctx, mm.tryPartialAliasMatch(provider, queryNorm)); err != nil || channel != nil {
+	// Strategy 4: snapshot alias 부분 매칭
+	if channel, err := mm.finalizeCandidate(ctx, mm.trySnapshotPartialAliasMatch(snapshot, queryNorm)); err != nil || channel != nil {
 		return channel, err
 	}
 
@@ -404,19 +675,20 @@ func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*
 
 // GetAllMembers: 등록된 모든 멤버 정보를 반환합니다.
 func (mm *MemberMatcher) GetAllMembers() []*domain.Member {
-	ctx := mm.ctx
-	if ctx == nil {
-		ctx = context.Background()
+	provider := mm.providerWithContext(mm.ctx)
+	if provider == nil {
+		return nil
 	}
-	return mm.membersData.WithContext(ctx).GetAllMembers()
+	return provider.GetAllMembers()
 }
 
 // GetMemberByChannelID: 채널 ID를 사용하여 멤버 정보를 조회합니다.
 func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID string) *domain.Member {
-	if ctx == nil {
-		ctx = context.Background()
+	provider := mm.providerWithContext(ctx)
+	if provider == nil {
+		return nil
 	}
-	return mm.membersData.WithContext(ctx).FindMemberByChannelID(channelID)
+	return provider.FindMemberByChannelID(channelID)
 }
 
 // FindBestMatchWithCandidates: !알람 명령어 전용 매칭 API.
@@ -424,33 +696,28 @@ func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID str
 func (mm *MemberMatcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, error) {
 	name, org := ParseNameWithOrg(query)
 	name = mm.normalizeQuery(name)
-
-	allMembers, err := mm.cache.GetAllMembers(ctx)
+	nameNorm := normalizeMatcherTerm(name)
+	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get all members: %w", err)
+		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+	}
+	if snapshot.dynamicLoadErr != nil {
+		return nil, snapshot.dynamicLoadErr
 	}
 
 	var candidates []*domain.Member
-	for key, channelID := range allMembers {
-		parts := strings.SplitN(key, ":", 2)
-		keyName := parts[0]
-		keyOrg := ""
-		if len(parts) > 1 {
-			keyOrg = parts[1]
+	for _, entry := range snapshot.exactNames[nameNorm] {
+		if entry == nil || entry.candidate == nil {
+			continue
 		}
-
-		if stringutil.Normalize(keyName) == stringutil.Normalize(name) {
-			if org != "" && keyOrg != org {
-				continue
-			}
-
-			member := &domain.Member{
-				Name:      keyName,
-				ChannelID: channelID,
-				Org:       keyOrg,
-			}
-			candidates = append(candidates, member)
+		if org != "" && entry.candidate.org != org {
+			continue
 		}
+		candidates = append(candidates, &domain.Member{
+			Name:      entry.candidate.memberName,
+			ChannelID: entry.candidate.channelID,
+			Org:       entry.candidate.org,
+		})
 	}
 
 	if len(candidates) == 0 {

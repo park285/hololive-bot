@@ -22,13 +22,114 @@ func TestNewMemberMatcher_Defaults(t *testing.T) {
 	t.Parallel()
 
 	provider := newStubMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
-	matcher := NewMemberMatcher(nil, provider, &cachemocks.Client{}, nil, nil, newMatcherTestLogger())
+	matcher := NewMemberMatcher(nil, provider, &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			return map[string]string{}, nil
+		},
+	}, nil, nil, newMatcherTestLogger())
 
 	require.NotNil(t, matcher)
-	require.NotNil(t, matcher.ctx)
+	assert.Nil(t, matcher.ctx)
 	assert.Equal(t, provider, matcher.membersData)
 	assert.NotNil(t, matcher.matchCache)
 	assert.Equal(t, 1, len(matcher.GetAllMembers()))
+}
+
+type trackingMemberProvider struct {
+	members    []*domain.Member
+	member     *domain.Member
+	ctx        context.Context
+	ctxCalls   *[]context.Context
+	channelIDs []string
+}
+
+type matcherTestContextKey struct{}
+
+func newTrackingMemberProvider(members []*domain.Member) *trackingMemberProvider {
+	member := &domain.Member{}
+	if len(members) > 0 && members[0] != nil {
+		member = members[0]
+	}
+	ctxCalls := make([]context.Context, 0, 4)
+	channelIDs := make([]string, 0, 4)
+	return &trackingMemberProvider{
+		members:    members,
+		member:     member,
+		ctxCalls:   &ctxCalls,
+		channelIDs: channelIDs,
+	}
+}
+
+func (p *trackingMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
+	p.channelIDs = append(p.channelIDs, channelID)
+	return p.member
+}
+
+func (p *trackingMemberProvider) FindMemberByName(string) *domain.Member {
+	return p.member
+}
+
+func (p *trackingMemberProvider) FindMemberByAlias(string) *domain.Member {
+	return p.member
+}
+
+func (p *trackingMemberProvider) GetChannelIDs() []string {
+	return nil
+}
+
+func (p *trackingMemberProvider) GetAllMembers() []*domain.Member {
+	return p.members
+}
+
+func (p *trackingMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+	*p.ctxCalls = append(*p.ctxCalls, ctx)
+	return &trackingMemberProvider{
+		members:    p.members,
+		member:     p.member,
+		ctx:        ctx,
+		ctxCalls:   p.ctxCalls,
+		channelIDs: p.channelIDs,
+	}
+}
+
+func (p *trackingMemberProvider) FindMembersByName(string) []*domain.Member {
+	return nil
+}
+
+func (p *trackingMemberProvider) FindMembersByAlias(string) []*domain.Member {
+	return nil
+}
+
+func TestGetAllMembers_DoesNotInjectBackgroundContext(t *testing.T) {
+	t.Parallel()
+
+	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
+	matcher := NewMemberMatcher(nil, provider, &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			return map[string]string{}, nil
+		},
+	}, nil, nil, newMatcherTestLogger())
+
+	members := matcher.GetAllMembers()
+	require.Len(t, members, 1)
+	assert.Empty(t, *provider.ctxCalls)
+}
+
+func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
+	t.Parallel()
+
+	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
+	matcher := NewMemberMatcher(nil, provider, &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			return map[string]string{}, nil
+		},
+	}, nil, nil, newMatcherTestLogger())
+	reqCtx := context.WithValue(context.Background(), matcherTestContextKey{}, "request")
+
+	member := matcher.GetMemberByChannelID(reqCtx, "ch1")
+	require.NotNil(t, member)
+	require.Len(t, *provider.ctxCalls, 1)
+	assert.Same(t, reqCtx, (*provider.ctxCalls)[0])
 }
 
 func TestTryExactValkeyMatch_PrefersHololiveCandidate(t *testing.T) {
@@ -126,6 +227,91 @@ func TestFindBestMatch_UsesDynamicStrategyAndCache(t *testing.T) {
 	require.NotNil(t, second)
 	assert.Equal(t, "ch-aqua", second.ID)
 	assert.Equal(t, 1, cacheCalls)
+}
+
+func TestFindBestMatch_UsesSnapshotAcrossDifferentQueries(t *testing.T) {
+	t.Parallel()
+
+	provider := newStubMemberProvider(nil)
+	cacheCalls := 0
+	cacheSvc := &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			cacheCalls++
+			return map[string]string{
+				"Aqua:Hololive":   "ch-aqua",
+				"Marine:Hololive": "ch-marine",
+			}, nil
+		},
+	}
+	matcher := NewMemberMatcher(context.Background(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+
+	first, err := matcher.FindBestMatch(context.Background(), "Aqua")
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	assert.Equal(t, "ch-aqua", first.ID)
+
+	second, err := matcher.FindBestMatch(context.Background(), "Marine")
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	assert.Equal(t, "ch-marine", second.ID)
+
+	assert.Equal(t, 1, cacheCalls)
+}
+
+func TestFindBestMatch_UsesSnapshotAliasIndex(t *testing.T) {
+	t.Parallel()
+
+	provider := newStubMemberProvider([]*domain.Member{{
+		ChannelID: "ch-sora",
+		Name:      "Tokino Sora",
+		NameJa:    "ときのそら",
+		NameKo:    "토키노 소라",
+		Aliases:   &domain.Aliases{Ja: []string{"そらちゃん"}},
+	}})
+	matcher := NewMemberMatcher(context.Background(), provider, &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			return map[string]string{}, nil
+		},
+	}, nil, nil, newMatcherTestLogger())
+
+	channel, err := matcher.FindBestMatch(context.Background(), "そらちゃん")
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, "ch-sora", channel.ID)
+
+	channel, err = matcher.FindBestMatch(context.Background(), "토키노 소라")
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, "ch-sora", channel.ID)
+}
+
+func TestFindBestMatchWithCandidates_DynamicLoadErrorIsNotSticky(t *testing.T) {
+	t.Parallel()
+
+	provider := newStubMemberProvider(nil)
+	cacheCalls := 0
+	cacheSvc := &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			cacheCalls++
+			if cacheCalls == 1 {
+				return nil, errors.New("temporary cache error")
+			}
+			return map[string]string{
+				"Aqua:Hololive": "ch-holo",
+			}, nil
+		},
+	}
+	matcher := NewMemberMatcher(context.Background(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+
+	channel, err := matcher.FindBestMatchWithCandidates(context.Background(), "Aqua")
+	require.Error(t, err)
+	assert.Nil(t, channel)
+	assert.Contains(t, err.Error(), "get all members")
+
+	channel, err = matcher.FindBestMatchWithCandidates(context.Background(), "Aqua")
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, "ch-holo", channel.ID)
 }
 
 func TestFindBestMatchWithCandidates_AmbiguousAndOrgFilter(t *testing.T) {
