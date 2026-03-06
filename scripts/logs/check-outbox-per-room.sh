@@ -52,7 +52,7 @@ if [[ ! -x "${QUERY_SCRIPT}" ]]; then
   exit 1
 fi
 
-RAW_LOGS="$("${QUERY_SCRIPT}" "${SERVICE}" --since "${SINCE}" --limit "${LIMIT}" --grep "Outbox per-room (enqueue completed|dispatch completed)")"
+RAW_LOGS="$("${QUERY_SCRIPT}" "${SERVICE}" --since "${SINCE}" --limit "${LIMIT}" --grep "Outbox per-room (enqueue completed|dispatch completed)" --quiet)"
 
 if [[ -z "${RAW_LOGS}" ]]; then
   echo "NO_DATA: no per-room logs found (service=${SERVICE}, since=${SINCE})"

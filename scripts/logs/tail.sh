@@ -46,10 +46,28 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+format_loki_stream() {
+  jq -Rr '
+    . as $line
+    | ($line | fromjson?) as $json
+    | if $json == null then
+        $line
+      elif ($json | type) == "object" then
+        ($json.message // $json.log // $json.msg // $line)
+      else
+        ($json | tostring)
+      end
+  ' | sed -u 's/\x1b\[[0-9;]*m//g'
+}
+
 # --- logcli 사전 조건 확인 ---
 if ! command -v logcli &>/dev/null; then
   echo "ERROR: logcli 미설치" >&2
   echo "설치: go install github.com/grafana/loki/v3/cmd/logcli@latest" >&2
+  exit 1
+fi
+if ! command -v jq &>/dev/null; then
+  echo "ERROR: jq 미설치" >&2
   exit 1
 fi
 
@@ -112,4 +130,10 @@ fi
 echo "tail: ${QUERY} (since ${SINCE})" >&2
 
 # --- logcli tail 실행 ---
-LOKI_ADDR="${LOKI_ADDR}" logcli query --tail --since="${SINCE}" "${QUERY}"
+LOKI_ADDR="${LOKI_ADDR}" logcli query \
+  --tail \
+  --since="${SINCE}" \
+  --no-labels \
+  --output=raw \
+  --quiet \
+  "${QUERY}" 2>/dev/null | format_loki_stream
