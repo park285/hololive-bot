@@ -7,6 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 )
 
 // LiveCommand: 현재 방송 중인 라이브 스트림 목록을 조회하고 보여주는 명령어
@@ -96,28 +97,20 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 
 // checkChzzkLive: 특정 멤버의 Chzzk 방송 상태를 확인합니다.
 func (c *LiveCommand) checkChzzkLive(ctx context.Context, member *domain.Member) *domain.Stream {
-	if member.ChzzkChannelID == "" || c.Deps().Chzzk == nil {
+	if member.ChzzkChannelID == "" || c.Deps().Chzzk == nil || !c.Deps().Chzzk.HasOpenAPICredentials() {
 		return nil
 	}
 
-	liveStatus, err := c.Deps().Chzzk.GetLiveStatus(ctx, member.ChzzkChannelID)
+	lives, err := c.Deps().Chzzk.GetLivesByChannelIDs(ctx, []string{member.ChzzkChannelID})
 	if err != nil {
 		return nil
 	}
 
-	if liveStatus == nil || liveStatus.Status != "OPEN" {
+	streams := buildChzzkLiveStreams([]*domain.Member{member}, lives)
+	if len(streams) == 0 {
 		return nil
 	}
-
-	return &domain.Stream{
-		Title:          liveStatus.LiveTitle,
-		ChannelID:      member.ChannelID,
-		ChannelName:    member.Name,
-		Status:         domain.StreamStatusLive,
-		ChzzkChannelID: member.ChzzkChannelID,
-		ChzzkLiveURL:   fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID),
-		IsChzzkOnly:    true,
-	}
+	return streams[0]
 }
 
 // getAllChzzkLiveStreams: Chzzk ID를 가진 모든 멤버의 방송 상태를 확인합니다.
@@ -126,21 +119,88 @@ func (c *LiveCommand) getAllChzzkLiveStreams(ctx context.Context) []*domain.Stre
 		return nil
 	}
 
-	members := c.Deps().MembersData.GetAllMembers()
-	var streams []*domain.Stream
+	if !c.Deps().Chzzk.HasOpenAPICredentials() {
+		return nil
+	}
+	provider := c.Deps().MembersData.WithContext(ctx)
+	if provider == nil {
+		return nil
+	}
 
+	members := provider.GetAllMembers()
+
+	return collectChzzkLiveStreams(
+		members,
+		func(channelIDs []string) ([]chzzk.LiveData, error) {
+			return c.Deps().Chzzk.GetLivesByChannelIDs(ctx, channelIDs)
+		},
+	)
+}
+
+func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*domain.Stream {
+	if len(members) == 0 || len(lives) == 0 {
+		return nil
+	}
+
+	byChzzkChannelID := make(map[string]*domain.Member, len(members))
 	for _, member := range members {
-		if member.ChzzkChannelID == "" || member.IsGraduated {
+		if member == nil || member.ChzzkChannelID == "" || member.IsGraduated {
 			continue
 		}
+		byChzzkChannelID[member.ChzzkChannelID] = member
+	}
 
-		stream := c.checkChzzkLive(ctx, member)
-		if stream != nil {
-			streams = append(streams, stream)
+	streams := make([]*domain.Stream, 0, len(lives))
+	for i := range lives {
+		member, ok := byChzzkChannelID[lives[i].ChannelID]
+		if !ok {
+			continue
 		}
+		streams = append(streams, newChzzkStream(member, lives[i].LiveTitle))
 	}
 
 	return streams
+}
+
+func collectChzzkLiveStreams(
+	members []*domain.Member,
+	fetchBatch func([]string) ([]chzzk.LiveData, error),
+) []*domain.Stream {
+	eligibleMembers := make([]*domain.Member, 0, len(members))
+	channelIDs := make([]string, 0, len(members))
+	for _, member := range members {
+		if member == nil || member.ChzzkChannelID == "" || member.IsGraduated {
+			continue
+		}
+		eligibleMembers = append(eligibleMembers, member)
+		channelIDs = append(channelIDs, member.ChzzkChannelID)
+	}
+	if len(eligibleMembers) == 0 {
+		return nil
+	}
+
+	if fetchBatch == nil {
+		return nil
+	}
+
+	lives, err := fetchBatch(channelIDs)
+	if err != nil {
+		return nil
+	}
+
+	return buildChzzkLiveStreams(eligibleMembers, lives)
+}
+
+func newChzzkStream(member *domain.Member, title string) *domain.Stream {
+	return &domain.Stream{
+		Title:          title,
+		ChannelID:      member.ChannelID,
+		ChannelName:    member.Name,
+		Status:         domain.StreamStatusLive,
+		ChzzkChannelID: member.ChzzkChannelID,
+		ChzzkLiveURL:   fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID),
+		IsChzzkOnly:    true,
+	}
 }
 
 func (c *LiveCommand) ensureDeps() error {
