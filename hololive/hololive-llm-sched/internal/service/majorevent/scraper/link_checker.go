@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 // LinkChecker는 링크 유효성 검증(HEAD 후 GET fallback)을 수행한다.
@@ -25,9 +26,7 @@ type LinkChecker struct {
 // NewLinkChecker는 LinkChecker를 생성한다.
 func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Logger) *LinkChecker {
 	if client == nil {
-		client = &http.Client{
-			Timeout: 15 * time.Second,
-		}
+		client = httputil.NewExternalAPIClient(defaultLinkCheckerHTTPClient)
 	}
 	if logger == nil {
 		logger = slog.Default()
