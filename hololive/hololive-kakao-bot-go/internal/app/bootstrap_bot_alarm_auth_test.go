@@ -26,15 +26,17 @@ func (testAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) { 
 func (testAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
 	return []*domain.Alarm{}, nil
 }
+func (testAlarmCRUD) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
+	return []domain.AlarmListView{}, nil
+}
 func (testAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
 func (testAlarmCRUD) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
 	return nil, nil
 }
-func (testAlarmCRUD) GetMemberNameWithFallback(context.Context, string) string { return "" }
-func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(int) []int                      { return []int{5} }
-func (testAlarmCRUD) GetTargetMinutes() []int                                  { return []int{5} }
-func (testAlarmCRUD) SetRoomName(context.Context, string, string) error        { return nil }
-func (testAlarmCRUD) SetUserName(context.Context, string, string) error        { return nil }
+func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(int) []int               { return []int{5} }
+func (testAlarmCRUD) GetTargetMinutes() []int                           { return []int{5} }
+func (testAlarmCRUD) SetRoomName(context.Context, string, string) error { return nil }
+func (testAlarmCRUD) SetUserName(context.Context, string, string) error { return nil }
 func (testAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return []*domain.AlarmEntry{}, nil
 }
