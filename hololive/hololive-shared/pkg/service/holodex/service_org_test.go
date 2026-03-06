@@ -92,6 +92,26 @@ func TestStreamTargetOrgs(t *testing.T) {
 	}
 }
 
+func TestHolodexOrgFetchParallelism(t *testing.T) {
+	original := constants.HolodexConcurrencyConfig.OrgAllParallelism
+	defer func() {
+		constants.HolodexConcurrencyConfig.OrgAllParallelism = original
+	}()
+
+	constants.HolodexConcurrencyConfig.OrgAllParallelism = 3
+	if got := holodexOrgFetchParallelism(constants.HolodexAPIParams.OrgAll); got != 3 {
+		t.Fatalf("holodexOrgFetchParallelism(all) = %d, want 3", got)
+	}
+	if got := holodexOrgFetchParallelism(constants.HolodexAPIParams.OrgHololive); got != 1 {
+		t.Fatalf("holodexOrgFetchParallelism(hololive) = %d, want 1", got)
+	}
+
+	constants.HolodexConcurrencyConfig.OrgAllParallelism = 0
+	if got := holodexOrgFetchParallelism(constants.HolodexAPIParams.OrgAll); got != 1 {
+		t.Fatalf("holodexOrgFetchParallelism(all) with non-positive config = %d, want 1", got)
+	}
+}
+
 func TestFilterStreamsByRequestedOrg(t *testing.T) {
 	t.Parallel()
 

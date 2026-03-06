@@ -194,7 +194,7 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 	seen := make(map[string]bool)
 
 	targetOrgs := streamTargetOrgs(resolvedOrg)
-	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: 1}, func(fetchCtx context.Context, targetOrg string) error {
+	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
 		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusLive, 0)
 		if fetchErr != nil {
 			h.logger.Warn("Failed to get live streams for org",
@@ -275,7 +275,7 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 	seen := make(map[string]bool)
 
 	targetOrgs := streamTargetOrgs(resolvedOrg)
-	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: 1}, func(fetchCtx context.Context, targetOrg string) error {
+	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
 		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusUpcoming, hours)
 		if fetchErr != nil {
 			h.logger.Warn("Failed to get upcoming streams for org",
@@ -393,6 +393,16 @@ func streamTargetOrgs(org string) []string {
 	targets = append(targets, constants.HolodexAPIParams.SyncTargetOrgs...)
 	targets = append(targets, constants.HolodexAPIParams.OrgIndie)
 	return targets
+}
+
+func holodexOrgFetchParallelism(org string) int {
+	if org != constants.HolodexAPIParams.OrgAll {
+		return 1
+	}
+	if constants.HolodexConcurrencyConfig.OrgAllParallelism > 1 {
+		return constants.HolodexConcurrencyConfig.OrgAllParallelism
+	}
+	return 1
 }
 
 func filterStreamsByRequestedOrg(streams []*domain.Stream, org string) []*domain.Stream {
