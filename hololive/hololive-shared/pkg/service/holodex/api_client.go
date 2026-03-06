@@ -41,13 +41,11 @@ type Requester interface {
 }
 
 // APIClient: Holodex API 요청을 처리하는 클라이언트
-// API 키 로테이션, 서킷 브레이커, 속도 제한(Rate Limiting) 기능을 포함합니다.
+// 서킷 브레이커, 속도 제한(Rate Limiting) 기능을 포함합니다.
 type APIClient struct {
 	httpClient       *http.Client
 	baseURL          string
-	apiKeys          []string
-	currentKeyIndex  int
-	keyMu            sync.Mutex
+	apiKey           string
 	logger           *slog.Logger
 	failureCount     int
 	circuitOpenUntil *time.Time
@@ -64,12 +62,12 @@ type distributedRateLimiter interface {
 var errNoAPIKeys = stdErrors.New("no Holodex API keys configured")
 
 // NewHolodexAPIClient: 새로운 Holodex API 클라이언트를 생성하고 초기화합니다.
-// 초당 10회 요청 제한(Rate Limit)이 기본 설정된다.
+// 단일 API 키 사용, 초당 10회 요청 제한(Rate Limit)이 기본 설정된다.
 // Semaphore로 동시 요청 수를 제한하여 API 과부하를 방지한다.
 func NewHolodexAPIClient(
 	httpClient *http.Client,
 	baseURL string,
-	apiKeys []string,
+	apiKey string,
 	logger *slog.Logger,
 	distributed distributedRateLimiter,
 ) *APIClient {
@@ -79,7 +77,7 @@ func NewHolodexAPIClient(
 	return &APIClient{
 		httpClient:  httpClient,
 		baseURL:     baseURL,
-		apiKeys:     apiKeys,
+		apiKey:      apiKey,
 		logger:      logger,
 		rateLimiter: rate.NewLimiter(rate.Every(100*time.Millisecond), 1), // 초당 10 요청
 		semaphore:   make(chan struct{}, constants.HolodexConcurrencyConfig.MaxConcurrentRequests),
@@ -95,12 +93,11 @@ func (c *APIClient) DoRequest(ctx context.Context, method, path string, params u
 		return nil, err
 	}
 
-	totalKeys := len(c.apiKeys)
-	if totalKeys == 0 {
+	if c.apiKey == "" {
 		return nil, errNoAPIKeys
 	}
 
-	maxAttempts := util.Min(totalKeys+constants.RetryConfig.MaxAttempts, 10)
+	maxAttempts := util.Min(1+constants.RetryConfig.MaxAttempts, 10)
 	const maxTimeoutRetries = 3
 	timeoutCount := 0
 	var lastErr error
@@ -162,10 +159,7 @@ func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
 		return fmt.Errorf("rate limiter wait failed: %w", err)
 	}
-	if err := c.waitForDistributedRateLimiter(ctx, path); err != nil {
-		return err
-	}
-	return nil
+	return c.waitForDistributedRateLimiter(ctx, path)
 }
 
 func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path string) error {
@@ -389,23 +383,7 @@ func (c *APIClient) IsCircuitOpen() bool {
 }
 
 func (c *APIClient) getNextAPIKey() string {
-	c.keyMu.Lock()
-	defer c.keyMu.Unlock()
-
-	if len(c.apiKeys) == 0 {
-		return ""
-	}
-
-	index := c.currentKeyIndex
-	key := c.apiKeys[index]
-	c.currentKeyIndex = (c.currentKeyIndex + 1) % len(c.apiKeys)
-
-	c.logger.Debug("Holodex API key selected",
-		slog.Int("index", index),
-		slog.Int("pool_size", len(c.apiKeys)),
-	)
-
-	return key
+	return c.apiKey
 }
 
 func (c *APIClient) openCircuit() {

@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -19,29 +18,20 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
-func TestHolodexAPIClientRotatesAllKeys(t *testing.T) {
+func TestHolodexAPIClientSingleKey(t *testing.T) {
 	logger := slog.Default()
 	client := &APIClient{
 		httpClient: &http.Client{},
 		baseURL:    "https://holodex.net/api/v2",
-		apiKeys: []string{
-			"k1",
-			"k2",
-			"k3",
-			"k4",
-			"k5",
-		},
-		logger: logger,
+		apiKey:     "k1",
+		logger:     logger,
 	}
 
-	got := make([]string, 0, 10)
-	for range 10 {
-		got = append(got, client.getNextAPIKey())
-	}
-
-	expected := []string{"k1", "k2", "k3", "k4", "k5", "k1", "k2", "k3", "k4", "k5"}
-	if !reflect.DeepEqual(got, expected) {
-		t.Fatalf("rotation order mismatch: got %v expected %v", got, expected)
+	for range 5 {
+		got := client.getNextAPIKey()
+		if got != "k1" {
+			t.Fatalf("expected key 'k1', got '%s'", got)
+		}
 	}
 }
 
@@ -51,7 +41,7 @@ func TestHolodexAPIClientDoRequestNoKeys(t *testing.T) {
 	client := &APIClient{
 		httpClient:  &http.Client{},
 		baseURL:     "https://holodex.net/api/v2",
-		apiKeys:     nil,
+		apiKey:      "",
 		logger:      logger,
 		rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 		semaphore:   make(chan struct{}, 2),
@@ -69,12 +59,12 @@ func TestHolodexAPIClientDoRequestNoKeys(t *testing.T) {
 // newTestClient: Mock 서버 테스트용 APIClient 생성
 // baseURL 오버라이드가 불가하므로, buildRequestURL을 우회하는 대신
 // 실제 요청 URL을 인터셉트하는 RoundTripper를 사용
-func newTestClientWithHandler(handler http.HandlerFunc, apiKeys []string) (*APIClient, *httptest.Server) {
+func newTestClientWithHandler(handler http.HandlerFunc, apiKey string) (*APIClient, *httptest.Server) {
 	server := httptest.NewServer(handler)
 	client := &APIClient{
 		httpClient:  server.Client(),
 		baseURL:     server.URL,
-		apiKeys:     apiKeys,
+		apiKey:      apiKey,
 		logger:      slog.Default(),
 		rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 		semaphore:   make(chan struct{}, 5),
@@ -89,7 +79,7 @@ func TestAPIClientWithMockServer_Success(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(expectedBody))
-	}, []string{"test-key-1"})
+	}, "test-key-1")
 	defer server.Close()
 
 	// Mock 서버 URL로 요청 (constants.APIConfig.HolodexBaseURL 대신)
@@ -107,7 +97,7 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 	client := &APIClient{
 		httpClient:  &http.Client{},
 		baseURL:     "https://holodex.net/api/v2",
-		apiKeys:     []string{"k1"},
+		apiKey:      "k1",
 		logger:      slog.Default(),
 		rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 		semaphore:   make(chan struct{}, 2),
@@ -138,7 +128,7 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	client := &APIClient{
 		httpClient: &http.Client{},
 		baseURL:    "https://holodex.net/api/v2",
-		apiKeys:    []string{"k1"},
+		apiKey:     "k1",
 		logger:     slog.Default(),
 	}
 
@@ -162,7 +152,7 @@ func TestPerAttemptTimeout(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{}`))
-	}, []string{"test-key"})
+	}, "test-key")
 	defer server.Close()
 
 	start := time.Now()
@@ -191,7 +181,7 @@ func TestTimeoutMaxRetries(t *testing.T) {
 		requestCount++
 		time.Sleep(300 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
-	}, []string{"test-key"})
+	}, "test-key")
 	defer server.Close()
 
 	start := time.Now()
@@ -286,7 +276,7 @@ func TestParentContextCancel(t *testing.T) {
 	client, server := newTestClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(2 * time.Second)
 		w.WriteHeader(http.StatusOK)
-	}, []string{"test-key"})
+	}, "test-key")
 	defer server.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -377,7 +367,7 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 		requester: &APIClient{
 			httpClient:  &http.Client{},
 			baseURL:     "https://holodex.net/api/v2",
-			apiKeys:     []string{"k1"},
+			apiKey:      "k1",
 			logger:      slog.Default(),
 			rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 			semaphore:   make(chan struct{}, 2),
@@ -441,7 +431,7 @@ func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
 		requester: &APIClient{
 			httpClient:  &http.Client{},
 			baseURL:     "https://holodex.net/api/v2",
-			apiKeys:     []string{"k1"},
+			apiKey:      "k1",
 			logger:      slog.Default(),
 			rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 			semaphore:   make(chan struct{}, 2),
