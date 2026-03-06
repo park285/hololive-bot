@@ -19,6 +19,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -80,7 +81,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	memberMatcher := &matcher.MemberMatcher{}
 	var ytService youtube.Service = &mockYouTubeService{}
 	var ytScheduler youtube.Scheduler = &mockYouTubeScheduler{}
-	ytStatsRepo := &youtube.StatsRepository{}
+	ytStatsRepo := &stats.StatsRepository{}
 	ytStack := &providers.YouTubeStack{
 		Service:   ytService,
 		Scheduler: ytScheduler,

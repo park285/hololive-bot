@@ -7,7 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
@@ -22,7 +22,7 @@ type commandInitView struct {
 	alarm            domain.AlarmCRUD
 	matcher          *matcher.MemberMatcher
 	officialProfiles *member.ProfileService
-	statsRepo        youtube.StatsCommandRepository
+	statsRepo        stats.StatsCommandRepository
 	memberNews       command.MemberNewsService
 	membersData      member.DataProvider
 	formatter        *adapter.ResponseFormatter

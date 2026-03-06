@@ -18,6 +18,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 type stubIrisClient struct{}
@@ -269,7 +270,7 @@ func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 		profiles := &member.ProfileService{}
 		holodexSvc := &holodex.Service{}
 		youtubeSvc := &stubYouTubeService{}
-		statsRepo := &youtube.StatsRepository{}
+		statsRepo := &stats.StatsRepository{}
 		activityLogger := &activity.Logger{}
 		settingsSvc := &stubSettingsReadWriter{}
 		aclSvc := &acl.Service{}

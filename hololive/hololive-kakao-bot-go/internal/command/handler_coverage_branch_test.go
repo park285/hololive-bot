@@ -8,7 +8,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 type stubCoverageStreamProvider struct{}
@@ -35,7 +35,7 @@ func (s *stubCoverageStatsRepository) GetTopGainers(_ context.Context, _ time.Ti
 	return nil, nil
 }
 
-func (s *stubCoverageStatsRepository) GetSubscriberGraph(_ context.Context, _ string, _ int) (*youtube.SubscriberGraphData, error) {
+func (s *stubCoverageStatsRepository) GetSubscriberGraph(_ context.Context, _ string, _ int) (*stats.SubscriberGraphData, error) {
 	return nil, nil
 }
 
@@ -254,14 +254,14 @@ func TestGraphPointValues(t *testing.T) {
 	})
 
 	t.Run("empty points", func(t *testing.T) {
-		got := graphPointValues([]youtube.SubscriberGraphPoint{})
+		got := graphPointValues([]stats.SubscriberGraphPoint{})
 		if got != nil {
 			t.Fatalf("expected nil, got %v", got)
 		}
 	})
 
 	t.Run("maps subscriber values", func(t *testing.T) {
-		points := []youtube.SubscriberGraphPoint{
+		points := []stats.SubscriberGraphPoint{
 			{Subscribers: 100},
 			{Subscribers: 200},
 			{Subscribers: 350},
@@ -370,7 +370,7 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		deps := &Dependencies{
-			Holodex: &stubCoverageStreamProvider{},
+			Holodex:   &stubCoverageStreamProvider{},
 			Formatter: adapter.NewResponseFormatter("!", nil),
 			SendMessage: func(_ context.Context, _, _ string) error {
 				return nil

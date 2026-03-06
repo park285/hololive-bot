@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
@@ -77,7 +77,7 @@ func (c *SubscriberGraphCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
-func graphPointValues(points []youtube.SubscriberGraphPoint) []int64 {
+func graphPointValues(points []stats.SubscriberGraphPoint) []int64 {
 	if len(points) == 0 {
 		return nil
 	}

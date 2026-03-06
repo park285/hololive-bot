@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
 // ProvideHolodexAPIKeys - 설정에서 API 키 추출
@@ -52,8 +53,8 @@ func ProvideHolodexService(
 func ProvideYouTubeStatsRepository(
 	postgres database.Client,
 	logger *slog.Logger,
-) *youtube.StatsRepository {
-	return youtube.NewYouTubeStatsRepository(postgres, logger)
+) *ytstats.StatsRepository {
+	return ytstats.NewYouTubeStatsRepository(postgres, logger)
 }
 
 // ProvideYouTubeStack - YouTube 서비스 스택 생성
@@ -64,7 +65,7 @@ func ProvideYouTubeStack(
 	cacheSvc cache.Client,
 	holodexSvc *holodex.Service,
 	members member.DataProvider,
-	statsRepo *youtube.StatsRepository,
+	statsRepo *ytstats.StatsRepository,
 	alarmSvc domain.AlarmDispatchState,
 	irisClient iris.Client,
 	formatter youtube.MilestoneMessageFormatter,
