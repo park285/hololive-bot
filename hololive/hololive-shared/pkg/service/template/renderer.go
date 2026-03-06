@@ -214,10 +214,6 @@ func toInt64(v any) (int64, bool) {
 }
 
 func formatNumber(v any) string {
-	if v == nil {
-		return "0"
-	}
-
 	n, ok := toInt64(v)
 	if !ok {
 		return fmt.Sprintf("%v", v)
@@ -244,10 +240,6 @@ func formatNumberInt64(n int64) string {
 }
 
 func formatNumberKR(v any) string {
-	if v == nil {
-		return "0"
-	}
-
 	n, ok := toInt64(v)
 	if !ok {
 		return fmt.Sprintf("%v", v)
