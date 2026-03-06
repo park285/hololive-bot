@@ -185,3 +185,16 @@ func TestEnableFileLogging_EnsuresReadableFilePerms(t *testing.T) {
 		}
 	}
 }
+
+func TestShouldDisableColor_NonFileWriter(t *testing.T) {
+	if !shouldDisableColor(&bytes.Buffer{}) {
+		t.Fatal("expected non-file writer to disable color")
+	}
+}
+
+func TestShouldDisableColor_WithNoColorEnv(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	if !shouldDisableColor(os.Stdout) {
+		t.Fatal("expected NO_COLOR env to disable color")
+	}
+}
