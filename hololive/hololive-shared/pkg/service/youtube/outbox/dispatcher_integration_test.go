@@ -311,7 +311,6 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		PollInterval: 100 * time.Millisecond,
 		MaxRetries:   3,
 		RetryBackoff: 50 * time.Millisecond,
-		PerRoomMode:  true,
 	}
 
 	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
@@ -387,7 +386,6 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		PollInterval: 100 * time.Millisecond,
 		MaxRetries:   3,
 		RetryBackoff: 30 * time.Millisecond,
-		PerRoomMode:  true,
 	}
 
 	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
@@ -464,7 +462,6 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		PollInterval: 100 * time.Millisecond,
 		MaxRetries:   3,
 		RetryBackoff: 50 * time.Millisecond,
-		PerRoomMode:  true,
 	}
 
 	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
@@ -535,7 +532,6 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		PollInterval: 100 * time.Millisecond,
 		MaxRetries:   1,
 		RetryBackoff: 30 * time.Millisecond,
-		PerRoomMode:  true,
 	}
 
 	dispatcher := outbox.NewDispatcher(db, cacheService, sender, nil, testLogger, cfg)
