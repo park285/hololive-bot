@@ -8,7 +8,7 @@ data:
   IRIS_BASE_URL: "http://iris:3000"
 
   # --- Service health URLs (kakao-bot) ---
-  SERVICES_LLM_SERVER_HEALTH_URL: "http://llm-server:40527/health"
+  SERVICES_LLM_SCHEDULER_HEALTH_URL: "http://llm-scheduler:30003/health"
   SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: "http://game-bot-twentyq:30081/health"
   SERVICES_GAME_BOT_TURTLE_HEALTH_URL: "http://game-bot-turtle:30082/health"
 
