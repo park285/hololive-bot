@@ -2,15 +2,186 @@ package command
 
 import (
 	"context"
+	"io"
 	"testing"
+	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 
+	"gorm.io/gorm"
 	"log/slog"
 )
+
+type alarmListViewerStub struct {
+	listCalled bool
+	entries    []domain.AlarmListView
+}
+
+func (s *alarmListViewerStub) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
+	return false, nil
+}
+func (s *alarmListViewerStub) RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error) {
+	return false, nil
+}
+func (s *alarmListViewerStub) GetRoomAlarms(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+func (s *alarmListViewerStub) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
+	return nil, nil
+}
+func (s *alarmListViewerStub) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
+func (s *alarmListViewerStub) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
+	return nil, nil
+}
+func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(int) []int               { return nil }
+func (s *alarmListViewerStub) GetTargetMinutes() []int                           { return nil }
+func (s *alarmListViewerStub) SetRoomName(context.Context, string, string) error { return nil }
+func (s *alarmListViewerStub) SetUserName(context.Context, string, string) error { return nil }
+func (s *alarmListViewerStub) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
+	return nil, nil
+}
+func (s *alarmListViewerStub) WarmCacheFromDB(context.Context) error { return nil }
+func (s *alarmListViewerStub) ListRoomAlarmsView(_ context.Context, _ string) ([]domain.AlarmListView, error) {
+	s.listCalled = true
+	return s.entries, nil
+}
+
+type memberProviderContextCapture struct {
+	contexts []context.Context
+}
+
+type testContextKey string
+
+func (c *memberProviderContextCapture) saw(expected context.Context) bool {
+	for _, observed := range c.contexts {
+		if observed == expected {
+			return true
+		}
+	}
+	return false
+}
+
+type contextAwareMemberProvider struct {
+	members    []*domain.Member
+	byChannel  map[string]*domain.Member
+	byName     map[string]*domain.Member
+	ctxCapture *memberProviderContextCapture
+}
+
+func newContextAwareMemberProvider(members []*domain.Member) *contextAwareMemberProvider {
+	byChannel := make(map[string]*domain.Member, len(members))
+	byName := make(map[string]*domain.Member, len(members))
+	for _, member := range members {
+		if member == nil {
+			continue
+		}
+		if member.ChannelID != "" {
+			byChannel[member.ChannelID] = member
+		}
+		if member.Name != "" {
+			byName[member.Name] = member
+		}
+	}
+
+	return &contextAwareMemberProvider{
+		members:    members,
+		byChannel:  byChannel,
+		byName:     byName,
+		ctxCapture: &memberProviderContextCapture{},
+	}
+}
+
+func (p *contextAwareMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
+	return p.byChannel[channelID]
+}
+
+func (p *contextAwareMemberProvider) FindMemberByName(name string) *domain.Member {
+	return p.byName[name]
+}
+
+func (p *contextAwareMemberProvider) FindMemberByAlias(string) *domain.Member {
+	return nil
+}
+
+func (p *contextAwareMemberProvider) GetChannelIDs() []string {
+	ids := make([]string, 0, len(p.byChannel))
+	for id := range p.byChannel {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (p *contextAwareMemberProvider) GetAllMembers() []*domain.Member {
+	return p.members
+}
+
+func (p *contextAwareMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+	p.ctxCapture.contexts = append(p.ctxCapture.contexts, ctx)
+	return &contextAwareMemberProvider{
+		members:    p.members,
+		byChannel:  p.byChannel,
+		byName:     p.byName,
+		ctxCapture: p.ctxCapture,
+	}
+}
+
+func (p *contextAwareMemberProvider) FindMembersByName(string) []*domain.Member {
+	return nil
+}
+
+func (p *contextAwareMemberProvider) FindMembersByAlias(string) []*domain.Member {
+	return nil
+}
+
+type alarmAddRecorder struct {
+	addCtx context.Context
+}
+
+func (s *alarmAddRecorder) AddAlarm(ctx context.Context, _ domain.AddAlarmRequest) (bool, error) {
+	s.addCtx = ctx
+	return true, nil
+}
+
+func (s *alarmAddRecorder) RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error) {
+	return false, nil
+}
+
+func (s *alarmAddRecorder) GetRoomAlarms(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+func (s *alarmAddRecorder) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
+	return nil, nil
+}
+
+func (s *alarmAddRecorder) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
+	return nil, nil
+}
+
+func (s *alarmAddRecorder) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
+
+func (s *alarmAddRecorder) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
+	return nil, nil
+}
+
+func (s *alarmAddRecorder) UpdateAlarmAdvanceMinutes(int) []int { return nil }
+
+func (s *alarmAddRecorder) GetTargetMinutes() []int { return nil }
+
+func (s *alarmAddRecorder) SetRoomName(context.Context, string, string) error { return nil }
+
+func (s *alarmAddRecorder) SetUserName(context.Context, string, string) error { return nil }
+
+func (s *alarmAddRecorder) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
+	return nil, nil
+}
+
+func (s *alarmAddRecorder) WarmCacheFromDB(context.Context) error { return nil }
 
 func TestAlarmCommand_InvalidAction(t *testing.T) {
 	var sentError string
@@ -49,4 +220,118 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 	if sentError != expectedMessage {
 		t.Fatalf("expected error message %q, got %q", expectedMessage, sentError)
 	}
+}
+
+func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
+	var sentMessage string
+
+	alarm := &alarmListViewerStub{
+		entries: []domain.AlarmListView{
+			{
+				ChannelID:  "ch-1",
+				MemberName: "미코",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+				NextStream: &domain.NextStreamInfo{
+					Status:         domain.NextStreamStatusUpcoming,
+					Title:          "테스트 방송",
+					VideoID:        "vid1",
+					StartScheduled: ptrTime(time.Date(2026, 3, 6, 12, 0, 0, 0, time.UTC)),
+				},
+			},
+		},
+	}
+
+	deps := &Dependencies{
+		Alarm:     alarm,
+		Matcher:   &matcher.MemberMatcher{},
+		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		SendMessage: func(ctx context.Context, room, message string) error {
+			sentMessage = message
+			return nil
+		},
+		SendError: func(ctx context.Context, room, message string) error { return nil },
+		Logger:    slog.Default(),
+	}
+
+	cmd := NewAlarmCommand(deps)
+	err := cmd.Execute(context.Background(), &domain.CommandContext{Room: "room-1"}, map[string]any{"action": "list"})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if !alarm.listCalled {
+		t.Fatal("expected ListRoomAlarmsView to be used")
+	}
+	if sentMessage == "" {
+		t.Fatal("expected formatted alarm list message")
+	}
+}
+
+func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
+	memberProvider := newContextAwareMemberProvider([]*domain.Member{{
+		ChannelID: "ch-aqua",
+		Name:      "Aqua",
+	}})
+	alarm := &alarmAddRecorder{}
+	deps := &Dependencies{
+		Alarm:     alarm,
+		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		SendMessage: func(context.Context, string, string) error {
+			return nil
+		},
+		SendError: func(context.Context, string, string) error {
+			t.Fatal("unexpected send error")
+			return nil
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	ctx := context.WithValue(context.Background(), testContextKey("request-id"), "alarm-propagation")
+	err := NewAlarmCommand(deps).Execute(ctx, &domain.CommandContext{
+		Room:     "room-1",
+		RoomName: "room-name",
+		UserID:   "user-1",
+		UserName: "tester",
+	}, map[string]any{
+		"action": "add",
+		"member": "Aqua",
+	})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if !memberProvider.ctxCapture.saw(ctx) {
+		t.Fatal("expected matcher provider to receive request context")
+	}
+	if alarm.addCtx != ctx {
+		t.Fatal("expected add alarm to receive original request context")
+	}
+}
+
+func ptrTime(v time.Time) *time.Time { return &v }
+
+func setupAlarmCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&domain.NotificationTemplate{}); err != nil {
+		t.Fatalf("migrate template table: %v", err)
+	}
+	if err := db.Create([]domain.NotificationTemplate{
+		{
+			TemplateKey: domain.TemplateKeyCmdAlarmList,
+			Body:        "알람 목록\n{{range .Alarms}}{{.MemberName}}\n{{end}}",
+		},
+		{
+			TemplateKey: domain.TemplateKeyCmdAlarmAdded,
+			Body:        "알람 추가\n{{.MemberName}}",
+		},
+	}).Error; err != nil {
+		t.Fatalf("seed alarm list template: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return serviceTemplate.NewRenderer(db, logger)
 }
