@@ -125,6 +125,7 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 type VideosPoller struct {
 	client     *scraper.Client
 	db         *gorm.DB
+	repo       batchRepository
 	maxResults int
 }
 
@@ -136,6 +137,7 @@ func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int)
 	return &VideosPoller{
 		client:     scraperClient,
 		db:         db,
+		repo:       newBatchRepository(db),
 		maxResults: maxResults,
 	}
 }
@@ -189,6 +191,8 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 		newVideos = append(newVideos, video)
 	}
 
+	dbVideos := make([]*domain.YouTubeVideo, 0, len(newVideos))
+	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newVideos))
 	for _, video := range newVideos {
 		isLiveReplay := isLiveReplayVideo(video.PublishedText)
 		thumbnails := convertThumbnails(video.Thumbnail)
@@ -205,64 +209,29 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 			ViewCount:     video.ViewCount,
 		}
 
-		result := p.db.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "video_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"last_seen_at", "view_count"}),
-		}).Create(dbVideo)
-
-		if result.Error != nil {
-			slog.Warn("Failed to upsert video",
-				"video_id", video.VideoID,
-				"error", result.Error)
-			continue
-		}
+		dbVideos = append(dbVideos, dbVideo)
 
 		if isInitialized && !isLiveReplay {
-			p.enqueueNotification(ctx, channelID, video.VideoID, domain.OutboxKindNewVideo, dbVideo)
+			notifications = append(notifications, &domain.YouTubeNotificationOutbox{
+				Kind:      domain.OutboxKindNewVideo,
+				ChannelID: channelID,
+				ContentID: video.VideoID,
+				Payload:   mustMarshalJSON(dbVideo),
+				Status:    domain.OutboxStatusPending,
+			})
 		}
 	}
 
-	p.updateWatermark(ctx, channelID, domain.WatermarkTypeVideo, videos[0].VideoID)
+	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, &domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeVideo,
+		Initialized:   true,
+		LastContentID: videos[0].VideoID,
+	}); err != nil {
+		return fmt.Errorf("persist video batch: %w", err)
+	}
 
 	return nil
-}
-
-// enqueueNotification: 알림 outbox에 추가
-func (p *VideosPoller) enqueueNotification(ctx context.Context, channelID, contentID string, kind domain.OutboxKind, payload any) {
-	// 중복 방지: ON CONFLICT DO NOTHING
-	outbox := &domain.YouTubeNotificationOutbox{
-		Kind:      kind,
-		ChannelID: channelID,
-		ContentID: contentID,
-		Payload:   mustMarshalJSON(payload),
-		Status:    domain.OutboxStatusPending,
-	}
-
-	result := p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		DoNothing: true,
-	}).Create(outbox)
-
-	if result.Error != nil {
-		slog.Warn("Failed to enqueue notification",
-			"kind", kind,
-			"content_id", contentID,
-			"error", result.Error)
-	}
-}
-
-// updateWatermark: 워터마크 업데이트
-func (p *VideosPoller) updateWatermark(ctx context.Context, channelID string, wmType domain.WatermarkType, lastContentID string) {
-	watermark := &domain.YouTubeContentWatermark{
-		ChannelID:     channelID,
-		WatermarkType: wmType,
-		Initialized:   true,
-		LastContentID: lastContentID,
-	}
-
-	p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "channel_id"}, {Name: "watermark_type"}},
-		DoUpdates: clause.AssignmentColumns([]string{"initialized", "last_content_id", "updated_at"}),
-	}).Create(watermark)
 }
 
 // LivePoller: 라이브 상태 및 시청자 샘플 폴러
@@ -453,6 +422,7 @@ func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID
 type ShortsPoller struct {
 	client     *scraper.Client
 	db         *gorm.DB
+	repo       batchRepository
 	maxResults int
 }
 
@@ -464,6 +434,7 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int)
 	return &ShortsPoller{
 		client:     scraperClient,
 		db:         db,
+		repo:       newBatchRepository(db),
 		maxResults: maxResults,
 	}
 }
@@ -517,6 +488,8 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		newShorts = append(newShorts, short)
 	}
 
+	dbVideos := make([]*domain.YouTubeVideo, 0, len(newShorts))
+	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newShorts))
 	for _, short := range newShorts {
 		thumbnails := convertThumbnails(short.Thumbnail)
 
@@ -529,69 +502,36 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 			ViewCount: short.ViewCount,
 		}
 
-		result := p.db.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "video_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"last_seen_at", "view_count"}),
-		}).Create(dbVideo)
-
-		if result.Error != nil {
-			slog.Warn("Failed to upsert short",
-				"video_id", short.VideoID,
-				"error", result.Error)
-			continue
-		}
+		dbVideos = append(dbVideos, dbVideo)
 
 		if isInitialized {
-			p.enqueueNotification(ctx, channelID, short.VideoID, domain.OutboxKindNewShort, dbVideo)
+			notifications = append(notifications, &domain.YouTubeNotificationOutbox{
+				Kind:      domain.OutboxKindNewShort,
+				ChannelID: channelID,
+				ContentID: short.VideoID,
+				Payload:   mustMarshalJSON(dbVideo),
+				Status:    domain.OutboxStatusPending,
+			})
 		}
 	}
 
-	p.updateWatermark(ctx, channelID, domain.WatermarkTypeShort, shorts[0].VideoID)
+	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, &domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeShort,
+		Initialized:   true,
+		LastContentID: shorts[0].VideoID,
+	}); err != nil {
+		return fmt.Errorf("persist short batch: %w", err)
+	}
 
 	return nil
-}
-
-// enqueueNotification: 알림 outbox에 추가
-func (p *ShortsPoller) enqueueNotification(ctx context.Context, channelID, contentID string, kind domain.OutboxKind, payload any) {
-	outbox := &domain.YouTubeNotificationOutbox{
-		Kind:      kind,
-		ChannelID: channelID,
-		ContentID: contentID,
-		Payload:   mustMarshalJSON(payload),
-		Status:    domain.OutboxStatusPending,
-	}
-
-	result := p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		DoNothing: true,
-	}).Create(outbox)
-
-	if result.Error != nil {
-		slog.Warn("Failed to enqueue notification",
-			"kind", kind,
-			"content_id", contentID,
-			"error", result.Error)
-	}
-}
-
-// updateWatermark: 워터마크 업데이트
-func (p *ShortsPoller) updateWatermark(ctx context.Context, channelID string, wmType domain.WatermarkType, lastContentID string) {
-	watermark := &domain.YouTubeContentWatermark{
-		ChannelID:     channelID,
-		WatermarkType: wmType,
-		Initialized:   true,
-		LastContentID: lastContentID,
-	}
-
-	p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "channel_id"}, {Name: "watermark_type"}},
-		DoUpdates: clause.AssignmentColumns([]string{"initialized", "last_content_id", "updated_at"}),
-	}).Create(watermark)
 }
 
 // CommunityPoller: 커뮤니티 포스트 감지 폴러
 type CommunityPoller struct {
 	client     *scraper.Client
 	db         *gorm.DB
+	repo       batchRepository
 	maxResults int
 	keywords   []string
 }
@@ -604,6 +544,7 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 	return &CommunityPoller{
 		client:     scraperClient,
 		db:         db,
+		repo:       newBatchRepository(db),
 		maxResults: maxResults,
 		keywords:   keywords,
 	}
@@ -658,6 +599,8 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		newPosts = append(newPosts, post)
 	}
 
+	dbPosts := make([]*domain.YouTubeCommunityPost, 0, len(newPosts))
+	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newPosts))
 	for _, post := range newPosts {
 		authorPhoto := convertThumbnails(post.AuthorPhoto)
 		images := convertThumbnails(post.Images)
@@ -675,24 +618,27 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 			AttachedVideo: post.VideoID,
 		}
 
-		result := p.db.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "post_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"last_seen_at", "like_count", "comment_count"}),
-		}).Create(dbPost)
-
-		if result.Error != nil {
-			slog.Warn("Failed to upsert community post",
-				"post_id", post.PostID,
-				"error", result.Error)
-			continue
-		}
+		dbPosts = append(dbPosts, dbPost)
 
 		if isInitialized && p.matchesKeywords(post.ContentText) {
-			p.enqueueNotification(ctx, channelID, post.PostID, domain.OutboxKindCommunityPost, dbPost)
+			notifications = append(notifications, &domain.YouTubeNotificationOutbox{
+				Kind:      domain.OutboxKindCommunityPost,
+				ChannelID: channelID,
+				ContentID: post.PostID,
+				Payload:   mustMarshalJSON(dbPost),
+				Status:    domain.OutboxStatusPending,
+			})
 		}
 	}
 
-	p.updateWatermark(ctx, channelID, domain.WatermarkTypeCommunityPost, posts[0].PostID)
+	if err := p.repo.PersistCommunityPosts(ctx, dbPosts, notifications, &domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: posts[0].PostID,
+	}); err != nil {
+		return fmt.Errorf("persist community batch: %w", err)
+	}
 
 	return nil
 }
@@ -711,41 +657,4 @@ func (p *CommunityPoller) matchesKeywords(text string) bool {
 		}
 	}
 	return false
-}
-
-// enqueueNotification: 알림 outbox에 추가
-func (p *CommunityPoller) enqueueNotification(ctx context.Context, channelID, contentID string, kind domain.OutboxKind, payload any) {
-	outbox := &domain.YouTubeNotificationOutbox{
-		Kind:      kind,
-		ChannelID: channelID,
-		ContentID: contentID,
-		Payload:   mustMarshalJSON(payload),
-		Status:    domain.OutboxStatusPending,
-	}
-
-	result := p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		DoNothing: true,
-	}).Create(outbox)
-
-	if result.Error != nil {
-		slog.Warn("Failed to enqueue notification",
-			"kind", kind,
-			"content_id", contentID,
-			"error", result.Error)
-	}
-}
-
-// updateWatermark: 워터마크 업데이트
-func (p *CommunityPoller) updateWatermark(ctx context.Context, channelID string, wmType domain.WatermarkType, lastContentID string) {
-	watermark := &domain.YouTubeContentWatermark{
-		ChannelID:     channelID,
-		WatermarkType: wmType,
-		Initialized:   true,
-		LastContentID: lastContentID,
-	}
-
-	p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "channel_id"}, {Name: "watermark_type"}},
-		DoUpdates: clause.AssignmentColumns([]string{"initialized", "last_content_id", "updated_at"}),
-	}).Create(watermark)
 }
