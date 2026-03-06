@@ -1,0 +1,200 @@
+package scraper
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+)
+
+const maxYtInitialDataCandidates = 8
+
+// ytInitialData 추출용 정규식 (패턴별 우선순위)
+var ytInitialDataPatterns = []*regexp.Regexp{
+	// 패턴 1: 기본 패턴 (가장 일반적)
+	regexp.MustCompile(`(?s)var\s+ytInitialData\s*=\s*(\{.+?\})\s*;\s*</script>`),
+	// 패턴 2: 세미콜론 없이 닫는 경우
+	regexp.MustCompile(`(?s)var\s+ytInitialData\s*=\s*(\{.+?\})\s*</script>`),
+	// 패턴 3: window['ytInitialData'] 형식
+	regexp.MustCompile(`(?s)window\["ytInitialData"\]\s*=\s*(\{.+?\})\s*;`),
+}
+
+var ytInitialDataAnchors = []string{
+	"var ytInitialData",
+	`window["ytInitialData"]`,
+	`window['ytInitialData']`,
+}
+
+// ErrYtInitialDataNotFound: HTML에서 ytInitialData를 찾을 수 없는 경우
+var ErrYtInitialDataNotFound = errors.New("ytInitialData not found in HTML")
+
+// extractYtInitialData: YouTube HTML에서 ytInitialData JSON을 추출
+// 여러 패턴을 시도하여 YouTube 구조 변경에 유연하게 대응
+func extractYtInitialData(html string) (string, error) {
+	candidates := collectYtInitialDataCandidates(html)
+	if best, ok := pickBestYtInitialDataCandidate(candidates); ok {
+		return best, nil
+	}
+
+	return "", ErrYtInitialDataNotFound
+}
+
+func collectYtInitialDataCandidates(html string) []string {
+	collector := newYtInitialDataCandidateCollector(maxYtInitialDataCandidates)
+	collectAnchorCandidates(html, collector)
+	collectPatternCandidates(html, collector)
+	return collector.values
+}
+
+type ytInitialDataCandidateCollector struct {
+	values []string
+	seen   map[string]struct{}
+	limit  int
+}
+
+func newYtInitialDataCandidateCollector(limit int) *ytInitialDataCandidateCollector {
+	return &ytInitialDataCandidateCollector{
+		values: make([]string, 0, limit),
+		seen:   make(map[string]struct{}, limit),
+		limit:  limit,
+	}
+}
+
+func (c *ytInitialDataCandidateCollector) full() bool {
+	return len(c.values) >= c.limit
+}
+
+func (c *ytInitialDataCandidateCollector) add(candidate string) {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return
+	}
+	if _, exists := c.seen[candidate]; exists {
+		return
+	}
+	c.seen[candidate] = struct{}{}
+	c.values = append(c.values, candidate)
+}
+
+func collectAnchorCandidates(html string, collector *ytInitialDataCandidateCollector) {
+	for _, anchor := range ytInitialDataAnchors {
+		if collector.full() {
+			return
+		}
+		scanAnchorCandidates(html, anchor, collector)
+	}
+}
+
+func scanAnchorCandidates(html, anchor string, collector *ytInitialDataCandidateCollector) {
+	searchFrom := 0
+	for searchFrom < len(html) && !collector.full() {
+		candidate, nextSearch, ok := findNextAnchorCandidate(html, anchor, searchFrom)
+		if !ok {
+			if nextSearch <= searchFrom {
+				return
+			}
+			searchFrom = nextSearch
+			continue
+		}
+		collector.add(candidate)
+		searchFrom = nextSearch
+	}
+}
+
+func findNextAnchorCandidate(html, anchor string, searchFrom int) (string, int, bool) {
+	idx := strings.Index(html[searchFrom:], anchor)
+	if idx < 0 {
+		return "", len(html), false
+	}
+	idx += searchFrom
+
+	eqOffset := strings.Index(html[idx:], "=")
+	if eqOffset < 0 {
+		return "", idx + len(anchor), false
+	}
+	eqIdx := idx + eqOffset
+	if eqIdx+1 >= len(html) {
+		return "", len(html), false
+	}
+
+	objOffset := strings.Index(html[eqIdx+1:], "{")
+	if objOffset < 0 {
+		return "", eqIdx + 1, false
+	}
+	objStart := eqIdx + 1 + objOffset
+
+	objEnd, ok := findJSONObjectEnd(html, objStart)
+	if !ok {
+		return "", objStart + 1, false
+	}
+
+	return html[objStart : objEnd+1], objEnd + 1, true
+}
+
+func collectPatternCandidates(html string, collector *ytInitialDataCandidateCollector) {
+	for _, pattern := range ytInitialDataPatterns {
+		if collector.full() {
+			return
+		}
+		appendPatternMatches(pattern.FindAllStringSubmatch(html, -1), collector)
+	}
+}
+
+func appendPatternMatches(matches [][]string, collector *ytInitialDataCandidateCollector) {
+	for _, match := range matches {
+		if collector.full() {
+			return
+		}
+		if len(match) < 2 {
+			continue
+		}
+		collector.add(match[1])
+	}
+}
+
+func findJSONObjectEnd(src string, start int) (int, bool) {
+	if start < 0 || start >= len(src) || src[start] != '{' {
+		return 0, false
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+	var quote byte
+
+	for i := start; i < len(src); i++ {
+		ch := src[i]
+
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == quote {
+				inString = false
+			}
+			continue
+		}
+
+		if ch == '"' || ch == '\'' {
+			inString = true
+			quote = ch
+			continue
+		}
+
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+		}
+	}
+
+	return 0, false
+}
