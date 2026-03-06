@@ -390,7 +390,7 @@ func TestService_WasUpcomingEventNotifiedRecently_InvalidPayloadReturnsError(t *
 
 	_, err := svc.WasUpcomingEventNotifiedRecently(t.Context(), "room1", "UC_TEST", stream, 15*time.Minute)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "was upcoming event notified recently: unmarshal data")
+	assert.ErrorContains(t, err, "was upcoming event notified recently: get cache data")
 }
 
 func TestService_TryClaimNotification_FallbackClaimOnSetNXFailure(t *testing.T) {
@@ -461,7 +461,7 @@ func TestService_TryClaimLogicalEvent_NilStream(t *testing.T) {
 	assert.False(t, acquired)
 }
 
-func TestService_ReadNotifiedData_LegacyJSONFallback(t *testing.T) {
+func TestService_ReadNotifiedData_LegacyJSONIgnored(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
 	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
@@ -483,5 +483,5 @@ func TestService_ReadNotifiedData_LegacyJSONFallback(t *testing.T) {
 		5,
 	)
 	require.NoError(t, err)
-	assert.True(t, notified)
+	assert.False(t, notified)
 }
