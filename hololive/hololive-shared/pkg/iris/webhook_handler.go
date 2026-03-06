@@ -141,6 +141,7 @@ type WebhookHandler struct {
 	cacheClient valkey.Client // for dedup (valkey-cache, NOT mq)
 	logger      *slog.Logger
 	options     WebhookHandlerOptions
+	baseContext context.Context
 	queue       chan webhookTask
 	queueLock   sync.RWMutex
 	workerWG    sync.WaitGroup
@@ -172,6 +173,7 @@ func NewWebhookHandler(
 		cacheClient: cacheClient,
 		logger:      logger,
 		options:     opt,
+		baseContext: context.Background(),
 		queue:       make(chan webhookTask, opt.QueueSize),
 	}
 
@@ -399,7 +401,7 @@ func (h *WebhookHandler) worker(index int) {
 
 			ctx := task.ctx
 			if ctx == nil {
-				ctx = context.TODO()
+				ctx = h.baseContext
 			}
 
 			runCtx := ctx
