@@ -285,6 +285,32 @@ func TestFindBestMatch_UsesSnapshotAliasIndex(t *testing.T) {
 	assert.Equal(t, "ch-sora", channel.ID)
 }
 
+func TestFindBestMatch_PrefersAliasExactBeforeNameExact(t *testing.T) {
+	t.Parallel()
+
+	provider := newStubMemberProvider([]*domain.Member{
+		{
+			ChannelID: "ch-name",
+			Name:      "Suisei",
+		},
+		{
+			ChannelID: "ch-alias",
+			Name:      "Hoshimachi Suisei",
+			Aliases:   &domain.Aliases{Ja: []string{"Suisei"}},
+		},
+	})
+	matcher := NewMemberMatcher(context.Background(), provider, &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			return map[string]string{}, nil
+		},
+	}, nil, nil, newMatcherTestLogger())
+
+	channel, err := matcher.FindBestMatch(context.Background(), "Suisei")
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, "ch-alias", channel.ID)
+}
+
 func TestFindBestMatchWithCandidates_DynamicLoadErrorIsNotSticky(t *testing.T) {
 	t.Parallel()
 
@@ -341,6 +367,25 @@ func TestFindBestMatchWithCandidates_AmbiguousAndOrgFilter(t *testing.T) {
 	if assert.NotNil(t, filtered.Org) {
 		assert.Equal(t, "Hololive", *filtered.Org)
 	}
+}
+
+func TestExactNameMembers_FiltersOrg(t *testing.T) {
+	t.Parallel()
+
+	matcher := &MemberMatcher{logger: newMatcherTestLogger()}
+	snapshot := &memberMatcherSnapshot{
+		exactNames: map[string][]*snapshotEntry{
+			"aqua": {
+				{candidate: &matchCandidate{channelID: "ch-holo", memberName: "Aqua", org: "Hololive"}},
+				{candidate: &matchCandidate{channelID: "ch-niji", memberName: "Aqua", org: "Nijisanji"}},
+			},
+		},
+	}
+
+	candidates := matcher.exactNameMembers(snapshot, "aqua", "Hololive")
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "ch-holo", candidates[0].ChannelID)
+	assert.Equal(t, "Hololive", candidates[0].Org)
 }
 
 func TestFindBestMatchWithCandidates_FallbackAndErrors(t *testing.T) {
