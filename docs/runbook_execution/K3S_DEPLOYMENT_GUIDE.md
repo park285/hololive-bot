@@ -34,7 +34,7 @@ sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/logs
    - `hololive-rust-dispatcher:prod`
 
 ## 설정 파일 수정
-- `base/configmap-app.yaml`
+- `base/configmap-bot.yaml`
   - `POSTGRES_HOST` (권장: `holo-postgres` 유지)
   - `IRIS_BASE_URL`
   - `CLIPROXY_BASE_URL`
@@ -44,7 +44,7 @@ sudo install -d -m 0770 -o 1000 -g 1000 /srv/hololive/logs
   - IP 직접 라우팅 모드 사용 시 EndpointSlice addresses(기본 `10.42.0.1`)만 수정
 - `overlays/prod/patch-external-services-to-externalname.yaml` (기본 DNS 모드)
   - 기본값은 현재 호스트/도커 브리지 실주소를 `*.nip.io`로 사용
-  - `llm-server`, `game-bot-*`는 Docker 컨테이너 IP 기반이므로 컨테이너 재생성 시 값 재확인 필요
+  - `game-bot-*`는 Docker 컨테이너 IP 기반이므로 컨테이너 재생성 시 값 재확인 필요
 - `base/secret-app.yaml`
   - DB 비밀번호/토큰/API 키 값 실값으로 교체
 

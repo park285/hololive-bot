@@ -23,15 +23,12 @@ EXPECTED_PORTS = {
     "holo-postgres": 5433,
     "iris": 3000,
     "cliproxy": 8787,
-    "llm-server": 40527,
     "game-bot-twentyq": 30081,
     "game-bot-turtle": 30082,
 }
 
 URL_KEYS = {
     "IRIS_BASE_URL": ("iris", 3000),
-    "CLIPROXY_BASE_URL": ("cliproxy", 8787),
-    "SERVICES_LLM_SERVER_HEALTH_URL": ("llm-server", 40527),
     "SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL": ("game-bot-twentyq", 30081),
     "SERVICES_GAME_BOT_TURTLE_HEALTH_URL": ("game-bot-turtle", 30082),
 }
@@ -179,7 +176,7 @@ def validate(
                 )
 
     if configmap_data is None:
-        ctx.error("missing ConfigMap: hololive-app-config")
+        ctx.error("missing ConfigMap data: hololive-common-config/hololive-bot-config")
         return ctx
 
     postgres_host = configmap_data.get("POSTGRES_HOST", "")
@@ -249,10 +246,12 @@ def collect_resources(
                 endpoint_slices.setdefault(service_name, []).append(doc)
             continue
 
-        if kind == "ConfigMap" and name == "hololive-app-config":
+        if kind == "ConfigMap" and name in {"hololive-common-config", "hololive-bot-config"}:
             data = doc.get("data", {})
             if isinstance(data, dict):
-                configmap_data = {str(k): str(v) for k, v in data.items()}
+                if configmap_data is None:
+                    configmap_data = {}
+                configmap_data.update({str(k): str(v) for k, v in data.items()})
 
     return services, endpoint_slices, configmap_data
 
