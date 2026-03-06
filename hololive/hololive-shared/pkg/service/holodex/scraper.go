@@ -7,10 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -30,11 +32,21 @@ type ScraperService struct {
 	baseURL        string
 	youtubeScraper *scraper.Client // YouTube HTML 스크래퍼 (1차 폴백)
 	fetchUpcoming  func(ctx context.Context, channelID string) ([]*scraper.UpcomingEvent, error)
+	officialPageMu sync.RWMutex
+	officialPage   officialSchedulePageCache
+	officialGroup  singleflight.Group
+	nowFunc        func() time.Time
 }
 
 const (
 	scraperChannelCacheKeyPrefix = "scraper:channel:"
+	officialSchedulePageCacheKey = "official_schedule_page"
 )
+
+type officialSchedulePageCache struct {
+	streams   []*domain.Stream
+	expiresAt time.Time
+}
 
 // NewScraperService: 새로운 ScraperService 인스턴스를 생성합니다.
 // 멤버 정보와 매핑 데이터를 초기화하여 크롤링 데이터 파싱에 활용한다.
@@ -243,6 +255,43 @@ func (s *ScraperService) YouTubeProxyEnabled() bool {
 }
 
 func (s *ScraperService) fetchAllStreams(ctx context.Context) ([]*domain.Stream, error) {
+	if cached, ok := s.getOfficialPageCache(); ok {
+		s.logger.Debug("Official schedule page cache hit",
+			slog.String("key", officialSchedulePageCacheKey),
+			slog.Int("streams", len(cached)))
+		return cached, nil
+	}
+
+	result, err, shared := s.officialGroup.Do(officialSchedulePageCacheKey, func() (any, error) {
+		if cached, ok := s.getOfficialPageCache(); ok {
+			return cached, nil
+		}
+
+		streams, fetchErr := s.fetchAllStreamsFromOrigin(ctx)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+
+		s.setOfficialPageCache(streams)
+		return streams, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	streams, ok := result.([]*domain.Stream)
+	if !ok {
+		return nil, fmt.Errorf("invalid official schedule page cache result: %T", result)
+	}
+	if shared {
+		s.logger.Debug("Official schedule page request deduplicated",
+			slog.String("key", officialSchedulePageCacheKey),
+			slog.Int("streams", len(streams)))
+	}
+	return cloneStreams(streams), nil
+}
+
+func (s *ScraperService) fetchAllStreamsFromOrigin(ctx context.Context) ([]*domain.Stream, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+"/lives/hololive", http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create scraper request: %w", err)
@@ -313,6 +362,100 @@ func (s *ScraperService) fetchAllStreams(ctx context.Context) ([]*domain.Stream,
 		slog.Int("parse_errors", parseErrors))
 
 	return streams, nil
+}
+
+func (s *ScraperService) getOfficialPageCache() ([]*domain.Stream, bool) {
+	ttl := constants.OfficialScheduleConfig.PageCacheTTL
+	if ttl <= 0 {
+		return nil, false
+	}
+
+	now := s.now()
+
+	s.officialPageMu.RLock()
+	defer s.officialPageMu.RUnlock()
+
+	if s.officialPage.expiresAt.IsZero() || !now.Before(s.officialPage.expiresAt) {
+		return nil, false
+	}
+	return cloneStreams(s.officialPage.streams), true
+}
+
+func (s *ScraperService) setOfficialPageCache(streams []*domain.Stream) {
+	ttl := constants.OfficialScheduleConfig.PageCacheTTL
+	if ttl <= 0 {
+		return
+	}
+
+	s.officialPageMu.Lock()
+	defer s.officialPageMu.Unlock()
+
+	s.officialPage = officialSchedulePageCache{
+		streams:   cloneStreams(streams),
+		expiresAt: s.now().Add(ttl),
+	}
+}
+
+func (s *ScraperService) now() time.Time {
+	if s.nowFunc != nil {
+		return s.nowFunc()
+	}
+	return time.Now()
+}
+
+func cloneStreams(streams []*domain.Stream) []*domain.Stream {
+	if streams == nil {
+		return nil
+	}
+
+	cloned := make([]*domain.Stream, 0, len(streams))
+	for _, stream := range streams {
+		cloned = append(cloned, cloneStream(stream))
+	}
+	return cloned
+}
+
+func cloneStream(stream *domain.Stream) *domain.Stream {
+	if stream == nil {
+		return nil
+	}
+
+	cloned := *stream
+
+	if stream.StartScheduled != nil {
+		startScheduled := *stream.StartScheduled
+		cloned.StartScheduled = &startScheduled
+	}
+	if stream.StartActual != nil {
+		startActual := *stream.StartActual
+		cloned.StartActual = &startActual
+	}
+	if stream.Duration != nil {
+		duration := *stream.Duration
+		cloned.Duration = &duration
+	}
+	if stream.Thumbnail != nil {
+		thumbnail := *stream.Thumbnail
+		cloned.Thumbnail = &thumbnail
+	}
+	if stream.Link != nil {
+		link := *stream.Link
+		cloned.Link = &link
+	}
+	if stream.TopicID != nil {
+		topicID := *stream.TopicID
+		cloned.TopicID = &topicID
+	}
+	if stream.Channel != nil {
+		channel := *stream.Channel
+		cloned.Channel = &channel
+	}
+	if stream.ViewerCount != nil {
+		viewerCount := *stream.ViewerCount
+		cloned.ViewerCount = &viewerCount
+	}
+
+	return &cloned
 }
 
 func (s *ScraperService) parseStreamElement(sel *goquery.Selection, currentDate string) (*domain.Stream, error) {
