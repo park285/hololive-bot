@@ -274,7 +274,7 @@ func (r *StatsRepository) GetTopGainers(ctx context.Context, since time.Time, li
 	}
 	defer rows.Close()
 
-	var entries []domain.RankEntry
+	entries := make([]domain.RankEntry, 0, limit)
 	rank := 1
 	for rows.Next() {
 		var entry domain.RankEntry

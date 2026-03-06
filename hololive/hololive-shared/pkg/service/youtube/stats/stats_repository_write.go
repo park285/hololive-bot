@@ -233,3 +233,73 @@ func (r *StatsRepository) RecordChange(ctx context.Context, change *domain.Stats
 
 	return nil
 }
+
+// recordChangeColumnsPerRow: RecordChangeBatch INSERT VALUES 절 한 행의 파라미터 수
+const recordChangeColumnsPerRow = 10
+
+// RecordChangeBatch: 여러 통계 변화를 한 번에 INSERT 합니다.
+func (r *StatsRepository) RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error {
+	if len(changes) == 0 {
+		return nil
+	}
+
+	for batchStart := 0; batchStart < len(changes); batchStart += saveBatchMaxSize {
+		batchEnd := batchStart + saveBatchMaxSize
+		if batchEnd > len(changes) {
+			batchEnd = len(changes)
+		}
+		if err := r.recordChangeBatchChunk(ctx, changes[batchStart:batchEnd]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *StatsRepository) recordChangeBatchChunk(ctx context.Context, changes []*domain.StatsChange) error {
+	var sb strings.Builder
+	sb.WriteString(`INSERT INTO youtube_stats_changes (channel_id, member_name, subscriber_change, video_change, view_change, previous_subs, current_subs, previous_videos, current_videos, detected_at) VALUES `)
+
+	args := make([]any, 0, len(changes)*recordChangeColumnsPerRow)
+	for i, change := range changes {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		base := i * recordChangeColumnsPerRow
+		sb.WriteByte('(')
+		for j := 0; j < recordChangeColumnsPerRow; j++ {
+			if j > 0 {
+				sb.WriteByte(',')
+			}
+			sb.WriteByte('$')
+			sb.WriteString(strconv.Itoa(base + j + 1))
+		}
+		sb.WriteByte(')')
+
+		var prevSubs, currSubs, prevVideos, currVideos *int64
+		if change.PreviousStats != nil {
+			v := int64(change.PreviousStats.SubscriberCount)
+			prevSubs = &v
+			v2 := int64(change.PreviousStats.VideoCount)
+			prevVideos = &v2
+		}
+		if change.CurrentStats != nil {
+			v := int64(change.CurrentStats.SubscriberCount)
+			currSubs = &v
+			v2 := int64(change.CurrentStats.VideoCount)
+			currVideos = &v2
+		}
+
+		args = append(args,
+			change.ChannelID, change.MemberName,
+			change.SubscriberChange, change.VideoChange, change.ViewChange,
+			prevSubs, currSubs, prevVideos, currVideos,
+			change.DetectedAt,
+		)
+	}
+
+	_, err := r.pool.Exec(ctx, sb.String(), args...)
+	if err != nil {
+		return fmt.Errorf("failed to batch record changes (%d rows): %w", len(changes), err)
+	}
+	return nil
+}
