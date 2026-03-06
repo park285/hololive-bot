@@ -12,6 +12,7 @@ type StatsWriteRepository interface {
 	SaveStats(ctx context.Context, stats *domain.TimestampedStats) error
 	SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error
 	RecordChange(ctx context.Context, change *domain.StatsChange) error
+	RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error
 }
 
 // StatsReadRepository: 통계 읽기 경로를 담당한다.
@@ -44,10 +45,12 @@ type NotificationRepository interface {
 	MarkChangeNotified(ctx context.Context, channelID string, detectedAt time.Time) error
 	GetUnnotifiedMilestones(ctx context.Context, limit int) ([]MilestoneNotification, error)
 	MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error
+	MarkMilestonesNotifiedBatch(ctx context.Context, milestones []MilestoneNotification) error
 	HasApproachingNotified(ctx context.Context, channelID string, milestoneValue uint64) (bool, error)
 	SaveApproachingNotification(ctx context.Context, channelID string, milestoneValue, currentSubs uint64, notifiedAt time.Time) error
 	GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ApproachingNotification, error)
 	MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error
+	MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error
 }
 
 // StatsServiceRepository: StatsService가 요구하는 최소 read/write 계약.
@@ -59,9 +62,12 @@ type StatsServiceRepository interface {
 // StatsSchedulerRepository: Scheduler가 요구하는 최소 계약.
 type StatsSchedulerRepository interface {
 	GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error)
+	GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error)
 	SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error
 	SaveStats(ctx context.Context, stats *domain.TimestampedStats) error
 	RecordChange(ctx context.Context, change *domain.StatsChange) error
+	RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error
+	GetAchievedMilestones(ctx context.Context, channelIDs []string, milestoneType domain.MilestoneType) (map[string][]uint64, error)
 	HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error)
 	SaveMilestone(ctx context.Context, milestone *domain.Milestone) error
 	GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]NearMilestoneEntry, error)
@@ -69,8 +75,10 @@ type StatsSchedulerRepository interface {
 	SaveApproachingNotification(ctx context.Context, channelID string, milestoneValue, currentSubs uint64, notifiedAt time.Time) error
 	GetUnnotifiedMilestones(ctx context.Context, limit int) ([]MilestoneNotification, error)
 	MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error
+	MarkMilestonesNotifiedBatch(ctx context.Context, milestones []MilestoneNotification) error
 	GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ApproachingNotification, error)
 	MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error
+	MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error
 }
 
 // StatsCommandRepository: 카카오 봇 command 경로가 요구하는 최소 계약.

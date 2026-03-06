@@ -79,7 +79,7 @@ func (ys *StatsService) loadPreviousStats(ctx context.Context, channelID string)
 		cacheKey := channelStatsCachePrefix + channelID
 		var cached domain.TimestampedStats
 		if err := ys.cache.Get(ctx, cacheKey, &cached); err == nil && cached.ChannelID != "" {
-			return new(cached)
+			return &cached
 		}
 	}
 
@@ -171,7 +171,7 @@ func (ys *StatsService) GetChannelStatisticsBatch(ctx context.Context, channelID
 		return nil, fmt.Errorf("YouTube service not available")
 	}
 
-	var stats []*ChannelStatistics
+	stats := make([]*ChannelStatistics, 0, len(channelIDs))
 	memberLookup := ys.loadMemberLookup(ctx)
 
 	const maxPerRequest = 50
