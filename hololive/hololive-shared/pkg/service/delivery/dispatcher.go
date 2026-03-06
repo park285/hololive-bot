@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -27,6 +28,7 @@ type deliveryRepository interface {
 // DispatcherConfig: Dispatcher 설정
 type DispatcherConfig struct {
 	BatchSize       int
+	MaxConcurrent   int
 	MaxRetries      int
 	LockTimeout     time.Duration
 	PollInterval    time.Duration
@@ -40,6 +42,7 @@ type DispatcherConfig struct {
 func DefaultDispatcherConfig() DispatcherConfig {
 	return DispatcherConfig{
 		BatchSize:       50,
+		MaxConcurrent:   4,
 		MaxRetries:      3,
 		LockTimeout:     5 * time.Minute,
 		PollInterval:    30 * time.Second,
@@ -64,6 +67,9 @@ func NewDispatcher(repo deliveryRepository, sender MessageSender, logger *slog.L
 	defaults := DefaultDispatcherConfig()
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = defaults.BatchSize
+	}
+	if cfg.MaxConcurrent <= 0 {
+		cfg.MaxConcurrent = defaults.MaxConcurrent
 	}
 	if cfg.MaxRetries <= 0 {
 		cfg.MaxRetries = defaults.MaxRetries
@@ -120,9 +126,7 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 		return
 	}
 
-	for i := range items {
-		d.processItem(ctx, &items[i])
-	}
+	d.processBatch(ctx, items)
 
 	// 모니터링: 실패 누적 경고
 	if cnt, _ := d.repo.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
@@ -138,6 +142,47 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 		}
 		d.lastCleanupAt = time.Now()
 	}
+}
+
+func (d *Dispatcher) processBatch(ctx context.Context, items []domain.NotificationDeliveryOutbox) {
+	if len(items) == 0 {
+		return
+	}
+
+	maxConcurrent := d.cfg.MaxConcurrent
+	if maxConcurrent <= 1 || len(items) == 1 {
+		for i := range items {
+			d.processItem(ctx, &items[i])
+		}
+		return
+	}
+	if maxConcurrent > len(items) {
+		maxConcurrent = len(items)
+	}
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxConcurrent)
+
+	for i := range items {
+		select {
+		case <-ctx.Done():
+			d.logger.Warn("Delivery batch canceled before completion",
+				slog.String("error", ctx.Err().Error()))
+			wg.Wait()
+			return
+		case sem <- struct{}{}:
+		}
+
+		item := items[i]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			d.processItem(ctx, &item)
+		}()
+	}
+
+	wg.Wait()
 }
 
 func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationDeliveryOutbox) {

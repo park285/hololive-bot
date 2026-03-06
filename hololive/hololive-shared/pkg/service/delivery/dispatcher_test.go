@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -80,6 +81,7 @@ func dispatcherLogger() *slog.Logger {
 }
 
 func TestProcessOnce_E2E(t *testing.T) {
+	var mu sync.Mutex
 	var sentIDs []int64
 	var sentRooms []string
 
@@ -91,6 +93,8 @@ func TestProcessOnce_E2E(t *testing.T) {
 			}, nil
 		},
 		markSentFn: func(_ context.Context, id int64) error {
+			mu.Lock()
+			defer mu.Unlock()
 			sentIDs = append(sentIDs, id)
 			return nil
 		},
@@ -104,6 +108,8 @@ func TestProcessOnce_E2E(t *testing.T) {
 
 	sender := &mockSender{
 		sendFn: func(_ context.Context, roomID, _ string) error {
+			mu.Lock()
+			defer mu.Unlock()
 			sentRooms = append(sentRooms, roomID)
 			return nil
 		},
@@ -225,5 +231,63 @@ func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
 	}
 	if countAfterCancel == 0 {
 		t.Fatal("expected at least 1 fetch call")
+	}
+}
+
+func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
+	var current atomic.Int32
+	var maxRunning atomic.Int32
+	var sentCount atomic.Int32
+
+	repo := &mockDeliveryRepo{
+		fetchAndLockFn: func(_ context.Context, _ int, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+			return []domain.NotificationDeliveryOutbox{
+				{ID: 1, RoomID: "room-a", Payload: makePayload(t, "hello-a")},
+				{ID: 2, RoomID: "room-b", Payload: makePayload(t, "hello-b")},
+				{ID: 3, RoomID: "room-c", Payload: makePayload(t, "hello-c")},
+				{ID: 4, RoomID: "room-d", Payload: makePayload(t, "hello-d")},
+			}, nil
+		},
+		markSentFn: func(_ context.Context, _ int64) error {
+			sentCount.Add(1)
+			return nil
+		},
+		countByStatusFn: func(_ context.Context, _ domain.DeliveryOutboxStatus) (int64, error) {
+			return 0, nil
+		},
+		cleanupFn: func(_ context.Context, _ time.Duration) (int64, error) {
+			return 0, nil
+		},
+	}
+
+	sender := &mockSender{
+		sendFn: func(_ context.Context, _, _ string) error {
+			running := current.Add(1)
+			for {
+				existing := maxRunning.Load()
+				if running <= existing || maxRunning.CompareAndSwap(existing, running) {
+					break
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+			current.Add(-1)
+			return nil
+		},
+	}
+
+	cfg := DefaultDispatcherConfig()
+	cfg.MaxConcurrent = 2
+
+	d := NewDispatcher(repo, sender, dispatcherLogger(), cfg)
+	d.processOnce(context.Background())
+
+	if sentCount.Load() != 4 {
+		t.Fatalf("expected 4 items marked sent, got %d", sentCount.Load())
+	}
+	if maxRunning.Load() > 2 {
+		t.Fatalf("expected max concurrency <= 2, got %d", maxRunning.Load())
+	}
+	if maxRunning.Load() != 2 {
+		t.Fatalf("expected dispatcher to use configured concurrency 2, got %d", maxRunning.Load())
 	}
 }
