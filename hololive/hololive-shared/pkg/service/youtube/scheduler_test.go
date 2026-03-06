@@ -837,19 +837,21 @@ func (m *mockTrackAllSubscribersService) GetRecentVideos(ctx context.Context, ch
 }
 
 type mockTrackAllSubscribersRepo struct {
-	latestByChannel   map[string]*domain.TimestampedStats
-	latestBatchErr    error
-	latestBatchCalls  int
-	latestBatchKeys   []string
-	achievedByChannel map[string][]uint64
-	achievedErr       error
-	achievedCalls     int
-	hasAchievedCalls  int
-	saveBatchErr      error
-	saveBatchCalls    int
-	saveBatchRows     int
-	saveSingleCalls   int
-	recordChangeCalls int
+	latestByChannel    map[string]*domain.TimestampedStats
+	latestBatchErr     error
+	latestBatchCalls   int
+	latestBatchKeys    []string
+	achievedByChannel  map[string][]uint64
+	achievedErr        error
+	achievedCalls      int
+	hasAchievedCalls   int
+	hasAchievedResult  bool
+	saveBatchErr       error
+	saveBatchCalls     int
+	saveBatchRows      int
+	saveSingleCalls    int
+	saveMilestoneCalls int
+	recordChangeCalls  int
 }
 
 func (m *mockTrackAllSubscribersRepo) GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
@@ -899,10 +901,11 @@ func (m *mockTrackAllSubscribersRepo) GetAchievedMilestones(ctx context.Context,
 
 func (m *mockTrackAllSubscribersRepo) HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error) {
 	m.hasAchievedCalls++
-	return false, nil
+	return m.hasAchievedResult, nil
 }
 
 func (m *mockTrackAllSubscribersRepo) SaveMilestone(ctx context.Context, milestone *domain.Milestone) error {
+	m.saveMilestoneCalls++
 	return nil
 }
 
@@ -1045,10 +1048,98 @@ func TestTrackAllSubscribers_SkipsChangeProcessingWhenBatchSaveFails(t *testing.
 	}
 }
 
+func TestTrackAllSubscribers_UsesHasAchievedFallbackWhenMilestonePreloadFails(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	members := &mockMemberDataProvider{
+		members: []*domain.Member{
+			{ChannelID: "UC1", Name: "A"},
+		},
+	}
+
+	youtubeSvc := &mockTrackAllSubscribersService{
+		stats: map[string]*ChannelStats{
+			"UC1": {SubscriberCount: 101000, VideoCount: 11, ViewCount: 10001},
+		},
+	}
+
+	repo := &mockTrackAllSubscribersRepo{
+		latestByChannel: map[string]*domain.TimestampedStats{
+			"UC1": {SubscriberCount: 99000, VideoCount: 10, ViewCount: 10000},
+		},
+		achievedErr: errors.New("preload failure"),
+	}
+
+	scheduler := &schedulerImpl{
+		youtube:     youtubeSvc,
+		statsRepo:   repo,
+		membersData: members,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+	}
+
+	scheduler.trackAllSubscribers(context.Background())
+
+	if repo.achievedCalls != 1 {
+		t.Fatalf("achievedCalls = %d, want 1", repo.achievedCalls)
+	}
+	if repo.hasAchievedCalls != 1 {
+		t.Fatalf("hasAchievedCalls = %d, want 1", repo.hasAchievedCalls)
+	}
+	if repo.saveMilestoneCalls != 1 {
+		t.Fatalf("saveMilestoneCalls = %d, want 1", repo.saveMilestoneCalls)
+	}
+}
+
+func TestProcessMilestones_FallsBackToHasAchievedWhenPreloadUnavailable(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := &mockTrackAllSubscribersRepo{
+		hasAchievedResult: true,
+	}
+
+	scheduler := &schedulerImpl{
+		statsRepo: repo,
+		logger:    logger,
+		stopCh:    make(chan struct{}),
+	}
+
+	member := &domain.Member{
+		ChannelID: "UC1",
+		Name:      "A",
+	}
+
+	achieved, checkErrors, saveErrors := scheduler.processMilestones(
+		context.Background(),
+		"UC1",
+		member,
+		[]uint64{100000},
+		nil,
+		false,
+		time.Now(),
+	)
+
+	if achieved != 0 {
+		t.Fatalf("achieved = %d, want 0", achieved)
+	}
+	if checkErrors != 0 {
+		t.Fatalf("checkErrors = %d, want 0", checkErrors)
+	}
+	if saveErrors != 0 {
+		t.Fatalf("saveErrors = %d, want 0", saveErrors)
+	}
+	if repo.hasAchievedCalls != 1 {
+		t.Fatalf("hasAchievedCalls = %d, want 1", repo.hasAchievedCalls)
+	}
+	if repo.saveMilestoneCalls != 0 {
+		t.Fatalf("saveMilestoneCalls = %d, want 0", repo.saveMilestoneCalls)
+	}
+}
+
 type mockRecentVideosService struct {
 	maxConcurrent int
 	current       int
 	mu            sync.Mutex
+	sleep         time.Duration
 }
 
 func (m *mockRecentVideosService) SetScraperProxyEnabled(enabled bool) bool { return enabled }
@@ -1066,7 +1157,11 @@ func (m *mockRecentVideosService) GetRecentVideos(ctx context.Context, channelID
 	}
 	m.mu.Unlock()
 
-	time.Sleep(10 * time.Millisecond)
+	sleep := m.sleep
+	if sleep == 0 {
+		sleep = 10 * time.Millisecond
+	}
+	time.Sleep(sleep)
 
 	m.mu.Lock()
 	m.current--
@@ -1107,5 +1202,60 @@ func TestFetchRecentVideosRotation_UsesBoundedParallelism(t *testing.T) {
 	}
 	if youtubeSvc.maxConcurrent > recentVideosFetchParallelism {
 		t.Fatalf("maxConcurrent = %d, want <= %d", youtubeSvc.maxConcurrent, recentVideosFetchParallelism)
+	}
+}
+
+func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	youtubeSvc := &mockRecentVideosService{
+		sleep: time.Millisecond,
+	}
+
+	var (
+		mu                 sync.Mutex
+		cacheCurrent       int
+		cacheMaxConcurrent int
+	)
+	cacheSvc := &cachemocks.Client{
+		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
+			mu.Lock()
+			cacheCurrent++
+			if cacheCurrent > cacheMaxConcurrent {
+				cacheMaxConcurrent = cacheCurrent
+			}
+			mu.Unlock()
+
+			time.Sleep(10 * time.Millisecond)
+
+			mu.Lock()
+			cacheCurrent--
+			mu.Unlock()
+			return nil
+		},
+	}
+
+	members := &mockMemberDataProvider{members: make([]*domain.Member, channelsPerBatch+5)}
+	for i := range members.members {
+		members.members[i] = &domain.Member{
+			ChannelID: fmt.Sprintf("UC%d", i+1),
+			Name:      fmt.Sprintf("M%d", i+1),
+		}
+	}
+
+	scheduler := &schedulerImpl{
+		youtube:     youtubeSvc,
+		cache:       cacheSvc,
+		membersData: members,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+	}
+
+	scheduler.fetchRecentVideosRotation(context.Background(), 0)
+
+	if cacheMaxConcurrent <= 1 {
+		t.Fatalf("cacheMaxConcurrent = %d, want > 1", cacheMaxConcurrent)
+	}
+	if cacheMaxConcurrent > recentVideosFetchParallelism {
+		t.Fatalf("cacheMaxConcurrent = %d, want <= %d", cacheMaxConcurrent, recentVideosFetchParallelism)
 	}
 }
