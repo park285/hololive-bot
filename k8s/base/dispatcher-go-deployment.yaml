@@ -48,7 +48,7 @@ spec:
             - name: CACHE_SOCKET_PATH
               value: ""
             - name: IRIS_BASE_URL
-              value: "http://host-external:3000"
+              value: "http://iris:3000"
             - name: IRIS_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
