@@ -65,7 +65,6 @@ type AlarmService struct {
 	logger          *slog.Logger
 	targetMinutes   []int
 	targetMinutesMu sync.RWMutex
-	cacheMutex      sync.RWMutex
 	persistPool     *workerpool.Pool
 	closeOnce       sync.Once
 }

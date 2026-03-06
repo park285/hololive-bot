@@ -25,15 +25,23 @@ type AlarmEntry struct {
 	MemberName string `json:"memberName"`
 }
 
+// AlarmListView: 알람 목록 표시를 위한 조합 조회 결과.
+type AlarmListView struct {
+	ChannelID  string
+	MemberName string
+	AlarmTypes AlarmTypes
+	NextStream *NextStreamInfo
+}
+
 // AlarmCRUD: 커맨드와 Admin API에서 사용하는 알람 CRUD 인터페이스
 type AlarmCRUD interface {
 	AddAlarm(ctx context.Context, req AddAlarmRequest) (bool, error)
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes AlarmTypes) (bool, error)
 	GetRoomAlarms(ctx context.Context, roomID string) ([]string, error)
 	GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*Alarm, error)
+	ListRoomAlarmsView(ctx context.Context, roomID string) ([]AlarmListView, error)
 	ClearRoomAlarms(ctx context.Context, roomID string) (int, error)
 	GetNextStreamInfo(ctx context.Context, channelID string) (*NextStreamInfo, error)
-	GetMemberNameWithFallback(ctx context.Context, channelID string) string
 	UpdateAlarmAdvanceMinutes(minutes int) []int
 	GetTargetMinutes() []int
 	SetRoomName(ctx context.Context, roomID, roomName string) error
