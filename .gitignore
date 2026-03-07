@@ -52,7 +52,9 @@ target/
 # Logs
 # ============================================
 *.log
-logs/
+logs/*
+logs/**/*
+!logs/.gitkeep
 !**/internal/logs/
 !scripts/logs/
 gc.log*

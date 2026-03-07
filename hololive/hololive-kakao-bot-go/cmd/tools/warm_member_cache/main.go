@@ -21,7 +21,13 @@ func main() {
 		return
 	}
 
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{}, "warm_member_cache.log", cfg.Logging.Level)
+	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
+		Dir:        cfg.Logging.Dir,
+		MaxSizeMB:  cfg.Logging.MaxSizeMB,
+		MaxBackups: cfg.Logging.MaxBackups,
+		MaxAgeDays: cfg.Logging.MaxAgeDays,
+		Compress:   cfg.Logging.Compress,
+	}, "warm_member_cache.log", cfg.Logging.Level)
 	if err != nil {
 		slog.Error("init_logger_failed", slog.Any("error", err))
 		return

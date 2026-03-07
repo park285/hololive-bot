@@ -40,9 +40,15 @@ func main() {
 		return
 	}
 
-	// slog 기반 로거 초기화 (파일 로깅 포함)
+	// slog 기반 로거 초기화 (stdout + file mirror when LOG_DIR is set)
 
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{}, "bot.log", cfg.Logging.Level)
+	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
+		Dir:        cfg.Logging.Dir,
+		MaxSizeMB:  cfg.Logging.MaxSizeMB,
+		MaxBackups: cfg.Logging.MaxBackups,
+		MaxAgeDays: cfg.Logging.MaxAgeDays,
+		Compress:   cfg.Logging.Compress,
+	}, "bot.log", cfg.Logging.Level)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		exitCode = 1

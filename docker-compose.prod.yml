@@ -6,6 +6,13 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+x-app-file-log-env: &app-file-log-env
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-100}
+  LOG_MAX_BACKUPS: ${LOG_MAX_BACKUPS:-5}
+  LOG_MAX_AGE_DAYS: ${LOG_MAX_AGE_DAYS:-30}
+  LOG_COMPRESS: ${LOG_COMPRESS:-true}
+
 x-security-hardening: &security-hardening
   security_opt:
     - no-new-privileges:true
@@ -145,6 +152,7 @@ services:
     env_file:
       - ./.env
     environment:
+      <<: *app-file-log-env
       GOGC: "60"
       IRIS_BASE_URL: http://host.docker.internal:3000
       IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
@@ -166,10 +174,9 @@ services:
       # alarm CRUD는 hololive-bot 내부 /internal/alarm/* 경로 사용
       ALARM_DISPATCHER_URL: http://hololive-bot:30001
       LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
-      BOT_INGESTION_ENABLED: "false"
       BOT_ADMIN_ENABLED: "true"
       SERVER_PORT: 30001
-      LOG_DIR: ""
+      LOG_DIR: /app/logs/hololive-bot
       GOMEMLIMIT: "450MiB"
       # 통합 Goroutine 모니터링용 외부 서비스 Health URL (llm 레포 서비스 → host.docker.internal)
       SERVICES_LLM_SCHEDULER_HEALTH_URL: http://host.docker.internal:30003/health
@@ -191,6 +198,7 @@ services:
       - "127.0.0.1:30001:30001"
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -234,6 +242,7 @@ services:
     env_file:
       - ./.env
     environment:
+      <<: *app-file-log-env
       DISPATCHER_PORT: "30020"
       IRIS_BASE_URL: http://host.docker.internal:3000
       IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
@@ -243,12 +252,12 @@ services:
       ALARM_DISPATCH_QUEUE_KEY: alarm:dispatch:queue
       ALARM_DISPATCH_MAX_BATCH: "50"
       DISPATCHER_RECONNECT_BACKOFF_MS: "1000"
-      LOG_LEVEL: info
-      LOG_DIR: ""
+      LOG_DIR: /app/logs/dispatcher-go
       TZ: Asia/Seoul
     ports:
       - "127.0.0.1:30020:30020"
     volumes:
+      - ./logs:/app/logs
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -287,8 +296,8 @@ services:
     env_file:
       - ./.env
     environment:
+      <<: *app-file-log-env
       SERVER_PORT: 30004
-      BOT_INGESTION_ENABLED: "true"
       IRIS_BASE_URL: http://host.docker.internal:3000
       IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
       IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
@@ -314,11 +323,12 @@ services:
       CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
       CLIPROXY_MODEL: gpt-5.2
       CLIPROXY_REASONING_EFFORT: xhigh
-      LOG_DIR: ""
+      LOG_DIR: /app/logs/stream-ingester
     ports:
       - "127.0.0.1:30004:30004"
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -359,6 +369,7 @@ services:
     env_file:
       - ./.env
     environment:
+      <<: *app-file-log-env
       LLM_SCHEDULER_PORT: 30003
       IRIS_BASE_URL: http://host.docker.internal:3000
       IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
@@ -384,11 +395,12 @@ services:
       CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
       CLIPROXY_MODEL: gpt-5.2
       CLIPROXY_REASONING_EFFORT: xhigh
-      LOG_DIR: ""
+      LOG_DIR: /app/logs/llm-scheduler
     ports:
       - "127.0.0.1:30003:30003"
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -417,6 +429,8 @@ services:
 
   # YouTube Scraper VPN Proxy (NordVPN + SOCKS5)
   vpn-scraper-proxy:
+    profiles:
+      - vpn
     image: hololive-vpn-scraper:prod
     build: ./hololive/hololive-kakao-bot-go/dev/vpn-scraper
     container_name: vpn-scraper-proxy
@@ -440,8 +454,8 @@ services:
       OPENVPN_CONFIG_1: /vpn/config1.ovpn
       OPENVPN_CONFIG_2: /vpn/config2.ovpn
       DUAL_VPN: ${DUAL_VPN:-1}
-      NORDVPN_USERNAME: ${NORDVPN_USERNAME:?set NORDVPN_USERNAME in .env}
-      NORDVPN_PASSWORD: ${NORDVPN_PASSWORD:?set NORDVPN_PASSWORD in .env}
+      NORDVPN_USERNAME: ${NORDVPN_USERNAME:-}
+      NORDVPN_PASSWORD: ${NORDVPN_PASSWORD:-}
       VPN_KILLSWITCH: ${VPN_KILLSWITCH:-1}
     healthcheck:
       test: ["CMD-SHELL", "curl -x socks5://127.0.0.1:1080 -s --max-time 10 https://ifconfig.me >/dev/null"]

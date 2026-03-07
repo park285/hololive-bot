@@ -47,7 +47,12 @@ type envConfig struct {
 	DispatchMaxBatch             int    `envconfig:"ALARM_DISPATCH_MAX_BATCH" default:"50"`
 	DispatcherReconnectBackoffMS int    `envconfig:"DISPATCHER_RECONNECT_BACKOFF_MS" default:"1000"`
 
-	LogLevel string `envconfig:"LOG_LEVEL" default:"info"`
+	LogLevel      string `envconfig:"LOG_LEVEL" default:"info"`
+	LogDir        string `envconfig:"LOG_DIR" default:""`
+	LogMaxSizeMB  int    `envconfig:"LOG_MAX_SIZE_MB" default:"100"`
+	LogMaxBackups int    `envconfig:"LOG_MAX_BACKUPS" default:"5"`
+	LogMaxAgeDays int    `envconfig:"LOG_MAX_AGE_DAYS" default:"30"`
+	LogCompress   bool   `envconfig:"LOG_COMPRESS" default:"true"`
 
 	OTELEnabled                  bool    `envconfig:"OTEL_ENABLED" default:"false"`
 	OTELMetricsEnabled           bool    `envconfig:"OTEL_METRICS_ENABLED" default:"false"`
@@ -136,7 +141,12 @@ func LoadConfig() (*Config, error) {
 			ReconnectBackoff: time.Duration(reconnectBackoffMS) * time.Millisecond,
 		},
 		Logging: sharedlogging.Config{
-			Level: strings.TrimSpace(raw.LogLevel),
+			Level:      strings.TrimSpace(raw.LogLevel),
+			Dir:        strings.TrimSpace(raw.LogDir),
+			MaxSizeMB:  raw.LogMaxSizeMB,
+			MaxBackups: raw.LogMaxBackups,
+			MaxAgeDays: raw.LogMaxAgeDays,
+			Compress:   raw.LogCompress,
 		},
 		Telemetry: sharedconfig.TelemetryConfig{
 			Enabled:               raw.OTELEnabled,

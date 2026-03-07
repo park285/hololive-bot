@@ -1,7 +1,7 @@
 # LLM Scheduler 운영 Runbook
 
 > 마지막 업데이트: 2026-02-28
-> 대상 서비스: `llm-scheduler` (포트 `30003`), `admin-api` (포트 `30002`)
+> 대상 서비스: `llm-scheduler` (포트 `30003`), `hololive-bot` 운영 API (포트 `30001`)
 
 ---
 
@@ -36,10 +36,11 @@ P5 분리 이후 `llm-scheduler` 장애/재실행/수동 실행 절차를 표준
 ## 3) 정상 상태 점검
 
 ```bash
-docker compose -f docker-compose.prod.yml ps llm-scheduler admin-api
+docker compose -f docker-compose.prod.yml ps llm-scheduler hololive-bot
 curl -fsS http://127.0.0.1:30003/health
-curl -fsS http://127.0.0.1:30002/health
+curl -fsS http://127.0.0.1:30001/health
 docker logs --tail 150 hololive-llm-scheduler
+docker logs --tail 150 hololive-kakao-bot-go
 ```
 
 정상 기준:
@@ -63,8 +64,8 @@ docker compose -f docker-compose.prod.yml ps llm-scheduler
 curl -fsS http://127.0.0.1:30003/health
 ```
 
-### B. admin-api 트리거 호출 실패(5xx/timeout)
-1. `admin-api` 로그에서 upstream(`llm-scheduler`) 오류 확인
+### B. `hololive-bot` 운영 API 트리거 호출 실패(5xx/timeout)
+1. `hololive-bot` 로그에서 upstream(`llm-scheduler`) 오류 확인
 2. `llm-scheduler` 헬스체크 선확인
 3. 원인 제거 후 **운영자가 수동으로 1회 재실행**
 
@@ -85,7 +86,7 @@ export API_KEY="REDACTED"
 ### 5.1 Major Event 주간 알림 실행
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:30002/api/holo/majorevent/trigger" \
+curl -sS -X POST "http://127.0.0.1:30001/api/holo/majorevent/trigger" \
   -H "X-API-Key: ${API_KEY}" \
   -H "Content-Type: application/json"
 ```
@@ -93,7 +94,7 @@ curl -sS -X POST "http://127.0.0.1:30002/api/holo/majorevent/trigger" \
 ### 5.2 Major Event 월간 알림 실행
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:30002/api/holo/majorevent/monthly-trigger" \
+curl -sS -X POST "http://127.0.0.1:30001/api/holo/majorevent/monthly-trigger" \
   -H "X-API-Key: ${API_KEY}" \
   -H "Content-Type: application/json"
 ```
@@ -101,7 +102,7 @@ curl -sS -X POST "http://127.0.0.1:30002/api/holo/majorevent/monthly-trigger" \
 ### 5.3 Member News 주간 다이제스트 즉시 실행
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:30002/api/holo/settings/llm" \
+curl -sS -X POST "http://127.0.0.1:30001/api/holo/settings/llm" \
   -H "X-API-Key: ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"memberNewsWeeklyRunNow":true}'
@@ -114,11 +115,11 @@ curl -sS -X POST "http://127.0.0.1:30002/api/holo/settings/llm" \
 ## 6) 실행 후 검증 체크리스트
 
 1. API 응답 `status=ok` 확인
-2. `hololive-admin-api`, `hololive-llm-scheduler` 로그에서 성공 메시지 확인
+2. `hololive-kakao-bot-go`, `hololive-llm-scheduler` 로그에서 성공 메시지 확인
 3. `409/5xx` 재발 여부 확인
 
 ```bash
-docker logs --since 5m hololive-admin-api
+docker logs --since 5m hololive-kakao-bot-go
 docker logs --since 5m hololive-llm-scheduler
 ```
 
