@@ -86,3 +86,20 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 		t.Fatalf("parsed type = %v, want %v", envelope.Parsed.Type, domain.CommandHelp)
 	}
 }
+
+func TestResolveRoom_NumericRoomPrefersRoomID(t *testing.T) {
+	t.Parallel()
+
+	message := &iris.Message{
+		Room: "123456",
+		JSON: &iris.MessageJSON{ChatID: "json-chat-id"},
+	}
+
+	chatID, roomName := resolveRoom(message)
+	if chatID != "123456" {
+		t.Fatalf("chat id = %q, want %q", chatID, "123456")
+	}
+	if roomName != "123456" {
+		t.Fatalf("room name = %q, want %q", roomName, "123456")
+	}
+}
