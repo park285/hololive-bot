@@ -1,7 +1,7 @@
-# P6 남은 작업 목록 (Stream Ingester 분리)
+# P6 종료 메모 (Stream Ingester 분리)
 
-> 마지막 업데이트: 2026-02-27
-> 범위: `hololive-kakao-bot-go` P6 마감 전까지 남은 실행 항목
+> 마지막 업데이트: 2026-03-07
+> 범위: `hololive-kakao-bot-go` P6 종료 상태와 후속 운영 메모
 
 ---
 
@@ -9,7 +9,7 @@
 
 - 완료:
   - `stream-ingester` 바이너리/런타임 1차 분리
-  - bot ingestion fallback 제거, stream-ingester 단독 운영 고정
+  - bot ingestion 코드 제거, stream-ingester 단독 운영 고정
   - Holodex/YouTube scraper 분산 rate limiter 적용
   - 기본 Runbook/설계 문서 작성
   - ingestion 분산 락 가드 추가 (`lock:ingestion:runtime`, SetNX + compare-and-expire renew + release)
@@ -24,9 +24,9 @@
 
 ---
 
-## 후속 권장 항목 (선택)
+## 후속 운영 항목 (선택)
 
-## 1) 운영 컷오버 검증 (제외됨)
+## 1) 운영 컷오버 검증 (참고)
 
 - 목표:
   - `hololive-bot`는 ingestion 코드 미포함
@@ -42,8 +42,8 @@
 - 목표:
   - ingestion ownership이 `stream-ingester`에만 고정되도록 보장
 - 작업:
-  - bot fallback 코드 제거
-  - 운영 체크리스트에서 토글 검증 제거
+  - bot ingestion 코드 제거
+  - 운영 체크리스트에서 bot 우회/토글 검증 제거
 - 현재 반영:
   - stream-ingester 시작 시 Valkey 분산 락 획득 강제
   - 락 미획득 시 프로세스 시작 실패(명시적 에러)
@@ -67,7 +67,7 @@
   - 장애 시 stream-ingester 복구 절차 확정
 - 작업:
   - [x] `stream-ingester` 단독 재기동 절차
-  - [x] bot ingestion 재활성화 우회 절차 제거
+  - [x] bot 측 ingestion 우회 절차 제거
   - [ ] (선택) 실제 운영 리허설(재기동 1회) 결과 기록
 - 완료 기준:
   - Runbook에 단계별 명령/판단 기준 포함
@@ -89,5 +89,5 @@
 ```bash
 go test ./internal/service/ratelimit ./internal/service/holodex ./internal/service/youtube/scraper ./internal/app
 go build ./...
-docker compose -f docker-compose.prod.yml ps hololive-bot stream-ingester
+docker compose -f docker-compose.prod.yml ps stream-ingester
 ```
