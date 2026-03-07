@@ -102,6 +102,23 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 1 {
 		t.Fatalf("expected dispatch queue size=1, got %d", queueSize)
 	}
+
+	notifiedKey := "notified:" + stream.ID
+	startScheduled, err := cacheSvc.HGet(context.Background(), notifiedKey, "start_scheduled")
+	if err != nil {
+		t.Fatalf("expected hash-based notified cache, got error: %v", err)
+	}
+	if startScheduled == "" {
+		t.Fatalf("expected start_scheduled field to be written")
+	}
+
+	minuteSent, err := cacheSvc.HGet(context.Background(), notifiedKey, "5")
+	if err != nil {
+		t.Fatalf("expected minute field to be readable from hash: %v", err)
+	}
+	if minuteSent != "1" {
+		t.Fatalf("expected minute field to be 1, got %q", minuteSent)
+	}
 }
 
 func readDispatchQueueSize(t *testing.T, cacheSvc cache.Client) int64 {

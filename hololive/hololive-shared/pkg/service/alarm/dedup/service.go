@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/valkey-io/valkey-go"
 )
 
 // NotifiedData: 알림 중복 발송 방지를 위한 이력 정보
@@ -32,6 +34,14 @@ type Service struct {
 	fallback      *LocalFallback
 	logger        *slog.Logger
 }
+
+type notifiedDataSource int
+
+const (
+	notifiedDataSourceMissing notifiedDataSource = iota
+	notifiedDataSourceHash
+	notifiedDataSourceLegacyString
+)
 
 // NewService: DedupService 생성
 func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Service {
@@ -104,16 +114,32 @@ func (s *Service) MarkAsNotified(ctx context.Context, streamID string, startSche
 	key := keys.NotifiedKey(streamID)
 	scheduledStr := keys.FormatScheduled(startScheduled)
 
-	// 기존 스케줄 확인 (변경 감지)
-	existingScheduled, err := s.cache.HGet(ctx, key, "start_scheduled")
+	existing, source, err := s.loadNotifiedData(ctx, key)
 	if err != nil {
-		return fmt.Errorf("mark as notified: get existing schedule: %w", err)
+		return fmt.Errorf("mark as notified: load existing data: %w", err)
 	}
-	if existingScheduled != "" && existingScheduled != scheduledStr {
-		// 스케줄 변경 -> 기존 해시 삭제 후 재생성
+
+	if existing != nil && existing.StartScheduled != "" && existing.StartScheduled != scheduledStr {
 		if err := s.cache.Del(ctx, key); err != nil {
 			return fmt.Errorf("mark as notified: reset old schedule hash: %w", err)
 		}
+		existing = nil
+		source = notifiedDataSourceMissing
+	}
+
+	if source == notifiedDataSourceLegacyString {
+		if existing == nil {
+			existing = &NotifiedData{}
+		}
+		if existing.SentAt == nil {
+			existing.SentAt = make(map[int]bool)
+		}
+		existing.StartScheduled = scheduledStr
+		existing.SentAt[minutesUntil] = true
+		if err := s.migrateLegacyNotifiedData(ctx, key, existing); err != nil {
+			return fmt.Errorf("mark as notified: migrate legacy data: %w", err)
+		}
+		return nil
 	}
 
 	// 원자적 필드 갱신
@@ -241,22 +267,120 @@ func (s *Service) isTargetMinute(minutesUntil int) bool {
 
 // readNotifiedData: Valkey에서 NotifiedData 해시를 조회합니다.
 func (s *Service) readNotifiedData(ctx context.Context, key string) *NotifiedData {
-	fields, err := s.cache.HGetAll(ctx, key)
-	if err == nil && len(fields) > 0 {
-		startScheduled := fields["start_scheduled"]
-		sentAt := make(map[int]bool)
-		for k := range fields {
-			if k == "start_scheduled" {
-				continue
-			}
-			if m, err := strconv.Atoi(k); err == nil {
-				sentAt[m] = true
-			}
-		}
-		return &NotifiedData{
-			StartScheduled: startScheduled,
-			SentAt:         sentAt,
+	data, source, err := s.loadNotifiedData(ctx, key)
+	if err != nil || data == nil {
+		return nil
+	}
+
+	if source == notifiedDataSourceLegacyString {
+		if err := s.migrateLegacyNotifiedData(ctx, key, data); err != nil {
+			s.logger.Warn("Failed to migrate legacy notified cache",
+				slog.String("key", key),
+				slog.Any("error", err),
+			)
 		}
 	}
+
+	return data
+}
+
+func (s *Service) loadNotifiedData(ctx context.Context, key string) (*NotifiedData, notifiedDataSource, error) {
+	fields, err := s.readNotifiedHashFields(ctx, key)
+	if err == nil {
+		if len(fields) == 0 {
+			return nil, notifiedDataSourceMissing, nil
+		}
+		return parseNotifiedHash(fields), notifiedDataSourceHash, nil
+	}
+	if !isWrongTypeError(err) {
+		return nil, notifiedDataSourceMissing, err
+	}
+
+	var legacy NotifiedData
+	if err := s.cache.Get(ctx, key, &legacy); err != nil {
+		return nil, notifiedDataSourceMissing, fmt.Errorf("get legacy string: %w", err)
+	}
+	if legacy.StartScheduled == "" && len(legacy.SentAt) == 0 {
+		return nil, notifiedDataSourceMissing, nil
+	}
+	if legacy.SentAt == nil {
+		legacy.SentAt = make(map[int]bool)
+	}
+
+	return &legacy, notifiedDataSourceLegacyString, nil
+}
+
+func (s *Service) readNotifiedHashFields(ctx context.Context, key string) (map[string]string, error) {
+	client, builder, ok := rawCacheAccessors(s.cache)
+	if !ok {
+		return s.cache.HGetAll(ctx, key)
+	}
+
+	resp := client.Do(ctx, builder.Hgetall().Key(key).Build())
+	if resp.Error() != nil {
+		return nil, resp.Error()
+	}
+	return resp.AsStrMap()
+}
+
+func (s *Service) migrateLegacyNotifiedData(ctx context.Context, key string, data *NotifiedData) error {
+	if err := s.cache.Del(ctx, key); err != nil {
+		return fmt.Errorf("delete legacy key: %w", err)
+	}
+	if err := s.persistNotifiedHash(ctx, key, data); err != nil {
+		return fmt.Errorf("persist migrated hash: %w", err)
+	}
 	return nil
+}
+
+func (s *Service) persistNotifiedHash(ctx context.Context, key string, data *NotifiedData) error {
+	fields := make(map[string]any, len(data.SentAt)+1)
+	fields["start_scheduled"] = data.StartScheduled
+	for minute, sent := range data.SentAt {
+		if !sent {
+			continue
+		}
+		fields[strconv.Itoa(minute)] = "1"
+	}
+	if err := s.cache.HMSet(ctx, key, fields); err != nil {
+		return fmt.Errorf("hmset notified hash: %w", err)
+	}
+	if err := s.cache.Expire(ctx, key, constants.CacheTTL.NotificationSent); err != nil {
+		return fmt.Errorf("expire notified hash: %w", err)
+	}
+	return nil
+}
+
+func parseNotifiedHash(fields map[string]string) *NotifiedData {
+	startScheduled := fields["start_scheduled"]
+	sentAt := make(map[int]bool)
+	for k := range fields {
+		if k == "start_scheduled" {
+			continue
+		}
+		if m, err := strconv.Atoi(k); err == nil {
+			sentAt[m] = true
+		}
+	}
+
+	return &NotifiedData{
+		StartScheduled: startScheduled,
+		SentAt:         sentAt,
+	}
+}
+
+func isWrongTypeError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "WRONGTYPE")
+}
+
+func rawCacheAccessors(c cache.Client) (client valkey.Client, builder valkey.Builder, ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+
+	client = c.GetClient()
+	builder = c.B()
+	return client, builder, true
 }
