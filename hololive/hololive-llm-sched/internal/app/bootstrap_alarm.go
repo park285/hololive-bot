@@ -2,15 +2,15 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
+	mnsummarizer "github.com/kapu/hololive-llm-sched/internal/service/membernews/summarizer"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -45,14 +45,13 @@ func initMemberNewsService(
 		validator, _ = membernews.NewSourceValidator("", membersData, logger)
 	}
 
-	adaptedSearcher := &memberNewsSearcherAdapter{base: searcher}
-	baseSummarizer := membernews.NewSummarizer(llmClient, adaptedSearcher, validator, logger)
+	baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger)
 
 	var summarizer membernews.Summarizer = baseSummarizer
 	if llmCfg.MemberNews.Enabled && reviewer != nil {
-		summarizer = membernews.NewConsensusSummarizer(
+		summarizer = mnsummarizer.NewConsensusSummarizer(
 			baseSummarizer, reviewer, adjudicator, validator,
-			membernews.ConsensusConfig{
+			consensus.Config{
 				ConfidenceThreshold: llmCfg.MemberNews.Confidence,
 				ReviewTimeout:       time.Duration(llmCfg.MemberNews.ReviewTimeout) * time.Second,
 				AdjudicateTimeout:   time.Duration(llmCfg.MemberNews.AdjudicateTimeout) * time.Second,
@@ -89,23 +88,4 @@ func resolveMemberNewsXAllowlistPath() string {
 		}
 	}
 	return ""
-}
-
-// memberNewsSearcherAdapter: majorevent/summarizer.WebSearcher를 membernews.WebSearcher로 변환
-type memberNewsSearcherAdapter struct {
-	base mesummarizer.WebSearcher
-}
-
-func (a *memberNewsSearcherAdapter) Search(ctx context.Context, query string) ([]membernews.SearchResult, error) {
-	if a.base == nil {
-		return nil, nil
-	}
-	results, err := a.base.Search(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("search member news context: %w", err)
-	}
-
-	converted := make([]membernews.SearchResult, 0, len(results))
-	converted = append(converted, results...)
-	return converted, nil
 }

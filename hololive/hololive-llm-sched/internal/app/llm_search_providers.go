@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -12,7 +13,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
-func provideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) mesummarizer.WebSearcher {
+func provideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -34,7 +35,7 @@ func provideEventSummarizer(
 	reviewerClient mesummarizer.LLMClient,
 	adjudicatorClient mesummarizer.LLMClient,
 	cacheSvc cache.Client,
-	searcher mesummarizer.WebSearcher,
+	searcher sharedmodel.WebSearcher,
 	logger *slog.Logger,
 ) *mesummarizer.EventSummarizer {
 	if logger == nil {

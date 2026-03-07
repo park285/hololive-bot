@@ -16,10 +16,10 @@ import (
 func processDigestForRoom(
 	ctx context.Context,
 	svc model.DigestService,
-	fmtr DigestFormatter,
+	fmtr model.DigestFormatter,
 	outbox outboxEnqueuer,
 	logger *slog.Logger,
-	period Period,
+	period model.Period,
 	kind domain.DeliveryOutboxKind,
 	periodKey, roomID, emptyHeader string,
 ) delivery.SendResult {
@@ -27,7 +27,7 @@ func processDigestForRoom(
 
 	digest, err := svc.GenerateRoomDigest(ctx, roomID, period)
 	if err != nil {
-		if errors.Is(err, ErrNoSubscribedMembers) {
+		if errors.Is(err, model.ErrNoSubscribedMembers) {
 			logger.Info("Member news skip: room has no alarm members",
 				slog.String("room_id", roomID),
 				slog.String("period", string(period)),
@@ -64,7 +64,7 @@ func processDigestForRoom(
 }
 
 // renderDigestMessage: 다이제스트 메시지 포맷팅 (weekly/monthly 공용).
-func renderDigestMessage(ctx context.Context, fmtr DigestFormatter, digest *Digest, emptyHeader string) string {
+func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest *model.Digest, emptyHeader string) string {
 	if digest == nil {
 		return emptyHeader + "\n- 표시할 항목이 없습니다."
 	}

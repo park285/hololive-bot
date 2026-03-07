@@ -25,7 +25,7 @@ const (
 // MonthlyScheduler: 월간 뉴스 자동 발송 스케줄러.
 type MonthlyScheduler struct {
 	service    model.DigestService
-	formatter  DigestFormatter
+	formatter  model.DigestFormatter
 	locker     delivery.NotificationLocker
 	outboxRepo outboxEnqueuer
 	logger     *slog.Logger
@@ -39,7 +39,7 @@ type MonthlyScheduler struct {
 // NewMonthlyScheduler: 월간 스케줄러 생성.
 func NewMonthlyScheduler(
 	service model.DigestService,
-	formatter DigestFormatter,
+	formatter model.DigestFormatter,
 	locker delivery.NotificationLocker,
 	outboxRepo outboxEnqueuer,
 	logger *slog.Logger,
@@ -119,11 +119,11 @@ func (s *MonthlyScheduler) run(ctx context.Context) {
 }
 
 func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
-	nowKST := now.In(kst)
+	nowKST := now.In(model.KST)
 
 	target := time.Date(
 		nowKST.Year(), nowKST.Month(), MonthlyScheduleDay,
-		MonthlyScheduleHourKST, monthlyScheduleMinuteKST, 0, 0, kst,
+		MonthlyScheduleHourKST, monthlyScheduleMinuteKST, 0, 0, model.KST,
 	)
 
 	// 이미 지났으면 다음 달로
@@ -208,10 +208,10 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 // processRoomDigest: 단일 room의 월간 다이제스트 생성 + outbox enqueue.
 func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, roomID string) delivery.SendResult {
 	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepo, s.logger,
-		PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID, "📅 이번달 구독 멤버 뉴스")
+		model.PeriodMonthly, domain.DeliveryKindMemberNewsMonthly, monthKey, roomID, "📅 이번달 구독 멤버 뉴스")
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {
-	now := s.now().In(kst)
+	now := s.now().In(model.KST)
 	return fmt.Sprintf("%d-%02d", now.Year(), now.Month())
 }

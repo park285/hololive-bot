@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-llm-sched/internal/llm"
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
@@ -65,69 +67,69 @@ func newTestMemberNewsClient(t *testing.T) LLMClient {
 	)
 }
 
-func integrationCandidates() []FilteredCandidate {
+func integrationCandidates() []model.FilteredCandidate {
 	date := func(y, m, d int) time.Time {
 		return time.Date(y, time.Month(m), d, 12, 0, 0, 0, kst)
 	}
-	return []FilteredCandidate{
+	return []model.FilteredCandidate{
 		{
-			Candidate: Candidate{
+			Candidate: model.Candidate{
 				Title:       "hololive SUPER EXPO 2026",
 				Description: "마쿠하리 메세에서 개최되는 홀로라이브 최대 규모 행사",
 			},
 			EffectiveDate:  date(2026, 3, 6),
 			MatchedMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 			MemberText:     "사쿠라 미코, 호시마치 스이세이",
-			Category:       CategoryEvent,
-			SourceTier:     SourceTierOfficial,
+			Category:       model.CategoryEvent,
+			SourceTier:     model.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/events/expo2026",
 		},
 		{
-			Candidate: Candidate{
+			Candidate: model.Candidate{
 				Title:       "Hoshimachi Suisei Live SuperNova: REBOOT",
 				Description: "호시마치 스이세이 솔로 라이브 콘서트",
 			},
 			EffectiveDate:  date(2026, 2, 20),
 			MatchedMembers: []string{"호시마치 스이세이"},
 			MemberText:     "호시마치 스이세이",
-			Category:       CategorySoloLive,
-			SourceTier:     SourceTierOfficial,
+			Category:       model.CategorySoloLive,
+			SourceTier:     model.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/events/suisei2026",
 		},
 		{
-			Candidate: Candidate{
+			Candidate: model.Candidate{
 				Title:       "사쿠라 미코 생일 기념 굿즈",
 				Description: "사쿠라 미코 생일 기념 한정 굿즈 판매",
 			},
 			EffectiveDate:  date(2026, 3, 5),
 			MatchedMembers: []string{"사쿠라 미코"},
 			MemberText:     "사쿠라 미코",
-			Category:       CategoryGoods,
-			SourceTier:     SourceTierOfficial,
+			Category:       model.CategoryGoods,
+			SourceTier:     model.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/miko-birthday-goods",
 		},
 		{
-			Candidate: Candidate{
+			Candidate: model.Candidate{
 				Title:       "hololive DEV_IS NEW WAVE POP UP STORE",
 				Description: "DEV_IS 소속 멤버 팝업스토어 개최",
 			},
 			EffectiveDate:  date(2026, 2, 14),
 			MatchedMembers: []string{"사쿠라 미코"},
 			MemberText:     "사쿠라 미코",
-			Category:       CategoryOther,
-			SourceTier:     SourceTierOfficial,
+			Category:       model.CategoryOther,
+			SourceTier:     model.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/devis-popup",
 		},
 		{
-			Candidate: Candidate{
+			Candidate: model.Candidate{
 				Title:       "ホロライブ バレンタイン 2026",
 				Description: "HMV&BOOKS SHIBUYA 팝업 이벤트",
 			},
 			EffectiveDate:  date(2026, 2, 7),
 			MatchedMembers: []string{"호시마치 스이세이"},
 			MemberText:     "호시마치 스이세이",
-			Category:       CategoryEvent,
-			SourceTier:     SourceTierOfficial,
+			Category:       model.CategoryEvent,
+			SourceTier:     model.SourceTierOfficial,
 			SourceURL:      "https://hololive.hololivepro.com/news/valentine2026",
 		},
 	}
@@ -142,9 +144,9 @@ func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(client, nil, validator, nil)
 
-	input := SummarizeInput{
-		Period:      PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, kst),
+	input := model.SummarizeInput{
+		Period:      model.PeriodWeekly,
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
 		RoomMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 		Candidates:  integrationCandidates(),
 	}
@@ -181,9 +183,9 @@ func TestIntegration_MemberNewsSummarize_Monthly(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(client, nil, validator, nil)
 
-	input := SummarizeInput{
-		Period:      PeriodMonthly,
-		Now:         time.Date(2026, 3, 1, 10, 0, 0, 0, kst),
+	input := model.SummarizeInput{
+		Period:      model.PeriodMonthly,
+		Now:         time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST),
 		RoomMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 		Candidates:  integrationCandidates(),
 	}
@@ -205,8 +207,8 @@ func TestIntegration_MemberNewsSummarize_Monthly(t *testing.T) {
 	}
 
 	// 월간 period 반환 검증
-	if digest.Period != PeriodMonthly {
-		t.Errorf("expected period %q, got %q", PeriodMonthly, digest.Period)
+	if digest.Period != model.PeriodMonthly {
+		t.Errorf("expected period %q, got %q", model.PeriodMonthly, digest.Period)
 	}
 }
 
@@ -217,9 +219,9 @@ func TestIntegration_MemberNewsSummarize_SchemaCompliance(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(client, nil, validator, nil)
 
-	input := SummarizeInput{
-		Period:      PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, kst),
+	input := model.SummarizeInput{
+		Period:      model.PeriodWeekly,
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
 		RoomMembers: []string{"사쿠라 미코"},
 		Candidates:  integrationCandidates(),
 	}
@@ -230,7 +232,7 @@ func TestIntegration_MemberNewsSummarize_SchemaCompliance(t *testing.T) {
 	}
 
 	// period enum 검증
-	if digest.Period != PeriodWeekly && digest.Period != PeriodMonthly {
+	if digest.Period != model.PeriodWeekly && digest.Period != model.PeriodMonthly {
 		t.Errorf("unexpected period enum: %q", digest.Period)
 	}
 
@@ -289,7 +291,7 @@ func TestIntegration_Consensus_FullPipeline(t *testing.T) {
 	baseSummarizer := NewSummarizer(primaryClient, nil, validator, nil)
 	cs := NewConsensusSummarizer(
 		baseSummarizer, reviewerClient, adjudicatorClient, validator,
-		ConsensusConfig{
+		consensus.Config{
 			ConfidenceThreshold: 0.85,
 			ReviewTimeout:       30 * time.Second,
 			AdjudicateTimeout:   45 * time.Second,
@@ -297,9 +299,9 @@ func TestIntegration_Consensus_FullPipeline(t *testing.T) {
 		nil,
 	)
 
-	input := SummarizeInput{
-		Period:      PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, kst),
+	input := model.SummarizeInput{
+		Period:      model.PeriodWeekly,
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
 		RoomMembers: []string{"사쿠라 미코", "호시마치 스이세이"},
 		Candidates:  integrationCandidates(),
 	}

@@ -8,13 +8,15 @@ import (
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // Service: 룸별 구독 멤버 뉴스를 생성합니다.
 type Service struct {
 	repository      *Repository
-	summarizer      Summarizer
+	summarizer      model.Summarizer
 	sourceValidator *SourceValidator
 	membersData     domain.MemberDataProvider
 	logger          *slog.Logger
@@ -24,7 +26,7 @@ type Service struct {
 // NewService: membernews 서비스 생성.
 func NewService(
 	repository *Repository,
-	summarizer Summarizer,
+	summarizer model.Summarizer,
 	sourceValidator *SourceValidator,
 	membersData domain.MemberDataProvider,
 	logger *slog.Logger,
@@ -51,7 +53,7 @@ func (s *Service) SetClock(clockFn func() time.Time) {
 }
 
 // GenerateRoomDigest: room 기준 뉴스 다이제스트를 생성합니다.
-func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period Period) (*Digest, error) {
+func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period model.Period) (*model.Digest, error) {
 	if s == nil {
 		return nil, fmt.Errorf("membernews service is nil")
 	}
@@ -62,13 +64,13 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 		return nil, fmt.Errorf("room id is required")
 	}
 
-	normalizedPeriod := NormalizePeriod(period)
+	normalizedPeriod := model.NormalizePeriod(period)
 	members, err := s.repository.GetRoomMembers(ctx, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("get room members: %w", err)
 	}
 	if len(members) == 0 {
-		return nil, ErrNoSubscribedMembers
+		return nil, model.ErrNoSubscribedMembers
 	}
 
 	candidates, err := s.repository.ListActiveMajorEvents(ctx)
@@ -83,11 +85,11 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 
 	filtered := FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
 	if len(filtered) == 0 {
-		return &Digest{
-			ResultType:   SummaryResultEmpty,
+		return &model.Digest{
+			ResultType:   sharedmodel.SummaryResultEmpty,
 			Period:       normalizedPeriod,
-			Headline:     defaultHeadline(normalizedPeriod),
-			TopItems:     []SummaryItem{},
+			Headline:     model.DefaultHeadline(normalizedPeriod),
+			TopItems:     []model.SummaryItem{},
 			MoreSummary:  "",
 			OmittedCount: 0,
 			TotalCount:   0,
@@ -100,7 +102,7 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 		return digest, nil
 	}
 
-	digest, err := s.summarizer.Summarize(ctx, SummarizeInput{
+	digest, err := s.summarizer.Summarize(ctx, model.SummarizeInput{
 		Period:      normalizedPeriod,
 		Now:         s.now(),
 		RoomID:      roomID,
@@ -122,7 +124,7 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 
 	digest.Period = normalizedPeriod
 	if digest.Headline == "" {
-		digest.Headline = defaultHeadline(normalizedPeriod)
+		digest.Headline = model.DefaultHeadline(normalizedPeriod)
 	}
 	if digest.OmittedCount < 0 {
 		digest.OmittedCount = 0
@@ -167,7 +169,7 @@ func (s *Service) IsRoomSubscribed(ctx context.Context, roomID string) (bool, er
 }
 
 // ListSubscribedRooms: 구독 방 목록을 조회합니다.
-func (s *Service) ListSubscribedRooms(ctx context.Context) ([]SubscribedRoom, error) {
+func (s *Service) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
 	if s == nil || s.repository == nil {
 		return nil, fmt.Errorf("membernews repository is nil")
 	}

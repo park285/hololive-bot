@@ -7,32 +7,36 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type mockDigestService struct {
-	rooms      []SubscribedRoom
-	digests    map[string]*Digest
+	rooms      []model.SubscribedRoom
+	digests    map[string]*model.Digest
 	digestErrs map[string]error
 }
 
-func (m *mockDigestService) GenerateRoomDigest(_ context.Context, roomID string, _ Period) (*Digest, error) {
+func (m *mockDigestService) GenerateRoomDigest(_ context.Context, roomID string, _ model.Period) (*model.Digest, error) {
 	if err, ok := m.digestErrs[roomID]; ok && err != nil {
 		return nil, err
 	}
 	if digest, ok := m.digests[roomID]; ok {
 		return digest, nil
 	}
-	return &Digest{Headline: "H", TopItems: []SummaryItem{{Member: "A", Category: "event", Title: "T", DateText: "2026-02-20", Summary: "S", SourceURL: "https://hololive.hololivepro.com/news/1"}}}, nil
+	return &model.Digest{
+		Headline: "H",
+		TopItems: []model.SummaryItem{{Member: "A", Category: "event", Title: "T", DateText: "2026-02-20", Summary: "S", SourceURL: "https://hololive.hololivepro.com/news/1"}},
+	}, nil
 }
 
-func (m *mockDigestService) ListSubscribedRooms(_ context.Context) ([]SubscribedRoom, error) {
+func (m *mockDigestService) ListSubscribedRooms(_ context.Context) ([]model.SubscribedRoom, error) {
 	return m.rooms, nil
 }
 
 type mockFormatter struct{}
 
-func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *Digest) string {
+func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Digest) string {
 	if digest == nil {
 		return ""
 	}
@@ -104,10 +108,10 @@ func (m *mockOutboxRepo) Enqueue(_ context.Context, kind domain.DeliveryOutboxKi
 }
 
 func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
-	service := &mockDigestService{rooms: []SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepo()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
@@ -121,10 +125,10 @@ func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
 }
 
 func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
-	service := &mockDigestService{rooms: []SubscribedRoom{{RoomID: "room-1"}, {RoomID: "room-2"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}, {RoomID: "room-2"}}}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
 	outbox := newMockOutboxRepo()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
@@ -138,11 +142,11 @@ func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
 }
 
 func TestScheduler_AllEnqueueFailureReturnsError(t *testing.T) {
-	service := &mockDigestService{rooms: []SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
 	outbox := newMockOutboxRepo()
 	outbox.enqueueErr["room-1"] = errors.New("db error")
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
@@ -162,18 +166,18 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 	}{
 		{
 			name: "before monday target same day",
-			now:  time.Date(2026, 2, 16, 8, 30, 0, 0, kst), // Monday
-			want: time.Date(2026, 2, 16, 9, 0, 0, 0, kst),
+			now:  time.Date(2026, 2, 16, 8, 30, 0, 0, model.KST), // Monday
+			want: time.Date(2026, 2, 16, 9, 0, 0, 0, model.KST),
 		},
 		{
 			name: "exact monday target next week",
-			now:  time.Date(2026, 2, 16, 9, 0, 0, 0, kst),
-			want: time.Date(2026, 2, 23, 9, 0, 0, 0, kst),
+			now:  time.Date(2026, 2, 16, 9, 0, 0, 0, model.KST),
+			want: time.Date(2026, 2, 23, 9, 0, 0, 0, model.KST),
 		},
 		{
 			name: "sunday moves next day monday",
-			now:  time.Date(2026, 2, 15, 23, 0, 0, 0, kst), // Sunday
-			want: time.Date(2026, 2, 16, 9, 0, 0, 0, kst),
+			now:  time.Date(2026, 2, 15, 23, 0, 0, 0, model.KST), // Sunday
+			want: time.Date(2026, 2, 16, 9, 0, 0, 0, model.KST),
 		},
 	}
 
@@ -189,7 +193,7 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 
 func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 	service := &mockDigestService{
-		rooms: []SubscribedRoom{
+		rooms: []model.SubscribedRoom{
 			{RoomID: "room-fail"},
 			{RoomID: "room-ok"},
 		},
@@ -197,7 +201,7 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
 	outbox := newMockOutboxRepo()
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
@@ -212,14 +216,14 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 
 func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 	service := &mockDigestService{
-		rooms: []SubscribedRoom{{RoomID: "room-no-members"}},
+		rooms: []model.SubscribedRoom{{RoomID: "room-no-members"}},
 		digestErrs: map[string]error{
-			"room-no-members": ErrNoSubscribedMembers,
+			"room-no-members": model.ErrNoSubscribedMembers,
 		},
 	}
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
 	outbox := newMockOutboxRepo()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
@@ -233,10 +237,10 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 }
 
 func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
-	service := &mockDigestService{rooms: []SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireToken: "tok-1", acquireAcquired: true}
 	outbox := newMockOutboxRepo()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
@@ -251,10 +255,10 @@ func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	// Graceful degradation: locker는 Valkey 장애 시 (token, true, nil) 반환.
 	// 스케줄러는 정상 진행.
-	service := &mockDigestService{rooms: []SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireToken: "degraded", acquireAcquired: true}
 	outbox := newMockOutboxRepo()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })

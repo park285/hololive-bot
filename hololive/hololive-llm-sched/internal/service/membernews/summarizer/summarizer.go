@@ -23,22 +23,21 @@ type LLMClient interface {
 	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
 }
 
-// SearchResult: sharedmodel.SearchResult의 별칭 (패키지 내 참조 호환)
-type SearchResult = sharedmodel.SearchResult
-
-// WebSearcher: sharedmodel.WebSearcher의 별칭 (패키지 내 참조 호환)
-type WebSearcher = sharedmodel.WebSearcher
-
 // Summarizer: LLM + hard validator + deterministic fallback 요약기.
 type SummarizerImpl struct {
 	llm       LLMClient
-	searcher  WebSearcher
+	searcher  sharedmodel.WebSearcher
 	validator model.SourceURLValidator
 	logger    *slog.Logger
 }
 
 // NewSummarizer: 요약기 생성.
-func NewSummarizer(llm LLMClient, searcher WebSearcher, validator model.SourceURLValidator, logger *slog.Logger) *SummarizerImpl {
+func NewSummarizer(
+	llm LLMClient,
+	searcher sharedmodel.WebSearcher,
+	validator model.SourceURLValidator,
+	logger *slog.Logger,
+) *SummarizerImpl {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -51,7 +50,7 @@ func NewSummarizer(llm LLMClient, searcher WebSearcher, validator model.SourceUR
 }
 
 // Summarize: 요약 생성(실패 시 deterministic fallback).
-func (s *SummarizerImpl) Summarize(ctx context.Context, input SummarizeInput) (*Digest, error) {
+func (s *SummarizerImpl) Summarize(ctx context.Context, input model.SummarizeInput) (*model.Digest, error) {
 	if len(input.Candidates) == 0 {
 		return newEmptyDigest(input.Period, 0), nil
 	}
@@ -92,12 +91,12 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input SummarizeInput) (*
 	return digest, nil
 }
 
-func newEmptyDigest(period Period, totalCount int) *Digest {
-	return &Digest{
-		ResultType:   SummaryResultEmpty,
+func newEmptyDigest(period model.Period, totalCount int) *model.Digest {
+	return &model.Digest{
+		ResultType:   sharedmodel.SummaryResultEmpty,
 		Period:       period,
 		Headline:     model.DefaultHeadline(period),
-		TopItems:     []SummaryItem{},
+		TopItems:     []model.SummaryItem{},
 		MoreSummary:  "",
 		OmittedCount: 0,
 		TotalCount:   totalCount,
@@ -107,18 +106,18 @@ func newEmptyDigest(period Period, totalCount int) *Digest {
 // validateAndBuildDigest: LLM 출력을 재검증합니다.
 // FilterCandidates에서 입력 후보를 사전 검증하지만, LLM이 source_url을 변형하거나
 // 허용 범위 외 항목을 생성할 수 있으므로 출력에 대한 이중 검증이 의도적으로 적용됩니다.
-func (s *SummarizerImpl) validateAndBuildDigest(input SummarizeInput, response *summaryResponse) *Digest {
+func (s *SummarizerImpl) validateAndBuildDigest(input model.SummarizeInput, response *summaryResponse) *model.Digest {
 	return validateAndBuildDigestFromResponse(input, response, s.validator)
 }
 
 // validateAndBuildDigestFromResponse: summaryResponse를 검증하여 Digest를 생성한다.
 // SummarizerImpl.validateAndBuildDigest와 ConsensusSummarizer 양쪽에서 재사용.
 func validateAndBuildDigestFromResponse(
-	input SummarizeInput,
+	input model.SummarizeInput,
 	response *summaryResponse,
 	validator model.SourceURLValidator,
-) *Digest {
-	validatedItems := make([]SummaryItem, 0, len(response.TopItems))
+) *model.Digest {
+	validatedItems := make([]model.SummaryItem, 0, len(response.TopItems))
 
 	for i := range response.TopItems {
 		item := &response.TopItems[i]
@@ -140,12 +139,12 @@ func validateAndBuildDigestFromResponse(
 				continue
 			}
 			normalizedURL = validatedSourceURL
-			if validatedTier == SourceTierCommunity && !validator.HasCorroboration(item.Summary) {
+			if validatedTier == model.SourceTierCommunity && !validator.HasCorroboration(item.Summary) {
 				continue
 			}
 		}
 
-		validatedItems = append(validatedItems, SummaryItem{
+		validatedItems = append(validatedItems, model.SummaryItem{
 			Member:    strings.TrimSpace(item.Member),
 			Category:  string(normalizedCategory),
 			Title:     strings.TrimSpace(item.Title),
@@ -173,9 +172,9 @@ func validateAndBuildDigestFromResponse(
 		moreSummary = fmt.Sprintf("외 %d건", omittedCount)
 	}
 
-	return &Digest{
-		ResultType:   SummaryResultPrimary,
-		Period:       model.NormalizePeriod(Period(response.Period)),
+	return &model.Digest{
+		ResultType:   sharedmodel.SummaryResultPrimary,
+		Period:       model.NormalizePeriod(model.Period(response.Period)),
 		Headline:     headline,
 		TopItems:     validatedItems,
 		MoreSummary:  moreSummary,
@@ -188,17 +187,17 @@ func validateAndBuildDigestFromResponse(
 var weekdayKR = [...]string{"일", "월", "화", "수", "목", "금", "토"}
 
 // categoryLabel: Category를 한국어 레이블로 변환.
-func categoryLabel(cat Category) string {
+func categoryLabel(cat model.Category) string {
 	switch cat {
-	case CategoryBirthdayLive:
+	case model.CategoryBirthdayLive:
 		return "생일 라이브"
-	case CategorySoloLive:
+	case model.CategorySoloLive:
 		return "솔로 라이브"
-	case CategoryCollab:
+	case model.CategoryCollab:
 		return "콜라보"
-	case CategoryEvent:
+	case model.CategoryEvent:
 		return "이벤트"
-	case CategoryGoods:
+	case model.CategoryGoods:
 		return "굿즈"
 	default:
 		return "기타"
@@ -206,8 +205,8 @@ func categoryLabel(cat Category) string {
 }
 
 // BuildDeterministicFallback: LLM 실패/검증 실패 시 고정 규칙 출력 생성.
-func BuildDeterministicFallback(period Period, candidates []FilteredCandidate) *Digest {
-	items := make([]SummaryItem, 0, min(5, len(candidates)))
+func BuildDeterministicFallback(period model.Period, candidates []model.FilteredCandidate) *model.Digest {
+	items := make([]model.SummaryItem, 0, min(5, len(candidates)))
 	for idx := range candidates {
 		if idx >= 5 {
 			break
@@ -217,7 +216,7 @@ func BuildDeterministicFallback(period Period, candidates []FilteredCandidate) *
 		localTime := candidate.EffectiveDate.In(kst)
 		dateText := fmt.Sprintf("%d/%d(%s)", localTime.Month(), localTime.Day(), weekdayKR[localTime.Weekday()])
 		summary := fmt.Sprintf("%s %s - %s", dateText, categoryLabel(candidate.Category), candidate.Candidate.Title)
-		items = append(items, SummaryItem{
+		items = append(items, model.SummaryItem{
 			Member:    candidate.MemberText,
 			Category:  string(candidate.Category),
 			Title:     candidate.Candidate.Title,
@@ -237,8 +236,8 @@ func BuildDeterministicFallback(period Period, candidates []FilteredCandidate) *
 		moreSummary = fmt.Sprintf("외 %d건", omitted)
 	}
 
-	return &Digest{
-		ResultType:   SummaryResultFallback,
+	return &model.Digest{
+		ResultType:   sharedmodel.SummaryResultFallback,
 		Period:       model.NormalizePeriod(period),
 		Headline:     model.DefaultHeadline(period),
 		TopItems:     items,
@@ -248,21 +247,21 @@ func BuildDeterministicFallback(period Period, candidates []FilteredCandidate) *
 	}
 }
 
-func normalizeCategory(raw string) Category {
+func normalizeCategory(raw string) model.Category {
 	normalized := strings.TrimSpace(strings.ToLower(raw))
 	switch normalized {
-	case string(CategoryBirthdayLive):
-		return CategoryBirthdayLive
-	case string(CategorySoloLive):
-		return CategorySoloLive
-	case string(CategoryCollab):
-		return CategoryCollab
-	case string(CategoryEvent):
-		return CategoryEvent
-	case string(CategoryGoods):
-		return CategoryGoods
+	case string(model.CategoryBirthdayLive):
+		return model.CategoryBirthdayLive
+	case string(model.CategorySoloLive):
+		return model.CategorySoloLive
+	case string(model.CategoryCollab):
+		return model.CategoryCollab
+	case string(model.CategoryEvent):
+		return model.CategoryEvent
+	case string(model.CategoryGoods):
+		return model.CategoryGoods
 	default:
-		return CategoryOther
+		return model.CategoryOther
 	}
 }
 
@@ -373,7 +372,7 @@ Rules:
 - Do not guess unknown facts.`
 }
 
-func buildMemberNewsUserPrompt(input SummarizeInput, searchContext string) string {
+func buildMemberNewsUserPrompt(input model.SummarizeInput, searchContext string) string {
 	candidates := make([]promptCandidate, 0, len(input.Candidates))
 	for i := range input.Candidates {
 		candidate := &input.Candidates[i]
@@ -410,9 +409,9 @@ candidate_events=%s`,
 	return base + "\nexa_search_context=" + searchContext + "\nReturn only schema JSON."
 }
 
-func buildSearchQuery(period Period, roomMembers []string, now time.Time) string {
+func buildSearchQuery(period model.Period, roomMembers []string, now time.Time) string {
 	periodText := "weekly"
-	if model.NormalizePeriod(period) == PeriodMonthly {
+	if model.NormalizePeriod(period) == model.PeriodMonthly {
 		periodText = "monthly"
 	}
 
@@ -430,7 +429,7 @@ func buildSearchQuery(period Period, roomMembers []string, now time.Time) string
 	return fmt.Sprintf("hololive %s news schedule %s %s", memberPart, periodText, now.In(kst).Format("2006-01"))
 }
 
-func formatSearchContext(results []SearchResult) string {
+func formatSearchContext(results []sharedmodel.SearchResult) string {
 	if len(results) == 0 {
 		return ""
 	}
