@@ -35,7 +35,11 @@ func main() {
 	}
 
 	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
-		Level: cfg.Logging.Level,
+		Dir:        cfg.Logging.Dir,
+		MaxSizeMB:  cfg.Logging.MaxSizeMB,
+		MaxBackups: cfg.Logging.MaxBackups,
+		MaxAgeDays: cfg.Logging.MaxAgeDays,
+		Compress:   cfg.Logging.Compress,
 	}, "dispatcher-go.log", cfg.Logging.Level)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)

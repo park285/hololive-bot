@@ -10,7 +10,7 @@ Module inventory for the `hololive-bot` workspace.
 | `hololive-stream-ingester` | Go 1.26 | `hololive/hololive-stream-ingester/` | YouTube/Holodex/Chzzk/Twitch polling + stats | 30004 |
 | `hololive-shared` | Go 1.26 | `hololive/hololive-shared/` | Shared Go library (hololive domain) | - |
 | `shared-go` | Go 1.26 | `shared-go/` | Shared Go utilities (errors, stringutil, valkeyx, workerpool, etc.) | - |
-| `k8s/` | YAML | `k8s/` | Kubernetes manifests (k3s) | - |
+| `docker-compose.prod.yml` | YAML | `docker-compose.prod.yml` | Production docker compose stack | - |
 
 ## Runtime Binaries (4)
 

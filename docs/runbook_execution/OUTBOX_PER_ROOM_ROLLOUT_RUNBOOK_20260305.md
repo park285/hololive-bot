@@ -68,7 +68,7 @@
 주기 점검(cron) 예시:
 
 ```bash
-*/10 * * * * /home/kapu/gemini/hololive-bot/scripts/logs/check-outbox-per-room-cron.sh >> /home/kapu/gemini/hololive-bot/logs/outbox-per-room-canary-cron.log 2>&1
+*/10 * * * * /home/kapu/gemini/hololive-bot/scripts/logs/check-outbox-per-room-cron.sh >> /home/kapu/gemini/hololive-bot/logs/cron/outbox-per-room-canary.log 2>&1
 ```
 
 cron 환경 변수(선택):

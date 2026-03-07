@@ -1,5 +1,5 @@
 [Unit]
-Description=Hololive Loki log mirror stream
+Description=Hololive compose log mirror stream
 After=network-online.target
 Wants=network-online.target
 

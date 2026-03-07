@@ -36,7 +36,13 @@ func main() {
 		return
 	}
 
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{}, "stream-ingester.log", cfg.Logging.Level)
+	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
+		Dir:        cfg.Logging.Dir,
+		MaxSizeMB:  cfg.Logging.MaxSizeMB,
+		MaxBackups: cfg.Logging.MaxBackups,
+		MaxAgeDays: cfg.Logging.MaxAgeDays,
+		Compress:   cfg.Logging.Compress,
+	}, "stream-ingester.log", cfg.Logging.Level)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		exitCode = 1
