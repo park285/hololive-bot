@@ -244,6 +244,8 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 				slog.Any("error", err))
 			continue
 		}
+
+		result[e.channelID] = map[string]bool{}
 		if len(members) == 0 {
 			continue
 		}

@@ -113,6 +113,93 @@ func TestProcessItem_PartialFailureLeavesOutboxPending(t *testing.T) {
 	assert.Len(t, sender.messages, 1)
 }
 
+func TestEnqueueDeliveries_SubscriberLookupFailureReleasesLockWithoutMarkingSent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
+
+	cacheSvc, mini := newDispatcherTestCache(t)
+	defer mini.Close()
+	defer func() { require.NoError(t, cacheSvc.Close()) }()
+
+	now := time.Now()
+	item := domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewVideo,
+		ChannelID:     "UC_lookup_fail",
+		ContentID:     "test_lookup_fail",
+		Payload:       `{"video_id":"vid1","title":"test-title"}`,
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: now,
+		LockedAt:      &now,
+	}
+	require.NoError(t, db.Create(&item).Error)
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	dispatcher := NewDispatcher(db, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 2,
+	})
+
+	dispatcher.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]map[string]bool{})
+
+	var updated domain.YouTubeNotificationOutbox
+	require.NoError(t, db.First(&updated, item.ID).Error)
+	assert.Equal(t, domain.OutboxStatusPending, updated.Status)
+	assert.Nil(t, updated.LockedAt)
+}
+
+func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
+
+	cacheSvc, mini := newDispatcherTestCache(t)
+	defer mini.Close()
+	defer func() { require.NoError(t, cacheSvc.Close()) }()
+
+	now := time.Now()
+	item := domain.YouTubeNotificationOutbox{
+		Kind:          domain.OutboxKindNewVideo,
+		ChannelID:     "UC_no_subscribers",
+		ContentID:     "test_no_subscribers",
+		Payload:       `{"video_id":"vid2","title":"test-title"}`,
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: now,
+		LockedAt:      &now,
+	}
+	require.NoError(t, db.Create(&item).Error)
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	dispatcher := NewDispatcher(db, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 2,
+	})
+
+	dispatcher.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]map[string]bool{
+		item.ChannelID: {},
+	})
+
+	var updated domain.YouTubeNotificationOutbox
+	require.NoError(t, db.First(&updated, item.ID).Error)
+	assert.Equal(t, domain.OutboxStatusSent, updated.Status)
+}
+
 func newDispatcherTestCache(t *testing.T) (*cache.Service, *miniredis.Miniredis) {
 	t.Helper()
 
