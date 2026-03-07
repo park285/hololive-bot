@@ -49,23 +49,6 @@ func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, res.Code)
 }
 
-func TestBuildYouTubeComponents_ReturnsSchedulerAndDispatcher(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	deps := botIngestionRuntimeDependencies{
-		cache:      &cachemocks.Client{},
-		postgres:   &nilGormPostgres{},
-		irisClient: &stubIrisClient{},
-		members:    &stubMemberDataProvider{},
-	}
-	runtimeDeps := botYouTubeRuntimeDependencies{}
-
-	scheduler, dispatcher := buildYouTubeComponents(config.ScraperConfig{}, deps, runtimeDeps, logger)
-	require.NotNil(t, scheduler)
-	require.NotNil(t, dispatcher)
-}
-
 func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 	t.Parallel()
 

@@ -41,7 +41,7 @@
 -   **Cache & MQ**: [Valkey](https://valkey.io/) (Open Source Redis Monitor)
     -   **Client**: `valkey-io/valkey-go`
 -   **Logging**: `log/slog` (Go Standard Library)
-    -   **Handler**: `lmittmann/tint` (Colorized output), `natefinch/lumberjack` (Log rotation)
+    -   **Handler**: `lmittmann/tint` (stdout structured logging, local file logging optional)
 -   **Concurrency**: `sourcegraph/conc` (Structured concurrency)
 -   **Infrastructure**:
     -   **Messenger**: Iris (카카오톡 연동 미들웨어)
@@ -139,25 +139,14 @@ hololive-kakao-bot-go/
 
 ### Docker Compose 배포 (프로덕션)
 
-이 프로젝트는 `docker-compose`를 통한 통합 배포를 권장합니다.
+이 저장소는 루트 `docker-compose.prod.yml` 기준으로 통합 배포합니다.
 
-```yaml
-# docker-compose.prod.yml 예시 (메인 레포지토리 참조)
-services:
-  hololive-bot:
-    image: hololive-kakao-bot-go:latest
-    environment:
-      - SERVER_PORT=30001
-      - POSTGRES_HOST=postgres
-      - CACHE_HOST=valkey-cache
-      - MQ_HOST=valkey-mq
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-    labels:
-      deunhealth.restart.on.unhealthy: "true" # 헬스 체크 실패 시 자동 재시작
+```bash
+./build-all.sh --no-bump
+./scripts/deploy/compose-redeploy-service.sh hololive-bot
 ```
+
+전체 스택/상세 절차는 `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`를 참고하세요.
 
 ## ⚙️ 환경 변수 설정 (`.env`)
 
@@ -166,7 +155,7 @@ services:
 | 카테고리 | 변수명 | 설명 | 기본값 |
 | :--- | :--- | :--- | :--- |
 | **서버** | `SERVER_PORT` | 봇 웹 서버 포트 | `30001` |
-| **Holodex** | `HOLODEX_API_KEY_1` | Holodex API 키 (여러 개 등록 가능 _1~_5) | **필수** |
+| **Holodex** | `HOLODEX_API_KEY` | Holodex API 키 | **필수** |
 | **YouTube** | `YOUTUBE_API_KEY` | YouTube Data API 키 (구독자 수 조회용) | - |
 | **Kakao** | `KAKAO_ROOMS` | 봇이 응답할 카카오톡 방 이름 목록 (쉼표 구분) | `홀로라이브 알림방` |
 | | `KAKAO_ACL_ENABLED` | ACL(접근 제어) 활성화 여부 | `true` |

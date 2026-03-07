@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/joho/godotenv"
 
@@ -53,7 +54,7 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 		Postgres: loadPostgresConfig(),
 		Holodex: HolodexConfig{
 			BaseURL: envutil.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
-			APIKeys: collectAPIKeys("HOLODEX_API_KEY_"),
+			APIKey:  resolveHolodexAPIKey(),
 		},
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,
@@ -80,8 +81,8 @@ func (c *AdminAPIConfig) validate() error {
 	if err := validateAPISecretKey(c.Telemetry.Environment, c.Server.APIKey); err != nil {
 		return err
 	}
-	if len(c.Holodex.APIKeys) == 0 {
-		return fmt.Errorf("at least one HOLODEX_API_KEY is required")
+	if strings.TrimSpace(c.Holodex.APIKey) == "" {
+		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
 	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
 		return err

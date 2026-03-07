@@ -8,12 +8,7 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
@@ -27,13 +22,8 @@ type BotRuntime struct {
 	Config *config.Config
 	Logger *slog.Logger
 
-	Bot              *bot.Bot
-	IngestionEnabled bool
-	Scheduler        youtube.Scheduler
-	ScraperScheduler *poller.Scheduler         // YouTube HTML 스크래퍼 기반 폴러 스케줄러
-	PhotoSync        *holodex.PhotoSyncService // 프로필 이미지 동기화 서비스
-	OutboxDispatcher *outbox.Dispatcher        // YouTube 알림 outbox 발송기
-	AlarmScheduler   runtimeAlarmScheduler     // Alarm runtime scheduler
+	Bot            *bot.Bot
+	AlarmScheduler runtimeAlarmScheduler // Alarm runtime scheduler
 
 	ConfigSubscriber *configsub.Subscriber // Valkey Pub/Sub 설정 구독자
 
@@ -41,7 +31,6 @@ type BotRuntime struct {
 	HttpServer *http.Server
 
 	webhookHandlerCloser interface{ Close() error }
-	ingestionLease       *providers.IngestionLease
 	alarmSchedulerMu     sync.Mutex
 	alarmSchedulerCancel context.CancelFunc
 	cleanup              func()

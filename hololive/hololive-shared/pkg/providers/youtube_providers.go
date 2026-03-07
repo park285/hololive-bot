@@ -18,9 +18,9 @@ import (
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
-// ProvideHolodexAPIKeys - 설정에서 API 키 추출
-func ProvideHolodexAPIKeys(cfg config.HolodexConfig) []string {
-	return cfg.APIKeys
+// ProvideHolodexAPIKey - 설정에서 API 키 추출
+func ProvideHolodexAPIKey(cfg config.HolodexConfig) string {
+	return cfg.APIKey
 }
 
 // ProvideScraperService - 스크래퍼 서비스 생성
@@ -37,12 +37,12 @@ func ProvideScraperService(
 // ProvideHolodexService - Holodex API 서비스 생성
 func ProvideHolodexService(
 	baseURL string,
-	apiKeys []string,
+	apiKey string,
 	cacheSvc cache.Client,
 	scraperSvc *holodex.ScraperService,
 	logger *slog.Logger,
 ) (*holodex.Service, error) {
-	svc, err := holodex.NewHolodexService(baseURL, apiKeys, cacheSvc, scraperSvc, logger)
+	svc, err := holodex.NewHolodexService(baseURL, apiKey, cacheSvc, scraperSvc, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create holodex service: %w", err)
 	}

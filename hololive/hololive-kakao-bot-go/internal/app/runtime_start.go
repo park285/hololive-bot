@@ -25,32 +25,6 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 }
 
 func (r *BotRuntime) startSchedulers(ctx context.Context, errCh chan<- error) {
-	if !r.IngestionEnabled {
-		r.logInfo("Ingestion runtime disabled on bot process")
-	} else if r.ingestionLease != nil {
-		go r.ingestionLease.StartRenewLoop(ctx, errCh)
-	}
-
-	if r.IngestionEnabled && r.Scheduler != nil {
-		r.Scheduler.Start(ctx)
-		r.logInfo("YouTube ingestion scheduler started")
-	}
-
-	if r.IngestionEnabled && r.PhotoSync != nil {
-		go r.PhotoSync.Start(ctx)
-		r.logInfo("Photo sync service started (7-day interval)")
-	}
-
-	if r.IngestionEnabled && r.OutboxDispatcher != nil {
-		r.OutboxDispatcher.Start(ctx)
-		r.logInfo("YouTube outbox dispatcher started")
-	}
-
-	if r.IngestionEnabled && r.ScraperScheduler != nil {
-		r.ScraperScheduler.Start(ctx)
-		r.logInfo("Scraper scheduler started")
-	}
-
 	r.startAlarmScheduler(ctx)
 
 	if r.ConfigSubscriber != nil {
