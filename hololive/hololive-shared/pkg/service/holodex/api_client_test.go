@@ -259,6 +259,85 @@ func TestWaitForRateLimiter_DistributedDeniedWithoutRetryAfter(t *testing.T) {
 	}
 }
 
+func TestProcessHolodexResponse_ForbiddenDoesNotRetry(t *testing.T) {
+	client := &APIClient{
+		logger: slog.Default(),
+	}
+
+	_, done, err := client.processHolodexResponse(
+		context.Background(),
+		http.StatusForbidden,
+		[]byte(`{"error":"invalid api key"}`),
+		"https://holodex.example/api/v2/live",
+		0,
+		4,
+	)
+	if !done {
+		t.Fatal("expected 403 response to stop retry loop")
+	}
+	if err == nil {
+		t.Fatal("expected 403 response to return error")
+	}
+
+	var apiErr *APIError
+	if !stdErrors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T", err)
+	}
+	if apiErr.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", apiErr.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestProcessHolodexResponse_RateLimitedRetriesBeforeExhaustion(t *testing.T) {
+	client := &APIClient{
+		logger: slog.Default(),
+	}
+
+	_, done, err := client.processHolodexResponse(
+		context.Background(),
+		http.StatusTooManyRequests,
+		nil,
+		"https://holodex.example/api/v2/live",
+		0,
+		4,
+	)
+	if done {
+		t.Fatal("expected 429 response to keep retry loop running")
+	}
+	if err != nil {
+		t.Fatalf("expected nil error before retries are exhausted, got %v", err)
+	}
+}
+
+func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *testing.T) {
+	client := &APIClient{
+		logger: slog.Default(),
+	}
+
+	_, done, err := client.processHolodexResponse(
+		context.Background(),
+		http.StatusTooManyRequests,
+		nil,
+		"https://holodex.example/api/v2/live",
+		3,
+		4,
+	)
+	if !done {
+		t.Fatal("expected final 429 response to stop retry loop")
+	}
+	if err == nil {
+		t.Fatal("expected final 429 response to return error")
+	}
+
+	var rotationErr *KeyRotationError
+	if !stdErrors.As(err, &rotationErr) {
+		t.Fatalf("expected KeyRotationError, got %T", err)
+	}
+	if rotationErr.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d", rotationErr.StatusCode, http.StatusTooManyRequests)
+	}
+}
+
 func TestDistributedRateLimitBucket(t *testing.T) {
 	got := distributedRateLimitBucket("/users/live")
 	want := constants.HolodexDistributedRateLimitConfig.BucketBase + ":users:live"
