@@ -176,7 +176,7 @@ services:
       LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
       BOT_ADMIN_ENABLED: "true"
       SERVER_PORT: 30001
-      LOG_DIR: /app/logs/hololive-bot
+      LOG_DIR: /app/logs
       GOMEMLIMIT: "450MiB"
       # 통합 Goroutine 모니터링용 외부 서비스 Health URL (llm 레포 서비스 → host.docker.internal)
       SERVICES_LLM_SCHEDULER_HEALTH_URL: http://host.docker.internal:30003/health
@@ -252,7 +252,7 @@ services:
       ALARM_DISPATCH_QUEUE_KEY: alarm:dispatch:queue
       ALARM_DISPATCH_MAX_BATCH: "50"
       DISPATCHER_RECONNECT_BACKOFF_MS: "1000"
-      LOG_DIR: /app/logs/dispatcher-go
+      LOG_DIR: /app/logs
       TZ: Asia/Seoul
     ports:
       - "127.0.0.1:30020:30020"
@@ -323,7 +323,7 @@ services:
       CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
       CLIPROXY_MODEL: gpt-5.2
       CLIPROXY_REASONING_EFFORT: xhigh
-      LOG_DIR: /app/logs/stream-ingester
+      LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30004:30004"
     volumes:
@@ -395,7 +395,7 @@ services:
       CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
       CLIPROXY_MODEL: gpt-5.2
       CLIPROXY_REASONING_EFFORT: xhigh
-      LOG_DIR: /app/logs/llm-scheduler
+      LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30003:30003"
     volumes:
