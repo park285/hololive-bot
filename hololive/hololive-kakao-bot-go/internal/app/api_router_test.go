@@ -168,3 +168,72 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 		t.Fatalf("ProvideAPIRouter() expected nil router on error")
 	}
 }
+
+func TestAPIRouter_PublicStreamRoutesBypassAPIKeyAuth(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	apiHandler := &server.APIHandler{}
+	domainHandlers := apiHandler.DomainHandlers()
+	authHandler := &server.AuthHandler{}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			APIKey: "test-key",
+		},
+		CORS: config.CORSConfig{
+			AllowedOrigins: []string{"http://localhost:3000"},
+		},
+	}
+
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+	if err != nil {
+		t.Fatalf("ProvideAPIRouter() error = %v", err)
+	}
+
+	tests := []string{
+		"/api/holo/streams/live?org=",
+		"/api/holo/streams/upcoming?org=",
+	}
+
+	for _, path := range tests {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("path=%s status=%d want=%d body=%s", path, rec.Code, http.StatusBadRequest, rec.Body.String())
+		}
+	}
+}
+
+func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	apiHandler := &server.APIHandler{}
+	domainHandlers := apiHandler.DomainHandlers()
+	authHandler := &server.AuthHandler{}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			APIKey: "test-key",
+		},
+		CORS: config.CORSConfig{
+			AllowedOrigins: []string{"http://localhost:3000"},
+		},
+	}
+
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+	if err != nil {
+		t.Fatalf("ProvideAPIRouter() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/holo/stats", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+}

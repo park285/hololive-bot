@@ -56,10 +56,13 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *server.SettingsAP
 func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsAPIHandler, streamHandler *server.StreamAPIHandler) {
 	holoAPI.GET("/stats", statsHandler.GetStats)
 	holoAPI.GET("/stats/channels", streamHandler.GetChannelStats)
-	holoAPI.GET("/streams/live", streamHandler.GetLiveStreams)
-	holoAPI.GET("/streams/upcoming", streamHandler.GetUpcomingStreams)
 	holoAPI.GET("/channels", streamHandler.GetChannel)
 	holoAPI.GET("/channels/search", streamHandler.SearchChannels)
+}
+
+func registerPublicStreamRoutes(holoAPI *gin.RouterGroup, handler *server.StreamAPIHandler) {
+	holoAPI.GET("/streams/live", handler.GetLiveStreams)
+	holoAPI.GET("/streams/upcoming", handler.GetUpcomingStreams)
 }
 
 func registerTemplateRoutes(holoAPI *gin.RouterGroup, handler *server.TemplateAPIHandler) {
