@@ -1,5 +1,0 @@
-# M0 baseline (2026-03-02)
-# format: <service-crate> -> <infra-crate>
-alarm-service -> alarm-infra
-alarm-service -> shared-infra
-scraper-service -> scraper-infra
