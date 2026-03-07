@@ -192,8 +192,9 @@ services:
       # CLIProxy LLM (행사 요약 + 멤버뉴스)
       CLIPROXY_ENABLED: "true"
       CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
-      CLIPROXY_MODEL: gpt-5.2
-      CLIPROXY_REASONING_EFFORT: xhigh
+      CLIPROXY_API_KEY: ${CLIPROXY_API_KEY:-}
+      CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
+      CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
     ports:
       - "127.0.0.1:30001:30001"
     volumes:
@@ -321,8 +322,9 @@ services:
       GIN_MODE: release
       CLIPROXY_ENABLED: "true"
       CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
-      CLIPROXY_MODEL: gpt-5.2
-      CLIPROXY_REASONING_EFFORT: xhigh
+      CLIPROXY_API_KEY: ${CLIPROXY_API_KEY:-}
+      CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
+      CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
       LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30004:30004"
@@ -393,8 +395,9 @@ services:
       GIN_MODE: release
       CLIPROXY_ENABLED: "true"
       CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
-      CLIPROXY_MODEL: gpt-5.2
-      CLIPROXY_REASONING_EFFORT: xhigh
+      CLIPROXY_API_KEY: ${CLIPROXY_API_KEY:-}
+      CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
+      CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
       LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30003:30003"
