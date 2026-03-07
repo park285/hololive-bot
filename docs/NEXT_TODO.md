@@ -1,7 +1,8 @@
 # 향후 작업 TODO
 
-> 최종 갱신: 2026-03-06
-> 아키텍처: 하이브리드 (Rust=compute, Go=network)
+> 최종 갱신: 2026-03-07
+> 아키텍처: Go 단일 런타임 (bot + dispatcher-go + llm-scheduler + stream-ingester)
+> 운영 기준: Docker Compose 단일 호스트 배포
 
 ---
 
