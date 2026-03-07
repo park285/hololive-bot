@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -67,6 +68,9 @@ func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...str
 		}
 
 		clientIP := c.ClientIP()
+		remoteAddr := strings.TrimSpace(c.Request.RemoteAddr)
+		forwardedFor := strings.TrimSpace(c.GetHeader("X-Forwarded-For"))
+		realIP := strings.TrimSpace(c.GetHeader("X-Real-IP"))
 		method := c.Request.Method
 
 		// Client Hints 우선 사용 (실제 기기 정보)
@@ -83,7 +87,14 @@ func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...str
 			slog.String("path", path),
 			slog.Int("status", status),
 			slog.String("ip", clientIP),
+			slog.String("remote_addr", remoteAddr),
 			slog.String("ua", deviceInfo),
+		}
+		if forwardedFor != "" {
+			attrs = append(attrs, slog.String("x_forwarded_for", forwardedFor))
+		}
+		if realIP != "" {
+			attrs = append(attrs, slog.String("x_real_ip", realIP))
 		}
 
 		// 느린 요청(100ms+)만 레이턴시 포함
