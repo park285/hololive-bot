@@ -49,7 +49,7 @@ func TestFailClosedAuth(t *testing.T) {
 				},
 			}
 
-			router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+			router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -91,7 +91,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -134,7 +134,7 @@ func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() unexpected error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, nil, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, nil, authHandler, nil, nil, nil)
 	if err == nil {
 		t.Fatalf("ProvideAPIRouter() expected error for nil domain handlers")
 	}

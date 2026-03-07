@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
@@ -19,6 +20,7 @@ import (
 type botAdminServerDependencies struct {
 	domainHandlers *server.DomainAPIHandlers
 	authHandler    *server.AuthHandler
+	cache          cache.Client
 }
 
 func buildBotAdminServerDependencies(
@@ -54,6 +56,7 @@ func buildBotAdminServerDependencies(
 	return &botAdminServerDependencies{
 		domainHandlers: domainHandlers,
 		authHandler:    server.NewAuthHandler(authService, logger),
+		cache:          deps.cache,
 	}, nil
 }
 
