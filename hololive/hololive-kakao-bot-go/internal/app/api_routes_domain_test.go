@@ -31,7 +31,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
