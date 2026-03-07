@@ -12,6 +12,7 @@ import (
 func setRequiredLoadEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOLODEX_API_KEY", "test-key")
+	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
@@ -169,6 +170,19 @@ func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	}
 	if !cfg.CORS.MissingInProduction {
 		t.Fatalf("MissingInProduction = false, want true")
+	}
+}
+
+func TestLoad_RejectsPlaceholderYouTubeAPIKey(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("YOUTUBE_API_KEY", "your_youtube_api_key")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected placeholder youtube api key error, got nil")
+	}
+	if !strings.Contains(err.Error(), "YOUTUBE_API_KEY uses placeholder value") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
