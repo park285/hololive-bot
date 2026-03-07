@@ -298,24 +298,6 @@
 - [x] 전체 import path 갱신 (4개 앱 모듈 기준)
 - [ ] `go build + go vet + golangci-lint + go test` (전체 모듈)
 
-### P11-E3. K8s Secret 서비스별 분리 `[x완료]`
-
-- [x] 기존 단일 secret-app 경로 제거/대체 확인
-- [x] 서비스별 Secret 분할:
-  - [x] `secret-common.yaml` — POSTGRES_USER, POSTGRES_PASSWORD, HOLODEX_API_KEY
-  - [x] `secret-bot.yaml` — IRIS_WEBHOOK_TOKEN, IRIS_BOT_TOKEN, API_SECRET_KEY
-  - [x] `secret-dispatcher.yaml` — IRIS_*, ALARM_DISPATCH_*
-  - [x] `secret-llm.yaml` — OPENAI_API_KEY, EXA_API_KEY
-- [x] 각 Deployment envFrom 참조 갱신
-- [ ] `kubectl apply --dry-run=client -f k8s/base/` 검증
-
-### P11-E4. K8s ConfigMap 서비스별 분리 `[x완료]`
-
-- [x] 기존 ConfigMap 구성 확인 및 분리 기준 정리
-- [x] 서비스별 분리 적용 (common/bot/dispatcher/llm)
-- [x] 분리 실행 및 Deployment envFrom 참조 갱신
-- [ ] `kubectl apply --dry-run=client -f k8s/base/` 검증
-
 ---
 
 ## 병렬 실행 가이드
@@ -340,7 +322,7 @@ Track E (구조):          P11-E1 → P11-E2 → P11-E3 → P11-E4
 | B | `contracts/subscription/`, `auth/errors.go`, `consensus/`, `httputil/` | DTO/유틸 추출 |
 | C | `stats/stats_repository_write.go`, `outbox_repository.go`, `member/repository.go` | 저장소 성능 |
 | D | `checker/*_test.go`, `notification/*_test.go`, `auth/*_test.go` | 테스트 파일만 (신규) |
-| E | `config/config*.go`, `server/middleware/`, `k8s/base/` | 구조 분할 |
+| E | `config/config*.go`, `server/middleware/` | 구조 분할 |
 
 ### 우선순위 권장 순서
 
