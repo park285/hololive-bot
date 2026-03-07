@@ -324,23 +324,34 @@ func isTimeoutError(err error) bool {
 
 func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) ([]byte, bool, error) {
 	switch {
-	case status == 429 || status == 403:
-		c.logger.Warn("Rate limited, rotating key",
+	case status == http.StatusTooManyRequests:
+		c.logger.Warn("Holodex rate limited, retrying",
 			slog.Int("status", status),
 			slog.Int("attempt", attempt+1),
+			slog.String("url", reqURL),
 		)
 		if attempt < maxAttempts-1 {
 			return nil, false, nil
 		}
-		return nil, true, NewKeyRotationError("All API keys rate limited", status, map[string]any{
+		return nil, true, NewKeyRotationError("Holodex rate limit exhausted", status, map[string]any{
 			"url": reqURL,
+		})
+	// Holodex 403은 권한/키 상태 문제일 가능성이 높아 retryable rate limit로 취급하지 않는다.
+	case status == http.StatusForbidden:
+		c.logger.Error("Holodex forbidden response",
+			slog.Int("status", status),
+			slog.Int("attempt", attempt+1),
+			slog.String("url", reqURL),
+			slog.String("body_preview", summarizeHolodexErrorBody(body)),
+		)
+		return nil, true, NewAPIError("Holodex forbidden", status, map[string]any{
+			"operation": reqURL,
 		})
 	case status >= 500:
 		return c.handleServerError(ctx, status, attempt, maxAttempts)
 	case status >= 400:
 		return nil, true, NewAPIError(fmt.Sprintf("Client error: %d", status), status, map[string]any{
-			"url":  reqURL,
-			"body": string(body),
+			"operation": reqURL,
 		})
 	default:
 		return body, true, nil
@@ -429,4 +440,16 @@ func (c *APIClient) releaseSemaphore() {
 	case <-c.semaphore:
 	default:
 	}
+}
+
+func summarizeHolodexErrorBody(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return ""
+	}
+	const maxPreviewLen = 256
+	if len(trimmed) <= maxPreviewLen {
+		return trimmed
+	}
+	return trimmed[:maxPreviewLen] + "..."
 }
