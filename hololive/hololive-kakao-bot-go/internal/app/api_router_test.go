@@ -185,7 +185,7 @@ func TestAPIRouter_PublicStreamRoutesBypassAPIKeyAuth(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
@@ -223,7 +223,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil)
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
