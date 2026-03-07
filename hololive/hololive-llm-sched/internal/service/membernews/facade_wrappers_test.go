@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -145,12 +146,19 @@ func TestSummarizerWrappers_BasicContracts(t *testing.T) {
 		t.Fatalf("Summarize() returned empty top items for fallback path")
 	}
 
-	consensus := NewConsensusSummarizer(fakePrimarySummarizer{digest: digest}, nil, nil, nil, ConsensusConfig{}, nil)
-	if consensus == nil {
+	consensusSummarizer := NewConsensusSummarizer(
+		fakePrimarySummarizer{digest: digest},
+		nil,
+		nil,
+		nil,
+		consensus.Config{},
+		nil,
+	)
+	if consensusSummarizer == nil {
 		t.Fatalf("NewConsensusSummarizer() returned nil")
 	}
 
-	got, err := consensus.Summarize(context.Background(), SummarizeInput{Period: PeriodWeekly})
+	got, err := consensusSummarizer.Summarize(context.Background(), SummarizeInput{Period: PeriodWeekly})
 	if err != nil {
 		t.Fatalf("ConsensusSummarize() error = %v", err)
 	}

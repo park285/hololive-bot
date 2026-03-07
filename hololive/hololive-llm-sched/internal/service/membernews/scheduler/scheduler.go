@@ -24,24 +24,6 @@ const (
 	weeklyScheduleMinuteKST = 0
 )
 
-var (
-	kst                    = model.KST
-	ErrNoSubscribedMembers = model.ErrNoSubscribedMembers
-)
-
-const (
-	PeriodWeekly  = model.PeriodWeekly
-	PeriodMonthly = model.PeriodMonthly
-)
-
-type (
-	Period          = model.Period
-	Digest          = model.Digest
-	SummaryItem     = model.SummaryItem
-	SubscribedRoom  = model.SubscribedRoom
-	DigestFormatter = model.DigestFormatter
-)
-
 // outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도)
 type outboxEnqueuer interface {
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error
@@ -50,7 +32,7 @@ type outboxEnqueuer interface {
 // Scheduler: 주간 뉴스 자동 발송 스케줄러.
 type Scheduler struct {
 	service    model.DigestService
-	formatter  DigestFormatter
+	formatter  model.DigestFormatter
 	locker     delivery.NotificationLocker
 	outboxRepo outboxEnqueuer
 	logger     *slog.Logger
@@ -64,7 +46,7 @@ type Scheduler struct {
 // NewScheduler: 스케줄러 생성.
 func NewScheduler(
 	service model.DigestService,
-	formatter DigestFormatter,
+	formatter model.DigestFormatter,
 	locker delivery.NotificationLocker,
 	outboxRepo outboxEnqueuer,
 	logger *slog.Logger,
@@ -144,12 +126,12 @@ func (s *Scheduler) run(ctx context.Context) {
 }
 
 func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
-	nowKST := now.In(kst)
+	nowKST := now.In(model.KST)
 
 	daysUntilMonday := (int(time.Monday) - int(nowKST.Weekday()) + 7) % 7
 	target := time.Date(
 		nowKST.Year(), nowKST.Month(), nowKST.Day()+daysUntilMonday,
-		WeeklyScheduleHourKST, weeklyScheduleMinuteKST, 0, 0, kst,
+		WeeklyScheduleHourKST, weeklyScheduleMinuteKST, 0, 0, model.KST,
 	)
 
 	if !target.After(nowKST) {
@@ -233,12 +215,12 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 // processRoomDigest: 단일 room의 주간 다이제스트 생성 + outbox enqueue.
 func (s *Scheduler) processRoomDigest(ctx context.Context, weekKey, roomID string) delivery.SendResult {
 	return processDigestForRoom(ctx, s.service, s.formatter, s.outboxRepo, s.logger,
-		PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID, "🗞️ 이번주 구독 멤버 뉴스")
+		model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, weekKey, roomID, "🗞️ 이번주 구독 멤버 뉴스")
 }
 
 func startOfWeek(t time.Time) time.Time {
-	kstNow := t.In(kst)
+	kstNow := t.In(model.KST)
 	daysFromMonday := (int(kstNow.Weekday()) - int(time.Monday) + 7) % 7
 	start := kstNow.AddDate(0, 0, -daysFromMonday)
-	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, kst)
+	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, model.KST)
 }

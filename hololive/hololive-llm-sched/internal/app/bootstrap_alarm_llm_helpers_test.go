@@ -2,17 +2,15 @@ package app
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
+	"github.com/kapu/hololive-shared/pkg/config"
 )
 
 func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
@@ -40,66 +38,6 @@ func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
 		tmp := filepath.Join(t.TempDir(), "allowlist.json")
 		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "  "+tmp+"  ")
 		assert.Equal(t, "  "+tmp+"  ", resolveMemberNewsXAllowlistPath())
-	})
-}
-
-func TestMemberNewsSearcherAdapterSearch_NilBase(t *testing.T) {
-	t.Run("nil base", func(t *testing.T) {
-		adapter := &memberNewsSearcherAdapter{base: nil}
-		results, err := adapter.Search(context.Background(), "query")
-		require.NoError(t, err)
-		assert.Nil(t, results)
-	})
-}
-
-type fakeMajorEventSearcher struct {
-	results []mesummarizer.SearchResult
-	err     error
-}
-
-func (f *fakeMajorEventSearcher) Search(context.Context, string) ([]mesummarizer.SearchResult, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.results, nil
-}
-
-func TestMemberNewsSearcherAdapterSearch_ConvertsAndWrapsError(t *testing.T) {
-	t.Run("convert results", func(t *testing.T) {
-		base := &fakeMajorEventSearcher{
-			results: []mesummarizer.SearchResult{
-				{Title: "A", URL: "https://example.com/a", Content: "content-a", PublishedDate: "2026-03-04"},
-				{Title: "B", URL: "https://example.com/b", Content: "content-b", PublishedDate: "2026-03-05"},
-			},
-		}
-		adapter := &memberNewsSearcherAdapter{base: base}
-
-		got, err := adapter.Search(context.Background(), "hololive news")
-		require.NoError(t, err)
-		require.Len(t, got, 2)
-
-		assert.Equal(t, membernews.SearchResult{
-			Title:         "A",
-			URL:           "https://example.com/a",
-			Content:       "content-a",
-			PublishedDate: "2026-03-04",
-		}, got[0])
-		assert.Equal(t, membernews.SearchResult{
-			Title:         "B",
-			URL:           "https://example.com/b",
-			Content:       "content-b",
-			PublishedDate: "2026-03-05",
-		}, got[1])
-	})
-
-	t.Run("wrap base error", func(t *testing.T) {
-		base := &fakeMajorEventSearcher{err: errors.New("search failed")}
-		adapter := &memberNewsSearcherAdapter{base: base}
-
-		got, err := adapter.Search(context.Background(), "hololive news")
-		require.Error(t, err)
-		assert.Nil(t, got)
-		assert.ErrorContains(t, err, "search member news context")
 	})
 }
 

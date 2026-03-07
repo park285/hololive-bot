@@ -16,6 +16,7 @@ import (
 	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
 	mescraper "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scraper"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews"
+	mnscheduler "github.com/kapu/hololive-llm-sched/internal/service/membernews/scheduler"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -37,8 +38,8 @@ type LLMSchedulerRuntime struct {
 	MajorEventScheduler        *mescheduler.Scheduler
 	MajorEventMonthlyScheduler *mescheduler.MonthlyScheduler
 	MajorEventScraperScheduler *mescraper.RuntimeScheduler
-	MemberNewsScheduler        *membernews.Scheduler
-	MemberNewsMonthlyScheduler *membernews.MonthlyScheduler
+	MemberNewsScheduler        *mnscheduler.Scheduler
+	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
 
 	configSubscriber *configsub.Subscriber
 	httpServer       *http.Server
@@ -218,14 +219,14 @@ func (r *LLMSchedulerRuntime) startSchedulers(ctx context.Context) {
 		r.MemberNewsScheduler.Start(ctx)
 		r.Logger.Info("Member news weekly scheduler started",
 			slog.String("schedule", fmt.Sprintf("%s %02d:00 KST",
-				membernews.WeeklyScheduleWeekday, membernews.WeeklyScheduleHourKST)))
+				mnscheduler.WeeklyScheduleWeekday, mnscheduler.WeeklyScheduleHourKST)))
 	}
 
 	if r.MemberNewsMonthlyScheduler != nil {
 		r.MemberNewsMonthlyScheduler.Start(ctx)
 		r.Logger.Info("Member news monthly scheduler started",
 			slog.String("schedule", fmt.Sprintf("%dth %02d:00 KST",
-				membernews.MonthlyScheduleDay, membernews.MonthlyScheduleHourKST)))
+				mnscheduler.MonthlyScheduleDay, mnscheduler.MonthlyScheduleHourKST)))
 	}
 }
 

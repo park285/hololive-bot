@@ -11,6 +11,7 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
 // fakeLLMWithCounter: 호출 횟수를 추적하는 LLM 모의 클라이언트.
@@ -30,39 +31,39 @@ func (f *fakeLLMWithCounter) GenerateJSON(_ context.Context, _, _ string, _ map[
 
 // fakeSummarizer: primary Summarizer 모의 구현.
 type fakeSummarizer struct {
-	digest *Digest
+	digest *model.Digest
 	err    error
 }
 
-func (f *fakeSummarizer) Summarize(_ context.Context, _ SummarizeInput) (*Digest, error) {
+func (f *fakeSummarizer) Summarize(_ context.Context, _ model.SummarizeInput) (*model.Digest, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.digest, nil
 }
 
-func defaultConsensusConfig() ConsensusConfig {
-	return ConsensusConfig{
+func defaultConsensusConfig() consensus.Config {
+	return consensus.Config{
 		ConfidenceThreshold: 0.85,
 		ReviewTimeout:       5 * time.Second,
 		AdjudicateTimeout:   5 * time.Second,
 	}
 }
 
-func defaultTestInput() SummarizeInput {
-	return SummarizeInput{
-		Period:      PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, kst),
+func defaultTestInput() model.SummarizeInput {
+	return model.SummarizeInput{
+		Period:      model.PeriodWeekly,
+		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST),
 		RoomMembers: []string{"사쿠라 미코"},
 		Candidates:  sampleCandidates(),
 	}
 }
 
-func primaryDigest() *Digest {
-	return &Digest{
-		Period:   PeriodWeekly,
+func primaryDigest() *model.Digest {
+	return &model.Digest{
+		Period:   model.PeriodWeekly,
 		Headline: "테스트 헤드라인",
-		TopItems: []SummaryItem{
+		TopItems: []model.SummaryItem{
 			{
 				Member:    "사쿠라 미코",
 				Category:  "event",
@@ -79,9 +80,9 @@ func primaryDigest() *Digest {
 }
 
 func approvedVerdictJSON(confidence float64) string {
-	v := ReviewVerdict{
+	v := consensus.ReviewVerdict{
 		Approved:   true,
-		Issues:     []ReviewIssue{},
+		Issues:     []consensus.ReviewIssue{},
 		Confidence: confidence,
 	}
 	b, _ := json.Marshal(v)
@@ -89,9 +90,9 @@ func approvedVerdictJSON(confidence float64) string {
 }
 
 func criticalVerdictJSON() string {
-	v := ReviewVerdict{
+	v := consensus.ReviewVerdict{
 		Approved: false,
-		Issues: []ReviewIssue{
+		Issues: []consensus.ReviewIssue{
 			{Field: "source_url", ItemIndex: 0, Severity: "critical", Description: "URL fabricated"},
 		},
 		Confidence: 0.3,
@@ -101,9 +102,9 @@ func criticalVerdictJSON() string {
 }
 
 func lowConfidenceVerdictJSON() string {
-	v := ReviewVerdict{
+	v := consensus.ReviewVerdict{
 		Approved:   false,
-		Issues:     []ReviewIssue{},
+		Issues:     []consensus.ReviewIssue{},
 		Confidence: 0.5,
 	}
 	b, _ := json.Marshal(v)
@@ -111,9 +112,9 @@ func lowConfidenceVerdictJSON() string {
 }
 
 func warningOnlyVerdictJSON() string {
-	v := ReviewVerdict{
+	v := consensus.ReviewVerdict{
 		Approved: true,
-		Issues: []ReviewIssue{
+		Issues: []consensus.ReviewIssue{
 			{Field: "category", ItemIndex: 0, Severity: "warning", Description: "minor mismatch"},
 		},
 		Confidence: 0.9,
@@ -328,10 +329,10 @@ func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 
 func TestConsensus_PrimaryEmpty_ReturnsFallback(t *testing.T) {
 	// primary가 빈 digest 반환 (fallback 포함)
-	emptyDigest := &Digest{
-		Period:   PeriodWeekly,
+	emptyDigest := &model.Digest{
+		Period:   model.PeriodWeekly,
 		Headline: "🗞️ 이번주 구독 멤버 뉴스",
-		TopItems: []SummaryItem{},
+		TopItems: []model.SummaryItem{},
 	}
 	reviewer := &fakeLLMWithCounter{}
 
@@ -397,9 +398,9 @@ func TestConsensus_ReviewerTimeout(t *testing.T) {
 
 func TestConsensus_UnknownSeverity_TreatedAsInfo(t *testing.T) {
 	// unknown severity → info로 정규화 → adjudication 미트리거
-	v := ReviewVerdict{
+	v := consensus.ReviewVerdict{
 		Approved: true,
-		Issues: []ReviewIssue{
+		Issues: []consensus.ReviewIssue{
 			{Field: "category", ItemIndex: 0, Severity: "unknown", Description: "test"},
 			{Field: "title", ItemIndex: 0, Severity: "", Description: "empty"},
 		},

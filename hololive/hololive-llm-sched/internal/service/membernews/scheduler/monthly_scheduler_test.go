@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
 func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
@@ -17,28 +19,28 @@ func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
 	}{
 		{
 			name: "before 1st target same month",
-			now:  time.Date(2026, 3, 1, 9, 0, 0, 0, kst),
-			want: time.Date(2026, 3, 1, 10, 0, 0, 0, kst),
+			now:  time.Date(2026, 3, 1, 9, 0, 0, 0, model.KST),
+			want: time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST),
 		},
 		{
 			name: "after 1st target next month",
-			now:  time.Date(2026, 3, 1, 10, 30, 0, 0, kst),
-			want: time.Date(2026, 4, 1, 10, 0, 0, 0, kst),
+			now:  time.Date(2026, 3, 1, 10, 30, 0, 0, model.KST),
+			want: time.Date(2026, 4, 1, 10, 0, 0, 0, model.KST),
 		},
 		{
 			name: "exact 1st 10:00 target next month",
-			now:  time.Date(2026, 3, 1, 10, 0, 0, 0, kst),
-			want: time.Date(2026, 4, 1, 10, 0, 0, 0, kst),
+			now:  time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST),
+			want: time.Date(2026, 4, 1, 10, 0, 0, 0, model.KST),
 		},
 		{
 			name: "year end december to january",
-			now:  time.Date(2026, 12, 2, 0, 0, 0, 0, kst),
-			want: time.Date(2027, 1, 1, 10, 0, 0, 0, kst),
+			now:  time.Date(2026, 12, 2, 0, 0, 0, 0, model.KST),
+			want: time.Date(2027, 1, 1, 10, 0, 0, 0, model.KST),
 		},
 		{
 			name: "leap year february to march",
-			now:  time.Date(2028, 2, 1, 11, 0, 0, 0, kst), // 2028 = 윤년
-			want: time.Date(2028, 3, 1, 10, 0, 0, 0, kst),
+			now:  time.Date(2028, 2, 1, 11, 0, 0, 0, model.KST), // 2028 = 윤년
+			want: time.Date(2028, 3, 1, 10, 0, 0, 0, model.KST),
 		},
 	}
 
@@ -53,10 +55,10 @@ func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
 }
 
 func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
-	service := &mockDigestService{rooms: []SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepo()
-	now := time.Date(2026, 3, 1, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })
@@ -71,7 +73,7 @@ func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
 
 func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 	service := &mockDigestService{
-		rooms: []SubscribedRoom{
+		rooms: []model.SubscribedRoom{
 			{RoomID: "room-fail"},
 			{RoomID: "room-ok"},
 		},
@@ -79,7 +81,7 @@ func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
 	outbox := newMockOutboxRepo()
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
-	now := time.Date(2026, 3, 1, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 3, 1, 10, 0, 0, 0, model.KST)
 
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil)
 	scheduler.SetClock(func() time.Time { return now })

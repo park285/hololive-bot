@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-llm-sched/internal/service/subscription"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -13,7 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-var _ subscription.SubscriptionRepository[SubscribedRoom] = (*Repository)(nil)
+var _ subscription.SubscriptionRepository[model.SubscribedRoom] = (*Repository)(nil)
 
 const (
 	memberNewsRoomsKey     = "membernews:rooms"
@@ -112,7 +113,7 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 }
 
 // ListSubscribedRooms: 구독 방 목록 조회(created_at 오름차순).
-func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]SubscribedRoom, error) {
+func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
@@ -128,9 +129,9 @@ func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]SubscribedRoom,
 	}
 	defer rows.Close()
 
-	rooms := make([]SubscribedRoom, 0)
+	rooms := make([]model.SubscribedRoom, 0)
 	for rows.Next() {
-		var room SubscribedRoom
+		var room model.SubscribedRoom
 		if scanErr := rows.Scan(&room.ID, &room.RoomID, &room.RoomName, &room.CreatedAt); scanErr != nil {
 			return nil, fmt.Errorf("scan member news room: %w", scanErr)
 		}
@@ -245,7 +246,7 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 }
 
 // ListActiveMajorEvents: major_events(active)에서 뉴스/행사 후보를 모두 읽습니다.
-func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]Candidate, error) {
+func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candidate, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
 	}
@@ -272,10 +273,10 @@ func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]Candidate, er
 	}
 	defer rows.Close()
 
-	result := make([]Candidate, 0)
+	result := make([]model.Candidate, 0)
 	for rows.Next() {
 		var (
-			candidate Candidate
+			candidate model.Candidate
 			eventType string
 			members   []string
 		)
