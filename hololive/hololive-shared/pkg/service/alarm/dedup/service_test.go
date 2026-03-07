@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -93,6 +94,9 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		state.mu.Lock()
 		defer state.mu.Unlock()
 
+		if _, ok := state.strings[key]; ok {
+			return "", errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+		}
 		if fields, ok := state.hashes[key]; ok {
 			return fields[field], nil
 		}
@@ -102,6 +106,9 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		state.mu.Lock()
 		defer state.mu.Unlock()
 
+		if _, ok := state.strings[key]; ok {
+			return errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+		}
 		fields, ok := state.hashes[key]
 		if !ok {
 			fields = make(map[string]string)
@@ -110,10 +117,30 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		fields[field] = value
 		return nil
 	}
+	client.HMSetFunc = func(_ context.Context, key string, fields map[string]any) error {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+
+		if _, ok := state.strings[key]; ok {
+			return errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+		}
+		hash, ok := state.hashes[key]
+		if !ok {
+			hash = make(map[string]string)
+			state.hashes[key] = hash
+		}
+		for field, value := range fields {
+			hash[field] = fmt.Sprint(value)
+		}
+		return nil
+	}
 	client.HGetAllFunc = func(_ context.Context, key string) (map[string]string, error) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
 
+		if _, ok := state.strings[key]; ok {
+			return nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+		}
 		fields, ok := state.hashes[key]
 		if !ok {
 			return map[string]string{}, nil
@@ -345,6 +372,45 @@ func TestService_MarkAsNotified_TargetMinutePolicyAndScheduleReset(t *testing.T)
 	assert.True(t, already)
 }
 
+func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
+	cacheMock, state := newMockDedupCache(t)
+	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	streamID := "vid-legacy"
+	start := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+	key := keys.NotifiedKey(streamID)
+
+	legacyJSON, err := json.Marshal(NotifiedData{
+		StartScheduled: keys.FormatScheduled(start),
+		SentAt:         map[int]bool{5: true},
+	})
+	require.NoError(t, err)
+	state.setRawString(key, string(legacyJSON))
+
+	already, err := svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 5)
+	require.NoError(t, err)
+	assert.True(t, already)
+
+	state.mu.Lock()
+	_, hasLegacyString := state.strings[key]
+	hashFields := maps.Clone(state.hashes[key])
+	state.mu.Unlock()
+
+	assert.False(t, hasLegacyString)
+	require.NotNil(t, hashFields)
+	assert.Equal(t, keys.FormatScheduled(start), hashFields["start_scheduled"])
+	assert.Equal(t, "1", hashFields["5"])
+
+	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 3))
+
+	state.mu.Lock()
+	hashFields = maps.Clone(state.hashes[key])
+	state.mu.Unlock()
+
+	assert.Equal(t, "1", hashFields["3"])
+	assert.Equal(t, "1", hashFields["5"])
+}
+
 func TestService_UpcomingEventRecentlyWindow(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
 	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
@@ -461,7 +527,7 @@ func TestService_TryClaimLogicalEvent_NilStream(t *testing.T) {
 	assert.False(t, acquired)
 }
 
-func TestService_ReadNotifiedData_LegacyJSONIgnored(t *testing.T) {
+func TestService_ReadNotifiedData_LegacyJSONMigrated(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
 	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
 
@@ -483,5 +549,15 @@ func TestService_ReadNotifiedData_LegacyJSONIgnored(t *testing.T) {
 		5,
 	)
 	require.NoError(t, err)
-	assert.False(t, notified)
+	assert.True(t, notified)
+
+	state.mu.Lock()
+	_, hasLegacyString := state.strings[key]
+	hashFields := maps.Clone(state.hashes[key])
+	state.mu.Unlock()
+
+	assert.False(t, hasLegacyString)
+	require.NotNil(t, hashFields)
+	assert.Equal(t, "2026-03-04T10:00:00Z", hashFields["start_scheduled"])
+	assert.Equal(t, "1", hashFields["5"])
 }
