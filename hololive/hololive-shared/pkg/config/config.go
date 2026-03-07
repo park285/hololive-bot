@@ -185,6 +185,9 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
+	if isPlaceholderAPIKey(c.YouTube.APIKey) {
+		return fmt.Errorf("YOUTUBE_API_KEY uses placeholder value; set a real API key")
+	}
 	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
@@ -193,6 +196,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 	return nil
+}
+
+func isPlaceholderAPIKey(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "", "your_api_key", "your_youtube_api_key", "changeme", "change_me", "replace_me", "replace-with-real-key":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateDeprecatedEnvUsage() error {
