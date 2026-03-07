@@ -1,8 +1,15 @@
 package app
 
 import (
+	"log/slog"
+	"net/http"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
@@ -10,6 +17,8 @@ import (
 func registerAPIRoutes(
 	router *gin.Engine,
 	apiKey string,
+	cacheSvc cache.Client,
+	logger *slog.Logger,
 	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
 ) {
@@ -34,6 +43,9 @@ func registerAPIRoutes(
 
 	// API Key 인증 미들웨어 적용 (apiKey가 빈 문자열이면 인증 건너뜀)
 	holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	if constants.APIRateLimitConfig.Enabled {
+		holoAPI.Use(apiRateLimitMiddleware(cacheSvc, logger))
+	}
 
 	registerMemberRoutes(holoAPI, domains.Member)
 	registerAlarmRoutes(holoAPI, domains.Alarm)
@@ -44,4 +56,50 @@ func registerAPIRoutes(
 	registerMilestoneRoutes(holoAPI, domains.Milestone)
 	registerProfileRoutes(holoAPI, domains.Profile)
 	registerMajorEventRoutes(holoAPI, domains.MajorEvent)
+}
+
+func apiRateLimitMiddleware(cacheSvc cache.Client, logger *slog.Logger) gin.HandlerFunc {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if cacheSvc == nil {
+		logger.Warn("api_rate_limit_disabled_no_cache")
+		return func(c *gin.Context) { c.Next() }
+	}
+
+	limiter, err := ratelimit.NewSlidingWindowLimiter(cacheSvc, "api:holo:ip", logger)
+	if err != nil {
+		logger.Error("api_rate_limit_init_failed", slog.String("error", err.Error()))
+		return func(c *gin.Context) { c.Next() }
+	}
+
+	limit := constants.APIRateLimitConfig.Limit
+	window := constants.APIRateLimitConfig.Window
+
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		if ip == "" {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+			return
+		}
+
+		decision, err := limiter.Allow(c.Request.Context(), ip, limit, window)
+		if err != nil {
+			logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.String("error", err.Error()))
+			c.Next()
+			return
+		}
+
+		c.Header("X-RateLimit-Limit", strconv.Itoa(decision.Limit))
+		c.Header("X-RateLimit-Remaining", strconv.Itoa(decision.Remaining))
+		if !decision.Allowed {
+			if decision.RetryAfter > 0 {
+				c.Header("Retry-After", strconv.Itoa(int(decision.RetryAfter.Seconds())))
+			}
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+			return
+		}
+
+		c.Next()
+	}
 }

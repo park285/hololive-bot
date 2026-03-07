@@ -45,6 +45,7 @@ func buildBotServer(
 			adminDeps.authHandler,
 			webhookHandler,
 			triggerHandler,
+			adminDeps.cache,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("build bot server: provide api router: %w", err)
