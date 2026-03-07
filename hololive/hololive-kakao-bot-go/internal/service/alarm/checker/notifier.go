@@ -206,7 +206,7 @@ func (n *Notifier) publishAndMark(ctx context.Context, payload *sendInput, claim
 		return fmt.Errorf("publish queue: %w", err)
 	}
 
-	if err := n.alarmSvc.MarkAsNotified(
+	if err := n.dedupSvc.MarkAsNotified(
 		ctx,
 		payload.streamID,
 		payload.startScheduled,
