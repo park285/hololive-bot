@@ -1,6 +1,6 @@
 module github.com/park285/llm-kakao-bots/shared-go
 
-go 1.26
+go 1.26.1
 
 require (
 	github.com/bytedance/sonic v1.15.0
