@@ -51,7 +51,12 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Logging: LoggingConfig{
-			Level: envutil.String("LOG_LEVEL", "info"),
+			Level:      envutil.String("LOG_LEVEL", "info"),
+			Dir:        envutil.String("LOG_DIR", ""),
+			MaxSizeMB:  envutil.Int("LOG_MAX_SIZE_MB", 100),
+			MaxBackups: envutil.Int("LOG_MAX_BACKUPS", 5),
+			MaxAgeDays: envutil.Int("LOG_MAX_AGE_DAYS", 30),
+			Compress:   envutil.Bool("LOG_COMPRESS", true),
 		},
 		Bot: BotConfig{
 			Prefix:   envutil.String("BOT_PREFIX", "!"),

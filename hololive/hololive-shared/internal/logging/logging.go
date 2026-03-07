@@ -121,13 +121,9 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 	}
 
 	logPath := filepath.Join(logDir, fileName)
-	combinedLogPath := filepath.Join(logDir, "combined.log")
 
 	if err := ensureLogFilePerm(logPath); err != nil {
 		return nil, fmt.Errorf("prepare log file failed: %w", err)
-	}
-	if err := ensureLogFilePerm(combinedLogPath); err != nil {
-		return nil, fmt.Errorf("prepare combined log file failed: %w", err)
 	}
 
 	logFile := &lumberjack.Logger{
@@ -138,15 +134,7 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 		Compress:   cfg.Compress,
 	}
 
-	combinedLogFile := &lumberjack.Logger{
-		Filename:   combinedLogPath,
-		MaxSize:    cfg.MaxSizeMB * 3,
-		MaxBackups: cfg.MaxBackups,
-		MaxAge:     cfg.MaxAgeDays,
-		Compress:   cfg.Compress,
-	}
-
-	w := io.MultiWriter(os.Stdout, logFile, combinedLogFile)
+	w := io.MultiWriter(os.Stdout, logFile)
 
 	var handler slog.Handler
 	handler = tint.NewHandler(w, &tint.Options{
@@ -166,7 +154,6 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 	slog.SetDefault(logger)
 	logger.Info("file_logging_enabled",
 		slog.String("path", logFile.Filename),
-		slog.String("combined", combinedLogFile.Filename),
 		slog.Bool("otel_correlation", enableOTel),
 	)
 	return logger, nil

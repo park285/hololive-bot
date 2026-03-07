@@ -86,7 +86,7 @@ var IndieChannelIDs = []string{
 psql -d <database> -f scripts/migrations/0XX-add-new-member.sql
 
 # 2. 애플리케이션 재빌드 (상수 변경 시)
-./build-all.sh hololive-bot
+./scripts/deploy/compose-redeploy-service.sh hololive-bot
 
 # 3. 캐시 갱신 (앱 재시작 시 자동)
 ```
@@ -237,7 +237,7 @@ var IndieChannelIDs = []string{
 psql -d hololive_bot -f scripts/migrations/017-add-new-indie-member.sql
 
 # 앱 재빌드
-./build-all.sh hololive-bot
+./scripts/deploy/compose-redeploy-service.sh hololive-bot
 ```
 
 ---

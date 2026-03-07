@@ -1,35 +1,22 @@
 #!/usr/bin/env bash
-# Loki 로그 시간범위 조회 (logcli 래퍼)
+# Docker Compose 로그 시간범위 조회 래퍼
 # 사용: ./scripts/logs/query.sh <service> [--since 1h] [--limit 1000] [--grep "pattern"]
 set -euo pipefail
 
-# --- 서비스명 → container_name 매핑 ---
-declare -A SERVICE_MAP=(
-  [bot]="hololive-bot"
-  [dispatcher]="dispatcher-go"
-  [dispatcher-go]="dispatcher-go"
-  [ingester]="stream-ingester"
-  [stream-ingester]="stream-ingester"
-  [llm]="llm-scheduler"
-  [llm-scheduler]="llm-scheduler"
-)
-
-LOKI_PORT=3100
-LOKI_ADDR="http://127.0.0.1:${LOKI_PORT}"
-NAMESPACE="hololive"
-PF_PID=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
 
 usage() {
-  cat <<EOF
+  cat <<USAGE
 Usage: $(basename "$0") <service> [options]
 
 Services: ${!SERVICE_MAP[*]}
 
 Options:
-  --since <duration>   Loki 시간 범위 (기본: 1h). 예: 30m, 2h, 1d
-  --limit <n>          최대 결과 수 (기본: 1000)
-  --grep <pattern>     Loki 서버사이드 정규식 필터 (|~ "pattern")
-  --pod <pod_name>     특정 pod 지정 (container_name 대신 pod_name 필터)
+  --since <duration>   조회 범위 (기본: 1h). 예: 30m, 2h, 1d
+  --limit <n>          최대 줄 수 (기본: 1000)
+  --grep <pattern>     client-side 정규식 필터
   --quiet              진행 로그 숨김
   -h, --help           도움말
 
@@ -37,31 +24,14 @@ Examples:
   $(basename "$0") dispatcher --since 2h --grep "ERROR"
   $(basename "$0") bot --limit 500
   $(basename "$0") ingester --since 1d --grep "failed"
-EOF
+USAGE
   exit 0
 }
 
-cleanup() {
-  if [[ -n "${PF_PID}" ]] && kill -0 "${PF_PID}" 2>/dev/null; then
-    kill "${PF_PID}" 2>/dev/null || true
-    wait "${PF_PID}" 2>/dev/null || true
-  fi
-}
-trap cleanup EXIT INT TERM
-
-# --- logcli 사전 조건 확인 ---
-if ! command -v logcli &>/dev/null; then
-  echo "ERROR: logcli 미설치" >&2
-  echo "설치: go install github.com/grafana/loki/v3/cmd/logcli@latest" >&2
-  exit 1
-fi
-
-# --- 인자 파싱 ---
 SERVICE=""
 SINCE="1h"
 LIMIT="1000"
-GREP=""
-POD=""
+GREP_PATTERN=""
 QUIET="false"
 
 while [[ $# -gt 0 ]]; do
@@ -69,70 +39,42 @@ while [[ $# -gt 0 ]]; do
     -h|--help) usage ;;
     --since) SINCE="$2"; shift 2 ;;
     --limit) LIMIT="$2"; shift 2 ;;
-    --grep) GREP="$2"; shift 2 ;;
-    --pod) POD="$2"; shift 2 ;;
+    --grep) GREP_PATTERN="$2"; shift 2 ;;
     --quiet) QUIET="true"; shift ;;
     *)
       if [[ -z "${SERVICE}" ]]; then
-        SERVICE="$1"; shift
+        SERVICE="$1"
+        shift
       else
-        echo "ERROR: 알 수 없는 인자: $1" >&2; exit 1
+        echo "ERROR: unknown arg: $1" >&2
+        exit 1
       fi
       ;;
   esac
 done
 
 if [[ -z "${SERVICE}" ]]; then
-  echo "ERROR: 서비스명 필수" >&2
+  echo "ERROR: service is required" >&2
   usage
 fi
 
-CONTAINER="${SERVICE_MAP[${SERVICE}]:-}"
-if [[ -z "${CONTAINER}" ]]; then
-  echo "ERROR: 알 수 없는 서비스: ${SERVICE}" >&2
-  echo "사용 가능: ${!SERVICE_MAP[*]}" >&2
-  exit 1
-fi
-
-# --- port-forward 시작 (이미 열려있으면 스킵) ---
-if ! curl -sf "${LOKI_ADDR}/ready" &>/dev/null; then
-  if [[ "${QUIET}" != "true" ]]; then
-    echo "port-forward 시작: svc/loki ${LOKI_PORT}:${LOKI_PORT}" >&2
-  fi
-  kubectl port-forward -n "${NAMESPACE}" svc/loki "${LOKI_PORT}:${LOKI_PORT}" &>/dev/null &
-  PF_PID=$!
-  # port-forward 준비 대기 (최대 10초)
-  for i in $(seq 1 20); do
-    if curl -sf "${LOKI_ADDR}/ready" &>/dev/null; then break; fi
-    if [[ $i -eq 20 ]]; then
-      echo "ERROR: Loki port-forward 연결 실패" >&2
-      exit 1
-    fi
-    sleep 0.5
-  done
-  if [[ "${QUIET}" != "true" ]]; then
-    echo "port-forward 준비 완료" >&2
-  fi
-fi
-
-# --- Loki 쿼리 구성 ---
-if [[ -n "${POD}" ]]; then
-  QUERY="{kubernetes_namespace_name=\"${NAMESPACE}\", kubernetes_pod_name=\"${POD}\"}"
-else
-  QUERY="{kubernetes_namespace_name=\"${NAMESPACE}\", kubernetes_container_name=\"${CONTAINER}\"}"
-fi
-
-if [[ -n "${GREP}" ]]; then
-  QUERY="${QUERY} |~ \"${GREP}\""
-fi
+resolve_compose_cmd
+SERVICE_NAME="$(resolve_service "${SERVICE}")"
 
 if [[ "${QUIET}" != "true" ]]; then
-  echo "query: ${QUERY} (since ${SINCE}, limit ${LIMIT})" >&2
+  echo "query: service=${SERVICE_NAME} since=${SINCE} limit=${LIMIT} mode=${COMPOSE_MODE}" >&2
 fi
 
-# --- logcli query 실행 ---
-if [[ "${QUIET}" == "true" ]]; then
-  LOKI_ADDR="${LOKI_ADDR}" logcli query --quiet --since="${SINCE}" --limit="${LIMIT}" "${QUERY}" 2>/dev/null
+OUTPUT="$("${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" logs \
+  --no-color \
+  --no-log-prefix \
+  --timestamps \
+  --since "${SINCE}" \
+  --tail "${LIMIT}" \
+  "${SERVICE_NAME}" 2>/dev/null || true)"
+
+if [[ -n "${GREP_PATTERN}" ]]; then
+  printf '%s\n' "${OUTPUT}" | grep -E -- "${GREP_PATTERN}" || true
 else
-  LOKI_ADDR="${LOKI_ADDR}" logcli query --since="${SINCE}" --limit="${LIMIT}" "${QUERY}"
+  printf '%s\n' "${OUTPUT}"
 fi

@@ -172,7 +172,6 @@ func TestEnableFileLogging_EnsuresReadableFilePerms(t *testing.T) {
 
 	tests := []string{
 		serviceLogPath,
-		filepath.Join(logDir, "combined.log"),
 	}
 
 	for _, path := range tests {
