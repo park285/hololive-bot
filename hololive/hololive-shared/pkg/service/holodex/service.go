@@ -186,6 +186,7 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 
 	var allStreams []*domain.Stream
 	seen := make(map[string]bool)
+	var mu sync.Mutex
 
 	targetOrgs := streamTargetOrgs(resolvedOrg)
 	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
@@ -200,12 +201,14 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 		filtered = filterStreamsByRequestedOrg(filtered, resolvedOrg)
 		liveOnly := filterStreamsByStatus(filtered, domain.StreamStatusLive)
 
+		mu.Lock()
 		for _, s := range liveOnly {
 			if !seen[s.ID] {
 				seen[s.ID] = true
 				allStreams = append(allStreams, s)
 			}
 		}
+		mu.Unlock()
 		return nil
 	})
 	fallback.ObservePrimaryPhase("holodex", "live_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
@@ -267,6 +270,7 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 
 	var allStreams []*domain.Stream
 	seen := make(map[string]bool)
+	var mu sync.Mutex
 
 	targetOrgs := streamTargetOrgs(resolvedOrg)
 	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
@@ -281,12 +285,14 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		filtered = filterStreamsByRequestedOrg(filtered, resolvedOrg)
 		upcoming := h.filter.FilterUpcomingStreams(filtered)
 
+		mu.Lock()
 		for _, s := range upcoming {
 			if !seen[s.ID] {
 				seen[s.ID] = true
 				allStreams = append(allStreams, s)
 			}
 		}
+		mu.Unlock()
 		return nil
 	})
 	fallback.ObservePrimaryPhase("holodex", "upcoming_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
