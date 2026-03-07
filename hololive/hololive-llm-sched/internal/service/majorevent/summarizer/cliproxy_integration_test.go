@@ -45,8 +45,24 @@ func skipIfNoCliproxy(t *testing.T) {
 }
 
 func loadEnv() error {
-	// godotenv 대신 직접 로드 (이미 로드되었을 수 있음)
-	data, err := os.ReadFile("../../../../.env")
+	// monorepo 루트 .env 또는 모듈 로컬 .env를 순서대로 탐색한다.
+	candidates := []string{
+		os.Getenv("HOLOLIVE_BOT_ENV_FILE"),
+		"../../../../.env",
+		"../../../../../../.env",
+	}
+
+	var data []byte
+	var err error
+	for _, path := range candidates {
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		data, err = os.ReadFile(path)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -64,10 +80,25 @@ func loadEnv() error {
 	return nil
 }
 
+func testCliproxyBaseURL() string {
+	baseURL := strings.TrimSpace(os.Getenv("CLIPROXY_TEST_BASE_URL"))
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("CLIPROXY_BASE_URL"))
+	}
+	if baseURL == "" {
+		baseURL = "http://172.17.0.1:8787/v1"
+	}
+
+	// 호스트에서 실행하는 통합 테스트는 host.docker.internal 해석이 안 될 수 있다.
+	return strings.Replace(baseURL, "host.docker.internal", "172.17.0.1", 1)
+}
+
 func newTestClient(t *testing.T, model string) *llm.OpenAIClient {
 	t.Helper()
+	baseURL := testCliproxyBaseURL()
+	t.Logf("Model: %s, BaseURL: %s", model, baseURL)
 	return llm.NewClient(
-		"http://127.0.0.1:8787/v1",
+		baseURL,
 		os.Getenv("CLIPROXY_API_KEY"),
 		model,
 		slog.New(slog.NewTextHandler(os.Stdout, nil)),
@@ -82,7 +113,7 @@ func TestIntegration_Summarize_RawJSON_GPT(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)
@@ -158,7 +189,7 @@ func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)
@@ -203,7 +234,7 @@ func TestIntegration_Summarize_RawJSON_GPT_WebSearch(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)
@@ -284,7 +315,7 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)
@@ -384,7 +415,7 @@ func TestIntegration_Summarize_Weekly_ExaPlusWebSearch(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)
@@ -454,7 +485,7 @@ func TestIntegration_Summarize_Monthly_ExaPlusWebSearch(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)
@@ -549,7 +580,7 @@ func TestIntegration_Summarize_DateAccuracy(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)
@@ -608,7 +639,7 @@ func TestIntegration_Summarize_ANIPLUSDiscovery(t *testing.T) {
 
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
 
 	client := newTestClient(t, model)

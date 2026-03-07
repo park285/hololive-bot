@@ -48,7 +48,23 @@ func skipIfNoLLMKey(t *testing.T) {
 }
 
 func loadEnv() error {
-	data, err := os.ReadFile("../../../../.env")
+	candidates := []string{
+		os.Getenv("HOLOLIVE_BOT_ENV_FILE"),
+		"../../../../.env",
+		"../../../../../../.env",
+	}
+
+	var data []byte
+	var err error
+	for _, path := range candidates {
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		data, err = os.ReadFile(path)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -66,17 +82,30 @@ func loadEnv() error {
 	return nil
 }
 
+func testCliproxyBaseURL() string {
+	baseURL := strings.TrimSpace(os.Getenv("CLIPROXY_TEST_BASE_URL"))
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv("CLIPROXY_BASE_URL"))
+	}
+	if baseURL == "" {
+		baseURL = "http://172.17.0.1:8787/v1"
+	}
+
+	return strings.Replace(baseURL, "host.docker.internal", "172.17.0.1", 1)
+}
+
 func newTestMemberNewsClient(t *testing.T) LLMClient {
 	t.Helper()
 	model := os.Getenv("CLIPROXY_TEST_MODEL")
 	if model == "" {
-		model = "gpt-5.3-codex"
+		model = "gpt-5.4"
 	}
+	baseURL := testCliproxyBaseURL()
 
-	t.Logf("Model: %s, BaseURL: http://127.0.0.1:8787/v1 (Chat Completions)", model)
+	t.Logf("Model: %s, BaseURL: %s (Chat Completions)", model, baseURL)
 
 	return llm.NewClient(
-		"http://127.0.0.1:8787/v1",
+		baseURL,
 		os.Getenv("CLIPROXY_API_KEY"),
 		model,
 		slog.New(slog.NewTextHandler(os.Stdout, nil)),
