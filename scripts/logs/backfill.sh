@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Docker Compose 최근 로그를 일회성 스냅샷 파일로 저장
-# 사용: ./scripts/logs/backfill.sh <service> [--since 24h] [--limit 5000] [--output path]
+# 사용: ENABLE_LOG_AUX_FILES=1 ./scripts/logs/backfill.sh <service> [--since 24h] [--limit 5000] [--output path]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,6 +8,7 @@ QUERY_SCRIPT="${SCRIPT_DIR}/query.sh"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SNAPSHOT_DIR="${REPO_ROOT}/logs/backfill"
 RETENTION_DAYS="${BACKFILL_RETENTION_DAYS:-7}"
+ENABLE_LOG_AUX_FILES="${ENABLE_LOG_AUX_FILES:-0}"
 
 usage() {
   cat <<USAGE
@@ -55,6 +56,11 @@ fi
 
 if [[ "${STDOUT_ONLY}" == "true" ]]; then
   "${QUERY_SCRIPT}" "${SERVICE}" --since "${SINCE}" --limit "${LIMIT}" --quiet
+  exit 0
+fi
+
+if [[ "${ENABLE_LOG_AUX_FILES}" != "1" ]]; then
+  echo "aux log files disabled: set ENABLE_LOG_AUX_FILES=1 to write snapshot files" >&2
   exit 0
 fi
 
