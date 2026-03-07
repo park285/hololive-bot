@@ -2,8 +2,10 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,11 +18,18 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
+var errBlockedLink = errors.New("parse link: blocked host")
+
 // LinkChecker는 링크 유효성 검증(HEAD 후 GET fallback)을 수행한다.
 type LinkChecker struct {
 	client *http.Client
 	config LinkCheckerConfig
 	logger *slog.Logger
+	resolver hostResolver
+}
+
+type hostResolver interface {
+	LookupIP(context.Context, string, string) ([]net.IP, error)
 }
 
 // NewLinkChecker는 LinkChecker를 생성한다.
@@ -41,10 +50,14 @@ func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Log
 		normalized.Concurrency = defaults.Concurrency
 	}
 
+	resolver := net.DefaultResolver
+	client = withBlockedRedirectPolicy(client, resolver, normalized.Timeout)
+
 	return &LinkChecker{
 		client: client,
 		config: normalized,
 		logger: logger,
+		resolver: resolver,
 	}
 }
 
@@ -107,13 +120,16 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.MajorEventLinkStatus, error) {
 	parsed, err := parseAndValidateLink(rawURL)
 	if err != nil {
-		if strings.Contains(err.Error(), "scheme") {
+		if isBlockedLinkError(err) {
 			return domain.MajorEventLinkStatusBlocked, err
 		}
 		return domain.MajorEventLinkStatusFailed, err
 	}
 
 	headStatus, headErr := c.probe(ctx, http.MethodHead, parsed.String())
+	if isBlockedLinkError(headErr) {
+		return domain.MajorEventLinkStatusBlocked, headErr
+	}
 	if headErr == nil {
 		if isSuccessStatus(headStatus) {
 			return domain.MajorEventLinkStatusOK, nil
@@ -126,6 +142,9 @@ func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.Majo
 	}
 
 	getStatus, getErr := c.probe(ctx, http.MethodGet, parsed.String())
+	if isBlockedLinkError(getErr) {
+		return domain.MajorEventLinkStatusBlocked, getErr
+	}
 	if getErr != nil {
 		return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: get request failed: %w", getErr)
 	}
@@ -136,6 +155,10 @@ func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.Majo
 }
 
 func (c *LinkChecker) probe(ctx context.Context, method, targetURL string) (int, error) {
+	if err := c.validateRequestTarget(ctx, targetURL); err != nil {
+		return 0, err
+	}
+
 	requestCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
 	defer cancel()
 
@@ -156,6 +179,14 @@ func (c *LinkChecker) probe(ctx context.Context, method, targetURL string) (int,
 	return resp.StatusCode, nil
 }
 
+func (c *LinkChecker) validateRequestTarget(ctx context.Context, rawURL string) error {
+	parsed, err := parseAndValidateLink(rawURL)
+	if err != nil {
+		return err
+	}
+	return validateResolvedHost(ctx, c.resolver, c.config.Timeout, parsed)
+}
+
 func parseAndValidateLink(rawURL string) (*url.URL, error) {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {
@@ -170,7 +201,85 @@ func parseAndValidateLink(rawURL string) (*url.URL, error) {
 	if scheme != "http" && scheme != "https" {
 		return nil, fmt.Errorf("parse link: unsupported scheme %q", parsed.Scheme)
 	}
+	hostname := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if hostname == "" {
+		return nil, fmt.Errorf("parse link: empty host")
+	}
+	if hostname == "localhost" {
+		return nil, fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
+	}
+	if ip := net.ParseIP(hostname); ip != nil && isPrivateOrInternalIP(ip) {
+		return nil, fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
+	}
 	return parsed, nil
+}
+
+func validateResolvedHost(ctx context.Context, resolver hostResolver, timeout time.Duration, parsed *url.URL) error {
+	if resolver == nil || parsed == nil {
+		return nil
+	}
+
+	lookupCtx := ctx
+	cancel := func() {}
+	if timeout > 0 {
+		lookupCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+	defer cancel()
+
+	ips, err := resolver.LookupIP(lookupCtx, "ip", parsed.Hostname())
+	if err != nil {
+		return fmt.Errorf("resolve link host: %w", err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("resolve link host: no addresses for %q", parsed.Hostname())
+	}
+	for _, ip := range ips {
+		if isPrivateOrInternalIP(ip) {
+			return fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
+		}
+	}
+	return nil
+}
+
+func isBlockedLinkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errBlockedLink) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "unsupported scheme")
+}
+
+func withBlockedRedirectPolicy(client *http.Client, resolver hostResolver, timeout time.Duration) *http.Client {
+	if client == nil {
+		return nil
+	}
+
+	cloned := *client
+	original := client.CheckRedirect
+	cloned.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := validateResolvedHost(req.Context(), resolver, timeout, req.URL); err != nil {
+			return err
+		}
+		if original != nil {
+			return original(req, via)
+		}
+		return nil
+	}
+	return &cloned
+}
+
+func isPrivateOrInternalIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified()
 }
 
 func isSuccessStatus(code int) bool {
