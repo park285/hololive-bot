@@ -51,4 +51,4 @@ go build ./...
 - `llm-valkey-cache` 연결 상태 (`/health`, logs)
 - `holodex`/`youtube scraper` 호출 지연 증가 여부
 - 과도한 거부(deny) 로그 발생 여부
-- `BOT_INGESTION_ENABLED` 조합 확인 (bot=false, stream-ingester=true 권장)
+- `stream-ingester` 단일 ingestion 리스 유지 여부 (`event=ingestion_lease_acquired`)

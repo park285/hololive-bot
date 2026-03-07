@@ -11,28 +11,32 @@ import (
 
 func setRequiredLoadEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 }
 
-func TestCollectAPIKeys(t *testing.T) {
-	prefix := "HOLODEX_API_KEY_"
+func TestResolveHolodexAPIKey(t *testing.T) {
+	t.Run("prefers HOLODEX_API_KEY", func(t *testing.T) {
+		t.Setenv("HOLODEX_API_KEY", " primary-key ")
+		t.Setenv("HOLODEX_API_KEY_1", "legacy-key")
 
-	t.Setenv("HOLODEX_API_KEY_1", " key-1 ")
-	t.Setenv("HOLODEX_API_KEY_2", "key-2")
-	t.Setenv("HOLODEX_API_KEY_3", "key-3")
-	t.Setenv("HOLODEX_API_KEY_4", "key-4")
-	t.Setenv("HOLODEX_API_KEY_5", "key-5")
-	t.Setenv("HOLODEX_API_KEYS", "key-2,key-6 , key-7")
+		got := resolveHolodexAPIKey()
+		if got != "primary-key" {
+			t.Fatalf("resolveHolodexAPIKey() = %q, want %q", got, "primary-key")
+		}
+	})
 
-	keys := collectAPIKeys(prefix)
+	t.Run("falls back to legacy HOLODEX_API_KEY_1", func(t *testing.T) {
+		t.Setenv("HOLODEX_API_KEY", "")
+		t.Setenv("HOLODEX_API_KEY_1", "legacy-key")
 
-	expected := []string{"key-1", "key-2", "key-3", "key-4", "key-5", "key-6", "key-7"}
-	if !reflect.DeepEqual(keys, expected) {
-		t.Fatalf("collectAPIKeys() = %v, expected %v", keys, expected)
-	}
+		got := resolveHolodexAPIKey()
+		if got != "legacy-key" {
+			t.Fatalf("resolveHolodexAPIKey() = %q, want %q", got, "legacy-key")
+		}
+	})
 }
 
 func TestKakaoConfig_IsRoomAllowed(t *testing.T) {
@@ -340,7 +344,7 @@ func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 }
 
 func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("OTEL_ENVIRONMENT", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
@@ -355,7 +359,7 @@ func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 }
 
 func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("OTEL_ENVIRONMENT", "production")
 	t.Setenv("API_SECRET_KEY", "")
 
@@ -555,7 +559,7 @@ func TestLoad_TelemetryMetricsInterval_FallbackToDefault(t *testing.T) {
 }
 
 func TestLoadAdminAPI_EnvApplied(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("ADMIN_API_PORT", "39002")
 	t.Setenv("LOG_LEVEL", "")
@@ -573,7 +577,7 @@ func TestLoadAdminAPI_EnvApplied(t *testing.T) {
 }
 
 func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("CORS_ENFORCE", "yes")
 
@@ -669,7 +673,7 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 }
 
 func TestLoadAdminAPI_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
-	t.Setenv("HOLODEX_API_KEY_1", "test-key")
+	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
 

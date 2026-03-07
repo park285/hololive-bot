@@ -25,7 +25,7 @@ func initScraperHolodexProfileFoundation(
 	infra *infraResources,
 	logger *slog.Logger,
 ) (*scraperHolodexProfileFoundation, error) {
-	holodexAPIKeys := providers.ProvideHolodexAPIKeys(cfg.Holodex)
+	holodexAPIKey := providers.ProvideHolodexAPIKey(cfg.Holodex)
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(infra.memberCache, logger)
 
 	scraperProxyConfig := scraper.ProxyConfig{
@@ -46,7 +46,7 @@ func initScraperHolodexProfileFoundation(
 	)
 	holodexService, err := providers.ProvideHolodexService(
 		cfg.Holodex.BaseURL,
-		holodexAPIKeys,
+		holodexAPIKey,
 		infra.cacheService,
 		scraperService,
 		logger,

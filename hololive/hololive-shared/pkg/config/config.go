@@ -14,8 +14,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-const maxHolodexAPIKeySlots = 5
-
 // Config: 홀로라이브 봇의 전체 동작에 필요한 설정을 담는 구조체
 type Config struct {
 	Iris               IrisConfig
@@ -100,7 +98,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		},
 		Holodex: HolodexConfig{
 			BaseURL: envutil.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
-			APIKeys: collectAPIKeys("HOLODEX_API_KEY_"),
+			APIKey:  resolveHolodexAPIKey(),
 		},
 		YouTube: YouTubeConfig{
 			APIKey:              envutil.String("YOUTUBE_API_KEY", ""),
@@ -121,10 +119,9 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			Compress:   envutil.Bool("LOG_COMPRESS", true),
 		},
 		Bot: BotConfig{
-			Prefix:           envutil.String("BOT_PREFIX", "!"),
-			SelfUser:         envutil.String("BOT_SELF_USER", "iris"),
-			IngestionEnabled: envutil.Bool("BOT_INGESTION_ENABLED", true),
-			AdminEnabled:     envutil.Bool("BOT_ADMIN_ENABLED", true),
+			Prefix:       envutil.String("BOT_PREFIX", "!"),
+			SelfUser:     envutil.String("BOT_SELF_USER", "iris"),
+			AdminEnabled: envutil.Bool("BOT_ADMIN_ENABLED", true),
 		},
 		Services: ServicesConfig{
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
@@ -185,8 +182,8 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
 		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
 	}
-	if len(c.Holodex.APIKeys) == 0 {
-		return fmt.Errorf("at least one HOLODEX_API_KEY is required")
+	if strings.TrimSpace(c.Holodex.APIKey) == "" {
+		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
 	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
 		return err

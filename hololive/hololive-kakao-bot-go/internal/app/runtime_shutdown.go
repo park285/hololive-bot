@@ -16,14 +16,6 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 		r.logInfo("Alarm runtime scheduler cancellation signaled")
 	}
 
-	if r.Scheduler != nil {
-		r.Scheduler.Stop()
-		r.logInfo("YouTube ingestion scheduler stopped")
-	}
-	if r.ScraperScheduler != nil {
-		r.ScraperScheduler.Stop()
-		r.logInfo("Scraper scheduler stopped")
-	}
 	if err := r.ShutdownHTTPServer(ctx); err != nil {
 		r.logError("HTTP server shutdown error", err)
 	}
@@ -42,11 +34,6 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 	if r.Bot != nil {
 		if err := r.Bot.Shutdown(ctx); err != nil {
 			r.logError("Error during shutdown", err)
-		}
-	}
-	if r.ingestionLease != nil {
-		if err := r.ingestionLease.Release(ctx); err != nil {
-			r.logError("Ingestion lease release failed", err)
 		}
 	}
 }

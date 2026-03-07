@@ -19,12 +19,8 @@ func BuildStreamIngesterRuntime(ctx context.Context, cfg *config.Config, logger 
 		return nil, fmt.Errorf("logger must not be nil")
 	}
 
-	if !cfg.Bot.IngestionEnabled {
-		return nil, fmt.Errorf("stream ingester requires BOT_INGESTION_ENABLED=true")
-	}
 	logger.Info("Stream-ingester ingestion runtime enabled",
 		slog.String("event", "stream_ingestion_enabled"),
-		slog.String("env", "BOT_INGESTION_ENABLED=true"),
 		slog.String("lock_key", providers.IngestionLeaseKey),
 	)
 

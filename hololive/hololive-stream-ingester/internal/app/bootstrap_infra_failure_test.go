@@ -12,9 +12,6 @@ import (
 
 func buildInfraFailureConfig() *config.Config {
 	return &config.Config{
-		Bot: config.BotConfig{
-			IngestionEnabled: true,
-		},
 		Server: config.ServerConfig{
 			Port: 30004,
 		},
@@ -24,12 +21,12 @@ func buildInfraFailureConfig() *config.Config {
 			DB:   0,
 		},
 		Postgres: config.PostgresConfig{
-			Host:      "127.0.0.1",
-			Port:      1,
-			User:      "test",
-			Password:  "test",
-			Database:  "test",
-			SSLMode:   "disable",
+			Host:          "127.0.0.1",
+			Port:          1,
+			User:          "test",
+			Password:      "test",
+			Database:      "test",
+			SSLMode:       "disable",
 			QueryExecMode: "simple_protocol",
 		},
 		Notification: config.NotificationConfig{
@@ -37,7 +34,7 @@ func buildInfraFailureConfig() *config.Config {
 		},
 		Holodex: config.HolodexConfig{
 			BaseURL: "https://example.com",
-			APIKeys: []string{"dummy"},
+			APIKey:  "dummy",
 		},
 	}
 }
@@ -74,4 +71,3 @@ func TestBuildStreamIngesterRuntime_ReturnsErrorOnInfraInitFailure(t *testing.T)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "provide cache resources")
 }
-

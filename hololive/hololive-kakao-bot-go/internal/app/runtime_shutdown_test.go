@@ -72,9 +72,8 @@ func TestBotRuntimeStartSchedulers_StartsAlarmRuntimeScheduler(t *testing.T) {
 	alarmScheduler := newTestAlarmRuntimeScheduler()
 
 	runtime := &BotRuntime{
-		Logger:           logger,
-		IngestionEnabled: true,
-		AlarmScheduler:   alarmScheduler,
+		Logger:         logger,
+		AlarmScheduler: alarmScheduler,
 	}
 
 	runtime.startSchedulers(context.Background(), nil)
@@ -96,8 +95,7 @@ func TestBotRuntimeStartSchedulers_LogsWhenAlarmRuntimeSchedulerMissing(t *testi
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 	runtime := &BotRuntime{
-		Logger:           logger,
-		IngestionEnabled: true,
+		Logger: logger,
 	}
 
 	runtime.startSchedulers(context.Background(), nil)
@@ -110,8 +108,7 @@ func TestBotRuntimeStartSchedulers_LogsWhenAlarmRuntimeSchedulerMissing(t *testi
 func TestBotRuntimeShutdown_CancelsAlarmRuntimeSchedulerOnCanceledContext(t *testing.T) {
 	alarmScheduler := newTestAlarmRuntimeScheduler()
 	runtime := &BotRuntime{
-		IngestionEnabled: true,
-		AlarmScheduler:   alarmScheduler,
+		AlarmScheduler: alarmScheduler,
 	}
 
 	runtime.startSchedulers(context.Background(), nil)

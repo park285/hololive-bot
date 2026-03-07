@@ -30,7 +30,7 @@ func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 	logger := newCheckerTestLogger()
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexSvc, _ := holodex.NewHolodexService("http://unused", []string{"k"}, cacheSvc, nil, logger)
+	holodexSvc, _ := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
 
 	tests := map[string]struct {
 		cacheNil   bool
@@ -82,7 +82,7 @@ func TestYouTubeCheckerCheck_EmptyChannelRegistry(t *testing.T) {
 	logger := newCheckerTestLogger()
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
 	tierSched := tier.NewTieredScheduler(logger)
-	holodexSvc, err := holodex.NewHolodexService("http://unused", []string{"k"}, cacheSvc, nil, logger)
+	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
 	require.NoError(t, err)
 
 	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, logger)
@@ -190,7 +190,7 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 			logger := newCheckerTestLogger()
 			dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
 			tierSched := tier.NewTieredScheduler(logger)
-			holodexSvc, err := holodex.NewHolodexService(server.URL, []string{"test-key"}, cacheSvc, nil, logger)
+			holodexSvc, err := holodex.NewHolodexService(server.URL, "test-key", cacheSvc, nil, logger)
 			require.NoError(t, err)
 
 			checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, logger)

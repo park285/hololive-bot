@@ -50,7 +50,7 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	irisClient := providers.ProvideIrisClient(cfg.Iris, logger)
 	templateRenderer := template.NewRenderer(infra.postgresService.GetGormDB(), logger)
 
-	holodexAPIKeys := providers.ProvideHolodexAPIKeys(cfg.Holodex)
+	holodexAPIKey := providers.ProvideHolodexAPIKey(cfg.Holodex)
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(infra.memberCache, logger)
 	membersData := memberServiceAdapter
 	scraperProxyConfig := scraper.ProxyConfig{
@@ -64,7 +64,7 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	}
 
 	scraperService := providers.ProvideScraperService(infra.cacheService, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
-	holodexService, err := providers.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKeys, infra.cacheService, scraperService, logger)
+	holodexService, err := providers.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKey, infra.cacheService, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}

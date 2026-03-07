@@ -11,7 +11,7 @@ type ServerConfig struct {
 // HolodexConfig: Holodex API 키 및 호출 관련 설정
 type HolodexConfig struct {
 	BaseURL string
-	APIKeys []string
+	APIKey  string
 }
 
 // YouTubeConfig: YouTube Data API 키 및 Quota 관리 설정
@@ -32,10 +32,9 @@ type LoggingConfig struct {
 
 // BotConfig: 봇의 기본 동작(명령어 접두사, 자기 자신 식별자) 설정
 type BotConfig struct {
-	Prefix           string
-	SelfUser         string
-	IngestionEnabled bool
-	AdminEnabled     bool
+	Prefix       string
+	SelfUser     string
+	AdminEnabled bool
 }
 
 // ServicesConfig: 외부 Go 서비스 연결 설정 (goroutine 통합 모니터링용)
