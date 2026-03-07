@@ -64,7 +64,7 @@ func loadCliproxyConfig() CliproxyConfig {
 	return CliproxyConfig{
 		BaseURL:         envutil.String("CLIPROXY_BASE_URL", "https://cliproxy.capu.blog/v1"),
 		APIKey:          envutil.String("CLIPROXY_API_KEY", ""),
-		Model:           envutil.String("CLIPROXY_MODEL", "gpt-5.3-codex"),
+		Model:           envutil.String("CLIPROXY_MODEL", "gpt-5.4"),
 		Enabled:         envutil.Bool("CLIPROXY_ENABLED", false),
 		ReasoningEffort: envutil.String("CLIPROXY_REASONING_EFFORT", "high"),
 	}
