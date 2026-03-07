@@ -36,8 +36,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: hololive-app-config
-            - secretRef:
-                name: hololive-app-secret
           env:
             - name: DISPATCHER_PORT
               value: "30020"
