@@ -242,22 +242,6 @@
   - `server/` root → h2c.go, response.go, websocket.go (인프라 코어)
 - **검증**: import path 갱신 후 전체 모듈 build + test
 
-### P11-E3. K8s Secret 서비스별 분리
-
-- **파일**: `k8s/base/secret-app.yaml` (단일 Secret, 모든 서비스가 모든 시크릿 접근)
-- **조치**:
-  - `k8s/base/secret-bot.yaml` (IRIS_*, API_SECRET_KEY)
-  - `k8s/base/secret-dispatcher.yaml` (IRIS_*, ALARM_*)
-  - `k8s/base/secret-llm.yaml` (OPENAI_*, EXA_*)
-  - `k8s/base/secret-common.yaml` (POSTGRES_*, HOLODEX_*, YOUTUBE_*)
-- **검증**: `kubectl apply --dry-run=client -f k8s/base/` 통과
-
-### P11-E4. K8s ConfigMap 서비스별 분리
-
-- **파일**: `k8s/base/configmap-app.yaml` (3개 ConfigMap, 일부 공유)
-- **조치**: 서비스별 ConfigMap 세분화 (공유 DB/Cache 설정은 common으로 유지)
-- **검증**: `kubectl apply --dry-run=client -f k8s/base/` 통과
-
 ---
 
 ## 라이브러리 검증 결과 (교체 불필요 확인)

@@ -10,6 +10,7 @@
 - `20260306/AUTH_CORE_UNIFICATION_DRAFT_20260306.md` — auth core 단일화 초안
 - `20260305/OUTBOX_MARKSENT_BATCH_PLAN_20260305.md` — outbox markSent 배치화 사전 설계
 - `20260305/OUTBOX_PER_ROOM_DELIVERY_MODEL_PLAN_20260305.md` — outbox per-room 전달 정합성 개선안
+- `20260307/COMPOSE_HISTORY_NOTES_20260307.md` — git history 기준 compose 시절 설정 메모
 
 ## 전환 (Archived — 하이브리드 아키텍처 확정, 2026-03-01)
 - `GO_TO_RUST_MIGRATION_PROGRESS_20260301.md`
@@ -30,9 +31,7 @@
 - `modularization/PLAN.md` / `PLAN_EXTENDED.md`
 - `modularization/TODO.md` / `TODO_EXTENDED.md`
 
-## K3s 실행 문서
-- `runbook_execution/K3S_DEPLOYMENT_GUIDE.md` — k3s 배포 가이드
-- `runbook_execution/HOLOLIVE_K3S_CUTOVER_RUNBOOK_20260227.md`
-- `runbook_execution/HOLOLIVE_K3S_EXTERNAL_DEPENDENCY_CHECKLIST_20260301.md`
+## 실행 문서
+- `runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` — docker compose 배포 가이드
 - `runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`
 - `runbook_execution/OUTBOX_PER_ROOM_ROLLOUT_RUNBOOK_20260305.md` — outbox per-room 모드 전환 런북
