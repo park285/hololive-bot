@@ -99,7 +99,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		return envelopes, nil
 	}
 
-	drained, err := c.lpopMany(ctx, remaining)
+	drained, err := c.rpopMany(ctx, remaining)
 	if err != nil {
 		resultLabel = "error"
 		return nil, fmt.Errorf("drain queue batch: pop drain payloads: %w", err)
@@ -154,21 +154,18 @@ func (c *Consumer) brpop(ctx context.Context, timeout time.Duration) (string, er
 	return result[1], nil
 }
 
-func (c *Consumer) lpopMany(ctx context.Context, count int) ([]string, error) {
+func (c *Consumer) rpopMany(ctx context.Context, count int) ([]string, error) {
 	if count <= 0 {
 		return nil, nil
 	}
 
-	cmd := c.cache.B().Lpop().Key(c.queueKey).Count(int64(count)).Build()
+	cmd := c.cache.B().Rpop().Key(c.queueKey).Count(int64(count)).Build()
 	values, err := c.cache.GetClient().Do(ctx, cmd).AsStrSlice()
 	if err != nil {
 		if util.IsValkeyNil(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("lpop queue payloads: execute command: %w", err)
-	}
-	for left, right := 0, len(values)-1; left < right; left, right = left+1, right-1 {
-		values[left], values[right] = values[right], values[left]
+		return nil, fmt.Errorf("rpop queue payloads: execute command: %w", err)
 	}
 	return values, nil
 }
