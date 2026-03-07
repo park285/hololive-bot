@@ -148,7 +148,6 @@ var templateFuncs = template.FuncMap{
 	"replace":        strings.ReplaceAll,
 	"contains":       strings.Contains,
 	"hasPrefix":      strings.HasPrefix,
-	"hasSuffix":      strings.HasSuffix,
 	"join":           strings.Join,
 	"split":          strings.Split,
 	"formatNumber":   formatNumber,
