@@ -57,8 +57,12 @@ func NewYouTubeService(
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) (Service, error) {
+	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
 		return nil, fmt.Errorf("YouTube API key is required")
+	}
+	if isPlaceholderYouTubeAPIKey(apiKey) {
+		return nil, fmt.Errorf("YouTube API key uses placeholder value")
 	}
 
 	service, err := youtube.NewService(ctx, option.WithAPIKey(apiKey))
@@ -85,6 +89,15 @@ func NewYouTubeService(
 		slog.Time("quotaReset", ys.quotaReset))
 
 	return ys, nil
+}
+
+func isPlaceholderYouTubeAPIKey(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "your_api_key", "your_youtube_api_key", "changeme", "change_me", "replace_me", "replace-with-real-key":
+		return true
+	default:
+		return false
+	}
 }
 
 // SetScraperProxyEnabled: YouTube 서비스 내부 HTML 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
@@ -674,6 +687,8 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 	result := make(map[string]*ChannelStats)
 	var mu sync.Mutex
 	successfulBatches := 0
+	var firstErr error
+	var errMu sync.Mutex
 
 	g, gctx := errgroup.WithContext(ctx)
 
@@ -687,6 +702,11 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 				ys.logger.Error("Failed to fetch channel statistics from API",
 					slog.Int("batch_size", len(batch)),
 					slog.Any("error", err))
+				errMu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				errMu.Unlock()
 				return nil
 			}
 
@@ -709,6 +729,9 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 	}
 
 	_ = g.Wait()
+	if successfulBatches == 0 && firstErr != nil {
+		return channelStatsAPIFallbackResult{}, fmt.Errorf("fetch channel statistics from API: %w", firstErr)
+	}
 	ys.consumeQuota(cost)
 
 	ys.logger.Info("API fallback completed",
