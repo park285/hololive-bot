@@ -90,6 +90,57 @@ func TestGormBatchRepositoryPersistVideos(t *testing.T) {
 	require.EqualValues(t, pollerBatchMaxSize+5, outboxCount)
 }
 
+func TestGormBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	repo := newBatchRepository(db)
+	ctx := context.Background()
+
+	notifications := []*domain.YouTubeNotificationOutbox{
+		{
+			Kind:      domain.OutboxKindNewVideo,
+			ChannelID: "channel-1",
+			ContentID: "video-1",
+			Payload:   `{"video_id":"video-1","kind":"video"}`,
+			Status:    domain.OutboxStatusPending,
+		},
+		{
+			Kind:      domain.OutboxKindNewShort,
+			ChannelID: "channel-1",
+			ContentID: "video-1",
+			Payload:   `{"video_id":"video-1","kind":"short"}`,
+			Status:    domain.OutboxStatusPending,
+		},
+		{
+			Kind:      domain.OutboxKindNewVideo,
+			ChannelID: "channel-1",
+			ContentID: "video-1",
+			Payload:   `{"video_id":"video-1","kind":"video-duplicate"}`,
+			Status:    domain.OutboxStatusPending,
+		},
+	}
+
+	err := repo.PersistVideos(ctx, []*domain.YouTubeVideo{{
+		VideoID:   "video-1",
+		ChannelID: "channel-1",
+		Title:     "title-video-1",
+		ViewCount: 1,
+	}}, notifications, &domain.YouTubeContentWatermark{
+		ChannelID:     "channel-1",
+		WatermarkType: domain.WatermarkTypeVideo,
+		Initialized:   true,
+		LastContentID: "video-1",
+	})
+	require.NoError(t, err)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	require.EqualValues(t, 2, outboxCount)
+}
+
 func TestGormBatchRepositoryPersistCommunityPosts(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
@@ -224,7 +275,7 @@ func createBatchTestTable(db *gorm.DB, model any) error {
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				kind TEXT NOT NULL,
 				channel_id TEXT NOT NULL,
-				content_id TEXT NOT NULL UNIQUE,
+				content_id TEXT NOT NULL,
 				payload TEXT NOT NULL,
 				status TEXT NOT NULL,
 				attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -232,7 +283,8 @@ func createBatchTestTable(db *gorm.DB, model any) error {
 				created_at DATETIME NOT NULL,
 				locked_at DATETIME,
 				sent_at DATETIME,
-				error TEXT
+				error TEXT,
+				UNIQUE(kind, content_id)
 			)
 		`).Error
 	case *domain.YouTubeContentWatermark:
