@@ -91,7 +91,7 @@ Phase 6: Rust 제거 + 배포 갱신               (Phase 2~5 전부 완료 후)
 
 - `hololive/hololive-rs/` 전체 삭제 (14 crates) (**완료**)
 - docker-compose: Rust 서비스 제거, dispatcher-go 추가 (**완료**)
-- k8s 매니페스트: alarm/scraper/rust-dispatcher/admin 삭제, dispatcher-go 생성 (**완료**)
+- 배포 자산: alarm/scraper/rust-dispatcher/admin 삭제, dispatcher-go 경로 정리 (**완료**)
 - pre-commit: Rust 검사 제거
 - 운영/점검 스크립트 서비스 매핑 갱신 (`bot + dispatcher-go + llm-scheduler + stream-ingester`) (**완료**)
 - 문서/README 최신 구조 반영 (**완료**)
