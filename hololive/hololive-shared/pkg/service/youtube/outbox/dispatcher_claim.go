@@ -67,13 +67,20 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 
 	enqueuedOutboxes := 0
 	noSubscriberOutboxes := 0
+	subscriberLookupFailures := 0
 	enqueueFailures := 0
 	totalTargetRooms := 0
 
 	for i := range outboxItems {
 		item := &outboxItems[i]
 		rooms, ok := roomsByChannel[item.ChannelID]
-		if !ok || len(rooms) == 0 {
+		if !ok {
+			subscriberLookupFailures++
+			d.releaseOutboxLock(ctx, item.ID)
+			continue
+		}
+
+		if len(rooms) == 0 {
 			noSubscriberOutboxes++
 			d.markSent(ctx, item.ID)
 			continue
@@ -102,12 +109,14 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 		slog.Int("outbox_claimed", len(outboxItems)),
 		slog.Int("outbox_enqueued", enqueuedOutboxes),
 		slog.Int("outbox_no_subscribers", noSubscriberOutboxes),
+		slog.Int("subscriber_lookup_failures", subscriberLookupFailures),
 		slog.Int("enqueue_failures", enqueueFailures),
 		slog.Int("target_rooms", totalTargetRooms))
 
 	outboxEnqueueOutboxesTotal.WithLabelValues("claimed").Add(float64(len(outboxItems)))
 	outboxEnqueueOutboxesTotal.WithLabelValues("enqueued").Add(float64(enqueuedOutboxes))
 	outboxEnqueueOutboxesTotal.WithLabelValues("no_subscribers").Add(float64(noSubscriberOutboxes))
+	outboxEnqueueOutboxesTotal.WithLabelValues("subscriber_lookup_failures").Add(float64(subscriberLookupFailures))
 	outboxEnqueueOutboxesTotal.WithLabelValues("enqueue_failures").Add(float64(enqueueFailures))
 	outboxEnqueueTargetRoomsTotal.Add(float64(totalTargetRooms))
 }
