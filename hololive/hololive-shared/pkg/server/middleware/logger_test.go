@@ -1,10 +1,16 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestShouldSkipPath(t *testing.T) {
@@ -28,13 +34,13 @@ func TestShouldSkipPath(t *testing.T) {
 			name:       "prefix 일치 → true",
 			path:       "/api/holo/ws/connect",
 			prefixSkip: []string{"/api/holo/ws"},
-			want:        true,
+			want:       true,
 		},
 		{
 			name:       "suffix 일치 → true",
 			path:       "/api/stream",
 			suffixSkip: []string{"/stream"},
-			want:        true,
+			want:       true,
 		},
 		{
 			name:       "어떤 패턴에도 불일치 → false",
@@ -42,7 +48,7 @@ func TestShouldSkipPath(t *testing.T) {
 			exactSkip:  map[string]bool{"/health": true},
 			prefixSkip: []string{"/metrics"},
 			suffixSkip: []string{"/stream"},
-			want:        false,
+			want:       false,
 		},
 		{
 			name:       "빈 맵/슬라이스 → false",
@@ -50,7 +56,7 @@ func TestShouldSkipPath(t *testing.T) {
 			exactSkip:  map[string]bool{},
 			prefixSkip: []string{},
 			suffixSkip: []string{},
-			want:        false,
+			want:       false,
 		},
 	}
 
@@ -112,4 +118,56 @@ func TestLogDebugf_NoPanic(t *testing.T) {
 
 	// 패닉 발생 시 테스트가 실패하므로 별도 assertion 불필요
 	LogDebugf(ctx, logger, "테스트 메시지", slog.String("key", "value"))
+}
+
+func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.ReleaseMode)
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	router := gin.New()
+	if err := router.SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
+		t.Fatalf("SetTrustedProxies 에러: %v", err)
+	}
+	router.Use(LoggerMiddleware(context.Background(), logger))
+	router.GET("/inspect", func(c *gin.Context) {
+		c.Status(http.StatusUnauthorized)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/inspect", nil)
+	req.RemoteAddr = "10.10.0.5:4321"
+	req.Header.Set("User-Agent", "curl/8.5.0")
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	req.Header.Set("X-Real-IP", "203.0.113.11")
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
+		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
+	}
+
+	if got := entry["msg"]; got != "HTTP" {
+		t.Fatalf("msg = %v, want HTTP", got)
+	}
+	if got := entry["ip"]; got != "203.0.113.10" {
+		t.Fatalf("ip = %v, want 203.0.113.10", got)
+	}
+	if got := entry["remote_addr"]; got != "10.10.0.5:4321" {
+		t.Fatalf("remote_addr = %v, want 10.10.0.5:4321", got)
+	}
+	if got := entry["x_forwarded_for"]; got != "203.0.113.10" {
+		t.Fatalf("x_forwarded_for = %v, want 203.0.113.10", got)
+	}
+	if got := entry["x_real_ip"]; got != "203.0.113.11" {
+		t.Fatalf("x_real_ip = %v, want 203.0.113.11", got)
+	}
 }
