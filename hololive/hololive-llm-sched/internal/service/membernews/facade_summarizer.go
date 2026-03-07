@@ -3,18 +3,17 @@ package membernews
 import (
 	"log/slog"
 
+	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
+	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/summarizer"
 )
 
 type (
 	LLMClient           = summarizer.LLMClient
-	SearchResult        = summarizer.SearchResult
-	WebSearcher         = summarizer.WebSearcher
+	SearchResult        = sharedmodel.SearchResult
+	WebSearcher         = sharedmodel.WebSearcher
 	SummarizerImpl      = summarizer.SummarizerImpl
-	ReviewIssue         = summarizer.ReviewIssue
-	ReviewVerdict       = summarizer.ReviewVerdict
-	ConsensusConfig     = summarizer.ConsensusConfig
 	ConsensusSummarizer = summarizer.ConsensusSummarizer
 )
 
@@ -38,7 +37,7 @@ func NewConsensusSummarizer(
 	reviewer LLMClient,
 	adjudicator LLMClient,
 	validator *SourceValidator,
-	cfg ConsensusConfig,
+	cfg consensus.Config,
 	logger *slog.Logger,
 ) *ConsensusSummarizer {
 	var v model.SourceURLValidator

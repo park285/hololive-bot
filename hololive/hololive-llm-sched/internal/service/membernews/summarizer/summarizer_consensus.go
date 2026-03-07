@@ -12,32 +12,23 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
-// ReviewIssue: consensus.ReviewIssue의 별칭 (API 호환)
-type ReviewIssue = consensus.ReviewIssue
-
-// ReviewVerdict: consensus.ReviewVerdict의 별칭 (API 호환)
-type ReviewVerdict = consensus.ReviewVerdict
-
-// ConsensusConfig: consensus.Config의 별칭 (API 호환)
-type ConsensusConfig = consensus.Config
-
 // ConsensusSummarizer: Primary → Reviewer → Adjudicator(조건부) 3단계 consensus wrapper.
 type ConsensusSummarizer struct {
-	primary     Summarizer
+	primary     model.Summarizer
 	reviewer    LLMClient
 	adjudicator LLMClient // nil이면 stage 3 스킵
 	validator   model.SourceURLValidator
-	config      ConsensusConfig
+	config      consensus.Config
 	logger      *slog.Logger
 }
 
 // NewConsensusSummarizer: consensus 요약기 생성.
 func NewConsensusSummarizer(
-	primary Summarizer,
+	primary model.Summarizer,
 	reviewer LLMClient,
 	adjudicator LLMClient,
 	validator model.SourceURLValidator,
-	cfg ConsensusConfig,
+	cfg consensus.Config,
 	logger *slog.Logger,
 ) *ConsensusSummarizer {
 	if logger == nil {
@@ -54,7 +45,7 @@ func NewConsensusSummarizer(
 }
 
 // Summarize: Summarizer 인터페이스 구현. Primary → Reviewer → Adjudicator(조건부) 파이프라인.
-func (c *ConsensusSummarizer) Summarize(ctx context.Context, input SummarizeInput) (*Digest, error) {
+func (c *ConsensusSummarizer) Summarize(ctx context.Context, input model.SummarizeInput) (*model.Digest, error) {
 	pipelineStart := time.Now()
 
 	// Stage 1: Primary
@@ -101,7 +92,11 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input SummarizeInpu
 }
 
 // runReview: Stage 2 reviewer 호출 및 결과 평가. nil 반환 시 primary 사용.
-func (c *ConsensusSummarizer) runReview(ctx context.Context, input SummarizeInput, primaryDigest *Digest) *ReviewVerdict {
+func (c *ConsensusSummarizer) runReview(
+	ctx context.Context,
+	input model.SummarizeInput,
+	primaryDigest *model.Digest,
+) *consensus.ReviewVerdict {
 	reviewStart := time.Now()
 	reviewCtx, reviewCancel := context.WithTimeout(ctx, c.config.ReviewTimeout)
 	defer reviewCancel()
@@ -137,10 +132,10 @@ func (c *ConsensusSummarizer) runReview(ctx context.Context, input SummarizeInpu
 
 // runAdjudication: Stage 3 adjudicator 호출. nil 반환 시 primary 사용.
 func (c *ConsensusSummarizer) runAdjudication(
-	ctx context.Context, input SummarizeInput,
-	primaryDigest *Digest, verdict *ReviewVerdict,
+	ctx context.Context, input model.SummarizeInput,
+	primaryDigest *model.Digest, verdict *consensus.ReviewVerdict,
 	pipelineStart time.Time,
-) *Digest {
+) *model.Digest {
 	triggerReason := "low_confidence"
 	if consensus.HasCriticalIssues(verdict.Issues) {
 		triggerReason = "critical_issues"
@@ -186,7 +181,11 @@ func (c *ConsensusSummarizer) runAdjudication(
 }
 
 // review: reviewer LLM 호출. verdict 파싱 실패 시 nil, nil 반환.
-func (c *ConsensusSummarizer) review(ctx context.Context, input SummarizeInput, digest *Digest) (*ReviewVerdict, error) {
+func (c *ConsensusSummarizer) review(
+	ctx context.Context,
+	input model.SummarizeInput,
+	digest *model.Digest,
+) (*consensus.ReviewVerdict, error) {
 	raw, err := c.reviewer.GenerateJSON(
 		ctx,
 		reviewSystemPrompt(),
@@ -197,7 +196,7 @@ func (c *ConsensusSummarizer) review(ctx context.Context, input SummarizeInput, 
 		return nil, fmt.Errorf("reviewer LLM call: %w", err)
 	}
 
-	var verdict ReviewVerdict
+	var verdict consensus.ReviewVerdict
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
 		c.logger.Warn("Consensus review: JSON parse failed",
 			slog.String("error", err.Error()),
@@ -214,7 +213,12 @@ func (c *ConsensusSummarizer) review(ctx context.Context, input SummarizeInput, 
 }
 
 // adjudicate: adjudicator LLM 호출. 파싱 실패 시 nil, nil 반환.
-func (c *ConsensusSummarizer) adjudicate(ctx context.Context, input SummarizeInput, digest *Digest, verdict *ReviewVerdict) (*summaryResponse, error) {
+func (c *ConsensusSummarizer) adjudicate(
+	ctx context.Context,
+	input model.SummarizeInput,
+	digest *model.Digest,
+	verdict *consensus.ReviewVerdict,
+) (*summaryResponse, error) {
 	raw, err := c.adjudicator.GenerateJSON(
 		ctx,
 		adjudicatorSystemPrompt(),
@@ -258,7 +262,7 @@ Rules:
 - severity=info: stylistic suggestions.`
 }
 
-func buildReviewUserPrompt(input SummarizeInput, digest *Digest) string {
+func buildReviewUserPrompt(input model.SummarizeInput, digest *model.Digest) string {
 	candidatesJSON, _ := json.Marshal(buildPromptCandidates(input))
 	digestJSON, _ := json.Marshal(digest)
 
@@ -274,7 +278,7 @@ Review the summary against the original candidates. Return only schema JSON.`,
 	)
 }
 
-func buildPromptCandidates(input SummarizeInput) []promptCandidate {
+func buildPromptCandidates(input model.SummarizeInput) []promptCandidate {
 	candidates := make([]promptCandidate, 0, len(input.Candidates))
 	for i := range input.Candidates {
 		candidate := &input.Candidates[i]
@@ -335,7 +339,11 @@ Rules:
 - Do not guess unknown facts.`
 }
 
-func buildAdjudicatorUserPrompt(input SummarizeInput, digest *Digest, verdict *ReviewVerdict) string {
+func buildAdjudicatorUserPrompt(
+	input model.SummarizeInput,
+	digest *model.Digest,
+	verdict *consensus.ReviewVerdict,
+) string {
 	candidatesJSON, _ := json.Marshal(buildPromptCandidates(input))
 	digestJSON, _ := json.Marshal(digest)
 	verdictJSON, _ := json.Marshal(verdict)

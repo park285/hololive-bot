@@ -9,20 +9,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type testSourceValidator struct{}
 
-func (v *testSourceValidator) ValidateSourceURL(rawURL string) (SourceTier, string, error) {
+func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return SourceTierCommunity, "", fmt.Errorf("source url is empty")
+		return model.SourceTierCommunity, "", fmt.Errorf("source url is empty")
 	}
 
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
+		return model.SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
 	}
 
 	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
@@ -30,11 +31,11 @@ func (v *testSourceValidator) ValidateSourceURL(rawURL string) (SourceTier, stri
 
 	switch host {
 	case "hololive.hololivepro.com", "hololivepro.com", "cover-corp.com":
-		return SourceTierOfficial, parsed.String(), nil
+		return model.SourceTierOfficial, parsed.String(), nil
 	case "prtimes.jp", "oricon.co.jp", "natalie.mu", "famitsu.com", "4gamer.net", "animate.tv", "dengekionline.com":
-		return SourceTierMedia, parsed.String(), nil
+		return model.SourceTierMedia, parsed.String(), nil
 	default:
-		return SourceTierCommunity, parsed.String(), nil
+		return model.SourceTierCommunity, parsed.String(), nil
 	}
 }
 
@@ -91,11 +92,11 @@ func (m *mockMemberDataForFilter) FindMembersByAlias(_ string) []*domain.Member 
 func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
-	targetDate := time.Date(2026, 2, 20, 12, 0, 0, 0, kst)
-	farFuture := time.Date(2026, 6, 1, 12, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
+	targetDate := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
+	farFuture := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST)
 
-	candidates := []Candidate{
+	candidates := []model.Candidate{
 		{
 			Type:           "event",
 			Title:          "사쿠라 미코 공식 행사",
@@ -118,15 +119,15 @@ func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
+	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
 	if len(filtered) != 2 {
 		t.Fatalf("expected 2 candidates in weekly range, got %d", len(filtered))
 	}
 
-	if filtered[0].SourceTier != SourceTierOfficial {
+	if filtered[0].SourceTier != model.SourceTierOfficial {
 		t.Fatalf("expected first candidate official tier, got %s", filtered[0].SourceTier)
 	}
-	if filtered[1].SourceTier != SourceTierCommunity {
+	if filtered[1].SourceTier != model.SourceTierCommunity {
 		t.Fatalf("expected second candidate community tier, got %s", filtered[1].SourceTier)
 	}
 }
@@ -138,47 +139,47 @@ func TestClassifyCategory(t *testing.T) {
 		name        string
 		title       string
 		description string
-		want        Category
+		want        model.Category
 	}{
 		// CategoryBirthdayLive
-		{"生誕 in title", "生誕ライブ開催", "", CategoryBirthdayLive},
-		{"생일 keyword", "사쿠라 미코 생일", "", CategoryBirthdayLive},
-		{"birthday in description", "special event", "birthday celebration", CategoryBirthdayLive},
-		{"birthday priority over live/event", "Birthday Live Concert event", "", CategoryBirthdayLive},
+		{"生誕 in title", "生誕ライブ開催", "", model.CategoryBirthdayLive},
+		{"생일 keyword", "사쿠라 미코 생일", "", model.CategoryBirthdayLive},
+		{"birthday in description", "special event", "birthday celebration", model.CategoryBirthdayLive},
+		{"birthday priority over live/event", "Birthday Live Concert event", "", model.CategoryBirthdayLive},
 
 		// CategorySoloLive
-		{"ソロライブ", "ソロライブ開催", "", CategorySoloLive},
-		{"solo live", "solo live announced", "", CategorySoloLive},
-		{"단독 라이브", "단독 라이브 개최", "", CategorySoloLive},
-		{"solo live priority over event keyword", "solo live concert event", "", CategorySoloLive},
+		{"ソロライブ", "ソロライブ開催", "", model.CategorySoloLive},
+		{"solo live", "solo live announced", "", model.CategorySoloLive},
+		{"단독 라이브", "단독 라이브 개최", "", model.CategorySoloLive},
+		{"solo live priority over event keyword", "solo live concert event", "", model.CategorySoloLive},
 
 		// CategoryCollab
-		{"コラボ", "コラボイベント", "", CategoryCollab},
-		{"콜라보", "콜라보 카페", "", CategoryCollab},
-		{"collaboration in description", "event info", "collaboration details", CategoryCollab},
+		{"コラボ", "コラボイベント", "", model.CategoryCollab},
+		{"콜라보", "콜라보 카페", "", model.CategoryCollab},
+		{"collaboration in description", "event info", "collaboration details", model.CategoryCollab},
 
 		// CategoryGoods
-		{"グッズ", "新グッズ販売", "", CategoryGoods},
-		{"굿즈", "굿즈 판매", "", CategoryGoods},
-		{"merchandise", "new merchandise", "", CategoryGoods},
+		{"グッズ", "新グッズ販売", "", model.CategoryGoods},
+		{"굿즈", "굿즈 판매", "", model.CategoryGoods},
+		{"merchandise", "new merchandise", "", model.CategoryGoods},
 
 		// CategoryEvent
-		{"fes keyword", "hololive fes 2026", "", CategoryEvent},
-		{"expo keyword", "SUPER EXPO 2026", "", CategoryEvent},
-		{"concert keyword", "holo concert", "", CategoryEvent},
-		{"event keyword", "special event announcement", "", CategoryEvent},
-		{"live keyword without qualifier", "big live show", "", CategoryEvent},
+		{"fes keyword", "hololive fes 2026", "", model.CategoryEvent},
+		{"expo keyword", "SUPER EXPO 2026", "", model.CategoryEvent},
+		{"concert keyword", "holo concert", "", model.CategoryEvent},
+		{"event keyword", "special event announcement", "", model.CategoryEvent},
+		{"live keyword without qualifier", "big live show", "", model.CategoryEvent},
 
 		// CategoryOther (fallback)
-		{"no match → CategoryOther", "一般的なお知らせ", "追加情報なし", CategoryOther},
+		{"no match → CategoryOther", "一般的なお知らせ", "追加情報なし", model.CategoryOther},
 
 		// title + description 합산 매칭
-		{"title+desc combined: solo in title, live in desc", "special solo", "live show details", CategorySoloLive},
+		{"title+desc combined: solo in title, live in desc", "special solo", "live show details", model.CategorySoloLive},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := classifyCategory(Candidate{Title: tt.title, Description: tt.description})
+			got := classifyCategory(model.Candidate{Title: tt.title, Description: tt.description})
 			if got != tt.want {
 				t.Errorf("classifyCategory(title=%q, desc=%q) = %q, want %q",
 					tt.title, tt.description, got, tt.want)
@@ -192,48 +193,48 @@ func TestClassifyCategory(t *testing.T) {
 func TestMatchMembers(t *testing.T) {
 	tests := []struct {
 		name      string
-		candidate Candidate
+		candidate model.Candidate
 		profiles  []memberProfile
 		wantLen   int
 		want      []string // nil이면 길이만 확인
 	}{
 		{
 			name:      "candidate.Members token exact match",
-			candidate: Candidate{Members: []string{"사쿠라 미코"}, Title: "unrelated", Description: "info"},
+			candidate: model.Candidate{Members: []string{"사쿠라 미코"}, Title: "unrelated", Description: "info"},
 			profiles:  []memberProfile{{display: "사쿠라 미코", tokens: []string{"사쿠라미코"}}},
 			wantLen:   1,
 			want:      []string{"사쿠라 미코"},
 		},
 		{
 			name:      "body match via title",
-			candidate: Candidate{Title: "사쿠라 미코 solo live", Description: "details"},
+			candidate: model.Candidate{Title: "사쿠라 미코 solo live", Description: "details"},
 			profiles:  []memberProfile{{display: "사쿠라 미코", tokens: []string{"사쿠라미코"}}},
 			wantLen:   1,
 			want:      []string{"사쿠라 미코"},
 		},
 		{
 			name:      "body match via description",
-			candidate: Candidate{Title: "event announcement", Description: "featuring 사쿠라 미코"},
+			candidate: model.Candidate{Title: "event announcement", Description: "featuring 사쿠라 미코"},
 			profiles:  []memberProfile{{display: "사쿠라 미코", tokens: []string{"사쿠라미코"}}},
 			wantLen:   1,
 			want:      []string{"사쿠라 미코"},
 		},
 		{
 			name:      "alias token match via Members field",
-			candidate: Candidate{Members: []string{"sakuramiko"}, Title: "event", Description: "info"},
+			candidate: model.Candidate{Members: []string{"sakuramiko"}, Title: "event", Description: "info"},
 			profiles:  []memberProfile{{display: "사쿠라 미코", tokens: []string{"사쿠라미코", "sakuramiko"}}},
 			wantLen:   1,
 			want:      []string{"사쿠라 미코"},
 		},
 		{
 			name:      "empty profiles returns nil",
-			candidate: Candidate{Members: []string{"사쿠라 미코"}, Title: "event"},
+			candidate: model.Candidate{Members: []string{"사쿠라 미코"}, Title: "event"},
 			profiles:  nil,
 			wantLen:   0,
 		},
 		{
 			name:      "dedup: same display name from duplicate profiles",
-			candidate: Candidate{Members: []string{"사쿠라 미코"}, Title: "사쿠라 미코 event"},
+			candidate: model.Candidate{Members: []string{"사쿠라 미코"}, Title: "사쿠라 미코 event"},
 			profiles: []memberProfile{
 				{display: "사쿠라 미코", tokens: []string{"사쿠라미코"}},
 				{display: "사쿠라 미코", tokens: []string{"사쿠라미코"}},
@@ -243,13 +244,13 @@ func TestMatchMembers(t *testing.T) {
 		},
 		{
 			name:      "no match returns empty",
-			candidate: Candidate{Members: []string{"unknown"}, Title: "unrelated", Description: "desc"},
+			candidate: model.Candidate{Members: []string{"unknown"}, Title: "unrelated", Description: "desc"},
 			profiles:  []memberProfile{{display: "사쿠라 미코", tokens: []string{"사쿠라미코"}}},
 			wantLen:   0,
 		},
 		{
 			name: "multiple members match preserves order",
-			candidate: Candidate{
+			candidate: model.Candidate{
 				Members: []string{"사쿠라 미코", "호시마치 스이세이"},
 				Title:   "collab event",
 			},
@@ -283,69 +284,69 @@ func TestMatchMembers(t *testing.T) {
 // === applyPeriodFilter ===
 
 func TestApplyPeriodFilter(t *testing.T) {
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
 	t.Run("weekly: in-range passes, out-of-range excluded", func(t *testing.T) {
-		inRange := time.Date(2026, 2, 20, 12, 0, 0, 0, kst)
-		outOfRange := time.Date(2026, 6, 1, 12, 0, 0, 0, kst)
-		candidates := []Candidate{
+		inRange := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
+		outOfRange := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST)
+		candidates := []model.Candidate{
 			{EventStartDate: &inRange, Type: domain.MajorEventTypeEvent},
 			{EventStartDate: &outOfRange, Type: domain.MajorEventTypeEvent},
 		}
-		result := applyPeriodFilter(candidates, PeriodWeekly, now)
+		result := applyPeriodFilter(candidates, model.PeriodWeekly, now)
 		if len(result) != 1 {
 			t.Fatalf("expected 1, got %d", len(result))
 		}
 	})
 
 	t.Run("monthly: month boundary check", func(t *testing.T) {
-		inRange := time.Date(2026, 2, 15, 12, 0, 0, 0, kst)
-		outOfRange := time.Date(2026, 3, 5, 12, 0, 0, 0, kst)
-		candidates := []Candidate{
+		inRange := time.Date(2026, 2, 15, 12, 0, 0, 0, model.KST)
+		outOfRange := time.Date(2026, 3, 5, 12, 0, 0, 0, model.KST)
+		candidates := []model.Candidate{
 			{EventStartDate: &inRange, Type: domain.MajorEventTypeEvent},
 			{EventStartDate: &outOfRange, Type: domain.MajorEventTypeEvent},
 		}
-		result := applyPeriodFilter(candidates, PeriodMonthly, now)
+		result := applyPeriodFilter(candidates, model.PeriodMonthly, now)
 		if len(result) != 1 {
 			t.Fatalf("expected 1, got %d", len(result))
 		}
 	})
 
 	t.Run("news type: PubDate takes priority over EventStartDate", func(t *testing.T) {
-		pubDate := time.Date(2026, 2, 15, 12, 0, 0, 0, kst)
-		eventDate := time.Date(2026, 6, 1, 12, 0, 0, 0, kst) // 범위 밖
-		candidates := []Candidate{
+		pubDate := time.Date(2026, 2, 15, 12, 0, 0, 0, model.KST)
+		eventDate := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST) // 범위 밖
+		candidates := []model.Candidate{
 			{Type: domain.MajorEventTypeNews, PubDate: &pubDate, EventStartDate: &eventDate},
 		}
-		result := applyPeriodFilter(candidates, PeriodWeekly, now)
+		result := applyPeriodFilter(candidates, model.PeriodWeekly, now)
 		if len(result) != 1 {
 			t.Fatalf("expected 1 (news uses PubDate in range), got %d", len(result))
 		}
-		if !result[0].date.Equal(pubDate.In(kst)) {
-			t.Fatalf("expected effective date = PubDate %v, got %v", pubDate.In(kst), result[0].date)
+		if !result[0].date.Equal(pubDate.In(model.KST)) {
+			t.Fatalf("expected effective date = PubDate %v, got %v", pubDate.In(model.KST), result[0].date)
 		}
 	})
 
 	t.Run("event type: EventStartDate takes priority over PubDate", func(t *testing.T) {
-		pubDate := time.Date(2026, 6, 1, 12, 0, 0, 0, kst)    // 범위 밖
-		eventDate := time.Date(2026, 2, 20, 12, 0, 0, 0, kst) // 범위 내
-		candidates := []Candidate{
+		pubDate := time.Date(2026, 6, 1, 12, 0, 0, 0, model.KST)    // 범위 밖
+		eventDate := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST) // 범위 내
+		candidates := []model.Candidate{
 			{Type: domain.MajorEventTypeEvent, PubDate: &pubDate, EventStartDate: &eventDate},
 		}
-		result := applyPeriodFilter(candidates, PeriodWeekly, now)
+		result := applyPeriodFilter(candidates, model.PeriodWeekly, now)
 		if len(result) != 1 {
 			t.Fatalf("expected 1 (event uses EventStartDate in range), got %d", len(result))
 		}
-		if !result[0].date.Equal(eventDate.In(kst)) {
-			t.Fatalf("expected effective date = EventStartDate %v, got %v", eventDate.In(kst), result[0].date)
+		if !result[0].date.Equal(eventDate.In(model.KST)) {
+			t.Fatalf("expected effective date = EventStartDate %v, got %v", eventDate.In(model.KST), result[0].date)
 		}
 	})
 
 	t.Run("both dates nil → excluded", func(t *testing.T) {
-		candidates := []Candidate{
+		candidates := []model.Candidate{
 			{Type: domain.MajorEventTypeEvent},
 		}
-		result := applyPeriodFilter(candidates, PeriodWeekly, now)
+		result := applyPeriodFilter(candidates, model.PeriodWeekly, now)
 		if len(result) != 0 {
 			t.Fatalf("expected 0 (both dates nil), got %d", len(result))
 		}
@@ -437,15 +438,15 @@ func TestBuildMemberProfiles(t *testing.T) {
 func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
+	date := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
 
-	candidates := []Candidate{
+	candidates := []model.Candidate{
 		{Title: "사쿠라 미코 event", EventStartDate: &date, Type: domain.MajorEventTypeEvent, SourceURL: ""},
 		{Title: "사쿠라 미코 event2", EventStartDate: &date, Type: domain.MajorEventTypeEvent, SourceURL: "  "},
 	}
 
-	filtered := FilterCandidates(candidates, PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
+	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
 	if len(filtered) != 0 {
 		t.Fatalf("expected 0 (empty sourceURL excluded), got %d", len(filtered))
 	}
@@ -454,10 +455,10 @@ func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 func TestFilterCandidates_CommunityWithoutCorroboration(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
+	date := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
 
-	candidates := []Candidate{
+	candidates := []model.Candidate{
 		{
 			Title:          "사쿠라 미코 event",
 			Description:    "비공식 정보만 포함됨",
@@ -467,7 +468,7 @@ func TestFilterCandidates_CommunityWithoutCorroboration(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
+	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
 	if len(filtered) != 0 {
 		t.Fatalf("expected 0 (community without corroboration excluded), got %d", len(filtered))
 	}
@@ -476,11 +477,11 @@ func TestFilterCandidates_CommunityWithoutCorroboration(t *testing.T) {
 func TestFilterCandidates_SortStability(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
-	date1 := time.Date(2026, 2, 18, 12, 0, 0, 0, kst)
-	date2 := time.Date(2026, 2, 20, 12, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
+	date1 := time.Date(2026, 2, 18, 12, 0, 0, 0, model.KST)
+	date2 := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
 
-	candidates := []Candidate{
+	candidates := []model.Candidate{
 		{
 			Title: "Z-title 사쿠라 미코 event", Description: "official",
 			EventStartDate: &date2, Type: domain.MajorEventTypeEvent,
@@ -498,7 +499,7 @@ func TestFilterCandidates_SortStability(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
+	filtered := FilterCandidates(candidates, model.PeriodWeekly, now, []string{"사쿠라 미코"}, nil, validator)
 	if len(filtered) != 3 {
 		t.Fatalf("expected 3, got %d", len(filtered))
 	}
@@ -518,10 +519,10 @@ func TestFilterCandidates_SortStability(t *testing.T) {
 func TestFilterCandidates_MultipleMatchedMembers(t *testing.T) {
 	validator := &testSourceValidator{}
 
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, kst)
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, kst)
+	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
+	date := time.Date(2026, 2, 20, 12, 0, 0, 0, model.KST)
 
-	candidates := []Candidate{
+	candidates := []model.Candidate{
 		{
 			Title:          "사쿠라 미코 호시마치 스이세이 콜라보",
 			Description:    "official collab",
@@ -532,7 +533,7 @@ func TestFilterCandidates_MultipleMatchedMembers(t *testing.T) {
 		},
 	}
 
-	filtered := FilterCandidates(candidates, PeriodWeekly, now,
+	filtered := FilterCandidates(candidates, model.PeriodWeekly, now,
 		[]string{"사쿠라 미코", "호시마치 스이세이"}, nil, validator)
 	if len(filtered) != 1 {
 		t.Fatalf("expected 1, got %d", len(filtered))

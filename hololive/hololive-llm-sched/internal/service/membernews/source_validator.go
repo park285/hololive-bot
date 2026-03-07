@@ -10,6 +10,7 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -67,40 +68,40 @@ func NewSourceValidator(
 }
 
 // ValidateSourceURL: URL 파싱 + 도메인/계정 검증 + 신뢰도 등급 판정을 수행합니다.
-func (v *SourceValidator) ValidateSourceURL(rawURL string) (SourceTier, string, error) {
+func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
 	if v == nil {
-		return SourceTierCommunity, "", fmt.Errorf("source validator is nil")
+		return model.SourceTierCommunity, "", fmt.Errorf("source validator is nil")
 	}
 
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {
-		return SourceTierCommunity, "", fmt.Errorf("source url is empty")
+		return model.SourceTierCommunity, "", fmt.Errorf("source url is empty")
 	}
 
 	parsed, err := url.Parse(trimmed)
 	if err != nil {
-		return SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
+		return model.SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
 	}
 
 	scheme := strings.ToLower(parsed.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return SourceTierCommunity, "", fmt.Errorf("unsupported source url scheme: %s", parsed.Scheme)
+		return model.SourceTierCommunity, "", fmt.Errorf("unsupported source url scheme: %s", parsed.Scheme)
 	}
 
 	host := normalizeHost(parsed.Hostname())
 	if host == "" {
-		return SourceTierCommunity, "", fmt.Errorf("source host is empty")
+		return model.SourceTierCommunity, "", fmt.Errorf("source host is empty")
 	}
 
 	if host == "x.com" || host == "twitter.com" {
 		account := extractXAccount(parsed.Path)
 		if account == "" {
-			return SourceTierCommunity, "", fmt.Errorf("x.com account not found")
+			return model.SourceTierCommunity, "", fmt.Errorf("x.com account not found")
 		}
 		if !v.isAllowedXAccount(account) {
-			return SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
+			return model.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
 		}
-		return SourceTierOfficial, parsed.String(), nil
+		return model.SourceTierOfficial, parsed.String(), nil
 	}
 
 	if isYouTubeHost(host) {
@@ -108,13 +109,13 @@ func (v *SourceValidator) ValidateSourceURL(rawURL string) (SourceTier, string, 
 	}
 
 	if containsHost(v.officialDomains, host) {
-		return SourceTierOfficial, parsed.String(), nil
+		return model.SourceTierOfficial, parsed.String(), nil
 	}
 	if containsHost(v.mediaDomains, host) {
-		return SourceTierMedia, parsed.String(), nil
+		return model.SourceTierMedia, parsed.String(), nil
 	}
 
-	return SourceTierCommunity, parsed.String(), nil
+	return model.SourceTierCommunity, parsed.String(), nil
 }
 
 // HasCorroboration: 본문 내 URL 중 official/media 출처가 하나라도 있으면 true.
@@ -129,25 +130,25 @@ func (v *SourceValidator) HasCorroboration(text string) bool {
 		if err != nil {
 			continue
 		}
-		if tier == SourceTierOfficial || tier == SourceTierMedia {
+		if tier == model.SourceTierOfficial || tier == model.SourceTierMedia {
 			return true
 		}
 	}
 	return false
 }
 
-func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (SourceTier, string, error) {
+func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (model.SourceTier, string, error) {
 	if parsed == nil {
-		return SourceTierCommunity, "", fmt.Errorf("youtube url is nil")
+		return model.SourceTierCommunity, "", fmt.Errorf("youtube url is nil")
 	}
 
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	if len(segments) >= 2 && segments[0] == "channel" {
 		channelID := strings.TrimSpace(segments[1])
 		if channelID != "" && v.isAllowedYouTubeChannelID(channelID) {
-			return SourceTierOfficial, parsed.String(), nil
+			return model.SourceTierOfficial, parsed.String(), nil
 		}
-		return SourceTierCommunity, parsed.String(), nil
+		return model.SourceTierCommunity, parsed.String(), nil
 	}
 
 	if len(segments) >= 1 {
@@ -156,20 +157,20 @@ func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (SourceTier, st
 		case strings.HasPrefix(first, "@"):
 			handle := strings.TrimPrefix(first, "@")
 			if v.isAllowedYouTubeHandle(handle) {
-				return SourceTierOfficial, parsed.String(), nil
+				return model.SourceTierOfficial, parsed.String(), nil
 			}
-			return SourceTierCommunity, parsed.String(), nil
+			return model.SourceTierCommunity, parsed.String(), nil
 		case (first == "user" || first == "c") && len(segments) >= 2:
 			if v.isAllowedYouTubeHandle(segments[1]) {
-				return SourceTierOfficial, parsed.String(), nil
+				return model.SourceTierOfficial, parsed.String(), nil
 			}
-			return SourceTierCommunity, parsed.String(), nil
+			return model.SourceTierCommunity, parsed.String(), nil
 		}
 	}
 
 	// watch / shorts / live / youtu.be — 채널 식별 불가 → community
 	// SSOT: youtube.com(공식 채널)만 official, 동영상 링크는 채널 특정 불가
-	return SourceTierCommunity, parsed.String(), nil
+	return model.SourceTierCommunity, parsed.String(), nil
 }
 
 func (v *SourceValidator) isAllowedXAccount(account string) bool {
