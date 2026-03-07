@@ -2,8 +2,10 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,6 +17,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
+
+var errBlockedLink = errors.New("parse link: blocked host")
 
 // LinkChecker는 링크 유효성 검증(HEAD 후 GET fallback)을 수행한다.
 type LinkChecker struct {
@@ -107,7 +111,7 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.MajorEventLinkStatus, error) {
 	parsed, err := parseAndValidateLink(rawURL)
 	if err != nil {
-		if strings.Contains(err.Error(), "scheme") {
+		if isBlockedLinkError(err) {
 			return domain.MajorEventLinkStatusBlocked, err
 		}
 		return domain.MajorEventLinkStatusFailed, err
@@ -170,7 +174,36 @@ func parseAndValidateLink(rawURL string) (*url.URL, error) {
 	if scheme != "http" && scheme != "https" {
 		return nil, fmt.Errorf("parse link: unsupported scheme %q", parsed.Scheme)
 	}
+	hostname := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if hostname == "" {
+		return nil, fmt.Errorf("parse link: empty host")
+	}
+	if hostname == "localhost" {
+		return nil, fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
+	}
+	if ip := net.ParseIP(hostname); ip != nil && isPrivateOrInternalIP(ip) {
+		return nil, fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
+	}
 	return parsed, nil
+}
+
+func isBlockedLinkError(err error) bool {
+	if errors.Is(err, errBlockedLink) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "unsupported scheme")
+}
+
+func isPrivateOrInternalIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified()
 }
 
 func isSuccessStatus(code int) bool {
