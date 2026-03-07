@@ -16,6 +16,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
@@ -51,6 +52,7 @@ func ProvideAPIRouter(
 	authHandler *server.AuthHandler,
 	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
+	cacheSvc cache.Client,
 ) (*gin.Engine, error) {
 	router, err := newAPIRouter(ctx, cfg, logger)
 	if err != nil {
@@ -74,7 +76,7 @@ func ProvideAPIRouter(
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}
 
-	registerAPIRoutes(router, cfg.Server.APIKey, domainHandlers, authHandler)
+	registerAPIRoutes(router, cfg.Server.APIKey, cacheSvc, logger, domainHandlers, authHandler)
 
 	if cfg.Server.APIKey != "" {
 		logger.Info("api_key_auth_enabled")
