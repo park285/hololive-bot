@@ -64,16 +64,15 @@ func TestBotRuntimeStartAndHelpers_NoPanicOnNilComponents(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 	runtime := &BotRuntime{
-		Logger:           logger,
-		IngestionEnabled: false,
+		Logger: logger,
 	}
 
 	runtime.Start(context.Background(), nil)
 	runtime.startBot(context.Background())
 	runtime.logError("expected test error", errors.New("boom"))
 
-	if !strings.Contains(logBuf.String(), "Ingestion runtime disabled on bot process") {
-		t.Fatalf("log missing ingestion-disabled message: %s", logBuf.String())
+	if logBuf.Len() == 0 {
+		t.Fatal("expected runtime helpers to write logs")
 	}
 }
 
@@ -86,7 +85,6 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 		HttpServer: &http.Server{
 			Addr: "invalid::addr",
 		},
-		IngestionEnabled: false,
 	}
 
 	done := make(chan struct{})
@@ -101,4 +99,3 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 		t.Fatal("Run() did not exit on server error")
 	}
 }
-

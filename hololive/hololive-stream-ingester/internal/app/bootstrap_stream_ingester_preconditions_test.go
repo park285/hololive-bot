@@ -31,14 +31,4 @@ func TestBuildStreamIngesterRuntime_Preconditions(t *testing.T) {
 		assert.Nil(t, runtime)
 		assert.Equal(t, "logger must not be nil", err.Error())
 	})
-
-	t.Run("ingestion disabled", func(t *testing.T) {
-		cfg := &config.Config{
-			Bot: config.BotConfig{IngestionEnabled: false},
-		}
-		runtime, err := BuildStreamIngesterRuntime(context.Background(), cfg, newStreamIngesterTestLogger())
-		require.Error(t, err)
-		assert.Nil(t, runtime)
-		assert.Equal(t, "stream ingester requires BOT_INGESTION_ENABLED=true", err.Error())
-	})
 }

@@ -1,12 +1,11 @@
 package config
 
 import (
-	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 
+	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
@@ -55,37 +54,8 @@ func parseIntList(value string) []int {
 	return result
 }
 
-func collectAPIKeys(prefix string) []string {
-	keys := make([]string, 0)
-	seen := make(map[string]struct{})
-
-	addKey := func(raw string) {
-		trimmed := stringutil.TrimSpace(raw)
-		if trimmed == "" {
-			return
-		}
-		if _, exists := seen[trimmed]; exists {
-			return
-		}
-		seen[trimmed] = struct{}{}
-		keys = append(keys, trimmed)
-	}
-
-	for i := 1; i <= maxHolodexAPIKeySlots; i++ {
-		envKey := fmt.Sprintf("%s%d", prefix, i)
-		addKey(os.Getenv(envKey))
-	}
-
-	if base := strings.TrimSuffix(prefix, "_"); base != "" {
-		if bulk := os.Getenv(base + "S"); bulk != "" {
-			parts := strings.SplitSeq(bulk, ",")
-			for part := range parts {
-				addKey(part)
-			}
-		}
-	}
-
-	return keys
+func resolveHolodexAPIKey() string {
+	return envutil.StringAny("HOLODEX_API_KEY", "HOLODEX_API_KEY_1")
 }
 
 func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bool) {
