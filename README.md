@@ -6,6 +6,8 @@
 
 Go 단일 언어 구조:
 
+> 운영 기준 (2026-03-07): 기존 k8s/k3s 배포에서 **단일 호스트 Docker Compose 기준으로 롤백**했습니다. 현재 배포, 로그 조회, 장애 대응 절차의 SSOT는 compose 문서입니다.
+
 | 영역 | 언어 | 역할 |
 |------|------|------|
 | Runtime | Go | bot(+admin API), dispatcher-go, llm-scheduler, stream-ingester |
@@ -22,7 +24,7 @@ Go 단일 언어 구조:
 | `hololive-kakao-bot-go` | Main bot (webhook + command routing + admin API) | 30001 |
 | `hololive-dispatcher-go` | Alarm dispatch consumer (BRPOP → Iris) | 30020 |
 | `hololive-llm-sched` | LLM scheduler (major event + member news + delivery) | 30003 |
-| `hololive-stream-ingester` | YouTube/Holodex/Chzzk/Twitch polling + stats | 30004 |
+| `hololive-stream-ingester` | Sole ingestion owner for YouTube/Holodex/Chzzk/Twitch polling + stats | 30004 |
 | `hololive-shared` | Shared Go library (hololive domain) | - |
 | `shared-go` | Shared Go utilities (errors, stringutil, valkeyx, etc.) | - |
 
@@ -67,7 +69,7 @@ go test ./hololive/hololive-kakao-bot-go/... \
 
 ## 배포
 
-Docker Compose 기반. 상세 배포 가이드: `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
+현재 운영 기준은 Docker Compose 기반입니다. 상세 배포 가이드: `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
 
 ```bash
 # 전체 스택 기동/빌드
@@ -86,16 +88,13 @@ Docker Compose 기반. 상세 배포 가이드: `docs/runbook_execution/DOCKER_C
 - 앱 파일 로그 로테이션: **100MB × 5 backups × 30일 보관 × gzip 압축**
 - 컨테이너 로그 드라이버(`json-file`) 로테이션: **10MB × 3 files**
 - 보조 로그 디렉터리:
-  - `logs/mirror/` — `stream.sh`, `dump.sh`가 만드는 임시 미러 로그
-  - `logs/backfill/` — `backfill.sh` 스냅샷 (기본 7일 보관)
-  - `logs/canary/` — canary 요약 로그
-  - `logs/cron/` — cron stderr/stdout
-  - `logs/runtime/pids/` — log worker PID
+  - 기본 운영 경로는 `logs/<service>/`만 사용
+  - `logs/mirror/`, `logs/backfill/`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 opt-in 보조 산출물
 - 기본 확인: `docker compose -f docker-compose.prod.yml logs -f <service>`
 - 범위 조회: `./scripts/logs/query.sh <service> --since 1h --limit 1000`
 - 실시간 tail: `./scripts/logs/tail.sh <service> --since 30m`
-- 일회성 스냅샷: `./scripts/logs/backfill.sh <service> --since 24h`
-- 선택적 로컬 미러링: `./scripts/logs/stream.sh start` 또는 `./scripts/logs/dump.sh` → `logs/mirror/*.log` (임시/보조 용도)
+- 일회성 스냅샷: `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/backfill.sh <service> --since 24h`
+- 선택적 로컬 미러링: `ENABLE_LOG_MIRROR=1 ./scripts/logs/stream.sh start` 또는 `ENABLE_LOG_MIRROR=1 ./scripts/logs/dump.sh`
 - 보조 로그 정리: `./scripts/logs/prune.sh`
 - 상태 확인: `docker compose -f docker-compose.prod.yml ps`
 - Health endpoint: `bot(30001)`, `dispatcher-go(30020)`, `llm-scheduler(30003)`, `stream-ingester(30004)`
@@ -104,3 +103,4 @@ Docker Compose 기반. 상세 배포 가이드: `docs/runbook_execution/DOCKER_C
 
 - `docs/README.md` — 문서 인덱스
 - `docs/PROJECT_MAP.md` — 모듈 구조
+- `docs/20260307/COMPOSE_HISTORY_NOTES_20260307.md` — compose 회귀 기준 메모

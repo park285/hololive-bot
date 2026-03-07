@@ -4,6 +4,8 @@
 
 단일 호스트 `docker compose` 기반으로 hololive runtime을 운영하기 위한 기본 절차입니다.
 
+> 운영 기준 (2026-03-07): 기존 k8s/k3s 배포에서 Docker Compose 기준으로 롤백했습니다. 현재 운영에서는 `kubectl`, `kustomize`, `helm` 절차 대신 이 문서를 우선 사용합니다.
+
 대상 서비스:
 - `hololive-bot` (`30001`)
 - `dispatcher-go` (`30020`)
@@ -11,6 +13,12 @@
 - `stream-ingester` (`30004`)
 - `holo-postgres` (`5433`)
 - `valkey-cache` (`6379`)
+
+## 운영 원칙
+
+- 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
+- 상태/장애 1차 확인은 `docker compose -f docker-compose.prod.yml ps`, `docker compose ... logs`, `/health`, `/ready` 기준으로 수행합니다.
+- k8s/k3s 시절 절차나 매니페스트가 저장소에 남아 있더라도, 현재 운영 SSOT로 간주하지 않습니다.
 
 ## 사전 준비
 
@@ -83,9 +91,9 @@ docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 - compose 런타임에서는 `LOG_DIR=/app/logs/<service>`로 설정해 host `./logs/hololive-bot/`, `./logs/dispatcher-go/`, `./logs/llm-scheduler/`, `./logs/stream-ingester/`에 파일 미러링합니다.
 - 앱 파일 로그 로테이션 기본값은 `100MB`, `5 backups`, `30일`, `gzip 압축`입니다.
 - Docker Compose `json-file` 드라이버 로테이션 기본값은 `10MB`, `3 files`입니다.
-- `logs/mirror/*.log`는 `stream.sh` 또는 `dump.sh`로 만든 **선택적 로컬 미러링**이며 운영 SSOT가 아닙니다.
-- `logs/backfill/*.log`는 일회성 스냅샷이며 기본 7일 보관입니다.
-- `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 보조 운영 산출물입니다.
+- 기본 운영 경로는 `logs/<service>/`만 사용합니다.
+- `logs/mirror/*.log`는 `ENABLE_LOG_MIRROR=1`일 때만 생성되는 선택적 로컬 미러링이며 운영 SSOT가 아닙니다.
+- `logs/backfill/*.log`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 `ENABLE_LOG_AUX_FILES=1`일 때만 사용하는 보조 운영 산출물입니다.
 - 보조 로그 정리는 `./scripts/logs/prune.sh` 기준으로 수행합니다.
 - 운영 판단의 기준은 `docker compose logs`이며, 별도 log aggregation 전제를 두지 않습니다.
 
