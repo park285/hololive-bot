@@ -33,7 +33,7 @@
 
 이 프로젝트는 최신 Go 생태계와 안정적인 오픈소스를 활용하여 구축되었습니다.
 
--   **Language**: [Go](https://go.dev/) 1.26.0
+-   **Language**: [Go](https://go.dev/) 1.26.1
 -   **Web Framework**: [Gin](https://github.com/gin-gonic/gin) 1.11.0 (High-performance HTTP web framework)
     -   **Protocol**: HTTP/2 Cleartext (H2C) via `golang.org/x/net/http2/h2c`
 -   **Database**: PostgreSQL 16+
