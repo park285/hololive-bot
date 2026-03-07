@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Docker Compose 로그 → logs/mirror/{service}.log 실시간 스트리밍 데몬
-# 사용: ./scripts/logs/stream.sh [start|stop|status|daemon]
+# 사용: ENABLE_LOG_MIRROR=1 ./scripts/logs/stream.sh [start|stop|status|daemon]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,6 +11,7 @@ PID_DIR="${LOG_ROOT}/runtime/pids"
 TAIL_SCRIPT="${SCRIPT_DIR}/tail.sh"
 SERVICES=(bot dispatcher-go stream-ingester llm-scheduler)
 STREAM_SINCE_DEFAULT="${STREAM_SINCE:-5m}"
+ENABLE_LOG_MIRROR="${ENABLE_LOG_MIRROR:-0}"
 
 usage() {
   cat <<USAGE
@@ -23,6 +24,13 @@ Commands:
   daemon   systemd용 supervisor 루프
 USAGE
   exit 0
+}
+
+ensure_mirror_enabled() {
+  if [[ "${ENABLE_LOG_MIRROR}" != "1" ]]; then
+    echo "log mirror disabled: set ENABLE_LOG_MIRROR=1 to enable" >&2
+    exit 0
+  fi
 }
 
 run_service_worker() {
@@ -98,12 +106,19 @@ do_daemon() {
 }
 
 case "${1:-}" in
-  start) do_start ;;
+  start)
+    ensure_mirror_enabled
+    do_start
+    ;;
   stop) do_stop ;;
   status) do_status ;;
-  daemon) do_daemon ;;
+  daemon)
+    ensure_mirror_enabled
+    do_daemon
+    ;;
   _service-worker)
     shift
+    ensure_mirror_enabled
     run_service_worker "$1"
     ;;
   *) usage ;;

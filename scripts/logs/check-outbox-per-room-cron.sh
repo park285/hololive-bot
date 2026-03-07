@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Outbox per-room canary 점검 cron 래퍼
 # 예시:
-#   */10 * * * * /home/kapu/gemini/hololive-bot/scripts/logs/check-outbox-per-room-cron.sh >> /home/kapu/gemini/hololive-bot/logs/cron/outbox-per-room-canary.log 2>&1
+#   */10 * * * * ENABLE_LOG_AUX_FILES=1 /home/kapu/gemini/hololive-bot/scripts/logs/check-outbox-per-room-cron.sh >> /home/kapu/gemini/hololive-bot/logs/cron/outbox-per-room-canary.log 2>&1
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,6 +10,7 @@ CHECK_SCRIPT="${SCRIPT_DIR}/check-outbox-per-room.sh"
 CRON_DIR="${REPO_ROOT}/logs/cron"
 CANARY_DIR="${REPO_ROOT}/logs/canary"
 SUMMARY_LOG="${CANARY_DIR}/outbox-per-room-canary.log"
+ENABLE_LOG_AUX_FILES="${ENABLE_LOG_AUX_FILES:-0}"
 
 SINCE="${OUTBOX_CANARY_SINCE:-30m}"
 LIMIT="${OUTBOX_CANARY_LIMIT:-5000}"
@@ -19,6 +20,11 @@ MAX_AGGREGATE_FAILURES="${OUTBOX_CANARY_MAX_AGGREGATE_FAILURES:-0}"
 MAX_ENQUEUE_FAILURES="${OUTBOX_CANARY_MAX_ENQUEUE_FAILURES:-0}"
 MIN_DELIVERY_CLAIMED="${OUTBOX_CANARY_MIN_DELIVERY_CLAIMED:-10}"
 ALLOW_NO_DATA="${OUTBOX_CANARY_ALLOW_NO_DATA:-true}"
+
+if [[ "${ENABLE_LOG_AUX_FILES}" != "1" ]]; then
+  echo "aux log files disabled: set ENABLE_LOG_AUX_FILES=1 to enable canary log files" >&2
+  exit 0
+fi
 
 mkdir -p "${CRON_DIR}" "${CANARY_DIR}"
 
