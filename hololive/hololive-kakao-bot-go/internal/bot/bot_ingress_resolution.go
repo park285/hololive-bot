@@ -6,7 +6,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/iris"
 )
 
-var numericRoomIDRegex = regexp.MustCompile(`^\\d+$`)
+var numericRoomIDRegex = regexp.MustCompile(`^\d+$`)
 
 func resolveRoom(message *iris.Message) (chatID, roomName string) {
 	isNumericRoom := message.Room != "" && numericRoomIDRegex.MatchString(message.Room)
