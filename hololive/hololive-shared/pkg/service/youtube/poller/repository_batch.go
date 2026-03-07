@@ -246,7 +246,7 @@ func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *
 	}
 
 	sb.WriteString(`
-		ON CONFLICT (content_id) DO NOTHING
+		ON CONFLICT (kind, content_id) DO NOTHING
 	`)
 
 	if err := tx.WithContext(ctx).Exec(sb.String(), args...).Error; err != nil {
