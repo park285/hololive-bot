@@ -86,7 +86,7 @@ llm/
 | 파일 | 귀속 | 이유 |
 |------|------|------|
 | `api_router.go` | shared | ProvideHealthOnlyRouter/TriggerRouter는 다수 서비스 사용 |
-| `ingestion_lock.go` | shared | stream-ingester + bot 사용 |
+| `ingestion_lock.go` | shared | stream-ingester 단독 ingestion ownership 보호 |
 | `iris_sender_adapter.go` | shared | iris 관련 |
 | `bootstrap_dispatcher.go` | hololive-alarm | alarm-dispatcher 전용 |
 | `bootstrap_admin.go` | hololive-admin | admin-api 전용 |
