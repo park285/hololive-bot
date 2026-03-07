@@ -88,10 +88,10 @@ docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 ./scripts/logs/prune.sh
 ```
 
-- compose 런타임에서는 `LOG_DIR=/app/logs/<service>`로 설정해 host `./logs/hololive-bot/`, `./logs/dispatcher-go/`, `./logs/llm-scheduler/`, `./logs/stream-ingester/`에 파일 미러링합니다.
+- compose 런타임에서는 `LOG_DIR=/app/logs`로 설정해 host `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`에 파일 미러링합니다.
 - 앱 파일 로그 로테이션 기본값은 `100MB`, `5 backups`, `30일`, `gzip 압축`입니다.
 - Docker Compose `json-file` 드라이버 로테이션 기본값은 `10MB`, `3 files`입니다.
-- 기본 운영 경로는 `logs/<service>/`만 사용합니다.
+- 기본 운영 경로는 `logs/*.log`만 사용합니다.
 - `logs/mirror/*.log`는 `ENABLE_LOG_MIRROR=1`일 때만 생성되는 선택적 로컬 미러링이며 운영 SSOT가 아닙니다.
 - `logs/backfill/*.log`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 `ENABLE_LOG_AUX_FILES=1`일 때만 사용하는 보조 운영 산출물입니다.
 - 보조 로그 정리는 `./scripts/logs/prune.sh` 기준으로 수행합니다.
