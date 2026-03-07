@@ -1,6 +1,6 @@
 # Go/Rust 도메인 경계 문서
 
-> 2026-03-02 운영 기준. hololive-kakao-bot-go와 hololive-rs 간 역할 분류.
+> 2026-03-07 운영 기준. hololive-kakao-bot-go와 hololive-rs 간 역할 분류.
 
 ---
 
@@ -17,7 +17,7 @@
 | 알람 CRUD | - | AlarmService (bot 내부 API) | Go ON |
 | 명령어 핸들링 | - | bot/ + command/ | Go ON |
 | Admin REST API | - | server/ | Go ON |
-| YouTube 통계/스크래핑 | - | youtube.Scheduler + poller/ | Go ON |
+| YouTube 통계/스크래핑 | - | stream-ingester runtime | Go ON |
 | YouTube 캐시 조회 | - | holodex.Service (Holodex API) | Go ON |
 | LLM 스케줄러 | - | majorevent/ + membernews/ | Go ON |
 | Delivery Outbox | - | delivery.Dispatcher | Go ON |
@@ -41,7 +41,7 @@
 |--------|------|-----|----------------------|
 | `major_events` | **Write** | Read | llm-scheduler (read), admin-api (read) |
 | `alarms` | - | **Write** | hololive-bot |
-| `youtube_stats` | - | **Write** | stream-ingester (또는 Bot 유지) |
+| `youtube_stats` | - | **Write** | stream-ingester |
 | `members`, `channels` | Read | **Write** | Bot (유지) |
 | `member_news*` | - | **Write** | llm-scheduler |
 | `delivery_outbox` | - | **Write** | llm-scheduler |
@@ -90,7 +90,7 @@ P0에서 정의한 소비자별 분리 인터페이스 (`internal/domain/interfa
 │  llm-scheduler (LLM 기능)                             │
 │    MajorEvent/MemberNews 스케줄러 + Delivery          │
 │                                                      │
-│  stream-ingester (Go 유지)                            │
+│  stream-ingester (ingestion 단독 소유)                 │
 │    YouTube 통계 + 스크래핑 + PhotoSync                 │
 └──────────────────────────────────────────────────────┘
 ```
@@ -101,3 +101,4 @@ P0에서 정의한 소비자별 분리 인터페이스 (`internal/domain/interfa
 - **근거**: bot/ingester/admin/llm-sched는 Go net/http 생태계(h2c, SOCKS5, HTTP/2 토글, per-host 풀)에 강하게 의존
 - **Rust 소유**: alarm-checker, scraper-rss, dispatcher (compute 집약)
 - **Go 소유**: bot, stream-ingester, admin-api, llm-scheduler (네트워크 집약)
+- **운영 메모 (2026-03-07)**: ingestion fallback은 `hololive-bot`에서 제거되었고, 현재는 `stream-ingester`만 ingestion 런타임을 소유한다.
