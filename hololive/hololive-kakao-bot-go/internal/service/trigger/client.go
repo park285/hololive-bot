@@ -23,23 +23,18 @@ package trigger
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
-	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 // Client는 llm-scheduler 내부 트리거 API를 호출한다.
 type Client struct {
-	schedulerURL string
-	apiKey       string
-	httpClient   *http.Client
-	logger       *slog.Logger
+	httpClient *httputil.JSONClient
+	logger     *slog.Logger
 }
 
 // NewClient는 trigger 클라이언트를 생성한다.
@@ -49,10 +44,8 @@ func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
 	}
 
 	return &Client{
-		schedulerURL: strings.TrimRight(strings.TrimSpace(schedulerURL), "/"),
-		apiKey:       strings.TrimSpace(apiKey),
-		httpClient:   httputil.NewInternalServiceClient(30 * time.Second),
-		logger:       logger,
+		httpClient: httputil.NewJSONClient(schedulerURL, apiKey, 30*time.Second),
+		logger:     logger,
 	}
 }
 
@@ -85,26 +78,24 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 		return fmt.Errorf("post trigger: client is nil")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.schedulerURL+path, http.NoBody)
+	req, err := c.httpClient.NewRequest(ctx, http.MethodPost, path)
 	if err != nil {
-		return fmt.Errorf("post trigger: build request %s: %w", path, err)
-	}
-	if c.apiKey != "" {
-		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
+		return fmt.Errorf("post trigger: new request %s: %w", path, err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("post trigger: execute request %s: %w", path, err)
+		return fmt.Errorf("post trigger: request %s: %w", path, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusConflict {
+		_ = resp.Body.Close()
 		c.logger.Info("Trigger notification already in progress", slog.String("path", path))
 		return triggercontracts.ErrNotificationInProgress
 	}
 
-	if err := httputil.CheckStatus(resp); err != nil {
+	if err := c.httpClient.CheckStatus(resp); err != nil {
+		_ = resp.Body.Close()
 		return fmt.Errorf(
 			"post trigger: request failed %s: %w",
 			path,
@@ -112,7 +103,7 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 		)
 	}
 
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+	if err := c.httpClient.DiscardBody(resp); err != nil {
 		return fmt.Errorf("post trigger: discard response body %s: %w", path, err)
 	}
 

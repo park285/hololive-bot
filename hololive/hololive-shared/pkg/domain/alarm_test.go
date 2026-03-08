@@ -21,10 +21,10 @@
 package domain_test
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {

@@ -22,7 +22,6 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,6 +33,7 @@ import (
 	"testing"
 
 	"github.com/openai/openai-go/v3"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestNewClient_DefaultOptions(t *testing.T) {

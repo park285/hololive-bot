@@ -21,12 +21,12 @@
 package httputil
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func newTestGinContext(method, path string) (*gin.Context, *httptest.ResponseRecorder) {

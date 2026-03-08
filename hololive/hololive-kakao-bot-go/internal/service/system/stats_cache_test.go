@@ -22,11 +22,12 @@ package system
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestNewCollector_DefaultConfiguration(t *testing.T) {
@@ -41,6 +42,9 @@ func TestNewCollector_DefaultConfiguration(t *testing.T) {
 	}
 	if collector.httpClient.Timeout != 2*time.Second {
 		t.Fatalf("timeout=%s want=2s", collector.httpClient.Timeout)
+	}
+	if collector.httpClient.Transport == nil {
+		t.Fatal("transport should be initialized")
 	}
 	if collector.cacheTTL != 2*time.Second {
 		t.Fatalf("cacheTTL=%s want=2s", collector.cacheTTL)

@@ -22,10 +22,11 @@ package queue
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -72,7 +73,11 @@ func (p *Publisher) Publish(ctx context.Context, notification *domain.AlarmNotif
 	}
 
 	cmd := p.cache.B().Lpush().Key(AlarmDispatchQueue).Element(string(jsonBytes)).Build()
-	if err := p.cache.GetClient().Do(ctx, cmd).Error(); err != nil {
+	results := p.cache.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		return fmt.Errorf("publish alarm queue: lpush dispatch queue: unexpected result count: %d", len(results))
+	}
+	if err := results[0].Error(); err != nil {
 		return fmt.Errorf("publish alarm queue: lpush dispatch queue: %w", err)
 	}
 

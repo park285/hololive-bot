@@ -21,34 +21,26 @@
 package membernewsclient
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
-	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+	sharedjson "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
+	httpClient *httputil.JSONClient
 }
 
 func New(baseURL, apiKey string) *Client {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	return &Client{
-		baseURL:    baseURL,
-		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httputil.NewInternalServiceClient(60 * time.Second),
+		httpClient: httputil.NewJSONClient(baseURL, apiKey, 60*time.Second),
 	}
 }
 
@@ -67,18 +59,12 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 		return nil, fmt.Errorf("room id is required")
 	}
 
-	body, err := json.Marshal(digestRequest{RoomID: roomID, Period: string(membernewscontracts.NormalizePeriod(period))})
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+membernewscontracts.DigestPath, bytes.NewReader(body))
+	req, err := c.httpClient.NewJSONRequest(ctx, http.MethodPost, membernewscontracts.DigestPath, digestRequest{
+		RoomID: roomID,
+		Period: string(membernewscontracts.NormalizePeriod(period)),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("new request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -89,18 +75,20 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 
 	if resp.StatusCode == http.StatusNotFound {
 		var parsed errorResponse
-		_ = json.NewDecoder(resp.Body).Decode(&parsed)
+		if decodeErr := sharedjson.NewDecoder(resp.Body).Decode(&parsed); decodeErr != nil {
+			return nil, fmt.Errorf("decode not found response: %w", decodeErr)
+		}
 		if strings.EqualFold(strings.TrimSpace(parsed.Error), "no_subscribed_members") {
 			return nil, membernewscontracts.ErrNoSubscribedMembers
 		}
 	}
 
-	if err := httputil.CheckStatus(resp); err != nil {
+	if err := c.httpClient.CheckStatus(resp); err != nil {
 		return nil, fmt.Errorf("check status: %w", err)
 	}
 
 	var digest membernewscontracts.Digest
-	if err := httputil.DecodeJSON(resp, &digest); err != nil {
+	if err := c.httpClient.DecodeJSON(resp, &digest); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &digest, nil
@@ -116,25 +104,24 @@ func (c *Client) UnsubscribeRoom(ctx context.Context, roomID string) error {
 		return fmt.Errorf("room id is required")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+membernewscontracts.SubscriptionsPath+"/"+roomID, http.NoBody)
+	req, err := c.httpClient.NewRequest(ctx, http.MethodDelete, membernewscontracts.SubscriptionsPath+"/"+roomID)
 	if err != nil {
 		return fmt.Errorf("new request: %w", err)
-	}
-	if c.apiKey != "" {
-		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if err := httputil.CheckStatus(resp); err != nil {
+	if err := c.httpClient.CheckStatus(resp); err != nil {
+		defer func() { _ = resp.Body.Close() }()
 		return fmt.Errorf("check status: %w", err)
 	}
 
-	_, _ = io.Copy(io.Discard, resp.Body)
+	if err := c.httpClient.DiscardBody(resp); err != nil {
+		return fmt.Errorf("discard body: %w", err)
+	}
 	return nil
 }
 
@@ -143,26 +130,23 @@ func (c *Client) IsRoomSubscribed(ctx context.Context, roomID string) (bool, err
 	if roomID == "" {
 		return false, fmt.Errorf("room id is required")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+membernewscontracts.SubscriptionsPath+"/"+roomID, http.NoBody)
+	req, err := c.httpClient.NewRequest(ctx, http.MethodGet, membernewscontracts.SubscriptionsPath+"/"+roomID)
 	if err != nil {
 		return false, fmt.Errorf("new request: %w", err)
-	}
-	if c.apiKey != "" {
-		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if err := httputil.CheckStatus(resp); err != nil {
+	if err := c.httpClient.CheckStatus(resp); err != nil {
+		defer func() { _ = resp.Body.Close() }()
 		return false, fmt.Errorf("check status: %w", err)
 	}
 
 	var parsed subscription.SubscriptionStatusResponse
-	if err := httputil.DecodeJSON(resp, &parsed); err != nil {
+	if err := c.httpClient.DecodeJSON(resp, &parsed); err != nil {
 		return false, fmt.Errorf("decode response: %w", err)
 	}
 	return parsed.Subscribed, nil
@@ -175,31 +159,24 @@ func (c *Client) postSubscription(ctx context.Context, payload subscription.Subs
 		return fmt.Errorf("room id is required")
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+membernewscontracts.SubscriptionsPath, bytes.NewReader(body))
+	req, err := c.httpClient.NewJSONRequest(ctx, http.MethodPost, membernewscontracts.SubscriptionsPath, payload)
 	if err != nil {
 		return fmt.Errorf("new request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if err := httputil.CheckStatus(resp); err != nil {
+	if err := c.httpClient.CheckStatus(resp); err != nil {
+		defer func() { _ = resp.Body.Close() }()
 		return fmt.Errorf("check status: %w", err)
 	}
 
-	_, _ = io.Copy(io.Discard, resp.Body)
+	if err := c.httpClient.DiscardBody(resp); err != nil {
+		return fmt.Errorf("discard body: %w", err)
+	}
 	return nil
 }
 
