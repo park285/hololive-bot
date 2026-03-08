@@ -98,7 +98,7 @@ type Service struct {
 // NewHolodexService: 새로운 Holodex API 서비스 인스턴스를 생성한다. (API Key 검증 포함)
 func NewHolodexService(baseURL string, apiKey string, cacheSvc cache.Client, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, fmt.Errorf("Holodex API key is required")
+		return nil, fmt.Errorf("holodex api key is required")
 	}
 
 	logger.Info("Holodex API key configured")

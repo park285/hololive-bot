@@ -32,19 +32,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 var errBlockedLink = errors.New("parse link: blocked host")
 
 // LinkChecker는 링크 유효성 검증(HEAD 후 GET fallback)을 수행한다.
 type LinkChecker struct {
-	client *http.Client
-	config LinkCheckerConfig
-	logger *slog.Logger
+	client   *http.Client
+	config   LinkCheckerConfig
+	logger   *slog.Logger
 	resolver hostResolver
 }
 
@@ -74,9 +74,9 @@ func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Log
 	client = withBlockedRedirectPolicy(client, resolver, normalized.Timeout)
 
 	return &LinkChecker{
-		client: client,
-		config: normalized,
-		logger: logger,
+		client:   client,
+		config:   normalized,
+		logger:   logger,
 		resolver: resolver,
 	}
 }

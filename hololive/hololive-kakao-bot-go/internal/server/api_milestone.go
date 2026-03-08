@@ -140,7 +140,7 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := h.statsRepo.GetMilestoneStats(ctx)
+	summary, err := h.statsRepo.GetMilestoneStats(ctx)
 	if err != nil {
 		h.logger.Error("Failed to get milestone stats", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to get milestone stats"})
@@ -154,11 +154,11 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "Failed to get near milestone summary"})
 		return
 	}
-	stats.TotalNearMilestone = nearCount
+	summary.TotalNearMilestone = nearCount
 
 	c.JSON(200, gin.H{
 		"status": "ok",
-		"stats":  stats,
+		"stats":  summary,
 	})
 }
 

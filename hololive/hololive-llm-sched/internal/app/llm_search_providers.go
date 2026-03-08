@@ -25,12 +25,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+
 	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 func provideExaSearcher(cfg config.ExaConfig, logger *slog.Logger) sharedmodel.WebSearcher {
