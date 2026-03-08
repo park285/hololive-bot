@@ -53,6 +53,8 @@ type StreamIngesterRuntime struct {
 	ServerAddr string
 	HttpServer *http.Server
 
+	Readiness *ingestionReadinessState
+
 	ingestionLease *providers.IngestionLease
 	cleanup        func()
 }
@@ -87,6 +89,9 @@ func (r *StreamIngesterRuntime) Run() {
 	errCh := make(chan error, 1)
 	r.startBackgroundServices(ctx, errCh)
 	r.startHTTPServer(errCh)
+	if r.Readiness != nil {
+		r.Readiness.markRunning()
+	}
 
 	r.waitForShutdown(sigCh, errCh)
 

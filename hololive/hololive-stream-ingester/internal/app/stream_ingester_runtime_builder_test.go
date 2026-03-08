@@ -49,7 +49,11 @@ func TestBuildStreamIngesterHTTPServer_Success(t *testing.T) {
 		},
 	}
 
-	server, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger())
+	readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+		youtubeEnabled:   false,
+		photoSyncEnabled: true,
+	})
+	server, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger(), streamIngesterRuntimeName, readiness)
 	require.NoError(t, err)
 	require.NotNil(t, server)
 	assert.Equal(t, ":30123", server.Addr)
@@ -69,10 +73,42 @@ func TestBuildStreamIngesterHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvalid
 		},
 	}
 
-	server, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger())
+	readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+		youtubeEnabled:   false,
+		photoSyncEnabled: true,
+	})
+	server, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger(), streamIngesterRuntimeName, readiness)
 	require.Error(t, err)
 	assert.Nil(t, server)
 	assert.Contains(t, err.Error(), "build stream ingester router: set trusted proxies")
+}
+
+func TestResolveIngestionRuntimeFeatures(t *testing.T) {
+	t.Run("stream ingester preserves configured flags", func(t *testing.T) {
+		cfg := &config.Config{
+			Ingestion: config.IngestionConfig{
+				YouTubeEnabled:   false,
+				PhotoSyncEnabled: true,
+			},
+		}
+
+		features := resolveIngestionRuntimeFeatures(cfg, streamIngesterRuntimeName, testLogger())
+		assert.False(t, features.youtubeEnabled)
+		assert.True(t, features.photoSyncEnabled)
+	})
+
+	t.Run("youtube scraper enforces dedicated ingestion role", func(t *testing.T) {
+		cfg := &config.Config{
+			Ingestion: config.IngestionConfig{
+				YouTubeEnabled:   false,
+				PhotoSyncEnabled: true,
+			},
+		}
+
+		features := resolveIngestionRuntimeFeatures(cfg, youtubeScraperRuntimeName, testLogger())
+		assert.True(t, features.youtubeEnabled)
+		assert.False(t, features.photoSyncEnabled)
+	})
 }
 
 func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T) {
@@ -88,6 +124,10 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			cfg := &config.Config{
 				Server: config.ServerConfig{Port: 30123},
+				Ingestion: config.IngestionConfig{
+					YouTubeEnabled:   true,
+					PhotoSyncEnabled: true,
+				},
 				Scraper: config.ScraperConfig{
 					ProxyEnabled: true,
 					ProxyURL:     "socks5://127.0.0.1:1080",
@@ -187,7 +227,11 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			assert.Equal(t, tc.updatedProxyEnabled, currentSettings.ScraperProxyEnabled)
 			assert.Equal(t, tc.updatedProxyEnabled, youtubeService.ScraperProxyEnabled())
 
-			httpServer, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger())
+			readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+				youtubeEnabled:   true,
+				photoSyncEnabled: true,
+			})
+			httpServer, err := buildStreamIngesterHTTPServer(context.Background(), cfg, testLogger(), streamIngesterRuntimeName, readiness)
 			require.NoError(t, err)
 			require.NotNil(t, httpServer)
 
@@ -201,6 +245,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				ConfigSubscriber: configSubscriber,
 				ServerAddr:       ProvideAPIAddr(cfg),
 				HttpServer:       httpServer,
+				Readiness:        readiness,
 				cleanup: func() {
 					infra.cleanupDB()
 					infra.cleanupCache()

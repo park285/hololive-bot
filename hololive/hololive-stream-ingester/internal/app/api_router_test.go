@@ -28,6 +28,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -40,7 +43,7 @@ func TestProvideAPIServer(t *testing.T) {
 		c.String(http.StatusOK, "pong")
 	})
 
-	server := ProvideAPIServer(":31004", router)
+	server := ProvideAPIServer(":31004", router, "test-http")
 	if server == nil {
 		t.Fatal("ProvideAPIServer() returned nil")
 	}
@@ -72,6 +75,33 @@ func TestProvideAPIServer(t *testing.T) {
 	if strings.TrimSpace(rr.Body.String()) != "pong" {
 		t.Fatalf("/ping body = %q, want %q", rr.Body.String(), "pong")
 	}
+
+	t.Run("wraps handler with otelhttp", func(t *testing.T) {
+		recorder := tracetest.NewSpanRecorder()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+		prev := otel.GetTracerProvider()
+		otel.SetTracerProvider(tp)
+		t.Cleanup(func() {
+			otel.SetTracerProvider(prev)
+			_ = tp.Shutdown(context.Background())
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+		rr := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("/ping status = %d, want %d", rr.Code, http.StatusOK)
+		}
+
+		spans := recorder.Ended()
+		if len(spans) == 0 {
+			t.Fatal("expected otelhttp to emit at least one span")
+		}
+		if got := spans[0].Name(); got != "test-http" {
+			t.Fatalf("span name = %q, want %q", got, "test-http")
+		}
+	})
 }
 
 func TestProvideHealthOnlyRouter(t *testing.T) {
@@ -83,7 +113,11 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	router, err := ProvideHealthOnlyRouter(ctx, testLogger())
+	readiness := newIngestionReadinessState(youtubeScraperRuntimeName, ingestionRuntimeFeatures{
+		youtubeEnabled:   true,
+		photoSyncEnabled: false,
+	})
+	router, err := ProvideHealthOnlyRouter(ctx, testLogger(), readiness)
 	if err != nil {
 		t.Fatalf("ProvideHealthOnlyRouter() error = %v", err)
 	}
@@ -137,6 +171,30 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Fatalf("/ready status = %d, want %d", rr.Code, http.StatusServiceUnavailable)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal /ready response: %v", err)
+		}
+		status, _ := payload["status"].(string)
+		if status != "not_ready" {
+			t.Fatalf("ready status = %q, want %q", status, "not_ready")
+		}
+		if got, _ := payload["runtime"].(string); got != youtubeScraperRuntimeName {
+			t.Fatalf("runtime = %q, want %q", got, youtubeScraperRuntimeName)
+		}
+	})
+
+	t.Run("ready endpoint after runtime start", func(t *testing.T) {
+		readiness.markRunning()
+
+		req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
 		if rr.Code != http.StatusOK {
 			t.Fatalf("/ready status = %d, want %d", rr.Code, http.StatusOK)
 		}
@@ -145,9 +203,11 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("unmarshal /ready response: %v", err)
 		}
-		status, _ := payload["status"].(string)
-		if status != "ok" {
-			t.Fatalf("ready status = %q, want %q", status, "ok")
+		if got, _ := payload["status"].(string); got != "ready" {
+			t.Fatalf("status = %q, want %q", got, "ready")
+		}
+		if got, _ := payload["youtube_enabled"].(bool); !got {
+			t.Fatal("youtube_enabled = false, want true")
 		}
 	})
 
@@ -176,7 +236,11 @@ func TestBuildStreamIngesterHTTPServer(t *testing.T) {
 		},
 	}
 
-	server, err := buildStreamIngesterHTTPServer(ctx, cfg, testLogger())
+	readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+		youtubeEnabled:   false,
+		photoSyncEnabled: true,
+	})
+	server, err := buildStreamIngesterHTTPServer(ctx, cfg, testLogger(), streamIngesterRuntimeName, readiness)
 	if err != nil {
 		t.Fatalf("buildStreamIngesterHTTPServer() error = %v", err)
 	}
@@ -197,7 +261,7 @@ func TestBuildStreamIngesterHTTPServer(t *testing.T) {
 	readyReq := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	readyRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(readyRR, readyReq)
-	if readyRR.Code != http.StatusOK {
-		t.Fatalf("/ready via built server status = %d, want %d", readyRR.Code, http.StatusOK)
+	if readyRR.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/ready via built server status = %d, want %d", readyRR.Code, http.StatusServiceUnavailable)
 	}
 }

@@ -41,6 +41,7 @@ type Config struct {
 	Kakao           KakaoConfig
 	Holodex         HolodexConfig
 	YouTube         YouTubeConfig
+	Ingestion       IngestionConfig
 	Chzzk           ChzzkConfig // 치지직 Open API 설정
 	Twitch          TwitchConfig
 	Valkey          ValkeyConfig
@@ -122,6 +123,10 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		YouTube: YouTubeConfig{
 			APIKey:              envutil.String("YOUTUBE_API_KEY", ""),
 			EnableQuotaBuilding: envutil.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
+		},
+		Ingestion: IngestionConfig{
+			YouTubeEnabled:   envutil.Bool("YOUTUBE_INGESTION_ENABLED", true),
+			PhotoSyncEnabled: envutil.Bool("PHOTO_SYNC_ENABLED", true),
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),

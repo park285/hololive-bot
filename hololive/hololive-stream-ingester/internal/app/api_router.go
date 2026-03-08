@@ -25,20 +25,30 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 // ProvideAPIServer: 관리자용 HTTP 서버 인스턴스를 생성합니다.
-func ProvideAPIServer(addr string, router *gin.Engine) *http.Server {
+func ProvideAPIServer(addr string, handler http.Handler, operation string) *http.Server {
+	if handler == nil {
+		handler = http.NotFoundHandler()
+	}
+	if strings.TrimSpace(operation) == "" {
+		operation = runtimeHTTPServerOperationName(streamIngesterRuntimeName)
+	}
+
 	return &http.Server{
 		Addr:              addr,
-		Handler:           sharedserver.WrapH2C(router),
+		Handler:           sharedserver.WrapH2C(otelhttp.NewHandler(handler, operation)),
 		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
 		ReadTimeout:       constants.ServerTimeout.Read,
 		WriteTimeout:      constants.ServerTimeout.Write,
@@ -48,7 +58,7 @@ func ProvideAPIServer(addr string, router *gin.Engine) *http.Server {
 }
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
-func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Engine, error) {
+func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, readiness *ingestionReadinessState) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
@@ -66,7 +76,13 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 		},
 	})
 
-	sharedserver.RegisterHealthRoutes(router)
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, health.Get())
+	})
+	router.GET("/ready", func(c *gin.Context) {
+		statusCode, payload := readiness.response()
+		c.JSON(statusCode, payload)
+	})
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	return router, nil
