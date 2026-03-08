@@ -19,11 +19,10 @@
 // SOFTWARE.
 
 // Package logging: 공통 로깅 유틸리티를 제공합니다.
-// slog + tint + lumberjack 기반의 구조화된 로깅 및 OpenTelemetry 상관관계를 지원합니다.
+// slog + tint + lumberjack 기반의 구조화된 로깅을 지원합니다.
 package logging
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -35,7 +34,6 @@ import (
 
 	"github.com/lmittmann/tint"
 	"github.com/mattn/go-isatty"
-	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -108,12 +106,6 @@ func NewTestLoggerWithOutput(w io.Writer) *slog.Logger {
 
 // EnableFileLogging: 파일 로깅을 활성화하고, 파일과 stdout에 동시에 출력하는 로거를 반환합니다.
 func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
-	return EnableFileLoggingWithOTel(cfg, fileName, false)
-}
-
-// EnableFileLoggingWithOTel: OTel 상관관계 기능을 포함한 파일 로깅을 활성화합니다.
-// enableOTel이 true면 로그에 trace_id/span_id가 자동으로 추가됩니다.
-func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*slog.Logger, error) {
 	level := ParseLevel(cfg.Level)
 	logDir := strings.TrimSpace(cfg.Dir)
 	if logDir == "" {
@@ -125,9 +117,6 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 			NoColor:    shouldDisableColor(os.Stdout),
 		})
 		handler = NewSanitizeHandler(handler)
-		if enableOTel {
-			handler = NewOTelHandler(handler)
-		}
 		logger := slog.New(handler)
 		slog.SetDefault(logger)
 		return logger, nil
@@ -165,16 +154,10 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 	})
 	handler = NewSanitizeHandler(handler)
 
-	// OTel 활성화 시 trace_id/span_id 자동 추가
-	if enableOTel {
-		handler = NewOTelHandler(handler)
-	}
-
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 	logger.Info("file_logging_enabled",
 		slog.String("path", logFile.Filename),
-		slog.Bool("otel_correlation", enableOTel),
 	)
 	return logger, nil
 }
@@ -222,46 +205,4 @@ func shouldDisableColor(w io.Writer) bool {
 
 	fd := file.Fd()
 	return !isatty.IsTerminal(fd) && !isatty.IsCygwinTerminal(fd)
-}
-
-// OTelHandler: slog.Handler를 래핑하여 trace_id/span_id를 자동으로 로그에 추가합니다.
-// OpenTelemetry 분산 추적과 로그 상관관계를 제공합니다.
-type OTelHandler struct {
-	inner slog.Handler
-}
-
-// NewOTelHandler: OTel 상관관계가 추가된 slog.Handler를 생성합니다.
-func NewOTelHandler(inner slog.Handler) *OTelHandler {
-	return &OTelHandler{inner: inner}
-}
-
-// Enabled: 로그 레벨 활성화 여부를 확인합니다.
-func (h *OTelHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return h.inner.Enabled(ctx, level)
-}
-
-// Handle: 로그 레코드에 trace_id/span_id를 추가하고 내부 핸들러로 전달합니다.
-func (h *OTelHandler) Handle(ctx context.Context, record slog.Record) error {
-	// Context에서 현재 Span 추출
-	span := trace.SpanFromContext(ctx)
-	if span.SpanContext().IsValid() {
-		spanCtx := span.SpanContext()
-		// trace_id와 span_id를 로그에 추가
-		record.AddAttrs(
-			slog.String("trace_id", spanCtx.TraceID().String()),
-			slog.String("span_id", spanCtx.SpanID().String()),
-		)
-	}
-	//nolint:wrapcheck // slog.Handler interface implementation
-	return h.inner.Handle(ctx, record)
-}
-
-// WithAttrs: 속성을 추가한 새로운 Handler를 반환합니다.
-func (h *OTelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &OTelHandler{inner: h.inner.WithAttrs(attrs)}
-}
-
-// WithGroup: 그룹을 추가한 새로운 Handler를 반환합니다.
-func (h *OTelHandler) WithGroup(name string) slog.Handler {
-	return &OTelHandler{inner: h.inner.WithGroup(name)}
 }

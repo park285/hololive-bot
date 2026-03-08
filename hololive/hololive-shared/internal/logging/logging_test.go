@@ -22,8 +22,6 @@ package logging
 
 import (
 	"bytes"
-	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,64 +68,6 @@ func TestNewTestLoggerDiscardsOutput(t *testing.T) {
 
 	logger.Info("this should be discarded")
 	logger.Error("this should also be discarded")
-}
-
-func TestOTelHandler_WithoutSpan(t *testing.T) {
-	var buf bytes.Buffer
-	baseHandler := slog.NewTextHandler(&buf, nil)
-	handler := NewOTelHandler(baseHandler)
-
-	logger := slog.New(handler)
-	logger.Info("test message")
-
-	output := buf.String()
-	// trace_id/span_id가 없어야 함 (span 없는 context)
-	if strings.Contains(output, "trace_id") {
-		t.Errorf("expected no trace_id without span, got: %s", output)
-	}
-}
-
-func TestOTelHandler_Enabled(t *testing.T) {
-	baseHandler := slog.NewTextHandler(nil, &slog.HandlerOptions{Level: slog.LevelWarn})
-	handler := NewOTelHandler(baseHandler)
-
-	// Info 레벨은 비활성화되어야 함
-	if handler.Enabled(context.Background(), slog.LevelInfo) {
-		t.Error("expected Info level to be disabled")
-	}
-
-	// Warn 레벨은 활성화되어야 함
-	if !handler.Enabled(context.Background(), slog.LevelWarn) {
-		t.Error("expected Warn level to be enabled")
-	}
-}
-
-func TestOTelHandler_WithAttrs(t *testing.T) {
-	baseHandler := slog.NewTextHandler(nil, nil)
-	handler := NewOTelHandler(baseHandler)
-
-	newHandler := handler.WithAttrs([]slog.Attr{slog.String("key", "value")})
-	if newHandler == nil {
-		t.Fatal("WithAttrs returned nil")
-	}
-	_, ok := newHandler.(*OTelHandler)
-	if !ok {
-		t.Error("WithAttrs did not return OTelHandler")
-	}
-}
-
-func TestOTelHandler_WithGroup(t *testing.T) {
-	baseHandler := slog.NewTextHandler(nil, nil)
-	handler := NewOTelHandler(baseHandler)
-
-	newHandler := handler.WithGroup("testgroup")
-	if newHandler == nil {
-		t.Fatal("WithGroup returned nil")
-	}
-	_, ok := newHandler.(*OTelHandler)
-	if !ok {
-		t.Error("WithGroup did not return OTelHandler")
-	}
 }
 
 func TestConfig_Validation(t *testing.T) {
