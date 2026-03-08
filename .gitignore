@@ -30,6 +30,7 @@ secrets/*
 hololive/hololive-kakao-bot-go/bot
 hololive/hololive-kakao-bot-go/fetch_profiles
 hololive/hololive-kakao-bot-go/config.json
+hololive/hololive-stream-ingester/youtube-scraper
 
 # ============================================
 # Rust

@@ -22,3 +22,4 @@
 # Local build artifacts under module roots
 hololive/hololive-kakao-bot-go/bot
 hololive/hololive-kakao-bot-go/fetch_profiles
+hololive/hololive-stream-ingester/youtube-scraper
