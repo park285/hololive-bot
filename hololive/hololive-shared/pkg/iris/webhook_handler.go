@@ -22,6 +22,7 @@ package iris
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -278,7 +279,7 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	if c.GetHeader(sharedirisx.HeaderIrisToken) != h.token {
+	if subtle.ConstantTimeCompare([]byte(c.GetHeader(sharedirisx.HeaderIrisToken)), []byte(h.token)) != 1 {
 		h.incRequest("unauthorized")
 		c.Status(http.StatusUnauthorized)
 		return

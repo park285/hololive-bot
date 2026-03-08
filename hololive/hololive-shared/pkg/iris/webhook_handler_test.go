@@ -365,3 +365,57 @@ func TestWebhookHandler_RequireHTTP2(t *testing.T) {
 		t.Fatalf("HTTP/2 status = %d, want %d", http2Rec.Code, http.StatusOK)
 	}
 }
+
+func TestWebhookHandler_TokenValidation(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	const token = "webhook-token"
+	webhookHandler := NewWebhookHandler(
+		token,
+		&noopMessageHandler{},
+		nil,
+		nil,
+		WebhookHandlerOptions{
+			WorkerCount:    1,
+			QueueSize:      8,
+			EnqueueTimeout: 10 * time.Millisecond,
+			HandlerTimeout: 1 * time.Second,
+		},
+	)
+	t.Cleanup(func() {
+		_ = webhookHandler.Close()
+	})
+
+	router := gin.New()
+	router.POST(sharedirisx.PathWebhook, webhookHandler.Handle)
+
+	requestBody := `{"text":"!도움","room":"room-1","sender":"tester","userId":"user-1","threadId":""}`
+
+	tests := []struct {
+		name       string
+		headerVal  string
+		wantStatus int
+	}{
+		{name: "missing token", wantStatus: http.StatusUnauthorized},
+		{name: "wrong token same length", headerVal: "wrong-token12", wantStatus: http.StatusUnauthorized},
+		{name: "wrong token different length", headerVal: "short", wantStatus: http.StatusUnauthorized},
+		{name: "valid token", headerVal: token, wantStatus: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, sharedirisx.PathWebhook, strings.NewReader(requestBody))
+			if tt.headerVal != "" {
+				req.Header.Set(sharedirisx.HeaderIrisToken, tt.headerVal)
+			}
+
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}
