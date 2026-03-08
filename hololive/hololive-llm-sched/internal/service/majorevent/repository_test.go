@@ -24,6 +24,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestRepository_Interface(t *testing.T) {
@@ -62,6 +64,33 @@ func TestRepository_NilPoolGuards(t *testing.T) {
 		_, err := repo.IsSubscribed(ctx, "room-1")
 		if err == nil || !strings.Contains(err.Error(), "postgres pool not configured") {
 			t.Fatalf("IsSubscribed() error = %v, want postgres pool not configured", err)
+		}
+	})
+}
+
+func TestNormalizeEventForUpsert(t *testing.T) {
+	t.Parallel()
+
+	t.Run("defaults empty fields", func(t *testing.T) {
+		eventType, linkStatus := normalizeEventForUpsert(&domain.MajorEvent{})
+		if eventType != domain.MajorEventTypeEvent {
+			t.Fatalf("eventType = %q, want %q", eventType, domain.MajorEventTypeEvent)
+		}
+		if linkStatus != domain.MajorEventLinkStatusUnchecked {
+			t.Fatalf("linkStatus = %q, want %q", linkStatus, domain.MajorEventLinkStatusUnchecked)
+		}
+	})
+
+	t.Run("preserves explicit fields", func(t *testing.T) {
+		eventType, linkStatus := normalizeEventForUpsert(&domain.MajorEvent{
+			Type:       domain.MajorEventTypeNews,
+			LinkStatus: domain.MajorEventLinkStatusOK,
+		})
+		if eventType != domain.MajorEventTypeNews {
+			t.Fatalf("eventType = %q, want %q", eventType, domain.MajorEventTypeNews)
+		}
+		if linkStatus != domain.MajorEventLinkStatusOK {
+			t.Fatalf("linkStatus = %q, want %q", linkStatus, domain.MajorEventLinkStatusOK)
 		}
 	})
 }

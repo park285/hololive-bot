@@ -39,6 +39,13 @@ type Repository struct {
 	logger *slog.Logger
 }
 
+const majorEventSelectColumns = `
+		SELECT id, external_id, type, title, link, COALESCE(description, '') as description, COALESCE(members, '{}') as members, pub_date,
+			   event_start_date, event_end_date, status, COALESCE(link_status, 'unchecked') as link_status, link_checked_at, notified_at, COALESCE(notified_week, '') as notified_week,
+			   COALESCE(notified_month, '') as notified_month, created_at, updated_at
+		FROM major_events
+	`
+
 func (r *Repository) requirePool(action string) error {
 	if r == nil || r.pool == nil {
 		return fmt.Errorf("%s: postgres pool not configured", action)
@@ -52,6 +59,20 @@ func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 		pool:   postgres.GetPool(),
 		logger: logger,
 	}
+}
+
+func normalizeEventForUpsert(event *domain.MajorEvent) (domain.MajorEventType, domain.MajorEventLinkStatus) {
+	eventType := event.Type
+	if eventType == "" {
+		eventType = domain.MajorEventTypeEvent
+	}
+
+	linkStatus := event.LinkStatus
+	if linkStatus == "" {
+		linkStatus = domain.MajorEventLinkStatusUnchecked
+	}
+
+	return eventType, linkStatus
 }
 
 // Subscribe: 방의 대형 행사 알림을 구독합니다. 이미 구독 중이면 무시합니다.
@@ -123,6 +144,26 @@ func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoo
 	defer rows.Close()
 
 	return r.scanSubscriptions(rows)
+}
+
+func (r *Repository) applyEventSchemaMigrations(ctx context.Context) error {
+	migrations := []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{name: "migrate type column", run: r.migrateTypeColumn},
+		{name: "migrate notified_month column", run: r.migrateNotifiedMonthColumn},
+		{name: "migrate link check columns", run: r.migrateLinkCheckColumns},
+		{name: "create indexes", run: r.createIndexes},
+	}
+
+	for _, migration := range migrations {
+		if err := migration.run(ctx); err != nil {
+			return fmt.Errorf("%s: %w", migration.name, err)
+		}
+	}
+
+	return nil
 }
 
 func (r *Repository) scanSubscriptions(rows pgx.Rows) ([]*domain.EventRoomSubscription, error) {
@@ -199,20 +240,8 @@ func (r *Repository) CreateEventsTable(ctx context.Context) error {
 		return fmt.Errorf("create major_events table: %w", err)
 	}
 
-	if err := r.migrateTypeColumn(ctx); err != nil {
-		return fmt.Errorf("migrate type column: %w", err)
-	}
-
-	if err := r.migrateNotifiedMonthColumn(ctx); err != nil {
-		return fmt.Errorf("migrate notified_month column: %w", err)
-	}
-
-	if err := r.migrateLinkCheckColumns(ctx); err != nil {
-		return fmt.Errorf("migrate link check columns: %w", err)
-	}
-
-	if err := r.createIndexes(ctx); err != nil {
-		return fmt.Errorf("create indexes: %w", err)
+	if err := r.applyEventSchemaMigrations(ctx); err != nil {
+		return fmt.Errorf("apply event schema migrations: %w", err)
 	}
 
 	return nil
@@ -378,6 +407,16 @@ func (r *Repository) GetRecentExternalIDs(ctx context.Context, eventType domain.
 	return externalIDs, latestPubDate, nil
 }
 
+func (r *Repository) queryEvents(ctx context.Context, action string, query string, args ...any) ([]*domain.MajorEvent, error) {
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", action, err)
+	}
+	defer rows.Close()
+
+	return r.scanEvents(rows)
+}
+
 // UpsertEvent: 이벤트를 삽입하거나 업데이트합니다. (external_id 기준)
 func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) error {
 	query := `
@@ -409,14 +448,7 @@ func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) 
 	RETURNING id
 	`
 
-	eventType := event.Type
-	if eventType == "" {
-		eventType = domain.MajorEventTypeEvent
-	}
-	linkStatus := event.LinkStatus
-	if linkStatus == "" {
-		linkStatus = domain.MajorEventLinkStatusUnchecked
-	}
+	eventType, linkStatus := normalizeEventForUpsert(event)
 
 	err := r.pool.QueryRow(ctx, query,
 		event.ExternalID,
@@ -439,11 +471,7 @@ func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) 
 
 // GetEventsByDateRange: 날짜 범위 내의 활성 행사를 조회합니다. (event + news, 주간 중복 방지)
 func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDate time.Time, weekKey string) ([]*domain.MajorEvent, error) {
-	query := `
-		SELECT id, external_id, type, title, link, COALESCE(description, '') as description, COALESCE(members, '{}') as members, pub_date,
-			   event_start_date, event_end_date, status, COALESCE(link_status, 'unchecked') as link_status, link_checked_at, notified_at, COALESCE(notified_week, '') as notified_week,
-			   COALESCE(notified_month, '') as notified_month, created_at, updated_at
-		FROM major_events
+	query := majorEventSelectColumns + `
 		WHERE status = $1
 		  AND type IN ($2, $3)
 		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'UTC')::date) <= $5
@@ -452,8 +480,9 @@ func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDat
 		ORDER BY event_start_date ASC
 	`
 
-	rows, err := r.pool.Query(
+	return r.queryEvents(
 		ctx,
+		"get events by date range",
 		query,
 		domain.MajorEventStatusActive,
 		domain.MajorEventTypeEvent,
@@ -462,12 +491,6 @@ func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDat
 		endDate,
 		weekKey,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("get events by date range: %w", err)
-	}
-	defer rows.Close()
-
-	return r.scanEvents(rows)
 }
 
 // GetEventsByMonth: 특정 월에 걸친 활성 행사를 조회합니다. (event + news, 월간 중복 방지)
@@ -475,11 +498,7 @@ func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, mont
 	monthStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	monthEnd := monthStart.AddDate(0, 1, -1)
 
-	query := `
-		SELECT id, external_id, type, title, link, COALESCE(description, '') as description, COALESCE(members, '{}') as members, pub_date,
-			   event_start_date, event_end_date, status, COALESCE(link_status, 'unchecked') as link_status, link_checked_at, notified_at, COALESCE(notified_week, '') as notified_week,
-			   COALESCE(notified_month, '') as notified_month, created_at, updated_at
-		FROM major_events
+	query := majorEventSelectColumns + `
 		WHERE status = $1
 		  AND type IN ($2, $3)
 		  AND COALESCE(event_start_date, (pub_date AT TIME ZONE 'UTC')::date) <= $4
@@ -488,8 +507,9 @@ func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, mont
 		ORDER BY event_start_date ASC
 	`
 
-	rows, err := r.pool.Query(
+	return r.queryEvents(
 		ctx,
+		"get events by month",
 		query,
 		domain.MajorEventStatusActive,
 		domain.MajorEventTypeEvent,
@@ -498,12 +518,6 @@ func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, mont
 		monthStart,
 		monthKey,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("get events by month: %w", err)
-	}
-	defer rows.Close()
-
-	return r.scanEvents(rows)
 }
 
 // MarkEventsAsMonthlyNotified: 이벤트들을 월간 알림 발송 완료로 표시합니다.
@@ -569,22 +583,11 @@ func (r *Repository) UpdateExpiredEvents(ctx context.Context) (int64, error) {
 
 // GetAllActiveEvents: 모든 활성 이벤트를 조회합니다.
 func (r *Repository) GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEvent, error) {
-	query := `
-		SELECT id, external_id, type, title, link, COALESCE(description, '') as description, COALESCE(members, '{}') as members, pub_date,
-			   event_start_date, event_end_date, status, COALESCE(link_status, 'unchecked') as link_status, link_checked_at, notified_at, COALESCE(notified_week, '') as notified_week,
-			   COALESCE(notified_month, '') as notified_month, created_at, updated_at
-		FROM major_events
+	query := majorEventSelectColumns + `
 		WHERE status = $1
 		ORDER BY event_start_date ASC
 	`
-
-	rows, err := r.pool.Query(ctx, query, domain.MajorEventStatusActive)
-	if err != nil {
-		return nil, fmt.Errorf("get all active events: %w", err)
-	}
-	defer rows.Close()
-
-	return r.scanEvents(rows)
+	return r.queryEvents(ctx, "get all active events", query, domain.MajorEventStatusActive)
 }
 
 func (r *Repository) scanEvents(rows pgx.Rows) ([]*domain.MajorEvent, error) {
