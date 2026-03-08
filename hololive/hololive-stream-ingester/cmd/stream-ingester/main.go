@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
-	sharedtelemetry "github.com/kapu/hololive-shared/pkg/telemetry"
 
 	"github.com/kapu/hololive-stream-ingester/internal/app"
 )
@@ -67,41 +66,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		exitCode = 1
 		return
-	}
-
-	otelProvider, err := sharedtelemetry.NewProvider(context.Background(), sharedtelemetry.Config{
-		Enabled:               cfg.Telemetry.Enabled,
-		MetricsEnabled:        cfg.Telemetry.MetricsEnabled,
-		MetricsExportInterval: cfg.Telemetry.MetricsExportInterval,
-		ServiceName:           cfg.Telemetry.ServiceName,
-		ServiceVersion:        cfg.Telemetry.ServiceVersion,
-		Environment:           cfg.Telemetry.Environment,
-		OTLPEndpoint:          cfg.Telemetry.OTLPEndpoint,
-		OTLPInsecure:          cfg.Telemetry.OTLPInsecure,
-		SampleRate:            cfg.Telemetry.SampleRate,
-	})
-	if err != nil {
-		logger.Error("otel_init_failed", slog.Any("err", err))
-		exitCode = 1
-		return
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if shutdownErr := otelProvider.Shutdown(shutdownCtx); shutdownErr != nil {
-			logger.Error("otel_shutdown_failed", slog.Any("err", shutdownErr))
-		}
-	}()
-
-	if otelProvider.IsEnabled() {
-		logger.Info("otel_enabled",
-			slog.String("service", cfg.Telemetry.ServiceName),
-			slog.String("endpoint", cfg.Telemetry.OTLPEndpoint),
-			slog.Bool("tracing_enabled", otelProvider.IsTracingEnabled()),
-			slog.Bool("metrics_enabled", otelProvider.IsMetricsEnabled()),
-			slog.Duration("metrics_export_interval", cfg.Telemetry.MetricsExportInterval),
-			slog.Float64("sample_rate", cfg.Telemetry.SampleRate),
-		)
 	}
 
 	logger.Info("Stream Ingester starting...",
