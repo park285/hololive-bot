@@ -39,6 +39,13 @@ type Repository struct {
 	logger *slog.Logger
 }
 
+func (r *Repository) requirePool(action string) error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("%s: postgres pool not configured", action)
+	}
+	return nil
+}
+
 // NewRepository: 새로운 Repository를 생성합니다.
 func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	return &Repository{
@@ -49,6 +56,10 @@ func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 
 // Subscribe: 방의 대형 행사 알림을 구독합니다. 이미 구독 중이면 무시합니다.
 func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) error {
+	if err := r.requirePool("subscribe major event"); err != nil {
+		return err
+	}
+
 	query := `
 		INSERT INTO major_event_subscriptions (room_id, room_name)
 		VALUES ($1, $2)
@@ -65,6 +76,10 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 
 // Unsubscribe: 방의 대형 행사 알림 구독을 해제합니다.
 func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
+	if err := r.requirePool("unsubscribe major event"); err != nil {
+		return err
+	}
+
 	query := `DELETE FROM major_event_subscriptions WHERE room_id = $1`
 	_, err := r.pool.Exec(ctx, query, roomID)
 	if err != nil {
@@ -75,6 +90,10 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 
 // IsSubscribed: 방이 대형 행사 알림을 구독 중인지 확인합니다.
 func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
+	if err := r.requirePool("check subscription"); err != nil {
+		return false, err
+	}
+
 	query := `SELECT EXISTS(SELECT 1 FROM major_event_subscriptions WHERE room_id = $1)`
 
 	var exists bool
@@ -87,6 +106,10 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 
 // GetSubscribedRooms: 구독 중인 모든 방 목록을 조회합니다.
 func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error) {
+	if err := r.requirePool("get subscribed rooms"); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT id, room_id, COALESCE(room_name, '') as room_name, created_at
 		FROM major_event_subscriptions
@@ -123,6 +146,10 @@ func (r *Repository) scanSubscriptions(rows pgx.Rows) ([]*domain.EventRoomSubscr
 
 // CreateTable: 테이블이 없으면 생성합니다. (마이그레이션용)
 func (r *Repository) CreateTable(ctx context.Context) error {
+	if err := r.requirePool("create major_event_subscriptions table"); err != nil {
+		return err
+	}
+
 	query := `
 		CREATE TABLE IF NOT EXISTS major_event_subscriptions (
 			id SERIAL PRIMARY KEY,
@@ -141,6 +168,10 @@ func (r *Repository) CreateTable(ctx context.Context) error {
 
 // CreateEventsTable: major_events 테이블을 생성합니다. (마이그레이션용)
 func (r *Repository) CreateEventsTable(ctx context.Context) error {
+	if err := r.requirePool("create major_events table"); err != nil {
+		return err
+	}
+
 	createTableQuery := `
 		CREATE TABLE IF NOT EXISTS major_events (
 			id SERIAL PRIMARY KEY,
