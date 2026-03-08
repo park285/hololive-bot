@@ -62,6 +62,7 @@ func TestLoadConfig_IgnoresLegacyTelemetryEnvironment(t *testing.T) {
 func TestLoadConfig_AppliesDefaultWhenInvalidNumericValue(t *testing.T) {
 	setRequiredEnvForLoadConfig(t)
 	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "-1")
+	t.Setenv("ALARM_DISPATCH_PARALLELISM", "0")
 	t.Setenv("DISPATCHER_RECONNECT_BACKOFF_MS", "0")
 
 	cfg, err := LoadConfig()
@@ -70,6 +71,9 @@ func TestLoadConfig_AppliesDefaultWhenInvalidNumericValue(t *testing.T) {
 	}
 	if cfg.Dispatch.MaxBatch != defaultMaxBatch {
 		t.Fatalf("Dispatch.MaxBatch = %d, want %d", cfg.Dispatch.MaxBatch, defaultMaxBatch)
+	}
+	if cfg.Dispatch.Parallelism != defaultDispatchParallelism {
+		t.Fatalf("Dispatch.Parallelism = %d, want %d", cfg.Dispatch.Parallelism, defaultDispatchParallelism)
 	}
 	if cfg.Dispatch.ReconnectBackoff != time.Second {
 		t.Fatalf("Dispatch.ReconnectBackoff = %v, want %v", cfg.Dispatch.ReconnectBackoff, time.Second)
@@ -111,6 +115,7 @@ func TestConfigValidate(t *testing.T) {
 		Dispatch: DispatchConfig{
 			QueueKey:         "alarm:dispatch:queue",
 			MaxBatch:         50,
+			Parallelism:      4,
 			ReconnectBackoff: time.Second,
 		},
 	}
@@ -135,6 +140,7 @@ func TestConfigValidate_RequiresBotToken(t *testing.T) {
 		Dispatch: DispatchConfig{
 			QueueKey:         "alarm:dispatch:queue",
 			MaxBatch:         50,
+			Parallelism:      4,
 			ReconnectBackoff: time.Second,
 		},
 	}

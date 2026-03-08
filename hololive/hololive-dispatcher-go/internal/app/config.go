@@ -35,9 +35,10 @@ import (
 )
 
 const (
-	defaultMaxBatch           = 50
-	defaultReconnectBackoffMS = 1000
-	defaultLoggingLevel       = "info"
+	defaultMaxBatch            = 50
+	defaultDispatchParallelism = 4
+	defaultReconnectBackoffMS  = 1000
+	defaultLoggingLevel        = "info"
 )
 
 // Config: dispatcher-go 런타임 설정.
@@ -65,6 +66,7 @@ type IrisConfig struct {
 type DispatchConfig struct {
 	QueueKey         string
 	MaxBatch         int
+	Parallelism      int
 	ReconnectBackoff time.Duration
 }
 
@@ -80,6 +82,10 @@ func LoadConfig() (*Config, error) {
 	maxBatch := lookupInt("ALARM_DISPATCH_MAX_BATCH", defaultMaxBatch)
 	if maxBatch <= 0 {
 		maxBatch = defaultMaxBatch
+	}
+	parallelism := lookupInt("ALARM_DISPATCH_PARALLELISM", defaultDispatchParallelism)
+	if parallelism <= 0 {
+		parallelism = defaultDispatchParallelism
 	}
 	reconnectBackoffMS := lookupInt("DISPATCHER_RECONNECT_BACKOFF_MS", defaultReconnectBackoffMS)
 	if reconnectBackoffMS <= 0 {
@@ -103,6 +109,7 @@ func LoadConfig() (*Config, error) {
 		Dispatch: DispatchConfig{
 			QueueKey:         lookupString("ALARM_DISPATCH_QUEUE_KEY", "alarm:dispatch:queue"),
 			MaxBatch:         maxBatch,
+			Parallelism:      parallelism,
 			ReconnectBackoff: time.Duration(reconnectBackoffMS) * time.Millisecond,
 		},
 		Logging: sharedlogging.Config{
@@ -144,6 +151,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Dispatch.MaxBatch <= 0 {
 		return fmt.Errorf("validate config: ALARM_DISPATCH_MAX_BATCH must be positive")
+	}
+	if c.Dispatch.Parallelism <= 0 {
+		return fmt.Errorf("validate config: ALARM_DISPATCH_PARALLELISM must be positive")
 	}
 	if c.Dispatch.ReconnectBackoff <= 0 {
 		return fmt.Errorf("validate config: DISPATCHER_RECONNECT_BACKOFF_MS must be positive")
@@ -205,18 +215,6 @@ func lookupBool(key string, def bool) bool {
 		return def
 	}
 	parsed, err := strconv.ParseBool(raw)
-	if err != nil {
-		return def
-	}
-	return parsed
-}
-
-func lookupFloat(key string, def float64) float64 {
-	raw := lookupOptional(key)
-	if raw == "" {
-		return def
-	}
-	parsed, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return def
 	}
