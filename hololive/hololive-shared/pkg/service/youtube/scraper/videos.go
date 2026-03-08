@@ -42,11 +42,17 @@ func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*Up
 
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
+		logStructureWarning("upcoming_events", channelID, "ytInitialData extraction failed", "error", err)
 		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
 
 	data := gjson.Parse(jsonStr)
-	return parseUpcomingEventsFromInitialData(data)
+	events, err := parseUpcomingEventsFromInitialData(data)
+	if err != nil {
+		logStructureWarning("upcoming_events", channelID, "failed to parse initial data", "error", err)
+		return nil, err
+	}
+	return events, nil
 }
 
 // GetRecentVideos: 채널의 최근 업로드 비디오 목록 조회 (/channel/{id}/videos)
@@ -97,7 +103,7 @@ func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResul
 		return videos, nil
 	}
 	if len(rssVideos) > 0 {
-		slog.Debug("recent videos recovered via rss fallback",
+		logStructureWarning("recent_videos", channelID, "html parser recovered via rss fallback",
 			"channel_id", channelID,
 			"count", len(rssVideos))
 		return rssVideos, nil
@@ -114,11 +120,17 @@ func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID
 
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
+		logStructureWarning("recent_videos", channelID, "ytInitialData extraction failed", "error", err)
 		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
 
 	data := gjson.Parse(jsonStr)
-	return parseVideosFromInitialData(data, channelID, maxResults, c.parseVideoRenderer)
+	videos, err := parseVideosFromInitialData(data, channelID, maxResults, c.parseVideoRenderer)
+	if err != nil {
+		logStructureWarning("recent_videos", channelID, "failed to parse initial data", "error", err)
+		return nil, err
+	}
+	return videos, nil
 }
 
 func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {

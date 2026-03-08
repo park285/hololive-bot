@@ -23,7 +23,6 @@ package scraper
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/tidwall/gjson"
 )
@@ -39,6 +38,7 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*Channe
 
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
+		logStructureWarning("channel_stats", channelID, "ytInitialData extraction failed", "error", err)
 		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
 
@@ -47,7 +47,12 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*Channe
 		return nil, err
 	}
 
-	return parseChannelStatsFromInitialData(data, channelID), nil
+	stats := parseChannelStatsFromInitialData(data, channelID)
+	if looksEmptyChannelStats(stats) {
+		logStructureWarning("channel_stats", channelID, "parsed stats are empty")
+	}
+
+	return stats, nil
 }
 
 // GetChannelSnippet: 채널 프로필 정보 조회 (아바타, 배너)
@@ -61,6 +66,7 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*Chan
 
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
+		logStructureWarning("channel_snippet", channelID, "ytInitialData extraction failed", "error", err)
 		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
 
@@ -71,8 +77,7 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*Chan
 	snippet := parseChannelSnippetFromInitialData(data)
 
 	if len(snippet.Avatar) == 0 || len(snippet.Banner) == 0 {
-		slog.Debug("channel snippet missing page header images",
-			"channel_id", channelID,
+		logStructureWarning("channel_snippet", channelID, "page header images missing",
 			"avatar_count", len(snippet.Avatar),
 			"banner_count", len(snippet.Banner))
 	}
