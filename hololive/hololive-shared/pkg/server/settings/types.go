@@ -59,3 +59,9 @@ type SettingsApplier interface {
 	ApplyMemberNewsWeeklyRunNow(ctx context.Context) MemberNewsWeeklyRunNowResult
 	ScraperProxyRuntimeState(requested bool) ScraperProxyRuntimeStateResult
 }
+
+// ConfigPublisher는 설정 변경을 다른 런타임으로 전파하는 인터페이스입니다.
+type ConfigPublisher interface {
+	PublishScraperProxy(ctx context.Context, enabled bool) error
+	PublishAlarmAdvanceMinutes(ctx context.Context, minutes int) error
+}

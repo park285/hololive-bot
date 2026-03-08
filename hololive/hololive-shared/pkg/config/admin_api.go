@@ -32,17 +32,16 @@ import (
 
 // AdminAPIConfig: 운영 API(호환) 설정
 type AdminAPIConfig struct {
-	Server             ServerConfig
-	Valkey             ValkeyConfig
-	Postgres           PostgresConfig
-	Holodex            HolodexConfig
-	CORS               CORSConfig
-	Telemetry          TelemetryConfig
-	Services           ServicesConfig
-	Logging            LoggingConfig
-	AlarmDispatcherURL string // alarm-dispatcher HTTP 기반 CRUD URL
-	LLMSchedulerURL    string // llm-scheduler 내부 트리거 프록시 URL
-	Version            string
+	Server          ServerConfig
+	Valkey          ValkeyConfig
+	Postgres        PostgresConfig
+	Holodex         HolodexConfig
+	CORS            CORSConfig
+	Telemetry       TelemetryConfig
+	Services        ServicesConfig
+	Logging         LoggingConfig
+	LLMSchedulerURL string // llm-scheduler 내부 트리거 프록시 URL
+	Version         string
 }
 
 // LoadAdminAPI: 운영 API(호환) 설정을 환경변수에서 로드합니다.
@@ -90,9 +89,8 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 		Logging: LoggingConfig{
 			Level: envutil.String("LOG_LEVEL", "info"),
 		},
-		AlarmDispatcherURL: envutil.String("ALARM_DISPATCHER_URL", ""),
-		LLMSchedulerURL:    envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		Version:            envutil.String("APP_VERSION", "1.0.0-bot-admin"),
+		LLMSchedulerURL: envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
+		Version:         envutil.String("APP_VERSION", "1.0.0-bot-admin"),
 	}
 }
 

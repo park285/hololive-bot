@@ -42,11 +42,12 @@ type SettingsReadRecentLogsFunc func(limit int) (any, error)
 
 // SettingsHandler는 설정 관련 공통 HTTP 핸들러 로직을 제공합니다.
 type SettingsHandler struct {
-	Logger         *slog.Logger
-	Alarm          domain.AlarmCRUD
-	Activity       SettingsActivityLogger
-	ReadRecentLogs SettingsReadRecentLogsFunc
-	Settings       settingssvc.ReadWriter
+	Logger          *slog.Logger
+	Alarm           domain.AlarmCRUD
+	Activity        SettingsActivityLogger
+	ReadRecentLogs  SettingsReadRecentLogsFunc
+	Settings        settingssvc.ReadWriter
+	ConfigPublisher ConfigPublisher
 	SettingsApplier
 }
 
@@ -173,6 +174,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 			runtime[k] = v
 		}
 	}
+	h.publishUpdateResult(c.Request.Context(), runtime, req.ScraperProxyEnabled, req.AlarmAdvanceMinutes)
 
 	h.Activity.Log("settings_update", "Settings updated", map[string]any{
 		"alarm_advance_minutes":  current.AlarmAdvanceMinutes,
@@ -181,6 +183,32 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	})
 
 	c.JSON(200, gin.H{"status": "ok", "message": "Settings updated", "settings": current, "runtime": runtime})
+}
+
+func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[string]any, scraperProxyEnabled *bool, alarmAdvanceMinutes *int) {
+	if h.ConfigPublisher == nil {
+		return
+	}
+
+	if scraperProxyEnabled != nil {
+		if err := h.ConfigPublisher.PublishScraperProxy(ctx, *scraperProxyEnabled); err != nil {
+			runtime["config_publish_scraper_proxy"] = false
+			runtime["config_publish_scraper_proxy_error"] = err.Error()
+			h.Logger.Warn("Failed to publish scraper proxy update", slog.Any("error", err))
+		} else {
+			runtime["config_publish_scraper_proxy"] = true
+		}
+	}
+
+	if alarmAdvanceMinutes != nil {
+		if err := h.ConfigPublisher.PublishAlarmAdvanceMinutes(ctx, *alarmAdvanceMinutes); err != nil {
+			runtime["config_publish_alarm_advance_minutes"] = false
+			runtime["config_publish_alarm_advance_minutes_error"] = err.Error()
+			h.Logger.Warn("Failed to publish alarm advance minutes update", slog.Any("error", err))
+		} else {
+			runtime["config_publish_alarm_advance_minutes"] = true
+		}
+	}
 }
 
 // UpdateLLMSettings: llm-scheduler 런타임 설정/실행 트리거를 업데이트합니다.

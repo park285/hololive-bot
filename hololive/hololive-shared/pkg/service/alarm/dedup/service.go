@@ -29,11 +29,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/valkey-io/valkey-go"
 )
 
 // NotifiedData: 알림 중복 발송 방지를 위한 이력 정보

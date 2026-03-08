@@ -27,7 +27,18 @@ func NewClient(timeout time.Duration) *http.Client {
 // NewProfiledClient: http.DefaultTransport를 clone한 뒤 필요한 transport 필드만 선택적으로 override합니다.
 // 기본 keep-alive, proxy, TLS 기본 동작은 유지하고 timeout/pool/HTTP2 정책만 profile로 주입합니다.
 func NewProfiledClient(profile TransportProfile) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok || baseTransport == nil {
+		baseTransport = &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: time.Second,
+		}
+	}
+	transport := baseTransport.Clone()
 
 	if profile.DialTimeout > 0 {
 		transport.DialContext = (&net.Dialer{
@@ -61,10 +72,31 @@ func NewProfiledClient(profile TransportProfile) *http.Client {
 
 // NewExternalAPIClient: 일반 외부 API 호출용 프로파일을 적용한 클라이언트를 반환합니다.
 func NewExternalAPIClient(timeout time.Duration) *http.Client {
-	return NewProfiledClient(TransportProfile{Timeout: timeout})
+	return NewProfiledClient(TransportProfile{
+		Timeout:               timeout,
+		DialTimeout:           5 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxConnsPerHost:       32,
+		MaxIdleConnsPerHost:   16,
+	})
+}
+
+// NewInternalServiceClient: 서비스 간 HTTP 호출용 공통 프로파일을 적용한 클라이언트를 반환합니다.
+func NewInternalServiceClient(timeout time.Duration) *http.Client {
+	return NewProfiledClient(TransportProfile{
+		Timeout:               timeout,
+		DialTimeout:           3 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxConnsPerHost:       64,
+		MaxIdleConnsPerHost:   32,
+	})
 }
 
 // DefaultClient: 30초 타임아웃 기본 클라이언트 반환
 func DefaultClient() *http.Client {
-	return NewClient(30 * time.Second)
+	return NewExternalAPIClient(30 * time.Second)
 }

@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
@@ -48,7 +49,7 @@ type ExaMCPClient struct {
 // NewExaMCPClient: Exa MCP 클라이언트를 생성합니다.
 func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *slog.Logger) *ExaMCPClient {
 	if httpClient == nil {
-		httpClient = httputil.DefaultClient()
+		httpClient = httputil.NewExternalAPIClient(30 * time.Second)
 	}
 
 	return &ExaMCPClient{

@@ -6,7 +6,6 @@ require (
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/park285/llm-kakao-bots/shared-go v0.0.0
 )
 

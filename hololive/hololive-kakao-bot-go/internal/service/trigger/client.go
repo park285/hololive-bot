@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
@@ -50,7 +51,7 @@ func NewClient(schedulerURL, apiKey string, logger *slog.Logger) *Client {
 	return &Client{
 		schedulerURL: strings.TrimRight(strings.TrimSpace(schedulerURL), "/"),
 		apiKey:       strings.TrimSpace(apiKey),
-		httpClient:   httputil.DefaultClient(),
+		httpClient:   httputil.NewInternalServiceClient(30 * time.Second),
 		logger:       logger,
 	}
 }

@@ -46,7 +46,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 )
 
@@ -297,30 +296,4 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 	assert.NotNil(t, components.alarmService)
 	assert.NotNil(t, components.chzzkClient)
 	assert.NotNil(t, components.twitchClient)
-}
-
-func TestBuildBotChannelPollerRegistrations_ReturnsExpectedDefaults(t *testing.T) {
-	t.Parallel()
-
-	registrations := buildBotChannelPollerRegistrations(
-		&stubPollerPostgres{},
-		scraper.ProxyConfig{},
-		nil,
-		&cache.Service{},
-	)
-
-	require.Len(t, registrations, 5)
-	intervals := providers.DefaultPollerIntervals()
-
-	assert.Equal(t, "videos", registrations[0].Poller.Name())
-	assert.Equal(t, "shorts", registrations[1].Poller.Name())
-	assert.Equal(t, "community", registrations[2].Poller.Name())
-	assert.Equal(t, "channel_stats", registrations[3].Poller.Name())
-	assert.Equal(t, "live", registrations[4].Poller.Name())
-
-	assert.Equal(t, intervals.Videos, registrations[0].Interval)
-	assert.Equal(t, intervals.Shorts, registrations[1].Interval)
-	assert.Equal(t, intervals.Community, registrations[2].Interval)
-	assert.Equal(t, intervals.Stats, registrations[3].Interval)
-	assert.Equal(t, intervals.Live, registrations[4].Interval)
 }

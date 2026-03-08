@@ -22,10 +22,16 @@ package app
 
 import (
 	"context"
+	"io"
+	"log/slog"
+	"net"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 	"unsafe"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -46,6 +52,25 @@ import (
 
 type fakeMemberDataProvider struct {
 	members []*domain.Member
+}
+
+type trackingProxyTogglePoller struct {
+	mu      sync.Mutex
+	enabled bool
+}
+
+func (p *trackingProxyTogglePoller) Poll(context.Context, string) error { return nil }
+func (p *trackingProxyTogglePoller) Name() string                       { return "tracking_proxy_toggle" }
+func (p *trackingProxyTogglePoller) SetProxyEnabled(enabled bool) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.enabled = enabled
+	return true
+}
+func (p *trackingProxyTogglePoller) ProxyEnabled() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.enabled
 }
 
 func (f *fakeMemberDataProvider) FindMemberByChannelID(channelID string) *domain.Member {
@@ -129,6 +154,29 @@ func schedulerJobCount(t *testing.T, scheduler *poller.Scheduler) int {
 
 	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
 	return field.Len()
+}
+
+func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
+	t.Helper()
+
+	mini := miniredis.RunT(t)
+	host, portStr, err := net.SplitHostPort(mini.Addr())
+	require.NoError(t, err)
+	addr := net.JoinHostPort(host, portStr)
+
+	client, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:       []string{addr},
+		DisableCache:      true,
+		ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		client.Close()
+		mini.Close()
+	})
+
+	return client, addr
 }
 
 func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
@@ -276,6 +324,92 @@ func TestBuildStreamIngesterConfigSubscriber_InvalidAndIgnoredUpdates(t *testing
 
 	assert.Equal(t, 0, updateCalls)
 	assert.False(t, currentSettings.ScraperProxyEnabled)
+}
+
+func TestBuildStreamIngesterConfigSubscriber_PublisherRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	client, addr := newTestValkeyClient(t)
+	publisherClient, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:       []string{addr},
+		DisableCache:      true,
+		ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { publisherClient.Close() })
+
+	var mu sync.Mutex
+	currentSettings := settings.Settings{
+		AlarmAdvanceMinutes: 5,
+		ScraperProxyEnabled: false,
+	}
+	updateCalls := 0
+	settingsService := &settingsmocks.ReadWriter{
+		GetFunc: func() settings.Settings {
+			mu.Lock()
+			defer mu.Unlock()
+			return currentSettings
+		},
+		UpdateFunc: func(newSettings settings.Settings) error {
+			mu.Lock()
+			defer mu.Unlock()
+			updateCalls++
+			currentSettings = newSettings
+			return nil
+		},
+	}
+	cacheService := &cachemocks.Client{
+		GetClientFunc: func() valkey.Client { return client },
+	}
+	youtubeService := &fakeYouTubeService{}
+	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: time.Millisecond,
+	})
+	trackingPoller := &trackingProxyTogglePoller{}
+	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
+
+	subscriber := buildStreamIngesterConfigSubscriber(
+		cacheService,
+		settingsService,
+		nil,
+		&providers.YouTubeStack{Service: youtubeService},
+		scheduler,
+		logger,
+	)
+	require.NotNil(t, subscriber)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		subscriber.Run(ctx)
+		close(done)
+	}()
+
+	configPublisher := configsub.NewPublisher(publisherClient)
+	require.Eventually(t, func() bool {
+		if err := configPublisher.PublishScraperProxy(context.Background(), true); err != nil {
+			return false
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		return currentSettings.ScraperProxyEnabled && youtubeService.ScraperProxyEnabled() && trackingPoller.ProxyEnabled()
+	}, 2*time.Second, 50*time.Millisecond)
+
+	mu.Lock()
+	assert.Equal(t, 1, updateCalls)
+	mu.Unlock()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscriber did not stop after cancel")
+	}
 }
 
 var _ domain.MemberDataProvider = (*fakeMemberDataProvider)(nil)
