@@ -236,10 +236,10 @@ CORE_MEMBER_HASH_SOFT_MIN_COUNT=10
 ---
 
 ## Operations (Runbook)
-- Bot 실행: `./scripts/start-bots.sh`
-- 상태: `./scripts/status-bots.sh` / 로그: `tail -f logs/bot.log`
-- 재시작: `./scripts/restart-bots.sh`
-- 종료: `./scripts/stop-bots.sh`
+- Bot 실행: `./scripts/start-bot.sh`
+- 상태: `./scripts/status.sh` / 로그: `tail -f logs/bot.log`
+- 재시작: `./scripts/restart-bot.sh`
+- 종료: `./scripts/stop-bot.sh`
 
 점검 체크리스트
 - Valkey 연결/키 TTL: `holodex:*`, `alarm:*`, `hololive:members` 존재 확인
@@ -538,7 +538,7 @@ func (h *HolodexService) filterHololiveStreams(streams []*domain.Stream) []*doma
 - 핵심: `setupWebSocket()`, `startAlarmChecker()`
 
 3) 상태 점검
-- `scripts/status-bots.sh`, Valkey 키/TTL 확인(`holodex:*`, `alarm:*`, `hololive:members`)
+- `scripts/status.sh`, Valkey 키/TTL 확인(`holodex:*`, `alarm:*`, `hololive:members`)
 
 ### 알람 기능 활성/검증 절차
 1) 사용자가 “!알람 추가 <멤버>” 전송
@@ -570,4 +570,3 @@ Scenario: “!알람 추가 페코라” → 방송 임박 알림 수신
 - 매칭/선택: `internal/service/matcher/matcher.go: selectBestFromCandidates`
 - 포맷: `internal/adapter/formatter.go: FormatLiveStreams / AlarmNotificationGroup`
 - 필터: `internal/service/holodex/service.go: filterHololiveStreams`
-
