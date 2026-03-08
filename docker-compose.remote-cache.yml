@@ -1,0 +1,35 @@
+services:
+  hololive-bot:
+    build:
+      cache_from:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-kakao-bot-go-buildcache:buildcache
+      cache_to:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-kakao-bot-go-buildcache:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+
+  dispatcher-go:
+    build:
+      cache_from:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-dispatcher-go-buildcache:buildcache
+      cache_to:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-dispatcher-go-buildcache:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+
+  stream-ingester:
+    build:
+      cache_from:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-stream-ingester-buildcache:buildcache
+      cache_to:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-stream-ingester-buildcache:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+
+  youtube-scraper:
+    build:
+      cache_from:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-scraper-buildcache:buildcache
+      cache_to:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-youtube-scraper-buildcache:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+
+  llm-scheduler:
+    build:
+      cache_from:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-llm-scheduler-buildcache:buildcache
+      cache_to:
+        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-llm-scheduler-buildcache:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
