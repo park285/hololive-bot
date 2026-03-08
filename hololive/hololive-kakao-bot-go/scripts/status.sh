@@ -84,6 +84,14 @@ if command -v "${CONTAINER_CLI}" >/dev/null 2>&1 && "${CONTAINER_CLI}" ps | grep
   if timeout 2 "${CONTAINER_CLI}" exec holo-valkey valkey-cli ping > /dev/null 2>&1; then
     CACHE_PORT=$(grep "^CACHE_PORT=" .env 2>/dev/null | cut -d'=' -f2 || echo "6379")
     echo "Redis: [CONNECTED] (host port $CACHE_PORT -> container port 6379)"
+    READY_FLAG=$("${CONTAINER_CLI}" exec holo-valkey valkey-cli EXISTS hololive:members:ready 2>/dev/null | tr -d '\r' || echo 0)
+    MEMBER_COUNT=$("${CONTAINER_CLI}" exec holo-valkey valkey-cli HLEN hololive:members 2>/dev/null | tr -d '\r' || echo 0)
+    if [[ "$READY_FLAG" == "1" ]]; then
+      echo "Ready: [SET] hololive:members:ready"
+    else
+      echo "Ready: [NOT SET] hololive:members:ready"
+    fi
+    echo "Members: ${MEMBER_COUNT}"
   else
     echo "Redis: [WARN] CONTAINER UP but not responding"
   fi
