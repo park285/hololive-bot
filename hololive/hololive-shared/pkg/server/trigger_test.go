@@ -22,7 +22,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -34,6 +33,7 @@ import (
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 // --- 인라인 스케줄러 스텁 ---

@@ -104,5 +104,6 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		client := ProvideFetchProfilesHTTPClient()
 		require.NotNil(t, client)
 		assert.Equal(t, constants.OfficialProfileConfig.RequestTimeout, client.Timeout)
+		assert.NotNil(t, client.Transport)
 	})
 }

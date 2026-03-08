@@ -22,7 +22,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -31,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestRespondError(t *testing.T) {

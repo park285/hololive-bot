@@ -22,7 +22,6 @@ package queue
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net"
 	"strconv"
@@ -38,6 +37,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func newTestLogger() *slog.Logger {

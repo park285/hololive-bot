@@ -71,12 +71,9 @@ type Collector struct {
 // NewCollector: 새 Collector를 생성합니다. endpoints는 외부 서비스 health URL 목록입니다.
 func NewCollector(endpoints []ServiceEndpoint) *Collector {
 	return &Collector{
-		httpClient: &http.Client{
-			Timeout:   2 * time.Second,
-			Transport: http.DefaultTransport,
-		},
-		endpoints: endpoints,
-		cacheTTL:  2 * time.Second,
+		httpClient: httputil.NewInternalServiceClient(2 * time.Second),
+		endpoints:  endpoints,
+		cacheTTL:   2 * time.Second,
 	}
 }
 

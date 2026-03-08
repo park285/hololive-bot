@@ -1,7 +1,6 @@
 package ginjson_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/ginjson"
+	sharedjson "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func init() {
@@ -35,7 +35,7 @@ func TestRespond(t *testing.T) {
 
 	// 유효한 JSON인지 확인
 	var out map[string]string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &out); err != nil {
+	if err := sharedjson.Unmarshal([]byte(strings.TrimSpace(body)), &out); err != nil {
 		t.Errorf("응답 바디가 유효한 JSON이 아님: %v (body=%s)", err, body)
 	}
 
@@ -63,7 +63,7 @@ func TestJSON_Render(t *testing.T) {
 
 	body := strings.TrimSpace(w.Body.String())
 	var out map[string]int
-	if err := json.Unmarshal([]byte(body), &out); err != nil {
+	if err := sharedjson.Unmarshal([]byte(body), &out); err != nil {
 		t.Errorf("응답 바디가 유효한 JSON이 아님: %v (body=%s)", err, body)
 	}
 
@@ -78,9 +78,9 @@ func TestJSON_WriteContentType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		preset      string // 사전 설정할 Content-Type 값 (빈 문자열이면 설정 안 함)
-		wantCT      string
+		name   string
+		preset string // 사전 설정할 Content-Type 값 (빈 문자열이면 설정 안 함)
+		wantCT string
 	}{
 		{
 			name:   "헤더 미설정 시 자동 설정",

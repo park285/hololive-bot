@@ -22,8 +22,8 @@ package holodex
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	sharedjson "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -51,10 +51,10 @@ func newInMemoryCacheClient() *cachemocks.Client {
 			if !ok {
 				return nil
 			}
-			return json.Unmarshal(payload, dest)
+			return sharedjson.Unmarshal(payload, dest)
 		},
 		SetFunc: func(_ context.Context, key string, value any, _ time.Duration) error {
-			payload, err := json.Marshal(value)
+			payload, err := sharedjson.Marshal(value)
 			if err != nil {
 				return err
 			}

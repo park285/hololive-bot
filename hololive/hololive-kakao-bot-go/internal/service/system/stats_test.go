@@ -22,10 +22,11 @@ package system
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestCloneSystemStats(t *testing.T) {
@@ -91,10 +92,10 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		handler    http.HandlerFunc
-		wantCount  int
-		wantOK     bool
+		name      string
+		handler   http.HandlerFunc
+		wantCount int
+		wantOK    bool
 	}{
 		{
 			name: "goroutines 직접 필드 형식 파싱 성공",
