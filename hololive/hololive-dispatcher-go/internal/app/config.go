@@ -22,12 +22,12 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/kelseyhightower/envconfig"
 
 	sharedconfig "github.com/kapu/hololive-shared/pkg/config"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
@@ -41,49 +41,6 @@ const (
 	defaultLoggingLevel       = "info"
 	defaultMetricsIntervalSec = 30
 )
-
-type envConfig struct {
-	DispatcherPort int `envconfig:"DISPATCHER_PORT" default:"30020"`
-
-	IrisBaseURL     string `envconfig:"IRIS_BASE_URL" default:"http://localhost:3000"`
-	IrisBotToken    string `envconfig:"IRIS_BOT_TOKEN"`
-	IrisSharedToken string `envconfig:"IRIS_SHARED_TOKEN"`
-
-	// CACHE_* 접두사: 나머지 Go 서비스(hololive-shared ValkeyConfig)와 동일 규칙
-	ValkeyHost       string `envconfig:"CACHE_HOST"`
-	ValkeyPort       string `envconfig:"CACHE_PORT"`
-	ValkeyPassword   string `envconfig:"CACHE_PASSWORD"`
-	ValkeyDB         string `envconfig:"CACHE_DB"`
-	ValkeySocketPath string `envconfig:"CACHE_SOCKET_PATH"`
-
-	// VALKEY_* 접두사: dispatcher 기존 환경변수 (하위호환)
-	LegacyValkeyHost       string `envconfig:"VALKEY_HOST"`
-	LegacyValkeyPort       string `envconfig:"VALKEY_PORT"`
-	LegacyValkeyPassword   string `envconfig:"VALKEY_PASSWORD"`
-	LegacyValkeyDB         string `envconfig:"VALKEY_DB"`
-	LegacyValkeySocketPath string `envconfig:"VALKEY_SOCKET_PATH"`
-
-	DispatchQueueKey             string `envconfig:"ALARM_DISPATCH_QUEUE_KEY" default:"alarm:dispatch:queue"`
-	DispatchMaxBatch             int    `envconfig:"ALARM_DISPATCH_MAX_BATCH" default:"50"`
-	DispatcherReconnectBackoffMS int    `envconfig:"DISPATCHER_RECONNECT_BACKOFF_MS" default:"1000"`
-
-	LogLevel      string `envconfig:"LOG_LEVEL" default:"info"`
-	LogDir        string `envconfig:"LOG_DIR" default:""`
-	LogMaxSizeMB  int    `envconfig:"LOG_MAX_SIZE_MB" default:"100"`
-	LogMaxBackups int    `envconfig:"LOG_MAX_BACKUPS" default:"5"`
-	LogMaxAgeDays int    `envconfig:"LOG_MAX_AGE_DAYS" default:"30"`
-	LogCompress   bool   `envconfig:"LOG_COMPRESS" default:"true"`
-
-	OTELEnabled                  bool    `envconfig:"OTEL_ENABLED" default:"false"`
-	OTELMetricsEnabled           bool    `envconfig:"OTEL_METRICS_ENABLED" default:"false"`
-	OTELMetricsExportIntervalSec int     `envconfig:"OTEL_METRICS_EXPORT_INTERVAL_SECONDS" default:"30"`
-	OTELServiceName              string  `envconfig:"OTEL_SERVICE_NAME" default:"hololive-dispatcher-go"`
-	OTELServiceVersion           string  `envconfig:"OTEL_SERVICE_VERSION" default:"1.0.0"`
-	OTELEnvironment              string  `envconfig:"OTEL_ENVIRONMENT" default:"production"`
-	OTELExporterOTLPEndpoint     string  `envconfig:"OTEL_EXPORTER_OTLP_ENDPOINT" default:"otel-collector:4317"`
-	OTELExporterOTLPInsecure     bool    `envconfig:"OTEL_EXPORTER_OTLP_INSECURE" default:"false"`
-	OTELSampleRate               float64 `envconfig:"OTEL_SAMPLE_RATE" default:"1.0"`
-}
 
 // Config: dispatcher-go 런타임 설정.
 type Config struct {
@@ -117,67 +74,62 @@ type DispatchConfig struct {
 func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
-	var raw envConfig
-	if err := envconfig.Process("", &raw); err != nil {
-		return nil, fmt.Errorf("load dispatcher config: process env: %w", err)
-	}
-
-	botToken := strings.TrimSpace(raw.IrisBotToken)
+	botToken := lookupString("IRIS_BOT_TOKEN", "")
 	if botToken == "" {
-		botToken = strings.TrimSpace(raw.IrisSharedToken)
+		botToken = lookupString("IRIS_SHARED_TOKEN", "")
 	}
 
-	maxBatch := raw.DispatchMaxBatch
+	maxBatch := lookupInt("ALARM_DISPATCH_MAX_BATCH", defaultMaxBatch)
 	if maxBatch <= 0 {
 		maxBatch = defaultMaxBatch
 	}
-	reconnectBackoffMS := raw.DispatcherReconnectBackoffMS
+	reconnectBackoffMS := lookupInt("DISPATCHER_RECONNECT_BACKOFF_MS", defaultReconnectBackoffMS)
 	if reconnectBackoffMS <= 0 {
 		reconnectBackoffMS = defaultReconnectBackoffMS
 	}
-	metricsExportIntervalSec := raw.OTELMetricsExportIntervalSec
+	metricsExportIntervalSec := lookupInt("OTEL_METRICS_EXPORT_INTERVAL_SECONDS", defaultMetricsIntervalSec)
 	if metricsExportIntervalSec <= 0 {
 		metricsExportIntervalSec = defaultMetricsIntervalSec
 	}
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: raw.DispatcherPort,
+			Port: lookupInt("DISPATCHER_PORT", 30020),
 		},
 		Iris: IrisConfig{
-			BaseURL:  raw.IrisBaseURL,
+			BaseURL:  lookupString("IRIS_BASE_URL", "http://localhost:3000"),
 			BotToken: botToken,
 		},
 		Valkey: cache.Config{
-			Host:       pickTrimmed(raw.ValkeyHost, raw.LegacyValkeyHost, "localhost"),
-			Port:       parseIntWithFallback(raw.ValkeyPort, raw.LegacyValkeyPort, 6379),
-			Password:   pickTrimmed(raw.ValkeyPassword, raw.LegacyValkeyPassword, ""),
-			DB:         parseIntWithFallback(raw.ValkeyDB, raw.LegacyValkeyDB, 0),
-			SocketPath: pickTrimmed(raw.ValkeySocketPath, raw.LegacyValkeySocketPath, ""),
+			Host:       pickTrimmed(lookupOptional("CACHE_HOST"), lookupOptional("VALKEY_HOST"), "localhost"),
+			Port:       parseIntWithFallback(lookupOptional("CACHE_PORT"), lookupOptional("VALKEY_PORT"), 6379),
+			Password:   pickTrimmed(lookupOptional("CACHE_PASSWORD"), lookupOptional("VALKEY_PASSWORD"), ""),
+			DB:         parseIntWithFallback(lookupOptional("CACHE_DB"), lookupOptional("VALKEY_DB"), 0),
+			SocketPath: pickTrimmed(lookupOptional("CACHE_SOCKET_PATH"), lookupOptional("VALKEY_SOCKET_PATH"), ""),
 		},
 		Dispatch: DispatchConfig{
-			QueueKey:         strings.TrimSpace(raw.DispatchQueueKey),
+			QueueKey:         lookupString("ALARM_DISPATCH_QUEUE_KEY", "alarm:dispatch:queue"),
 			MaxBatch:         maxBatch,
 			ReconnectBackoff: time.Duration(reconnectBackoffMS) * time.Millisecond,
 		},
 		Logging: sharedlogging.Config{
-			Level:      strings.TrimSpace(raw.LogLevel),
-			Dir:        strings.TrimSpace(raw.LogDir),
-			MaxSizeMB:  raw.LogMaxSizeMB,
-			MaxBackups: raw.LogMaxBackups,
-			MaxAgeDays: raw.LogMaxAgeDays,
-			Compress:   raw.LogCompress,
+			Level:      lookupString("LOG_LEVEL", "info"),
+			Dir:        lookupString("LOG_DIR", ""),
+			MaxSizeMB:  lookupInt("LOG_MAX_SIZE_MB", 100),
+			MaxBackups: lookupInt("LOG_MAX_BACKUPS", 5),
+			MaxAgeDays: lookupInt("LOG_MAX_AGE_DAYS", 30),
+			Compress:   lookupBool("LOG_COMPRESS", true),
 		},
 		Telemetry: sharedconfig.TelemetryConfig{
-			Enabled:               raw.OTELEnabled,
-			MetricsEnabled:        raw.OTELMetricsEnabled,
+			Enabled:               lookupBool("OTEL_ENABLED", false),
+			MetricsEnabled:        lookupBool("OTEL_METRICS_ENABLED", false),
 			MetricsExportInterval: time.Duration(metricsExportIntervalSec) * time.Second,
-			ServiceName:           strings.TrimSpace(raw.OTELServiceName),
-			ServiceVersion:        strings.TrimSpace(raw.OTELServiceVersion),
-			Environment:           strings.TrimSpace(raw.OTELEnvironment),
-			OTLPEndpoint:          strings.TrimSpace(raw.OTELExporterOTLPEndpoint),
-			OTLPInsecure:          raw.OTELExporterOTLPInsecure,
-			SampleRate:            raw.OTELSampleRate,
+			ServiceName:           lookupString("OTEL_SERVICE_NAME", "hololive-dispatcher-go"),
+			ServiceVersion:        lookupString("OTEL_SERVICE_VERSION", "1.0.0"),
+			Environment:           lookupString("OTEL_ENVIRONMENT", "production"),
+			OTLPEndpoint:          lookupString("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
+			OTLPInsecure:          lookupBool("OTEL_EXPORTER_OTLP_INSECURE", false),
+			SampleRate:            lookupFloat("OTEL_SAMPLE_RATE", 1.0),
 		},
 	}
 	if cfg.Dispatch.QueueKey == "" {
@@ -239,6 +191,53 @@ func parseIntWithFallback(primary, secondary string, def int) int {
 		return def
 	}
 	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return def
+	}
+	return parsed
+}
+
+func lookupOptional(key string) string {
+	return strings.TrimSpace(os.Getenv(key))
+}
+
+func lookupString(key, def string) string {
+	if value := lookupOptional(key); value != "" {
+		return value
+	}
+	return def
+}
+
+func lookupInt(key string, def int) int {
+	raw := lookupOptional(key)
+	if raw == "" {
+		return def
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return def
+	}
+	return parsed
+}
+
+func lookupBool(key string, def bool) bool {
+	raw := lookupOptional(key)
+	if raw == "" {
+		return def
+	}
+	parsed, err := strconv.ParseBool(raw)
+	if err != nil {
+		return def
+	}
+	return parsed
+}
+
+func lookupFloat(key string, def float64) float64 {
+	raw := lookupOptional(key)
+	if raw == "" {
+		return def
+	}
+	parsed, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return def
 	}

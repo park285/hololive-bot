@@ -171,8 +171,6 @@ services:
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
       MAJOREVENT_SCRAPE_HOUR_KST: "4"
-      # alarm CRUD는 hololive-bot 내부 /internal/alarm/* 경로 사용
-      ALARM_DISPATCHER_URL: http://hololive-bot:30001
       LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
       BOT_ADMIN_ENABLED: "true"
       SERVER_PORT: 30001
@@ -316,7 +314,6 @@ services:
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
       MAJOREVENT_SCRAPE_HOUR_KST: "4"
-      ALARM_DISPATCHER_URL: http://hololive-bot:30001
       GOGC: "100"
       GOMEMLIMIT: "320MiB"
       GIN_MODE: release

@@ -23,13 +23,20 @@ package server
 import (
 	"github.com/gin-gonic/gin"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 func (h *SettingsAPIHandler) sharedSettingsHandler() *sharedsettings.SettingsHandler {
+	var publisher sharedsettings.ConfigPublisher
+	if h.valkeyCache != nil {
+		publisher = configsub.NewPublisher(h.valkeyCache.GetClient())
+	}
+
 	return &sharedsettings.SettingsHandler{
-		Logger:   h.logger,
-		Alarm:    h.alarm,
-		Activity: h.activity,
+		Logger:          h.logger,
+		Alarm:           h.alarm,
+		Activity:        h.activity,
+		ConfigPublisher: publisher,
 		ReadRecentLogs: func(limit int) (any, error) {
 			return h.activity.GetRecentLogs(limit)
 		},

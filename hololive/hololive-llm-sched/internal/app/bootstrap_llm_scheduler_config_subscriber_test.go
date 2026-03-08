@@ -122,6 +122,8 @@ func TestNewLLMSchedulerConfigApplyFn_RunNowOnly(t *testing.T) {
 	applyFn := newLLMSchedulerConfigApplyFn(context.Background(), sender, logger)
 
 	applyFn(configsub.ConfigUpdate{Type: "unknown"})
+	applyFn(configsub.ConfigUpdate{Type: contractssettings.UpdateTypeScraperProxy, Payload: []byte(`{"enabled":true}`)})
+	applyFn(configsub.ConfigUpdate{Type: contractssettings.UpdateTypeAlarmAdvanceMinutes, Payload: []byte(`{"minutes":30}`)})
 	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, 0, sender.CallCount())
 
