@@ -38,7 +38,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
@@ -115,23 +114,13 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 	}
 	router.TrustedPlatform = gin.PlatformCloudflare
 
-	// OTel 미들웨어: 활성화된 경우 모든 HTTP 요청을 추적함 (가장 앞에 배치)
-	if cfg.Telemetry.Enabled {
-		serviceName := cfg.Telemetry.ServiceName
-		if serviceName == "" {
-			serviceName = "hololive-bot"
-		}
-		router.Use(otelgin.Middleware(serviceName))
-		logger.Info("otel_http_middleware_enabled", slog.String("service", serviceName))
-	}
-
 	router.Use(gin.Recovery())
 	router.Use(gzip.Gzip(gzip.DefaultCompression)) // 응답 압축 (HTTP/2 호환)
 	router.Use(middleware.LoggerMiddleware(ctx, logger,
 		"/health",
 		"/metrics", // Prometheus 메트릭 폴링 (15초 간격)
 	))
-	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Telemetry.Environment), "production")
+	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Environment), "production")
 	if isProduction && cfg.CORS.MissingInProduction {
 		logger.Warn(
 			"cors_allowed_origins_missing_in_production_monitor_mode",
