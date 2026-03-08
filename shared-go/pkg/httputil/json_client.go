@@ -12,7 +12,7 @@ import (
 	sharedjson "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-const apiKeyHeader = "X-API-Key"
+const apiKeyHeader = "X-API-Key" //nolint:gosec // G101: 헤더 이름일 뿐 실제 credential이 아님
 
 // JSONClient는 내부 서비스 간 JSON API 호출용 공통 HTTP 클라이언트입니다.
 type JSONClient struct {
