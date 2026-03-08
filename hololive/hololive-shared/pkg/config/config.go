@@ -76,11 +76,10 @@ func Load() (*Config, error) {
 }
 
 func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
-	sharedIrisToken := envutil.String("IRIS_SHARED_TOKEN", "")
 	webhookToken, botToken := sharedirisx.ResolveTokens(
 		envutil.String("IRIS_WEBHOOK_TOKEN", ""),
 		envutil.String("IRIS_BOT_TOKEN", ""),
-		sharedIrisToken,
+		"",
 	)
 
 	runtimeEnv := loadAppEnvironment()
@@ -200,10 +199,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("KAKAO_ROOMS is required")
 	}
 	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
-		return fmt.Errorf("IRIS_WEBHOOK_TOKEN (or IRIS_SHARED_TOKEN) is required")
+		return fmt.Errorf("IRIS_WEBHOOK_TOKEN is required")
 	}
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
-		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
+		return fmt.Errorf("IRIS_BOT_TOKEN is required")
 	}
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")

@@ -98,10 +98,10 @@ func (c *LLMSchedulerConfig) validate() error {
 		return err
 	}
 	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
-		return fmt.Errorf("IRIS_WEBHOOK_TOKEN (or IRIS_SHARED_TOKEN) is required")
+		return fmt.Errorf("IRIS_WEBHOOK_TOKEN is required")
 	}
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
-		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
+		return fmt.Errorf("IRIS_BOT_TOKEN is required")
 	}
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err

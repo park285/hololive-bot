@@ -18,10 +18,10 @@ func TestResolveToken(t *testing.T) {
 			wantResult: "webhook-token",
 		},
 		{
-			name:       "fallback to shared token",
+			name:       "does not fallback to shared token",
 			token:      "",
 			shared:     "shared-token",
-			wantResult: "shared-token",
+			wantResult: "",
 		},
 		{
 			name:       "trim spaces",
@@ -52,8 +52,8 @@ func TestResolveTokens(t *testing.T) {
 	t.Parallel()
 
 	webhook, bot := ResolveTokens("", "bot-token", "shared-token")
-	if webhook != "shared-token" {
-		t.Fatalf("webhook token = %q, want %q", webhook, "shared-token")
+	if webhook != "" {
+		t.Fatalf("webhook token = %q, want empty", webhook)
 	}
 	if bot != "bot-token" {
 		t.Fatalf("bot token = %q, want %q", bot, "bot-token")

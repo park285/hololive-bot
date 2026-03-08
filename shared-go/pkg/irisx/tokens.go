@@ -2,16 +2,15 @@ package irisx
 
 import "strings"
 
-// ResolveToken: 개별 토큰(웹훅/봇)이 비어있으면 sharedToken으로 대체합니다.
+// ResolveToken: 개별 토큰(웹훅/봇) 값을 정규화합니다.
+// sharedToken 인자는 하위 호환성을 위해 유지되지만 더 이상 사용하지 않습니다.
 func ResolveToken(token, sharedToken string) string {
-	trimmedToken := strings.TrimSpace(token)
-	if trimmedToken != "" {
-		return trimmedToken
-	}
-	return strings.TrimSpace(sharedToken)
+	_ = sharedToken
+	return strings.TrimSpace(token)
 }
 
-// ResolveTokens: webhook/bot 토큰을 sharedToken 기준으로 보정합니다.
+// ResolveTokens: webhook/bot 토큰 값을 각각 정규화합니다.
+// sharedToken 인자는 하위 호환성을 위해 유지되지만 더 이상 사용하지 않습니다.
 func ResolveTokens(webhookToken, botToken, sharedToken string) (resolvedWebhookToken, resolvedBotToken string) {
 	return ResolveToken(webhookToken, sharedToken), ResolveToken(botToken, sharedToken)
 }
