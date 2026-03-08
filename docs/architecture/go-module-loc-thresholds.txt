@@ -1,0 +1,21 @@
+# M4 14차: Go 대형 모듈 분해 후 LOC 상한 (path:max)
+# 목표: 핵심 런타임/커맨드 파일의 재비대화를 CI에서 차단
+
+hololive/hololive-kakao-bot-go/internal/bot/bot.go:260
+hololive/hololive-kakao-bot-go/internal/bot/bot_dependencies_validator.go:100
+hololive/hololive-kakao-bot-go/internal/bot/bot_message_handler.go:139
+hololive/hololive-kakao-bot-go/internal/bot/bot_runtime_components.go:140
+hololive/hololive-kakao-bot-go/internal/bot/bot_ingress.go:200
+hololive/hololive-kakao-bot-go/internal/bot/bot_ingress_resolution.go:80
+hololive/hololive-kakao-bot-go/internal/bot/bot_lifecycle.go:180
+hololive/hololive-kakao-bot-go/internal/bot/bot_lifecycle_iris_waiter.go:120
+hololive/hololive-kakao-bot-go/internal/bot/command_router.go:100
+hololive/hololive-kakao-bot-go/internal/command/info_member_info.go:180
+hololive/hololive-kakao-bot-go/internal/command/info_member_info_directory.go:200
+hololive/hololive-kakao-bot-go/internal/command/info_member_info_groups.go:180
+hololive/hololive-kakao-bot-go/internal/command/info_member_info_directory_groups.go:120
+hololive/hololive-stream-ingester/internal/app/bootstrap_stream_ingester.go:240
+hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder.go:150
+hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder_helpers.go:100
+hololive/hololive-stream-ingester/internal/app/stream_ingester_config_updates.go:130
+hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_runner.go:160

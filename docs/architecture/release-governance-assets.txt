@@ -1,0 +1,7 @@
+# Release governance 필수 자산 목록
+# - 상대경로 기준: repository root
+# - 형식: path|version-marker|required-token-1|required-token-2...
+
+.github/pull_request_template.md|release-governance-template-version: 2026-03-03.v1|./scripts/architecture/ci-boundary-gate.sh|M0/M1/M4/M6
+docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md|release-governance-template-version: 2026-03-03.v1|./scripts/architecture/ci-boundary-gate.sh|M0/M1/M4/M6|{{CI_EVIDENCE_LINK}}|{{CI_ARTIFACT_URL}}|render-release-notes.sh
+docs/architecture/BOUNDARY_GATE_POLICY_20260303.md||Release 전 운영 체크리스트(필수)|.github/pull_request_template.md|docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md
