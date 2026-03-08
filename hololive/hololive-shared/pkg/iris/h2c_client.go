@@ -229,7 +229,6 @@ func (c *H2CClient) newRequest(ctx context.Context, method, path string, body io
 		return nil, fmt.Errorf("new request %s %s: %w", method, path, err)
 	}
 
-	// Note: Iris server may require X-Bot-Token for outbound bot calls.
 	if strings.TrimSpace(c.botToken) != "" {
 		req.Header.Set(sharedirisx.HeaderBotToken, c.botToken)
 	}
