@@ -3,13 +3,7 @@
 `hololive-kakao-bot-go/scripts`는 아래 3개 범주만 유지합니다.
 
 ## 1. 로컬 단일 프로세스 보조
-- `start-bot.sh`
-- `stop-bot.sh`
-- `restart-bot.sh`
-- `status.sh`
-- `rebuild.sh`
-
-`*-bots.sh` 계열 중복 래퍼는 제거했고, ready 체크는 `start-bot.sh`/`status.sh`로 흡수했습니다.
+- `bot.sh` (`start|stop|restart|rebuild|status`)
 
 ## 2. 선택적 빌드 실험
 - `build-with-pgo.sh`
