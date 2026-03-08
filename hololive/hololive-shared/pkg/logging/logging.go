@@ -39,7 +39,7 @@ func NewLogger() *slog.Logger {
 // NewLoggerWithLevel: 지정된 레벨로 콘솔 출력용 slog 로거를 생성합니다.
 func NewLoggerWithLevel(level string) *slog.Logger {
 	cfg := Config{Level: level}
-	logger, err := internallogging.EnableFileLoggingWithOTel(cfg, "", false)
+	logger, err := internallogging.EnableFileLogging(cfg, "")
 	if err != nil || logger == nil {
 		return internallogging.NewLogger()
 	}
@@ -68,7 +68,7 @@ func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
 // EnableFileLoggingWithLevel: 지정된 레벨과 파일 로깅을 활성화합니다.
 func EnableFileLoggingWithLevel(cfg Config, fileName, level string) (*slog.Logger, error) {
 	cfg.Level = level
-	logger, err := internallogging.EnableFileLoggingWithOTel(cfg, fileName, false)
+	logger, err := internallogging.EnableFileLogging(cfg, fileName)
 	if err != nil {
 		return nil, fmt.Errorf("enable file logging with level: %w", err)
 	}
