@@ -45,6 +45,20 @@ func TestLoadConfig_UsesIRISSharedTokenFallback(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_IgnoresLegacyTelemetryEnvironment(t *testing.T) {
+	setRequiredEnvForLoadConfig(t)
+	t.Setenv("APP_ENV", "")
+	t.Setenv("OTEL_ENVIRONMENT", "development")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.Environment != "production" {
+		t.Fatalf("Environment = %q, want %q", cfg.Environment, "production")
+	}
+}
+
 func TestLoadConfig_AppliesDefaultWhenInvalidNumericValue(t *testing.T) {
 	setRequiredEnvForLoadConfig(t)
 	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "-1")
