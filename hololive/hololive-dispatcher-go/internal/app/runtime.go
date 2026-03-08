@@ -240,9 +240,6 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 		"dispatch_loop_running": dispatchLoopRunning,
 		"valkey_connected":      valkeyConnected,
 	}
-	if lastError := r.readyState.getLastError(); lastError != "" {
-		response["last_error"] = lastError
-	}
 
 	writeJSON(req.Context(), w, statusCode, response)
 }

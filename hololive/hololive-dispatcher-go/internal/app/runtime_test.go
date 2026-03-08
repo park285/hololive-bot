@@ -157,7 +157,7 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			}
 		})
 
-		t.Run("last_error is included when present", func(t *testing.T) {
+		t.Run("last_error is hidden when present internally", func(t *testing.T) {
 			rt := newTestRuntimeForReadiness(false)
 			rt.readyState.dispatchLoopRunning.Store(true)
 			rt.readyState.setLastError("dispatch failed")
@@ -170,8 +170,8 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode ready response: %v", err)
 			}
-			if got := payload["last_error"]; got != "dispatch failed" {
-				t.Fatalf("last_error = %v, want dispatch failed", got)
+			if _, exists := payload["last_error"]; exists {
+				t.Fatal("last_error should be hidden from readiness payload")
 			}
 		})
 	})
