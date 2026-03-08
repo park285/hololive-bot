@@ -32,7 +32,7 @@ import (
 func TestNewCollector_DefaultConfiguration(t *testing.T) {
 	endpoints := []ServiceEndpoint{{Name: "svc-a", URL: "http://example.com/health"}}
 
-	collector := NewCollector(endpoints, false)
+	collector := NewCollector(endpoints)
 	if collector == nil {
 		t.Fatal("NewCollector returned nil")
 	}
@@ -47,11 +47,6 @@ func TestNewCollector_DefaultConfiguration(t *testing.T) {
 	}
 	if len(collector.endpoints) != 1 || collector.endpoints[0].Name != "svc-a" {
 		t.Fatalf("unexpected endpoints: %+v", collector.endpoints)
-	}
-
-	collectorOTel := NewCollector(nil, true)
-	if collectorOTel == nil || collectorOTel.httpClient == nil {
-		t.Fatal("NewCollector(enableOTel=true) should initialize client")
 	}
 }
 
@@ -114,7 +109,7 @@ func TestCollector_FetchServiceGoroutines_MixedEndpoints(t *testing.T) {
 }
 
 func TestCollector_GetCurrentStats_CacheMissThenHit(t *testing.T) {
-	collector := NewCollector(nil, false)
+	collector := NewCollector(nil)
 
 	first, err := collector.GetCurrentStats(context.Background())
 	if err != nil {

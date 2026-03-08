@@ -31,7 +31,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // ServiceGoroutines: 개별 서비스의 goroutine 통계
@@ -70,16 +69,11 @@ type Collector struct {
 }
 
 // NewCollector: 새 Collector를 생성합니다. endpoints는 외부 서비스 health URL 목록입니다.
-// enableOTel=true이면 HTTP 트레이싱(otelhttp)을 적용합니다.
-func NewCollector(endpoints []ServiceEndpoint, enableOTel bool) *Collector {
-	transport := http.DefaultTransport
-	if enableOTel {
-		transport = otelhttp.NewTransport(http.DefaultTransport)
-	}
+func NewCollector(endpoints []ServiceEndpoint) *Collector {
 	return &Collector{
 		httpClient: &http.Client{
 			Timeout:   2 * time.Second,
-			Transport: transport,
+			Transport: http.DefaultTransport,
 		},
 		endpoints: endpoints,
 		cacheTTL:  2 * time.Second,
