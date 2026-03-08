@@ -174,12 +174,15 @@ func (l *SlidingWindowLimiter) allowByScript(
 			strconv.FormatInt(ttlSeconds, 10),
 		).
 		Build()
-	resp := l.cacheSvc.GetClient().Do(ctx, cmd)
-	if resp.Error() != nil {
-		return false, 0, 0, fmt.Errorf("eval allow script: %w", resp.Error())
+	results := l.cacheSvc.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		return false, 0, 0, fmt.Errorf("eval allow script: unexpected result count: %d", len(results))
+	}
+	if results[0].Error() != nil {
+		return false, 0, 0, fmt.Errorf("eval allow script: %w", results[0].Error())
 	}
 
-	values, err := resp.ToArray()
+	values, err := results[0].ToArray()
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse allow script result: %w", err)
 	}

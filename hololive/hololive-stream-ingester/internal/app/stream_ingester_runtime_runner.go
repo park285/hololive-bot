@@ -103,7 +103,7 @@ func (r *StreamIngesterRuntime) Run() {
 
 	go func() {
 		if err := r.HttpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("HTTP server error: %w", err)
+			errCh <- fmt.Errorf("http server error: %w", err)
 		}
 	}()
 	r.Logger.Info("Stream Ingester HTTP server started",

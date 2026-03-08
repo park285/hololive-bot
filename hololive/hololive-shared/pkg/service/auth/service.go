@@ -571,12 +571,14 @@ func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
 }
 
 func incrWithTTL(ctx context.Context, cacheSvc cache.Client, key string, ttl time.Duration) (int64, error) {
-	client := cacheSvc.GetClient()
-	resp := client.Do(ctx, client.B().Incr().Key(key).Build())
-	if resp.Error() != nil {
-		return 0, resp.Error()
+	results := cacheSvc.DoMulti(ctx, cacheSvc.B().Incr().Key(key).Build())
+	if len(results) != 1 {
+		return 0, fmt.Errorf("increment with ttl: unexpected result count: %d", len(results))
 	}
-	count, err := resp.AsInt64()
+	if results[0].Error() != nil {
+		return 0, results[0].Error()
+	}
+	count, err := results[0].AsInt64()
 	if err != nil {
 		return 0, err
 	}
