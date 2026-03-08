@@ -32,7 +32,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
@@ -116,10 +115,13 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 
 	router.Use(gin.Recovery())
 	router.Use(gzip.Gzip(gzip.DefaultCompression)) // 응답 압축 (HTTP/2 호환)
-	router.Use(middleware.LoggerMiddleware(ctx, logger,
-		"/health",
-		"/metrics", // Prometheus 메트릭 폴링 (15초 간격)
-	))
+	sharedserver.ApplyBaseMiddleware(router, ctx, logger, sharedserver.BaseMiddlewareOptions{
+		SkipLogPaths: []string{
+			"/health",
+			"/ready",
+			"/metrics", // Prometheus 메트릭 폴링 (15초 간격)
+		},
+	})
 	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Environment), "production")
 	if isProduction && cfg.CORS.MissingInProduction {
 		logger.Warn(
@@ -130,9 +132,6 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 	}
 	router.Use(corsOriginGuard(cfg.CORS.AllowedOrigins))
 	router.Use(cors.New(newAPICORSConfig(cfg)))
-	router.Use(middleware.SecurityHeadersMiddleware())
-	router.Use(middleware.RequestIDMiddleware())
-	router.Use(middleware.MaxBodySizeMiddleware(constants.ServerConfig.MaxBodyBytes))
 	router.Use(middleware.ClientHintsMiddleware()) // Client Hints 요청 (실제 기기 정보 수집)
 
 	registerAPIHealthRoutes(router)
@@ -145,11 +144,7 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 }
 
 func registerAPIHealthRoutes(router *gin.Engine) {
-	// Health check 엔드포인트 (버전/uptime 포함)
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, health.Get())
-	})
-
+	sharedserver.RegisterHealthRoutes(router)
 	// Prometheus 메트릭 (장기 히스토리 분석용)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }

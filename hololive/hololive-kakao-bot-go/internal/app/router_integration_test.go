@@ -51,6 +51,15 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
+	readyResp, err := http.Get(server.URL + "/ready")
+	if err != nil {
+		t.Fatalf("GET /ready error = %v", err)
+	}
+	readyResp.Body.Close()
+	if readyResp.StatusCode != http.StatusOK {
+		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
+	}
+
 	metricsResp, err := http.Get(server.URL + "/metrics")
 	if err != nil {
 		t.Fatalf("GET /metrics error = %v", err)
@@ -79,5 +88,14 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	readyResp, err := http.Get(server.URL + "/ready")
+	if err != nil {
+		t.Fatalf("GET /ready error = %v", err)
+	}
+	readyResp.Body.Close()
+	if readyResp.StatusCode != http.StatusOK {
+		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
 	}
 }
