@@ -39,6 +39,8 @@ type ServiceAdapter struct {
 func NewMemberServiceAdapter(ctx context.Context, cache *Cache, logger *slog.Logger) *ServiceAdapter {
 	if ctx == nil {
 		ctx = context.TODO()
+	} else {
+		ctx = context.WithoutCancel(ctx)
 	}
 	return &ServiceAdapter{
 		cache:  cache,
