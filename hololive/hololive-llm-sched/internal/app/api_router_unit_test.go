@@ -33,6 +33,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
+	membernewssvc "github.com/kapu/hololive-llm-sched/internal/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
@@ -76,7 +78,7 @@ func TestProvideHealthOnlyRouter_Endpoints(t *testing.T) {
 		gin.SetMode(prevMode)
 	})
 
-	router, err := ProvideHealthOnlyRouter(context.Background(), newDiscardLogger())
+	router, err := ProvideHealthOnlyRouter(context.Background(), newDiscardLogger(), "")
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
@@ -105,6 +107,23 @@ func TestProvideHealthOnlyRouter_Endpoints(t *testing.T) {
 		assert.Contains(t, rr.Header().Get("Content-Type"), "text/plain")
 	})
 
+	t.Run("metrics require api key when configured", func(t *testing.T) {
+		protectedRouter, err := ProvideHealthOnlyRouter(context.Background(), newDiscardLogger(), "test-key")
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rr := httptest.NewRecorder()
+		protectedRouter.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+
+		reqWithKey := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		reqWithKey.Header.Set(middleware.APIKeyHeader, "test-key")
+		rrWithKey := httptest.NewRecorder()
+		protectedRouter.ServeHTTP(rrWithKey, reqWithKey)
+		assert.Equal(t, http.StatusOK, rrWithKey.Code)
+		assert.NotEmpty(t, rrWithKey.Body.String())
+	})
+
 	t.Run("ready", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 		rr := httptest.NewRecorder()
@@ -125,7 +144,7 @@ func TestProvideHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 }
 
-func TestBuildLLMSchedulerHTTPServer_HealthAndTrigger(t *testing.T) {
+func TestBuildLLMSchedulerHTTPServer_FailsClosedWithoutAPIKey(t *testing.T) {
 	prevMode := gin.Mode()
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
@@ -143,25 +162,9 @@ func TestBuildLLMSchedulerHTTPServer_HealthAndTrigger(t *testing.T) {
 		nil,
 		nil,
 	)
-	require.NoError(t, err)
-	require.NotNil(t, server)
-
-	assert.Equal(t, ":32005", server.Addr)
-
-	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
-	healthRR := httptest.NewRecorder()
-	server.Handler.ServeHTTP(healthRR, healthReq)
-	assert.Equal(t, http.StatusOK, healthRR.Code)
-
-	readyReq := httptest.NewRequest(http.MethodGet, "/ready", nil)
-	readyRR := httptest.NewRecorder()
-	server.Handler.ServeHTTP(readyRR, readyReq)
-	assert.Equal(t, http.StatusOK, readyRR.Code)
-
-	triggerReq := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	triggerRR := httptest.NewRecorder()
-	server.Handler.ServeHTTP(triggerRR, triggerReq)
-	assert.Equal(t, http.StatusServiceUnavailable, triggerRR.Code)
+	require.Error(t, err)
+	assert.Nil(t, server)
+	assert.Contains(t, err.Error(), "API_SECRET_KEY required")
 }
 
 func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
@@ -195,4 +198,26 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	withKeyRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(withKeyRR, withKeyReq)
 	assert.Equal(t, http.StatusServiceUnavailable, withKeyRR.Code)
+}
+
+func TestBuildLLMSchedulerHTTPServer_FailsClosedForInternalDataRoutesWithoutAPIKey(t *testing.T) {
+	prevMode := gin.Mode()
+	t.Cleanup(func() {
+		gin.SetMode(prevMode)
+	})
+
+	logger := newDiscardLogger()
+
+	server, err := buildLLMSchedulerHTTPServer(
+		context.Background(),
+		32007,
+		logger,
+		nil,
+		"",
+		&majorevent.Repository{},
+		membernewssvc.NewService(nil, nil, nil, nil, logger),
+	)
+	require.Error(t, err)
+	assert.Nil(t, server)
+	assert.Contains(t, err.Error(), "API_SECRET_KEY required")
 }

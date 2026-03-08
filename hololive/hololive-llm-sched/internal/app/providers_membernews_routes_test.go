@@ -223,7 +223,7 @@ func newMemberNewsRouter(t *testing.T, apiKey string, svc *membernewssvc.Service
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
-	engine, err := ProvideHealthOnlyRouter(context.Background(), newTestLogger())
+	engine, err := ProvideHealthOnlyRouter(context.Background(), newTestLogger(), "")
 	require.NoError(t, err)
 	registerMemberNewsInternalRoutes(engine, apiKey, svc)
 

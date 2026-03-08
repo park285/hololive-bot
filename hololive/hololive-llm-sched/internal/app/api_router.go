@@ -25,12 +25,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 // ProvideAPIServer: HTTP 서버 인스턴스를 생성합니다.
@@ -47,7 +49,7 @@ func ProvideAPIServer(addr string, router *gin.Engine) *http.Server {
 }
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
-func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Engine, error) {
+func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
@@ -65,7 +67,9 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 	})
 
 	sharedserver.RegisterHealthRoutes(router)
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	metrics := router.Group("")
+	metrics.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	return router, nil
 }
@@ -77,12 +81,15 @@ func ProvideTriggerRouter(
 	triggerHandler *sharedserver.TriggerHandler,
 	apiKey string,
 ) (*gin.Engine, error) {
-	router, err := ProvideHealthOnlyRouter(ctx, logger)
+	router, err := ProvideHealthOnlyRouter(ctx, logger, apiKey)
 	if err != nil {
 		return nil, err
 	}
 
 	if triggerHandler != nil {
+		if strings.TrimSpace(apiKey) == "" {
+			return nil, fmt.Errorf("API_SECRET_KEY required")
+		}
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
 	}
 
