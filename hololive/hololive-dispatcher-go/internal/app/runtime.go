@@ -22,7 +22,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -40,6 +39,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 const readyCheckTimeout = 2 * time.Second
@@ -101,7 +101,14 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 	renderer := dispatch.NewSimpleRenderer()
 	irisClient := iris.NewH2CClient(cfg.Iris.BaseURL, cfg.Iris.BotToken, logger)
 
-	dispatcher, err := dispatch.NewDispatcher(consumer, irisClient, renderer, cfg.Dispatch.MaxBatch, logger)
+	dispatcher, err := dispatch.NewDispatcher(
+		consumer,
+		irisClient,
+		renderer,
+		cfg.Dispatch.MaxBatch,
+		cfg.Dispatch.Parallelism,
+		logger,
+	)
 	if err != nil {
 		_ = cacheSvc.Close()
 		return nil, fmt.Errorf("build runtime: create dispatcher: %w", err)

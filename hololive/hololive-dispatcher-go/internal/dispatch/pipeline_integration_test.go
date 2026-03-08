@@ -108,6 +108,7 @@ func TestAlarmQueueDispatchPipeline_EndToEnd(t *testing.T) {
 		sender,
 		NewSimpleRenderer(),
 		10,
+		1,
 		logger,
 	)
 	if err != nil {

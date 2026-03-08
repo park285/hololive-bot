@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -62,6 +63,7 @@ type schedulerImpl struct {
 	stopCh               chan struct{}
 	currentBatch         int
 	batchMu              sync.Mutex
+	batchRunning         atomic.Bool
 }
 
 const (
@@ -173,6 +175,12 @@ func (ys *schedulerImpl) Stop() {
 }
 
 func (ys *schedulerImpl) runBatch(ctx context.Context) {
+	if !ys.batchRunning.CompareAndSwap(false, true) {
+		ys.logger.Warn("Skipping YouTube quota building batch: previous batch still running")
+		return
+	}
+	defer ys.batchRunning.Store(false)
+
 	ys.batchMu.Lock()
 	batchNum := ys.currentBatch
 	ys.currentBatch = (ys.currentBatch + 1) % batchesPerDay
@@ -182,9 +190,20 @@ func (ys *schedulerImpl) runBatch(ctx context.Context) {
 		slog.Int("batch", batchNum),
 		slog.Int("total_batches", batchesPerDay))
 
-	go ys.trackAllSubscribers(ctx)
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	go ys.fetchRecentVideosRotation(ctx, batchNum)
+	go func() {
+		defer wg.Done()
+		ys.trackAllSubscribers(ctx)
+	}()
+
+	go func() {
+		defer wg.Done()
+		ys.fetchRecentVideosRotation(ctx, batchNum)
+	}()
+
+	wg.Wait()
 }
 
 // channelStatsWorkItem: trackAllSubscribers에서 채널별 처리를 위한 작업 단위
