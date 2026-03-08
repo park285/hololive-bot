@@ -193,13 +193,13 @@ func (d *Dispatcher) processBatch(ctx context.Context, items []domain.Notificati
 		case sem <- struct{}{}:
 		}
 
-		item := items[i]
+		item := &items[i]
 		wg.Add(1)
-		go func() {
+		go func(item *domain.NotificationDeliveryOutbox) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			d.processItem(ctx, &item)
-		}()
+			d.processItem(ctx, item)
+		}(item)
 	}
 
 	wg.Wait()
