@@ -195,6 +195,10 @@ func TestStreamIngesterRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	t.Parallel()
 
 	scheduler := &fakeScheduler{}
+	readiness := newIngestionReadinessState(youtubeScraperRuntimeName, ingestionRuntimeFeatures{
+		youtubeEnabled:   true,
+		photoSyncEnabled: false,
+	})
 	runtime := &StreamIngesterRuntime{
 		Logger:     testLogger(),
 		Scheduler:  scheduler,
@@ -203,6 +207,7 @@ func TestStreamIngesterRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 			Addr:    "invalid-address",
 			Handler: http.NewServeMux(),
 		},
+		Readiness: readiness,
 	}
 
 	runtime.Run()
@@ -212,6 +217,18 @@ func TestStreamIngesterRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	}
 	if scheduler.stopCalls != 1 {
 		t.Fatalf("scheduler Stop calls = %d, want 1", scheduler.stopCalls)
+	}
+
+	statusCode, payload := readiness.response()
+	if statusCode != http.StatusServiceUnavailable {
+		t.Fatalf("readiness status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
+	}
+	status, _ := payload["status"].(string)
+	if status != "not_ready" {
+		t.Fatalf("readiness status = %q, want %q", status, "not_ready")
+	}
+	if payload["last_error"] == nil {
+		t.Fatal("last_error missing after server error")
 	}
 }
 

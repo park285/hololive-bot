@@ -72,11 +72,17 @@ func (r *StreamIngesterRuntime) startHTTPServer(errCh chan<- error) {
 func (r *StreamIngesterRuntime) waitForShutdown(sigCh <-chan os.Signal, errCh <-chan error) {
 	select {
 	case sig := <-sigCh:
+		if r.Readiness != nil {
+			r.Readiness.markStopping("")
+		}
 		r.Logger.Info("Received shutdown signal",
 			slog.String("runtime", r.runtimeName()),
 			slog.String("signal", sig.String()),
 		)
 	case err := <-errCh:
+		if r.Readiness != nil {
+			r.Readiness.markStopping(err.Error())
+		}
 		r.Logger.Error("Server error",
 			slog.String("runtime", r.runtimeName()),
 			slog.Any("error", err),
@@ -85,6 +91,10 @@ func (r *StreamIngesterRuntime) waitForShutdown(sigCh <-chan os.Signal, errCh <-
 }
 
 func (r *StreamIngesterRuntime) shutdown() {
+	if r.Readiness != nil {
+		r.Readiness.markStopping("")
+	}
+
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
 	defer shutdownCancel()
 

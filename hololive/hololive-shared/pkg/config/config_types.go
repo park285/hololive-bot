@@ -40,6 +40,12 @@ type YouTubeConfig struct {
 	EnableQuotaBuilding bool
 }
 
+// IngestionConfig: ingestion 런타임 기능 토글 설정
+type IngestionConfig struct {
+	YouTubeEnabled   bool
+	PhotoSyncEnabled bool
+}
+
 // LoggingConfig: 애플리케이션 로그 설정
 type LoggingConfig struct {
 	Level      string
