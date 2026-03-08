@@ -29,6 +29,7 @@ import (
 	"net/url"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/proxy"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -58,21 +59,23 @@ func (c *Client) initHTTPClients() {
 		return
 	}
 
-	directClient, err := createHTTPClient(ProxyConfig{})
+	directClient, directTransport, err := createHTTPClient(ProxyConfig{})
 	if err != nil {
 		slog.Error("Failed to create direct scraper client, using fallback default transport",
 			"error", err)
 		directClient = &http.Client{Timeout: constants.YouTubeConfig.ScraperHTTPTimeout}
 	}
 	c.directHTTPClient = directClient
+	c.directTransport = directTransport
 
 	if c.proxyConfig.URL != "" {
-		proxyClient, proxyErr := createHTTPClient(ProxyConfig{Enabled: true, URL: c.proxyConfig.URL})
+		proxyClient, proxyTransport, proxyErr := createHTTPClient(ProxyConfig{Enabled: true, URL: c.proxyConfig.URL})
 		if proxyErr != nil {
 			slog.Error("Failed to create proxy scraper client, proxy toggle unavailable until restart",
 				"error", proxyErr)
 		} else {
 			c.proxyHTTPClient = proxyClient
+			c.proxyTransport = proxyTransport
 		}
 	}
 
@@ -137,19 +140,13 @@ func (c *Client) currentHTTPClient() *http.Client {
 }
 
 func (c *Client) closeIdleConnections() {
-	clients := []*http.Client{
-		c.httpClient,
-		c.directHTTPClient,
-		c.proxyHTTPClient,
-		c.activeHTTPClient.Load(),
+	transports := []*http.Transport{
+		c.directTransport,
+		c.proxyTransport,
 	}
 	seen := make(map[*http.Transport]struct{})
-	for _, client := range clients {
-		if client == nil {
-			continue
-		}
-		transport, ok := client.Transport.(*http.Transport)
-		if !ok || transport == nil {
+	for _, transport := range transports {
+		if transport == nil {
 			continue
 		}
 		if _, exists := seen[transport]; exists {
@@ -158,10 +155,36 @@ func (c *Client) closeIdleConnections() {
 		seen[transport] = struct{}{}
 		transport.CloseIdleConnections()
 	}
+
+	clients := []*http.Client{
+		c.httpClient,
+		c.directHTTPClient,
+		c.proxyHTTPClient,
+		c.activeHTTPClient.Load(),
+	}
+	for _, client := range clients {
+		if client == nil {
+			continue
+		}
+		transport, ok := client.Transport.(interface{ CloseIdleConnections() })
+		if !ok || transport == nil {
+			continue
+		}
+		httpTransport, ok := unwrapHTTPTransport(client.Transport)
+		if !ok || httpTransport == nil {
+			transport.CloseIdleConnections()
+			continue
+		}
+		if _, exists := seen[httpTransport]; exists {
+			continue
+		}
+		seen[httpTransport] = struct{}{}
+		transport.CloseIdleConnections()
+	}
 }
 
 // createHTTPClient: 프록시 설정에 따라 HTTP 클라이언트 생성
-func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, error) {
+func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, error) {
 	baseTransport := &http.Transport{
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
@@ -180,14 +203,14 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, error) {
 		}
 		baseTransport.DialContext = dialer.DialContext
 		return &http.Client{
-			Transport: baseTransport,
+			Transport: instrumentScraperTransport(baseTransport),
 			Timeout:   constants.YouTubeConfig.ScraperHTTPTimeout,
-		}, nil
+		}, baseTransport, nil
 	}
 
 	parsedURL, err := url.Parse(proxyCfg.URL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid proxy URL: %w", err)
+		return nil, nil, fmt.Errorf("invalid proxy URL: %w", err)
 	}
 
 	var auth *proxy.Auth
@@ -206,7 +229,7 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, error) {
 
 	dialer, err := proxy.SOCKS5("tcp", parsedURL.Host, auth, forwardDialer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
+		return nil, nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
 	}
 
 	transport := &http.Transport{
@@ -243,9 +266,25 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, error) {
 		"has_auth", auth != nil)
 
 	return &http.Client{
-		Transport: transport,
+		Transport: instrumentScraperTransport(transport),
 		Timeout:   constants.YouTubeConfig.ScraperHTTPTimeout,
-	}, nil
+	}, transport, nil
+}
+
+func instrumentScraperTransport(baseTransport *http.Transport) http.RoundTripper {
+	if baseTransport == nil {
+		return http.DefaultTransport
+	}
+
+	return otelhttp.NewTransport(baseTransport)
+}
+
+func unwrapHTTPTransport(roundTripper http.RoundTripper) (*http.Transport, bool) {
+	transport, ok := roundTripper.(*http.Transport)
+	if ok {
+		return transport, true
+	}
+	return nil, false
 }
 
 type dialResult struct {

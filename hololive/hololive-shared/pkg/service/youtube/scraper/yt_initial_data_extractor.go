@@ -24,6 +24,8 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 const maxYtInitialDataCandidates = 8
@@ -44,6 +46,11 @@ var ytInitialDataAnchors = []string{
 	`window['ytInitialData']`,
 }
 
+var ytInitialDataDOMFallbackAnchors = []string{
+	"window.ytInitialData",
+	"ytInitialData",
+}
+
 // ErrYtInitialDataNotFound: HTML에서 ytInitialData를 찾을 수 없는 경우
 var ErrYtInitialDataNotFound = errors.New("ytInitialData not found in HTML")
 
@@ -62,6 +69,9 @@ func collectYtInitialDataCandidates(html string) []string {
 	collector := newYtInitialDataCandidateCollector(maxYtInitialDataCandidates)
 	collectAnchorCandidates(html, collector)
 	collectPatternCandidates(html, collector)
+	if len(collector.values) == 0 {
+		collectDOMScriptCandidates(html, collector)
+	}
 	return collector.values
 }
 
@@ -168,6 +178,43 @@ func appendPatternMatches(matches [][]string, collector *ytInitialDataCandidateC
 			continue
 		}
 		collector.add(match[1])
+	}
+}
+
+func collectDOMScriptCandidates(html string, collector *ytInitialDataCandidateCollector) {
+	if strings.TrimSpace(html) == "" || collector.full() {
+		return
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return
+	}
+
+	doc.Find("script").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		if collector.full() {
+			return false
+		}
+
+		scriptBody := strings.TrimSpace(selection.Text())
+		if scriptBody == "" {
+			return true
+		}
+
+		collectAnchorCandidates(scriptBody, collector)
+		collectPatternCandidates(scriptBody, collector)
+		collectGenericDOMAnchorCandidates(scriptBody, collector)
+
+		return !collector.full()
+	})
+}
+
+func collectGenericDOMAnchorCandidates(scriptBody string, collector *ytInitialDataCandidateCollector) {
+	for _, anchor := range ytInitialDataDOMFallbackAnchors {
+		if collector.full() {
+			return
+		}
+		scanAnchorCandidates(scriptBody, anchor, collector)
 	}
 }
 

@@ -21,7 +21,6 @@
 package scraper
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,22 +28,22 @@ import (
 )
 
 func TestCreateHTTPClient_DirectHTTP2(t *testing.T) {
-	client, err := createHTTPClient(ProxyConfig{})
+	client, transport, err := createHTTPClient(ProxyConfig{})
 	require.NoError(t, err)
+	require.NotNil(t, client)
 
-	transport, ok := client.Transport.(*http.Transport)
-	require.True(t, ok, "Transport should be *http.Transport")
+	require.NotNil(t, transport, "base transport should be returned")
 	assert.True(t, transport.ForceAttemptHTTP2, "direct path should have ForceAttemptHTTP2=true")
 }
 
 func TestCreateHTTPClient_ProxyHTTP2(t *testing.T) {
-	client, err := createHTTPClient(ProxyConfig{
+	client, transport, err := createHTTPClient(ProxyConfig{
 		Enabled: true,
 		URL:     "socks5://127.0.0.1:1080",
 	})
 	require.NoError(t, err)
+	require.NotNil(t, client)
 
-	transport, ok := client.Transport.(*http.Transport)
-	require.True(t, ok, "Transport should be *http.Transport")
+	require.NotNil(t, transport, "base transport should be returned")
 	assert.False(t, transport.ForceAttemptHTTP2, "proxy path should disable HTTP/2 (single tunnel multiplex is fragile)")
 }
