@@ -160,6 +160,8 @@ type Client struct {
 	httpClient       *http.Client // 테스트/특수 경로용 고정 클라이언트
 	directHTTPClient *http.Client
 	proxyHTTPClient  *http.Client
+	directTransport  *http.Transport
+	proxyTransport   *http.Transport
 	activeHTTPClient atomic.Pointer[http.Client]
 	proxyEnabled     atomic.Bool
 	uaProvider       ua.Provider
