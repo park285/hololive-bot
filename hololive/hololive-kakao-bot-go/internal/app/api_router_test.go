@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 func TestFailClosedAuth(t *testing.T) {
@@ -251,5 +252,53 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+}
+
+func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	apiHandler := &server.APIHandler{}
+	domainHandlers := apiHandler.DomainHandlers()
+	authHandler := &server.AuthHandler{}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			APIKey: "test-key",
+		},
+		CORS: config.CORSConfig{
+			AllowedOrigins: []string{"http://localhost:3000"},
+		},
+	}
+
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("ProvideAPIRouter() error = %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		headerVal  string
+		wantStatus int
+	}{
+		{name: "missing api key", wantStatus: http.StatusUnauthorized},
+		{name: "invalid api key", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
+		{name: "valid api key", headerVal: "test-key", wantStatus: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			if tt.headerVal != "" {
+				req.Header.Set(middleware.APIKeyHeader, tt.headerVal)
+			}
+
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+		})
 	}
 }
