@@ -192,6 +192,20 @@ func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	}
 }
 
+func TestLoad_UsesProductionWhenOnlyLegacyTelemetryEnvIsSet(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("APP_ENV", "")
+	t.Setenv("OTEL_ENVIRONMENT", "development")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Environment != "production" {
+		t.Fatalf("Environment = %q, want %q", cfg.Environment, "production")
+	}
+}
+
 func TestLoad_RejectsPlaceholderYouTubeAPIKey(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_API_KEY", "your_youtube_api_key")
