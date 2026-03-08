@@ -49,8 +49,8 @@ type Config struct {
 	Logging         LoggingConfig
 	Bot             BotConfig
 	Services        ServicesConfig
-	Telemetry       TelemetryConfig // OpenTelemetry 분산 추적
-	Scraper         ScraperConfig   // YouTube 스크래퍼 프록시 설정
+	Environment     string
+	Scraper         ScraperConfig // YouTube 스크래퍼 프록시 설정
 	Webhook         WebhookConfig
 	CORS            CORSConfig // CORS 설정
 	Cliproxy        CliproxyConfig
@@ -82,7 +82,7 @@ func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
 		sharedIrisToken,
 	)
 
-	runtimeEnv := envutil.String("APP_ENV", envutil.String("OTEL_ENVIRONMENT", "production"))
+	runtimeEnv := loadAppEnvironment()
 	isProduction := strings.EqualFold(runtimeEnv, "production")
 	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
 		envutil.String("CORS_ALLOWED_ORIGINS", ""),
@@ -147,7 +147,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
 			GameBotTurtleHealthURL:  envutil.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
 		},
-		Telemetry: loadTelemetryConfig(),
+		Environment: loadAppEnvironment(),
 		Scraper: ScraperConfig{
 			ProxyEnabled: envutil.Bool("SCRAPER_PROXY_ENABLED", false),
 			ProxyURL:     envutil.String("SCRAPER_PROXY_URL", ""),
@@ -188,7 +188,7 @@ func (c *Config) Validate() error {
 	if c.Server.Port == 0 {
 		return fmt.Errorf("SERVER_PORT is required")
 	}
-	if err := validateAPISecretKey(c.Telemetry.Environment, c.Server.APIKey); err != nil {
+	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return err
 	}
 	if len(c.Kakao.Rooms) == 0 {
@@ -206,10 +206,10 @@ func (c *Config) Validate() error {
 	if isPlaceholderAPIKey(c.YouTube.APIKey) {
 		return fmt.Errorf("YOUTUBE_API_KEY uses placeholder value; set a real API key")
 	}
-	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
+	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
-	isProduction := strings.EqualFold(strings.TrimSpace(c.Telemetry.Environment), "production")
+	isProduction := strings.EqualFold(strings.TrimSpace(c.Environment), "production")
 	if isProduction && c.CORS.Enforce && len(c.CORS.AllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
