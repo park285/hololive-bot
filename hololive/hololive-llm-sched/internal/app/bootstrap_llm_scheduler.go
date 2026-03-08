@@ -334,7 +334,7 @@ func buildLLMSchedulerComponents(
 	if err != nil {
 		return nil, fmt.Errorf("init member cache: %w", err)
 	}
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(memberCache, logger)
+	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
 	memberDataProvider := memberServiceAdapter
 
 	templateRenderer := template.NewRenderer(postgresService.GetGormDB(), logger)

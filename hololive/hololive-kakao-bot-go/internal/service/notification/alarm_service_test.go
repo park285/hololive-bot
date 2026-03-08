@@ -275,7 +275,7 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	result := as.UpdateAlarmAdvanceMinutes(20)
+	result := as.UpdateAlarmAdvanceMinutes(context.Background(), 20)
 
 	// 20, 3, 1이 정규화됨
 	assert.Contains(t, result, 20)

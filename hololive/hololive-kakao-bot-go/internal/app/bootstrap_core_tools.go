@@ -78,7 +78,7 @@ func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresCo
 		return nil, nil, fmt.Errorf("provide member cache without valkey: %w", err)
 	}
 
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(memberCache, logger)
+	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
 
 	runtime := &DBIntegrationRuntime{
 		Logger:        logger,

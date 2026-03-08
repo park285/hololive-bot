@@ -45,7 +45,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 	}
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
-	configSubscriber := buildBotConfigSubscriber(runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
+	configSubscriber := buildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
 
 	var adminServerDeps *botAdminServerDependencies
 	if cfg.Bot.AdminEnabled {

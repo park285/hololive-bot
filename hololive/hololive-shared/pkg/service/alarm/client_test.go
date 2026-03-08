@@ -22,13 +22,13 @@ package alarm
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 // newTestClient: httptest.Server 기반 테스트 클라이언트 생성 헬퍼
@@ -526,7 +526,7 @@ func TestClient_UpdateAlarmAdvanceMinutes(t *testing.T) {
 			})
 			client, _ := newTestClient(t, mux)
 
-			got := client.UpdateAlarmAdvanceMinutes(tt.inputMin)
+			got := client.UpdateAlarmAdvanceMinutes(context.Background(), tt.inputMin)
 			if len(got) != len(tt.wantMinutes) {
 				t.Errorf("len = %d, want %d", len(got), len(tt.wantMinutes))
 				return
@@ -555,7 +555,7 @@ func TestClient_GetTargetMinutes(t *testing.T) {
 	}
 
 	// 업데이트 후 캐시 반영
-	client.UpdateAlarmAdvanceMinutes(5)
+	client.UpdateAlarmAdvanceMinutes(context.Background(), 5)
 	got := client.GetTargetMinutes()
 	if len(got) != 3 {
 		t.Errorf("len = %d, want 3", len(got))

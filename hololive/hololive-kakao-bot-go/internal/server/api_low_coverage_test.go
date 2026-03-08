@@ -80,7 +80,7 @@ func (s *stubAlarmCRUDForServer) GetNextStreamInfo(context.Context, string) (*do
 	return nil, nil
 }
 
-func (s *stubAlarmCRUDForServer) UpdateAlarmAdvanceMinutes(int) []int {
+func (s *stubAlarmCRUDForServer) UpdateAlarmAdvanceMinutes(context.Context, int) []int {
 	return nil
 }
 

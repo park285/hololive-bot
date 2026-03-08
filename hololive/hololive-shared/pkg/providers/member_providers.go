@@ -76,8 +76,8 @@ func ProvideMemberCache(
 }
 
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성
-func ProvideMemberServiceAdapter(memberCache *member.Cache, logger *slog.Logger) member.DataProvider {
-	return member.NewMemberServiceAdapter(memberCache, logger)
+func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache, logger *slog.Logger) member.DataProvider {
+	return member.NewMemberServiceAdapter(ctx, memberCache, logger)
 }
 
 // ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함)

@@ -206,7 +206,7 @@ func (h *APIHandler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 		return
 	}
 
-	targets := h.alarm.UpdateAlarmAdvanceMinutes(req.Minutes)
+	targets := h.alarm.UpdateAlarmAdvanceMinutes(c.Request.Context(), req.Minutes)
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": targets}})
 }
 
