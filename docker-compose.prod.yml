@@ -180,11 +180,7 @@ services:
       SERVICES_LLM_SCHEDULER_HEALTH_URL: http://host.docker.internal:30003/health
       SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
       SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
-      # OpenTelemetry
-      OTEL_ENABLED: "false"
-      OTEL_SERVICE_NAME: hololive-bot
-      OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-false}"
-      OTEL_SAMPLE_RATE: "0.1"
+      APP_ENV: "production"
       # Docker Socket Proxy (보안: 직접 소켓 마운트 대신 제한된 API만 허용)
       DOCKER_HOST: tcp://docker-proxy:2375
       # CLIProxy LLM (행사 요약 + 멤버뉴스)
