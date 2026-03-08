@@ -858,21 +858,25 @@ func (m *mockTrackAllSubscribersService) GetRecentVideos(ctx context.Context, ch
 }
 
 type mockTrackAllSubscribersRepo struct {
-	latestByChannel    map[string]*domain.TimestampedStats
-	latestBatchErr     error
-	latestBatchCalls   int
-	latestBatchKeys    []string
-	achievedByChannel  map[string][]uint64
-	achievedErr        error
-	achievedCalls      int
-	hasAchievedCalls   int
-	hasAchievedResult  bool
-	saveBatchErr       error
-	saveBatchCalls     int
-	saveBatchRows      int
-	saveSingleCalls    int
-	saveMilestoneCalls int
-	recordChangeCalls  int
+	latestByChannel       map[string]*domain.TimestampedStats
+	latestBatchErr        error
+	latestBatchCalls      int
+	latestBatchKeys       []string
+	achievedByChannel     map[string][]uint64
+	achievedErr           error
+	achievedCalls         int
+	hasAchievedCalls      int
+	hasAchievedResult     bool
+	saveBatchErr          error
+	saveBatchCalls        int
+	saveBatchRows         int
+	saveSingleCalls       int
+	saveMilestoneCalls    int
+	recordChangeCalls     int
+	unnotifiedMilestones  []ytstats.MilestoneNotification
+	markedMilestones      []ytstats.MilestoneNotification
+	unnotifiedApproaching []ytstats.ApproachingNotification
+	markedApproaching     []ytstats.ApproachingNotification
 }
 
 func (m *mockTrackAllSubscribersRepo) GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
@@ -943,7 +947,7 @@ func (m *mockTrackAllSubscribersRepo) SaveApproachingNotification(ctx context.Co
 }
 
 func (m *mockTrackAllSubscribersRepo) GetUnnotifiedMilestones(ctx context.Context, limit int) ([]ytstats.MilestoneNotification, error) {
-	return nil, nil
+	return append([]ytstats.MilestoneNotification(nil), m.unnotifiedMilestones...), nil
 }
 
 func (m *mockTrackAllSubscribersRepo) MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error {
@@ -951,11 +955,12 @@ func (m *mockTrackAllSubscribersRepo) MarkMilestoneNotified(ctx context.Context,
 }
 
 func (m *mockTrackAllSubscribersRepo) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []ytstats.MilestoneNotification) error {
+	m.markedMilestones = append([]ytstats.MilestoneNotification(nil), milestones...)
 	return nil
 }
 
 func (m *mockTrackAllSubscribersRepo) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ytstats.ApproachingNotification, error) {
-	return nil, nil
+	return append([]ytstats.ApproachingNotification(nil), m.unnotifiedApproaching...), nil
 }
 
 func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error {
@@ -963,7 +968,58 @@ func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotified(ctx context.Co
 }
 
 func (m *mockTrackAllSubscribersRepo) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ytstats.ApproachingNotification) error {
+	m.markedApproaching = append([]ytstats.ApproachingNotification(nil), notifications...)
 	return nil
+}
+
+type mockMilestoneFormatter struct{}
+
+func (mockMilestoneFormatter) FormatMilestoneAchieved(ctx context.Context, memberName, milestone string) (string, error) {
+	return fmt.Sprintf("ACHIEVED:%s:%s", memberName, milestone), nil
+}
+
+func (mockMilestoneFormatter) FormatMilestoneApproaching(ctx context.Context, memberName, milestone, remaining string) (string, error) {
+	return fmt.Sprintf("APPROACHING:%s:%s:%s", memberName, milestone, remaining), nil
+}
+
+func TestSendMilestoneAlerts_SendsAndMarksBothKinds(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := &mockTrackAllSubscribersRepo{
+		unnotifiedMilestones: []ytstats.MilestoneNotification{
+			{ChannelID: "UC1", MemberName: "A", Value: 100000},
+		},
+		unnotifiedApproaching: []ytstats.ApproachingNotification{
+			{ChannelID: "UC2", MemberName: "B", MilestoneValue: 1000000, CurrentSubs: 990000},
+		},
+	}
+
+	scheduler := &schedulerImpl{
+		statsRepo: repo,
+		formatter: mockMilestoneFormatter{},
+		logger:    logger,
+		stopCh:    make(chan struct{}),
+	}
+
+	var sent []string
+	sendMessage := func(room, message string) error {
+		sent = append(sent, room+"|"+message)
+		return nil
+	}
+
+	rooms := []string{"room-1", "room-2"}
+	if err := scheduler.SendMilestoneAlerts(context.Background(), sendMessage, rooms); err != nil {
+		t.Fatalf("SendMilestoneAlerts() error = %v", err)
+	}
+
+	if len(sent) != 4 {
+		t.Fatalf("sent messages = %d, want 4", len(sent))
+	}
+	if len(repo.markedMilestones) != 1 {
+		t.Fatalf("marked milestones = %d, want 1", len(repo.markedMilestones))
+	}
+	if len(repo.markedApproaching) != 1 {
+		t.Fatalf("marked approaching = %d, want 1", len(repo.markedApproaching))
+	}
 }
 
 func TestTrackAllSubscribers_UsesSaveStatsBatch(t *testing.T) {
