@@ -46,13 +46,13 @@
 권장 점검 커맨드:
 
 ```bash
-./scripts/logs/check-outbox-per-room.sh --since 30m
+./scripts/logs/logs.sh canary --since 30m
 ```
 
 임계치 조정 예시:
 
 ```bash
-./scripts/logs/check-outbox-per-room.sh \
+./scripts/logs/logs.sh canary \
   --since 30m \
   --warn-failure-rate 0.05 \
   --max-aggregate-failures 0 \
@@ -68,7 +68,7 @@
 주기 점검(cron) 예시:
 
 ```bash
-*/10 * * * * /home/kapu/gemini/hololive-bot/scripts/logs/check-outbox-per-room-cron.sh >> /home/kapu/gemini/hololive-bot/logs/cron/outbox-per-room-canary.log 2>&1
+*/10 * * * * /home/kapu/gemini/hololive-bot/scripts/logs/logs.sh canary-cron >> /home/kapu/gemini/hololive-bot/logs/cron/outbox-per-room-canary.log 2>&1
 ```
 
 cron 환경 변수(선택):
