@@ -30,6 +30,23 @@ PID_FILE=".bot.pid"
 LOG_DIR="logs"
 NOHUP_LOG="$LOG_DIR/nohup.log"
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
+WAIT_FOR_READY="true"
+MIN_COUNT="${CORE_MEMBER_HASH_SOFT_MIN_COUNT:-50}"
+TIMEOUT_SEC="${CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS:-45}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-ready-wait)
+      WAIT_FOR_READY="false"
+      shift
+      ;;
+    *)
+      echo "[ERROR] Unknown argument: $1"
+      echo "Usage: ./scripts/start-bot.sh [--no-ready-wait]"
+      exit 1
+      ;;
+  esac
+done
 
 case "${CONTAINER_CLI}" in
   docker|podman) ;;
@@ -93,6 +110,14 @@ for var in $REQUIRED_VARS; do
   fi
 done
 echo "[OK] Environment variables validated"
+
+if [[ -f ./.env ]]; then
+  set -a
+  . ./.env
+  set +a
+  MIN_COUNT="${CORE_MEMBER_HASH_SOFT_MIN_COUNT:-$MIN_COUNT}"
+  TIMEOUT_SEC="${CORE_MEMBER_HASH_SOFT_TIMEOUT_SECONDS:-$TIMEOUT_SEC}"
+fi
 
 # === 3. 바이너리 확인 ===
 if [ ! -f "bin/bot" ]; then
@@ -176,4 +201,29 @@ else
   tail -30 "$NOHUP_LOG" 2>/dev/null || true
   rm -f "$PID_FILE"
   exit 1
+fi
+
+if [[ "${WAIT_FOR_READY}" == "true" ]]; then
+  echo "[CHECK] Waiting for member cache readiness..."
+  START_TS=$(date +%s)
+  while true; do
+    if "${CONTAINER_CLI}" exec holo-valkey valkey-cli EXISTS hololive:members:ready 2>/dev/null | grep -q "^1$"; then
+      echo "[READY] hololive:members:ready flag detected"
+      break
+    fi
+
+    COUNT=$("${CONTAINER_CLI}" exec holo-valkey valkey-cli HLEN hololive:members 2>/dev/null | tr -d '\r' || echo 0)
+    if [[ "$COUNT" =~ ^[0-9]+$ ]] && [ "$COUNT" -ge "$MIN_COUNT" ]; then
+      echo "[READY] hololive:members count >= $MIN_COUNT (=$COUNT)"
+      break
+    fi
+
+    NOW=$(date +%s)
+    ELAPSED=$((NOW - START_TS))
+    if [ "$ELAPSED" -ge "$TIMEOUT_SEC" ]; then
+      echo "[WARN] Readiness not reached in ${TIMEOUT_SEC}s (flag missing, count=${COUNT:-0})"
+      break
+    fi
+    sleep 1
+  done
 fi
