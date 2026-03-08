@@ -42,7 +42,9 @@
    ```
 2. 필수 시크릿/접속값 채우기
    - `DB_PASSWORD`
-   - `IRIS_SHARED_TOKEN`
+   - `IRIS_WEBHOOK_TOKEN`
+   - `IRIS_BOT_TOKEN`
+     - 필요하면 두 값은 동일하게 둘 수 있지만 변수는 분리해서 유지합니다.
    - `HOLODEX_API_KEY_*`
    - 필요 시 `NORDVPN_*` (VPN profile 사용 시만)
 3. Docker Compose 사용 가능 여부 확인

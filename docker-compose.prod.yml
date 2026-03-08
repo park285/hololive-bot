@@ -155,8 +155,8 @@ services:
       <<: *app-file-log-env
       GOGC: "60"
       IRIS_BASE_URL: http://host.docker.internal:3000
-      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
-      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
@@ -240,7 +240,7 @@ services:
       <<: *app-file-log-env
       DISPATCHER_PORT: "30020"
       IRIS_BASE_URL: http://host.docker.internal:3000
-      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN}
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -296,8 +296,8 @@ services:
       YOUTUBE_INGESTION_ENABLED: "false"
       PHOTO_SYNC_ENABLED: "true"
       IRIS_BASE_URL: http://host.docker.internal:3000
-      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
-      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
@@ -371,8 +371,8 @@ services:
       YOUTUBE_INGESTION_ENABLED: "true"
       PHOTO_SYNC_ENABLED: "false"
       IRIS_BASE_URL: http://host.docker.internal:3000
-      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
-      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
@@ -444,8 +444,8 @@ services:
       <<: *app-file-log-env
       LLM_SCHEDULER_PORT: 30003
       IRIS_BASE_URL: http://host.docker.internal:3000
-      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
-      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
