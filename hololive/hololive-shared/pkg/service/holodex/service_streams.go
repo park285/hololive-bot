@@ -1,0 +1,348 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package holodex
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"strings"
+	"sync"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/fallback"
+	"github.com/kapu/hololive-shared/pkg/util"
+)
+
+// SupportedStreamOrgParams: stream 조회 API에서 허용하는 org 파라미터 목록을 반환합니다.
+func SupportedStreamOrgParams() []string {
+	return []string{
+		strings.ToLower(constants.HolodexAPIParams.OrgHololive),
+		strings.ToLower(constants.HolodexAPIParams.OrgVSpo),
+		strings.ToLower(constants.HolodexAPIParams.OrgStellive),
+		strings.ToLower(constants.HolodexAPIParams.OrgIndie),
+		constants.HolodexAPIParams.OrgAll,
+	}
+}
+
+// GetLiveStreams: 기본 org(Hololive)의 현재 진행 중인 VTuber 스트림 목록을 조회합니다.
+func (h *Service) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
+	return h.GetLiveStreamsByOrg(ctx, constants.HolodexAPIParams.OrgHololive)
+}
+
+// GetLiveStreamsByOrg: org별 현재 진행 중인 VTuber 스트림 목록을 조회합니다.
+// org 미지정 시 Hololive를 기본값으로 사용합니다.
+func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, error) {
+	resolvedOrg, err := resolveStreamOrg(org)
+	if err != nil {
+		return nil, err
+	}
+
+	if cached, found := h.cacheManager.GetLiveStreamsByOrg(ctx, resolvedOrg); found {
+		return cached, nil
+	}
+
+	var allStreams []*domain.Stream
+	seen := make(map[string]bool)
+	var mu sync.Mutex
+
+	targetOrgs := streamTargetOrgs(resolvedOrg)
+	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
+		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusLive, 0)
+		if fetchErr != nil {
+			h.logger.Warn("Failed to get live streams for org",
+				slog.String("org", targetOrg), slog.Any("error", fetchErr))
+			return fetchErr
+		}
+
+		filtered := h.filter.FilterHololiveStreams(streams)
+		filtered = filterStreamsByRequestedOrg(filtered, resolvedOrg)
+		liveOnly := filterStreamsByStatus(filtered, domain.StreamStatusLive)
+
+		mu.Lock()
+		for _, s := range liveOnly {
+			if !seen[s.ID] {
+				seen[s.ID] = true
+				allStreams = append(allStreams, s)
+			}
+		}
+		mu.Unlock()
+		return nil
+	})
+	fallback.ObservePrimaryPhase("holodex", "live_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
+
+	if primary.HasFailures() {
+		h.scheduleRetryIfNeeded(ctx, fmt.Sprintf("live_streams_%s", strings.ToLower(resolvedOrg)), func(retryCtx context.Context) {
+			_, _ = h.GetLiveStreamsByOrg(retryCtx, resolvedOrg)
+		})
+	}
+
+	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
+	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+		Service:   "holodex",
+		Operation: "live_streams",
+		Trigger:   scraperFallbackPolicy.Trigger,
+		ShouldRun: h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
+			scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed)),
+		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
+			h.logger.Warn("Primary org fetch returned no live streams, using scraper fallback",
+				slog.Int("failed_orgs", len(primary.Failed)))
+			scraperStreams, scraperErr := h.scraper.FetchAllStreams(runCtx)
+			if scraperErr != nil {
+				return fallback.SecondaryResult{}, scraperErr
+			}
+			liveStreams := filterStreamsByStatus(scraperStreams, domain.StreamStatusLive)
+			h.cacheManager.SetLiveStreamsByOrg(runCtx, resolvedOrg, liveStreams)
+			allStreams = liveStreams
+			return fallback.SecondaryResult{
+				Items:     len(liveStreams),
+				Successes: 1,
+			}, nil
+		},
+	})
+	if err == nil && secondary.Outcome == "hit" {
+		return allStreams, nil
+	}
+
+	h.cacheManager.SetLiveStreamsByOrg(ctx, resolvedOrg, allStreams)
+	return allStreams, nil
+}
+
+// GetUpcomingStreams: 기본 org(Hololive)의 예정 스트림 목록을 조회합니다.
+func (h *Service) GetUpcomingStreams(ctx context.Context, hours int) ([]*domain.Stream, error) {
+	return h.GetUpcomingStreamsByOrg(ctx, hours, constants.HolodexAPIParams.OrgHololive)
+}
+
+// GetUpcomingStreamsByOrg: org별 예정 스트림 목록을 조회합니다.
+// org 미지정 시 Hololive를 기본값으로 사용합니다.
+func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org string) ([]*domain.Stream, error) {
+	resolvedOrg, err := resolveStreamOrg(org)
+	if err != nil {
+		return nil, err
+	}
+
+	if cached, found := h.cacheManager.GetUpcomingStreamsByOrg(ctx, resolvedOrg, hours); found {
+		return cached, nil
+	}
+
+	var allStreams []*domain.Stream
+	seen := make(map[string]bool)
+	var mu sync.Mutex
+
+	targetOrgs := streamTargetOrgs(resolvedOrg)
+	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
+		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusUpcoming, hours)
+		if fetchErr != nil {
+			h.logger.Warn("Failed to get upcoming streams for org",
+				slog.String("org", targetOrg), slog.Any("error", fetchErr))
+			return fetchErr
+		}
+
+		filtered := h.filter.FilterHololiveStreams(streams)
+		filtered = filterStreamsByRequestedOrg(filtered, resolvedOrg)
+		upcoming := h.filter.FilterUpcomingStreams(filtered)
+
+		mu.Lock()
+		for _, s := range upcoming {
+			if !seen[s.ID] {
+				seen[s.ID] = true
+				allStreams = append(allStreams, s)
+			}
+		}
+		mu.Unlock()
+		return nil
+	})
+	fallback.ObservePrimaryPhase("holodex", "upcoming_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
+
+	if primary.HasFailures() {
+		h.scheduleRetryIfNeeded(ctx, fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours), func(retryCtx context.Context) {
+			_, _ = h.GetUpcomingStreamsByOrg(retryCtx, hours, resolvedOrg)
+		})
+	}
+
+	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
+	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+		Service:   "holodex",
+		Operation: "upcoming_streams",
+		Trigger:   scraperFallbackPolicy.Trigger,
+		ShouldRun: h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
+			scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed)),
+		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
+			h.logger.Warn("Primary org fetch returned no upcoming streams, using scraper fallback",
+				slog.Int("failed_orgs", len(primary.Failed)))
+			scraperStreams, scraperErr := h.scraper.FetchAllStreams(runCtx)
+			if scraperErr != nil {
+				return fallback.SecondaryResult{}, scraperErr
+			}
+			upcomingStreams := h.filter.FilterUpcomingStreams(scraperStreams)
+			h.cacheManager.SetUpcomingStreamsByOrg(runCtx, resolvedOrg, hours, upcomingStreams)
+			allStreams = upcomingStreams
+			return fallback.SecondaryResult{
+				Items:     len(upcomingStreams),
+				Successes: 1,
+			}, nil
+		},
+	})
+	if err == nil && secondary.Outcome == "hit" {
+		return allStreams, nil
+	}
+
+	h.cacheManager.SetUpcomingStreamsByOrg(ctx, resolvedOrg, hours, allStreams)
+	return allStreams, nil
+}
+
+func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hours int) ([]*domain.Stream, error) {
+	if org == constants.HolodexAPIParams.OrgIndie {
+		streams, err := h.fetchIndieStreams(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("fetch indie streams: %w", err)
+		}
+		return streams, nil
+	}
+
+	params := url.Values{}
+	params.Set("org", org)
+	params.Set("status", status)
+	params.Set("type", constants.HolodexAPIParams.TypeStream)
+	if status == constants.HolodexAPIParams.StatusUpcoming {
+		params.Set("max_upcoming_hours", fmt.Sprintf("%d", util.Min(hours, constants.HolodexAPIParams.MaxUpcomingHours)))
+		params.Set("order", "asc")
+		params.Set("sort", "start_scheduled")
+	}
+
+	body, err := h.requester.DoRequest(ctx, "GET", "/live", params)
+	if err != nil {
+		return nil, fmt.Errorf("get streams by org (%s): %w", org, err)
+	}
+
+	var rawStreams []StreamRaw
+	if err := json.Unmarshal(body, &rawStreams); err != nil {
+		return nil, fmt.Errorf("unmarshal streams by org (%s): %w", org, err)
+	}
+
+	return h.mapper.MapStreamsResponse(rawStreams), nil
+}
+
+func resolveStreamOrg(org string) (string, error) {
+	switch normalizeStreamOrg(org) {
+	case "", "holo", strings.ToLower(constants.HolodexAPIParams.OrgHololive):
+		return constants.HolodexAPIParams.OrgHololive, nil
+	case strings.ToLower(constants.HolodexAPIParams.OrgVSpo):
+		return constants.HolodexAPIParams.OrgVSpo, nil
+	case strings.ToLower(constants.HolodexAPIParams.OrgStellive):
+		return constants.HolodexAPIParams.OrgStellive, nil
+	case strings.ToLower(constants.HolodexAPIParams.OrgIndie):
+		return constants.HolodexAPIParams.OrgIndie, nil
+	case constants.HolodexAPIParams.OrgAll:
+		return constants.HolodexAPIParams.OrgAll, nil
+	default:
+		return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, stringutil.TrimSpace(org))
+	}
+}
+
+func streamTargetOrgs(org string) []string {
+	if org != constants.HolodexAPIParams.OrgAll {
+		return []string{org}
+	}
+
+	targets := make([]string, 0, len(constants.HolodexAPIParams.SyncTargetOrgs)+1)
+	targets = append(targets, constants.HolodexAPIParams.SyncTargetOrgs...)
+	targets = append(targets, constants.HolodexAPIParams.OrgIndie)
+	return targets
+}
+
+func holodexOrgFetchParallelism(org string) int {
+	if org != constants.HolodexAPIParams.OrgAll {
+		return 1
+	}
+	if constants.HolodexConcurrencyConfig.OrgAllParallelism > 1 {
+		return constants.HolodexConcurrencyConfig.OrgAllParallelism
+	}
+	return 1
+}
+
+func filterStreamsByRequestedOrg(streams []*domain.Stream, org string) []*domain.Stream {
+	if org == constants.HolodexAPIParams.OrgAll {
+		return streams
+	}
+
+	target := normalizeStreamOrg(org)
+	filtered := make([]*domain.Stream, 0, len(streams))
+	for _, stream := range streams {
+		if stream.Channel == nil || stream.Channel.Org == nil {
+			continue
+		}
+		if normalizeStreamOrg(*stream.Channel.Org) == target {
+			filtered = append(filtered, stream)
+		}
+	}
+	return filtered
+}
+
+func filterStreamsByStatus(streams []*domain.Stream, status domain.StreamStatus) []*domain.Stream {
+	filtered := make([]*domain.Stream, 0, len(streams))
+	for _, stream := range streams {
+		if stream.Status == status {
+			filtered = append(filtered, stream)
+		}
+	}
+	return filtered
+}
+
+func supportsScraperFallback(org string) bool {
+	return org == constants.HolodexAPIParams.OrgHololive
+}
+
+func normalizeStreamOrg(org string) string {
+	normalized := strings.ToLower(stringutil.TrimSpace(org))
+	return strings.TrimSuffix(normalized, "!")
+}
+
+// fetchIndieStreams: 개인세 VTuber 채널의 라이브 스트림을 조회합니다.
+// Holodex /users/live API를 사용하여 채널 ID 기반으로 조회합니다.
+func (h *Service) fetchIndieStreams(ctx context.Context) ([]*domain.Stream, error) {
+	if len(constants.IndieChannelIDs) == 0 {
+		return nil, nil
+	}
+
+	params := url.Values{}
+	params.Set("channels", strings.Join(constants.IndieChannelIDs, ","))
+
+	body, err := h.requester.DoRequest(ctx, "GET", "/users/live", params)
+	if err != nil {
+		return nil, fmt.Errorf("fetch indie streams: %w", err)
+	}
+
+	var rawStreams []StreamRaw
+	if err := json.Unmarshal(body, &rawStreams); err != nil {
+		return nil, fmt.Errorf("unmarshal indie streams: %w", err)
+	}
+
+	streams := h.mapper.MapStreamsResponse(rawStreams)
+	h.hydrateIndieStreamChannels(streams, constants.IndieChannelIDs)
+
+	return streams, nil
+}
