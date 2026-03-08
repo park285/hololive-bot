@@ -31,17 +31,17 @@ import (
 
 // LLMSchedulerConfig: llm-scheduler 바이너리 전용 설정
 type LLMSchedulerConfig struct {
-	Server    ServerConfig
-	Iris      IrisConfig
-	Valkey    ValkeyConfig
-	Postgres  PostgresConfig
-	Logging   LoggingConfig
-	Bot       BotConfig
-	Telemetry TelemetryConfig
-	Cliproxy  CliproxyConfig
-	LLM       LLMConfig
-	Exa       ExaConfig
-	Version   string
+	Server      ServerConfig
+	Iris        IrisConfig
+	Valkey      ValkeyConfig
+	Postgres    PostgresConfig
+	Logging     LoggingConfig
+	Bot         BotConfig
+	Environment string
+	Cliproxy    CliproxyConfig
+	LLM         LLMConfig
+	Exa         ExaConfig
+	Version     string
 }
 
 // LoadLLMScheduler: llm-scheduler 전용 설정을 환경변수에서 로드합니다.
@@ -82,11 +82,11 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 			Prefix:   envutil.String("BOT_PREFIX", "!"),
 			SelfUser: envutil.String("BOT_SELF_USER", "iris"),
 		},
-		Telemetry: loadTelemetryConfig(),
-		Cliproxy:  loadCliproxyConfig(),
-		LLM:       loadLLMConfig(),
-		Exa:       loadExaConfig(),
-		Version:   envutil.String("APP_VERSION", "1.0.0-llm-scheduler"),
+		Environment: loadAppEnvironment(),
+		Cliproxy:    loadCliproxyConfig(),
+		LLM:         loadLLMConfig(),
+		Exa:         loadExaConfig(),
+		Version:     envutil.String("APP_VERSION", "1.0.0-llm-scheduler"),
 	}
 }
 
@@ -94,7 +94,7 @@ func (c *LLMSchedulerConfig) validate() error {
 	if c.Server.Port == 0 {
 		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
 	}
-	if err := validateAPISecretKey(c.Telemetry.Environment, c.Server.APIKey); err != nil {
+	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
@@ -103,7 +103,7 @@ func (c *LLMSchedulerConfig) validate() error {
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
 		return fmt.Errorf("IRIS_BOT_TOKEN (or IRIS_SHARED_TOKEN) is required")
 	}
-	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
+	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
 	return nil

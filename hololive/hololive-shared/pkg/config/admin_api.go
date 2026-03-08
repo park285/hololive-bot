@@ -37,7 +37,7 @@ type AdminAPIConfig struct {
 	Postgres        PostgresConfig
 	Holodex         HolodexConfig
 	CORS            CORSConfig
-	Telemetry       TelemetryConfig
+	Environment     string
 	Services        ServicesConfig
 	Logging         LoggingConfig
 	LLMSchedulerURL string // llm-scheduler 내부 트리거 프록시 URL
@@ -80,7 +80,7 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 			Enforce:             envutil.Bool("CORS_ENFORCE", false),
 			MissingInProduction: corsMissingInProduction,
 		},
-		Telemetry: loadTelemetryConfig(),
+		Environment: loadAppEnvironment(),
 		Services: ServicesConfig{
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
 			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
@@ -96,13 +96,13 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 
 // validate: 필수 설정값을 검증합니다.
 func (c *AdminAPIConfig) validate() error {
-	if err := validateAPISecretKey(c.Telemetry.Environment, c.Server.APIKey); err != nil {
+	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")
 	}
-	if err := validatePostgresSSLMode(c.Telemetry.Environment, c.Postgres.SSLMode); err != nil {
+	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
 	return nil
