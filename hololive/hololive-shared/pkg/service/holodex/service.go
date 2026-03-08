@@ -825,6 +825,7 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 	}
 
 	streams := h.mapper.MapStreamsResponse(rawStreams)
+	h.hydrateIndieStreamChannels(streams, channelIDs)
 	filtered := h.filter.FilterHololiveStreams(streams)
 
 	// /users/live는 캐시된 결과이므로 짧은 TTL 적용 (30초)
@@ -836,6 +837,45 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 	)
 
 	return filtered, nil
+}
+
+func (h *Service) hydrateIndieStreamChannels(streams []*domain.Stream, requestedChannelIDs []string) {
+	if len(streams) == 0 || len(requestedChannelIDs) == 0 || len(constants.IndieChannelIDs) == 0 {
+		return
+	}
+
+	indieRequested := make(map[string]struct{}, len(constants.IndieChannelIDs))
+	for _, channelID := range requestedChannelIDs {
+		if channelID == "" {
+			continue
+		}
+		if slices.Contains(constants.IndieChannelIDs, channelID) {
+			indieRequested[channelID] = struct{}{}
+		}
+	}
+	if len(indieRequested) == 0 {
+		return
+	}
+
+	indie := constants.HolodexAPIParams.OrgIndie
+	for _, stream := range streams {
+		if stream == nil || stream.ChannelID == "" {
+			continue
+		}
+		if _, ok := indieRequested[stream.ChannelID]; !ok {
+			continue
+		}
+
+		if stream.Channel == nil {
+			stream.Channel = &domain.Channel{
+				ID:   stream.ChannelID,
+				Name: stream.ChannelName,
+			}
+		}
+		if stream.Channel.Org == nil || *stream.Channel.Org == "" {
+			stream.Channel.Org = &indie
+		}
+	}
 }
 
 func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
@@ -1050,14 +1090,7 @@ func (h *Service) fetchIndieStreams(ctx context.Context) ([]*domain.Stream, erro
 	}
 
 	streams := h.mapper.MapStreamsResponse(rawStreams)
-
-	// Indie 스트림 org 태깅
-	for _, s := range streams {
-		if s.Channel != nil && (s.Channel.Org == nil || *s.Channel.Org == "") {
-			indie := "Indie"
-			s.Channel.Org = &indie
-		}
-	}
+	h.hydrateIndieStreamChannels(streams, constants.IndieChannelIDs)
 
 	return streams, nil
 }
