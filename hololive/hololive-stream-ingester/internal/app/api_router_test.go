@@ -34,6 +34,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
@@ -117,7 +118,7 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		youtubeEnabled:   true,
 		photoSyncEnabled: false,
 	})
-	router, err := ProvideHealthOnlyRouter(ctx, testLogger(), readiness)
+	router, err := ProvideHealthOnlyRouter(ctx, testLogger(), readiness, "")
 	if err != nil {
 		t.Fatalf("ProvideHealthOnlyRouter() error = %v", err)
 	}
@@ -163,6 +164,31 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		}
 		if !strings.Contains(rr.Header().Get("Content-Type"), "text/plain") {
 			t.Fatalf("Content-Type = %q, want contains text/plain", rr.Header().Get("Content-Type"))
+		}
+	})
+
+	t.Run("metrics endpoint requires api key when configured", func(t *testing.T) {
+		protectedRouter, err := ProvideHealthOnlyRouter(ctx, testLogger(), readiness, "test-key")
+		if err != nil {
+			t.Fatalf("ProvideHealthOnlyRouter() protected error = %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		rr := httptest.NewRecorder()
+		protectedRouter.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("/metrics status without api key = %d, want %d", rr.Code, http.StatusUnauthorized)
+		}
+
+		reqWithKey := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		reqWithKey.Header.Set(middleware.APIKeyHeader, "test-key")
+		rrWithKey := httptest.NewRecorder()
+		protectedRouter.ServeHTTP(rrWithKey, reqWithKey)
+		if rrWithKey.Code != http.StatusOK {
+			t.Fatalf("/metrics status with api key = %d, want %d", rrWithKey.Code, http.StatusOK)
+		}
+		if rrWithKey.Body.Len() == 0 {
+			t.Fatal("/metrics body with api key is empty")
 		}
 	})
 

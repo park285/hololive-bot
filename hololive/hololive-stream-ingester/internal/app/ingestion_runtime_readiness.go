@@ -104,9 +104,6 @@ func (s *ingestionReadinessState) response() (int, map[string]any) {
 		"youtube_enabled":     s.youtubeEnabled,
 		"photo_sync_enabled":  s.photoSyncEnabled,
 	}
-	if lastError, _ := s.lastError.Load().(string); strings.TrimSpace(lastError) != "" {
-		response["last_error"] = lastError
-	}
 
 	return statusCode, response
 }
