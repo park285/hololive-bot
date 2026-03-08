@@ -98,7 +98,7 @@ var LLMHTTPTimeout = struct {
 	Request:        2 * time.Minute,
 	Dial:           5 * time.Second,
 	TLSHandshake:   5 * time.Second,
-	ResponseHeader: 15 * time.Second,
+	ResponseHeader: 60 * time.Second, // GPT-5.4 요약 요청은 첫 헤더까지 수십 초가 걸릴 수 있다.
 	IdleConn:       90 * time.Second,
 }
 
