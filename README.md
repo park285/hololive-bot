@@ -91,11 +91,11 @@ go test ./hololive/hololive-kakao-bot-go/... \
   - 기본 운영 경로는 `logs/*.log`만 사용
   - `logs/mirror/`, `logs/backfill/`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 opt-in 보조 산출물
 - 기본 확인: `docker compose -f docker-compose.prod.yml logs -f <service>`
-- 범위 조회: `./scripts/logs/query.sh <service> --since 1h --limit 1000`
-- 실시간 tail: `./scripts/logs/tail.sh <service> --since 30m`
-- 일회성 스냅샷: `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/backfill.sh <service> --since 24h`
-- 선택적 로컬 미러링: `ENABLE_LOG_MIRROR=1 ./scripts/logs/stream.sh start` 또는 `ENABLE_LOG_MIRROR=1 ./scripts/logs/dump.sh`
-- 보조 로그 정리: `./scripts/logs/prune.sh`
+- 범위 조회: `./scripts/logs/logs.sh query <service> --since 1h --limit 1000`
+- 실시간 tail: `./scripts/logs/logs.sh tail <service> --since 30m`
+- 일회성 스냅샷: `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh backfill <service> --since 24h`
+- 선택적 로컬 미러링: `ENABLE_LOG_MIRROR=1 ./scripts/logs/logs.sh stream start` 또는 `ENABLE_LOG_MIRROR=1 ./scripts/logs/logs.sh dump`
+- 보조 로그 정리: `./scripts/logs/logs.sh prune`
 - 상태 확인: `docker compose -f docker-compose.prod.yml ps`
 - Health endpoint: `bot(30001)`, `dispatcher-go(30020)`, `llm-scheduler(30003)`, `stream-ingester(30004)`
 
