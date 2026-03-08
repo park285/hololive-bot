@@ -296,7 +296,7 @@ func (s *ScraperService) fetchAllStreams(ctx context.Context) ([]*domain.Stream,
 		return streams, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load official schedule page: %w", err)
 	}
 
 	streams, ok := result.([]*domain.Stream)

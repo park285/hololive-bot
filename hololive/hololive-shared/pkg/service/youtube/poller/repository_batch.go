@@ -47,7 +47,7 @@ func newBatchRepository(db *gorm.DB) batchRepository {
 }
 
 func (r *gormBatchRepository) PersistVideos(ctx context.Context, videos []*domain.YouTubeVideo, notifications []*domain.YouTubeNotificationOutbox, watermark *domain.YouTubeContentWatermark) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := r.batchUpsertVideos(ctx, tx, videos); err != nil {
 			return fmt.Errorf("batch upsert videos: %w", err)
 		}
@@ -58,11 +58,14 @@ func (r *gormBatchRepository) PersistVideos(ctx context.Context, videos []*domai
 			return fmt.Errorf("upsert watermark: %w", err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("persist videos transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *gormBatchRepository) PersistCommunityPosts(ctx context.Context, posts []*domain.YouTubeCommunityPost, notifications []*domain.YouTubeNotificationOutbox, watermark *domain.YouTubeContentWatermark) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := r.batchUpsertCommunityPosts(ctx, tx, posts); err != nil {
 			return fmt.Errorf("batch upsert community posts: %w", err)
 		}
@@ -73,7 +76,10 @@ func (r *gormBatchRepository) PersistCommunityPosts(ctx context.Context, posts [
 			return fmt.Errorf("upsert watermark: %w", err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("persist community posts transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *gormBatchRepository) batchUpsertVideos(ctx context.Context, tx *gorm.DB, videos []*domain.YouTubeVideo) error {

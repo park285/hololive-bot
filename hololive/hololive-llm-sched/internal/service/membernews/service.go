@@ -30,6 +30,7 @@ import (
 
 	sharedmodel "github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
