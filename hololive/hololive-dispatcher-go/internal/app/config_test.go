@@ -62,19 +62,6 @@ func TestLoadConfig_AppliesDefaultWhenInvalidNumericValue(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_TelemetryMetricsIntervalFallback(t *testing.T) {
-	setRequiredEnvForLoadConfig(t)
-	t.Setenv("OTEL_METRICS_EXPORT_INTERVAL_SECONDS", "-1")
-
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig() error = %v", err)
-	}
-	if cfg.Telemetry.MetricsExportInterval != 30*time.Second {
-		t.Fatalf("Telemetry.MetricsExportInterval = %v, want %v", cfg.Telemetry.MetricsExportInterval, 30*time.Second)
-	}
-}
-
 func TestLoadConfig_LegacyValkeyEnvFallback(t *testing.T) {
 	setRequiredEnvForLoadConfig(t)
 	t.Setenv("CACHE_HOST", "")

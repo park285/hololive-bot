@@ -29,7 +29,6 @@ import (
 
 	"github.com/joho/godotenv"
 
-	sharedconfig "github.com/kapu/hololive-shared/pkg/config"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -39,17 +38,16 @@ const (
 	defaultMaxBatch           = 50
 	defaultReconnectBackoffMS = 1000
 	defaultLoggingLevel       = "info"
-	defaultMetricsIntervalSec = 30
 )
 
 // Config: dispatcher-go 런타임 설정.
 type Config struct {
-	Server    ServerConfig
-	Iris      IrisConfig
-	Valkey    cache.Config
-	Dispatch  DispatchConfig
-	Logging   sharedlogging.Config
-	Telemetry sharedconfig.TelemetryConfig
+	Server      ServerConfig
+	Iris        IrisConfig
+	Valkey      cache.Config
+	Dispatch    DispatchConfig
+	Logging     sharedlogging.Config
+	Environment string
 }
 
 // ServerConfig: HTTP 서버 설정.
@@ -87,11 +85,6 @@ func LoadConfig() (*Config, error) {
 	if reconnectBackoffMS <= 0 {
 		reconnectBackoffMS = defaultReconnectBackoffMS
 	}
-	metricsExportIntervalSec := lookupInt("OTEL_METRICS_EXPORT_INTERVAL_SECONDS", defaultMetricsIntervalSec)
-	if metricsExportIntervalSec <= 0 {
-		metricsExportIntervalSec = defaultMetricsIntervalSec
-	}
-
 	cfg := &Config{
 		Server: ServerConfig{
 			Port: lookupInt("DISPATCHER_PORT", 30020),
@@ -120,17 +113,7 @@ func LoadConfig() (*Config, error) {
 			MaxAgeDays: lookupInt("LOG_MAX_AGE_DAYS", 30),
 			Compress:   lookupBool("LOG_COMPRESS", true),
 		},
-		Telemetry: sharedconfig.TelemetryConfig{
-			Enabled:               lookupBool("OTEL_ENABLED", false),
-			MetricsEnabled:        lookupBool("OTEL_METRICS_ENABLED", false),
-			MetricsExportInterval: time.Duration(metricsExportIntervalSec) * time.Second,
-			ServiceName:           lookupString("OTEL_SERVICE_NAME", "hololive-dispatcher-go"),
-			ServiceVersion:        lookupString("OTEL_SERVICE_VERSION", "1.0.0"),
-			Environment:           lookupString("OTEL_ENVIRONMENT", "production"),
-			OTLPEndpoint:          lookupString("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-			OTLPInsecure:          lookupBool("OTEL_EXPORTER_OTLP_INSECURE", false),
-			SampleRate:            lookupFloat("OTEL_SAMPLE_RATE", 1.0),
-		},
+		Environment: lookupString("APP_ENV", "production"),
 	}
 	if cfg.Dispatch.QueueKey == "" {
 		cfg.Dispatch.QueueKey = contractsalarm.DispatchQueueKey
@@ -138,10 +121,6 @@ func LoadConfig() (*Config, error) {
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = defaultLoggingLevel
 	}
-	if cfg.Telemetry.MetricsExportInterval <= 0 {
-		cfg.Telemetry.MetricsExportInterval = defaultMetricsIntervalSec * time.Second
-	}
-
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("load dispatcher config: validate: %w", err)
 	}
