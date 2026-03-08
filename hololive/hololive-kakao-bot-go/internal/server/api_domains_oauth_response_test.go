@@ -46,6 +46,12 @@ func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 	if got.Member.APIHandler == nil {
 		t.Fatal("embedded APIHandler should be initialized")
 	}
+	if got.Member.APIHandler.streamState == nil {
+		t.Fatal("embedded APIHandler streamState should be initialized")
+	}
+	if got.Member.APIHandler.startTime.IsZero() {
+		t.Fatal("embedded APIHandler startTime should be initialized")
+	}
 	if got.Member.APIHandler != got.Alarm.APIHandler || got.Member.APIHandler != got.OAuth.APIHandler {
 		t.Fatal("all domain handlers should share same APIHandler instance")
 	}
@@ -54,6 +60,12 @@ func TestDomainHandlers_WiringAndNilReceiver(t *testing.T) {
 	wired := base.DomainHandlers()
 	if wired.Member.APIHandler != base || wired.Template.APIHandler != base {
 		t.Fatal("expected all domain handlers to reference original APIHandler")
+	}
+	if wired.Member.APIHandler.streamState == nil {
+		t.Fatal("zero-value APIHandler should gain streamState defaults")
+	}
+	if wired.Member.APIHandler.startTime.IsZero() {
+		t.Fatal("zero-value APIHandler should gain startTime defaults")
 	}
 }
 
@@ -85,6 +97,21 @@ func TestNewAPIHandler_BasicInitialization(t *testing.T) {
 	)
 	if repoBacked.memberIndexLoader == nil {
 		t.Fatal("memberIndexLoader should be set when repo is provided")
+	}
+}
+
+func TestAPIHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
+	h := (&APIHandler{}).ensureDefaults()
+	if h.streamState == nil {
+		t.Fatal("streamState should be initialized")
+	}
+	if h.startTime.IsZero() {
+		t.Fatal("startTime should be initialized")
+	}
+
+	repoBacked := (&APIHandler{repo: &member.Repository{}}).ensureDefaults()
+	if repoBacked.memberIndexLoader == nil {
+		t.Fatal("memberIndexLoader should be derived from repo")
 	}
 }
 
