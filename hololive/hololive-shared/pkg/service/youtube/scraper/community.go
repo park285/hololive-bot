@@ -53,6 +53,7 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
+		logStructureWarning("community_posts", channelID, "ytInitialData extraction failed", "error", err)
 		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
 
