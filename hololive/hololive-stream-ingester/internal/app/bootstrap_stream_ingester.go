@@ -144,7 +144,7 @@ func buildStreamIngesterHTTPServer(
 	runtimeName string,
 	readiness *ingestionReadinessState,
 ) (*http.Server, error) {
-	router, err := ProvideHealthOnlyRouter(ctx, logger, readiness)
+	router, err := ProvideHealthOnlyRouter(ctx, logger, readiness, cfg.Server.APIKey)
 	if err != nil {
 		return nil, fmt.Errorf("build stream ingester router: %w", err)
 	}
