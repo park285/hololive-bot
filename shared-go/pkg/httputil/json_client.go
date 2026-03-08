@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
-
 	sharedjson "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
+
+const apiKeyHeader = "X-API-Key"
 
 // JSONClient는 내부 서비스 간 JSON API 호출용 공통 HTTP 클라이언트입니다.
 type JSONClient struct {
@@ -87,5 +87,5 @@ func (c *JSONClient) applyAPIKey(req *http.Request) {
 	if req == nil || c.apiKey == "" {
 		return
 	}
-	req.Header.Set(commoncontracts.APIKeyHeader, c.apiKey)
+	req.Header.Set(apiKeyHeader, c.apiKey)
 }
