@@ -30,9 +30,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 // ProvideAPIServer: HTTP 서버 인스턴스를 생성합니다.
@@ -58,14 +56,15 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	router.Use(gin.Recovery())
-	router.Use(middleware.LoggerMiddleware(ctx, logger,
-		"/health",
-		"/metrics",
-	))
-
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, health.Get())
+	sharedserver.ApplyBaseMiddleware(router, ctx, logger, sharedserver.BaseMiddlewareOptions{
+		SkipLogPaths: []string{
+			"/health",
+			"/ready",
+			"/metrics",
+		},
 	})
+
+	sharedserver.RegisterHealthRoutes(router)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	return router, nil
