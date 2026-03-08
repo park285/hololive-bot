@@ -49,9 +49,7 @@ type DomainAPIHandlers struct {
 }
 
 func (h *APIHandler) DomainHandlers() *DomainAPIHandlers {
-	if h == nil {
-		h = &APIHandler{}
-	}
+	h = h.ensureDefaults()
 
 	return &DomainAPIHandlers{
 		Member:     &MemberAPIHandler{APIHandler: h},

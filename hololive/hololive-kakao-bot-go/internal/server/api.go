@@ -80,8 +80,30 @@ func newStreamState() *sharedserver.StreamState {
 	return sharedserver.NewStreamState(channelStatsCacheWorkers, channelStatsRefreshWorkers)
 }
 
+func (h *APIHandler) ensureDefaults() *APIHandler {
+	if h == nil {
+		h = &APIHandler{}
+	}
+	if h.streamState == nil {
+		h.streamState = newStreamState()
+	}
+	if h.memberIndexLoader == nil && h.repo != nil {
+		h.memberIndexLoader = h.repo.GetAllMembers
+	}
+	if h.startTime.IsZero() {
+		h.startTime = time.Now()
+	}
+	return h
+}
+
 // streamState 접근자. 생성자에서 반드시 초기화되므로 nil이 될 수 없다.
 func (h *APIHandler) ensureStreamState() *sharedserver.StreamState {
+	if h == nil {
+		return newStreamState()
+	}
+	if h.streamState == nil {
+		h.streamState = newStreamState()
+	}
 	return h.streamState
 }
 
@@ -111,7 +133,7 @@ func NewAPIHandler(
 		memberIndexLoader = repo.GetAllMembers
 	}
 
-	return &APIHandler{
+	return (&APIHandler{
 		repo:                       repo,
 		memberCache:                memberCache,
 		valkeyCache:                valkeyCache,
@@ -133,5 +155,5 @@ func NewAPIHandler(
 		startTime:                  time.Now(),
 		streamState:                newStreamState(),
 		memberIndexLoader:          memberIndexLoader,
-	}
+	}).ensureDefaults()
 }
