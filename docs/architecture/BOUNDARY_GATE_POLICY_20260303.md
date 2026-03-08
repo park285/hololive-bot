@@ -1,7 +1,7 @@
 # Architecture Boundary Gate Policy
 
 > 시행일: 2026-03-03  
-> 범위: `hololive-bot` 모노레포(Go + Rust)
+> 범위: `hololive-bot` 모노레포(Go 단일 런타임)
 
 ## 1) 목적
 
@@ -12,14 +12,12 @@
 아래 규칙은 `.github/workflows/architecture-gates.yml`에서 **항상** 실행되어야 한다.
 
 1. `scripts/architecture/m0-gate.sh`
-   - Rust service→infra allowlist 검사
-   - admin↔kakao 중복 allowlist + 총 중복 상한 검사
    - `shared-go` 경계(`shared-go -> github.com/kapu/hololive-*`) 금지 검사
    - `shared-go/pkg` 신규 패키지 allowlist 검사
    - Go 호환 어댑터(`*_compat.go`, sharedserver type alias) 금지 검사
    - Go import graph 산출
 2. `scripts/architecture/m1-contract-gate.sh`
-   - Go↔Rust alarm 계약 상수 parity 검사
+   - Go alarm 계약 상수 sanity 검사
    - Trigger 경로 하드코딩 금지 검사
 3. `scripts/architecture/check-go-module-loc.sh`
    - M4 분해 대상 Go 파일 LOC 상한 검사
