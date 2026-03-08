@@ -267,4 +267,83 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	}
 }
 
+func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	client, _, addr := newTestValkeyClient(t)
+	publisherClient, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:       []string{addr},
+		DisableCache:      true,
+		ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { publisherClient.Close() })
+
+	cacheSvc := &cachemocks.Client{
+		GetClientFunc: func() valkey.Client { return client },
+	}
+	settingsSvc := &trackingSettingsReadWriter{
+		current: settings.Settings{
+			AlarmAdvanceMinutes: 5,
+			ScraperProxyEnabled: false,
+		},
+	}
+	youtubeSvc := &trackingYouTubeSvc{}
+	alarmSvc := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
+	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: time.Millisecond,
+	})
+	trackingPoller := &trackingProxyTogglePoller{}
+	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
+
+	deps := botConfigSubscriberDependencies{
+		cache:    cacheSvc,
+		settings: settingsSvc,
+	}
+	runtimeDeps := botConfigSubscriberRuntimeDependencies{
+		youtubeService: youtubeSvc,
+		alarmCRUD:      alarmSvc,
+	}
+	subscriber := buildBotConfigSubscriber(deps, runtimeDeps, scheduler, logger)
+	require.NotNil(t, subscriber)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		subscriber.Run(ctx)
+		close(done)
+	}()
+
+	configPublisher := configsub.NewPublisher(publisherClient)
+
+	require.Eventually(t, func() bool {
+		if err := configPublisher.PublishScraperProxy(context.Background(), true); err != nil {
+			return false
+		}
+		got := settingsSvc.Get()
+		return got.ScraperProxyEnabled && youtubeSvc.isProxyEnabled() && trackingPoller.isEnabled()
+	}, 2*time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		if err := configPublisher.PublishAlarmAdvanceMinutes(context.Background(), 30); err != nil {
+			return false
+		}
+		calls, last := alarmSvc.callSnapshot()
+		return calls >= 1 && last == 30 && settingsSvc.Get().AlarmAdvanceMinutes == 30
+	}, 2*time.Second, 50*time.Millisecond)
+
+	assert.GreaterOrEqual(t, settingsSvc.calls(), 2)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscriber did not stop after cancel")
+	}
+}
+
 var _ settings.ReadWriter = (*trackingSettingsReadWriter)(nil)
