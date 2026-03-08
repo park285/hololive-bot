@@ -29,8 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valkey-io/valkey-go"
-
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -332,20 +330,11 @@ func (s *Service) loadNotifiedData(ctx context.Context, key string) (*NotifiedDa
 }
 
 func (s *Service) readNotifiedHashFields(ctx context.Context, key string) (map[string]string, error) {
-	client, builder, ok := rawCacheAccessors(s.cache)
-	if !ok {
-		fields, err := s.cache.HGetAll(ctx, key)
-		if err != nil {
-			return nil, fmt.Errorf("read notified hash fields: %w", err)
-		}
-		return fields, nil
+	fields, err := s.cache.HGetAll(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("read notified hash fields: %w", err)
 	}
-
-	resp := client.Do(ctx, builder.Hgetall().Key(key).Build())
-	if resp.Error() != nil {
-		return nil, resp.Error()
-	}
-	return resp.AsStrMap()
+	return fields, nil
 }
 
 func (s *Service) migrateLegacyNotifiedData(ctx context.Context, key string, data *NotifiedData) error {
@@ -396,16 +385,4 @@ func parseNotifiedHash(fields map[string]string) *NotifiedData {
 
 func isWrongTypeError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "WRONGTYPE")
-}
-
-func rawCacheAccessors(c cache.Client) (client valkey.Client, builder valkey.Builder, ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-
-	client = c.GetClient()
-	builder = c.B()
-	return client, builder, true
 }

@@ -22,9 +22,8 @@ package chzzk
 
 import (
 	"context"
+	stdErrors "errors"
 	"fmt"
-	"github.com/kapu/hololive-shared/pkg/constants"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +32,11 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
 
 func TestNewClient(t *testing.T) {
@@ -141,6 +145,20 @@ func TestGetLiveStatus_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error for 404 response")
 	}
+
+	var apiErr *errors.APIError
+	if !stdErrors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T: %v", err, err)
+	}
+	if apiErr.Operation != chzzkGetLiveStatusOp {
+		t.Fatalf("operation = %q, want %q", apiErr.Operation, chzzkGetLiveStatusOp)
+	}
+	if apiErr.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", apiErr.StatusCode, http.StatusNotFound)
+	}
+	if got := err.Error(); got != "api error operation=chzzk_get_live_status status=404" {
+		t.Fatalf("unexpected error string: %q", got)
+	}
 }
 
 func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
@@ -176,6 +194,10 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 	_, err := client.GetLiveStatus(ctx, "test-channel")
 	if err == nil {
 		t.Error("Expected circuit breaker error")
+	}
+	var circuitErr errors.CircuitOpenError
+	if !stdErrors.As(err, &circuitErr) {
+		t.Fatalf("expected CircuitOpenError, got %T: %v", err, err)
 	}
 	if callCount != callCountBefore {
 		t.Errorf("Circuit breaker should prevent API call, but callCount increased from %d to %d", callCountBefore, callCount)
@@ -686,6 +708,41 @@ func TestGetLivesByChannelIDs_EmptyTargets(t *testing.T) {
 	}
 	if len(lives) != 0 {
 		t.Fatalf("expected empty result, got %#v", lives)
+	}
+}
+
+func TestGetLives_HTTPError_Normalized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+	client.openAPIBaseURL = server.URL
+
+	_, err := client.GetLives(context.Background(), 10, "")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var apiErr *errors.APIError
+	if !stdErrors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T: %v", err, err)
+	}
+	if apiErr.Operation != chzzkGetLivesOp {
+		t.Fatalf("operation = %q, want %q", apiErr.Operation, chzzkGetLivesOp)
+	}
+	if apiErr.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d", apiErr.StatusCode, http.StatusBadGateway)
+	}
+	if got := err.Error(); got != "api error operation=chzzk_get_lives status=502" {
+		t.Fatalf("unexpected error string: %q", got)
 	}
 }
 

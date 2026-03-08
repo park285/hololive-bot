@@ -22,7 +22,6 @@ package dedup
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -38,6 +37,7 @@ import (
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 var newTestLogger = sharedlogging.NewLogger
