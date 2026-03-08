@@ -227,8 +227,8 @@ func TestStreamIngesterRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	if status != "not_ready" {
 		t.Fatalf("readiness status = %q, want %q", status, "not_ready")
 	}
-	if payload["last_error"] == nil {
-		t.Fatal("last_error missing after server error")
+	if _, exists := payload["last_error"]; exists {
+		t.Fatal("last_error should be hidden from readiness payload")
 	}
 }
 

@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 // ProvideAPIServer: 관리자용 HTTP 서버 인스턴스를 생성합니다.
@@ -58,7 +59,7 @@ func ProvideAPIServer(addr string, handler http.Handler, operation string) *http
 }
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
-func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, readiness *ingestionReadinessState) (*gin.Engine, error) {
+func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, readiness *ingestionReadinessState, apiKey string) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
@@ -83,7 +84,9 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, readiness
 		statusCode, payload := readiness.response()
 		c.JSON(statusCode, payload)
 	})
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	metrics := router.Group("")
+	metrics.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	return router, nil
 }
