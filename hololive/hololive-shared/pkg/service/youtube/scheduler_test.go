@@ -1281,6 +1281,124 @@ func TestFetchRecentVideosRotation_CacheWritesUseBoundedParallelism(t *testing.T
 	}
 }
 
+type mockBatchOverlapGuardService struct {
+	mu          sync.Mutex
+	recentCalls int
+	startedCh   chan struct{}
+	releaseCh   chan struct{}
+}
+
+func (m *mockBatchOverlapGuardService) SetScraperProxyEnabled(enabled bool) bool { return enabled }
+func (m *mockBatchOverlapGuardService) ScraperProxyEnabled() bool                { return false }
+
+func (m *mockBatchOverlapGuardService) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
+	return map[string]*ChannelStats{}, nil
+}
+
+func (m *mockBatchOverlapGuardService) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
+	m.mu.Lock()
+	m.recentCalls++
+	m.mu.Unlock()
+
+	select {
+	case m.startedCh <- struct{}{}:
+	default:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-m.releaseCh:
+		return []string{channelID + "-video"}, nil
+	}
+}
+
+func (m *mockBatchOverlapGuardService) RecentCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.recentCalls
+}
+
+func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	youtubeSvc := &mockBatchOverlapGuardService{
+		startedCh: make(chan struct{}, recentVideosFetchParallelism),
+		releaseCh: make(chan struct{}),
+	}
+	cacheSvc := &cachemocks.Client{
+		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
+			return nil
+		},
+	}
+	members := &mockMemberDataProvider{
+		members: make([]*domain.Member, channelsPerBatch),
+	}
+	for i := range members.members {
+		members.members[i] = &domain.Member{
+			ChannelID: fmt.Sprintf("UC%d", i+1),
+			Name:      fmt.Sprintf("M%d", i+1),
+		}
+	}
+
+	scheduler := &schedulerImpl{
+		youtube:     youtubeSvc,
+		statsRepo:   &mockTrackAllSubscribersRepo{latestByChannel: map[string]*domain.TimestampedStats{}},
+		cache:       cacheSvc,
+		membersData: members,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+	}
+
+	ctx := t.Context()
+	firstDone := make(chan struct{})
+	go func() {
+		scheduler.runBatch(ctx)
+		close(firstDone)
+	}()
+
+	for i := 0; i < recentVideosFetchParallelism; i++ {
+		select {
+		case <-youtubeSvc.startedCh:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for first batch to fill parallelism slots")
+		}
+	}
+
+	scheduler.runBatch(ctx)
+
+	if got := youtubeSvc.RecentCalls(); got != recentVideosFetchParallelism {
+		t.Fatalf("recentCalls = %d, want %d while overlap guard is active", got, recentVideosFetchParallelism)
+	}
+
+	scheduler.batchMu.Lock()
+	currentBatch := scheduler.currentBatch
+	scheduler.batchMu.Unlock()
+	if currentBatch != 1 {
+		t.Fatalf("currentBatch = %d, want 1 after skipped overlapping batch", currentBatch)
+	}
+
+	close(youtubeSvc.releaseCh)
+
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first batch to finish")
+	}
+
+	scheduler.runBatch(ctx)
+
+	if got := youtubeSvc.RecentCalls(); got != channelsPerBatch*2 {
+		t.Fatalf("recentCalls = %d, want %d after guard is released", got, channelsPerBatch*2)
+	}
+
+	scheduler.batchMu.Lock()
+	currentBatch = scheduler.currentBatch
+	scheduler.batchMu.Unlock()
+	if currentBatch != 0 {
+		t.Fatalf("currentBatch = %d, want 0 after next successful batch", currentBatch)
+	}
+}
+
 func TestFinalizeNearMilestoneChannelMap_KeepsPartialResultsOnError(t *testing.T) {
 	t.Parallel()
 

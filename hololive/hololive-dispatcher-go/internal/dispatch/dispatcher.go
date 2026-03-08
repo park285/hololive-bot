@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
+	"golang.org/x/sync/errgroup"
 )
 
 type queueConsumer interface {
@@ -40,11 +41,12 @@ type messageSender interface {
 
 // Dispatcher: 큐 소비 + 그룹 렌더링 + Iris 전송.
 type Dispatcher struct {
-	consumer queueConsumer
-	sender   messageSender
-	renderer Renderer
-	maxBatch int
-	logger   *slog.Logger
+	consumer    queueConsumer
+	sender      messageSender
+	renderer    Renderer
+	maxBatch    int
+	parallelism int
+	logger      *slog.Logger
 }
 
 // NewDispatcher: 디스패처 생성자.
@@ -53,6 +55,7 @@ func NewDispatcher(
 	sender messageSender,
 	renderer Renderer,
 	maxBatch int,
+	parallelism int,
 	logger *slog.Logger,
 ) (*Dispatcher, error) {
 	if consumer == nil {
@@ -67,16 +70,20 @@ func NewDispatcher(
 	if maxBatch <= 0 {
 		return nil, fmt.Errorf("new dispatcher: max batch must be positive")
 	}
+	if parallelism <= 0 {
+		return nil, fmt.Errorf("new dispatcher: parallelism must be positive")
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	return &Dispatcher{
-		consumer: consumer,
-		sender:   sender,
-		renderer: renderer,
-		maxBatch: maxBatch,
-		logger:   logger,
+		consumer:    consumer,
+		sender:      sender,
+		renderer:    renderer,
+		maxBatch:    maxBatch,
+		parallelism: parallelism,
+		logger:      logger,
 	}, nil
 }
 
@@ -91,16 +98,34 @@ func (d *Dispatcher) RunOnce(ctx context.Context) error {
 	}
 
 	groups := GroupEnvelopes(envelopes)
-	for _, group := range groups {
-		if err := d.dispatchGroup(ctx, group); err != nil {
-			d.logger.Warn("Dispatch group failed",
-				slog.String("room_id", group.RoomID),
-				slog.Int("notifications", len(group.Notifications)),
-				slog.Any("error", err),
-			)
-		}
+	if err := d.dispatchGroups(ctx, groups); err != nil {
+		return fmt.Errorf("run dispatch once: dispatch groups: %w", err)
 	}
 
+	return nil
+}
+
+func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGroup) error {
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(d.parallelism)
+
+	for _, group := range groups {
+		group := group
+		eg.Go(func() error {
+			if err := d.dispatchGroup(egCtx, group); err != nil {
+				d.logger.Warn("Dispatch group failed",
+					slog.String("room_id", group.RoomID),
+					slog.Int("notifications", len(group.Notifications)),
+					slog.Any("error", err),
+				)
+			}
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return fmt.Errorf("dispatch groups: wait: %w", err)
+	}
 	return nil
 }
 

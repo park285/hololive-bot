@@ -22,7 +22,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -35,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 type testQueueConsumer struct {
@@ -203,6 +203,7 @@ func TestRunDispatchLoop_ErrorThenRecoveryClearsLastError(t *testing.T) {
 		&testMessageSender{},
 		dispatch.NewSimpleRenderer(),
 		1,
+		1,
 		testLogger(),
 	)
 	if err != nil {
@@ -263,6 +264,7 @@ func TestRunDispatchLoop_CancelDuringBackoffStopsQuickly(t *testing.T) {
 		consumer,
 		&testMessageSender{},
 		dispatch.NewSimpleRenderer(),
+		1,
 		1,
 		testLogger(),
 	)
