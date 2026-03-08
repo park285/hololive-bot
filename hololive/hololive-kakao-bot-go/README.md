@@ -100,7 +100,7 @@ hololive-kakao-bot-go/
 │   ├── service/                  # 비즈니스 로직 (YouTube, Chzzk, Twitch, Alarm 등)
 │   └── util/                     # 유틸리티 함수
 ├── data/                         # 임베디드 정적 데이터 (번역된 프로필 등)
-├── scripts/                      # 배포 및 실행 스크립트
+├── scripts/                      # 로컬 실행/DB 마이그레이션 스크립트
 └── Dockerfile                    # 프로덕션 배포용 Docker 설정
 ```
 
@@ -133,8 +133,8 @@ hololive-kakao-bot-go/
     # 실행
     go run ./cmd/bot
     
-    # 또는 스크립트 사용
-    ./scripts/start-bots.sh --foreground
+    # 또는 로컬 보조 스크립트 사용
+    ./scripts/start-bot.sh
     ```
 
 ### Docker Compose 배포 (프로덕션)
@@ -147,6 +147,8 @@ hololive-kakao-bot-go/
 ```
 
 전체 스택/상세 절차는 `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`를 참고하세요.
+
+로컬 단일 프로세스 보조 스크립트는 `scripts/README.md`를 참고하세요.
 
 ## ⚙️ 환경 변수 설정 (`.env`)
 
