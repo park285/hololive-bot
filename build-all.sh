@@ -2,8 +2,9 @@
 # build-all.sh: Hololive Bot 서비스 버전 관리 및 Docker 이미지 빌드 스크립트
 #
 # 사용법:
-#   ./build-all.sh                      # 모든 서비스 버전 bump + 빌드
-#   ./build-all.sh --no-bump            # 버전 bump 없이 빌드만
+#   ./build-all.sh                      # 모든 서비스 버전 bump + 빌드/배포
+#   ./build-all.sh --no-bump            # 버전 bump 없이 빌드/배포
+#   ./build-all.sh --build-only         # 빌드만 수행 (배포/재기동 없음)
 #   ./build-all.sh hololive-bot         # 특정 서비스만 빌드
 
 set -e
@@ -52,12 +53,17 @@ VERSION_DIRS=(
 
 # 인자 파싱
 NO_BUMP=false
+BUILD_ONLY=false
 TARGET_SERVICES=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-bump)
             NO_BUMP=true
+            shift
+            ;;
+        --build-only)
+            BUILD_ONLY=true
             shift
             ;;
         *)
@@ -117,9 +123,14 @@ if [ ${#TARGET_SERVICES[@]} -gt 0 ]; then
     # 지정 타겟 빌드
     echo "  [Docker] Targets: ${TARGET_SERVICES[*]}"
     "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml build "${TARGET_SERVICES[@]}"
+elif [ "$BUILD_ONLY" = true ]; then
+    # 전체 빌드만 수행
+    echo "  Target: All Services (build only)"
+    echo "  [Docker] docker-compose.prod.yml"
+    "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml build
 else
-    # 전체 빌드
-    echo "  Target: All Services"
+    # 전체 빌드 + 배포
+    echo "  Target: All Services (build + deploy)"
     echo "  [Docker] docker-compose.prod.yml"
     "${COMPOSE_CMD[@]}" -f docker-compose.prod.yml up -d --build
 fi
