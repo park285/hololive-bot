@@ -103,9 +103,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
-		Telemetry: config.TelemetryConfig{
-			Environment: "production",
-		},
+		Environment: "production",
 		CORS: config.CORSConfig{
 			AllowedOrigins: []string{"https://allowed.example.com"},
 		},
@@ -144,9 +142,7 @@ func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
 		Server: config.ServerConfig{
 			APIKey: "test-key",
 		},
-		Telemetry: config.TelemetryConfig{
-			Environment: "production",
-		},
+		Environment: "production",
 		CORS: config.CORSConfig{
 			AllowedOrigins:      nil,
 			Enforce:             true,
