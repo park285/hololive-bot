@@ -1,0 +1,57 @@
+name: Dependency Hygiene
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - shared-go
+          - hololive/hololive-shared
+          - hololive/hololive-kakao-bot-go
+          - hololive/hololive-llm-sched
+          - hololive/hololive-stream-ingester
+          - hololive/hololive-dispatcher-go
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Capture Dependency Update Report
+        run: go list -m -u -mod=readonly all > dependency-updates.txt
+
+      - name: Run govulncheck
+        continue-on-error: true
+        run: |
+          govulncheck ./... | tee govulncheck.txt
+
+      - name: Upload Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-hygiene-${{ matrix.module }}
+          path: |
+            ${{ matrix.module }}/dependency-updates.txt
+            ${{ matrix.module }}/govulncheck.txt
