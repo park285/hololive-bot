@@ -50,6 +50,13 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 			t.Fatalf("/health status = %d, want %d", healthRes.Code, http.StatusOK)
 		}
 
+		readyReq := httptest.NewRequest(http.MethodGet, "/ready", nil)
+		readyRes := httptest.NewRecorder()
+		router.ServeHTTP(readyRes, readyReq)
+		if readyRes.Code != http.StatusOK {
+			t.Fatalf("/ready status = %d, want %d", readyRes.Code, http.StatusOK)
+		}
+
 		triggerReq := httptest.NewRequest(http.MethodPost, triggercontracts.MajorEventWeeklyPath, nil)
 		triggerRes := httptest.NewRecorder()
 		router.ServeHTTP(triggerRes, triggerReq)

@@ -22,7 +22,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -38,6 +37,7 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func newDiscardLogger() *slog.Logger {
@@ -105,6 +105,18 @@ func TestProvideHealthOnlyRouter_Endpoints(t *testing.T) {
 		assert.Contains(t, rr.Header().Get("Content-Type"), "text/plain")
 	})
 
+	t.Run("ready", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &payload))
+		assert.Equal(t, "ok", payload["status"])
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/unknown", nil)
 		rr := httptest.NewRecorder()
@@ -140,6 +152,11 @@ func TestBuildLLMSchedulerHTTPServer_HealthAndTrigger(t *testing.T) {
 	healthRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(healthRR, healthReq)
 	assert.Equal(t, http.StatusOK, healthRR.Code)
+
+	readyReq := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	readyRR := httptest.NewRecorder()
+	server.Handler.ServeHTTP(readyRR, readyReq)
+	assert.Equal(t, http.StatusOK, readyRR.Code)
 
 	triggerReq := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	triggerRR := httptest.NewRecorder()

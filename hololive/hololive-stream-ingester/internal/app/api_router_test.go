@@ -22,7 +22,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,6 +31,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestProvideAPIServer(t *testing.T) {
@@ -132,6 +132,25 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		}
 	})
 
+	t.Run("ready endpoint", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("/ready status = %d, want %d", rr.Code, http.StatusOK)
+		}
+
+		var payload map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal /ready response: %v", err)
+		}
+		status, _ := payload["status"].(string)
+		if status != "ok" {
+			t.Fatalf("ready status = %q, want %q", status, "ok")
+		}
+	})
+
 	t.Run("unknown endpoint", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/unknown", nil)
 		rr := httptest.NewRecorder()
@@ -173,5 +192,12 @@ func TestBuildStreamIngesterHTTPServer(t *testing.T) {
 	server.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("/health via built server status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	readyReq := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	readyRR := httptest.NewRecorder()
+	server.Handler.ServeHTTP(readyRR, readyReq)
+	if readyRR.Code != http.StatusOK {
+		t.Fatalf("/ready via built server status = %d, want %d", readyRR.Code, http.StatusOK)
 	}
 }

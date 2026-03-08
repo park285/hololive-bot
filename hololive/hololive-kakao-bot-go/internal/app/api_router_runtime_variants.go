@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
@@ -43,10 +42,13 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	router.Use(gin.Recovery())
-	router.Use(middleware.LoggerMiddleware(ctx, logger,
-		"/health",
-		"/metrics",
-	))
+	sharedserver.ApplyBaseMiddleware(router, ctx, logger, sharedserver.BaseMiddlewareOptions{
+		SkipLogPaths: []string{
+			"/health",
+			"/ready",
+			"/metrics",
+		},
+	})
 
 	registerAPIHealthRoutes(router)
 
@@ -84,10 +86,13 @@ func ProvideBotRouter(
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	router.Use(gin.Recovery())
-	router.Use(middleware.LoggerMiddleware(ctx, logger,
-		"/health",
-		"/metrics",
-	))
+	sharedserver.ApplyBaseMiddleware(router, ctx, logger, sharedserver.BaseMiddlewareOptions{
+		SkipLogPaths: []string{
+			"/health",
+			"/ready",
+			"/metrics",
+		},
+	})
 
 	registerAPIHealthRoutes(router)
 
