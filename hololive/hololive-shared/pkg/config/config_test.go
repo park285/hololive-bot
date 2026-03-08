@@ -33,7 +33,8 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
+	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 }
 
@@ -154,22 +155,36 @@ func TestKakaoConfig_SnapshotACL_ReturnsCopy(t *testing.T) {
 	}
 }
 
-func TestLoad_IrisSharedTokenFallback(t *testing.T) {
+func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
-	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
-	t.Setenv("IRIS_BOT_TOKEN", "")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", " webhook-token ")
+	t.Setenv("IRIS_BOT_TOKEN", " bot-token ")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Iris.WebhookToken != "shared-token" {
-		t.Fatalf("WebhookToken = %q, want %q", cfg.Iris.WebhookToken, "shared-token")
+	if cfg.Iris.WebhookToken != "webhook-token" {
+		t.Fatalf("WebhookToken = %q, want %q", cfg.Iris.WebhookToken, "webhook-token")
 	}
-	if cfg.Iris.BotToken != "shared-token" {
-		t.Fatalf("BotToken = %q, want %q", cfg.Iris.BotToken, "shared-token")
+	if cfg.Iris.BotToken != "bot-token" {
+		t.Fatalf("BotToken = %q, want %q", cfg.Iris.BotToken, "bot-token")
+	}
+}
+
+func TestLoad_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
+	t.Setenv("IRIS_BOT_TOKEN", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected missing webhook token error, got nil")
+	}
+	if !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -420,7 +435,8 @@ func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
 }
 
 func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
+	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
@@ -435,7 +451,8 @@ func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T)
 }
 
 func TestLoadLLMScheduler_ProductionRequiresAPISecretKey(t *testing.T) {
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
+	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("API_SECRET_KEY", "")
 
@@ -610,7 +627,8 @@ func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
 }
 
 func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
+	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("LLM_SCHEDULER_PORT", "39003")
 	t.Setenv("BOT_PREFIX", "#")
@@ -624,6 +642,21 @@ func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
 	}
 	if cfg.Bot.Prefix != "#" {
 		t.Fatalf("Bot.Prefix = %q, want %q", cfg.Bot.Prefix, "#")
+	}
+}
+
+func TestLoadLLMScheduler_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
+	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
+	t.Setenv("IRIS_BOT_TOKEN", "")
+	t.Setenv("API_SECRET_KEY", "test-api-key")
+
+	_, err := LoadLLMScheduler()
+	if err == nil {
+		t.Fatal("LoadLLMScheduler() expected missing webhook token error, got nil")
+	}
+	if !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

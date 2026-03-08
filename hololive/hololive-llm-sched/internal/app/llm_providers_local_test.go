@@ -304,7 +304,8 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY_1", "test-key")
 	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
 	t.Setenv("KAKAO_ROOMS", "test-room")
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
+	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 
 	// Cliproxy 활성화
