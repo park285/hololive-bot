@@ -56,7 +56,6 @@ type Config struct {
 	Cliproxy           CliproxyConfig
 	LLM                LLMConfig
 	Exa                ExaConfig
-	AlarmDispatcherURL string // alarm-dispatcher HTTP 기반 CRUD 전환 URL
 	LLMSchedulerURL    string // llm-scheduler 내부 API URL (bot이 구독/다이제스트 요청 시 사용)
 	Version            string
 }
@@ -171,7 +170,6 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Cliproxy:           loadCliproxyConfig(),
 		LLM:                loadLLMConfig(),
 		Exa:                loadExaConfig(),
-		AlarmDispatcherURL: envutil.String("ALARM_DISPATCHER_URL", ""),
 		LLMSchedulerURL:    envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,

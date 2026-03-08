@@ -591,7 +591,7 @@ Content-Type: application/json
 |------|------|------|------|
 | memberNewsWeeklyRunNow | boolean | ✅ | `true`일 때 member news 주간 다이제스트 즉시 실행 |
 
-> `majorEventScrapeHourKST`, `majorEventScrapeRunNow`는 2026-03-01부터 제거되었습니다 (Rust scraper 소유).
+> `majorEventScrapeHourKST`, `majorEventScrapeRunNow`는 2026-03-01부터 제거되었습니다 (`llm-scheduler` 런타임 소유).
 
 **응답 예시 (200):**
 ```json
@@ -610,7 +610,7 @@ Content-Type: application/json
 - `memberNewsWeeklyRunNow must be true when provided`
 
 **Legacy 에러 예시 (410):**
-- `majorEventScrape* controls are no longer supported; major event scraping is owned by hololive-rs`
+- `majorEventScrape* controls are no longer supported; major event scraping is owned by llm-scheduler`
 
 ---
 

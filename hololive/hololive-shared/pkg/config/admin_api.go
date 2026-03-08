@@ -40,7 +40,6 @@ type AdminAPIConfig struct {
 	Telemetry          TelemetryConfig
 	Services           ServicesConfig
 	Logging            LoggingConfig
-	AlarmDispatcherURL string // alarm-dispatcher HTTP 기반 CRUD URL
 	LLMSchedulerURL    string // llm-scheduler 내부 트리거 프록시 URL
 	Version            string
 }
@@ -90,7 +89,6 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 		Logging: LoggingConfig{
 			Level: envutil.String("LOG_LEVEL", "info"),
 		},
-		AlarmDispatcherURL: envutil.String("ALARM_DISPATCHER_URL", ""),
 		LLMSchedulerURL:    envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		Version:            envutil.String("APP_VERSION", "1.0.0-bot-admin"),
 	}

@@ -26,7 +26,7 @@ P5 분리 이후 `llm-scheduler` 장애/재실행/수동 실행 절차를 표준
 - `POST /internal/trigger/majorevent-weekly`
 - `POST /internal/trigger/majorevent-monthly`
 - `POST /internal/trigger/membernews-weekly`
-- `SUBSCRIBE config:update` (`membernews_weekly_run_now`)
+- `SUBSCRIBE config:update` (`membernews_weekly_run_now`만 처리, 일반 settings는 무시)
 
 > 보안 정책(2026-03-01 반영): `API_SECRET_KEY`가 설정된 환경에서는 내부 트리거 호출도 `X-API-Key` 헤더가 필수입니다.  
 > admin-api trigger proxy는 동일한 `API_SECRET_KEY`를 내부 호출에 자동 전달합니다.
@@ -108,7 +108,7 @@ curl -sS -X POST "http://127.0.0.1:30001/api/holo/settings/llm" \
   -d '{"memberNewsWeeklyRunNow":true}'
 ```
 
-> 참고: Major Event 스크래핑 실행/스케줄 제어는 Rust(`hololive-rs`) 소유이며, 본 API에서 더 이상 지원하지 않습니다.
+> 참고: Major Event 스크래핑 실행/스케줄 제어는 `llm-scheduler` 런타임 소유이며, bot `/api/holo/settings/llm`에서는 더 이상 지원하지 않습니다.
 
 ---
 
