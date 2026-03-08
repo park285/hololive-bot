@@ -511,6 +511,16 @@ func (ys *schedulerImpl) processMilestones(
 	return achieved, checkErrors, saveErrors
 }
 
+type milestoneAlertWork struct {
+	notification ytstats.MilestoneNotification
+	message      string
+}
+
+type approachingAlertWork struct {
+	notification ytstats.ApproachingNotification
+	message      string
+}
+
 // channelStatsResult: processChannelStats의 결과를 담는 구조체
 type channelStatsResult struct {
 	changesDetected      int
@@ -693,60 +703,9 @@ func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage fu
 	if err != nil {
 		ys.logger.Warn("Failed to get unnotified milestones", slog.Any("error", err))
 	}
-
-	// 메시지 포맷 + 병렬 발송
-	type milestoneWork struct {
-		notification ytstats.MilestoneNotification
-		message      string
-	}
-	works := make([]milestoneWork, 0, len(milestones))
-	for _, m := range milestones {
-		var msg string
-		if ys.formatter == nil {
-			msg = fmt.Sprintf("🎉 %s님이 구독자 %s명을 달성했습니다!\n축하합니다! 🎊",
-				m.MemberName,
-				util.FormatKoreanNumber(int64(m.Value)))
-		} else {
-			formatted, fmtErr := ys.formatter.FormatMilestoneAchieved(ctx, m.MemberName, util.FormatKoreanNumber(int64(m.Value)))
-			if fmtErr != nil {
-				ys.logger.Warn("마일스톤 달성 메시지 포맷 오류", slog.Any("error", fmtErr))
-				continue
-			}
-			msg = formatted
-		}
-		works = append(works, milestoneWork{notification: m, message: msg})
-	}
-
-	// errgroup 병렬 발송 (milestone × room)
-	sentNotifications := make([]ytstats.MilestoneNotification, 0, len(works))
-	eg, _ := errgroup.WithContext(ctx)
-	eg.SetLimit(4)
-	for _, w := range works {
-		w := w
-		for _, room := range rooms {
-			room := room
-			eg.Go(func() error {
-				if err := sendMessage(room, w.message); err != nil {
-					ys.logger.Error("Failed to send milestone notification",
-						slog.String("room", room),
-						slog.String("member", w.notification.MemberName),
-						slog.Any("error", err))
-				}
-				return nil
-			})
-		}
-		sentNotifications = append(sentNotifications, w.notification)
-	}
-	_ = eg.Wait()
-
-	// batch 마킹
-	if len(sentNotifications) > 0 {
-		if err := ys.statsRepo.MarkMilestonesNotifiedBatch(ctx, sentNotifications); err != nil {
-			ys.logger.Warn("Failed to batch mark milestones notified",
-				slog.Int("count", len(sentNotifications)),
-				slog.Any("error", err))
-		}
-	}
+	works := ys.buildMilestoneAlertWorks(ctx, milestones)
+	sentNotifications := ys.dispatchMilestoneAlertWorks(ctx, sendMessage, rooms, works)
+	ys.markMilestoneNotificationsSent(ctx, sentNotifications)
 
 	milestoneSent := len(sentNotifications)
 	totalSent := milestoneSent + approachingSent
@@ -770,48 +729,9 @@ func (ys *schedulerImpl) sendApproachingAlerts(ctx context.Context, sendMessage 
 	if len(notifications) == 0 {
 		return 0
 	}
-
-	// 메시지 포맷 + 병렬 발송
-	type approachingWork struct {
-		notification ytstats.ApproachingNotification
-		message      string
-	}
-	works := make([]approachingWork, 0, len(notifications))
-	for _, n := range notifications {
-		msg := ys.formatApproachingMessage(ctx, n.MemberName, n.MilestoneValue, n.CurrentSubs)
-		works = append(works, approachingWork{notification: n, message: msg})
-	}
-
-	eg, _ := errgroup.WithContext(ctx)
-	eg.SetLimit(4)
-	for _, w := range works {
-		w := w
-		for _, room := range rooms {
-			room := room
-			eg.Go(func() error {
-				if err := sendMessage(room, w.message); err != nil {
-					ys.logger.Error("Failed to send approaching notification",
-						slog.String("room", room),
-						slog.String("member", w.notification.MemberName),
-						slog.Any("error", err))
-				}
-				return nil
-			})
-		}
-	}
-	_ = eg.Wait()
-
-	// batch 마킹
-	sentNotifications := make([]ytstats.ApproachingNotification, len(works))
-	for i, w := range works {
-		sentNotifications[i] = w.notification
-	}
-	if err := ys.statsRepo.MarkApproachingChatNotifiedBatch(ctx, sentNotifications); err != nil {
-		ys.logger.Warn("Failed to batch mark approaching notified",
-			slog.Int("count", len(sentNotifications)),
-			slog.Any("error", err))
-	}
-
+	works := ys.buildApproachingAlertWorks(ctx, notifications)
+	sentNotifications := ys.dispatchApproachingAlertWorks(ctx, sendMessage, rooms, works)
+	ys.markApproachingNotificationsSent(ctx, sentNotifications)
 	return len(sentNotifications)
 }
 
@@ -858,6 +778,148 @@ func (ys *schedulerImpl) formatChangeMessageWithContext(ctx context.Context, cha
 	}
 
 	return ""
+}
+
+func (ys *schedulerImpl) buildMilestoneAlertWorks(
+	ctx context.Context,
+	milestones []ytstats.MilestoneNotification,
+) []milestoneAlertWork {
+	works := make([]milestoneAlertWork, 0, len(milestones))
+	for _, milestone := range milestones {
+		message, ok := ys.formatMilestoneAchievedMessage(ctx, milestone.MemberName, milestone.Value)
+		if !ok {
+			continue
+		}
+		works = append(works, milestoneAlertWork{
+			notification: milestone,
+			message:      message,
+		})
+	}
+
+	return works
+}
+
+func (ys *schedulerImpl) formatMilestoneAchievedMessage(ctx context.Context, memberName string, value uint64) (string, bool) {
+	formattedValue := util.FormatKoreanNumber(int64(value))
+	if ys.formatter == nil {
+		return fmt.Sprintf("🎉 %s님이 구독자 %s명을 달성했습니다!\n축하합니다! 🎊", memberName, formattedValue), true
+	}
+
+	message, err := ys.formatter.FormatMilestoneAchieved(ctx, memberName, formattedValue)
+	if err != nil {
+		ys.logger.Warn("마일스톤 달성 메시지 포맷 오류", slog.Any("error", err))
+		return "", false
+	}
+
+	return message, true
+}
+
+func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
+	ctx context.Context,
+	sendMessage func(room, message string) error,
+	rooms []string,
+	works []milestoneAlertWork,
+) []ytstats.MilestoneNotification {
+	if len(works) == 0 || len(rooms) == 0 {
+		return nil
+	}
+
+	sentNotifications := make([]ytstats.MilestoneNotification, 0, len(works))
+	eg, _ := errgroup.WithContext(ctx)
+	eg.SetLimit(4)
+
+	for _, work := range works {
+		work := work
+		sentNotifications = append(sentNotifications, work.notification)
+		for _, room := range rooms {
+			room := room
+			eg.Go(func() error {
+				if err := sendMessage(room, work.message); err != nil {
+					ys.logger.Error("Failed to send milestone notification",
+						slog.String("room", room),
+						slog.String("member", work.notification.MemberName),
+						slog.Any("error", err))
+				}
+				return nil
+			})
+		}
+	}
+
+	_ = eg.Wait()
+	return sentNotifications
+}
+
+func (ys *schedulerImpl) markMilestoneNotificationsSent(ctx context.Context, notifications []ytstats.MilestoneNotification) {
+	if len(notifications) == 0 {
+		return
+	}
+
+	if err := ys.statsRepo.MarkMilestonesNotifiedBatch(ctx, notifications); err != nil {
+		ys.logger.Warn("Failed to batch mark milestones notified",
+			slog.Int("count", len(notifications)),
+			slog.Any("error", err))
+	}
+}
+
+func (ys *schedulerImpl) buildApproachingAlertWorks(
+	ctx context.Context,
+	notifications []ytstats.ApproachingNotification,
+) []approachingAlertWork {
+	works := make([]approachingAlertWork, 0, len(notifications))
+	for _, notification := range notifications {
+		works = append(works, approachingAlertWork{
+			notification: notification,
+			message:      ys.formatApproachingMessage(ctx, notification.MemberName, notification.MilestoneValue, notification.CurrentSubs),
+		})
+	}
+	return works
+}
+
+func (ys *schedulerImpl) dispatchApproachingAlertWorks(
+	ctx context.Context,
+	sendMessage func(room, message string) error,
+	rooms []string,
+	works []approachingAlertWork,
+) []ytstats.ApproachingNotification {
+	if len(works) == 0 || len(rooms) == 0 {
+		return nil
+	}
+
+	sentNotifications := make([]ytstats.ApproachingNotification, 0, len(works))
+	eg, _ := errgroup.WithContext(ctx)
+	eg.SetLimit(4)
+
+	for _, work := range works {
+		work := work
+		sentNotifications = append(sentNotifications, work.notification)
+		for _, room := range rooms {
+			room := room
+			eg.Go(func() error {
+				if err := sendMessage(room, work.message); err != nil {
+					ys.logger.Error("Failed to send approaching notification",
+						slog.String("room", room),
+						slog.String("member", work.notification.MemberName),
+						slog.Any("error", err))
+				}
+				return nil
+			})
+		}
+	}
+
+	_ = eg.Wait()
+	return sentNotifications
+}
+
+func (ys *schedulerImpl) markApproachingNotificationsSent(ctx context.Context, notifications []ytstats.ApproachingNotification) {
+	if len(notifications) == 0 {
+		return
+	}
+
+	if err := ys.statsRepo.MarkApproachingChatNotifiedBatch(ctx, notifications); err != nil {
+		ys.logger.Warn("Failed to batch mark approaching notified",
+			slog.Int("count", len(notifications)),
+			slog.Any("error", err))
+	}
 }
 
 // watchNearMilestoneMembers: Holodex API를 사용하여 마일스톤 직전 멤버를 빠르게 체크한다.
