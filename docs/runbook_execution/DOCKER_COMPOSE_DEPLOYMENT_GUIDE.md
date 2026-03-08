@@ -81,11 +81,11 @@ docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 보조 스크립트:
 
 ```bash
-./scripts/logs/query.sh bot --since 1h --limit 1000
-./scripts/logs/tail.sh dispatcher --since 30m
-./scripts/logs/backfill.sh llm --since 24h
-./scripts/logs/stream.sh start
-./scripts/logs/prune.sh
+./scripts/logs/logs.sh query bot --since 1h --limit 1000
+./scripts/logs/logs.sh tail dispatcher --since 30m
+./scripts/logs/logs.sh backfill llm --since 24h
+./scripts/logs/logs.sh stream start
+./scripts/logs/logs.sh prune
 ```
 
 - compose 런타임에서는 `LOG_DIR=/app/logs`로 설정해 host `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`에 파일 미러링합니다.
@@ -94,7 +94,7 @@ docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 - 기본 운영 경로는 `logs/*.log`만 사용합니다.
 - `logs/mirror/*.log`는 `ENABLE_LOG_MIRROR=1`일 때만 생성되는 선택적 로컬 미러링이며 운영 SSOT가 아닙니다.
 - `logs/backfill/*.log`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 `ENABLE_LOG_AUX_FILES=1`일 때만 사용하는 보조 운영 산출물입니다.
-- 보조 로그 정리는 `./scripts/logs/prune.sh` 기준으로 수행합니다.
+- 보조 로그 정리는 `./scripts/logs/logs.sh prune` 기준으로 수행합니다.
 - 운영 판단의 기준은 `docker compose logs`이며, 별도 log aggregation 전제를 두지 않습니다.
 
 ## DB migration
