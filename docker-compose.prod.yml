@@ -293,6 +293,8 @@ services:
     environment:
       <<: *app-file-log-env
       SERVER_PORT: 30004
+      YOUTUBE_INGESTION_ENABLED: "false"
+      PHOTO_SYNC_ENABLED: "true"
       IRIS_BASE_URL: http://host.docker.internal:3000
       IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
       IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
@@ -349,6 +351,81 @@ services:
       hololive-net:
         aliases:
           - stream-ingester
+
+  youtube-scraper:
+    image: hololive-youtube-scraper:prod
+    build:
+      context: .
+      dockerfile: hololive/hololive-stream-ingester/Dockerfile.youtube-scraper
+      args:
+        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+    container_name: hololive-youtube-scraper
+    restart: always
+    labels:
+      deunhealth.restart.on.unhealthy: "true"
+    env_file:
+      - ./.env
+    environment:
+      <<: *app-file-log-env
+      SERVER_PORT: 30005
+      YOUTUBE_INGESTION_ENABLED: "true"
+      PHOTO_SYNC_ENABLED: "false"
+      IRIS_BASE_URL: http://host.docker.internal:3000
+      IRIS_WEBHOOK_TOKEN: ${IRIS_SHARED_TOKEN}
+      IRIS_BOT_TOKEN: ${IRIS_SHARED_TOKEN}
+      CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
+      CACHE_HOST: valkey-cache
+      CACHE_PORT: 6379
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: "5433"
+      POSTGRES_SOCKET_PATH: ""
+      POSTGRES_DB: hololive
+      POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+      POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
+      POSTGRES_AUTO_PREPARE_SCHEMA: "false"
+      MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
+      MAJOREVENT_SCRAPE_HOUR_KST: "4"
+      GOGC: "100"
+      GOMEMLIMIT: "320MiB"
+      GIN_MODE: release
+      CLIPROXY_ENABLED: "true"
+      CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
+      CLIPROXY_API_KEY: ${CLIPROXY_API_KEY:-}
+      CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
+      CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
+      LOG_DIR: /app/logs
+    ports:
+      - "127.0.0.1:30005:30005"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - valkey-cache-socket:/var/run/valkey:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      holo-postgres:
+        condition: service_healthy
+      hololive-db-migrate:
+        condition: service_completed_successfully
+      valkey-cache:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:30005/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+    <<: *security-hardening
+    networks:
+      hololive-net:
+        aliases:
+          - youtube-scraper
 
   llm-scheduler:
     image: hololive-llm-scheduler:prod

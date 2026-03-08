@@ -16,6 +16,7 @@ usage() {
     echo "  dispatcher-go | dispatcher"
     echo "  llm-scheduler | llm"
     echo "  stream-ingester | ingester"
+    echo "  youtube-scraper | yt-scraper"
     echo "  holo-postgres | postgres"
     echo "  valkey-cache | valkey"
     echo "  hololive-db-migrate | migrate"
@@ -64,6 +65,7 @@ case "$SERVICE" in
     dispatcher-go|dispatcher) TARGET="dispatcher-go" ;;
     llm-scheduler|llm) TARGET="llm-scheduler" ;;
     stream-ingester|ingester) TARGET="stream-ingester" ;;
+    youtube-scraper|yt-scraper) TARGET="youtube-scraper" ;;
     holo-postgres|postgres) TARGET="holo-postgres" ;;
     valkey-cache|valkey) TARGET="valkey-cache" ;;
     hololive-db-migrate|migrate) TARGET="hololive-db-migrate" ;;
