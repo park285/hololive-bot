@@ -22,11 +22,14 @@ package config
 
 import (
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
+
+func loadAppEnvironment() string {
+	return envutil.String("APP_ENV", "production")
+}
 
 func loadValkeyConfig() ValkeyConfig {
 	return ValkeyConfig{
@@ -106,24 +109,5 @@ func loadExaConfig() ExaConfig {
 		Endpoint: envutil.String("EXA_MCP_ENDPOINT", "https://mcp.exa.ai/mcp"),
 		APIKey:   envutil.String("EXA_API_KEY", ""),
 		Enabled:  envutil.Bool("EXA_ENABLED", false),
-	}
-}
-
-func loadTelemetryConfig() TelemetryConfig {
-	metricsExportIntervalSeconds := envutil.Int("OTEL_METRICS_EXPORT_INTERVAL_SECONDS", 30)
-	if metricsExportIntervalSeconds <= 0 {
-		metricsExportIntervalSeconds = 30
-	}
-
-	return TelemetryConfig{
-		Enabled:               envutil.Bool("OTEL_ENABLED", false),
-		MetricsEnabled:        envutil.Bool("OTEL_METRICS_ENABLED", false),
-		MetricsExportInterval: time.Duration(metricsExportIntervalSeconds) * time.Second,
-		ServiceName:           envutil.String("OTEL_SERVICE_NAME", "hololive-bot"),
-		ServiceVersion:        envutil.String("OTEL_SERVICE_VERSION", "1.0.0"),
-		Environment:           envutil.String("OTEL_ENVIRONMENT", "production"),
-		OTLPEndpoint:          envutil.String("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-		OTLPInsecure:          envutil.Bool("OTEL_EXPORTER_OTLP_INSECURE", false),
-		SampleRate:            envutil.Float("OTEL_SAMPLE_RATE", 1.0),
 	}
 }

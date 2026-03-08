@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -176,7 +175,7 @@ func TestLoad_IrisSharedTokenFallback(t *testing.T) {
 
 func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "false")
 
@@ -208,7 +207,7 @@ func TestLoad_RejectsPlaceholderYouTubeAPIKey(t *testing.T) {
 
 func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "true")
 
@@ -223,7 +222,7 @@ func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 
 func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("CORS_ENFORCE", "false")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*,http://localhost:5173,https://admin.example.com")
 
@@ -351,7 +350,7 @@ func TestLoad_DefaultPostgresSSLModeRequire(t *testing.T) {
 
 func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("API_SECRET_KEY", "")
 
 	_, err := Load()
@@ -365,7 +364,7 @@ func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 
 func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
 
 	_, err := Load()
@@ -380,7 +379,7 @@ func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
 
 	_, err := LoadAdminAPI()
@@ -394,7 +393,7 @@ func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 
 func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("API_SECRET_KEY", "")
 
 	_, err := LoadAdminAPI()
@@ -409,7 +408,7 @@ func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
 func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
 
 	_, err := LoadLLMScheduler()
@@ -423,7 +422,7 @@ func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T)
 
 func TestLoadLLMScheduler_ProductionRequiresAPISecretKey(t *testing.T) {
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
-	t.Setenv("OTEL_ENVIRONMENT", "production")
+	t.Setenv("APP_ENV", "production")
 	t.Setenv("API_SECRET_KEY", "")
 
 	_, err := LoadLLMScheduler()
@@ -564,34 +563,6 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 	})
 }
 
-func TestLoad_TelemetryMetricsDefaults(t *testing.T) {
-	setRequiredLoadEnv(t)
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Telemetry.MetricsEnabled {
-		t.Fatalf("Telemetry.MetricsEnabled = true, want false")
-	}
-	if cfg.Telemetry.MetricsExportInterval != 30*time.Second {
-		t.Fatalf("Telemetry.MetricsExportInterval = %v, want %v", cfg.Telemetry.MetricsExportInterval, 30*time.Second)
-	}
-}
-
-func TestLoad_TelemetryMetricsInterval_FallbackToDefault(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("OTEL_METRICS_EXPORT_INTERVAL_SECONDS", "-10")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Telemetry.MetricsExportInterval != 30*time.Second {
-		t.Fatalf("Telemetry.MetricsExportInterval = %v, want %v", cfg.Telemetry.MetricsExportInterval, 30*time.Second)
-	}
-}
-
 func TestLoadAdminAPI_EnvApplied(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
@@ -656,23 +627,6 @@ func TestLoad_InvalidNumericStillUsesDefault(t *testing.T) {
 	}
 	if cfg.Valkey.Port != 6379 {
 		t.Fatalf("Valkey.Port = %d, want %d", cfg.Valkey.Port, 6379)
-	}
-}
-
-func TestLoad_TelemetryLooseBoolParsing(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("OTEL_ENABLED", "yes")
-	t.Setenv("OTEL_METRICS_ENABLED", "y")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !cfg.Telemetry.Enabled {
-		t.Fatal("Telemetry.Enabled = false, want true")
-	}
-	if !cfg.Telemetry.MetricsEnabled {
-		t.Fatal("Telemetry.MetricsEnabled = false, want true")
 	}
 }
 
