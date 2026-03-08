@@ -1,0 +1,24 @@
+.git
+.omx
+.codex
+.claude
+.serena
+.idea
+.vscode
+
+**/.idea
+**/.vscode
+**/.serena
+**/.gomodcache
+**/.gocache
+**/vendor
+**/bin
+**/logs
+**/tmp
+**/*.log
+**/*.tmp
+**/*.out
+
+# Local build artifacts under module roots
+hololive/hololive-kakao-bot-go/bot
+hololive/hololive-kakao-bot-go/fetch_profiles
