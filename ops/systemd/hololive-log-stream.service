@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/kapu/gemini/hololive-bot
-ExecStart=/home/kapu/gemini/hololive-bot/scripts/logs/stream.sh daemon
+ExecStart=/home/kapu/gemini/hololive-bot/scripts/logs/logs.sh stream daemon
 Restart=always
 RestartSec=5
 
