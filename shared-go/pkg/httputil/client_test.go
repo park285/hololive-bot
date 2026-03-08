@@ -91,3 +91,26 @@ func TestNewExternalAPIClient(t *testing.T) {
 		t.Fatalf("Transport type = %T, want *http.Transport", client.Transport)
 	}
 }
+
+func TestNewInternalServiceClient(t *testing.T) {
+	t.Parallel()
+
+	client := NewInternalServiceClient(8 * time.Second)
+	if client == nil {
+		t.Fatal("NewInternalServiceClient() returned nil")
+	}
+	if client.Timeout != 8*time.Second {
+		t.Fatalf("Timeout = %s, want %s", client.Timeout, 8*time.Second)
+	}
+
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport type = %T, want *http.Transport", client.Transport)
+	}
+	if transport.MaxConnsPerHost != 64 {
+		t.Fatalf("MaxConnsPerHost = %d, want 64", transport.MaxConnsPerHost)
+	}
+	if transport.MaxIdleConnsPerHost != 32 {
+		t.Fatalf("MaxIdleConnsPerHost = %d, want 32", transport.MaxIdleConnsPerHost)
+	}
+}

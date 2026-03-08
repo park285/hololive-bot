@@ -36,29 +36,28 @@ import (
 
 // Config: 홀로라이브 봇의 전체 동작에 필요한 설정을 담는 구조체
 type Config struct {
-	Iris               IrisConfig
-	Server             ServerConfig
-	Kakao              KakaoConfig
-	Holodex            HolodexConfig
-	YouTube            YouTubeConfig
-	Chzzk              ChzzkConfig // 치지직 Open API 설정
-	Twitch             TwitchConfig
-	Valkey             ValkeyConfig
-	Postgres           PostgresConfig
-	Notification       NotificationConfig
-	Logging            LoggingConfig
-	Bot                BotConfig
-	Services           ServicesConfig
-	Telemetry          TelemetryConfig // OpenTelemetry 분산 추적
-	Scraper            ScraperConfig   // YouTube 스크래퍼 프록시 설정
-	Webhook            WebhookConfig
-	CORS               CORSConfig // CORS 설정
-	Cliproxy           CliproxyConfig
-	LLM                LLMConfig
-	Exa                ExaConfig
-	AlarmDispatcherURL string // alarm-dispatcher HTTP 기반 CRUD 전환 URL
-	LLMSchedulerURL    string // llm-scheduler 내부 API URL (bot이 구독/다이제스트 요청 시 사용)
-	Version            string
+	Iris            IrisConfig
+	Server          ServerConfig
+	Kakao           KakaoConfig
+	Holodex         HolodexConfig
+	YouTube         YouTubeConfig
+	Chzzk           ChzzkConfig // 치지직 Open API 설정
+	Twitch          TwitchConfig
+	Valkey          ValkeyConfig
+	Postgres        PostgresConfig
+	Notification    NotificationConfig
+	Logging         LoggingConfig
+	Bot             BotConfig
+	Services        ServicesConfig
+	Telemetry       TelemetryConfig // OpenTelemetry 분산 추적
+	Scraper         ScraperConfig   // YouTube 스크래퍼 프록시 설정
+	Webhook         WebhookConfig
+	CORS            CORSConfig // CORS 설정
+	Cliproxy        CliproxyConfig
+	LLM             LLMConfig
+	Exa             ExaConfig
+	LLMSchedulerURL string // llm-scheduler 내부 API URL (bot이 구독/다이제스트 요청 시 사용)
+	Version         string
 }
 
 // Load: .env 파일 및 환경 변수로부터 설정을 로드하고, 기본값을 적용하여 Config 객체를 생성합니다.
@@ -168,11 +167,10 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			ClientID:     envutil.String("TWITCH_CLIENT_ID", ""),
 			ClientSecret: envutil.String("TWITCH_CLIENT_SECRET", ""),
 		},
-		Cliproxy:           loadCliproxyConfig(),
-		LLM:                loadLLMConfig(),
-		Exa:                loadExaConfig(),
-		AlarmDispatcherURL: envutil.String("ALARM_DISPATCHER_URL", ""),
-		LLMSchedulerURL:    envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
+		Cliproxy:        loadCliproxyConfig(),
+		LLM:             loadLLMConfig(),
+		Exa:             loadExaConfig(),
+		LLMSchedulerURL: envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,
 			Enforce:             envutil.Bool("CORS_ENFORCE", false),

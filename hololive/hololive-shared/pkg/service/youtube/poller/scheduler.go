@@ -100,6 +100,7 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	}
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
+	ensureMetrics()
 
 	return &Scheduler{
 		jobs:        make(jobHeap, 0),
@@ -134,6 +135,7 @@ func (s *Scheduler) Register(channelID string, poller Poller, priority Priority,
 
 	heap.Push(&s.jobs, job)
 	s.jobMap[key] = job
+	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 }
 
 // UpdatePriority: 작업 우선순위 업데이트
@@ -285,6 +287,7 @@ func (s *Scheduler) dispatchDueJobs(ctx context.Context, jobCh chan<- *Job) {
 		case jobCh <- job:
 		default:
 			// 채널 가득 참 - 다음 슬롯으로 미룸
+			schedulerDispatchDefer.WithLabelValues("worker_channel_full").Inc()
 			job.NextRunAt = now.Add(10 * time.Second)
 			heap.Push(&s.jobs, job)
 			return
@@ -327,9 +330,12 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	start := time.Now()
 	err := job.Poller.Poll(ctx, job.ChannelID)
 	elapsed := time.Since(start)
+	status := "success"
 
 	if err != nil {
+		status = "error"
 		if errors.Is(err, context.Canceled) {
+			status = "canceled"
 			slog.Debug("Poll canceled",
 				"poller", job.Poller.Name(),
 				"channel_id", job.ChannelID,
@@ -347,6 +353,7 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 			"channel_id", job.ChannelID,
 			"elapsed", elapsed)
 	}
+	schedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
 
 	s.rescheduleJob(job)
 }

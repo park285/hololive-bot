@@ -38,7 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Client: alarm-dispatcher HTTP 클라이언트 (domain.AlarmCRUD 구현)
+// Client: alarm CRUD HTTP 클라이언트 (domain.AlarmCRUD 구현)
 type Client struct {
 	baseURL    string
 	apiKey     string
@@ -52,12 +52,12 @@ type Client struct {
 
 var _ domain.AlarmCRUD = (*Client)(nil)
 
-// NewClient: alarm-dispatcher 클라이언트를 생성합니다.
+// NewClient: alarm CRUD 클라이언트를 생성합니다.
 func NewClient(baseURL string, logger *slog.Logger) *Client {
 	return NewClientWithAPIKey(baseURL, "", logger)
 }
 
-// NewClientWithAPIKey: alarm-dispatcher 클라이언트를 생성합니다. apiKey가 있으면 X-API-Key 헤더를 포함합니다.
+// NewClientWithAPIKey: alarm CRUD 클라이언트를 생성합니다. apiKey가 있으면 X-API-Key 헤더를 포함합니다.
 func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if logger == nil {
@@ -66,7 +66,7 @@ func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	return &Client{
 		baseURL:    baseURL,
 		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httputil.NewClient(10 * time.Second),
+		httpClient: httputil.NewInternalServiceClient(10 * time.Second),
 		logger:     logger,
 	}
 }
@@ -198,7 +198,7 @@ type apiEnvelope struct {
 func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/internal/alarm/room/"+roomID+"/view", http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: new request: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: new request: %w", roomID, err)
 	}
 	if c.apiKey != "" {
 		req.Header.Set("X-API-Key", c.apiKey)
@@ -206,20 +206,20 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: %w", roomID, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if err := httputil.CheckStatus(resp); err != nil {
-		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: check status: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: check status: %w", roomID, err)
 	}
 
 	var envelope apiEnvelope
 	if err := stdjson.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: decode envelope: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: decode envelope: %w", roomID, err)
 	}
 	if !envelope.Success {
-		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: %s", roomID, envelope.Message)
+		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: %s", roomID, envelope.Message)
 	}
 	if envelope.Data == nil {
 		return []domain.AlarmListView{}, nil
@@ -227,7 +227,7 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 
 	var entries []domain.AlarmListView
 	if err := stdjson.Unmarshal(*envelope.Data, &entries); err != nil {
-		return nil, fmt.Errorf("alarm-dispatcher: /internal/alarm/room/%s/view: decode entries: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: decode entries: %w", roomID, err)
 	}
 	if entries == nil {
 		return []domain.AlarmListView{}, nil
@@ -320,7 +320,7 @@ func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, err
 	return entries, nil
 }
 
-// WarmCacheFromDB: no-op — alarm-dispatcher 시작 시 자동으로 캐시 워밍이 수행됩니다.
+// WarmCacheFromDB: no-op — alarm API owner 시작 시 자동으로 캐시 워밍이 수행됩니다.
 func (c *Client) WarmCacheFromDB(_ context.Context) error {
 	return nil
 }
@@ -348,14 +348,14 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	if body != nil {
 		var buf bytes.Buffer
 		if err := json.NewEncoder(&buf).Encode(body); err != nil {
-			return fmt.Errorf("alarm-dispatcher: %s: encode request: %w", path, err)
+			return fmt.Errorf("alarm-api: %s: encode request: %w", path, err)
 		}
 		bodyReader = &buf
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
 	if err != nil {
-		return fmt.Errorf("alarm-dispatcher: %s: new request: %w", path, err)
+		return fmt.Errorf("alarm-api: %s: new request: %w", path, err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -366,12 +366,12 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("alarm-dispatcher: %s: %w", path, err)
+		return fmt.Errorf("alarm-api: %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if err := httputil.CheckStatus(resp); err != nil {
-		return fmt.Errorf("alarm-dispatcher: %s: check status: %w", path, err)
+		return fmt.Errorf("alarm-api: %s: check status: %w", path, err)
 	}
 
 	if out == nil {
@@ -380,7 +380,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	}
 
 	if err := httputil.DecodeJSON(resp, out); err != nil {
-		return fmt.Errorf("alarm-dispatcher: %s: decode response: %w", path, err)
+		return fmt.Errorf("alarm-api: %s: decode response: %w", path, err)
 	}
 	return nil
 }
