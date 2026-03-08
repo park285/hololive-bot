@@ -193,3 +193,23 @@ func TestExtractYtInitialData_NotFound(t *testing.T) {
 	_, err := extractYtInitialData(`<html><body>No ytInitialData here</body></html>`)
 	require.ErrorIs(t, err, ErrYtInitialDataNotFound)
 }
+
+func TestExtractYtInitialData_DOMFallbackSupportsWindowDotAssignment(t *testing.T) {
+	html := `
+<html>
+  <body>
+    <script nonce="abc123">
+      window.ytInitialData = {"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Videos"}}]}},"metadata":{"channelMetadataRenderer":{"title":"DOMFallback"}}};
+    </script>
+  </body>
+</html>
+`
+
+	got, err := extractYtInitialData(html)
+	require.NoError(t, err)
+	assert.True(t, json.Valid([]byte(got)))
+
+	data := gjson.Parse(got)
+	assert.Equal(t, "DOMFallback", data.Get("metadata.channelMetadataRenderer.title").String())
+	assert.True(t, data.Get("contents.twoColumnBrowseResultsRenderer.tabs").Exists())
+}
