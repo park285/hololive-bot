@@ -145,7 +145,6 @@ func buildBotAdminSystemCollector(cfg *config.Config) *system.Collector {
 			{Name: "twentyq", URL: cfg.Services.GameBotTwentyQHealthURL},
 			{Name: "turtlesoup", URL: cfg.Services.GameBotTurtleHealthURL},
 		},
-		cfg.Telemetry.Enabled,
 	)
 }
 
