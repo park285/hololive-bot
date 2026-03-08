@@ -134,7 +134,7 @@ hololive-kakao-bot-go/
     go run ./cmd/bot
     
     # 또는 로컬 보조 스크립트 사용
-    ./scripts/start-bot.sh
+    ./scripts/bot.sh start
     ```
 
 ### Docker Compose 배포 (프로덕션)
