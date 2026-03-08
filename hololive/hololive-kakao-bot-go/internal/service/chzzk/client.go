@@ -34,11 +34,18 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
 
 const (
 	DefaultBaseURL = "https://api.chzzk.naver.com"
 	OpenAPIBaseURL = "https://openapi.chzzk.naver.com"
+
+	chzzkGetLiveStatusOp     = "chzzk_get_live_status"
+	chzzkGetScheduledLivesOp = "chzzk_get_scheduled_lives"
+	chzzkGetLivesOp          = "chzzk_get_lives"
+	chzzkGetChannelsOp       = "chzzk_get_channels"
 )
 
 type Client struct {
@@ -105,13 +112,20 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetLiveStatusOp,
+			StatusCode: 0,
+			Err:        err,
+		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetLiveStatusOp,
+			StatusCode: resp.StatusCode,
+		}
 	}
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
@@ -144,13 +158,20 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetScheduledLivesOp,
+			StatusCode: 0,
+			Err:        err,
+		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetScheduledLivesOp,
+			StatusCode: resp.StatusCode,
+		}
 	}
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
@@ -212,7 +233,7 @@ func (c *Client) rejectIfCircuitOpen() error {
 	c.circuitMu.RUnlock()
 
 	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remainingMs))
-	return fmt.Errorf("circuit breaker open, retry after %d ms", remainingMs)
+	return errors.CircuitOpenError{RetryAfterMs: remainingMs}
 }
 
 func (c *Client) handleRequestFailure() {
@@ -295,13 +316,20 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetLivesOp,
+			StatusCode: 0,
+			Err:        err,
+		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetLivesOp,
+			StatusCode: resp.StatusCode,
+		}
 	}
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
@@ -352,13 +380,20 @@ func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*Channel
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetChannelsOp,
+			StatusCode: 0,
+			Err:        err,
+		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, &errors.APIError{
+			Operation:  chzzkGetChannelsOp,
+			StatusCode: resp.StatusCode,
+		}
 	}
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
