@@ -236,10 +236,10 @@ CORE_MEMBER_HASH_SOFT_MIN_COUNT=10
 ---
 
 ## Operations (Runbook)
-- Bot 실행: `./scripts/start-bot.sh`
-- 상태: `./scripts/status.sh` / 로그: `tail -f logs/bot.log`
-- 재시작: `./scripts/restart-bot.sh`
-- 종료: `./scripts/stop-bot.sh`
+- Bot 실행: `./scripts/bot.sh start`
+- 상태: `./scripts/bot.sh status` / 로그: `tail -f logs/bot.log`
+- 재시작: `./scripts/bot.sh restart`
+- 종료: `./scripts/bot.sh stop`
 
 점검 체크리스트
 - Valkey 연결/키 TTL: `holodex:*`, `alarm:*`, `hololive:members` 존재 확인
@@ -538,7 +538,7 @@ func (h *HolodexService) filterHololiveStreams(streams []*domain.Stream) []*doma
 - 핵심: `setupWebSocket()`, `startAlarmChecker()`
 
 3) 상태 점검
-- `scripts/status.sh`, Valkey 키/TTL 확인(`holodex:*`, `alarm:*`, `hololive:members`)
+- `scripts/bot.sh status`, Valkey 키/TTL 확인(`holodex:*`, `alarm:*`, `hololive:members`)
 
 ### 알람 기능 활성/검증 절차
 1) 사용자가 “!알람 추가 <멤버>” 전송
