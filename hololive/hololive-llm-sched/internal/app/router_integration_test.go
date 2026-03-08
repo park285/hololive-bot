@@ -38,29 +38,14 @@ func TestProvideTriggerRouter_Integration(t *testing.T) {
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	router, err := ProvideTriggerRouter(context.Background(), logger, triggerHandler, "")
-	if err != nil {
-		t.Fatalf("ProvideTriggerRouter() error = %v", err)
+	if err == nil {
+		t.Fatal("ProvideTriggerRouter() error = nil, want non-nil")
 	}
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	healthResp, err := http.Get(server.URL + "/health")
-	if err != nil {
-		t.Fatalf("GET /health error = %v", err)
+	if router != nil {
+		t.Fatal("ProvideTriggerRouter() router = non-nil, want nil")
 	}
-	healthResp.Body.Close()
-	if healthResp.StatusCode != http.StatusOK {
-		t.Fatalf("/health status = %d, want %d", healthResp.StatusCode, http.StatusOK)
-	}
-
-	triggerResp, err := http.Post(server.URL+triggercontracts.MemberNewsWeeklyPath, "application/json", nil)
-	if err != nil {
-		t.Fatalf("POST /internal/trigger/membernews-weekly error = %v", err)
-	}
-	triggerResp.Body.Close()
-	if triggerResp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("trigger status = %d, want %d", triggerResp.StatusCode, http.StatusServiceUnavailable)
+	if err.Error() != "API_SECRET_KEY required" {
+		t.Fatalf("ProvideTriggerRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
 	}
 }
 
@@ -102,5 +87,32 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	respWithKey.Body.Close()
 	if respWithKey.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status with API key = %d, want %d", respWithKey.StatusCode, http.StatusServiceUnavailable)
+	}
+
+	metricsReq, err := http.NewRequest(http.MethodGet, server.URL+"/metrics", http.NoBody)
+	if err != nil {
+		t.Fatalf("new metrics request error = %v", err)
+	}
+	metricsResp, err := http.DefaultClient.Do(metricsReq)
+	if err != nil {
+		t.Fatalf("GET /metrics without API key error = %v", err)
+	}
+	metricsResp.Body.Close()
+	if metricsResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/metrics status without API key = %d, want %d", metricsResp.StatusCode, http.StatusUnauthorized)
+	}
+
+	metricsReqWithKey, err := http.NewRequest(http.MethodGet, server.URL+"/metrics", http.NoBody)
+	if err != nil {
+		t.Fatalf("new metrics request with key error = %v", err)
+	}
+	metricsReqWithKey.Header.Set(middleware.APIKeyHeader, "test-key")
+	metricsRespWithKey, err := http.DefaultClient.Do(metricsReqWithKey)
+	if err != nil {
+		t.Fatalf("GET /metrics with API key error = %v", err)
+	}
+	metricsRespWithKey.Body.Close()
+	if metricsRespWithKey.StatusCode != http.StatusOK {
+		t.Fatalf("/metrics status with API key = %d, want %d", metricsRespWithKey.StatusCode, http.StatusOK)
 	}
 }

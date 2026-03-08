@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -401,6 +402,10 @@ func buildLLMSchedulerHTTPServer(
 	majorEventRepo *majorevent.Repository,
 	memberNewsService *membernews.Service,
 ) (*http.Server, error) {
+	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepo != nil || memberNewsService != nil) {
+		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
+	}
+
 	router, err := ProvideTriggerRouter(ctx, logger, triggerHandler, apiKey)
 	if err != nil {
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
