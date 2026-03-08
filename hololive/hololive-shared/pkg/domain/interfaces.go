@@ -62,7 +62,7 @@ type AlarmCRUD interface {
 	ListRoomAlarmsView(ctx context.Context, roomID string) ([]AlarmListView, error)
 	ClearRoomAlarms(ctx context.Context, roomID string) (int, error)
 	GetNextStreamInfo(ctx context.Context, channelID string) (*NextStreamInfo, error)
-	UpdateAlarmAdvanceMinutes(minutes int) []int
+	UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int
 	GetTargetMinutes() []int
 	SetRoomName(ctx context.Context, roomID, roomName string) error
 	SetUserName(ctx context.Context, userID, userName string) error

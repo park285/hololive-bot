@@ -46,7 +46,7 @@ func initScraperHolodexProfileFoundation(
 	logger *slog.Logger,
 ) (*scraperHolodexProfileFoundation, error) {
 	holodexAPIKey := providers.ProvideHolodexAPIKey(cfg.Holodex)
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(infra.memberCache, logger)
+	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.memberCache, logger)
 
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: cfg.Scraper.ProxyEnabled,

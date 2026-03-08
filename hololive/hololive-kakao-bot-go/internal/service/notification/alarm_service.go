@@ -142,7 +142,7 @@ func (as *AlarmService) GetTargetMinutes() []int {
 	return as.getTargetMinutes()
 }
 
-func (as *AlarmService) UpdateAlarmAdvanceMinutes(alarmAdvanceMinutes int) []int {
+func (as *AlarmService) UpdateAlarmAdvanceMinutes(_ context.Context, alarmAdvanceMinutes int) []int {
 	normalized := buildRuntimeTargetMinutes(alarmAdvanceMinutes)
 	as.targetMinutesMu.Lock()
 	as.targetMinutes = normalized

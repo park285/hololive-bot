@@ -36,10 +36,13 @@ type ServiceAdapter struct {
 }
 
 // NewMemberServiceAdapter: 새로운 MemberServiceAdapter 인스턴스를 생성합니다.
-func NewMemberServiceAdapter(cache *Cache, logger *slog.Logger) *ServiceAdapter {
+func NewMemberServiceAdapter(ctx context.Context, cache *Cache, logger *slog.Logger) *ServiceAdapter {
+	if ctx == nil {
+		ctx = context.TODO()
+	}
 	return &ServiceAdapter{
 		cache:  cache,
-		ctx:    context.Background(),
+		ctx:    ctx,
 		logger: logger,
 	}
 }
@@ -97,7 +100,7 @@ func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
 // WithContext: 커스텀 context를 가진 새 adapter를 생성합니다.
 func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvider {
 	if ctx == nil {
-		ctx = context.Background()
+		return a
 	}
 	return &ServiceAdapter{
 		cache:  a.cache,

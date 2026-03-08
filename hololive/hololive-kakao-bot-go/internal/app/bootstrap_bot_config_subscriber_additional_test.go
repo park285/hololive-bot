@@ -81,7 +81,7 @@ type trackingAlarmAdvanceCRUD struct {
 	targets     []int
 }
 
-func (a *trackingAlarmAdvanceCRUD) UpdateAlarmAdvanceMinutes(minutes int) []int {
+func (a *trackingAlarmAdvanceCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.calls++
@@ -174,7 +174,7 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
 		youtubeService: youtubeSvc,
 	}
-	subscriber := buildBotConfigSubscriber(deps, runtimeDeps, scheduler, logger)
+	subscriber := buildBotConfigSubscriber(context.Background(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -235,7 +235,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
 		alarmCRUD: alarmSvc,
 	}
-	subscriber := buildBotConfigSubscriber(deps, runtimeDeps, nil, logger)
+	subscriber := buildBotConfigSubscriber(context.Background(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -306,7 +306,7 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 		youtubeService: youtubeSvc,
 		alarmCRUD:      alarmSvc,
 	}
-	subscriber := buildBotConfigSubscriber(deps, runtimeDeps, scheduler, logger)
+	subscriber := buildBotConfigSubscriber(context.Background(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
 
 	ctx, cancel := context.WithCancel(context.Background())

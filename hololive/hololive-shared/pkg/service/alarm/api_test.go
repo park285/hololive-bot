@@ -23,7 +23,6 @@ package alarm
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -35,6 +34,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 // mockAlarmCRUD: 테스트용 domain.AlarmCRUD mock
@@ -82,7 +82,7 @@ func (m *mockAlarmCRUD) GetNextStreamInfo(ctx context.Context, channelID string)
 	return m.getNextStreamInfoFn(ctx, channelID)
 }
 
-func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(minutes int) []int {
+func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
 	return m.updateAlarmAdvanceMinutesFn(minutes)
 }
 

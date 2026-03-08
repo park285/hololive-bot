@@ -23,7 +23,6 @@ package alarm
 import (
 	"bytes"
 	"context"
-	stdjson "encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -189,9 +188,9 @@ func (c *Client) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*
 }
 
 type apiEnvelope struct {
-	Success bool                `json:"success"`
-	Message string              `json:"message,omitempty"`
-	Data    *stdjson.RawMessage `json:"data,omitempty"`
+	Success bool             `json:"success"`
+	Message string           `json:"message,omitempty"`
+	Data    *json.RawMessage `json:"data,omitempty"`
 }
 
 // ListRoomAlarmsView: GET /internal/alarm/room/:id/view — 방의 알람 목록 표시용 조합 조회
@@ -215,7 +214,7 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 	}
 
 	var envelope apiEnvelope
-	if err := stdjson.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: decode envelope: %w", roomID, err)
 	}
 	if !envelope.Success {
@@ -226,7 +225,7 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 	}
 
 	var entries []domain.AlarmListView
-	if err := stdjson.Unmarshal(*envelope.Data, &entries); err != nil {
+	if err := json.Unmarshal(*envelope.Data, &entries); err != nil {
 		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: decode entries: %w", roomID, err)
 	}
 	if entries == nil {
@@ -266,12 +265,14 @@ func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*doma
 
 // UpdateAlarmAdvanceMinutes: PUT /internal/alarm/settings — 알림 사전 시간 업데이트
 // 에러 시 빈 슬라이스를 반환합니다.
-func (c *Client) UpdateAlarmAdvanceMinutes(minutes int) []int {
+func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int {
 	body := updateAdvanceMinutesReq{Minutes: minutes}
 	var resp minutesResp
-	// UpdateAlarmAdvanceMinutes는 context를 받지 않으므로 Background 사용
-	//nolint:contextcheck // 인터페이스 시그니처에 ctx 없음
-	if err := c.putJSON(context.Background(), "/internal/alarm/settings", body, &resp); err != nil {
+	if ctx == nil {
+		c.logger.Warn("UpdateAlarmAdvanceMinutes skipped: nil context", slog.Int("minutes", minutes))
+		return []int{}
+	}
+	if err := c.putJSON(ctx, "/internal/alarm/settings", body, &resp); err != nil {
 		c.logger.Warn("UpdateAlarmAdvanceMinutes 실패",
 			slog.Int("minutes", minutes),
 			slog.Any("error", err),
