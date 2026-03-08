@@ -21,6 +21,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -31,6 +32,7 @@ import (
 // buildBotConfigSubscriber: Bot용 ConfigSubscriber를 생성합니다.
 // scraper_proxy / alarm_advance_minutes 두 가지 설정 변경을 수신하여 적용합니다.
 func buildBotConfigSubscriber(
+	ctx context.Context,
 	deps botConfigSubscriberDependencies,
 	runtimeDeps botConfigSubscriberRuntimeDependencies,
 	scraperScheduler *poller.Scheduler,
@@ -47,7 +49,7 @@ func buildBotConfigSubscriber(
 			}
 		},
 		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
-			targets := runtimeDeps.alarmCRUD.UpdateAlarmAdvanceMinutes(payload.Minutes)
+			targets := runtimeDeps.alarmCRUD.UpdateAlarmAdvanceMinutes(ctx, payload.Minutes)
 			logger.Info("Applied alarm advance minutes via pub/sub",
 				slog.Int("minutes", payload.Minutes),
 				slog.Any("targets", targets),

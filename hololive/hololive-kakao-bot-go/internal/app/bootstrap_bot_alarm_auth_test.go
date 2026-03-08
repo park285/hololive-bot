@@ -53,10 +53,10 @@ func (testAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) { ret
 func (testAlarmCRUD) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
 	return nil, nil
 }
-func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(int) []int               { return []int{5} }
-func (testAlarmCRUD) GetTargetMinutes() []int                           { return []int{5} }
-func (testAlarmCRUD) SetRoomName(context.Context, string, string) error { return nil }
-func (testAlarmCRUD) SetUserName(context.Context, string, string) error { return nil }
+func (testAlarmCRUD) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return []int{5} }
+func (testAlarmCRUD) GetTargetMinutes() []int                              { return []int{5} }
+func (testAlarmCRUD) SetRoomName(context.Context, string, string) error    { return nil }
+func (testAlarmCRUD) SetUserName(context.Context, string, string) error    { return nil }
 func (testAlarmCRUD) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return []*domain.AlarmEntry{}, nil
 }

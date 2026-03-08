@@ -58,10 +58,10 @@ func (s *alarmListViewerStub) ClearRoomAlarms(context.Context, string) (int, err
 func (s *alarmListViewerStub) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
 	return nil, nil
 }
-func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(int) []int               { return nil }
-func (s *alarmListViewerStub) GetTargetMinutes() []int                           { return nil }
-func (s *alarmListViewerStub) SetRoomName(context.Context, string, string) error { return nil }
-func (s *alarmListViewerStub) SetUserName(context.Context, string, string) error { return nil }
+func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
+func (s *alarmListViewerStub) GetTargetMinutes() []int                              { return nil }
+func (s *alarmListViewerStub) SetRoomName(context.Context, string, string) error    { return nil }
+func (s *alarmListViewerStub) SetUserName(context.Context, string, string) error    { return nil }
 func (s *alarmListViewerStub) GetAllAlarmKeys(context.Context) ([]*domain.AlarmEntry, error) {
 	return nil, nil
 }
@@ -189,7 +189,7 @@ func (s *alarmAddRecorder) GetNextStreamInfo(context.Context, string) (*domain.N
 	return nil, nil
 }
 
-func (s *alarmAddRecorder) UpdateAlarmAdvanceMinutes(int) []int { return nil }
+func (s *alarmAddRecorder) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
 
 func (s *alarmAddRecorder) GetTargetMinutes() []int { return nil }
 

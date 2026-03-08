@@ -202,11 +202,11 @@ func TestTargetMinutesAndCloseHelpers(t *testing.T) {
 	as := &AlarmService{logger: newDiscardAlarmLogger()}
 	assert.Equal(t, []int{5, 3, 1}, as.GetTargetMinutes())
 
-	updated := as.UpdateAlarmAdvanceMinutes(10)
+	updated := as.UpdateAlarmAdvanceMinutes(context.Background(), 10)
 	assert.Equal(t, []int{10, 3, 1}, updated)
 	assert.Equal(t, []int{10, 3, 1}, as.GetTargetMinutes())
 
-	updated = as.UpdateAlarmAdvanceMinutes(1)
+	updated = as.UpdateAlarmAdvanceMinutes(context.Background(), 1)
 	assert.Equal(t, []int{3, 1}, updated)
 	assert.Equal(t, []int{3, 1}, as.GetTargetMinutes())
 

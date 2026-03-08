@@ -82,7 +82,7 @@ func (a *localSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool
 }
 
 // ApplyAlarmAdvanceMinutes: 알람 사전 알림 시간을 직접 적용합니다.
-func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) AlarmAdvanceMinutesApplyResult {
+func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) AlarmAdvanceMinutesApplyResult {
 	runtime := AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 	}
@@ -93,7 +93,7 @@ func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minut
 		return runtime
 	}
 
-	targetMinutes := a.alarm.UpdateAlarmAdvanceMinutes(minutes)
+	targetMinutes := a.alarm.UpdateAlarmAdvanceMinutes(ctx, minutes)
 	runtime.AlarmApplied = true
 	runtime.AlarmTargetMinutes = targetMinutes
 
