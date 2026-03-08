@@ -21,5 +21,6 @@
 
 ## 실행 문서
 - `runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` — 현재 운영 SSOT인 docker compose 배포 가이드
+- `runbook_execution/YOUTUBE_SCRAPER_RUNBOOK.md` — `youtube-scraper` 전용 운영/장애 대응 런북
 - `runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`
 - `runbook_execution/OUTBOX_PER_ROOM_ROLLOUT_RUNBOOK_20260305.md` — outbox per-room 모드 전환 런북
