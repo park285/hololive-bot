@@ -22,6 +22,7 @@ package majorevent
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -34,5 +35,33 @@ func TestRepository_Interface(t *testing.T) {
 		}
 
 		t.Log("Repository interface verified")
+	})
+}
+
+func TestRepository_NilPoolGuards(t *testing.T) {
+	t.Parallel()
+
+	repo := &Repository{}
+	ctx := context.Background()
+
+	t.Run("subscribe", func(t *testing.T) {
+		err := repo.Subscribe(ctx, "room-1", "room")
+		if err == nil || !strings.Contains(err.Error(), "postgres pool not configured") {
+			t.Fatalf("Subscribe() error = %v, want postgres pool not configured", err)
+		}
+	})
+
+	t.Run("unsubscribe", func(t *testing.T) {
+		err := repo.Unsubscribe(ctx, "room-1")
+		if err == nil || !strings.Contains(err.Error(), "postgres pool not configured") {
+			t.Fatalf("Unsubscribe() error = %v, want postgres pool not configured", err)
+		}
+	})
+
+	t.Run("is subscribed", func(t *testing.T) {
+		_, err := repo.IsSubscribed(ctx, "room-1")
+		if err == nil || !strings.Contains(err.Error(), "postgres pool not configured") {
+			t.Fatalf("IsSubscribed() error = %v, want postgres pool not configured", err)
+		}
 	})
 }
