@@ -1,24 +1,30 @@
 # Stream Ingester 운영 Runbook
 
-> 마지막 업데이트: 2026-03-07
+> 마지막 업데이트: 2026-03-09
 > 대상 서비스: `stream-ingester` (포트 `30004`)
 
 ## 1) 목적
 
-YouTube/스크래퍼 수집 런타임을 `stream-ingester` 단일 서비스로 운영합니다.
+현재 Docker Compose 기준 `stream-ingester`는 photo sync 중심 런타임으로 운영합니다.
 
 포함 책임:
+- Photo sync
+- ingestion-adjacent health/runtime 엔드포인트
+
+제외 책임:
 - YouTube ingestion scheduler
 - YouTube scraper scheduler
 - YouTube outbox dispatcher
-- Photo sync
-- config:update 구독 (`scraper_proxy` 적용, `alarm_advance_minutes` 무시)
+- `config:update` 기반 scraper runtime 운영
+
+위 책임은 `youtube-scraper` (`30005`)가 담당합니다. 상세는 `docs/runbook_execution/YOUTUBE_SCRAPER_RUNBOOK.md`를 따르세요.
 
 ## 2) 배포 구성
 
 `docker-compose.prod.yml` 기준:
 - `hololive-bot`: ingestion 미포함
-- `stream-ingester`: ingestion 전담, `SERVER_PORT=30004`
+- `stream-ingester`: `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`, `SERVER_PORT=30004`
+- `youtube-scraper`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `SERVER_PORT=30005`
 
 ## 3) 헬스체크
 
@@ -31,15 +37,15 @@ docker logs --tail 200 hololive-stream-ingester
 정상 기준:
 - `stream-ingester` 컨테이너 `healthy`
 - `/health` 200
-- 스케줄러 시작 로그 확인
-- 분산 락 획득 로그 확인 (`event=ingestion_lease_acquired`, `role=stream-ingester`)
+- `Photo sync service started` 로그 확인
+- `event=ingestion_lease_acquired`가 **없음** (`stream-ingester`는 YouTube ingestion 락을 잡지 않음)
 
 ## 4) 컷오버 체크리스트 (운영 전환 시)
 
 1. `docker compose ... ps`에서 `stream-ingester`가 `healthy`
 2. `/health`가 200을 반환
-3. 로그에서 `event=stream_ingestion_enabled`, `event=ingestion_lease_acquired` 확인
-4. 10~15분 관찰 시 중복 수집/중복 알림 로그 없음
+3. 로그에서 `Photo sync service started` 확인
+4. 10~15분 관찰 시 photo sync 오류/반복 재시작 로그 없음
 
 ## 5) 장애 대응
 
@@ -50,20 +56,14 @@ docker compose -f docker-compose.prod.yml up -d --build stream-ingester
 curl -fsS http://127.0.0.1:30004/health
 ```
 
-### B. 분산 limiter 과차단 의심
+### B. photo sync 이상 징후
 1. Valkey 상태 확인
-2. `DISTRIBUTED_RATE_LIMITING.md` 기준으로 bucket/지연 증가 여부 확인
-3. 필요 시 트래픽 완화 후 재확인
+2. Holodex API 응답/에러 증가 여부 확인
+3. 필요 시 `stream-ingester`만 재배포 후 재확인
 
-### C. ingestion 분산 락 경합/상실 감지
-- 주요 이벤트 로그:
-  - `event=ingestion_lease_acquired`
-  - `event=ingestion_lease_released`
-  - `event=ingestion_lease_lost`
-  - `event=ingestion_lease_renew_failed`
-- 운영 규칙:
-  - `ingestion_lease_lost` 1회라도 발생하면 즉시 점검
-  - `ingestion_lease_renew_failed`가 연속 발생하면 Valkey 연결 상태 점검
+### C. ingestion 이슈가 보일 때
+- `stream-ingester`가 아니라 `youtube-scraper` 로그/헬스를 먼저 확인합니다.
+- 분산 락 이벤트(`event=ingestion_lease_*`)는 `youtube-scraper` 런북 기준으로 대응합니다.
 
 예시 확인 명령:
 ```bash
@@ -72,16 +72,17 @@ docker logs --since 15m hololive-stream-ingester | grep "ingestion_lease"
 
 ## 6) 장애 대응 원칙
 
-- ingestion 장애는 `stream-ingester` 복구로만 대응합니다.
+- photo sync 장애는 `stream-ingester` 복구로 대응합니다.
+- YouTube ingestion/scraper/outbox 장애는 `youtube-scraper` 런북으로 대응합니다.
 - `hololive-bot`은 ingestion 런타임을 포함하지 않습니다.
 
 ## 7) 수동 점검 항목
 
-- `scraper_proxy` 설정 변경 시 stream-ingester 로그와 `/metrics`에서 적용 상태 확인
-- outbox 처리량 지표/로그 증가 확인
 - photo sync 주기 실행 로그 확인
+- ingestion 관련 로그가 보이면 `youtube-scraper`에 잘못 배치되지 않았는지 compose/env를 재확인
 
 ## 8) 관련 문서
 
+- `docs/runbook_execution/YOUTUBE_SCRAPER_RUNBOOK.md`
 - `docs/SERVICE_DECOMPOSITION_ROADMAP.md`
 - `docs/DISTRIBUTED_RATE_LIMITING.md`

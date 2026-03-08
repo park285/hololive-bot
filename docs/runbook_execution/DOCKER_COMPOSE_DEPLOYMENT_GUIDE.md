@@ -11,6 +11,7 @@
 - `dispatcher-go` (`30020`)
 - `llm-scheduler` (`30003`)
 - `stream-ingester` (`30004`)
+- `youtube-scraper` (`30005`)
 - `holo-postgres` (`5433`)
 - `valkey-cache` (`6379`)
 
@@ -19,6 +20,19 @@
 - 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
 - 상태/장애 1차 확인은 `docker compose -f docker-compose.prod.yml ps`, `docker compose ... logs`, `/health`, `/ready` 기준으로 수행합니다.
 - k8s/k3s 시절 절차나 매니페스트가 저장소에 남아 있더라도, 현재 운영 SSOT로 간주하지 않습니다.
+
+## ingestion 런타임 분리
+
+`docker-compose.prod.yml` 기준 현재 ingestion 책임은 두 서비스로 분리되어 있습니다.
+
+- `stream-ingester` (`30004`): `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`
+  - Holodex photo sync
+  - ingestion-adjacent health/config runtime
+- `youtube-scraper` (`30005`): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`
+  - YouTube ingestion scheduler
+  - YouTube scraper scheduler
+  - YouTube outbox dispatcher
+  - `config:update` 구독 (`scraper_proxy` 반영)
 
 ## 사전 준비
 
@@ -54,6 +68,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 ./scripts/deploy/compose-redeploy-service.sh hololive-bot
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
 ./scripts/deploy/compose-redeploy-service.sh stream-ingester
+./scripts/deploy/compose-redeploy-service.sh youtube-scraper
 ./scripts/deploy/compose-redeploy-service.sh dispatcher-go
 ```
 
@@ -64,6 +79,7 @@ docker compose -f docker-compose.prod.yml ps
 curl -fsS http://127.0.0.1:30001/health
 curl -fsS http://127.0.0.1:30003/health
 curl -fsS http://127.0.0.1:30004/health
+curl -fsS http://127.0.0.1:30005/health
 curl -fsS http://127.0.0.1:30020/ready
 ```
 
@@ -75,6 +91,7 @@ curl -fsS http://127.0.0.1:30020/ready
 docker compose -f docker-compose.prod.yml logs -f hololive-bot
 docker compose -f docker-compose.prod.yml logs -f llm-scheduler
 docker compose -f docker-compose.prod.yml logs -f stream-ingester
+docker compose -f docker-compose.prod.yml logs -f youtube-scraper
 docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 ```
 
@@ -88,7 +105,7 @@ docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 ./scripts/logs/logs.sh prune
 ```
 
-- compose 런타임에서는 `LOG_DIR=/app/logs`로 설정해 host `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`에 파일 미러링합니다.
+- compose 런타임에서는 `LOG_DIR=/app/logs`로 설정해 host `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`, `./logs/youtube-scraper.log`에 파일 미러링합니다.
 - 앱 파일 로그 로테이션 기본값은 `100MB`, `5 backups`, `30일`, `gzip 압축`입니다.
 - Docker Compose `json-file` 드라이버 로테이션 기본값은 `10MB`, `3 files`입니다.
 - 기본 운영 경로는 `logs/*.log`만 사용합니다.
@@ -112,6 +129,11 @@ docker compose -f docker-compose.prod.yml up --build hololive-db-migrate
 ```bash
 docker compose -f docker-compose.prod.yml --profile vpn up -d vpn-scraper-proxy
 ```
+
+## 관련 런북
+
+- `docs/runbook_execution/YOUTUBE_SCRAPER_RUNBOOK.md`
+- `hololive/hololive-kakao-bot-go/docs/STREAM_INGESTER_RUNBOOK.md`
 
 ## 정지 / 재기동
 
