@@ -38,7 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Client: alarm-dispatcher HTTP 클라이언트 (domain.AlarmCRUD 구현)
+// Client: alarm CRUD HTTP 클라이언트 (domain.AlarmCRUD 구현)
 type Client struct {
 	baseURL    string
 	apiKey     string
@@ -52,12 +52,12 @@ type Client struct {
 
 var _ domain.AlarmCRUD = (*Client)(nil)
 
-// NewClient: alarm-dispatcher 클라이언트를 생성합니다.
+// NewClient: alarm CRUD 클라이언트를 생성합니다.
 func NewClient(baseURL string, logger *slog.Logger) *Client {
 	return NewClientWithAPIKey(baseURL, "", logger)
 }
 
-// NewClientWithAPIKey: alarm-dispatcher 클라이언트를 생성합니다. apiKey가 있으면 X-API-Key 헤더를 포함합니다.
+// NewClientWithAPIKey: alarm CRUD 클라이언트를 생성합니다. apiKey가 있으면 X-API-Key 헤더를 포함합니다.
 func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if logger == nil {
@@ -66,7 +66,7 @@ func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	return &Client{
 		baseURL:    baseURL,
 		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httputil.NewClient(10 * time.Second),
+		httpClient: httputil.NewInternalServiceClient(10 * time.Second),
 		logger:     logger,
 	}
 }

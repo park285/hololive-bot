@@ -28,6 +28,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
@@ -46,7 +47,7 @@ func New(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL:    baseURL,
 		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httputil.DefaultClient(),
+		httpClient: httputil.NewInternalServiceClient(30 * time.Second),
 	}
 }
 

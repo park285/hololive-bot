@@ -48,7 +48,7 @@ func New(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL:    baseURL,
 		apiKey:     strings.TrimSpace(apiKey),
-		httpClient: httputil.NewClient(60 * time.Second),
+		httpClient: httputil.NewInternalServiceClient(60 * time.Second),
 	}
 }
 
