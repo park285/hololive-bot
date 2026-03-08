@@ -22,16 +22,14 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -42,8 +40,9 @@ import (
 
 // StreamIngesterRuntime: stream-ingester 전용 런타임 (YouTube/스크래퍼/PhotoSync/Outbox).
 type StreamIngesterRuntime struct {
-	Config *config.Config
-	Logger *slog.Logger
+	RuntimeName string
+	Config      *config.Config
+	Logger      *slog.Logger
 
 	Scheduler        youtube.Scheduler
 	ScraperScheduler *poller.Scheduler
@@ -65,6 +64,17 @@ func (r *StreamIngesterRuntime) Close() {
 	}
 }
 
+func (r *StreamIngesterRuntime) runtimeName() string {
+	if r == nil {
+		return streamIngesterRuntimeName
+	}
+	name := strings.TrimSpace(r.RuntimeName)
+	if name == "" {
+		return streamIngesterRuntimeName
+	}
+	return name
+}
+
 // Run: SIGINT/SIGTERM 신호를 대기하며 graceful shutdown을 수행합니다. (블로킹)
 func (r *StreamIngesterRuntime) Run() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -75,70 +85,11 @@ func (r *StreamIngesterRuntime) Run() {
 	defer signal.Stop(sigCh)
 
 	errCh := make(chan error, 1)
+	r.startBackgroundServices(ctx, errCh)
+	r.startHTTPServer(errCh)
 
-	if r.ConfigSubscriber != nil {
-		go r.ConfigSubscriber.Run(ctx)
-		r.Logger.Info("Config subscriber started")
-	}
-	if r.ingestionLease != nil {
-		go r.ingestionLease.StartRenewLoop(ctx, errCh)
-	}
-
-	if r.Scheduler != nil {
-		r.Scheduler.Start(ctx)
-		r.Logger.Info("YouTube ingestion scheduler started")
-	}
-	if r.ScraperScheduler != nil {
-		r.ScraperScheduler.Start(ctx)
-		r.Logger.Info("Scraper scheduler started")
-	}
-	if r.OutboxDispatcher != nil {
-		r.OutboxDispatcher.Start(ctx)
-		r.Logger.Info("YouTube outbox dispatcher started")
-	}
-	if r.PhotoSync != nil {
-		go r.PhotoSync.Start(ctx)
-		r.Logger.Info("Photo sync service started")
-	}
-
-	go func() {
-		if err := r.HttpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("http server error: %w", err)
-		}
-	}()
-	r.Logger.Info("Stream Ingester HTTP server started",
-		slog.String("addr", r.ServerAddr),
-	)
-
-	select {
-	case sig := <-sigCh:
-		r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
-	case err := <-errCh:
-		r.Logger.Error("Server error", slog.Any("error", err))
-	}
+	r.waitForShutdown(sigCh, errCh)
 
 	cancel()
 	r.shutdown()
-}
-
-func (r *StreamIngesterRuntime) shutdown() {
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
-	defer shutdownCancel()
-
-	if r.Scheduler != nil {
-		r.Scheduler.Stop()
-	}
-	if r.ScraperScheduler != nil {
-		r.ScraperScheduler.Stop()
-	}
-	if r.HttpServer != nil {
-		if err := r.HttpServer.Shutdown(shutdownCtx); err != nil {
-			r.Logger.Error("Stream ingester HTTP shutdown failed", slog.Any("error", err))
-		}
-	}
-	if r.ingestionLease != nil {
-		if err := r.ingestionLease.Release(shutdownCtx); err != nil {
-			r.Logger.Error("Stream ingester lease release failed", slog.Any("error", err))
-		}
-	}
 }
