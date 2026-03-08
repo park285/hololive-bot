@@ -27,7 +27,18 @@ func NewClient(timeout time.Duration) *http.Client {
 // NewProfiledClient: http.DefaultTransport를 clone한 뒤 필요한 transport 필드만 선택적으로 override합니다.
 // 기본 keep-alive, proxy, TLS 기본 동작은 유지하고 timeout/pool/HTTP2 정책만 profile로 주입합니다.
 func NewProfiledClient(profile TransportProfile) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok || baseTransport == nil {
+		baseTransport = &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: time.Second,
+		}
+	}
+	transport := baseTransport.Clone()
 
 	if profile.DialTimeout > 0 {
 		transport.DialContext = (&net.Dialer{
