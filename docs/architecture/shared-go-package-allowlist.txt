@@ -1,0 +1,13 @@
+# shared-go/pkg 하위 non-test package directory baseline (2026-03-03)
+# 규칙:
+# - 신규 패키지가 필요하면 사유/영향/롤백 포함 PR에서 이 파일을 함께 갱신
+# - 제거된 패키지는 이 파일에서도 즉시 삭제
+
+ginjson
+httputil
+irisx
+json
+jsonutil
+runtime/automaxprocs
+stringutil
+workerpool
