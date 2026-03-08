@@ -87,4 +87,18 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 			t.Fatalf("trigger status with api key = %d, want %d", withAuthRes.Code, http.StatusServiceUnavailable)
 		}
 	})
+
+	t.Run("trigger routes fail closed when api key missing", func(t *testing.T) {
+		triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+		router, err := ProvideTriggerRouter(context.Background(), logger, triggerHandler, "")
+		if err == nil {
+			t.Fatal("ProvideTriggerRouter() error = nil, want non-nil")
+		}
+		if router != nil {
+			t.Fatal("ProvideTriggerRouter() router = non-nil, want nil")
+		}
+		if err.Error() != "API_SECRET_KEY required" {
+			t.Fatalf("ProvideTriggerRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
+		}
+	})
 }

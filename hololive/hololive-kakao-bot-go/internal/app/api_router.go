@@ -134,7 +134,7 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 	router.Use(cors.New(newAPICORSConfig(cfg)))
 	router.Use(middleware.ClientHintsMiddleware()) // Client Hints 요청 (실제 기기 정보 수집)
 
-	registerAPIHealthRoutes(router)
+	registerAPIHealthRoutes(router, cfg.Server.APIKey)
 
 	// NoRoute 핸들러: 미등록 경로 접근 시 API Key 검증 후 401/404 반환
 	// 크롤러/스캐너가 루트 경로 등에 접근할 때 404 대신 401 Unauthorized 반환
@@ -143,8 +143,10 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 	return router, nil
 }
 
-func registerAPIHealthRoutes(router *gin.Engine) {
+func registerAPIHealthRoutes(router *gin.Engine, apiKey string) {
 	sharedserver.RegisterHealthRoutes(router)
 	// Prometheus 메트릭 (장기 히스토리 분석용)
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	metrics := router.Group("")
+	metrics.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
