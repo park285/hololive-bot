@@ -64,7 +64,7 @@ RUN addgroup -g 1000 appuser && \
 
 WORKDIR /app
 
-COPY --from=builder --link --chown=appuser:appuser /dist ./
+COPY --from=builder --link --chown=1000:1000 /dist ./
 
 ENV GOGC=200 \
     GOMEMLIMIT=450MiB \
