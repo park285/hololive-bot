@@ -30,10 +30,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-llm-sched/internal/model"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+
+	"github.com/kapu/hololive-llm-sched/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )

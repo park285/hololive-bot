@@ -25,8 +25,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+
+	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
 )
 
 // RuntimeScheduler는 RSS 수집/유지보수 스케줄러를 통합 실행한다.

@@ -334,7 +334,11 @@ func (s *Service) loadNotifiedData(ctx context.Context, key string) (*NotifiedDa
 func (s *Service) readNotifiedHashFields(ctx context.Context, key string) (map[string]string, error) {
 	client, builder, ok := rawCacheAccessors(s.cache)
 	if !ok {
-		return s.cache.HGetAll(ctx, key)
+		fields, err := s.cache.HGetAll(ctx, key)
+		if err != nil {
+			return nil, fmt.Errorf("read notified hash fields: %w", err)
+		}
+		return fields, nil
 	}
 
 	resp := client.Do(ctx, builder.Hgetall().Key(key).Build())

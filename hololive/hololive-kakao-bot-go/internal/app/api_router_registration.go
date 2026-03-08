@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -33,6 +34,13 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
+
+type apiRateLimitHandler struct {
+	limiter *ratelimit.SlidingWindowLimiter
+	limit   int
+	window  time.Duration
+	logger  *slog.Logger
+}
 
 func registerAPIRoutes(
 	router *gin.Engine,
@@ -100,30 +108,38 @@ func apiRateLimitMiddleware(cacheSvc cache.Client, logger *slog.Logger) gin.Hand
 	limit := constants.APIRateLimitConfig.Limit
 	window := constants.APIRateLimitConfig.Window
 
-	return func(c *gin.Context) {
-		ip := c.ClientIP()
-		if ip == "" {
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
-			return
-		}
-
-		decision, err := limiter.Allow(c.Request.Context(), ip, limit, window)
-		if err != nil {
-			logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.String("error", err.Error()))
-			c.Next()
-			return
-		}
-
-		c.Header("X-RateLimit-Limit", strconv.Itoa(decision.Limit))
-		c.Header("X-RateLimit-Remaining", strconv.Itoa(decision.Remaining))
-		if !decision.Allowed {
-			if decision.RetryAfter > 0 {
-				c.Header("Retry-After", strconv.Itoa(int(decision.RetryAfter.Seconds())))
-			}
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
-			return
-		}
-
-		c.Next()
+	handler := apiRateLimitHandler{
+		limiter: limiter,
+		limit:   limit,
+		window:  window,
+		logger:  logger,
 	}
+	return handler.Handle
+}
+
+func (h apiRateLimitHandler) Handle(c *gin.Context) {
+	ip := c.ClientIP()
+	if ip == "" {
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+		return
+	}
+
+	decision, err := h.limiter.Allow(c.Request.Context(), ip, h.limit, h.window)
+	if err != nil {
+		h.logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.String("error", err.Error()))
+		c.Next()
+		return
+	}
+
+	c.Header("X-RateLimit-Limit", strconv.Itoa(decision.Limit))
+	c.Header("X-RateLimit-Remaining", strconv.Itoa(decision.Remaining))
+	if !decision.Allowed {
+		if decision.RetryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(int(decision.RetryAfter.Seconds())))
+		}
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+		return
+	}
+
+	c.Next()
 }
