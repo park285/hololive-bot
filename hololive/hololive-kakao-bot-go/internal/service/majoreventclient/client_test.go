@@ -22,7 +22,6 @@ package majoreventclient_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/majoreventclient"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 const testAPIKey = "test-api-key"
@@ -55,11 +55,11 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name            string
-		inputURL        string
-		inputAPIKey     string
-		wantBaseURL     string
-		wantAPIKey      string
+		name        string
+		inputURL    string
+		inputAPIKey string
+		wantBaseURL string
+		wantAPIKey  string
 	}{
 		{
 			name:        "URL 후행 슬래시 제거",
@@ -151,12 +151,12 @@ func TestIsSubscribed(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		roomID      string
-		statusCode  int
+		name         string
+		roomID       string
+		statusCode   int
 		responseBody any
-		wantResult  bool
-		wantErr     bool
+		wantResult   bool
+		wantErr      bool
 	}{
 		{
 			name:         "구독 상태 true 반환",
@@ -175,11 +175,11 @@ func TestIsSubscribed(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:        "빈 roomID → 에러",
-			roomID:      "",
-			statusCode:  http.StatusOK,
-			wantResult:  false,
-			wantErr:     true,
+			name:       "빈 roomID → 에러",
+			roomID:     "",
+			statusCode: http.StatusOK,
+			wantResult: false,
+			wantErr:    true,
 		},
 		{
 			name:         "500 상태 코드 → 에러",
@@ -410,4 +410,3 @@ func TestUnsubscribe(t *testing.T) {
 		})
 	}
 }
-

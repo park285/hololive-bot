@@ -22,11 +22,12 @@ package queue
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -159,7 +160,11 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 // brpop: Valkey BRPOP 래퍼
 func (c *Consumer) brpop(ctx context.Context, timeout time.Duration) (string, error) {
 	cmd := c.cache.B().Brpop().Key(c.queueKey).Timeout(timeout.Seconds()).Build()
-	result, err := c.cache.GetClient().Do(ctx, cmd).AsStrSlice()
+	results := c.cache.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		return "", fmt.Errorf("brpop queue payload: unexpected result count: %d", len(results))
+	}
+	result, err := results[0].AsStrSlice()
 	if err != nil {
 		if util.IsValkeyNil(err) {
 			return "", nil
@@ -180,7 +185,11 @@ func (c *Consumer) rpopMany(ctx context.Context, count int) ([]string, error) {
 	}
 
 	cmd := c.cache.B().Rpop().Key(c.queueKey).Count(int64(count)).Build()
-	values, err := c.cache.GetClient().Do(ctx, cmd).AsStrSlice()
+	results := c.cache.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		return nil, fmt.Errorf("rpop queue payloads: unexpected result count: %d", len(results))
+	}
+	values, err := results[0].AsStrSlice()
 	if err != nil {
 		if util.IsValkeyNil(err) {
 			return nil, nil

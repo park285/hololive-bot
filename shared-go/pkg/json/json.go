@@ -1,8 +1,9 @@
 package json
 
 import (
-	"encoding/json"
+	"errors"
 	"io"
+	"strconv"
 
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/decoder"
@@ -14,14 +15,48 @@ type (
 	SyntaxError        = decoder.SyntaxError
 	UnmarshalTypeError = decoder.MismatchTypeError
 
-	// Standard types used by Sonic
-	RawMessage = json.RawMessage
-	Number     = json.Number
-
 	// Stream Encoders/Decoders Interfaces
 	Encoder = sonic.Encoder
 	Decoder = sonic.Decoder
 )
+
+// RawMessage는 지연 디코딩을 위한 raw JSON 바이트를 보관합니다.
+type RawMessage []byte
+
+// MarshalJSON은 raw payload를 그대로 반환합니다.
+func (m RawMessage) MarshalJSON() ([]byte, error) {
+	if m == nil {
+		return []byte("null"), nil
+	}
+	return m, nil
+}
+
+// UnmarshalJSON은 입력 바이트를 복사해 저장합니다.
+func (m *RawMessage) UnmarshalJSON(data []byte) error {
+	if m == nil {
+		return errors.New("json.RawMessage: UnmarshalJSON on nil pointer")
+	}
+	*m = append((*m)[:0], data...)
+	return nil
+}
+
+// Number는 JSON 숫자 리터럴 문자열을 보관합니다.
+type Number string
+
+// String은 숫자 문자열을 반환합니다.
+func (n Number) String() string {
+	return string(n)
+}
+
+// Float64는 숫자 문자열을 float64로 변환합니다.
+func (n Number) Float64() (float64, error) {
+	return strconv.ParseFloat(string(n), 64)
+}
+
+// Int64는 숫자 문자열을 int64로 변환합니다.
+func (n Number) Int64() (int64, error) {
+	return strconv.ParseInt(string(n), 10, 64)
+}
 
 // ConfigDefault는 기본 설정을 사용하는 API 인스턴스입니다.
 var api = sonic.ConfigDefault

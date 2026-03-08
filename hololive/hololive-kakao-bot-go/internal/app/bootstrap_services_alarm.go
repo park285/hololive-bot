@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -33,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 func initAlarmDependencies(
@@ -46,7 +46,7 @@ func initAlarmDependencies(
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*alarmDependencies, error) {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	httpClient := httputil.NewExternalAPIClient(10 * time.Second)
 	chzzkClient := ProvideChzzkClient(httpClient, chzzkCfg, logger)
 	twitchClient := ProvideTwitchClient(twitchCfg, logger)
 	memberDataProvider := memberServiceAdapter

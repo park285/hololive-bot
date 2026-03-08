@@ -22,7 +22,6 @@ package membernewsclient_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +31,7 @@ import (
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/membernewsclient"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 const testAPIKey = "test-api-key"
@@ -76,14 +76,14 @@ func TestGenerateRoomDigest(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		roomID       string
-		period       membernewscontracts.Period
-		statusCode   int
-		responseBody any
+		name          string
+		roomID        string
+		period        membernewscontracts.Period
+		statusCode    int
+		responseBody  any
 		wantNilDigest bool
-		wantErr      bool
-		wantSentinel bool // membernewscontracts.ErrNoSubscribedMembers 여부
+		wantErr       bool
+		wantSentinel  bool // membernewscontracts.ErrNoSubscribedMembers 여부
 	}{
 		{
 			name:          "성공 (200 + 유효한 Digest JSON)",
@@ -433,9 +433,9 @@ func TestIsNoSubscribedMembers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		err     error
-		want    bool
+		name string
+		err  error
+		want bool
 	}{
 		{
 			name: "ErrNoSubscribedMembers → true",

@@ -22,7 +22,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestServerHandlers_DoNotUseErrError(t *testing.T) {
