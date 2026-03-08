@@ -29,12 +29,14 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
 func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	router, err := ProvideHealthOnlyRouter(context.Background(), logger)
+	router, err := ProvideHealthOnlyRouter(context.Background(), logger, "test-key")
 	if err != nil {
 		t.Fatalf("ProvideHealthOnlyRouter() error = %v", err)
 	}
@@ -60,7 +62,12 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
 	}
 
-	metricsResp, err := http.Get(server.URL + "/metrics")
+	metricsReq, err := http.NewRequest(http.MethodGet, server.URL+"/metrics", http.NoBody)
+	if err != nil {
+		t.Fatalf("new /metrics request error = %v", err)
+	}
+	metricsReq.Header.Set(middleware.APIKeyHeader, "test-key")
+	metricsResp, err := http.DefaultClient.Do(metricsReq)
 	if err != nil {
 		t.Fatalf("GET /metrics error = %v", err)
 	}
@@ -97,5 +104,21 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 	readyResp.Body.Close()
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
+
+	router, err := ProvideBotRouter(context.Background(), &config.Config{}, logger, nil, triggerHandler)
+	if err == nil {
+		t.Fatal("ProvideBotRouter() error = nil, want non-nil")
+	}
+	if router != nil {
+		t.Fatal("ProvideBotRouter() router = non-nil, want nil")
+	}
+	if err.Error() != "API_SECRET_KEY required" {
+		t.Fatalf("ProvideBotRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
 	}
 }

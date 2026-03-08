@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -33,7 +34,7 @@ import (
 )
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
-func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Engine, error) {
+func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
@@ -50,19 +51,22 @@ func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger) (*gin.Eng
 		},
 	})
 
-	registerAPIHealthRoutes(router)
+	registerAPIHealthRoutes(router, apiKey)
 
 	return router, nil
 }
 
 // ProvideTriggerRouter: health + metrics + 내부 트리거 엔드포인트를 제공하는 라우터.
 func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandler *sharedserver.TriggerHandler, apiKey string) (*gin.Engine, error) {
-	router, err := ProvideHealthOnlyRouter(ctx, logger)
+	router, err := ProvideHealthOnlyRouter(ctx, logger, apiKey)
 	if err != nil {
 		return nil, err
 	}
 
 	if triggerHandler != nil {
+		if strings.TrimSpace(apiKey) == "" {
+			return nil, fmt.Errorf("API_SECRET_KEY required")
+		}
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
 	}
 
@@ -94,7 +98,7 @@ func ProvideBotRouter(
 		},
 	})
 
-	registerAPIHealthRoutes(router)
+	registerAPIHealthRoutes(router, cfg.Server.APIKey)
 
 	// Iris webhook 수신 (h2c POST)
 	if webhookHandler != nil {
@@ -103,6 +107,9 @@ func ProvideBotRouter(
 
 	// 내부 트리거 라우트 (운영 API에서 내부 호출)
 	if triggerHandler != nil {
+		if strings.TrimSpace(cfg.Server.APIKey) == "" {
+			return nil, fmt.Errorf("API_SECRET_KEY required")
+		}
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}
 
