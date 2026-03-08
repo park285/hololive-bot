@@ -10,7 +10,7 @@ Go 단일 언어 구조:
 
 | 영역 | 언어 | 역할 |
 |------|------|------|
-| Runtime | Go | bot(+admin API), dispatcher-go, llm-scheduler, stream-ingester |
+| Runtime | Go | bot(+admin API), dispatcher-go, llm-scheduler, stream-ingester, youtube-scraper |
 
 데이터 흐름: `webhook → handler → service → repository → PostgreSQL/Valkey`
 
@@ -24,16 +24,25 @@ Go 단일 언어 구조:
 | `hololive-kakao-bot-go` | Main bot (webhook + command routing + admin API) | 30001 |
 | `hololive-dispatcher-go` | Alarm dispatch consumer (BRPOP → Iris) | 30020 |
 | `hololive-llm-sched` | LLM scheduler (major event + member news + delivery) | 30003 |
-| `hololive-stream-ingester` | Sole ingestion owner for YouTube/Holodex/Chzzk/Twitch polling + stats | 30004 |
+| `hololive-stream-ingester` | Photo sync + ingestion-adjacent runtime builders (`stream-ingester`, `youtube-scraper`) | 30004 / 30005 |
 | `hololive-shared` | Shared Go library (hololive domain) | - |
 | `shared-go` | Shared Go utilities (errors, stringutil, valkeyx, etc.) | - |
+
+### Runtime 바이너리 (5개)
+| 바이너리 | 역할 | 포트 |
+|------|------|------|
+| `bot` | Main bot (+ admin API) | 30001 |
+| `dispatcher-go` | Alarm dispatch consumer | 30020 |
+| `llm-scheduler` | LLM scheduler | 30003 |
+| `stream-ingester` | Photo sync + ingestion-adjacent health/config runtime | 30004 |
+| `youtube-scraper` | YouTube polling/scraping + outbox runtime | 30005 |
 
 ### 인프라
 | 항목 | 설명 |
 |------|------|
 | PostgreSQL | 메인 데이터베이스 (Docker) |
 | Valkey | 캐시/큐 (Docker) |
-| Docker Compose | Go 서비스 배포 (bot, dispatcher-go, llm-scheduler, stream-ingester) |
+| Docker Compose | Go 서비스 배포 (bot, dispatcher-go, llm-scheduler, stream-ingester, youtube-scraper) |
 | Iris (Redroid) | KakaoTalk 자동화 |
 
 상세: `docs/PROJECT_MAP.md`
@@ -80,11 +89,12 @@ go test ./hololive/hololive-kakao-bot-go/... \
 ./scripts/deploy/compose-redeploy-service.sh dispatcher-go
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
 ./scripts/deploy/compose-redeploy-service.sh stream-ingester
+./scripts/deploy/compose-redeploy-service.sh youtube-scraper
 ```
 
 ### 로그 정책
 - SSOT: **application stdout/stderr → `docker compose logs`**
-- 파일 미러링: `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`
+- 파일 미러링: `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`, `./logs/youtube-scraper.log`
 - 앱 파일 로그 로테이션: **100MB × 5 backups × 30일 보관 × gzip 압축**
 - 컨테이너 로그 드라이버(`json-file`) 로테이션: **10MB × 3 files**
 - 보조 로그 디렉터리:
@@ -97,7 +107,7 @@ go test ./hololive/hololive-kakao-bot-go/... \
 - 선택적 로컬 미러링: `ENABLE_LOG_MIRROR=1 ./scripts/logs/logs.sh stream start` 또는 `ENABLE_LOG_MIRROR=1 ./scripts/logs/logs.sh dump`
 - 보조 로그 정리: `./scripts/logs/logs.sh prune`
 - 상태 확인: `docker compose -f docker-compose.prod.yml ps`
-- Health endpoint: `bot(30001)`, `dispatcher-go(30020)`, `llm-scheduler(30003)`, `stream-ingester(30004)`
+- Health endpoint: `bot(30001)`, `dispatcher-go(30020)`, `llm-scheduler(30003)`, `stream-ingester(30004)`, `youtube-scraper(30005)`
 
 ## 문서
 
