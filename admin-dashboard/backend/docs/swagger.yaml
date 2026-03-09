@@ -1,0 +1,494 @@
+basePath: /admin/api
+definitions:
+  github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.AggregatedStatus:
+    properties:
+      adminGoroutines:
+        type: integer
+      availableServices:
+        type: integer
+      services:
+        description: 서비스별 상태
+        items:
+          $ref: '#/definitions/github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.ServiceStatus'
+        type: array
+      startedAt:
+        type: integer
+      totalGoroutines:
+        description: 집계 통계
+        type: integer
+      totalServices:
+        type: integer
+      uptime:
+        type: string
+      version:
+        description: Admin Dashboard 자체 상태
+        type: string
+    type: object
+  github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.ServiceStatus:
+    properties:
+      available:
+        type: boolean
+      goroutines:
+        type: integer
+      name:
+        type: string
+      uptime:
+        type: string
+      version:
+        type: string
+    type: object
+  internal_server.ContainerInfo:
+    properties:
+      blockReadMB:
+        example: 100
+        type: number
+      blockWriteMB:
+        example: 50
+        type: number
+      cpuPercent:
+        example: 1.5
+        type: number
+      goroutineCount:
+        example: 25
+        type: integer
+      id:
+        example: abc123def456
+        type: string
+      memoryLimitMB:
+        example: 512
+        type: number
+      memoryPercent:
+        example: 25.1
+        type: number
+      memoryUsageMB:
+        example: 128.5
+        type: number
+      name:
+        example: hololive-bot
+        type: string
+      networkRxMB:
+        example: 10.5
+        type: number
+      networkTxMB:
+        example: 5.2
+        type: number
+      state:
+        example: running
+        type: string
+      status:
+        example: Up 2 hours
+        type: string
+    type: object
+  internal_server.ContainerListResponse:
+    properties:
+      containers:
+        items:
+          $ref: '#/definitions/internal_server.ContainerInfo'
+        type: array
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_server.DockerHealthResponse:
+    properties:
+      available:
+        example: true
+        type: boolean
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_server.ErrorResponse:
+    properties:
+      details:
+        example: Session expired
+        type: string
+      error:
+        example: Unauthorized
+        type: string
+    type: object
+  internal_server.HeartbeatRequest:
+    properties:
+      idle:
+        example: false
+        type: boolean
+    type: object
+  internal_server.HeartbeatResponse:
+    properties:
+      absolute_expires_at:
+        example: 1704067200
+        type: integer
+      idle_rejected:
+        example: false
+        type: boolean
+      rotated:
+        example: true
+        type: boolean
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_server.LogFile:
+    properties:
+      description:
+        example: All services combined log
+        type: string
+      key:
+        example: combined
+        type: string
+      name:
+        example: combined.log
+        type: string
+    type: object
+  internal_server.LogFilesResponse:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/internal_server.LogFile'
+        type: array
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_server.LoginRequest:
+    properties:
+      password:
+        example: password123
+        type: string
+      username:
+        example: admin
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  internal_server.LoginResponse:
+    properties:
+      message:
+        example: Login successful
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_server.StatusResponse:
+    properties:
+      message:
+        example: Operation successful
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_server.SystemLogsResponse:
+    properties:
+      count:
+        example: 100
+        type: integer
+      file:
+        example: combined
+        type: string
+      lines:
+        items:
+          type: string
+        type: array
+      status:
+        example: ok
+        type: string
+    type: object
+host: admin.capu.blog
+info:
+  contact:
+    email: admin@capu.blog
+    name: API Support
+  description: |-
+    Unified Admin Console Backend for the Antigravity Bot Ecosystem.
+    Provides infrastructure management APIs (Auth, Docker, Logs) and domain bot proxies.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: Admin Backend API
+  version: 1.0.0
+paths:
+  /auth/heartbeat:
+    post:
+      consumes:
+      - application/json
+      description: Keep session alive and optionally rotate session token
+      parameters:
+      - description: Heartbeat options
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/internal_server.HeartbeatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.HeartbeatResponse'
+        "401":
+          description: Session expired or invalid
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Session heartbeat
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate with username and password. Returns session cookie
+        on success.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_server.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.LoginResponse'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "429":
+          description: Too many login attempts
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      summary: User login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Invalidate session and clear cookies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.StatusResponse'
+      security:
+      - SessionCookie: []
+      summary: User logout
+      tags:
+      - auth
+  /docker/containers:
+    get:
+      consumes:
+      - application/json
+      description: Get all managed Docker containers with status and resource usage
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.ContainerListResponse'
+        "503":
+          description: Docker service unavailable
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: List containers
+      tags:
+      - docker
+  /docker/containers/{name}/restart:
+    post:
+      consumes:
+      - application/json
+      description: Restart a managed Docker container by name
+      parameters:
+      - description: Container name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.StatusResponse'
+        "404":
+          description: Container not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "503":
+          description: Docker service unavailable
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Restart container
+      tags:
+      - docker
+  /docker/containers/{name}/start:
+    post:
+      consumes:
+      - application/json
+      description: Start a stopped Docker container by name
+      parameters:
+      - description: Container name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.StatusResponse'
+        "404":
+          description: Container not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "503":
+          description: Docker service unavailable
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Start container
+      tags:
+      - docker
+  /docker/containers/{name}/stop:
+    post:
+      consumes:
+      - application/json
+      description: Stop a managed Docker container by name
+      parameters:
+      - description: Container name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.StatusResponse'
+        "404":
+          description: Container not found
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+        "503":
+          description: Docker service unavailable
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Stop container
+      tags:
+      - docker
+  /docker/health:
+    get:
+      consumes:
+      - application/json
+      description: Check if Docker daemon is accessible
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.DockerHealthResponse'
+      security:
+      - SessionCookie: []
+      summary: Docker health check
+      tags:
+      - docker
+  /logs:
+    get:
+      consumes:
+      - application/json
+      description: Read last N lines from a system log file
+      parameters:
+      - default: combined
+        description: Log file key
+        in: query
+        name: file
+        type: string
+      - default: 200
+        description: Number of lines to fetch
+        in: query
+        maximum: 1000
+        name: lines
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.SystemLogsResponse'
+        "400":
+          description: Invalid log file
+          schema:
+            $ref: '#/definitions/internal_server.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Get system logs
+      tags:
+      - logs
+  /logs/files:
+    get:
+      consumes:
+      - application/json
+      description: Get available system log files
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.LogFilesResponse'
+      security:
+      - SessionCookie: []
+      summary: List log files
+      tags:
+      - logs
+  /status:
+    get:
+      consumes:
+      - application/json
+      description: 모든 서비스(Admin, Holo Bot, Game Bots, LLM Server)의 상태를 집계하여 반환
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.AggregatedStatus'
+      security:
+      - SessionCookie: []
+      summary: 통합 시스템 상태
+      tags:
+      - status
+schemes:
+- https
+securityDefinitions:
+  SessionCookie:
+    description: Session-based authentication via HMAC-signed HTTP-only cookie
+    in: cookie
+    name: admin_session
+    type: apiKey
+swagger: "2.0"

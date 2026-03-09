@@ -1,0 +1,6 @@
+# go:embed용 프론트엔드 빌드 (Docker에서만 복사)
+# placeholder 파일은 제외하고 실제 빌드 결과물 무시
+admin-ui/dist/*.js
+admin-ui/dist/*.css
+admin-ui/dist/assets/*.js
+admin-ui/dist/assets/*.css
