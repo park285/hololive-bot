@@ -1,0 +1,748 @@
+{
+    "schemes": [
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "Unified Admin Console Backend for the Antigravity Bot Ecosystem.\nProvides infrastructure management APIs (Auth, Docker, Logs) and domain bot proxies.",
+        "title": "Admin Backend API",
+        "contact": {
+            "name": "API Support",
+            "email": "admin@capu.blog"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0.0"
+    },
+    "host": "admin.capu.blog",
+    "basePath": "/admin/api",
+    "paths": {
+        "/auth/heartbeat": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Keep session alive and optionally rotate session token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Session heartbeat",
+                "parameters": [
+                    {
+                        "description": "Heartbeat options",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.HeartbeatRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.HeartbeatResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Session expired or invalid",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "description": "Authenticate with username and password. Returns session cookie on success.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "User login",
+                "parameters": [
+                    {
+                        "description": "Login credentials",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.LoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too many login attempts",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Invalidate session and clear cookies",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "User logout",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.StatusResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/containers": {
+            "get": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Get all managed Docker containers with status and resource usage",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "List containers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ContainerListResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Docker service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/containers/{name}/restart": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Restart a managed Docker container by name",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Restart container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.StatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Container not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Docker service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/containers/{name}/start": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Start a stopped Docker container by name",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Start container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.StatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Container not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Docker service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/containers/{name}/stop": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Stop a managed Docker container by name",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Stop container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.StatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Container not found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Docker service unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/docker/health": {
+            "get": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Check if Docker daemon is accessible",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "docker"
+                ],
+                "summary": "Docker health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.DockerHealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/logs": {
+            "get": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Read last N lines from a system log file",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "Get system logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "combined",
+                        "description": "Log file key",
+                        "name": "file",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 1000,
+                        "type": "integer",
+                        "default": 200,
+                        "description": "Number of lines to fetch",
+                        "name": "lines",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.SystemLogsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid log file",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/logs/files": {
+            "get": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Get available system log files",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "logs"
+                ],
+                "summary": "List log files",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.LogFilesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/status": {
+            "get": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "모든 서비스(Admin, Holo Bot, Game Bots, LLM Server)의 상태를 집계하여 반환",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "status"
+                ],
+                "summary": "통합 시스템 상태",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.AggregatedStatus"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.AggregatedStatus": {
+            "type": "object",
+            "properties": {
+                "adminGoroutines": {
+                    "type": "integer"
+                },
+                "availableServices": {
+                    "type": "integer"
+                },
+                "services": {
+                    "description": "서비스별 상태",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.ServiceStatus"
+                    }
+                },
+                "startedAt": {
+                    "type": "integer"
+                },
+                "totalGoroutines": {
+                    "description": "집계 통계",
+                    "type": "integer"
+                },
+                "totalServices": {
+                    "type": "integer"
+                },
+                "uptime": {
+                    "type": "string"
+                },
+                "version": {
+                    "description": "Admin Dashboard 자체 상태",
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_park285_llm-kakao-bots_admin-dashboard_internal_status.ServiceStatus": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "goroutines": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "uptime": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_server.ContainerInfo": {
+            "type": "object",
+            "properties": {
+                "blockReadMB": {
+                    "type": "number",
+                    "example": 100
+                },
+                "blockWriteMB": {
+                    "type": "number",
+                    "example": 50
+                },
+                "cpuPercent": {
+                    "type": "number",
+                    "example": 1.5
+                },
+                "goroutineCount": {
+                    "type": "integer",
+                    "example": 25
+                },
+                "id": {
+                    "type": "string",
+                    "example": "abc123def456"
+                },
+                "memoryLimitMB": {
+                    "type": "number",
+                    "example": 512
+                },
+                "memoryPercent": {
+                    "type": "number",
+                    "example": 25.1
+                },
+                "memoryUsageMB": {
+                    "type": "number",
+                    "example": 128.5
+                },
+                "name": {
+                    "type": "string",
+                    "example": "hololive-bot"
+                },
+                "networkRxMB": {
+                    "type": "number",
+                    "example": 10.5
+                },
+                "networkTxMB": {
+                    "type": "number",
+                    "example": 5.2
+                },
+                "state": {
+                    "type": "string",
+                    "example": "running"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "Up 2 hours"
+                }
+            }
+        },
+        "internal_server.ContainerListResponse": {
+            "type": "object",
+            "properties": {
+                "containers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_server.ContainerInfo"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "internal_server.DockerHealthResponse": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "internal_server.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string",
+                    "example": "Session expired"
+                },
+                "error": {
+                    "type": "string",
+                    "example": "Unauthorized"
+                }
+            }
+        },
+        "internal_server.HeartbeatRequest": {
+            "type": "object",
+            "properties": {
+                "idle": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "internal_server.HeartbeatResponse": {
+            "type": "object",
+            "properties": {
+                "absolute_expires_at": {
+                    "type": "integer",
+                    "example": 1704067200
+                },
+                "idle_rejected": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "rotated": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "internal_server.LogFile": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "All services combined log"
+                },
+                "key": {
+                    "type": "string",
+                    "example": "combined"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "combined.log"
+                }
+            }
+        },
+        "internal_server.LogFilesResponse": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_server.LogFile"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "internal_server.LoginRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "example": "password123"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "admin"
+                }
+            }
+        },
+        "internal_server.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Login successful"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "internal_server.StatusResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Operation successful"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "internal_server.SystemLogsResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 100
+                },
+                "file": {
+                    "type": "string",
+                    "example": "combined"
+                },
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "SessionCookie": {
+            "description": "Session-based authentication via HMAC-signed HTTP-only cookie",
+            "type": "apiKey",
+            "name": "admin_session",
+            "in": "cookie"
+        }
+    }
+}
