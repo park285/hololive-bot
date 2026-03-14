@@ -153,7 +153,6 @@ func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
 	eg.SetLimit(s.config.FeedConcurrency)
 
 	for _, source := range s.config.Sources {
-		source := source
 		eg.Go(func() error {
 			result := s.scrapeSingleSource(egCtx, source)
 			mu.Lock()

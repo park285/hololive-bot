@@ -597,7 +597,6 @@ func (ys *schedulerImpl) fetchRecentVideosRotation(ctx context.Context, batchNum
 	eg.SetLimit(recentVideosFetchParallelism)
 
 	for _, channelID := range channels {
-		channelID := channelID
 		eg.Go(func() error {
 			videos, err := ys.youtube.GetRecentVideos(egCtx, channelID, 10)
 			if err != nil {
@@ -829,10 +828,8 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 	eg.SetLimit(4)
 
 	for _, work := range works {
-		work := work
 		sentNotifications = append(sentNotifications, work.notification)
 		for _, room := range rooms {
-			room := room
 			eg.Go(func() error {
 				if err := sendMessage(room, work.message); err != nil {
 					ys.logger.Error("Failed to send milestone notification",
@@ -890,10 +887,8 @@ func (ys *schedulerImpl) dispatchApproachingAlertWorks(
 	eg.SetLimit(4)
 
 	for _, work := range works {
-		work := work
 		sentNotifications = append(sentNotifications, work.notification)
 		for _, room := range rooms {
-			room := room
 			eg.Go(func() error {
 				if err := sendMessage(room, work.message); err != nil {
 					ys.logger.Error("Failed to send approaching notification",

@@ -91,8 +91,6 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 	eg.SetLimit(defaultLookupConcurrency)
 
 	for youtubeChannelID, chzzkChannelID := range channelMappings {
-		youtubeChannelID := youtubeChannelID
-		chzzkChannelID := chzzkChannelID
 		subscriberRooms := subscriberMap[youtubeChannelID]
 		if len(subscriberRooms) == 0 {
 			continue

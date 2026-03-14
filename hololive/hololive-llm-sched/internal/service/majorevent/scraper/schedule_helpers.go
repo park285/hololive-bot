@@ -27,13 +27,7 @@ import (
 var kstLocation = time.FixedZone("KST", 9*60*60)
 
 func calculateNextRunAtHour(now time.Time, hourKST int) time.Time {
-	targetHour := hourKST
-	if targetHour < 0 {
-		targetHour = 0
-	}
-	if targetHour > 23 {
-		targetHour = 23
-	}
+	targetHour := min(max(hourKST, 0), 23)
 
 	nowKST := now.In(kstLocation)
 	target := time.Date(

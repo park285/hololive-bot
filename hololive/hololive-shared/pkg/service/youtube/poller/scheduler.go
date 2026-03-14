@@ -222,7 +222,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	jobCh := make(chan *Job, s.workerCount*2)
 
 	// 워커 시작
-	for i := 0; i < s.workerCount; i++ {
+	for i := range s.workerCount {
 		s.wg.Add(1)
 		go s.worker(ctx, jobCh, i)
 	}

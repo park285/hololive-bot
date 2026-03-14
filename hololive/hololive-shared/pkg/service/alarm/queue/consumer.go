@@ -87,10 +87,7 @@ func NewConsumer(c cache.Client, logger *slog.Logger, opts ...ConsumerOption) *C
 func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
 	initQueueMetrics()
 
-	limit := min(maxItems, c.maxBatch)
-	if limit < 1 {
-		limit = 1
-	}
+	limit := max(1, min(maxItems, c.maxBatch))
 
 	startedAt := time.Now()
 	resultLabel := "ok"
@@ -141,8 +138,8 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 	}
 
 	elements := make([]string, 0, len(envelopes))
-	for _, envelope := range envelopes {
-		jsonBytes, err := json.Marshal(envelope)
+	for i := range envelopes {
+		jsonBytes, err := json.Marshal(envelopes[i])
 		if err != nil {
 			return fmt.Errorf("requeue envelopes: marshal envelope: %w", err)
 		}

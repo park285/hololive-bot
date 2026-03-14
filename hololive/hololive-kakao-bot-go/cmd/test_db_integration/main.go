@@ -79,6 +79,7 @@ func main() {
 	}
 	if foundMember == nil {
 		log.Fatal("Korone not found")
+		return
 	}
 	log.Printf("Find by channel ID: %s (aliases: ko=%d, ja=%d)",
 		foundMember.Name, len(foundMember.Aliases.Ko), len(foundMember.Aliases.Ja))
@@ -90,6 +91,7 @@ func main() {
 	}
 	if foundMember == nil {
 		log.Fatal("Alias '코로네' not found")
+		return
 	}
 	log.Printf("Find by alias '코로네': %s", foundMember.Name)
 
@@ -104,6 +106,7 @@ func main() {
 	}
 	if foundMember == nil {
 		log.Fatal("Korone not in cache")
+		return
 	}
 	log.Printf("Cache hit: %s", foundMember.Name)
 
@@ -113,6 +116,7 @@ func main() {
 	foundMember = adapterCtx.FindMemberByChannelID(testChannelID)
 	if foundMember == nil {
 		log.Fatal("Adapter failed")
+		return
 	}
 	log.Printf("Adapter works: %s", foundMember.Name)
 

@@ -304,8 +304,8 @@ func (c *H2CClient) postJSON(ctx context.Context, path string, body any, out any
 }
 
 func (c *H2CClient) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	url := c.baseURL + path
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	requestURL := c.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("new request %s %s: %w", method, path, err)
 	}

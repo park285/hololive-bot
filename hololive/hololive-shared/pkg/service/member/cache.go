@@ -119,23 +119,17 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	chunkSize := c.warmUpChunkSize
 	chunks := chunkMembers(members, chunkSize)
 
-	maxWorkers := c.warmUpMaxGoroutines
-	if maxWorkers < 1 {
-		maxWorkers = 1
-	}
+	maxWorkers := max(1, c.warmUpMaxGoroutines)
 	semaphore := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
 
 	// Worker pool로 병렬 캐싱 (stdlib 기반)
 	for _, chunk := range chunks {
-		chunk := chunk
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 			c.cacheChunk(ctx, chunk)
-		}()
+		})
 	}
 	wg.Wait()
 

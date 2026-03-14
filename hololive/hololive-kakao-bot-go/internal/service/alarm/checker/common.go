@@ -141,7 +141,6 @@ func loadSubscriberRoomsByChannel(
 	eg.SetLimit(defaultLookupConcurrency)
 
 	for _, channelID := range uniqueChannelIDs {
-		channelID := channelID
 		eg.Go(func() error {
 			rooms, err := cacheSvc.SMembers(egCtx, notification.ChannelSubscribersKeyPrefix+channelID)
 			if err != nil {

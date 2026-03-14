@@ -103,10 +103,7 @@ func (s *FeedScheduler) run(ctx context.Context) {
 	for {
 		now := s.now()
 		nextRun, trigger := s.nextRun(now)
-		waitDuration := time.Until(nextRun)
-		if waitDuration < 0 {
-			waitDuration = 0
-		}
+		waitDuration := max(time.Until(nextRun), time.Duration(0))
 
 		s.logger.Info(
 			"Major event feed scheduler waiting",
