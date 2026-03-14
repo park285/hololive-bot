@@ -418,7 +418,7 @@ func TestClient_SetProxyEnabled_CustomHTTPClient_NoOp(t *testing.T) {
 		WithHTTPClient(httpClient),
 		WithRateLimiter(NewRateLimiter(0)),
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
-		WithProxy(ProxyConfig{Enabled: true, URL: "socks5://127.0.0.1:1080"}),
+		WithProxy(ProxyConfig{Enabled: true, URL: "socks5://proxy.internal:1080"}),
 	)
 
 	applied := client.SetProxyEnabled(false)

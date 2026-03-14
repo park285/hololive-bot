@@ -130,7 +130,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				},
 				Scraper: config.ScraperConfig{
 					ProxyEnabled: true,
-					ProxyURL:     "socks5://127.0.0.1:1080",
+					ProxyURL:     "socks5://proxy.internal:1080",
 				},
 			}
 
