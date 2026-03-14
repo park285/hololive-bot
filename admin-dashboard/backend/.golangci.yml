@@ -28,6 +28,8 @@ linters:
     - dupl
     - goconst
     - gocritic
+    - intrange
+    - modernize
     - misspell
     - predeclared
     - revive
