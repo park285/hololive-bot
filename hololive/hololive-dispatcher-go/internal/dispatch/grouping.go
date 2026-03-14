@@ -30,6 +30,7 @@ import (
 type NotificationGroup struct {
 	RoomID        string
 	MinutesUntil  int
+	Envelopes     []domain.AlarmQueueEnvelope
 	Notifications []domain.AlarmNotification
 	ClaimKeys     []string
 }
@@ -52,6 +53,7 @@ func GroupEnvelopes(envelopes []domain.AlarmQueueEnvelope) []NotificationGroup {
 			groups = append(groups, NotificationGroup{
 				RoomID:        envelope.Notification.RoomID,
 				MinutesUntil:  envelope.Notification.MinutesUntil,
+				Envelopes:     []domain.AlarmQueueEnvelope{envelope},
 				Notifications: []domain.AlarmNotification{envelope.Notification},
 				ClaimKeys:     append([]string{}, envelope.ClaimKeys...),
 			})
@@ -60,6 +62,7 @@ func GroupEnvelopes(envelopes []domain.AlarmQueueEnvelope) []NotificationGroup {
 
 		group := &groups[groupIndex]
 		group.MinutesUntil = mergeMinutesUntil(group.MinutesUntil, envelope.Notification.MinutesUntil)
+		group.Envelopes = append(group.Envelopes, envelope)
 		group.Notifications = append(group.Notifications, envelope.Notification)
 		group.ClaimKeys = append(group.ClaimKeys, envelope.ClaimKeys...)
 	}

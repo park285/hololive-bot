@@ -28,20 +28,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (as *AlarmService) submitPersistTask(action string, task func()) {
-	if as.persistPool == nil {
+func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
+	if as.persistExecutor == nil {
 		if as.logger != nil {
-			as.logger.Error("Persist pool is not initialized",
+			as.logger.Error("Persist executor is not initialized",
 				slog.String("action", action),
+				slog.String("room_id", roomID),
 			)
 		}
 		return
 	}
 
-	if err := as.persistPool.Submit(task); err != nil {
+	if err := as.persistExecutor.Submit(roomID, task); err != nil {
 		if as.logger != nil {
-			as.logger.Warn("Failed to submit persist task to pool",
+			as.logger.Warn("Failed to submit persist task to executor",
 				slog.String("action", action),
+				slog.String("room_id", roomID),
 				slog.Any("error", err),
 			)
 		}
@@ -53,15 +55,15 @@ func (as *AlarmService) submitPersistTask(action string, task func()) {
 //
 //nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
 func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
-	if as.alarmRepo == nil {
+	if as.alarmWriter == nil || alarm == nil {
 		return
 	}
 
-	as.submitPersistTask("persist_alarm", func() {
+	as.submitPersistTask("persist_alarm", alarm.RoomID, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
 		defer cancel()
 
-		if err := as.alarmRepo.Add(ctx, alarm); err != nil {
+		if err := as.alarmWriter.Add(ctx, alarm); err != nil {
 			as.logger.Warn("Failed to persist alarm to DB (async)",
 				slog.String("room_id", alarm.RoomID),
 				slog.String("channel_id", alarm.ChannelID),
@@ -75,15 +77,15 @@ func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
 //
 //nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
 func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
-	if as.alarmRepo == nil {
+	if as.alarmWriter == nil {
 		return
 	}
 
-	as.submitPersistTask("remove_alarm", func() {
+	as.submitPersistTask("remove_alarm", roomID, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
 		defer cancel()
 
-		if err := as.alarmRepo.Remove(ctx, roomID, channelID); err != nil {
+		if err := as.alarmWriter.Remove(ctx, roomID, channelID); err != nil {
 			as.logger.Warn("Failed to remove alarm from DB (async)",
 				slog.String("room_id", roomID),
 				slog.String("channel_id", channelID),
@@ -97,15 +99,15 @@ func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
 //
 //nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
 func (as *AlarmService) clearRoomAlarmsAsync(roomID string) {
-	if as.alarmRepo == nil {
+	if as.alarmWriter == nil {
 		return
 	}
 
-	as.submitPersistTask("clear_room_alarms", func() {
+	as.submitPersistTask("clear_room_alarms", roomID, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
 		defer cancel()
 
-		if _, err := as.alarmRepo.ClearByRoom(ctx, roomID); err != nil {
+		if _, err := as.alarmWriter.ClearByRoom(ctx, roomID); err != nil {
 			as.logger.Warn("Failed to clear room alarms from DB (async)",
 				slog.String("room_id", roomID),
 				slog.Any("error", err),
