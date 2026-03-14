@@ -32,6 +32,8 @@ linters:
     - dupl
     - goconst
     - gocritic
+    - intrange
+    - modernize
     - misspell
     - predeclared   # 내장 이름 재정의 방지
     - revive
