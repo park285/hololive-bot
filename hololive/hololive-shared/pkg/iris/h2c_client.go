@@ -53,6 +53,11 @@ const (
 	defaultHTTPTLSHandshake       = 5 * time.Second
 	defaultHTTPResponseHeaderWait = 5 * time.Second
 	defaultHTTPIdleConnTimeout    = 90 * time.Second
+	defaultHTTPMaxIdleConns       = 10
+	defaultHTTPMaxIdleConnsHost   = 10
+	defaultHTTP2ReadIdleTimeout   = 30 * time.Second
+	defaultHTTP2PingTimeout       = 15 * time.Second
+	defaultHTTP2WriteByteTimeout  = 10 * time.Second
 )
 
 type H2CClientOptions struct {
@@ -61,6 +66,11 @@ type H2CClientOptions struct {
 	TLSHandshakeTimeout   time.Duration
 	ResponseHeaderTimeout time.Duration
 	IdleConnTimeout       time.Duration
+	MaxIdleConns          int
+	MaxIdleConnsPerHost   int
+	ReadIdleTimeout       time.Duration
+	PingTimeout           time.Duration
+	WriteByteTimeout      time.Duration
 }
 
 func (o H2CClientOptions) normalized() H2CClientOptions {
@@ -79,6 +89,21 @@ func (o H2CClientOptions) normalized() H2CClientOptions {
 	}
 	if result.IdleConnTimeout <= 0 {
 		result.IdleConnTimeout = defaultHTTPIdleConnTimeout
+	}
+	if result.MaxIdleConns <= 0 {
+		result.MaxIdleConns = defaultHTTPMaxIdleConns
+	}
+	if result.MaxIdleConnsPerHost <= 0 {
+		result.MaxIdleConnsPerHost = defaultHTTPMaxIdleConnsHost
+	}
+	if result.ReadIdleTimeout <= 0 {
+		result.ReadIdleTimeout = defaultHTTP2ReadIdleTimeout
+	}
+	if result.PingTimeout <= 0 {
+		result.PingTimeout = defaultHTTP2PingTimeout
+	}
+	if result.WriteByteTimeout <= 0 {
+		result.WriteByteTimeout = defaultHTTP2WriteByteTimeout
 	}
 	return result
 }
@@ -141,8 +166,8 @@ func newIrisTransport(baseURL string, logger *slog.Logger, opt H2CClientOptions)
 
 func newHTTPTransport(opt H2CClientOptions) *http.Transport {
 	return &http.Transport{
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 10,
+		MaxIdleConns:        opt.MaxIdleConns,
+		MaxIdleConnsPerHost: opt.MaxIdleConnsPerHost,
 		IdleConnTimeout:     opt.IdleConnTimeout,
 		DialContext: (&net.Dialer{
 			Timeout:   opt.DialTimeout,
@@ -157,9 +182,9 @@ func newH2CTransport(opt H2CClientOptions) *http2.Transport {
 	return &http2.Transport{
 		AllowHTTP:        true,
 		IdleConnTimeout:  opt.IdleConnTimeout,
-		PingTimeout:      15 * time.Second,
-		ReadIdleTimeout:  0,
-		WriteByteTimeout: 0,
+		PingTimeout:      opt.PingTimeout,
+		ReadIdleTimeout:  opt.ReadIdleTimeout,
+		WriteByteTimeout: opt.WriteByteTimeout,
 		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
 			d := &net.Dialer{
 				Timeout:   opt.DialTimeout,
