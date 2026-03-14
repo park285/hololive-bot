@@ -134,6 +134,33 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	return envelopes, nil
 }
 
+// Requeue: 드레인된 envelope를 큐 앞으로 다시 넣어 재시도 대상에 포함한다.
+func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if len(envelopes) == 0 {
+		return nil
+	}
+
+	elements := make([]string, 0, len(envelopes))
+	for _, envelope := range envelopes {
+		jsonBytes, err := json.Marshal(envelope)
+		if err != nil {
+			return fmt.Errorf("requeue envelopes: marshal envelope: %w", err)
+		}
+		elements = append(elements, string(jsonBytes))
+	}
+
+	cmd := c.cache.B().Lpush().Key(c.queueKey).Element(elements...).Build()
+	results := c.cache.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		return fmt.Errorf("requeue envelopes: lpush dispatch queue: unexpected result count: %d", len(results))
+	}
+	if err := results[0].Error(); err != nil {
+		return fmt.Errorf("requeue envelopes: lpush dispatch queue: %w", err)
+	}
+
+	return nil
+}
+
 // ReleaseClaimKeys: claim 키를 prefix 필터링 후 Valkey DEL
 func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
 	initQueueMetrics()

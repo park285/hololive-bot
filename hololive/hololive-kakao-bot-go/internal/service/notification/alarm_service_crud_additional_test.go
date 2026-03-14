@@ -191,7 +191,7 @@ func TestAlarmService_SubmitPersistTaskAndWarmCache_NoRepository(t *testing.T) {
 	called := false
 	as := &AlarmService{logger: newDiscardAlarmLogger()}
 
-	as.submitPersistTask("persist_alarm", func() {
+	as.submitPersistTask("persist_alarm", "room-1", func() {
 		called = true
 	})
 	assert.False(t, called)

@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 )
 
 // -- AddAlarm 테스트 --
@@ -406,23 +405,22 @@ func TestSubmitPersistTask_NilPool(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	// persistPool이 nil이면 로그만 남기고 패닉 안 함
-	as.submitPersistTask("test", func() { t.Fatal("should not be called") })
+	// persistExecutor가 nil이면 로그만 남기고 패닉 안 함
+	as.submitPersistTask("test", "room-1", func() { t.Fatal("should not be called") })
 }
 
 func TestSubmitPersistTask_ClosedPool(t *testing.T) {
 	t.Parallel()
 
-	pool, err := workerpool.New(workerpool.DefaultConfig())
-	require.NoError(t, err)
-	pool.Shutdown()
+	executor := newStripedExecutor(1, 1)
+	require.NoError(t, executor.ShutdownWait(context.Background()))
 
 	called := false
 	as := &AlarmService{
-		persistPool: pool,
-		logger:      newDiscardAlarmLogger(),
+		persistExecutor: executor,
+		logger:          newDiscardAlarmLogger(),
 	}
-	as.submitPersistTask("test", func() { called = true })
+	as.submitPersistTask("test", "room-1", func() { called = true })
 
 	assert.False(t, called)
 }

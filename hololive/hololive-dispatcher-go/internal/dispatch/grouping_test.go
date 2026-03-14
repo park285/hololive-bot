@@ -73,6 +73,32 @@ func TestGroupEnvelopes_GroupByMinutesWhenScheduleMissing(t *testing.T) {
 	}
 }
 
+func TestGroupEnvelopes_SeparateByScheduledMinuteBucket(t *testing.T) {
+	t.Parallel()
+
+	startA := time.Date(2026, 3, 4, 10, 0, 59, 0, time.UTC)
+	startB := time.Date(2026, 3, 4, 10, 1, 0, 0, time.UTC)
+
+	envelopes := []domain.AlarmQueueEnvelope{
+		newEnvelope("room-a", "stream-1", 5, &startA, "claim-1"),
+		newEnvelope("room-a", "stream-2", 5, &startB, "claim-2"),
+	}
+
+	groups := GroupEnvelopes(envelopes)
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %d", len(groups))
+	}
+
+	for i, group := range groups {
+		if group.RoomID != "room-a" {
+			t.Fatalf("group %d room = %s, want room-a", i, group.RoomID)
+		}
+		if len(group.Notifications) != 1 {
+			t.Fatalf("group %d notifications = %d, want 1", i, len(group.Notifications))
+		}
+	}
+}
+
 func newEnvelope(roomID, streamID string, minutesUntil int, startScheduled *time.Time, claimKey string) domain.AlarmQueueEnvelope {
 	stream := &domain.Stream{
 		ID:             streamID,

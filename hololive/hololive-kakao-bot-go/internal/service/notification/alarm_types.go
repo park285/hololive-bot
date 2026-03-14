@@ -21,6 +21,7 @@
 package notification
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
@@ -75,6 +75,12 @@ type UpcomingEventNotifiedData struct {
 	NotifiedAt string `json:"notified_at"`
 }
 
+type alarmWriter interface {
+	Add(ctx context.Context, alarm *domain.Alarm) error
+	Remove(ctx context.Context, roomID, channelID string) error
+	ClearByRoom(ctx context.Context, roomID string) (int64, error)
+}
+
 // AlarmService: 방송 알림(Alarm)을 관리하는 서비스 (Rust 이관 후 CRUD/상태 관리만 담당)
 type AlarmService struct {
 	cache           cache.Client
@@ -83,10 +89,11 @@ type AlarmService struct {
 	twitch          *twitch.Client
 	memberData      domain.MemberDataProvider
 	alarmRepo       *alarm.Repository
+	alarmWriter     alarmWriter
 	logger          *slog.Logger
 	targetMinutes   []int
 	targetMinutesMu sync.RWMutex
 	platformMapMu   sync.Mutex
-	persistPool     *workerpool.Pool
+	persistExecutor *stripedExecutor
 	closeOnce       sync.Once
 }
