@@ -8,7 +8,7 @@ k8s/k3s 운영에서 Docker Compose 기준으로 회귀할 때 git history에서
 
 - `3db5ac9` `chore(ops): switch deploy/docs to 4-service go topology`
   - 서비스: `hololive-bot`, `dispatcher-go`, `stream-ingester`, `llm-scheduler`
-  - 보조: `holo-postgres`, `valkey-cache`, `hololive-db-migrate`, `vpn-scraper-proxy`, `docker-proxy`, `deunhealth`
+  - 보조: `holo-postgres`, `valkey-cache`, `hololive-db-migrate`, `docker-proxy`, `deunhealth`
   - 현재 운영 회귀 기준으로 가장 적합
 
 현재 운영 기준:
@@ -67,7 +67,6 @@ k8s/k3s 운영에서 Docker Compose 기준으로 회귀할 때 git history에서
 - infra/support:
   - `docker-proxy`
   - `deunhealth`
-  - `vpn-scraper-proxy`
 - 대부분의 앱 컨테이너는 `127.0.0.1` loopback publish
 
 ## 회귀 시 참고 포인트

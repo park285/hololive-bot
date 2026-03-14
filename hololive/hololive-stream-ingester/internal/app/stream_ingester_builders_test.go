@@ -185,7 +185,7 @@ func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
 	postgres := &databasemocks.Client{}
 	registrations := buildStreamIngesterChannelPollerRegistrations(
 		postgres,
-		scraper.ProxyConfig{Enabled: true, URL: "socks5://127.0.0.1:1080"},
+		scraper.ProxyConfig{Enabled: true, URL: "socks5://proxy.internal:1080"},
 		nil,
 		nil,
 	)
@@ -223,7 +223,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 	}
 
 	scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
-		config.ScraperConfig{ProxyEnabled: true, ProxyURL: "socks5://127.0.0.1:1080"},
+		config.ScraperConfig{ProxyEnabled: true, ProxyURL: "socks5://proxy.internal:1080"},
 		&databasemocks.Client{},
 		membersData,
 		nil,
