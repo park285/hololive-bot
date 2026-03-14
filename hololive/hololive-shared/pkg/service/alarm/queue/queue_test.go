@@ -216,3 +216,39 @@ func TestConsumerDrainBatch_UsesBatchedDrain(t *testing.T) {
 	assert.Equal(t, "room-2", envelopes[1].Notification.RoomID)
 	assert.Equal(t, "room-3", envelopes[2].Notification.RoomID)
 }
+
+func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	publisher := NewPublisher(cacheClient, newTestLogger())
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	retryA := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{RoomID: "retry-a"},
+		ClaimKeys:    []string{"notified:claim:retry-a"},
+		EnqueuedAt:   time.Now().UTC().Format(time.RFC3339),
+		Version:      contractsalarm.QueueEnvelopeVersionV1,
+	}
+	retryB := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{RoomID: "retry-b"},
+		ClaimKeys:    []string{"notified:claim:retry-b"},
+		EnqueuedAt:   time.Now().UTC().Format(time.RFC3339),
+		Version:      contractsalarm.QueueEnvelopeVersionV1,
+	}
+
+	err := publisher.Publish(
+		context.Background(),
+		&domain.AlarmNotification{RoomID: "existing"},
+		[]string{"notified:claim:existing"},
+	)
+	require.NoError(t, err)
+
+	err = consumer.Requeue(context.Background(), []domain.AlarmQueueEnvelope{retryA, retryB})
+	require.NoError(t, err)
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 3)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 3)
+	assert.Equal(t, "existing", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "retry-a", envelopes[1].Notification.RoomID)
+	assert.Equal(t, "retry-b", envelopes[2].Notification.RoomID)
+}

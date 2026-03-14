@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/iris"
 )
 
-func TestDispatcherRunOnce_SendFailureReleasesClaimKeys(t *testing.T) {
+func TestDispatcherRunOnce_RenderFailureReleasesClaimKeys(t *testing.T) {
 	t.Parallel()
 
 	fakeConsumer := &testQueueConsumer{
@@ -52,6 +52,42 @@ func TestDispatcherRunOnce_SendFailureReleasesClaimKeys(t *testing.T) {
 					},
 					ClaimKeys: []string{"claim-1", "claim-2"},
 				},
+			}, nil
+		},
+	}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{},
+		&failingTestRenderer{err: errors.New("render failed")},
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() error = %v", runErr)
+	}
+
+	if len(fakeConsumer.releasedClaimKeys) != 2 {
+		t.Fatalf("expected 2 released claim keys, got %d", len(fakeConsumer.releasedClaimKeys))
+	}
+	if len(fakeConsumer.requeuedEnvelopes) != 0 {
+		t.Fatalf("expected 0 requeued envelopes, got %d", len(fakeConsumer.requeuedEnvelopes))
+	}
+}
+
+func TestDispatcherRunOnce_SendFailureRequeuesEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			return []domain.AlarmQueueEnvelope{
+				testAlarmQueueEnvelope("room-1", "claim-1"),
+				testAlarmQueueEnvelope("room-1", "claim-2"),
 			}, nil
 		},
 	}
@@ -78,8 +114,11 @@ func TestDispatcherRunOnce_SendFailureReleasesClaimKeys(t *testing.T) {
 		t.Fatalf("RunOnce() error = %v", runErr)
 	}
 
-	if len(fakeConsumer.releasedClaimKeys) != 2 {
-		t.Fatalf("expected 2 released claim keys, got %d", len(fakeConsumer.releasedClaimKeys))
+	if len(fakeConsumer.requeuedEnvelopes) != 2 {
+		t.Fatalf("expected 2 requeued envelopes, got %d", len(fakeConsumer.requeuedEnvelopes))
+	}
+	if len(fakeConsumer.releasedClaimKeys) != 0 {
+		t.Fatalf("expected released claim keys = 0, got %d", len(fakeConsumer.releasedClaimKeys))
 	}
 }
 
@@ -215,7 +254,9 @@ func testAlarmQueueEnvelope(roomID, claimKey string) domain.AlarmQueueEnvelope {
 type testQueueConsumer struct {
 	drainBatchFunc    func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	releaseClaimKeys  func(ctx context.Context, claimKeys []string) error
+	requeueFunc       func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	releasedClaimKeys []string
+	requeuedEnvelopes []domain.AlarmQueueEnvelope
 }
 
 func (c *testQueueConsumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
@@ -233,6 +274,14 @@ func (c *testQueueConsumer) ReleaseClaimKeys(ctx context.Context, claimKeys []st
 	return nil
 }
 
+func (c *testQueueConsumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if c.requeueFunc != nil {
+		return c.requeueFunc(ctx, envelopes)
+	}
+	c.requeuedEnvelopes = append(c.requeuedEnvelopes, envelopes...)
+	return nil
+}
+
 type testMessageSender struct {
 	sendMessageFunc func(ctx context.Context, room, message string, opts ...iris.SendOption) error
 }
@@ -242,4 +291,12 @@ func (s *testMessageSender) SendMessage(ctx context.Context, room, message strin
 		return s.sendMessageFunc(ctx, room, message, opts...)
 	}
 	return nil
+}
+
+type failingTestRenderer struct {
+	err error
+}
+
+func (r *failingTestRenderer) RenderGroup(ctx context.Context, group NotificationGroup) (string, error) {
+	return "", r.err
 }

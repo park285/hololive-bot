@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
@@ -43,6 +42,9 @@ import (
 const (
 	alarmServiceCloseTimeout = 3 * time.Second
 	alarmPersistTaskTimeout  = alarmServiceCloseTimeout
+
+	alarmPersistStripeCount    = 16
+	alarmPersistStripeQueueCap = 256
 )
 
 // alarmServiceCloseOnce: 생성된 AlarmService 인스턴스 레지스트리 (CloseAllAlarmServices 용)
@@ -71,21 +73,22 @@ func NewAlarmService(
 
 	targetMinutes := buildTargetMinutes(advanceMinutes)
 
-	pool, err := workerpool.New(workerpool.DefaultConfig())
-	if err != nil {
-		return nil, fmt.Errorf("create alarm persist pool: %w", err)
+	var writer alarmWriter
+	if alarmRepo != nil {
+		writer = alarmRepo
 	}
 
 	svc := &AlarmService{
-		cache:         cacheSvc,
-		holodex:       holodexSvc,
-		chzzk:         chzzkClient,
-		twitch:        twitchClient,
-		memberData:    memberData,
-		alarmRepo:     alarmRepo,
-		logger:        logger,
-		targetMinutes: targetMinutes,
-		persistPool:   pool,
+		cache:           cacheSvc,
+		holodex:         holodexSvc,
+		chzzk:           chzzkClient,
+		twitch:          twitchClient,
+		memberData:      memberData,
+		alarmRepo:       alarmRepo,
+		alarmWriter:     writer,
+		logger:          logger,
+		targetMinutes:   targetMinutes,
+		persistExecutor: newStripedExecutor(alarmPersistStripeCount, alarmPersistStripeQueueCap),
 	}
 
 	alarmServiceCloseOnce.Store(svc, struct{}{})
@@ -158,7 +161,7 @@ func (as *AlarmService) UpdateAlarmAdvanceMinutes(_ context.Context, alarmAdvanc
 	return normalized
 }
 
-// Close gracefully shuts down the AlarmService, releasing the worker pool.
+// Close gracefully shuts down the AlarmService, releasing the persist executor.
 func (as *AlarmService) Close(ctx context.Context) error {
 	if as == nil {
 		return nil
@@ -169,15 +172,15 @@ func (as *AlarmService) Close(ctx context.Context) error {
 
 	var closeErr error
 	as.closeOnce.Do(func() {
-		if as.persistPool == nil {
+		if as.persistExecutor == nil {
 			return
 		}
 
 		shutdownCtx, cancel := context.WithTimeout(ctx, alarmServiceCloseTimeout)
 		defer cancel()
 
-		if err := as.persistPool.ShutdownWait(shutdownCtx); err != nil {
-			closeErr = fmt.Errorf("shutdown alarm persist pool: %w", err)
+		if err := as.persistExecutor.ShutdownWait(shutdownCtx); err != nil {
+			closeErr = fmt.Errorf("shutdown alarm persist executor: %w", err)
 		}
 	})
 

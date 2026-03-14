@@ -40,6 +40,7 @@ import (
 type testQueueConsumer struct {
 	drainBatchFunc      func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	releaseClaimKeyFunc func(ctx context.Context, claimKeys []string) error
+	requeueFunc         func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
 func (c *testQueueConsumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
@@ -52,6 +53,13 @@ func (c *testQueueConsumer) DrainBatch(ctx context.Context, maxItems int) ([]dom
 func (c *testQueueConsumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
 	if c.releaseClaimKeyFunc != nil {
 		return c.releaseClaimKeyFunc(ctx, claimKeys)
+	}
+	return nil
+}
+
+func (c *testQueueConsumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if c.requeueFunc != nil {
+		return c.requeueFunc(ctx, envelopes)
 	}
 	return nil
 }

@@ -33,6 +33,7 @@ import (
 type queueConsumer interface {
 	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
+	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
 type messageSender interface {
@@ -137,11 +138,24 @@ func (d *Dispatcher) dispatchGroup(ctx context.Context, group NotificationGroup)
 	}
 
 	if err := d.sender.SendMessage(ctx, group.RoomID, message); err != nil {
-		d.releaseClaimKeys(ctx, group.RoomID, group.ClaimKeys, "send failed")
+		d.requeueEnvelopes(ctx, group.RoomID, group.Envelopes)
 		return fmt.Errorf("dispatch group: send message: %w", err)
 	}
 
 	return nil
+}
+
+func (d *Dispatcher) requeueEnvelopes(ctx context.Context, roomID string, envelopes []domain.AlarmQueueEnvelope) {
+	if len(envelopes) == 0 {
+		return
+	}
+	if err := d.consumer.Requeue(ctx, envelopes); err != nil {
+		d.logger.Warn("Requeue envelopes failed",
+			slog.String("room_id", roomID),
+			slog.Int("envelopes", len(envelopes)),
+			slog.Any("error", err),
+		)
+	}
 }
 
 func (d *Dispatcher) releaseClaimKeys(ctx context.Context, roomID string, claimKeys []string, reason string) {
