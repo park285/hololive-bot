@@ -17,6 +17,8 @@ k8s/base/secret-*.yaml
 *.key
 *.pem
 *.p12
+KR.pub
+ssh-key-2026-03-09.key.pub
 credentials.json
 secrets.yml
 secrets.yaml
@@ -188,6 +190,7 @@ hololive/hololive-rs/docs/reports/**/*.tsv
 # Agent Workflows (Local Only)
 # ============================================
 .agent/
+.tasklists/
 
 # ============================================
 # Deploy Snapshots
