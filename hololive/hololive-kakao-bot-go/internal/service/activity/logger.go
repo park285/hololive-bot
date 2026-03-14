@@ -152,7 +152,7 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 	}
 
 	logs := make([]LogEntry, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		logs[i] = ring[(writePos+i)%limit]
 	}
 	return logs, nil

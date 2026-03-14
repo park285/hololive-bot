@@ -83,7 +83,7 @@ func WithRetry(ctx context.Context, opts RetryOptions, fn func(ctx context.Conte
 
 	var lastErr error
 
-	for attempt := 0; attempt < opts.MaxAttempts; attempt++ {
+	for attempt := range opts.MaxAttempts {
 		if ctx.Err() != nil {
 			if lastErr != nil {
 				return lastErr

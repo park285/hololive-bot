@@ -23,11 +23,12 @@ package scraper
 import "log/slog"
 
 func logStructureWarning(surface, channelID, detail string, attrs ...any) {
-	baseAttrs := []any{
+	baseAttrs := make([]any, 0, 6+len(attrs))
+	baseAttrs = append(baseAttrs,
 		"surface", surface,
 		"channel_id", channelID,
 		"detail", detail,
-	}
+	)
 	baseAttrs = append(baseAttrs, attrs...)
 	slog.Warn("YouTube scraper structure signal", baseAttrs...)
 }

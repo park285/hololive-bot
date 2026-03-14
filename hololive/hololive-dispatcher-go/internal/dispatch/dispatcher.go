@@ -111,7 +111,6 @@ func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGr
 	eg.SetLimit(d.parallelism)
 
 	for _, group := range groups {
-		group := group
 		eg.Go(func() error {
 			if err := d.dispatchGroup(egCtx, group); err != nil {
 				d.logger.Warn("Dispatch group failed",

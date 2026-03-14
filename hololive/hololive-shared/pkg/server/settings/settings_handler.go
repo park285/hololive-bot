@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 
 	"github.com/gin-gonic/gin"
 
@@ -170,9 +171,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 
 	runtime := h.ApplyScraperProxy(c.Request.Context(), current.ScraperProxyEnabled).AsMap()
 	if alarmAdvanceUpdated {
-		for k, v := range h.ApplyAlarmAdvanceMinutes(c.Request.Context(), current.AlarmAdvanceMinutes).AsMap() {
-			runtime[k] = v
-		}
+		maps.Copy(runtime, h.ApplyAlarmAdvanceMinutes(c.Request.Context(), current.AlarmAdvanceMinutes).AsMap())
 	}
 	h.publishUpdateResult(c.Request.Context(), runtime, req.ScraperProxyEnabled, req.AlarmAdvanceMinutes)
 

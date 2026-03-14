@@ -60,7 +60,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 		envelope.RoomName,
 		envelope.UserID,
 		envelope.UserName,
-		message.Msg,
+		envelope.Parsed.RawMessage,
 		false,
 	)
 	if message != nil && message.JSON != nil && message.JSON.ThreadID != nil {

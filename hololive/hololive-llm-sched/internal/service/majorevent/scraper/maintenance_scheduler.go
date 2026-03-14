@@ -112,10 +112,7 @@ func (s *MaintenanceScheduler) run(ctx context.Context) {
 
 	for {
 		nextExpiredRun := calculateNextRunAtHour(s.now(), s.config.ExpireHourKST)
-		waitDuration := time.Until(nextExpiredRun)
-		if waitDuration < 0 {
-			waitDuration = 0
-		}
+		waitDuration := max(time.Until(nextExpiredRun), time.Duration(0))
 
 		s.logger.Info(
 			"Major event maintenance scheduler waiting",

@@ -22,6 +22,7 @@ package server
 
 import (
 	"log/slog"
+	"maps"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,9 +30,7 @@ import (
 // RespondError는 API 에러 응답 payload를 일관된 형식으로 반환합니다.
 func RespondError(c *gin.Context, status int, message string, extra gin.H) {
 	payload := gin.H{"error": message}
-	for key, value := range extra {
-		payload[key] = value
-	}
+	maps.Copy(payload, extra)
 	c.JSON(status, payload)
 }
 

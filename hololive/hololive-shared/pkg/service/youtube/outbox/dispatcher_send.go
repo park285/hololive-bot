@@ -185,7 +185,6 @@ func (d *Dispatcher) sendItemMessageToRooms(ctx context.Context, subscribers []s
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(d.deliveryParallelism())
 	for roomID := range d.groupByRoom(subscribers) {
-		roomID := roomID
 		eg.Go(func() error {
 			if err := d.sender.SendMessage(egCtx, roomID, message); err != nil {
 				d.logger.Warn("Failed to send message to room",

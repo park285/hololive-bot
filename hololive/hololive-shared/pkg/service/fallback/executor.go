@@ -112,7 +112,6 @@ func Execute[K any, V any](
 		eg.SetLimit(parallelism)
 
 		for i := range plan.Targets {
-			i := i
 			key := plan.Targets[i]
 			eg.Go(func() error {
 				value, err := plan.Fetch(egCtx, key)

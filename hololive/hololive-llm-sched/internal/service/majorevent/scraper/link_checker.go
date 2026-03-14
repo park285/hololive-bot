@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -94,7 +95,6 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 	var mu sync.Mutex
 
 	for _, event := range events {
-		event := event
 		if event == nil {
 			continue
 		}
@@ -253,10 +253,8 @@ func validateResolvedHost(ctx context.Context, resolver hostResolver, timeout ti
 	if len(ips) == 0 {
 		return fmt.Errorf("resolve link host: no addresses for %q", parsed.Hostname())
 	}
-	for _, ip := range ips {
-		if isPrivateOrInternalIP(ip) {
-			return fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
-		}
+	if slices.ContainsFunc(ips, isPrivateOrInternalIP) {
+		return fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
 	}
 	return nil
 }

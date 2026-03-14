@@ -226,7 +226,7 @@ func NewWebhookHandler(
 	}
 	h.observeQueueDepth()
 
-	for i := 0; i < stripeCount; i++ {
+	for i := range stripeCount {
 		h.workerWG.Add(1)
 		go h.worker(i, h.stripes[i].queue)
 	}
@@ -325,29 +325,9 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	irisMsg := &Message{
-		Msg:  req.Text,
-		Room: req.Room,
-		Sender: func() *string {
-			s := req.Sender
-			return new(s)
-		}(),
-		JSON: &MessageJSON{
-			UserID: req.UserID,
-			ChatID: req.Room,
-			ThreadID: func() *string {
-				id := strings.TrimSpace(req.ThreadID)
-				if id == "" {
-					return nil
-				}
-				return &id
-			}(),
-		},
-	}
-
 	task := webhookTask{
 		ctx: context.WithoutCancel(c.Request.Context()),
-		msg: irisMsg,
+		msg: h.buildWebhookMessage(req),
 	}
 	if err := h.enqueue(task); err != nil {
 		stripeIndex, stripeDepth, stripeCap := h.stripeStats(task.msg)
@@ -367,6 +347,28 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 
 	h.incRequest("accepted")
 	c.Status(http.StatusOK)
+}
+
+func (h *WebhookHandler) buildWebhookMessage(req WebhookRequest) *Message {
+	return &Message{
+		Msg:  req.Text,
+		Room: req.Room,
+		Sender: func() *string {
+			s := req.Sender
+			return new(s)
+		}(),
+		JSON: &MessageJSON{
+			UserID: req.UserID,
+			ChatID: req.Room,
+			ThreadID: func() *string {
+				id := strings.TrimSpace(req.ThreadID)
+				if id == "" {
+					return nil
+				}
+				return &id
+			}(),
+		},
+	}
 }
 
 // checkDedup: 메시지 ID 기반 중복 요청 체크. 중복이면 (status, true) 반환.

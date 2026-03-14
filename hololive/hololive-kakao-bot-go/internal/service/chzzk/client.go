@@ -458,7 +458,6 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 	g.SetLimit(constants.ChzzkConfig.MaxConcurrentStatusChecks)
 
 	for _, channelID := range channelIDs {
-		channelID := channelID
 		g.Go(func() error {
 			status, err := c.GetLiveStatus(ctx, channelID)
 			if err != nil {
