@@ -23,17 +23,21 @@ package iris
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"golang.org/x/net/http2"
 )
 
 type H2CClient struct {
@@ -91,7 +95,52 @@ func NewH2CClient(baseURL, botToken string, logger *slog.Logger, options ...H2CC
 	}
 	opt = opt.normalized()
 
-	transport := &http.Transport{
+	client := httputil.NewClient(opt.Timeout)
+	client.Transport = newIrisTransport(baseURL, logger, opt)
+
+	return &H2CClient{
+		baseURL:  baseURL,
+		botToken: botToken,
+		client:   client,
+		logger:   logger,
+	}
+}
+
+func newIrisTransport(baseURL string, logger *slog.Logger, opt H2CClientOptions) http.RoundTripper {
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		if logger != nil {
+			logger.Warn(
+				"iris_client_invalid_base_url",
+				slog.String("base_url", baseURL),
+				slog.Any("error", err),
+			)
+		}
+		return newHTTPTransport(opt)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("IRIS_TRANSPORT"))) {
+	case "http1", "http", "http/1.1":
+		return newHTTPTransport(opt)
+	case "", "h2c", "http2":
+	default:
+		if logger != nil {
+			logger.Warn(
+				"iris_client_unknown_transport",
+				slog.String("transport", os.Getenv("IRIS_TRANSPORT")),
+				slog.String("fallback", "h2c"),
+			)
+		}
+	}
+
+	if strings.EqualFold(parsedURL.Scheme, "http") {
+		return newH2CTransport(opt)
+	}
+	return newHTTPTransport(opt)
+}
+
+func newHTTPTransport(opt H2CClientOptions) *http.Transport {
+	return &http.Transport{
 		MaxIdleConns:        10,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     opt.IdleConnTimeout,
@@ -102,15 +151,22 @@ func NewH2CClient(baseURL, botToken string, logger *slog.Logger, options ...H2CC
 		TLSHandshakeTimeout:   opt.TLSHandshakeTimeout,
 		ResponseHeaderTimeout: opt.ResponseHeaderTimeout,
 	}
+}
 
-	client := httputil.NewClient(opt.Timeout)
-	client.Transport = transport
-
-	return &H2CClient{
-		baseURL:  baseURL,
-		botToken: botToken,
-		client:   client,
-		logger:   logger,
+func newH2CTransport(opt H2CClientOptions) *http2.Transport {
+	return &http2.Transport{
+		AllowHTTP:        true,
+		IdleConnTimeout:  opt.IdleConnTimeout,
+		PingTimeout:      15 * time.Second,
+		ReadIdleTimeout:  0,
+		WriteByteTimeout: 0,
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			d := &net.Dialer{
+				Timeout:   opt.DialTimeout,
+				KeepAlive: 30 * time.Second,
+			}
+			return d.DialContext(ctx, network, addr)
+		},
 	}
 }
 
@@ -135,7 +191,7 @@ func (c *H2CClient) SendImage(ctx context.Context, room, imageBase64 string) err
 }
 
 func (c *H2CClient) Ping(ctx context.Context) bool {
-	req, err := c.newRequest(ctx, http.MethodGet, "/config", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, sharedirisx.PathReady, nil)
 	if err != nil {
 		return false
 	}

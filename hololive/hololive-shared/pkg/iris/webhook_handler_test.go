@@ -23,6 +23,7 @@ package iris
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -57,6 +58,17 @@ type noopMessageHandler struct{}
 
 func (h *noopMessageHandler) HandleMessage(_ context.Context, _ *Message) {}
 
+type messageCaptureHandler struct {
+	msgCh chan *Message
+}
+
+func (h *messageCaptureHandler) HandleMessage(_ context.Context, msg *Message) {
+	select {
+	case h.msgCh <- msg:
+	default:
+	}
+}
+
 type contextCaptureMessageHandler struct {
 	ctxCh chan context.Context
 }
@@ -77,6 +89,26 @@ func (h *countingBlockOnceMessageHandler) HandleMessage(_ context.Context, _ *Me
 		}
 		<-h.release
 	}
+}
+
+type keyedBlockingMessageHandler struct {
+	started chan string
+	block   chan struct{}
+}
+
+func (h *keyedBlockingMessageHandler) HandleMessage(_ context.Context, msg *Message) {
+	key := ""
+	if msg != nil {
+		key = msg.Room
+		if key == "" && msg.JSON != nil {
+			key = msg.JSON.ChatID
+		}
+	}
+	select {
+	case h.started <- key:
+	default:
+	}
+	<-h.block
 }
 
 func TestWebhookHandler_BackpressureReturns503(t *testing.T) {
@@ -138,6 +170,161 @@ func TestWebhookHandler_BackpressureReturns503(t *testing.T) {
 	if err := webhookHandler.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
+}
+
+func TestWebhookHandler_StripedExecutor_SameRoomSerializes(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	token := "webhook-token"
+	handlerImpl := &keyedBlockingMessageHandler{
+		started: make(chan string, 2),
+		block:   make(chan struct{}),
+	}
+	webhookHandler := NewWebhookHandler(
+		token,
+		handlerImpl,
+		nil,
+		nil,
+		WebhookHandlerOptions{
+			WorkerCount:    2,
+			QueueSize:      8,
+			EnqueueTimeout: 10 * time.Millisecond,
+			HandlerTimeout: 1 * time.Second,
+		},
+	)
+	t.Cleanup(func() { _ = webhookHandler.Close() })
+
+	router := gin.New()
+	router.POST(sharedirisx.PathWebhook, webhookHandler.Handle)
+
+	room := "room-serial"
+	requestBody := fmt.Sprintf(`{"text":"hello","room":"%s","sender":"tester","userId":"user-1","threadId":""}`, room)
+	doRequest := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, sharedirisx.PathWebhook, strings.NewReader(requestBody))
+		req.Header.Set(sharedirisx.HeaderIrisToken, token)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	first := doRequest()
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", first.Code, http.StatusOK)
+	}
+
+	select {
+	case got := <-handlerImpl.started:
+		if got != room {
+			t.Fatalf("first started room = %q, want %q", got, room)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("first worker did not start in time")
+	}
+
+	second := doRequest()
+	if second.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d", second.Code, http.StatusOK)
+	}
+
+	select {
+	case got := <-handlerImpl.started:
+		t.Fatalf("second started early: got=%q", got)
+	case <-time.After(80 * time.Millisecond):
+	}
+
+	close(handlerImpl.block)
+
+	select {
+	case got := <-handlerImpl.started:
+		if got != room {
+			t.Fatalf("second started room = %q, want %q", got, room)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("second worker did not start in time")
+	}
+}
+
+func TestWebhookHandler_StripedExecutor_DifferentRoomsCanRunConcurrently(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	token := "webhook-token"
+	handlerImpl := &keyedBlockingMessageHandler{
+		started: make(chan string, 2),
+		block:   make(chan struct{}),
+	}
+	webhookHandler := NewWebhookHandler(
+		token,
+		handlerImpl,
+		nil,
+		nil,
+		WebhookHandlerOptions{
+			WorkerCount:    2,
+			QueueSize:      8,
+			EnqueueTimeout: 10 * time.Millisecond,
+			HandlerTimeout: 1 * time.Second,
+		},
+	)
+	t.Cleanup(func() { _ = webhookHandler.Close() })
+
+	router := gin.New()
+	router.POST(sharedirisx.PathWebhook, webhookHandler.Handle)
+
+	roomA := "room-a"
+	roomB := "room-b"
+	for i := 0; i < 100; i++ {
+		idxA := webhookHandler.stripeIndex(&Message{Room: roomA, JSON: &MessageJSON{ChatID: roomA}})
+		idxB := webhookHandler.stripeIndex(&Message{Room: roomB, JSON: &MessageJSON{ChatID: roomB}})
+		if idxA != idxB {
+			break
+		}
+		roomB = fmt.Sprintf("room-b-%d", i)
+	}
+	idxA := webhookHandler.stripeIndex(&Message{Room: roomA, JSON: &MessageJSON{ChatID: roomA}})
+	idxB := webhookHandler.stripeIndex(&Message{Room: roomB, JSON: &MessageJSON{ChatID: roomB}})
+	if idxA == idxB {
+		t.Fatalf("failed to find distinct room keys for stripes: idx=%d", idxA)
+	}
+
+	doRequest := func(room string) *httptest.ResponseRecorder {
+		requestBody := fmt.Sprintf(`{"text":"hello","room":"%s","sender":"tester","userId":"user-1","threadId":""}`, room)
+		req := httptest.NewRequest(http.MethodPost, sharedirisx.PathWebhook, strings.NewReader(requestBody))
+		req.Header.Set(sharedirisx.HeaderIrisToken, token)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	first := doRequest(roomA)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", first.Code, http.StatusOK)
+	}
+
+	select {
+	case got := <-handlerImpl.started:
+		if got != roomA {
+			t.Fatalf("first started room = %q, want %q", got, roomA)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("first worker did not start in time")
+	}
+
+	second := doRequest(roomB)
+	if second.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d", second.Code, http.StatusOK)
+	}
+
+	select {
+	case got := <-handlerImpl.started:
+		if got != roomB {
+			t.Fatalf("second started room = %q, want %q", got, roomB)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatalf("second room did not start concurrently in time (stripeA=%d stripeB=%d)", idxA, idxB)
+	}
+
+	close(handlerImpl.block)
 }
 
 func TestWebhookHandler_CloseDrainsQueueAndRejectsNewTasks(t *testing.T) {
@@ -417,5 +604,52 @@ func TestWebhookHandler_TokenValidation(t *testing.T) {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
 		})
+	}
+}
+
+func TestWebhookHandler_ThreadIDIsPreservedInMessageJSON(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	token := "webhook-token"
+	capture := &messageCaptureHandler{msgCh: make(chan *Message, 1)}
+	webhookHandler := NewWebhookHandler(
+		token,
+		capture,
+		nil,
+		nil,
+		WebhookHandlerOptions{
+			WorkerCount:    1,
+			QueueSize:      8,
+			EnqueueTimeout: 10 * time.Millisecond,
+			HandlerTimeout: 1 * time.Second,
+		},
+	)
+	t.Cleanup(func() {
+		_ = webhookHandler.Close()
+	})
+
+	router := gin.New()
+	router.POST(sharedirisx.PathWebhook, webhookHandler.Handle)
+
+	requestBody := `{"text":"!도움","room":"room-1","sender":"tester","userId":"user-1","threadId":"thread-1"}`
+	req := httptest.NewRequest(http.MethodPost, sharedirisx.PathWebhook, strings.NewReader(requestBody))
+	req.Header.Set(sharedirisx.HeaderIrisToken, token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	select {
+	case msg := <-capture.msgCh:
+		if msg == nil || msg.JSON == nil || msg.JSON.ThreadID == nil {
+			t.Fatalf("message threadId = nil, want non-nil")
+		}
+		if got := *msg.JSON.ThreadID; got != "thread-1" {
+			t.Fatalf("message threadId = %q, want %q", got, "thread-1")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("did not receive message in time")
 	}
 }

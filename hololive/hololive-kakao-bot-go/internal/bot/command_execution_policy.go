@@ -18,31 +18,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package bot
 
-import "time"
+import "github.com/kapu/hololive-shared/pkg/domain"
 
-// CommandContext: 명령어 실행 시 필요한 컨텍스트 정보(채팅방, 사용자, 메시지 내용, 타임스탬프 등)를 담는 구조체
-type CommandContext struct {
-	Room        string // 숫자 Room ID
-	RoomName    string // 한글 방 이름
-	ThreadID    *string
-	UserID      string // 숫자 User ID
-	UserName    string // 한글 유저 이름
-	IsGroupChat bool
-	Message     string
-	Timestamp   time.Time
-}
+func shouldExecuteAsync(cmdType domain.CommandType) bool {
+	if !cmdType.IsValid() {
+		// 외부 플러그인/추가 명령은 상태형일 수 있으므로 보수적으로 직렬 실행합니다.
+		return false
+	}
 
-// NewCommandContext: 새로운 CommandContext 인스턴스를 생성합니다.
-func NewCommandContext(room, roomName, userID, userName, message string, isGroupChat bool) *CommandContext {
-	return &CommandContext{
-		Room:        room,
-		RoomName:    roomName,
-		UserID:      userID,
-		UserName:    userName,
-		IsGroupChat: isGroupChat,
-		Message:     message,
-		Timestamp:   time.Now(),
+	switch cmdType {
+	case domain.CommandHelp,
+		domain.CommandLive,
+		domain.CommandUpcoming,
+		domain.CommandSchedule,
+		domain.CommandMemberInfo,
+		domain.CommandStats,
+		domain.CommandSubscriber:
+		return true
+	default:
+		// 상태형(알람/구독/뉴스 다이제스트 등)은 room 순서를 보장해야 하므로 직렬 실행합니다.
+		return false
 	}
 }

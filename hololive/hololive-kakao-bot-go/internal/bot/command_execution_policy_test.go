@@ -18,31 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package domain
+package bot
 
-import "time"
+import (
+	"testing"
 
-// CommandContext: 명령어 실행 시 필요한 컨텍스트 정보(채팅방, 사용자, 메시지 내용, 타임스탬프 등)를 담는 구조체
-type CommandContext struct {
-	Room        string // 숫자 Room ID
-	RoomName    string // 한글 방 이름
-	ThreadID    *string
-	UserID      string // 숫자 User ID
-	UserName    string // 한글 유저 이름
-	IsGroupChat bool
-	Message     string
-	Timestamp   time.Time
-}
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
 
-// NewCommandContext: 새로운 CommandContext 인스턴스를 생성합니다.
-func NewCommandContext(room, roomName, userID, userName, message string, isGroupChat bool) *CommandContext {
-	return &CommandContext{
-		Room:        room,
-		RoomName:    roomName,
-		UserID:      userID,
-		UserName:    userName,
-		IsGroupChat: isGroupChat,
-		Message:     message,
-		Timestamp:   time.Now(),
+func TestShouldExecuteAsync(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cmdType domain.CommandType
+		want    bool
+	}{
+		{name: "help", cmdType: domain.CommandHelp, want: true},
+		{name: "live", cmdType: domain.CommandLive, want: true},
+		{name: "alarm add", cmdType: domain.CommandAlarmAdd, want: false},
+		{name: "alarm list", cmdType: domain.CommandAlarmList, want: false},
+		{name: "member news digest", cmdType: domain.CommandMemberNews, want: false},
+		{name: "news subscription", cmdType: domain.CommandMemberNewsSubscription, want: false},
+		{name: "major event", cmdType: domain.CommandMajorEvent, want: false},
+		{name: "custom command", cmdType: domain.CommandType("custom"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldExecuteAsync(tt.cmdType); got != tt.want {
+				t.Fatalf("shouldExecuteAsync(%q) = %v, want %v", tt.cmdType, got, tt.want)
+			}
+		})
 	}
 }

@@ -117,6 +117,10 @@ var IrisConnection = struct {
 // Iris 측 재시도(단기)에서 동일 메시지 ID를 스킵하기 위한 목적입니다.
 var IrisWebhookDedupTTL = 60 * time.Second
 
+// IrisWebhookDedupTimeout: Iris -> Bot webhook dedup 캐시 호출 타임아웃입니다.
+// ACK 지연이 Iris 재시도/백프레셔로 이어지지 않도록 짧게 유지합니다.
+var IrisWebhookDedupTimeout = 200 * time.Millisecond
+
 // DatabaseConfig: 데이터베이스 연결 설정입니다.
 var DatabaseConfig = struct {
 	MaxOpenConns    int

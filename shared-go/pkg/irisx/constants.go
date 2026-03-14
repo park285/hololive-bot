@@ -7,6 +7,10 @@ const (
 	PathWebhook = "/webhook/iris"
 	// PathReply: Bot -> Iris 아웃바운드 reply 경로입니다.
 	PathReply = "/reply"
+	// PathReady: Iris readiness probe 경로입니다.
+	PathReady = "/ready"
+	// PathHealth: Iris liveness probe 경로입니다.
+	PathHealth = "/health"
 )
 
 const (

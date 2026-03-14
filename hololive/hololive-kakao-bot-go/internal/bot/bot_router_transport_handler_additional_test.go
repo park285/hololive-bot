@@ -26,7 +26,9 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,21 +59,42 @@ type testIrisClient struct {
 	sendMessageErr error
 	sendImageErr   error
 
+	mu sync.Mutex
+
+	messageCh chan sentMessage
+
 	lastMessageRoom string
 	lastMessage     string
 	lastImageRoom   string
 	lastImage       string
 }
 
+type sentMessage struct {
+	room    string
+	message string
+}
+
 func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+	c.mu.Lock()
 	c.lastMessageRoom = room
 	c.lastMessage = message
+	ch := c.messageCh
+	c.mu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- sentMessage{room: room, message: message}:
+		default:
+		}
+	}
 	return c.sendMessageErr
 }
 
 func (c *testIrisClient) SendImage(ctx context.Context, room, imageBase64 string) error {
+	c.mu.Lock()
 	c.lastImageRoom = room
 	c.lastImage = imageBase64
+	c.mu.Unlock()
 	return c.sendImageErr
 }
 
@@ -203,7 +226,8 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 	t.Parallel()
 
 	logger := newBotTestLogger()
-	irisClient := &testIrisClient{}
+	msgCh := make(chan sentMessage, 1)
+	irisClient := &testIrisClient{messageCh: msgCh}
 	b := &Bot{
 		logger:          logger,
 		commandRegistry: command.NewRegistry(),
@@ -235,15 +259,22 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 			ChatID: "room-1",
 		},
 	})
-	assert.Equal(t, "room-1", irisClient.lastMessageRoom)
-	assert.Equal(t, adapter.ErrUnknownCommand, irisClient.lastMessage)
+
+	select {
+	case msg := <-msgCh:
+		assert.Equal(t, "room-1", msg.room)
+		assert.Equal(t, adapter.ErrUnknownCommand, msg.message)
+	case <-time.After(1 * time.Second):
+		t.Fatalf("did not receive message in time")
+	}
 }
 
 func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	t.Parallel()
 
 	logger := newBotTestLogger()
-	irisClient := &testIrisClient{}
+	msgCh := make(chan sentMessage, 1)
+	irisClient := &testIrisClient{messageCh: msgCh}
 
 	registry := command.NewRegistry()
 	registry.Register(&testCommand{
@@ -272,8 +303,13 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, "room-1", irisClient.lastMessageRoom)
-	assert.Contains(t, irisClient.lastMessage, "help 명령어 처리 중 오류")
+	select {
+	case msg := <-msgCh:
+		assert.Equal(t, "room-1", msg.room)
+		assert.Contains(t, msg.message, "help 명령어 처리 중 오류")
+	case <-time.After(1 * time.Second):
+		t.Fatalf("did not receive message in time")
+	}
 
 	t.Run("getErrorMessage mappings", func(t *testing.T) {
 		assert.Equal(t, "", b.getErrorMessage(nil, "help"))
