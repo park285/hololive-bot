@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -163,11 +164,15 @@ type WebhookHandler struct {
 	logger      *slog.Logger
 	options     WebhookHandlerOptions
 	baseContext context.Context
-	queue       chan webhookTask
+	stripes     []webhookStripe
 	queueLock   sync.RWMutex
 	workerWG    sync.WaitGroup
 	closeOnce   sync.Once
 	closed      bool
+}
+
+type webhookStripe struct {
+	queue chan webhookTask
 }
 
 func NewWebhookHandler(
@@ -195,11 +200,23 @@ func NewWebhookHandler(
 		logger:      logger,
 		options:     opt,
 		baseContext: context.Background(),
-		queue:       make(chan webhookTask, opt.QueueSize),
+	}
+
+	stripeCount := opt.WorkerCount
+	perStripeCap := 1
+	if stripeCount > 0 {
+		perStripeCap = (opt.QueueSize + stripeCount - 1) / stripeCount
+		if perStripeCap <= 0 {
+			perStripeCap = 1
+		}
+	}
+	h.stripes = make([]webhookStripe, stripeCount)
+	for i := range h.stripes {
+		h.stripes[i] = webhookStripe{queue: make(chan webhookTask, perStripeCap)}
 	}
 
 	if webhookQueueCapacity != nil {
-		webhookQueueCapacity.Set(float64(opt.QueueSize))
+		webhookQueueCapacity.Set(float64(stripeCount * perStripeCap))
 	}
 	if webhookWorkerConfigured != nil {
 		webhookWorkerConfigured.Set(float64(opt.WorkerCount))
@@ -209,9 +226,9 @@ func NewWebhookHandler(
 	}
 	h.observeQueueDepth()
 
-	for i := 0; i < opt.WorkerCount; i++ {
+	for i := 0; i < stripeCount; i++ {
 		h.workerWG.Add(1)
-		go h.worker(i)
+		go h.worker(i, h.stripes[i].queue)
 	}
 
 	logger.Info(
@@ -229,8 +246,10 @@ func (h *WebhookHandler) Close() error {
 	h.closeOnce.Do(func() {
 		h.queueLock.Lock()
 		h.closed = true
-		if h.queue != nil {
-			close(h.queue)
+		for _, stripe := range h.stripes {
+			if stripe.queue != nil {
+				close(stripe.queue)
+			}
 		}
 		h.queueLock.Unlock()
 
@@ -316,6 +335,13 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		JSON: &MessageJSON{
 			UserID: req.UserID,
 			ChatID: req.Room,
+			ThreadID: func() *string {
+				id := strings.TrimSpace(req.ThreadID)
+				if id == "" {
+					return nil
+				}
+				return &id
+			}(),
 		},
 	}
 
@@ -324,11 +350,15 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		msg: irisMsg,
 	}
 	if err := h.enqueue(task); err != nil {
+		stripeIndex, stripeDepth, stripeCap := h.stripeStats(task.msg)
 		h.logger.Warn(
 			"iris_webhook_enqueue_failed",
 			slog.Any("error", err),
-			slog.Int("queue_depth", len(h.queue)),
-			slog.Int("queue_size", cap(h.queue)),
+			slog.Int("stripe_index", stripeIndex),
+			slog.Int("stripe_depth", stripeDepth),
+			slog.Int("stripe_size", stripeCap),
+			slog.Int("queue_depth", h.queueDepth()),
+			slog.Int("queue_size", h.queueCapacity()),
 		)
 		h.incRequest("backpressure")
 		c.Status(http.StatusServiceUnavailable)
@@ -347,22 +377,41 @@ func (h *WebhookHandler) checkDedup(c *gin.Context) (int, bool) {
 	}
 
 	dedupKey := sharedirisx.DedupKey(msgID)
+	if dedupKey == "" {
+		return 0, false
+	}
 	ttl := constants.IrisWebhookDedupTTL
 	if ttl <= 0 {
 		ttl = sharedirisx.DefaultWebhookDedupTTL
 	}
 
 	cmd := h.cacheClient.B().Set().Key(dedupKey).Value("1").Nx().ExSeconds(int64(ttl.Seconds())).Build()
-	resp := h.cacheClient.Do(c.Request.Context(), cmd)
+
+	dedupTimeout := constants.IrisWebhookDedupTimeout
+	if dedupTimeout <= 0 {
+		h.logger.Warn(
+			"iris_webhook_dedup_timeout_disabled",
+			slog.String("message_id", msgID),
+		)
+		return 0, false
+	}
+	dedupCtx, cancel := context.WithTimeout(c.Request.Context(), dedupTimeout)
+	defer cancel()
+
+	resp := h.cacheClient.Do(dedupCtx, cmd)
 	if util.IsValkeyNil(resp.Error()) {
 		h.logger.Info("iris_webhook_dedup_skipped", slog.String("message_id", msgID))
 		h.incRequest("dedup")
 		return http.StatusOK, true
 	}
 	if resp.Error() != nil {
-		h.logger.Error("iris_webhook_dedup_failed", slog.String("message_id", msgID), slog.Any("error", resp.Error()))
-		h.incRequest("internal_error")
-		return http.StatusInternalServerError, true
+		h.logger.Warn(
+			"iris_webhook_dedup_failed_degraded",
+			slog.String("message_id", msgID),
+			slog.Duration("timeout", dedupTimeout),
+			slog.Any("error", resp.Error()),
+		)
+		return 0, false
 	}
 	return 0, false
 }
@@ -371,13 +420,21 @@ func (h *WebhookHandler) enqueue(task webhookTask) error {
 	h.queueLock.RLock()
 	defer h.queueLock.RUnlock()
 
-	if h.closed || h.queue == nil {
+	if h.closed || len(h.stripes) == 0 {
+		h.incEnqueue("closed")
+		return errWebhookClosed
+	}
+
+	index := h.stripeIndex(task.msg)
+	stripe := h.stripes[index]
+	queue := stripe.queue
+	if queue == nil {
 		h.incEnqueue("closed")
 		return errWebhookClosed
 	}
 
 	select {
-	case h.queue <- task:
+	case queue <- task:
 		h.incEnqueue("ok")
 		h.observeQueueDepth()
 		return nil
@@ -388,12 +445,12 @@ func (h *WebhookHandler) enqueue(task webhookTask) error {
 	defer timer.Stop()
 
 	select {
-	case h.queue <- task:
+	case queue <- task:
 		h.incEnqueue("ok")
 		h.observeQueueDepth()
 		return nil
 	case <-timer.C:
-		if len(h.queue) >= cap(h.queue) {
+		if len(queue) >= cap(queue) {
 			h.incEnqueue("queue_full")
 			return errWebhookQueueFull
 		}
@@ -402,10 +459,10 @@ func (h *WebhookHandler) enqueue(task webhookTask) error {
 	}
 }
 
-func (h *WebhookHandler) worker(index int) {
+func (h *WebhookHandler) worker(index int, queue <-chan webhookTask) {
 	defer h.workerWG.Done()
 
-	for task := range h.queue {
+	for task := range queue {
 		h.observeQueueDepth()
 		start := time.Now()
 
@@ -442,9 +499,66 @@ func (h *WebhookHandler) worker(index int) {
 }
 
 func (h *WebhookHandler) observeQueueDepth() {
-	if webhookQueueDepth != nil && h.queue != nil {
-		webhookQueueDepth.Set(float64(len(h.queue)))
+	if webhookQueueDepth != nil {
+		webhookQueueDepth.Set(float64(h.queueDepth()))
 	}
+}
+
+func (h *WebhookHandler) queueDepth() int {
+	total := 0
+	for _, stripe := range h.stripes {
+		if stripe.queue == nil {
+			continue
+		}
+		total += len(stripe.queue)
+	}
+	return total
+}
+
+func (h *WebhookHandler) queueCapacity() int {
+	total := 0
+	for _, stripe := range h.stripes {
+		if stripe.queue == nil {
+			continue
+		}
+		total += cap(stripe.queue)
+	}
+	return total
+}
+
+func (h *WebhookHandler) stripeIndex(msg *Message) int {
+	stripeCount := len(h.stripes)
+	if stripeCount <= 1 {
+		return 0
+	}
+
+	key := ""
+	if msg != nil && msg.JSON != nil {
+		key = strings.TrimSpace(msg.JSON.ChatID)
+	}
+	if key == "" && msg != nil {
+		key = strings.TrimSpace(msg.Room)
+	}
+	if key == "" {
+		return 0
+	}
+
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(key))
+	return int(hasher.Sum32() % uint32(stripeCount))
+}
+
+func (h *WebhookHandler) stripeStats(msg *Message) (index int, depth int, capSize int) {
+	index = h.stripeIndex(msg)
+	if index < 0 || index >= len(h.stripes) {
+		return index, 0, 0
+	}
+
+	queue := h.stripes[index].queue
+	if queue == nil {
+		return index, 0, 0
+	}
+	return index, len(queue), cap(queue)
 }
 
 func (h *WebhookHandler) incRequest(result string) {

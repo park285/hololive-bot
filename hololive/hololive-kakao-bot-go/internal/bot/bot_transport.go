@@ -52,7 +52,12 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	if err := t.irisClient.SendMessage(sendCtx, room, message); err != nil {
+	var opts []iris.SendOption
+	if threadID, ok := threadIDFromContext(sendCtx); ok {
+		opts = append(opts, iris.WithThreadID(threadID))
+	}
+
+	if err := t.irisClient.SendMessage(sendCtx, room, message, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", "iris", "send_message", err)
 		return fmt.Errorf("send message to room %s: %w", room, serviceErr)
 	}

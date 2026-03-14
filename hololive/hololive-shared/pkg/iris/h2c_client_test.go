@@ -22,17 +22,24 @@ package iris
 
 import (
 	"context"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
+
+	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 func newTestServer(t *testing.T, handler http.Handler) *httptest.Server {
 	t.Helper()
 
-	srv := httptest.NewServer(handler)
+	srv := httptest.NewUnstartedServer(h2c.NewHandler(handler, &http2.Server{}))
+	srv.Start()
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -197,7 +204,7 @@ func TestH2CClient_Ping_ReturnsStatus(t *testing.T) {
 	token := "bot-token"
 
 	okMux := http.NewServeMux()
-	okMux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	okMux.HandleFunc(sharedirisx.PathReady, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	okSrv := newTestServer(t, okMux)
 	okClient := NewH2CClient(okSrv.URL, token, nil)
 
@@ -209,7 +216,7 @@ func TestH2CClient_Ping_ReturnsStatus(t *testing.T) {
 	}
 
 	failMux := http.NewServeMux()
-	failMux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) })
+	failMux.HandleFunc(sharedirisx.PathReady, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) })
 	failSrv := newTestServer(t, failMux)
 	failClient := NewH2CClient(failSrv.URL, token, nil)
 
@@ -274,18 +281,27 @@ func TestNewH2CClient_DefaultTimeouts(t *testing.T) {
 		t.Fatalf("Timeout = %v, want %v", client.client.Timeout, 10*time.Second)
 	}
 
-	transport, ok := client.client.Transport.(*http.Transport)
+	transport, ok := client.client.Transport.(*http2.Transport)
 	if !ok || transport == nil {
-		t.Fatalf("transport type = %T, want *http.Transport", client.client.Transport)
+		t.Fatalf("transport type = %T, want *http2.Transport", client.client.Transport)
+	}
+	if !transport.AllowHTTP {
+		t.Fatalf("AllowHTTP = false, want true")
 	}
 	if transport.IdleConnTimeout != 90*time.Second {
 		t.Fatalf("IdleConnTimeout = %v, want %v", transport.IdleConnTimeout, 90*time.Second)
 	}
-	if transport.TLSHandshakeTimeout != 5*time.Second {
-		t.Fatalf("TLSHandshakeTimeout = %v, want %v", transport.TLSHandshakeTimeout, 5*time.Second)
+	if transport.ReadIdleTimeout != 30*time.Second {
+		t.Fatalf("ReadIdleTimeout = %v, want %v", transport.ReadIdleTimeout, 30*time.Second)
 	}
-	if transport.ResponseHeaderTimeout != 5*time.Second {
-		t.Fatalf("ResponseHeaderTimeout = %v, want %v", transport.ResponseHeaderTimeout, 5*time.Second)
+	if transport.PingTimeout != 15*time.Second {
+		t.Fatalf("PingTimeout = %v, want %v", transport.PingTimeout, 15*time.Second)
+	}
+	if transport.WriteByteTimeout != 10*time.Second {
+		t.Fatalf("WriteByteTimeout = %v, want %v", transport.WriteByteTimeout, 10*time.Second)
+	}
+	if transport.DialTLSContext == nil {
+		t.Fatalf("DialTLSContext is nil")
 	}
 }
 
@@ -298,6 +314,11 @@ func TestNewH2CClient_CustomTimeouts(t *testing.T) {
 		TLSHandshakeTimeout:   8 * time.Second,
 		ResponseHeaderTimeout: 9 * time.Second,
 		IdleConnTimeout:       70 * time.Second,
+		MaxIdleConns:          24,
+		MaxIdleConnsPerHost:   18,
+		ReadIdleTimeout:       31 * time.Second,
+		PingTimeout:           11 * time.Second,
+		WriteByteTimeout:      12 * time.Second,
 	})
 	if client == nil || client.client == nil {
 		t.Fatalf("client or http client is nil")
@@ -306,17 +327,176 @@ func TestNewH2CClient_CustomTimeouts(t *testing.T) {
 		t.Fatalf("Timeout = %v, want %v", client.client.Timeout, 20*time.Second)
 	}
 
-	transport, ok := client.client.Transport.(*http.Transport)
+	transport, ok := client.client.Transport.(*http2.Transport)
 	if !ok || transport == nil {
-		t.Fatalf("transport type = %T, want *http.Transport", client.client.Transport)
+		t.Fatalf("transport type = %T, want *http2.Transport", client.client.Transport)
 	}
 	if transport.IdleConnTimeout != 70*time.Second {
 		t.Fatalf("IdleConnTimeout = %v, want %v", transport.IdleConnTimeout, 70*time.Second)
 	}
-	if transport.TLSHandshakeTimeout != 8*time.Second {
-		t.Fatalf("TLSHandshakeTimeout = %v, want %v", transport.TLSHandshakeTimeout, 8*time.Second)
+	if transport.ReadIdleTimeout != 31*time.Second {
+		t.Fatalf("ReadIdleTimeout = %v, want %v", transport.ReadIdleTimeout, 31*time.Second)
 	}
-	if transport.ResponseHeaderTimeout != 9*time.Second {
-		t.Fatalf("ResponseHeaderTimeout = %v, want %v", transport.ResponseHeaderTimeout, 9*time.Second)
+	if transport.PingTimeout != 11*time.Second {
+		t.Fatalf("PingTimeout = %v, want %v", transport.PingTimeout, 11*time.Second)
+	}
+	if transport.WriteByteTimeout != 12*time.Second {
+		t.Fatalf("WriteByteTimeout = %v, want %v", transport.WriteByteTimeout, 12*time.Second)
+	}
+	if transport.DialTLSContext == nil {
+		t.Fatalf("DialTLSContext is nil")
+	}
+}
+
+func TestH2CClient_UsesHTTP2ForHTTPBaseURL(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var gotProtoMajor int
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(sharedirisx.PathReady, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		gotProtoMajor = r.ProtoMajor
+		mu.Unlock()
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	srv := newTestServer(t, mux)
+	client := NewH2CClient(srv.URL, "bot-token", nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if !client.Ping(ctx) {
+		t.Fatalf("Ping() = false, want true")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotProtoMajor != 2 {
+		t.Fatalf("request proto major = %d, want 2", gotProtoMajor)
+	}
+}
+
+func TestNewH2CClient_HTTPS_UsesHTTPTransport(t *testing.T) {
+	t.Parallel()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	srv := httptest.NewTLSServer(handler)
+	t.Cleanup(srv.Close)
+
+	client := NewH2CClient(srv.URL, "bot-token", nil)
+	if client == nil || client.client == nil {
+		t.Fatalf("client or http client is nil")
+	}
+
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok || transport == nil {
+		t.Fatalf("transport type = %T, want *http.Transport", client.client.Transport)
+	}
+	if transport.TLSHandshakeTimeout != 5*time.Second {
+		t.Fatalf("TLSHandshakeTimeout = %v, want %v", transport.TLSHandshakeTimeout, 5*time.Second)
+	}
+	if transport.ResponseHeaderTimeout != 5*time.Second {
+		t.Fatalf("ResponseHeaderTimeout = %v, want %v", transport.ResponseHeaderTimeout, 5*time.Second)
+	}
+	if transport.MaxIdleConns != 10 {
+		t.Fatalf("MaxIdleConns = %d, want %d", transport.MaxIdleConns, 10)
+	}
+	if transport.MaxIdleConnsPerHost != 10 {
+		t.Fatalf("MaxIdleConnsPerHost = %d, want %d", transport.MaxIdleConnsPerHost, 10)
+	}
+
+	// tls server와 통신할 수 있어야 합니다.
+	client.client.Transport = transport.Clone()
+	client.client.Transport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- test-only.
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if !client.Ping(ctx) {
+		t.Fatalf("Ping() = false, want true")
+	}
+}
+
+func TestNewH2CClient_HTTPTransportOverride_UsesCustomIdlePoolSettings(t *testing.T) {
+	t.Setenv("IRIS_TRANSPORT", "http1")
+
+	client := NewH2CClient("http://iris.local", "bot-token", nil, H2CClientOptions{
+		MaxIdleConns:        21,
+		MaxIdleConnsPerHost: 13,
+		IdleConnTimeout:     44 * time.Second,
+	})
+	if client == nil || client.client == nil {
+		t.Fatalf("client or http client is nil")
+	}
+
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok || transport == nil {
+		t.Fatalf("transport type = %T, want *http.Transport", client.client.Transport)
+	}
+	if transport.MaxIdleConns != 21 {
+		t.Fatalf("MaxIdleConns = %d, want %d", transport.MaxIdleConns, 21)
+	}
+	if transport.MaxIdleConnsPerHost != 13 {
+		t.Fatalf("MaxIdleConnsPerHost = %d, want %d", transport.MaxIdleConnsPerHost, 13)
+	}
+	if transport.IdleConnTimeout != 44*time.Second {
+		t.Fatalf("IdleConnTimeout = %v, want %v", transport.IdleConnTimeout, 44*time.Second)
+	}
+}
+
+func TestNewH2CClient_HTTPTransportOverride_UsesHTTP1ForHTTPBaseURL(t *testing.T) {
+	t.Setenv("IRIS_TRANSPORT", "http1")
+
+	var mu sync.Mutex
+	var gotProtoMajor int
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		gotProtoMajor = r.ProtoMajor
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	})
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	client := NewH2CClient(srv.URL, "bot-token", nil)
+	if client == nil || client.client == nil {
+		t.Fatalf("client or http client is nil")
+	}
+
+	transport, ok := client.client.Transport.(*http.Transport)
+	if !ok || transport == nil {
+		t.Fatalf("transport type = %T, want *http.Transport", client.client.Transport)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if !client.Ping(ctx) {
+		t.Fatalf("Ping() = false, want true")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if gotProtoMajor != 1 {
+		t.Fatalf("request proto major = %d, want 1", gotProtoMajor)
+	}
+}
+
+func TestNewH2CClient_UnknownTransportOverride_FallsBackToH2C(t *testing.T) {
+	t.Setenv("IRIS_TRANSPORT", "weird-mode")
+
+	client := NewH2CClient("http://iris.local", "bot-token", nil)
+	if client == nil || client.client == nil {
+		t.Fatalf("client or http client is nil")
+	}
+
+	if _, ok := client.client.Transport.(*http2.Transport); !ok {
+		t.Fatalf("transport type = %T, want *http2.Transport", client.client.Transport)
 	}
 }

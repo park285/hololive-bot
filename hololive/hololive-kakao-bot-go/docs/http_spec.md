@@ -25,6 +25,7 @@
 6. [프로필 API](#6-프로필-api)
 7. [설정 API](#7-설정-api)
 8. [헬스체크](#8-헬스체크)
+9. [Iris 브리지 내부 계약](#9-iris-브리지-내부-계약)
 
 ---
 
@@ -716,3 +717,86 @@ resp, _ := http.DefaultClient.Do(req)
 | 2026-02-28 | `POST /api/holo/settings/llm` 추가 (LLM scheduler 제어) |
 | 2026-03-01 | channel 단일 `channelId` 조회 제거(410), fail-fast 응답 정책 반영 |
 | 2026-03-08 | `GET /api/holo/streams/live`, `GET /api/holo/streams/upcoming` 공개 조회로 전환 |
+
+---
+
+## 9. Iris 브리지 내부 계약
+
+> 이 섹션은 Admin/Tauri 공개 API가 아니라 Iris(redroid) 연동용 내부 계약입니다.
+
+### 9.1 Iris → Bot 인바운드 webhook
+
+```
+POST /webhook/iris
+```
+
+**헤더:**
+
+| 이름 | 필수 | 설명 |
+|------|------|------|
+| `X-Iris-Token` | ✅ | bot 인바운드 webhook 인증 토큰 (`IRIS_WEBHOOK_TOKEN`) |
+| `X-Iris-Message-Id` | 권장 | 메시지 dedup 키. 없으면 bot-side dedup이 적용되지 않음 |
+
+**요청 본문:**
+
+```json
+{
+  "text": "!도움",
+  "room": "123456789",
+  "sender": "tester",
+  "userId": "user-1",
+  "threadId": "thread-1"
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `text` | string | 원본 메시지 텍스트 |
+| `room` | string | Kakao room 식별자 또는 room name |
+| `sender` | string | 발신자 표시명 |
+| `userId` | string | 발신자 식별자 |
+| `threadId` | string | 스레드 문맥 식별자. 빈 문자열 가능 |
+
+**응답 코드:**
+
+| 코드 | 설명 |
+|------|------|
+| `200` | 인증/JSON/dedup/enqueue 통과 |
+| `400` | JSON 형식 오류 |
+| `401` | `X-Iris-Token` 불일치 또는 누락 |
+| `405` | POST 외 메서드 |
+| `503` | 큐 포화 또는 enqueue timeout |
+
+### 9.2 Bot → Iris 아웃바운드 reply
+
+```
+POST /reply
+```
+
+**헤더:**
+
+| 이름 | 필수 | 설명 |
+|------|------|------|
+| `X-Bot-Token` | ✅ | Iris outbound 인증 토큰 (`IRIS_BOT_TOKEN`) |
+
+**요청 본문:**
+
+```json
+{
+  "type": "text",
+  "room": "123456789",
+  "data": "안녕하세요",
+  "threadId": "thread-1"
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `type` | string | `text` 또는 `image` |
+| `room` | string | 대상 room 식별자 |
+| `data` | string | 텍스트 본문 또는 base64 이미지 |
+| `threadId` | string, optional | Iris `/reply` wire schema에서 지원하는 스레드 ID |
+
+메모:
+- `/webhook/iris`와 `/reply`는 내부 브리지 계약입니다. 공개 클라이언트 API처럼 `X-API-Key`를 쓰지 않습니다.
+- `threadId`는 Iris 인바운드 webhook에서 수신한 값을 bot 내부 컨텍스트에 보존하고, text reply 전송 시 함께 전달합니다. (빈 문자열은 전달하지 않음)
