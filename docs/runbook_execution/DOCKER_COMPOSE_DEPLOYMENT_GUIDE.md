@@ -46,7 +46,10 @@
    - `IRIS_BOT_TOKEN`
      - 필요하면 두 값은 동일하게 둘 수 있지만 변수는 분리해서 유지합니다.
    - `HOLODEX_API_KEY_*`
-   - 필요 시 `NORDVPN_*` (VPN profile 사용 시만)
+   - 필요 시 `HOLOLIVE_BOT_PORT_BIND_IP`
+     - 기본값: `127.0.0.1` (호스트 로컬에서만 접근)
+     - Tailscale/redroid에서 bot webhook(`30001`)에 접근해야 하면 ARM 호스트의 Tailscale IP로 설정
+       - 예: `HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.3`
 3. Docker Compose 사용 가능 여부 확인
    ```bash
    docker compose version
@@ -85,6 +88,46 @@ curl -fsS http://127.0.0.1:30005/health
 curl -fsS http://127.0.0.1:30020/ready
 ```
 
+Tailscale/redroid 연동이 필요한 경우에는 배포 전에 다음을 함께 확인하세요.
+
+```bash
+# .env
+HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.3
+
+# 재배포 후, 같은 tailnet peer에서 확인
+curl -fsS http://100.100.1.3:30001/health
+```
+
+- `HOLOLIVE_BOT_PORT_BIND_IP`를 설정하지 않으면 `hololive-bot`은 기본적으로 `127.0.0.1:30001`에만 publish 됩니다.
+- redroid/Iris 인바운드 webhook에 필요한 포트는 `30001`입니다.
+- `30081`, `30082`는 외부 health dependency 확인용이며 `hololive-bot` webhook 자체와는 별도입니다.
+
+### Iris → Bot webhook 계약
+
+redroid/Iris가 bot에 전달하는 인바운드 경로는 아래 기준을 사용합니다.
+
+- URL: `http://<HOLOLIVE_BOT_PORT_BIND_IP>:30001/webhook/iris`
+- Method: `POST`
+- Header:
+  - `X-Iris-Token: $IRIS_WEBHOOK_TOKEN`
+  - `X-Iris-Message-Id: <unique-message-id>` (dedup용, 권장 아님이 아니라 사실상 필수)
+- JSON body:
+
+```json
+{
+  "text": "!도움",
+  "room": "123456789",
+  "sender": "tester",
+  "userId": "user-1",
+  "threadId": "thread-1"
+}
+```
+
+메모:
+- 경로는 `/webhook`이 아니라 `/webhook/iris`입니다.
+- `threadId`는 현재 인바운드 webhook 스키마에 포함됩니다.
+- `X-Iris-Message-Id`가 비어 있으면 bot-side dedup이 동작하지 않습니다.
+
 ## 로그 확인
 
 기본 정책은 **애플리케이션 stdout/stderr를 SSOT**로 두고 `docker compose logs`를 직접 조회하는 것입니다.
@@ -122,14 +165,6 @@ docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 
 ```bash
 docker compose -f docker-compose.prod.yml up --build hololive-db-migrate
-```
-
-## VPN scraper (선택)
-
-기본 스택에는 포함되지 않습니다. 필요 시 profile로만 실행하세요.
-
-```bash
-docker compose -f docker-compose.prod.yml --profile vpn up -d vpn-scraper-proxy
 ```
 
 ## 관련 런북

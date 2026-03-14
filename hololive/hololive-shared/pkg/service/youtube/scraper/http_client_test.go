@@ -39,7 +39,7 @@ func TestCreateHTTPClient_DirectHTTP2(t *testing.T) {
 func TestCreateHTTPClient_ProxyHTTP2(t *testing.T) {
 	client, transport, err := createHTTPClient(ProxyConfig{
 		Enabled: true,
-		URL:     "socks5://127.0.0.1:1080",
+		URL:     "socks5://proxy.internal:1080",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, client)

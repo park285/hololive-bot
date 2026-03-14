@@ -405,6 +405,17 @@ func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	}
 }
 
+func TestLoad_ProductionAllowsInsecurePostgresSSLMode_WithOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("POSTGRES_SSLMODE", "disable")
+	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
+
 func TestLoadAdminAPI_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	t.Setenv("HOLODEX_API_KEY", "test-key")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
