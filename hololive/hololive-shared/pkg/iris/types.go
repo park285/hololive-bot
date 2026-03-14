@@ -59,9 +59,10 @@ type Message struct {
 
 // MessageJSON: 메시지 세부 정보를 담는 JSON 구조체
 type MessageJSON struct {
-	UserID    string `json:"user_id,omitempty"`
-	Message   string `json:"message,omitempty"`
-	ChatID    string `json:"chat_id,omitempty"`
-	Type      string `json:"type,omitempty"`
-	CreatedAt string `json:"created_at,omitempty"`
+	UserID    string  `json:"user_id,omitempty"`
+	Message   string  `json:"message,omitempty"`
+	ChatID    string  `json:"chat_id,omitempty"`
+	Type      string  `json:"type,omitempty"`
+	CreatedAt string  `json:"created_at,omitempty"`
+	ThreadID  *string `json:"thread_id,omitempty"`
 }

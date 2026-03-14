@@ -14,6 +14,7 @@
 |:---|:---|
 | [api/session_security.md](api/session_security.md) | 세션 보안 가이드 |
 | [api/milestone_api.md](api/milestone_api.md) | 마일스톤 API 명세 |
+| [http_spec.md](http_spec.md) | bot HTTP API 및 Iris 브리지 내부 계약 |
 
 ## 시스템 문서
 

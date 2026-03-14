@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
 
@@ -62,12 +63,27 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 		message.Msg,
 		false,
 	)
+	if message != nil && message.JSON != nil && message.JSON.ThreadID != nil {
+		if trimmed := strings.TrimSpace(*message.JSON.ThreadID); trimmed != "" {
+			cmdCtx.ThreadID = &trimmed
+		}
+	}
 
-	if err := b.executeCommand(ctx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
+	reqCtx := ctx
+	if cmdCtx.ThreadID != nil {
+		reqCtx = withThreadID(ctx, *cmdCtx.ThreadID)
+	}
+
+	if shouldExecuteAsync(envelope.Parsed.Type) {
+		b.executeCommandAsync(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params, commandType, envelope.ChatID)
+		return
+	}
+
+	if err := b.executeCommand(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
 		b.logger.Error("Failed to execute command", slog.Any("error", err))
 		errorMsg := b.getErrorMessage(err, commandType)
 		if envelope.ChatID != "" {
-			if sendErr := b.sendError(ctx, envelope.ChatID, errorMsg); sendErr != nil {
+			if sendErr := b.sendError(reqCtx, envelope.ChatID, errorMsg); sendErr != nil {
 				b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", envelope.ChatID))
 			}
 		}
@@ -76,6 +92,58 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 
 func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
 	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)
+}
+
+func (b *Bot) executeCommandAsync(
+	ctx context.Context,
+	cmdCtx *domain.CommandContext,
+	cmdType domain.CommandType,
+	params map[string]any,
+	commandType string,
+	chatID string,
+) {
+	base := context.WithoutCancel(ctx)
+	asyncCtx, cancel := context.WithTimeout(base, constants.RequestTimeout.WebhookProcessing)
+
+	task := func() {
+		defer cancel()
+
+		defer func() {
+			if r := recover(); r != nil && b.logger != nil {
+				b.logger.Error(
+					"Panic in async command handler",
+					slog.Any("panic", r),
+					slog.String("command", commandType),
+				)
+			}
+		}()
+
+		if err := b.executeCommand(asyncCtx, cmdCtx, cmdType, params); err != nil {
+			b.logger.Error("Failed to execute command", slog.Any("error", err))
+			errorMsg := b.getErrorMessage(err, commandType)
+			if chatID != "" {
+				if sendErr := b.sendError(asyncCtx, chatID, errorMsg); sendErr != nil {
+					b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", chatID))
+				}
+			}
+		}
+	}
+
+	if b.workerPool != nil {
+		submitErr := b.workerPool.Submit(task)
+		if submitErr == nil {
+			return
+		}
+		if b.logger != nil {
+			b.logger.Warn(
+				"Failed to submit async command task to worker pool; falling back to goroutine",
+				slog.String("command", commandType),
+				slog.Any("error", submitErr),
+			)
+		}
+	}
+
+	go task()
 }
 
 func (b *Bot) sendMessage(ctx context.Context, room, message string) error {
