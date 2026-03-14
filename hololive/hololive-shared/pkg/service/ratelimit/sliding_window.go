@@ -124,10 +124,7 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit i
 		return Decision{}, fmt.Errorf("allow: evaluate script: %w", err)
 	}
 
-	remaining := limit - current
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(0, limit-current)
 
 	result := Decision{
 		Allowed:   allowed,

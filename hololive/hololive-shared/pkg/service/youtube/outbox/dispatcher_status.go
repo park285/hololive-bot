@@ -43,10 +43,7 @@ func (d *Dispatcher) markSentBatch(ctx context.Context, ids []int64) {
 
 	now := time.Now()
 	for start := 0; start < len(uniqueIDs); start += markSentBatchChunkSize {
-		end := start + markSentBatchChunkSize
-		if end > len(uniqueIDs) {
-			end = len(uniqueIDs)
-		}
+		end := min(start+markSentBatchChunkSize, len(uniqueIDs))
 		chunk := uniqueIDs[start:end]
 
 		result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).

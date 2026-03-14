@@ -117,10 +117,7 @@ func (r *StatsRepository) SaveStatsBatch(ctx context.Context, stats []*domain.Ti
 	}
 
 	for batchStart := 0; batchStart < len(stats); batchStart += saveBatchMaxSize {
-		batchEnd := batchStart + saveBatchMaxSize
-		if batchEnd > len(stats) {
-			batchEnd = len(stats)
-		}
+		batchEnd := min(batchStart+saveBatchMaxSize, len(stats))
 		chunk := stats[batchStart:batchEnd]
 		if err := r.saveStatsBatchChunk(ctx, chunk); err != nil {
 			return err
@@ -156,7 +153,7 @@ func (r *StatsRepository) saveStatsBatchChunk(ctx context.Context, stats []*doma
 		}
 		base := i * columnsPerRow
 		sb.WriteByte('(')
-		for j := 0; j < columnsPerRow; j++ {
+		for j := range columnsPerRow {
 			if j > 0 {
 				sb.WriteByte(',')
 			}
@@ -188,7 +185,7 @@ func (r *StatsRepository) upsertLatestStatsBatch(ctx context.Context, stats []*d
 		}
 		base := i * columnsPerRow
 		sb.WriteByte('(')
-		for j := 0; j < columnsPerRow; j++ {
+		for j := range columnsPerRow {
 			if j > 0 {
 				sb.WriteByte(',')
 			}
@@ -264,10 +261,7 @@ func (r *StatsRepository) RecordChangeBatch(ctx context.Context, changes []*doma
 	}
 
 	for batchStart := 0; batchStart < len(changes); batchStart += saveBatchMaxSize {
-		batchEnd := batchStart + saveBatchMaxSize
-		if batchEnd > len(changes) {
-			batchEnd = len(changes)
-		}
+		batchEnd := min(batchStart+saveBatchMaxSize, len(changes))
 		if err := r.recordChangeBatchChunk(ctx, changes[batchStart:batchEnd]); err != nil {
 			return err
 		}
@@ -286,7 +280,7 @@ func (r *StatsRepository) recordChangeBatchChunk(ctx context.Context, changes []
 		}
 		base := i * recordChangeColumnsPerRow
 		sb.WriteByte('(')
-		for j := 0; j < recordChangeColumnsPerRow; j++ {
+		for j := range recordChangeColumnsPerRow {
 			if j > 0 {
 				sb.WriteByte(',')
 			}

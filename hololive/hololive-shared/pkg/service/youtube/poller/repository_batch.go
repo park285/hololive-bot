@@ -88,10 +88,7 @@ func (r *gormBatchRepository) batchUpsertVideos(ctx context.Context, tx *gorm.DB
 	}
 
 	for start := 0; start < len(videos); start += pollerBatchMaxSize {
-		end := start + pollerBatchMaxSize
-		if end > len(videos) {
-			end = len(videos)
-		}
+		end := min(start+pollerBatchMaxSize, len(videos))
 		chunk := videos[start:end]
 		if err := r.upsertVideosChunk(ctx, tx, chunk); err != nil {
 			return err
@@ -151,10 +148,7 @@ func (r *gormBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx 
 	}
 
 	for start := 0; start < len(posts); start += pollerBatchMaxSize {
-		end := start + pollerBatchMaxSize
-		if end > len(posts) {
-			end = len(posts)
-		}
+		end := min(start+pollerBatchMaxSize, len(posts))
 		chunk := posts[start:end]
 		if err := r.upsertCommunityPostsChunk(ctx, tx, chunk); err != nil {
 			return err
@@ -216,10 +210,7 @@ func (r *gormBatchRepository) batchInsertNotifications(ctx context.Context, tx *
 	}
 
 	for start := 0; start < len(notifications); start += pollerBatchMaxSize {
-		end := start + pollerBatchMaxSize
-		if end > len(notifications) {
-			end = len(notifications)
-		}
+		end := min(start+pollerBatchMaxSize, len(notifications))
 		chunk := notifications[start:end]
 		if err := r.insertNotificationsChunk(ctx, tx, chunk); err != nil {
 			return err

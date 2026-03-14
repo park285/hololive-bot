@@ -147,11 +147,9 @@ func (r *Runtime) Run() {
 
 	dispatchCtx, dispatchCancel := context.WithCancel(runCtx)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		r.runDispatchLoop(dispatchCtx)
-	}()
+	})
 
 	serverErrCh := make(chan error, 1)
 	go func() {

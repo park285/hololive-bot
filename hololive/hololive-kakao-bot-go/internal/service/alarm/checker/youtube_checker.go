@@ -119,7 +119,6 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 	eg.SetLimit(channelProcessingConcurrency)
 
 	for _, channelID := range dueChannels {
-		channelID := channelID
 		channelStreams := streamsByChannel[channelID]
 		if len(channelStreams) == 0 {
 			channelStreams = []*domain.Stream{}

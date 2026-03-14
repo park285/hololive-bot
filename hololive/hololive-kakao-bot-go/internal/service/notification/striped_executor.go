@@ -23,6 +23,7 @@ package notification
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"strings"
 	"sync"
@@ -126,7 +127,7 @@ func (e *stripedExecutor) ShutdownWait(ctx context.Context) error {
 			e.stop()
 			e.workerWG.Wait()
 		}()
-		return ctx.Err()
+		return fmt.Errorf("shutdown wait: %w", ctx.Err())
 	}
 }
 
