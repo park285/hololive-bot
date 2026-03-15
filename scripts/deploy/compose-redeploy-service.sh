@@ -21,6 +21,7 @@ usage() {
     echo "  valkey-cache | valkey"
     echo "  hololive-db-migrate | migrate"
     echo "  docker-proxy"
+    echo "  admin-dashboard | admin"
     echo "  deunhealth"
     echo "  all"
 }
@@ -70,6 +71,7 @@ case "$SERVICE" in
     valkey-cache|valkey) TARGET="valkey-cache" ;;
     hololive-db-migrate|migrate) TARGET="hololive-db-migrate" ;;
     docker-proxy) TARGET="docker-proxy" ;;
+    admin-dashboard|admin) TARGET="admin-dashboard" ;;
     deunhealth) TARGET="deunhealth" ;;
     all) TARGET="" ;;
     *)
