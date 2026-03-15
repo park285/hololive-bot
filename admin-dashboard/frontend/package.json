@@ -37,8 +37,8 @@
     "@types/node": "^25.3.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.4",
-    "autoprefixer": "^10.4.27",
+    "@rolldown/plugin-babel": "^0.2.1",
+    "@vitejs/plugin-react": "^6.0.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -48,6 +48,6 @@
     "tailwindcss": "^4.2.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^8.0.0"
   }
 }
