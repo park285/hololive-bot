@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react, { reactCompilerPreset } from '@vitejs/plugin-react'
+import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
@@ -28,26 +29,39 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
-    react({
-      babel: {
-        plugins: [['babel-plugin-react-compiler', { target: '19' }]],
-      },
-    }),
+    // Vite 8: Oxc 기반 React Refresh (Babel 제거)
+    react(),
+    // React Compiler는 @rolldown/plugin-babel 경유로 적용
+    // NOTE: @rolldown/plugin-babel의 PluginOptions 타입 정의 이슈로 as any 사용
+    babel({
+      presets: [reactCompilerPreset({ target: '19' })],
+    } as any),
   ],
   build: {
     target: 'esnext',
     sourcemap: false,
     cssCodeSplit: true,
-    minify: 'esbuild',
-    rollupOptions: {
+    // Vite 8: Rolldown 기반 code splitting (manualChunks 제거됨)
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          // 라우팅
-          'vendor-router': ['react-router-dom'],
-          // 데이터 fetching
-          'vendor-query': ['@tanstack/react-query'],
-          // 아이콘
-          'vendor-icons': ['lucide-react'],
+        codeSplitting: {
+          groups: [
+            {
+              // 라우팅
+              name: 'vendor-router',
+              test: /react-router-dom/,
+            },
+            {
+              // 데이터 fetching
+              name: 'vendor-query',
+              test: /@tanstack\/react-query/,
+            },
+            {
+              // 아이콘
+              name: 'vendor-icons',
+              test: /lucide-react/,
+            },
+          ],
         },
       },
     },
