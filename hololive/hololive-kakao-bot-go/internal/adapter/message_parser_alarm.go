@@ -34,17 +34,8 @@ func (ma *MessageAdapter) tryAlarmCommand(command string, args []string, raw str
 	return ma.parseAlarmCommand(command, args, raw), true
 }
 
-func (ma *MessageAdapter) isAlarmCommand(cmd string, args []string) bool {
-	if stringutil.ContainsString([]string{"알람", "알림", "알림설정", "알람설정", "alarm"}, cmd) {
-		return true
-	}
-
-	if len(args) > 0 {
-		subCmd := stringutil.Normalize(args[0])
-		return stringutil.ContainsString([]string{"추가", "set", "add", "설정", "제거", "remove", "del", "삭제", "목록", "list", "초기화", "clear"}, subCmd)
-	}
-
-	return false
+func (ma *MessageAdapter) isAlarmCommand(cmd string, _ []string) bool {
+	return stringutil.ContainsString([]string{"알람", "알림", "알림설정", "알람설정", "alarm"}, cmd)
 }
 
 func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage string) *ParsedCommand {
