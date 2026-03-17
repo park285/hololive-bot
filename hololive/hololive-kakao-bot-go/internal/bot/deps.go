@@ -43,7 +43,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-// Dependencies: 봇 실행에 필요한 모든 의존성을 담는 구조체 (Service Locator 패턴)
+// Dependencies: 봇 실행에 필요한 모든 의존성을 담는 구조체 (Service Locator 패턴).
 type Dependencies struct {
 	BotSelfUser      string
 	IrisBaseURL      string
@@ -125,6 +125,7 @@ func (d *Dependencies) coreDeps() coreDependencies {
 	if d == nil {
 		return coreDependencies{}
 	}
+
 	return coreDependencies{
 		botSelfUser:  d.BotSelfUser,
 		irisBaseURL:  d.IrisBaseURL,
@@ -137,6 +138,7 @@ func (d *Dependencies) messagingDeps() messagingDependencies {
 	if d == nil {
 		return messagingDependencies{}
 	}
+
 	return messagingDependencies{
 		client:         d.Client,
 		messageAdapter: d.MessageAdapter,
@@ -148,6 +150,7 @@ func (d *Dependencies) dataDeps() dataDependencies {
 	if d == nil {
 		return dataDependencies{}
 	}
+
 	return dataDependencies{
 		cache:       d.Cache,
 		postgres:    d.Postgres,
@@ -160,6 +163,7 @@ func (d *Dependencies) streamDeps() streamDependencies {
 	if d == nil {
 		return streamDependencies{}
 	}
+
 	return streamDependencies{
 		holodex:          d.Holodex,
 		chzzk:            d.Chzzk,
@@ -178,6 +182,7 @@ func (d *Dependencies) supportDeps() supportDependencies {
 	if d == nil {
 		return supportDependencies{}
 	}
+
 	return supportDependencies{
 		activity:   d.Activity,
 		settings:   d.Settings,
@@ -190,6 +195,7 @@ func (d *Dependencies) featureDeps() featureDependencies {
 	if d == nil {
 		return featureDependencies{}
 	}
+
 	return featureDependencies{
 		majorEventRepo:   d.MajorEventRepo,
 		memberNews:       d.MemberNews,

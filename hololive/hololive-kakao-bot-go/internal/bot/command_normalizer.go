@@ -34,6 +34,7 @@ func normalizeCommandKey(cmdType domain.CommandType, params map[string]any) (str
 	if after, ok := strings.CutPrefix(typeStr, "alarm_"); ok {
 		action := after
 		newParams := cloneParamsWithAction(params, action)
+
 		return commandKeyAlarm, newParams
 	}
 
@@ -47,6 +48,7 @@ func normalizeCommandKey(cmdType domain.CommandType, params map[string]any) (str
 	if after, ok := strings.CutPrefix(typeStr, "news_subscription_"); ok {
 		action := after
 		newParams := cloneParamsWithAction(params, action)
+
 		return commandKeyNewsSubscription, newParams
 	}
 
@@ -63,6 +65,8 @@ func normalizeCommandKey(cmdType domain.CommandType, params map[string]any) (str
 func cloneParamsWithAction(params map[string]any, action string) map[string]any {
 	newParams := make(map[string]any)
 	maps.Copy(newParams, params)
+
 	newParams["action"] = action
+
 	return newParams
 }
