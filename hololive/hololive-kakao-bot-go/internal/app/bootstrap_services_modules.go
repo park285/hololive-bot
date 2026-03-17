@@ -91,9 +91,9 @@ func buildBotDependencyModules(
 			aclSvc:         aclService,
 			workerPool:     workerPool,
 		},
-		feature: botFeatureModule{
-			majorEventRepo: majorEventRepo,
-			memberNewsSvc:  memberNewsService,
-		},
-	}
+			feature: botFeatureModule{
+				majorEventRepo: majorEventRepo,
+				memberNewsSvc:  memberNewsService,
+			},
+		}
 }

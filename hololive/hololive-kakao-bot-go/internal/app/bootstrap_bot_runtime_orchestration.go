@@ -48,6 +48,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 	configSubscriber := buildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
 
 	var adminServerDeps *botAdminServerDependencies
+
 	if cfg.Bot.AdminEnabled {
 		adminServerDeps, err = buildBotAdminServerDependencies(ctx, cfg, runtimeViews.adminRuntime, nil, logger)
 		if err != nil {

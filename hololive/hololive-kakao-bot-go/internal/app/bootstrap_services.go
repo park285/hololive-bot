@@ -40,6 +40,7 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		if retErr != nil {
 			infra.cleanupDB()
@@ -48,7 +49,7 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	}()
 
 	templateRenderer := template.NewRenderer(infra.postgresService.GetGormDB(), logger)
-	messageAdapter := adapter.NewMessageAdapter(cfg.Bot.Prefix)
+	messageAdapter := adapter.NewMessageAdapter(cfg.Bot.Prefix, cfg.Bot.MentionPrefix)
 	formatter := adapter.NewResponseFormatter(cfg.Bot.Prefix, templateRenderer)
 
 	streamFoundation, err := initScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
@@ -79,12 +80,12 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 		alarmYouTubeStack.youTubeStack,
 		alarmYouTubeStack.activityLogger,
 		alarmYouTubeStack.settingsService,
-		integrationServices.aclService,
-		integrationServices.majorEventRepo,
-		integrationServices.memberNewsService,
-		integrationServices.workerPool,
-		logger,
-	)
+			integrationServices.aclService,
+			integrationServices.majorEventRepo,
+			integrationServices.memberNewsService,
+			integrationServices.workerPool,
+			logger,
+		)
 	deps := ProvideBotDependencies(modules)
 
 	return &coreInfrastructure{

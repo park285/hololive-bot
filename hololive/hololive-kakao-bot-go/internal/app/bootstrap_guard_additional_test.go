@@ -22,11 +22,20 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/iris"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -38,15 +47,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
-	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/iris"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 )
 
 type stubWebhookMessageHandler struct{}
@@ -61,16 +61,24 @@ func (s *stubPollerPostgres) GetPool() *pgxpool.Pool     { return nil }
 func (s *stubPollerPostgres) GetGormDB() *gorm.DB        { return s.db }
 func (s *stubPollerPostgres) Ping(context.Context) error { return nil }
 func (s *stubPollerPostgres) Close() error               { return nil }
-func testBootstrapGuardLogger() *slog.Logger             { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func testBootstrapGuardLogger() *slog.Logger             { return slog.New(slog.DiscardHandler) }
 func canceledContext() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+
 	return ctx
 }
+
 func closeAlarmServices(t *testing.T) {
 	t.Helper()
-	require.NoError(t, notification.CloseAllAlarmServices(context.Background()))
+
+	// t.Cleanup 시점에 t.Context()는 이미 canceled 상태이므로 독립 context 사용
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, notification.CloseAllAlarmServices(ctx))
 }
+
 func TestInitializeBotDependencies_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
@@ -153,7 +161,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := buildBotRuntime(context.Background(), &config.Config{}, testBootstrapGuardLogger(), &coreInfrastructure{})
+	runtime, err := buildBotRuntime(t.Context(), &config.Config{}, testBootstrapGuardLogger(), &coreInfrastructure{})
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to create bot")
@@ -164,12 +172,12 @@ func TestBuildBotAdminServerDependencies_GuardBranches(t *testing.T) {
 
 	logger := testBootstrapGuardLogger()
 
-	deps, err := buildBotAdminServerDependencies(context.Background(), nil, botAdminRuntimeDependencies{}, nil, logger)
+	deps, err := buildBotAdminServerDependencies(t.Context(), nil, botAdminRuntimeDependencies{}, nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, deps)
 	assert.Contains(t, err.Error(), "config is nil")
 
-	deps, err = buildBotAdminServerDependencies(context.Background(), &config.Config{}, botAdminRuntimeDependencies{}, nil, logger)
+	deps, err = buildBotAdminServerDependencies(t.Context(), &config.Config{}, botAdminRuntimeDependencies{}, nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, deps)
 	assert.Contains(t, err.Error(), "admin dependency view is incomplete")
@@ -224,13 +232,13 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 		matcherSvc,
 		ytStack,
 		activityLogger,
-		settingsSvc,
-		aclSvc,
-		&stubMajorEventRepo{},
-		&stubMemberNewsService{},
-		workerPool,
-		logger,
-	)
+			settingsSvc,
+			aclSvc,
+			&stubMajorEventRepo{},
+			&stubMemberNewsService{},
+			workerPool,
+			logger,
+		)
 
 	assert.Equal(t, "self-user", modules.core.botSelfUser)
 	assert.Equal(t, "https://iris.example", modules.core.irisBaseURL)
@@ -279,7 +287,7 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 
 	memberData := &stubMemberDataProvider{}
 	components, err := initAlarmModeComponents(
-		context.Background(),
+		t.Context(),
 		&config.Config{
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 			Scraper:      config.ScraperConfig{},
