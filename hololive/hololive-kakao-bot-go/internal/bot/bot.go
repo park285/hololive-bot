@@ -53,7 +53,7 @@ type streamRuntime interface {
 	Stop()
 }
 
-// Bot: 홀로라이브 봇의 핵심 상태와 의존성(서비스, 캐시, 핸들러 등)을 관리하는 메인 구조체
+// Bot: 홀로라이브 봇의 핵심 상태와 의존성(서비스, 캐시, 핸들러 등)을 관리하는 메인 구조체.
 type Bot struct {
 	botSelfUser      string
 	irisBaseURL      string
@@ -93,6 +93,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	core := deps.coreDeps()
 	messaging := deps.messagingDeps()
 	data := deps.dataDeps()
@@ -116,12 +117,12 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		officialProfiles: stream.profiles,
 		alarm:            stream.alarm,
 		matcher:          stream.matcher,
-		statsRepo:        stream.youTubeStatsRepo,
-		acl:              support.acl,
-		majorEventRepo:   feature.majorEventRepo,
-		memberNews:       feature.memberNews,
-		commandFactories: feature.commandFactories,
-		membersData:      stream.membersData,
+			statsRepo:        stream.youTubeStatsRepo,
+			acl:              support.acl,
+			majorEventRepo:   feature.majorEventRepo,
+			memberNews:       feature.memberNews,
+			commandFactories: feature.commandFactories,
+			membersData:      stream.membersData,
 		workerPool:       support.workerPool,
 		stopCh:           make(chan struct{}),
 		doneCh:           make(chan struct{}),
@@ -149,12 +150,14 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 
 func (b *Bot) initializeCommands() {
 	registry := command.NewRegistry()
+
 	b.commandRegistry = registry
 
 	view := b.commandInitView()
 	deps := view.toCommandDependencies(registry)
 
 	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepo != nil))
+
 	factories := view.buildFactories()
 
 	commandsList := command.BuildCommands(deps, factories...)

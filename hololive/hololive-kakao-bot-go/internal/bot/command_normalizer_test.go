@@ -108,13 +108,19 @@ func TestNormalizeCommandKey(t *testing.T) {
 			params:  map[string]any{"foo": "bar"},
 			wantKey: "live",
 		},
-		{
-			name:    "help → 변환 없이 help 키 반환",
-			cmdType: domain.CommandHelp,
-			params:  map[string]any{},
-			wantKey: "help",
-		},
-	}
+			{
+				name:    "help → 변환 없이 help 키 반환",
+				cmdType: domain.CommandHelp,
+				params:  map[string]any{},
+				wantKey: "help",
+			},
+			{
+				name:    "settlement_status → 변환 없이 원래 타입 유지",
+				cmdType: domain.CommandSettlementStatus,
+				params:  map[string]any{"action": "status"},
+				wantKey: "settlement_status",
+			},
+		}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -134,8 +140,9 @@ func TestNormalizeCommandKey(t *testing.T) {
 			if tc.wantAction != "" {
 				gotAction, ok := gotParams["action"]
 				if !ok {
-					t.Fatalf("gotParams에 action 키가 없음")
+					t.Fatal("gotParams에 action 키가 없음")
 				}
+
 				if gotAction != tc.wantAction {
 					t.Errorf("gotParams[action] = %q, want %q", gotAction, tc.wantAction)
 				}
@@ -225,6 +232,7 @@ func TestCloneParamsWithAction(t *testing.T) {
 			if len(tc.params) > 0 {
 				// 반환된 맵을 수정해도 원본에 영향 없어야 한다
 				got["__test_isolation__"] = true
+
 				if _, leaked := tc.params["__test_isolation__"]; leaked {
 					t.Error("cloneParamsWithAction이 원본 맵을 반환함 (복제 아님)")
 				}
