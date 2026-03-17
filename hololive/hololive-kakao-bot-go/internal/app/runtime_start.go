@@ -31,6 +31,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return
 	}
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -39,6 +40,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	r.startBot(ctx)
 
 	r.StartHTTPServer(errCh)
+
 	if r.Logger != nil && r.ServerAddr != "" {
 		r.Logger.Info("Bot HTTP server started", slog.String("addr", r.ServerAddr))
 	}
@@ -49,6 +51,7 @@ func (r *BotRuntime) startSchedulers(ctx context.Context, errCh chan<- error) {
 
 	if r.ConfigSubscriber != nil {
 		go r.ConfigSubscriber.Run(ctx)
+
 		r.logInfo("Config subscriber started")
 	}
 }
@@ -58,6 +61,7 @@ func (r *BotRuntime) startAlarmScheduler(ctx context.Context) {
 		r.logInfo("Alarm runtime scheduler not configured")
 		return
 	}
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -66,6 +70,7 @@ func (r *BotRuntime) startAlarmScheduler(ctx context.Context) {
 	r.setAlarmSchedulerCancel(alarmCancel)
 
 	go r.AlarmScheduler.Start(alarmCtx)
+
 	r.logInfo("Alarm runtime scheduler started")
 }
 
@@ -76,6 +81,7 @@ func (r *BotRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) {
 
 	r.alarmSchedulerMu.Lock()
 	prevCancel := r.alarmSchedulerCancel
+
 	r.alarmSchedulerCancel = cancel
 	r.alarmSchedulerMu.Unlock()
 
@@ -87,6 +93,7 @@ func (r *BotRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) {
 func (r *BotRuntime) clearAlarmSchedulerCancel() bool {
 	r.alarmSchedulerMu.Lock()
 	cancel := r.alarmSchedulerCancel
+
 	r.alarmSchedulerCancel = nil
 	r.alarmSchedulerMu.Unlock()
 
@@ -94,6 +101,7 @@ func (r *BotRuntime) clearAlarmSchedulerCancel() bool {
 		cancel()
 		return true
 	}
+
 	return false
 }
 
@@ -101,6 +109,7 @@ func (r *BotRuntime) startBot(ctx context.Context) {
 	if r.Bot == nil {
 		return
 	}
+
 	go func() {
 		if err := r.Bot.Start(ctx); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

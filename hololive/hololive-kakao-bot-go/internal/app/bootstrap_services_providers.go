@@ -34,10 +34,11 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
-// ProvideACLService - 접근 제어 서비스 생성 (PostgreSQL 영구화)
+// ProvideACLService - 접근 제어 서비스 생성 (PostgreSQL 영구화).
 func ProvideACLService(
 	ctx context.Context,
 	kakaoACLEnabled bool,
+	kakaoACLMode acl.ACLMode,
 	kakaoRooms []string,
 	postgres database.Client,
 	cacheSvc cache.Client,
@@ -49,22 +50,25 @@ func ProvideACLService(
 		cacheSvc,
 		logger,
 		kakaoACLEnabled,
+		kakaoACLMode,
 		kakaoRooms,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ACL service: %w", err)
 	}
+
 	return svc, nil
 }
 
-// ProvideActivityLogger - 활동 로거 생성 (stdout-only, 파일 로깅 제거됨)
+// ProvideActivityLogger - 활동 로거 생성 (stdout-only, 파일 로깅 제거됨).
 func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
 	return activity.NewActivityLogger("", logger)
 }
 
-// ProvideBotDependencies - 모든 의존성을 bot.Dependencies로 조립
+// ProvideBotDependencies - 모든 의존성을 bot.Dependencies로 조립.
 func ProvideBotDependencies(modules botDependencyModules) *bot.Dependencies {
 	var youTubeStatsRepo stats.StatsCommandRepository
+
 	if statsRepo := modules.stream.ytStack.GetStatsRepo(); statsRepo != nil {
 		youTubeStatsRepo = statsRepo
 	}
@@ -96,12 +100,12 @@ func ProvideBotDependencies(modules botDependencyModules) *bot.Dependencies {
 		Service:          youTubeService,
 		Scheduler:        youTubeScheduler,
 		YouTubeStatsRepo: youTubeStatsRepo,
-		Activity:         modules.support.activityLogger,
-		Settings:         modules.support.settingsSvc,
-		ACL:              modules.support.aclSvc,
-		MajorEventRepo:   modules.feature.majorEventRepo,
-		MemberNews:       modules.feature.memberNewsSvc,
-		CommandFactories: modules.feature.commandFactories,
-		WorkerPool:       modules.support.workerPool,
-	}
+			Activity:         modules.support.activityLogger,
+			Settings:         modules.support.settingsSvc,
+			ACL:              modules.support.aclSvc,
+			MajorEventRepo:   modules.feature.majorEventRepo,
+			MemberNews:       modules.feature.memberNewsSvc,
+			CommandFactories: modules.feature.commandFactories,
+			WorkerPool:       modules.support.workerPool,
+		}
 }
