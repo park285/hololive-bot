@@ -96,7 +96,9 @@ func (v commandInitView) toCommandDependencies(registry *command.Registry) *comm
 		SendError:        v.sendError,
 		Logger:           v.logger,
 	}
+
 	deps.Dispatcher = command.NewSequentialDispatcher(registry, normalizeCommandKey)
+
 	return deps
 }
 
@@ -105,16 +107,19 @@ func (v commandInitView) buildFactories() []command.Factory {
 
 	if v.majorEventRepo != nil {
 		v.logInfo("MajorEvent command enabled")
+
 		factories = append(factories, command.NewMajorEventFactory(v.majorEventRepo))
 	}
 
 	if v.memberNews != nil {
 		v.logInfo("MemberNews commands enabled")
+
 		factories = append(factories, command.MemberNewsFactories()...)
 	}
 
 	if len(v.commandFactories) > 0 {
 		v.logInfo("External command factories enabled", slog.Int("count", len(v.commandFactories)))
+
 		factories = append(factories, v.commandFactories...)
 	}
 
@@ -125,5 +130,6 @@ func (v commandInitView) logInfo(msg string, args ...any) {
 	if v.logger == nil {
 		return
 	}
+
 	v.logger.Info(msg, args...)
 }
