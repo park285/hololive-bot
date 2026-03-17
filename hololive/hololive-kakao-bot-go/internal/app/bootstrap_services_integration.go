@@ -50,6 +50,7 @@ func initCoreIntegrationServices(
 	aclService, err := ProvideACLService(
 		ctx,
 		cfg.Kakao.ACLEnabled,
+		acl.ParseACLMode(cfg.Kakao.ACLMode),
 		cfg.Kakao.Rooms,
 		infra.postgresService,
 		infra.cacheService,

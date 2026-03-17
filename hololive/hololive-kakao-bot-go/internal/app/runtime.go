@@ -21,6 +21,7 @@
 package app
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -37,7 +38,7 @@ type runtimeAlarmScheduler interface {
 	Start(ctx context.Context)
 }
 
-// BotRuntime: 봇 애플리케이션의 전체 실행 환경 및 상태를 관리하는 구조체
+// BotRuntime: 봇 애플리케이션의 전체 실행 환경 및 상태를 관리하는 구조체.
 type BotRuntime struct {
 	Config *config.Config
 	Logger *slog.Logger
@@ -56,7 +57,7 @@ type BotRuntime struct {
 	cleanup              func()
 }
 
-// Close - 런타임 리소스 정리 (DB, 캐시 연결 해제)
+// Close - 런타임 리소스 정리 (DB, 캐시 연결 해제).
 func (r *BotRuntime) Close() {
 	if r != nil && r.cleanup != nil {
 		r.cleanup()
@@ -66,11 +67,13 @@ func (r *BotRuntime) Close() {
 // BuildRuntime: 설정과 로거를 기반으로 봇 런타임 환경을 구성하고 모든 의존성을 초기화합니다.
 func BuildRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*BotRuntime, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("config must not be nil")
+		return nil, errors.New("config must not be nil")
 	}
+
 	if logger == nil {
-		return nil, fmt.Errorf("logger must not be nil")
+		return nil, errors.New("logger must not be nil")
 	}
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -79,6 +82,7 @@ func BuildRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}
+
 	runtime.cleanup = cleanup
 
 	return runtime, nil
