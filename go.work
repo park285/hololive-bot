@@ -6,5 +6,6 @@ use (
 	./hololive/hololive-llm-sched
 	./hololive/hololive-shared
 	./hololive/hololive-stream-ingester
+	./hololive/settlement-go
 	./shared-go
 )
