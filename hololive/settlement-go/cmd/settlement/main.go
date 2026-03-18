@@ -32,7 +32,6 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// PostgreSQL
 	pool, err := pgxpool.New(ctx, cfg.databaseURL)
 	if err != nil {
 		logger.Error("PostgreSQL 연결 실패", slog.String("error", err.Error()))
@@ -40,7 +39,6 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Valkey (cache.Service가 cache.Client 인터페이스를 구현)
 	cacheCfg := cache.Config{
 		Host:       envOrDefault("CACHE_HOST", "localhost"),
 		Port:       intEnvOrDefault("CACHE_PORT", 6379),
@@ -53,38 +51,34 @@ func main() {
 	}
 	defer cacheService.Close()
 
-	// Iris H2C 클라이언트
 	irisClient := iris.NewH2CClient(cfg.irisBaseURL, cfg.irisBotToken, logger)
 
-	// Repository
 	repo := settlement.NewRepository(pool, logger)
-
-	// 포맷터
+	svc := settlement.NewService(repo)
 	formatter := &messageFormatter{}
 
-	// 봇 핸들러
 	bot := &botHandler{
-		repo:       repo,
+		svc:        svc,
 		iris:       irisClient,
 		formatter:  formatter,
 		allowRooms: cfg.allowRooms,
 		logger:     logger,
 	}
 
-	// 스케줄러 (알람 방 설정된 경우)
 	if cfg.alarmRoomID != "" {
 		scheduler := settlement.NewScheduler(
-			repo, cacheService,
+			svc,
+			cacheService,
 			formatter.formatAlarm,
 			func(ctx context.Context, room, message string) error {
 				return irisClient.SendMessage(ctx, room, message)
 			},
-			cfg.alarmRoomID, logger,
+			cfg.alarmRoomID,
+			logger,
 		)
 		go scheduler.Start(ctx)
 	}
 
-	// HTTP 서버 (webhook 수신)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook/iris", bot.handleWebhook)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -143,7 +137,6 @@ func loadConfig() appConfig {
 		logCompress:   boolEnvOrDefault("LOG_COMPRESS", true),
 	}
 
-	// 화이트리스트: 쉼표 구분 방 ID
 	for _, room := range strings.Split(os.Getenv("SETTLEMENT_ALLOW_ROOMS"), ",") {
 		room = strings.TrimSpace(room)
 		if room != "" {
