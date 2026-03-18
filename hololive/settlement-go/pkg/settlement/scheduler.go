@@ -96,8 +96,9 @@ func (s *Scheduler) check(ctx context.Context) {
 		return
 	}
 
-	// 사이클 확보 + 납부 행 생성
-	cycle, err := s.repo.EnsureCycle(ctx, s.roomID, year, month)
+	// 사이클 확보 + 납부 행 생성 (v2: cycle_key 기반, 스케줄러는 플레이스홀더 값으로 호출)
+	cycleKey := fmt.Sprintf("%d-%02d-18", year, month)
+	cycle, err := s.repo.EnsureCycle(ctx, s.roomID, cycleKey, nil, nil, 0, 0, 18, 0)
 	if err != nil {
 		s.logger.Error("사이클 확보 실패", slog.String("error", err.Error()))
 		return
@@ -119,7 +120,7 @@ func (s *Scheduler) check(ctx context.Context) {
 	}
 
 	// 알람 메시지 발송
-	msg := s.formatAlarm(unpaid, cycle.PerPerson, cycle.DueDay)
+	msg := s.formatAlarm(unpaid, cycle.PerPerson, cycle.BillingAnchorDay)
 	if err := s.sendMessage(ctx, s.roomID, msg); err != nil {
 		s.logger.Error("정산 알람 발송 실패", slog.String("error", err.Error()))
 		return
