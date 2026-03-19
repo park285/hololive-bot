@@ -269,9 +269,8 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 			continue
 		}
 
-		rooms := d.groupByRoom(members)
-		roomSet := make(map[string]bool, len(rooms))
-		for roomID := range rooms {
+		roomSet := make(map[string]bool, len(members))
+		for _, roomID := range members {
 			roomSet[roomID] = true
 		}
 		result[e.channelID] = roomSet
@@ -290,15 +289,6 @@ func channelSubscribersKey(channelID string, alarmType domain.AlarmType) string 
 	default:
 		return "alarm:channel_subscribers:" + channelID
 	}
-}
-
-// groupByRoom: room 기반 구독자 목록을 중복 제거하여 반환
-func (d *Dispatcher) groupByRoom(subscribers []string) map[string][]string {
-	rooms := make(map[string][]string, len(subscribers))
-	for _, roomID := range subscribers {
-		rooms[roomID] = nil
-	}
-	return rooms
 }
 
 // ProcessOnceForTest: 테스트용 - 한 번의 폴링 사이클 실행
