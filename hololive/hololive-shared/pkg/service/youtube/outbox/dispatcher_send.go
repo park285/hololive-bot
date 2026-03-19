@@ -49,12 +49,14 @@ func (d *Dispatcher) dispatchDeliveryRows(
 	}
 	var mu sync.Mutex
 
+	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(d.deliveryParallelism())
 	for i := range rows {
 		row := rows[i]
 		eg.Go(func() error {
-			d.dispatchDeliveryRow(egCtx, row, outboxByID, &result, &mu)
+			d.dispatchDeliveryRow(egCtx, row, formattedMessages, formatFailures, &result, &mu)
 			return nil
 		})
 	}
@@ -66,23 +68,18 @@ func (d *Dispatcher) dispatchDeliveryRows(
 func (d *Dispatcher) dispatchDeliveryRow(
 	ctx context.Context,
 	row domain.YouTubeNotificationDelivery,
-	outboxByID map[int64]domain.YouTubeNotificationOutbox,
+	formattedMessages map[int64]string,
+	formatFailures map[int64]bool,
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
-	item, ok := outboxByID[row.OutboxID]
-	if !ok {
-		d.recordDeliveryFailure(result, mu, "outbox row not found", row.ID, row.OutboxID)
+	if formatFailures[row.OutboxID] {
+		d.recordDeliveryFailure(result, mu, "format message", row.ID, row.OutboxID)
 		return
 	}
-
-	message, formatErr := d.formatter.formatMessage(ctx, item)
-	if formatErr != nil {
-		d.logger.Warn("Failed to format delivery message",
-			slog.Int64("delivery_id", row.ID),
-			slog.Int64("outbox_id", row.OutboxID),
-			slog.Any("error", formatErr))
-		d.recordDeliveryFailure(result, mu, "format message", row.ID, row.OutboxID)
+	message, ok := formattedMessages[row.OutboxID]
+	if !ok {
+		d.recordDeliveryFailure(result, mu, "outbox row not found", row.ID, row.OutboxID)
 		return
 	}
 
@@ -113,6 +110,24 @@ func (d *Dispatcher) recordDeliveryFailure(
 	result.failureBuckets[reason] = append(result.failureBuckets[reason], deliveryID)
 	result.touchedOutboxIDs = append(result.touchedOutboxIDs, outboxID)
 	mu.Unlock()
+}
+
+// preFormatMessages: outbox_id별로 메시지를 1회 포맷하여 캐싱
+func (d *Dispatcher) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
+	messages = make(map[int64]string, len(outboxByID))
+	failures = make(map[int64]bool)
+	for id, item := range outboxByID {
+		msg, err := d.formatter.formatMessage(ctx, item)
+		if err != nil {
+			d.logger.Warn("Failed to pre-format outbox message",
+				slog.Int64("outbox_id", id),
+				slog.Any("error", err))
+			failures[id] = true
+			continue
+		}
+		messages[id] = msg
+	}
+	return
 }
 
 func (d *Dispatcher) deliveryParallelism() int {
