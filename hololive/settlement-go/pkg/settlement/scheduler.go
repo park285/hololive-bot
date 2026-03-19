@@ -13,11 +13,11 @@ import (
 type SendMessageFunc func(ctx context.Context, room, message string) error
 
 // FormatAlarmFunc: 미납 알람 포맷 함수 타입.
-type FormatAlarmFunc func(unpaidNames []string, perPerson int, dueDay int) string
+type FormatAlarmFunc func(cycle *Cycle, unpaidNames []string) string
 
 // Scheduler: 정산 알람 스케줄러.
 type Scheduler struct {
-	repo        *Repository
+	svc         *Service
 	cache       cache.Client
 	formatAlarm FormatAlarmFunc
 	sendMessage SendMessageFunc
@@ -27,7 +27,7 @@ type Scheduler struct {
 
 // NewScheduler: 정산 스케줄러 인스턴스를 생성합니다.
 func NewScheduler(
-	repo *Repository,
+	svc *Service,
 	cache cache.Client,
 	formatAlarm FormatAlarmFunc,
 	sendMessage SendMessageFunc,
@@ -35,7 +35,7 @@ func NewScheduler(
 	logger *slog.Logger,
 ) *Scheduler {
 	return &Scheduler{
-		repo:        repo,
+		svc:         svc,
 		cache:       cache,
 		formatAlarm: formatAlarm,
 		sendMessage: sendMessage,
@@ -71,22 +71,31 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 func (s *Scheduler) check(ctx context.Context) {
+	now := time.Now().UTC()
+
+	cycle, unpaid, err := s.svc.GetReminderPayload(ctx, s.roomID, now)
+	if err != nil {
+		s.logger.Error("정산 알람 대상 조회 실패", slog.String("error", err.Error()))
+		return
+	}
+	if cycle == nil || len(unpaid) == 0 {
+		return
+	}
+
 	kst, err := time.LoadLocation("Asia/Seoul")
 	if err != nil {
 		s.logger.Error("KST 로케이션 로드 실패", slog.String("error", err.Error()))
 		return
 	}
+	localNow := now.In(kst)
 
-	now := time.Now().In(kst)
-	// 17일부터 말일까지 매일 알람 발송
-	if now.Day() < 17 {
-		return
-	}
+	dedupKey := fmt.Sprintf(
+		"settlement:alarm:%s:%s:%s",
+		s.roomID,
+		cycle.CycleKey,
+		localNow.Format("2006-01-02"),
+	)
 
-	year, month, day := now.Year(), int(now.Month()), now.Day()
-	dedupKey := fmt.Sprintf("settlement:alarm:%s:%d:%d:%d", s.roomID, year, month, day)
-
-	// Valkey dedup: 이미 발송했으면 스킵
 	exists, err := s.cache.Exists(ctx, dedupKey)
 	if err != nil {
 		s.logger.Error("dedup 키 확인 실패", slog.String("error", err.Error()))
@@ -96,43 +105,18 @@ func (s *Scheduler) check(ctx context.Context) {
 		return
 	}
 
-	// 사이클 확보 + 납부 행 생성
-	cycle, err := s.repo.EnsureCycle(ctx, s.roomID, year, month)
-	if err != nil {
-		s.logger.Error("사이클 확보 실패", slog.String("error", err.Error()))
-		return
-	}
-
-	if err := s.repo.EnsurePaymentRows(ctx, s.roomID, cycle.ID); err != nil {
-		s.logger.Error("납부 행 생성 실패", slog.String("error", err.Error()))
-		return
-	}
-
-	unpaid, err := s.repo.GetUnpaidMembers(ctx, cycle.ID)
-	if err != nil {
-		s.logger.Error("미납 멤버 조회 실패", slog.String("error", err.Error()))
-		return
-	}
-
-	if len(unpaid) == 0 {
-		return
-	}
-
-	// 알람 메시지 발송
-	msg := s.formatAlarm(unpaid, cycle.PerPerson, cycle.DueDay)
+	msg := s.formatAlarm(cycle, unpaid)
 	if err := s.sendMessage(ctx, s.roomID, msg); err != nil {
 		s.logger.Error("정산 알람 발송 실패", slog.String("error", err.Error()))
 		return
 	}
 
-	// dedup 키 설정 (24시간 TTL)
 	if err := s.cache.Set(ctx, dedupKey, true, 24*time.Hour); err != nil {
 		s.logger.Error("dedup 키 설정 실패", slog.String("error", err.Error()))
 	}
 
 	s.logger.Info("정산 알람 발송 완료",
-		slog.Int("year", year),
-		slog.Int("month", month),
+		slog.String("cycle_key", cycle.CycleKey),
 		slog.Int("unpaid_count", len(unpaid)),
 	)
 }

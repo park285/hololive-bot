@@ -319,10 +319,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:SHORTS:UCperroom_success", []string{
-		"roomA:user1",
-		"roomB:user2",
-	})
+	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:SHORTS:UCperroom_success", []string{"roomA", "roomB"})
 	setupMemberName(t, cacheService, "UCperroom_success", "PerRoomMember")
 
 	cfg := outbox.Config{
@@ -394,10 +391,7 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_retry", []string{
-		"roomA:user1",
-		"roomB:user2",
-	})
+	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_retry", []string{"roomA", "roomB"})
 	setupMemberName(t, cacheService, "UCperroom_retry", "PerRoomRetryMember")
 
 	cfg := outbox.Config{
@@ -540,10 +534,7 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 	cacheService := setupCacheService(t)
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_terminal_fail", []string{
-		"roomA:user1",
-		"roomB:user2",
-	})
+	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_terminal_fail", []string{"roomA", "roomB"})
 	setupMemberName(t, cacheService, "UCperroom_terminal_fail", "PerRoomTerminalFailMember")
 
 	cfg := outbox.Config{
@@ -741,8 +732,8 @@ func setupTestSubscribers(t *testing.T, cacheService *cache.Service) {
 	t.Helper()
 	ctx := context.Background()
 
-	cacheService.SAdd(ctx, "alarm:channel_subscribers:SHORTS:UCtest123", []string{"testroom:testuser"})
-	cacheService.SAdd(ctx, "alarm:channel_subscribers:UCtest456", []string{"testroom:testuser"})
+	cacheService.SAdd(ctx, "alarm:channel_subscribers:SHORTS:UCtest123", []string{"testroom"})
+	cacheService.SAdd(ctx, "alarm:channel_subscribers:UCtest456", []string{"testroom"})
 	cacheService.HSet(ctx, "alarm:member_names", "UCtest123", "TestMember")
 	cacheService.HSet(ctx, "alarm:member_names", "UCtest456", "TestMember2")
 

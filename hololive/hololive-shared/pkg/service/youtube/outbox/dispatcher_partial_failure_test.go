@@ -83,56 +83,6 @@ func (s *testSender) Decrypt(_ context.Context, data string) (string, error) {
 	return data, nil
 }
 
-func TestProcessItem_PartialFailureLeavesOutboxPending(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&sqliteOutboxModel{}))
-
-	cacheSvc, mini := newDispatcherTestCache(t)
-	defer mini.Close()
-	defer func() { require.NoError(t, cacheSvc.Close()) }()
-
-	_, err = cacheSvc.SAdd(ctx, "alarm:channel_subscribers:UC_partial", []string{"roomA:user1", "roomB:user2"})
-	require.NoError(t, err)
-
-	item := domain.YouTubeNotificationOutbox{
-		Kind:          domain.OutboxKindNewVideo,
-		ChannelID:     "UC_partial",
-		ContentID:     "test_partial_failure",
-		Payload:       `{"video_id":"vid1","title":"test-title"}`,
-		Status:        domain.OutboxStatusPending,
-		AttemptCount:  0,
-		NextAttemptAt: time.Now(),
-	}
-	require.NoError(t, db.Create(&item).Error)
-
-	sender := &testSender{failRoom: map[string]bool{"roomB": true}}
-	dispatcher := NewDispatcher(db, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
-		BatchSize:           10,
-		LockTimeout:         time.Minute,
-		PollInterval:        time.Second,
-		MaxRetries:          3,
-		RetryBackoff:        time.Minute,
-		DeliveryParallelism: 2,
-	})
-
-	err = dispatcher.processItem(ctx, item)
-	require.Error(t, err)
-
-	var updated domain.YouTubeNotificationOutbox
-	require.NoError(t, db.First(&updated, item.ID).Error)
-	assert.Equal(t, domain.OutboxStatusPending, updated.Status)
-	assert.Equal(t, 1, updated.AttemptCount)
-	assert.Nil(t, updated.LockedAt)
-
-	sender.mu.Lock()
-	defer sender.mu.Unlock()
-	assert.Len(t, sender.messages, 1)
-}
-
 func TestEnqueueDeliveries_SubscriberLookupFailureReleasesLockWithoutMarkingSent(t *testing.T) {
 	t.Parallel()
 
