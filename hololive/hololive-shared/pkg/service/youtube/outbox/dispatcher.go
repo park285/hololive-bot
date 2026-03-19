@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/valkey-io/valkey-go"
@@ -270,9 +269,8 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 			continue
 		}
 
-		rooms := d.groupByRoom(members)
-		roomSet := make(map[string]bool, len(rooms))
-		for roomID := range rooms {
+		roomSet := make(map[string]bool, len(members))
+		for _, roomID := range members {
 			roomSet[roomID] = true
 		}
 		result[e.channelID] = roomSet
@@ -291,33 +289,6 @@ func channelSubscribersKey(channelID string, alarmType domain.AlarmType) string 
 	default:
 		return "alarm:channel_subscribers:" + channelID
 	}
-}
-
-// getChannelSubscribers: 채널 구독자 목록 조회 (알람 타입별)
-func (d *Dispatcher) getChannelSubscribers(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-	key := channelSubscribersKey(channelID, alarmType)
-	members, err := d.cache.SMembers(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("get channel subscribers: %w", err)
-	}
-	return members, nil
-}
-
-// groupByRoom: 구독자 키를 room별로 그룹화
-func (d *Dispatcher) groupByRoom(subscribers []string) map[string][]string {
-	rooms := make(map[string][]string)
-
-	for _, key := range subscribers {
-		parts := strings.SplitN(key, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		roomID := parts[0]
-		userID := parts[1]
-		rooms[roomID] = append(rooms[roomID], userID)
-	}
-
-	return rooms
 }
 
 // ProcessOnceForTest: 테스트용 - 한 번의 폴링 사이클 실행
