@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/valkey-io/valkey-go"
@@ -293,30 +292,12 @@ func channelSubscribersKey(channelID string, alarmType domain.AlarmType) string 
 	}
 }
 
-// getChannelSubscribers: 채널 구독자 목록 조회 (알람 타입별)
-func (d *Dispatcher) getChannelSubscribers(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-	key := channelSubscribersKey(channelID, alarmType)
-	members, err := d.cache.SMembers(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("get channel subscribers: %w", err)
-	}
-	return members, nil
-}
-
-// groupByRoom: 구독자 키를 room별로 그룹화
+// groupByRoom: room 기반 구독자 목록을 중복 제거하여 반환
 func (d *Dispatcher) groupByRoom(subscribers []string) map[string][]string {
-	rooms := make(map[string][]string)
-
-	for _, key := range subscribers {
-		parts := strings.SplitN(key, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		roomID := parts[0]
-		userID := parts[1]
-		rooms[roomID] = append(rooms[roomID], userID)
+	rooms := make(map[string][]string, len(subscribers))
+	for _, roomID := range subscribers {
+		rooms[roomID] = nil
 	}
-
 	return rooms
 }
 
