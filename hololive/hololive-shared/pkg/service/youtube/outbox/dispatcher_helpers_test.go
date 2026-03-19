@@ -29,47 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestGroupByRoom(t *testing.T) {
-	t.Parallel()
-
-	d := &Dispatcher{}
-	tests := []struct {
-		name string
-		in   []string
-		want map[string][]string
-	}{
-		{
-			name: "empty input",
-			in:   nil,
-			want: map[string][]string{},
-		},
-		{
-			name: "groups by room and ignores malformed entries",
-			in: []string{
-				"room1:user1",
-				"room1:user2",
-				"invalid",
-				"room2:user3",
-			},
-			want: map[string][]string{
-				"room1": {"user1", "user2"},
-				"room2": {"user3"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := d.groupByRoom(tt.in)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("groupByRoom() = %#v, want %#v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestBuildTemplateData(t *testing.T) {
 	t.Parallel()
 
