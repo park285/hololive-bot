@@ -21,16 +21,13 @@
 package app
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
@@ -45,6 +42,7 @@ func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
 	assert.Equal(t, 1, calls)
 
 	var nilRuntime *DBIntegrationRuntime
+
 	require.NotPanics(t, func() {
 		nilRuntime.Close()
 	})
@@ -53,7 +51,7 @@ func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
 func TestBuildDBIntegrationRuntime_ReturnsErrorOnNilLogger(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := BuildDBIntegrationRuntime(context.Background(), config.PostgresConfig{}, nil)
+	runtime, err := BuildDBIntegrationRuntime(t.Context(), config.PostgresConfig{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "logger must not be nil")
@@ -71,6 +69,7 @@ func TestFetchProfilesRuntimeClose_CallsCleanupOnce(t *testing.T) {
 	assert.Equal(t, 1, calls)
 
 	var nilRuntime *FetchProfilesRuntime
+
 	require.NotPanics(t, func() {
 		nilRuntime.Close()
 	})
@@ -92,7 +91,7 @@ func TestBuildFetchProfilesRuntime_WithNilContext(t *testing.T) {
 func TestBuildDBIntegrationRuntime_InitializesContextWhenNil(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	runtime, err := BuildDBIntegrationRuntime(nil, config.PostgresConfig{}, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)

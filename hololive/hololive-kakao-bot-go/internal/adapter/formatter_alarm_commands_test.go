@@ -21,16 +21,14 @@
 package adapter
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAlarmFormatters_CommandPaths(t *testing.T) {
@@ -55,27 +53,27 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 		Title:          "다음 방송",
 		StartScheduled: &now,
 	}
-	added := formatter.FormatAlarmAdded(context.Background(), "미코", true, nextUpcoming)
+	added := formatter.FormatAlarmAdded(t.Context(), "미코", true, nextUpcoming)
 	assert.Contains(t, added, "ADD 미코 true")
 	assert.Contains(t, added, "upcoming")
 
-	removed := formatter.FormatAlarmRemoved(context.Background(), "미코", true)
+	removed := formatter.FormatAlarmRemoved(t.Context(), "미코", true)
 	assert.Equal(t, "REMOVE 미코 true", removed)
 
-	list := formatter.FormatAlarmList(context.Background(), []AlarmListEntry{
+	list := formatter.FormatAlarmList(t.Context(), []AlarmListEntry{
 		{MemberName: "미코", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeCommunity}, NextStream: &domain.NextStreamInfo{Status: domain.NextStreamStatusLive, VideoID: "live123", Title: "라이브"}},
 	})
 	assert.Contains(t, list, "알람 목록")
 	assert.Contains(t, list, "미코|방송+커뮤니티|live")
 	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(list, util.KakaoZeroWidthSpace))
 
-	emptyList := formatter.FormatAlarmList(context.Background(), nil)
+	emptyList := formatter.FormatAlarmList(t.Context(), nil)
 	assert.Equal(t, "알람 목록", emptyList)
 
-	assert.Equal(t, "CLEAR 3", formatter.FormatAlarmCleared(context.Background(), 3))
+	assert.Equal(t, "CLEAR 3", formatter.FormatAlarmCleared(t.Context(), 3))
 	assert.Equal(t, ErrInvalidAlarmUsage, formatter.InvalidAlarmUsage())
 
-	notify := formatter.AlarmNotification(context.Background(), &domain.AlarmNotification{
+	notify := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{
 		Channel: &domain.Channel{Name: "미코"},
 		Stream: &domain.Stream{
 			ID:             "yt123",
@@ -88,7 +86,7 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	assert.Contains(t, notify, "NOTIFY")
 	assert.Contains(t, notify, "https://youtube.com/watch?v=yt123")
 
-	liveStarted := formatter.AlarmNotification(context.Background(), &domain.AlarmNotification{
+	liveStarted := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{
 		Channel: &domain.Channel{Name: "후부키"},
 		Stream: &domain.Stream{
 			ID:             "yt999",
@@ -100,11 +98,11 @@ func TestAlarmFormatters_CommandPaths(t *testing.T) {
 	})
 	assert.Contains(t, liveStarted, "LIVE")
 
-	milestoneMsg, err := formatter.FormatMilestoneAchieved(context.Background(), "미코", "100만")
+	milestoneMsg, err := formatter.FormatMilestoneAchieved(t.Context(), "미코", "100만")
 	require.NoError(t, err)
 	assert.Equal(t, "MILESTONE 미코 100만", milestoneMsg)
 
-	approachMsg, err := formatter.FormatMilestoneApproaching(context.Background(), "미코", "100만", "5천")
+	approachMsg, err := formatter.FormatMilestoneApproaching(t.Context(), "미코", "100만", "5천")
 	require.NoError(t, err)
 	assert.Equal(t, "APPROACH 미코 100만 5천", approachMsg)
 }
@@ -113,13 +111,13 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmAddFailed), formatter.FormatAlarmAdded(context.Background(), "미코", true, nil))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmRemoveFailed), formatter.FormatAlarmRemoved(context.Background(), "미코", true))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmListFailed), formatter.FormatAlarmList(context.Background(), []AlarmListEntry{{MemberName: "미코"}}))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmClearFailed), formatter.FormatAlarmCleared(context.Background(), 1))
-	assert.Equal(t, ErrorMessage(ErrDisplayAlarmNotifyFailed), formatter.AlarmNotification(context.Background(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
+	assert.Equal(t, ErrorMessage(ErrDisplayAlarmAddFailed), formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
+	assert.Equal(t, ErrorMessage(ErrDisplayAlarmRemoveFailed), formatter.FormatAlarmRemoved(t.Context(), "미코", true))
+	assert.Equal(t, ErrorMessage(ErrDisplayAlarmListFailed), formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
+	assert.Equal(t, ErrorMessage(ErrDisplayAlarmClearFailed), formatter.FormatAlarmCleared(t.Context(), 1))
+	assert.Equal(t, ErrorMessage(ErrDisplayAlarmNotifyFailed), formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
 
-	fallbackLive := formatter.AlarmNotification(context.Background(), &domain.AlarmNotification{MinutesUntil: 0, Channel: &domain.Channel{Name: "미코"}, Stream: &domain.Stream{ID: "yt", Title: "제목", ChannelName: "미코"}})
+	fallbackLive := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 0, Channel: &domain.Channel{Name: "미코"}, Stream: &domain.Stream{ID: "yt", Title: "제목", ChannelName: "미코"}})
 	assert.Contains(t, fallbackLive, "방송 시작됨")
 	assert.Contains(t, fallbackLive, "https://youtube.com/watch?v=yt")
 
@@ -142,7 +140,7 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	require.NotNil(t, soon)
 	assert.True(t, soon.StartingSoon)
 
-	assert.Equal(t, "", formatUpcomingTimeDetail(-time.Minute))
+	assert.Empty(t, formatUpcomingTimeDetail(-time.Minute))
 	assert.Equal(t, "30분 후", formatUpcomingTimeDetail(30*time.Minute))
 	assert.Equal(t, "2시간 0분 후", formatUpcomingTimeDetail(2*time.Hour))
 	assert.Equal(t, "1일 후", formatUpcomingTimeDetail(26*time.Hour))

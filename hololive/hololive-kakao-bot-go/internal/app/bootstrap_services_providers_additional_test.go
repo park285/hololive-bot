@@ -23,19 +23,18 @@ package app
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
 
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
@@ -46,7 +45,7 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&acl.Settings{}, &acl.Room{}))
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	dbClient := &dbmocks.Client{
 		GetGormDBFunc: func() *gorm.DB { return db },
 	}
@@ -58,12 +57,12 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 		},
 	}
 
-	svc, err := ProvideACLService(context.Background(), true, []string{"room-a", "room-b"}, dbClient, cacheSvc, logger)
+	svc, err := ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cacheSvc, logger)
 	require.NoError(t, err)
 	require.NotNil(t, svc)
 	assert.True(t, svc.IsReady())
 
-	enabled, rooms := svc.GetACLStatus()
+	enabled, _, rooms := svc.GetACLStatus()
 	assert.True(t, enabled)
 	assert.Len(t, rooms, 2)
 }
@@ -71,11 +70,12 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 func TestProvideActivityLogger_StdoutOnlyMode(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	activityLogger := ProvideActivityLogger(logger)
 	require.NotNil(t, activityLogger)
 
 	activityLogger.Log("test", "summary", map[string]any{"k": "v"})
+
 	logs, err := activityLogger.GetRecentLogs(10)
 	require.NoError(t, err)
 	assert.Empty(t, logs)

@@ -39,6 +39,7 @@ func (h *AlarmAPIHandler) GetAlarms(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get alarm keys", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to get alarms"})
+
 		return
 	}
 
@@ -48,7 +49,7 @@ func (h *AlarmAPIHandler) GetAlarms(c *gin.Context) {
 	})
 }
 
-// DeleteAlarm: 특정 알람을 삭제합니다. (방 기반: room_id + channel_id)
+// DeleteAlarm: 특정 알람을 삭제합니다. (방 기반: room_id + channel_id).
 func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 	var req struct {
 		RoomID    string `json:"roomId" binding:"required"`
@@ -58,6 +59,7 @@ func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
+
 		return
 	}
 
@@ -68,6 +70,7 @@ func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to delete alarm", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to delete alarm"})
+
 		return
 	}
 

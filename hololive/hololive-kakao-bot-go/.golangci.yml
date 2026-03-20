@@ -1,67 +1,88 @@
 version: "2"
 
 run:
-  timeout: 5m  # 당근 설정 참고
+  timeout: 5m
   tests: true
+  modules-download-mode: readonly
+  relative-path-mode: gomod
 
 linters:
   default: none
   enable:
-    # 기본 오류 검사
+    # correctness
     - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
-    
-    # 리소스 관리
-    - bodyclose     #HTTP body close
-    - rowserrcheck  #DB rows.Err() 체크
-    - sqlclosecheck #SQL close 체크
-    
-    # Context 관리
-    - contextcheck  #context 사용 패턴
-    - noctx         #HTTP request context
-    
-    # 에러 처리
-    - errorlint     # 에러 처리 best practice
-    - errname       # 에러 변수 네이밍
-    - wrapcheck     # 에러 wrapping
-    
-    # 코드 품질
+
+    # resources / context / concurrency
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - containedctx
+    - contextcheck
+    - noctx
+    - fatcontext
+    - copyloopvar
+
+    # modern Go / stdlib / simplification
+    - canonicalheader
+    - durationcheck
+    - embeddedstructfieldcheck
+    - exptostd
+    - intrange
+    - makezero
+    - mirror
+    - modernize
+    - recvcheck
+    - unconvert
+    - unqueryvet
+    - usestdlibvars
+
+    # errors
+    - errname
+    - errorlint
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - wrapcheck
+
+    # style / docs / suppression hygiene
+    - depguard
+    - godot
+    - misspell
+    - nakedret
+    - nlreturn
+    - nolintlint
+    - predeclared
+    - revive
+    - sloglint
+    - whitespace
+    - wsl_v5
+    - wastedassign
+
+    # maintainability
     - dupl
+    - funlen
+    - gocognit
     - goconst
     - gocritic
-    - intrange
-    - modernize
-    - misspell
-    - predeclared   # 내장 이름 재정의 방지
-    - revive
-    - wastedassign  # 사용되지 않는 할당
-    - whitespace    # 공백 문제
-    
-    # 복잡도
     - gocyclo
-    - gocognit
-    - funlen
-    
-    # 성능
+    - interfacebloat
+    - maintidx
+    - nestif
     - prealloc
-    
-    # 보안
-    - bidichk       # 유니코드 양방향 문자
+
+    # tests
+    - testifylint
+    - thelper
+    - tparallel
+    - usetesting
+
+    # security / text safety
+    - bidichk
     - gosec
-    
-    # 로깅
-    - sloglint
-
-    # 기타
-    - durationcheck # time.Duration 사용
-    - unconvert
-    - nakedret
-
-    # 교차 서비스 의존 금지
-    - depguard
 
   settings:
     errcheck:
@@ -79,11 +100,19 @@ linters:
       disable:
         - fieldalignment
 
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1020
+        - -ST1021
+        - -ST1022
+
     gocyclo:
-      min-complexity: 17  # 엄격하게 적용 (현재 코드베이스 모두 통과)
+      min-complexity: 17
 
     gocognit:
-      min-complexity: 31  # 복잡한 함수 3개만 리팩토링 대상
+      min-complexity: 31
 
     dupl:
       threshold: 200
@@ -123,15 +152,113 @@ linters:
         - emptyStringTest
 
     funlen:
-      lines: 90  # 적절한 함수 길이 제한
+      lines: 90
       statements: 45
+      ignore-comments: true
 
     revive:
+      severity: error
+      enable-default-rules: true
+      directives:
+        - name: specify-disable-reason
+          severity: error
       rules:
         - name: exported
           disabled: true
         - name: package-comments
           disabled: true
+        - name: use-any
+        - name: use-errors-new
+        - name: use-fmt-print
+        - name: time-date
+        - name: time-equal
+        - name: error-naming
+        - name: error-return
+        - name: unexported-naming
+        - name: unnecessary-format
+        - name: unnecessary-if
+        - name: unsecure-url-scheme
+        - name: use-waitgroup-go
+
+
+
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+
+    wsl_v5:
+      default: all
+      allow-first-in-block: false
+      allow-whole-block: false
+      branch-max-lines: 2
+      case-max-lines: 0
+
+    godot:
+      scope: declarations
+      capital: true
+      period: true
+
+    copyloopvar:
+      check-alias: true
+
+    fatcontext:
+      check-struct-pointers: true
+
+    embeddedstructfieldcheck:
+      empty-line: true
+      forbid-mutex: true
+
+    nilnil:
+      only-two: false
+      detect-opposite: true
+
+    nlreturn:
+      block-size: 2
+
+    predeclared:
+      qualified-name: true
+
+    wrapcheck:
+      report-internal-errors: true
+      extra-ignore-sigs:
+        - google.golang.org/grpc/status.Error
+        - google.golang.org/grpc/status.Errorf
+      ignore-package-globs:
+        - github.com/valkey-io/valkey-go
+        - github.com/valkey-io/valkey-go/*
+        - google.golang.org/grpc/status
+        - google.golang.org/grpc/status/*
+
+    usestdlibvars:
+      http-method: true
+      http-status-code: true
+      time-date-month: true
+      time-weekday: true
+      time-month: true
+      time-layout: true
+      crypto-hash: true
+      default-rpc-path: true
+      sql-isolation-level: true
+      tls-signature-scheme: true
+      constant-kind: true
+
+    interfacebloat:
+      max: 5
+
+    maintidx:
+      under: 35
+
+    nestif:
+      min-complexity: 4
+
+    testifylint:
+      enable-all: true
+
+    usetesting:
+      os-temp-dir: true
+      context-background: true
+      context-todo: true
 
     depguard:
       rules:
@@ -144,28 +271,13 @@ linters:
             - pkg: "github.com/kapu/hololive-stream-ingester"
               desc: "kakao-bot -> stream-ingester 교차 의존 금지"
 
-    wrapcheck:
-      extra-ignore-sigs:
-        # status.Error는 그대로 반환 (wrapping 금지)
-        - google.golang.org/grpc/status.Error
-        - google.golang.org/grpc/status.Errorf
-      ignore-package-globs:
-        - github.com/valkey-io/valkey-go
-        - github.com/valkey-io/valkey-go/*
-        - google.golang.org/grpc/status
-        - google.golang.org/grpc/status/*
-
   exclusions:
+    generated: strict
+    warn-unused: true
     rules:
       - linters:
           - contextcheck
         text: 'Non-inherited new context'
-      - linters:
-          - gocyclo
-          - errcheck
-          - dupl
-          - funlen
-        path: _test\.go
 
       - linters:
           - gosec
@@ -179,13 +291,8 @@ linters:
           - gosec
         text: "G704:"
 
-      - linters:
-          - funlen
-        path: cmd/
-
     paths:
       - '.*\.pb\.go$'
-      - '.*_test\.go$'
       - vendor
       - proto
 
@@ -198,7 +305,7 @@ issues:
 formatters:
   enable:
     - gci
-    - gofmt
+    - gofumpt
     - goimports
 
   settings:
@@ -207,14 +314,22 @@ formatters:
         - standard
         - default
         - prefix(github.com/kapu/hololive-kakao-bot-go)
+      custom-order: true
+      no-inline-comments: true
+      no-prefix-comments: true
+
+    gofumpt:
+      module-path: github.com/kapu/hololive-kakao-bot-go
+      extra-rules: true
 
     goimports:
       local-prefixes:
         - github.com/kapu/hololive-kakao-bot-go
 
   exclusions:
+    generated: strict
+    warn-unused: true
     paths:
       - '.*\.pb\.go$'
-      - '.*_test\.go$'
       - vendor
       - proto

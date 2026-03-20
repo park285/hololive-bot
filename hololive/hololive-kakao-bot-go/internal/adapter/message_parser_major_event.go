@@ -35,6 +35,7 @@ func (ma *MessageAdapter) tryMajorEventCommand(command string, args []string, ra
 	}
 
 	params := make(map[string]any)
+
 	if len(args) > 0 {
 		action := stringutil.Normalize(args[0])
 		switch action {

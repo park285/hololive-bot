@@ -21,17 +21,15 @@
 package adapter
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
@@ -60,31 +58,31 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 		},
 	}
 
-	live := formatter.FormatLiveStreams(context.Background(), streams)
+	live := formatter.FormatLiveStreams(t.Context(), streams)
 	assert.Contains(t, live, "라이브 목록")
 	assert.Contains(t, live, "[Holo] 사쿠라 미코")
 	assert.Contains(t, live, "https://youtube.com/watch?v=abc123")
 	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(live, util.KakaoZeroWidthSpace))
 
-	upcoming := formatter.UpcomingStreams(context.Background(), streams, 12)
+	upcoming := formatter.UpcomingStreams(t.Context(), streams, 12)
 	assert.Contains(t, upcoming, "예정 목록")
 	assert.Contains(t, upcoming, "https://youtube.com/watch?v=abc123")
 	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(upcoming, util.KakaoZeroWidthSpace))
 
 	channel := &domain.Channel{Name: "사쿠라 미코"}
-	schedule := formatter.ChannelSchedule(context.Background(), channel, streams, 7)
+	schedule := formatter.ChannelSchedule(t.Context(), channel, streams, 7)
 	assert.Contains(t, schedule, "채널 일정")
 	assert.Contains(t, schedule, "https://youtube.com/watch?v=abc123")
 	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(schedule, util.KakaoZeroWidthSpace))
 
-	emptyLive := formatter.FormatLiveStreams(context.Background(), nil)
+	emptyLive := formatter.FormatLiveStreams(t.Context(), nil)
 	assert.Equal(t, "라이브 목록", emptyLive)
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, ErrorMessage(ErrDisplayLiveStreamsFailed), errorFormatter.FormatLiveStreams(context.Background(), streams))
-	assert.Equal(t, ErrorMessage(ErrDisplayUpcomingFailed), errorFormatter.UpcomingStreams(context.Background(), streams, 12))
-	assert.Equal(t, ErrorMessage(ErrDisplayScheduleFailed), errorFormatter.ChannelSchedule(context.Background(), channel, streams, 7))
+	assert.Equal(t, ErrorMessage(ErrDisplayLiveStreamsFailed), errorFormatter.FormatLiveStreams(t.Context(), streams))
+	assert.Equal(t, ErrorMessage(ErrDisplayUpcomingFailed), errorFormatter.UpcomingStreams(t.Context(), streams, 12))
+	assert.Equal(t, ErrorMessage(ErrDisplayScheduleFailed), errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
 }
 
 func TestStreamHelpers(t *testing.T) {
@@ -94,6 +92,7 @@ func TestStreamHelpers(t *testing.T) {
 
 	t.Run("truncate title", func(t *testing.T) {
 		t.Parallel()
+
 		input := strings.Repeat("A", constants.StringLimits.StreamTitle+30)
 		got := formatter.truncateTitle(input)
 		assert.LessOrEqual(t, len([]rune(got)), constants.StringLimits.StreamTitle+3)
@@ -119,13 +118,14 @@ func TestStreamHelpers(t *testing.T) {
 
 	t.Run("formatChannelName", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "", formatter.formatChannelName(nil))
+		assert.Empty(t, formatter.formatChannelName(nil))
 
 		org := "Nijisanji"
 		stream := &domain.Stream{ChannelName: "쿠제 혼마", Channel: &domain.Channel{Org: &org}}
 		assert.Equal(t, "[니지산지] 쿠제 혼마", formatter.formatChannelName(stream))
 
 		unknownOrg := "NewOrg"
+
 		stream = &domain.Stream{ChannelName: "테스트", Channel: &domain.Channel{Org: &unknownOrg}}
 		assert.Equal(t, "[NewOrg] 테스트", formatter.formatChannelName(stream))
 
@@ -172,7 +172,7 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 	require.Len(t, prepared[1].Members, 1)
 	assert.False(t, prepared[1].Members[0].ShowBoth)
 
-	message := formatter.MemberDirectory(context.Background(), groups, 0)
+	message := formatter.MemberDirectory(t.Context(), groups, 0)
 	assert.Contains(t, message, "멤버 목록")
 	assert.Contains(t, message, "JP 1기생")
 	assert.Contains(t, message, "사쿠라 미코(Sakura Miko)")
@@ -181,10 +181,10 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 	emptyPrepared := prepareMemberDirectoryGroups(nil)
 	assert.Nil(t, emptyPrepared)
 
-	emptyMessage := formatter.MemberDirectory(context.Background(), nil, 0)
+	emptyMessage := formatter.MemberDirectory(t.Context(), nil, 0)
 	assert.Equal(t, "멤버 목록", emptyMessage)
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, ErrorMessage(ErrDisplayMemberListFailed), errorFormatter.MemberDirectory(context.Background(), groups, 1))
+	assert.Equal(t, ErrorMessage(ErrDisplayMemberListFailed), errorFormatter.MemberDirectory(t.Context(), groups, 1))
 }

@@ -22,6 +22,7 @@ package errors
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -33,18 +34,20 @@ func TestAPIError_ErrorAndUnwrap(t *testing.T) {
 	}
 
 	cause := errors.New("network down")
+
 	withCause := APIError{Operation: "op", StatusCode: 503, Err: cause}
 	if got := withCause.Error(); !strings.Contains(got, "network down") {
 		t.Fatalf("expected cause in APIError string: %q", got)
 	}
+
 	if !errors.Is(withCause.Unwrap(), cause) {
-		t.Fatalf("APIError.Unwrap() mismatch")
+		t.Fatal("APIError.Unwrap() mismatch")
 	}
 }
 
 func TestNewAPIError_OperationSelection(t *testing.T) {
 	err := NewAPIError("fallback-op", 429, map[string]any{"operation": "explicit-op"})
-	if err.Operation != "explicit-op" || err.StatusCode != 429 {
+	if err.Operation != "explicit-op" || err.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("unexpected NewAPIError result: %+v", err)
 	}
 
@@ -61,7 +64,7 @@ func TestKeyRotationError_ErrorAndFactory(t *testing.T) {
 	}
 
 	err := NewKeyRotationError("fallback", 429, map[string]any{"url": "https://api.example.com"})
-	if err.Operation != "https://api.example.com" || err.StatusCode != 429 {
+	if err.Operation != "https://api.example.com" || err.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("unexpected NewKeyRotationError result: %+v", err)
 	}
 
@@ -78,12 +81,14 @@ func TestCacheError_ErrorAndFactory(t *testing.T) {
 	}
 
 	cause := errors.New("redis timeout")
+
 	withCause := CacheError{Operation: "set", Key: "k2", Err: cause}
 	if got := withCause.Error(); !strings.Contains(got, "redis timeout") {
 		t.Fatalf("expected cause in CacheError string: %q", got)
 	}
+
 	if !errors.Is(withCause.Unwrap(), cause) {
-		t.Fatalf("CacheError.Unwrap() mismatch")
+		t.Fatal("CacheError.Unwrap() mismatch")
 	}
 
 	created := NewCacheError("ignored", "delete", "k3", cause)
@@ -123,12 +128,14 @@ func TestServiceError_ErrorAndFactory(t *testing.T) {
 	}
 
 	cause := errors.New("db failed")
+
 	withCause := ServiceError{Service: "member", Operation: "sync", Err: cause}
 	if got := withCause.Error(); !strings.Contains(got, "db failed") {
 		t.Fatalf("expected cause in ServiceError string: %q", got)
 	}
+
 	if !errors.Is(withCause.Unwrap(), cause) {
-		t.Fatalf("ServiceError.Unwrap() mismatch")
+		t.Fatal("ServiceError.Unwrap() mismatch")
 	}
 
 	created := NewServiceError("ignored", "alarm", "publish", cause)

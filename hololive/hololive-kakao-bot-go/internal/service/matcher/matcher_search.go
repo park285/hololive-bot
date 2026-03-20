@@ -56,6 +56,7 @@ func (mm *MemberMatcher) FindBestMatch(ctx context.Context, query string) (*doma
 	cacheKey := fmt.Sprintf("match:%s", normalizedQuery)
 
 	mm.matchCacheMu.RLock()
+
 	cached, found := mm.matchCache[cacheKey]
 	mm.matchCacheMu.RUnlock()
 
@@ -86,6 +87,7 @@ func (mm *MemberMatcher) FindBestMatch(ctx context.Context, query string) (*doma
 
 func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, error) {
 	queryNorm := normalizeMatcherTerm(query)
+
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
@@ -96,6 +98,7 @@ func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*
 	}
 
 	mm.logger.Debug("No match found in internal data", slog.String("query", query))
+
 	return nil, nil
 }
 
@@ -105,6 +108,7 @@ func (mm *MemberMatcher) GetAllMembers() []*domain.Member {
 	if provider == nil {
 		return nil
 	}
+
 	return provider.GetAllMembers()
 }
 
@@ -114,6 +118,7 @@ func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID str
 	if provider == nil {
 		return nil
 	}
+
 	return provider.FindMemberByChannelID(channelID)
 }
 
@@ -121,12 +126,16 @@ func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID str
 // "이름 (그룹)" 형식을 파싱하고, 동명이인 발생 시 AmbiguousMatchError를 반환합니다.
 func (mm *MemberMatcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, error) {
 	name, org := ParseNameWithOrg(query)
+
 	name = mm.normalizeQuery(name)
+
 	nameNorm := normalizeMatcherTerm(name)
+
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
 	}
+
 	if snapshot.dynamicLoadErr != nil {
 		return nil, snapshot.dynamicLoadErr
 	}

@@ -21,6 +21,7 @@
 package checker
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -53,13 +54,15 @@ func NewNotifier(
 	logger *slog.Logger,
 ) (*Notifier, error) {
 	if dedupSvc == nil {
-		return nil, fmt.Errorf("new notifier: dedup service is nil")
+		return nil, errors.New("new notifier: dedup service is nil")
 	}
+
 	if queuePublisher == nil {
-		return nil, fmt.Errorf("new notifier: queue publisher is nil")
+		return nil, errors.New("new notifier: queue publisher is nil")
 	}
+
 	if alarmSvc == nil {
-		return nil, fmt.Errorf("new notifier: alarm service is nil")
+		return nil, errors.New("new notifier: alarm service is nil")
 	}
 
 	return &Notifier{
@@ -74,6 +77,7 @@ func NewNotifier(
 // Send는 알림 목록을 순차 처리한다.
 func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, error) {
 	result := SendResult{}
+
 	for _, notification := range notifications {
 		singleResult, err := n.sendOne(ctx, notification)
 		if err != nil {
@@ -89,6 +93,7 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 			result.Failed++
 		}
 	}
+
 	return result, nil
 }
 
@@ -117,6 +122,7 @@ func (n *Notifier) sendOne(ctx context.Context, notif *domain.AlarmNotification)
 	if err != nil {
 		return sendOutcomeFailed, fmt.Errorf("send one: claim dedup: %w", err)
 	}
+
 	if !claimed {
 		return sendOutcomeSkipped, nil
 	}
@@ -156,11 +162,13 @@ func resolveSendInput(notif *domain.AlarmNotification, now time.Time) *sendInput
 	if channelID == "" && resolvedStream.Channel != nil {
 		channelID = strings.TrimSpace(resolvedStream.Channel.ID)
 	}
+
 	if channelID == "" {
 		return nil
 	}
 
 	resolvedNotification := *notif
+
 	resolvedNotification.Stream = resolvedStream
 
 	return &sendInput{
@@ -182,6 +190,7 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string
 	if err != nil {
 		return nil, false, fmt.Errorf("claim notification: %w", err)
 	}
+
 	if !notifyClaimed {
 		return nil, false, nil
 	}
@@ -197,6 +206,7 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string
 		n.releaseClaimsBestEffort(ctx, []string{notifyClaimKey}, "failed to release notification claim after logical claim error")
 		return nil, false, fmt.Errorf("claim logical event: %w", err)
 	}
+
 	if !logicalClaimed {
 		n.releaseClaimsBestEffort(ctx, []string{notifyClaimKey}, "failed to release notification claim after logical dedup skip")
 		return nil, false, nil
@@ -215,8 +225,10 @@ func compactClaimKeys(keys ...string) []string {
 		if strings.TrimSpace(key) == "" {
 			continue
 		}
+
 		compacted = append(compacted, key)
 	}
+
 	return compacted
 }
 
@@ -251,6 +263,7 @@ func (n *Notifier) releaseClaimsBestEffort(ctx context.Context, claimKeys []stri
 	if len(claimKeys) == 0 {
 		return
 	}
+
 	if err := n.dedupSvc.ReleaseClaims(ctx, claimKeys); err != nil {
 		n.logger.Warn(message, slog.Any("error", err))
 	}

@@ -21,6 +21,7 @@
 package app
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -29,7 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// DBIntegrationRuntime: DB 통합 테스트 및 실행을 위한 런타임 환경 (Repository, Cache, Adapter 포함)
+// DBIntegrationRuntime: DB 통합 테스트 및 실행을 위한 런타임 환경 (Repository, Cache, Adapter 포함).
 type DBIntegrationRuntime struct {
 	Logger        *slog.Logger
 	Repository    *member.Repository
@@ -53,8 +54,9 @@ func BuildDBIntegrationRuntime(
 	logger *slog.Logger,
 ) (*DBIntegrationRuntime, error) {
 	if logger == nil {
-		return nil, fmt.Errorf("logger must not be nil")
+		return nil, errors.New("logger must not be nil")
 	}
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -63,6 +65,7 @@ func BuildDBIntegrationRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize DB integration runtime: %w", err)
 	}
+
 	runtime.cleanup = cleanup
 
 	return runtime, nil

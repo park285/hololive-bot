@@ -22,7 +22,6 @@ package matcher
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -41,22 +40,27 @@ func newStubMemberProvider(members []*domain.Member) *stubMemberProvider {
 	byChannel := make(map[string]*domain.Member)
 	byName := make(map[string]*domain.Member)
 	byAlias := make(map[string]*domain.Member)
+
 	for _, member := range members {
 		if member == nil {
 			continue
 		}
+
 		if member.ChannelID != "" {
 			byChannel[member.ChannelID] = member
 		}
+
 		if member.Name != "" {
 			byName[member.Name] = member
 		}
+
 		for _, alias := range member.GetAllAliases() {
 			if alias != "" {
 				byAlias[alias] = member
 			}
 		}
 	}
+
 	return &stubMemberProvider{
 		members:   members,
 		byChannel: byChannel,
@@ -82,6 +86,7 @@ func (p *stubMemberProvider) GetChannelIDs() []string {
 	for id := range p.byChannel {
 		ids = append(ids, id)
 	}
+
 	return ids
 }
 
@@ -102,19 +107,22 @@ func (p *stubMemberProvider) FindMembersByAlias(alias string) []*domain.Member {
 }
 
 func TestCandidateFromMember(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	mm := &MemberMatcher{logger: logger}
 
 	member := &domain.Member{ChannelID: "ch1", NameJa: "jp-name"}
+
 	candidate := mm.candidateFromMember(member, "source")
 	if candidate == nil {
-		t.Fatalf("expected candidate")
+		t.Fatal("expected candidate")
 	}
+
 	if candidate.channelID != "ch1" || candidate.memberName != "jp-name" {
 		t.Fatalf("unexpected candidate: %+v", candidate)
 	}
 
 	member = &domain.Member{ChannelID: "ch2"}
+
 	candidate = mm.candidateFromMember(member, "source")
 	if candidate == nil || candidate.memberName != "ch2" {
 		t.Fatalf("expected channel id fallback, got: %+v", candidate)
@@ -122,7 +130,7 @@ func TestCandidateFromMember(t *testing.T) {
 }
 
 func TestCandidateFromDynamic(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	provider := newStubMemberProvider([]*domain.Member{
 		{ChannelID: "ch1", Name: "member"},
 	})
@@ -141,7 +149,7 @@ func TestCandidateFromDynamic(t *testing.T) {
 }
 
 func TestTryPartialStaticMatch(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	provider := newStubMemberProvider([]*domain.Member{
 		{ChannelID: "ch1", Name: "Test Name"},
 	})
@@ -165,19 +173,21 @@ func TestMaybeCleanupMatchCache(t *testing.T) {
 	}
 
 	mm.maybeCleanupMatchCache()
+
 	if _, ok := mm.matchCache["old"]; ok {
-		t.Fatalf("expected old cache entry to be removed")
+		t.Fatal("expected old cache entry to be removed")
 	}
+
 	if _, ok := mm.matchCache["new"]; !ok {
-		t.Fatalf("expected new cache entry to remain")
+		t.Fatal("expected new cache entry to remain")
 	}
 }
 
 func TestFinalizeCandidateFallback(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	mm := &MemberMatcher{logger: logger}
 
-	channel, err := mm.finalizeCandidate(context.Background(), &matchCandidate{
+	channel, err := mm.finalizeCandidate(t.Context(), &matchCandidate{
 		channelID:  "ch1",
 		memberName: "name",
 		source:     "source",
@@ -185,14 +195,16 @@ func TestFinalizeCandidateFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if channel == nil || channel.ID != "ch1" {
 		t.Fatalf("unexpected channel: %+v", channel)
 	}
+
 	if channel.EnglishName == nil || *channel.EnglishName != "name" {
 		t.Fatalf("unexpected english name: %+v", channel.EnglishName)
 	}
 
-	channel, err = mm.finalizeCandidate(context.Background(), nil)
+	channel, err = mm.finalizeCandidate(t.Context(), nil)
 	if err != nil || channel != nil {
 		t.Fatalf("expected nil candidate result, got: %+v, err: %v", channel, err)
 	}
@@ -200,8 +212,9 @@ func TestFinalizeCandidateFallback(t *testing.T) {
 
 func TestToStringPtr(t *testing.T) {
 	if toStringPtr("") != nil {
-		t.Fatalf("expected nil for empty string")
+		t.Fatal("expected nil for empty string")
 	}
+
 	value := toStringPtr("value")
 	if value == nil || *value != "value" {
 		t.Fatalf("unexpected value: %+v", value)

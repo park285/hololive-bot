@@ -21,7 +21,6 @@
 package system
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -65,6 +64,7 @@ func TestCloneSystemStats(t *testing.T) {
 		if cloned.CPUUsage != 25.0 {
 			t.Errorf("cloned.CPUUsage = %v, want 25.0 (원본 수정에 영향받으면 안 됨)", cloned.CPUUsage)
 		}
+
 		if cloned.ServiceGoroutines[0].Goroutines != 10 {
 			t.Errorf("cloned.ServiceGoroutines[0].Goroutines = %v, want 10 (슬라이스 deep copy 실패)", cloned.ServiceGoroutines[0].Goroutines)
 		}
@@ -82,6 +82,7 @@ func TestCloneSystemStats(t *testing.T) {
 		if cloned == nil {
 			t.Fatal("cloneSystemStats with empty ServiceGoroutines returned nil")
 		}
+
 		if cloned.CPUUsage != 10.0 {
 			t.Errorf("cloned.CPUUsage = %v, want 10.0", cloned.CPUUsage)
 		}
@@ -101,6 +102,7 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 			name: "goroutines 직접 필드 형식 파싱 성공",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+
 				_ = json.NewEncoder(w).Encode(map[string]any{"goroutines": 42})
 			},
 			wantCount: 42,
@@ -110,6 +112,7 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 			name: "components.app.detail.goroutines 형식 파싱 성공",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+
 				body := map[string]any{
 					"components": map[string]any{
 						"app": map[string]any{
@@ -119,6 +122,7 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 						},
 					},
 				}
+
 				_ = json.NewEncoder(w).Encode(body)
 			},
 			wantCount: 30,
@@ -136,6 +140,7 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 			name: "잘못된 JSON은 (0, false) 반환",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+
 				_, _ = w.Write([]byte("{invalid json"))
 			},
 			wantCount: 0,
@@ -156,11 +161,12 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 				endpoints:  nil,
 			}
 
-			gotCount, gotOK := c.fetchGoroutineCount(context.Background(), srv.URL)
+			gotCount, gotOK := c.fetchGoroutineCount(t.Context(), srv.URL)
 
 			if gotOK != tc.wantOK {
 				t.Errorf("fetchGoroutineCount() ok = %v, want %v", gotOK, tc.wantOK)
 			}
+
 			if gotCount != tc.wantCount {
 				t.Errorf("fetchGoroutineCount() count = %v, want %v", gotCount, tc.wantCount)
 			}

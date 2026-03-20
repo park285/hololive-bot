@@ -52,6 +52,7 @@ func initAlarmDependencies(
 	memberDataProvider := memberServiceAdapter
 
 	resolved := providers.ResolveAlarmAdvanceMinutes(advanceMinutes, scraperProxyEnabled, logger)
+
 	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, chzzkClient, twitchClient, memberDataProvider, alarmRepository, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide alarm service: %w", err)

@@ -23,14 +23,14 @@ package command
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type liveStreamProviderStub struct {
@@ -80,12 +80,15 @@ func TestBuildChzzkLiveStreams(t *testing.T) {
 	if len(streams) != 1 {
 		t.Fatalf("expected 1 stream, got %d", len(streams))
 	}
+
 	if streams[0].ChannelID != "yt-1" {
 		t.Fatalf("channel_id = %q, want yt-1", streams[0].ChannelID)
 	}
+
 	if streams[0].Title != "치지직 방송" {
 		t.Fatalf("title = %q, want 치지직 방송", streams[0].Title)
 	}
+
 	if !streams[0].IsChzzkOnly {
 		t.Fatal("expected chzzk-only stream")
 	}
@@ -105,9 +108,11 @@ func TestCollectChzzkLiveStreams_UsesBatchResult(t *testing.T) {
 		members,
 		func(channelIDs []string) ([]chzzk.LiveData, error) {
 			batchCalls++
+
 			if len(channelIDs) != 2 {
 				t.Fatalf("unexpected channelIDs: %#v", channelIDs)
 			}
+
 			return []chzzk.LiveData{
 				{ChannelID: "cz-1", LiveTitle: "batch-live-1"},
 				{ChannelID: "cz-2", LiveTitle: "batch-live-2"},
@@ -118,12 +123,15 @@ func TestCollectChzzkLiveStreams_UsesBatchResult(t *testing.T) {
 	if batchCalls != 1 {
 		t.Fatalf("batchCalls = %d, want 1", batchCalls)
 	}
+
 	if len(streams) != 2 {
 		t.Fatalf("expected 2 streams, got %d", len(streams))
 	}
+
 	if streams[0].Title != "batch-live-1" {
 		t.Fatalf("title = %q, want batch-live-1", streams[0].Title)
 	}
+
 	if streams[1].Title != "batch-live-2" {
 		t.Fatalf("title = %q, want batch-live-2", streams[1].Title)
 	}
@@ -155,7 +163,7 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 	}})
 	deps := &Dependencies{
 		Holodex:   &liveStreamProviderStub{},
-		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
@@ -164,16 +172,18 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 			t.Fatal("unexpected send error")
 			return nil
 		},
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	ctx := context.WithValue(context.Background(), testContextKey("request-id"), "live-propagation")
+	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "live-propagation")
+
 	err := NewLiveCommand(deps).Execute(ctx, &domain.CommandContext{Room: "room-1"}, map[string]any{
 		"member": "Aqua",
 	})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
+
 	if !memberProvider.ctxCapture.saw(ctx) {
 		t.Fatal("expected matcher provider to receive request context")
 	}

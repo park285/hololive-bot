@@ -35,7 +35,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/app"
 )
 
-// Version: 빌드 시 ldflags로 주입됨 (예: -ldflags="-X main.Version=1.0.0")
+// Version: 빌드 시 ldflags로 주입됨 (예: -ldflags="-X main.Version=1.0.0").
 var Version = "dev"
 
 func main() {
@@ -47,6 +47,7 @@ func main() {
 
 	// Graceful Shutdown을 위해 os.Exit 대신 exitCode 변수 사용
 	var exitCode int
+
 	defer func() {
 		os.Exit(exitCode)
 	}()
@@ -54,7 +55,9 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+
 		exitCode = 1
+
 		return
 	}
 
@@ -69,7 +72,9 @@ func main() {
 	}, "bot.log", cfg.Logging.Level)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+
 		exitCode = 1
+
 		return
 	}
 
@@ -80,12 +85,17 @@ func main() {
 
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
 	runtime, err := app.BuildRuntime(buildCtx, cfg, logger)
+
 	buildCancel()
+
 	if err != nil {
 		logger.Error("Failed to assemble application services", slog.Any("error", err))
+
 		exitCode = 1
+
 		return
 	}
+
 	defer runtime.Close()
 
 	runtime.Run()

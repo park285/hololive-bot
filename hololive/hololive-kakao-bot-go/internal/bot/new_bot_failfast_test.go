@@ -21,24 +21,26 @@
 package bot
 
 import (
-	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
 func testBotLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func callNewBotSafely(deps *Dependencies) (_ *Bot, _ error, recovered any) {
 	defer func() {
 		recovered = recover()
 	}()
+
 	created, err := NewBot(deps)
+
 	return created, err, nil
 }
 
@@ -93,14 +95,17 @@ func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
 			if recovered != nil {
 				t.Fatalf("NewBot panic = %v", recovered)
 			}
+
 			if err == nil {
 				t.Fatalf("NewBot() error = nil, want %q", tc.wantErr)
 			}
+
 			if err.Error() != tc.wantErr {
 				t.Fatalf("NewBot() error = %q, want %q", err.Error(), tc.wantErr)
 			}
+
 			if created != nil {
-				t.Fatalf("NewBot() result must be nil on fail-fast error")
+				t.Fatal("NewBot() result must be nil on fail-fast error")
 			}
 		})
 	}

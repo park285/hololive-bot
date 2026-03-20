@@ -24,12 +24,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// getAlarmKey: 방 기반 알람 키 (room_id가 PRIMARY)
+// getAlarmKey: 방 기반 알람 키 (room_id가 PRIMARY).
 func (as *AlarmService) getAlarmKey(roomID string) string {
 	return AlarmKeyPrefix + roomID
 }
 
-// getRegistryKey: 방 기반 레지스트리 키 (room_id가 PRIMARY)
+// getRegistryKey: 방 기반 레지스트리 키 (room_id가 PRIMARY).
 func (as *AlarmService) getRegistryKey(roomID string) string {
 	return roomID
 }

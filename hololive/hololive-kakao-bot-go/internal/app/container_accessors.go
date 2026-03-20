@@ -21,6 +21,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -37,12 +38,14 @@ import (
 // NewBot: 설정된 의존성을 사용하여 새로운 Bot 인스턴스를 생성합니다.
 func (c *Container) NewBot() (*bot.Bot, error) {
 	if c.botDeps == nil {
-		return nil, fmt.Errorf("bot dependencies not initialized")
+		return nil, errors.New("bot dependencies not initialized")
 	}
+
 	b, err := bot.NewBot(c.botDeps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot instance: %w", err)
 	}
+
 	return b, nil
 }
 

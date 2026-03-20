@@ -33,7 +33,7 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 	timeout, retryInterval, pingTimeout time.Duration,
 ) error {
 	if l == nil || l.irisClient == nil {
-		return fmt.Errorf("wait for iris ready: iris client is not configured")
+		return errors.New("wait for iris ready: iris client is not configured")
 	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -45,10 +45,13 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 	attempt := 0
 	startedAt := time.Now()
 	lastWarnLoggedAt := time.Time{}
+
 	for {
 		attempt++
+
 		pingCtx, pingCancel := context.WithTimeout(waitCtx, pingTimeout)
 		ready := l.irisClient.Ping(pingCtx)
+
 		pingCancel()
 
 		if ready {
@@ -59,6 +62,7 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 					slog.Duration("elapsed", time.Since(startedAt)),
 				)
 			}
+
 			return nil
 		}
 
@@ -70,6 +74,7 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 				slog.Duration("retry_interval", retryInterval),
 				slog.Duration("elapsed", now.Sub(startedAt)),
 			)
+
 			lastWarnLoggedAt = now
 		}
 
@@ -78,6 +83,7 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
 				return fmt.Errorf("wait for iris ready: timeout after %s", timeout)
 			}
+
 			return fmt.Errorf("wait for iris ready: canceled: %w", waitCtx.Err())
 		case <-ticker.C:
 		}

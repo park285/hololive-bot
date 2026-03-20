@@ -47,7 +47,7 @@ const (
 	alarmPersistStripeQueueCap = 256
 )
 
-// alarmServiceCloseOnce: 생성된 AlarmService 인스턴스 레지스트리 (CloseAllAlarmServices 용)
+// alarmServiceCloseOnce: 생성된 AlarmService 인스턴스 레지스트리 (CloseAllAlarmServices 용).
 var alarmServiceCloseOnce sync.Map // map[*AlarmService]struct{}
 
 var (
@@ -69,11 +69,13 @@ func NewAlarmService(
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	initAlarmMetrics()
 
 	targetMinutes := buildTargetMinutes(advanceMinutes)
 
 	var writer alarmWriter
+
 	if alarmRepo != nil {
 		writer = alarmRepo
 	}
@@ -104,9 +106,11 @@ func buildTargetMinutes(advanceMinutes []int) []int {
 		if minute <= 0 {
 			continue
 		}
+
 		if _, exists := seen[minute]; exists {
 			continue
 		}
+
 		seen[minute] = struct{}{}
 		filtered = append(filtered, minute)
 	}
@@ -138,6 +142,7 @@ func (as *AlarmService) getTargetMinutes() []int {
 
 	targetMinutes := make([]int, len(as.targetMinutes))
 	copy(targetMinutes, as.targetMinutes)
+
 	return targetMinutes
 }
 
@@ -147,6 +152,7 @@ func (as *AlarmService) GetTargetMinutes() []int {
 
 func (as *AlarmService) UpdateAlarmAdvanceMinutes(_ context.Context, alarmAdvanceMinutes int) []int {
 	normalized := buildRuntimeTargetMinutes(alarmAdvanceMinutes)
+
 	as.targetMinutesMu.Lock()
 	as.targetMinutes = normalized
 	as.targetMinutesMu.Unlock()
@@ -166,11 +172,13 @@ func (as *AlarmService) Close(ctx context.Context) error {
 	if as == nil {
 		return nil
 	}
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	var closeErr error
+
 	as.closeOnce.Do(func() {
 		if as.persistExecutor == nil {
 			return
@@ -190,6 +198,7 @@ func (as *AlarmService) Close(ctx context.Context) error {
 // CloseAllAlarmServices closes all AlarmService instances created via NewAlarmService.
 func CloseAllAlarmServices(ctx context.Context) error {
 	var joinedErr error
+
 	alarmServiceCloseOnce.Range(func(key, _ any) bool {
 		svc, ok := key.(*AlarmService)
 		if !ok || svc == nil {
@@ -199,7 +208,9 @@ func CloseAllAlarmServices(ctx context.Context) error {
 		if err := svc.Close(ctx); err != nil {
 			joinedErr = stdErrors.Join(joinedErr, err)
 		}
+
 		alarmServiceCloseOnce.Delete(svc)
+
 		return true
 	})
 
@@ -207,10 +218,12 @@ func CloseAllAlarmServices(ctx context.Context) error {
 }
 
 // AddAlarm: 특정 채팅방에 대해 특정 멤버(채널)의 방송 알림을 추가합니다.
-// 방 기반 시스템: room_id가 PRIMARY 키, user_id는 감사(audit) 목적으로 DB에만 기록
+// 방 기반 시스템: room_id가 PRIMARY 키, user_id는 감사(audit) 목적으로 DB에만 기록.
 func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool, error) {
 	startedAt := time.Now()
+
 	var opErr error
+
 	defer func() {
 		observeAlarmServiceOperation("add", startedAt, opErr)
 	}()
@@ -220,16 +233,19 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 	memberName := req.MemberName
 	roomName := req.RoomName
 	userName := req.UserName
+
 	alarmTypes := req.AlarmTypes
 	if len(alarmTypes) == 0 {
 		alarmTypes = domain.DefaultAlarmTypes
 	}
 
 	alarmKey := as.getAlarmKey(roomID)
+
 	added, err := as.cache.SAdd(ctx, alarmKey, []string{channelID})
 	if err != nil {
 		opErr = fmt.Errorf("add alarm: %w", err)
 		as.logger.Error("Failed to add alarm", slog.Any("error", err))
+
 		return false, opErr
 	}
 
@@ -240,11 +256,14 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 
 	// Pipeline Redis writes for alarm type subscriptions
 	client := as.cache.GetClient()
+
 	saddCmds := make([]valkey.Completed, len(alarmTypes))
 	for i, alarmType := range alarmTypes {
 		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
+
 		saddCmds[i] = client.B().Sadd().Key(subsKey).Member(registryKey).Build()
 	}
+
 	results := as.cache.DoMulti(ctx, saddCmds...)
 	for i, result := range results {
 		if err := result.Error(); err != nil {
@@ -265,6 +284,7 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 	if roomName != "" {
 		_ = as.cache.HSet(ctx, RoomNamesCacheKey, roomID, roomName)
 	}
+
 	if userName != "" {
 		_ = as.cache.HSet(ctx, UserNamesCacheKey, req.UserID, userName)
 	}
@@ -302,10 +322,12 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 	return added > 0, nil
 }
 
-// RemoveAlarm: 특정 채팅방에서 특정 멤버(채널)의 방송 알림을 해제합니다. (방 기반)
+// RemoveAlarm: 특정 채팅방에서 특정 멤버(채널)의 방송 알림을 해제합니다. (방 기반).
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
 	startedAt := time.Now()
+
 	var opErr error
+
 	defer func() {
 		observeAlarmServiceOperation("remove", startedAt, opErr)
 	}()
@@ -315,10 +337,12 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 	}
 
 	alarmKey := as.getAlarmKey(roomID)
+
 	removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
 	if err != nil {
 		opErr = fmt.Errorf("remove alarm: %w", err)
 		as.logger.Error("Failed to remove alarm", slog.Any("error", err))
+
 		return false, opErr
 	}
 
@@ -362,9 +386,11 @@ func (as *AlarmService) removeChannelSubscribers(
 	alarmTypes domain.AlarmTypes,
 ) {
 	builder := as.cache.Builder()
+
 	sremCmds := make([]valkey.Completed, 0, len(alarmTypes))
 	for _, alarmType := range alarmTypes {
 		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
+
 		sremCmds = append(sremCmds, builder.Srem().Key(subsKey).Member(registryKey).Build())
 	}
 
@@ -382,18 +408,22 @@ func (as *AlarmService) removeChannelSubscribers(
 	smembersCmds := make([]valkey.Completed, 0, len(alarmTypes))
 	for _, alarmType := range alarmTypes {
 		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
+
 		smembersCmds = append(smembersCmds, builder.Smembers().Key(subsKey).Build())
 	}
+
 	if len(smembersCmds) == 0 {
 		return
 	}
 
 	smembersResults := as.cache.DoMulti(ctx, smembersCmds...)
+
 	cleanupCmds := make([]valkey.Completed, 0, len(smembersResults))
 	for i, res := range smembersResults {
 		members, memErr := res.AsStrSlice()
 		if memErr == nil && len(members) == 0 {
 			subsKey := as.channelSubscribersKeyByType(channelID, alarmTypes[i])
+
 			cleanupCmds = append(cleanupCmds, builder.Del().Key(subsKey).Build())
 		}
 	}
@@ -406,30 +436,36 @@ func (as *AlarmService) removeChannelSubscribers(
 // GetRoomAlarms: 해당 방이 구독 중인 모든 채널 ID 목록을 반환합니다.
 func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
 	alarmKey := as.getAlarmKey(roomID)
+
 	channelIDs, err := as.cache.SMembers(ctx, alarmKey)
 	if err != nil {
 		as.logger.Error("Failed to get room alarms", slog.Any("error", err))
 		return []string{}, fmt.Errorf("get room alarms: %w", err)
 	}
+
 	return channelIDs, nil
 }
 
 // GetRoomAlarmsWithTypes: 해당 방의 알람 목록을 타입 정보와 함께 반환합니다.
 func (as *AlarmService) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
 	if as.alarmRepo == nil {
-		return nil, fmt.Errorf("alarm repository not configured")
+		return nil, stdErrors.New("alarm repository not configured")
 	}
+
 	alarms, err := as.alarmRepo.FindByRoom(ctx, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find room alarms: %w", err)
 	}
+
 	return alarms, nil
 }
 
 // ClearRoomAlarms: 해당 방의 모든 알림 설정을 삭제(초기화)합니다.
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	startedAt := time.Now()
+
 	var opErr error
+
 	defer func() {
 		observeAlarmServiceOperation("clear", startedAt, opErr)
 	}()
@@ -445,18 +481,22 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 	}
 
 	alarmKey := as.getAlarmKey(roomID)
+
 	removed, err := as.cache.SRem(ctx, alarmKey, alarms)
 	if err != nil {
 		opErr = fmt.Errorf("clear room alarms: %w", err)
 		as.logger.Error("Failed to clear room alarms", slog.Any("error", err))
+
 		return 0, opErr
 	}
 
 	registryKey := as.getRegistryKey(roomID)
 
 	as.clearChannelSubscribersPipeline(ctx, alarms, registryKey)
+
 	for _, channelID := range alarms {
 		as.cleanupChannelRegistryIfEmpty(ctx, channelID)
+
 		if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
 			as.logger.Warn("Failed to sync platform alarm mapping after clear",
 				slog.Any("error", syncErr),
@@ -486,20 +526,24 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 	client := as.cache.GetClient()
 
 	channelSubsKeys := make([]string, 0, len(alarms)*len(domain.AllAlarmTypes))
+
 	sremCmds := make([]valkey.Completed, 0, len(alarms)*len(domain.AllAlarmTypes))
 	for _, channelID := range alarms {
 		for _, alarmType := range domain.AllAlarmTypes {
 			key := as.channelSubscribersKeyByType(channelID, alarmType)
+
 			channelSubsKeys = append(channelSubsKeys, key)
 			sremCmds = append(sremCmds, client.B().Srem().Key(key).Member(registryKey).Build())
 		}
 	}
+
 	_ = as.cache.DoMulti(ctx, sremCmds...)
 
 	smembersCmds := make([]valkey.Completed, len(channelSubsKeys))
 	for i, key := range channelSubsKeys {
 		smembersCmds[i] = client.B().Smembers().Key(key).Build()
 	}
+
 	smembersResults := as.cache.DoMulti(ctx, smembersCmds...)
 
 	cleanupCmds := make([]valkey.Completed, 0, len(smembersResults))
@@ -508,6 +552,7 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 		if err != nil || len(members) > 0 {
 			continue
 		}
+
 		cleanupCmds = append(cleanupCmds, client.B().Del().Key(channelSubsKeys[i]).Build())
 	}
 
@@ -519,6 +564,7 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, channelID string) {
 	allEmpty := true
 	builder := as.cache.Builder()
+
 	allSubsKeys := make([]string, 0, len(domain.AllAlarmTypes))
 	for _, alarmType := range domain.AllAlarmTypes {
 		allSubsKeys = append(allSubsKeys, as.channelSubscribersKeyByType(channelID, alarmType))

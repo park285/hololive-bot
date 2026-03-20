@@ -75,6 +75,7 @@ func registerAPIRoutes(
 
 	// API Key 인증 미들웨어 적용 (apiKey가 빈 문자열이면 인증 건너뜀)
 	holoAPI.Use(middleware.APIKeyAuthMiddleware(apiKey))
+
 	if constants.APIRateLimitConfig.Enabled {
 		holoAPI.Use(apiRateLimitMiddleware(cacheSvc, logger))
 	}
@@ -94,6 +95,7 @@ func apiRateLimitMiddleware(cacheSvc cache.Client, logger *slog.Logger) gin.Hand
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	if cacheSvc == nil {
 		logger.Warn("api_rate_limit_disabled_no_cache")
 		return func(c *gin.Context) { c.Next() }
@@ -114,6 +116,7 @@ func apiRateLimitMiddleware(cacheSvc cache.Client, logger *slog.Logger) gin.Hand
 		window:  window,
 		logger:  logger,
 	}
+
 	return handler.Handle
 }
 
@@ -128,16 +131,20 @@ func (h apiRateLimitHandler) Handle(c *gin.Context) {
 	if err != nil {
 		h.logger.Warn("api_rate_limit_check_failed", slog.String("ip", ip), slog.String("error", err.Error()))
 		c.Next()
+
 		return
 	}
 
 	c.Header("X-RateLimit-Limit", strconv.Itoa(decision.Limit))
 	c.Header("X-RateLimit-Remaining", strconv.Itoa(decision.Remaining))
+
 	if !decision.Allowed {
 		if decision.RetryAfter > 0 {
 			c.Header("Retry-After", strconv.Itoa(int(decision.RetryAfter.Seconds())))
 		}
+
 		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+
 		return
 	}
 

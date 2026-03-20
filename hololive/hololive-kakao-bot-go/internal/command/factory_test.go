@@ -55,6 +55,7 @@ func TestBuildCommandsSkipsNilEntries(t *testing.T) {
 	if len(commands) != 1 {
 		t.Fatalf("len(commands) = %d, want 1", len(commands))
 	}
+
 	if commands[0].Name() != "ok" {
 		t.Fatalf("commands[0].Name() = %q, want %q", commands[0].Name(), "ok")
 	}

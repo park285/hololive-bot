@@ -26,7 +26,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// AmbiguousMatchError: 동명이인으로 인해 정확한 매칭을 할 수 없을 때 반환되는 에러
+// AmbiguousMatchError: 동명이인으로 인해 정확한 매칭을 할 수 없을 때 반환되는 에러.
 type AmbiguousMatchError struct {
 	Query      string
 	Candidates []*domain.Member

@@ -22,6 +22,7 @@ package chzzk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -35,7 +36,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/errors"
+	apperrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
 
 const (
@@ -82,6 +83,7 @@ func NewClientWithConfig(cfg ClientConfig) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+
 	return &Client{
 		httpClient:     cfg.HTTPClient,
 		baseURL:        baseURL,
@@ -112,17 +114,20 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetLiveStatusOp,
 			StatusCode: 0,
 			Err:        err,
 		}
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetLiveStatusOp,
 			StatusCode: resp.StatusCode,
 		}
@@ -139,6 +144,7 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 	}
 
 	c.resetCircuit()
+
 	return liveStatusResp.Content, nil
 }
 
@@ -158,17 +164,20 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetScheduledLivesOp,
 			StatusCode: 0,
 			Err:        err,
 		}
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetScheduledLivesOp,
 			StatusCode: resp.StatusCode,
 		}
@@ -226,14 +235,18 @@ func (c *Client) rejectIfCircuitOpen() error {
 	}
 
 	c.circuitMu.RLock()
+
 	var remainingMs int64
+
 	if c.circuitOpenUntil != nil {
 		remainingMs = time.Until(*c.circuitOpenUntil).Milliseconds()
 	}
+
 	c.circuitMu.RUnlock()
 
 	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remainingMs))
-	return errors.CircuitOpenError{RetryAfterMs: remainingMs}
+
+	return apperrors.CircuitOpenError{RetryAfterMs: remainingMs}
 }
 
 func (c *Client) handleRequestFailure() {
@@ -262,6 +275,7 @@ func (c *Client) openCircuit() {
 	defer c.circuitMu.Unlock()
 
 	resetTime := time.Now().Add(constants.CircuitBreakerConfig.ResetTimeout)
+
 	c.circuitOpenUntil = &resetTime
 	c.failureCount = 0
 
@@ -283,12 +297,13 @@ func (c *Client) incrementFailureCount() int {
 	defer c.circuitMu.Unlock()
 
 	c.failureCount++
+
 	return c.failureCount
 }
 
 func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesResponse, error) {
 	if !c.HasOpenAPICredentials() {
-		return nil, fmt.Errorf("chzzk open API credentials not configured")
+		return nil, errors.New("chzzk open API credentials not configured")
 	}
 
 	if err := c.rejectIfCircuitOpen(); err != nil {
@@ -296,14 +311,17 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 	}
 
 	params := url.Values{}
+
 	if size > 0 && size <= 20 {
 		params.Set("size", fmt.Sprintf("%d", size))
 	}
+
 	if next != "" {
 		params.Set("next", next)
 	}
 
 	reqURL := c.openAPIBaseURL + "/open/v1/lives"
+
 	if len(params) > 0 {
 		reqURL += "?" + params.Encode()
 	}
@@ -316,17 +334,20 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetLivesOp,
 			StatusCode: 0,
 			Err:        err,
 		}
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetLivesOp,
 			StatusCode: resp.StatusCode,
 		}
@@ -347,12 +368,13 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 	}
 
 	c.resetCircuit()
+
 	return &apiResp.Content, nil
 }
 
 func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*ChannelsResponse, error) {
 	if !c.HasOpenAPICredentials() {
-		return nil, fmt.Errorf("chzzk open API credentials not configured")
+		return nil, errors.New("chzzk open API credentials not configured")
 	}
 
 	if len(channelIDs) == 0 {
@@ -380,17 +402,20 @@ func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*Channel
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.handleRequestFailure()
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetChannelsOp,
 			StatusCode: 0,
 			Err:        err,
 		}
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.handleStatusCodeError(resp.StatusCode)
-		return nil, &errors.APIError{
+
+		return nil, &apperrors.APIError{
 			Operation:  chzzkGetChannelsOp,
 			StatusCode: resp.StatusCode,
 		}
@@ -411,12 +436,13 @@ func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*Channel
 	}
 
 	c.resetCircuit()
+
 	return &apiResp.Content, nil
 }
 
 func (c *Client) GetLivesByChannelIDs(ctx context.Context, channelIDs []string) ([]LiveData, error) {
 	if !c.HasOpenAPICredentials() {
-		return nil, fmt.Errorf("chzzk open API credentials not configured")
+		return nil, errors.New("chzzk open API credentials not configured")
 	}
 
 	targets := normalizeChannelTargets(channelIDs)
@@ -438,6 +464,7 @@ func normalizeChannelTargets(channelIDs []string) []string {
 		if channelID == "" {
 			continue
 		}
+
 		targetSet[channelID] = struct{}{}
 	}
 
@@ -463,6 +490,7 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 			if err != nil {
 				return fmt.Errorf("get live status for %s: %w", channelID, err)
 			}
+
 			if status == nil || !strings.EqualFold(status.Status, "OPEN") {
 				return nil
 			}
@@ -475,6 +503,7 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 				LiveCategoryValue:   status.LiveCategoryValue,
 			}
 			mu.Unlock()
+
 			return nil
 		})
 	}
@@ -484,11 +513,13 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 	}
 
 	result := make([]LiveData, 0, len(liveMap))
+
 	for _, channelID := range channelIDs {
 		live, ok := liveMap[channelID]
 		if !ok {
 			continue
 		}
+
 		result = append(result, live)
 	}
 
@@ -515,9 +546,11 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 			if _, ok := targets[resp.Data[i].ChannelID]; !ok {
 				continue
 			}
+
 			if _, exists := found[resp.Data[i].ChannelID]; exists {
 				continue
 			}
+
 			found[resp.Data[i].ChannelID] = struct{}{}
 			result = append(result, resp.Data[i])
 		}
@@ -525,6 +558,7 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 		if len(found) == len(targets) || resp.Page.Next == "" {
 			break
 		}
+
 		next = resp.Page.Next
 	}
 

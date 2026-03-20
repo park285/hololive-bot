@@ -21,6 +21,7 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"strings"
@@ -31,7 +32,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// ScheduleCommand: 특정 멤버의 향후 방송 일정을 조회하여 보여주는 명령어
+// ScheduleCommand: 특정 멤버의 향후 방송 일정을 조회하여 보여주는 명령어.
 type ScheduleCommand struct {
 	BaseCommand
 }
@@ -65,9 +66,12 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 		if shouldSuppressSchedulePrompt(cmdCtx, rawCommandToken) {
 			return nil
 		}
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrScheduleNeedMemberName)
 	}
+
 	days := 7
+
 	if d, ok := params["days"]; ok {
 		switch v := d.(type) {
 		case float64:
@@ -80,6 +84,7 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 	if days < 1 {
 		days = 7
 	}
+
 	if days > 30 {
 		days = 30
 	}
@@ -90,12 +95,14 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 	}
 
 	hours := days * 24
+
 	streams, err := c.Deps().Holodex.GetChannelSchedule(ctx, channel.ID, hours, true)
 	if err != nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrScheduleQueryFailed)
 	}
 
 	message := c.Deps().Formatter.ChannelSchedule(ctx, channel, streams, days)
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -105,7 +112,7 @@ func (c *ScheduleCommand) ensureDeps() error {
 	}
 
 	if c.Deps().Matcher == nil || c.Deps().Holodex == nil || c.Deps().Formatter == nil {
-		return fmt.Errorf("schedule command services not configured")
+		return errors.New("schedule command services not configured")
 	}
 
 	return nil
@@ -130,5 +137,6 @@ func shouldSuppressSchedulePrompt(cmdCtx *domain.CommandContext, rawToken string
 	message = stringutil.TrimSpace(message)
 
 	normalizedMessage := stringutil.Normalize(message)
+
 	return normalizedMessage == "멤버" || normalizedMessage == "member"
 }

@@ -38,7 +38,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-// ProvideAlarmService - 알림 서비스 생성
+// ProvideAlarmService - 알림 서비스 생성.
 func ProvideAlarmService(
 	advanceMinutes []int,
 	cacheSvc cache.Client,
@@ -62,10 +62,11 @@ func ProvideAlarmService(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create alarm service: %w", err)
 	}
+
 	return svc, nil
 }
 
-// ProvideAlarmRepository - 알람 저장소 생성 (DB 영속화)
+// ProvideAlarmRepository - 알람 저장소 생성 (DB 영속화).
 func ProvideAlarmRepository(
 	postgres database.Client,
 	logger *slog.Logger,
@@ -73,18 +74,21 @@ func ProvideAlarmRepository(
 	return alarm.NewRepository(postgres, logger)
 }
 
-// ProvideAlarmWorkerPool - 알림 처리용 워커풀 생성
+// ProvideAlarmWorkerPool - 알림 처리용 워커풀 생성.
 func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
 	cfg := workerpool.DefaultConfig()
+
 	cfg.Size = 10
+
 	pool, err := workerpool.New(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create alarm worker pool: %w", err)
 	}
+
 	return pool, nil
 }
 
-// ProvideMemberMatcher - 멤버 매칭 서비스 생성
+// ProvideMemberMatcher - 멤버 매칭 서비스 생성.
 func ProvideMemberMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,

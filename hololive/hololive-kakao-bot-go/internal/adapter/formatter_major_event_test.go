@@ -21,16 +21,14 @@
 package adapter
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
+	"gorm.io/gorm"
 )
 
 func TestFormatMajorEventDates(t *testing.T) {
@@ -46,14 +44,14 @@ func TestFormatMajorEventDates(t *testing.T) {
 		},
 		{
 			name:     "single date",
-			dates:    []time.Time{time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)},
+			dates:    []time.Time{time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)},
 			contains: "2026년 3월 6일",
 		},
 		{
 			name: "multiple dates (range)",
 			dates: []time.Time{
-				time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC),
-				time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC),
+				time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC),
 			},
 			contains: "~",
 		},
@@ -75,6 +73,7 @@ func containsString(s, substr string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -93,20 +92,20 @@ func TestFormatMajorEventDatesFromDB(t *testing.T) {
 		},
 		{
 			name:     "single date (end nil)",
-			start:    new(time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)),
+			start:    new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
 			end:      nil,
 			contains: "2026년 3월 6일",
 		},
 		{
 			name:     "same start and end",
-			start:    new(time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)),
-			end:      new(time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)),
+			start:    new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
+			end:      new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
 			contains: "2026년 3월 6일",
 		},
 		{
 			name:     "date range",
-			start:    new(time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)),
-			end:      new(time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC)),
+			start:    new(time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)),
+			end:      new(time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC)),
 			contains: "~",
 		},
 	}
@@ -129,7 +128,7 @@ func TestFormatMajorEventMonthlySummary_NoDuplicateListWhenLLMSummaryExists(t *t
 	renderer := setupMajorEventRenderer(t)
 	formatter := NewResponseFormatter("!", renderer)
 
-	start := time.Date(2026, 2, 20, 0, 0, 0, 0, time.UTC)
+	start := time.Date(2026, time.February, 20, 0, 0, 0, 0, time.UTC)
 	events := []domain.MajorEvent{
 		{
 			Title:          "Hoshimachi Suisei Live “SuperNova: REBOOT”",
@@ -144,11 +143,12 @@ func TestFormatMajorEventMonthlySummary_NoDuplicateListWhenLLMSummaryExists(t *t
 - 솔로 라이브 개최
 https://hololive.hololivepro.com/events/supernova-reboot/`
 
-	output := formatter.FormatMajorEventMonthlySummary(context.Background(), events, llmSummary)
+	output := formatter.FormatMajorEventMonthlySummary(t.Context(), events, llmSummary)
 
 	if !containsString(output, llmSummary) {
 		t.Fatalf("output should contain llm summary, got: %s", output)
 	}
+
 	if containsString(output, "1. Hoshimachi Suisei Live") {
 		t.Fatalf("output should not contain fallback event list when llm summary exists, got: %s", output)
 	}

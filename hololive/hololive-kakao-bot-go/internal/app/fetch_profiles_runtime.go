@@ -27,7 +27,7 @@ import (
 	"net/http"
 )
 
-// FetchProfilesRuntime: 프로필 수집 작업을 실행하기 위한 런타임 환경
+// FetchProfilesRuntime: 프로필 수집 작업을 실행하기 위한 런타임 환경.
 type FetchProfilesRuntime struct {
 	Logger     *slog.Logger
 	HTTPClient *http.Client
@@ -52,6 +52,7 @@ func BuildFetchProfilesRuntime(ctx context.Context) (*FetchProfilesRuntime, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize fetch profiles runtime: %w", err)
 	}
+
 	runtime.cleanup = cleanup
 
 	return runtime, nil

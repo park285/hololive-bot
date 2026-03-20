@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const ChzzkTimeLayout = "2006-01-02 15:04:05"
+const ChzzkTimeLayout = time.DateTime
 
 type LiveStatusResponse struct {
 	Code    int                `json:"code"`

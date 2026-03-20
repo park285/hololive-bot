@@ -52,6 +52,7 @@ func initScraperHolodexProfileFoundation(
 		Enabled: cfg.Scraper.ProxyEnabled,
 		URL:     cfg.Scraper.ProxyURL,
 	}
+
 	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.cacheService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
@@ -64,6 +65,7 @@ func initScraperHolodexProfileFoundation(
 		sharedRL,
 		logger,
 	)
+
 	holodexService, err := providers.ProvideHolodexService(
 		cfg.Holodex.BaseURL,
 		holodexAPIKey,

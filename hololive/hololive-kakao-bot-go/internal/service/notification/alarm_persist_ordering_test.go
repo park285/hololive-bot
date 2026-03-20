@@ -25,9 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/stretchr/testify/require"
 )
 
 type blockingAlarmWriter struct {
@@ -40,7 +39,9 @@ func (w *blockingAlarmWriter) Add(context.Context, *domain.Alarm) error {
 	case w.started <- "add":
 	default:
 	}
+
 	<-w.block
+
 	return nil
 }
 
@@ -49,6 +50,7 @@ func (w *blockingAlarmWriter) Remove(context.Context, string, string) error {
 	case w.started <- "remove":
 	default:
 	}
+
 	return nil
 }
 
@@ -57,6 +59,7 @@ func (w *blockingAlarmWriter) ClearByRoom(context.Context, string) (int64, error
 	case w.started <- "clear":
 	default:
 	}
+
 	return 0, nil
 }
 
@@ -83,7 +86,7 @@ func TestAlarmService_PersistWriteThrough_IsRoomKeyedSerialized(t *testing.T) {
 	case got := <-writer.started:
 		require.Equal(t, "add", got)
 	case <-time.After(1 * time.Second):
-		t.Fatalf("add persist did not start in time")
+		t.Fatal("add persist did not start in time")
 	}
 
 	as.removeAlarmAsync("room-1", "ch-1")
@@ -100,10 +103,11 @@ func TestAlarmService_PersistWriteThrough_IsRoomKeyedSerialized(t *testing.T) {
 	case got := <-writer.started:
 		require.Equal(t, "remove", got)
 	case <-time.After(1 * time.Second):
-		t.Fatalf("remove persist did not start in time")
+		t.Fatal("remove persist did not start in time")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
+
 	require.NoError(t, executor.ShutdownWait(ctx))
 }

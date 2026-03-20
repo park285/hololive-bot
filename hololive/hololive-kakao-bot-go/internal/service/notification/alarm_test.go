@@ -55,6 +55,7 @@ func TestBuildTargetMinutes(t *testing.T) {
 			if len(got) != len(tc.expected) {
 				t.Fatalf("unexpected length: got=%v expected=%v", got, tc.expected)
 			}
+
 			for i := range got {
 				if got[i] != tc.expected[i] {
 					t.Fatalf("unexpected targets: got=%v expected=%v", got, tc.expected)

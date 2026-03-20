@@ -22,34 +22,38 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
 type stubStreamProvider struct{}
 
-func (s *stubStreamProvider) GetLiveStreams(context.Context) ([]*domain.Stream, error) { return nil, nil }
+func (s *stubStreamProvider) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
+	return nil, nil
+}
 func (s *stubStreamProvider) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
 	return nil, nil
 }
+
 func (s *stubStreamProvider) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
 	return nil, nil
 }
-func (s *stubStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) { return nil, nil }
+func (s *stubStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) {
+	return nil, nil
+}
 
 func TestContainerClose_CallsCleanupOnce(t *testing.T) {
 	t.Parallel()
@@ -92,16 +96,16 @@ func TestContainerGetterMappings(t *testing.T) {
 
 	container := &Container{
 		botDeps: &bot.Dependencies{
-			Cache:      cacheSvc,
-			MemberRepo: memberRepo,
+			Cache:       cacheSvc,
+			MemberRepo:  memberRepo,
 			MemberCache: memberCache,
-			Alarm:      alarmSvc,
-			Holodex:    streamSvc,
-			Service:    youtubeSvc,
-			Scheduler:  scheduler,
-			Activity:   activityLogger,
-			Settings:   settingsSvc,
-			ACL:        aclSvc,
+			Alarm:       alarmSvc,
+			Holodex:     streamSvc,
+			Service:     youtubeSvc,
+			Scheduler:   scheduler,
+			Activity:    activityLogger,
+			Settings:    settingsSvc,
+			ACL:         aclSvc,
 		},
 	}
 
@@ -117,24 +121,24 @@ func TestContainerGetterMappings(t *testing.T) {
 	assert.Same(t, aclSvc, container.GetACLService())
 }
 
-
 func TestBuild_FailFastOnNilInputs(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
-	created, err := Build(context.Background(), nil, logger)
+	created, err := Build(t.Context(), nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, created)
 	assert.Equal(t, "config must not be nil", err.Error())
 
-	created, err = Build(context.Background(), &config.Config{}, nil)
+	created, err = Build(t.Context(), &config.Config{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, created)
 	assert.Equal(t, "logger must not be nil", err.Error())
 }
 
-var _ youtube.Scheduler = (*stubYouTubeScheduler)(nil)
-var _ domain.StreamProvider = (*stubStreamProvider)(nil)
-var _ settings.ReadWriter = (*stubSettingsReadWriter)(nil)
-
+var (
+	_ youtube.Scheduler     = (*stubYouTubeScheduler)(nil)
+	_ domain.StreamProvider = (*stubStreamProvider)(nil)
+	_ settings.ReadWriter   = (*stubSettingsReadWriter)(nil)
+)

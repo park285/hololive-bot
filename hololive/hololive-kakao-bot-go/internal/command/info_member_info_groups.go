@@ -40,6 +40,7 @@ func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Mem
 			slog.String("member", member.Name),
 			slog.Any("error", err),
 		)
+
 		return nil
 	}
 
@@ -57,6 +58,7 @@ func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Mem
 			if name == "" {
 				continue
 			}
+
 			if !seen[name] {
 				normalized = append(normalized, name)
 				seen[name] = true
@@ -85,6 +87,7 @@ func extractUnitValues(profile *domain.TalentProfile, translated *domain.Transla
 				if stringutil.TrimSpace(entry.Value) != "" {
 					values = append(values, entry.Value)
 				}
+
 				break
 			}
 		}
@@ -95,6 +98,7 @@ func extractUnitValues(profile *domain.TalentProfile, translated *domain.Transla
 
 func splitGroupTokens(raw string) []string {
 	clean := strings.ReplaceAll(raw, "／", "/")
+
 	clean = strings.ReplaceAll(clean, "、", "/")
 	clean = strings.ReplaceAll(clean, "・", "/")
 
@@ -110,9 +114,11 @@ func splitGroupTokens(raw string) []string {
 			result = append(result, token)
 		}
 	}
+
 	if len(result) == 0 {
 		return []string{raw}
 	}
+
 	return result
 }
 
@@ -139,6 +145,7 @@ func normalizeMemberGroup(name string) string {
 
 	if after, ok := strings.CutPrefix(trimmed, "hololive English"); ok {
 		suffix := stringutil.TrimSpace(after)
+
 		suffix = strings.Trim(suffix, "-")
 		if suffix != "" {
 			return suffix
@@ -152,9 +159,11 @@ func primaryMemberName(member *domain.Member) string {
 	if member == nil {
 		return ""
 	}
+
 	primary := strings.Trim(stringutil.TrimSpace(member.NameKo), ",")
 	if primary != "" {
 		return primary
 	}
+
 	return member.Name
 }

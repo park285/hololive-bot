@@ -45,17 +45,21 @@ func uniqueStrings(values []string) []string {
 	}
 
 	seen := make(map[string]struct{}, len(values))
+
 	unique := make([]string, 0, len(values))
 	for _, value := range values {
 		if value == "" {
 			continue
 		}
+
 		if _, ok := seen[value]; ok {
 			continue
 		}
+
 		seen[value] = struct{}{}
 		unique = append(unique, value)
 	}
+
 	return unique
 }
 
@@ -67,16 +71,22 @@ func cloneStream(stream *domain.Stream) *domain.Stream {
 	copied := *stream
 	if stream.StartScheduled != nil {
 		start := *stream.StartScheduled
+
 		copied.StartScheduled = &start
 	}
+
 	if stream.StartActual != nil {
 		startActual := *stream.StartActual
+
 		copied.StartActual = &startActual
 	}
+
 	if stream.Channel != nil {
 		channelCopy := *stream.Channel
+
 		copied.Channel = &channelCopy
 	}
+
 	return &copied
 }
 
@@ -84,6 +94,7 @@ func ensureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stre
 	if stream == nil {
 		return nil
 	}
+
 	if stream.StartScheduled != nil && !stream.StartScheduled.IsZero() {
 		return stream
 	}
@@ -91,12 +102,16 @@ func ensureScheduledTime(stream *domain.Stream, fallback time.Time) *domain.Stre
 	updated := cloneStream(stream)
 	if updated.StartActual != nil && !updated.StartActual.IsZero() {
 		start := updated.StartActual.UTC()
+
 		updated.StartScheduled = &start
+
 		return updated
 	}
 
 	fallbackUTC := fallback.UTC().Truncate(time.Minute)
+
 	updated.StartScheduled = &fallbackUTC
+
 	return updated
 }
 
@@ -116,11 +131,13 @@ func roomNotifications(
 		if roomID == "" {
 			continue
 		}
+
 		notifications = append(
 			notifications,
 			domain.NewAlarmNotification(roomID, channel, stream, minutesUntil, []string{}, scheduleMessage),
 		)
 	}
+
 	return notifications
 }
 
@@ -135,6 +152,7 @@ func loadSubscriberRoomsByChannel(
 	}
 
 	result := make(map[string][]string, len(uniqueChannelIDs))
+
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -146,6 +164,7 @@ func loadSubscriberRoomsByChannel(
 			if err != nil {
 				return fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
 			}
+
 			if len(rooms) == 0 {
 				return nil
 			}
@@ -153,6 +172,7 @@ func loadSubscriberRoomsByChannel(
 			mu.Lock()
 			result[channelID] = rooms
 			mu.Unlock()
+
 			return nil
 		})
 	}
@@ -170,22 +190,27 @@ func normalizeTargetMinutes(targetMinutes []int) []int {
 	}
 
 	seen := make(map[int]struct{}, len(targetMinutes))
+
 	normalized := make([]int, 0, len(targetMinutes))
 	for _, minute := range targetMinutes {
 		if minute <= 0 {
 			continue
 		}
+
 		if _, ok := seen[minute]; ok {
 			continue
 		}
+
 		seen[minute] = struct{}{}
 		normalized = append(normalized, minute)
 	}
+
 	if len(normalized) == 0 {
 		return []int{5, 3, 1}
 	}
 
 	slices.SortFunc(normalized, func(a, b int) int { return b - a })
+
 	if _, ok := seen[1]; !ok {
 		normalized = append(normalized, 1)
 	}
@@ -197,5 +222,6 @@ func safeLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
 		return slog.Default()
 	}
+
 	return logger
 }

@@ -22,14 +22,9 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/config"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -42,8 +37,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
 type mockYouTubeService struct{}
@@ -53,6 +52,7 @@ func (s *mockYouTubeService) ScraperProxyEnabled() bool                { return 
 func (s *mockYouTubeService) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*youtube.ChannelStats, error) {
 	return nil, nil
 }
+
 func (s *mockYouTubeService) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
 	return nil, nil
 }
@@ -67,6 +67,7 @@ type stubMajorEventRepo struct{}
 func (s *stubMajorEventRepo) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	return false, nil
 }
+
 func (s *stubMajorEventRepo) Subscribe(ctx context.Context, roomID, roomName string) error {
 	return nil
 }
@@ -77,6 +78,7 @@ type stubMemberNewsService struct{}
 func (s *stubMemberNewsService) GenerateRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (*membernewscontracts.Digest, error) {
 	return nil, nil
 }
+
 func (s *stubMemberNewsService) SubscribeRoom(ctx context.Context, roomID, roomName string) error {
 	return nil
 }
@@ -86,7 +88,7 @@ func (s *stubMemberNewsService) IsRoomSubscribed(ctx context.Context, roomID str
 }
 
 func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
 
@@ -99,8 +101,12 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	twitchClient := &twitch.Client{}
 	profiles := &member.ProfileService{}
 	memberMatcher := &matcher.MemberMatcher{}
-	var ytService youtube.Service = &mockYouTubeService{}
-	var ytScheduler youtube.Scheduler = &mockYouTubeScheduler{}
+
+	var (
+		ytService   youtube.Service   = &mockYouTubeService{}
+		ytScheduler youtube.Scheduler = &mockYouTubeScheduler{}
+	)
+
 	ytStatsRepo := &stats.StatsRepository{}
 	ytStack := &providers.YouTubeStack{
 		Service:   ytService,
@@ -157,33 +163,43 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	if deps == nil {
 		t.Fatal("ProvideBotDependencies() returned nil")
 	}
+
 	if deps.BotSelfUser != "bot-self" {
 		t.Fatalf("BotSelfUser = %q, want %q", deps.BotSelfUser, "bot-self")
 	}
+
 	if deps.MessageAdapter != messageAdapter {
 		t.Fatal("MessageAdapter wiring mismatch")
 	}
+
 	if deps.Formatter != formatter {
 		t.Fatal("Formatter wiring mismatch")
 	}
+
 	if deps.Cache != cacheSvc || deps.Postgres != postgres {
 		t.Fatal("infra wiring mismatch")
 	}
+
 	if deps.MemberRepo != memberRepo || deps.MemberCache != memberCache {
 		t.Fatal("member wiring mismatch")
 	}
+
 	if deps.Holodex != holodexSvc || deps.Chzzk != chzzkClient || deps.Twitch != twitchClient {
 		t.Fatal("stream client wiring mismatch")
 	}
+
 	if deps.Service != ytService || deps.Scheduler != ytScheduler || deps.YouTubeStatsRepo != ytStatsRepo {
 		t.Fatal("youtube stack wiring mismatch")
 	}
+
 	if deps.Activity != activityLogger || deps.Settings != settingsSvc || deps.ACL != aclSvc {
 		t.Fatal("runtime support wiring mismatch")
 	}
+
 	if deps.MajorEventRepo != majorEventRepo || deps.MemberNews != memberNewsSvc {
 		t.Fatal("event/news wiring mismatch")
 	}
+
 	if deps.WorkerPool != workerPool {
 		t.Fatal("worker pool wiring mismatch")
 	}
@@ -200,12 +216,15 @@ func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
 	if deps == nil {
 		t.Fatal("ProvideBotDependencies() returned nil")
 	}
+
 	if deps.Service != nil {
 		t.Fatal("Service must be nil when ytStack is nil")
 	}
+
 	if deps.Scheduler != nil {
 		t.Fatal("Scheduler must be nil when ytStack is nil")
 	}
+
 	if deps.YouTubeStatsRepo != nil {
 		t.Fatal("YouTubeStatsRepo must be nil when ytStack is nil")
 	}

@@ -24,9 +24,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -38,6 +35,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
 type stubIrisClient struct{}
@@ -75,6 +76,7 @@ func (s *stubYouTubeService) ScraperProxyEnabled() bool                { return 
 func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return nil, nil
 }
+
 func (s *stubYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
 	return nil, nil
 }
@@ -127,6 +129,7 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 		if view.cache != cacheSvc {
 			t.Fatal("cache mapping mismatch")
 		}
+
 		if view.settings != settingsSvc {
 			t.Fatal("settings mapping mismatch")
 		}
@@ -144,7 +147,9 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 	t.Run("maps runtime fields", func(t *testing.T) {
 		youtubeSvc := &stubYouTubeService{}
 		holodexSvc := &holodex.Service{}
+
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+
 		infra := &coreInfrastructure{
 			deps: &bot.Dependencies{
 				Service: youtubeSvc,
@@ -157,9 +162,11 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 		if view.youtubeService != youtubeSvc {
 			t.Fatal("youtube service mapping mismatch")
 		}
+
 		if view.holodexService != holodexSvc {
 			t.Fatal("holodex service mapping mismatch")
 		}
+
 		if view.alarmCRUD != alarmCRUD {
 			t.Fatal("alarm CRUD mapping mismatch")
 		}
@@ -189,6 +196,7 @@ func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 		settingsSvc := &stubSettingsReadWriter{}
 		aclSvc := &acl.Service{}
 		templateAdminSvc := &template.AdminService{}
+
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
 		infra := &coreInfrastructure{
@@ -213,39 +221,51 @@ func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 		if view.cache != cacheSvc {
 			t.Fatal("cache mapping mismatch")
 		}
+
 		if view.postgres != postgresSvc {
 			t.Fatal("postgres mapping mismatch")
 		}
+
 		if view.memberRepo != memberRepo {
 			t.Fatal("member repo mapping mismatch")
 		}
+
 		if view.memberCache != memberCache {
 			t.Fatal("member cache mapping mismatch")
 		}
+
 		if view.profiles != profiles {
 			t.Fatal("profiles mapping mismatch")
 		}
+
 		if view.alarmCRUD != alarmCRUD {
 			t.Fatal("alarm CRUD mapping mismatch")
 		}
+
 		if view.holodexService != holodexSvc {
 			t.Fatal("holodex service mapping mismatch")
 		}
+
 		if view.youtubeService != youtubeSvc {
 			t.Fatal("youtube service mapping mismatch")
 		}
+
 		if view.statsRepo != statsRepo {
 			t.Fatal("stats repo mapping mismatch")
 		}
+
 		if view.activityLogger != activityLogger {
 			t.Fatal("activity logger mapping mismatch")
 		}
+
 		if view.settings != settingsSvc {
 			t.Fatal("settings mapping mismatch")
 		}
+
 		if view.acl != aclSvc {
 			t.Fatal("acl mapping mismatch")
 		}
+
 		if view.templateAdminSvc != templateAdminSvc {
 			t.Fatal("template admin service mapping mismatch")
 		}
@@ -262,6 +282,7 @@ func TestBuildBotServerRuntimeDependencies(t *testing.T) {
 
 	t.Run("maps alarm CRUD", func(t *testing.T) {
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+
 		infra := &coreInfrastructure{
 			alarmCRUD: alarmCRUD,
 		}
@@ -279,6 +300,7 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		if views.botDeps != nil {
 			t.Fatal("nil infra must yield nil bot deps")
 		}
+
 		if views.webhook.cache != nil || views.configSubscriber.cache != nil ||
 			views.configSubscriberRuntime.alarmCRUD != nil || views.adminRuntime.cache != nil ||
 			views.serverRuntime.alarmCRUD != nil {
@@ -292,6 +314,7 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		youtubeSvc := &stubYouTubeService{}
 		holodexSvc := &holodex.Service{}
 		templateAdminSvc := &template.AdminService{}
+
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
 		deps := &bot.Dependencies{
@@ -311,25 +334,32 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		if views.botDeps != deps {
 			t.Fatal("bot deps mapping mismatch")
 		}
+
 		if views.webhook.cache != cacheSvc {
 			t.Fatal("webhook view mapping mismatch")
 		}
+
 		if views.configSubscriber.cache != cacheSvc || views.configSubscriber.settings != settingsSvc {
 			t.Fatal("config subscriber view mapping mismatch")
 		}
+
 		if views.configSubscriberRuntime.alarmCRUD != alarmCRUD || views.configSubscriberRuntime.holodexService != holodexSvc {
 			t.Fatal("config subscriber runtime view mapping mismatch")
 		}
+
 		if views.adminRuntime.cache != cacheSvc || views.adminRuntime.templateAdminSvc != templateAdminSvc {
 			t.Fatal("admin runtime view mapping mismatch")
 		}
+
 		if views.serverRuntime.alarmCRUD != alarmCRUD {
 			t.Fatal("server runtime view mapping mismatch")
 		}
 	})
 }
 
-var _ member.DataProvider = (*stubMemberDataProvider)(nil)
-var _ youtube.Scheduler = (*stubYouTubeScheduler)(nil)
-var _ youtube.Service = (*stubYouTubeService)(nil)
-var _ settings.ReadWriter = (*stubSettingsReadWriter)(nil)
+var (
+	_ member.DataProvider = (*stubMemberDataProvider)(nil)
+	_ youtube.Scheduler   = (*stubYouTubeScheduler)(nil)
+	_ youtube.Service     = (*stubYouTubeService)(nil)
+	_ settings.ReadWriter = (*stubSettingsReadWriter)(nil)
+)

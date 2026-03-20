@@ -34,6 +34,7 @@ func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw stri
 	}
 
 	params := make(map[string]any)
+
 	if len(args) > 0 {
 		member := stringutil.TrimSpace(strings.Join(args, " "))
 		if member != "" {
@@ -52,6 +53,7 @@ func (ma *MessageAdapter) tryUpcomingCommand(command string, args []string, raw 
 	if !ma.isUpcomingCommand(command) {
 		return nil, false
 	}
+
 	return &ParsedCommand{
 		Type:       domain.CommandUpcoming,
 		Params:     ma.parseUpcomingArgs(args),
@@ -65,6 +67,7 @@ func (ma *MessageAdapter) isUpcomingCommand(cmd string) bool {
 
 func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 	params := make(map[string]any)
+
 	if len(args) == 0 {
 		return params
 	}
@@ -89,6 +92,7 @@ func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 			if n, err := strconv.Atoi(token); err == nil && n > 0 {
 				params["limit"] = n
 				limitSet = true
+
 				continue
 			}
 		}
@@ -113,11 +117,15 @@ func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw 
 	if !ma.isScheduleCommand(command) {
 		return nil, false
 	}
+
 	if len(args) == 0 && stringutil.ContainsString([]string{"멤버", "member"}, command) {
 		return nil, false
 	}
+
 	params := ma.parseScheduleArgs(args)
+
 	params["_raw_command"] = command
+
 	return &ParsedCommand{
 		Type:       domain.CommandSchedule,
 		Params:     params,

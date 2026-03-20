@@ -25,11 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatStatsTopGainers(t *testing.T) {
@@ -65,7 +64,7 @@ func TestFormatSubscriberGraph(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", nil)
-	now := time.Date(2026, 3, 4, 14, 10, 0, 0, time.FixedZone("KST", 9*60*60))
+	now := time.Date(2026, time.March, 4, 14, 10, 0, 0, time.FixedZone("KST", 9*60*60))
 	message := formatter.FormatSubscriberGraph(
 		"사쿠라 미코",
 		30,
@@ -91,7 +90,7 @@ func TestWriteSubscriberGraphChange(t *testing.T) {
 
 	var builder strings.Builder
 	writeSubscriberGraphChange(&builder, "7일", 0)
-	assert.Equal(t, "", builder.String())
+	assert.Empty(t, builder.String())
 
 	writeSubscriberGraphChange(&builder, "7일", 1234)
 	writeSubscriberGraphChange(&builder, "30일", -12)
@@ -106,11 +105,12 @@ func TestGenerateSparklineAndDownsample(t *testing.T) {
 
 	t.Run("empty values", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "", generateSparkline(nil, 10))
+		assert.Empty(t, generateSparkline(nil, 10))
 	})
 
 	t.Run("single flat value", func(t *testing.T) {
 		t.Parallel()
+
 		line := generateSparkline([]int64{10, 10, 10}, 10)
 		require.NotEmpty(t, line)
 		assert.Len(t, []rune(line), 3)
@@ -118,6 +118,7 @@ func TestGenerateSparklineAndDownsample(t *testing.T) {
 
 	t.Run("downsample keeps requested width", func(t *testing.T) {
 		t.Parallel()
+
 		values := []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 		sampled := downsampleSparklineValues(values, 4)
 		require.Len(t, sampled, 4)
@@ -126,6 +127,7 @@ func TestGenerateSparklineAndDownsample(t *testing.T) {
 
 	t.Run("non-positive width keeps original", func(t *testing.T) {
 		t.Parallel()
+
 		values := []int64{1, 2, 3}
 		assert.Equal(t, values, downsampleSparklineValues(values, 0))
 		assert.Equal(t, values, downsampleSparklineValues(values, -1))

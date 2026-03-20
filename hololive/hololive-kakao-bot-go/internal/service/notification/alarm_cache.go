@@ -34,11 +34,12 @@ import (
 	"github.com/valkey-io/valkey-go"
 )
 
-// CacheMemberName: 채널 ID에 해당하는 멤버 이름을 Redis에 캐싱한다. (표시 이름 최적화)
+// CacheMemberName: 채널 ID에 해당하는 멤버 이름을 Redis에 캐싱한다. (표시 이름 최적화).
 func (as *AlarmService) CacheMemberName(ctx context.Context, channelID, memberName string) error {
 	if err := as.cache.HSet(ctx, MemberNameKey, channelID, memberName); err != nil {
 		return fmt.Errorf("cache member name: %w", err)
 	}
+
 	return nil
 }
 
@@ -48,15 +49,18 @@ func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (st
 	if err != nil {
 		return "", fmt.Errorf("get member name: %w", err)
 	}
+
 	return name, nil
 }
 
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
 	key := as.channelSubscribersKeyByType(channelID, alarmType)
+
 	subscribers, err := as.cache.SMembers(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("get channel subscribers by type: %w", err)
 	}
+
 	return subscribers, nil
 }
 
@@ -65,6 +69,7 @@ func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string
 	if err := as.cache.HSet(ctx, RoomNamesCacheKey, roomID, roomName); err != nil {
 		return fmt.Errorf("set room name: %w", err)
 	}
+
 	return nil
 }
 
@@ -73,6 +78,7 @@ func (as *AlarmService) SetUserName(ctx context.Context, userID, userName string
 	if err := as.cache.HSet(ctx, UserNamesCacheKey, userID, userName); err != nil {
 		return fmt.Errorf("set user name: %w", err)
 	}
+
 	return nil
 }
 
@@ -85,10 +91,13 @@ func buildTitleFingerprint(title, streamID string) string {
 	if normalized == "" {
 		normalized = stringutil.NormalizeKey(streamID)
 	}
+
 	if normalized == "" {
 		normalized = "untitled"
 	}
+
 	sum := sha256.Sum256([]byte(normalized))
+
 	return hex.EncodeToString(sum[:8])
 }
 
@@ -96,22 +105,26 @@ func resolveStreamChannelID(stream *domain.Stream, defaultChannelID string) stri
 	if stream == nil {
 		return defaultChannelID
 	}
+
 	channelID := stringutil.TrimSpace(stream.ChannelID)
 	if channelID != "" {
 		return channelID
 	}
+
 	if stream.Channel != nil {
 		channelID = stringutil.TrimSpace(stream.Channel.ID)
 		if channelID != "" {
 			return channelID
 		}
 	}
+
 	return defaultChannelID
 }
 
 func (as *AlarmService) buildUpcomingEventKey(roomID, channelID, streamID, title string, startScheduled time.Time) string {
 	scheduledMinute := normalizeScheduledMinute(startScheduled).Unix()
 	titleFingerprint := buildTitleFingerprint(title, streamID)
+
 	return fmt.Sprintf(
 		"%s%s:%s:%d:%s",
 		UpcomingEventKeyPrefix,
@@ -146,6 +159,7 @@ func (as *AlarmService) MarkAsNotified(ctx context.Context, streamID string, sta
 	if existing.SentAt == nil {
 		existing.SentAt = make(map[int]bool)
 	}
+
 	existing.SentAt[minutesUntil] = true
 
 	if err := as.cache.Set(ctx, notifiedKey, existing, constants.CacheTTL.NotificationSent); err != nil {
@@ -153,6 +167,7 @@ func (as *AlarmService) MarkAsNotified(ctx context.Context, streamID string, sta
 			slog.String("stream_id", streamID),
 			slog.Any("error", err),
 		)
+
 		return fmt.Errorf("mark as notified: %w", err)
 	}
 
@@ -168,12 +183,14 @@ func (as *AlarmService) MarkUpcomingEventNotified(
 	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
 		return nil
 	}
+
 	resolvedChannelID := resolveStreamChannelID(stream, channelID)
 	if stringutil.TrimSpace(resolvedChannelID) == "" {
 		return nil
 	}
 
 	key := as.buildUpcomingEventKey(roomID, resolvedChannelID, stream.ID, stream.Title, *stream.StartScheduled)
+
 	data := UpcomingEventNotifiedData{
 		NotifiedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -185,8 +202,10 @@ func (as *AlarmService) MarkUpcomingEventNotified(
 			slog.String("stream_id", stream.ID),
 			slog.Any("error", err),
 		)
+
 		return fmt.Errorf("mark upcoming event notified: %w", err)
 	}
+
 	return nil
 }
 
@@ -200,12 +219,14 @@ func (as *AlarmService) WasUpcomingEventNotifiedRecently(
 	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
 		return false
 	}
+
 	resolvedChannelID := resolveStreamChannelID(stream, channelID)
 	if stringutil.TrimSpace(resolvedChannelID) == "" {
 		return false
 	}
 
 	key := as.buildUpcomingEventKey(roomID, resolvedChannelID, stream.ID, stream.Title, *stream.StartScheduled)
+
 	var data UpcomingEventNotifiedData
 	if err := as.cache.Get(ctx, key, &data); err != nil || data.NotifiedAt == "" {
 		return false
@@ -215,21 +236,25 @@ func (as *AlarmService) WasUpcomingEventNotifiedRecently(
 	if err != nil {
 		return false
 	}
+
 	if window <= 0 {
 		return false
 	}
+
 	return time.Since(notifiedAt) <= window
 }
 
 // GetNextStreamInfo: 특정 채널의 다음 방송 정보(예정 또는 라이브)를 캐시에서 조회합니다.
 func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
 	key := NextStreamKeyPrefix + channelID
+
 	data, err := as.cache.HGetAll(ctx, key)
 	if err != nil {
 		as.logger.Error("Failed to get next stream info from cache",
 			slog.String("channel_id", channelID),
 			slog.Any("error", err),
 		)
+
 		return nil, fmt.Errorf("get next stream info: %w", err)
 	}
 
@@ -238,7 +263,9 @@ func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string)
 
 func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
 	startedAt := time.Now()
+
 	var opErr error
+
 	defer func() {
 		observeAlarmServiceOperation("list_view", startedAt, opErr)
 	}()
@@ -248,6 +275,7 @@ func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) (
 		opErr = fmt.Errorf("list room alarms view: %w", err)
 		return nil, opErr
 	}
+
 	if len(alarms) == 0 {
 		return []domain.AlarmListView{}, nil
 	}
@@ -283,9 +311,11 @@ func buildAlarmListViews(
 		if memberName == "" {
 			memberName = stringutil.TrimSpace(alarm.MemberName)
 		}
+
 		if memberName == "" {
 			memberName = alarm.ChannelID
 		}
+
 		entries = append(entries, domain.AlarmListView{
 			ChannelID:  alarm.ChannelID,
 			MemberName: memberName,
@@ -293,6 +323,7 @@ func buildAlarmListViews(
 			NextStream: nextStreams[alarm.ChannelID],
 		})
 	}
+
 	return entries
 }
 
@@ -302,6 +333,7 @@ func (as *AlarmService) getMemberNamesBatch(ctx context.Context, channelIDs []st
 	}
 
 	builder := as.cache.Builder()
+
 	cmds := make([]valkey.Completed, 0, len(channelIDs))
 	for _, channelID := range channelIDs {
 		cmds = append(cmds, builder.Hget().Key(MemberNameKey).Field(channelID).Build())
@@ -309,14 +341,17 @@ func (as *AlarmService) getMemberNamesBatch(ctx context.Context, channelIDs []st
 
 	results := as.cache.DoMulti(ctx, cmds...)
 	names := make(map[string]string, len(channelIDs))
+
 	for i, result := range results {
 		if err := result.Error(); err != nil {
 			continue
 		}
+
 		name, err := result.ToString()
 		if err != nil || stringutil.TrimSpace(name) == "" {
 			continue
 		}
+
 		names[channelIDs[i]] = name
 	}
 
@@ -329,6 +364,7 @@ func (as *AlarmService) getNextStreamInfosBatch(ctx context.Context, channelIDs 
 	}
 
 	builder := as.cache.Builder()
+
 	cmds := make([]valkey.Completed, 0, len(channelIDs))
 	for _, channelID := range channelIDs {
 		cmds = append(cmds, builder.Hgetall().Key(NextStreamKeyPrefix+channelID).Build())
@@ -336,11 +372,13 @@ func (as *AlarmService) getNextStreamInfosBatch(ctx context.Context, channelIDs 
 
 	results := as.cache.DoMulti(ctx, cmds...)
 	infos := make(map[string]*domain.NextStreamInfo, len(channelIDs))
+
 	for i, result := range results {
 		data, err := result.AsStrMap()
 		if err != nil || len(data) == 0 {
 			continue
 		}
+
 		if info := as.parseNextStreamInfo(channelIDs[i], data); info != nil {
 			infos[channelIDs[i]] = info
 		}
@@ -365,6 +403,7 @@ func (as *AlarmService) parseNextStreamInfo(channelID string, data map[string]st
 			slog.String("channel_id", channelID),
 			slog.String("status", info.Status.String()),
 		)
+
 		return nil
 	}
 
@@ -377,8 +416,10 @@ func (as *AlarmService) parseNextStreamInfo(channelID string, data map[string]st
 				slog.String("start_scheduled", startScheduledStr),
 				slog.Any("error", err),
 			)
+
 			return nil
 		}
+
 		info.StartScheduled = &scheduledDate
 	}
 
@@ -390,6 +431,7 @@ func (as *AlarmService) parseNextStreamInfo(channelID string, data map[string]st
 				slog.Bool("has_start", startScheduledStr != ""),
 				slog.Bool("has_video_id", info.VideoID != ""),
 			)
+
 			return nil
 		}
 	}

@@ -29,17 +29,19 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// 번역된 값 우선 사용, 없으면 원본 반환
+// 번역된 값 우선 사용, 없으면 원본 반환.
 func getTranslatedText(translatedVal, rawVal string) string {
 	if trimmed := stringutil.TrimSpace(translatedVal); trimmed != "" {
 		return trimmed
 	}
+
 	return stringutil.TrimSpace(rawVal)
 }
 
-// 캐치프레이즈 섹션 포맷팅
+// 캐치프레이즈 섹션 포맷팅.
 func formatProfileCatchphrase(raw *domain.TalentProfile, translated *domain.Translated) string {
 	catchphrase := ""
+
 	if translated != nil {
 		catchphrase = getTranslatedText(translated.Catchphrase, raw.Catchphrase)
 	} else if raw != nil {
@@ -49,12 +51,14 @@ func formatProfileCatchphrase(raw *domain.TalentProfile, translated *domain.Tran
 	if catchphrase == "" {
 		return ""
 	}
+
 	return fmt.Sprintf("%s %s\n", DefaultEmoji.Speech, catchphrase)
 }
 
-// 요약 섹션 포맷팅
+// 요약 섹션 포맷팅.
 func formatProfileSummary(raw *domain.TalentProfile, translated *domain.Translated) string {
 	summary := ""
+
 	if translated != nil {
 		summary = getTranslatedText(translated.Summary, raw.Description)
 	} else if raw != nil {
@@ -64,10 +68,11 @@ func formatProfileSummary(raw *domain.TalentProfile, translated *domain.Translat
 	if summary == "" {
 		return ""
 	}
+
 	return summary + "\n"
 }
 
-// 하이라이트 섹션 포맷팅
+// 하이라이트 섹션 포맷팅.
 func formatProfileHighlights(translated *domain.Translated) string {
 	if translated == nil || len(translated.Highlights) == 0 {
 		return ""
@@ -75,15 +80,17 @@ func formatProfileHighlights(translated *domain.Translated) string {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "\n%s 하이라이트\n", DefaultEmoji.Highlight)
+
 	for _, highlight := range translated.Highlights {
 		if trimmed := stringutil.TrimSpace(highlight); trimmed != "" {
 			fmt.Fprintf(&sb, "- %s\n", trimmed)
 		}
 	}
+
 	return sb.String()
 }
 
-// 번역된 데이터 또는 원본 데이터 반환
+// 번역된 데이터 또는 원본 데이터 반환.
 func getProfileDataEntries(raw *domain.TalentProfile, translated *domain.Translated) []domain.TranslatedProfileDataRow {
 	if translated != nil && len(translated.Data) > 0 {
 		return translated.Data
@@ -94,16 +101,19 @@ func getProfileDataEntries(raw *domain.TalentProfile, translated *domain.Transla
 	}
 
 	entries := make([]domain.TranslatedProfileDataRow, 0)
+
 	for _, entry := range raw.DataEntries {
 		if stringutil.TrimSpace(entry.Label) == "" || stringutil.TrimSpace(entry.Value) == "" {
 			continue
 		}
+
 		entries = append(entries, domain.TranslatedProfileDataRow(entry))
 	}
+
 	return entries
 }
 
-// 프로필 데이터 섹션 포맷팅 (최대 8개)
+// 프로필 데이터 섹션 포맷팅 (최대 8개).
 func formatProfileDataEntries(raw *domain.TalentProfile, translated *domain.Translated) string {
 	dataEntries := getProfileDataEntries(raw, translated)
 	if len(dataEntries) == 0 {
@@ -118,6 +128,7 @@ func formatProfileDataEntries(raw *domain.TalentProfile, translated *domain.Tran
 	for i := range maxRows {
 		row := dataEntries[i]
 		label := stringutil.TrimSpace(row.Label)
+
 		value := stringutil.TrimSpace(row.Value)
 		if label == "" || value == "" {
 			continue
@@ -134,7 +145,7 @@ func formatProfileDataEntries(raw *domain.TalentProfile, translated *domain.Tran
 	return sb.String()
 }
 
-// 소셜 링크 섹션 포맷팅 (최대 4개)
+// 소셜 링크 섹션 포맷팅 (최대 4개).
 func formatProfileSocialLinks(raw *domain.TalentProfile) string {
 	if raw == nil || len(raw.SocialLinks) == 0 {
 		return ""
@@ -150,6 +161,7 @@ func formatProfileSocialLinks(raw *domain.TalentProfile) string {
 		if stringutil.TrimSpace(link.Label) == "" || stringutil.TrimSpace(link.URL) == "" {
 			continue
 		}
+
 		translatedLabel := socialLinkLabel(link.Label)
 		fmt.Fprintf(&sb, "- %s: %s\n", translatedLabel, stringutil.TrimSpace(link.URL))
 	}
@@ -157,11 +169,12 @@ func formatProfileSocialLinks(raw *domain.TalentProfile) string {
 	return sb.String()
 }
 
-// 공식 URL 섹션 포맷팅
+// 공식 URL 섹션 포맷팅.
 func formatProfileOfficialURL(raw *domain.TalentProfile) string {
 	if raw == nil || stringutil.TrimSpace(raw.OfficialURL) == "" {
 		return ""
 	}
+
 	return fmt.Sprintf("\n%s 공식 프로필: %s", DefaultEmoji.Web, stringutil.TrimSpace(raw.OfficialURL))
 }
 
@@ -172,6 +185,7 @@ func (f *ResponseFormatter) FormatTalentProfile(raw *domain.TalentProfile, trans
 	}
 
 	var sb strings.Builder
+
 	header := buildTalentHeader(raw, translated)
 	sb.WriteString(header)
 	sb.WriteString("\n")
@@ -189,6 +203,7 @@ func (f *ResponseFormatter) FormatTalentProfile(raw *domain.TalentProfile, trans
 	}
 
 	body := stringutil.StripLeadingHeader(content, header)
+
 	body = stringutil.TrimSpace(body)
 	if body == "" {
 		return content
@@ -212,6 +227,7 @@ func socialLinkLabel(label string) string {
 	if korean, ok := translations[label]; ok {
 		return korean
 	}
+
 	return label
 }
 
@@ -225,12 +241,14 @@ func talentDisplayNames(raw *domain.TalentProfile, translated *domain.Translated
 
 	english := ""
 	japanese := ""
+
 	if raw != nil {
 		english = stringutil.TrimSpace(raw.EnglishName)
 		japanese = stringutil.TrimSpace(raw.JapaneseName)
 	}
 
 	display := ""
+
 	if translated != nil {
 		display = stringutil.TrimSpace(translated.DisplayName)
 	}
@@ -259,6 +277,7 @@ func parseDisplayNameComponents(display string) []string {
 	var rawParts []string
 
 	openIdx := strings.Index(display, "(")
+
 	closeIdx := strings.LastIndex(display, ")")
 	if openIdx != -1 && closeIdx != -1 && closeIdx > openIdx {
 		before := stringutil.TrimSpace(display[:openIdx])
@@ -268,9 +287,11 @@ func parseDisplayNameComponents(display string) []string {
 		if before != "" {
 			rawParts = append(rawParts, before)
 		}
+
 		if inside != "" {
 			rawParts = append(rawParts, inside)
 		}
+
 		if after != "" {
 			rawParts = append(rawParts, after)
 		}
@@ -279,6 +300,7 @@ func parseDisplayNameComponents(display string) []string {
 	}
 
 	var result []string
+
 	for _, part := range rawParts {
 		segments := strings.SplitSeq(part, "/")
 		for segment := range segments {

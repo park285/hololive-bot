@@ -23,10 +23,9 @@ package command
 import (
 	"testing"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
@@ -51,7 +50,6 @@ func TestCommandConstructorsNameDescription(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			require.NotNil(t, tc.command)
 			assert.Equal(t, tc.expectName, tc.command.Name())
@@ -65,6 +63,7 @@ func TestFactoryHelpers(t *testing.T) {
 
 	majorFactory := NewMajorEventFactory(nil)
 	require.NotNil(t, majorFactory)
+
 	majorCommand := majorFactory(nil)
 	require.NotNil(t, majorCommand)
 	assert.Equal(t, "major_event", majorCommand.Name())
@@ -76,6 +75,7 @@ func TestFactoryHelpers(t *testing.T) {
 
 	newsCommand := newsFactories[0](nil)
 	subscriptionCommand := newsFactories[1](nil)
+
 	require.NotNil(t, newsCommand)
 	require.NotNil(t, subscriptionCommand)
 	assert.Equal(t, "member_news", newsCommand.Name())
@@ -123,7 +123,7 @@ func TestMemberGroupParsingHelpers(t *testing.T) {
 	})
 
 	t.Run("primary member name", func(t *testing.T) {
-		assert.Equal(t, "", primaryMemberName(nil))
+		assert.Empty(t, primaryMemberName(nil))
 		assert.Equal(t, "미코", primaryMemberName(&domain.Member{Name: "Sakura Miko", NameKo: ",미코,"}))
 		assert.Equal(t, "Sora", primaryMemberName(&domain.Member{Name: "Sora"}))
 	})

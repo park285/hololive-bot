@@ -22,7 +22,7 @@ package server
 
 import (
 	"bytes"
-	"io"
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -32,8 +32,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 )
 
 func TestServerHandlers_DoNotUseErrError(t *testing.T) {
@@ -45,6 +46,7 @@ func TestServerHandlers_DoNotUseErrError(t *testing.T) {
 	}
 
 	var offenders []string
+
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || filepath.Ext(name) != ".go" || strings.HasSuffix(name, "_test.go") {
@@ -69,7 +71,7 @@ func TestServerHandlers_DoNotUseErrError(t *testing.T) {
 func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	base := &APIHandler{
 		logger: logger,
 		acl:    &acl.Service{},
@@ -154,7 +156,7 @@ func newMalformedJSONContext(method, path string, params gin.Params) (*gin.Conte
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
 
-	req := httptest.NewRequest(method, path, bytes.NewBufferString(`{"`))
+	req := httptest.NewRequestWithContext(context.Background(), method, path, bytes.NewBufferString(`{"`))
 	req.Header.Set("Content-Type", "application/json")
 
 	ctx.Request = req

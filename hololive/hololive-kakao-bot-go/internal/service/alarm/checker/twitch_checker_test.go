@@ -28,11 +28,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
@@ -40,9 +39,10 @@ import (
 
 func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 	cacheSvc := newCheckerTestCacheClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, cacheSvc.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
+
 	_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
 	require.NoError(t, err)
 
@@ -51,9 +51,11 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 		switch r.URL.Path {
 		case "/oauth2/token":
 			w.WriteHeader(http.StatusOK)
+
 			_, _ = w.Write([]byte(`{"access_token":"token","expires_in":3600,"token_type":"bearer"}`))
 		case "/helix/streams":
 			w.WriteHeader(http.StatusOK)
+
 			_, _ = w.Write([]byte(`{"data":[{"id":"stream-1","user_id":"user-1","user_login":"aqua","user_name":"Aqua","type":"live","title":"live","viewer_count":100,"started_at":"` + startedAt + `"},{"id":"stream-2","user_id":"user-2","user_login":"aqua","user_name":"Aqua","type":"","started_at":"` + startedAt + `"}]}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -63,8 +65,10 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 
 	originalBaseURL := sharedconstants.TwitchConfig.BaseURL
 	originalAuthURL := sharedconstants.TwitchConfig.AuthURL
+
 	sharedconstants.TwitchConfig.BaseURL = server.URL + "/helix"
 	sharedconstants.TwitchConfig.AuthURL = server.URL + "/oauth2/token"
+
 	t.Cleanup(func() {
 		sharedconstants.TwitchConfig.BaseURL = originalBaseURL
 		sharedconstants.TwitchConfig.AuthURL = originalAuthURL
@@ -97,8 +101,9 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 		t.Parallel()
 
 		cacheSvc := newCheckerTestCacheClient(t)
-		ctx := context.Background()
+		ctx := t.Context()
 		require.NoError(t, cacheSvc.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
+
 		_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
 		require.NoError(t, err)
 
@@ -113,8 +118,9 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 
 	t.Run("server 5xx", func(t *testing.T) {
 		cacheSvc := newCheckerTestCacheClient(t)
-		ctx := context.Background()
+		ctx := t.Context()
 		require.NoError(t, cacheSvc.HSet(ctx, notification.TwitchLoginMapKey, "aqua", "yt-1"))
+
 		_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
 		require.NoError(t, err)
 
@@ -122,9 +128,11 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 			switch r.URL.Path {
 			case "/oauth2/token":
 				w.WriteHeader(http.StatusOK)
+
 				_, _ = w.Write([]byte(`{"access_token":"token","expires_in":3600,"token_type":"bearer"}`))
 			case "/helix/streams":
 				w.WriteHeader(http.StatusInternalServerError)
+
 				_, _ = w.Write([]byte(`{"error":"server error"}`))
 			default:
 				w.WriteHeader(http.StatusNotFound)
@@ -134,8 +142,10 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 
 		originalBaseURL := sharedconstants.TwitchConfig.BaseURL
 		originalAuthURL := sharedconstants.TwitchConfig.AuthURL
+
 		sharedconstants.TwitchConfig.BaseURL = server.URL + "/helix"
 		sharedconstants.TwitchConfig.AuthURL = server.URL + "/oauth2/token"
+
 		t.Cleanup(func() {
 			sharedconstants.TwitchConfig.BaseURL = originalBaseURL
 			sharedconstants.TwitchConfig.AuthURL = originalAuthURL
@@ -229,7 +239,6 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -237,9 +246,11 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 			cacheSvc := &cachemocks.Client{
 				SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 					setNXInvokes++
+
 					if tc.setNXErr != nil {
 						return false, tc.setNXErr
 					}
+
 					return tc.setNXClaimed, nil
 				},
 			}
@@ -249,7 +260,7 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 			}
 
 			notifications, err := checker.buildLiveNotifications(
-				context.Background(),
+				t.Context(),
 				tc.loginMappings,
 				tc.subscriberMap,
 				tc.streamsResponse,
@@ -262,6 +273,7 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 				require.NoError(t, err)
 				require.Len(t, notifications, tc.wantLen)
 			}
+
 			assert.Equal(t, tc.wantSetNXInvokes, setNXInvokes)
 		})
 	}

@@ -31,8 +31,9 @@ import (
 
 // MessageAdapter: 카카오톡 메시지를 커맨드로 파싱하는 어댑터입니다.
 type MessageAdapter struct {
-	prefix  string
-	parsers []CommandParser
+	prefix        string
+	mentionPrefix string
+	parsers       []CommandParser
 }
 
 const (
@@ -48,6 +49,7 @@ func normalizeCommandPrefix(prefix string) string {
 	if trimmed == "" {
 		return "!"
 	}
+
 	return trimmed
 }
 
@@ -56,6 +58,7 @@ func trimLegacyLeading(text string) string {
 		if unicode.IsSpace(r) {
 			return true
 		}
+
 		switch r {
 		case '\u200b', '\u200c', '\u200d', '\ufeff':
 			return true
@@ -65,8 +68,9 @@ func trimLegacyLeading(text string) string {
 	})
 }
 
-func (ma *MessageAdapter) extractCommandText(raw string) (normalized string, commandText string, ok bool) {
+func (ma *MessageAdapter) extractCommandText(raw string) (normalized, commandText string, ok bool) {
 	text := trimLegacyLeading(raw)
+
 	text = stringutil.TrimSpace(text)
 	if text == "" {
 		return text, "", false
@@ -81,15 +85,19 @@ func (ma *MessageAdapter) extractCommandText(raw string) (normalized string, com
 	if cmd == "" {
 		return text, "", false
 	}
+
 	return text, cmd, true
 }
 
 // NewMessageAdapter: MessageAdapter 인스턴스를 생성합니다.
-func NewMessageAdapter(prefix string) *MessageAdapter {
+func NewMessageAdapter(prefix string, mentionPrefix string) *MessageAdapter {
 	adapter := &MessageAdapter{
-		prefix: normalizeCommandPrefix(prefix),
+		prefix:        normalizeCommandPrefix(prefix),
+		mentionPrefix: mentionPrefix,
 	}
+
 	adapter.parsers = defaultCommandParsers(adapter)
+
 	return adapter
 }
 
@@ -128,6 +136,7 @@ func (ma *MessageAdapter) ParseMessage(message *iris.Message) *ParsedCommand {
 		if parser == nil {
 			continue
 		}
+
 		if parsed, ok := parser.Parse(command, args, text); ok {
 			return parsed
 		}
@@ -143,3 +152,4 @@ func (ma *MessageAdapter) createUnknownCommand(text string) *ParsedCommand {
 		RawMessage: text,
 	}
 }
+

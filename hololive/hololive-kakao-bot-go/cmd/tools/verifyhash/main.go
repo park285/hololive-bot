@@ -31,6 +31,7 @@ import (
 func main() {
 	password := flag.String("password", "", "plain password (or VERIFY_PASSWORD env)")
 	hash := flag.String("hash", "", "bcrypt hash (or VERIFY_HASH env)")
+
 	flag.Parse()
 
 	passwordValue := *password

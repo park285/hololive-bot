@@ -21,7 +21,6 @@
 package majoreventclient_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,9 +28,9 @@ import (
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/majoreventclient"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 const testAPIKey = "test-api-key"
@@ -39,12 +38,15 @@ const testAPIKey = "test-api-key"
 // newTestServer: httptest 서버를 생성하고 요청 검증 핸들러를 반환합니다.
 func newTestServer(t *testing.T, statusCode int, responseBody any, assertFn func(r *http.Request)) *httptest.Server {
 	t.Helper()
+
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if assertFn != nil {
 			assertFn(r)
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
+
 		if responseBody != nil {
 			_ = json.NewEncoder(w).Encode(responseBody)
 		}
@@ -106,7 +108,9 @@ func TestNew(t *testing.T) {
 				if r.Header.Get(commoncontracts.APIKeyHeader) != tc.wantAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), tc.wantAPIKey)
 				}
+
 				w.WriteHeader(http.StatusOK)
+
 				_ = json.NewEncoder(w).Encode(map[string]bool{"subscribed": false})
 			}))
 			defer srv.Close()
@@ -126,22 +130,27 @@ func TestNew_URLTrimming(t *testing.T) {
 
 	// httptest 서버로 실제 baseURL에 후행 슬래시가 없는지 경로 검증
 	var capturedPath string
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
+
 		w.WriteHeader(http.StatusOK)
+
 		_ = json.NewEncoder(w).Encode(map[string]bool{"subscribed": false})
 	}))
 	defer srv.Close()
 
 	// 후행 슬래시 포함 URL로 클라이언트 생성
 	c := majoreventclient.New(srv.URL+"/", testAPIKey)
-	_, _ = c.IsSubscribed(context.Background(), "room-1")
+
+	_, _ = c.IsSubscribed(t.Context(), "room-1")
 
 	// 경로에 이중 슬래시가 없어야 합니다
 	wantPath := majoreventcontracts.SubscriptionsPath + "/room-1"
 	if capturedPath != wantPath {
 		t.Errorf("capturedPath = %q, want %q", capturedPath, wantPath)
 	}
+
 	if strings.Contains(capturedPath, "//") {
 		t.Errorf("경로에 이중 슬래시가 포함됨: %q", capturedPath)
 	}
@@ -206,13 +215,16 @@ func TestIsSubscribed(t *testing.T) {
 			// 빈 roomID는 서버 없이도 검증
 			if tc.roomID == "" {
 				c := majoreventclient.New("http://localhost:0", testAPIKey)
-				got, err := c.IsSubscribed(context.Background(), tc.roomID)
+
+				got, err := c.IsSubscribed(t.Context(), tc.roomID)
 				if (err != nil) != tc.wantErr {
 					t.Errorf("IsSubscribed() err = %v, wantErr %v", err, tc.wantErr)
 				}
+
 				if got != tc.wantResult {
 					t.Errorf("IsSubscribed() = %v, want %v", got, tc.wantResult)
 				}
+
 				return
 			}
 
@@ -221,11 +233,13 @@ func TestIsSubscribed(t *testing.T) {
 				if r.Method != http.MethodGet {
 					t.Errorf("method = %q, want GET", r.Method)
 				}
+
 				// 경로 검증
 				wantPath := majoreventcontracts.SubscriptionsPath + "/" + tc.roomID
 				if r.URL.Path != wantPath {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
+
 				// API 키 헤더 검증
 				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
@@ -234,11 +248,12 @@ func TestIsSubscribed(t *testing.T) {
 			defer srv.Close()
 
 			c := majoreventclient.New(srv.URL, testAPIKey)
-			got, err := c.IsSubscribed(context.Background(), tc.roomID)
+			got, err := c.IsSubscribed(t.Context(), tc.roomID)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("IsSubscribed() err = %v, wantErr %v", err, tc.wantErr)
 			}
+
 			if got != tc.wantResult {
 				t.Errorf("IsSubscribed() = %v, want %v", got, tc.wantResult)
 			}
@@ -299,10 +314,12 @@ func TestSubscribe(t *testing.T) {
 
 			if tc.roomID == "" {
 				c := majoreventclient.New("http://localhost:0", testAPIKey)
-				err := c.Subscribe(context.Background(), tc.roomID, tc.roomName)
+
+				err := c.Subscribe(t.Context(), tc.roomID, tc.roomName)
 				if (err != nil) != tc.wantErr {
 					t.Errorf("Subscribe() err = %v, wantErr %v", err, tc.wantErr)
 				}
+
 				return
 			}
 
@@ -311,14 +328,17 @@ func TestSubscribe(t *testing.T) {
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %q, want POST", r.Method)
 				}
+
 				// 경로 검증
 				if r.URL.Path != majoreventcontracts.SubscriptionsPath {
 					t.Errorf("path = %q, want %q", r.URL.Path, majoreventcontracts.SubscriptionsPath)
 				}
+
 				// Content-Type 검증
 				if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 					t.Errorf("Content-Type = %q, want application/json", ct)
 				}
+
 				// API 키 헤더 검증
 				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
@@ -327,7 +347,7 @@ func TestSubscribe(t *testing.T) {
 			defer srv.Close()
 
 			c := majoreventclient.New(srv.URL, testAPIKey)
-			err := c.Subscribe(context.Background(), tc.roomID, tc.roomName)
+			err := c.Subscribe(t.Context(), tc.roomID, tc.roomName)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("Subscribe() err = %v, wantErr %v", err, tc.wantErr)
@@ -377,10 +397,12 @@ func TestUnsubscribe(t *testing.T) {
 
 			if tc.roomID == "" {
 				c := majoreventclient.New("http://localhost:0", testAPIKey)
-				err := c.Unsubscribe(context.Background(), tc.roomID)
+
+				err := c.Unsubscribe(t.Context(), tc.roomID)
 				if (err != nil) != tc.wantErr {
 					t.Errorf("Unsubscribe() err = %v, wantErr %v", err, tc.wantErr)
 				}
+
 				return
 			}
 
@@ -389,11 +411,13 @@ func TestUnsubscribe(t *testing.T) {
 				if r.Method != http.MethodDelete {
 					t.Errorf("method = %q, want DELETE", r.Method)
 				}
+
 				// 경로 검증
 				wantPath := majoreventcontracts.SubscriptionsPath + "/" + tc.roomID
 				if r.URL.Path != wantPath {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
+
 				// API 키 헤더 검증
 				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
@@ -402,7 +426,7 @@ func TestUnsubscribe(t *testing.T) {
 			defer srv.Close()
 
 			c := majoreventclient.New(srv.URL, testAPIKey)
-			err := c.Unsubscribe(context.Background(), tc.roomID)
+			err := c.Unsubscribe(t.Context(), tc.roomID)
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("Unsubscribe() err = %v, wantErr %v", err, tc.wantErr)

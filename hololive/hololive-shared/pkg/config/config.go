@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/internal/envutil"
@@ -76,11 +75,8 @@ func Load() (*Config, error) {
 }
 
 func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
-	webhookToken, botToken := sharedirisx.ResolveTokens(
-		envutil.String("IRIS_WEBHOOK_TOKEN", ""),
-		envutil.String("IRIS_BOT_TOKEN", ""),
-		"",
-	)
+	webhookToken := strings.TrimSpace(envutil.String("IRIS_WEBHOOK_TOKEN", ""))
+	botToken := strings.TrimSpace(envutil.String("IRIS_BOT_TOKEN", ""))
 
 	runtimeEnv := loadAppEnvironment()
 	isProduction := strings.EqualFold(runtimeEnv, "production")
@@ -114,6 +110,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Kakao: KakaoConfig{
 			Rooms:      parseCommaSeparated(envutil.String("KAKAO_ROOMS", "홀로라이브 알림방")),
 			ACLEnabled: envutil.Bool("KAKAO_ACL_ENABLED", true),
+			ACLMode:    envutil.String("KAKAO_ACL_MODE", "whitelist"),
 		},
 		Holodex: HolodexConfig{
 			BaseURL: envutil.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
@@ -142,9 +139,11 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			Compress:   envutil.Bool("LOG_COMPRESS", true),
 		},
 		Bot: BotConfig{
-			Prefix:       envutil.String("BOT_PREFIX", "!"),
-			SelfUser:     envutil.String("BOT_SELF_USER", "iris"),
-			AdminEnabled: envutil.Bool("BOT_ADMIN_ENABLED", true),
+			Prefix:           envutil.String("BOT_PREFIX", "!"),
+			SelfUser:         envutil.String("BOT_SELF_USER", "iris"),
+			AdminEnabled:     envutil.Bool("BOT_ADMIN_ENABLED", true),
+			SettlementRoomID: envutil.String("SETTLEMENT_ROOM_ID", ""),
+			MentionPrefix:    envutil.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		},
 		Services: ServicesConfig{
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,

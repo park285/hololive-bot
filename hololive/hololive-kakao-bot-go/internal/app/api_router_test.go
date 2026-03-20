@@ -21,21 +21,20 @@
 package app
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
 func TestFailClosedAuth(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
@@ -74,19 +73,21 @@ func TestFailClosedAuth(t *testing.T) {
 
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("ProvideAPIRouter() expected error, but got nil")
+					t.Error("ProvideAPIRouter() expected error, but got nil")
 				} else if err.Error() != tt.expectedErr {
 					t.Errorf("ProvideAPIRouter() expected error %q, but got %q", tt.expectedErr, err.Error())
 				}
+
 				if router != nil {
-					t.Errorf("ProvideAPIRouter() expected nil router on error, but got non-nil")
+					t.Error("ProvideAPIRouter() expected nil router on error, but got non-nil")
 				}
 			} else {
 				if err != nil {
 					t.Errorf("ProvideAPIRouter() unexpected error: %v", err)
 				}
+
 				if router == nil {
-					t.Errorf("ProvideAPIRouter() expected non-nil router, but got nil")
+					t.Error("ProvideAPIRouter() expected non-nil router, but got nil")
 				}
 			}
 		})
@@ -94,8 +95,8 @@ func TestFailClosedAuth(t *testing.T) {
 }
 
 func TestAPIRouter_CORSOriginGuard(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
@@ -115,26 +116,30 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
 
-	disallowedReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	disallowedReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 	disallowedReq.Header.Set("Origin", "https://blocked.example.com")
+
 	disallowedRec := httptest.NewRecorder()
 	router.ServeHTTP(disallowedRec, disallowedReq)
+
 	if disallowedRec.Code != http.StatusForbidden {
 		t.Fatalf("disallowed origin status = %d, want %d", disallowedRec.Code, http.StatusForbidden)
 	}
 
-	allowedReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	allowedReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 	allowedReq.Header.Set("Origin", "https://allowed.example.com")
+
 	allowedRec := httptest.NewRecorder()
 	router.ServeHTTP(allowedRec, allowedReq)
+
 	if allowedRec.Code != http.StatusOK {
 		t.Fatalf("allowed origin status = %d, want %d", allowedRec.Code, http.StatusOK)
 	}
 }
 
 func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
@@ -155,14 +160,15 @@ func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() unexpected error: %v", err)
 	}
+
 	if router == nil {
-		t.Fatalf("ProvideAPIRouter() expected non-nil router")
+		t.Fatal("ProvideAPIRouter() expected non-nil router")
 	}
 }
 
 func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	authHandler := &server.AuthHandler{}
 
 	cfg := &config.Config{
@@ -176,19 +182,21 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 
 	router, err := ProvideAPIRouter(ctx, cfg, logger, nil, authHandler, nil, nil, nil)
 	if err == nil {
-		t.Fatalf("ProvideAPIRouter() expected error for nil domain handlers")
+		t.Fatal("ProvideAPIRouter() expected error for nil domain handlers")
 	}
+
 	if err.Error() != "domain handlers must not be nil" {
 		t.Fatalf("ProvideAPIRouter() error = %q, want %q", err.Error(), "domain handlers must not be nil")
 	}
+
 	if router != nil {
-		t.Fatalf("ProvideAPIRouter() expected nil router on error")
+		t.Fatal("ProvideAPIRouter() expected nil router on error")
 	}
 }
 
 func TestAPIRouter_PublicStreamRoutesBypassAPIKeyAuth(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
@@ -213,7 +221,7 @@ func TestAPIRouter_PublicStreamRoutesBypassAPIKeyAuth(t *testing.T) {
 	}
 
 	for _, path := range tests {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)
 		rec := httptest.NewRecorder()
 
 		router.ServeHTTP(rec, req)
@@ -225,8 +233,8 @@ func TestAPIRouter_PublicStreamRoutesBypassAPIKeyAuth(t *testing.T) {
 }
 
 func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
@@ -245,7 +253,7 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/holo/stats", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/stats", http.NoBody)
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
@@ -256,8 +264,8 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 }
 
 func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
@@ -288,7 +296,8 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
+
 			if tt.headerVal != "" {
 				req.Header.Set(middleware.APIKeyHeader, tt.headerVal)
 			}

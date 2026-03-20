@@ -49,7 +49,7 @@ func InitializeBotDependencies(ctx context.Context, cfg *config.Config, logger *
 	return infra.deps, cleanup, nil
 }
 
-// InitializeBotRuntime - cmd/bot 런타임 (Bot + MQ + Admin API 구성요소)
+// InitializeBotRuntime - cmd/bot 런타임 (Bot + MQ + Admin API 구성요소).
 func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*BotRuntime, func(), error) {
 	infra, err := initCoreInfrastructure(ctx, cfg, logger)
 	if err != nil {
@@ -60,6 +60,7 @@ func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 	if err != nil {
 		infra.cleanupDB()
 		infra.cleanupCache()
+
 		return nil, nil, err
 	}
 
@@ -71,12 +72,13 @@ func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 	return runtime, cleanup, nil
 }
 
-// ProvideBot: 봇 인스턴스를 생성하여 제공함
+// ProvideBot: 봇 인스턴스를 생성하여 제공함.
 func ProvideBot(deps *bot.Dependencies) (*bot.Bot, error) {
 	created, err := bot.NewBot(deps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
+
 	return created, nil
 }
 
@@ -85,6 +87,7 @@ func ProvideYouTubeService(ytStack *providers.YouTubeStack) youtube.Service {
 	if ytStack == nil {
 		return nil
 	}
+
 	return ytStack.Service
 }
 
@@ -93,6 +96,7 @@ func ProvideYouTubeScheduler(deps *bot.Dependencies) youtube.Scheduler {
 	if deps == nil {
 		return nil
 	}
+
 	return deps.Scheduler
 }
 

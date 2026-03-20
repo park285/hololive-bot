@@ -21,6 +21,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -35,29 +36,35 @@ func buildAlarmRuntimeScheduler(
 	logger *slog.Logger,
 ) (runtimeAlarmScheduler, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: config is nil")
+		return nil, errors.New("build alarm runtime scheduler: config is nil")
 	}
+
 	if infra == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: infrastructure is nil")
+		return nil, errors.New("build alarm runtime scheduler: infrastructure is nil")
 	}
+
 	if infra.deps == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: bot dependencies are nil")
+		return nil, errors.New("build alarm runtime scheduler: bot dependencies are nil")
 	}
 
 	if infra.deps.Cache == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: cache dependency is nil")
+		return nil, errors.New("build alarm runtime scheduler: cache dependency is nil")
 	}
+
 	if infra.holodexService == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: holodex service is nil")
+		return nil, errors.New("build alarm runtime scheduler: holodex service is nil")
 	}
+
 	if infra.deps.Chzzk == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: chzzk client is nil")
+		return nil, errors.New("build alarm runtime scheduler: chzzk client is nil")
 	}
+
 	if infra.deps.Twitch == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: twitch client is nil")
+		return nil, errors.New("build alarm runtime scheduler: twitch client is nil")
 	}
+
 	if infra.alarmService == nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: alarm service is nil")
+		return nil, errors.New("build alarm runtime scheduler: alarm service is nil")
 	}
 
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(

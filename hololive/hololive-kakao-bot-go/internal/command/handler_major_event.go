@@ -30,6 +30,7 @@ import (
 
 type MajorEventCommand struct {
 	BaseCommand
+
 	repository MajorEventRepository
 }
 

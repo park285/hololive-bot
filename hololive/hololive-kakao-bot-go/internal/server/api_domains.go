@@ -21,17 +21,19 @@
 package server
 
 // API domain handlers split API responsibilities by route group.
-type MemberAPIHandler struct{ *APIHandler }
-type AlarmAPIHandler struct{ *APIHandler }
-type RoomAPIHandler struct{ *APIHandler }
-type StreamAPIHandler struct{ *APIHandler }
-type StatsAPIHandler struct{ *APIHandler }
-type SettingsAPIHandler struct{ *APIHandler }
-type TemplateAPIHandler struct{ *APIHandler }
-type MilestoneAPIHandler struct{ *APIHandler }
-type ProfileAPIHandler struct{ *APIHandler }
-type MajorEventAPIHandler struct{ *APIHandler }
-type OAuthAPIHandler struct{ *APIHandler }
+type (
+	MemberAPIHandler     struct{ *APIHandler }
+	AlarmAPIHandler      struct{ *APIHandler }
+	RoomAPIHandler       struct{ *APIHandler }
+	StreamAPIHandler     struct{ *APIHandler }
+	StatsAPIHandler      struct{ *APIHandler }
+	SettingsAPIHandler   struct{ *APIHandler }
+	TemplateAPIHandler   struct{ *APIHandler }
+	MilestoneAPIHandler  struct{ *APIHandler }
+	ProfileAPIHandler    struct{ *APIHandler }
+	MajorEventAPIHandler struct{ *APIHandler }
+	OAuthAPIHandler      struct{ *APIHandler }
+)
 
 // DomainAPIHandlers groups domain-scoped API handlers for route registration.
 type DomainAPIHandlers struct {

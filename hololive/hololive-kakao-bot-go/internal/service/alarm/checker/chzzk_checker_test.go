@@ -28,10 +28,9 @@ import (
 	"testing"
 	"time"
 
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
@@ -81,14 +80,14 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			cacheSvc := newCheckerTestCacheClient(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			require.NoError(t, cacheSvc.HSet(ctx, notification.ChzzkChannelMapKey, "yt-1", "chzzk-1"))
+
 			_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1", "room-2"})
 			require.NoError(t, err)
 
@@ -96,12 +95,15 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 				if tc.responseDelay > 0 {
 					time.Sleep(tc.responseDelay)
 				}
+
 				w.WriteHeader(tc.statusCode)
+
 				_, _ = w.Write([]byte(tc.responseBody))
 			}))
 			t.Cleanup(server.Close)
 
 			httpClient := server.Client()
+
 			if tc.clientTimeout > 0 {
 				httpClient.Timeout = tc.clientTimeout
 			}
@@ -149,6 +151,7 @@ func TestChzzkCheckerCheck_DedupClaimError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write([]byte(`{"code":200,"content":{"status":"OPEN"}}`))
 	}))
 	t.Cleanup(server.Close)
@@ -160,7 +163,7 @@ func TestChzzkCheckerCheck_DedupClaimError(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	notifications, checkErr := checker.Check(context.Background())
+	notifications, checkErr := checker.Check(t.Context())
 	require.Error(t, checkErr)
 	assert.Contains(t, checkErr.Error(), "claim dedup key")
 	assert.Nil(t, notifications)
