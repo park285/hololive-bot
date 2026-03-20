@@ -65,6 +65,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/park285/iris-client-go v0.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -109,11 +110,10 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
-	park285/iris-client-go v0.0.0 // indirect
 )
 
 replace (
 	github.com/kapu/hololive-shared => ../hololive-shared
+	github.com/park285/iris-client-go => ../../../iris-client-go
 	github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
-	park285/iris-client-go => ../../../iris-client-go
 )

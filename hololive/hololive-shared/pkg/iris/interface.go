@@ -20,7 +20,7 @@
 
 package iris
 
-import "park285/iris-client-go/client"
+import "github.com/park285/iris-client-go/client"
 
 // Client: iris-client-go의 Sender + AdminClient를 결합한 인터페이스입니다.
 // *client.H2CClient는 두 인터페이스를 모두 구현하므로 이 타입을 만족합니다.

@@ -21,8 +21,8 @@
 package iris
 
 import (
-	"park285/iris-client-go/client"
-	"park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/webhook"
 )
 
 // 클라이언트 타입 별칭 — iris-client-go/client로 위임합니다.
