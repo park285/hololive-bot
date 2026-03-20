@@ -68,6 +68,10 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool)
 		return nil, false
 	}
 
+	if message.JSON != nil && message.JSON.Type != "" && message.JSON.Type != "1" {
+		return nil, false
+	}
+
 	if i.messageAdapter == nil {
 		i.logWarn("Message adapter is not configured")
 		return nil, false
