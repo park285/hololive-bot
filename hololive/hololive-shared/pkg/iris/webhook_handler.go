@@ -29,8 +29,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/valkey-io/valkey-go"
 
-	"park285/iris-client-go/dedup"
-	"park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/dedup"
+	"github.com/park285/iris-client-go/webhook"
 )
 
 // WebhookHandlerOptions: 기존 구조체 기반 옵션 — 하위 호환성 유지를 위해 보존합니다.

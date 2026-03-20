@@ -24,7 +24,7 @@ import (
 	"log/slog"
 	"time"
 
-	"park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/client"
 )
 
 // H2CClient: iris-client-go/client.H2CClient의 타입 별칭입니다.
