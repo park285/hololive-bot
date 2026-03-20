@@ -33,7 +33,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// AlarmListEntry: 알림 목록 조회를 위한 개별 항목 (멤버 이름 및 다음 방송 정보 포함)
+// AlarmListEntry: 알림 목록 조회를 위한 개별 항목 (멤버 이름 및 다음 방송 정보 포함).
 type AlarmListEntry struct {
 	MemberName string
 	AlarmTypes domain.AlarmTypes
@@ -104,12 +104,15 @@ func alarmChannelName(notification *domain.AlarmNotification) string {
 	}
 
 	var name string
+
 	if notification.Channel != nil {
 		name = stringutil.TrimSpace(notification.Channel.GetDisplayName())
 	}
+
 	if name == "" && notification.Stream != nil {
 		name = stringutil.TrimSpace(notification.Stream.ChannelName)
 	}
+
 	if name == "" {
 		return ""
 	}
@@ -129,6 +132,7 @@ func alarmChannelName(notification *domain.AlarmNotification) string {
 			case "Stellive":
 				displayOrg = "스텔라이브"
 			}
+
 			name = fmt.Sprintf("[%s] %s", displayOrg, name)
 		}
 	}
@@ -174,6 +178,7 @@ func summarizeNextStreamInfo(info *domain.NextStreamInfo) *domain.NextStreamInfo
 	if info == nil || !info.Status.IsLive() {
 		return nil
 	}
+
 	return info
 }
 
@@ -200,6 +205,7 @@ func buildNextStreamInfoView(info *domain.NextStreamInfo) *nextStreamInfoView {
 		}
 
 		scheduled := *info.StartScheduled
+
 		view.ScheduledKST = util.FormatKST(scheduled, "01/02 15:04")
 
 		timeLeft := time.Until(scheduled)
@@ -256,15 +262,18 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 	if data.Count == 0 {
 		return rendered
 	}
+
 	instruction, body := splitTemplateInstruction(rendered)
 	if instruction == "" || body == "" {
 		return rendered
 	}
+
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
 func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) string {
 	data := alarmClearedTemplateData{Emoji: DefaultEmoji, Count: count}
+
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmCleared, data)
 	if err != nil {
 		return ErrorMessage(ErrDisplayAlarmClearFailed)
@@ -287,6 +296,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 	stream := notification.Stream
 
 	var urlText string
+
 	switch {
 	case stream.IsTwitchOnly:
 		urlText = fmt.Sprintf("📺 Twitch: %s", stream.GetTwitchLiveURL())
@@ -302,6 +312,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 
 	// 방송 시각 표시: StartScheduled가 있으면 MinutesUntil 값과 무관하게 절대 시각 표시
 	var scheduledTimeKST string
+
 	if notification.Stream.StartScheduled != nil {
 		scheduledTimeKST = util.FormatKST(*notification.Stream.StartScheduled, "15:04")
 	}
@@ -317,6 +328,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 	}
 
 	templateKey := domain.TemplateKeyCmdAlarmNotification
+
 	if notification.MinutesUntil <= 0 {
 		templateKey = domain.TemplateKeyCmdAlarmLiveStarted
 	}
@@ -327,6 +339,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 			// 마이그레이션 적용 전에도 catch-up 문구가 "방송 시작"으로 보이도록 안전한 fallback.
 			return fmt.Sprintf("🔴 %s 방송 시작됨\n📺 %s\n🔗 %s", channelName, data.Title, data.URL)
 		}
+
 		return ErrorMessage(ErrDisplayAlarmNotifyFailed)
 	}
 
@@ -334,7 +347,7 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 	return rendered
 }
 
-// AlarmNotificationGroup: 여러 방송의 알림을 하나로 묶어 그룹 메시지를 생성한다. (알림 폭탄 방지)
+// AlarmNotificationGroup: 여러 방송의 알림을 하나로 묶어 그룹 메시지를 생성한다. (알림 폭탄 방지).
 func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notifications []*domain.AlarmNotification) string {
 	if len(notifications) == 0 {
 		return ""
@@ -347,6 +360,7 @@ func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notificatio
 		}
 
 		var scheduledKST string
+
 		if notification.Stream.StartScheduled != nil {
 			scheduledKST = util.FormatKST(*notification.Stream.StartScheduled, "15:04")
 		}
@@ -368,14 +382,18 @@ func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notificatio
 			if a.ChannelName < b.ChannelName {
 				return -1
 			}
+
 			return 1
 		}
+
 		if a.Title < b.Title {
 			return -1
 		}
+
 		if a.Title > b.Title {
 			return 1
 		}
+
 		return 0
 	})
 
@@ -422,6 +440,7 @@ func groupAlarmEntryLine(index int, channelName, scheduledKST string, minutesUnt
 		if minutesUntil > 0 {
 			return fmt.Sprintf("%d. %s (%s 방송예정)", index, channelName, scheduledKST)
 		}
+
 		return fmt.Sprintf("%d. %s (%s 방송 시작)", index, channelName, scheduledKST)
 	}
 
@@ -438,15 +457,18 @@ func groupAlarmSummaryLine(minutesUntil int, entries []alarmNotificationGroupEnt
 	}
 
 	seen := make(map[string]struct{}, len(entries))
+
 	scheduledTimes := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		scheduledKST := stringutil.TrimSpace(entry.ScheduledKST)
 		if scheduledKST == "" {
 			continue
 		}
+
 		if _, ok := seen[scheduledKST]; ok {
 			continue
 		}
+
 		seen[scheduledKST] = struct{}{}
 		scheduledTimes = append(scheduledTimes, scheduledKST)
 	}
@@ -456,6 +478,7 @@ func groupAlarmSummaryLine(minutesUntil int, entries []alarmNotificationGroupEnt
 	}
 
 	slices.Sort(scheduledTimes)
+
 	if len(scheduledTimes) == 1 {
 		return fmt.Sprintf("%s %s 방송예정", DefaultEmoji.Time, scheduledTimes[0])
 	}
@@ -502,6 +525,7 @@ func formatAlarmTypesLabel(types domain.AlarmTypes) string {
 	for i, t := range types {
 		names[i] = t.DisplayName()
 	}
+
 	return strings.Join(names, "+")
 }
 
@@ -514,6 +538,7 @@ func (f *ResponseFormatter) FormatAmbiguousMembers(candidates []*domain.Member) 
 	}
 
 	sb.WriteString("\n정확한 멤버를 지정하려면 다음과 같이 입력해주세요:\n")
+
 	if len(candidates) > 0 {
 		fmt.Fprintf(&sb, "%s알람 추가 %s", f.prefix, candidates[0].GetDisplayName())
 	}

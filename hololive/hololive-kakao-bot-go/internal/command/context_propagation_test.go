@@ -22,22 +22,21 @@ package command
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"sync"
 	"testing"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func newCommandTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 type commandContextKey struct{}
@@ -51,8 +50,10 @@ func (s *trackedContextState) record(ctx context.Context) {
 	if ctx == nil {
 		return
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.seen = append(s.seen, ctx)
 }
 
@@ -63,6 +64,7 @@ func (s *trackedContextState) assertAll(t *testing.T, want context.Context) {
 	defer s.mu.Unlock()
 
 	require.NotEmpty(t, s.seen)
+
 	for _, got := range s.seen {
 		assert.Same(t, want, got)
 	}
@@ -81,8 +83,10 @@ func newTrackedMemberProvider(members ...*domain.Member) *trackedMemberProvider 
 		if member == nil || member.ChannelID == "" {
 			continue
 		}
+
 		byChannel[member.ChannelID] = member
 	}
+
 	return &trackedMemberProvider{
 		state:     &trackedContextState{},
 		members:   members,
@@ -108,6 +112,7 @@ func (p *trackedMemberProvider) GetChannelIDs() []string {
 	for id := range p.byChannel {
 		ids = append(ids, id)
 	}
+
 	return ids
 }
 
@@ -158,7 +163,7 @@ func (p *trackedStreamProvider) GetChannel(context.Context, string) (*domain.Cha
 func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 	t.Parallel()
 
-	reqCtx := context.WithValue(context.Background(), commandContextKey{}, "request")
+	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
 		ChannelID: "ch-aqua",
 		Name:      "Aqua",
@@ -184,7 +189,7 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 	t.Parallel()
 
-	reqCtx := context.WithValue(context.Background(), commandContextKey{}, "request")
+	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
 		ChannelID:   "ch-aqua",
 		Name:        "Aqua",
@@ -206,9 +211,10 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 			t.Fatal("unexpected SendMessage call")
 			return nil
 		},
-		SendError: func(ctx context.Context, _ string, message string) error {
+		SendError: func(ctx context.Context, _, message string) error {
 			sendErrorCtx = ctx
 			sendErrorMsg = message
+
 			return nil
 		},
 		Logger: newCommandTestLogger(),
@@ -227,7 +233,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	t.Parallel()
 
-	reqCtx := context.WithValue(context.Background(), commandContextKey{}, "request")
+	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
 		ChannelID: "ch-aqua",
 		Name:      "Aqua",
@@ -244,9 +250,10 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		Holodex:   streamProvider,
 		Matcher:   matcherSvc,
 		Formatter: adapter.NewResponseFormatter("!", nil),
-		SendMessage: func(ctx context.Context, _ string, message string) error {
+		SendMessage: func(ctx context.Context, _, message string) error {
 			sendMessageCtx = ctx
 			sendMessageMsg = message
+
 			return nil
 		},
 		SendError: func(context.Context, string, string) error {
@@ -269,7 +276,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 	t.Parallel()
 
-	reqCtx := context.WithValue(context.Background(), commandContextKey{}, "request")
+	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
 		ChannelID: "ch-aqua",
 		Name:      "Aqua",
@@ -284,8 +291,8 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 			Logger:       newCommandTestLogger(),
 		}),
 		MembersData: provider,
-		Matcher: matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
-		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		Matcher:     matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
+		Formatter:   adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
 		},

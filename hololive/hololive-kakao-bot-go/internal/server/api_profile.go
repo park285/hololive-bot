@@ -30,14 +30,14 @@ import (
 )
 
 // ProfileResponse: 프로필 API 응답 구조체
-// 원본 프로필과 번역된 프로필 정보를 함께 반환함
+// 원본 프로필과 번역된 프로필 정보를 함께 반환함.
 type ProfileResponse struct {
 	Status     string          `json:"status"`
 	Profile    *ProfileData    `json:"profile,omitempty"`
 	Translated *TranslatedData `json:"translated,omitempty"`
 }
 
-// ProfileData: 원본 프로필 데이터 (영문 기반)
+// ProfileData: 원본 프로필 데이터 (영문 기반).
 type ProfileData struct {
 	Slug         string       `json:"slug"`
 	EnglishName  string       `json:"english_name"`
@@ -49,19 +49,19 @@ type ProfileData struct {
 	OfficialURL  string       `json:"official_url"`
 }
 
-// DataEntry: 프로필 데이터 항목 (레이블-값 쌍)
+// DataEntry: 프로필 데이터 항목 (레이블-값 쌍).
 type DataEntry struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 }
 
-// SocialLink: 소셜 미디어 링크
+// SocialLink: 소셜 미디어 링크.
 type SocialLink struct {
 	Label string `json:"label"`
 	URL   string `json:"url"`
 }
 
-// TranslatedData: 번역된 프로필 데이터 (한국어)
+// TranslatedData: 번역된 프로필 데이터 (한국어).
 type TranslatedData struct {
 	DisplayName string      `json:"display_name"`
 	Catchphrase string      `json:"catchphrase"`
@@ -83,6 +83,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	if h.profiles == nil {
 		h.logger.Error("ProfileService is not initialized")
 		c.JSON(500, gin.H{"error": "Profile service unavailable"})
+
 		return
 	}
 
@@ -97,6 +98,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 			slog.Any("error", err),
 		)
 		c.JSON(404, gin.H{"error": "Profile not found for channel"})
+
 		return
 	}
 
@@ -108,6 +110,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 			slog.Any("error", err),
 		)
 		c.JSON(500, gin.H{"error": "Failed to load translated profile"})
+
 		return
 	}
 
@@ -143,6 +146,7 @@ func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 	if h.profiles == nil {
 		h.logger.Error("ProfileService is not initialized")
 		c.JSON(500, gin.H{"error": "Profile service unavailable"})
+
 		return
 	}
 
@@ -156,6 +160,7 @@ func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 			slog.Any("error", err),
 		)
 		c.JSON(404, gin.H{"error": "Profile not found"})
+
 		return
 	}
 
@@ -177,7 +182,7 @@ func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 	c.JSON(200, resp)
 }
 
-// convertToProfileData: domain.TalentProfile을 API 응답 구조체로 변환
+// convertToProfileData: domain.TalentProfile을 API 응답 구조체로 변환.
 func convertToProfileData(p *domain.TalentProfile) *ProfileData {
 	if p == nil {
 		return nil
@@ -205,11 +210,12 @@ func convertToProfileData(p *domain.TalentProfile) *ProfileData {
 	}
 }
 
-// convertTranslatedRows: domain.TranslatedProfileDataRow 슬라이스를 API 응답 형식으로 변환
+// convertTranslatedRows: domain.TranslatedProfileDataRow 슬라이스를 API 응답 형식으로 변환.
 func convertTranslatedRows(rows []domain.TranslatedProfileDataRow) []DataEntry {
 	result := make([]DataEntry, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, DataEntry{Label: row.Label, Value: row.Value})
 	}
+
 	return result
 }

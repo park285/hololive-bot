@@ -52,6 +52,7 @@ func initAlarmYouTubeStack(
 	logger *slog.Logger,
 ) (*alarmYouTubeStackComponents, error) {
 	alarmRepository := ProvideAlarmRepository(infra.postgresService, logger)
+
 	alarmMode, err := initAlarmModeComponents(
 		ctx,
 		cfg,

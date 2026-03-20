@@ -59,6 +59,7 @@ func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	period := membernewscontracts.PeriodWeekly
+
 	if rawPeriod, ok := params["period"].(string); ok {
 		period = membernewscontracts.NormalizePeriod(membernewscontracts.Period(rawPeriod))
 	}
@@ -70,6 +71,7 @@ func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		}
 
 		c.Deps().Logger.Error("Member news command failed", "room", cmdCtx.Room, "error", err)
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsQueryFailed)
 	}
 

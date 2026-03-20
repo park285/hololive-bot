@@ -21,8 +21,6 @@
 package app
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +28,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kapu/hololive-shared/pkg/config"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
@@ -39,9 +40,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
-	"github.com/kapu/hololive-shared/pkg/config"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
 )
 
 func TestProvideBot_ErrorWrapped(t *testing.T) {
@@ -56,14 +54,14 @@ func TestProvideBot_ErrorWrapped(t *testing.T) {
 func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	handler := ProvideTriggerHandler(nil, nil, nil, logger)
 	require.NotNil(t, handler)
 
 	router := gin.New()
 	handler.RegisterInternalRoutesWithAuth(router.Group(""), "")
 
-	req := httptest.NewRequest(http.MethodPost, triggercontracts.MajorEventWeeklyPath, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(t, http.StatusServiceUnavailable, res.Code)
@@ -98,7 +96,7 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 	router := gin.New()
 	router.Any("/webhook/iris", handler.Handle)
 
-	req := httptest.NewRequest(http.MethodGet, "/webhook/iris", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/webhook/iris", http.NoBody)
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(t, http.StatusMethodNotAllowed, res.Code)
@@ -107,8 +105,8 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	runtime, err := buildBotRuntime(context.Background(), nil, logger, nil)
+	logger := slog.New(slog.DiscardHandler)
+	runtime, err := buildBotRuntime(t.Context(), nil, logger, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to create bot")
@@ -117,7 +115,7 @@ func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
 func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	cfg := &config.Config{
 		Notification: config.NotificationConfig{
 			AdvanceMinutes: []int{5, 3, 1},

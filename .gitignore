@@ -205,3 +205,5 @@ hololive/hololive-rs/docs/reports/**/*.tsv
 !LICENSE
 !CHANGELOG.md
 !docs/
+docs/.omx/
+docs/doc-gen/

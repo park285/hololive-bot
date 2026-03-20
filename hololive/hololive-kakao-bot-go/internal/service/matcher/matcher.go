@@ -32,7 +32,7 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// MatchCacheEntry: 멤버 매칭 결과를 캐싱하기 위한 구조체 (채널 정보 + 타임스탬프)
+// MatchCacheEntry: 멤버 매칭 결과를 캐싱하기 위한 구조체 (채널 정보 + 타임스탬프).
 type MatchCacheEntry struct {
 	Channel   *domain.Channel
 	Timestamp time.Time
@@ -65,7 +65,7 @@ type snapshotMatchStrategy struct {
 	find func(*memberMatcherSnapshot, string) *matchCandidate
 }
 
-// ChannelSelector: 모호한 검색어에 대해 모호성 해소를 돕는 채널 선택 인터페이스
+// ChannelSelector: 모호한 검색어에 대해 모호성 해소를 돕는 채널 선택 인터페이스.
 type ChannelSelector interface {
 	SelectBestChannel(ctx context.Context, query string, candidates []*domain.Channel) (*domain.Channel, error)
 }
@@ -113,6 +113,7 @@ func NewMemberMatcher(
 
 	provider := mm.providerWithContext(ctx)
 	memberCount := 0
+
 	if provider != nil {
 		memberCount = len(provider.GetAllMembers())
 	}
@@ -128,8 +129,10 @@ func (mm *MemberMatcher) providerWithContext(ctx context.Context) domain.MemberD
 	if mm == nil || mm.membersData == nil {
 		return nil
 	}
+
 	if ctx == nil {
 		return mm.membersData
 	}
+
 	return mm.membersData.WithContext(ctx)
 }

@@ -21,13 +21,12 @@
 package app
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 	"github.com/kapu/hololive-shared/pkg/config"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
 type routeSpec struct {
@@ -36,8 +35,8 @@ type routeSpec struct {
 }
 
 func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
 	domainHandlers := apiHandler.DomainHandlers()
 	authHandler := &server.AuthHandler{}
@@ -57,6 +56,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	}
 
 	routeSet := make(map[string]struct{})
+
 	for _, route := range router.Routes() {
 		routeSet[route.Method+" "+route.Path] = struct{}{}
 	}

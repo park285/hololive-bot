@@ -21,6 +21,7 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -74,6 +75,7 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		if target == "" {
 			target = rawQuery
 		}
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(target))
 	}
 
@@ -83,6 +85,7 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 			slog.String("member", member.Name),
 			slog.Any("error", err),
 		)
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, fmt.Sprintf(adapter.ErrMemberProfileLoadFailed, member.Name))
 	}
 
@@ -105,7 +108,7 @@ func (c *MemberInfoCommand) ensureDeps() error {
 
 	if c.Deps().Matcher == nil || c.Deps().MembersData == nil ||
 		c.Deps().Formatter == nil || c.Deps().OfficialProfiles == nil {
-		return fmt.Errorf("member info command services not configured")
+		return errors.New("member info command services not configured")
 	}
 
 	return nil
@@ -137,8 +140,10 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 			slog.String("query", trimmed),
 			slog.Any("error", err),
 		)
+
 		return nil
 	}
+
 	if channel == nil {
 		return nil
 	}
@@ -150,6 +155,7 @@ func (c *MemberInfoCommand) log() *slog.Logger {
 	if c.Deps() != nil && c.Deps().Logger != nil {
 		return c.Deps().Logger
 	}
+
 	return slog.Default()
 }
 
@@ -157,10 +163,12 @@ func getStringParam(params map[string]any, key string) string {
 	if params == nil {
 		return ""
 	}
+
 	val, ok := params[key]
 	if !ok {
 		return ""
 	}
+
 	switch v := val.(type) {
 	case string:
 		return stringutil.TrimSpace(v)

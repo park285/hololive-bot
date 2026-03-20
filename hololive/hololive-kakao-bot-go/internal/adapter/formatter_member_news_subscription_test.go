@@ -21,13 +21,11 @@
 package adapter
 
 import (
-	"context"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFormatMemberNewsSubscriptionMessages(t *testing.T) {
@@ -43,7 +41,7 @@ func TestFormatMemberNewsSubscriptionMessages(t *testing.T) {
 	})
 	formatter := NewResponseFormatter("?", renderer)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	assert.Equal(t, "NO_MEMBERS ?", formatter.FormatMemberNewsNoMembers(ctx))
 	assert.Equal(t, "SUBSCRIBED ?", formatter.FormatMemberNewsSubscribed(ctx))
 	assert.Equal(t, "ALREADY_SUB ?", formatter.FormatMemberNewsAlreadySubscribed(ctx))
@@ -56,7 +54,7 @@ func TestFormatMemberNewsSubscriptionMessages(t *testing.T) {
 func TestFormatMemberNewsSubscriptionMessages_Fallback(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	formatter := NewResponseFormatter("!", nil)
 
 	assert.Equal(t, MsgMemberNewsNoMembers, formatter.FormatMemberNewsNoMembers(ctx))
@@ -90,6 +88,6 @@ func TestMemberNewsLocalizationHelpers(t *testing.T) {
 	assert.Equal(t, "기타", localized[5].Category)
 	assert.Equal(t, "unknown", localized[6].Category)
 
-	assert.Equal(t, "", memberNewsCategoryLabel(""))
+	assert.Empty(t, memberNewsCategoryLabel(""))
 	assert.Equal(t, "굿즈", memberNewsCategoryLabel(" goods "))
 }

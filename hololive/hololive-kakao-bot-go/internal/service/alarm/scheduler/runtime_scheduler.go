@@ -21,6 +21,7 @@
 package scheduler
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -79,20 +80,25 @@ func NewRuntimeScheduler(
 	logger *slog.Logger,
 ) (*RuntimeScheduler, error) {
 	if cacheSvc == nil {
-		return nil, fmt.Errorf("new runtime scheduler: cache service is nil")
+		return nil, errors.New("new runtime scheduler: cache service is nil")
 	}
+
 	if holodexSvc == nil {
-		return nil, fmt.Errorf("new runtime scheduler: holodex service is nil")
+		return nil, errors.New("new runtime scheduler: holodex service is nil")
 	}
+
 	if chzzkClient == nil {
-		return nil, fmt.Errorf("new runtime scheduler: chzzk client is nil")
+		return nil, errors.New("new runtime scheduler: chzzk client is nil")
 	}
+
 	if twitchClient == nil {
-		return nil, fmt.Errorf("new runtime scheduler: twitch client is nil")
+		return nil, errors.New("new runtime scheduler: twitch client is nil")
 	}
+
 	if alarmSvc == nil {
-		return nil, fmt.Errorf("new runtime scheduler: alarm service is nil")
+		return nil, errors.New("new runtime scheduler: alarm service is nil")
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -110,14 +116,17 @@ func NewRuntimeScheduler(
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create youtube checker: %w", err)
 	}
+
 	chzzkChecker, err := checker.NewChzzkChecker(cacheSvc, chzzkClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create chzzk checker: %w", err)
 	}
+
 	twitchChecker, err := checker.NewTwitchChecker(cacheSvc, twitchClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create twitch checker: %w", err)
 	}
+
 	notifierSvc, err := checker.NewNotifier(dedupSvc, queuePublisher, alarmSvc, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
@@ -188,13 +197,16 @@ func (s *RuntimeScheduler) runLoop(
 		case <-next.C:
 			loopCtx, cancel := context.WithTimeout(ctx, timeout)
 			err := run(loopCtx)
+
 			cancel()
+
 			if err != nil {
 				s.logger.Warn("Alarm loop iteration failed",
 					slog.String("loop", name),
 					slog.Any("error", err),
 				)
 			}
+
 			next.Reset(interval)
 		}
 	}
@@ -205,6 +217,7 @@ func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("run youtube iteration: check notifications: %w", err)
 	}
+
 	return s.dispatchNotifications(ctx, "youtube", notifications)
 }
 
@@ -213,6 +226,7 @@ func (s *RuntimeScheduler) runChzzkIteration(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("run chzzk iteration: check notifications: %w", err)
 	}
+
 	return s.dispatchNotifications(ctx, "chzzk", notifications)
 }
 
@@ -221,6 +235,7 @@ func (s *RuntimeScheduler) runTwitchIteration(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("run twitch iteration: check notifications: %w", err)
 	}
+
 	return s.dispatchNotifications(ctx, "twitch", notifications)
 }
 
@@ -250,14 +265,17 @@ func (s *RuntimeScheduler) dispatchNotifications(
 
 func normalizeTargetMinutes(targetMinutes []int) []int {
 	normalized := make([]int, 0, len(targetMinutes))
+
 	seen := make(map[int]struct{}, len(targetMinutes))
 	for _, minute := range targetMinutes {
 		if minute <= 0 {
 			continue
 		}
+
 		if _, ok := seen[minute]; ok {
 			continue
 		}
+
 		seen[minute] = struct{}{}
 		normalized = append(normalized, minute)
 	}
@@ -267,6 +285,7 @@ func normalizeTargetMinutes(targetMinutes []int) []int {
 	}
 
 	slices.SortFunc(normalized, func(a, b int) int { return b - a })
+
 	if _, ok := seen[1]; !ok {
 		normalized = append(normalized, 1)
 	}

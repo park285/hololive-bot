@@ -21,6 +21,7 @@
 package checker
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -63,16 +64,19 @@ func NewYouTubeChecker(
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
 	if cacheSvc == nil {
-		return nil, fmt.Errorf("new youtube checker: cache service is nil")
+		return nil, errors.New("new youtube checker: cache service is nil")
 	}
+
 	if holodexSvc == nil {
-		return nil, fmt.Errorf("new youtube checker: holodex service is nil")
+		return nil, errors.New("new youtube checker: holodex service is nil")
 	}
+
 	if tierScheduler == nil {
-		return nil, fmt.Errorf("new youtube checker: tier scheduler is nil")
+		return nil, errors.New("new youtube checker: tier scheduler is nil")
 	}
+
 	if dedupSvc == nil {
-		return nil, fmt.Errorf("new youtube checker: dedup service is nil")
+		return nil, errors.New("new youtube checker: dedup service is nil")
 	}
 
 	return &YouTubeChecker{
@@ -91,6 +95,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 	if err != nil {
 		return nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
 	}
+
 	if len(channelIDs) == 0 {
 		return []*domain.AlarmNotification{}, nil
 	}
@@ -106,6 +111,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 	}
 
 	streamsByChannel := groupStreamsByChannel(streams)
+
 	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, dueChannels)
 	if err != nil {
 		return nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
@@ -113,6 +119,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 
 	now := time.Now().UTC()
 	notifications := make([]*domain.AlarmNotification, 0, len(dueChannels)*5)
+
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -125,6 +132,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 		}
 
 		c.tierScheduler.UpdateChannelState(channelID, channelStreams)
+
 		subscriberRooms := subscriberMap[channelID]
 		if len(subscriberRooms) == 0 {
 			continue
@@ -147,8 +155,10 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 			}
 
 			mu.Lock()
+
 			notifications = append(notifications, channelNotifications...)
 			mu.Unlock()
+
 			return nil
 		})
 	}
@@ -177,12 +187,14 @@ func (c *YouTubeChecker) buildChannelNotifications(
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build upcoming notifications: %w", err)
 		}
+
 		notifications = append(notifications, upcomingNotifications...)
 
 		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, subscriberRooms, now)
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build live catchup notifications: %w", err)
 		}
+
 		notifications = append(notifications, liveCatchupNotifications...)
 	}
 
@@ -198,6 +210,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	if stream == nil || !stream.IsUpcoming() || stream.StartScheduled == nil {
 		return nil, nil
 	}
+
 	if !stream.StartScheduled.After(now) {
 		return nil, nil
 	}
@@ -211,11 +224,13 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	if err != nil {
 		return nil, fmt.Errorf("build upcoming notifications: check already notified for schedule: %w", err)
 	}
+
 	if alreadyNotified {
 		return nil, nil
 	}
 
 	resolvedStream := ensureScheduledTime(stream, *stream.StartScheduled)
+
 	return roomNotifications(subscriberRooms, resolvedStream.Channel, resolvedStream, minutesUntil, ""), nil
 }
 
@@ -244,11 +259,13 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	if err != nil {
 		return nil, fmt.Errorf("build live catchup notifications: check already notified: %w", err)
 	}
+
 	if alreadyNotified {
 		return nil, nil
 	}
 
 	resolvedStream := ensureScheduledTime(stream, *startAt)
+
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
 	for _, roomID := range subscriberRooms {
 		recentlyUpcoming, err := c.dedupSvc.WasUpcomingEventNotifiedRecently(
@@ -261,9 +278,11 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 		if err != nil {
 			return nil, fmt.Errorf("build live catchup notifications: check upcoming suppress window: %w", err)
 		}
+
 		if recentlyUpcoming {
 			continue
 		}
+
 		notifications = append(notifications, roomNotifications([]string{roomID}, resolvedStream.Channel, resolvedStream, 0, "")...)
 	}
 
@@ -274,32 +293,39 @@ func resolveLiveStart(stream *domain.Stream) *time.Time {
 	if stream == nil {
 		return nil
 	}
+
 	if stream.StartActual != nil && !stream.StartActual.IsZero() {
 		start := stream.StartActual.UTC()
 		return &start
 	}
+
 	if stream.StartScheduled != nil && !stream.StartScheduled.IsZero() {
 		start := stream.StartScheduled.UTC()
 		return &start
 	}
+
 	return nil
 }
 
 func groupStreamsByChannel(streams []*domain.Stream) map[string][]*domain.Stream {
 	grouped := make(map[string][]*domain.Stream)
+
 	for _, stream := range streams {
 		if stream == nil {
 			continue
 		}
+
 		channelID := stream.ChannelID
 		if channelID == "" && stream.Channel != nil {
 			channelID = stream.Channel.ID
 		}
+
 		if channelID == "" {
 			continue
 		}
 
 		grouped[channelID] = append(grouped[channelID], stream)
 	}
+
 	return grouped
 }

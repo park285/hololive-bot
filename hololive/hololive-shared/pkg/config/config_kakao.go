@@ -22,27 +22,29 @@ package config
 
 import (
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// KakaoConfig: 카카오톡 채팅방 허용 목록 및 접근 제어(ACL) 설정
+// KakaoConfig: 카카오톡 채팅방 접근 제어(ACL) 설정
 type KakaoConfig struct {
 	Rooms      []string
 	ACLEnabled bool
+	ACLMode    string // "whitelist" 또는 "blacklist"
 
 	mu sync.RWMutex
 }
 
-// SnapshotACL: 현재 ACL 설정 상태(활성화 여부 및 허용된 방 목록)의 스냅샷을 반환합니다.
+// SnapshotACL: 현재 ACL 설정 상태(활성화 여부, 모드, 방 목록)의 스냅샷을 반환합니다.
 // Thread-safe하게 읽기 락을 사용한다.
-func (c *KakaoConfig) SnapshotACL() (enabled bool, rooms []string) {
+func (c *KakaoConfig) SnapshotACL() (enabled bool, mode string, rooms []string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	rooms = append([]string(nil), c.Rooms...)
-	return c.ACLEnabled, rooms
+	return c.ACLEnabled, c.ACLMode, rooms
 }
 
 // SetACLEnabled: ACL(접근 제어) 기능의 활성화 여부를 '동적으로' 설정합니다.
@@ -53,7 +55,7 @@ func (c *KakaoConfig) SetACLEnabled(enabled bool) {
 	c.ACLEnabled = enabled
 }
 
-// AddRoom: 허용 목록에 새로운 채팅방을 추가한다. 이미 존재하면 false를 반환합니다.
+// AddRoom: ACL 목록에 새로운 채팅방을 추가한다. 이미 존재하면 false를 반환합니다.
 func (c *KakaoConfig) AddRoom(room string) bool {
 	room = stringutil.TrimSpace(room)
 	if room == "" {
@@ -71,7 +73,7 @@ func (c *KakaoConfig) AddRoom(room string) bool {
 	return true
 }
 
-// RemoveRoom: 허용 목록에서 특정 채팅방을 제거합니다.
+// RemoveRoom: ACL 목록에서 특정 채팅방을 제거합니다.
 func (c *KakaoConfig) RemoveRoom(room string) bool {
 	room = stringutil.TrimSpace(room)
 	if room == "" {
@@ -112,5 +114,14 @@ func (c *KakaoConfig) IsRoomAllowed(roomName, chatID string) bool {
 		return false // chatID가 없으면 거부
 	}
 
-	return slices.Contains(c.Rooms, chatID)
+	inList := slices.Contains(c.Rooms, chatID)
+
+	switch strings.ToLower(strings.TrimSpace(c.ACLMode)) {
+	case "blacklist":
+		// 블랙리스트: 목록에 있으면 차단
+		return !inList
+	default:
+		// 화이트리스트: 목록에 있으면 허용
+		return inList
+	}
 }

@@ -140,7 +140,7 @@ func TestKakaoConfig_SnapshotACL_ReturnsCopy(t *testing.T) {
 		ACLEnabled: true,
 	}
 
-	enabled, rooms := cfg.SnapshotACL()
+	enabled, _, rooms := cfg.SnapshotACL()
 	if !enabled {
 		t.Fatalf("expected enabled to be true")
 	}
@@ -149,7 +149,7 @@ func TestKakaoConfig_SnapshotACL_ReturnsCopy(t *testing.T) {
 	}
 
 	rooms[0] = "mutated"
-	_, rooms2 := cfg.SnapshotACL()
+	_, _, rooms2 := cfg.SnapshotACL()
 	if rooms2[0] != "a" {
 		t.Fatalf("expected SnapshotACL to return a copy, got: %v", rooms2)
 	}

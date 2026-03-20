@@ -46,6 +46,7 @@ func newStripedExecutor(stripeCount, stripeCap int) *stripedExecutor {
 	if stripeCount <= 0 {
 		stripeCount = 1
 	}
+
 	if stripeCap <= 0 {
 		stripeCap = 1
 	}
@@ -58,9 +59,11 @@ func newStripedExecutor(stripeCount, stripeCap int) *stripedExecutor {
 
 	for i := range e.stripes {
 		ch := make(chan func(), stripeCap)
+
 		e.stripes[i] = ch
 
 		e.workerWG.Add(1)
+
 		go func(queue <-chan func()) {
 			defer e.workerWG.Done()
 
@@ -74,6 +77,7 @@ func newStripedExecutor(stripeCount, stripeCap int) *stripedExecutor {
 						if task == nil {
 							return
 						}
+
 						task()
 					}()
 				case <-e.stopCh:
@@ -90,16 +94,20 @@ func (e *stripedExecutor) Submit(key string, task func()) error {
 	if e == nil {
 		return errStripedExecutorClosed
 	}
+
 	if e.closed.Load() {
 		return errStripedExecutorClosed
 	}
+
 	if task == nil {
 		return nil
 	}
 
 	index := e.stripeIndex(key)
 	e.taskWG.Add(1)
+
 	e.stripes[index] <- task
+
 	return nil
 }
 
@@ -111,6 +119,7 @@ func (e *stripedExecutor) ShutdownWait(ctx context.Context) error {
 	e.closed.Store(true)
 
 	done := make(chan struct{})
+
 	go func() {
 		e.taskWG.Wait()
 		close(done)
@@ -120,6 +129,7 @@ func (e *stripedExecutor) ShutdownWait(ctx context.Context) error {
 	case <-done:
 		e.stop()
 		e.workerWG.Wait()
+
 		return nil
 	case <-ctx.Done():
 		go func() {
@@ -127,6 +137,7 @@ func (e *stripedExecutor) ShutdownWait(ctx context.Context) error {
 			e.stop()
 			e.workerWG.Wait()
 		}()
+
 		return fmt.Errorf("shutdown wait: %w", ctx.Err())
 	}
 }
@@ -147,6 +158,8 @@ func (e *stripedExecutor) stripeIndex(key string) int {
 	}
 
 	hasher := fnv.New32a()
+
 	_, _ = hasher.Write([]byte(trimmed))
+
 	return int(hasher.Sum32() % uint32(stripeCount))
 }

@@ -44,9 +44,11 @@ func TestBuildActiveMemberIndex(t *testing.T) {
 	if len(ids) != 2 {
 		t.Fatalf("len(ids)=%d want=2 ids=%v", len(ids), ids)
 	}
+
 	if ids[0] != "UC1" || ids[1] != "UC3" {
 		t.Fatalf("ids=%v want=[UC1 UC3]", ids)
 	}
+
 	if names["UC1"] != "A" || names["UC3"] != "C" {
 		t.Fatalf("names=%v", names)
 	}
@@ -60,6 +62,7 @@ func TestGetActiveMemberIndex_ConcurrentBuildIsCoalesced(t *testing.T) {
 		memberIndexLoader: func(context.Context) ([]*domain.Member, error) {
 			callCount.Add(1)
 			time.Sleep(40 * time.Millisecond)
+
 			return []*domain.Member{
 				{ChannelID: "UC1", Name: "A"},
 				{ChannelID: "UC2", Name: "B"},
@@ -70,27 +73,29 @@ func TestGetActiveMemberIndex_ConcurrentBuildIsCoalesced(t *testing.T) {
 	}}
 
 	const workers = 20
+
 	var wg sync.WaitGroup
+
 	errCh := make(chan error, workers)
 
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ids, names, err := handler.getActiveMemberIndex(context.Background())
+	for range workers {
+		wg.Go(func() {
+			ids, names, err := handler.getActiveMemberIndex(t.Context())
 			if err != nil {
 				errCh <- fmt.Errorf("get active member index: %w", err)
 				return
 			}
+
 			if len(ids) != 2 {
 				errCh <- fmt.Errorf("len(ids)=%d want=2", len(ids))
 				return
 			}
+
 			if names["UC1"] != "A" || names["UC2"] != "B" {
 				errCh <- fmt.Errorf("unexpected names map: %v", names)
 				return
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -104,10 +109,11 @@ func TestGetActiveMemberIndex_ConcurrentBuildIsCoalesced(t *testing.T) {
 		t.Fatalf("callCount=%d want=1", got)
 	}
 
-	_, _, err := handler.getActiveMemberIndex(context.Background())
+	_, _, err := handler.getActiveMemberIndex(t.Context())
 	if err != nil {
 		t.Fatalf("second cache call: %v", err)
 	}
+
 	if got := callCount.Load(); got != 1 {
 		t.Fatalf("callCount after cache hit=%d want=1", got)
 	}
@@ -159,18 +165,23 @@ func TestMemberToChannelResponse(t *testing.T) {
 				if got != nil {
 					t.Errorf("memberToChannelResponse() = %+v, want nil", got)
 				}
+
 				return
 			}
+
 			if got == nil {
 				t.Errorf("memberToChannelResponse() = nil, want %+v", tt.expected)
 				return
 			}
+
 			if got.ID != tt.expected.ID {
 				t.Errorf("ID = %q, want %q", got.ID, tt.expected.ID)
 			}
+
 			if got.Name != tt.expected.Name {
 				t.Errorf("Name = %q, want %q", got.Name, tt.expected.Name)
 			}
+
 			if tt.expected.Photo == nil {
 				if got.Photo != nil {
 					t.Errorf("Photo = %v, want nil", *got.Photo)

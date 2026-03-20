@@ -53,18 +53,18 @@ const (
 	ScheduleTransitionKeyPrefix = "notified:schedule:transition:"
 	NextStreamKeyPrefix         = "alarm:next_stream:"
 
-	// 타입별 구독자 키 접두사 (COMMUNITY, SHORTS용)
+	// 타입별 구독자 키 접두사 (COMMUNITY, SHORTS용).
 	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
 	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
 
-	// Chzzk 알림 키 접두사
+	// Chzzk 알림 키 접두사.
 	ChzzkLiveNotifiedKeyPrefix  = "notified:chzzk:live:"
 	IntegratedNotifiedKeyPrefix = "notified:integrated:"
 )
 
 // NotifiedData: 알림 중복 발송 방지를 위해 기록하는 알림 이력 정보
 // SentAt: 발송된 minutesUntil을 키로 기록 (예: {5: true, 3: true})
-// 스케줄 변경 시 StartScheduled 불일치 → SentAt 맵 리셋
+// 스케줄 변경 시 StartScheduled 불일치 → SentAt 맵 리셋.
 type NotifiedData struct {
 	StartScheduled string       `json:"start_scheduled"`
 	SentAt         map[int]bool `json:"sent_at"`
@@ -81,7 +81,7 @@ type alarmWriter interface {
 	ClearByRoom(ctx context.Context, roomID string) (int64, error)
 }
 
-// AlarmService: 방송 알림(Alarm)을 관리하는 서비스 (Rust 이관 후 CRUD/상태 관리만 담당)
+// AlarmService: 방송 알림(Alarm)을 관리하는 서비스 (Rust 이관 후 CRUD/상태 관리만 담당).
 type AlarmService struct {
 	cache           cache.Client
 	holodex         *holodex.Service

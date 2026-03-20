@@ -32,7 +32,7 @@ import (
 )
 
 // GetMilestones: 달성된 마일스톤 목록을 반환합니다.
-// GET /api/milestones?limit=50&offset=0&channelId=xxx&memberName=xxx
+// GET /api/milestones?limit=50&offset=0&channelId=xxx&memberName=xxx.
 func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -51,14 +51,17 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "limit must be an integer between 1 and 100"})
 			return
 		}
+
 		limit = parsed
 	}
+
 	if o := c.Query("offset"); o != "" {
 		parsed, err := parseInt(o)
 		if err != nil || parsed < 0 {
 			c.JSON(400, gin.H{"error": "offset must be an integer greater than or equal to 0"})
 			return
 		}
+
 		offset = parsed
 	}
 
@@ -73,6 +76,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get milestones", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to get milestones"})
+
 		return
 	}
 
@@ -87,7 +91,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 
 // GetNearMilestoneMembers: 마일스톤 달성 직전의 멤버 목록을 반환합니다.
 // GET /api/milestones/near?threshold=0.9
-// 기본 threshold: 백그라운드 워커와 동일한 95% (MilestoneThresholdRatio)
+// 기본 threshold: 백그라운드 워커와 동일한 95% (MilestoneThresholdRatio).
 func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -98,12 +102,14 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 
 	// 기본값: 백그라운드 워커와 동일한 95%
 	threshold := youtube.MilestoneThresholdRatio
+
 	if t := c.Query("threshold"); t != "" {
 		parsed, err := parseFloat(t)
 		if err != nil || parsed <= 0 || parsed >= 1 {
 			c.JSON(400, gin.H{"error": "threshold must be a number between 0 and 1"})
 			return
 		}
+
 		threshold = parsed
 	}
 
@@ -114,6 +120,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get near milestone members", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to get near milestone members"})
+
 		return
 	}
 
@@ -131,7 +138,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 }
 
 // GetMilestoneStats: 마일스톤 관련 통계 요약을 반환합니다.
-// GET /api/milestones/stats
+// GET /api/milestones/stats.
 func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -144,6 +151,7 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get milestone stats", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to get milestone stats"})
+
 		return
 	}
 
@@ -152,8 +160,10 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Failed to get near milestone summary", slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to get near milestone summary"})
+
 		return
 	}
+
 	summary.TotalNearMilestone = nearCount
 
 	c.JSON(200, gin.H{
@@ -162,20 +172,22 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	})
 }
 
-// parseInt: 문자열을 정수로 파싱
+// parseInt: 문자열을 정수로 파싱.
 func parseInt(s string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil {
 		return 0, fmt.Errorf("parseInt: %w", err)
 	}
+
 	return n, nil
 }
 
-// parseFloat: 문자열을 실수로 파싱
+// parseFloat: 문자열을 실수로 파싱.
 func parseFloat(s string) (float64, error) {
 	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	if err != nil {
 		return 0, fmt.Errorf("parseFloat: %w", err)
 	}
+
 	return f, nil
 }

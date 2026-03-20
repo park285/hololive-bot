@@ -22,16 +22,16 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	botserver "github.com/kapu/hololive-kakao-bot-go/internal/server"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
+
+	botserver "github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
 type testAlarmCRUD struct{}
@@ -39,6 +39,7 @@ type testAlarmCRUD struct{}
 func (testAlarmCRUD) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
 	return true, nil
 }
+
 func (testAlarmCRUD) RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error) {
 	return true, nil
 }
@@ -46,6 +47,7 @@ func (testAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) { 
 func (testAlarmCRUD) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
 	return []*domain.Alarm{}, nil
 }
+
 func (testAlarmCRUD) ListRoomAlarmsView(context.Context, string) ([]domain.AlarmListView, error) {
 	return []domain.AlarmListView{}, nil
 }
@@ -64,6 +66,7 @@ func (testAlarmCRUD) WarmCacheFromDB(context.Context) error { return nil }
 
 func testAdminDependencies() *botAdminServerDependencies {
 	apiHandler := &botserver.APIHandler{}
+
 	return &botAdminServerDependencies{
 		domainHandlers: apiHandler.DomainHandlers(),
 		authHandler:    &botserver.AuthHandler{},
@@ -71,7 +74,7 @@ func testAdminDependencies() *botAdminServerDependencies {
 }
 
 func TestBuildBotServer_InternalAlarmRoutesRequireAPIKey(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			Port:   30001,
@@ -79,25 +82,28 @@ func TestBuildBotServer_InternalAlarmRoutesRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
+	server, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 	if err != nil {
 		t.Fatalf("buildBotServer() error = %v", err)
 	}
 
 	t.Run("missing api key", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/internal/alarm/keys", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/keys", http.NoBody)
 		w := httptest.NewRecorder()
 		server.Handler.ServeHTTP(w, req)
+
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 		}
 	})
 
 	t.Run("valid api key", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/internal/alarm/keys", nil)
-		req.Header.Set("X-API-Key", "test-secret")
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal/alarm/keys", http.NoBody)
+		req.Header.Set("X-Api-Key", "test-secret")
+
 		w := httptest.NewRecorder()
 		server.Handler.ServeHTTP(w, req)
+
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 		}
@@ -105,24 +111,25 @@ func TestBuildBotServer_InternalAlarmRoutesRequireAPIKey(t *testing.T) {
 }
 
 func TestBuildBotServer_InternalAlarmRoutesRequireConfiguredAPIKey(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			Port: 30001,
 		},
 	}
 
-	_, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
+	_, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 	if err == nil {
 		t.Fatal("buildBotServer() error = nil, want non-nil")
 	}
+
 	if !strings.Contains(err.Error(), "API_SECRET_KEY") {
 		t.Fatalf("buildBotServer() error = %v, want contains API_SECRET_KEY", err)
 	}
 }
 
 func TestBuildBotServer_AdminRoutesToggleByConfig(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("admin enabled exposes admin routes", func(t *testing.T) {
 		cfg := &config.Config{
@@ -138,14 +145,15 @@ func TestBuildBotServer_AdminRoutesToggleByConfig(t *testing.T) {
 			},
 		}
 
-		server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, testAdminDependencies(), logger)
+		server, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, testAdminDependencies(), logger)
 		if err != nil {
 			t.Fatalf("buildBotServer() error = %v", err)
 		}
 
-		req := httptest.NewRequest(http.MethodGet, "/api/holo/members", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/members", http.NoBody)
 		w := httptest.NewRecorder()
 		server.Handler.ServeHTTP(w, req)
+
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 		}
@@ -162,14 +170,15 @@ func TestBuildBotServer_AdminRoutesToggleByConfig(t *testing.T) {
 			},
 		}
 
-		server, err := buildBotServer(context.Background(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
+		server, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 		if err != nil {
 			t.Fatalf("buildBotServer() error = %v", err)
 		}
 
-		req := httptest.NewRequest(http.MethodGet, "/api/holo/members", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/members", http.NoBody)
 		w := httptest.NewRecorder()
 		server.Handler.ServeHTTP(w, req)
+
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
 		}

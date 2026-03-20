@@ -25,18 +25,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestAlarmPersistence_MarkAsNotifiedRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
-	start := time.Date(2026, 3, 5, 11, 25, 42, 0, time.UTC)
+	ctx := t.Context()
+	start := time.Date(2026, time.March, 5, 11, 25, 42, 0, time.UTC)
 
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-roundtrip", start, 5))
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-roundtrip", start, 3))
@@ -52,7 +51,8 @@ func TestAlarmPersistence_MarkAsNotifiedTimeout(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+
 	time.Sleep(1 * time.Millisecond)
 	cancel()
 
@@ -65,7 +65,7 @@ func TestAlarmPersistence_UpcomingEventRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	start := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Minute)
 
 	stream := &domain.Stream{

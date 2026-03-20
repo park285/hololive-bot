@@ -21,7 +21,7 @@
 package command
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 )
 
@@ -39,11 +39,11 @@ func NewBaseCommand(deps *Dependencies) BaseCommand {
 // 모든 커맨드에서 공통으로 필요한 SendMessage, SendError, Logger를 확인한다.
 func (b *BaseCommand) EnsureBaseDeps() error {
 	if b == nil || b.deps == nil {
-		return fmt.Errorf("command dependencies not configured")
+		return errors.New("command dependencies not configured")
 	}
 
 	if b.deps.SendMessage == nil || b.deps.SendError == nil {
-		return fmt.Errorf("message callbacks not configured")
+		return errors.New("message callbacks not configured")
 	}
 
 	if b.deps.Logger == nil {
@@ -58,5 +58,6 @@ func (b *BaseCommand) Deps() *Dependencies {
 	if b == nil {
 		return nil
 	}
+
 	return b.deps
 }

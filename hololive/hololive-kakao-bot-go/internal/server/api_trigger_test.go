@@ -22,7 +22,6 @@ package server
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -59,17 +58,18 @@ func (s *stubMemberNewsWeeklyScheduler) SendWeeklyDigest(_ context.Context) erro
 
 func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+
 	router := gin.New()
 
 	handler := sharedserver.NewTriggerHandler(
 		&stubMajorEventScheduler{},
 		&stubMajorEventMonthlyScheduler{},
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 	)
 	handler.RegisterInternalRoutes(router.Group(""))
 
-	req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -80,17 +80,18 @@ func TestTriggerHandler_MemberNewsWeekly_NotInitialized(t *testing.T) {
 
 func TestTriggerHandler_MemberNewsWeekly_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+
 	router := gin.New()
 
 	handler := sharedserver.NewTriggerHandler(
 		&stubMajorEventScheduler{},
 		&stubMajorEventMonthlyScheduler{},
 		&stubMemberNewsWeeklyScheduler{},
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 	)
 	handler.RegisterInternalRoutes(router.Group(""))
 
-	req := httptest.NewRequest(http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

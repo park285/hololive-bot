@@ -23,7 +23,6 @@ package app
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"sync"
@@ -31,16 +30,15 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
-
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 )
 
 type trackingSettingsReadWriter struct {
@@ -53,28 +51,34 @@ type trackingSettingsReadWriter struct {
 func (s *trackingSettingsReadWriter) Get() settings.Settings {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.current
 }
 
 func (s *trackingSettingsReadWriter) Update(newSettings settings.Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.updateCalls++
 	if s.updateErr != nil {
 		return s.updateErr
 	}
+
 	s.current = newSettings
+
 	return nil
 }
 
 func (s *trackingSettingsReadWriter) calls() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.updateCalls
 }
 
 type trackingAlarmAdvanceCRUD struct {
 	testAlarmCRUD
+
 	mu          sync.Mutex
 	lastMinutes int
 	calls       int
@@ -84,17 +88,21 @@ type trackingAlarmAdvanceCRUD struct {
 func (a *trackingAlarmAdvanceCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
 	a.calls++
+
 	a.lastMinutes = minutes
 	if len(a.targets) > 0 {
 		return append([]int(nil), a.targets...)
 	}
+
 	return []int{minutes}
 }
 
-func (a *trackingAlarmAdvanceCRUD) callSnapshot() (calls int, lastMinutes int) {
+func (a *trackingAlarmAdvanceCRUD) callSnapshot() (calls, lastMinutes int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
 	return a.calls, a.lastMinutes
 }
 
@@ -104,6 +112,7 @@ func newTestValkeyClient(t *testing.T) (valkey.Client, *miniredis.Miniredis, str
 	mini := miniredis.RunT(t)
 	host, portStr, err := net.SplitHostPort(mini.Addr())
 	require.NoError(t, err)
+
 	addr := net.JoinHostPort(host, portStr)
 
 	client, err := valkey.NewClient(valkey.ClientOption{
@@ -126,6 +135,7 @@ func publishConfigUpdate(t *testing.T, client valkey.Client, updateType string, 
 
 	rawPayload, err := json.Marshal(payload)
 	require.NoError(t, err)
+
 	update := configsub.ConfigUpdate{
 		Type:    updateType,
 		Payload: rawPayload,
@@ -134,13 +144,13 @@ func publishConfigUpdate(t *testing.T, client valkey.Client, updateType string, 
 	require.NoError(t, err)
 
 	cmd := client.B().Publish().Channel(configsub.DefaultChannel).Message(string(rawUpdate)).Build()
-	require.NoError(t, client.Do(context.Background(), cmd).Error())
+	require.NoError(t, client.Do(t.Context(), cmd).Error())
 }
 
 func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	client, _, addr := newTestValkeyClient(t)
 	publisher, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
@@ -174,13 +184,14 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
 		youtubeService: youtubeSvc,
 	}
-	subscriber := buildBotConfigSubscriber(context.Background(), deps, runtimeDeps, scheduler, logger)
+	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	done := make(chan struct{})
+
 	go func() {
 		subscriber.Run(ctx)
 		close(done)
@@ -189,13 +200,16 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	// subscriber가 subscribe 핸드셰이크를 완료할 때까지 반복 publish (비결정적 sleep 제거)
 	require.Eventually(t, func() bool {
 		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeScraperProxy, contractssettings.ScraperProxyPayloadV1{Enabled: true})
+
 		got := settingsSvc.Get()
+
 		return got.ScraperProxyEnabled && youtubeSvc.isProxyEnabled() && trackingPoller.isEnabled()
 	}, 2*time.Second, 50*time.Millisecond)
 
 	assert.GreaterOrEqual(t, settingsSvc.calls(), 1)
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
@@ -206,7 +220,7 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	client, _, addr := newTestValkeyClient(t)
 	publisher, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
@@ -235,13 +249,14 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
 		alarmCRUD: alarmSvc,
 	}
-	subscriber := buildBotConfigSubscriber(context.Background(), deps, runtimeDeps, nil, logger)
+	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	done := make(chan struct{})
+
 	go func() {
 		subscriber.Run(ctx)
 		close(done)
@@ -250,7 +265,9 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	// subscriber가 subscribe 핸드셰이크를 완료할 때까지 반복 publish (비결정적 sleep 제거)
 	require.Eventually(t, func() bool {
 		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 30})
+
 		calls, last := alarmSvc.callSnapshot()
+
 		return calls >= 1 && last == 30
 	}, 2*time.Second, 50*time.Millisecond)
 
@@ -260,6 +277,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	assert.Equal(t, 5, settingsSvc.Get().AlarmAdvanceMinutes)
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
@@ -270,7 +288,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	client, _, addr := newTestValkeyClient(t)
 	publisherClient, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
@@ -306,13 +324,14 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 		youtubeService: youtubeSvc,
 		alarmCRUD:      alarmSvc,
 	}
-	subscriber := buildBotConfigSubscriber(context.Background(), deps, runtimeDeps, scheduler, logger)
+	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	done := make(chan struct{})
+
 	go func() {
 		subscriber.Run(ctx)
 		close(done)
@@ -321,24 +340,29 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	configPublisher := configsub.NewPublisher(publisherClient)
 
 	require.Eventually(t, func() bool {
-		if err := configPublisher.PublishScraperProxy(context.Background(), true); err != nil {
+		if err := configPublisher.PublishScraperProxy(t.Context(), true); err != nil {
 			return false
 		}
+
 		got := settingsSvc.Get()
+
 		return got.ScraperProxyEnabled && youtubeSvc.isProxyEnabled() && trackingPoller.isEnabled()
 	}, 2*time.Second, 50*time.Millisecond)
 
 	require.Eventually(t, func() bool {
-		if err := configPublisher.PublishAlarmAdvanceMinutes(context.Background(), 30); err != nil {
+		if err := configPublisher.PublishAlarmAdvanceMinutes(t.Context(), 30); err != nil {
 			return false
 		}
+
 		calls, last := alarmSvc.callSnapshot()
+
 		return calls >= 1 && last == 30 && settingsSvc.Get().AlarmAdvanceMinutes == 30
 	}, 2*time.Second, 50*time.Millisecond)
 
 	assert.GreaterOrEqual(t, settingsSvc.calls(), 2)
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):

@@ -56,5 +56,6 @@ func alarmOperationResult(err error) string {
 	if err != nil {
 		return "error"
 	}
+
 	return "ok"
 }

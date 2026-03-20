@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -57,6 +56,7 @@ func (s *stubAlarmCRUDForServer) RemoveAlarm(
 	if s.removeAlarm == nil {
 		return false, nil
 	}
+
 	return s.removeAlarm(ctx, roomID, channelID, alarmTypes)
 }
 
@@ -100,6 +100,7 @@ func (s *stubAlarmCRUDForServer) GetAllAlarmKeys(ctx context.Context) ([]*domain
 	if s.getAllAlarmKeys == nil {
 		return nil, nil
 	}
+
 	return s.getAllAlarmKeys(ctx)
 }
 
@@ -110,16 +111,19 @@ func (s *stubAlarmCRUDForServer) WarmCacheFromDB(context.Context) error {
 func newAPITestContext(method, urlPath string, body []byte) (*gin.Context, *httptest.ResponseRecorder) {
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
-	req := httptest.NewRequest(method, urlPath, bytes.NewReader(body))
+
+	req := httptest.NewRequestWithContext(context.Background(), method, urlPath, bytes.NewReader(body))
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
 	}
+
 	ctx.Request = req
+
 	return ctx, rec
 }
 
 func newDiscardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func newActivityLoggerForTest(t *testing.T) *activity.Logger {
@@ -146,6 +150,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}
+
 		body := rec.Body.String()
 		if !strings.Contains(body, `"status":"ok"`) || !strings.Contains(body, `"roomId":"r1"`) {
 			t.Fatalf("unexpected body: %s", body)
@@ -179,6 +184,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 
 		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/alarm", []byte("{"))
 		handler.DeleteAlarm(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 		}
@@ -197,6 +203,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 
 		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/alarm", []byte(`{"roomId":"room-1","channelId":"ch-1"}`))
 		handler.DeleteAlarm(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
 		}
@@ -204,6 +211,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 
 	t.Run("delete alarm success", func(t *testing.T) {
 		var gotRoomID, gotChannelID string
+
 		handler := &AlarmAPIHandler{APIHandler: &APIHandler{
 			alarm: &stubAlarmCRUDForServer{
 				removeAlarm: func(_ context.Context, roomID, channelID string, _ domain.AlarmTypes) (bool, error) {
@@ -221,9 +229,11 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}
+
 		if gotRoomID != "room-1" || gotChannelID != "ch-1" {
 			t.Fatalf("remove args mismatch got room=%q channel=%q", gotRoomID, gotChannelID)
 		}
+
 		if !strings.Contains(rec.Body.String(), `"removed":true`) {
 			t.Fatalf("unexpected body: %s", rec.Body.String())
 		}
@@ -237,6 +247,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 		handler.TriggerMajorEventNotification(ctx)
+
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 		}
@@ -249,6 +260,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 		handler.TriggerMajorEventNotification(ctx)
+
 		if rec.Code != http.StatusConflict {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusConflict, rec.Body.String())
 		}
@@ -261,6 +273,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 		handler.TriggerMajorEventNotification(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
 		}
@@ -273,6 +286,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 		handler.TriggerMajorEventNotification(ctx)
+
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}
@@ -282,6 +296,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		handler := &MajorEventAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
 		handler.TriggerMajorEventMonthlyNotification(ctx)
+
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 		}
@@ -294,6 +309,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
 		handler.TriggerMajorEventMonthlyNotification(ctx)
+
 		if rec.Code != http.StatusConflict {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusConflict, rec.Body.String())
 		}
@@ -306,6 +322,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
 		handler.TriggerMajorEventMonthlyNotification(ctx)
+
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}
@@ -319,6 +336,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile", nil)
 		handler.GetProfile(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 		}
@@ -328,6 +346,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile?channelId=UC123", nil)
 		handler.GetProfile(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
 		}
@@ -337,6 +356,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile/by-name", nil)
 		handler.GetProfileByName(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 		}
@@ -346,6 +366,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		handler := &ProfileAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile/by-name?name=Sora", nil)
 		handler.GetProfileByName(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
 		}
@@ -371,12 +392,15 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		if got == nil {
 			t.Fatal("convertToProfileData returned nil")
 		}
+
 		if got.EnglishName != "Tokino Sora" || got.JapaneseName != "ときのそら" {
 			t.Fatalf("unexpected profile names: %+v", got)
 		}
+
 		if len(got.DataEntries) != 1 || got.DataEntries[0].Label != "Unit" {
 			t.Fatalf("unexpected data entries: %+v", got.DataEntries)
 		}
+
 		if len(got.SocialLinks) != 1 || got.SocialLinks[0].Label != "X" {
 			t.Fatalf("unexpected social links: %+v", got.SocialLinks)
 		}
@@ -391,10 +415,12 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 			{Label: "생일", Value: "5월 15일"},
 			{Label: "소속", Value: "JP"},
 		}
+
 		got := convertTranslatedRows(rows)
 		if len(got) != 2 {
 			t.Fatalf("len(got)=%d want=2", len(got))
 		}
+
 		if got[0].Label != "생일" || got[1].Value != "JP" {
 			t.Fatalf("unexpected converted rows: %+v", got)
 		}
@@ -408,6 +434,7 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte("{"))
 		handler.AddRoom(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 		}
@@ -417,6 +444,7 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/rooms", []byte("{"))
 		handler.RemoveRoom(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 		}
@@ -426,6 +454,7 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 		handler := &RoomAPIHandler{APIHandler: &APIHandler{acl: &acl.Service{}, logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/acl", []byte("{"))
 		handler.SetACL(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 		}

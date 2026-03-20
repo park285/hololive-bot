@@ -56,7 +56,7 @@ type errorResponse struct {
 func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (*membernewscontracts.Digest, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return nil, fmt.Errorf("room id is required")
+		return nil, errors.New("room id is required")
 	}
 
 	req, err := c.httpClient.NewJSONRequest(ctx, http.MethodPost, membernewscontracts.DigestPath, digestRequest{
@@ -71,6 +71,7 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
@@ -78,6 +79,7 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 		if decodeErr := sharedjson.NewDecoder(resp.Body).Decode(&parsed); decodeErr != nil {
 			return nil, fmt.Errorf("decode not found response: %w", decodeErr)
 		}
+
 		if strings.EqualFold(strings.TrimSpace(parsed.Error), "no_subscribed_members") {
 			return nil, membernewscontracts.ErrNoSubscribedMembers
 		}
@@ -91,6 +93,7 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 	if err := c.httpClient.DecodeJSON(resp, &digest); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
+
 	return &digest, nil
 }
 
@@ -101,7 +104,7 @@ func (c *Client) SubscribeRoom(ctx context.Context, roomID, roomName string) err
 func (c *Client) UnsubscribeRoom(ctx context.Context, roomID string) error {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return fmt.Errorf("room id is required")
+		return errors.New("room id is required")
 	}
 
 	req, err := c.httpClient.NewRequest(ctx, http.MethodDelete, membernewscontracts.SubscriptionsPath+"/"+roomID)
@@ -122,14 +125,16 @@ func (c *Client) UnsubscribeRoom(ctx context.Context, roomID string) error {
 	if err := c.httpClient.DiscardBody(resp); err != nil {
 		return fmt.Errorf("discard body: %w", err)
 	}
+
 	return nil
 }
 
 func (c *Client) IsRoomSubscribed(ctx context.Context, roomID string) (bool, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return false, fmt.Errorf("room id is required")
+		return false, errors.New("room id is required")
 	}
+
 	req, err := c.httpClient.NewRequest(ctx, http.MethodGet, membernewscontracts.SubscriptionsPath+"/"+roomID)
 	if err != nil {
 		return false, fmt.Errorf("new request: %w", err)
@@ -149,14 +154,16 @@ func (c *Client) IsRoomSubscribed(ctx context.Context, roomID string) (bool, err
 	if err := c.httpClient.DecodeJSON(resp, &parsed); err != nil {
 		return false, fmt.Errorf("decode response: %w", err)
 	}
+
 	return parsed.Subscribed, nil
 }
 
 func (c *Client) postSubscription(ctx context.Context, payload subscription.SubscribeRequest) error {
 	payload.RoomID = strings.TrimSpace(payload.RoomID)
+
 	payload.RoomName = strings.TrimSpace(payload.RoomName)
 	if payload.RoomID == "" {
-		return fmt.Errorf("room id is required")
+		return errors.New("room id is required")
 	}
 
 	req, err := c.httpClient.NewJSONRequest(ctx, http.MethodPost, membernewscontracts.SubscriptionsPath, payload)
@@ -177,6 +184,7 @@ func (c *Client) postSubscription(ctx context.Context, payload subscription.Subs
 	if err := c.httpClient.DiscardBody(resp); err != nil {
 		return fmt.Errorf("discard body: %w", err)
 	}
+
 	return nil
 }
 

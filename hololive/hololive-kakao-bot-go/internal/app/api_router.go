@@ -21,6 +21,7 @@
 package app
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -78,11 +79,11 @@ func ProvideAPIRouter(
 	}
 
 	if domainHandlers == nil {
-		return nil, fmt.Errorf("domain handlers must not be nil")
+		return nil, errors.New("domain handlers must not be nil")
 	}
 
 	if authHandler == nil {
-		return nil, fmt.Errorf("auth handler must not be nil")
+		return nil, errors.New("auth handler must not be nil")
 	}
 
 	if webhookHandler != nil {
@@ -99,7 +100,7 @@ func ProvideAPIRouter(
 	if cfg.Server.APIKey != "" {
 		logger.Info("api_key_auth_enabled")
 	} else {
-		return nil, fmt.Errorf("API_SECRET_KEY required")
+		return nil, errors.New("API_SECRET_KEY required")
 	}
 
 	return router, nil
@@ -107,10 +108,12 @@ func ProvideAPIRouter(
 
 func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
+
 	router := gin.New()
 	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("failed to set trusted proxies: %w", err)
 	}
+
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	router.Use(gin.Recovery())
@@ -122,6 +125,7 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 			"/metrics", // Prometheus 메트릭 폴링 (15초 간격)
 		},
 	})
+
 	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Environment), "production")
 	if isProduction && cfg.CORS.MissingInProduction {
 		logger.Warn(
@@ -130,6 +134,7 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 			slog.String("next_step", "set CORS_ALLOWED_ORIGINS and enable CORS_ENFORCE"),
 		)
 	}
+
 	router.Use(corsOriginGuard(cfg.CORS.AllowedOrigins))
 	router.Use(cors.New(newAPICORSConfig(cfg)))
 	router.Use(middleware.ClientHintsMiddleware()) // Client Hints 요청 (실제 기기 정보 수집)

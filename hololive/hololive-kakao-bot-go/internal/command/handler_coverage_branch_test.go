@@ -25,10 +25,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 )
 
 type stubCoverageStreamProvider struct{}
@@ -105,7 +106,6 @@ func TestParseUpcomingIntParam(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := parseUpcomingIntParam(tc.params, tc.key, tc.defaultValue)
 			if got != tc.want {
@@ -129,7 +129,6 @@ func TestNormalizeUpcomingHours(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := normalizeUpcomingHours(tc.hours)
 			if got != tc.want {
@@ -153,7 +152,6 @@ func TestNormalizeUpcomingDisplayLimit(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := normalizeUpcomingDisplayLimit(tc.displayLimit, tc.showAll)
 			if got != tc.want {
@@ -197,12 +195,12 @@ func TestParseUpcomingOptions(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := parseUpcomingOptions(tc.params)
 			if got.hours != tc.wantHours {
 				t.Fatalf("expected hours %d, got %d", tc.wantHours, got.hours)
 			}
+
 			if got.displayLimit != tc.wantDisplayLimit {
 				t.Fatalf("expected displayLimit %d, got %d", tc.wantDisplayLimit, got.displayLimit)
 			}
@@ -255,7 +253,6 @@ func TestShouldSuppressSchedulePrompt(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := shouldSuppressSchedulePrompt(tc.cmdCtx, tc.rawToken)
 			if got != tc.want {
@@ -291,6 +288,7 @@ func TestGraphPointValues(t *testing.T) {
 		if len(got) != 3 {
 			t.Fatalf("expected length 3, got %d", len(got))
 		}
+
 		if got[0] != 100 || got[1] != 200 || got[2] != 350 {
 			t.Fatalf("unexpected values: %v", got)
 		}
@@ -341,19 +339,20 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateMemberLookupDependencies(tc.deps)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("expected nil error, got %v", err)
 				}
+
 				return
 			}
 
 			if err == nil {
 				t.Fatalf("expected error %q, got nil", tc.wantErr)
 			}
+
 			if err.Error() != tc.wantErr {
 				t.Fatalf("expected error %q, got %q", tc.wantErr, err.Error())
 			}
@@ -364,10 +363,12 @@ func TestValidateMemberLookupDependencies(t *testing.T) {
 func TestUpcomingCommandEnsureDeps(t *testing.T) {
 	t.Run("base dependency error", func(t *testing.T) {
 		cmd := NewUpcomingCommand(&Dependencies{})
+
 		err := cmd.ensureDeps()
 		if err == nil {
-			t.Fatalf("expected error, got nil")
+			t.Fatal("expected error, got nil")
 		}
+
 		if err.Error() != "failed to ensure base dependencies: message callbacks not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -379,10 +380,12 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 			SendError:   func(_ context.Context, _, _ string) error { return nil },
 		}
 		cmd := NewUpcomingCommand(deps)
+
 		err := cmd.ensureDeps()
 		if err == nil {
-			t.Fatalf("expected error, got nil")
+			t.Fatal("expected error, got nil")
 		}
+
 		if err.Error() != "upcoming command services not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -404,8 +407,9 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 		if err := cmd.ensureDeps(); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
+
 		if deps.Logger == nil {
-			t.Fatalf("expected logger to be initialized")
+			t.Fatal("expected logger to be initialized")
 		}
 	})
 }
@@ -413,10 +417,12 @@ func TestUpcomingCommandEnsureDeps(t *testing.T) {
 func TestScheduleCommandEnsureDeps(t *testing.T) {
 	t.Run("base dependency error", func(t *testing.T) {
 		cmd := NewScheduleCommand(&Dependencies{})
+
 		err := cmd.ensureDeps()
 		if err == nil {
-			t.Fatalf("expected error, got nil")
+			t.Fatal("expected error, got nil")
 		}
+
 		if err.Error() != "failed to ensure base dependencies: message callbacks not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -428,10 +434,12 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 			SendError:   func(_ context.Context, _, _ string) error { return nil },
 		}
 		cmd := NewScheduleCommand(deps)
+
 		err := cmd.ensureDeps()
 		if err == nil {
-			t.Fatalf("expected error, got nil")
+			t.Fatal("expected error, got nil")
 		}
+
 		if err.Error() != "schedule command services not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -454,8 +462,9 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 		if err := cmd.ensureDeps(); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
+
 		if deps.Logger == nil {
-			t.Fatalf("expected logger to be initialized")
+			t.Fatal("expected logger to be initialized")
 		}
 	})
 }
@@ -463,10 +472,12 @@ func TestScheduleCommandEnsureDeps(t *testing.T) {
 func TestSubscriberGraphCommandEnsureDeps(t *testing.T) {
 	t.Run("base dependency error", func(t *testing.T) {
 		cmd := NewSubscriberGraphCommand(&Dependencies{})
+
 		err := cmd.ensureDeps()
 		if err == nil {
-			t.Fatalf("expected error, got nil")
+			t.Fatal("expected error, got nil")
 		}
+
 		if err.Error() != "failed to ensure base dependencies: message callbacks not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -478,10 +489,12 @@ func TestSubscriberGraphCommandEnsureDeps(t *testing.T) {
 			SendError:   func(_ context.Context, _, _ string) error { return nil },
 		}
 		cmd := NewSubscriberGraphCommand(deps)
+
 		err := cmd.ensureDeps()
 		if err == nil {
-			t.Fatalf("expected error, got nil")
+			t.Fatal("expected error, got nil")
 		}
+
 		if err.Error() != "subscriber graph command services not configured" {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -503,8 +516,9 @@ func TestSubscriberGraphCommandEnsureDeps(t *testing.T) {
 		if err := cmd.ensureDeps(); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
+
 		if deps.Logger == nil {
-			t.Fatalf("expected logger to be initialized")
+			t.Fatal("expected logger to be initialized")
 		}
 	})
 }

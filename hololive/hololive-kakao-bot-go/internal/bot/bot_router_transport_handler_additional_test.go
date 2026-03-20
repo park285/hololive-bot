@@ -23,18 +23,15 @@ package bot
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/iris"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
@@ -52,6 +49,7 @@ func (c *testCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	if c.execute == nil {
 		return nil
 	}
+
 	return c.execute(ctx, cmdCtx, params)
 }
 
@@ -78,6 +76,7 @@ func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, 
 	c.mu.Lock()
 	c.lastMessageRoom = room
 	c.lastMessage = message
+
 	ch := c.messageCh
 	c.mu.Unlock()
 
@@ -87,6 +86,7 @@ func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, 
 		default:
 		}
 	}
+
 	return c.sendMessageErr
 }
 
@@ -95,6 +95,7 @@ func (c *testIrisClient) SendImage(ctx context.Context, room, imageBase64 string
 	c.lastImageRoom = room
 	c.lastImage = imageBase64
 	c.mu.Unlock()
+
 	return c.sendImageErr
 }
 
@@ -109,13 +110,13 @@ func (c *testIrisClient) Decrypt(ctx context.Context, data string) (string, erro
 }
 
 func newBotTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestCommandRouterExecuteBranches(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	cmdCtx := domain.NewCommandContext("room-1", "room", "user-1", "user", "!help", false)
 
 	t.Run("nil registry", func(t *testing.T) {
@@ -127,9 +128,11 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 
 	t.Run("unknown command sends fallback", func(t *testing.T) {
 		var gotRoom, gotMessage string
+
 		router := NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(_ context.Context, room, message string) error {
 			gotRoom = room
 			gotMessage = message
+
 			return nil
 		})
 
@@ -157,6 +160,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 				return errors.New("handler failed")
 			},
 		})
+
 		router := NewCommandRouter(registry, newBotTestLogger(), func(context.Context, string, string) error { return nil })
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
@@ -176,7 +180,7 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 func TestCommandTransportSendMethods(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("constructor", func(t *testing.T) {
 		client := &testIrisClient{}
@@ -187,6 +191,7 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 	t.Run("send message with nil client", func(t *testing.T) {
 		var transport *CommandTransport
+
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
@@ -217,8 +222,8 @@ func TestCommandTransportSendMethods(t *testing.T) {
 
 		require.NoError(t, transport.SendError(ctx, "room", "boom"))
 		assert.Equal(t, "room", client.lastMessageRoom)
-		assert.True(t, strings.Contains(client.lastMessage, "boom"))
-		assert.True(t, strings.Contains(client.lastMessage, "❌"))
+		assert.Contains(t, client.lastMessage, "boom")
+		assert.Contains(t, client.lastMessage, "❌")
 	})
 }
 
@@ -231,7 +236,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 	b := &Bot{
 		logger:          logger,
 		commandRegistry: command.NewRegistry(),
-		messageAdapter:  adapter.NewMessageAdapter("!"),
+		messageAdapter:  adapter.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
 		formatter:       adapter.NewResponseFormatter("!", nil),
 	}
@@ -250,7 +255,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 
 	// unknown command path: fallback message should be sent
 	sender := "user"
-	b.HandleMessage(context.Background(), &iris.Message{
+	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
@@ -265,7 +270,7 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 		assert.Equal(t, "room-1", msg.room)
 		assert.Equal(t, adapter.ErrUnknownCommand, msg.message)
 	case <-time.After(1 * time.Second):
-		t.Fatalf("did not receive message in time")
+		t.Fatal("did not receive message in time")
 	}
 }
 
@@ -287,13 +292,13 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	b := &Bot{
 		logger:          logger,
 		commandRegistry: registry,
-		messageAdapter:  adapter.NewMessageAdapter("!"),
+		messageAdapter:  adapter.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
 		formatter:       adapter.NewResponseFormatter("!", nil),
 	}
 
 	sender := "user"
-	b.HandleMessage(context.Background(), &iris.Message{
+	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
@@ -308,11 +313,11 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		assert.Equal(t, "room-1", msg.room)
 		assert.Contains(t, msg.message, "help 명령어 처리 중 오류")
 	case <-time.After(1 * time.Second):
-		t.Fatalf("did not receive message in time")
+		t.Fatal("did not receive message in time")
 	}
 
 	t.Run("getErrorMessage mappings", func(t *testing.T) {
-		assert.Equal(t, "", b.getErrorMessage(nil, "help"))
+		assert.Empty(t, b.getErrorMessage(nil, "help"))
 
 		aiErr := errors.New("외부 AI 서비스 장애: 일시적 오류")
 		assert.Equal(t, aiErr.Error(), b.getErrorMessage(aiErr, "help"))

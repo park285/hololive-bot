@@ -21,19 +21,18 @@
 package bot
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/iris"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
-	"github.com/kapu/hololive-shared/pkg/iris"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
@@ -48,10 +47,12 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
 		select {
 		case reqCh <- req:
 		default:
 		}
+
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -63,14 +64,14 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: command.NewRegistry(),
-		messageAdapter:  adapter.NewMessageAdapter("!"),
+		messageAdapter:  adapter.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
 		formatter:       adapter.NewResponseFormatter("!", nil),
 	}
 
-	threadID := "thread-1"
+	threadID := "12345"
 	sender := "user"
-	b.HandleMessage(context.Background(), &iris.Message{
+	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
@@ -86,6 +87,6 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 		require.NotNil(t, req.ThreadID)
 		require.Equal(t, threadID, *req.ThreadID)
 	case <-time.After(1 * time.Second):
-		t.Fatalf("did not receive /reply request in time")
+		t.Fatal("did not receive /reply request in time")
 	}
 }

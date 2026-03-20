@@ -21,6 +21,7 @@
 package majoreventclient
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"net/http"
@@ -45,8 +46,9 @@ func New(baseURL, apiKey string) *Client {
 func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return false, fmt.Errorf("room id is required")
+		return false, errors.New("room id is required")
 	}
+
 	req, err := c.httpClient.NewRequest(ctx, http.MethodGet, majoreventcontracts.SubscriptionsPath+"/"+roomID)
 	if err != nil {
 		return false, fmt.Errorf("new request: %w", err)
@@ -66,14 +68,16 @@ func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) 
 	if err := c.httpClient.DecodeJSON(resp, &parsed); err != nil {
 		return false, fmt.Errorf("decode response: %w", err)
 	}
+
 	return parsed.Subscribed, nil
 }
 
 func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
 	roomID = strings.TrimSpace(roomID)
 	roomName = strings.TrimSpace(roomName)
+
 	if roomID == "" {
-		return fmt.Errorf("room id is required")
+		return errors.New("room id is required")
 	}
 
 	req, err := c.httpClient.NewJSONRequest(ctx, http.MethodPost, majoreventcontracts.SubscriptionsPath, subscription.SubscribeRequest{
@@ -97,13 +101,14 @@ func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if err := c.httpClient.DiscardBody(resp); err != nil {
 		return fmt.Errorf("discard body: %w", err)
 	}
+
 	return nil
 }
 
 func (c *Client) Unsubscribe(ctx context.Context, roomID string) error {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return fmt.Errorf("room id is required")
+		return errors.New("room id is required")
 	}
 
 	req, err := c.httpClient.NewRequest(ctx, http.MethodDelete, majoreventcontracts.SubscriptionsPath+"/"+roomID)
@@ -124,5 +129,6 @@ func (c *Client) Unsubscribe(ctx context.Context, roomID string) error {
 	if err := c.httpClient.DiscardBody(resp); err != nil {
 		return fmt.Errorf("discard body: %w", err)
 	}
+
 	return nil
 }

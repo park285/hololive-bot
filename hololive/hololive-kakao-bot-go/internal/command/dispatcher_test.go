@@ -42,7 +42,7 @@ func (s *stubCommand) Execute(_ context.Context, _ *domain.CommandContext, _ map
 }
 
 func TestSequentialDispatcherPublishRequiresConfiguration(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var nilDispatcher *sequentialDispatcher
 	if _, err := nilDispatcher.Publish(ctx, nil); err == nil {
@@ -74,16 +74,18 @@ func TestSequentialDispatcherPublishExecutesEvents(t *testing.T) {
 		},
 	)
 
-	executed, err := dispatcher.Publish(context.Background(), &domain.CommandContext{}, Event{
+	executed, err := dispatcher.Publish(t.Context(), &domain.CommandContext{}, Event{
 		Type:   domain.CommandHelp,
 		Params: map[string]any{"foo": "bar"},
 	})
 	if err != nil {
 		t.Fatalf("publish failed: %v", err)
 	}
+
 	if executed != 1 {
 		t.Fatalf("executed = %d, want 1", executed)
 	}
+
 	if cmd.executed != 1 {
 		t.Fatalf("command executed = %d, want 1", cmd.executed)
 	}

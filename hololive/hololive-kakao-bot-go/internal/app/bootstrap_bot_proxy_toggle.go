@@ -65,9 +65,11 @@ func applyScraperProxyToggle(
 	if youtubeService != nil {
 		youtubeApplied = youtubeService.SetScraperProxyEnabled(enabled)
 	}
+
 	if holodexService != nil {
 		holodexApplied = holodexService.SetScraperProxyEnabled(enabled)
 	}
+
 	if scraperScheduler != nil {
 		schedulerApplied = scraperScheduler.SetProxyEnabled(enabled)
 	}

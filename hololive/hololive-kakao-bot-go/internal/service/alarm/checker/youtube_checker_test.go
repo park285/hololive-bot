@@ -29,13 +29,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
@@ -73,15 +72,19 @@ func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 			h := holodexSvc
 			ts := tierSched
 			d := dedupSvc
+
 			if tc.cacheNil {
 				c = nil
 			}
+
 			if tc.holodexNil {
 				h = nil
 			}
+
 			if tc.tierNil {
 				ts = nil
 			}
+
 			if tc.dedupNil {
 				d = nil
 			}
@@ -108,7 +111,7 @@ func TestYouTubeCheckerCheck_EmptyChannelRegistry(t *testing.T) {
 	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, logger)
 	require.NoError(t, err)
 
-	notifications, checkErr := checker.Check(context.Background())
+	notifications, checkErr := checker.Check(t.Context())
 	require.NoError(t, checkErr)
 	assert.Empty(t, notifications)
 }
@@ -172,9 +175,9 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			startScheduled := time.Now().UTC().Truncate(time.Second).Add(5*time.Minute + 10*time.Second)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -182,23 +185,29 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 					http.NotFound(w, r)
 					return
 				}
+
 				if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
 					http.Error(w, "missing channels query", http.StatusBadRequest)
 					return
 				}
+
 				switch tc.scenario {
 				case "ok", "dedup":
 					w.Header().Set("Content-Type", "application/json")
+
 					_, _ = w.Write([]byte(buildUpcomingResponse(startScheduled)))
 				case "not_found":
 					w.Header().Set("Content-Type", "application/json")
+
 					_, _ = w.Write([]byte(`[]`))
 				case "timeout":
 					time.Sleep(150 * time.Millisecond)
 					w.Header().Set("Content-Type", "application/json")
+
 					_, _ = w.Write([]byte(`[]`))
 				case "5xx":
 					w.WriteHeader(http.StatusInternalServerError)
+
 					_, _ = w.Write([]byte(`{"error":"server exploded"}`))
 				default:
 					http.Error(w, "unknown scenario", http.StatusInternalServerError)
@@ -216,9 +225,11 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 			checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, logger)
 			require.NoError(t, err)
 
-			setupCtx := context.Background()
+			setupCtx := t.Context()
+
 			_, err = cacheSvc.SAdd(setupCtx, notification.AlarmChannelRegistryKey, []string{channelID})
 			require.NoError(t, err)
+
 			_, err = cacheSvc.SAdd(setupCtx, notification.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 			require.NoError(t, err)
 
@@ -228,16 +239,20 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 			}
 
 			runCtx := setupCtx
+
 			if tc.ctxTimeout > 0 {
 				var cancel context.CancelFunc
+
 				runCtx, cancel = context.WithTimeout(setupCtx, tc.ctxTimeout)
 				defer cancel()
 			}
 
 			notifications, checkErr := checker.Check(runCtx)
+
 			if tc.wantErrContains != "" {
 				require.Error(t, checkErr)
 				assert.Contains(t, checkErr.Error(), tc.wantErrContains)
+
 				return
 			}
 
@@ -309,6 +324,7 @@ func TestCloneStream(t *testing.T) {
 
 	t.Run("deep copy 검증", func(t *testing.T) {
 		t.Parallel()
+
 		start := time.Now().UTC()
 		actual := start.Add(-5 * time.Minute)
 		original := &domain.Stream{
@@ -348,11 +364,13 @@ func TestEnsureScheduledTime(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			got := ensureScheduledTime(tc.stream, tc.fallback)
 			if tc.wantNil {
 				assert.Nil(t, got)
 			} else {
 				require.NotNil(t, got)
+
 				if tc.wantHasSched {
 					assert.NotNil(t, got.StartScheduled)
 				}
@@ -390,10 +408,11 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 	t.Parallel()
 
 	cacheSvc := newCheckerTestCacheClient(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch1", []string{"r1", "r2"})
 	require.NoError(t, err)
+
 	_, err = cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch2", []string{"r3"})
 	require.NoError(t, err)
 
@@ -426,6 +445,7 @@ func TestSafeLogger(t *testing.T) {
 
 	t.Run("정상 로거 통과", func(t *testing.T) {
 		t.Parallel()
+
 		l := newCheckerTestLogger()
 		assert.Same(t, l, safeLogger(l))
 	})
@@ -481,6 +501,7 @@ func TestResolveLiveStart(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			got := resolveLiveStart(tc.stream)
 			if tc.wantNil {
 				assert.Nil(t, got)
@@ -518,7 +539,7 @@ func TestIsChzzkLive(t *testing.T) {
 func TestBuildChzzkLiveDedupKey(t *testing.T) {
 	t.Parallel()
 
-	detectedAt := time.Date(2026, 3, 2, 10, 35, 0, 0, time.UTC)
+	detectedAt := time.Date(2026, time.March, 2, 10, 35, 0, 0, time.UTC)
 	key := buildChzzkLiveDedupKey("chzzk123", detectedAt)
 
 	// 10분 bucket → 10:30
@@ -535,7 +556,7 @@ func TestBuildChzzkLiveStream(t *testing.T) {
 		ConcurrentUserCount: 1234,
 		LiveCategoryValue:   "게임",
 	}
-	detectedAt := time.Date(2026, 3, 2, 10, 35, 0, 0, time.UTC)
+	detectedAt := time.Date(2026, time.March, 2, 10, 35, 0, 0, time.UTC)
 
 	stream := buildChzzkLiveStream("UC_YT", "chzzk123", status, detectedAt)
 	require.NotNil(t, stream)
@@ -581,6 +602,7 @@ func TestNormalizeTwitchLoginMappings(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			m, ids := normalizeTwitchLoginMappings(tc.input)
 			assert.Len(t, m, tc.wantLen)
 			assert.Len(t, ids, tc.wantLen)

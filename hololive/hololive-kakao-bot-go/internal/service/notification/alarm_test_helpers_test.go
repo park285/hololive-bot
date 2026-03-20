@@ -31,7 +31,7 @@ import (
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-// mockMemberDataProvider: 테스트용 멤버 데이터 프로바이더
+// mockMemberDataProvider: 테스트용 멤버 데이터 프로바이더.
 type mockMemberDataProvider struct {
 	members []*domain.Member
 }
@@ -42,6 +42,7 @@ func (m *mockMemberDataProvider) FindMemberByChannelID(channelID string) *domain
 			return member
 		}
 	}
+
 	return nil
 }
 
@@ -63,18 +64,20 @@ func (m *mockMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member {
 	return []*domain.Member{}
 }
 
-// newTestCacheService: 테스트용 miniredis 기반 캐시 서비스 생성
+// newTestCacheService: 테스트용 miniredis 기반 캐시 서비스 생성.
 func newTestCacheService(t *testing.T, ctx context.Context) *cache.Service {
 	t.Helper()
 	return sharedtestutil.NewTestCacheService(t, ctx)
 }
 
-// newTestAlarmService: 테스트용 AlarmService 인스턴스 생성 (miniredis 기반)
+// newTestAlarmService: 테스트용 AlarmService 인스턴스 생성 (miniredis 기반).
 func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
-	ctx := context.Background()
+
+	ctx := t.Context()
 	cacheSvc := newTestCacheService(t, ctx)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
 	return &AlarmService{
 		cache:         cacheSvc,
 		logger:        logger,

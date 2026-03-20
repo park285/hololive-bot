@@ -20,30 +20,17 @@
 
 package iris
 
-import "context"
+import "park285/iris-client-go/client"
 
+// Client: iris-client-go의 Sender + AdminClient를 결합한 인터페이스입니다.
+// *client.H2CClient는 두 인터페이스를 모두 구현하므로 이 타입을 만족합니다.
 type Client interface {
-	SendMessage(ctx context.Context, room, message string, opts ...SendOption) error
-	SendImage(ctx context.Context, room, imageBase64 string) error
-	Ping(ctx context.Context) bool
-	GetConfig(ctx context.Context) (*Config, error)
-	Decrypt(ctx context.Context, data string) (string, error)
+	client.Sender
+	client.AdminClient
 }
 
-type SendOption func(*sendOptions)
+// SendOption: 메시지 전송 옵션 — client.SendOption의 타입 별칭입니다.
+type SendOption = client.SendOption
 
-type sendOptions struct {
-	ThreadID *string
-}
-
-func WithThreadID(id string) SendOption {
-	return func(o *sendOptions) { o.ThreadID = &id }
-}
-
-func applySendOptions(opts []SendOption) sendOptions {
-	var o sendOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
-	return o
-}
+// WithThreadID: 메시지 전송 시 스레드 ID를 지정합니다.
+var WithThreadID = client.WithThreadID

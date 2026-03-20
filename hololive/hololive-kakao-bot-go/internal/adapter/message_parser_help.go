@@ -25,10 +25,11 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-func (ma *MessageAdapter) tryHelpCommand(command string, raw string) (*ParsedCommand, bool) {
+func (ma *MessageAdapter) tryHelpCommand(command, raw string) (*ParsedCommand, bool) {
 	if !ma.isHelpCommand(command) {
 		return nil, false
 	}
+
 	return &ParsedCommand{Type: domain.CommandHelp, Params: make(map[string]any), RawMessage: raw}, true
 }
 

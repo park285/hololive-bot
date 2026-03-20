@@ -30,12 +30,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// Run: 봇 애플리케이션을 실행하고 종료 신호(SIGINT, SIGTERM)를 대기한다. (블로킹)
+// Run: 봇 애플리케이션을 실행하고 종료 신호(SIGINT, SIGTERM)를 대기한다. (블로킹).
 func (r *BotRuntime) Run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	sigCh := make(chan os.Signal, 1)
+
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 

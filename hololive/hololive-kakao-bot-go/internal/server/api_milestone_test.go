@@ -47,6 +47,7 @@ func (s *stubStatsDashboardRepository) GetAllMilestones(ctx context.Context, fil
 	if s.getAllMilestones == nil {
 		return &stats.MilestoneResult{}, nil
 	}
+
 	return s.getAllMilestones(ctx, filter)
 }
 
@@ -59,6 +60,7 @@ func (s *stubStatsDashboardRepository) GetNearMilestoneMembers(
 	if s.getNearMilestoneMember == nil {
 		return nil, nil
 	}
+
 	return s.getNearMilestoneMember(ctx, thresholdPct, milestones, limit)
 }
 
@@ -66,6 +68,7 @@ func (s *stubStatsDashboardRepository) GetMilestoneStats(ctx context.Context) (*
 	if s.getMilestoneStats == nil {
 		return &stats.MilestoneStats{}, nil
 	}
+
 	return s.getMilestoneStats(ctx)
 }
 
@@ -77,6 +80,7 @@ func (s *stubStatsDashboardRepository) CountNearMilestoneMembers(
 	if s.countNearMembers == nil {
 		return 0, nil
 	}
+
 	return s.countNearMembers(ctx, thresholdPct, milestones)
 }
 
@@ -115,6 +119,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones", nil)
 		h.GetMilestones(ctx)
+
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusServiceUnavailable)
 		}
@@ -127,6 +132,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?limit=999", nil)
 		h.GetMilestones(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusBadRequest)
 		}
@@ -139,6 +145,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?offset=-1", nil)
 		h.GetMilestones(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusBadRequest)
 		}
@@ -155,6 +162,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones", nil)
 		h.GetMilestones(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusInternalServerError)
 		}
@@ -185,6 +193,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?channelId=UC1", nil)
 		h.GetMilestones(ctx)
+
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}
@@ -198,6 +207,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/near", nil)
 		h.GetNearMilestoneMembers(ctx)
+
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusServiceUnavailable)
 		}
@@ -210,6 +220,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/near?threshold=1.1", nil)
 		h.GetNearMilestoneMembers(ctx)
+
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusBadRequest)
 		}
@@ -226,6 +237,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/near", nil)
 		h.GetNearMilestoneMembers(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusInternalServerError)
 		}
@@ -236,7 +248,8 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 			statsRepo: &stubStatsDashboardRepository{
 				getNearMilestoneMember: func(context.Context, float64, []uint64, int) ([]stats.NearMilestoneEntry, error) {
 					out := make([]stats.NearMilestoneEntry, 0, 8)
-					for i := 0; i < 8; i++ {
+
+					for range 8 {
 						out = append(out, stats.NearMilestoneEntry{
 							ChannelID:     "UC",
 							MemberName:    "member",
@@ -246,6 +259,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 							ProgressPct:   90,
 						})
 					}
+
 					return out, nil
 				},
 			},
@@ -254,6 +268,7 @@ func TestMilestoneAPIHandler_GetNearMilestoneMembers(t *testing.T) {
 
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/near?threshold=0.9", nil)
 		h.GetNearMilestoneMembers(ctx)
+
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}
@@ -267,6 +282,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 		h := &MilestoneAPIHandler{APIHandler: &APIHandler{logger: newDiscardLogger()}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/stats", nil)
 		h.GetMilestoneStats(ctx)
+
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusServiceUnavailable)
 		}
@@ -283,6 +299,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/stats", nil)
 		h.GetMilestoneStats(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusInternalServerError)
 		}
@@ -302,6 +319,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/stats", nil)
 		h.GetMilestoneStats(ctx)
+
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusInternalServerError)
 		}
@@ -325,6 +343,7 @@ func TestMilestoneAPIHandler_GetMilestoneStats(t *testing.T) {
 		}}
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones/stats", nil)
 		h.GetMilestoneStats(ctx)
+
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 		}

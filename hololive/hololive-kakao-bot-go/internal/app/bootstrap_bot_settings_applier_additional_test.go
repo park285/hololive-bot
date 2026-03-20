@@ -23,19 +23,17 @@ package app
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
@@ -92,38 +90,46 @@ type trackingHolodexProxySvc struct {
 func (s *trackingYouTubeSvc) SetScraperProxyEnabled(enabled bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.proxyEnabled = enabled
+
 	return true
 }
 
 func (s *trackingYouTubeSvc) ScraperProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.proxyEnabled
 }
 
 func (s *trackingYouTubeSvc) isProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.proxyEnabled
 }
 
 func (s *trackingHolodexProxySvc) SetScraperProxyEnabled(enabled bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.proxyEnabled = enabled
+
 	return true
 }
 
 func (s *trackingHolodexProxySvc) ScraperProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.proxyEnabled
 }
 
 func (s *trackingHolodexProxySvc) isProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.proxyEnabled
 }
 
@@ -144,26 +150,32 @@ func (p *trackingProxyTogglePoller) Name() string { return "tracking-proxy-polle
 func (p *trackingProxyTogglePoller) Poll(context.Context, string) error {
 	return nil
 }
+
 func (p *trackingProxyTogglePoller) SetProxyEnabled(enabled bool) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	p.enabled = enabled
+
 	return true
 }
+
 func (p *trackingProxyTogglePoller) ProxyEnabled() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	return p.enabled
 }
 
 func (p *trackingProxyTogglePoller) isEnabled() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	return p.enabled
 }
 
 func testAppLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestNewBotSettingsApplier_DefaultLogger(t *testing.T) {
@@ -203,10 +215,10 @@ func TestBotSettingsApplier_DelegatesToBase(t *testing.T) {
 		logger: testAppLogger(),
 	}
 
-	assert.Equal(t, expectedScraper, applier.ApplyScraperProxy(context.Background(), true))
+	assert.Equal(t, expectedScraper, applier.ApplyScraperProxy(t.Context(), true))
 	assert.True(t, base.lastScraperProxyEnabled)
 
-	assert.Equal(t, expectedAlarm, applier.ApplyAlarmAdvanceMinutes(context.Background(), 15))
+	assert.Equal(t, expectedAlarm, applier.ApplyAlarmAdvanceMinutes(t.Context(), 15))
 	assert.Equal(t, 15, base.lastAlarmMinutes)
 
 	assert.Equal(t, expectedRuntime, applier.ScraperProxyRuntimeState(true))
@@ -222,7 +234,7 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 			logger:           testAppLogger(),
 		}
 
-		result := applier.ApplyMemberNewsWeeklyRunNow(context.Background())
+		result := applier.ApplyMemberNewsWeeklyRunNow(t.Context())
 		assert.False(t, result.Applied)
 		assert.Equal(t, "member news trigger is not configured", result.Reason)
 		assert.Empty(t, result.Error)
@@ -235,7 +247,8 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 			logger:           testAppLogger(),
 		}
 
-		result := applier.ApplyMemberNewsWeeklyRunNow(context.Background())
+		result := applier.ApplyMemberNewsWeeklyRunNow(t.Context())
+
 		assert.Equal(t, 1, trigger.called)
 		assert.False(t, result.Applied)
 		assert.Equal(t, "member news trigger failed", result.Reason)
@@ -249,7 +262,8 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 			logger:           testAppLogger(),
 		}
 
-		result := applier.ApplyMemberNewsWeeklyRunNow(context.Background())
+		result := applier.ApplyMemberNewsWeeklyRunNow(t.Context())
+
 		assert.Equal(t, 1, trigger.called)
 		assert.True(t, result.Applied)
 		assert.Equal(t, "member_news_trigger", result.Source)
@@ -272,6 +286,7 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	applyScraperProxyToggle(true, youtubeSvc, nil, scheduler, logger)
 	assert.True(t, youtubeSvc.isProxyEnabled())
 	assert.True(t, trackingPoller.isEnabled())
+
 	enabled, known := scheduler.ProxyEnabled()
 	assert.True(t, known)
 	assert.True(t, enabled)
@@ -279,6 +294,7 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	applyScraperProxyToggle(false, youtubeSvc, nil, scheduler, logger)
 	assert.False(t, youtubeSvc.isProxyEnabled())
 	assert.False(t, trackingPoller.isEnabled())
+
 	enabled, known = scheduler.ProxyEnabled()
 	assert.True(t, known)
 	assert.False(t, enabled)
@@ -312,6 +328,8 @@ func TestProvideYouTubeServiceAndScheduler_Defaults(t *testing.T) {
 	assert.Same(t, scheduler, ProvideYouTubeScheduler(deps))
 }
 
-var _ sharedserver.SettingsApplier = (*trackingSettingsApplier)(nil)
-var _ memberNewsWeeklyRunNowTrigger = (*trackingMemberNewsRunNowTrigger)(nil)
-var _ youtube.Service = (*trackingYouTubeSvc)(nil)
+var (
+	_ sharedserver.SettingsApplier  = (*trackingSettingsApplier)(nil)
+	_ memberNewsWeeklyRunNowTrigger = (*trackingMemberNewsRunNowTrigger)(nil)
+	_ youtube.Service               = (*trackingYouTubeSvc)(nil)
+)

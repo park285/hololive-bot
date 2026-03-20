@@ -58,9 +58,11 @@ type LoggingConfig struct {
 
 // BotConfig: 봇의 기본 동작(명령어 접두사, 자기 자신 식별자) 설정
 type BotConfig struct {
-	Prefix       string
-	SelfUser     string
-	AdminEnabled bool
+	Prefix           string
+	SelfUser         string
+	AdminEnabled     bool
+	SettlementRoomID string // 정산 알람 대상 방 ID (빈 문자열이면 비활성)
+	MentionPrefix    string // 멘션 기반 명령어 접두사 (예: @카푸봇)
 }
 
 // ServicesConfig: 외부 Go 서비스 연결 설정 (goroutine 통합 모니터링용)

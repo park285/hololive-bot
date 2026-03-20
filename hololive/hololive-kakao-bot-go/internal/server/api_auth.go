@@ -33,7 +33,7 @@ import (
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 )
 
-// AuthHandler: /api/auth 엔드포인트를 처리하는 핸들러
+// AuthHandler: /api/auth 엔드포인트를 처리하는 핸들러.
 type AuthHandler struct {
 	auth   *authsvc.Service
 	logger *slog.Logger
@@ -76,10 +76,12 @@ func parseBearerToken(c *gin.Context) (string, bool) {
 	if raw == "" {
 		return "", false
 	}
+
 	parts := strings.Fields(raw)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 		return "", false
 	}
+
 	return parts[1], true
 }
 
@@ -107,7 +109,7 @@ func mapAuthErrorToHTTP(err error) (status int, code authsvc.ErrorCode) {
 	}
 }
 
-// Register: POST /api/auth/register
+// Register: POST /api/auth/register.
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -122,6 +124,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if err != nil {
 		status, code := mapAuthErrorToHTTP(err)
 		writeAuthError(c, status, code)
+
 		return
 	}
 
@@ -136,7 +139,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	})
 }
 
-// Login: POST /api/auth/login
+// Login: POST /api/auth/login.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -151,6 +154,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err != nil {
 		status, code := mapAuthErrorToHTTP(err)
 		writeAuthError(c, status, code)
+
 		return
 	}
 
@@ -169,7 +173,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
-// Logout: POST /api/auth/logout
+// Logout: POST /api/auth/logout.
 func (h *AuthHandler) Logout(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
@@ -183,13 +187,14 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if err := h.auth.Logout(ctx, token); err != nil {
 		status, code := mapAuthErrorToHTTP(err)
 		writeAuthError(c, status, code)
+
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// Refresh: POST /api/auth/refresh
+// Refresh: POST /api/auth/refresh.
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
@@ -204,6 +209,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if err != nil {
 		status, code := mapAuthErrorToHTTP(err)
 		writeAuthError(c, status, code)
+
 		return
 	}
 
@@ -216,7 +222,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	})
 }
 
-// Me: GET /api/auth/me
+// Me: GET /api/auth/me.
 func (h *AuthHandler) Me(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
@@ -231,6 +237,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	if err != nil {
 		status, code := mapAuthErrorToHTTP(err)
 		writeAuthError(c, status, code)
+
 		return
 	}
 
@@ -246,7 +253,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	})
 }
 
-// ResetRequest: POST /api/auth/password/reset-request
+// ResetRequest: POST /api/auth/password/reset-request.
 func (h *AuthHandler) ResetRequest(c *gin.Context) {
 	var req resetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -260,6 +267,7 @@ func (h *AuthHandler) ResetRequest(c *gin.Context) {
 	if _, err := h.auth.RequestPasswordReset(ctx, req.Email, c.ClientIP()); err != nil {
 		status, code := mapAuthErrorToHTTP(err)
 		writeAuthError(c, status, code)
+
 		return
 	}
 
@@ -269,7 +277,7 @@ func (h *AuthHandler) ResetRequest(c *gin.Context) {
 	})
 }
 
-// ResetPassword: POST /api/auth/password/reset
+// ResetPassword: POST /api/auth/password/reset.
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -283,6 +291,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	if err := h.auth.ResetPassword(ctx, req.Token, req.NewPassword); err != nil {
 		status, code := mapAuthErrorToHTTP(err)
 		writeAuthError(c, status, code)
+
 		return
 	}
 

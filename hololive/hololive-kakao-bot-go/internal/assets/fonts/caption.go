@@ -72,6 +72,7 @@ func CaptionFaceSized(size float64) (font.Face, error) {
 	}
 
 	actual, _ := captionFaceCache.LoadOrStore(cacheKey, face)
+
 	return actual.(font.Face), nil
 }
 
@@ -82,7 +83,9 @@ func loadCaptionFont() (*opentype.Font, error) {
 			errCaptionFont = fmt.Errorf("parse caption font: %w", err)
 			return
 		}
+
 		captionFont = fnt
 	})
+
 	return captionFont, errCaptionFont
 }

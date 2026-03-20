@@ -84,15 +84,19 @@ func (h *APIHandler) ensureDefaults() *APIHandler {
 	if h == nil {
 		h = &APIHandler{}
 	}
+
 	if h.streamState == nil {
 		h.streamState = newStreamState()
 	}
+
 	if h.memberIndexLoader == nil && h.repo != nil {
 		h.memberIndexLoader = h.repo.GetAllMembers
 	}
+
 	if h.startTime.IsZero() {
 		h.startTime = time.Now()
 	}
+
 	return h
 }
 
@@ -101,9 +105,11 @@ func (h *APIHandler) ensureStreamState() *sharedserver.StreamState {
 	if h == nil {
 		return newStreamState()
 	}
+
 	if h.streamState == nil {
 		h.streamState = newStreamState()
 	}
+
 	return h.streamState
 }
 
@@ -129,6 +135,7 @@ func NewAPIHandler(
 	logger *slog.Logger,
 ) *APIHandler {
 	var memberIndexLoader func(context.Context) ([]*domain.Member, error)
+
 	if repo != nil {
 		memberIndexLoader = repo.GetAllMembers
 	}

@@ -30,7 +30,7 @@ import (
 )
 
 // buildBotConfigSubscriber: Bot용 ConfigSubscriber를 생성합니다.
-// scraper_proxy / alarm_advance_minutes 두 가지 설정 변경을 수신하여 적용합니다.
+// Scraper_proxy / alarm_advance_minutes 두 가지 설정 변경을 수신하여 적용합니다.
 func buildBotConfigSubscriber(
 	ctx context.Context,
 	deps botConfigSubscriberDependencies,
@@ -43,6 +43,7 @@ func buildBotConfigSubscriber(
 			applyScraperProxyToggle(payload.Enabled, runtimeDeps.youtubeService, runtimeDeps.holodexService, scraperScheduler, logger)
 			// 설정 파일에도 반영
 			current := deps.settings.Get()
+
 			current.ScraperProxyEnabled = payload.Enabled
 			if err := deps.settings.Update(current); err != nil {
 				logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
@@ -56,6 +57,7 @@ func buildBotConfigSubscriber(
 			)
 			// 설정 파일에도 반영
 			current := deps.settings.Get()
+
 			current.AlarmAdvanceMinutes = payload.Minutes
 			if err := deps.settings.Update(current); err != nil {
 				logger.Warn("Failed to persist alarm_advance_minutes setting", slog.Any("error", err))

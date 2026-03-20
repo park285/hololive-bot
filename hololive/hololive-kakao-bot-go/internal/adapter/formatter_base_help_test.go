@@ -21,20 +21,17 @@
 package adapter
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func setupFormatterTestRenderer(t *testing.T, templates map[domain.TemplateKey]string) *serviceTemplate.Renderer {
@@ -52,7 +49,8 @@ func setupFormatterTestRenderer(t *testing.T, templates map[domain.TemplateKey]s
 		require.NoError(t, err)
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
+
 	return serviceTemplate.NewRenderer(db, logger)
 }
 
@@ -63,8 +61,8 @@ func TestSplitTemplateInstruction(t *testing.T) {
 		t.Parallel()
 
 		instruction, body := splitTemplateInstruction("\n\r\n")
-		assert.Equal(t, "", instruction)
-		assert.Equal(t, "", body)
+		assert.Empty(t, instruction)
+		assert.Empty(t, body)
 	})
 
 	t.Run("single line only", func(t *testing.T) {
@@ -72,7 +70,7 @@ func TestSplitTemplateInstruction(t *testing.T) {
 
 		instruction, body := splitTemplateInstruction("사용법 안내만")
 		assert.Equal(t, "사용법 안내만", instruction)
-		assert.Equal(t, "", body)
+		assert.Empty(t, body)
 	})
 
 	t.Run("instruction and body", func(t *testing.T) {
@@ -121,7 +119,7 @@ func TestResponseFormatterRender(t *testing.T) {
 		})
 		formatter := NewResponseFormatter("!", renderer)
 
-		got, err := formatter.render(context.Background(), domain.TemplateKeyCmdHelp, map[string]string{"Name": "Kapu"})
+		got, err := formatter.render(t.Context(), domain.TemplateKeyCmdHelp, map[string]string{"Name": "Kapu"})
 		require.NoError(t, err)
 		assert.Equal(t, "Hello Kapu", got)
 	})
@@ -132,7 +130,7 @@ func TestResponseFormatterRender(t *testing.T) {
 		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 		formatter := NewResponseFormatter("!", renderer)
 
-		_, err := formatter.render(context.Background(), domain.TemplateKeyCmdHelp, nil)
+		_, err := formatter.render(t.Context(), domain.TemplateKeyCmdHelp, nil)
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "render template")
 	})
@@ -149,7 +147,7 @@ func TestFormatHelp(t *testing.T) {
 		})
 		formatter := NewResponseFormatter("!", renderer)
 
-		got := formatter.FormatHelp(context.Background())
+		got := formatter.FormatHelp(t.Context())
 		assert.True(t, strings.HasPrefix(got, "도움말 안내"))
 		assert.Contains(t, got, "\n사용 가능한 명령어 목록")
 		assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(got, util.KakaoZeroWidthSpace))
@@ -163,7 +161,7 @@ func TestFormatHelp(t *testing.T) {
 		})
 		formatter := NewResponseFormatter("!", renderer)
 
-		got := formatter.FormatHelp(context.Background())
+		got := formatter.FormatHelp(t.Context())
 		assert.Equal(t, "한 줄 도움말", got)
 	})
 
@@ -173,7 +171,7 @@ func TestFormatHelp(t *testing.T) {
 		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 		formatter := NewResponseFormatter("!", renderer)
 
-		got := formatter.FormatHelp(context.Background())
+		got := formatter.FormatHelp(t.Context())
 		assert.Equal(t, ErrorMessage(ErrDisplayHelpFailed), got)
 	})
 }

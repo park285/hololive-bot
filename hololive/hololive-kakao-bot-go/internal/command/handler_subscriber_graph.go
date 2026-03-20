@@ -21,6 +21,7 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -64,6 +65,7 @@ func (c *SubscriberGraphCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 	}
 
 	days := 30
+
 	if daysStr, ok := params["days"].(string); ok && daysStr != "" {
 		if parsed, parseErr := strconv.Atoi(daysStr); parseErr == nil && parsed > 0 {
 			days = parsed
@@ -94,6 +96,7 @@ func (c *SubscriberGraphCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 		graphData.UpdatedAt,
 		graphPointValues(graphData.Points),
 	)
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -116,7 +119,7 @@ func (c *SubscriberGraphCommand) ensureDeps() error {
 	}
 
 	if c.Deps().Matcher == nil || c.Deps().StatsRepo == nil {
-		return fmt.Errorf("subscriber graph command services not configured")
+		return errors.New("subscriber graph command services not configured")
 	}
 
 	return nil

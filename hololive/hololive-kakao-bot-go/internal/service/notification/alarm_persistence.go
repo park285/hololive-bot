@@ -36,6 +36,7 @@ func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
 				slog.String("room_id", roomID),
 			)
 		}
+
 		return
 	}
 
@@ -53,7 +54,7 @@ func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
 // persistAlarmAsync: 알람을 DB에 비동기로 저장한다. (Write-Through)
 // 사용자 응답을 지연시키지 않기 위해 goroutine으로 실행한다.
 //
-//nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
+
 func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
 	if as.alarmWriter == nil || alarm == nil {
 		return
@@ -75,7 +76,7 @@ func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
 
 // removeAlarmAsync: 알람을 DB에서 비동기로 삭제한다. (Write-Through, 방 기반)
 //
-//nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
+
 func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
 	if as.alarmWriter == nil {
 		return
@@ -97,7 +98,7 @@ func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
 
 // clearRoomAlarmsAsync: 방의 모든 알람을 DB에서 비동기로 삭제한다. (Write-Through)
 //
-//nolint:contextcheck // Async 작업은 caller context와 독립적으로 실행되어야 함
+
 func (as *AlarmService) clearRoomAlarmsAsync(roomID string) {
 	if as.alarmWriter == nil {
 		return
@@ -165,6 +166,7 @@ func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 		if a.RoomName != "" {
 			_ = as.cache.HSet(ctx, RoomNamesCacheKey, a.RoomID, a.RoomName)
 		}
+
 		if a.UserName != "" {
 			_ = as.cache.HSet(ctx, UserNamesCacheKey, a.UserID, a.UserName)
 		}

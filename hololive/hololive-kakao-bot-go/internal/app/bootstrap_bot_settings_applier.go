@@ -71,6 +71,7 @@ func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sh
 
 	if err := a.memberNewsRunNow.SendMemberNewsWeekly(ctx); err != nil {
 		a.logger.Warn("Failed to trigger member news weekly run-now", slog.Any("error", err))
+
 		return sharedsettings.MemberNewsWeeklyRunNowResult{
 			Applied: false,
 			Reason:  "member news trigger failed",

@@ -46,6 +46,7 @@ func TestNewClient(t *testing.T) {
 	if client == nil {
 		t.Fatal("Expected non-nil client")
 	}
+
 	if client.baseURL != DefaultBaseURL {
 		t.Errorf("Expected baseURL %q, got %q", DefaultBaseURL, client.baseURL)
 	}
@@ -68,7 +69,9 @@ func TestGetLiveStatus_Success_Open(t *testing.T) {
 		if r.URL.Path != "/polling/v2/channels/test-channel/live-status" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
+
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -76,21 +79,25 @@ func TestGetLiveStatus_Success_Open(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
-	content, err := client.GetLiveStatus(ctx, "test-channel")
+	ctx := t.Context()
 
+	content, err := client.GetLiveStatus(ctx, "test-channel")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
+
 	if content == nil {
 		t.Fatal("Expected non-nil content")
 	}
+
 	if content.Status != "OPEN" {
 		t.Errorf("Expected status OPEN, got: %s", content.Status)
 	}
+
 	if content.LiveTitle != "마인크래프트 생방송" {
 		t.Errorf("Expected title '마인크래프트 생방송', got: %s", content.LiveTitle)
 	}
+
 	if content.ConcurrentUserCount != 1234 {
 		t.Errorf("Expected 1234 viewers, got: %d", content.ConcurrentUserCount)
 	}
@@ -107,6 +114,7 @@ func TestGetLiveStatus_Success_Close(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -114,15 +122,17 @@ func TestGetLiveStatus_Success_Close(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
-	content, err := client.GetLiveStatus(ctx, "test-channel")
+	ctx := t.Context()
 
+	content, err := client.GetLiveStatus(ctx, "test-channel")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
+
 	if content == nil {
 		t.Fatal("Expected non-nil content")
 	}
+
 	if content.Status != "CLOSE" {
 		t.Errorf("Expected status CLOSE, got: %s", content.Status)
 	}
@@ -132,6 +142,7 @@ func TestGetLiveStatus_NotFound(t *testing.T) {
 	// 404 Not Found 응답
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
+
 		_, _ = w.Write([]byte(`{"code":404,"message":"Channel not found"}`))
 	}))
 	defer server.Close()
@@ -139,9 +150,9 @@ func TestGetLiveStatus_NotFound(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
-	_, err := client.GetLiveStatus(ctx, "invalid-channel")
+	ctx := t.Context()
 
+	_, err := client.GetLiveStatus(ctx, "invalid-channel")
 	if err == nil {
 		t.Fatal("Expected error for 404 response")
 	}
@@ -150,12 +161,15 @@ func TestGetLiveStatus_NotFound(t *testing.T) {
 	if !stdErrors.As(err, &apiErr) {
 		t.Fatalf("expected APIError, got %T: %v", err, err)
 	}
+
 	if apiErr.Operation != chzzkGetLiveStatusOp {
 		t.Fatalf("operation = %q, want %q", apiErr.Operation, chzzkGetLiveStatusOp)
 	}
+
 	if apiErr.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", apiErr.StatusCode, http.StatusNotFound)
 	}
+
 	if got := err.Error(); got != "api error operation=chzzk_get_live_status status=404" {
 		t.Fatalf("unexpected error string: %q", got)
 	}
@@ -167,7 +181,9 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
+
 		w.WriteHeader(http.StatusTooManyRequests)
+
 		_, _ = w.Write([]byte(`{"code":429,"message":"Rate limit exceeded"}`))
 	}))
 	defer server.Close()
@@ -175,7 +191,7 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 3번 연속 실패 시 Circuit Breaker OPEN
 	for i := range 3 {
@@ -191,14 +207,17 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 
 	// 4번째 호출은 Circuit Breaker가 막아야 함
 	callCountBefore := callCount
+
 	_, err := client.GetLiveStatus(ctx, "test-channel")
 	if err == nil {
 		t.Error("Expected circuit breaker error")
 	}
+
 	var circuitErr errors.CircuitOpenError
 	if !stdErrors.As(err, &circuitErr) {
 		t.Fatalf("expected CircuitOpenError, got %T: %v", err, err)
 	}
+
 	if callCount != callCountBefore {
 		t.Errorf("Circuit breaker should prevent API call, but callCount increased from %d to %d", callCountBefore, callCount)
 	}
@@ -215,11 +234,10 @@ func TestGetLiveStatus_ContextTimeout(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	_, err := client.GetLiveStatus(ctx, "test-channel")
-
 	if err == nil {
 		t.Fatal("Expected timeout error")
 	}
@@ -254,7 +272,9 @@ func TestGetScheduledLives_Success(t *testing.T) {
 		if r.URL.Path != "/service/v1/channels/test-channel/scheduled-lives" {
 			t.Errorf("Unexpected path: %s", r.URL.Path)
 		}
+
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -262,18 +282,21 @@ func TestGetScheduledLives_Success(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
-	lives, err := client.GetScheduledLives(ctx, "test-channel")
+	ctx := t.Context()
 
+	lives, err := client.GetScheduledLives(ctx, "test-channel")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
+
 	if len(lives) != 3 {
 		t.Fatalf("Expected 3 scheduled lives, got: %d", len(lives))
 	}
+
 	if lives[0].LiveTitle != "오후 3시 잡담" {
 		t.Errorf("Expected first live title '오후 3시 잡담', got: %s", lives[0].LiveTitle)
 	}
+
 	if lives[2].LiveId != 103 {
 		t.Errorf("Expected last live ID 103, got: %d", lives[2].LiveId)
 	}
@@ -290,6 +313,7 @@ func TestGetScheduledLives_EmptyArray(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -297,12 +321,13 @@ func TestGetScheduledLives_EmptyArray(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
-	lives, err := client.GetScheduledLives(ctx, "test-channel")
+	ctx := t.Context()
 
+	lives, err := client.GetScheduledLives(ctx, "test-channel")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
+
 	if len(lives) != 0 {
 		t.Errorf("Expected empty array, got: %d items", len(lives))
 	}
@@ -315,6 +340,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
+
 		if forceError {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -327,7 +353,9 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 				Status: "CLOSE",
 			},
 		}
+
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -335,7 +363,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Step 1: 3회 연속 실패로 Circuit OPEN
 	for range 3 {
@@ -350,6 +378,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 	// Step 3: 30초 대기를 시뮬레이션 (강제로 circuitOpenUntil 조작)
 	// 프로덕션에서는 30초 후 자동 리셋되지만, 테스트에서는 시간 조작
 	past := time.Now().Add(-1 * time.Second) // 과거 시점으로 설정
+
 	client.circuitMu.Lock()
 	client.circuitOpenUntil = &past
 	client.circuitMu.Unlock()
@@ -361,6 +390,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 
 	// Step 5: 에러 해제 후 정상 요청
 	forceError = false
+
 	callCountBefore := callCount
 
 	_, err := client.GetLiveStatus(ctx, "test-channel")
@@ -379,7 +409,9 @@ func TestGetLiveStatus_ServerError_IncreasesFailureCount(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
+
 		w.WriteHeader(http.StatusInternalServerError)
+
 		_, _ = w.Write([]byte(`{"code":500,"message":"Internal server error"}`))
 	}))
 	defer server.Close()
@@ -387,7 +419,7 @@ func TestGetLiveStatus_ServerError_IncreasesFailureCount(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 첫 번째 실패
 	_, err := client.GetLiveStatus(ctx, "test-channel")
@@ -414,6 +446,7 @@ func TestGetScheduledLives_NilContent(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -421,13 +454,13 @@ func TestGetScheduledLives_NilContent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	lives, err := client.GetScheduledLives(ctx, "test-channel")
-
 	// Content가 nil이면 빈 배열 반환 (에러 아님)
 	if err != nil {
 		t.Errorf("Expected no error for nil content, got: %v", err)
 	}
+
 	if len(lives) != 0 {
 		t.Errorf("Expected empty array for nil content, got: %d items", len(lives))
 	}
@@ -444,13 +477,12 @@ func TestGetLiveStatus_ContextCancellation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // 즉시 취소
 
 	_, err := client.GetLiveStatus(ctx, "test-channel")
-
 	if err == nil {
-		t.Fatal("Expected error for cancelled context")
+		t.Fatal("Expected error for canceled context")
 	}
 }
 
@@ -476,7 +508,9 @@ func TestClient_UserAgent(t *testing.T) {
 				Status: "CLOSE",
 			},
 		}
+
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -484,9 +518,9 @@ func TestClient_UserAgent(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
-	_, err := client.GetLiveStatus(ctx, "test-channel")
+	ctx := t.Context()
 
+	_, err := client.GetLiveStatus(ctx, "test-channel")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -501,6 +535,7 @@ func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 	// 잘못된 JSON 응답
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		_, _ = w.Write([]byte(`{"code":200,"content":`)) // Incomplete JSON
 	}))
 	defer server.Close()
@@ -508,9 +543,9 @@ func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
-	_, err := client.GetLiveStatus(ctx, "test-channel")
+	ctx := t.Context()
 
+	_, err := client.GetLiveStatus(ctx, "test-channel")
 	if err == nil {
 		t.Fatal("Expected error for malformed JSON")
 	}
@@ -518,13 +553,16 @@ func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 
 func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 	callCount := 0
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
+
 		if r.URL.Path != "/open/v1/lives" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 
 		var response OpenAPIResponse[LivesResponse]
+
 		switch callCount {
 		case 1:
 			response = OpenAPIResponse[LivesResponse]{
@@ -551,6 +589,7 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -562,15 +601,18 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 		ClientSecret: "secret",
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
+
 	client.openAPIBaseURL = server.URL
 
-	lives, err := client.GetLivesByChannelIDs(context.Background(), []string{"target-1", "target-2", "target-3", "target-4", "target-5"})
+	lives, err := client.GetLivesByChannelIDs(t.Context(), []string{"target-1", "target-2", "target-3", "target-4", "target-5"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if len(lives) != 2 {
 		t.Fatalf("expected 2 lives, got %d", len(lives))
 	}
+
 	if lives[0].ChannelID != "target-1" || lives[1].ChannelID != "target-2" {
 		t.Fatalf("unexpected lives: %#v", lives)
 	}
@@ -586,6 +628,7 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/polling/v2/channels/") && strings.HasSuffix(r.URL.Path, "/live-status"):
 			liveStatusCalls.Add(1)
+
 			channelID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/polling/v2/channels/"), "/live-status")
 			response := LiveStatusResponse{
 				Code: 200,
@@ -594,16 +637,19 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 					LiveTitle: "closed",
 				},
 			}
+
 			if channelID == "target-1" {
 				response.Content.Status = "OPEN"
 				response.Content.LiveTitle = "target-live-1"
 				response.Content.ConcurrentUserCount = 123
 			}
+
 			w.Header().Set("Content-Type", "application/json")
+
 			_ = json.NewEncoder(w).Encode(response)
 		case r.URL.Path == "/open/v1/lives":
 			pageCalls.Add(1)
-			t.Fatalf("unexpected page scan request for small target set")
+			t.Fatal("unexpected page scan request for small target set")
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -617,21 +663,26 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 		ClientSecret: "secret",
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
+
 	client.openAPIBaseURL = server.URL
 
-	lives, err := client.GetLivesByChannelIDs(context.Background(), []string{"target-1", "target-2"})
+	lives, err := client.GetLivesByChannelIDs(t.Context(), []string{"target-1", "target-2"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if len(lives) != 1 {
 		t.Fatalf("expected 1 live, got %d", len(lives))
 	}
+
 	if lives[0].ChannelID != "target-1" {
 		t.Fatalf("unexpected live result: %#v", lives)
 	}
+
 	if got := liveStatusCalls.Load(); got != 2 {
 		t.Fatalf("live status calls = %d, want 2", got)
 	}
+
 	if got := pageCalls.Load(); got != 0 {
 		t.Fatalf("page scan calls = %d, want 0", got)
 	}
@@ -647,16 +698,19 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/polling/v2/channels/"):
 			liveStatusCalls.Add(1)
-			t.Fatalf("unexpected live status request for large target set")
+			t.Fatal("unexpected live status request for large target set")
 		case r.URL.Path == "/open/v1/lives":
 			pageCalls.Add(1)
+
 			response := OpenAPIResponse[LivesResponse]{
 				Code: http.StatusOK,
 				Content: LivesResponse{
 					Data: []LiveData{{ChannelID: "target-1", LiveTitle: "target-live-1"}},
 				},
 			}
+
 			w.Header().Set("Content-Type", "application/json")
+
 			_ = json.NewEncoder(w).Encode(response)
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -671,23 +725,27 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 		ClientSecret: "secret",
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
+
 	client.openAPIBaseURL = server.URL
 
 	channelIDs := make([]string, 0, constants.ChzzkConfig.BatchLookupThreshold+1)
-	for i := 0; i < constants.ChzzkConfig.BatchLookupThreshold+1; i++ {
+	for i := range constants.ChzzkConfig.BatchLookupThreshold + 1 {
 		channelIDs = append(channelIDs, fmt.Sprintf("target-%d", i+1))
 	}
 
-	lives, err := client.GetLivesByChannelIDs(context.Background(), channelIDs)
+	lives, err := client.GetLivesByChannelIDs(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if len(lives) != 1 {
 		t.Fatalf("expected 1 live, got %d", len(lives))
 	}
+
 	if got := pageCalls.Load(); got != 1 {
 		t.Fatalf("page scan calls = %d, want 1", got)
 	}
+
 	if got := liveStatusCalls.Load(); got != 0 {
 		t.Fatalf("live status calls = %d, want 0", got)
 	}
@@ -702,10 +760,11 @@ func TestGetLivesByChannelIDs_EmptyTargets(t *testing.T) {
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
 
-	lives, err := client.GetLivesByChannelIDs(context.Background(), nil)
+	lives, err := client.GetLivesByChannelIDs(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if len(lives) != 0 {
 		t.Fatalf("expected empty result, got %#v", lives)
 	}
@@ -724,9 +783,10 @@ func TestGetLives_HTTPError_Normalized(t *testing.T) {
 		ClientSecret: "secret",
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
+
 	client.openAPIBaseURL = server.URL
 
-	_, err := client.GetLives(context.Background(), 10, "")
+	_, err := client.GetLives(t.Context(), 10, "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -735,12 +795,15 @@ func TestGetLives_HTTPError_Normalized(t *testing.T) {
 	if !stdErrors.As(err, &apiErr) {
 		t.Fatalf("expected APIError, got %T: %v", err, err)
 	}
+
 	if apiErr.Operation != chzzkGetLivesOp {
 		t.Fatalf("operation = %q, want %q", apiErr.Operation, chzzkGetLivesOp)
 	}
+
 	if apiErr.StatusCode != http.StatusBadGateway {
 		t.Fatalf("status = %d, want %d", apiErr.StatusCode, http.StatusBadGateway)
 	}
+
 	if got := err.Error(); got != "api error operation=chzzk_get_lives status=502" {
 		t.Fatalf("unexpected error string: %q", got)
 	}
@@ -756,6 +819,7 @@ func BenchmarkGetLiveStatus(b *testing.B) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -763,10 +827,11 @@ func BenchmarkGetLiveStatus(b *testing.B) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for i := range b.N {
 		_, err := client.GetLiveStatus(ctx, fmt.Sprintf("channel-%d", i))
 		if err != nil {
 			b.Fatalf("Unexpected error: %v", err)

@@ -57,6 +57,7 @@ func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *dom
 	}
 
 	action := "status"
+
 	if rawAction, ok := params["action"].(string); ok && rawAction != "" {
 		action = rawAction
 	}
@@ -76,6 +77,7 @@ func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmd
 	if err != nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
 	}
+
 	if isSubscribed {
 		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsAlreadySubscribed(ctx))
 	}
@@ -93,6 +95,7 @@ func (c *MemberNewsSubscriptionCommand) handleUnsubscribe(ctx context.Context, c
 	if err != nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
 	}
+
 	if !isSubscribed {
 		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsNotSubscribed(ctx))
 	}
@@ -110,5 +113,6 @@ func (c *MemberNewsSubscriptionCommand) handleStatus(ctx context.Context, cmdCtx
 	if err != nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsSubscriptionFailed)
 	}
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsStatus(ctx, isSubscribed))
 }

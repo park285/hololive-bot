@@ -52,35 +52,45 @@ func main() {
 
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
 	runtime, err := app.BuildDBIntegrationRuntime(buildCtx, postgresCfg, logger)
+
 	buildCancel()
+
 	if err != nil {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
+
 	defer runtime.Close()
+
 	log.Println("PostgreSQL connected")
 
 	// Initialize Repository
 	repo := runtime.Repository
+
 	log.Println("Repository created")
 
 	// Test 1: Get all members
 	ctx := context.Background()
+
 	members, err := repo.GetAllMembers(ctx)
 	if err != nil {
 		log.Fatalf("Failed to get all members: %v", err)
 	}
+
 	log.Printf("Loaded %d members from PostgreSQL", len(members))
 
 	// Test 2: Find by channel ID
 	testChannelID := "UChAnqc_AY5_I3Px5dig3X1Q" // Korone
+
 	foundMember, err := repo.FindByChannelID(ctx, testChannelID)
 	if err != nil {
 		log.Fatalf("Failed to find by channel ID: %v", err)
 	}
+
 	if foundMember == nil {
 		log.Fatal("Korone not found")
 		return
 	}
+
 	log.Printf("Find by channel ID: %s (aliases: ko=%d, ja=%d)",
 		foundMember.Name, len(foundMember.Aliases.Ko), len(foundMember.Aliases.Ja))
 
@@ -89,14 +99,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to find by alias: %v", err)
 	}
+
 	if foundMember == nil {
 		log.Fatal("Alias '코로네' not found")
 		return
 	}
+
 	log.Printf("Find by alias '코로네': %s", foundMember.Name)
 
 	// Test 4: Initialize Cache (without Valkey)
 	memberCache := runtime.Cache
+
 	log.Println("Cache created with warm-up")
 
 	// Test 5: Cache queries
@@ -104,20 +117,24 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cache GetByChannelID failed: %v", err)
 	}
+
 	if foundMember == nil {
 		log.Fatal("Korone not in cache")
 		return
 	}
+
 	log.Printf("Cache hit: %s", foundMember.Name)
 
 	// Test 6: Adapter
 	adapter := runtime.MemberAdapter
 	adapterCtx := adapter.WithContext(ctx)
+
 	foundMember = adapterCtx.FindMemberByChannelID(testChannelID)
 	if foundMember == nil {
 		log.Fatal("Adapter failed")
 		return
 	}
+
 	log.Printf("Adapter works: %s", foundMember.Name)
 
 	channelIDs := adapterCtx.GetChannelIDs()
@@ -132,16 +149,17 @@ func main() {
 	fmt.Println("Summary:")
 	fmt.Printf("- Total members: %d\n", len(members))
 	fmt.Printf("- With channel ID: %d\n", len(channelIDs))
-	fmt.Printf("- Repository: OK\n")
-	fmt.Printf("- Cache: OK\n")
-	fmt.Printf("- Adapter: OK\n")
-	fmt.Printf("- Alias search: OK\n")
+	fmt.Println("- Repository: OK")
+	fmt.Println("- Cache: OK")
+	fmt.Println("- Adapter: OK")
+	fmt.Println("- Alias search: OK")
 }
 
 func envOrDefault(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
+
 	return fallback
 }
 
@@ -150,13 +168,15 @@ func envOrDefaultInt(key string, fallback int) int {
 	if value == "" {
 		return fallback
 	}
+
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		log.Printf("⚠ Invalid integer environment value for %s, using default %d\n", key, fallback)
 		return fallback
 	}
+
 	return parsed
 }
 
-// 린터 경고 억제: 사용된 인터페이스
+// 린터 경고 억제: 사용된 인터페이스.
 var _ = slog.Default

@@ -79,7 +79,7 @@ func TestBotRuntimeShutdown_ClosesWebhookHandler(t *testing.T) {
 		webhookHandlerCloser: webhookCloser,
 	}
 
-	runtime.Shutdown(context.Background())
+	runtime.Shutdown(t.Context())
 
 	if webhookCloser.calls != 1 {
 		t.Fatalf("webhook Close calls = %d, want %d", webhookCloser.calls, 1)
@@ -88,6 +88,7 @@ func TestBotRuntimeShutdown_ClosesWebhookHandler(t *testing.T) {
 
 func TestBotRuntimeStartSchedulers_StartsAlarmRuntimeScheduler(t *testing.T) {
 	var logBuf bytes.Buffer
+
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 	alarmScheduler := newTestAlarmRuntimeScheduler()
 
@@ -96,10 +97,10 @@ func TestBotRuntimeStartSchedulers_StartsAlarmRuntimeScheduler(t *testing.T) {
 		AlarmScheduler: alarmScheduler,
 	}
 
-	runtime.startSchedulers(context.Background(), nil)
+	runtime.startSchedulers(t.Context(), nil)
 	waitForSignal(t, alarmScheduler.startedCh, "alarm scheduler start")
 
-	runtime.Shutdown(context.Background())
+	runtime.Shutdown(t.Context())
 	waitForSignal(t, alarmScheduler.stoppedCh, "alarm scheduler stop")
 
 	if got := alarmScheduler.calls.Load(); got != 1 {
@@ -113,12 +114,13 @@ func TestBotRuntimeStartSchedulers_StartsAlarmRuntimeScheduler(t *testing.T) {
 
 func TestBotRuntimeStartSchedulers_LogsWhenAlarmRuntimeSchedulerMissing(t *testing.T) {
 	var logBuf bytes.Buffer
+
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 	runtime := &BotRuntime{
 		Logger: logger,
 	}
 
-	runtime.startSchedulers(context.Background(), nil)
+	runtime.startSchedulers(t.Context(), nil)
 
 	if !strings.Contains(logBuf.String(), "Alarm runtime scheduler not configured") {
 		t.Fatalf("log does not contain unconfigured message: %s", logBuf.String())
@@ -131,10 +133,10 @@ func TestBotRuntimeShutdown_CancelsAlarmRuntimeSchedulerOnCanceledContext(t *tes
 		AlarmScheduler: alarmScheduler,
 	}
 
-	runtime.startSchedulers(context.Background(), nil)
+	runtime.startSchedulers(t.Context(), nil)
 	waitForSignal(t, alarmScheduler.startedCh, "alarm scheduler start")
 
-	shutdownCtx, cancel := context.WithCancel(context.Background())
+	shutdownCtx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	runtime.Shutdown(shutdownCtx)

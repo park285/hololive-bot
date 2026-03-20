@@ -22,25 +22,24 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 func TestSingleConsumerProviders_Smoke(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("stream clients", func(t *testing.T) {
 		chzzkClient := ProvideChzzkClient(http.DefaultClient, config.ChzzkConfig{
@@ -64,14 +63,15 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, pool)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		defer cancel()
+
 		require.NoError(t, pool.ShutdownWait(ctx))
 	})
 
 	t.Run("alarm service", func(t *testing.T) {
 		t.Cleanup(func() {
-			_ = notification.CloseAllAlarmServices(context.Background())
+			_ = notification.CloseAllAlarmServices(t.Context())
 		})
 
 		svc, err := ProvideAlarmService(
@@ -90,7 +90,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	})
 
 	t.Run("member matcher", func(t *testing.T) {
-		matcher := ProvideMemberMatcher(context.Background(), &stubMemberDataProvider{}, &cachemocks.Client{}, nil, logger)
+		matcher := ProvideMemberMatcher(t.Context(), &stubMemberDataProvider{}, &cachemocks.Client{}, nil, logger)
 		require.NotNil(t, matcher)
 	})
 

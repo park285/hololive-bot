@@ -66,12 +66,15 @@ func (h *TemplateAPIHandler) GetTemplates(c *gin.Context) {
 	defer cancel()
 
 	var keyPtr *domain.TemplateKey
+
 	if keyStr := c.Query("template_key"); keyStr != "" {
 		key := domain.TemplateKey(keyStr)
+
 		keyPtr = &key
 	}
 
 	var channelPtr *string
+
 	if ch := c.Query("channel_id"); ch != "" {
 		channelPtr = &ch
 	}
@@ -97,8 +100,10 @@ func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "template not found"})
 			return
 		}
+
 		h.logger.Error("Failed to get template", slog.String("key", string(key)), slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "failed to get template"})
+
 		return
 	}
 
@@ -119,10 +124,12 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
+
 		return
 	}
 
 	var channelPtr *string
+
 	if ch := c.Query("channel_id"); ch != "" {
 		channelPtr = &ch
 	}
@@ -130,6 +137,7 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 	tmpl, err := h.templateAdmin.Save(ctx, key, channelPtr, req.Body)
 	if err != nil {
 		h.logger.Warn("Failed to save template", slog.String("key", string(key)), slog.Any("error", err))
+
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
 			c.JSON(404, gin.H{"error": "template not found"})
@@ -140,6 +148,7 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 		default:
 			c.JSON(500, gin.H{"error": "failed to save template"})
 		}
+
 		return
 	}
 
@@ -159,7 +168,9 @@ func (h *TemplateAPIHandler) DeleteTemplateOverride(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "channel_id required for delete (cannot delete default template)"})
 			return
 		}
+
 		c.JSON(500, gin.H{"error": "failed to delete override"})
+
 		return
 	}
 
@@ -176,12 +187,14 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
+
 		return
 	}
 
 	rendered, sampleData, err := h.templateAdmin.Preview(ctx, key, req.Body)
 	if err != nil {
 		h.logger.Warn("Failed to preview template", slog.String("key", string(key)), slog.Any("error", err))
+
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
 			c.JSON(404, gin.H{"error": "template not found"})
@@ -192,6 +205,7 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 		default:
 			c.JSON(500, gin.H{"error": "failed to preview template"})
 		}
+
 		return
 	}
 
@@ -208,6 +222,7 @@ func (h *TemplateAPIHandler) GetTemplateRevisions(c *gin.Context) {
 	key := domain.TemplateKey(c.Param("key"))
 
 	var channelPtr *string
+
 	if ch := c.Query("channel_id"); ch != "" {
 		channelPtr = &ch
 	}
@@ -230,6 +245,7 @@ func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
 	defer cancel()
 
 	idStr := c.Param("id")
+
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		c.JSON(400, gin.H{"error": "invalid revision id"})
@@ -242,8 +258,10 @@ func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "revision not found"})
 			return
 		}
+
 		h.logger.Error("Failed to get revision", slog.Int64("id", id), slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "failed to get revision"})
+
 		return
 	}
 

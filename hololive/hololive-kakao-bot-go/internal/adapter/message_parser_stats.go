@@ -31,8 +31,10 @@ func (ma *MessageAdapter) trySubscriberCommand(command string, args []string, ra
 	if !ma.isSubscriberCommand(command) {
 		return nil, false
 	}
+
 	// 멤버 이름이 없으면 에러 처리를 위해 빈 member로 전달
 	member := stringutil.TrimSpace(strings.Join(args, " "))
+
 	return &ParsedCommand{
 		Type:       domain.CommandSubscriber,
 		Params:     map[string]any{"member": member},
@@ -48,6 +50,7 @@ func (ma *MessageAdapter) tryStatsCommand(command string, args []string, raw str
 	if !ma.isStatsCommand(command) {
 		return nil, false
 	}
+
 	return &ParsedCommand{
 		Type:       domain.CommandStats,
 		Params:     ma.parseStatsArgs(args),
@@ -61,6 +64,7 @@ func (ma *MessageAdapter) isStatsCommand(cmd string) bool {
 
 func (ma *MessageAdapter) parseStatsArgs(args []string) map[string]any {
 	params := map[string]any{"action": "gainers"}
+
 	for _, arg := range args {
 		token := stringutil.TrimSpace(arg)
 		if token == "" {
@@ -74,6 +78,7 @@ func (ma *MessageAdapter) parseStatsArgs(args []string) map[string]any {
 			}
 
 			key := stringutil.TrimSpace(parts[0])
+
 			value := stringutil.TrimSpace(parts[1])
 			if key == "" || value == "" {
 				continue
@@ -89,6 +94,7 @@ func (ma *MessageAdapter) parseStatsArgs(args []string) map[string]any {
 			} else if canonical := normalizePeriodToken(value); canonical != "" {
 				params["period"] = canonical
 			}
+
 			continue
 		}
 
@@ -105,6 +111,7 @@ func isStatsPeriodKey(key string) bool {
 	case "period", "기간", "주기", "순위", "랭킹", "구독자", "통계":
 		return true
 	}
+
 	return false
 }
 

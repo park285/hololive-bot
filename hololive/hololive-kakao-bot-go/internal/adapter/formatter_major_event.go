@@ -75,6 +75,7 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 
 	normalizedSummary := strings.TrimSpace(llmSummary)
 	views := buildMajorEventViews(events)
+
 	if normalizedSummary != "" {
 		// LLM 요약이 있는 경우 템플릿의 기본 목록과 중복 노출을 방지합니다.
 		views = nil
@@ -96,6 +97,7 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 	if instruction == "" || body == "" {
 		return rendered
 	}
+
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
@@ -107,6 +109,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 
 	normalizedSummary := strings.TrimSpace(llmSummary)
 	views := buildMajorEventViews(events)
+
 	if normalizedSummary != "" {
 		// LLM 요약이 있는 경우 템플릿의 기본 목록과 중복 노출을 방지합니다.
 		views = nil
@@ -128,6 +131,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 	if instruction == "" || body == "" {
 		return rendered
 	}
+
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
@@ -135,6 +139,7 @@ func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
 	views := make([]majorEventView, 0, len(events))
 	for i := range events {
 		event := &events[i]
+
 		views = append(views, majorEventView{
 			Title:    event.Title,
 			DateStr:  formatMajorEventDatesFromDB(event.EventStartDate, event.EventEndDate),
@@ -143,6 +148,7 @@ func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
 			HasDates: event.EventStartDate != nil,
 		})
 	}
+
 	return views
 }
 
@@ -156,6 +162,7 @@ func (f *ResponseFormatter) FormatMajorEventSubscribed(ctx context.Context) stri
 	if err != nil {
 		return ErrorMessage(ErrDisplayMajorEventFailed)
 	}
+
 	return rendered
 }
 
@@ -164,6 +171,7 @@ func (f *ResponseFormatter) FormatMajorEventUnsubscribed(ctx context.Context) st
 	if err != nil {
 		return ErrorMessage(ErrDisplayMajorEventFailed)
 	}
+
 	return rendered
 }
 
@@ -172,15 +180,18 @@ func (f *ResponseFormatter) FormatMajorEventAlreadySubscribed(ctx context.Contex
 	if err != nil {
 		return ErrorMessage(ErrDisplayMajorEventFailed)
 	}
+
 	return rendered
 }
 
 func (f *ResponseFormatter) FormatMajorEventNotSubscribed(ctx context.Context) string {
 	data := majorEventSubscribedData{Emoji: DefaultEmoji, Prefix: f.prefix}
+
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMajorEventNotSub, data)
 	if err != nil {
 		return ErrorMessage(ErrDisplayMajorEventFailed)
 	}
+
 	return rendered
 }
 
@@ -195,6 +206,7 @@ func (f *ResponseFormatter) FormatMajorEventStatus(ctx context.Context, isSubscr
 	if err != nil {
 		return ErrorMessage(ErrDisplayMajorEventFailed)
 	}
+
 	return rendered
 }
 
@@ -208,6 +220,7 @@ func (f *ResponseFormatter) FormatMajorEventUsage(ctx context.Context) string {
 	if err != nil {
 		return ErrorMessage(ErrDisplayMajorEventFailed)
 	}
+
 	return rendered
 }
 

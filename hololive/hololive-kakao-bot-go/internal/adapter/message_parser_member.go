@@ -34,6 +34,7 @@ func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, ra
 
 	query := stringutil.TrimSpace(strings.Join(args, " "))
 	params := make(map[string]any)
+
 	if query != "" {
 		params["query"] = query
 	}
@@ -51,6 +52,7 @@ func (ma *MessageAdapter) tryMemberNewsSubscriptionCommand(command string, args 
 	}
 
 	action := memberNewsActionStatus
+
 	if len(args) > 0 {
 		switch stringutil.Normalize(args[0]) {
 		case "켜기", "on", "구독":
@@ -81,6 +83,7 @@ func (ma *MessageAdapter) tryMemberNewsCommand(command string, args []string, ra
 	}
 
 	period := "weekly"
+
 	if len(args) > 0 {
 		// 공백 포함 입력("이번 달") 대응: args 전체를 결합 후 정규화
 		token := stringutil.Normalize(strings.Join(args, ""))
