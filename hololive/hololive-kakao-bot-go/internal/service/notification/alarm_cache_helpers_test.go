@@ -21,8 +21,8 @@
 package notification
 
 import (
-	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 	"testing"
@@ -71,9 +71,9 @@ func TestChannelSubscribersKeyByType(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := as.channelSubscribersKeyByType(tt.channelID, tt.alarmType); got != tt.want {
 				t.Fatalf("channelSubscribersKeyByType() = %q, want %q", got, tt.want)
 			}
@@ -96,9 +96,9 @@ func TestBuildTitleFingerprint(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := buildTitleFingerprint(tt.title, tt.streamID)
 			if len(got) != tt.wantLen {
 				t.Fatalf("buildTitleFingerprint() len = %d, want %d", len(got), tt.wantLen)
@@ -109,6 +109,7 @@ func TestBuildTitleFingerprint(t *testing.T) {
 	if got1, got2 := buildTitleFingerprint("같은 제목", "a"), buildTitleFingerprint("같은 제목", "b"); got1 != got2 {
 		t.Fatalf("expected same fingerprint for same normalized title, got %q and %q", got1, got2)
 	}
+
 	if got1, got2 := buildTitleFingerprint("", "stream-a"), buildTitleFingerprint("", "stream-b"); got1 == got2 {
 		t.Fatalf("expected different fingerprints for different stream id fallback, got same %q", got1)
 	}
@@ -150,9 +151,9 @@ func TestResolveStreamChannelID(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := resolveStreamChannelID(tt.stream, tt.fallback); got != tt.wantValue {
 				t.Fatalf("resolveStreamChannelID() = %q, want %q", got, tt.wantValue)
 			}
@@ -164,7 +165,7 @@ func TestBuildUpcomingEventKey(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	start := time.Date(2026, 3, 2, 10, 30, 59, 0, time.UTC)
+	start := time.Date(2026, time.March, 2, 10, 30, 59, 0, time.UTC)
 	key := as.buildUpcomingEventKey("room1", "channel1", "stream1", "Title", start)
 
 	parts := strings.Split(key, ":")
@@ -190,7 +191,7 @@ func TestMarkUpcomingEventNotifiedAndWasRecently(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	start := time.Now().UTC().Add(30 * time.Minute)
 
 	stream := &domain.Stream{
@@ -204,23 +205,24 @@ func TestMarkUpcomingEventNotifiedAndWasRecently(t *testing.T) {
 	}
 
 	if !as.WasUpcomingEventNotifiedRecently(ctx, "room1", "channel1", stream, time.Hour) {
-		t.Fatalf("expected upcoming event to be considered recently notified")
+		t.Fatal("expected upcoming event to be considered recently notified")
 	}
 
 	if as.WasUpcomingEventNotifiedRecently(ctx, "room1", "channel1", stream, 0) {
-		t.Fatalf("expected zero window to return false")
+		t.Fatal("expected zero window to return false")
 	}
 
 	if as.WasUpcomingEventNotifiedRecently(ctx, "other-room", "channel1", stream, time.Hour) {
-		t.Fatalf("expected different room key to return false")
+		t.Fatal("expected different room key to return false")
 	}
 
 	key := as.buildUpcomingEventKey("room1", "channel1", stream.ID, stream.Title, *stream.StartScheduled)
 	if err := as.cache.Set(ctx, key, UpcomingEventNotifiedData{NotifiedAt: "invalid-time"}, constants.CacheTTL.NotificationSent); err != nil {
 		t.Fatalf("cache.Set invalid payload failed: %v", err)
 	}
+
 	if as.WasUpcomingEventNotifiedRecently(ctx, "room1", "channel1", stream, time.Hour) {
-		t.Fatalf("expected invalid notified timestamp to return false")
+		t.Fatal("expected invalid notified timestamp to return false")
 	}
 
 	if err := as.MarkUpcomingEventNotified(ctx, "room1", "channel1", nil); err != nil {
@@ -232,7 +234,7 @@ func TestGetNextStreamInfo(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	channelID := "UC_test"
 	key := NextStreamKeyPrefix + channelID
 
@@ -246,9 +248,11 @@ func TestGetNextStreamInfo(t *testing.T) {
 			seed: nil,
 			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
 				t.Helper()
+
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
+
 				if got != nil {
 					t.Fatalf("expected nil info, got %#v", got)
 				}
@@ -259,9 +263,11 @@ func TestGetNextStreamInfo(t *testing.T) {
 			seed: map[string]any{"status": "broken", "video_id": "v1", "title": "t1"},
 			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
 				t.Helper()
+
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
+
 				if got != nil {
 					t.Fatalf("expected nil info for invalid status, got %#v", got)
 				}
@@ -272,9 +278,11 @@ func TestGetNextStreamInfo(t *testing.T) {
 			seed: map[string]any{"status": "upcoming", "video_id": "v1"},
 			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
 				t.Helper()
+
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
+
 				if got != nil {
 					t.Fatalf("expected nil info for incomplete upcoming, got %#v", got)
 				}
@@ -290,15 +298,19 @@ func TestGetNextStreamInfo(t *testing.T) {
 			},
 			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
 				t.Helper()
+
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
+
 				if got == nil {
-					t.Fatalf("expected info, got nil")
+					t.Fatal("expected info, got nil")
 				}
+
 				if got.Status != domain.NextStreamStatusUpcoming || got.VideoID != "v1" || got.Title != "테스트" {
 					t.Fatalf("unexpected info: %#v", got)
 				}
+
 				if got.StartScheduled == nil || got.StartScheduled.Format(time.RFC3339) != "2026-03-02T00:00:00Z" {
 					t.Fatalf("unexpected scheduled time: %#v", got.StartScheduled)
 				}
@@ -307,7 +319,6 @@ func TestGetNextStreamInfo(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			if err := as.cache.Del(ctx, key); err != nil {
 				t.Fatalf("cache delete failed: %v", err)
@@ -315,9 +326,8 @@ func TestGetNextStreamInfo(t *testing.T) {
 
 			if len(tt.seed) > 0 {
 				fields := make(map[string]any, len(tt.seed))
-				for k, v := range tt.seed {
-					fields[k] = v
-				}
+				maps.Copy(fields, tt.seed)
+
 				if err := as.cache.HMSet(ctx, key, fields); err != nil {
 					t.Fatalf("cache HMSet failed: %v", err)
 				}
@@ -333,7 +343,7 @@ func TestGetNextStreamInfosBatch(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, as.cache.HMSet(ctx, NextStreamKeyPrefix+"UC_ok", map[string]any{
 		"status":          "upcoming",
@@ -410,8 +420,9 @@ func TestBuildAlarmListViews(t *testing.T) {
 func TestNormalizeScheduledMinute(t *testing.T) {
 	t.Parallel()
 
-	input := time.Date(2026, 3, 2, 5, 4, 59, 123, time.UTC)
-	want := time.Date(2026, 3, 2, 5, 4, 0, 0, time.UTC)
+	input := time.Date(2026, time.March, 2, 5, 4, 59, 123, time.UTC)
+
+	want := time.Date(2026, time.March, 2, 5, 4, 0, 0, time.UTC)
 	if got := normalizeScheduledMinute(input); !reflect.DeepEqual(got, want) {
 		t.Fatalf("normalizeScheduledMinute() = %v, want %v", got, want)
 	}

@@ -35,7 +35,7 @@ import (
 
 const systemStatsStreamInterval = 5 * time.Second
 
-// GetStats: 봇 통계를 반환합니다. (성능 최적화를 위해 병렬 조회)
+// GetStats: 봇 통계를 반환합니다. (성능 최적화를 위해 병렬 조회).
 func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
@@ -50,14 +50,18 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 
 	// 병렬로 데이터 조회
 	wg.Add(2)
+
 	go func() {
 		defer wg.Done()
+
 		members, memberErr = h.repo.GetAllMembers(ctx)
 	}()
 	go func() {
 		defer wg.Done()
+
 		alarmKeys, alarmErr = h.alarm.GetAllAlarmKeys(ctx)
 	}()
+
 	wg.Wait()
 
 	if memberErr != nil || alarmErr != nil {
@@ -65,13 +69,16 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 			slog.Any("member_error", memberErr),
 			slog.Any("alarm_error", alarmErr))
 		c.JSON(500, gin.H{"error": "failed to collect stats"})
+
 		return
 	}
 
 	// ACL 서비스에서 rooms 수 조회
 	var roomCount int
+
 	if h.acl != nil {
-		_, rooms := h.acl.GetACLStatus()
+		_, _, rooms := h.acl.GetACLStatus()
+
 		roomCount = len(rooms)
 	}
 
@@ -93,6 +100,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 			"status":  "error",
 			"message": "System stats collector not available",
 		})
+
 		return
 	}
 
@@ -101,8 +109,10 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	if err != nil {
 		h.logger.Warn("failed to upgrade websocket", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "failed to upgrade websocket connection"})
+
 		return
 	}
+
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil {
 			h.logger.Warn("failed to close websocket connection", slog.Any("error", closeErr))
@@ -110,6 +120,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	}()
 
 	ctx := c.Request.Context()
+
 	ticker := time.NewTicker(systemStatsStreamInterval)
 	defer ticker.Stop()
 
@@ -119,6 +130,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 		h.logger.Error("failed to collect initial system stats", slog.Any("error", err))
 		return
 	}
+
 	if err := conn.WriteJSON(stats); err != nil {
 		h.logger.Warn("failed to write initial system stats", slog.Any("error", err))
 		return
@@ -134,6 +146,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 				h.logger.Error("failed to collect system stats", slog.Any("error", err))
 				return
 			}
+
 			if err := conn.WriteJSON(stats); err != nil {
 				h.logger.Warn("failed to write system stats", slog.Any("error", err))
 				return

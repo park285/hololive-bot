@@ -22,18 +22,18 @@ package bot
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 )
 
 type stubYouTubeScheduler struct{}
@@ -47,25 +47,30 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 	if got := deps.coreDeps(); got.logger != nil || got.botSelfUser != "" || got.irisBaseURL != "" {
 		t.Fatal("coreDeps nil-safety failed")
 	}
+
 	if got := deps.messagingDeps(); got.client != nil || got.messageAdapter != nil || got.formatter != nil {
 		t.Fatal("messagingDeps nil-safety failed")
 	}
+
 	if got := deps.dataDeps(); got.cache != nil || got.postgres != nil || got.memberRepo != nil || got.memberCache != nil {
 		t.Fatal("dataDeps nil-safety failed")
 	}
+
 	if got := deps.streamDeps(); got.holodex != nil || got.scheduler != nil || got.youTubeStatsRepo != nil {
 		t.Fatal("streamDeps nil-safety failed")
 	}
+
 	if got := deps.supportDeps(); got.acl != nil || got.workerPool != nil {
 		t.Fatal("supportDeps nil-safety failed")
 	}
+
 	if got := deps.featureDeps(); len(got.commandFactories) != 0 || got.majorEventRepo != nil || got.memberNews != nil {
 		t.Fatal("featureDeps nil-safety failed")
 	}
 }
 
 func TestDependenciesViews_FieldMapping(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	messageAdapter := &adapter.MessageAdapter{}
 	formatter := &adapter.ResponseFormatter{}
 	cacheSvc := &cache.Service{}
@@ -125,6 +130,7 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 
 	// defensive copy 보장
 	deps.CommandFactories[0] = nil
+
 	if feature.commandFactories[0] == nil {
 		t.Fatal("featureDeps commandFactories must be copied defensively")
 	}

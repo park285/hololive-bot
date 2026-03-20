@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 )
 
-// CommandRouter: 봇 명령어의 라우팅 및 실행을 담당하는 컴포넌트
+// CommandRouter: 봇 명령어의 라우팅 및 실행을 담당하는 컴포넌트.
 type CommandRouter struct {
 	registry    *command.Registry
 	logger      *slog.Logger
@@ -51,7 +51,7 @@ func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessa
 // Execute: 명령어 타입과 파라미터를 기반으로 명령어를 실행합니다.
 func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
 	if r.registry == nil {
-		return fmt.Errorf("command registry is not initialized")
+		return errors.New("command registry is not initialized")
 	}
 
 	key, normalizedParams := r.normalizeCommand(cmdType, params)
@@ -59,11 +59,14 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 	if err := r.registry.Execute(ctx, cmdCtx, key, normalizedParams); err != nil {
 		if errors.Is(err, command.ErrUnknownCommand) {
 			r.logger.Warn("Unknown command", slog.String("type", cmdType.String()))
+
 			if sendErr := r.sendMessage(ctx, cmdCtx.Room, adapter.ErrUnknownCommand); sendErr != nil {
 				return fmt.Errorf("failed to send unknown command message: %w", sendErr)
 			}
+
 			return nil
 		}
+
 		return fmt.Errorf("execute command: %w", err)
 	}
 

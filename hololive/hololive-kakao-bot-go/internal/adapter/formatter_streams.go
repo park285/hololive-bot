@@ -78,9 +78,11 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 		data.Streams = make([]liveStreamView, len(streams))
 		for i, stream := range streams {
 			viewerCount := 0
+
 			if stream.ViewerCount != nil {
 				viewerCount = *stream.ViewerCount
 			}
+
 			data.Streams[i] = liveStreamView{
 				ChannelName: f.formatChannelName(stream),
 				Title:       f.truncateTitle(stream.Title),
@@ -98,10 +100,12 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 	if data.Count == 0 {
 		return rendered
 	}
+
 	instruction, body := splitTemplateInstruction(rendered)
 	if instruction == "" || body == "" {
 		return rendered
 	}
+
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
@@ -127,18 +131,22 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 	if data.Count == 0 {
 		return rendered
 	}
+
 	instruction, body := splitTemplateInstruction(rendered)
 	if instruction == "" || body == "" {
 		return rendered
 	}
+
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
 func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) string {
 	data := channelScheduleTemplateData{Emoji: DefaultEmoji, Days: days, Count: len(streams)}
+
 	if channel != nil {
 		data.ChannelName = channel.GetDisplayName()
 	}
+
 	if len(streams) > 0 {
 		data.Streams = make([]scheduleEntryView, len(streams))
 		for i, stream := range streams {
@@ -165,10 +173,12 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 	if data.Count == 0 {
 		return rendered
 	}
+
 	instruction, body := splitTemplateInstruction(rendered)
 	if instruction == "" || body == "" {
 		return rendered
 	}
+
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
@@ -224,6 +234,7 @@ func (f *ResponseFormatter) formatChannelName(stream *domain.Stream) string {
 			case "Stellive":
 				displayOrg = "스텔라이브"
 			}
+
 			name = fmt.Sprintf("[%s] %s", displayOrg, name)
 		}
 	}

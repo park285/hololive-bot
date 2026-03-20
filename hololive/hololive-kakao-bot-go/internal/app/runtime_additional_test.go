@@ -22,7 +22,6 @@ package app
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -40,6 +39,7 @@ func TestBotRuntimeClose_CallsCleanup(t *testing.T) {
 	}
 
 	runtime.Close()
+
 	if calls != 1 {
 		t.Fatalf("cleanup calls = %d, want 1", calls)
 	}
@@ -82,13 +82,14 @@ func TestBotRuntimeStartAndHelpers_NoPanicOnNilComponents(t *testing.T) {
 	t.Parallel()
 
 	var logBuf bytes.Buffer
+
 	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
 	runtime := &BotRuntime{
 		Logger: logger,
 	}
 
-	runtime.Start(context.Background(), nil)
-	runtime.startBot(context.Background())
+	runtime.Start(t.Context(), nil)
+	runtime.startBot(t.Context())
 	runtime.logError("expected test error", errors.New("boom"))
 
 	if logBuf.Len() == 0 {
@@ -108,6 +109,7 @@ func TestBotRuntimeRun_ExitsOnServerError(t *testing.T) {
 	}
 
 	done := make(chan struct{})
+
 	go func() {
 		runtime.Run()
 		close(done)

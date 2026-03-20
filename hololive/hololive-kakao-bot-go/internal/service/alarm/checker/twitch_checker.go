@@ -21,6 +21,7 @@
 package checker
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -47,11 +48,13 @@ type TwitchChecker struct {
 // NewTwitchChecker는 Twitch 체커를 생성한다.
 func NewTwitchChecker(cacheSvc cache.Client, twitchClient *twitch.Client, logger *slog.Logger) (*TwitchChecker, error) {
 	if cacheSvc == nil {
-		return nil, fmt.Errorf("new twitch checker: cache service is nil")
+		return nil, errors.New("new twitch checker: cache service is nil")
 	}
+
 	if twitchClient == nil {
-		return nil, fmt.Errorf("new twitch checker: twitch client is nil")
+		return nil, errors.New("new twitch checker: twitch client is nil")
 	}
+
 	return &TwitchChecker{
 		cacheSvc:     cacheSvc,
 		twitchClient: twitchClient,
@@ -65,6 +68,7 @@ func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification,
 	if err != nil {
 		return nil, fmt.Errorf("check twitch streams: read login mappings: %w", err)
 	}
+
 	loginMappings, youtubeChannelIDs := normalizeTwitchLoginMappings(loginMappingsRaw)
 	if len(loginMappings) == 0 {
 		return []*domain.AlarmNotification{}, nil
@@ -84,6 +88,7 @@ func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification,
 	if err != nil {
 		return nil, fmt.Errorf("check twitch streams: get streams batch: %w", err)
 	}
+
 	if streamsResponse == nil || len(streamsResponse.Data) == 0 {
 		return []*domain.AlarmNotification{}, nil
 	}
@@ -102,16 +107,20 @@ func normalizeTwitchLoginMappings(loginMappingsRaw map[string]string) (map[strin
 	}
 
 	loginMappings := make(map[string]string, len(loginMappingsRaw))
+
 	youtubeChannelIDs := make([]string, 0, len(loginMappingsRaw))
 	for login, channelID := range loginMappingsRaw {
 		normalizedLogin := stringutil.Normalize(login)
+
 		trimmedChannelID := strings.TrimSpace(channelID)
 		if normalizedLogin == "" || trimmedChannelID == "" {
 			continue
 		}
+
 		loginMappings[normalizedLogin] = trimmedChannelID
 		youtubeChannelIDs = append(youtubeChannelIDs, trimmedChannelID)
 	}
+
 	return loginMappings, youtubeChannelIDs
 }
 
@@ -121,8 +130,10 @@ func buildTwitchLookupLogins(loginMappings map[string]string, subscriberMap map[
 		if len(subscriberMap[channelID]) == 0 {
 			continue
 		}
+
 		loginsToLookup = append(loginsToLookup, login)
 	}
+
 	return uniqueStrings(loginsToLookup)
 }
 
@@ -133,6 +144,7 @@ func (c *TwitchChecker) buildLiveNotifications(
 	streamsResponse *twitch.StreamsResponse,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0)
+
 	for idx := range streamsResponse.Data {
 		streamData := &streamsResponse.Data[idx]
 		if !streamData.IsLive() {
@@ -140,6 +152,7 @@ func (c *TwitchChecker) buildLiveNotifications(
 		}
 
 		normalizedLogin := stringutil.Normalize(streamData.UserLogin)
+
 		youtubeChannelID, ok := loginMappings[normalizedLogin]
 		if !ok {
 			continue
@@ -151,16 +164,19 @@ func (c *TwitchChecker) buildLiveNotifications(
 		}
 
 		dedupKey := buildTwitchLiveDedupKey(streamData.UserID, streamData.ID)
+
 		claimed, claimErr := c.cacheSvc.SetNX(ctx, dedupKey, "1", sharedconstants.CacheTTL.TwitchNotification)
 		if claimErr != nil {
 			return nil, fmt.Errorf("check twitch streams: claim dedup key %s: %w", dedupKey, claimErr)
 		}
+
 		if !claimed {
 			continue
 		}
 
 		stream := buildTwitchLiveStream(youtubeChannelID, streamData)
 		channelNotifications := roomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
+
 		notifications = append(notifications, channelNotifications...)
 	}
 
@@ -178,6 +194,7 @@ func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamDat
 
 	startAt := streamData.StartedAt.UTC()
 	startScheduled := startAt
+
 	channelName := strings.TrimSpace(streamData.UserName)
 	if channelName == "" {
 		channelName = strings.TrimSpace(streamData.UserLogin)
@@ -189,6 +206,7 @@ func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamDat
 	}
 
 	normalizedLogin := stringutil.Normalize(streamData.UserLogin)
+
 	twitchUserID := strings.TrimSpace(streamData.UserID)
 	if twitchUserID == "" {
 		twitchUserID = normalizedLogin
@@ -196,6 +214,7 @@ func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamDat
 
 	viewerCount := streamData.ViewerCount
 	liveURL := ""
+
 	if normalizedLogin != "" {
 		liveURL = fmt.Sprintf("https://twitch.tv/%s", normalizedLogin)
 	}

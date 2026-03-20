@@ -22,7 +22,6 @@ package scheduler
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -61,10 +60,10 @@ func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {
 		chzzkTimeout:   3 * time.Second,
 		twitchTimeout:  3 * time.Second,
 
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.DiscardHandler),
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 
 	go func() {
@@ -78,6 +77,6 @@ func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatalf("runtime scheduler did not stop after cancellation")
+		t.Fatal("runtime scheduler did not stop after cancellation")
 	}
 }

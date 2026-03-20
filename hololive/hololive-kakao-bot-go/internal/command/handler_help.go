@@ -21,13 +21,14 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// HelpCommand: 도움말 정보를 출력하는 커맨드 핸들러
+// HelpCommand: 도움말 정보를 출력하는 커맨드 핸들러.
 type HelpCommand struct {
 	deps *Dependencies
 }
@@ -52,21 +53,23 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
+
 	message := c.deps.Formatter.FormatHelp(ctx)
+
 	return c.deps.SendMessage(ctx, cmdCtx.Room, message)
 }
 
 func (c *HelpCommand) ensureDeps() error {
 	if c == nil || c.deps == nil {
-		return fmt.Errorf("help command dependencies not configured")
+		return errors.New("help command dependencies not configured")
 	}
 
 	if c.deps.SendMessage == nil {
-		return fmt.Errorf("message callback not configured")
+		return errors.New("message callback not configured")
 	}
 
 	if c.deps.Formatter == nil {
-		return fmt.Errorf("formatter not configured")
+		return errors.New("formatter not configured")
 	}
 
 	return nil

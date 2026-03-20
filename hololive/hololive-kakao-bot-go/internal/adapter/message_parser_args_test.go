@@ -28,7 +28,7 @@ import (
 func TestParseUpcomingArgs(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!")
+	adapter := NewMessageAdapter("!", "")
 	tests := []struct {
 		name string
 		args []string
@@ -62,9 +62,9 @@ func TestParseUpcomingArgs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := adapter.parseUpcomingArgs(tt.args)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("parseUpcomingArgs() = %#v, want %#v", got, tt.want)
@@ -76,7 +76,7 @@ func TestParseUpcomingArgs(t *testing.T) {
 func TestParseScheduleArgs(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!")
+	adapter := NewMessageAdapter("!", "")
 	tests := []struct {
 		name string
 		args []string
@@ -110,9 +110,9 @@ func TestParseScheduleArgs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := adapter.parseScheduleArgs(tt.args)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("parseScheduleArgs() = %#v, want %#v", got, tt.want)
@@ -124,7 +124,7 @@ func TestParseScheduleArgs(t *testing.T) {
 func TestParseStatsArgs(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!")
+	adapter := NewMessageAdapter("!", "")
 	tests := []struct {
 		name string
 		args []string
@@ -163,9 +163,9 @@ func TestParseStatsArgs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := adapter.parseStatsArgs(tt.args)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("parseStatsArgs() = %#v, want %#v", got, tt.want)
@@ -204,9 +204,9 @@ func TestNormalizeCompactAlarmTokens(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			gotCommand, gotArgs, gotChanged := normalizeCompactAlarmTokens(tt.command, tt.args)
 			if gotCommand != tt.wantCommand || !reflect.DeepEqual(gotArgs, tt.wantArgs) || gotChanged != tt.wantChanged {
 				t.Fatalf("normalizeCompactAlarmTokens() = (%q, %#v, %v), want (%q, %#v, %v)",
@@ -219,7 +219,7 @@ func TestNormalizeCompactAlarmTokens(t *testing.T) {
 func TestExtractMemberAndType(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewMessageAdapter("!")
+	adapter := NewMessageAdapter("!", "")
 	tests := []struct {
 		name       string
 		args       []string
@@ -247,9 +247,9 @@ func TestExtractMemberAndType(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			gotMember, gotType := adapter.extractMemberAndType(tt.args)
 			if gotMember != tt.wantMember || gotType != tt.wantType {
 				t.Fatalf("extractMemberAndType() = (%q, %q), want (%q, %q)", gotMember, gotType, tt.wantMember, tt.wantType)

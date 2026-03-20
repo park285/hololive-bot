@@ -32,6 +32,7 @@ func withThreadID(ctx context.Context, threadID string) context.Context {
 	if id == "" {
 		return ctx
 	}
+
 	return context.WithValue(ctx, threadIDContextKey{}, id)
 }
 
@@ -41,13 +42,16 @@ func threadIDFromContext(ctx context.Context) (string, bool) {
 	}
 
 	raw := ctx.Value(threadIDContextKey{})
+
 	id, ok := raw.(string)
 	if !ok {
 		return "", false
 	}
+
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", false
 	}
+
 	return id, true
 }

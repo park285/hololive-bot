@@ -21,6 +21,7 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -87,20 +88,21 @@ func (c *StatsCommand) showTopGainers(ctx context.Context, cmdCtx *domain.Comman
 	}
 
 	message := c.deps.Formatter.FormatStatsTopGainers(periodLabel, gainers)
+
 	return c.deps.SendMessage(ctx, cmdCtx.Room, message)
 }
 
 func (c *StatsCommand) ensureDeps(cmdCtx *domain.CommandContext) error {
 	if c == nil || c.deps == nil {
-		return fmt.Errorf("stats command dependencies not configured")
+		return errors.New("stats command dependencies not configured")
 	}
 
 	if c.deps.SendMessage == nil || c.deps.SendError == nil {
-		return fmt.Errorf("message callbacks not configured")
+		return errors.New("message callbacks not configured")
 	}
 
 	if c.deps.StatsRepo == nil {
-		return fmt.Errorf("stats repository not configured")
+		return errors.New("stats repository not configured")
 	}
 
 	if c.deps.Logger == nil {

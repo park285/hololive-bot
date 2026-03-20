@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 )
 
-// AlarmCommand: 알람 설정 및 관리를 담당하는 커맨드 핸들러
+// AlarmCommand: 알람 설정 및 관리를 담당하는 커맨드 핸들러.
 type AlarmCommand struct {
 	BaseCommand
 }
@@ -86,6 +86,7 @@ func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContex
 			slog.String("sub_command", subCmd),
 			slog.String("member", memberName),
 		)
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.InvalidAlarmUsage())
 	default:
 		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatHelp(ctx))
@@ -98,7 +99,7 @@ func (c *AlarmCommand) ensureDeps() error {
 	}
 
 	if c.Deps().Matcher == nil || c.Deps().Formatter == nil {
-		return fmt.Errorf("alarm command services not configured")
+		return stdErrors.New("alarm command services not configured")
 	}
 
 	return nil
@@ -124,8 +125,10 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 			message := c.Deps().Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 		}
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
 	}
+
 	if channel == nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
 	}
@@ -151,12 +154,14 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 			slog.String("channel", channel.Name),
 			slog.Any("error", err),
 		)
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrAlarmAddFailed)
 	}
 
 	nextStreamInfo, _ := c.Deps().Alarm.GetNextStreamInfo(ctx, channel.ID)
 
 	message := c.Deps().Formatter.FormatAlarmAdded(ctx, channel.Name, added, nextStreamInfo)
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -179,8 +184,10 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 			message := c.Deps().Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
 			return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 		}
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
 	}
+
 	if channel == nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
 	}
@@ -191,10 +198,12 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 			slog.String("channel", channel.Name),
 			slog.Any("error", err),
 		)
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrAlarmRemoveFailed)
 	}
 
 	message := c.Deps().Formatter.FormatAlarmRemoved(ctx, channel.Name, removed)
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -214,6 +223,7 @@ func (c *AlarmCommand) handleList(ctx context.Context, cmdCtx *domain.CommandCon
 	}
 
 	message := c.Deps().Formatter.FormatAlarmList(ctx, alarmInfos)
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -225,6 +235,7 @@ func (c *AlarmCommand) handleClear(ctx context.Context, cmdCtx *domain.CommandCo
 	}
 
 	message := c.Deps().Formatter.FormatAlarmCleared(ctx, count)
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 

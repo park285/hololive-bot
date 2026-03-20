@@ -33,14 +33,14 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-// ServiceGoroutines: 개별 서비스의 goroutine 통계
+// ServiceGoroutines: 개별 서비스의 goroutine 통계.
 type ServiceGoroutines struct {
 	Name       string `json:"name"`
 	Goroutines int    `json:"goroutines"`
 	Available  bool   `json:"available"`
 }
 
-// SystemStats: 시스템 리소스 통계 (통합 goroutine 포함)
+// SystemStats: 시스템 리소스 통계 (통합 goroutine 포함).
 type SystemStats struct {
 	CPUUsage          float64             `json:"cpuUsage"`          // CPU 사용률 (%)
 	MemoryUsage       float64             `json:"memoryUsage"`       // 메모리 사용률 (%)
@@ -51,7 +51,7 @@ type SystemStats struct {
 	ServiceGoroutines []ServiceGoroutines `json:"serviceGoroutines"` // 서비스별 Go 루틴 통계
 }
 
-// ServiceEndpoint: 외부 서비스 health 엔드포인트 정보
+// ServiceEndpoint: 외부 서비스 health 엔드포인트 정보.
 type ServiceEndpoint struct {
 	Name string
 	URL  string
@@ -68,7 +68,7 @@ type Collector struct {
 	cached     *SystemStats
 }
 
-// NewCollector: 새 Collector를 생성합니다. endpoints는 외부 서비스 health URL 목록입니다.
+// NewCollector: 새 Collector를 생성합니다. Endpoints는 외부 서비스 health URL 목록입니다.
 func NewCollector(endpoints []ServiceEndpoint) *Collector {
 	return &Collector{
 		httpClient: httputil.NewInternalServiceClient(2 * time.Second),
@@ -116,6 +116,7 @@ func (c *Collector) collectCurrentStats(ctx context.Context) (*SystemStats, erro
 	}
 
 	var cpuUsage float64
+
 	if len(cpus) > 0 {
 		cpuUsage = cpus[0]
 	}
@@ -127,6 +128,7 @@ func (c *Collector) collectCurrentStats(ctx context.Context) (*SystemStats, erro
 
 	// 합계 계산
 	totalGoroutines := localGoroutines
+
 	for _, svc := range serviceStats {
 		if svc.Available {
 			totalGoroutines += svc.Goroutines
@@ -158,6 +160,7 @@ func (c *Collector) getCachedStats() *SystemStats {
 	if c.cached == nil {
 		return nil
 	}
+
 	if time.Since(c.cachedAt) > c.cacheTTL {
 		return nil
 	}
@@ -169,8 +172,11 @@ func cloneSystemStats(src *SystemStats) *SystemStats {
 	if src == nil {
 		return nil
 	}
+
 	cloned := *src
+
 	cloned.ServiceGoroutines = append([]ServiceGoroutines(nil), src.ServiceGoroutines...)
+
 	return &cloned
 }
 
@@ -181,6 +187,7 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 	}
 
 	results := make([]ServiceGoroutines, len(c.endpoints))
+
 	var wg sync.WaitGroup
 
 	for i, ep := range c.endpoints {
@@ -190,9 +197,12 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 		}
 
 		wg.Add(1)
+
 		go func(idx int, endpoint ServiceEndpoint) {
 			defer wg.Done()
+
 			goroutines, ok := c.fetchGoroutineCount(ctx, endpoint.URL)
+
 			results[idx] = ServiceGoroutines{
 				Name:       endpoint.Name,
 				Goroutines: goroutines,
@@ -202,10 +212,11 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 	}
 
 	wg.Wait()
+
 	return results
 }
 
-// healthResponse: /health 엔드포인트 응답 파싱용
+// healthResponse: /health 엔드포인트 응답 파싱용.
 type healthResponse struct {
 	Goroutines int `json:"goroutines"`
 	Components map[string]struct {

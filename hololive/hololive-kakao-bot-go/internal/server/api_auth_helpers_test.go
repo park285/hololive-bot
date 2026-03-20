@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 )
 
@@ -37,6 +36,7 @@ func TestNewAuthHandler(t *testing.T) {
 	if h == nil {
 		t.Fatal("NewAuthHandler returned nil")
 	}
+
 	if h.auth != nil {
 		t.Fatal("expected nil auth service")
 	}
@@ -62,16 +62,19 @@ func TestParseBearerToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			ctx, _ := gin.CreateTestContext(rec)
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
+
 			if tt.header != "" {
 				req.Header.Set("Authorization", tt.header)
 			}
+
 			ctx.Request = req
 
 			got, ok := parseBearerToken(ctx)
 			if ok != tt.ok {
 				t.Fatalf("ok=%v want=%v", ok, tt.ok)
 			}
+
 			if got != tt.want {
 				t.Fatalf("token=%q want=%q", got, tt.want)
 			}
@@ -111,7 +114,8 @@ func TestWriteAuthErrorPayload(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	ctx.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 
 	writeAuthError(ctx, http.StatusUnauthorized, authsvc.CodeUnauthorized)
 
@@ -123,6 +127,7 @@ func TestWriteAuthErrorPayload(t *testing.T) {
 	if !bytes.Contains([]byte(body), []byte(`"success":false`)) {
 		t.Fatalf("missing success=false payload: %s", body)
 	}
+
 	if !bytes.Contains([]byte(body), []byte(`"error":"UNAUTHORIZED"`)) {
 		t.Fatalf("missing error code payload: %s", body)
 	}
@@ -161,10 +166,11 @@ func TestAuthHandler_EarlyValidationBranches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, bytes.NewBufferString(tt.body))
 			if tt.body != "" {
 				req.Header.Set("Content-Type", "application/json")
 			}
+
 			if tt.authHeader != "" {
 				req.Header.Set("Authorization", tt.authHeader)
 			}
@@ -175,6 +181,7 @@ func TestAuthHandler_EarlyValidationBranches(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
 			}
+
 			if !bytes.Contains(rec.Body.Bytes(), []byte(`"error":"`+tt.wantCode+`"`)) {
 				t.Fatalf("expected error code %s in body: %s", tt.wantCode, rec.Body.String())
 			}

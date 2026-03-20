@@ -22,19 +22,18 @@ package command
 
 import (
 	"context"
-	"io"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
+	"gorm.io/gorm"
+
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-
-	"gorm.io/gorm"
-	"log/slog"
 )
 
 type alarmListViewerStub struct {
@@ -45,12 +44,15 @@ type alarmListViewerStub struct {
 func (s *alarmListViewerStub) AddAlarm(context.Context, domain.AddAlarmRequest) (bool, error) {
 	return false, nil
 }
+
 func (s *alarmListViewerStub) RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error) {
 	return false, nil
 }
+
 func (s *alarmListViewerStub) GetRoomAlarms(context.Context, string) ([]string, error) {
 	return nil, nil
 }
+
 func (s *alarmListViewerStub) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
 	return nil, nil
 }
@@ -83,6 +85,7 @@ func (c *memberProviderContextCapture) saw(expected context.Context) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -95,14 +98,17 @@ type contextAwareMemberProvider struct {
 
 func newContextAwareMemberProvider(members []*domain.Member) *contextAwareMemberProvider {
 	byChannel := make(map[string]*domain.Member, len(members))
+
 	byName := make(map[string]*domain.Member, len(members))
 	for _, member := range members {
 		if member == nil {
 			continue
 		}
+
 		if member.ChannelID != "" {
 			byChannel[member.ChannelID] = member
 		}
+
 		if member.Name != "" {
 			byName[member.Name] = member
 		}
@@ -133,6 +139,7 @@ func (p *contextAwareMemberProvider) GetChannelIDs() []string {
 	for id := range p.byChannel {
 		ids = append(ids, id)
 	}
+
 	return ids
 }
 
@@ -142,6 +149,7 @@ func (p *contextAwareMemberProvider) GetAllMembers() []*domain.Member {
 
 func (p *contextAwareMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
 	p.ctxCapture.contexts = append(p.ctxCapture.contexts, ctx)
+
 	return &contextAwareMemberProvider{
 		members:    p.members,
 		byChannel:  p.byChannel,
@@ -232,7 +240,7 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 		UserName: "user-1",
 	}
 
-	if err := cmd.Execute(context.Background(), ctx, params); err != nil {
+	if err := cmd.Execute(t.Context(), ctx, params); err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
@@ -255,7 +263,7 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 					Status:         domain.NextStreamStatusUpcoming,
 					Title:          "테스트 방송",
 					VideoID:        "vid1",
-					StartScheduled: ptrTime(time.Date(2026, 3, 6, 12, 0, 0, 0, time.UTC)),
+					StartScheduled: ptrTime(time.Date(2026, time.March, 6, 12, 0, 0, 0, time.UTC)),
 				},
 			},
 		},
@@ -274,13 +282,16 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 	}
 
 	cmd := NewAlarmCommand(deps)
-	err := cmd.Execute(context.Background(), &domain.CommandContext{Room: "room-1"}, map[string]any{"action": "list"})
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{"action": "list"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
+
 	if !alarm.listCalled {
 		t.Fatal("expected ListRoomAlarmsView to be used")
 	}
+
 	if sentMessage == "" {
 		t.Fatal("expected formatted alarm list message")
 	}
@@ -294,7 +305,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	alarm := &alarmAddRecorder{}
 	deps := &Dependencies{
 		Alarm:     alarm,
-		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
@@ -303,10 +314,11 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 			t.Fatal("unexpected send error")
 			return nil
 		},
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	ctx := context.WithValue(context.Background(), testContextKey("request-id"), "alarm-propagation")
+	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "alarm-propagation")
+
 	err := NewAlarmCommand(deps).Execute(ctx, &domain.CommandContext{
 		Room:     "room-1",
 		RoomName: "room-name",
@@ -319,9 +331,11 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
+
 	if !memberProvider.ctxCapture.saw(ctx) {
 		t.Fatal("expected matcher provider to receive request context")
 	}
+
 	if alarm.addCtx != ctx {
 		t.Fatal("expected add alarm to receive original request context")
 	}
@@ -336,9 +350,11 @@ func setupAlarmCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+
 	if err := db.AutoMigrate(&domain.NotificationTemplate{}); err != nil {
 		t.Fatalf("migrate template table: %v", err)
 	}
+
 	if err := db.Create([]domain.NotificationTemplate{
 		{
 			TemplateKey: domain.TemplateKeyCmdAlarmList,
@@ -352,6 +368,7 @@ func setupAlarmCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 		t.Fatalf("seed alarm list template: %v", err)
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
+
 	return serviceTemplate.NewRenderer(db, logger)
 }

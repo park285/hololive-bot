@@ -22,18 +22,16 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/config"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type nilGormPostgres struct{}
@@ -48,11 +46,11 @@ func (p *nilGormPostgres) Close() error { return nil }
 func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("nil config", func(t *testing.T) {
 		deps := botAdminRuntimeDependencies{}
-		got, err := buildBotAdminServerDependencies(context.Background(), nil, deps, nil, logger)
+		got, err := buildBotAdminServerDependencies(t.Context(), nil, deps, nil, logger)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.Contains(t, err.Error(), "config is nil")
@@ -63,7 +61,7 @@ func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 		deps := botAdminRuntimeDependencies{
 			cache: nil,
 		}
-		got, err := buildBotAdminServerDependencies(context.Background(), cfg, deps, nil, logger)
+		got, err := buildBotAdminServerDependencies(t.Context(), cfg, deps, nil, logger)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.Contains(t, err.Error(), "admin dependency view is incomplete")
@@ -80,7 +78,7 @@ func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 			postgres: &nilGormPostgres{},
 		}
 
-		got, err := buildBotAdminServerDependencies(context.Background(), cfg, deps, nil, logger)
+		got, err := buildBotAdminServerDependencies(t.Context(), cfg, deps, nil, logger)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.Contains(t, err.Error(), "create auth service")
@@ -89,4 +87,3 @@ func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 }
 
 var _ database.Client = (*nilGormPostgres)(nil)
-

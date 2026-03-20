@@ -23,21 +23,19 @@ package notification
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"sort"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newDiscardAlarmLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestAlarmKeyHelpers(t *testing.T) {
@@ -53,9 +51,10 @@ func TestAlarmCacheNameAndSubscriberHelpers(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, as.CacheMemberName(ctx, "ch-1", "Miko"))
+
 	name, err := as.GetMemberName(ctx, "ch-1")
 	require.NoError(t, err)
 	assert.Equal(t, "Miko", name)
@@ -73,8 +72,10 @@ func TestAlarmCacheNameAndSubscriberHelpers(t *testing.T) {
 
 	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType("ch-1", domain.AlarmTypeLive), []string{"room-1"})
 	require.NoError(t, err)
+
 	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType("ch-1", domain.AlarmTypeCommunity), []string{"room-1"})
 	require.NoError(t, err)
+
 	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType("ch-1", domain.AlarmTypeShorts), []string{"room-1"})
 	require.NoError(t, err)
 
@@ -95,12 +96,14 @@ func TestGetDistinctRoomsAndAllAlarmKeys(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, err := as.cache.SAdd(ctx, AlarmRegistryKey, []string{"room-1", "room-2", ""})
 	require.NoError(t, err)
+
 	_, err = as.cache.SAdd(ctx, as.getAlarmKey("room-1"), []string{"ch-1", "ch-2"})
 	require.NoError(t, err)
+
 	_, err = as.cache.SAdd(ctx, as.getAlarmKey("room-2"), []string{"ch-3"})
 	require.NoError(t, err)
 
@@ -119,14 +122,17 @@ func TestGetDistinctRoomsAndAllAlarmKeys(t *testing.T) {
 	require.Len(t, alarms, 3)
 
 	byRoom := map[string][]*domain.AlarmEntry{}
+
 	for _, entry := range alarms {
 		byRoom[entry.RoomID] = append(byRoom[entry.RoomID], entry)
 	}
 
 	require.Len(t, byRoom["room-1"], 2)
+
 	for _, entry := range byRoom["room-1"] {
 		assert.Equal(t, "메인방", entry.RoomName)
 	}
+
 	require.Len(t, byRoom["room-2"], 1)
 	assert.Equal(t, "room-2", byRoom["room-2"][0].RoomName)
 }
@@ -144,11 +150,11 @@ func TestAlarmAdminCacheErrorBranches(t *testing.T) {
 		logger: newDiscardAlarmLogger(),
 	}
 
-	_, err := as.GetAllAlarmKeys(context.Background())
+	_, err := as.GetAllAlarmKeys(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get alarm registry")
 
-	_, err = as.GetDistinctRooms(context.Background())
+	_, err = as.GetDistinctRooms(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get alarm registry")
 }
@@ -157,8 +163,8 @@ func TestMarkAsNotified(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
-	start := time.Date(2026, 3, 4, 10, 10, 30, 0, time.UTC)
+	ctx := t.Context()
+	start := time.Date(2026, time.March, 4, 10, 10, 30, 0, time.UTC)
 
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-1", start, 5))
 	require.NoError(t, as.MarkAsNotified(ctx, "stream-1", start, 3))
@@ -191,7 +197,7 @@ func TestMarkAsNotified_SetFailure(t *testing.T) {
 		logger: newDiscardAlarmLogger(),
 	}
 
-	err := as.MarkAsNotified(context.Background(), "stream-1", time.Now().UTC(), 5)
+	err := as.MarkAsNotified(t.Context(), "stream-1", time.Now().UTC(), 5)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mark as notified")
 }
@@ -202,15 +208,15 @@ func TestTargetMinutesAndCloseHelpers(t *testing.T) {
 	as := &AlarmService{logger: newDiscardAlarmLogger()}
 	assert.Equal(t, []int{5, 3, 1}, as.GetTargetMinutes())
 
-	updated := as.UpdateAlarmAdvanceMinutes(context.Background(), 10)
+	updated := as.UpdateAlarmAdvanceMinutes(t.Context(), 10)
 	assert.Equal(t, []int{10, 3, 1}, updated)
 	assert.Equal(t, []int{10, 3, 1}, as.GetTargetMinutes())
 
-	updated = as.UpdateAlarmAdvanceMinutes(context.Background(), 1)
+	updated = as.UpdateAlarmAdvanceMinutes(t.Context(), 1)
 	assert.Equal(t, []int{3, 1}, updated)
 	assert.Equal(t, []int{3, 1}, as.GetTargetMinutes())
 
 	var nilService *AlarmService
 	require.NoError(t, nilService.Close(nil))
-	require.NoError(t, as.Close(context.Background()))
+	require.NoError(t, as.Close(t.Context()))
 }

@@ -29,13 +29,13 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// MemberDirectoryGroup: 멤버 목록 표시를 위한 그룹 (예: 'JP 3기생', 'EN Promise')
+// MemberDirectoryGroup: 멤버 목록 표시를 위한 그룹 (예: 'JP 3기생', 'EN Promise').
 type MemberDirectoryGroup struct {
 	GroupName string
 	Members   []MemberDirectoryEntry
 }
 
-// MemberDirectoryEntry: 멤버 목록의 개별 항목 (주 이름 및 보조 이름 포함)
+// MemberDirectoryEntry: 멤버 목록의 개별 항목 (주 이름 및 보조 이름 포함).
 type MemberDirectoryEntry struct {
 	PrimaryName   string
 	SecondaryName string
@@ -86,6 +86,7 @@ func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []Member
 	if instruction == "" || body == "" {
 		return rendered
 	}
+
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
@@ -104,6 +105,7 @@ func prepareMemberDirectoryGroups(groups []MemberDirectoryGroup) []memberDirecto
 		members := make([]memberDirectoryEntryView, 0, len(group.Members))
 		for _, member := range group.Members {
 			primary := stringutil.TrimSpace(member.PrimaryName)
+
 			secondary := stringutil.TrimSpace(member.SecondaryName)
 			if primary == "" && secondary == "" {
 				continue
@@ -114,6 +116,7 @@ func prepareMemberDirectoryGroups(groups []MemberDirectoryGroup) []memberDirecto
 				Secondary: secondary,
 				ShowBoth:  primary != "" && secondary != "" && !strings.EqualFold(primary, secondary),
 			}
+
 			members = append(members, entry)
 		}
 

@@ -30,28 +30,33 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// InitializeWarmMemberCache - cmd/tools/warm_member_cache 전용
+// InitializeWarmMemberCache - cmd/tools/warm_member_cache 전용.
 func InitializeWarmMemberCache(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*member.Cache, func(), error) {
 	postgresConfig := providers.ProvidePostgresConfig(cfg)
+
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, postgresConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
+
 	postgresService := providers.ProvidePostgresService(databaseResources)
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 
 	valkeyConfig := providers.ProvideValkeyConfig(cfg)
+
 	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, valkeyConfig, logger)
 	if err != nil {
 		cleanupDB()
 		return nil, nil, fmt.Errorf("provide cache resources: %w", err)
 	}
+
 	cacheService := providers.ProvideCacheService(cacheResources)
 
 	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
 		cleanupCache()
 		cleanupDB()
+
 		return nil, nil, fmt.Errorf("provide member cache: %w", err)
 	}
 
@@ -63,12 +68,13 @@ func InitializeWarmMemberCache(ctx context.Context, cfg *config.Config, logger *
 	return memberCache, cleanup, nil
 }
 
-// InitializeDBIntegrationRuntime - cmd/test_db_integration 전용
+// InitializeDBIntegrationRuntime - cmd/test_db_integration 전용.
 func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, pgCfg, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
+
 	postgresService := providers.ProvidePostgresService(databaseResources)
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 
@@ -90,7 +96,7 @@ func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresCo
 	return runtime, cleanupDB, nil
 }
 
-// InitializeFetchProfilesRuntime - cmd/tools/fetch_profiles 전용
+// InitializeFetchProfilesRuntime - cmd/tools/fetch_profiles 전용.
 func InitializeFetchProfilesRuntime(_ context.Context) (*FetchProfilesRuntime, func(), error) {
 	logger, cleanupLogger, err := ProvideFetchProfilesLogger()
 	if err != nil {

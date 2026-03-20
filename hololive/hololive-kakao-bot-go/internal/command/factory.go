@@ -67,5 +67,6 @@ func BuildCommands(deps *Dependencies, factories ...Factory) []Command {
 
 		commands = append(commands, command)
 	}
+
 	return commands
 }

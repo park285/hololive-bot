@@ -22,7 +22,6 @@ package bot
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -48,6 +47,7 @@ func (f *fakeIrisClient) Ping(context.Context) bool {
 		f.failCount--
 		return false
 	}
+
 	return true
 }
 
@@ -57,13 +57,14 @@ func TestWaitUntilIrisReady_SucceedsAfterRetry(t *testing.T) {
 	client := &fakeIrisClient{failCount: 2}
 	b := &Bot{
 		irisClient: client,
-		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:     slog.New(slog.DiscardHandler),
 	}
 
-	err := b.waitUntilIrisReady(context.Background(), 300*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
+	err := b.waitUntilIrisReady(t.Context(), 300*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("waitUntilIrisReady failed: %v", err)
 	}
+
 	if client.pingCalls < 3 {
 		t.Fatalf("expected at least 3 ping attempts, got %d", client.pingCalls)
 	}
@@ -75,13 +76,14 @@ func TestWaitUntilIrisReady_TimesOut(t *testing.T) {
 	client := &fakeIrisClient{failCount: 1000}
 	b := &Bot{
 		irisClient: client,
-		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:     slog.New(slog.DiscardHandler),
 	}
 
-	err := b.waitUntilIrisReady(context.Background(), 70*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
+	err := b.waitUntilIrisReady(t.Context(), 70*time.Millisecond, 10*time.Millisecond, 10*time.Millisecond)
 	if err == nil {
-		t.Fatalf("expected timeout error, got nil")
+		t.Fatal("expected timeout error, got nil")
 	}
+
 	if !strings.Contains(err.Error(), "timeout") {
 		t.Fatalf("expected timeout error, got: %v", err)
 	}

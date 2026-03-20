@@ -67,6 +67,7 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool)
 		i.logWarn("Nil message received")
 		return nil, false
 	}
+
 	if i.messageAdapter == nil {
 		i.logWarn("Message adapter is not configured")
 		return nil, false
@@ -82,16 +83,18 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool)
 			slog.String("room", chatID),
 			slog.String("payload", message.Msg),
 		)
+
 		return nil, false
 	}
 
 	if i.acl != nil && !i.acl.IsRoomAllowed(roomName, chatID) {
 		i.logDebug(
-			"Room not in ACL whitelist, ignoring message",
+			"Room blocked by ACL, ignoring message",
 			slog.String("room", chatID),
 			slog.String("room_name", roomName),
 			slog.String("user_name", userName),
 		)
+
 		return nil, false
 	}
 
@@ -100,6 +103,7 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool)
 		i.logWarn("Parsed command is nil", slog.String("room", chatID))
 		return nil, false
 	}
+
 	commandType := parsed.Type.String()
 	if parsed.Type == domain.CommandUnknown {
 		i.logDebug(
@@ -108,6 +112,7 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool)
 			slog.String("room", chatID),
 			slog.String("user_name", userName),
 		)
+
 		return nil, false
 	}
 
@@ -136,6 +141,7 @@ func (i *MessageIngress) isSelfSender(sender string) bool {
 	if canonical == "" || i.selfSender == "" {
 		return false
 	}
+
 	return canonical == i.selfSender
 }
 
@@ -143,10 +149,12 @@ func (i *MessageIngress) logDebug(msg string, attrs ...slog.Attr) {
 	if i.logger == nil {
 		return
 	}
+
 	args := make([]any, 0, len(attrs))
 	for _, attr := range attrs {
 		args = append(args, attr)
 	}
+
 	i.logger.Debug(msg, args...)
 }
 
@@ -154,10 +162,12 @@ func (i *MessageIngress) logInfo(msg string, attrs ...slog.Attr) {
 	if i.logger == nil {
 		return
 	}
+
 	args := make([]any, 0, len(attrs))
 	for _, attr := range attrs {
 		args = append(args, attr)
 	}
+
 	i.logger.Info(msg, args...)
 }
 
@@ -165,9 +175,11 @@ func (i *MessageIngress) logWarn(msg string, attrs ...slog.Attr) {
 	if i.logger == nil {
 		return
 	}
+
 	args := make([]any, 0, len(attrs))
 	for _, attr := range attrs {
 		args = append(args, attr)
 	}
+
 	i.logger.Warn(msg, args...)
 }

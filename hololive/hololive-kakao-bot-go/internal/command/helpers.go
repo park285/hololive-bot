@@ -21,6 +21,7 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 
@@ -69,16 +70,20 @@ func FindActiveMemberOrError(ctx context.Context, deps *Dependencies, room, memb
 
 func validateMemberLookupDependencies(deps *Dependencies) error {
 	if deps == nil {
-		return fmt.Errorf("deps is nil")
+		return errors.New("deps is nil")
 	}
+
 	if deps.Matcher == nil {
-		return fmt.Errorf("matcher is nil")
+		return errors.New("matcher is nil")
 	}
+
 	if deps.Formatter == nil {
-		return fmt.Errorf("formatter is nil")
+		return errors.New("formatter is nil")
 	}
+
 	if deps.SendError == nil {
-		return fmt.Errorf("send error callback is nil")
+		return errors.New("send error callback is nil")
 	}
+
 	return nil
 }

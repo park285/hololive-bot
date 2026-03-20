@@ -21,45 +21,16 @@
 package iris
 
 import (
-	"bytes"
-	"context"
-	"crypto/tls"
-	"fmt"
-	"io"
 	"log/slog"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
-	"strings"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
-	sharedirisx "github.com/park285/llm-kakao-bots/shared-go/pkg/irisx"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
-	"golang.org/x/net/http2"
+	"park285/iris-client-go/client"
 )
 
-type H2CClient struct {
-	baseURL  string
-	botToken string // X-Bot-Token for outbound auth
-	client   *http.Client
-	logger   *slog.Logger
-}
+// H2CClient: iris-client-go/client.H2CClient의 타입 별칭입니다.
+type H2CClient = client.H2CClient
 
-const (
-	defaultHTTPTimeout            = 10 * time.Second
-	defaultHTTPDialTimeout        = 3 * time.Second
-	defaultHTTPTLSHandshake       = 5 * time.Second
-	defaultHTTPResponseHeaderWait = 5 * time.Second
-	defaultHTTPIdleConnTimeout    = 90 * time.Second
-	defaultHTTPMaxIdleConns       = 10
-	defaultHTTPMaxIdleConnsHost   = 10
-	defaultHTTP2ReadIdleTimeout   = 30 * time.Second
-	defaultHTTP2PingTimeout       = 15 * time.Second
-	defaultHTTP2WriteByteTimeout  = 10 * time.Second
-)
-
+// H2CClientOptions: 기존 구조체 기반 옵션 — 하위 호환성 유지를 위해 보존합니다.
 type H2CClientOptions struct {
 	Timeout               time.Duration
 	DialTimeout           time.Duration
@@ -73,246 +44,44 @@ type H2CClientOptions struct {
 	WriteByteTimeout      time.Duration
 }
 
-func (o H2CClientOptions) normalized() H2CClientOptions {
-	result := o
-	if result.Timeout <= 0 {
-		result.Timeout = defaultHTTPTimeout
+// NewH2CClient: 구조체 옵션을 함수형 옵션으로 변환하여 iris-client-go H2CClient를 생성합니다.
+func NewH2CClient(baseURL, botToken string, logger *slog.Logger, options ...H2CClientOptions) *client.H2CClient {
+	var opts []client.ClientOption
+	if logger != nil {
+		opts = append(opts, client.WithLogger(logger))
 	}
-	if result.DialTimeout <= 0 {
-		result.DialTimeout = defaultHTTPDialTimeout
-	}
-	if result.TLSHandshakeTimeout <= 0 {
-		result.TLSHandshakeTimeout = defaultHTTPTLSHandshake
-	}
-	if result.ResponseHeaderTimeout <= 0 {
-		result.ResponseHeaderTimeout = defaultHTTPResponseHeaderWait
-	}
-	if result.IdleConnTimeout <= 0 {
-		result.IdleConnTimeout = defaultHTTPIdleConnTimeout
-	}
-	if result.MaxIdleConns <= 0 {
-		result.MaxIdleConns = defaultHTTPMaxIdleConns
-	}
-	if result.MaxIdleConnsPerHost <= 0 {
-		result.MaxIdleConnsPerHost = defaultHTTPMaxIdleConnsHost
-	}
-	if result.ReadIdleTimeout <= 0 {
-		result.ReadIdleTimeout = defaultHTTP2ReadIdleTimeout
-	}
-	if result.PingTimeout <= 0 {
-		result.PingTimeout = defaultHTTP2PingTimeout
-	}
-	if result.WriteByteTimeout <= 0 {
-		result.WriteByteTimeout = defaultHTTP2WriteByteTimeout
-	}
-	return result
-}
-
-func NewH2CClient(baseURL, botToken string, logger *slog.Logger, options ...H2CClientOptions) *H2CClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	opt := H2CClientOptions{}
 	if len(options) > 0 {
-		opt = options[0]
-	}
-	opt = opt.normalized()
-
-	client := httputil.NewClient(opt.Timeout)
-	client.Transport = newIrisTransport(baseURL, logger, opt)
-
-	return &H2CClient{
-		baseURL:  baseURL,
-		botToken: botToken,
-		client:   client,
-		logger:   logger,
-	}
-}
-
-func newIrisTransport(baseURL string, logger *slog.Logger, opt H2CClientOptions) http.RoundTripper {
-	parsedURL, err := url.Parse(baseURL)
-	if err != nil {
-		if logger != nil {
-			logger.Warn(
-				"iris_client_invalid_base_url",
-				slog.String("base_url", baseURL),
-				slog.Any("error", err),
-			)
+		o := options[0]
+		if o.Timeout > 0 {
+			opts = append(opts, client.WithTimeout(o.Timeout))
 		}
-		return newHTTPTransport(opt)
-	}
-
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("IRIS_TRANSPORT"))) {
-	case "http1", "http", "http/1.1":
-		return newHTTPTransport(opt)
-	case "", "h2c", "http2":
-	default:
-		if logger != nil {
-			logger.Warn(
-				"iris_client_unknown_transport",
-				slog.String("transport", os.Getenv("IRIS_TRANSPORT")),
-				slog.String("fallback", "h2c"),
-			)
+		if o.DialTimeout > 0 {
+			opts = append(opts, client.WithDialTimeout(o.DialTimeout))
+		}
+		if o.TLSHandshakeTimeout > 0 {
+			opts = append(opts, client.WithTLSHandshakeTimeout(o.TLSHandshakeTimeout))
+		}
+		if o.ResponseHeaderTimeout > 0 {
+			opts = append(opts, client.WithResponseHeaderTimeout(o.ResponseHeaderTimeout))
+		}
+		if o.IdleConnTimeout > 0 {
+			opts = append(opts, client.WithIdleConnTimeout(o.IdleConnTimeout))
+		}
+		if o.MaxIdleConns > 0 {
+			opts = append(opts, client.WithMaxIdleConns(o.MaxIdleConns))
+		}
+		if o.MaxIdleConnsPerHost > 0 {
+			opts = append(opts, client.WithMaxIdleConnsPerHost(o.MaxIdleConnsPerHost))
+		}
+		if o.ReadIdleTimeout > 0 {
+			opts = append(opts, client.WithReadIdleTimeout(o.ReadIdleTimeout))
+		}
+		if o.PingTimeout > 0 {
+			opts = append(opts, client.WithPingTimeout(o.PingTimeout))
+		}
+		if o.WriteByteTimeout > 0 {
+			opts = append(opts, client.WithWriteByteTimeout(o.WriteByteTimeout))
 		}
 	}
-
-	if strings.EqualFold(parsedURL.Scheme, "http") {
-		return newH2CTransport(opt)
-	}
-	return newHTTPTransport(opt)
-}
-
-func newHTTPTransport(opt H2CClientOptions) *http.Transport {
-	return &http.Transport{
-		MaxIdleConns:        opt.MaxIdleConns,
-		MaxIdleConnsPerHost: opt.MaxIdleConnsPerHost,
-		IdleConnTimeout:     opt.IdleConnTimeout,
-		DialContext: (&net.Dialer{
-			Timeout:   opt.DialTimeout,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		TLSHandshakeTimeout:   opt.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: opt.ResponseHeaderTimeout,
-	}
-}
-
-func newH2CTransport(opt H2CClientOptions) *http2.Transport {
-	return &http2.Transport{
-		AllowHTTP:        true,
-		IdleConnTimeout:  opt.IdleConnTimeout,
-		PingTimeout:      opt.PingTimeout,
-		ReadIdleTimeout:  opt.ReadIdleTimeout,
-		WriteByteTimeout: opt.WriteByteTimeout,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			d := &net.Dialer{
-				Timeout:   opt.DialTimeout,
-				KeepAlive: 30 * time.Second,
-			}
-			return d.DialContext(ctx, network, addr)
-		},
-	}
-}
-
-func (c *H2CClient) SendMessage(ctx context.Context, room, message string, opts ...SendOption) error {
-	o := applySendOptions(opts)
-	reqBody := ReplyRequest{
-		Type:     "text",
-		Room:     room,
-		Data:     message,
-		ThreadID: o.ThreadID,
-	}
-	return c.postJSON(ctx, sharedirisx.PathReply, reqBody, nil)
-}
-
-func (c *H2CClient) SendImage(ctx context.Context, room, imageBase64 string) error {
-	reqBody := ReplyRequest{
-		Type: "image",
-		Room: room,
-		Data: imageBase64,
-	}
-	return c.postJSON(ctx, sharedirisx.PathReply, reqBody, nil)
-}
-
-func (c *H2CClient) Ping(ctx context.Context) bool {
-	req, err := c.newRequest(ctx, http.MethodGet, sharedirisx.PathReady, nil)
-	if err != nil {
-		return false
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	return resp.StatusCode >= 200 && resp.StatusCode < 300
-}
-
-func (c *H2CClient) GetConfig(ctx context.Context) (*Config, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/config", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("get /config: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if err := httputil.CheckStatus(resp); err != nil {
-		return nil, fmt.Errorf("get /config: %w", err)
-	}
-
-	var cfg Config
-	if err := httputil.DecodeJSON(resp, &cfg); err != nil {
-		return nil, fmt.Errorf("decode /config response: %w", err)
-	}
-	return &cfg, nil
-}
-
-func (c *H2CClient) Decrypt(ctx context.Context, data string) (string, error) {
-	reqBody := DecryptRequest{
-		B64Ciphertext: data,
-		Enc:           0,
-	}
-
-	var respBody DecryptResponse
-	if err := c.postJSON(ctx, "/decrypt", reqBody, &respBody); err != nil {
-		return "", err
-	}
-	return respBody.PlainText, nil
-}
-
-func (c *H2CClient) postJSON(ctx context.Context, path string, body any, out any) error {
-	var buf bytes.Buffer
-	if body != nil {
-		if err := json.NewEncoder(&buf).Encode(body); err != nil {
-			return fmt.Errorf("encode request body: %w", err)
-		}
-	}
-
-	req, err := c.newRequest(ctx, http.MethodPost, path, &buf)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("post %s: %w", path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if err := httputil.CheckStatus(resp); err != nil {
-		return fmt.Errorf("post %s: %w", path, err)
-	}
-
-	if out == nil {
-		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-			return fmt.Errorf("drain %s response body: %w", path, err)
-		}
-		return nil
-	}
-
-	if err := httputil.DecodeJSON(resp, out); err != nil {
-		return fmt.Errorf("decode %s response: %w", path, err)
-	}
-	return nil
-}
-
-func (c *H2CClient) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	requestURL := c.baseURL + path
-	req, err := http.NewRequestWithContext(ctx, method, requestURL, body)
-	if err != nil {
-		return nil, fmt.Errorf("new request %s %s: %w", method, path, err)
-	}
-
-	if strings.TrimSpace(c.botToken) != "" {
-		req.Header.Set(sharedirisx.HeaderBotToken, c.botToken)
-	}
-
-	return req, nil
+	return client.NewH2CClient(baseURL, botToken, opts...)
 }

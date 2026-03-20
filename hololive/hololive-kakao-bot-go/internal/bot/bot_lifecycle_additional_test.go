@@ -27,13 +27,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type lifecycleTestPostgres struct {
@@ -46,6 +45,7 @@ func (p *lifecycleTestPostgres) GetGormDB() *gorm.DB    { return nil }
 func (p *lifecycleTestPostgres) Ping(context.Context) error {
 	return nil
 }
+
 func (p *lifecycleTestPostgres) Close() error {
 	p.closeCalled = true
 	return p.closeErr
@@ -59,12 +59,15 @@ func (h *lifecycleTestHolodex) Stop() { h.stopCalled = true }
 func (h *lifecycleTestHolodex) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
 	return nil, nil
 }
+
 func (h *lifecycleTestHolodex) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
 	return nil, nil
 }
+
 func (h *lifecycleTestHolodex) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
 	return nil, nil
 }
+
 func (h *lifecycleTestHolodex) GetChannel(context.Context, string) (*domain.Channel, error) {
 	return nil, nil
 }
@@ -75,7 +78,7 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 	t.Run("cache not configured", func(t *testing.T) {
 		lifecycle := NewBotLifecycle(newBotTestLogger(), nil, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}), nil, nil, nil)
 
-		err := lifecycle.Start(context.Background())
+		err := lifecycle.Start(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache is not configured")
 	})
@@ -86,7 +89,7 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 		}
 		lifecycle := NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}), nil, nil, nil)
 
-		err := lifecycle.Start(context.Background())
+		err := lifecycle.Start(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "valkey connection timeout")
 	})
@@ -97,9 +100,10 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 		}
 		stopCh := make(chan struct{})
 		close(stopCh)
+
 		lifecycle := NewBotLifecycle(newBotTestLogger(), cacheClient, nil, "http://iris", stopCh, make(chan struct{}), nil, nil, nil)
 
-		err := lifecycle.Start(context.Background())
+		err := lifecycle.Start(t.Context())
 		require.NoError(t, err)
 	})
 }
@@ -112,7 +116,8 @@ func TestBotLifecycleStart_ContextCanceled(t *testing.T) {
 	}
 	lifecycle := NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), make(chan struct{}), nil, nil, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
+
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		cancel()
@@ -143,7 +148,7 @@ func TestBotLifecycleShutdownBranches(t *testing.T) {
 
 	lifecycle := NewBotLifecycle(newBotTestLogger(), cacheClient, &testIrisClient{}, "http://iris", make(chan struct{}), doneCh, pool, holodex, postgres)
 
-	require.NoError(t, lifecycle.Shutdown(context.Background()))
+	require.NoError(t, lifecycle.Shutdown(t.Context()))
 	assert.True(t, cacheClosed)
 	assert.True(t, holodex.stopCalled)
 	assert.True(t, postgres.closeCalled)
@@ -161,10 +166,9 @@ func TestBotStartAndShutdownDelegateToLifecycle(t *testing.T) {
 	lifecycle := NewBotLifecycle(newBotTestLogger(), nil, nil, "", make(chan struct{}), make(chan struct{}), nil, nil, nil)
 	b := &Bot{lifecycle: lifecycle}
 
-	err := b.Start(context.Background())
+	err := b.Start(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cache is not configured")
 
-	require.NoError(t, b.Shutdown(context.Background()))
+	require.NoError(t, b.Shutdown(t.Context()))
 }
-

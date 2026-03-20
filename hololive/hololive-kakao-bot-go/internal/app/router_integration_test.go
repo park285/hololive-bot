@@ -21,8 +21,6 @@
 package app
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -34,9 +32,9 @@ import (
 )
 
 func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
-	router, err := ProvideHealthOnlyRouter(context.Background(), logger, "test-key")
+	router, err := ProvideHealthOnlyRouter(t.Context(), logger, "test-key")
 	if err != nil {
 		t.Fatalf("ProvideHealthOnlyRouter() error = %v", err)
 	}
@@ -48,7 +46,9 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /health error = %v", err)
 	}
+
 	resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
@@ -57,7 +57,9 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /ready error = %v", err)
 	}
+
 	readyResp.Body.Close()
+
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
 	}
@@ -66,21 +68,25 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new /metrics request error = %v", err)
 	}
+
 	metricsReq.Header.Set(middleware.APIKeyHeader, "test-key")
+
 	metricsResp, err := http.DefaultClient.Do(metricsReq)
 	if err != nil {
 		t.Fatalf("GET /metrics error = %v", err)
 	}
+
 	metricsResp.Body.Close()
+
 	if metricsResp.StatusCode != http.StatusOK {
 		t.Fatalf("/metrics status = %d, want %d", metricsResp.StatusCode, http.StatusOK)
 	}
 }
 
 func TestProvideBotRouter_Integration(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
-	router, err := ProvideBotRouter(context.Background(), &config.Config{}, logger, nil, nil)
+	router, err := ProvideBotRouter(t.Context(), &config.Config{}, logger, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideBotRouter() error = %v", err)
 	}
@@ -92,7 +98,9 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /health error = %v", err)
 	}
+
 	resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
@@ -101,23 +109,27 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /ready error = %v", err)
 	}
+
 	readyResp.Body.Close()
+
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
 	}
 }
 
 func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	router, err := ProvideBotRouter(context.Background(), &config.Config{}, logger, nil, triggerHandler)
+	router, err := ProvideBotRouter(t.Context(), &config.Config{}, logger, nil, triggerHandler)
 	if err == nil {
 		t.Fatal("ProvideBotRouter() error = nil, want non-nil")
 	}
+
 	if router != nil {
 		t.Fatal("ProvideBotRouter() router = non-nil, want nil")
 	}
+
 	if err.Error() != "API_SECRET_KEY required" {
 		t.Fatalf("ProvideBotRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
 	}

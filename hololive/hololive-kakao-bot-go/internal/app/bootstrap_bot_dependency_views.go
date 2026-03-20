@@ -105,6 +105,7 @@ func buildBotWebhookRuntimeDependencies(deps *bot.Dependencies) botWebhookRuntim
 	if deps == nil {
 		return botWebhookRuntimeDependencies{}
 	}
+
 	return botWebhookRuntimeDependencies{
 		cache: deps.Cache,
 	}
@@ -114,6 +115,7 @@ func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubsc
 	if deps == nil {
 		return botConfigSubscriberDependencies{}
 	}
+
 	return botConfigSubscriberDependencies{
 		cache:    deps.Cache,
 		settings: deps.Settings,
@@ -124,6 +126,7 @@ func buildBotConfigSubscriberRuntimeDependencies(infra *coreInfrastructure) botC
 	if infra == nil || infra.deps == nil {
 		return botConfigSubscriberRuntimeDependencies{}
 	}
+
 	return botConfigSubscriberRuntimeDependencies{
 		youtubeService: infra.deps.Service,
 		holodexService: infra.holodexService,
@@ -137,6 +140,7 @@ func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntime
 	}
 
 	var statsRepo stats.StatsDashboardRepository
+
 	if infra.ytStack != nil {
 		statsRepo = infra.ytStack.StatsRepo
 	}
@@ -162,6 +166,7 @@ func buildBotServerRuntimeDependencies(infra *coreInfrastructure) botServerRunti
 	if infra == nil {
 		return botServerRuntimeDependencies{}
 	}
+
 	return botServerRuntimeDependencies{
 		alarmCRUD: infra.alarmCRUD,
 	}

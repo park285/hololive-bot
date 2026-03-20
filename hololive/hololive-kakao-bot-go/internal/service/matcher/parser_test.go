@@ -87,6 +87,7 @@ func TestParseNameWithOrg(t *testing.T) {
 			if gotName != tt.expectedName {
 				t.Errorf("ParseNameWithOrg(%q) name = %q, want %q", tt.input, gotName, tt.expectedName)
 			}
+
 			if gotOrg != tt.expectedOrg {
 				t.Errorf("ParseNameWithOrg(%q) org = %q, want %q", tt.input, gotOrg, tt.expectedOrg)
 			}

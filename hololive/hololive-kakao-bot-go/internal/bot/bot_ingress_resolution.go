@@ -37,6 +37,7 @@ func resolveRoom(message *iris.Message) (chatID, roomName string) {
 	}
 
 	roomName = message.Room
+
 	return chatID, roomName
 }
 

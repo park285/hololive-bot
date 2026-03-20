@@ -31,6 +31,7 @@ func (ma *MessageAdapter) tryAlarmCommand(command string, args []string, raw str
 	if !ma.isAlarmCommand(command, args) {
 		return nil, false
 	}
+
 	return ma.parseAlarmCommand(command, args, raw), true
 }
 
@@ -52,6 +53,7 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 
 	if stringutil.ContainsString([]string{"추가", "설정", "set", "add"}, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
+
 		return &ParsedCommand{
 			Type: domain.CommandAlarmAdd,
 			Params: map[string]any{
@@ -65,6 +67,7 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 
 	if stringutil.ContainsString([]string{"제거", "삭제", "remove", "del", "delete"}, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
+
 		return &ParsedCommand{
 			Type: domain.CommandAlarmRemove,
 			Params: map[string]any{
@@ -128,7 +131,7 @@ func (ma *MessageAdapter) extractMemberAndType(args []string) (member, alarmType
 	return strings.Join(args, " "), ""
 }
 
-// 알람 명령 정규화
+// 알람 명령 정규화.
 func normalizeCompactAlarmTokens(command string, args []string) (string, []string, bool) {
 	mapping := map[string]string{
 		"알람설정":  "설정",
@@ -157,6 +160,7 @@ func normalizeCompactAlarmTokens(command string, args []string) (string, []strin
 	}
 
 	newArgs := make([]string, 0, 1+len(args))
+
 	newArgs = append(newArgs, subCmd)
 	newArgs = append(newArgs, args...)
 

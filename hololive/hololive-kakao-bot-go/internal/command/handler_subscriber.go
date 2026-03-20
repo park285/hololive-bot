@@ -21,6 +21,7 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -31,7 +32,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// SubscriberCommand: 특정 멤버의 구독자 수를 조회하는 명령어
+// SubscriberCommand: 특정 멤버의 구독자 수를 조회하는 명령어.
 type SubscriberCommand struct {
 	BaseCommand
 }
@@ -58,6 +59,7 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	memberQuery, _ := params["member"].(string)
+
 	memberQuery = stringutil.TrimSpace(memberQuery)
 
 	// 멤버 이름 필수
@@ -72,8 +74,10 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 			slog.String("query", memberQuery),
 			slog.Any("error", err),
 		)
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberQuery))
 	}
+
 	if matchedChannel == nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberQuery))
 	}
@@ -85,6 +89,7 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 			slog.String("channel_id", matchedChannel.ID),
 			slog.Any("error", err),
 		)
+
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrSubscriberQueryFailed)
 	}
 
@@ -105,6 +110,7 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 
 	// 응답 메시지 생성
 	message := c.Deps().Formatter.FormatSubscriberCount(memberName, uint64(*channel.SubscriberCount))
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -114,16 +120,19 @@ func (c *SubscriberCommand) ensureDeps() error {
 	}
 
 	if c.Deps().Matcher == nil {
-		return fmt.Errorf("matcher not configured")
+		return errors.New("matcher not configured")
 	}
+
 	if c.Deps().Holodex == nil {
-		return fmt.Errorf("holodex service not configured")
+		return errors.New("holodex service not configured")
 	}
+
 	if c.Deps().MembersData == nil {
-		return fmt.Errorf("members data not configured")
+		return errors.New("members data not configured")
 	}
+
 	if c.Deps().Formatter == nil {
-		return fmt.Errorf("formatter not configured")
+		return errors.New("formatter not configured")
 	}
 
 	return nil
@@ -133,5 +142,6 @@ func (c *SubscriberCommand) log() *slog.Logger {
 	if c.Deps() != nil && c.Deps().Logger != nil {
 		return c.Deps().Logger
 	}
+
 	return slog.Default()
 }

@@ -21,6 +21,7 @@
 package command
 
 import (
+	"errors"
 	"context"
 	"fmt"
 
@@ -30,7 +31,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 )
 
-// LiveCommand: 현재 방송 중인 라이브 스트림 목록을 조회하고 보여주는 명령어
+// LiveCommand: 현재 방송 중인 라이브 스트림 목록을 조회하고 보여주는 명령어.
 type LiveCommand struct {
 	BaseCommand
 }
@@ -92,6 +93,7 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		}
 
 		message := c.Deps().Formatter.FormatLiveStreams(ctx, memberStreams)
+
 		return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 	}
 
@@ -101,6 +103,7 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	}
 
 	chzzkStreams := c.getAllChzzkLiveStreams(ctx)
+
 	streams = append(streams, chzzkStreams...)
 
 	total := len(streams)
@@ -109,9 +112,11 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	}
 
 	message := c.Deps().Formatter.FormatLiveStreams(ctx, streams)
+
 	if total > 10 {
 		message += c.Deps().Formatter.FormatLiveOverflowCount(total - 10)
 	}
+
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
@@ -130,6 +135,7 @@ func (c *LiveCommand) checkChzzkLive(ctx context.Context, member *domain.Member)
 	if len(streams) == 0 {
 		return nil
 	}
+
 	return streams[0]
 }
 
@@ -142,6 +148,7 @@ func (c *LiveCommand) getAllChzzkLiveStreams(ctx context.Context) []*domain.Stre
 	if !c.Deps().Chzzk.HasOpenAPICredentials() {
 		return nil
 	}
+
 	provider := c.Deps().MembersData.WithContext(ctx)
 	if provider == nil {
 		return nil
@@ -167,6 +174,7 @@ func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*
 		if member == nil || member.ChzzkChannelID == "" || member.IsGraduated {
 			continue
 		}
+
 		byChzzkChannelID[member.ChzzkChannelID] = member
 	}
 
@@ -176,6 +184,7 @@ func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*
 		if !ok {
 			continue
 		}
+
 		streams = append(streams, newChzzkStream(member, lives[i].LiveTitle))
 	}
 
@@ -187,14 +196,17 @@ func collectChzzkLiveStreams(
 	fetchBatch func([]string) ([]chzzk.LiveData, error),
 ) []*domain.Stream {
 	eligibleMembers := make([]*domain.Member, 0, len(members))
+
 	channelIDs := make([]string, 0, len(members))
 	for _, member := range members {
 		if member == nil || member.ChzzkChannelID == "" || member.IsGraduated {
 			continue
 		}
+
 		eligibleMembers = append(eligibleMembers, member)
 		channelIDs = append(channelIDs, member.ChzzkChannelID)
 	}
+
 	if len(eligibleMembers) == 0 {
 		return nil
 	}
@@ -229,7 +241,7 @@ func (c *LiveCommand) ensureDeps() error {
 	}
 
 	if c.Deps().Matcher == nil || c.Deps().Holodex == nil || c.Deps().Formatter == nil {
-		return fmt.Errorf("live command services not configured")
+		return errors.New("live command services not configured")
 	}
 
 	return nil

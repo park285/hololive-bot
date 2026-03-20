@@ -21,14 +21,12 @@
 package notification
 
 import (
-	"context"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 // -- AddAlarm 테스트 --
@@ -37,8 +35,10 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	req := domain.AddAlarmRequest{
 		RoomID:     "room1",
@@ -78,8 +78,10 @@ func TestAddAlarm_DuplicateReturnsNotAdded(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	req := domain.AddAlarmRequest{
 		RoomID:     "room1",
@@ -102,8 +104,10 @@ func TestRemoveAlarm_Success(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	// 알람 추가
 	req := domain.AddAlarmRequest{
@@ -129,8 +133,10 @@ func TestRemoveAlarm_NotFound(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	removed, err := as.RemoveAlarm(ctx, "room1", "UC_NONEXIST", nil)
 	require.NoError(t, err)
@@ -143,8 +149,10 @@ func TestGetRoomAlarms_WithAlarms(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	for _, ch := range []string{"UC_A", "UC_B", "UC_C"} {
 		_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
@@ -163,7 +171,7 @@ func TestGetRoomAlarms_EmptyRoom(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	channels, err := as.GetRoomAlarms(ctx, "room_empty")
 	require.NoError(t, err)
@@ -176,8 +184,10 @@ func TestClearRoomAlarms_ClearsAll(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	for _, ch := range []string{"UC_A", "UC_B"} {
 		_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
@@ -206,7 +216,7 @@ func TestClearRoomAlarms_EmptyRoom(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cleared, err := as.ClearRoomAlarms(ctx, "room_empty")
 	require.NoError(t, err)
@@ -219,7 +229,7 @@ func TestMarkAsNotified_SetsFlag(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	start := time.Now().UTC().Truncate(time.Minute)
 	err := as.MarkAsNotified(ctx, "stream1", start, 5)
@@ -227,6 +237,7 @@ func TestMarkAsNotified_SetsFlag(t *testing.T) {
 
 	// 기록된 데이터 확인
 	var data NotifiedData
+
 	err = as.cache.Get(ctx, NotifiedKeyPrefix+"stream1", &data)
 	require.NoError(t, err)
 	assert.True(t, data.SentAt[5])
@@ -237,10 +248,10 @@ func TestMarkAsNotified_ScheduleChangeResetsMap(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	start1 := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
-	start2 := time.Date(2026, 3, 2, 11, 0, 0, 0, time.UTC)
+	start1 := time.Date(2026, time.March, 2, 10, 0, 0, 0, time.UTC)
+	start2 := time.Date(2026, time.March, 2, 11, 0, 0, 0, time.UTC)
 
 	// 첫 번째 스케줄
 	err := as.MarkAsNotified(ctx, "stream1", start1, 5)
@@ -251,6 +262,7 @@ func TestMarkAsNotified_ScheduleChangeResetsMap(t *testing.T) {
 	require.NoError(t, err)
 
 	var data NotifiedData
+
 	err = as.cache.Get(ctx, NotifiedKeyPrefix+"stream1", &data)
 	require.NoError(t, err)
 
@@ -274,7 +286,7 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	result := as.UpdateAlarmAdvanceMinutes(context.Background(), 20)
+	result := as.UpdateAlarmAdvanceMinutes(t.Context(), 20)
 
 	// 20, 3, 1이 정규화됨
 	assert.Contains(t, result, 20)
@@ -290,7 +302,7 @@ func TestCacheMemberName_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := as.CacheMemberName(ctx, "UC_TEST", "페코라")
 	require.NoError(t, err)
@@ -306,7 +318,7 @@ func TestSetRoomName(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := as.SetRoomName(ctx, "room1", "테스트 방")
 	require.NoError(t, err)
@@ -320,7 +332,7 @@ func TestSetUserName(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := as.SetUserName(ctx, "user1", "테스트 사용자")
 	require.NoError(t, err)
@@ -336,8 +348,10 @@ func TestGetAllAlarmKeys(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
 		RoomID:     "room1",
@@ -357,8 +371,10 @@ func TestGetDistinctRooms(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	_, _ = as.AddAlarm(ctx, domain.AddAlarmRequest{RoomID: "room1", ChannelID: "UC_A"})
 	_, _ = as.AddAlarm(ctx, domain.AddAlarmRequest{RoomID: "room2", ChannelID: "UC_B"})
@@ -373,7 +389,7 @@ func TestGetDistinctRooms(t *testing.T) {
 func TestAlarmServiceClose(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	cacheSvc := newTestCacheService(t, ctx)
 
 	svc, err := NewAlarmService(cacheSvc, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
@@ -382,6 +398,7 @@ func TestAlarmServiceClose(t *testing.T) {
 	// 두 번 호출해도 안전해야 함 (closeOnce)
 	err = svc.Close(ctx)
 	assert.NoError(t, err)
+
 	err = svc.Close(ctx)
 	assert.NoError(t, err)
 }
@@ -392,7 +409,7 @@ func TestWarmCacheFromDB_NilRepo(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// alarmRepo가 nil이면 스킵
 	err := as.WarmCacheFromDB(ctx)
@@ -413,7 +430,7 @@ func TestSubmitPersistTask_ClosedPool(t *testing.T) {
 	t.Parallel()
 
 	executor := newStripedExecutor(1, 1)
-	require.NoError(t, executor.ShutdownWait(context.Background()))
+	require.NoError(t, executor.ShutdownWait(t.Context()))
 
 	called := false
 	as := &AlarmService{

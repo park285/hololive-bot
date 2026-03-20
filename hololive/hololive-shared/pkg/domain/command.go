@@ -56,6 +56,12 @@ const (
 	CommandMemberNewsSubscription CommandType = "news_subscription"
 	// CommandMajorEvent: 대형 행사 알림 관리 명령어 (구독/해제/목록)
 	CommandMajorEvent CommandType = "major_event"
+	// CommandSettlementStatus: 정산 현황 조회 명령어
+	CommandSettlementStatus CommandType = "settlement_status"
+	// CommandSettlementPaid: 정산 완료 처리 명령어
+	CommandSettlementPaid CommandType = "settlement_paid"
+	// CommandSettlementRegister: 정산 멤버 등록 명령어
+	CommandSettlementRegister CommandType = "settlement_register"
 	// CommandUnknown: 인식할 수 없는 명령어
 	CommandUnknown CommandType = "unknown"
 )
@@ -71,7 +77,9 @@ func (c CommandType) IsValid() bool {
 		CommandAlarmAdd, CommandAlarmRemove, CommandAlarmList, CommandAlarmClear, CommandAlarmInvalid,
 		CommandMemberInfo, CommandStats, CommandSubscriber,
 		CommandMemberNews, CommandMemberNewsSubscription,
-		CommandMajorEvent, CommandUnknown:
+		CommandMajorEvent,
+		CommandSettlementStatus, CommandSettlementPaid, CommandSettlementRegister,
+		CommandUnknown:
 		return true
 	default:
 		return false

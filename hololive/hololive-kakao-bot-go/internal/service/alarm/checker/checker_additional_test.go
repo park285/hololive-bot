@@ -26,9 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
@@ -36,6 +33,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
@@ -51,6 +50,7 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		assert.Contains(t, err.Error(), "cache service is nil")
 
 		cacheSvc := newCheckerTestCacheClient(t)
+
 		_, err = NewChzzkChecker(cacheSvc, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "chzzk client is nil")
@@ -62,6 +62,7 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		assert.Contains(t, err.Error(), "cache service is nil")
 
 		cacheSvc := newCheckerTestCacheClient(t)
+
 		_, err = NewTwitchChecker(cacheSvc, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "twitch client is nil")
@@ -131,7 +132,7 @@ func TestCommonHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("clone stream deep copy", func(t *testing.T) {
-		now := time.Date(2026, 3, 5, 1, 0, 0, 0, time.UTC)
+		now := time.Date(2026, time.March, 5, 1, 0, 0, 0, time.UTC)
 		channel := &domain.Channel{ID: "ch1", Name: "name"}
 		stream := &domain.Stream{ID: "s1", StartScheduled: &now, StartActual: &now, Channel: channel}
 
@@ -146,8 +147,8 @@ func TestCommonHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("ensure scheduled time", func(t *testing.T) {
-		fallback := time.Date(2026, 3, 5, 1, 3, 45, 0, time.FixedZone("KST", 9*60*60))
-		actual := time.Date(2026, 3, 5, 1, 1, 30, 0, time.FixedZone("KST", 9*60*60))
+		fallback := time.Date(2026, time.March, 5, 1, 3, 45, 0, time.FixedZone("KST", 9*60*60))
+		actual := time.Date(2026, time.March, 5, 1, 1, 30, 0, time.FixedZone("KST", 9*60*60))
 
 		streamWithSchedule := &domain.Stream{StartScheduled: &fallback}
 		assert.Same(t, streamWithSchedule, ensureScheduledTime(streamWithSchedule, fallback))
@@ -159,6 +160,7 @@ func TestCommonHelperFunctions(t *testing.T) {
 		assert.Equal(t, actual.UTC(), *updated.StartScheduled)
 
 		streamWithoutTimes := &domain.Stream{}
+
 		updated = ensureScheduledTime(streamWithoutTimes, fallback)
 		require.NotNil(t, updated.StartScheduled)
 		assert.Equal(t, fallback.UTC().Truncate(time.Minute), *updated.StartScheduled)
@@ -188,6 +190,7 @@ func TestCommonHelperFunctions(t *testing.T) {
 
 	t.Run("safe logger", func(t *testing.T) {
 		require.NotNil(t, safeLogger(nil))
+
 		logger := newCheckerTestLogger()
 		assert.Same(t, logger, safeLogger(logger))
 	})
@@ -198,7 +201,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		cacheSvc := newCheckerTestCacheClient(t)
-		ctx := context.Background()
+		ctx := t.Context()
 
 		_, err := cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch1", []string{"room1", "room2"})
 		require.NoError(t, err)
@@ -210,7 +213,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		result, err := loadSubscriberRoomsByChannel(context.Background(), &cachemocks.Client{}, nil)
+		result, err := loadSubscriberRoomsByChannel(t.Context(), &cachemocks.Client{}, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
@@ -221,7 +224,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 				return nil, errors.New("smembers failed")
 			},
 		}
-		_, err := loadSubscriberRoomsByChannel(context.Background(), mockCache, []string{"ch1"})
+		_, err := loadSubscriberRoomsByChannel(t.Context(), mockCache, []string{"ch1"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "smembers channel ch1")
 	})
@@ -235,7 +238,7 @@ func TestChzzkHelperFunctions(t *testing.T) {
 	assert.True(t, isChzzkLive(&chzzk.LiveStatusContent{Status: "open"}))
 	assert.False(t, isChzzkLive(&chzzk.LiveStatusContent{Status: "CLOSE"}))
 
-	detected := time.Date(2026, 3, 5, 2, 4, 59, 0, time.UTC)
+	detected := time.Date(2026, time.March, 5, 2, 4, 59, 0, time.UTC)
 	assert.Equal(
 		t,
 		notification.ChzzkLiveNotifiedKeyPrefix+"chzzk1:20260305T0200",
@@ -257,6 +260,7 @@ func TestChzzkHelperFunctions(t *testing.T) {
 		LiveCategoryValue:   "게임",
 		ConcurrentUserCount: 777,
 	}
+
 	stream = buildChzzkLiveStream("yt2", "chzzk2", status, detected)
 	require.NotNil(t, stream.ViewerCount)
 	assert.Equal(t, 777, *stream.ViewerCount)
@@ -286,7 +290,7 @@ func TestTwitchHelperFunctions(t *testing.T) {
 
 	assert.Nil(t, buildTwitchLiveStream("yt", nil))
 
-	startedAt := time.Date(2026, 3, 5, 3, 0, 0, 0, time.UTC)
+	startedAt := time.Date(2026, time.March, 5, 3, 0, 0, 0, time.UTC)
 	stream := buildTwitchLiveStream("yt1", &twitch.StreamData{
 		ID:          "stream-1",
 		UserID:      "user-1",
@@ -327,7 +331,7 @@ func TestTwitchHelperFunctions(t *testing.T) {
 func TestTwitchBuildLiveNotifications(t *testing.T) {
 	t.Parallel()
 
-	startedAt := time.Date(2026, 3, 5, 4, 0, 0, 0, time.UTC)
+	startedAt := time.Date(2026, time.March, 5, 4, 0, 0, 0, time.UTC)
 	liveResponse := &twitch.StreamsResponse{
 		Data: []twitch.StreamData{
 			{
@@ -358,6 +362,7 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 					if setNXCalls == 1 {
 						return true, nil
 					}
+
 					return false, nil
 				},
 			},
@@ -365,7 +370,7 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 		}
 
 		notifications, err := checker.buildLiveNotifications(
-			context.Background(),
+			t.Context(),
 			map[string]string{"aqua": "ch1"},
 			map[string][]string{"ch1": {"room1", "room2"}},
 			liveResponse,
@@ -375,7 +380,7 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 		assert.ElementsMatch(t, []string{"room1", "room2"}, []string{notifications[0].RoomID, notifications[1].RoomID})
 
 		notifications, err = checker.buildLiveNotifications(
-			context.Background(),
+			t.Context(),
 			map[string]string{"aqua": "ch1"},
 			map[string][]string{"ch1": {"room1", "room2"}},
 			liveResponse,
@@ -395,7 +400,7 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 		}
 
 		_, err := checker.buildLiveNotifications(
-			context.Background(),
+			t.Context(),
 			map[string]string{"aqua": "ch1"},
 			map[string][]string{"ch1": {"room1"}},
 			liveResponse,
@@ -408,7 +413,7 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 func TestYouTubeHelperFunctions(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, 3, 5, 5, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.March, 5, 5, 0, 0, 0, time.UTC)
 
 	assert.Nil(t, resolveLiveStart(nil))
 
@@ -418,6 +423,7 @@ func TestYouTubeHelperFunctions(t *testing.T) {
 	assert.Equal(t, scheduled.UTC(), *start)
 
 	actual := now.Add(-2 * time.Minute)
+
 	start = resolveLiveStart(&domain.Stream{StartScheduled: &scheduled, StartActual: &actual})
 	require.NotNil(t, start)
 	assert.Equal(t, actual.UTC(), *start)
@@ -444,8 +450,8 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		logger:        newCheckerTestLogger(),
 	}
 
-	ctx := context.Background()
-	now := time.Date(2026, 3, 5, 6, 0, 0, 0, time.UTC)
+	ctx := t.Context()
+	now := time.Date(2026, time.March, 5, 6, 0, 0, 0, time.UTC)
 
 	t.Run("build upcoming notifications", func(t *testing.T) {
 		start := now.Add(5 * time.Minute)
@@ -463,11 +469,13 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
 		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
+
 		notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, now)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
 
 		nonTarget := now.Add(4 * time.Minute)
+
 		notifications, err = checker.buildUpcomingNotifications(ctx, &domain.Stream{
 			ID:             "upcoming-2",
 			Status:         domain.StreamStatusUpcoming,
@@ -494,24 +502,28 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		require.Len(t, notifications, 2)
 
 		require.NoError(t, dedupSvc.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
+
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 		require.NoError(t, err)
 		require.Len(t, notifications, 1)
 		assert.Equal(t, "room2", notifications[0].RoomID)
 
 		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 0))
+
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
 
 		oldStart := now.Add(-10 * time.Minute)
 		oldStream := &domain.Stream{ID: "live-old", Status: domain.StreamStatusLive, StartScheduled: &oldStart}
+
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", oldStream, []string{"room1"}, now)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
 
 		futureStart := now.Add(2 * time.Minute)
 		futureStream := &domain.Stream{ID: "live-future", Status: domain.StreamStatusLive, StartScheduled: &futureStart}
+
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", futureStream, []string{"room1"}, now)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
@@ -557,8 +569,8 @@ func TestNotifierReleaseClaimsBestEffort(t *testing.T) {
 	}
 
 	// error should be swallowed as best-effort path.
-	notifier.releaseClaimsBestEffort(context.Background(), []string{"claim-1"}, "release failed")
-	notifier.releaseClaimsBestEffort(context.Background(), nil, "release failed")
+	notifier.releaseClaimsBestEffort(t.Context(), []string{"claim-1"}, "release failed")
+	notifier.releaseClaimsBestEffort(t.Context(), nil, "release failed")
 }
 
 var _ cache.Client = (*cachemocks.Client)(nil)

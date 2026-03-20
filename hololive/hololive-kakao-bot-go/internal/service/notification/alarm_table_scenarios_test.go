@@ -25,10 +25,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
@@ -78,8 +77,11 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			name: "add 알람 타입 지정 시 타입별 subscriber 키를 정확히 갱신한다",
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
+
 				req := baseReq
+
 				req.AlarmTypes = domain.AlarmTypes{domain.AlarmTypeCommunity}
+
 				return svc.AddAlarm(ctx, req)
 			},
 			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
@@ -103,6 +105,7 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			name: "duplicate add는 false를 반환하고 channel set 크기를 유지한다",
 			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
 				t.Helper()
+
 				added, err := svc.AddAlarm(ctx, baseReq)
 				require.NoError(t, err)
 				require.True(t, added)
@@ -124,11 +127,13 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			name: "다중 채널 구독에서 한 채널 제거 시 room registry와 나머지 채널 구독은 유지된다",
 			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
 				t.Helper()
+
 				added, err := svc.AddAlarm(ctx, baseReq)
 				require.NoError(t, err)
 				require.True(t, added)
 
 				secondReq := baseReq
+
 				secondReq.ChannelID = "UC_TEST_2"
 				secondReq.MemberName = "두번째 멤버"
 				added, err = svc.AddAlarm(ctx, secondReq)
@@ -161,6 +166,7 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			name: "remove existing alarm은 room 알람과 registry를 정리한다",
 			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
 				t.Helper()
+
 				added, err := svc.AddAlarm(ctx, baseReq)
 				require.NoError(t, err)
 				require.True(t, added)
@@ -196,13 +202,14 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 	}
 
 	for _, tc := range scenarios {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			svc := newTestAlarmService(t)
+
 			svc.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
-			ctx := context.Background()
+
+			ctx := t.Context()
 
 			if tc.seed != nil {
 				tc.seed(t, svc, ctx)
@@ -223,7 +230,7 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 		run  func(t *testing.T, svc *AlarmService, ctx context.Context)
 	}
 
-	roundTripStart := time.Date(2026, 3, 5, 11, 25, 42, 0, time.UTC)
+	roundTripStart := time.Date(2026, time.March, 5, 11, 25, 42, 0, time.UTC)
 
 	scenarios := []scenario{
 		{
@@ -244,7 +251,8 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 			name: "MarkAsNotified는 스케줄 변경 시 이전 SentAt 맵을 초기화한다",
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) {
 				t.Helper()
-				firstStart := time.Date(2026, 3, 5, 11, 25, 42, 0, time.UTC)
+
+				firstStart := time.Date(2026, time.March, 5, 11, 25, 42, 0, time.UTC)
 				secondStart := firstStart.Add(7 * time.Minute)
 
 				require.NoError(t, svc.MarkAsNotified(ctx, "stream-reset", firstStart, 5))
@@ -261,6 +269,7 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 			name: "UpcomingEvent roundtrip은 TTL 윈도우 내 true, 즉시 만료 설정 시 false",
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) {
 				t.Helper()
+
 				start := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Minute)
 				stream := &domain.Stream{
 					ID:             "stream-upcoming",
@@ -277,12 +286,11 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 	}
 
 	for _, tc := range scenarios {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			svc := newTestAlarmService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 			tc.run(t, svc, ctx)
 		})
 	}

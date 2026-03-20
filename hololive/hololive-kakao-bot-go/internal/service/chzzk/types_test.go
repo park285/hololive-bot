@@ -21,13 +21,14 @@
 package chzzk
 
 import (
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"os"
 	"testing"
 	"time"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// TestLiveStatusResponse_Unmarshal: LiveStatusResponse JSON 파싱 테스트
+// TestLiveStatusResponse_Unmarshal: LiveStatusResponse JSON 파싱 테스트.
 func TestLiveStatusResponse_Unmarshal(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -78,17 +79,17 @@ func TestLiveStatusResponse_Unmarshal(t *testing.T) {
 			}
 
 			if tt.wantNil && resp.Content != nil {
-				t.Errorf("Content should be nil for 404")
+				t.Error("Content should be nil for 404")
 			}
 
 			if !tt.wantNil && resp.Content == nil {
-				t.Errorf("Content should not be nil")
+				t.Error("Content should not be nil")
 			}
 		})
 	}
 }
 
-// TestLiveStatusContent_Fields: LiveStatusContent 필드 검증
+// TestLiveStatusContent_Fields: LiveStatusContent 필드 검증.
 func TestLiveStatusContent_Fields(t *testing.T) {
 	data, err := os.ReadFile("testdata/live_status_open.json")
 	if err != nil {
@@ -122,7 +123,7 @@ func TestLiveStatusContent_Fields(t *testing.T) {
 	}
 }
 
-// TestScheduledLivesResponse_Unmarshal: ScheduledLivesResponse JSON 파싱 테스트
+// TestScheduledLivesResponse_Unmarshal: ScheduledLivesResponse JSON 파싱 테스트.
 func TestScheduledLivesResponse_Unmarshal(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -171,7 +172,7 @@ func TestScheduledLivesResponse_Unmarshal(t *testing.T) {
 	}
 }
 
-// TestScheduledLive_Fields: ScheduledLive 필드 검증
+// TestScheduledLive_Fields: ScheduledLive 필드 검증.
 func TestScheduledLive_Fields(t *testing.T) {
 	data, err := os.ReadFile("testdata/scheduled_lives.json")
 	if err != nil {
@@ -201,7 +202,7 @@ func TestScheduledLive_Fields(t *testing.T) {
 	}
 }
 
-// TestParseScheduledStartAt: 시간 파싱 함수 테스트
+// TestParseScheduledStartAt: 시간 파싱 함수 테스트.
 func TestParseScheduledStartAt(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -290,7 +291,7 @@ func TestParseScheduledStartAt(t *testing.T) {
 	}
 }
 
-// TestParseScheduledStartAt_TimeZone: KST 타임존 정확성 테스트
+// TestParseScheduledStartAt_TimeZone: KST 타임존 정확성 테스트.
 func TestParseScheduledStartAt_TimeZone(t *testing.T) {
 	parsed, err := ParseScheduledStartAt("2024-05-20 19:00:00")
 	if err != nil {

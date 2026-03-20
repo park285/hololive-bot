@@ -30,7 +30,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// ResponseFormatter: 봇의 응답 메시지를 생성하는 포맷터 (카카오톡 UI 템플릿 적용)
+// ResponseFormatter: 봇의 응답 메시지를 생성하는 포맷터 (카카오톡 UI 템플릿 적용).
 type ResponseFormatter struct {
 	prefix   string
 	renderer *template.Renderer
@@ -41,22 +41,25 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 	if err != nil {
 		return "", fmt.Errorf("render template %s: %w", key, err)
 	}
+
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-func splitTemplateInstruction(rendered string) (instruction string, body string) {
+func splitTemplateInstruction(rendered string) (instruction, body string) {
 	trimmed := strings.TrimLeft(rendered, "\r\n")
 	if trimmed == "" {
 		return "", ""
 	}
 
 	parts := strings.SplitN(trimmed, "\n", 2)
+
 	instruction = stringutil.TrimSpace(strings.TrimSuffix(parts[0], "\r"))
 	if len(parts) < 2 {
 		return instruction, ""
 	}
 
 	body = strings.TrimLeft(parts[1], "\r\n")
+
 	return instruction, body
 }
 
@@ -65,6 +68,7 @@ func NewResponseFormatter(prefix string, renderer *template.Renderer) *ResponseF
 	if stringutil.TrimSpace(prefix) == "" {
 		prefix = "!"
 	}
+
 	return &ResponseFormatter{prefix: prefix, renderer: renderer}
 }
 
@@ -73,9 +77,11 @@ func (f *ResponseFormatter) Prefix() string {
 	if f == nil {
 		return "!"
 	}
+
 	if trimmed := stringutil.TrimSpace(f.prefix); trimmed != "" {
 		return trimmed
 	}
+
 	return "!"
 }
 

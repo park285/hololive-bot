@@ -21,6 +21,7 @@
 package app
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -36,10 +37,12 @@ import (
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
 func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
+
 	router := gin.New()
 	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("failed to set trusted proxies: %w", err)
 	}
+
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	router.Use(gin.Recovery())
@@ -65,8 +68,9 @@ func ProvideTriggerRouter(ctx context.Context, logger *slog.Logger, triggerHandl
 
 	if triggerHandler != nil {
 		if strings.TrimSpace(apiKey) == "" {
-			return nil, fmt.Errorf("API_SECRET_KEY required")
+			return nil, errors.New("API_SECRET_KEY required")
 		}
+
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
 	}
 
@@ -83,10 +87,12 @@ func ProvideBotRouter(
 	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
+
 	router := gin.New()
 	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("failed to set trusted proxies: %w", err)
 	}
+
 	router.TrustedPlatform = gin.PlatformCloudflare
 
 	router.Use(gin.Recovery())
@@ -108,8 +114,9 @@ func ProvideBotRouter(
 	// 내부 트리거 라우트 (운영 API에서 내부 호출)
 	if triggerHandler != nil {
 		if strings.TrimSpace(cfg.Server.APIKey) == "" {
-			return nil, fmt.Errorf("API_SECRET_KEY required")
+			return nil, errors.New("API_SECRET_KEY required")
 		}
+
 		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
 	}
 

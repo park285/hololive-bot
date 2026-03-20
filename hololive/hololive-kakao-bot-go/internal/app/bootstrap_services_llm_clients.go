@@ -38,6 +38,7 @@ func resolveLLMSchedulerClients(
 		logger.Warn("LLM scheduler URL not configured; majorevent/membernews commands disabled",
 			slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"),
 		)
+
 		return nil, nil
 	}
 

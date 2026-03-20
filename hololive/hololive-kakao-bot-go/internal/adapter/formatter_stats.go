@@ -33,6 +33,7 @@ import (
 func (f *ResponseFormatter) FormatStatsTopGainers(periodLabel string, gainers []domain.RankEntry) string {
 	trimmedPeriod := stringutil.TrimSpace(periodLabel)
 	instruction := fmt.Sprintf("%s %s", DefaultEmoji.Stats, MsgStatsGainersHeader)
+
 	if trimmedPeriod != "" {
 		instruction = fmt.Sprintf("%s (%s)", instruction, trimmedPeriod)
 	}
@@ -44,18 +45,22 @@ func (f *ResponseFormatter) FormatStatsTopGainers(periodLabel string, gainers []
 	for _, entry := range gainers {
 		fmt.Fprintf(&builder, "%d위. %s\n", entry.Rank, entry.MemberName)
 		fmt.Fprintf(&builder, "    +%s명", util.FormatKoreanNumber(entry.Value))
+
 		if entry.CurrentSubscribers > 0 {
 			fmt.Fprintf(&builder, " (현재 %s명)", util.FormatKoreanNumber(int64(entry.CurrentSubscribers)))
 		}
+
 		builder.WriteString("\n\n")
 	}
 
 	content := stringutil.TrimSpace(builder.String())
+
 	return util.ApplyKakaoSeeMorePadding(stringutil.StripLeadingHeader(content, instruction), instruction)
 }
 
 func (f *ResponseFormatter) FormatSubscriberCount(memberName string, subscribers uint64) string {
 	formattedSubs := util.FormatKoreanNumber(int64(subscribers))
+
 	return fmt.Sprintf("%s %s\n\n%s 현재 구독자: %s명",
 		DefaultEmoji.Member,
 		memberName,
@@ -99,9 +104,11 @@ func writeSubscriberGraphChange(builder *strings.Builder, label string, value in
 	}
 
 	sign := "+"
+
 	if value < 0 {
 		sign = ""
 	}
+
 	fmt.Fprintf(builder, "%s: %s%s명\n", label, sign, util.FormatKoreanNumber(value))
 }
 
@@ -117,24 +124,29 @@ func generateSparkline(values []int64, width int) string {
 		if value < minVal {
 			minVal = value
 		}
+
 		if value > maxVal {
 			maxVal = value
 		}
 	}
 
 	sparkChars := []rune(" ▁▂▃▄▅▆▇█")
+
 	rangeVal := maxVal - minVal
 	if rangeVal == 0 {
 		rangeVal = 1
 	}
 
 	var result strings.Builder
+
 	for _, value := range values {
 		normalized := float64(value-minVal) / float64(rangeVal)
+
 		idx := int(normalized * float64(len(sparkChars)-1))
 		if idx >= len(sparkChars) {
 			idx = len(sparkChars) - 1
 		}
+
 		result.WriteRune(sparkChars[idx])
 	}
 
@@ -147,12 +159,14 @@ func downsampleSparklineValues(values []int64, width int) []int64 {
 	}
 
 	step := float64(len(values)) / float64(width)
+
 	sampled := make([]int64, width)
 	for i := range width {
 		idx := int(float64(i) * step)
 		if idx >= len(values) {
 			idx = len(values) - 1
 		}
+
 		sampled[i] = values[idx]
 	}
 

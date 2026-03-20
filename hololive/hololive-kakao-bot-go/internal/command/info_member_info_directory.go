@@ -32,6 +32,7 @@ import (
 
 func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *domain.CommandContext) error {
 	provider := c.Deps().MembersData.WithContext(ctx)
+
 	activeMembers := c.filterActiveMembers(provider.GetAllMembers())
 	if len(activeMembers) == 0 {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrNoMemberInfoFound)
@@ -43,6 +44,7 @@ func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *d
 	}
 
 	ordered := c.sortGroupsByPreference(groupEntries)
+
 	message := c.Deps().Formatter.MemberDirectory(ctx, ordered, len(activeMembers))
 	if stringutil.TrimSpace(message) == "" {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrCannotDisplayMemberInfo)
@@ -58,6 +60,7 @@ func (c *MemberInfoCommand) filterActiveMembers(members []*domain.Member) []*dom
 			activeMembers = append(activeMembers, member)
 		}
 	}
+
 	return activeMembers
 }
 
@@ -83,6 +86,7 @@ func (c *MemberInfoCommand) buildGroupEntries(ctx context.Context, members []*do
 			if groupEntries[group] == nil {
 				groupEntries[group] = make(map[string]adapter.MemberDirectoryEntry)
 			}
+
 			groupEntries[group][member.Name] = entry
 		}
 	}
@@ -107,6 +111,7 @@ func (c *MemberInfoCommand) sortGroupsByPreference(groupEntries map[string]map[s
 			remaining = append(remaining, name)
 		}
 	}
+
 	slices.Sort(remaining)
 
 	for _, name := range remaining {
@@ -121,15 +126,19 @@ func buildMemberDirectoryGroup(groupName string, entries map[string]adapter.Memb
 	for _, entry := range entries {
 		list = append(list, entry)
 	}
+
 	slices.SortStableFunc(list, func(a, b adapter.MemberDirectoryEntry) int {
 		if a.PrimaryName < b.PrimaryName {
 			return -1
 		}
+
 		if a.PrimaryName > b.PrimaryName {
 			return 1
 		}
+
 		return 0
 	})
+
 	return adapter.MemberDirectoryGroup{
 		GroupName: groupName,
 		Members:   list,

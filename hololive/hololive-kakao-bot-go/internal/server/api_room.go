@@ -25,6 +25,8 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 )
 
 // GetRooms: 설정된 방 목록을 반환합니다.
@@ -33,15 +35,17 @@ func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
 		c.JSON(503, gin.H{"error": "ACL service not available"})
 		return
 	}
-	aclEnabled, rooms := h.acl.GetACLStatus()
+
+	aclEnabled, mode, rooms := h.acl.GetACLStatus()
 	c.JSON(200, gin.H{
 		"status":     "ok",
 		"rooms":      rooms,
 		"aclEnabled": aclEnabled,
+		"aclMode":    string(mode),
 	})
 }
 
-// AddRoom: 화이트리스트에 새로운 방을 추가합니다.
+// AddRoom: 현재 활성 모드의 ACL 목록에 새로운 방을 추가합니다.
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
@@ -57,14 +61,17 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
+
 		return
 	}
 
 	ctx := c.Request.Context()
+
 	added, err := h.acl.AddRoom(ctx, req.Room)
 	if err != nil {
 		h.logger.Error("Failed to add room", slog.String("room", req.Room), slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to add room"})
+
 		return
 	}
 
@@ -78,10 +85,10 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 		"message": "Room added successfully",
 	})
 
-	h.activity.Log("room_add", "Room added to whitelist: "+req.Room, map[string]any{"room": req.Room})
+	h.activity.Log("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
-// RemoveRoom: 화이트리스트에서 방을 제거합니다.
+// RemoveRoom: 현재 활성 모드의 ACL 목록에서 방을 제거합니다.
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
@@ -97,16 +104,20 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
+
 		return
 	}
 
 	ctx := c.Request.Context()
+
 	removed, err := h.acl.RemoveRoom(ctx, req.Room)
 	if err != nil {
 		h.logger.Error("Failed to remove room", slog.String("room", req.Room), slog.Any("error", err))
 		c.JSON(500, gin.H{"error": "Failed to remove room"})
+
 		return
 	}
+
 	if !removed {
 		c.JSON(404, gin.H{"error": "Room not found"})
 		return
@@ -117,10 +128,10 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 		"message": "Room removed successfully",
 	})
 
-	h.activity.Log("room_remove", "Room removed from whitelist: "+req.Room, map[string]any{"room": req.Room})
+	h.activity.Log("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
-// SetACL: 방 ACL을 활성화 또는 비활성화합니다.
+// SetACL: 방 ACL을 활성화/비활성화하거나 모드를 변경합니다.
 func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	if h.acl == nil {
 		c.JSON(503, gin.H{"error": "ACL service not available"})
@@ -128,28 +139,54 @@ func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	}
 
 	var req struct {
-		Enabled bool `json:"enabled"`
+		Enabled *bool   `json:"enabled"`
+		Mode    *string `json:"mode"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
 		c.JSON(400, gin.H{"error": "invalid request body"})
+
+		return
+	}
+
+	if req.Enabled == nil && req.Mode == nil {
+		c.JSON(400, gin.H{"error": "at least one of 'enabled' or 'mode' must be provided"})
 		return
 	}
 
 	ctx := c.Request.Context()
-	if err := h.acl.SetEnabled(ctx, req.Enabled); err != nil {
-		h.logger.Error("Failed to set ACL", slog.Bool("enabled", req.Enabled), slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to set ACL"})
-		return
+
+	// enabled 변경
+	if req.Enabled != nil {
+		if err := h.acl.SetEnabled(ctx, *req.Enabled); err != nil {
+			h.logger.Error("Failed to set ACL enabled", slog.Bool("enabled", *req.Enabled), slog.Any("error", err))
+			c.JSON(500, gin.H{"error": "Failed to set ACL enabled"})
+
+			return
+		}
 	}
 
-	h.logger.Info("Room ACL updated", slog.Bool("enabled", req.Enabled))
+	// mode 변경
+	if req.Mode != nil {
+		mode := acl.ParseACLMode(*req.Mode)
+		if err := h.acl.SetMode(ctx, mode); err != nil {
+			h.logger.Error("Failed to set ACL mode", slog.String("mode", *req.Mode), slog.Any("error", err))
+			c.JSON(500, gin.H{"error": "Failed to set ACL mode"})
 
-	h.activity.Log("acl_update", fmt.Sprintf("Room ACL state changed to %v", req.Enabled), map[string]any{"enabled": req.Enabled})
+			return
+		}
+	}
+
+	// 최종 상태 조회
+	enabled, mode, _ := h.acl.GetACLStatus()
+	h.logger.Info("Room ACL updated", slog.Bool("enabled", enabled), slog.String("mode", string(mode)))
+
+	h.activity.Log("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s", enabled, mode), map[string]any{"enabled": enabled, "mode": string(mode)})
 	c.JSON(200, gin.H{
 		"status":  "ok",
 		"message": "ACL setting updated successfully",
-		"enabled": req.Enabled,
+		"enabled": enabled,
+		"mode":    string(mode),
 	})
 }

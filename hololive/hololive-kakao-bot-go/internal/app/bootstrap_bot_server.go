@@ -21,6 +21,7 @@
 package app
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -38,7 +39,7 @@ import (
 
 // buildBotServer: Bot HTTP 서버를 구성합니다.
 // - AdminEnabled=true: webhook + trigger + health + admin API
-// - AdminEnabled=false: webhook + trigger + health
+// - AdminEnabled=false: webhook + trigger + health.
 func buildBotServer(
 	ctx context.Context,
 	cfg *config.Config,
@@ -55,8 +56,9 @@ func buildBotServer(
 
 	if cfg.Bot.AdminEnabled {
 		if adminDeps == nil || adminDeps.domainHandlers == nil || adminDeps.authHandler == nil {
-			return nil, fmt.Errorf("build bot server: admin routes enabled but dependencies are incomplete")
+			return nil, errors.New("build bot server: admin routes enabled but dependencies are incomplete")
 		}
+
 		botRouter, err = ProvideAPIRouter(
 			ctx,
 			cfg,
@@ -79,8 +81,9 @@ func buildBotServer(
 
 	if alarmCRUD != nil {
 		if strings.TrimSpace(cfg.Server.APIKey) == "" {
-			return nil, fmt.Errorf("build bot server: internal alarm API requires API_SECRET_KEY")
+			return nil, errors.New("build bot server: internal alarm API requires API_SECRET_KEY")
 		}
+
 		alarmAPI := alarmsvc.NewAPIHandler(alarmCRUD, logger)
 		internalAlarmGroup := botRouter.Group("")
 		internalAlarmGroup.Use(middleware.APIKeyAuthMiddleware(cfg.Server.APIKey))
@@ -88,5 +91,6 @@ func buildBotServer(
 	}
 
 	addr := ProvideAPIAddr(cfg)
+
 	return ProvideAPIServer(addr, botRouter), nil
 }

@@ -21,28 +21,26 @@
 package checker
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"net"
 	"strconv"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
-
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 func newCheckerTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	t.Helper()
 
 	mini := miniredis.RunT(t)
+
 	host, rawPort, err := net.SplitHostPort(mini.Addr())
 	if err != nil {
 		t.Fatalf("SplitHostPort() error = %v", err)
@@ -54,7 +52,7 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	}
 
 	cacheSvc, err := cache.NewCacheService(
-		context.Background(),
+		t.Context(),
 		cache.Config{
 			Host:         host,
 			Port:         port,
@@ -90,8 +88,9 @@ func newCheckerTestAlarmService(t *testing.T, cacheSvc cache.Client) *notificati
 	if err != nil {
 		t.Fatalf("NewAlarmService() error = %v", err)
 	}
+
 	t.Cleanup(func() {
-		_ = alarmSvc.Close(context.Background())
+		_ = alarmSvc.Close(t.Context())
 	})
 
 	return alarmSvc

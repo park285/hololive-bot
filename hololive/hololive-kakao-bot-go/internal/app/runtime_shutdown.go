@@ -39,6 +39,7 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 	if err := r.ShutdownHTTPServer(ctx); err != nil {
 		r.logError("HTTP server shutdown error", err)
 	}
+
 	if r.webhookHandlerCloser != nil {
 		if err := r.webhookHandlerCloser.Close(); err != nil {
 			r.logError("Iris webhook handler shutdown error", err)
@@ -46,11 +47,13 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 			r.logInfo("Iris webhook handler stopped")
 		}
 	}
+
 	if err := notification.CloseAllAlarmServices(ctx); err != nil {
 		r.logError("Alarm service shutdown error", err)
 	} else {
 		r.logInfo("Alarm services stopped")
 	}
+
 	if r.Bot != nil {
 		if err := r.Bot.Shutdown(ctx); err != nil {
 			r.logError("Error during shutdown", err)

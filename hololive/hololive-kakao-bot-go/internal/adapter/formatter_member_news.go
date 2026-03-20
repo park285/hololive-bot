@@ -73,10 +73,12 @@ func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) strin
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsNoMembers
 	}
+
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNoMembers, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
 		return MsgMemberNewsNoMembers
 	}
+
 	return message
 }
 
@@ -85,10 +87,12 @@ func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) stri
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsSubscribed
 	}
+
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsSubscribed, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
 		return MsgMemberNewsSubscribed
 	}
+
 	return message
 }
 
@@ -97,10 +101,12 @@ func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Contex
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsAlreadySubscribed
 	}
+
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsAlreadySub, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
 		return MsgMemberNewsAlreadySubscribed
 	}
+
 	return message
 }
 
@@ -109,10 +115,12 @@ func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) st
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsUnsubscribed
 	}
+
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsUnsubscribed, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
 		return MsgMemberNewsUnsubscribed
 	}
+
 	return message
 }
 
@@ -121,10 +129,12 @@ func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) s
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsNotSubscribed
 	}
+
 	message, err := f.render(ctx, domain.TemplateKeyCmdMemberNewsNotSub, memberNewsSubscriptionTemplateData{Emoji: DefaultEmoji, Prefix: f.prefix})
 	if err != nil {
 		return MsgMemberNewsNotSubscribed
 	}
+
 	return message
 }
 
@@ -134,6 +144,7 @@ func (f *ResponseFormatter) FormatMemberNewsStatus(ctx context.Context, isSubscr
 		if isSubscribed {
 			return MsgMemberNewsStatusOn
 		}
+
 		return MsgMemberNewsStatusOff
 	}
 
@@ -146,8 +157,10 @@ func (f *ResponseFormatter) FormatMemberNewsStatus(ctx context.Context, isSubscr
 		if isSubscribed {
 			return MsgMemberNewsStatusOn
 		}
+
 		return MsgMemberNewsStatusOff
 	}
+
 	return message
 }
 
@@ -158,6 +171,7 @@ func localizeMemberNewsItems(items []membernewscontracts.SummaryItem) []memberne
 
 	localized := make([]membernewscontracts.SummaryItem, len(items))
 	copy(localized, items)
+
 	for i := range localized {
 		localized[i].Category = memberNewsCategoryLabel(localized[i].Category)
 	}

@@ -28,8 +28,10 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
-const channelStatsCacheWorkers = sharedserver.DefaultChannelStatsCacheWorkers
-const channelStatsRefreshWorkers = sharedserver.DefaultChannelStatsRefreshWorkers
+const (
+	channelStatsCacheWorkers   = sharedserver.DefaultChannelStatsCacheWorkers
+	channelStatsRefreshWorkers = sharedserver.DefaultChannelStatsRefreshWorkers
+)
 
 func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 	return &sharedserver.StreamHandler{
@@ -56,7 +58,7 @@ func (h *StreamAPIHandler) GetUpcomingStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetUpcomingStreams(c)
 }
 
-// GetChannelStats: 채널 통계를 반환합니다. (SWR 패턴: 캐시 → DB → 백그라운드 갱신)
+// GetChannelStats: 채널 통계를 반환합니다. (SWR 패턴: 캐시 → DB → 백그라운드 갱신).
 func (h *StreamAPIHandler) GetChannelStats(c *gin.Context) {
 	h.sharedStreamHandler().GetChannelStats(c)
 }
@@ -66,6 +68,7 @@ func (h *StreamAPIHandler) getActiveMemberIndex(ctx context.Context) ([]string, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("get active member index: %w", err)
 	}
+
 	return ids, names, nil
 }
 

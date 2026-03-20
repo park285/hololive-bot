@@ -21,16 +21,14 @@
 package adapter
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatMajorEventCommandMessages(t *testing.T) {
@@ -48,7 +46,7 @@ func TestFormatMajorEventCommandMessages(t *testing.T) {
 	})
 	formatter := NewResponseFormatter("!", renderer)
 
-	start := time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC)
+	start := time.Date(2026, time.March, 8, 0, 0, 0, 0, time.UTC)
 	events := []domain.MajorEvent{{
 		Title:          "EXPO",
 		EventStartDate: &start,
@@ -57,19 +55,19 @@ func TestFormatMajorEventCommandMessages(t *testing.T) {
 		Link:           "https://example.com/expo",
 	}}
 
-	weekly := formatter.FormatMajorEventWeeklySummary(context.Background(), events, "")
+	weekly := formatter.FormatMajorEventWeeklySummary(t.Context(), events, "")
 	assert.Contains(t, weekly, "주간 행사")
 	assert.Contains(t, weekly, "EXPO")
 	assert.Contains(t, weekly, "https://example.com/expo")
 	assert.Equal(t, util.KakaoSeeMorePadding, strings.Count(weekly, util.KakaoZeroWidthSpace))
 
-	assert.Equal(t, "구독완료 !", formatter.FormatMajorEventSubscribed(context.Background()))
-	assert.Equal(t, "구독해제", formatter.FormatMajorEventUnsubscribed(context.Background()))
-	assert.Equal(t, "이미구독", formatter.FormatMajorEventAlreadySubscribed(context.Background()))
-	assert.Equal(t, "미구독 !", formatter.FormatMajorEventNotSubscribed(context.Background()))
-	assert.Equal(t, "상태 ON", formatter.FormatMajorEventStatus(context.Background(), true))
-	assert.Equal(t, "상태 OFF", formatter.FormatMajorEventStatus(context.Background(), false))
-	assert.Equal(t, "사용법 !행사알림", formatter.FormatMajorEventUsage(context.Background()))
+	assert.Equal(t, "구독완료 !", formatter.FormatMajorEventSubscribed(t.Context()))
+	assert.Equal(t, "구독해제", formatter.FormatMajorEventUnsubscribed(t.Context()))
+	assert.Equal(t, "이미구독", formatter.FormatMajorEventAlreadySubscribed(t.Context()))
+	assert.Equal(t, "미구독 !", formatter.FormatMajorEventNotSubscribed(t.Context()))
+	assert.Equal(t, "상태 ON", formatter.FormatMajorEventStatus(t.Context(), true))
+	assert.Equal(t, "상태 OFF", formatter.FormatMajorEventStatus(t.Context(), false))
+	assert.Equal(t, "사용법 !행사알림", formatter.FormatMajorEventUsage(t.Context()))
 }
 
 func TestFormatMajorEventCommandMessages_Fallback(t *testing.T) {
@@ -78,12 +76,12 @@ func TestFormatMajorEventCommandMessages_Fallback(t *testing.T) {
 	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
 	want := ErrorMessage(ErrDisplayMajorEventFailed)
 
-	assert.Equal(t, want, formatter.FormatMajorEventSubscribed(context.Background()))
-	assert.Equal(t, want, formatter.FormatMajorEventUnsubscribed(context.Background()))
-	assert.Equal(t, want, formatter.FormatMajorEventAlreadySubscribed(context.Background()))
-	assert.Equal(t, want, formatter.FormatMajorEventNotSubscribed(context.Background()))
-	assert.Equal(t, want, formatter.FormatMajorEventStatus(context.Background(), true))
-	assert.Equal(t, want, formatter.FormatMajorEventUsage(context.Background()))
+	assert.Equal(t, want, formatter.FormatMajorEventSubscribed(t.Context()))
+	assert.Equal(t, want, formatter.FormatMajorEventUnsubscribed(t.Context()))
+	assert.Equal(t, want, formatter.FormatMajorEventAlreadySubscribed(t.Context()))
+	assert.Equal(t, want, formatter.FormatMajorEventNotSubscribed(t.Context()))
+	assert.Equal(t, want, formatter.FormatMajorEventStatus(t.Context(), true))
+	assert.Equal(t, want, formatter.FormatMajorEventUsage(t.Context()))
 }
 
 func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {

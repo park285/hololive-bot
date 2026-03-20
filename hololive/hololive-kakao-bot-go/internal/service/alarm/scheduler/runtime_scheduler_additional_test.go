@@ -23,16 +23,14 @@ package scheduler
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/alarm/checker"
 )
@@ -45,6 +43,7 @@ func (r *runnerFunc) Check(ctx context.Context) ([]*domain.AlarmNotification, er
 	if r.check == nil {
 		return nil, nil
 	}
+
 	return r.check(ctx)
 }
 
@@ -56,11 +55,12 @@ func (s *senderFunc) Send(ctx context.Context, notifications []*domain.AlarmNoti
 	if s.send == nil {
 		return checker.SendResult{}, nil
 	}
+
 	return s.send(ctx, notifications)
 }
 
 func testSchedulerLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestNormalizeTargetMinutes(t *testing.T) {
@@ -77,7 +77,6 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.expected, normalizeTargetMinutes(tc.input))
@@ -113,7 +112,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 			logger:   testSchedulerLogger(),
 		}
 
-		err := s.runYouTubeIteration(context.Background())
+		err := s.runYouTubeIteration(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "run youtube iteration: check notifications")
 	})
@@ -133,7 +132,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		err := s.runYouTubeIteration(context.Background())
+		err := s.runYouTubeIteration(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dispatch notifications: send notifications")
 	})
@@ -155,7 +154,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		require.NoError(t, s.runChzzkIteration(context.Background()))
+		require.NoError(t, s.runChzzkIteration(t.Context()))
 		assert.Equal(t, int32(1), sent.Load())
 	})
 
@@ -176,7 +175,7 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		require.NoError(t, s.runTwitchIteration(context.Background()))
+		require.NoError(t, s.runTwitchIteration(t.Context()))
 		assert.Equal(t, int32(0), sent.Load())
 	})
 }
@@ -185,15 +184,17 @@ func TestRuntimeSchedulerRunLoop_StopsOnContextCancel(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
+
 	s := &RuntimeScheduler{
 		logger: testSchedulerLogger(),
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
+
 		s.runLoop(ctx, "test", 10*time.Millisecond, 50*time.Millisecond, func(context.Context) error {
 			calls.Add(1)
 			return errors.New("expected failure branch")

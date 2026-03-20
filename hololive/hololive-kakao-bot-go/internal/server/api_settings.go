@@ -28,6 +28,7 @@ import (
 
 func (h *SettingsAPIHandler) sharedSettingsHandler() *sharedsettings.SettingsHandler {
 	var publisher sharedsettings.ConfigPublisher
+
 	if h.valkeyCache != nil {
 		publisher = configsub.NewPublisher(h.valkeyCache.GetClient())
 	}

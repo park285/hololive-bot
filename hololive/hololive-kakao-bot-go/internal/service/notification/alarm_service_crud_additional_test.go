@@ -24,14 +24,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cacheSvc := newTestCacheService(t, ctx)
 
 	svc, err := NewAlarmService(
@@ -53,8 +52,9 @@ func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
 }
 
 func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
 			{
@@ -120,8 +120,9 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 }
 
 func TestAlarmService_ClearRoomAlarms(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	as := newTestAlarmService(t)
+
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
 			{ChannelID: "ch-1", Name: "A", ChzzkChannelID: "chzzk-1", TwitchUserID: "a_live"},
@@ -178,12 +179,15 @@ func assertPlatformMappings(t *testing.T, as *AlarmService, ctx context.Context,
 
 	twitchMap, err := as.cache.HGetAll(ctx, TwitchLoginMapKey)
 	require.NoError(t, err)
+
 	if wantTwitchLogin == "" {
 		for _, mappedChannelID := range twitchMap {
 			assert.NotEqual(t, channelID, mappedChannelID)
 		}
+
 		return
 	}
+
 	assert.Equal(t, channelID, twitchMap[wantTwitchLogin])
 }
 
@@ -196,5 +200,5 @@ func TestAlarmService_SubmitPersistTaskAndWarmCache_NoRepository(t *testing.T) {
 	})
 	assert.False(t, called)
 
-	require.NoError(t, as.WarmCacheFromDB(context.Background()))
+	require.NoError(t, as.WarmCacheFromDB(t.Context()))
 }

@@ -56,7 +56,7 @@ func TestMessageBuilderMemberHeaderAndJoinNames(t *testing.T) {
 	assert.Equal(t, "📘 사쿠라 미코", builder.MemberHeader([]string{"사쿠라 미코"}))
 	assert.Equal(t, "📘 사쿠라 미코 (호시마치 스이세이 / 시라카미 후부키)", builder.MemberHeader([]string{"사쿠라 미코", "호시마치 스이세이", "시라카미 후부키"}))
 
-	assert.Equal(t, "", joinNames(nil))
+	assert.Empty(t, joinNames(nil))
 	assert.Equal(t, "A", joinNames([]string{"A"}))
 	assert.Equal(t, "A / B / C", joinNames([]string{"A", "B", "C"}))
 }

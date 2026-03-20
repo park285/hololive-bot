@@ -35,7 +35,7 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-// ProvideChzzkClient - Chzzk API 클라이언트 생성
+// ProvideChzzkClient - Chzzk API 클라이언트 생성.
 func ProvideChzzkClient(httpClient *http.Client, cfg config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
 	return chzzk.NewClientWithConfig(chzzk.ClientConfig{
 		HTTPClient:   httpClient,
@@ -46,7 +46,7 @@ func ProvideChzzkClient(httpClient *http.Client, cfg config.ChzzkConfig, logger 
 	})
 }
 
-// ProvideTwitchClient - Twitch Helix API 클라이언트 생성
+// ProvideTwitchClient - Twitch Helix API 클라이언트 생성.
 func ProvideTwitchClient(cfg config.TwitchConfig, logger *slog.Logger) *twitch.Client {
 	return twitch.NewClient(twitch.ClientConfig{
 		ClientID:     cfg.ClientID,
@@ -54,7 +54,7 @@ func ProvideTwitchClient(cfg config.TwitchConfig, logger *slog.Logger) *twitch.C
 	}, logger)
 }
 
-// ProvideMemberCacheWithoutValkey - Valkey 없이 멤버 캐시만 구성
+// ProvideMemberCacheWithoutValkey - Valkey 없이 멤버 캐시만 구성.
 func ProvideMemberCacheWithoutValkey(
 	ctx context.Context,
 	repo *member.Repository,
@@ -67,17 +67,19 @@ func ProvideMemberCacheWithoutValkey(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create member cache: %w", err)
 	}
+
 	return memberCache, nil
 }
 
-// ProvideFetchProfilesLogger - fetch_profiles 전용 로거
+// ProvideFetchProfilesLogger - fetch_profiles 전용 로거.
 func ProvideFetchProfilesLogger() (*slog.Logger, func(), error) {
 	logger := slog.Default()
 	cleanup := func() {} // slog는 Sync 필요 없음
+
 	return logger, cleanup, nil
 }
 
-// ProvideFetchProfilesHTTPClient - fetch_profiles 전용 HTTP 클라이언트
+// ProvideFetchProfilesHTTPClient - fetch_profiles 전용 HTTP 클라이언트.
 func ProvideFetchProfilesHTTPClient() *http.Client {
 	return httputil.NewExternalAPIClient(constants.OfficialProfileConfig.RequestTimeout)
 }

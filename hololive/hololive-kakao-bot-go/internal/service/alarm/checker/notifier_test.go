@@ -21,7 +21,6 @@
 package checker
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -39,6 +38,7 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 	alarmSvc := newCheckerTestAlarmService(t, cacheSvc)
 
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+
 	notifier, err := NewNotifier(
 		dedupSvc,
 		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
@@ -61,13 +61,13 @@ func TestNotifierSend_DedupSkip(t *testing.T) {
 	}
 	notification := domain.NewAlarmNotification("room1", stream.Channel, stream, 5, []string{}, "")
 
-	if _, claimed, claimErr := dedupSvc.TryClaimNotification(context.Background(), "room1", stream.ID, start, 5); claimErr != nil {
+	if _, claimed, claimErr := dedupSvc.TryClaimNotification(t.Context(), "room1", stream.ID, start, 5); claimErr != nil {
 		t.Fatalf("TryClaimNotification() error = %v", claimErr)
 	} else if !claimed {
-		t.Fatalf("expected pre-claim to succeed")
+		t.Fatal("expected pre-claim to succeed")
 	}
 
-	result, sendErr := notifier.Send(context.Background(), []*domain.AlarmNotification{notification})
+	result, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
 	if sendErr != nil {
 		t.Fatalf("Send() error = %v", sendErr)
 	}
@@ -88,6 +88,7 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	alarmSvc := newCheckerTestAlarmService(t, cacheSvc)
 
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+
 	notifier, err := NewNotifier(
 		dedupSvc,
 		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
@@ -110,7 +111,7 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	}
 	notification := domain.NewAlarmNotification("room2", stream.Channel, stream, 5, []string{}, "")
 
-	result, sendErr := notifier.Send(context.Background(), []*domain.AlarmNotification{notification})
+	result, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
 	if sendErr != nil {
 		t.Fatalf("Send() error = %v", sendErr)
 	}
@@ -124,18 +125,21 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	}
 
 	notifiedKey := "notified:" + stream.ID
-	startScheduled, err := cacheSvc.HGet(context.Background(), notifiedKey, "start_scheduled")
+
+	startScheduled, err := cacheSvc.HGet(t.Context(), notifiedKey, "start_scheduled")
 	if err != nil {
 		t.Fatalf("expected hash-based notified cache, got error: %v", err)
 	}
+
 	if startScheduled == "" {
-		t.Fatalf("expected start_scheduled field to be written")
+		t.Fatal("expected start_scheduled field to be written")
 	}
 
-	minuteSent, err := cacheSvc.HGet(context.Background(), notifiedKey, "5")
+	minuteSent, err := cacheSvc.HGet(t.Context(), notifiedKey, "5")
 	if err != nil {
 		t.Fatalf("expected minute field to be readable from hash: %v", err)
 	}
+
 	if minuteSent != "1" {
 		t.Fatalf("expected minute field to be 1, got %q", minuteSent)
 	}
@@ -144,10 +148,12 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 func readDispatchQueueSize(t *testing.T, cacheSvc cache.Client) int64 {
 	t.Helper()
 
-	resp := cacheSvc.GetClient().Do(context.Background(), cacheSvc.B().Llen().Key(queue.AlarmDispatchQueue).Build())
+	resp := cacheSvc.GetClient().Do(t.Context(), cacheSvc.B().Llen().Key(queue.AlarmDispatchQueue).Build())
+
 	size, err := resp.AsInt64()
 	if err != nil {
 		t.Fatalf("queue size lookup failed: %v", err)
 	}
+
 	return size
 }

@@ -21,17 +21,15 @@
 package adapter
 
 import (
-	"context"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
+	"gorm.io/gorm"
 )
 
 func TestFormatMemberNewsDigest_RendersTemplate(t *testing.T) {
@@ -47,13 +45,15 @@ func TestFormatMemberNewsDigest_RendersTemplate(t *testing.T) {
 		MoreSummary: "외 3건",
 	}
 
-	output := formatter.FormatMemberNewsDigest(context.Background(), digest)
+	output := formatter.FormatMemberNewsDigest(t.Context(), digest)
 	if !strings.Contains(output, digest.Headline) {
 		t.Fatalf("output should contain headline, got: %s", output)
 	}
+
 	if !strings.Contains(output, "https://hololive.hololivepro.com/news/1") {
 		t.Fatalf("output should contain source link, got: %s", output)
 	}
+
 	if !strings.Contains(output, "외 3건") {
 		t.Fatalf("output should contain more summary, got: %s", output)
 	}
@@ -70,10 +70,11 @@ func TestFormatMemberNewsDigest_LocalizesCategoryLabel(t *testing.T) {
 		},
 	}
 
-	output := formatter.FormatMemberNewsDigest(context.Background(), digest)
+	output := formatter.FormatMemberNewsDigest(t.Context(), digest)
 	if !strings.Contains(output, "솔로 라이브") {
 		t.Fatalf("output should contain localized category label, got: %s", output)
 	}
+
 	if strings.Contains(output, "solo_live") {
 		t.Fatalf("output should not contain raw category code, got: %s", output)
 	}
@@ -83,7 +84,8 @@ func TestFormatMemberNewsDigest_RenderFailFallback(t *testing.T) {
 	formatter := NewResponseFormatter("!", nil)
 	digest := &membernewscontracts.Digest{Headline: "뉴스"}
 
-	output := formatter.FormatMemberNewsDigest(context.Background(), digest)
+	output := formatter.FormatMemberNewsDigest(t.Context(), digest)
+
 	expected := ErrorMessage(ErrDisplayMemberNewsFailed)
 	if output != expected {
 		t.Fatalf("expected %q, got %q", expected, output)

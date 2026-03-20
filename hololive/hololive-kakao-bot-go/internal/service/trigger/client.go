@@ -21,6 +21,7 @@
 package trigger
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"log/slog"
@@ -54,6 +55,7 @@ func (c *Client) SendWeeklyNotification(ctx context.Context) error {
 	if err := c.postTrigger(ctx, triggercontracts.MajorEventWeeklyPath); err != nil {
 		return fmt.Errorf("send weekly notification: %w", err)
 	}
+
 	return nil
 }
 
@@ -62,6 +64,7 @@ func (c *Client) SendMonthlyNotification(ctx context.Context) error {
 	if err := c.postTrigger(ctx, triggercontracts.MajorEventMonthlyPath); err != nil {
 		return fmt.Errorf("send monthly notification: %w", err)
 	}
+
 	return nil
 }
 
@@ -70,12 +73,13 @@ func (c *Client) SendMemberNewsWeekly(ctx context.Context) error {
 	if err := c.postTrigger(ctx, triggercontracts.MemberNewsWeeklyPath); err != nil {
 		return fmt.Errorf("send member news weekly notification: %w", err)
 	}
+
 	return nil
 }
 
 func (c *Client) postTrigger(ctx context.Context, path string) error {
 	if c == nil {
-		return fmt.Errorf("post trigger: client is nil")
+		return errors.New("post trigger: client is nil")
 	}
 
 	req, err := c.httpClient.NewRequest(ctx, http.MethodPost, path)
@@ -90,12 +94,15 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 
 	if resp.StatusCode == http.StatusConflict {
 		_ = resp.Body.Close()
+
 		c.logger.Info("Trigger notification already in progress", slog.String("path", path))
+
 		return triggercontracts.ErrNotificationInProgress
 	}
 
 	if err := c.httpClient.CheckStatus(resp); err != nil {
 		_ = resp.Body.Close()
+
 		return fmt.Errorf(
 			"post trigger: request failed %s: %w",
 			path,
@@ -108,5 +115,6 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	}
 
 	c.logger.Debug("Trigger request succeeded", slog.String("path", path), slog.Int("status", resp.StatusCode))
+
 	return nil
 }

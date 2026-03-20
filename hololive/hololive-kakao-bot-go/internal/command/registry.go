@@ -30,10 +30,10 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// ErrUnknownCommand: 등록되지 않은 명령어를 호출했을 때 발생하는 오류
+// ErrUnknownCommand: 등록되지 않은 명령어를 호출했을 때 발생하는 오류.
 var ErrUnknownCommand = errors.New("unknown command")
 
-// Registry: 봇의 모든 명령어 핸들러를 등록하고 관리하며, 이름 기반 조회 및 실행을 담당하는 레지스트리
+// Registry: 봇의 모든 명령어 핸들러를 등록하고 관리하며, 이름 기반 조회 및 실행을 담당하는 레지스트리.
 type Registry struct {
 	mu        sync.RWMutex
 	handlers  map[string]Command
@@ -48,7 +48,7 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register: 새로운 명령어 핸들러를 레지스트리에 등록한다. (이름 정규화 적용)
+// Register: 새로운 명령어 핸들러를 레지스트리에 등록한다. (이름 정규화 적용).
 func (r *Registry) Register(handler Command) {
 	if handler == nil {
 		return
@@ -58,13 +58,14 @@ func (r *Registry) Register(handler Command) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.handlers[name] = handler
 }
 
-// Execute: 주어진 키(명령어 이름)에 해당하는 핸들러를 찾아 명령을 실행한다. (스레드 안전)
+// Execute: 주어진 키(명령어 이름)에 해당하는 핸들러를 찾아 명령을 실행한다. (스레드 안전).
 func (r *Registry) Execute(ctx context.Context, cmdCtx *domain.CommandContext, key string, params map[string]any) error {
 	if r == nil {
-		return fmt.Errorf("command registry is nil")
+		return errors.New("command registry is nil")
 	}
 
 	handler := r.getHandler(key)
@@ -75,6 +76,7 @@ func (r *Registry) Execute(ctx context.Context, cmdCtx *domain.CommandContext, k
 	if err := handler.Execute(ctx, cmdCtx, params); err != nil {
 		return fmt.Errorf("failed to execute command %s: %w", key, err)
 	}
+
 	return nil
 }
 
@@ -83,19 +85,24 @@ func (r *Registry) Count() int {
 	if r == nil {
 		return 0
 	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return len(r.handlers)
 }
 
 func (r *Registry) getHandler(key string) Command {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	if key == "" {
 		return nil
 	}
+
 	if handler, ok := r.handlers[stringutil.Normalize(key)]; ok {
 		return handler
 	}
+
 	return nil
 }

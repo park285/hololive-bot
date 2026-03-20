@@ -68,6 +68,7 @@ func TestClient_IsConfigured(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tc.client.IsConfigured()
 			if got != tc.want {
 				t.Errorf("IsConfigured() = %v, want %v", got, tc.want)
@@ -104,6 +105,7 @@ func TestStreamData_IsLive(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tc.stream.IsLive()
 			if got != tc.want {
 				t.Errorf("IsLive() = %v, want %v", got, tc.want)
@@ -148,6 +150,7 @@ func TestStreamData_GetThumbnailURL(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tc.stream.GetThumbnailURL(tc.width, tc.height)
 			if got != tc.want {
 				t.Errorf("GetThumbnailURL(%d, %d) = %q, want %q", tc.width, tc.height, got, tc.want)
@@ -174,6 +177,7 @@ func TestClient_CircuitBreaker(t *testing.T) {
 					t.Errorf("실패 %d회 후 Circuit이 열렸으나 아직 열리면 안 됨 (threshold=%d)", i+1, threshold)
 				}
 			}
+
 			c.recordFailure()
 		}
 
