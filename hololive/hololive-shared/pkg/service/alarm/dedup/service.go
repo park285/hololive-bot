@@ -179,7 +179,10 @@ func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID str
 	key := keys.NotifiedKey(streamID)
 	scheduledStr := keys.FormatScheduled(startScheduled)
 
-	data := s.readNotifiedData(ctx, key)
+	data, err := s.readNotifiedData(ctx, key)
+	if err != nil {
+		return false, fmt.Errorf("is already notified for schedule: %w", err)
+	}
 	if data == nil {
 		return false, nil
 	}
@@ -211,7 +214,10 @@ func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID str
 // IsAlreadyNotified: 어떤 분이라도 발송 이력이 있으면 true
 func (s *Service) IsAlreadyNotified(ctx context.Context, streamID string) (bool, error) {
 	key := keys.NotifiedKey(streamID)
-	data := s.readNotifiedData(ctx, key)
+	data, err := s.readNotifiedData(ctx, key)
+	if err != nil {
+		return false, fmt.Errorf("is already notified: %w", err)
+	}
 	if data == nil {
 		return false, nil
 	}
@@ -285,22 +291,25 @@ func (s *Service) isTargetMinute(minutesUntil int) bool {
 }
 
 // readNotifiedData: Valkey에서 NotifiedData 해시를 조회합니다.
-func (s *Service) readNotifiedData(ctx context.Context, key string) *NotifiedData {
+func (s *Service) readNotifiedData(ctx context.Context, key string) (*NotifiedData, error) {
 	data, source, err := s.loadNotifiedData(ctx, key)
-	if err != nil || data == nil {
-		return nil
+	if err != nil {
+		return nil, err
+	}
+	if data == nil {
+		return nil, nil
 	}
 
 	if source == notifiedDataSourceLegacyString {
-		if err := s.migrateLegacyNotifiedData(ctx, key, data); err != nil {
+		if migErr := s.migrateLegacyNotifiedData(ctx, key, data); migErr != nil {
 			s.logger.Warn("Failed to migrate legacy notified cache",
 				slog.String("key", key),
-				slog.Any("error", err),
+				slog.Any("error", migErr),
 			)
 		}
 	}
 
-	return data
+	return data, nil
 }
 
 func (s *Service) loadNotifiedData(ctx context.Context, key string) (*NotifiedData, notifiedDataSource, error) {
