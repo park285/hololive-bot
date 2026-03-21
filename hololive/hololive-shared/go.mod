@@ -109,3 +109,5 @@ require (
 )
 
 replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
+
+replace github.com/park285/iris-client-go => /home/kapu/gemini/iris-client-go

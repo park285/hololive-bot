@@ -28,6 +28,7 @@ require (
 
 replace (
 	github.com/kapu/hololive-shared => ../hololive-shared
+	github.com/park285/iris-client-go => /home/kapu/gemini/iris-client-go
 	github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
 )
 

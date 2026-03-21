@@ -5,21 +5,33 @@
 .serena
 .idea
 .vscode
+.github/
+.tasklists/
+.runlogs/
 
 **/.idea
 **/.vscode
 **/.serena
 **/.gomodcache
 **/.gocache
+**/.env*
 **/vendor
 **/bin
 **/logs
 **/tmp
+**/node_modules
+**/dist
+**/coverage
 **/*.log
 **/*.tmp
 **/*.out
+**/*.md
 
 # Local build artifacts under module roots
 hololive/hololive-kakao-bot-go/bot
 hololive/hololive-kakao-bot-go/fetch_profiles
 hololive/hololive-stream-ingester/youtube-scraper
+
+# Data / backups (not needed for builds)
+backups/
+data/
