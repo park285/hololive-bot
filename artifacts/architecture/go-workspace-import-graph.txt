@@ -180,7 +180,6 @@ github.com/kapu/hololive-kakao-bot-go/internal/service/notification -> github.co
 github.com/kapu/hololive-kakao-bot-go/internal/service/notification -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-kakao-bot-go/internal/service/notification -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-kakao-bot-go/internal/service/notification -> github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil
-github.com/kapu/hololive-kakao-bot-go/internal/service/notification -> github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool
 github.com/kapu/hololive-kakao-bot-go/internal/service/system -> github.com/park285/llm-kakao-bots/shared-go/pkg/httputil
 github.com/kapu/hololive-kakao-bot-go/internal/service/trigger -> github.com/kapu/hololive-shared/pkg/contracts/trigger
 github.com/kapu/hololive-kakao-bot-go/internal/service/trigger -> github.com/park285/llm-kakao-bots/shared-go/pkg/httputil
@@ -278,7 +277,6 @@ github.com/kapu/hololive-shared/internal/testutil -> github.com/kapu/hololive-sh
 github.com/kapu/hololive-shared/internal/testutil/cacheclient -> github.com/kapu/hololive-shared/internal/testredis
 github.com/kapu/hololive-shared/pkg/config -> github.com/kapu/hololive-shared/internal/envutil
 github.com/kapu/hololive-shared/pkg/config -> github.com/kapu/hololive-shared/pkg/constants
-github.com/kapu/hololive-shared/pkg/config -> github.com/park285/llm-kakao-bots/shared-go/pkg/irisx
 github.com/kapu/hololive-shared/pkg/config -> github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/contracts/alarm -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/contracts/delivery -> github.com/kapu/hololive-shared/pkg/domain
@@ -286,11 +284,6 @@ github.com/kapu/hololive-shared/pkg/contracts/membernews -> github.com/park285/l
 github.com/kapu/hololive-shared/pkg/contracts/settings -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/domain -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/domain -> github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil
-github.com/kapu/hololive-shared/pkg/iris -> github.com/kapu/hololive-shared/pkg/constants
-github.com/kapu/hololive-shared/pkg/iris -> github.com/kapu/hololive-shared/pkg/util
-github.com/kapu/hololive-shared/pkg/iris -> github.com/park285/llm-kakao-bots/shared-go/pkg/httputil
-github.com/kapu/hololive-shared/pkg/iris -> github.com/park285/llm-kakao-bots/shared-go/pkg/irisx
-github.com/kapu/hololive-shared/pkg/iris -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/logging -> github.com/kapu/hololive-shared/internal/logging
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/internal/retry
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/config
