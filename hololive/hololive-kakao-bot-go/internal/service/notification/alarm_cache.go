@@ -22,14 +22,13 @@ package notification
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 	"github.com/valkey-io/valkey-go"
 )
@@ -87,18 +86,7 @@ func normalizeScheduledMinute(startScheduled time.Time) time.Time {
 }
 
 func buildTitleFingerprint(title, streamID string) string {
-	normalized := stringutil.NormalizeKey(title)
-	if normalized == "" {
-		normalized = stringutil.NormalizeKey(streamID)
-	}
-
-	if normalized == "" {
-		normalized = "untitled"
-	}
-
-	sum := sha256.Sum256([]byte(normalized))
-
-	return hex.EncodeToString(sum[:8])
+	return keys.BuildTitleFingerprint(title, streamID)
 }
 
 func resolveStreamChannelID(stream *domain.Stream, defaultChannelID string) string {
