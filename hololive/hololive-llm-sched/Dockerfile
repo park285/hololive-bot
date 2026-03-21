@@ -26,6 +26,8 @@ ARG ALPINE_VERSION=3.23
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 ARG VERSION=dev
+RUN apk add --no-cache git
+ENV GOPRIVATE=github.com/park285/iris-client-go
 
 WORKDIR /app
 
@@ -34,7 +36,14 @@ COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/
 COPY hololive/hololive-llm-sched/go.mod hololive/hololive-llm-sched/go.sum ./hololive/hololive-llm-sched/
 
 WORKDIR /app/hololive/hololive-llm-sched
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
+RUN --mount=type=secret,id=modules_token,required=true \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    MODULES_TOKEN="$(tr -d '\r\n' < /run/secrets/modules_token)" && \
+    git config --global url."https://x-access-token:${MODULES_TOKEN}@github.com/".insteadOf "https://github.com/" && \
+    (cd /app/hololive/hololive-shared && if grep -q 'github.com/park285/iris-client-go =>' go.mod; then go mod edit -dropreplace github.com/park285/iris-client-go; fi) && \
+    go mod download && \
+    rm -f /root/.gitconfig
 
 WORKDIR /app
 COPY shared-go ./shared-go
@@ -43,11 +52,18 @@ COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 
 WORKDIR /app/hololive/hololive-llm-sched
 
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=secret,id=modules_token,required=true \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    MODULES_TOKEN="$(tr -d '\r\n' < /run/secrets/modules_token)" && \
+    git config --global url."https://x-access-token:${MODULES_TOKEN}@github.com/".insteadOf "https://github.com/" && \
+    (cd /app/hololive/hololive-shared && if grep -q 'github.com/park285/iris-client-go =>' go.mod; then go mod edit -dropreplace github.com/park285/iris-client-go; fi) && \
+    go mod download github.com/park285/iris-client-go && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=greenteagc \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/llm-scheduler ./cmd/llm-scheduler && \
     mkdir -p /dist/internal/domain && \
-    cp -r ../hololive-shared/pkg/domain/data /dist/internal/domain/
+    cp -r ../hololive-shared/pkg/domain/data /dist/internal/domain/ && \
+    rm -f /root/.gitconfig
 
 FROM alpine:${ALPINE_VERSION}
 

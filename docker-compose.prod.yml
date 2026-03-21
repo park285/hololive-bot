@@ -145,6 +145,8 @@ services:
       dockerfile: hololive/hololive-kakao-bot-go/Dockerfile
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+      secrets:
+        - modules_token
     container_name: hololive-kakao-bot-go
     restart: always
     labels:
@@ -231,6 +233,8 @@ services:
       dockerfile: hololive/hololive-dispatcher-go/Dockerfile
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+      secrets:
+        - modules_token
     container_name: hololive-dispatcher-go
     restart: always
     labels:
@@ -286,6 +290,8 @@ services:
       dockerfile: hololive/hololive-stream-ingester/Dockerfile
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+      secrets:
+        - modules_token
     container_name: hololive-stream-ingester
     restart: always
     labels:
@@ -362,6 +368,8 @@ services:
       dockerfile: hololive/hololive-stream-ingester/Dockerfile.youtube-scraper
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+      secrets:
+        - modules_token
     container_name: hololive-youtube-scraper
     restart: always
     labels:
@@ -438,6 +446,8 @@ services:
       dockerfile: hololive/hololive-llm-sched/Dockerfile
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+      secrets:
+        - modules_token
     container_name: hololive-llm-scheduler
     restart: always
     labels:
@@ -624,6 +634,10 @@ volumes:
   holo-pg-data:
   valkey-cache-data:
   valkey-cache-socket:
+
+secrets:
+  modules_token:
+    environment: MODULES_TOKEN
     driver: local
     driver_opts:
       type: tmpfs
