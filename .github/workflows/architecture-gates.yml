@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOPRIVATE: github.com/park285/iris-client-go
+
 concurrency:
   group: architecture-gates-${{ github.ref }}
   cancel-in-progress: true
@@ -26,6 +29,21 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.work
+
+      - name: Configure private module access
+        run: |
+          if [[ -z "${{ secrets.MODULES_TOKEN }}" ]]; then
+            echo "::error::MODULES_TOKEN secret is required to fetch github.com/park285/iris-client-go"
+            exit 1
+          fi
+
+          git config --global url."https://x-access-token:${{ secrets.MODULES_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+          for mod in hololive/hololive-shared hololive/hololive-kakao-bot-go; do
+            if grep -q 'github.com/park285/iris-client-go =>' "$mod/go.mod"; then
+              (cd "$mod" && go mod edit -dropreplace github.com/park285/iris-client-go)
+            fi
+          done
 
       - name: Setup Rust (nightly)
         uses: dtolnay/rust-toolchain@master
