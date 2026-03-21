@@ -392,6 +392,23 @@ func TestService_MarkAsNotified_TargetMinutePolicyAndScheduleReset(t *testing.T)
 	assert.True(t, already)
 }
 
+func TestIsAlreadyNotified_PropagatesCacheError(t *testing.T) {
+	t.Parallel()
+
+	cacheErr := fmt.Errorf("connection refused")
+	mockCache, _ := newMockDedupCache(t)
+	mockCache.HGetAllFunc = func(_ context.Context, _ string) (map[string]string, error) {
+		return nil, cacheErr
+	}
+
+	svc := NewService(mockCache, []int{5, 3, 1}, newTestLogger())
+
+	_, err := svc.IsAlreadyNotified(t.Context(), "stream-error-test")
+	if err == nil {
+		t.Fatal("expected error from IsAlreadyNotified when cache fails, got nil")
+	}
+}
+
 func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
 	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
