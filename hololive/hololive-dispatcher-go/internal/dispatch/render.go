@@ -53,18 +53,17 @@ func (r *SimpleRenderer) RenderGroup(_ context.Context, group NotificationGroup)
 
 	var builder strings.Builder
 	if group.MinutesUntil <= 0 {
-		builder.WriteString("🔔 방송 시작 알림\n")
+		builder.WriteString("🔔 방송 시작 알림")
 	} else {
-		fmt.Fprintf(&builder, "⏰ %d분 내 방송 알림\n", group.MinutesUntil)
+		fmt.Fprintf(&builder, "⏰ %d분 내 방송 알림", group.MinutesUntil)
 	}
 
 	for _, notification := range group.Notifications {
-		builder.WriteString("- ")
-		builder.WriteString(renderNotificationSummary(notification))
-		builder.WriteString("\n")
+		builder.WriteString("\n\n")
+		builder.WriteString(renderNotification(notification))
 	}
 
-	return strings.TrimSpace(builder.String()), nil
+	return builder.String(), nil
 }
 
 func renderNotification(notification domain.AlarmNotification) string {
