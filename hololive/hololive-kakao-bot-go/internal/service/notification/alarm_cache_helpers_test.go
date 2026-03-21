@@ -115,6 +115,16 @@ func TestBuildTitleFingerprint(t *testing.T) {
 	}
 }
 
+func TestBuildTitleFingerprint_FullWidthEquivalence(t *testing.T) {
+	t.Parallel()
+
+	fpA := buildTitleFingerprint("クリアする!そして", "s1")
+	fpB := buildTitleFingerprint("クリアする！そして", "s1")
+	if fpA != fpB {
+		t.Errorf("alarm_cache fingerprints differ for half/full-width: %q != %q", fpA, fpB)
+	}
+}
+
 func TestResolveStreamChannelID(t *testing.T) {
 	t.Parallel()
 

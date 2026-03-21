@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
@@ -64,11 +65,35 @@ func NormalizeScheduledMinute(t time.Time) time.Time {
 	return t.Truncate(time.Minute)
 }
 
+// normalizeTitleForFingerprint: alarm dedup 전용 title 정규화.
+// NormalizeKey 기반에 CJK full-width 구두점을 추가로 제거한다.
+// NormalizeKey 전역 수정 시 멤버 검색/LLM 필터 side effect 발생하므로 분리.
+func normalizeTitleForFingerprint(title string) string {
+	base := stringutil.NormalizeKey(title)
+	if base == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(base))
+	for _, r := range base {
+		switch r {
+		case '?', '(', ')', '&', ',', ':', ';',
+			'\uFF01', '\uFF1F', '\uFF08', '\uFF09', '\uFF06', '\uFF0C', '\uFF1A', '\uFF1B',
+			'\u3001', '\u3002', '\u300C', '\u300D', '\u3010', '\u3011':
+			continue
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
+
 // BuildTitleFingerprint: SHA256 앞 8바이트 hex (16문자)
 func BuildTitleFingerprint(title, streamID string) string {
-	normalized := stringutil.NormalizeKey(title)
+	normalized := normalizeTitleForFingerprint(title)
 	if normalized == "" {
-		normalized = stringutil.NormalizeKey(streamID)
+		normalized = normalizeTitleForFingerprint(streamID)
 	}
 	if normalized == "" {
 		normalized = "untitled"
