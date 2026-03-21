@@ -88,16 +88,6 @@ func renderNotification(notification domain.AlarmNotification) string {
 	return strings.TrimSpace(builder.String())
 }
 
-func renderNotificationSummary(notification domain.AlarmNotification) string {
-	memberName := resolveMemberName(notification)
-	title := resolveTitle(notification)
-	url := resolveStreamURL(notification)
-	if url == "" {
-		return fmt.Sprintf("%s - %s", memberName, title)
-	}
-	return fmt.Sprintf("%s - %s (%s)", memberName, title, url)
-}
-
 func resolveMemberName(notification domain.AlarmNotification) string {
 	if notification.Channel != nil && strings.TrimSpace(notification.Channel.Name) != "" {
 		return strings.TrimSpace(notification.Channel.Name)
