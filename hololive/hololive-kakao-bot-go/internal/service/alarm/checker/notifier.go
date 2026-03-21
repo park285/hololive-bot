@@ -244,7 +244,11 @@ func (n *Notifier) publishAndMark(ctx context.Context, payload *sendInput, claim
 		payload.startScheduled,
 		payload.notification.MinutesUntil,
 	); err != nil {
-		return fmt.Errorf("mark as notified: %w", err)
+		n.logger.Warn("Failed to mark as notified after publish (non-fatal)",
+			slog.String("stream_id", payload.streamID),
+			slog.Int("minutes_until", payload.notification.MinutesUntil),
+			slog.Any("error", err),
+		)
 	}
 
 	if err := n.alarmSvc.MarkUpcomingEventNotified(
@@ -253,7 +257,11 @@ func (n *Notifier) publishAndMark(ctx context.Context, payload *sendInput, claim
 		payload.channelID,
 		payload.notification.Stream,
 	); err != nil {
-		return fmt.Errorf("mark upcoming event notified: %w", err)
+		n.logger.Warn("Failed to mark upcoming event notified after publish (non-fatal)",
+			slog.String("room_id", payload.notification.RoomID),
+			slog.String("channel_id", payload.channelID),
+			slog.Any("error", err),
+		)
 	}
 
 	return nil

@@ -145,6 +145,57 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	}
 }
 
+func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	alarmSvc := newCheckerTestAlarmService(t, cacheSvc)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+
+	notifier, err := NewNotifier(
+		dedupSvc,
+		queue.NewPublisher(cacheSvc, logger),
+		alarmSvc,
+		tier.NewTieredScheduler(logger),
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewNotifier() error = %v", err)
+	}
+
+	start := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Minute)
+	makeNotification := func(roomID, streamID string) *domain.AlarmNotification {
+		stream := &domain.Stream{
+			ID:             streamID,
+			Title:          "Batch Test " + streamID,
+			ChannelID:      "UC_BATCH",
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &start,
+			Channel:        &domain.Channel{ID: "UC_BATCH", Name: "Batch Channel"},
+		}
+		return domain.NewAlarmNotification(roomID, stream.Channel, stream, 5, []string{}, "")
+	}
+
+	notifications := []*domain.AlarmNotification{
+		makeNotification("room-batch-1", "stream-batch-1"),
+		makeNotification("room-batch-2", "stream-batch-2"),
+	}
+
+	result, sendErr := notifier.Send(t.Context(), notifications)
+	if sendErr != nil {
+		t.Fatalf("Send() error = %v", sendErr)
+	}
+
+	if result.Sent != 2 {
+		t.Fatalf("expected Sent=2, got %d (Skipped=%d, Failed=%d)", result.Sent, result.Skipped, result.Failed)
+	}
+
+	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 2 {
+		t.Fatalf("expected dispatch queue size=2, got %d", queueSize)
+	}
+}
+
 func readDispatchQueueSize(t *testing.T, cacheSvc cache.Client) int64 {
 	t.Helper()
 
