@@ -37,6 +37,68 @@ type deliveryDispatchResult struct {
 	failureBuckets     map[string][]int64
 }
 
+// deliveryGroup: dispatch 시점 동일 room+channel+kind delivery row 그룹
+type deliveryGroup struct {
+	roomID    string
+	channelID string
+	kind      domain.OutboxKind
+	rows      []domain.YouTubeNotificationDelivery
+	outboxes  []domain.YouTubeNotificationOutbox
+}
+
+// groupDeliveryRows: delivery row를 room+channel+kind 기준으로 그룹핑한다.
+// milestone kind는 그룹핑 제외 (항상 단건 그룹).
+// outbox를 찾을 수 없는 row는 orphanRows로 반환한다.
+func groupDeliveryRows(
+	rows []domain.YouTubeNotificationDelivery,
+	outboxByID map[int64]domain.YouTubeNotificationOutbox,
+) (groups []deliveryGroup, orphanRows []domain.YouTubeNotificationDelivery) {
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	index := make(map[string]int)
+	groups = make([]deliveryGroup, 0, len(rows))
+
+	for i := range rows {
+		row := rows[i]
+		outbox, ok := outboxByID[row.OutboxID]
+		if !ok {
+			orphanRows = append(orphanRows, row)
+			continue
+		}
+
+		if outbox.Kind == domain.OutboxKindMilestone {
+			groups = append(groups, deliveryGroup{
+				roomID:    row.RoomID,
+				channelID: outbox.ChannelID,
+				kind:      outbox.Kind,
+				rows:      []domain.YouTubeNotificationDelivery{row},
+				outboxes:  []domain.YouTubeNotificationOutbox{outbox},
+			})
+			continue
+		}
+
+		key := row.RoomID + "|" + outbox.ChannelID + "|" + string(outbox.Kind)
+		if idx, exists := index[key]; exists {
+			groups[idx].rows = append(groups[idx].rows, row)
+			groups[idx].outboxes = append(groups[idx].outboxes, outbox)
+			continue
+		}
+
+		index[key] = len(groups)
+		groups = append(groups, deliveryGroup{
+			roomID:    row.RoomID,
+			channelID: outbox.ChannelID,
+			kind:      outbox.Kind,
+			rows:      []domain.YouTubeNotificationDelivery{row},
+			outboxes:  []domain.YouTubeNotificationOutbox{outbox},
+		})
+	}
+
+	return groups, orphanRows
+}
+
 func (d *Dispatcher) dispatchDeliveryRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
