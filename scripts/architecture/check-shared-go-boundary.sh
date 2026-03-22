@@ -17,7 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 pushd "${SHARED_GO_DIR}" >/dev/null
-go list -f '{{if not .Standard}}{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{end}}' ./... \
+GOWORK=off go list -f '{{if not .Standard}}{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{end}}' ./... \
   | awk '
       $1 != "" {
         from = $1
