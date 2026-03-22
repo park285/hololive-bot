@@ -1,6 +1,7 @@
 mod auth;
 mod config;
 mod error;
+mod state;
 
 fn main() {
     dotenvy::dotenv().ok();
