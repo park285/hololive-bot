@@ -1,10 +1,33 @@
 package outbox
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
+	t.Helper()
+
+	cacheSvc, mini := newDispatcherTestCache(t)
+	t.Cleanup(func() {
+		mini.Close()
+		_ = cacheSvc.Close()
+	})
+
+	return NewDispatcher(nil, cacheSvc, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		BatchSize:           10,
+		LockTimeout:         time.Minute,
+		PollInterval:        time.Second,
+		MaxRetries:          3,
+		RetryBackoff:        time.Minute,
+		DeliveryParallelism: 2,
+	})
+}
 
 func TestGroupDeliveryRows(t *testing.T) {
 	t.Parallel()
@@ -117,5 +140,143 @@ func TestValidateOutboxPayload(t *testing.T) {
 				t.Fatalf("validateOutboxPayload() = %v, want %v", got, tt.wantOK)
 			}
 		})
+	}
+}
+
+func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	d := newTestDispatcherForSend(t, sender)
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+	}
+
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 2, RoomID: "room1"},
+	}
+
+	result := d.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	if len(result.successDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.successDeliveryIDs))
+	}
+
+	sender.mu.Lock()
+	msgCount := len(sender.messages)
+	sender.mu.Unlock()
+	if msgCount != 2 {
+		t.Fatalf("sender message count = %d, want 2 (fallback)", msgCount)
+	}
+}
+
+func TestDispatchDeliveryRows_OrphanRows(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	d := newTestDispatcherForSend(t, sender)
+
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 99, RoomID: "room1"},
+	}
+
+	result := d.dispatchDeliveryRows(context.Background(), rows, map[int64]domain.YouTubeNotificationOutbox{})
+
+	if result.failedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1", result.failedDeliveries)
+	}
+	if ids, ok := result.failureBuckets["outbox row not found"]; !ok || len(ids) != 1 || ids[0] != 101 {
+		t.Fatalf("unexpected failure buckets: %+v", result.failureBuckets)
+	}
+}
+
+func TestDispatchDeliveryRows_PayloadValidationEjection(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	d := newTestDispatcherForSend(t, sender)
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s1","title":"ok"}`},
+		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{broken json`},
+		3: {ID: 3, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s3","title":"ok"}`},
+	}
+
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 103, OutboxID: 3, RoomID: "room1"},
+	}
+
+	result := d.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	totalProcessed := len(result.successDeliveryIDs) + result.failedDeliveries
+	if totalProcessed != 3 {
+		t.Fatalf("total processed = %d, want 3", totalProcessed)
+	}
+	if result.failedDeliveries != 1 {
+		t.Fatalf("failedDeliveries = %d, want 1 (broken payload)", result.failedDeliveries)
+	}
+	if len(result.successDeliveryIDs) != 2 {
+		t.Fatalf("successDeliveryIDs count = %d, want 2", len(result.successDeliveryIDs))
+	}
+}
+
+func TestDispatchDeliveryRows_MixedBatch(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	d := newTestDispatcherForSend(t, sender)
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		3: {ID: 3, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"영상1"}`},
+		4: {ID: 4, ChannelID: "UCch1", Kind: domain.OutboxKindMilestone, Payload: `{"milestone":"100만"}`},
+	}
+
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 103, OutboxID: 3, RoomID: "room1"},
+		{ID: 104, OutboxID: 4, RoomID: "room1"},
+	}
+
+	result := d.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	if len(result.successDeliveryIDs) != 4 {
+		t.Fatalf("successDeliveryIDs = %d, want 4", len(result.successDeliveryIDs))
+	}
+	if len(result.touchedOutboxIDs) != 4 {
+		t.Fatalf("touchedOutboxIDs = %d, want 4", len(result.touchedOutboxIDs))
+	}
+}
+
+func TestDispatchDeliveryRows_SendFailure(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{"room1": true}}
+	d := newTestDispatcherForSend(t, sender)
+
+	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
+		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+	}
+
+	rows := []domain.YouTubeNotificationDelivery{
+		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 102, OutboxID: 2, RoomID: "room1"},
+	}
+
+	result := d.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+
+	if result.failedDeliveries != 2 {
+		t.Fatalf("failedDeliveries = %d, want 2", result.failedDeliveries)
+	}
+	if len(result.successDeliveryIDs) != 0 {
+		t.Fatalf("successDeliveryIDs = %d, want 0", len(result.successDeliveryIDs))
 	}
 }
