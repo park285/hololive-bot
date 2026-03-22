@@ -26,7 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/iris"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"golang.org/x/sync/errgroup"
 )
 
