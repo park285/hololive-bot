@@ -5,7 +5,9 @@ use crate::auth::session::ValkeySessionStore;
 use crate::config::Config;
 use crate::docker::DockerService;
 use crate::proxy::BotProxy;
+use crate::status::{StatusCollector, SystemStats};
 use crate::stream_limiter::StreamLimiter;
+use tokio::sync::broadcast;
 
 pub struct AppState {
     pub config: Config,
@@ -13,5 +15,7 @@ pub struct AppState {
     pub rate_limiter: Arc<LoginRateLimiter>,
     pub bot_proxy: Option<BotProxy>,
     pub docker_svc: Option<Arc<DockerService>>,
+    pub status_collector: StatusCollector,
+    pub stats_tx: broadcast::Sender<SystemStats>,
     pub stream_limiter: Arc<StreamLimiter>,
 }
