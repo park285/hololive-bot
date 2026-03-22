@@ -5,23 +5,25 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
+#[allow(clippy::expect_used)] // HMAC-SHA256은 모든 키 길이를 허용
 pub fn sign_session_id(session_id: &str, secret: &str) -> String {
     assert!(!secret.is_empty(), "session secret must not be empty");
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts any key length");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
     mac.update(session_id.as_bytes());
     let signature = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
     format!("{session_id}.{signature}")
 }
 
+#[allow(clippy::expect_used)] // HMAC-SHA256은 모든 키 길이를 허용
 pub fn validate_session_signature(full_id: &str, secret: &str) -> (String, bool) {
     assert!(!secret.is_empty(), "session secret must not be empty");
     let Some((session_id, provided_sig)) = full_id.split_once('.') else {
         return (String::new(), false);
     };
 
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts any key length");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
     mac.update(session_id.as_bytes());
     let expected_sig = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
 
@@ -48,7 +50,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 #[cfg(test)]

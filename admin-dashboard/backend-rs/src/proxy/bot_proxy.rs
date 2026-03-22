@@ -1,13 +1,14 @@
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::response::Response;
-use hyper::header::{HOST, ORIGIN, UPGRADE};
 use hyper::Uri;
+use hyper::header::{HOST, ORIGIN, UPGRADE};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
 use std::sync::Arc;
 
+#[allow(missing_debug_implementations)]
 pub struct BotProxy {
     // H2C client for normal API requests
     h2c_client: Client<HttpConnector, Body>,
@@ -18,7 +19,7 @@ pub struct BotProxy {
 }
 
 impl BotProxy {
-    pub fn new(target_url: &str, api_key: Option<String>) -> Result<Self, anyhow::Error> {
+    pub fn new(target_url: &str, api_key: Option<String>) -> Self {
         let mut h2c_connector = HttpConnector::new();
         h2c_connector.enforce_http(false);
 
@@ -31,12 +32,12 @@ impl BotProxy {
 
         let http11_client = Client::builder(TokioExecutor::new()).build(http11_connector);
 
-        Ok(Self {
+        Self {
             h2c_client,
             http11_client,
             target_base: target_url.trim_end_matches('/').to_string(),
             api_key,
-        })
+        }
     }
 }
 
@@ -54,7 +55,9 @@ pub async fn proxy_holo(
 
     // Path rewrite: /admin/api/holo/<path> -> /api/holo/<path>
     let original_path = parts.uri.path();
-    let new_path = original_path.strip_prefix("/admin").unwrap_or(original_path);
+    let new_path = original_path
+        .strip_prefix("/admin")
+        .unwrap_or(original_path);
     let query = parts
         .uri
         .path_and_query()
@@ -70,8 +73,7 @@ pub async fn proxy_holo(
         .headers
         .get(UPGRADE)
         .and_then(|v| v.to_str().ok())
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
+        .is_some_and(|v| v.eq_ignore_ascii_case("websocket"));
 
     // Build new request
     let mut builder = hyper::Request::builder()
@@ -87,10 +89,10 @@ pub async fn proxy_holo(
     }
 
     // Inject API key
-    if let Some(ref key) = proxy.api_key {
-        if !key.is_empty() {
-            builder = builder.header("X-API-Key", key);
-        }
+    if let Some(ref key) = proxy.api_key
+        && !key.is_empty()
+    {
+        builder = builder.header("X-API-Key", key);
     }
 
     let proxy_req = builder
@@ -142,19 +144,18 @@ mod tests {
     #[test]
     fn test_bot_proxy_creation() {
         let proxy = BotProxy::new("http://localhost:30001", None);
-        assert!(proxy.is_ok());
+        assert_eq!(proxy.target_base, "http://localhost:30001");
     }
 
     #[test]
     fn test_bot_proxy_with_api_key() {
         let proxy = BotProxy::new("http://localhost:30001", Some("test-key".to_string()));
-        assert!(proxy.is_ok());
-        assert_eq!(proxy.unwrap().api_key, Some("test-key".to_string()));
+        assert_eq!(proxy.api_key, Some("test-key".to_string()));
     }
 
     #[test]
     fn test_target_base_trailing_slash_stripped() {
-        let proxy = BotProxy::new("http://localhost:30001/", None).unwrap();
+        let proxy = BotProxy::new("http://localhost:30001/", None);
         assert_eq!(proxy.target_base, "http://localhost:30001");
     }
 }

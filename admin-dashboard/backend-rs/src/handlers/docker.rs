@@ -157,7 +157,7 @@ pub async fn handle_docker_log_stream(
 
     let stream_limiter = Arc::clone(&state.stream_limiter);
     let docker_svc = state.docker_svc.clone();
-    let session_id_clone = session_id.clone();
+    let session_id_clone = session_id;
 
     Ok(ws.on_upgrade(move |mut socket| async move {
         let timeout = tokio::time::sleep(Duration::from_secs(600));
@@ -169,7 +169,7 @@ pub async fn handle_docker_log_stream(
                     let mut buf = vec![0_u8; 4096];
                     loop {
                         tokio::select! {
-                            _ = &mut timeout => break,
+                            () = &mut timeout => break,
                             result = reader.read(&mut buf) => {
                                 match result {
                                     Ok(0) => break,

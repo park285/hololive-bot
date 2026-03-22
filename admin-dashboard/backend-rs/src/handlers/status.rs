@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Request, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
-use axum::Json;
 
 use crate::config::SecurityMode;
 
@@ -24,7 +24,7 @@ pub async fn handle_aggregated_status(
 }
 
 pub async fn handle_system_stats_stream(
-    State(state): State<Arc<crate::state::AppState>>,
+    State(app_state): State<Arc<crate::state::AppState>>,
     ws: WebSocketUpgrade,
     req: Request,
 ) -> Result<impl IntoResponse, crate::error::AppError> {
@@ -33,7 +33,7 @@ pub async fn handle_system_stats_stream(
         .get(axum::http::header::ORIGIN)
         .and_then(|v| v.to_str().ok());
 
-    let allowed_origins: HashSet<String> = state
+    let allowed_origins: HashSet<String> = app_state
         .config
         .security
         .allowed_origins
@@ -43,32 +43,35 @@ pub async fn handle_system_stats_stream(
     verify_ws_origin(
         origin,
         &allowed_origins,
-        state.config.security.ws_origin_mode,
+        app_state.config.security.ws_origin_mode,
     )?;
 
-    let mut rx = state.stats_tx.subscribe();
+    let mut rx = app_state.stats_tx.subscribe();
 
     Ok(ws.on_upgrade(move |mut socket: WebSocket| async move {
         loop {
             match rx.recv().await {
-                Ok(stats) => {
-                    let json = serde_json::to_string(&stats).unwrap_or_default();
+                Ok(system_stats) => {
+                    let json = serde_json::to_string(&system_stats).unwrap_or_default();
                     if socket.send(Message::Text(json.into())).await.is_err() {
                         break;
                     }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
             }
         }
     }))
 }
 
-pub fn verify_ws_origin(
+pub fn verify_ws_origin<S>(
     origin: Option<&str>,
-    allowed: &HashSet<String>,
+    allowed: &HashSet<String, S>,
     mode: SecurityMode,
-) -> Result<(), crate::error::AppError> {
+) -> Result<(), crate::error::AppError>
+where
+    S: std::hash::BuildHasher,
+{
     if mode == SecurityMode::Off {
         return Ok(());
     }
@@ -82,14 +85,14 @@ pub fn verify_ws_origin(
             Err(crate::error::AuthError::CsrfViolation.into())
         }
         Some(o) => {
-            if !allowed.contains(o) {
+            if allowed.contains(o) {
+                Ok(())
+            } else {
                 if mode == SecurityMode::Monitor {
                     tracing::warn!(origin = o, mode = "monitor", "ws_origin_rejected");
                     return Ok(());
                 }
                 Err(crate::error::AuthError::CsrfViolation.into())
-            } else {
-                Ok(())
             }
         }
     }

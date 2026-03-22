@@ -37,12 +37,13 @@ async fn main() {
         .create_pool(Some(deadpool_redis::Runtime::Tokio1))
         .expect("valkey pool creation failed");
 
-    let docker_svc = docker::DockerService::new(&cfg.docker_host).ok().map(Arc::new);
-    let bot_proxy = proxy::BotProxy::new(&cfg.holo_bot_url, {
+    let docker_svc = docker::DockerService::new(&cfg.docker_host)
+        .ok()
+        .map(Arc::new);
+    let bot_proxy = Some(proxy::BotProxy::new(&cfg.holo_bot_url, {
         let key = cfg.holo_bot_api_key.clone();
         if key.is_empty() { None } else { Some(key) }
-    })
-    .ok();
+    }));
 
     let endpoints = vec![status::ServiceEndpoint {
         name: "hololive-bot".to_string(),

@@ -4,11 +4,11 @@ use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use bollard::Docker;
 use bollard::models::ContainerSummary;
 use bollard::query_parameters::{
     ListContainersOptions, LogsOptions, RestartContainerOptions, StopContainerOptions,
 };
-use bollard::Docker;
 use futures_util::TryStreamExt;
 use tokio::io::AsyncRead;
 use tokio_util::io::StreamReader;
@@ -16,6 +16,7 @@ use tokio_util::io::StreamReader;
 use crate::docker::{Container, DockerProvider, PortMapping};
 use crate::error::DockerError;
 
+#[allow(missing_debug_implementations)]
 pub struct DockerService {
     docker: Docker,
     managed_prefixes: Vec<String>,
@@ -43,6 +44,7 @@ impl DockerService {
         })
     }
 
+    #[cfg(test)]
     pub fn new_test() -> Self {
         Self {
             docker: Docker::connect_with_http("tcp://localhost:0", 1, bollard::API_DEFAULT_VERSION)
@@ -74,12 +76,11 @@ impl DockerProvider for DockerService {
     }
 
     async fn list_containers(&self) -> Result<Vec<Container>, DockerError> {
-        if let Ok(cache) = self.cache.read() {
-            if let Some((created_at, containers)) = cache.as_ref() {
-                if created_at.elapsed() < self.cache_ttl {
-                    return Ok(containers.clone());
-                }
-            }
+        if let Ok(cache) = self.cache.read()
+            && let Some((created_at, containers)) = cache.as_ref()
+            && created_at.elapsed() < self.cache_ttl
+        {
+            return Ok(containers.clone());
         }
 
         let containers = self
@@ -151,7 +152,10 @@ impl DockerProvider for DockerService {
         }
 
         self.docker
-            .start_container(name, None::<bollard::query_parameters::StartContainerOptions>)
+            .start_container(
+                name,
+                None::<bollard::query_parameters::StartContainerOptions>,
+            )
             .await
             .map_err(|e| DockerError::Internal(e.to_string()))?;
 
@@ -217,14 +221,12 @@ impl DockerService {
             .ports
             .unwrap_or_default()
             .into_iter()
-            .filter_map(|port| {
-                let private_port = u16::try_from(port.private_port).ok()?;
-                let public_port = port.public_port.and_then(|p| u16::try_from(p).ok());
-                Some(PortMapping {
-                    private_port,
-                    public_port,
-                    port_type: port.typ.map(|t| t.to_string()).unwrap_or_else(|| "tcp".to_string()),
-                })
+            .map(|port| PortMapping {
+                private_port: port.private_port,
+                public_port: port.public_port,
+                port_type: port
+                    .typ
+                    .map_or_else(|| "tcp".to_string(), |t| t.to_string()),
             })
             .collect();
 
@@ -277,7 +279,10 @@ mod tests {
 
     #[test]
     fn test_parse_health_from_status() {
-        assert_eq!(parse_health("Up 2 hours (healthy)"), Some("healthy".to_string()));
+        assert_eq!(
+            parse_health("Up 2 hours (healthy)"),
+            Some("healthy".to_string())
+        );
         assert_eq!(
             parse_health("Up 5 minutes (unhealthy)"),
             Some("unhealthy".to_string())

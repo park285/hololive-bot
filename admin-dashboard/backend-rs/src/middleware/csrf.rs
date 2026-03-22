@@ -83,7 +83,9 @@ pub async fn csrf_middleware(
         &state.config.session_secret,
     );
 
-    if !valid {
+    if valid {
+        Ok(next.run(req).await)
+    } else {
         match mode {
             SecurityMode::Monitor => {
                 tracing::warn!(
@@ -95,12 +97,10 @@ pub async fn csrf_middleware(
             SecurityMode::Enforce => Err(AuthError::CsrfViolation.into()),
             SecurityMode::Off => unreachable!(),
         }
-    } else {
-        Ok(next.run(req).await)
     }
 }
 
-fn should_skip_csrf(method: &Method) -> bool {
+const fn should_skip_csrf(method: &Method) -> bool {
     matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
 }
 
@@ -119,7 +119,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 #[cfg(test)]

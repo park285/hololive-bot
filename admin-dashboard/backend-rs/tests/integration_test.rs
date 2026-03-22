@@ -87,7 +87,8 @@ fn build_test_app() -> axum::Router {
 }
 
 fn with_connect_info(mut req: Request<Body>) -> Request<Body> {
-    req.extensions_mut().insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12345))));
+    req.extensions_mut()
+        .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 12345))));
     req
 }
 
@@ -165,9 +166,7 @@ async fn test_login_response_contract() {
     let req = with_connect_info(
         Request::post("/admin/api/auth/login")
             .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                r#"{"username":"wrong","password":"wrong"}"#,
-            ))
+            .body(Body::from(r#"{"username":"wrong","password":"wrong"}"#))
             .unwrap(),
     );
     let resp = app.oneshot(req).await.unwrap();
