@@ -21,8 +21,8 @@
 package app
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -30,8 +30,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 )
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
@@ -108,7 +108,7 @@ func ProvideBotRouter(
 
 	// Iris webhook 수신 (h2c POST)
 	if webhookHandler != nil {
-		router.POST("/webhook/iris", webhookHandler.Handle)
+		router.POST("/webhook/iris", gin.WrapH(webhookHandler))
 	}
 
 	// 내부 트리거 라우트 (운영 API에서 내부 호출)

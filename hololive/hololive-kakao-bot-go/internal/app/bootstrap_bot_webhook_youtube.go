@@ -21,10 +21,12 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/iris"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	irispreset "github.com/park285/llm-kakao-bots/shared-go/pkg/iris/preset"
 )
 
 func buildBotWebhookHandler(
@@ -33,11 +35,16 @@ func buildBotWebhookHandler(
 	deps botWebhookRuntimeDependencies,
 	logger *slog.Logger,
 ) *iris.WebhookHandler {
-	return iris.NewWebhookHandler(cfg.Iris.WebhookToken, messageHandler, deps.cache.GetClient(), logger, iris.WebhookHandlerOptions{
-		WorkerCount:    cfg.Webhook.WorkerCount,
-		QueueSize:      cfg.Webhook.QueueSize,
-		EnqueueTimeout: cfg.Webhook.EnqueueTimeout,
-		HandlerTimeout: cfg.Webhook.HandlerTimeout,
-		RequireHTTP2:   cfg.Webhook.RequireHTTP2,
-	})
+	return iris.NewHandler(
+		context.Background(),
+		cfg.Iris.WebhookToken,
+		messageHandler,
+		logger,
+		irispreset.WebhookValkeyDedup(deps.cache.GetClient()),
+		iris.WithWorkerCount(cfg.Webhook.WorkerCount),
+		iris.WithQueueSize(cfg.Webhook.QueueSize),
+		iris.WithEnqueueTimeout(cfg.Webhook.EnqueueTimeout),
+		iris.WithHandlerTimeout(cfg.Webhook.HandlerTimeout),
+		iris.WithRequireHTTP2(cfg.Webhook.RequireHTTP2),
+	)
 }

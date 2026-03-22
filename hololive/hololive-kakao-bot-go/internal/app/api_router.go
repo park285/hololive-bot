@@ -21,8 +21,8 @@
 package app
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -33,10 +33,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
@@ -87,7 +87,7 @@ func ProvideAPIRouter(
 	}
 
 	if webhookHandler != nil {
-		router.POST("/webhook/iris", webhookHandler.Handle)
+		router.POST("/webhook/iris", gin.WrapH(webhookHandler))
 	}
 
 	// 내부 트리거 라우트 등록 (운영 API에서 스케줄러 수동 실행용)

@@ -26,8 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 
@@ -60,7 +60,7 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	srv.Start()
 	t.Cleanup(srv.Close)
 
-	irisClient := iris.NewH2CClient(srv.URL, "bot-token", nil)
+	irisClient := iris.NewH2CClient(srv.URL, "bot-token")
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: command.NewRegistry(),
