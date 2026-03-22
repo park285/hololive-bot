@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::response::Response;
 use hyper::Uri;
-use hyper::header::{HOST, ORIGIN, UPGRADE};
+use hyper::header::UPGRADE;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
@@ -39,6 +39,46 @@ impl BotProxy {
             api_key,
         }
     }
+}
+
+fn should_forward_header(name: &hyper::header::HeaderName, is_websocket: bool) -> bool {
+    let header = name.as_str();
+
+    if matches!(
+        header,
+        "cookie" | "authorization" | "origin" | "host" | "x-csrf-token"
+    ) {
+        return false;
+    }
+
+    if matches!(
+        header,
+        "accept"
+            | "accept-encoding"
+            | "accept-language"
+            | "cache-control"
+            | "content-length"
+            | "content-type"
+            | "if-match"
+            | "if-modified-since"
+            | "if-none-match"
+            | "if-unmodified-since"
+            | "pragma"
+            | "user-agent"
+    ) {
+        return true;
+    }
+
+    is_websocket
+        && matches!(
+            header,
+            "connection"
+                | "sec-websocket-extensions"
+                | "sec-websocket-key"
+                | "sec-websocket-protocol"
+                | "sec-websocket-version"
+                | "upgrade"
+        )
 }
 
 /// Proxy handler for /admin/api/holo/*path
@@ -80,12 +120,11 @@ pub async fn proxy_holo(
         .method(parts.method.clone())
         .uri(new_uri);
 
-    // Copy headers, remove Origin
+    // Forward only an explicit allowlist so admin cookies/tokens never leak upstream.
     for (name, value) in &parts.headers {
-        if name == HOST || name == ORIGIN {
-            continue;
+        if should_forward_header(name, is_ws) {
+            builder = builder.header(name, value);
         }
-        builder = builder.header(name, value);
     }
 
     // Inject API key
@@ -126,6 +165,7 @@ pub async fn proxy_holo(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hyper::header::{ACCEPT, CONNECTION, CONTENT_TYPE, COOKIE, HeaderName, SEC_WEBSOCKET_KEY};
 
     #[test]
     fn test_path_rewrite() {
@@ -157,5 +197,31 @@ mod tests {
     fn test_target_base_trailing_slash_stripped() {
         let proxy = BotProxy::new("http://localhost:30001/", None);
         assert_eq!(proxy.target_base, "http://localhost:30001");
+    }
+
+    #[test]
+    fn test_sensitive_headers_are_not_forwarded() {
+        assert!(!should_forward_header(&COOKIE, false));
+        assert!(!should_forward_header(
+            &HeaderName::from_static("authorization"),
+            false
+        ));
+        assert!(!should_forward_header(
+            &HeaderName::from_static("x-csrf-token"),
+            false
+        ));
+    }
+
+    #[test]
+    fn test_safe_http_headers_are_forwarded() {
+        assert!(should_forward_header(&ACCEPT, false));
+        assert!(should_forward_header(&CONTENT_TYPE, false));
+    }
+
+    #[test]
+    fn test_websocket_upgrade_headers_are_forwarded_only_for_ws() {
+        assert!(should_forward_header(&CONNECTION, true));
+        assert!(should_forward_header(&SEC_WEBSOCKET_KEY, true));
+        assert!(!should_forward_header(&SEC_WEBSOCKET_KEY, false));
     }
 }

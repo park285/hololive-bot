@@ -2,6 +2,7 @@
 name = "admin-dashboard"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 # Web framework
@@ -28,7 +29,7 @@ http-body-util = "0.1"
 hmac = "0.12"
 sha2 = "0.10"
 bcrypt = "0.19"
-rand = "0.10"
+getrandom = "0.4"
 hex = "0.4"
 base64 = "0.22"
 
@@ -51,6 +52,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 
 # Logging
 tracing = "0.1"
+tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Error handling

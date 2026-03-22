@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde::Serialize;
 use std::time::{Duration, Instant};
+use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ServiceEndpoint {
@@ -9,7 +10,7 @@ pub struct ServiceEndpoint {
     pub health_path: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ServiceStatus {
     pub name: String,
     pub available: bool,
@@ -17,7 +18,7 @@ pub struct ServiceStatus {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct AggregatedStatus {
     pub services: Vec<ServiceStatus>,
     pub uptime: String,

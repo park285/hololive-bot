@@ -9,10 +9,8 @@ use admin_dashboard::auth::rate_limiter::LoginRateLimiter;
 use admin_dashboard::auth::session::ValkeySessionStore;
 use admin_dashboard::config::{Config, SecurityConfig, SecurityMode, SessionConfig};
 use admin_dashboard::routes::build_router;
-use admin_dashboard::ssr::SsrInjector;
 use admin_dashboard::state::AppState;
 use admin_dashboard::status::{StatusCollector, SystemStats};
-use admin_dashboard::stream_limiter::StreamLimiter;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode, header};
@@ -33,18 +31,16 @@ fn test_config() -> Config {
         admin_user: "admin".to_string(),
         admin_pass_hash: test_admin_pass_hash().to_string(),
         session_secret: "test-secret-key-minimum-length".to_string(),
-        valkey_url: "127.0.0.1:6379".to_string(),
+        valkey_url: "127.0.0.1:1".to_string(),
         docker_host: "tcp://127.0.0.1:2375".to_string(),
         holo_bot_url: "http://127.0.0.1:30001".to_string(),
         holo_bot_api_key: String::new(),
+        log_dir: "/tmp/admin-dashboard-test-logs".to_string(),
         security: SecurityConfig {
             allowed_origins: vec!["http://localhost:5173".to_string()],
             allow_localhost_in_prod: true,
             csrf_mode: SecurityMode::Enforce,
             ws_origin_mode: SecurityMode::Enforce,
-            stream_limit_mode: SecurityMode::Enforce,
-            global_stream_limit: 10,
-            per_session_stream_limit: 2,
             force_https: false,
             tls_enabled: false,
             tls_cert_path: "/tmp/test.crt".to_string(),
@@ -64,13 +60,6 @@ fn build_test_app() -> axum::Router {
     let rate_limiter = Arc::new(LoginRateLimiter::new());
     let status_collector = StatusCollector::new(vec![], env!("CARGO_PKG_VERSION"));
     let (stats_tx, _) = tokio::sync::broadcast::channel::<SystemStats>(16);
-    let stream_limiter = Arc::new(StreamLimiter::new(
-        config.security.global_stream_limit,
-        config.security.per_session_stream_limit,
-        config.security.stream_limit_mode,
-    ));
-    let ssr_injector = SsrInjector::new(&config.holo_bot_url);
-
     let state = Arc::new(AppState {
         config,
         sessions,
@@ -79,8 +68,6 @@ fn build_test_app() -> axum::Router {
         docker_svc: None,
         status_collector,
         stats_tx,
-        stream_limiter,
-        ssr_injector,
     });
 
     build_router(state)
@@ -120,8 +107,7 @@ async fn test_api_404_returns_json_not_html() {
         .unwrap_or("");
     assert!(
         content_type.contains("json"),
-        "API 404 should return JSON, got: {}",
-        content_type
+        "API 404 should return JSON, got: {content_type}",
     );
 }
 
@@ -178,4 +164,45 @@ async fn test_login_response_contract() {
         json["error"].is_string(),
         "Error response should have 'error' field"
     );
+}
+
+#[tokio::test]
+async fn test_auth_session_without_cookie_returns_401() {
+    let app = build_test_app();
+    let req = Request::get("/admin/api/auth/session")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_auth_session_store_failure_returns_503() {
+    let app = build_test_app();
+    let signed = admin_dashboard::auth::sign_session_id(
+        "session-that-will-hit-valkey",
+        "test-secret-key-minimum-length",
+    );
+    let req = Request::get("/admin/api/auth/session")
+        .header(header::COOKIE, format!("admin_session={signed}"))
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn test_openapi_contains_auth_session_route() {
+    let app = build_test_app();
+    let req = Request::get("/api-docs/openapi.json")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(resp.into_body(), 256 * 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(json["paths"]["/admin/api/auth/session"].is_object());
 }

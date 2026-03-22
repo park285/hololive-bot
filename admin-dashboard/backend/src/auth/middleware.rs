@@ -28,14 +28,19 @@ pub async fn auth_middleware(
         return Err(AuthError::Unauthorized.into());
     }
 
-    if !state.sessions.validate_session(&session_id).await {
-        let mut response = StatusCode::UNAUTHORIZED.into_response();
-        set_clear_cookie(
-            response.headers_mut(),
-            "admin_session",
-            state.config.security.force_https,
-        );
-        return Ok(response);
+    match state.sessions.validate_session(&session_id).await {
+        Ok(true) => {}
+        Ok(false) => {
+            let mut response = StatusCode::UNAUTHORIZED.into_response();
+            set_clear_cookie(
+                response.headers_mut(),
+                "admin_session",
+                state.config.security.force_https,
+            );
+            set_clear_cookie(response.headers_mut(), "csrf_token", false);
+            return Ok(response);
+        }
+        Err(_) => return Err(AuthError::StoreUnavailable.into()),
     }
 
     req.extensions_mut().insert(SessionId(session_id));
@@ -96,7 +101,8 @@ pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool) 
 // ---------------------------------------------------------------------------
 
 const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
-                    img-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'none'";
+                    img-src 'self' data: https://*.ytimg.com https://*.ggpht.com; \
+                    connect-src 'self' ws: wss:; frame-ancestors 'none'";
 
 /// 모든 응답에 보안 헤더를 추가하는 standalone async fn
 /// 라우터에서 `.layer(axum::middleware::from_fn(apply_security_headers))` 로 사용
@@ -274,6 +280,13 @@ mod tests {
                 .to_str()
                 .unwrap()
                 .contains("default-src 'self'")
+        );
+        assert!(
+            h.get(header::CONTENT_SECURITY_POLICY)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("img-src 'self' data: https://*.ytimg.com https://*.ggpht.com")
         );
         // HSTS 는 기본 함수에서 미포함
         assert!(h.get(header::STRICT_TRANSPORT_SECURITY).is_none());

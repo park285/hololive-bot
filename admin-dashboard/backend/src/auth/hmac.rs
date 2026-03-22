@@ -1,6 +1,5 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
-use rand::Rng;
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -35,7 +34,7 @@ pub fn validate_session_signature(full_id: &str, secret: &str) -> (String, bool)
 
 pub fn generate_session_id() -> String {
     let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
+    getrandom::fill(&mut bytes).expect("OS RNG unavailable");
     hex::encode(bytes)
 }
 
@@ -94,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "secret must not be empty")]
     fn test_sign_empty_secret_panics() {
         sign_session_id("session123", "");
     }

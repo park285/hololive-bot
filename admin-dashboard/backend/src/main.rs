@@ -3,6 +3,7 @@ mod config;
 mod docker;
 mod error;
 mod handlers;
+mod logging;
 mod middleware;
 mod openapi;
 mod proxy;
@@ -11,26 +12,18 @@ mod ssr;
 mod state;
 mod static_files;
 mod status;
-mod stream_limiter;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_env("LOG_LEVEL").unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .json()
-        .init();
-
     let cfg = config::Config::load();
+    let _tracing_guards = logging::init_tracing(&cfg);
     tracing::info!(port = %cfg.port, env = %cfg.env, "starting admin-dashboard");
 
     let pool = deadpool_redis::Config::from_url(format!("redis://{}", cfg.valkey_url))
@@ -50,21 +43,16 @@ async fn main() {
         url: cfg.holo_bot_url.clone(),
         health_path: "/health".to_string(),
     }];
-    let status_collector = status::StatusCollector::new(endpoints, env!("CARGO_PKG_VERSION"));
+    let status_collector =
+        status::StatusCollector::new(endpoints.clone(), env!("CARGO_PKG_VERSION"));
     let (stats_tx, _) = tokio::sync::broadcast::channel(16);
     let cancel_token = CancellationToken::new();
-    status::SystemStatsCollector::start(stats_tx.clone(), cancel_token.clone());
+    status::SystemStatsCollector::start(stats_tx.clone(), endpoints, cancel_token.clone());
 
     let session_cfg = cfg.session.clone();
     let sessions = auth::session::ValkeySessionStore::new(pool, session_cfg);
     let rate_limiter = Arc::new(auth::rate_limiter::LoginRateLimiter::new());
     rate_limiter.start_cleanup_task();
-    let ssr_injector = ssr::SsrInjector::new(&cfg.holo_bot_url);
-    let stream_limiter = Arc::new(stream_limiter::StreamLimiter::new(
-        cfg.security.global_stream_limit,
-        cfg.security.per_session_stream_limit,
-        cfg.security.stream_limit_mode,
-    ));
 
     let app_state = Arc::new(state::AppState {
         config: cfg.clone(),
@@ -74,8 +62,6 @@ async fn main() {
         docker_svc,
         status_collector,
         stats_tx,
-        stream_limiter,
-        ssr_injector,
     });
     let router = routes::build_router(app_state);
 
