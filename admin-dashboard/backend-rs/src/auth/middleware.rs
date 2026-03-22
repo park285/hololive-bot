@@ -1,6 +1,6 @@
 use axum::extract::{Request, State};
-use axum::http::header::{HeaderMap, HeaderValue, SET_COOKIE};
 use axum::http::StatusCode;
+use axum::http::header::{HeaderMap, HeaderValue, SET_COOKIE};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use std::sync::Arc;
@@ -20,8 +20,7 @@ pub async fn auth_middleware(
     mut req: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    let session_cookie =
-        extract_cookie(&req, "admin_session").ok_or(AuthError::Unauthorized)?;
+    let session_cookie = extract_cookie(&req, "admin_session").ok_or(AuthError::Unauthorized)?;
 
     let (session_id, valid) =
         validate_session_signature(&session_cookie, &state.config.session_secret);
@@ -49,48 +48,47 @@ pub async fn auth_middleware(
 
 /// Cookie 헤더에서 name 에 해당하는 값을 추출
 pub fn extract_cookie(req: &Request, name: &str) -> Option<String> {
-    let header = req.headers().get(axum::http::header::COOKIE)?.to_str().ok()?;
+    let header = req
+        .headers()
+        .get(axum::http::header::COOKIE)?
+        .to_str()
+        .ok()?;
     for pair in header.split(';') {
         let pair = pair.trim();
-        if let Some((k, v)) = pair.split_once('=') {
-            if k.trim() == name {
-                return Some(v.trim().to_string());
-            }
+        if let Some((k, v)) = pair.split_once('=')
+            && k.trim() == name
+        {
+            return Some(v.trim().to_string());
         }
     }
     None
 }
 
 /// 세션 쿠키 설정 (HttpOnly, SameSite=Strict, Max-Age=1800)
-pub fn set_session_cookie(
-    headers: &mut HeaderMap,
-    name: &str,
-    value: &str,
-    force_https: bool,
-) {
+pub fn set_session_cookie(headers: &mut HeaderMap, name: &str, value: &str, force_https: bool) {
     let secure = if force_https { "; Secure" } else { "" };
-    let cookie = format!(
-        "{name}={value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=1800{secure}"
-    );
-    headers.append(SET_COOKIE, HeaderValue::from_str(&cookie).expect("valid cookie"));
+    let cookie = format!("{name}={value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=1800{secure}");
+    if let Ok(val) = HeaderValue::from_str(&cookie) {
+        headers.append(SET_COOKIE, val);
+    }
 }
 
 /// CSRF 쿠키 설정 (JS 에서 읽어야 하므로 HttpOnly 없음)
 pub fn set_csrf_cookie(headers: &mut HeaderMap, token: &str, force_https: bool) {
     let secure = if force_https { "; Secure" } else { "" };
-    let cookie = format!(
-        "csrf_token={token}; SameSite=Strict; Path=/{secure}"
-    );
-    headers.append(SET_COOKIE, HeaderValue::from_str(&cookie).expect("valid cookie"));
+    let cookie = format!("csrf_token={token}; SameSite=Strict; Path=/{secure}");
+    if let Ok(val) = HeaderValue::from_str(&cookie) {
+        headers.append(SET_COOKIE, val);
+    }
 }
 
 /// 쿠키 삭제 (Max-Age=-1 으로 즉시 만료)
 pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool) {
     let secure = if force_https { "; Secure" } else { "" };
-    let cookie = format!(
-        "{name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=-1{secure}"
-    );
-    headers.append(SET_COOKIE, HeaderValue::from_str(&cookie).expect("valid cookie"));
+    let cookie = format!("{name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=-1{secure}");
+    if let Ok(val) = HeaderValue::from_str(&cookie) {
+        headers.append(SET_COOKIE, val);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +126,7 @@ pub async fn apply_security_headers(mut response: Response) -> Response {
 }
 
 /// force_https=true 일 때 HSTS 헤더도 추가하는 버전
+#[allow(dead_code)]
 pub async fn apply_security_headers_with_hsts(response: Response) -> Response {
     let mut response = apply_security_headers(response).await;
     response.headers_mut().insert(
@@ -145,7 +144,7 @@ pub async fn apply_security_headers_with_hsts(response: Response) -> Response {
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{header, Request as HttpRequest};
+    use axum::http::{Request as HttpRequest, header};
 
     // -- extract_cookie --
 
@@ -176,9 +175,7 @@ mod tests {
 
     #[test]
     fn test_extract_cookie_no_header() {
-        let req = HttpRequest::builder()
-            .body(Body::empty())
-            .unwrap();
+        let req = HttpRequest::builder().body(Body::empty()).unwrap();
         assert_eq!(extract_cookie(&req, "admin_session"), None);
     }
 
@@ -271,7 +268,13 @@ mod tests {
             h.get(header::REFERRER_POLICY).unwrap(),
             "strict-origin-when-cross-origin"
         );
-        assert!(h.get(header::CONTENT_SECURITY_POLICY).unwrap().to_str().unwrap().contains("default-src 'self'"));
+        assert!(
+            h.get(header::CONTENT_SECURITY_POLICY)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("default-src 'self'")
+        );
         // HSTS 는 기본 함수에서 미포함
         assert!(h.get(header::STRICT_TRANSPORT_SECURITY).is_none());
     }
@@ -301,9 +304,11 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let response = apply_security_headers(response).await;
-        assert!(response
-            .headers()
-            .get("content-security-policy-report-only")
-            .is_none());
+        assert!(
+            response
+                .headers()
+                .get("content-security-policy-report-only")
+                .is_none()
+        );
     }
 }

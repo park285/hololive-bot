@@ -34,6 +34,9 @@ pub trait DockerProvider: Send + Sync {
     async fn get_log_stream(
         &self,
         name: &str,
-    ) -> Result<std::pin::Pin<Box<dyn tokio::io::AsyncRead + Send + Unpin>>, crate::error::DockerError>;
+    ) -> Result<
+        std::pin::Pin<Box<dyn tokio::io::AsyncRead + Send + Unpin>>,
+        crate::error::DockerError,
+    >;
     fn is_managed(&self, name: &str) -> bool;
 }

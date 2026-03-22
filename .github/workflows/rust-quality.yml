@@ -1,0 +1,75 @@
+name: Rust Quality Gates
+
+on:
+  pull_request:
+    paths:
+      - 'admin-dashboard/backend-rs/**'
+      - 'admin-dashboard/backend/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'admin-dashboard/backend-rs/**'
+      - 'admin-dashboard/backend/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --check --manifest-path admin-dashboard/backend-rs/Cargo.toml
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: admin-dashboard/backend-rs
+      - run: cargo clippy --manifest-path admin-dashboard/backend-rs/Cargo.toml -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: admin-dashboard/backend-rs
+      - run: cargo test --manifest-path admin-dashboard/backend-rs/Cargo.toml
+
+  deny:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: admin-dashboard/backend-rs/Cargo.toml
+          command: check
+          arguments: --config admin-dashboard/backend-rs/deny.toml

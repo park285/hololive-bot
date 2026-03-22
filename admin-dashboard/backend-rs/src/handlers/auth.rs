@@ -13,13 +13,13 @@ use crate::auth::session::SessionProvider;
 use crate::error::{AppError, AuthError};
 use crate::state::AppState;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub status: String,
     pub message: String,
@@ -75,10 +75,8 @@ pub async fn handle_login(
         .map_err(|_| AuthError::StoreUnavailable)?;
 
     let signed = crate::auth::sign_session_id(&session.id, &state.config.session_secret);
-    let csrf_token = crate::middleware::csrf::new_csrf_token(
-        &session.id,
-        &state.config.session_secret,
-    );
+    let csrf_token =
+        crate::middleware::csrf::new_csrf_token(&session.id, &state.config.session_secret);
 
     let mut response = Json(LoginResponse {
         status: "ok".to_string(),
@@ -110,10 +108,7 @@ pub async fn handle_login(
     ),
     tag = "auth"
 )]
-pub async fn handle_logout(
-    State(state): State<Arc<AppState>>,
-    req: Request,
-) -> impl IntoResponse {
+pub async fn handle_logout(State(state): State<Arc<AppState>>, req: Request) -> impl IntoResponse {
     if let Some(session_id) = req.extensions().get::<SessionId>() {
         state.sessions.delete_session(&session_id.0).await;
     }
@@ -124,21 +119,17 @@ pub async fn handle_logout(
         "admin_session",
         state.config.security.force_https,
     );
-    crate::auth::middleware::set_clear_cookie(
-        response.headers_mut(),
-        "csrf_token",
-        false,
-    );
+    crate::auth::middleware::set_clear_cookie(response.headers_mut(), "csrf_token", false);
     response
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct HeartbeatRequest {
     #[serde(default)]
     pub idle: bool,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct HeartbeatResponse {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -171,7 +162,7 @@ pub async fn handle_heartbeat(
 
     let body = axum::body::to_bytes(req.into_body(), 1024)
         .await
-        .map_err(|e| anyhow::anyhow!("body read failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("body read failed: {e}"))?;
     let hb: HeartbeatRequest =
         serde_json::from_slice(&body).unwrap_or(HeartbeatRequest { idle: false });
 
@@ -188,11 +179,7 @@ pub async fn handle_heartbeat(
             "admin_session",
             state.config.security.force_https,
         );
-        crate::auth::middleware::set_clear_cookie(
-            response.headers_mut(),
-            "csrf_token",
-            false,
-        );
+        crate::auth::middleware::set_clear_cookie(response.headers_mut(), "csrf_token", false);
         return Ok(response);
     }
 
@@ -213,44 +200,38 @@ pub async fn handle_heartbeat(
             "admin_session",
             state.config.security.force_https,
         );
-        crate::auth::middleware::set_clear_cookie(
-            response.headers_mut(),
-            "csrf_token",
-            false,
-        );
+        crate::auth::middleware::set_clear_cookie(response.headers_mut(), "csrf_token", false);
         return Ok(response);
     }
 
-    if state.config.session.token_rotation_enabled {
-        if let Ok(Some(new_session)) = state.sessions.rotate_session(&session_id).await {
-            let new_signed =
-                crate::auth::sign_session_id(&new_session.id, &state.config.session_secret);
-            let new_csrf = crate::middleware::csrf::new_csrf_token(
-                &new_session.id,
-                &state.config.session_secret,
-            );
+    if state.config.session.token_rotation_enabled
+        && let Ok(Some(new_session)) = state.sessions.rotate_session(&session_id).await
+    {
+        let new_signed =
+            crate::auth::sign_session_id(&new_session.id, &state.config.session_secret);
+        let new_csrf =
+            crate::middleware::csrf::new_csrf_token(&new_session.id, &state.config.session_secret);
 
-            let mut response = Json(HeartbeatResponse {
-                status: "ok".to_string(),
-                rotated: Some(true),
-                csrf_token: Some(new_csrf.clone()),
-                idle_rejected: None,
-            })
-            .into_response();
+        let mut response = Json(HeartbeatResponse {
+            status: "ok".to_string(),
+            rotated: Some(true),
+            csrf_token: Some(new_csrf.clone()),
+            idle_rejected: None,
+        })
+        .into_response();
 
-            crate::auth::middleware::set_session_cookie(
-                response.headers_mut(),
-                "admin_session",
-                &new_signed,
-                state.config.security.force_https,
-            );
-            crate::auth::middleware::set_csrf_cookie(
-                response.headers_mut(),
-                &new_csrf,
-                state.config.security.force_https,
-            );
-            return Ok(response);
-        }
+        crate::auth::middleware::set_session_cookie(
+            response.headers_mut(),
+            "admin_session",
+            &new_signed,
+            state.config.security.force_https,
+        );
+        crate::auth::middleware::set_csrf_cookie(
+            response.headers_mut(),
+            &new_csrf,
+            state.config.security.force_https,
+        );
+        return Ok(response);
     }
 
     Ok(Json(HeartbeatResponse {

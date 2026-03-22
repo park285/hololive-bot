@@ -14,6 +14,7 @@ pub struct SystemStats {
     pub load_avg_15: f64,
 }
 
+#[allow(missing_debug_implementations)]
 pub struct SystemStatsCollector;
 
 impl SystemStatsCollector {
@@ -23,8 +24,8 @@ impl SystemStatsCollector {
 
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => break,
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {
+                    () = cancel.cancelled() => break,
+                    () = tokio::time::sleep(std::time::Duration::from_secs(2)) => {
                         sys.refresh_cpu_all();
                         sys.refresh_memory();
                         let load = System::load_average();

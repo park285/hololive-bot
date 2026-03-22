@@ -1,5 +1,8 @@
+#![allow(clippy::needless_for_each)]
+
 use utoipa::OpenApi;
 
+#[allow(clippy::needless_for_each)]
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -25,4 +28,5 @@ use utoipa::OpenApi;
         (name = "status", description = "Status and monitoring endpoints"),
     )
 )]
+#[allow(missing_debug_implementations)]
 pub struct ApiDoc;

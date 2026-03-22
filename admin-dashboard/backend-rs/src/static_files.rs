@@ -7,6 +7,7 @@ use rust_embed::RustEmbed;
 struct StaticAssets;
 
 /// Check if embedded assets exist (index.html present)
+#[allow(dead_code)]
 pub fn has_embedded() -> bool {
     StaticAssets::get("index.html").is_some()
 }
@@ -24,7 +25,7 @@ pub fn favicon() -> Option<Vec<u8>> {
 /// Serve static files from embedded assets
 pub async fn serve_static(uri: axum::http::Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches("/assets/");
-    let asset_path = format!("assets/{}", path);
+    let asset_path = format!("assets/{path}");
 
     match StaticAssets::get(&asset_path) {
         Some(file) => {
@@ -32,7 +33,8 @@ pub async fn serve_static(uri: axum::http::Uri) -> impl IntoResponse {
             let mut response = Response::new(axum::body::Body::from(file.data.to_vec()));
             response.headers_mut().insert(
                 header::CONTENT_TYPE,
-                HeaderValue::from_str(mime.as_ref()).unwrap(),
+                HeaderValue::from_str(mime.as_ref())
+                    .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
             );
             response.headers_mut().insert(
                 header::CACHE_CONTROL,
@@ -72,10 +74,9 @@ pub async fn serve_index() -> impl IntoResponse {
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("text/html; charset=utf-8"),
             );
-            response.headers_mut().insert(
-                header::CACHE_CONTROL,
-                HeaderValue::from_static("no-cache"),
-            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
             response
         }
         None => StatusCode::NOT_FOUND.into_response(),

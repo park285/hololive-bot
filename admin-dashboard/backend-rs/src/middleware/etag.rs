@@ -7,6 +7,7 @@ use http_body_util::BodyExt;
 use xxhash_rust::xxh3::xxh3_64;
 
 /// ETag middleware for API GET responses.
+///
 /// Buffers response body, computes xxhash, supports If-None-Match -> 304.
 /// Only applies to GET requests on /admin/api/* paths.
 /// Excludes WebSocket upgrades and non-API paths.
@@ -45,21 +46,23 @@ pub async fn etag_middleware(req: Request, next: Next) -> Response {
     let hash = xxh3_64(&bytes);
     let etag = format!("\"{hash:016x}\"");
 
-    if let Some(inm) = if_none_match {
-        if inm == etag || inm == etag.trim_matches('"') {
-            let mut not_modified = Response::new(Body::empty());
-            *not_modified.status_mut() = StatusCode::NOT_MODIFIED;
-            not_modified
-                .headers_mut()
-                .insert(header::ETAG, HeaderValue::from_str(&etag).expect("valid etag"));
-            return not_modified;
-        }
+    if let Some(inm) = if_none_match
+        && (inm == etag || inm == etag.trim_matches('"'))
+    {
+        let mut not_modified = Response::new(Body::empty());
+        *not_modified.status_mut() = StatusCode::NOT_MODIFIED;
+        not_modified.headers_mut().insert(
+            header::ETAG,
+            HeaderValue::from_str(&etag).unwrap_or_else(|_| HeaderValue::from_static("\"0\"")),
+        );
+        return not_modified;
     }
 
     let mut response = Response::from_parts(parts, Body::from(bytes));
-    response
-        .headers_mut()
-        .insert(header::ETAG, HeaderValue::from_str(&etag).expect("valid etag"));
+    response.headers_mut().insert(
+        header::ETAG,
+        HeaderValue::from_str(&etag).unwrap_or_else(|_| HeaderValue::from_static("\"0\"")),
+    );
     response
 }
 

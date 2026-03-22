@@ -10,7 +10,6 @@ pub enum SecurityMode {
 impl SecurityMode {
     pub fn parse(input: &str) -> Self {
         match input.trim().to_ascii_lowercase().as_str() {
-            "enforce" => Self::Enforce,
             "monitor" => Self::Monitor,
             "off" => Self::Off,
             _ => Self::Enforce,
@@ -161,7 +160,11 @@ pub fn is_localhost_origin(origin: &str) -> bool {
     let authority = normalized.split("://").nth(1).unwrap_or(&normalized);
     // IPv6 bracket 주소 처리: [::1]:3000 -> host=[::1]
     let host = if authority.starts_with('[') {
-        authority.split(']').next().map(|s| format!("{s}]")).unwrap_or_default()
+        authority
+            .split(']')
+            .next()
+            .map(|s| format!("{s}]"))
+            .unwrap_or_default()
     } else {
         authority.split(':').next().unwrap_or("").to_string()
     };
@@ -183,9 +186,7 @@ pub fn parse_allowed_origins(environment: &str, allow_localhost_in_prod: bool) -
             .filter(|origin| !origin.is_empty())
             .collect::<Vec<_>>(),
         _ => {
-            tracing::warn!(
-                "ALLOWED_ORIGINS is not set; using fallback origin allowlist"
-            );
+            tracing::warn!("ALLOWED_ORIGINS is not set; using fallback origin allowlist");
             fallback_origins()
         }
     };
@@ -218,7 +219,12 @@ fn required_alias(keys: &[&str]) -> String {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
         })
-        .unwrap_or_else(|| panic!("required environment variable missing: {}", keys.join(" or ")))
+        .unwrap_or_else(|| {
+            panic!(
+                "required environment variable missing: {}",
+                keys.join(" or ")
+            )
+        })
 }
 
 #[cfg(test)]
@@ -231,6 +237,7 @@ mod tests {
         ENV_LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    #[allow(unsafe_code)] // 테스트 전용: env::set_var/remove_var는 Rust 2024에서 unsafe
     fn with_env_vars<R>(vars: &[(&str, Option<&str>)], test: impl FnOnce() -> R) -> R {
         let _guard = env_lock().lock().unwrap();
         let snapshot = vars
@@ -286,8 +293,14 @@ mod tests {
 
     #[test]
     fn test_normalize_origin() {
-        assert_eq!(normalize_origin("  https://example.com/  "), "https://example.com");
-        assert_eq!(normalize_origin("https://example.com"), "https://example.com");
+        assert_eq!(
+            normalize_origin("  https://example.com/  "),
+            "https://example.com"
+        );
+        assert_eq!(
+            normalize_origin("https://example.com"),
+            "https://example.com"
+        );
     }
 
     #[test]
@@ -302,10 +315,16 @@ mod tests {
     fn test_session_config_defaults() {
         let cfg = SessionConfig::default();
         assert_eq!(cfg.expiry_duration, std::time::Duration::from_secs(30 * 60));
-        assert_eq!(cfg.absolute_timeout, std::time::Duration::from_secs(8 * 3600));
+        assert_eq!(
+            cfg.absolute_timeout,
+            std::time::Duration::from_secs(8 * 3600)
+        );
         assert_eq!(cfg.idle_session_ttl, std::time::Duration::from_secs(10));
         assert_eq!(cfg.grace_period, std::time::Duration::from_secs(30));
-        assert_eq!(cfg.rotation_interval, std::time::Duration::from_secs(15 * 60));
+        assert_eq!(
+            cfg.rotation_interval,
+            std::time::Duration::from_secs(15 * 60)
+        );
     }
 
     #[test]
@@ -409,7 +428,10 @@ mod tests {
             ],
             || {
                 let cfg = Config::load();
-                assert_eq!(cfg.security.allowed_origins, vec!["https://admin.capu.blog"]);
+                assert_eq!(
+                    cfg.security.allowed_origins,
+                    vec!["https://admin.capu.blog"]
+                );
             },
         );
 

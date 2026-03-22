@@ -1,18 +1,20 @@
 use reqwest::Client;
 
+#[allow(dead_code, missing_debug_implementations)]
 pub struct SsrInjector {
     holo_bot_url: String,
     html_cache: Vec<u8>,
     http_client: Client,
 }
 
+#[allow(dead_code)]
 impl SsrInjector {
     pub fn new(holo_bot_url: &str) -> Self {
         let html_cache = crate::static_files::index_html().unwrap_or_default();
         let http_client = Client::builder()
             .timeout(std::time::Duration::from_secs(3))
             .build()
-            .expect("http client");
+            .unwrap_or_else(|e| panic!("http client build failed: {e}"));
         Self {
             holo_bot_url: holo_bot_url.to_string(),
             html_cache,
@@ -28,9 +30,8 @@ impl SsrInjector {
             return self.html_cache.clone();
         }
 
-        let data_url = match self.data_url_for_path(path) {
-            Some(url) => url,
-            None => return self.html_cache.clone(),
+        let Some(data_url) = self.data_url_for_path(path) else {
+            return self.html_cache.clone();
         };
 
         match self.fetch_upstream(&data_url).await {
@@ -55,10 +56,10 @@ impl SsrInjector {
     async fn fetch_upstream(&self, url: &str) -> Result<serde_json::Value, anyhow::Error> {
         let resp = self.http_client.get(url).send().await?;
 
-        if let Some(len) = resp.content_length() {
-            if len > 2 * 1024 * 1024 {
-                anyhow::bail!("upstream response too large: {} bytes", len);
-            }
+        if let Some(len) = resp.content_length()
+            && len > 2 * 1024 * 1024
+        {
+            anyhow::bail!("upstream response too large: {len} bytes");
         }
 
         let bytes = resp.bytes().await?;
@@ -72,7 +73,7 @@ impl SsrInjector {
     fn inject_data(&self, data: &serde_json::Value) -> Vec<u8> {
         let html = String::from_utf8_lossy(&self.html_cache);
         let script = format!(
-            r#"<script>window.__SSR_DATA__={}</script>"#,
+            r"<script>window.__SSR_DATA__={}</script>",
             serde_json::to_string(data).unwrap_or_default()
         );
 
