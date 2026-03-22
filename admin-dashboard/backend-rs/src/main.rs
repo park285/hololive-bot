@@ -2,6 +2,7 @@ mod auth;
 mod config;
 mod docker;
 mod error;
+mod handlers;
 mod middleware;
 mod proxy;
 mod ssr;
