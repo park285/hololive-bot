@@ -56,7 +56,7 @@ COPY --from=builder --link --chown=1000:1000 /build/admin-dashboard-bin ./admin-
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-30190}/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-30190}/health || exit 1
 
 EXPOSE 30190
 
