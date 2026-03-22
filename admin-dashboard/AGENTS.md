@@ -9,8 +9,8 @@ INHERIT: ../AGENTS.md
 
 | Item | Value |
 |------|-------|
-| **Service** | Unified admin dashboard (Go backend + React frontend) |
-| **Entrypoints** | Backend: `backend/cmd/admin/main.go`, Frontend: `frontend/src/main.tsx` |
+| **Service** | Unified admin dashboard (Rust backend + React frontend) |
+| **Entrypoints** | Backend: `backend/src/main.rs`, Frontend: `frontend/src/main.tsx` |
 | **Ports** | :30190 (combined) |
 
 ### Tech Stack
@@ -18,7 +18,7 @@ INHERIT: ../AGENTS.md
 | Layer | Technology |
 |-------|------------|
 | **Frontend** | React 19, TypeScript, Vite 7, TailwindCSS 4, shadcn/ui |
-| **Backend** | Go 1.26.1, Gin framework, Swagger docs |
+| **Backend** | Rust 1.94, axum, tokio, tower-http |
 | **State** | TanStack Query v5 (server), Zustand (client) |
 | **Auth** | Session cookie (HMAC signed), heartbeat rotation |
 
@@ -26,9 +26,11 @@ INHERIT: ../AGENTS.md
 
 | Task | Location |
 |------|----------|
-| API routes | `backend/internal/server/routes.go` |
-| Auth logic | `backend/internal/auth/auth.go` |
-| Docker control | `backend/internal/docker/` |
+| Route assembly | `backend/src/routes.rs` |
+| Auth middleware | `backend/src/auth/middleware.rs` |
+| Auth handlers | `backend/src/handlers/auth.rs` |
+| Docker control | `backend/src/docker/` |
+| Config | `backend/src/config.rs` |
 | API client | `frontend/src/api/client.ts` |
 | Generated types | `frontend/src/api/generated/` |
 
@@ -45,9 +47,9 @@ INHERIT: ../AGENTS.md
 - **WebSocket**: Real-time system stats and Docker log streaming
 
 ### Security
-- **CSRF**: Token-based protection
-- **Rate Limit**: Limit login attempt frequency
-- **Heartbeat**: Extend sessions and rotate tokens every 5 minutes
+- **CSRF**: Token-based protection (3-state: enforce/monitor/off)
+- **Rate Limit**: In-memory per-IP login attempt limiting
+- **Heartbeat**: Extend sessions and rotate tokens every 15 minutes
 
 ### Commands
 ```bash
