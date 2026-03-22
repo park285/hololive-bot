@@ -78,7 +78,8 @@ func ProvideAlarmRepository(
 func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
 	cfg := workerpool.DefaultConfig()
 
-	cfg.Size = 10
+	const alarmWorkerPoolSize = 10
+	cfg.Size = alarmWorkerPoolSize
 
 	pool, err := workerpool.New(cfg)
 	if err != nil {
