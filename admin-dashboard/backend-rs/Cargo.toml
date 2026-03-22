@@ -63,9 +63,13 @@ reqwest = { version = "0.13", features = ["json"] }
 # Async trait
 async-trait = "0.1"
 
+# Stream utilities
+bytes = "1"
+futures-util = "0.3"
+
 # Misc
 chrono = { version = "0.4", features = ["serde"] }
-tokio-util = { version = "0.7", features = ["rt"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 mime_guess = "2"
 pin-project-lite = "0.2"
