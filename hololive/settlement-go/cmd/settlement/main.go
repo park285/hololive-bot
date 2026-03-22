@@ -16,7 +16,7 @@ import (
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/client"
 
 	"github.com/kapu/settlement-go/pkg/settlement"
 )

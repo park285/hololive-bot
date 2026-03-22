@@ -25,14 +25,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	iris "github.com/park285/iris-client-go/client"
 )
 
 type irisDeliverySender struct {
-	client iris.Client
+	client iris.Sender
 }
 
 func (s irisDeliverySender) SendMessage(ctx context.Context, roomID, message string) error {
@@ -53,7 +53,7 @@ func ProvideOutboxRepository(postgres database.Client, logger *slog.Logger) *del
 }
 
 // ProvideDeliverySender - Iris client를 delivery.MessageSender로 어댑트한다.
-func ProvideDeliverySender(client iris.Client) delivery.MessageSender {
+func ProvideDeliverySender(client iris.Sender) delivery.MessageSender {
 	return irisDeliverySender{client: client}
 }
 

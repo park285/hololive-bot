@@ -25,7 +25,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -49,7 +48,7 @@ type Dependencies struct {
 	IrisBaseURL      string
 	Notification     config.NotificationConfig
 	Logger           *slog.Logger
-	Client           iris.Client
+	Client           irisClient
 	MessageAdapter   *adapter.MessageAdapter
 	Formatter        *adapter.ResponseFormatter
 	Cache            cache.Client
@@ -83,7 +82,7 @@ type coreDependencies struct {
 }
 
 type messagingDependencies struct {
-	client         iris.Client
+	client         irisClient
 	messageAdapter *adapter.MessageAdapter
 	formatter      *adapter.ResponseFormatter
 }

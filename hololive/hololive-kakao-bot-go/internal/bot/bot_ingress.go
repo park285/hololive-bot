@@ -25,7 +25,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/webhook"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"

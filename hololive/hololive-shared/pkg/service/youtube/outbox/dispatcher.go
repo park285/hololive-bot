@@ -30,9 +30,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	iris "github.com/park285/iris-client-go/client"
 )
 
 // Config: Dispatcher 설정
@@ -65,7 +65,7 @@ func DefaultConfig() Config {
 type Dispatcher struct {
 	db        *gorm.DB
 	cache     cache.Client
-	sender    iris.Client
+	sender    iris.Sender
 	renderer  *template.Renderer
 	logger    *slog.Logger
 	cfg       Config
@@ -74,7 +74,7 @@ type Dispatcher struct {
 }
 
 // NewDispatcher: 새 Dispatcher 생성
-func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender iris.Client, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
+func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender iris.Sender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
 	initOutboxMetrics()
 
 	if cfg.BatchSize <= 0 {

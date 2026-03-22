@@ -26,7 +26,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -35,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	iris "github.com/park285/iris-client-go/client"
 )
 
 // streamIngesterInfrastructure: stream-ingester 전용 인프라 (alarm/ACL/activity 미포함).
@@ -42,7 +42,7 @@ type streamIngesterInfrastructure struct {
 	cacheService     cache.Client
 	postgresService  database.Client
 	membersData      member.DataProvider
-	irisClient       iris.Client
+	irisClient       iris.Sender
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
 	ytStack          *providers.YouTubeStack

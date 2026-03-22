@@ -25,7 +25,7 @@ import (
 	"unicode"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/webhook"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
@@ -152,4 +152,3 @@ func (ma *MessageAdapter) createUnknownCommand(text string) *ParsedCommand {
 		RawMessage: text,
 	}
 }
-

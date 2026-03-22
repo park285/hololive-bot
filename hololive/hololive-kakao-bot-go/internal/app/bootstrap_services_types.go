@@ -21,11 +21,11 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	iris "github.com/park285/iris-client-go/client"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
@@ -84,8 +85,14 @@ type botCoreModule struct {
 	logger       *slog.Logger
 }
 
+type botIrisClient interface {
+	iris.Sender
+	Ping(ctx context.Context) bool
+	GetConfig(ctx context.Context) (*iris.Config, error)
+}
+
 type botMessagingModule struct {
-	client         iris.Client
+	client         botIrisClient
 	messageAdapter *adapter.MessageAdapter
 	formatter      *adapter.ResponseFormatter
 }
