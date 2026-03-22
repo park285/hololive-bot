@@ -5,6 +5,7 @@ use crate::auth::session::ValkeySessionStore;
 use crate::config::Config;
 use crate::docker::DockerService;
 use crate::proxy::BotProxy;
+use crate::ssr::SsrInjector;
 use crate::status::{StatusCollector, SystemStats};
 use crate::stream_limiter::StreamLimiter;
 use tokio::sync::broadcast;
@@ -18,4 +19,5 @@ pub struct AppState {
     pub status_collector: StatusCollector,
     pub stats_tx: broadcast::Sender<SystemStats>,
     pub stream_limiter: Arc<StreamLimiter>,
+    pub ssr_injector: SsrInjector,
 }
