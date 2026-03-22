@@ -29,46 +29,31 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 # 빌드 시 버전 주입 (docker-compose args 또는 --build-arg로 전달)
 ARG VERSION=dev
 RUN apk add --no-cache git
-ENV GOPRIVATE=github.com/park285/iris-client-go
+ENV GOWORK=/workspace/hololive-bot/go.work
 
-WORKDIR /app
+WORKDIR /workspace/hololive-bot
 
-COPY shared-go/go.mod shared-go/go.sum ./shared-go/
-COPY hololive/hololive-shared/go.mod hololive/hololive-shared/go.sum ./hololive/hololive-shared/
-COPY hololive/hololive-kakao-bot-go/go.mod hololive/hololive-kakao-bot-go/go.sum ./hololive/hololive-kakao-bot-go/
-
-WORKDIR /app/hololive/hololive-kakao-bot-go
-RUN --mount=type=secret,id=modules_token,required=true \
-    --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    MODULES_TOKEN="$(tr -d '\r\n' < /run/secrets/modules_token)" && \
-    git config --global url."https://x-access-token:${MODULES_TOKEN}@github.com/".insteadOf "https://github.com/" && \
-    (cd /app/hololive/hololive-shared && if grep -q 'github.com/park285/iris-client-go =>' go.mod; then go mod edit -dropreplace github.com/park285/iris-client-go; fi) && \
-    (cd /app/hololive/hololive-kakao-bot-go && if grep -q 'github.com/park285/iris-client-go =>' go.mod; then go mod edit -dropreplace github.com/park285/iris-client-go; fi) && \
-    go mod download && \
-    rm -f /root/.gitconfig
-
-WORKDIR /app
-COPY shared-go ./shared-go
+COPY go.work go.work.sum ./
+COPY --from=iris_client_go . ../iris-client-go
+COPY --from=shared_go_workspace . ../llm/shared-go
+COPY hololive/hololive-dispatcher-go ./hololive/hololive-dispatcher-go
+COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
+COPY hololive/hololive-stream-ingester ./hololive/hololive-stream-ingester
+COPY hololive/settlement-go ./hololive/settlement-go
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
 
-WORKDIR /app/hololive/hololive-kakao-bot-go
+WORKDIR /workspace/hololive-bot/hololive/hololive-kakao-bot-go
 
-RUN --mount=type=secret,id=modules_token,required=true \
+RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    MODULES_TOKEN="$(tr -d '\r\n' < /run/secrets/modules_token)" && \
-    git config --global url."https://x-access-token:${MODULES_TOKEN}@github.com/".insteadOf "https://github.com/" && \
-    (cd /app/hololive/hololive-shared && if grep -q 'github.com/park285/iris-client-go =>' go.mod; then go mod edit -dropreplace github.com/park285/iris-client-go; fi) && \
-    (cd /app/hololive/hololive-kakao-bot-go && if grep -q 'github.com/park285/iris-client-go =>' go.mod; then go mod edit -dropreplace github.com/park285/iris-client-go; fi) && \
-    go mod download github.com/park285/iris-client-go && \
+    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=greenteagc \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/bot ./cmd/bot && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/data /dist/internal/domain/ && \
-    cp config.example.json config.json official_japanese_names.json /dist/ && \
-    rm -f /root/.gitconfig
+    cp config.example.json config.json official_japanese_names.json /dist/
 
 # Stage 2: Production Runtime
 FROM alpine:${ALPINE_VERSION}
