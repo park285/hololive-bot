@@ -98,6 +98,21 @@ func TestFilterHololiveStreams(t *testing.T) {
 			wantIDs:   []string{"s4"},
 		},
 		{
+			name: "Independents org - 유지됨",
+			input: []*domain.Stream{
+				{
+					ID:          "s-indie",
+					ChannelName: "유우키 사쿠나",
+					Channel: &domain.Channel{
+						ID:  "UCrV1Hf5r8P148idjoSfrGEQ",
+						Org: new("Independents"),
+					},
+				},
+			},
+			wantCount: 1,
+			wantIDs:   []string{"s-indie"},
+		},
+		{
 			name: "혼합 입력 - 유효한 스트림만 유지됨",
 			input: []*domain.Stream{
 				{ID: "s5", Channel: nil},

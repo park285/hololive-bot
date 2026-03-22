@@ -33,7 +33,14 @@ func ParseNameWithOrg(input string) (name, org string) {
 
 	matches := re.FindStringSubmatch(input)
 	if len(matches) == 3 {
-		return strings.TrimSpace(matches[1]), strings.TrimSpace(matches[2])
+		name = strings.TrimSpace(matches[1])
+		org = strings.TrimSpace(matches[2])
+
+		if org == "Indie" {
+			org = "Independents"
+		}
+
+		return name, org
 	}
 
 	return input, ""

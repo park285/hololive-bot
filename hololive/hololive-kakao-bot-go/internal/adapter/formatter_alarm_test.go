@@ -85,7 +85,7 @@ func TestAlarmChannelName_WithStelliveOrg(t *testing.T) {
 			notification: &domain.AlarmNotification{
 				Channel: &domain.Channel{
 					Name: "유우키 사쿠나",
-					Org:  new("Indie"),
+					Org:  new("Independents"),
 				},
 			},
 			want: "[개인세] 유우키 사쿠나",

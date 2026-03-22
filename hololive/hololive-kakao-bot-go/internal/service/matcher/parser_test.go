@@ -59,7 +59,7 @@ func TestParseNameWithOrg(t *testing.T) {
 			name:         "with org Indie",
 			input:        "사쿠나 (Indie)",
 			expectedName: "사쿠나",
-			expectedOrg:  "Indie",
+			expectedOrg:  "Independents",
 		},
 		{
 			name:         "with extra spaces",
