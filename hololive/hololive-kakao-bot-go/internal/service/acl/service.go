@@ -25,7 +25,6 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -44,7 +43,7 @@ const (
 
 // ParseACLMode: 문자열을 ACLMode로 파싱한다. 유효하지 않으면 whitelist로 폴백.
 func ParseACLMode(s string) ACLMode {
-	switch strings.ToLower(strings.TrimSpace(s)) {
+	switch stringutil.Normalize(s) {
 	case string(ACLModeBlacklist):
 		return ACLModeBlacklist
 	default:

@@ -32,6 +32,8 @@ import (
 	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
 
+const serviceNameIris = "iris"
+
 // CommandTransport: 명령 실행 결과(텍스트/이미지/에러)를 Iris로 전달합니다.
 type CommandTransport struct {
 	irisClient iris.Client
@@ -60,7 +62,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	}
 
 	if err := t.irisClient.SendMessage(sendCtx, room, message, opts...); err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send message", "iris", "send_message", err)
+		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message to room %s: %w", room, serviceErr)
 	}
 
@@ -76,7 +78,7 @@ func (t *CommandTransport) SendImage(ctx context.Context, room, imageBase64 stri
 	defer cancel()
 
 	if err := t.irisClient.SendImage(sendCtx, room, imageBase64); err != nil {
-		serviceErr := appErrors.NewServiceError("failed to send image", "iris", "send_image", err)
+		serviceErr := appErrors.NewServiceError("failed to send image", serviceNameIris, "send_image", err)
 		return fmt.Errorf("send image to room %s: %w", room, serviceErr)
 	}
 

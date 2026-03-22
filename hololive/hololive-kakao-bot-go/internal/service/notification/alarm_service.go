@@ -405,23 +405,23 @@ func (as *AlarmService) removeChannelSubscribers(
 		}
 	}
 
-	smembersCmds := make([]valkey.Completed, 0, len(alarmTypes))
+	scardCmds := make([]valkey.Completed, 0, len(alarmTypes))
 	for _, alarmType := range alarmTypes {
 		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
 
-		smembersCmds = append(smembersCmds, builder.Smembers().Key(subsKey).Build())
+		scardCmds = append(scardCmds, builder.Scard().Key(subsKey).Build())
 	}
 
-	if len(smembersCmds) == 0 {
+	if len(scardCmds) == 0 {
 		return
 	}
 
-	smembersResults := as.cache.DoMulti(ctx, smembersCmds...)
+	scardResults := as.cache.DoMulti(ctx, scardCmds...)
 
-	cleanupCmds := make([]valkey.Completed, 0, len(smembersResults))
-	for i, res := range smembersResults {
-		members, memErr := res.AsStrSlice()
-		if memErr == nil && len(members) == 0 {
+	cleanupCmds := make([]valkey.Completed, 0, len(scardResults))
+	for i, res := range scardResults {
+		count, cardErr := res.AsInt64()
+		if cardErr == nil && count == 0 {
 			subsKey := as.channelSubscribersKeyByType(channelID, alarmTypes[i])
 
 			cleanupCmds = append(cleanupCmds, builder.Del().Key(subsKey).Build())
@@ -539,17 +539,17 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 
 	_ = as.cache.DoMulti(ctx, sremCmds...)
 
-	smembersCmds := make([]valkey.Completed, len(channelSubsKeys))
+	scardCmds := make([]valkey.Completed, len(channelSubsKeys))
 	for i, key := range channelSubsKeys {
-		smembersCmds[i] = client.B().Smembers().Key(key).Build()
+		scardCmds[i] = client.B().Scard().Key(key).Build()
 	}
 
-	smembersResults := as.cache.DoMulti(ctx, smembersCmds...)
+	scardResults := as.cache.DoMulti(ctx, scardCmds...)
 
-	cleanupCmds := make([]valkey.Completed, 0, len(smembersResults))
-	for i, result := range smembersResults {
-		members, err := result.AsStrSlice()
-		if err != nil || len(members) > 0 {
+	cleanupCmds := make([]valkey.Completed, 0, len(scardResults))
+	for i, result := range scardResults {
+		count, err := result.AsInt64()
+		if err != nil || count > 0 {
 			continue
 		}
 
@@ -570,15 +570,15 @@ func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, chann
 		allSubsKeys = append(allSubsKeys, as.channelSubscribersKeyByType(channelID, alarmType))
 	}
 
-	allSmembersCmds := make([]valkey.Completed, 0, len(allSubsKeys))
+	scardCmds := make([]valkey.Completed, 0, len(allSubsKeys))
 	for _, k := range allSubsKeys {
-		allSmembersCmds = append(allSmembersCmds, builder.Smembers().Key(k).Build())
+		scardCmds = append(scardCmds, builder.Scard().Key(k).Build())
 	}
 
-	allSmembersResults := as.cache.DoMulti(ctx, allSmembersCmds...)
-	for _, res := range allSmembersResults {
-		subs, _ := res.AsStrSlice()
-		if len(subs) > 0 {
+	scardResults := as.cache.DoMulti(ctx, scardCmds...)
+	for _, res := range scardResults {
+		count, _ := res.AsInt64()
+		if count > 0 {
 			allEmpty = false
 			break
 		}

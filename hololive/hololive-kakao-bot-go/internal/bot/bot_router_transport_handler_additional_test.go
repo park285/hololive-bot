@@ -319,10 +319,7 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	t.Run("getErrorMessage mappings", func(t *testing.T) {
 		assert.Empty(t, b.getErrorMessage(nil, "help"))
 
-		aiErr := errors.New("외부 AI 서비스 장애: 일시적 오류")
-		assert.Equal(t, aiErr.Error(), b.getErrorMessage(aiErr, "help"))
-
-		irisServiceErr := appErrors.NewServiceError("msg", "iris", "send_message", errors.New("down"))
+		irisServiceErr := appErrors.NewServiceError("msg", serviceNameIris, "send_message", errors.New("down"))
 		assert.Equal(t, adapter.ErrIrisConnectionFailed, b.getErrorMessage(irisServiceErr, "help"))
 
 		apiErr := appErrors.NewAPIError("api", 500, map[string]any{"operation": "fetch"})
@@ -336,8 +333,6 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 
 		validationErr := appErrors.NewValidationError("invalid input", "field", "v")
 		assert.Equal(t, validationErr.Error(), b.getErrorMessage(validationErr, "help"))
-
-		assert.Equal(t, adapter.ErrCacheConnectionFailed, b.getErrorMessage(errors.New("Valkey timeout"), "help"))
 
 		fallback := b.getErrorMessage(errors.New("generic error"), "help")
 		assert.Contains(t, fallback, "help 명령어 처리 중 오류")

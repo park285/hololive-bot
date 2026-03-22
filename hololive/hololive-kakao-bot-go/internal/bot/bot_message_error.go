@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
@@ -47,14 +46,8 @@ func (b *Bot) getErrorMessage(err error, commandType string) string {
 		return ""
 	}
 
-	msg := err.Error()
-
-	if strings.Contains(msg, "외부 AI 서비스 장애") {
-		return msg
-	}
-
 	var serviceErr *appErrors.ServiceError
-	if errors.As(err, &serviceErr) && strings.EqualFold(serviceErr.Service, "iris") {
+	if errors.As(err, &serviceErr) && serviceErr.Service == serviceNameIris {
 		return adapter.ErrIrisConnectionFailed
 	}
 
@@ -75,11 +68,7 @@ func (b *Bot) getErrorMessage(err error, commandType string) string {
 
 	var validationErr *appErrors.ValidationError
 	if errors.As(err, &validationErr) {
-		return msg
-	}
-
-	if strings.Contains(msg, "Valkey") || strings.Contains(msg, "cache") {
-		return adapter.ErrCacheConnectionFailed
+		return err.Error()
 	}
 
 	return fmt.Sprintf(adapter.ErrCommandProcessingFailed, commandType)
