@@ -1,0 +1,81 @@
+[package]
+name = "admin-dashboard"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Web framework
+axum = { version = "0.8", features = ["ws", "macros"] }
+axum-extra = { version = "0.10", features = ["cookie", "typed-header"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "set-header", "trace"] }
+
+# Session store
+deadpool-redis = "0.18"
+redis = { version = "0.27", features = ["tokio-comp"] }
+
+# Docker
+bollard = "0.18"
+
+# Proxy
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "http2", "tokio"] }
+http-body-util = "0.1"
+
+# Auth
+hmac = "0.12"
+sha2 = "0.10"
+bcrypt = "0.17"
+rand = "0.9"
+hex = "0.4"
+base64 = "0.22"
+
+# JSON
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Config
+dotenvy = "0.15"
+
+# Static files
+rust-embed = "8"
+
+# System stats
+sysinfo = "0.33"
+
+# OpenAPI
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "8", features = ["axum"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# HTTP client (status collector, SSR)
+reqwest = { version = "0.12", features = ["json"] }
+
+# Async trait
+async-trait = "0.1"
+
+# Misc
+chrono = { version = "0.4", features = ["serde"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+mime_guess = "2"
+pin-project-lite = "0.2"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+mockall = "0.13"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
