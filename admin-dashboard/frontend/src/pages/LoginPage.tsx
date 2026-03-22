@@ -64,29 +64,31 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-50 font-display selection:bg-sky-200">
-      {/* Dynamic Background with Hololive Colors */}
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-50 font-body selection:bg-sky-200">
+      {/* Dynamic Background */}
       <div className="absolute inset-0 bg-white z-0">
         <div className="absolute top-0 left-0 right-0 h-[500px] bg-linear-to-b from-sky-100/50 to-transparent"></div>
         <div className="absolute -top-24 right-0 w-[500px] h-[500px] bg-sky-200/30 rounded-full blur-[100px] animate-pulse"></div>
         <div className="absolute top-1/2 -left-24 w-[400px] h-[400px] bg-cyan-100/40 rounded-full blur-[80px]"></div>
+        {/* Subtle noise texture */}
+        <div className="absolute inset-0 opacity-[0.015]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }} />
       </div>
 
       <div className="w-full max-w-[400px] z-10 px-6">
         <div className="relative">
           {/* Logo Section */}
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-tr from-sky-400 to-cyan-400 rounded-2xl shadow-lg shadow-sky-200 mb-6 transform rotate-3 hover:rotate-6 transition-transform duration-300">
+          <div className="text-center mb-10 animate-fade-in-up">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-tr from-sky-400 to-cyan-400 rounded-2xl shadow-lg shadow-sky-200/60 mb-6 transform rotate-3 hover:rotate-6 transition-transform duration-300">
               <Play className="w-8 h-8 text-white fill-white ml-1" aria-hidden="true" />
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+            <h1 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
               Hololive Bot <span className="text-sky-500">Console</span>
             </h1>
           </div>
 
           {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in-up stagger-2">
             <div className="space-y-4">
               <div className="group relative">
                 <Label htmlFor="username" className="sr-only">Username</Label>
@@ -137,7 +139,7 @@ const LoginPage = () => {
             <Button
               type="submit"
               disabled={loginMutation.isPending}
-              className="w-full relative overflow-hidden flex justify-center items-center py-6 px-4 bg-slate-900 rounded-xl text-sm font-bold text-white hover:bg-slate-800 focus-visible:ring-4 focus-visible:ring-slate-200 disabled:opacity-70 disabled:cursor-not-allowed transition-colors shadow-xl shadow-slate-200 group"
+              className="w-full relative overflow-hidden flex justify-center items-center py-6 px-4 bg-slate-900 rounded-xl text-sm font-display font-bold text-white hover:bg-slate-800 focus-visible:ring-4 focus-visible:ring-slate-200 disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 shadow-xl shadow-slate-200/80 hover:shadow-2xl hover:shadow-slate-300/60 hover:-translate-y-0.5 group"
             >
               <div className="relative z-10 flex items-center justify-center">
                 {loginMutation.isPending ? (
@@ -160,7 +162,7 @@ const LoginPage = () => {
           </form>
 
           {/* Footer */}
-          <div className="mt-12 text-center space-y-2">
+          <div className="mt-12 text-center space-y-2 animate-fade-in stagger-4">
             <div className="flex justify-center space-x-2">
               <div className="w-1.5 h-1.5 rounded-full bg-sky-400"></div>
               <div className="w-1.5 h-1.5 rounded-full bg-cyan-400"></div>

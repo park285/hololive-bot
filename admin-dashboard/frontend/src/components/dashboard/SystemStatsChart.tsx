@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import type { SystemStats } from '@/types'
 import { CONFIG } from '@/config'
-import { Card, Badge } from '@/components/ui'
+import { Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
 import Activity from 'lucide-react/dist/esm/icons/activity'
 import Cpu from 'lucide-react/dist/esm/icons/cpu'
 import CircuitBoard from 'lucide-react/dist/esm/icons/circuit-board'
@@ -354,7 +355,7 @@ export const SystemStatsChart = () => {
             <Card.Header className="flex flex-row items-center justify-between border-b border-slate-100 pb-4 bg-slate-50/50">
                 <div className="flex items-center gap-2">
                     <Activity className="text-slate-500" size={20} />
-                    <h3 className="text-lg font-bold text-slate-800">시스템 리소스</h3>
+                    <h3 className="text-lg font-display font-bold text-slate-800">시스템 리소스</h3>
                     {isConnected ? (
                         <span className="flex h-2 w-2 relative ml-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
