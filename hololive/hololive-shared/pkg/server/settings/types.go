@@ -52,6 +52,22 @@ func normalizeScraperProxyRuntimeService(service scraperProxyRuntimeService) scr
 	return service
 }
 
+func normalizeScraperProxyToggler(toggler ScraperProxyToggler) ScraperProxyToggler {
+	if toggler == nil {
+		return nil
+	}
+
+	value := reflect.ValueOf(toggler)
+	switch value.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func:
+		if value.IsNil() {
+			return nil
+		}
+	}
+
+	return toggler
+}
+
 // SettingsApplier: 설정 변경을 런타임에 적용하는 인터페이스
 type SettingsApplier interface {
 	ApplyScraperProxy(ctx context.Context, enabled bool) ScraperProxyApplyResult
