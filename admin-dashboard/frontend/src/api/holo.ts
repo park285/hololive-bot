@@ -120,8 +120,8 @@ export const roomsApi = {
         return response.data
     },
 
-    setACL: async (enabled: boolean) => {
-        const response = await apiClient.post<ApiResponse & { enabled: boolean }>('/holo/rooms/acl', { enabled })
+    setACL: async (params: { enabled?: boolean; mode?: 'whitelist' | 'blacklist' }) => {
+        const response = await apiClient.post<ApiResponse & { enabled: boolean; mode: string }>('/holo/rooms/acl', params)
         return response.data
     },
 }
