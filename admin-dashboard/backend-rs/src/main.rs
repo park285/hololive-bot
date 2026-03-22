@@ -3,6 +3,7 @@ mod config;
 mod error;
 mod middleware;
 mod state;
+mod stream_limiter;
 
 fn main() {
     dotenvy::dotenv().ok();
