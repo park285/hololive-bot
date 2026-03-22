@@ -1,6 +1,6 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
-use rand::RngCore;
+use rand::Rng;
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;

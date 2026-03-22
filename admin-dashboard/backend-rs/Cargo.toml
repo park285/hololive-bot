@@ -6,18 +6,18 @@ edition = "2024"
 [dependencies]
 # Web framework
 axum = { version = "0.8", features = ["ws", "macros"] }
-axum-extra = { version = "0.10", features = ["cookie", "typed-header"] }
-axum-server = { version = "0.7", features = ["tls-rustls"] }
+axum-extra = { version = "0.12", features = ["cookie", "typed-header"] }
+axum-server = { version = "0.8", features = ["tls-rustls"] }
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors", "set-header", "trace"] }
 
 # Session store
-deadpool-redis = "0.18"
-redis = { version = "0.27", features = ["tokio-comp"] }
+deadpool-redis = "0.23"
+redis = { version = "1.1", features = ["tokio-comp"] }
 
 # Docker
-bollard = "0.18"
+bollard = "0.20"
 
 # Proxy
 hyper = { version = "1", features = ["full"] }
@@ -27,8 +27,8 @@ http-body-util = "0.1"
 # Auth
 hmac = "0.12"
 sha2 = "0.10"
-bcrypt = "0.17"
-rand = "0.9"
+bcrypt = "0.19"
+rand = "0.10"
 hex = "0.4"
 base64 = "0.22"
 
@@ -43,11 +43,11 @@ dotenvy = "0.15"
 rust-embed = "8"
 
 # System stats
-sysinfo = "0.33"
+sysinfo = "0.38"
 
 # OpenAPI
 utoipa = { version = "5", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "8", features = ["axum"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
 
 # Logging
 tracing = "0.1"
@@ -58,7 +58,7 @@ thiserror = "2"
 anyhow = "1"
 
 # HTTP client (status collector, SSR)
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 
 # Async trait
 async-trait = "0.1"
@@ -73,7 +73,7 @@ pin-project-lite = "0.2"
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
-mockall = "0.13"
+mockall = "0.14"
 
 [profile.release]
 lto = true
