@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod docker;
 mod error;
 mod middleware;
 mod state;
