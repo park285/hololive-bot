@@ -32,7 +32,6 @@ fi
 
 COMPOSE_CMD=("${CONTAINER_CLI}" "compose")
 COMPOSE_MODE="${CONTAINER_CLI} compose"
-PRIVATE_MODULE_HOST="github.com/park285/iris-client-go"
 # podman 선택 시 docker-compose provider 의존을 피하기 위해 podman-compose 우선
 if [ "${CONTAINER_CLI}" = "podman" ] && command -v podman-compose >/dev/null 2>&1; then
     COMPOSE_CMD=("podman-compose")
@@ -47,38 +46,6 @@ elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
         exit 1
     fi
 fi
-
-load_modules_token() {
-    if [[ -n "${MODULES_TOKEN:-}" ]]; then
-        return 0
-    fi
-
-    if [[ -n "${MODULES_TOKEN_FILE:-}" ]]; then
-        if [[ ! -f "$MODULES_TOKEN_FILE" ]]; then
-            echo "[ERROR] MODULES_TOKEN_FILE not found: ${MODULES_TOKEN_FILE}"
-            exit 1
-        fi
-
-        MODULES_TOKEN="$(tr -d '\r\n' < "$MODULES_TOKEN_FILE")"
-        export MODULES_TOKEN
-        return 0
-    fi
-
-    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-        MODULES_TOKEN="$(gh auth token 2>/dev/null || true)"
-        export MODULES_TOKEN
-    fi
-}
-
-require_modules_token() {
-    if [[ -n "${MODULES_TOKEN:-}" ]]; then
-        return 0
-    fi
-
-    echo "[ERROR] MODULES_TOKEN or MODULES_TOKEN_FILE is required to fetch ${PRIVATE_MODULE_HOST}"
-    echo "        local fallback also checks 'gh auth token' when GitHub CLI is logged in"
-    exit 1
-}
 
 # 버전 관리 대상 디렉토리
 VERSION_DIRS=(
@@ -171,9 +138,6 @@ if [ "$REMOTE_CACHE" = true ]; then
     echo "  REMOTE_CACHE_PREFIX=$REMOTE_CACHE_PREFIX"
 fi
 echo ""
-
-load_modules_token
-require_modules_token
 
 if [ ${#TARGET_SERVICES[@]} -gt 0 ]; then
     # 지정 타겟 빌드

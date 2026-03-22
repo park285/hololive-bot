@@ -27,10 +27,7 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-replace (
-	github.com/kapu/hololive-shared => ../hololive-shared
-	github.com/park285/iris-client-go => /home/kapu/gemini/iris-client-go
-)
+replace github.com/kapu/hololive-shared => ../hololive-shared
 
 require (
 	cloud.google.com/go/auth v0.18.2 // indirect
