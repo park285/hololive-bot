@@ -6,20 +6,15 @@
  */
 
 import { isAxiosError } from 'axios'
-import apiClient from './client'
-import { Docker } from '@/api/generated/Docker'
-import { Logs } from '@/api/generated/Logs'
-import type { InternalServerContainerInfo } from '@/api/generated/data-contracts'
+import apiClient, { createApiClient } from './client'
+import { Admin } from '@/api/generated/Admin'
+import type {
+    AggregatedStatus as GeneratedAggregatedStatus,
+    Container as GeneratedContainer,
+} from '@/api/generated/data-contracts'
 
-// API 공통 설정
-const API_CONFIG = {
-    baseURL: '/admin/api',
-    withCredentials: true,
-}
-
-// 싱글톤 인스턴스
-const dockerClient = new Docker(API_CONFIG)
-const logsClient = new Logs(API_CONFIG)
+const adminClient = new Admin()
+adminClient.instance = createApiClient('')
 
 // 기존 인터페이스 유지를 위한 타입 변환
 export interface HeartbeatResponse {
@@ -29,6 +24,12 @@ export interface HeartbeatResponse {
     idle_rejected?: boolean
     absolute_expired?: boolean
     error?: string
+}
+
+export interface SessionStatusResponse {
+    status: string
+    authenticated: boolean
+    username: string
 }
 
 // DockerContainer 타입 (기존 타입과 호환 유지)
@@ -53,6 +54,8 @@ export interface DockerContainer {
     blockReadMB?: number
     blockWriteMB?: number
     goroutineCount?: number
+    created: number
+    ports: GeneratedContainer['ports']
 }
 
 export interface DockerHealthResponse {
@@ -68,26 +71,6 @@ export interface DockerContainersResponse {
 export interface StatusOnlyResponse {
     status: string
     message?: string
-}
-
-export interface SystemLogsResponse {
-    status: string
-    file: string
-    lines: string[]
-    count: number
-    error?: string
-}
-
-export interface SystemLogFile {
-    key: string
-    name: string
-    description: string
-    exists: boolean
-}
-
-export interface SystemLogFilesResponse {
-    status: string
-    files: SystemLogFile[]
 }
 
 interface AuthStatusResponse {
@@ -112,6 +95,15 @@ export const authApi = {
         }
     },
 
+    getSession: async (): Promise<SessionStatusResponse> => {
+        const { data } = await adminClient.handleSessionStatus()
+        return {
+            status: data.status,
+            authenticated: data.authenticated,
+            username: data.username,
+        }
+    },
+
     heartbeat: async (idle = false, signal?: AbortSignal): Promise<HeartbeatResponse> => {
         try {
             const response = await apiClient.post('/auth/heartbeat', { idle }, { signal })
@@ -128,79 +120,45 @@ export const authApi = {
 // Docker API
 export const dockerApi = {
     checkHealth: async (): Promise<DockerHealthResponse> => {
-        const response = await dockerClient.healthList()
+        const { data } = await adminClient.handleDockerHealth()
         return {
-            status: response.data.status ?? 'ok',
-            available: response.data.available ?? false,
+            status: data.status,
+            available: data.available,
         }
     },
 
     getContainers: async (): Promise<DockerContainersResponse> => {
-        const response = await dockerClient.containersList()
-        const containers: DockerContainer[] = (response.data.containers ?? []).map(
-            (c: InternalServerContainerInfo) => ({
-                id: c.id ?? '',
-                name: c.name ?? '',
-                state: c.state ?? '',
-                status: c.status ?? '',
-                image: '',
-                health: c.state === 'running' ? 'healthy' : 'unhealthy',
+        const { data } = await adminClient.handleDockerContainers()
+        const containers: DockerContainer[] = data.containers.map(
+            (c: GeneratedContainer) => ({
+                id: c.id,
+                name: c.name,
+                state: c.state,
+                status: c.status,
+                image: c.image,
+                health: c.health ?? 'none',
                 managed: true,
                 paused: false,
-                cpuPercent: c.cpuPercent,
-                memoryUsageMB: c.memoryUsageMB,
-                memoryLimitMB: c.memoryLimitMB,
-                memoryPercent: c.memoryPercent,
-                networkRxMB: c.networkRxMB,
-                networkTxMB: c.networkTxMB,
-                blockReadMB: c.blockReadMB,
-                blockWriteMB: c.blockWriteMB,
-                goroutineCount: c.goroutineCount,
+                created: c.created,
+                ports: c.ports,
             }),
         )
-        return { status: response.data.status ?? 'ok', containers }
+        return { status: data.status, containers }
     },
 
     restartContainer: async (name: string): Promise<StatusOnlyResponse> => {
-        const response = await dockerClient.containersRestartCreate(name)
-        return { status: response.data.status ?? 'ok', message: response.data.message }
+        const { data } = await adminClient.handleDockerRestart(name)
+        return { status: data.status, message: data.message }
     },
 
     stopContainer: async (name: string): Promise<StatusOnlyResponse> => {
-        const response = await dockerClient.containersStopCreate(name)
-        return { status: response.data.status ?? 'ok', message: response.data.message }
+        const { data } = await adminClient.handleDockerStop(name)
+        return { status: data.status, message: data.message }
     },
 
     startContainer: async (name: string): Promise<StatusOnlyResponse> => {
-        const response = await dockerClient.containersStartCreate(name)
-        return { status: response.data.status ?? 'ok', message: response.data.message }
-    },
-}
-
-// System Logs API (Core)
-export const systemLogsApi = {
-    getSystemLogs: async (file = 'combined', lines = 200): Promise<SystemLogsResponse> => {
-        const response = await logsClient.logsList({ file, lines })
-        return {
-            status: response.data.status ?? 'ok',
-            file: response.data.file ?? file,
-            lines: response.data.lines ?? [],
-            count: response.data.count ?? 0,
-            error: undefined,
-        }
-    },
-
-    getSystemLogFiles: async (): Promise<SystemLogFilesResponse> => {
-        const response = await logsClient.filesList()
-        return {
-            status: response.data.status ?? 'ok',
-            files: (response.data.files ?? []).map((f) => ({
-                key: f.key ?? '',
-                name: f.name ?? '',
-                description: f.description ?? '',
-                exists: true,
-            })),
-        }
+        const { data } = await adminClient.handleDockerStart(name)
+        return { status: data.status, message: data.message }
     },
 }
 
@@ -208,25 +166,15 @@ export const systemLogsApi = {
 export interface ServiceStatus {
     name: string
     available: boolean
-    version?: string
-    uptime?: string
-    goroutines: number
+    response_time_ms?: number | null
+    error?: string | null
 }
 
-export interface AggregatedStatus {
-    version: string
-    uptime: string
-    startedAt: number
-    services: ServiceStatus[]
-    totalGoroutines: number
-    availableServices: number
-    totalServices: number
-    adminGoroutines: number
-}
+export type AggregatedStatus = GeneratedAggregatedStatus
 
 export const statusApi = {
     get: async (): Promise<AggregatedStatus> => {
-        const response = await apiClient.get<AggregatedStatus>('/status')
-        return response.data
+        const { data } = await adminClient.handleAggregatedStatus()
+        return data
     },
 }

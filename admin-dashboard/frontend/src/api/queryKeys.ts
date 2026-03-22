@@ -36,13 +36,6 @@ export const queryKeys = {
         upcoming: (org: StreamOrg) => ['streams', 'upcoming', org] as const,
     },
 
-    /** 로그 관련 쿼리 키 */
-    logs: {
-        all: ['logs'] as const,
-        system: (file: string) => ['logs', 'system', file] as const,
-        systemFiles: ['logs', 'system', 'files'] as const,
-    },
-
     /** 설정 관련 쿼리 키 */
     settings: {
         all: ['settings'] as const,

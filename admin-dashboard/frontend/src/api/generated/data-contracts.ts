@@ -10,135 +10,88 @@
  * ---------------------------------------------------------------
  */
 
-export interface GithubComPark285LlmKakaoBotsAdminDashboardInternalStatusAggregatedStatus {
-  adminGoroutines?: number;
-  availableServices?: number;
-  /** 서비스별 상태 */
-  services?: GithubComPark285LlmKakaoBotsAdminDashboardInternalStatusServiceStatus[];
-  startedAt?: number;
-  /** 집계 통계 */
-  totalGoroutines?: number;
-  totalServices?: number;
-  uptime?: string;
-  /** Admin Dashboard 자체 상태 */
-  version?: string;
+export interface AggregatedStatus {
+  services: ServiceStatus[];
+  uptime: string;
+  version: string;
 }
 
-export interface GithubComPark285LlmKakaoBotsAdminDashboardInternalStatusServiceStatus {
-  available?: boolean;
-  goroutines?: number;
-  name?: string;
-  uptime?: string;
-  version?: string;
+export interface Container {
+  /** @format int64 */
+  created: number;
+  health?: string | null;
+  id: string;
+  image: string;
+  name: string;
+  ports: PortMapping[];
+  state: string;
+  status: string;
 }
 
-export interface InternalServerContainerInfo {
-  /** @example 100 */
-  blockReadMB?: number;
-  /** @example 50 */
-  blockWriteMB?: number;
-  /** @example 1.5 */
-  cpuPercent?: number;
-  /** @example 25 */
-  goroutineCount?: number;
-  /** @example "abc123def456" */
-  id?: string;
-  /** @example 512 */
-  memoryLimitMB?: number;
-  /** @example 25.1 */
-  memoryPercent?: number;
-  /** @example 128.5 */
-  memoryUsageMB?: number;
-  /** @example "hololive-bot" */
-  name?: string;
-  /** @example 10.5 */
-  networkRxMB?: number;
-  /** @example 5.2 */
-  networkTxMB?: number;
-  /** @example "running" */
-  state?: string;
-  /** @example "Up 2 hours" */
-  status?: string;
+export interface DockerActionResponse {
+  message: string;
+  status: string;
 }
 
-export interface InternalServerContainerListResponse {
-  containers?: InternalServerContainerInfo[];
-  /** @example "ok" */
-  status?: string;
+export interface DockerContainerListResponse {
+  containers: Container[];
+  status: string;
 }
 
-export interface InternalServerDockerHealthResponse {
-  /** @example true */
-  available?: boolean;
-  /** @example "ok" */
-  status?: string;
+export interface DockerHealthResponse {
+  available: boolean;
+  status: string;
 }
 
-export interface InternalServerErrorResponse {
-  /** @example "Session expired" */
-  details?: string;
-  /** @example "Unauthorized" */
-  error?: string;
-}
-
-export interface InternalServerHeartbeatRequest {
-  /** @example false */
+export interface HeartbeatRequest {
   idle?: boolean;
 }
 
-export interface InternalServerHeartbeatResponse {
-  /** @example 1704067200 */
-  absolute_expires_at?: number;
-  /** @example false */
-  idle_rejected?: boolean;
-  /** @example true */
-  rotated?: boolean;
-  /** @example "ok" */
-  status?: string;
+export interface HeartbeatResponse {
+  csrf_token?: string | null;
+  idle_rejected?: boolean | null;
+  rotated?: boolean | null;
+  status: string;
 }
 
-export interface InternalServerLogFile {
-  /** @example "All services combined log" */
-  description?: string;
-  /** @example "combined" */
-  key?: string;
-  /** @example "combined.log" */
-  name?: string;
-}
-
-export interface InternalServerLogFilesResponse {
-  files?: InternalServerLogFile[];
-  /** @example "ok" */
-  status?: string;
-}
-
-export interface InternalServerLoginRequest {
-  /** @example "password123" */
+export interface LoginRequest {
   password: string;
-  /** @example "admin" */
   username: string;
 }
 
-export interface InternalServerLoginResponse {
-  /** @example "Login successful" */
-  message?: string;
-  /** @example "ok" */
-  status?: string;
+export interface LoginResponse {
+  csrf_token: string;
+  message: string;
+  status: string;
 }
 
-export interface InternalServerStatusResponse {
-  /** @example "Operation successful" */
-  message?: string;
-  /** @example "ok" */
-  status?: string;
+export interface PortMapping {
+  port_type: string;
+  /**
+   * @format int32
+   * @min 0
+   */
+  private_port: number;
+  /**
+   * @format int32
+   * @min 0
+   */
+  public_port?: number | null;
 }
 
-export interface InternalServerSystemLogsResponse {
-  /** @example 100 */
-  count?: number;
-  /** @example "combined" */
-  file?: string;
-  lines?: string[];
-  /** @example "ok" */
-  status?: string;
+export interface ServiceStatus {
+  available: boolean;
+  error?: string | null;
+  name: string;
+  /**
+   * @format int64
+   * @min 0
+   */
+  response_time_ms?: number | null;
+}
+
+export interface SessionStatusResponse {
+  authenticated: boolean;
+  status: string;
+  username: string;
 }

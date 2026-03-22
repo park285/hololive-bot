@@ -4,7 +4,7 @@
  */
 
 import { useMemo } from 'react'
-import { consumeSSRData, type SSRData } from '@/utils/ssr'
+import { getSSRDataFor, type SSRData } from '@/utils/ssr'
 
 /**
  * SSR 데이터를 소비하고 변환하는 훅
@@ -26,10 +26,10 @@ export function useSSRData<K extends keyof SSRData, R>(
 ): R | undefined {
     return useMemo(
         () => {
-            const ssrData = consumeSSRData(key)
+            const ssrData = getSSRDataFor(key)
             return validator(ssrData)
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- SSR 데이터는 최초 마운트 시 한 번만 소비
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- SSR 데이터는 최초 마운트 시 한 번만 읽음
         []
     )
 }

@@ -2,7 +2,8 @@ import axios from 'axios'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { authApi, statusApi } from '@/api/core'
+import { authApi } from '@/api/core'
+import { queryClient } from '@/lib/queryClient'
 import { useAuthStore } from '@/stores/authStore'
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right'
 import Loader2 from 'lucide-react/dist/esm/icons/loader-2'
@@ -23,10 +24,10 @@ const LoginPage = () => {
   const loginMutation = useMutation({
     mutationFn: async () => {
       await authApi.login(username, password)
-      // 로그인 성공 직후 세션 검증 (2-2)
-      await statusApi.get()
+      await authApi.getSession()
     },
     onSuccess: () => {
+      queryClient.clear()
       setAuthenticated(true)
       void navigate('/dashboard/stats')
     },

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { alarmsApi, namesApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
@@ -28,12 +28,15 @@ interface AlarmGroup {
 }
 
 const numberFormatter = new Intl.NumberFormat('ko-KR')
+const ALARM_GROUP_PAGE_SIZE = 20
 
 const AlarmsTab = () => {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const deferredSearch = useDeferredValue(search)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [alarmToDelete, setAlarmToDelete] = useState<Alarm | null>(null)
+  const [visibleGroupCount, setVisibleGroupCount] = useState(ALARM_GROUP_PAGE_SIZE)
 
   const [editModal, setEditModal] = useState<{
     type: 'room' | 'user'
@@ -64,6 +67,10 @@ const AlarmsTab = () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.alarms.all })
     },
   })
+
+  useEffect(() => {
+    setVisibleGroupCount(ALARM_GROUP_PAGE_SIZE)
+  }, [deferredSearch])
 
   // 유저별로 그룹화
   const groupedAlarms = useMemo(() => {
@@ -96,15 +103,20 @@ const AlarmsTab = () => {
 
   // 검색 필터링
   const filteredGroups = useMemo(() => {
-    if (!search.trim()) return groupedAlarms
+    if (!deferredSearch.trim()) return groupedAlarms
 
-    const searchLower = search.toLowerCase()
+    const searchLower = deferredSearch.toLowerCase()
     return groupedAlarms.filter(group =>
       group.roomName.toLowerCase().includes(searchLower) ||
       group.userName.toLowerCase().includes(searchLower) ||
       group.alarms.some(a => a.memberName.toLowerCase().includes(searchLower))
     )
-  }, [groupedAlarms, search])
+  }, [deferredSearch, groupedAlarms])
+
+  const visibleGroups = useMemo(
+    () => filteredGroups.slice(0, visibleGroupCount),
+    [filteredGroups, visibleGroupCount]
+  )
 
   const toggleGroup = (key: string) => {
     const newExpanded = new Set(expandedGroups)
@@ -194,7 +206,7 @@ const AlarmsTab = () => {
             <p className="text-slate-500">새로운 알람을 등록하거나 검색어를 변경해보세요.</p>
           </div>
         ) : (
-          filteredGroups.map((group) => {
+          visibleGroups.map((group) => {
             const groupKey = `${group.roomId}:${group.userId}`
             const isExpanded = expandedGroups.has(groupKey)
             const displayAlarms = isExpanded ? group.alarms : group.alarms.slice(0, 5)
@@ -312,6 +324,18 @@ const AlarmsTab = () => {
           })
         )}
       </div>
+
+      {visibleGroupCount < filteredGroups.length && (
+        <div className="flex justify-center">
+          <Button
+            variant="secondary"
+            onClick={() => { setVisibleGroupCount((prev) => prev + ALARM_GROUP_PAGE_SIZE) }}
+            className="px-5"
+          >
+            그룹 더 보기
+          </Button>
+        </div>
+      )}
 
       {/* 이름 편집 모달 */}
       <EditNameModal

@@ -23,7 +23,6 @@ import type {
     ApiResponse,
     StreamsResponse,
     ChannelStatsResponse,
-    LogsResponse,
     SettingsResponse,
     Settings,
     Member,
@@ -158,14 +157,6 @@ export const streamsApi = {
             streams: Array.isArray(response.data.streams) ? response.data.streams : [],
         }
     }
-}
-
-// Holo Logs API (봇 활동 로그)
-export const holoLogsApi = {
-    get: async () => {
-        const response = await apiClient.get<LogsResponse>('/holo/logs')
-        return response.data
-    },
 }
 
 // Settings API

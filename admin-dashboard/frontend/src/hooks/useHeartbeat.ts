@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { authApi } from '@/api/core'
 import { CONFIG } from '@/config'
-import toast from '@/lib/toast'
+import toast from '@/lib/toast-api'
 
 export const useHeartbeat = (isIdle: boolean) => {
     const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -41,7 +41,7 @@ export const useHeartbeat = (isIdle: boolean) => {
             }
 
             if (response.error) {
-                if (response.error === 'Session expired') {
+                if (response.error === 'Session expired' || response.error === 'Unauthorized') {
                     logout()
                     return
                 }

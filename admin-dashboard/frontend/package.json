@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "generate:api": "swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
+    "generate:api": "mkdir -p ../backend/docs && (cd ../backend && cargo run --quiet --bin export-openapi > docs/swagger.json) && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
+  },
+  "overrides": {
+    "flatted": "^3.4.2"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

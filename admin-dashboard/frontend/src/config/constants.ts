@@ -20,12 +20,6 @@ export const CONFIG = {
         maxFailures: 3,
     },
 
-    /** 로그 뷰어 설정 */
-    logs: {
-        /** 최대 유지 로그 라인 수 */
-        maxLines: 5000,
-    },
-
     /** WebSocket 재연결 설정 */
     websocket: {
         /** 재연결 시도 횟수 */
