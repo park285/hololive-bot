@@ -130,18 +130,109 @@ func (d *Dispatcher) dispatchDeliveryRows(
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
 
+	groups, orphanRows := groupDeliveryRows(rows, outboxByID)
+
+	// orphan row 처리
+	for i := range orphanRows {
+		d.recordDeliveryFailure(&result, &mu, "outbox row not found", orphanRows[i].ID, orphanRows[i].OutboxID)
+	}
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(d.deliveryParallelism())
-	for i := range rows {
-		row := rows[i]
+
+	for i := range groups {
+		group := groups[i]
 		eg.Go(func() error {
-			d.dispatchDeliveryRow(egCtx, row, formattedMessages, formatFailures, &result, &mu)
+			d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, &result, &mu)
 			return nil
 		})
 	}
 	_ = eg.Wait()
 
 	return result
+}
+
+func (d *Dispatcher) dispatchGroup(
+	ctx context.Context,
+	group deliveryGroup,
+	formattedMessages map[int64]string,
+	formatFailures map[int64]bool,
+	result *deliveryDispatchResult,
+	mu *sync.Mutex,
+) {
+	// 단건 그룹: 기존 개별 dispatch 경로
+	if len(group.rows) == 1 {
+		d.dispatchDeliveryRow(ctx, group.rows[0], formattedMessages, formatFailures, result, mu)
+		return
+	}
+
+	// 복수건: payload 검증 -> 유효 항목만 그룹 포맷
+	var validOutboxes []domain.YouTubeNotificationOutbox
+	var validRows []domain.YouTubeNotificationDelivery
+	var invalidRows []domain.YouTubeNotificationDelivery
+
+	for i := range group.outboxes {
+		if validateOutboxPayload(group.outboxes[i]) {
+			validOutboxes = append(validOutboxes, group.outboxes[i])
+			validRows = append(validRows, group.rows[i])
+		} else {
+			invalidRows = append(invalidRows, group.rows[i])
+		}
+	}
+
+	// payload 검증 실패 항목 -> 개별 dispatch
+	for i := range invalidRows {
+		d.dispatchDeliveryRow(ctx, invalidRows[i], formattedMessages, formatFailures, result, mu)
+	}
+
+	// 검증 후 1건 이하 -> 개별 dispatch
+	if len(validRows) <= 1 {
+		for i := range validRows {
+			d.dispatchDeliveryRow(ctx, validRows[i], formattedMessages, formatFailures, result, mu)
+		}
+		return
+	}
+
+	// 그룹 포맷 시도
+	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
+	if err != nil || memberName == "" {
+		memberName = "VTuber"
+	}
+
+	message, err := d.formatter.formatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
+	if err != nil {
+		d.logger.Warn("Grouped format failed, falling back to individual dispatch",
+			slog.String("room_id", group.roomID),
+			slog.String("channel_id", group.channelID),
+			slog.String("kind", string(group.kind)),
+			slog.Int("count", len(validRows)),
+			slog.Any("error", err))
+		for i := range validRows {
+			d.dispatchDeliveryRow(ctx, validRows[i], formattedMessages, formatFailures, result, mu)
+		}
+		return
+	}
+
+	// 그룹 메시지 전송
+	if sendErr := d.sender.SendMessage(ctx, group.roomID, message); sendErr != nil {
+		d.logger.Warn("Failed to send grouped delivery",
+			slog.String("room_id", group.roomID),
+			slog.String("kind", string(group.kind)),
+			slog.Int("count", len(validRows)),
+			slog.Any("error", sendErr))
+		for i := range validRows {
+			d.recordDeliveryFailure(result, mu, "send message", validRows[i].ID, validRows[i].OutboxID)
+		}
+		return
+	}
+
+	// 성공: 그룹 내 모든 delivery ID 성공 처리
+	mu.Lock()
+	for i := range validRows {
+		result.successDeliveryIDs = append(result.successDeliveryIDs, validRows[i].ID)
+		result.touchedOutboxIDs = append(result.touchedOutboxIDs, validRows[i].OutboxID)
+	}
+	mu.Unlock()
 }
 
 func (d *Dispatcher) dispatchDeliveryRow(

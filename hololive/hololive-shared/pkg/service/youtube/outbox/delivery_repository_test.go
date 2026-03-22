@@ -25,6 +25,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -161,7 +162,12 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 	if !reflect.DeepEqual(result.failureBuckets["outbox row not found"], []int64{3}) {
 		t.Fatalf("outbox row not found failures = %#v, want []int64{3}", result.failureBuckets["outbox row not found"])
 	}
-	if !reflect.DeepEqual(result.touchedOutboxIDs, []int64{100, 100, 999}) {
-		t.Fatalf("touchedOutboxIDs = %#v, want []int64{100, 100, 999}", result.touchedOutboxIDs)
+	wantTouched := []int64{100, 100, 999}
+	gotTouched := make([]int64, len(result.touchedOutboxIDs))
+	copy(gotTouched, result.touchedOutboxIDs)
+	slices.Sort(gotTouched)
+	slices.Sort(wantTouched)
+	if !reflect.DeepEqual(gotTouched, wantTouched) {
+		t.Fatalf("touchedOutboxIDs (sorted) = %#v, want %#v", gotTouched, wantTouched)
 	}
 }
