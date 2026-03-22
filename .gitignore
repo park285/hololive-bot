@@ -207,4 +207,10 @@ hololive/hololive-rs/docs/reports/**/*.tsv
 !docs/
 docs/.omx/
 docs/doc-gen/
+docs/superpowers/
+
+# Build outputs
+admin-dashboard/backend/admin
+hololive/settlement-go/settlement
+
 .worktrees/
