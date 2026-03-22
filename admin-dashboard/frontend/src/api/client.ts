@@ -57,12 +57,13 @@ apiClient.interceptors.response.use(
   (error: AxiosError<{ retry_after?: number }>) => {
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 401) {
-        // React 컴포넌트 외부에서 스토어 접근
-        useAuthStore.getState().logout()
-
-        // 로그인 페이지로 리다이렉트 (이미 로그인 페이지가 아닌 경우)
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
+        const url = error.config?.url ?? ''
+        // /holo/* 는 봇 프록시 경로 — 봇 측 401은 세션 만료가 아니므로 로그아웃하지 않음
+        if (!url.startsWith('/holo/')) {
+          useAuthStore.getState().logout()
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login'
+          }
         }
       } else if (error.response?.status === 429) {
         // Rate limit 처리

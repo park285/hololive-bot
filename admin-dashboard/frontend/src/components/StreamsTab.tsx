@@ -91,7 +91,7 @@ const StreamsTab = () => {
         { value: 'hololive', label: 'Hololive' },
         { value: 'vspo', label: 'VSpo' },
         { value: 'stellive', label: 'Stellive' },
-        { value: 'indie', label: 'Indie' },
+        { value: 'independents', label: 'Indie' },
         { value: 'all', label: 'All' },
     ]
 

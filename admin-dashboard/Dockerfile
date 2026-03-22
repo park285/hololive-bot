@@ -52,7 +52,7 @@ RUN addgroup -g 1000 appgroup && \
 
 WORKDIR /app
 
-COPY --from=builder --link --chown=appuser:appgroup /build/admin-dashboard/backend/admin ./
+COPY --from=builder --link --chown=1000:1000 /build/admin-dashboard/backend/admin ./
 
 ENV GOGC=200 \
     GOMEMLIMIT=230MiB \

@@ -10,7 +10,14 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
-import { Search, Trash2, Edit2, ChevronDown, ChevronUp, Bell, MapPin, User } from 'lucide-react'
+import Search from 'lucide-react/dist/esm/icons/search'
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2'
+import Edit2 from 'lucide-react/dist/esm/icons/edit-2'
+import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down'
+import ChevronUp from 'lucide-react/dist/esm/icons/chevron-up'
+import Bell from 'lucide-react/dist/esm/icons/bell'
+import MapPin from 'lucide-react/dist/esm/icons/map-pin'
+import User from 'lucide-react/dist/esm/icons/user'
 
 interface AlarmGroup {
   roomId: string
