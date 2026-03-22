@@ -2,11 +2,14 @@ use crate::config::SecurityMode;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+#[derive(Debug)]
+#[allow(dead_code)]
 pub struct LimitResult {
     pub per_session_hit: bool,
     pub global_hit: bool,
 }
 
+#[allow(missing_debug_implementations)]
 pub struct StreamLimiter {
     global_limit: usize,
     per_session_limit: usize,
@@ -75,9 +78,14 @@ impl StreamLimiter {
         }
     }
 
+    #[allow(dead_code)]
     pub fn stats(&self) -> (usize, usize, usize) {
         let state = self.state.lock().unwrap();
-        (state.global_count, self.global_limit, state.per_session.len())
+        (
+            state.global_count,
+            self.global_limit,
+            state.per_session.len(),
+        )
     }
 }
 

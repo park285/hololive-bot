@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use axum::http::StatusCode;
 use axum::{
-    Json, Router,
-    middleware,
+    Json, Router, middleware,
     routing::{any, get, post},
 };
 use serde_json::json;
@@ -13,21 +12,23 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::state::AppState;
 
 pub fn build_router(state: Arc<AppState>) -> Router {
-    let auth_layer = middleware::from_fn_with_state(
-        state.clone(),
-        crate::auth::middleware::auth_middleware,
-    );
-    let csrf_layer = middleware::from_fn_with_state(
-        state.clone(),
-        crate::middleware::csrf::csrf_middleware,
-    );
+    let auth_layer =
+        middleware::from_fn_with_state(state.clone(), crate::auth::middleware::auth_middleware);
+    let csrf_layer =
+        middleware::from_fn_with_state(state.clone(), crate::middleware::csrf::csrf_middleware);
 
     let public = Router::new()
         .route("/health", get(|| async { Json(json!({ "status": "ok" })) }))
-        .route("/admin/api/auth/login", post(crate::handlers::auth::handle_login));
+        .route(
+            "/admin/api/auth/login",
+            post(crate::handlers::auth::handle_login),
+        );
 
     let auth_csrf = Router::new()
-        .route("/admin/api/auth/logout", post(crate::handlers::auth::handle_logout))
+        .route(
+            "/admin/api/auth/logout",
+            post(crate::handlers::auth::handle_logout),
+        )
         .route(
             "/admin/api/auth/heartbeat",
             post(crate::handlers::auth::handle_heartbeat),
@@ -101,6 +102,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .layer(middleware::map_response(
             crate::auth::middleware::apply_security_headers,
         ))
-        .layer(middleware::from_fn(crate::middleware::etag::etag_middleware))
+        .layer(middleware::from_fn(
+            crate::middleware::etag::etag_middleware,
+        ))
         .with_state(state)
 }

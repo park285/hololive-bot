@@ -39,18 +39,21 @@ pub trait SessionProvider: Send + Sync {
     async fn validate_session(&self, session_id: &str) -> bool;
     async fn delete_session(&self, session_id: &str);
     async fn refresh_session_with_validation(
-        &self, session_id: &str, idle: bool,
+        &self,
+        session_id: &str,
+        idle: bool,
     ) -> Result<(bool, bool), anyhow::Error>;
     async fn rotate_session(&self, old_session_id: &str) -> Result<Option<Session>, anyhow::Error>;
 }
 
+#[allow(missing_debug_implementations)]
 pub struct ValkeySessionStore {
     pool: Pool,
     config: SessionConfig,
 }
 
 impl ValkeySessionStore {
-    pub fn new(pool: Pool, config: SessionConfig) -> Self {
+    pub const fn new(pool: Pool, config: SessionConfig) -> Self {
         Self { pool, config }
     }
 
@@ -66,7 +69,7 @@ impl ValkeySessionStore {
 }
 
 // Lua 스크립트: 세션 원자적 교체
-const ROTATE_LUA: &str = r#"
+const ROTATE_LUA: &str = r"
 local old_key = KEYS[1]
 local new_key = KEYS[2]
 local new_data = ARGV[1]
@@ -77,7 +80,7 @@ if not old_data then return nil end
 redis.call('SET', new_key, new_data, 'EX', new_ttl)
 redis.call('EXPIRE', old_key, grace_ttl)
 return old_data
-"#;
+";
 
 #[async_trait::async_trait]
 impl SessionProvider for ValkeySessionStore {
@@ -89,7 +92,8 @@ impl SessionProvider for ValkeySessionStore {
         let ttl_secs = self.config.expiry_duration.as_secs() as i64;
 
         let mut conn = self.pool.get().await?;
-        conn.set_ex::<_, _, ()>(session_key(&id), &data, ttl_secs as u64).await?;
+        conn.set_ex::<_, _, ()>(session_key(&id), &data, ttl_secs as u64)
+            .await?;
 
         debug!(session_id = %super::truncate_session_id(&id), "session created");
         Ok(session)
@@ -164,7 +168,9 @@ impl SessionProvider for ValkeySessionStore {
     }
 
     async fn refresh_session_with_validation(
-        &self, session_id: &str, idle: bool,
+        &self,
+        session_id: &str,
+        idle: bool,
     ) -> Result<(bool, bool), anyhow::Error> {
         let mut conn = self.pool.get().await?;
         let data: Option<String> = conn.get(session_key(session_id)).await?;
@@ -191,14 +197,13 @@ impl SessionProvider for ValkeySessionStore {
             self.config.expiry_duration.as_secs() as i64
         };
 
-        conn.set_ex::<_, _, ()>(session_key(session_id), &data, ttl as u64).await?;
+        conn.set_ex::<_, _, ()>(session_key(session_id), &data, ttl as u64)
+            .await?;
 
         Ok((true, false))
     }
 
-    async fn rotate_session(
-        &self, old_session_id: &str,
-    ) -> Result<Option<Session>, anyhow::Error> {
+    async fn rotate_session(&self, old_session_id: &str) -> Result<Option<Session>, anyhow::Error> {
         // 기존 세션 조회
         let mut conn = self.pool.get().await?;
         let old_data: Option<String> = conn.get(session_key(old_session_id)).await?;
@@ -299,7 +304,10 @@ mod tests {
         assert_eq!(deserialized.id, session.id);
         assert_eq!(deserialized.created_at, session.created_at);
         assert_eq!(deserialized.expires_at, session.expires_at);
-        assert_eq!(deserialized.absolute_expires_at, session.absolute_expires_at);
+        assert_eq!(
+            deserialized.absolute_expires_at,
+            session.absolute_expires_at
+        );
         assert_eq!(deserialized.last_rotated_at, session.last_rotated_at);
     }
 
@@ -356,8 +364,7 @@ mod tests {
             last_rotated_at: now,
         };
 
-        let json: serde_json::Value =
-            serde_json::to_value(&session).expect("to_value");
+        let json: serde_json::Value = serde_json::to_value(&session).expect("to_value");
         assert!(json.get("id").is_some());
         assert!(json.get("created_at").is_some());
         assert!(json.get("expires_at").is_some());

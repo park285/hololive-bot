@@ -24,6 +24,7 @@ pub struct AggregatedStatus {
     pub version: String,
 }
 
+#[allow(missing_debug_implementations)]
 pub struct StatusCollector {
     http_client: Client,
     endpoints: Vec<ServiceEndpoint>,
@@ -107,11 +108,11 @@ pub fn format_duration(duration: Duration) -> String {
     let mins = (secs % 3_600) / 60;
 
     if days > 0 {
-        format!("{}d {}h {}m", days, hours, mins)
+        format!("{days}d {hours}h {mins}m")
     } else if hours > 0 {
-        format!("{}h {}m", hours, mins)
+        format!("{hours}h {mins}m")
     } else {
-        format!("{}m", mins)
+        format!("{mins}m")
     }
 }
 

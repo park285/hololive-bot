@@ -10,12 +10,20 @@ struct AttemptInfo {
     locked_until: Option<Instant>,
 }
 
+// Mutex 내부로 인해 수동 Debug 불가
+#[allow(missing_debug_implementations)]
 pub struct LoginRateLimiter {
     attempts: Mutex<HashMap<String, AttemptInfo>>,
     max_attempts: usize,
     window: Duration,
     lockout: Duration,
     cancel: CancellationToken,
+}
+
+impl Default for LoginRateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LoginRateLimiter {
@@ -64,11 +72,13 @@ impl LoginRateLimiter {
     /// 실패 기록. 현재 실패 횟수 반환
     pub fn record_failure(&self, ip: &str) -> usize {
         let mut attempts = self.attempts.lock().unwrap();
-        let info = attempts.entry(ip.to_string()).or_insert_with(|| AttemptInfo {
-            count: 0,
-            first_attempt: Instant::now(),
-            locked_until: None,
-        });
+        let info = attempts
+            .entry(ip.to_string())
+            .or_insert_with(|| AttemptInfo {
+                count: 0,
+                first_attempt: Instant::now(),
+                locked_until: None,
+            });
 
         info.count += 1;
 
@@ -92,16 +102,16 @@ impl LoginRateLimiter {
         tokio::spawn(async move {
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => break,
-                    _ = tokio::time::sleep(Duration::from_secs(60)) => {
+                    () = cancel.cancelled() => break,
+                    () = tokio::time::sleep(Duration::from_secs(60)) => {
                         let mut attempts = limiter.attempts.lock().unwrap();
                         let now = Instant::now();
                         attempts.retain(|_, info| {
                             // 잠금 만료 항목 제거
-                            if let Some(locked_until) = info.locked_until {
-                                if now >= locked_until {
-                                    return false;
-                                }
+                            if let Some(locked_until) = info.locked_until
+                                && now >= locked_until
+                            {
+                                return false;
                             }
                             // 윈도우 만료 항목 제거
                             if info.first_attempt.elapsed() > limiter.window {

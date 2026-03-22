@@ -1,6 +1,6 @@
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
@@ -16,6 +16,7 @@ pub enum AppError {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum AuthError {
     #[error("unauthorized")]
     Unauthorized,
@@ -52,7 +53,7 @@ pub enum ProxyError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, body) = match &self {
-            AppError::Auth(e) => match e {
+            Self::Auth(e) => match e {
                 AuthError::Unauthorized | AuthError::SessionExpired => {
                     (StatusCode::UNAUTHORIZED, json!({"error": "Unauthorized"}))
                 }
@@ -64,37 +65,37 @@ impl IntoResponse for AppError {
                     StatusCode::TOO_MANY_REQUESTS,
                     json!({"error": "Too many login attempts", "retry_after": retry_after_secs}),
                 ),
-                AuthError::CsrfViolation => {
-                    (StatusCode::FORBIDDEN, json!({"error": "Forbidden"}))
-                }
+                AuthError::CsrfViolation => (StatusCode::FORBIDDEN, json!({"error": "Forbidden"})),
                 AuthError::StoreUnavailable => (
                     StatusCode::SERVICE_UNAVAILABLE,
                     json!({"error": "Session store unavailable"}),
                 ),
             },
-            AppError::Docker(e) => match e {
+            Self::Docker(e) => match e {
                 DockerError::Unavailable => (
                     StatusCode::SERVICE_UNAVAILABLE,
                     json!({"error": "Docker service not available"}),
                 ),
-                DockerError::NotManaged(_name) => {
-                    (StatusCode::NOT_FOUND, json!({"error": "container not found"}))
-                }
+                DockerError::NotManaged(_name) => (
+                    StatusCode::NOT_FOUND,
+                    json!({"error": "container not found"}),
+                ),
                 DockerError::Internal(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     json!({"error": "An internal error occurred"}),
                 ),
             },
-            AppError::Proxy(e) => match e {
-                ProxyError::Unavailable => {
-                    (StatusCode::BAD_GATEWAY, json!({"error": "Service unavailable"}))
-                }
+            Self::Proxy(e) => match e {
+                ProxyError::Unavailable => (
+                    StatusCode::BAD_GATEWAY,
+                    json!({"error": "Service unavailable"}),
+                ),
                 ProxyError::WsUnavailable => (
                     StatusCode::BAD_GATEWAY,
                     json!({"error": "WebSocket service unavailable"}),
                 ),
             },
-            AppError::Internal(e) => {
+            Self::Internal(e) => {
                 tracing::error!(error = %e, "internal error");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,

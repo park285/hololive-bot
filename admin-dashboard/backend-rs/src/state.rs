@@ -10,6 +10,7 @@ use crate::status::{StatusCollector, SystemStats};
 use crate::stream_limiter::StreamLimiter;
 use tokio::sync::broadcast;
 
+#[allow(missing_debug_implementations)]
 pub struct AppState {
     pub config: Config,
     pub sessions: ValkeySessionStore,
@@ -19,5 +20,6 @@ pub struct AppState {
     pub status_collector: StatusCollector,
     pub stats_tx: broadcast::Sender<SystemStats>,
     pub stream_limiter: Arc<StreamLimiter>,
+    #[allow(dead_code)]
     pub ssr_injector: SsrInjector,
 }
