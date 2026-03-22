@@ -63,7 +63,7 @@ const MemberCard = memo(({
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              <h3 className="text-lg font-bold leading-tight text-slate-800">{member.name}</h3>
+              <h3 className="text-lg font-display font-bold leading-tight text-slate-800">{member.name}</h3>
               <button
                 onClick={() => { onEditName(member.id, member.name) }}
                 className="rounded p-1 text-slate-400 opacity-0 transition-all hover:text-sky-600 group-hover:opacity-100 outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sky-200"

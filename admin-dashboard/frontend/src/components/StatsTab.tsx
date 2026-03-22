@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { statusApi } from '@/api/core'
@@ -63,13 +63,15 @@ const StatsTab = () => {
   }, [statusData]) // P1: selectedService 제거 - functional setState로 자기참조 루프 방지
 
   // 현재 선택된 서비스 데이터 찾기
-  const currentServiceStats = statusData?.services.find(s => s.name === selectedService) || {
-    name: selectedService,
-    available: false,
-    version: '-',
-    uptime: '-',
-    goroutines: 0
-  }
+  const currentServiceStats = useMemo(() => {
+    return statusData?.services.find(s => s.name === selectedService) ?? {
+      name: selectedService,
+      available: false,
+      version: '-',
+      uptime: '-',
+      goroutines: 0,
+    }
+  }, [statusData?.services, selectedService])
 
   // 바로가기 핸들러
   const go = (path: string) => { void navigate(path) }
@@ -129,7 +131,7 @@ const StatsTab = () => {
   return (
     <div className="space-y-8">
       {/* 1. 환영 배너 */}
-      <div className="relative overflow-hidden rounded-3xl bg-white border border-slate-100 p-8 shadow-sm">
+      <div className="relative overflow-hidden rounded-3xl bg-white border border-slate-100 p-8 shadow-sm animate-fade-in-up">
         {/* 배경 Gradients */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-sky-50 rounded-full blur-3xl opacity-60 -mr-20 -mt-20 pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-cyan-50 rounded-full blur-3xl opacity-40 -ml-10 -mb-10 pointer-events-none"></div>
@@ -143,13 +145,13 @@ const StatsTab = () => {
               </span>
               System Operational
             </div>
-            <h1 className="text-3xl font-bold text-slate-800 tracking-tight">
+            <h1 className="text-3xl font-display font-bold text-slate-800 tracking-tight">
               Bot Management Console
             </h1>
           </div>
 
           {/* Hero 일러스트 */}
-          <div className="hidden md:flex items-center justify-center w-32 h-32 bg-linear-to-br from-sky-400 via-cyan-400 to-indigo-400 rounded-3xl shadow-xl shadow-sky-200 transform rotate-6 border-4 border-white">
+          <div className="hidden md:flex items-center justify-center w-32 h-32 bg-linear-to-br from-sky-400 via-cyan-400 to-indigo-400 rounded-3xl shadow-xl shadow-sky-200/60 transform rotate-6 border-4 border-white hover:rotate-3 transition-transform duration-500">
             <Play className="w-16 h-16 text-white drop-shadow-md fill-white ml-2" />
           </div>
         </div>
@@ -157,13 +159,13 @@ const StatsTab = () => {
 
       {/* 2. 주요 지표 (Holo Bot) */}
       <div>
-        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center gap-2">
           <Activity size={20} className="text-sky-500" />
           실시간 현황 (Hololive Bot)
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {mainStats.map((stat) => (
-            <div key={stat.label}>
+          {mainStats.map((stat, idx) => (
+            <div key={stat.label} className="animate-fade-in-up" style={{ animationDelay: `${String((idx + 1) * 80)}ms` }}>
               <StatCard
                 label={stat.label}
                 value={stat.value}
@@ -180,9 +182,9 @@ const StatsTab = () => {
         <div className="lg:col-span-2 space-y-6">
 
           {/* 3. 시스템 상태 (Compact & Selectable) */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm animate-fade-in-up stagger-3">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <h3 className="text-lg font-display font-bold text-slate-800 flex items-center gap-2">
                 <Server size={20} className="text-slate-500" />
                 서비스 상태
               </h3>
@@ -252,8 +254,8 @@ const StatsTab = () => {
         </div>
 
         {/* 4. 바로가기 */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col h-fit">
-          <h3 className="text-lg font-bold text-slate-800 mb-4">바로가기</h3>
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col h-fit animate-fade-in-up stagger-4">
+          <h3 className="text-lg font-display font-bold text-slate-800 mb-4">바로가기</h3>
           <div className="space-y-3 flex-1">
             <button
               onClick={() => { go('/dashboard/members') }}
@@ -282,8 +284,8 @@ const StatsTab = () => {
 
 
       {/* 5. 채널 통계 */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm animate-fade-in-up stagger-5">
+        <h3 className="text-lg font-display font-bold text-slate-800 mb-6 flex items-center gap-2">
           <Activity size={20} className="text-rose-500" />
           채널 통계 (구독자 순 상위 10등)
         </h3>

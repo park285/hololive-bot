@@ -39,10 +39,11 @@ export const AppLayout = () => {
     });
 
     return (
-        <div className="flex h-screen bg-slate-50 overflow-hidden font-display selection:bg-sky-200">
-            {/* 동적 배경 (미묘한 효과) */}
+        <div className="flex h-screen bg-slate-50 overflow-hidden font-body selection:bg-sky-200">
+            {/* 동적 배경 */}
             <div className="absolute inset-0 z-0 pointer-events-none">
                 <div className="absolute top-0 left-0 w-full h-96 bg-linear-to-b from-sky-50/50 to-transparent"></div>
+                <div className="absolute inset-0 opacity-[0.012]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }} />
             </div>
 
             {/* 사이드바 */}
@@ -57,7 +58,7 @@ export const AppLayout = () => {
                             <div className="w-8 h-8 bg-linear-to-br from-sky-400 to-cyan-400 rounded-lg flex items-center justify-center shadow-md shadow-sky-200">
                                 <Play className="w-4 h-4 text-white fill-white ml-0.5" />
                             </div>
-                            <span className="text-lg font-bold text-slate-800 tracking-tight">
+                            <span className="text-lg font-display font-bold text-slate-800 tracking-tight">
                                 Bot Admin
                             </span>
                         </div>
@@ -90,9 +91,9 @@ export const AppLayout = () => {
                 )}
 
                 {/* 네비게이션 */}
-                <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-hide">
+                <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-hide animate-fade-in">
                     {navGroups.map((group, groupIndex) => (
-                        <div key={group.title || groupIndex} className="mb-6 last:mb-0">
+                        <div key={group.title || groupIndex} className="mb-6 last:mb-0 animate-slide-in-left" style={{ animationDelay: `${String(groupIndex * 80)}ms` }}>
                             {isSidebarOpen && group.title && (
                                 <div className="px-3 mb-2">
                                     <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -159,11 +160,11 @@ export const AppLayout = () => {
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
                 {/* 헤더 - Glass 효과 */}
                 <header className="h-20 bg-white/60 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-8 sticky top-0 z-20">
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+                    <div className="animate-fade-in-up">
+                        <h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
                             {activeRoute?.label || '대시보드'}
                         </h2>
-                        <p className="text-xs text-slate-400 font-medium mt-0.5">
+                        <p className="text-xs text-slate-400 font-medium mt-0.5 tracking-wide">
                             Unified Bot Management System
                         </p>
                     </div>
@@ -174,7 +175,7 @@ export const AppLayout = () => {
                                 A
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-sm font-bold text-slate-700 leading-none">Administrator</span>
+                                <span className="text-sm font-display font-bold text-slate-700 leading-none">Administrator</span>
                                 <span className="text-[10px] text-sky-500 font-medium leading-none mt-1">Super User</span>
                             </div>
                         </div>
