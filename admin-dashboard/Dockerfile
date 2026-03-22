@@ -18,23 +18,23 @@ FROM rust:${RUST_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 RUN apk add --no-cache musl-dev
 
-WORKDIR /build/admin-dashboard/backend-rs
+WORKDIR /build/admin-dashboard/backend
 
 # 의존성 캐시 레이어
-COPY admin-dashboard/backend-rs/Cargo.toml admin-dashboard/backend-rs/Cargo.lock ./
+COPY admin-dashboard/backend/Cargo.toml admin-dashboard/backend/Cargo.lock ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/admin-dashboard/backend-rs/target \
+    --mount=type=cache,target=/build/admin-dashboard/backend/target \
     mkdir -p src && echo 'fn main() {}' > src/main.rs && \
     cargo build --release && \
     rm -rf src
 
-COPY admin-dashboard/backend-rs/src/ ./src/
+COPY admin-dashboard/backend/src/ ./src/
 
 # 프론트엔드 빌드 결과물 복사 (rust-embed용)
 COPY --from=frontend-builder /app/frontend/dist ./static/dist/
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/admin-dashboard/backend-rs/target \
+    --mount=type=cache,target=/build/admin-dashboard/backend/target \
     touch src/main.rs && \
     cargo build --release && \
     cp target/release/admin-dashboard /build/admin-dashboard-bin
