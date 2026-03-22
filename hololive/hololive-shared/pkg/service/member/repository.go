@@ -115,7 +115,7 @@ func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*do
 		return nil, fmt.Errorf("failed to query member by channel_id: %w", err)
 	}
 
-	return r.scanMember(id, slug, channelIDVal, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, twitchUserID)
+	return r.scanMember(id, slug, channelIDVal, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
 }
 
 // FindByName: 이름으로 멤버를 조회합니다.
@@ -156,7 +156,7 @@ func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Membe
 		return nil, fmt.Errorf("failed to query member by name: %w", err)
 	}
 
-	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, twitchUserID)
+	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
 }
 
 // FindByAlias: 별칭으로 멤버를 검색합니다.
@@ -201,7 +201,7 @@ func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Mem
 		return nil, fmt.Errorf("failed to query member by alias: %w", err)
 	}
 
-	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, twitchUserID)
+	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
 }
 
 // GetAllChannelIDs: 모든 멤버의 채널 ID 목록을 반환합니다.
@@ -240,7 +240,7 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	query := `
 		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
-		       status, is_graduated, aliases, org, suborg, sync_source, twitch_user_id
+		       status, is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id
 		FROM members
 		ORDER BY english_name
 	`
@@ -263,6 +263,7 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 			status       string
 			isGraduated  bool
 			aliasesJSON  []byte
+			photo        *string
 			org          string
 			suborg       *string
 			syncSource   string
@@ -270,12 +271,12 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 		)
 
 		if err := rows.Scan(&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
-			&status, &isGraduated, &aliasesJSON, &org, &suborg, &syncSource, &twitchUserID); err != nil {
+			&status, &isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID); err != nil {
 			r.logger.Warn("Failed to scan member row", slog.Any("error", err))
 			continue
 		}
 
-		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, twitchUserID)
+		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
 		if err != nil {
 			r.logger.Warn("Failed to parse member", slog.String("name", englishName), slog.Any("error", err))
 			continue
@@ -299,7 +300,7 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 
 	query := `
 		SELECT id, channel_id, english_name, japanese_name, korean_name,
-		       is_graduated, aliases, photo, twitch_user_id
+		       is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE channel_id = ANY($1::text[])
 	`
@@ -321,16 +322,19 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 			isGraduated  bool
 			aliasesJSON  []byte
 			photo        *string
+			org          string
+			suborg       *string
+			syncSource   string
 			twitchUserID *string
 		)
 
 		if err := rows.Scan(&id, &channelID, &englishName, &japaneseName, &koreanName,
-			&isGraduated, &aliasesJSON, &photo, &twitchUserID); err != nil {
+			&isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID); err != nil {
 			r.logger.Warn("Failed to scan member row", slog.Any("error", err))
 			continue
 		}
 
-		member, err := r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, twitchUserID)
+		member, err := r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
 		if err != nil {
 			r.logger.Warn("Failed to parse member", slog.String("name", englishName), slog.Any("error", err))
 			continue
@@ -352,7 +356,7 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	query := `
 		SELECT id, channel_id, english_name, japanese_name, korean_name,
-		       is_graduated, aliases, photo, twitch_user_id
+		       is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE channel_id = $1
 		LIMIT 1
@@ -367,12 +371,15 @@ func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelI
 		isGraduated  bool
 		aliasesJSON  []byte
 		photo        *string
+		org          string
+		suborg       *string
+		syncSource   string
 		twitchUserID *string
 	)
 
 	err := r.pool.QueryRow(ctx, query, channelID).Scan(
 		&id, &chID, &englishName, &japaneseName, &koreanName,
-		&isGraduated, &aliasesJSON, &photo, &twitchUserID,
+		&isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -382,7 +389,7 @@ func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelI
 		return nil, fmt.Errorf("failed to query member by channel_id: %w", err)
 	}
 
-	return r.scanMemberWithPhoto(id, chID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, twitchUserID)
+	return r.scanMemberWithPhoto(id, chID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
 }
 
 // scanMember: DB 조회 결과를 domain.Member로 변환함
@@ -396,9 +403,13 @@ func (r *Repository) scanMember(
 	_ string,
 	isGraduated bool,
 	aliasesJSON []byte,
+	photo *string,
+	org string,
+	suborg *string,
+	syncSource string,
 	twitchUserID *string,
 ) (*domain.Member, error) {
-	return r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, nil, twitchUserID)
+	return r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
 }
 
 // scanMemberWithPhoto: DB 조회 결과를 domain.Member로 변환 (photo 포함)
@@ -411,6 +422,9 @@ func (r *Repository) scanMemberWithPhoto(
 	isGraduated bool,
 	aliasesJSON []byte,
 	photo *string,
+	org string,
+	suborg *string,
+	syncSource string,
 	twitchUserID *string,
 ) (*domain.Member, error) {
 	var aliases domain.Aliases
@@ -423,6 +437,8 @@ func (r *Repository) scanMemberWithPhoto(
 		Name:        englishName,
 		Aliases:     &aliases,
 		IsGraduated: isGraduated,
+		Org:         org,
+		SyncSource:  syncSource,
 	}
 
 	if channelID != nil {
@@ -436,6 +452,9 @@ func (r *Repository) scanMemberWithPhoto(
 	}
 	if photo != nil {
 		member.Photo = *photo
+	}
+	if suborg != nil {
+		member.Suborg = *suborg
 	}
 	if twitchUserID != nil {
 		member.TwitchUserID = *twitchUserID
@@ -747,7 +766,7 @@ func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.
 			continue
 		}
 
-		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, twitchUserID)
+		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
 		if err != nil {
 			r.logger.Warn("Failed to parse member", slog.String("name", englishName), slog.Any("error", err))
 			continue
@@ -805,5 +824,5 @@ func (r *Repository) FindByNameAndOrg(ctx context.Context, name, org string) (*d
 		return nil, fmt.Errorf("failed to query member by name and org: %w", err)
 	}
 
-	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, twitchUserID)
+	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, orgVal, suborg, syncSource, twitchUserID)
 }
