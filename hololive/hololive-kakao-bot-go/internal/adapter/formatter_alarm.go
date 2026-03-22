@@ -127,7 +127,7 @@ func alarmChannelName(notification *domain.AlarmNotification) string {
 				displayOrg = "니지산지"
 			case "VSPO":
 				displayOrg = "VSPO"
-			case "Indie":
+			case "Independents":
 				displayOrg = "개인세"
 			case "Stellive":
 				displayOrg = "스텔라이브"

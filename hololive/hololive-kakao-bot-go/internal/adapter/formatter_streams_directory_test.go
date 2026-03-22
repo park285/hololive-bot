@@ -188,3 +188,48 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
 	assert.Equal(t, ErrorMessage(ErrDisplayMemberListFailed), errorFormatter.MemberDirectory(t.Context(), groups, 1))
 }
+
+func TestFormatChannelName_IndependentsOrg(t *testing.T) {
+	t.Parallel()
+
+	f := &ResponseFormatter{}
+
+	tests := []struct {
+		name   string
+		stream *domain.Stream
+		want   string
+	}{
+		{
+			name: "Independents org shows 개인세 tag",
+			stream: &domain.Stream{
+				ChannelName: "유우키 사쿠나",
+				Channel: &domain.Channel{
+					Org: new("Independents"),
+				},
+			},
+			want: "[개인세] 유우키 사쿠나",
+		},
+		{
+			name: "Hololive org shows Holo tag",
+			stream: &domain.Stream{
+				ChannelName: "사쿠라 미코",
+				Channel: &domain.Channel{
+					Org: new("Hololive"),
+				},
+			},
+			want: "[Holo] 사쿠라 미코",
+		},
+		{
+			name:   "nil stream returns empty",
+			stream: nil,
+			want:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, f.formatChannelName(tt.stream))
+		})
+	}
+}
