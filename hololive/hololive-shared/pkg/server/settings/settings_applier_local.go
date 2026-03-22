@@ -47,7 +47,7 @@ func NewLocalSettingsApplier(
 	return &localSettingsApplier{
 		youtube:             youtubeSvc,
 		holodex:             normalizeScraperProxyRuntimeService(holodexSvc),
-		scraperProxyToggler: scraperProxyToggler,
+		scraperProxyToggler: normalizeScraperProxyToggler(scraperProxyToggler),
 		alarm:               alarm,
 	}
 }

@@ -27,6 +27,17 @@ type stubHolodexProxyRuntimeService struct {
 	setCalls int
 }
 
+type nilUnsafeProxyToggler struct{}
+
+func (t *nilUnsafeProxyToggler) SetProxyEnabled(bool) int {
+	return 0
+}
+
+func (t *nilUnsafeProxyToggler) ProxyEnabled() (bool, bool) {
+	_ = *t
+	return false, false
+}
+
 func (s *stubHolodexProxyRuntimeService) SetScraperProxyEnabled(enabled bool) bool {
 	s.setCalls++
 	s.enabled = enabled
@@ -57,5 +68,21 @@ func TestLocalSettingsApplier_ApplyScraperProxy_HolodexOnly(t *testing.T) {
 	runtime := applier.ScraperProxyRuntimeState(true)
 	if runtime.HolodexEnabled == nil || !*runtime.HolodexEnabled {
 		t.Fatalf("runtime.HolodexEnabled = %#v, want true", runtime.HolodexEnabled)
+	}
+}
+
+func TestLocalSettingsApplier_ScraperProxyRuntimeState_TypedNilSchedulerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	var toggler *nilUnsafeProxyToggler
+	applier := NewLocalSettingsApplier(nil, nil, toggler, nil)
+
+	runtime := applier.ScraperProxyRuntimeState(true)
+
+	if runtime.SchedulerEnabled != nil {
+		t.Fatalf("runtime.SchedulerEnabled = %#v, want nil", runtime.SchedulerEnabled)
+	}
+	if runtime.SchedulerKnown != nil {
+		t.Fatalf("runtime.SchedulerKnown = %#v, want nil", runtime.SchedulerKnown)
 	}
 }
