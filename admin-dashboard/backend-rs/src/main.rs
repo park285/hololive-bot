@@ -6,6 +6,7 @@ mod middleware;
 mod ssr;
 mod state;
 mod static_files;
+mod status;
 mod stream_limiter;
 
 fn main() {
