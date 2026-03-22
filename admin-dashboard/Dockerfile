@@ -16,7 +16,7 @@ RUN npm run build
 # Stage 2: Build Backend (Rust)
 FROM rust:${RUST_VERSION}-alpine${ALPINE_VERSION} AS builder
 
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev curl
 
 WORKDIR /build/admin-dashboard/backend
 
