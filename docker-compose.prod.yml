@@ -521,8 +521,6 @@ services:
     build:
       context: .
       dockerfile: admin-dashboard/Dockerfile
-      args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: admin-dashboard
     restart: always
     labels:
@@ -530,27 +528,20 @@ services:
     env_file:
       - ./.env
     environment:
-      <<: *app-file-log-env
       PORT: "30190"
       ENV: "production"
       FORCE_HTTPS: "true"
+      LOG_LEVEL: "info"
       ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASS_BCRYPT: ${ADMIN_PASS_BCRYPT:?set ADMIN_PASS_BCRYPT in .env}
+      ADMIN_PASS_HASH: ${ADMIN_PASS_BCRYPT:?set ADMIN_PASS_BCRYPT in .env}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       SESSION_TOKEN_ROTATION: "true"
       VALKEY_URL: valkey-cache:6379
       DOCKER_HOST: tcp://docker-proxy:2375
       HOLO_BOT_URL: http://hololive-kakao-bot-go:30001
       HOLO_BOT_API_KEY: ${HOLO_BOT_API_KEY:-}
-      OTEL_ENABLED: "false"
-      GOGC: "200"
-      GOMEMLIMIT: "230MiB"
-      GIN_MODE: release
-      LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30190:30190"
-    volumes:
-      - ./logs:/app/logs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -563,7 +554,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 128m
     healthcheck:
       test: [ "CMD-SHELL", "wget -q --spider -T 5 http://localhost:30190/health || exit 1" ]
       interval: 30s
