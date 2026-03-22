@@ -21,6 +21,7 @@
 package bot
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -30,6 +31,9 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 )
+
+// irisMessageTypeText: Iris 프로토콜에서 일반 텍스트 메시지를 나타내는 타입 값.
+const irisMessageTypeText = "1"
 
 type ingressEnvelope struct {
 	CommandType string
@@ -68,7 +72,7 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool)
 		return nil, false
 	}
 
-	if message.JSON != nil && message.JSON.Type != "" && message.JSON.Type != "1" {
+	if message.JSON != nil && message.JSON.Type != "" && message.JSON.Type != irisMessageTypeText {
 		return nil, false
 	}
 
@@ -154,12 +158,7 @@ func (i *MessageIngress) logDebug(msg string, attrs ...slog.Attr) {
 		return
 	}
 
-	args := make([]any, 0, len(attrs))
-	for _, attr := range attrs {
-		args = append(args, attr)
-	}
-
-	i.logger.Debug(msg, args...)
+	i.logger.LogAttrs(context.Background(), slog.LevelDebug, msg, attrs...)
 }
 
 func (i *MessageIngress) logInfo(msg string, attrs ...slog.Attr) {
@@ -167,12 +166,7 @@ func (i *MessageIngress) logInfo(msg string, attrs ...slog.Attr) {
 		return
 	}
 
-	args := make([]any, 0, len(attrs))
-	for _, attr := range attrs {
-		args = append(args, attr)
-	}
-
-	i.logger.Info(msg, args...)
+	i.logger.LogAttrs(context.Background(), slog.LevelInfo, msg, attrs...)
 }
 
 func (i *MessageIngress) logWarn(msg string, attrs ...slog.Attr) {
@@ -180,10 +174,5 @@ func (i *MessageIngress) logWarn(msg string, attrs ...slog.Attr) {
 		return
 	}
 
-	args := make([]any, 0, len(attrs))
-	for _, attr := range attrs {
-		args = append(args, attr)
-	}
-
-	i.logger.Warn(msg, args...)
+	i.logger.LogAttrs(context.Background(), slog.LevelWarn, msg, attrs...)
 }

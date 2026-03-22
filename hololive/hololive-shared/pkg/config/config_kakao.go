@@ -22,11 +22,12 @@ package config
 
 import (
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
+
+const aclModeBlacklist = "blacklist"
 
 // KakaoConfig: 카카오톡 채팅방 접근 제어(ACL) 설정
 type KakaoConfig struct {
@@ -116,8 +117,8 @@ func (c *KakaoConfig) IsRoomAllowed(roomName, chatID string) bool {
 
 	inList := slices.Contains(c.Rooms, chatID)
 
-	switch strings.ToLower(strings.TrimSpace(c.ACLMode)) {
-	case "blacklist":
+	switch stringutil.Normalize(c.ACLMode) {
+	case aclModeBlacklist:
 		// 블랙리스트: 목록에 있으면 차단
 		return !inList
 	default:
