@@ -1,6 +1,7 @@
 mod auth;
 mod config;
 mod error;
+mod middleware;
 mod state;
 
 fn main() {
