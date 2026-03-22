@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { authApi } from '@/api/core';
+import { QueryErrorBoundary } from '@/components/QueryErrorBoundary';
 import LogOut from 'lucide-react/dist/esm/icons/log-out';
 import Menu from 'lucide-react/dist/esm/icons/menu';
 import X from 'lucide-react/dist/esm/icons/x';
@@ -23,6 +24,7 @@ export const AppLayout = () => {
                 // 에러 무시
             }
             logout();
+            queryClient.clear();
             void navigate('/login');
         })();
     };
@@ -184,10 +186,13 @@ export const AppLayout = () => {
 
                 <div className="flex-1 overflow-auto p-6 sm:p-10 scroll-smooth">
                     <div className="max-w-7xl mx-auto w-full">
-                        <Outlet />
+                        <QueryErrorBoundary>
+                            <Outlet />
+                        </QueryErrorBoundary>
                     </div>
                 </div>
             </main>
         </div>
     );
 };
+import { queryClient } from '@/lib/queryClient';

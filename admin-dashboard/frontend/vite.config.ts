@@ -4,6 +4,13 @@ import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
+const babelOptions = {
+  include: /[\\/]src[\\/].*\.[jt]sx?$/,
+  presets: [reactCompilerPreset({ target: '19' })],
+  sourceMap: true,
+} as unknown as Parameters<typeof babel>[0]
+const adminApiProxyTarget = process.env.ADMIN_DASHBOARD_PROXY_TARGET ?? 'http://localhost:30190'
+
 // https://vite.dev/config/
 export default defineConfig({
   // P0: Barrel file imports 최적화 (lucide-react 1,583 모듈 → 필요한 것만)
@@ -32,10 +39,7 @@ export default defineConfig({
     // Vite 8: Oxc 기반 React Refresh (Babel 제거)
     react(),
     // React Compiler는 @rolldown/plugin-babel 경유로 적용
-    // NOTE: @rolldown/plugin-babel의 PluginOptions 타입 정의 이슈로 as any 사용
-    babel({
-      presets: [reactCompilerPreset({ target: '19' })],
-    } as any),
+    babel(babelOptions),
   ],
   build: {
     target: 'esnext',
@@ -43,6 +47,9 @@ export default defineConfig({
     cssCodeSplit: true,
     // Vite 8: Rolldown 기반 code splitting (manualChunks 제거됨)
     rolldownOptions: {
+      checks: {
+        pluginTimings: false,
+      },
       output: {
         codeSplitting: {
           groups: [
@@ -70,7 +77,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/admin/api': {
-        target: 'http://localhost:30001',
+        target: adminApiProxyTarget,
         changeOrigin: true,
       },
     },

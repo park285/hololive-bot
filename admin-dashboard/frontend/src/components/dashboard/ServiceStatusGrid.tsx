@@ -3,12 +3,9 @@ import Bot from 'lucide-react/dist/esm/icons/bot'
 import Server from 'lucide-react/dist/esm/icons/server'
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check'
 import Cpu from 'lucide-react/dist/esm/icons/cpu'
-
 interface ServiceStatusGridProps {
     services: ServiceStatus[]
 }
-
-const numberFormatter = new Intl.NumberFormat('ko-KR')
 
 const ServiceIcon = ({ name }: { name: string }) => {
     if (name.includes('hololive')) return <Bot className="text-sky-500" size={20} aria-hidden="true" />
@@ -56,24 +53,24 @@ export const ServiceStatusGrid = ({ services }: ServiceStatusGridProps) => (
                             {service.available && (
                                 <div className="text-right">
                                     <div className="text-[10px] uppercase text-slate-400 font-bold tracking-wider mb-0.5">
-                                        Uptime
+                                        Response
                                     </div>
                                     <div className="text-xs font-mono font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                                        {service.uptime || '-'}
+                                        {service.response_time_ms != null ? `${String(service.response_time_ms)}ms` : '-'}
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {service.available && (
+                        {(service.available || service.error) && (
                             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                                 <div className="text-slate-500 font-medium">
-                                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-mono mr-1">VER</span>
-                                    {service.version || 'v1.0.0'}
+                                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px] font-mono mr-1">ERR</span>
+                                    {service.error || 'none'}
                                 </div>
                                 <div className="flex items-center gap-1.5 text-slate-500 font-medium">
                                     <Cpu size={14} className="text-slate-400" aria-hidden="true" />
-                                    <span className="font-mono">{numberFormatter.format(service.goroutines)} GR</span>
+                                    <span className="font-mono">{service.available ? 'OK' : 'DOWN'}</span>
                                 </div>
                             </div>
                         )}

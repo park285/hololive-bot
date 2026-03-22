@@ -143,19 +143,6 @@ export interface ChannelStatsResponse {
   stats: Record<string, ChannelStat>
 }
 
-// Log Types
-export interface LogEntry {
-  timestamp: string
-  type: string
-  summary: string
-  details?: Record<string, unknown>
-}
-
-export interface LogsResponse {
-  status: string
-  logs: LogEntry[]
-}
-
 // Settings Types
 export interface Settings {
   alarmAdvanceMinutes: number
@@ -192,6 +179,12 @@ export interface DockerContainer {
   health: string
   managed: boolean
   paused: boolean
+  created: number
+  ports: Array<{
+    private_port: number
+    public_port?: number | null
+    port_type: string
+  }>
   startedAt?: string
 }
 

@@ -1,21 +1,23 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 
 interface AuthState {
   isAuthenticated: boolean
+  isAuthResolved: boolean
   setAuthenticated: (value: boolean) => void
+  markAuthPending: () => void
   logout: () => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      isAuthenticated: false,
-      setAuthenticated: (value) => set({ isAuthenticated: value }),
-      logout: () => set({ isAuthenticated: false }),
-    }),
-    {
-      name: 'admin-auth',
-    }
-  )
-)
+export const useAuthStore = create<AuthState>()((set) => ({
+  isAuthenticated: false,
+  isAuthResolved: false,
+  setAuthenticated: (value) => {
+    set({ isAuthenticated: value, isAuthResolved: true })
+  },
+  markAuthPending: () => {
+    set({ isAuthResolved: false })
+  },
+  logout: () => {
+    set({ isAuthenticated: false, isAuthResolved: true })
+  },
+}))

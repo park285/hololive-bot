@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useOptimistic, useState, startTransition } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useOptimistic, useState, startTransition } from 'react'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import ChannelEditModal from './ChannelEditModal'
 import AddMemberModal from '@/components/AddMemberModal'
@@ -16,6 +16,7 @@ import { useSSRData } from '@/hooks/useSSRData'
 import { useMemberMutations, optimisticMemberReducer } from '@/hooks/useMemberMutations'
 
 const numberFormatter = new Intl.NumberFormat('ko-KR')
+const MEMBER_PAGE_SIZE = 48
 
 const MembersTab = () => {
   // SSR 데이터 소비 (useSSRData 훅 활용)
@@ -41,6 +42,7 @@ const MembersTab = () => {
 
   // 상태 관리
   const [searchTerm, setSearchTerm] = useState('')
+  const deferredSearchTerm = useDeferredValue(searchTerm)
   const [hideGraduated, setHideGraduated] = useState<boolean>(() => {
     const saved = localStorage.getItem('hideGraduated')
     return saved !== null ? saved === 'true' : true
@@ -56,6 +58,7 @@ const MembersTab = () => {
 
   const [modal, setModal] = useState<ModalState>({ type: 'none' })
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(MEMBER_PAGE_SIZE)
 
   // Optimistic 업데이트 설정
   const allMembers = useMemo(
@@ -81,6 +84,10 @@ const MembersTab = () => {
     setHideGraduated(newValue)
     localStorage.setItem('hideGraduated', String(newValue))
   }
+
+  useEffect(() => {
+    setVisibleCount(MEMBER_PAGE_SIZE)
+  }, [deferredSearchTerm, hideGraduated])
 
   const handleAddAlias = useCallback((memberId: number, type: 'ko' | 'ja', rawAlias: string) => {
     const alias = rawAlias.trim()
@@ -175,8 +182,8 @@ const MembersTab = () => {
     () =>
       optimisticMembers.filter((member: Member) => {
         if (hideGraduated && member.isGraduated) return false
-        if (searchTerm) {
-          const lowerSearch = searchTerm.toLowerCase()
+        if (deferredSearchTerm) {
+          const lowerSearch = deferredSearchTerm.toLowerCase()
           return (
             member.name.toLowerCase().includes(lowerSearch) ||
             member.channelId.toLowerCase().includes(lowerSearch) ||
@@ -187,7 +194,7 @@ const MembersTab = () => {
         }
         return true
       }),
-    [hideGraduated, optimisticMembers, searchTerm],
+    [deferredSearchTerm, hideGraduated, optimisticMembers],
   )
 
   const sortedMembers = useMemo(
@@ -199,6 +206,11 @@ const MembersTab = () => {
         return a.name.localeCompare(b.name)
       }),
     [filteredMembers],
+  )
+
+  const visibleMembers = useMemo(
+    () => sortedMembers.slice(0, visibleCount),
+    [sortedMembers, visibleCount],
   )
 
   if (isLoading) {
@@ -258,7 +270,7 @@ const MembersTab = () => {
 
       {/* 멤버 카드 그리드 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" role="list">
-        {sortedMembers.map((member: Member) => (
+        {visibleMembers.map((member: Member) => (
           <div key={member.id} role="listitem">
             <MemberCard
               member={member}
@@ -276,6 +288,18 @@ const MembersTab = () => {
           </div>
         )}
       </div>
+
+      {visibleCount < sortedMembers.length && (
+        <div className="flex justify-center">
+          <Button
+            variant="secondary"
+            onClick={() => { setVisibleCount((prev) => prev + MEMBER_PAGE_SIZE) }}
+            className="px-5"
+          >
+            멤버 더 보기
+          </Button>
+        </div>
+      )}
 
       {/* 별명 삭제 확인 모달 */}
       <ConfirmModal
