@@ -26,10 +26,10 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 )
 
 // CacheResources: 초기화된 캐시 서비스 인스턴스와 리소스 해제(Close) 함수를 캡슐화한 구조체
@@ -116,11 +116,14 @@ func ProvidePostgresService(resources *DatabaseResources) database.Client {
 
 // ProvideIrisClient - Iris h2c(HTTP/2 Cleartext) 클라이언트 생성
 func ProvideIrisClient(cfg config.IrisConfig, logger *slog.Logger) iris.Client {
-	return iris.NewH2CClient(cfg.BaseURL, cfg.BotToken, logger, iris.H2CClientOptions{
-		Timeout:               cfg.HTTPTimeout,
-		DialTimeout:           cfg.HTTPDialTimeout,
-		ResponseHeaderTimeout: cfg.HTTPResponseHeaderTimeout,
-	})
+	return iris.NewH2CClient(
+		cfg.BaseURL,
+		cfg.BotToken,
+		iris.WithLogger(logger),
+		iris.WithTimeout(cfg.HTTPTimeout),
+		iris.WithDialTimeout(cfg.HTTPDialTimeout),
+		iris.WithResponseHeaderTimeout(cfg.HTTPResponseHeaderTimeout),
+	)
 }
 
 // ProvideSettingsService - 설정 서비스 생성

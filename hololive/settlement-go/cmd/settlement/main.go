@@ -13,10 +13,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 
 	"github.com/kapu/settlement-go/pkg/settlement"
 )
@@ -51,7 +51,7 @@ func main() {
 	}
 	defer cacheService.Close()
 
-	irisClient := iris.NewH2CClient(cfg.irisBaseURL, cfg.irisBotToken, logger)
+	irisClient := iris.NewH2CClient(cfg.irisBaseURL, cfg.irisBotToken, iris.WithLogger(logger))
 
 	repo := settlement.NewRepository(pool, logger)
 	svc := settlement.NewService(repo)
