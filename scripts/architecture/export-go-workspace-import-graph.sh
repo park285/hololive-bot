@@ -23,7 +23,7 @@ trap cleanup EXIT
 
 for module_dir in "${MODULE_DIRS[@]}"; do
   pushd "${ROOT_DIR}/${module_dir}" >/dev/null
-  go list -f '{{if not .Standard}}{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{end}}' ./...
+  GOWORK=off go list -f '{{if not .Standard}}{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{end}}' ./...
   popd >/dev/null
 done | awk '
   $1 != "" {

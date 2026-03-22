@@ -1,0 +1,3 @@
+# Release governance assets for architecture gate.
+# Format:
+# relative/path|version marker|required token|another token
