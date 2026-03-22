@@ -41,10 +41,13 @@ export interface AlarmsResponse {
 }
 
 // Room Types
+export type ACLMode = 'whitelist' | 'blacklist'
+
 export interface RoomsResponse {
   status: string
   rooms: string[]
   aclEnabled: boolean
+  aclMode: ACLMode
 }
 
 // Stats Types
