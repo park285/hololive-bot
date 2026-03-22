@@ -143,8 +143,8 @@ github.com/openai/openai-go/v3 v3.24.0 h1:08x6GnYiB+AAejTo6yzPY8RkZMJQ8NpreiOyM5
 github.com/openai/openai-go/v3 v3.24.0/go.mod h1:cdufnVK14cWcT9qA1rRtrXx4FTRsgbDPW7Ia7SS5cZo=
 github.com/park285/iris-client-go v0.4.0 h1:woQe42RZy62PgEEfew7FbHKMrAA8i0mYTsFX+7LkFy0=
 github.com/park285/iris-client-go v0.4.0/go.mod h1:zx+9LkC5eRMRC1By06GkgHMF5D3+Z2QZHfPI0o+EjBk=
-github.com/park285/llm-kakao-bots/shared-go v0.1.0 h1:iA8hHik9UaqyTMgBcB54rZ9lNMjwn87SHm2EeFDBupk=
-github.com/park285/llm-kakao-bots/shared-go v0.1.0/go.mod h1:7BdSwpYsVaRsWNVqAKVde1+F6e4rcVrD1a5bTb1N76o=
+github.com/park285/llm-kakao-bots/shared-go v0.1.1 h1:bvI4zwm/g6Ukfq4uaej8Rsa/LswZ/zCuhymLGy8cHg0=
+github.com/park285/llm-kakao-bots/shared-go v0.1.1/go.mod h1:7BdSwpYsVaRsWNVqAKVde1+F6e4rcVrD1a5bTb1N76o=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

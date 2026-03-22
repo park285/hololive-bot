@@ -7,7 +7,7 @@ replace github.com/kapu/hololive-shared => ../hololive-shared
 require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/llm-kakao-bots/shared-go v0.1.0
+	github.com/park285/llm-kakao-bots/shared-go v0.1.1
 )
 
 require (

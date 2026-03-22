@@ -7,7 +7,7 @@ require (
 	github.com/gin-contrib/gzip v1.2.5
 	github.com/gin-gonic/gin v1.12.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/llm-kakao-bots/shared-go v0.1.0
+	github.com/park285/llm-kakao-bots/shared-go v0.1.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.73

@@ -14,7 +14,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/llm-kakao-bots/shared-go v0.1.0
+	github.com/park285/llm-kakao-bots/shared-go v0.1.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/shirou/gopsutil/v4 v4.26.2
 	github.com/stretchr/testify v1.11.1
