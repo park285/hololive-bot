@@ -94,7 +94,7 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 	})
 
 	router := gin.New()
-	router.Any("/webhook/iris", handler.Handle)
+	router.Any("/webhook/iris", gin.WrapH(handler))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/webhook/iris", http.NoBody)
 	res := httptest.NewRecorder()
