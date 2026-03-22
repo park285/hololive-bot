@@ -1,5 +1,3 @@
-use std::io;
-use std::pin::Pin;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
@@ -7,11 +5,8 @@ use async_trait::async_trait;
 use bollard::Docker;
 use bollard::models::ContainerSummary;
 use bollard::query_parameters::{
-    ListContainersOptions, LogsOptions, RestartContainerOptions, StopContainerOptions,
+    ListContainersOptions, RestartContainerOptions, StopContainerOptions,
 };
-use futures_util::TryStreamExt;
-use tokio::io::AsyncRead;
-use tokio_util::io::StreamReader;
 
 use crate::docker::{Container, DockerProvider, PortMapping};
 use crate::error::DockerError;
@@ -161,37 +156,6 @@ impl DockerProvider for DockerService {
 
         self.clear_cache();
         Ok(())
-    }
-
-    async fn get_log_stream(
-        &self,
-        name: &str,
-    ) -> Result<Pin<Box<dyn AsyncRead + Send + Unpin>>, DockerError> {
-        if !self.is_managed(name) {
-            return Err(DockerError::NotManaged(name.to_string()));
-        }
-
-        let stream = self
-            .docker
-            .logs(
-                name,
-                Some(LogsOptions {
-                    follow: true,
-                    stdout: true,
-                    stderr: true,
-                    tail: "100".into(),
-                    ..Default::default()
-                }),
-            )
-            .map_ok(|output| match output {
-                bollard::container::LogOutput::StdOut { message }
-                | bollard::container::LogOutput::StdErr { message }
-                | bollard::container::LogOutput::Console { message }
-                | bollard::container::LogOutput::StdIn { message } => message,
-            })
-            .map_err(io::Error::other);
-
-        Ok(Box::pin(StreamReader::new(stream)))
     }
 
     fn is_managed(&self, name: &str) -> bool {

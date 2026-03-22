@@ -1,11 +1,12 @@
 use async_trait::async_trait;
 use serde::Serialize;
+use utoipa::ToSchema;
 
 pub mod service;
 
 pub use service::DockerService;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Container {
     pub id: String,
     pub name: String,
@@ -17,7 +18,7 @@ pub struct Container {
     pub ports: Vec<PortMapping>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct PortMapping {
     pub private_port: u16,
     pub public_port: Option<u16>,
@@ -31,12 +32,5 @@ pub trait DockerProvider: Send + Sync {
     async fn restart_container(&self, name: &str) -> Result<(), crate::error::DockerError>;
     async fn stop_container(&self, name: &str) -> Result<(), crate::error::DockerError>;
     async fn start_container(&self, name: &str) -> Result<(), crate::error::DockerError>;
-    async fn get_log_stream(
-        &self,
-        name: &str,
-    ) -> Result<
-        std::pin::Pin<Box<dyn tokio::io::AsyncRead + Send + Unpin>>,
-        crate::error::DockerError,
-    >;
     fn is_managed(&self, name: &str) -> bool;
 }

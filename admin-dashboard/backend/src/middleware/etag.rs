@@ -75,7 +75,7 @@ mod tests {
     use axum::{Router, middleware};
     use tower::ServiceExt;
 
-    async fn test_app() -> Router {
+    fn test_app() -> Router {
         Router::new()
             .route("/admin/api/status", get(|| async { "hello world" }))
             .route("/other", get(|| async { "other" }))
@@ -84,7 +84,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_api_has_etag() {
-        let app = test_app().await;
+        let app = test_app();
         let req = Request::get("/admin/api/status")
             .body(Body::empty())
             .unwrap();
@@ -96,7 +96,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_if_none_match_returns_304() {
-        let app = test_app().await;
+        let app = test_app();
         let req = Request::get("/admin/api/status")
             .body(Body::empty())
             .unwrap();
@@ -133,7 +133,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_non_api_no_etag() {
-        let app = test_app().await;
+        let app = test_app();
         let req = Request::get("/other").body(Body::empty()).unwrap();
         let resp = app.oneshot(req).await.unwrap();
 

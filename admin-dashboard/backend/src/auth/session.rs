@@ -36,7 +36,7 @@ pub struct Session {
 pub trait SessionProvider: Send + Sync {
     async fn create_session(&self) -> Result<Session, anyhow::Error>;
     async fn get_session(&self, session_id: &str) -> Result<Option<Session>, anyhow::Error>;
-    async fn validate_session(&self, session_id: &str) -> bool;
+    async fn validate_session(&self, session_id: &str) -> Result<bool, anyhow::Error>;
     async fn delete_session(&self, session_id: &str);
     async fn refresh_session_with_validation(
         &self,
@@ -68,19 +68,7 @@ impl ValkeySessionStore {
     }
 }
 
-// Lua 스크립트: 세션 원자적 교체
-const ROTATE_LUA: &str = r"
-local old_key = KEYS[1]
-local new_key = KEYS[2]
-local new_data = ARGV[1]
-local new_ttl = tonumber(ARGV[2])
-local grace_ttl = tonumber(ARGV[3])
-local old_data = redis.call('GET', old_key)
-if not old_data then return nil end
-redis.call('SET', new_key, new_data, 'EX', new_ttl)
-redis.call('EXPIRE', old_key, grace_ttl)
-return old_data
-";
+const ROTATE_LUA: &str = include_str!("rotate_session.lua");
 
 #[async_trait::async_trait]
 impl SessionProvider for ValkeySessionStore {
@@ -121,17 +109,17 @@ impl SessionProvider for ValkeySessionStore {
         Ok(Some(session))
     }
 
-    async fn validate_session(&self, session_id: &str) -> bool {
+    async fn validate_session(&self, session_id: &str) -> Result<bool, anyhow::Error> {
         match self.get_session(session_id).await {
-            Ok(Some(_)) => true,
-            Ok(None) => false,
+            Ok(Some(_)) => Ok(true),
+            Ok(None) => Ok(false),
             Err(e) => {
                 warn!(
                     session_id = %super::truncate_session_id(session_id),
                     error = %e,
                     "session validation error"
                 );
-                false
+                Err(e)
             }
         }
     }

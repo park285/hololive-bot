@@ -12,7 +12,7 @@ use crate::config::SecurityMode;
     get,
     path = "/admin/api/status",
     responses(
-        (status = 200, description = "Aggregated status retrieved")
+        (status = 200, description = "Aggregated status retrieved", body = crate::status::AggregatedStatus)
     ),
     tag = "status"
 )]

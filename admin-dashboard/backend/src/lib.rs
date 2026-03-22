@@ -11,4 +11,3 @@ pub mod ssr;
 pub mod state;
 pub mod static_files;
 pub mod status;
-pub mod stream_limiter;
