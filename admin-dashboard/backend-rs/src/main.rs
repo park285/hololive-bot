@@ -3,6 +3,7 @@ mod config;
 mod docker;
 mod error;
 mod middleware;
+mod ssr;
 mod state;
 mod static_files;
 mod stream_limiter;
