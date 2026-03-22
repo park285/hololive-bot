@@ -18,6 +18,7 @@
 **/vendor
 **/bin
 **/logs
+!admin-dashboard/backend/internal/logs
 **/tmp
 **/node_modules
 **/dist
