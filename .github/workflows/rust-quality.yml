@@ -72,4 +72,4 @@ jobs:
         with:
           manifest-path: admin-dashboard/backend/Cargo.toml
           command: check
-          arguments: --config admin-dashboard/backend/deny.toml
+          command-arguments: --config admin-dashboard/backend/deny.toml
