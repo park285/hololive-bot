@@ -143,10 +143,11 @@ services:
     build:
       context: .
       dockerfile: hololive/hololive-kakao-bot-go/Dockerfile
+      additional_contexts:
+        iris_client_go: ../iris-client-go
+        shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-      secrets:
-        - modules_token
     container_name: hololive-kakao-bot-go
     restart: always
     labels:
@@ -232,10 +233,11 @@ services:
     build:
       context: .
       dockerfile: hololive/hololive-dispatcher-go/Dockerfile
+      additional_contexts:
+        iris_client_go: ../iris-client-go
+        shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-      secrets:
-        - modules_token
     container_name: hololive-dispatcher-go
     restart: always
     labels:
@@ -289,10 +291,11 @@ services:
     build:
       context: .
       dockerfile: hololive/hololive-stream-ingester/Dockerfile
+      additional_contexts:
+        iris_client_go: ../iris-client-go
+        shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-      secrets:
-        - modules_token
     container_name: hololive-stream-ingester
     restart: always
     labels:
@@ -367,10 +370,11 @@ services:
     build:
       context: .
       dockerfile: hololive/hololive-stream-ingester/Dockerfile.youtube-scraper
+      additional_contexts:
+        iris_client_go: ../iris-client-go
+        shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-      secrets:
-        - modules_token
     container_name: hololive-youtube-scraper
     restart: always
     labels:
@@ -445,10 +449,11 @@ services:
     build:
       context: .
       dockerfile: hololive/hololive-llm-sched/Dockerfile
+      additional_contexts:
+        iris_client_go: ../iris-client-go
+        shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
-      secrets:
-        - modules_token
     container_name: hololive-llm-scheduler
     restart: always
     labels:
@@ -541,8 +546,11 @@ services:
       DOCKER_HOST: tcp://docker-proxy:2375
       HOLO_BOT_URL: http://hololive-kakao-bot-go:30001
       HOLO_BOT_API_KEY: ${HOLO_BOT_API_KEY:-}
+      LOG_DIR: /app/logs
     ports:
       - "127.0.0.1:30190:30190"
+    volumes:
+      - ./logs:/app/logs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -627,14 +635,6 @@ volumes:
   valkey-cache-data:
   valkey-cache-socket:
 
-secrets:
-  modules_token:
-    environment: MODULES_TOKEN
-    driver: local
-    driver_opts:
-      type: tmpfs
-      device: tmpfs
-      o: size=1m,mode=0777
 networks:
   hololive-net:
     driver: bridge
