@@ -69,3 +69,53 @@ func TestGroupDeliveryRows(t *testing.T) {
 		t.Fatalf("milestone group count = %d, want 2", milestoneCount)
 	}
 }
+
+func TestValidateOutboxPayload(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		item   domain.YouTubeNotificationOutbox
+		wantOK bool
+	}{
+		{
+			name:   "valid video",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"t"}`},
+			wantOK: true,
+		},
+		{
+			name:   "valid short",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s1","title":"t"}`},
+			wantOK: true,
+		},
+		{
+			name:   "valid community",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindCommunityPost, Payload: `{"post_id":"p1","content_text":"c"}`},
+			wantOK: true,
+		},
+		{
+			name:   "invalid json",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindNewVideo, Payload: `{broken`},
+			wantOK: false,
+		},
+		{
+			name:   "milestone always valid",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindMilestone, Payload: `{"milestone":"100만"}`},
+			wantOK: true,
+		},
+		{
+			name:   "unknown kind",
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKind("UNKNOWN"), Payload: `{}`},
+			wantOK: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := validateOutboxPayload(tt.item); got != tt.wantOK {
+				t.Fatalf("validateOutboxPayload() = %v, want %v", got, tt.wantOK)
+			}
+		})
+	}
+}
