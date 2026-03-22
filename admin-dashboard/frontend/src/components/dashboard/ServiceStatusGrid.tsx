@@ -1,5 +1,8 @@
 import type { ServiceStatus } from '@/api/core'
-import { Bot, Server, ShieldCheck, Cpu } from 'lucide-react'
+import Bot from 'lucide-react/dist/esm/icons/bot'
+import Server from 'lucide-react/dist/esm/icons/server'
+import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check'
+import Cpu from 'lucide-react/dist/esm/icons/cpu'
 
 interface ServiceStatusGridProps {
     services: ServiceStatus[]
