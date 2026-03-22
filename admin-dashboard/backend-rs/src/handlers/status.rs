@@ -8,6 +8,14 @@ use axum::Json;
 
 use crate::config::SecurityMode;
 
+#[utoipa::path(
+    get,
+    path = "/admin/api/status",
+    responses(
+        (status = 200, description = "Aggregated status retrieved")
+    ),
+    tag = "status"
+)]
 pub async fn handle_aggregated_status(
     State(state): State<Arc<crate::state::AppState>>,
 ) -> impl IntoResponse {
