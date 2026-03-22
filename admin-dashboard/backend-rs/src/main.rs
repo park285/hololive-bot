@@ -4,6 +4,7 @@ mod docker;
 mod error;
 mod handlers;
 mod middleware;
+mod openapi;
 mod proxy;
 mod routes;
 mod ssr;

@@ -6,25 +6,37 @@ use axum::Json;
 use axum::extract::{ConnectInfo, Request, State};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::auth::SessionId;
 use crate::auth::session::SessionProvider;
 use crate::error::{AppError, AuthError};
 use crate::state::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct LoginResponse {
     pub status: String,
     pub message: String,
     pub csrf_token: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/api/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 401, description = "Authentication failed"),
+        (status = 429, description = "Rate limited")
+    ),
+    tag = "auth"
+)]
 pub async fn handle_login(
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -90,6 +102,14 @@ pub async fn handle_login(
     Ok(response)
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/api/auth/logout",
+    responses(
+        (status = 200, description = "Logout successful")
+    ),
+    tag = "auth"
+)]
 pub async fn handle_logout(
     State(state): State<Arc<AppState>>,
     req: Request,
@@ -112,13 +132,13 @@ pub async fn handle_logout(
     response
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct HeartbeatRequest {
     #[serde(default)]
     pub idle: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct HeartbeatResponse {
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,6 +149,16 @@ pub struct HeartbeatResponse {
     pub idle_rejected: Option<bool>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/api/auth/heartbeat",
+    request_body = HeartbeatRequest,
+    responses(
+        (status = 200, description = "Heartbeat processed", body = HeartbeatResponse),
+        (status = 401, description = "Session expired or unauthorized")
+    ),
+    tag = "auth"
+)]
 pub async fn handle_heartbeat(
     State(state): State<Arc<AppState>>,
     req: Request,

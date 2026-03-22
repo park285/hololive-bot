@@ -7,6 +7,8 @@ use axum::{
     routing::{any, get, post},
 };
 use serde_json::json;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::state::AppState;
 
@@ -90,6 +92,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .merge(public)
         .merge(authenticated)
+        .merge(
+            SwaggerUi::new("/swagger-ui")
+                .url("/api-docs/openapi.json", crate::openapi::ApiDoc::openapi()),
+        )
         .merge(api_fallback)
         .merge(spa)
         .layer(middleware::map_response(

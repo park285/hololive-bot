@@ -13,6 +13,14 @@ use crate::docker::DockerProvider;
 use crate::error::{AppError, DockerError};
 use crate::state::AppState;
 
+#[utoipa::path(
+    get,
+    path = "/admin/api/docker/health",
+    responses(
+        (status = 200, description = "Docker health retrieved")
+    ),
+    tag = "docker"
+)]
 pub async fn handle_docker_health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let available = match &state.docker_svc {
         Some(svc) => svc.available().await,
@@ -25,6 +33,15 @@ pub async fn handle_docker_health(State(state): State<Arc<AppState>>) -> impl In
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/admin/api/docker/containers",
+    responses(
+        (status = 200, description = "Docker containers listed"),
+        (status = 503, description = "Docker unavailable")
+    ),
+    tag = "docker"
+)]
 pub async fn handle_docker_containers(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -37,6 +54,17 @@ pub async fn handle_docker_containers(
     })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/api/docker/containers/{name}/restart",
+    params(("name" = String, Path, description = "Container name")),
+    responses(
+        (status = 200, description = "Container restarted"),
+        (status = 404, description = "Container is not managed"),
+        (status = 503, description = "Docker unavailable")
+    ),
+    tag = "docker"
+)]
 pub async fn handle_docker_restart(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -53,6 +81,17 @@ pub async fn handle_docker_restart(
     })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/api/docker/containers/{name}/stop",
+    params(("name" = String, Path, description = "Container name")),
+    responses(
+        (status = 200, description = "Container stopped"),
+        (status = 404, description = "Container is not managed"),
+        (status = 503, description = "Docker unavailable")
+    ),
+    tag = "docker"
+)]
 pub async fn handle_docker_stop(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -69,6 +108,17 @@ pub async fn handle_docker_stop(
     })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/api/docker/containers/{name}/start",
+    params(("name" = String, Path, description = "Container name")),
+    responses(
+        (status = 200, description = "Container started"),
+        (status = 404, description = "Container is not managed"),
+        (status = 503, description = "Docker unavailable")
+    ),
+    tag = "docker"
+)]
 pub async fn handle_docker_start(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
