@@ -118,7 +118,7 @@ export interface Stream {
   start_actual?: string
 }
 
-export type StreamOrg = 'hololive' | 'vspo' | 'stellive' | 'indie' | 'all'
+export type StreamOrg = 'hololive' | 'vspo' | 'stellive' | 'independents' | 'all'
 
 export interface StreamsResponse {
   status: string
