@@ -1,4 +1,5 @@
 mod config;
+mod error;
 
 fn main() {
     dotenvy::dotenv().ok();
