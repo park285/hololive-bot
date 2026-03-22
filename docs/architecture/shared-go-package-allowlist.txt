@@ -1,0 +1,11 @@
+# Keep this list in sync with hololive-bot/shared-go/pkg/* non-test packages.
+envutil
+ginjson
+httputil
+json
+jsonutil
+logging
+runtime/automaxprocs
+stringutil
+telemetry
+workerpool
