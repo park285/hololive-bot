@@ -1,3 +1,7 @@
+mod config;
+
 fn main() {
-    println!("admin-dashboard placeholder");
+    dotenvy::dotenv().ok();
+    let _cfg = config::Config::load();
+    println!("config loaded");
 }
