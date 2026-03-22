@@ -4,6 +4,7 @@ mod docker;
 mod error;
 mod middleware;
 mod state;
+mod static_files;
 mod stream_limiter;
 
 fn main() {
