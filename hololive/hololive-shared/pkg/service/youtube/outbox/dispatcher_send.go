@@ -27,6 +27,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -97,6 +99,21 @@ func groupDeliveryRows(
 	}
 
 	return groups, orphanRows
+}
+
+// validateOutboxPayload: outbox payload가 정상 파싱 가능한지 검증한다.
+// grouped format 전에 호출하여 빈 Title/URL 방지.
+func validateOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
+	switch item.Kind {
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
+		var p videoPayload
+		return json.Unmarshal([]byte(item.Payload), &p) == nil
+	case domain.OutboxKindCommunityPost:
+		var p communityPayload
+		return json.Unmarshal([]byte(item.Payload), &p) == nil
+	default:
+		return true
+	}
 }
 
 func (d *Dispatcher) dispatchDeliveryRows(
