@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/client"
 )
 
 type fakeIrisClient struct {

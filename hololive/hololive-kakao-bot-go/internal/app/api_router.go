@@ -36,7 +36,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/webhook"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
@@ -69,7 +69,7 @@ func ProvideAPIRouter(
 	logger *slog.Logger,
 	domainHandlers *server.DomainAPIHandlers,
 	authHandler *server.AuthHandler,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *iris.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	cacheSvc cache.Client,
 ) (*gin.Engine, error) {

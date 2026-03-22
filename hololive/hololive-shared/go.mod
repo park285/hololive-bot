@@ -32,7 +32,7 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
-require github.com/park285/iris-client-go v0.4.0 // indirect
+require github.com/park285/iris-client-go v0.4.2
 
 require (
 	cloud.google.com/go/auth v0.18.2 // indirect

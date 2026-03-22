@@ -26,7 +26,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/webhook"
 )
 
 // HandleMessage: Iris webhook으로부터 수신한 메시지를 처리합니다.

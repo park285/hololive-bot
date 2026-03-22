@@ -21,12 +21,12 @@
 package bot
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/client"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
@@ -36,11 +36,11 @@ const serviceNameIris = "iris"
 
 // CommandTransport: 명령 실행 결과(텍스트/이미지/에러)를 Iris로 전달합니다.
 type CommandTransport struct {
-	irisClient iris.Client
+	irisClient irisClient
 	formatter  *adapter.ResponseFormatter
 }
 
-func NewCommandTransport(irisClient iris.Client, formatter *adapter.ResponseFormatter) *CommandTransport {
+func NewCommandTransport(irisClient irisClient, formatter *adapter.ResponseFormatter) *CommandTransport {
 	return &CommandTransport{
 		irisClient: irisClient,
 		formatter:  formatter,

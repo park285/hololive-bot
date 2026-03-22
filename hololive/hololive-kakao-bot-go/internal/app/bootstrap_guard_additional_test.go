@@ -28,13 +28,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	iris "github.com/park285/iris-client-go/webhook"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -232,13 +232,13 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 		matcherSvc,
 		ytStack,
 		activityLogger,
-			settingsSvc,
-			aclSvc,
-			&stubMajorEventRepo{},
-			&stubMemberNewsService{},
-			workerPool,
-			logger,
-		)
+		settingsSvc,
+		aclSvc,
+		&stubMajorEventRepo{},
+		&stubMemberNewsService{},
+		workerPool,
+		logger,
+	)
 
 	assert.Equal(t, "self-user", modules.core.botSelfUser)
 	assert.Equal(t, "https://iris.example", modules.core.irisBaseURL)

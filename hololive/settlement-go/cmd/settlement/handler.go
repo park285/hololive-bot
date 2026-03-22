@@ -11,7 +11,7 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
+	iris "github.com/park285/iris-client-go/client"
 
 	"github.com/kapu/settlement-go/pkg/settlement"
 )
@@ -34,7 +34,7 @@ type parsedCommand struct {
 
 type botHandler struct {
 	svc        *settlement.Service
-	iris       iris.Client
+	iris       iris.Sender
 	formatter  *messageFormatter
 	allowRooms map[string]bool
 	logger     *slog.Logger

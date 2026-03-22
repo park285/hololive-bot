@@ -118,8 +118,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/onsi/gomega v1.38.3 h1:eTX+W6dobAYfFeGC2PV6RwXRu/MyT+cQguijutvkpSM=
 github.com/onsi/gomega v1.38.3/go.mod h1:ZCU1pkQcXDO5Sl9/VVEGlDyp+zm0m1cmeG5TOzLgdh4=
-github.com/park285/iris-client-go v0.4.0 h1:woQe42RZy62PgEEfew7FbHKMrAA8i0mYTsFX+7LkFy0=
-github.com/park285/iris-client-go v0.4.0/go.mod h1:zx+9LkC5eRMRC1By06GkgHMF5D3+Z2QZHfPI0o+EjBk=
+github.com/park285/iris-client-go v0.4.2 h1:0sPjLhaUdd9kUyUdibhUXSeALDQ/JDRO8aw+3QiwIck=
+github.com/park285/iris-client-go v0.4.2/go.mod h1:aLJfWCul+PisKSuLSEbuPkPay5LhSKnMu2FKU87879s=
 github.com/park285/llm-kakao-bots/shared-go v0.1.1 h1:bvI4zwm/g6Ukfq4uaej8Rsa/LswZ/zCuhymLGy8cHg0=
 github.com/park285/llm-kakao-bots/shared-go v0.1.1/go.mod h1:7BdSwpYsVaRsWNVqAKVde1+F6e4rcVrD1a5bTb1N76o=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=

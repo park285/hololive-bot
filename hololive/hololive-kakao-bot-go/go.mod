@@ -14,6 +14,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/kapu/hololive-shared v0.0.0
+	github.com/park285/iris-client-go v0.4.2
 	github.com/park285/llm-kakao-bots/shared-go v0.1.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/shirou/gopsutil/v4 v4.26.2
@@ -83,7 +84,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/panjf2000/ants/v2 v2.11.5 // indirect
-	github.com/park285/iris-client-go v0.4.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
