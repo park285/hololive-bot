@@ -31,9 +31,9 @@ import (
 
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	iris "github.com/park285/iris-client-go/client"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 

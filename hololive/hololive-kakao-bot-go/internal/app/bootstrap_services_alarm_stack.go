@@ -25,9 +25,9 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	iris "github.com/park285/iris-client-go/client"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
@@ -47,7 +47,7 @@ func initAlarmYouTubeStack(
 	cfg *config.Config,
 	infra *infraResources,
 	foundation *scraperHolodexProfileFoundation,
-	irisClient iris.Client,
+	irisClient iris.Sender,
 	formatter *adapter.ResponseFormatter,
 	logger *slog.Logger,
 ) (*alarmYouTubeStackComponents, error) {

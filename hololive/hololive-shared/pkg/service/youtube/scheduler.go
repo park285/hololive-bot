@@ -31,11 +31,11 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/kapu/hololive-shared/pkg/util"
+	iris "github.com/park285/iris-client-go/client"
 )
 
 // MilestoneMessageFormatter: 마일스톤 관련 메시지 포맷터 최소 계약.
@@ -55,7 +55,7 @@ type schedulerImpl struct {
 	statsRepo            ytstats.StatsSchedulerRepository
 	membersData          domain.MemberDataProvider
 	alarmService         domain.AlarmDispatchState
-	irisClient           iris.Client
+	irisClient           iris.Sender
 	formatter            MilestoneMessageFormatter
 	logger               *slog.Logger
 	ticker               *time.Ticker
@@ -92,7 +92,7 @@ func NewScheduler(
 	statsRepo ytstats.StatsSchedulerRepository,
 	membersData domain.MemberDataProvider,
 	alarmSvc domain.AlarmDispatchState,
-	irisClient iris.Client,
+	irisClient iris.Sender,
 	formatter MilestoneMessageFormatter,
 	logger *slog.Logger,
 ) Scheduler {

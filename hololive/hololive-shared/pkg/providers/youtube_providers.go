@@ -27,7 +27,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -36,6 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	iris "github.com/park285/iris-client-go/client"
 )
 
 // ProvideHolodexAPIKey - 설정에서 API 키 추출
@@ -87,7 +87,7 @@ func ProvideYouTubeStack(
 	members member.DataProvider,
 	statsRepo *ytstats.StatsRepository,
 	alarmSvc domain.AlarmDispatchState,
-	irisClient iris.Client,
+	irisClient iris.Sender,
 	formatter youtube.MilestoneMessageFormatter,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,

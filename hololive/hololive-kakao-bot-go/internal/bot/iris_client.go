@@ -18,33 +18,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package app
+package bot
 
 import (
 	"context"
-	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	irisdedup "github.com/park285/iris-client-go/dedup"
-	iris "github.com/park285/iris-client-go/webhook"
+	iris "github.com/park285/iris-client-go/client"
 )
 
-func buildBotWebhookHandler(
-	cfg *config.Config,
-	messageHandler iris.MessageHandler,
-	deps botWebhookRuntimeDependencies,
-	logger *slog.Logger,
-) *iris.Handler {
-	return iris.NewHandler(
-		context.Background(),
-		cfg.Iris.WebhookToken,
-		messageHandler,
-		logger,
-		iris.WithDeduplicator(irisdedup.NewValkeyDeduplicator(deps.cache.GetClient())),
-		iris.WithWorkerCount(cfg.Webhook.WorkerCount),
-		iris.WithQueueSize(cfg.Webhook.QueueSize),
-		iris.WithEnqueueTimeout(cfg.Webhook.EnqueueTimeout),
-		iris.WithHandlerTimeout(cfg.Webhook.HandlerTimeout),
-		iris.WithRequireHTTP2(cfg.Webhook.RequireHTTP2),
-	)
+type irisClient interface {
+	iris.Sender
+	Ping(ctx context.Context) bool
+	GetConfig(ctx context.Context) (*iris.Config, error)
 }

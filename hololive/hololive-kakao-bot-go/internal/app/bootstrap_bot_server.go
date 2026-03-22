@@ -21,8 +21,8 @@
 package app
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -31,10 +31,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	alarmsvc "github.com/kapu/hololive-shared/pkg/service/alarm"
+	iris "github.com/park285/iris-client-go/webhook"
 )
 
 // buildBotServer: Bot HTTP 서버를 구성합니다.
@@ -43,7 +43,7 @@ import (
 func buildBotServer(
 	ctx context.Context,
 	cfg *config.Config,
-	webhookHandler *iris.WebhookHandler,
+	webhookHandler *iris.Handler,
 	triggerHandler *sharedserver.TriggerHandler,
 	alarmCRUD domain.AlarmCRUD,
 	adminDeps *botAdminServerDependencies,

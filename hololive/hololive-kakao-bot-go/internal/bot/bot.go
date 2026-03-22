@@ -27,7 +27,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -59,7 +58,7 @@ type Bot struct {
 	irisBaseURL      string
 	notification     config.NotificationConfig
 	logger           *slog.Logger
-	irisClient       iris.Client
+	irisClient       irisClient
 	messageAdapter   *adapter.MessageAdapter
 	formatter        *adapter.ResponseFormatter
 	cache            cache.Client
@@ -117,12 +116,12 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		officialProfiles: stream.profiles,
 		alarm:            stream.alarm,
 		matcher:          stream.matcher,
-			statsRepo:        stream.youTubeStatsRepo,
-			acl:              support.acl,
-			majorEventRepo:   feature.majorEventRepo,
-			memberNews:       feature.memberNews,
-			commandFactories: feature.commandFactories,
-			membersData:      stream.membersData,
+		statsRepo:        stream.youTubeStatsRepo,
+		acl:              support.acl,
+		majorEventRepo:   feature.majorEventRepo,
+		memberNews:       feature.memberNews,
+		commandFactories: feature.commandFactories,
+		membersData:      stream.membersData,
 		workerPool:       support.workerPool,
 		stopCh:           make(chan struct{}),
 		doneCh:           make(chan struct{}),

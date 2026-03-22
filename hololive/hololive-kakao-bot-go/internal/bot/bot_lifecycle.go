@@ -21,14 +21,13 @@
 package bot
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
@@ -38,7 +37,7 @@ import (
 type BotLifecycle struct {
 	logger      *slog.Logger
 	cache       cache.Client
-	irisClient  iris.Client
+	irisClient  irisClient
 	irisBaseURL string
 	stopCh      chan struct{}
 	doneCh      chan struct{}
@@ -51,7 +50,7 @@ type BotLifecycle struct {
 func NewBotLifecycle(
 	logger *slog.Logger,
 	cacheSvc cache.Client,
-	irisClient iris.Client,
+	irisClient irisClient,
 	irisBaseURL string,
 	stopCh chan struct{},
 	doneCh chan struct{},

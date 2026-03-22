@@ -24,7 +24,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -45,7 +44,7 @@ func buildBotDependencyModules(
 	holodexService *holodex.Service,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
-	irisClient iris.Client,
+	irisClient botIrisClient,
 	profileService *member.ProfileService,
 	memberMatcher *matcher.MemberMatcher,
 	youTubeStack *providers.YouTubeStack,
@@ -91,9 +90,9 @@ func buildBotDependencyModules(
 			aclSvc:         aclService,
 			workerPool:     workerPool,
 		},
-			feature: botFeatureModule{
-				majorEventRepo: majorEventRepo,
-				memberNewsSvc:  memberNewsService,
-			},
-		}
+		feature: botFeatureModule{
+			majorEventRepo: majorEventRepo,
+			memberNewsSvc:  memberNewsService,
+		},
+	}
 }

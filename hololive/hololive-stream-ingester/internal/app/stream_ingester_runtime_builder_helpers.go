@@ -24,7 +24,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -33,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	iris "github.com/park285/iris-client-go/client"
 )
 
 // buildStreamIngesterYouTubeComponents: stream-ingester 전용 YouTube 컴포넌트를 구성한다.
@@ -41,7 +41,7 @@ func buildStreamIngesterYouTubeComponents(
 	postgresService database.Client,
 	membersData member.DataProvider,
 	cacheService cache.Client,
-	irisClient iris.Client,
+	irisClient iris.Sender,
 	templateRenderer *template.Renderer,
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
