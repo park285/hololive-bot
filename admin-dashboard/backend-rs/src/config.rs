@@ -136,6 +136,7 @@ pub fn env_bool(key: &str, default: bool) -> bool {
     }
 }
 
+#[allow(dead_code)]
 pub fn env_i64(key: &str, default: i64) -> i64 {
     env::var(key)
         .ok()
