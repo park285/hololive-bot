@@ -94,7 +94,7 @@ var HolodexAPIParams = struct {
 	OrgHololive:         "Hololive",
 	OrgVSpo:             "VSpo",
 	OrgStellive:         "Stellive",
-	OrgIndie:            "Indie",
+	OrgIndie:            "Independents",
 	OrgAll:              "all",
 	StatusLive:          "live",
 	StatusUpcoming:      "upcoming",
@@ -104,7 +104,7 @@ var HolodexAPIParams = struct {
 	DefaultChannelLimit: 50,
 	MaxPaginationOffset: 500,
 	SyncTargetOrgs:      []string{"Hololive", "VSpo", "Stellive"},
-	AllowedFilterOrgs:   []string{"Hololive", "VSpo", "Indie", "Stellive"},
+	AllowedFilterOrgs:   []string{"Hololive", "VSpo", "Independents", "Stellive"},
 }
 
 // YouTubeConfig: 패키지 변수다.

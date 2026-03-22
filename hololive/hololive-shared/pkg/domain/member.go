@@ -41,7 +41,7 @@ type Member struct {
 	NameKo         string   `json:"nameKo,omitempty"`
 	IsGraduated    bool     `json:"isGraduated,omitempty"`
 	Photo          string   `json:"photo,omitempty"`          // YouTube 프로필 이미지 URL (고화질)
-	Org            string   `json:"org,omitempty"`            // 그룹명 (Hololive, Nijisanji, VSPO, Indie)
+	Org            string   `json:"org,omitempty"`            // 그룹명 (Hololive, Nijisanji, VSPO, Independents)
 	Suborg         string   `json:"suborg,omitempty"`         // 서브그룹 (예: EN, JP, KR)
 	SyncSource     string   `json:"sync_source,omitempty"`    // 동기화 소스 (holodex, manual)
 	ChzzkChannelID string   `json:"chzzkChannelId,omitempty"` // Chzzk 채널 ID
