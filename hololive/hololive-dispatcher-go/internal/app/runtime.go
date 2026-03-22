@@ -35,10 +35,10 @@ import (
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/iris"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
@@ -99,7 +99,7 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		queue.WithMaxBatch(cfg.Dispatch.MaxBatch),
 	)
 	renderer := dispatch.NewSimpleRenderer()
-	irisClient := iris.NewH2CClient(cfg.Iris.BaseURL, cfg.Iris.BotToken, logger)
+	irisClient := iris.NewH2CClient(cfg.Iris.BaseURL, cfg.Iris.BotToken, iris.WithLogger(logger))
 
 	dispatcher, err := dispatch.NewDispatcher(
 		consumer,
@@ -188,6 +188,12 @@ func (r *Runtime) runDispatchLoop(ctx context.Context) {
 		}
 
 		if err := r.dispatcher.RunOnce(ctx); err != nil {
+			if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+				r.readyState.clearLastError()
+				r.logger.Info("Dispatcher loop stopped")
+				return
+			}
+
 			r.readyState.setLastError(err.Error())
 			r.logger.Warn("Dispatch loop iteration failed", slog.Any("error", err))
 

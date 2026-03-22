@@ -31,7 +31,7 @@ import (
 
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/iris"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/iris"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -312,5 +312,66 @@ func TestRunDispatchLoop_CancelDuringBackoffStopsQuickly(t *testing.T) {
 
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Fatalf("stop elapsed = %s, want <= 500ms", elapsed)
+	}
+}
+
+func TestRunDispatchLoop_ContextCanceledWhileDrainingDoesNotRecordLastError(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	drainStarted := make(chan struct{})
+	consumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, _ int) ([]domain.AlarmQueueEnvelope, error) {
+			close(drainStarted)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+
+	dispatcher, err := dispatch.NewDispatcher(
+		consumer,
+		&testMessageSender{},
+		dispatch.NewSimpleRenderer(),
+		1,
+		1,
+		testLogger(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	rt := &Runtime{
+		cfg: &Config{
+			Dispatch: DispatchConfig{ReconnectBackoff: 5 * time.Second},
+		},
+		logger:     testLogger(),
+		dispatcher: dispatcher,
+		readyState: newReadinessState(),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		rt.runDispatchLoop(ctx)
+	}()
+
+	select {
+	case <-drainStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("drain loop did not start in time")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("runDispatchLoop() did not stop quickly after context cancellation")
+	}
+
+	if lastErr := rt.readyState.getLastError(); lastErr != "" {
+		t.Fatalf("last error = %q, want empty on shutdown cancellation", lastErr)
 	}
 }
