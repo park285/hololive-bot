@@ -8,6 +8,7 @@ use utoipa::OpenApi;
     paths(
         crate::handlers::auth::handle_login,
         crate::handlers::auth::handle_logout,
+        crate::handlers::auth::handle_session_status,
         crate::handlers::auth::handle_heartbeat,
         crate::handlers::docker::handle_docker_health,
         crate::handlers::docker::handle_docker_containers,
@@ -19,8 +20,16 @@ use utoipa::OpenApi;
     components(schemas(
         crate::handlers::auth::LoginRequest,
         crate::handlers::auth::LoginResponse,
+        crate::handlers::auth::SessionStatusResponse,
         crate::handlers::auth::HeartbeatRequest,
         crate::handlers::auth::HeartbeatResponse,
+        crate::handlers::docker::DockerHealthResponse,
+        crate::handlers::docker::DockerContainerListResponse,
+        crate::handlers::docker::DockerActionResponse,
+        crate::docker::Container,
+        crate::docker::PortMapping,
+        crate::status::AggregatedStatus,
+        crate::status::ServiceStatus,
     )),
     tags(
         (name = "auth", description = "Authentication endpoints"),

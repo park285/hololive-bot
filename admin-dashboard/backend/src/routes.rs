@@ -49,16 +49,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
     let auth_get = Router::new()
         .route(
+            "/admin/api/auth/session",
+            get(crate::handlers::auth::handle_session_status),
+        )
+        .route(
             "/admin/api/docker/health",
             get(crate::handlers::docker::handle_docker_health),
         )
         .route(
             "/admin/api/docker/containers",
             get(crate::handlers::docker::handle_docker_containers),
-        )
-        .route(
-            "/admin/api/docker/containers/{name}/logs/stream",
-            get(crate::handlers::docker::handle_docker_log_stream),
         )
         .route(
             "/admin/api/status",

@@ -6,7 +6,6 @@ use axum::middleware::Next;
 use axum::response::Response;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
-use rand::Rng;
 use sha2::Sha256;
 
 use crate::auth::middleware::{SessionId, extract_cookie};
@@ -20,7 +19,7 @@ type HmacSha256 = Hmac<Sha256>;
 /// Generate a new CSRF token: nonce.hmac(nonce+session_id)
 pub fn new_csrf_token(session_id: &str, secret: &str) -> String {
     let mut nonce_bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut nonce_bytes);
+    getrandom::fill(&mut nonce_bytes).expect("OS RNG unavailable");
     let nonce = hex::encode(nonce_bytes);
 
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC key");

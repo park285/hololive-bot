@@ -1,0 +1,573 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "admin-dashboard",
+    "description": "",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/admin/api/auth/heartbeat": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "handle_heartbeat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Heartbeat processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired or unauthorized"
+          }
+        }
+      }
+    },
+    "/admin/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "handle_login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "429": {
+            "description": "Rate limited"
+          }
+        }
+      }
+    },
+    "/admin/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "handle_logout",
+        "responses": {
+          "200": {
+            "description": "Logout successful"
+          }
+        }
+      }
+    },
+    "/admin/api/auth/session": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "handle_session_status",
+        "responses": {
+          "200": {
+            "description": "Session is valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Session store unavailable"
+          }
+        }
+      }
+    },
+    "/admin/api/docker/containers": {
+      "get": {
+        "tags": [
+          "docker"
+        ],
+        "operationId": "handle_docker_containers",
+        "responses": {
+          "200": {
+            "description": "Docker containers listed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockerContainerListResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Docker unavailable"
+          }
+        }
+      }
+    },
+    "/admin/api/docker/containers/{name}/restart": {
+      "post": {
+        "tags": [
+          "docker"
+        ],
+        "operationId": "handle_docker_restart",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Container name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Container restarted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockerActionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Container is not managed"
+          },
+          "503": {
+            "description": "Docker unavailable"
+          }
+        }
+      }
+    },
+    "/admin/api/docker/containers/{name}/start": {
+      "post": {
+        "tags": [
+          "docker"
+        ],
+        "operationId": "handle_docker_start",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Container name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Container started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockerActionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Container is not managed"
+          },
+          "503": {
+            "description": "Docker unavailable"
+          }
+        }
+      }
+    },
+    "/admin/api/docker/containers/{name}/stop": {
+      "post": {
+        "tags": [
+          "docker"
+        ],
+        "operationId": "handle_docker_stop",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Container name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Container stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockerActionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Container is not managed"
+          },
+          "503": {
+            "description": "Docker unavailable"
+          }
+        }
+      }
+    },
+    "/admin/api/docker/health": {
+      "get": {
+        "tags": [
+          "docker"
+        ],
+        "operationId": "handle_docker_health",
+        "responses": {
+          "200": {
+            "description": "Docker health retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DockerHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/status": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "operationId": "handle_aggregated_status",
+        "responses": {
+          "200": {
+            "description": "Aggregated status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AggregatedStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AggregatedStatus": {
+        "type": "object",
+        "required": [
+          "services",
+          "uptime",
+          "version"
+        ],
+        "properties": {
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceStatus"
+            }
+          },
+          "uptime": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "Container": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "image",
+          "status",
+          "state",
+          "created",
+          "ports"
+        ],
+        "properties": {
+          "created": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "health": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortMapping"
+            }
+          },
+          "state": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DockerActionResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DockerContainerListResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "containers"
+        ],
+        "properties": {
+          "containers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Container"
+            }
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DockerHealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "HeartbeatRequest": {
+        "type": "object",
+        "properties": {
+          "idle": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HeartbeatResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "csrf_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "idle_rejected": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rotated": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "csrf_token"
+        ],
+        "properties": {
+          "csrf_token": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "PortMapping": {
+        "type": "object",
+        "required": [
+          "private_port",
+          "port_type"
+        ],
+        "properties": {
+          "port_type": {
+            "type": "string"
+          },
+          "private_port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "public_port": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ServiceStatus": {
+        "type": "object",
+        "required": [
+          "name",
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "response_time_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "SessionStatusResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "authenticated",
+          "username"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Authentication endpoints"
+    },
+    {
+      "name": "docker",
+      "description": "Docker management endpoints"
+    },
+    {
+      "name": "status",
+      "description": "Status and monitoring endpoints"
+    }
+  ]
+}

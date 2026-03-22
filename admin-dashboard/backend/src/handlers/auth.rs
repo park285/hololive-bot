@@ -26,6 +26,13 @@ pub struct LoginResponse {
     pub csrf_token: String,
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SessionStatusResponse {
+    pub status: String,
+    pub authenticated: bool,
+    pub username: String,
+}
+
 #[utoipa::path(
     post,
     path = "/admin/api/auth/login",
@@ -121,6 +128,32 @@ pub async fn handle_logout(State(state): State<Arc<AppState>>, req: Request) -> 
     );
     crate::auth::middleware::set_clear_cookie(response.headers_mut(), "csrf_token", false);
     response
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/api/auth/session",
+    responses(
+        (status = 200, description = "Session is valid", body = SessionStatusResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 503, description = "Session store unavailable")
+    ),
+    tag = "auth"
+)]
+pub async fn handle_session_status(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+) -> Result<impl IntoResponse, AppError> {
+    let _session_id = req
+        .extensions()
+        .get::<SessionId>()
+        .ok_or(AuthError::Unauthorized)?;
+
+    Ok(Json(SessionStatusResponse {
+        status: "ok".to_string(),
+        authenticated: true,
+        username: state.config.admin_user.clone(),
+    }))
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -267,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_heartbeat_request_defaults() {
-        let json = r#"{}"#;
+        let json = r"{}";
         let req: HeartbeatRequest = serde_json::from_str(json).unwrap();
         assert!(!req.idle);
     }
@@ -283,5 +316,17 @@ mod tests {
         let json = serde_json::to_string(&resp).unwrap();
         assert!(!json.contains("rotated"));
         assert!(!json.contains("csrf_token"));
+    }
+
+    #[test]
+    fn test_session_status_response_serialize() {
+        let resp = SessionStatusResponse {
+            status: "ok".to_string(),
+            authenticated: true,
+            username: "admin".to_string(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("authenticated"));
+        assert!(json.contains("username"));
     }
 }
