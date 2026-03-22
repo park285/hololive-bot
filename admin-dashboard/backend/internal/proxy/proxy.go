@@ -196,6 +196,9 @@ func (p *BotProxies) ProxyHolo(c *gin.Context) {
 		c.Request.Header.Set("X-API-Key", p.holoAPIKey)
 	}
 
+	// 내부 프록시이므로 브라우저 Origin 헤더 제거 (봇 서버 CORS guard 우회)
+	c.Request.Header.Del("Origin")
+
 	// WebSocket 요청은 HTTP/1.1 프록시 사용
 	if isWebSocketRequest(c.Request) {
 		p.logger.Debug("proxy websocket to holo",
