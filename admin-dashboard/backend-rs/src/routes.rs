@@ -33,15 +33,15 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(crate::handlers::auth::handle_heartbeat),
         )
         .route(
-            "/admin/api/docker/containers/:name/restart",
+            "/admin/api/docker/containers/{name}/restart",
             post(crate::handlers::docker::handle_docker_restart),
         )
         .route(
-            "/admin/api/docker/containers/:name/stop",
+            "/admin/api/docker/containers/{name}/stop",
             post(crate::handlers::docker::handle_docker_stop),
         )
         .route(
-            "/admin/api/docker/containers/:name/start",
+            "/admin/api/docker/containers/{name}/start",
             post(crate::handlers::docker::handle_docker_start),
         )
         .layer(csrf_layer);
@@ -56,7 +56,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(crate::handlers::docker::handle_docker_containers),
         )
         .route(
-            "/admin/api/docker/containers/:name/logs/stream",
+            "/admin/api/docker/containers/{name}/logs/stream",
             get(crate::handlers::docker::handle_docker_log_stream),
         )
         .route(
