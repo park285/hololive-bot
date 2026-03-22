@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { getCookie } from '@/api/client'
 import type { SystemStats } from '@/types'
 import { CONFIG } from '@/config'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { useAuthStore } from '@/stores/authStore'
 import Activity from 'lucide-react/dist/esm/icons/activity'
 import Cpu from 'lucide-react/dist/esm/icons/cpu'
 import CircuitBoard from 'lucide-react/dist/esm/icons/circuit-board'
@@ -37,13 +39,17 @@ const parseSystemStats = (value: unknown): SystemStats | null => {
     const record = asRecord(value)
     if (!record) return null
 
-    const cpuUsage = asNumber(record['cpuUsage'])
-    const memoryUsage = asNumber(record['memoryUsage'])
-    const memoryTotal = asNumber(record['memoryTotal'])
-    const memoryUsed = asNumber(record['memoryUsed'])
+    const cpuUsage = asNumber(record['cpuUsage'] ?? record['cpu_usage'])
+    const memoryUsage = asNumber(record['memoryUsage'] ?? record['memory_usage'] ?? record['memory_usage_percent'])
+    const memoryTotal = asNumber(record['memoryTotal'] ?? record['memory_total'])
+    const memoryUsed = asNumber(record['memoryUsed'] ?? record['memory_used'])
     const goroutines = asNumber(record['goroutines'])
-    const totalGoroutines = asNumber(record['totalGoroutines'])
-    const serviceGoroutinesValue = Array.isArray(record['serviceGoroutines']) ? record['serviceGoroutines'] : null
+    const totalGoroutines = asNumber(record['totalGoroutines'] ?? record['total_goroutines'] ?? record['goroutines'])
+    const serviceGoroutinesValue = Array.isArray(record['serviceGoroutines'])
+        ? record['serviceGoroutines']
+        : Array.isArray(record['service_goroutines'])
+            ? record['service_goroutines']
+            : []
 
     if (
         cpuUsage === null ||
@@ -51,8 +57,7 @@ const parseSystemStats = (value: unknown): SystemStats | null => {
         memoryTotal === null ||
         memoryUsed === null ||
         goroutines === null ||
-        totalGoroutines === null ||
-        serviceGoroutinesValue === null
+        totalGoroutines === null
     ) {
         return null
     }
@@ -305,9 +310,11 @@ const GoroutineChart = ({ history, serviceNames }: GoroutineChartProps) => {
 export const SystemStatsChart = () => {
     const [statsHistory, setStatsHistory] = useState<SystemStatsPoint[]>([])
     const [currentStats, setCurrentStats] = useState<SystemStats | null>(null)
+    const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/admin/api/ws/system-stats`
+    const hasSessionCookie = getCookie('admin_session') != null
 
     const serviceNames = useMemo(() => {
         const names = new Set<string>()
@@ -325,9 +332,8 @@ export const SystemStatsChart = () => {
     const latestPoint = statsHistory[statsHistory.length - 1]
 
     const { isConnected } = useWebSocket<SystemStats>(wsUrl, {
-        parseMessage: (data) => {
-            return parseSystemStats(data)
-        },
+        autoConnect: isAuthenticated && hasSessionCookie,
+        parseMessage: (data) => parseSystemStats(data),
         onMessage: (data) => {
             const now = new Date()
             const timeStr = now.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })

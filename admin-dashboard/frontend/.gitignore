@@ -12,9 +12,6 @@ dist
 dist-ssr
 *.local
 
-# Generated API (swagger-typescript-api)
-src/api/generated
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

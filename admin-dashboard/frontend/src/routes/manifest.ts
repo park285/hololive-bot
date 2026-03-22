@@ -3,7 +3,6 @@ import Bell from 'lucide-react/dist/esm/icons/bell'
 import LayoutDashboard from 'lucide-react/dist/esm/icons/layout-dashboard'
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square'
 import Radio from 'lucide-react/dist/esm/icons/radio'
-import ScrollText from 'lucide-react/dist/esm/icons/scroll-text'
 import Settings from 'lucide-react/dist/esm/icons/settings'
 import Trophy from 'lucide-react/dist/esm/icons/trophy'
 import Users from 'lucide-react/dist/esm/icons/users'
@@ -56,12 +55,6 @@ const ROUTE_METADATA: Record<string, Omit<RouteManifestItem, 'path' | 'absoluteP
     label: '방 관리',
     icon: MessageSquare,
     group: 'Hololive Bot',
-  },
-  logs: {
-    id: 'logs',
-    label: '로그',
-    icon: ScrollText,
-    group: 'Infrastructure',
   },
   settings: {
     id: 'settings',

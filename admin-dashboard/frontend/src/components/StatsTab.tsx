@@ -64,14 +64,37 @@ const StatsTab = () => {
 
   // 현재 선택된 서비스 데이터 찾기
   const currentServiceStats = useMemo(() => {
-    return statusData?.services.find(s => s.name === selectedService) ?? {
+    const baseService = statusData?.services.find(s => s.name === selectedService)
+
+    const runtimeInfo = selectedService === 'hololive-bot'
+      ? {
+          version: holoStats?.version,
+          uptime: holoStats?.uptime,
+        }
+      : selectedService === 'admin-dashboard'
+        ? {
+            version: statusData?.version,
+            uptime: statusData?.uptime,
+          }
+        : {
+            version: undefined,
+            uptime: undefined,
+          }
+
+    return {
       name: selectedService,
-      available: false,
-      version: '-',
-      uptime: '-',
-      goroutines: 0,
+      available: baseService?.available ?? false,
+      version: runtimeInfo.version ?? '-',
+      uptime: runtimeInfo.uptime ?? '-',
     }
-  }, [statusData?.services, selectedService])
+  }, [
+    holoStats?.uptime,
+    holoStats?.version,
+    selectedService,
+    statusData?.services,
+    statusData?.uptime,
+    statusData?.version,
+  ])
 
   // 바로가기 핸들러
   const go = (path: string) => { void navigate(path) }

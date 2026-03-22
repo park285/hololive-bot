@@ -7,7 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { membersApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
 import type { Member, AddAliasRequest, RemoveAliasRequest } from '@/types'
-import toast from '@/lib/toast'
+import toast from '@/lib/toast-api'
 
 /**
  * 멤버 쿼리 무효화 헬퍼

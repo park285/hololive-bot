@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
-import toast from '@/lib/toast'
+import toast from '@/lib/toast-api'
 
 interface SettingsFormProps {
   initialData?: SettingsResponse
@@ -61,7 +61,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
     },
   })
 
-  const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const onSubmit = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     const nextError = validateAlarmAdvanceMinutes(alarmAdvanceMinutes)

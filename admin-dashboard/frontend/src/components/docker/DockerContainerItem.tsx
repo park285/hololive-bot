@@ -1,4 +1,4 @@
-import type { DockerContainer } from '@/types'
+import type { DockerContainer } from '@/api/core'
 import { Button, Badge } from '@/components/ui'
 import { Play, Square, AlertCircle, Power, StopCircle, RefreshCw } from 'lucide-react'
 import clsx from 'clsx'

@@ -1,19 +1,10 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import CheckCircle2 from 'lucide-react/dist/esm/icons/circle-check-big'
 import CircleAlert from 'lucide-react/dist/esm/icons/circle-alert'
 import X from 'lucide-react/dist/esm/icons/x'
+import toastApi, { getToastItems, subscribeToToasts, type ToastItem } from '@/lib/toast-api'
 
-type ToastVariant = 'success' | 'error'
-
-interface ToastOptions {
-  id?: string
-}
-
-interface ToastItem {
-  id: string
-  message: ReactNode
-  variant: ToastVariant
-}
+type ToastVariant = ToastItem['variant']
 
 interface ToasterProps {
   position?: 'top-center'
@@ -28,63 +19,6 @@ interface ToasterProps {
       iconTheme?: { primary?: string; secondary?: string }
     }
   }
-}
-
-const listeners = new Set<(toasts: ToastItem[]) => void>()
-let toasts: ToastItem[] = []
-const dismissTimers = new Map<string, number>()
-
-const notify = () => {
-  listeners.forEach((listener) => listener(toasts))
-}
-
-const clearDismissTimer = (id: string) => {
-  const timer = dismissTimers.get(id)
-  if (timer !== undefined) {
-    window.clearTimeout(timer)
-    dismissTimers.delete(id)
-  }
-}
-
-const removeToast = (id: string) => {
-  clearDismissTimer(id)
-  toasts = toasts.filter((toast) => toast.id !== id)
-  notify()
-}
-
-const scheduleDismiss = (id: string, variant: ToastVariant) => {
-  clearDismissTimer(id)
-  const timeoutMs = variant === 'success' ? 3000 : 4500
-  const timer = window.setTimeout(() => {
-    removeToast(id)
-  }, timeoutMs)
-  dismissTimers.set(id, timer)
-}
-
-const pushToast = (variant: ToastVariant, message: ReactNode, options?: ToastOptions) => {
-  const id = options?.id ?? `${variant}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const nextToast: ToastItem = { id, message, variant }
-
-  toasts = [nextToast, ...toasts.filter((toast) => toast.id !== id)].slice(0, 4)
-  notify()
-  scheduleDismiss(id, variant)
-
-  return id
-}
-
-const toast = {
-  success: (message: ReactNode, options?: ToastOptions) => pushToast('success', message, options),
-  error: (message: ReactNode, options?: ToastOptions) => pushToast('error', message, options),
-  dismiss: (id?: string) => {
-    if (id) {
-      removeToast(id)
-      return
-    }
-
-    Array.from(dismissTimers.keys()).forEach((toastId) => clearDismissTimer(toastId))
-    toasts = []
-    notify()
-  },
 }
 
 const getVariantStyles = (
@@ -105,20 +39,18 @@ const getVariantStyles = (
 }
 
 export const Toaster = ({
-  position = 'top-center',
+  position: _position = 'top-center',
   reverseOrder = false,
   toastOptions,
 }: ToasterProps) => {
-  const [items, setItems] = useState<ToastItem[]>(toasts)
+  void _position
+  const [items, setItems] = useState<ToastItem[]>(getToastItems())
 
   useEffect(() => {
-    const listener = (nextToasts: ToastItem[]) => {
+    const unsubscribe = subscribeToToasts((nextToasts: ToastItem[]) => {
       setItems(nextToasts)
-    }
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
+    })
+    return unsubscribe
   }, [])
 
   if (items.length === 0) {
@@ -126,9 +58,7 @@ export const Toaster = ({
   }
 
   const orderedItems = reverseOrder ? [...items].reverse() : items
-  const positionClassName = position === 'top-center'
-    ? 'top-4 left-1/2 -translate-x-1/2'
-    : 'top-4 left-1/2 -translate-x-1/2'
+  const positionClassName = 'top-4 left-1/2 -translate-x-1/2'
 
   return (
     <div className={`pointer-events-none fixed z-[100] flex w-full max-w-md flex-col gap-3 px-4 ${positionClassName}`}>
@@ -149,7 +79,7 @@ export const Toaster = ({
             <button
               type="button"
               className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-              onClick={() => { removeToast(item.id) }}
+              onClick={() => { toastApi.dismiss(item.id) }}
               aria-label="알림 닫기"
             >
               <X size={14} aria-hidden="true" />
@@ -160,5 +90,3 @@ export const Toaster = ({
     </div>
   )
 }
-
-export default toast

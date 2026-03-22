@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Server, RefreshCw, AlertCircle, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
-import toast from '@/lib/toast'
+import toast from '@/lib/toast-api'
 import { DockerContainerItem } from '@/components/docker/DockerContainerItem'
 import { ConfirmModal } from '@/components/ConfirmModal'
 

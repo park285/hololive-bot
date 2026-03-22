@@ -45,12 +45,6 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
     load: () => import('@/components/RoomsTab'),
   },
   {
-    id: 'logs',
-    path: 'logs',
-    absolutePath: '/dashboard/logs',
-    load: () => import('@/components/LogsTab'),
-  },
-  {
     id: 'settings',
     path: 'settings',
     absolutePath: '/dashboard/settings',
