@@ -161,7 +161,9 @@ hololive-kakao-bot-go/
 | **YouTube** | `YOUTUBE_API_KEY` | YouTube Data API 키 (구독자 수 조회용) | - |
 | **Kakao** | `KAKAO_ROOMS` | 봇이 응답할 카카오톡 방 이름 목록 (쉼표 구분) | `홀로라이브 알림방` |
 | | `KAKAO_ACL_ENABLED` | ACL(접근 제어) 활성화 여부 | `true` |
-| **Iris** | `IRIS_BASE_URL` | Iris 메신저 서버 주소 | `http://localhost:3000` |
+| **Iris** | `IRIS_BASE_URL` | Iris 메신저 서버 주소 | **필수** |
+| | `IRIS_WEBHOOK_TOKEN` | Iris -> bot inbound webhook 인증 토큰 | **필수** |
+| | `IRIS_BOT_TOKEN` | bot -> Iris reply/send 인증 토큰 | **필수** |
 | **DB** | `POSTGRES_HOST`, `_PORT`, ... | PostgreSQL 연결 정보 | `localhost`, `5432` |
 | **Cache** | `CACHE_HOST`, `_PORT` | Valkey(Redis) 캐시 서버 정보 | `localhost`, `6379` |
 | **MQ** | `MQ_HOST`, `_PORT` | ValkeyMQ 서버 정보 | `localhost`, `1833` |

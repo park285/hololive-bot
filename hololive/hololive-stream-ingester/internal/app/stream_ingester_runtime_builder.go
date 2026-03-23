@@ -67,7 +67,10 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		}
 	}()
 
-	irisClient := providers.ProvideIrisClient(cfg.Iris, logger)
+	irisClient, err := providers.ProvideIrisClient(logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide iris client: %w", err)
+	}
 	templateRenderer := template.NewRenderer(infra.postgresService.GetGormDB(), logger)
 
 	holodexAPIKey := providers.ProvideHolodexAPIKey(cfg.Holodex)

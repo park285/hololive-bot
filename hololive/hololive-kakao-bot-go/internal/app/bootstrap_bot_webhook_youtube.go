@@ -21,12 +21,10 @@
 package app
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	irisdedup "github.com/park285/iris-client-go/dedup"
-	iris "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 )
 
 func buildBotWebhookHandler(
@@ -34,13 +32,10 @@ func buildBotWebhookHandler(
 	messageHandler iris.MessageHandler,
 	deps botWebhookRuntimeDependencies,
 	logger *slog.Logger,
-) *iris.Handler {
-	return iris.NewHandler(
-		context.Background(),
-		cfg.Iris.WebhookToken,
-		messageHandler,
-		logger,
-		iris.WithDeduplicator(irisdedup.NewValkeyDeduplicator(deps.cache.GetClient())),
+) (*iris.WebhookHandler, error) {
+	return iris.NewWebhookHandler(messageHandler,
+		iris.WithWebhookLogger(logger),
+		iris.WithValkeyDedup(deps.cache.GetClient()),
 		iris.WithWorkerCount(cfg.Webhook.WorkerCount),
 		iris.WithQueueSize(cfg.Webhook.QueueSize),
 		iris.WithEnqueueTimeout(cfg.Webhook.EnqueueTimeout),

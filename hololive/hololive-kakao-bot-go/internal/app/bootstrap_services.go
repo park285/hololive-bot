@@ -34,9 +34,17 @@ import (
 
 // initCoreInfrastructure 는 공통 인프라를 초기화한다.
 func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *coreInfrastructure, retErr error) {
-	irisClient := providers.ProvideIrisClient(cfg.Iris, logger)
-
 	infra, err := initInfraResources(ctx, cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	irisClient, err := providers.ProvideIrisClient(logger)
+	if err != nil {
+		infra.cleanupDB()
+		infra.cleanupCache()
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}

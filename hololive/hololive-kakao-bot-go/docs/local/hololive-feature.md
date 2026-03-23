@@ -195,7 +195,9 @@ Valkey Key 설계(요약)
 
 ```env
 # Iris Server
-IRIS_BASE_URL=http://localhost:3000
+IRIS_BASE_URL=
+IRIS_WEBHOOK_TOKEN=...
+IRIS_BOT_TOKEN=...
 IRIS_WS_URL=ws://localhost:3000/ws
 
 # Kakao

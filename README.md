@@ -26,7 +26,7 @@ Go 단일 언어 구조:
 | `hololive-llm-sched` | LLM scheduler (major event + member news + delivery) | 30003 |
 | `hololive-stream-ingester` | Photo sync + ingestion-adjacent runtime builders (`stream-ingester`, `youtube-scraper`) | 30004 / 30005 |
 | `hololive-shared` | Shared Go library (hololive domain) | - |
-| `shared-go` | Shared Go utilities (errors, stringutil, valkeyx, etc.) | - |
+| `shared-go` | Active shared Go utilities workspace (`../llm/shared-go`) | - |
 
 ### Runtime 바이너리 (5개)
 | 바이너리 | 역할 | 포트 |
@@ -62,7 +62,7 @@ go build ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/... \
   ./hololive/hololive-shared/... \
-  ./shared-go/...
+  ../llm/shared-go/...
 ```
 
 ### 테스트
@@ -73,7 +73,7 @@ go test ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/... \
   ./hololive/hololive-shared/... \
-  ./shared-go/...
+  ../llm/shared-go/...
 ```
 
 ## 배포
