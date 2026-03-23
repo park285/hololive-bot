@@ -3,12 +3,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SHARED_GO_DIR="${ROOT_DIR}/shared-go"
+REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
-if [[ ! -d "${SHARED_GO_DIR}" ]]; then
-  echo "error: shared-go dir not found: ${SHARED_GO_DIR}" >&2
-  exit 1
-fi
+resolve_shared_go_dir() {
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
+  if [[ ! -d "${candidate}" ]]; then
+    echo "error: active shared-go dir not found: ${candidate}" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "${candidate}"
+}
+
+SHARED_GO_DIR="$(resolve_shared_go_dir)"
 
 tmp_edges="$(mktemp)"
 cleanup() {

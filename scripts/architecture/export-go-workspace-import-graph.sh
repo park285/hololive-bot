@@ -3,15 +3,28 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 OUTPUT_FILE="${1:-${ROOT_DIR}/artifacts/architecture/go-workspace-import-graph.txt}"
 
+resolve_shared_go_dir() {
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
+  if [[ ! -d "${candidate}" ]]; then
+    echo "error: active shared-go dir not found: ${candidate}" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "${candidate}"
+}
+
+SHARED_GO_DIR="$(resolve_shared_go_dir)"
+
 MODULE_DIRS=(
-  "shared-go"
-  "hololive/hololive-shared"
-  "hololive/hololive-kakao-bot-go"
-  "hololive/hololive-dispatcher-go"
-  "hololive/hololive-llm-sched"
-  "hololive/hololive-stream-ingester"
+  "${SHARED_GO_DIR}"
+  "${ROOT_DIR}/hololive/hololive-shared"
+  "${ROOT_DIR}/hololive/hololive-kakao-bot-go"
+  "${ROOT_DIR}/hololive/hololive-dispatcher-go"
+  "${ROOT_DIR}/hololive/hololive-llm-sched"
+  "${ROOT_DIR}/hololive/hololive-stream-ingester"
 )
 
 mkdir -p "$(dirname "${OUTPUT_FILE}")"
@@ -22,7 +35,7 @@ cleanup() {
 trap cleanup EXIT
 
 for module_dir in "${MODULE_DIRS[@]}"; do
-  pushd "${ROOT_DIR}/${module_dir}" >/dev/null
+  pushd "${module_dir}" >/dev/null
   GOWORK=off go list -f '{{if not .Standard}}{{.ImportPath}}{{range .Imports}} {{.}}{{end}}{{end}}' ./...
   popd >/dev/null
 done | awk '

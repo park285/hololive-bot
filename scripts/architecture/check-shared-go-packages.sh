@@ -3,13 +3,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SHARED_GO_PKG_DIR="${ROOT_DIR}/shared-go/pkg"
+REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 ALLOWLIST_FILE="${1:-${ROOT_DIR}/docs/architecture/shared-go-package-allowlist.txt}"
 
-if [[ ! -d "${SHARED_GO_PKG_DIR}" ]]; then
-  echo "error: shared-go pkg dir not found: ${SHARED_GO_PKG_DIR}" >&2
-  exit 1
-fi
+resolve_shared_go_pkg_dir() {
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
+  if [[ ! -d "${candidate}/pkg" ]]; then
+    echo "error: active shared-go pkg dir not found: ${candidate}/pkg" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "${candidate}/pkg"
+}
+
+SHARED_GO_PKG_DIR="$(resolve_shared_go_pkg_dir)"
 
 if [[ ! -f "${ALLOWLIST_FILE}" ]]; then
   echo "error: allowlist not found: ${ALLOWLIST_FILE}" >&2

@@ -13,6 +13,19 @@ set -e
 # 스크립트 위치 기준 절대 경로로 이동 (루트에 위치)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
+
+resolve_shared_go_workspace_path() {
+    local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
+    if [ ! -d "$candidate" ]; then
+        echo "[ERROR] Active shared-go workspace not found: $candidate"
+        exit 1
+    fi
+
+    printf '%s\n' "$candidate"
+}
+
+SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
 
 # 컨테이너 런타임 CLI (docker / podman)
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
@@ -129,6 +142,7 @@ echo "[BUILD] Building Docker images..."
 echo "  CONTAINER_CLI=$CONTAINER_CLI"
 echo "  COMPOSE_MODE=$COMPOSE_MODE"
 echo "  REMOTE_CACHE=$REMOTE_CACHE"
+echo "  SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
 
 # VERSION 파일에서 환경변수 설정 (docker-compose build args로 전달)
 export HOLO_BOT_VERSION=$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo "dev")
