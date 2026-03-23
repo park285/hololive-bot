@@ -29,8 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	irisclient "github.com/park285/iris-client-go/client"
-	iriswebhook "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -73,7 +72,7 @@ type sentMessage struct {
 	message string
 }
 
-func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, opts ...irisclient.SendOption) error {
+func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
 	c.mu.Lock()
 	c.lastMessageRoom = room
 	c.lastMessage = message
@@ -102,8 +101,8 @@ func (c *testIrisClient) SendImage(ctx context.Context, room, imageBase64 string
 
 func (c *testIrisClient) Ping(ctx context.Context) bool { return true }
 
-func (c *testIrisClient) GetConfig(ctx context.Context) (*irisclient.Config, error) {
-	return &irisclient.Config{}, nil
+func (c *testIrisClient) GetConfig(ctx context.Context) (*iris.Config, error) {
+	return &iris.Config{}, nil
 }
 
 func (c *testIrisClient) Decrypt(ctx context.Context, data string) (string, error) {
@@ -256,11 +255,11 @@ func TestBotEnsureComponentsAndHandleMessage(t *testing.T) {
 
 	// unknown command path: fallback message should be sent
 	sender := "user"
-	b.HandleMessage(t.Context(), &iriswebhook.Message{
+	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
-		JSON: &iriswebhook.MessageJSON{
+		JSON: &iris.MessageJSON{
 			UserID: "user-1",
 			ChatID: "room-1",
 		},
@@ -299,11 +298,11 @@ func TestBotHandleMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 	}
 
 	sender := "user"
-	b.HandleMessage(t.Context(), &iriswebhook.Message{
+	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
-		JSON: &iriswebhook.MessageJSON{
+		JSON: &iris.MessageJSON{
 			UserID: "user-1",
 			ChatID: "room-1",
 		},

@@ -31,7 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	iris "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 )
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
@@ -83,7 +83,7 @@ func ProvideBotRouter(
 	ctx context.Context,
 	cfg *config.Config,
 	logger *slog.Logger,
-	webhookHandler *iris.Handler,
+	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)

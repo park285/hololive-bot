@@ -23,7 +23,7 @@ package bot
 import (
 	"context"
 
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 )
 
 type irisClient interface {
