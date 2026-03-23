@@ -26,7 +26,7 @@ import (
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"

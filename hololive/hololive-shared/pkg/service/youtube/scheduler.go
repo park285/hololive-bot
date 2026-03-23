@@ -35,7 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/kapu/hololive-shared/pkg/util"
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 )
 
 // MilestoneMessageFormatter: 마일스톤 관련 메시지 포맷터 최소 계약.

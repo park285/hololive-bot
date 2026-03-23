@@ -25,7 +25,7 @@ import (
 	"unicode"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	iris "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 

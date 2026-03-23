@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 )
 
 type fakeIrisClient struct {

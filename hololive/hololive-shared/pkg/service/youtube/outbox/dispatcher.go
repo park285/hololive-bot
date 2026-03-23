@@ -32,7 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 )
 
 // Config: Dispatcher 설정

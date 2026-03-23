@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 )
 
 func TestDispatcherRunOnce_RenderFailureReleasesClaimKeys(t *testing.T) {

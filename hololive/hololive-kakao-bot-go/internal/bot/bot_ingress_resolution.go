@@ -23,7 +23,7 @@ package bot
 import (
 	"regexp"
 
-	iris "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 )
 
 var numericRoomIDRegex = regexp.MustCompile(`^\d+$`)

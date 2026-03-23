@@ -33,7 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 

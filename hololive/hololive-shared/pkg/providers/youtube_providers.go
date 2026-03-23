@@ -35,7 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 )
 
 // ProvideHolodexAPIKey - 설정에서 API 키 추출
