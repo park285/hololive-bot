@@ -9,7 +9,10 @@ ALLOWLIST_FILE="${1:-${ROOT_DIR}/docs/architecture/shared-go-package-allowlist.t
 resolve_shared_go_pkg_dir() {
   local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
   if [[ ! -d "${candidate}/pkg" ]]; then
-    echo "error: active shared-go pkg dir not found: ${candidate}/pkg" >&2
+    candidate="${ROOT_DIR}/shared-go"
+  fi
+  if [[ ! -d "${candidate}/pkg" ]]; then
+    echo "error: active shared-go pkg dir not found" >&2
     exit 1
   fi
 

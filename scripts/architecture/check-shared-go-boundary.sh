@@ -8,7 +8,10 @@ REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolu
 resolve_shared_go_dir() {
   local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
   if [[ ! -d "${candidate}" ]]; then
-    echo "error: active shared-go dir not found: ${candidate}" >&2
+    candidate="${ROOT_DIR}/shared-go"
+  fi
+  if [[ ! -d "${candidate}" ]]; then
+    echo "error: active shared-go dir not found" >&2
     exit 1
   fi
 
