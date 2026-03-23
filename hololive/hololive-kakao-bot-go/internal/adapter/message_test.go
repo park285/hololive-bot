@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	iris "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 )
 
 func TestParseMessage_CompactAlarmAdd(t *testing.T) {

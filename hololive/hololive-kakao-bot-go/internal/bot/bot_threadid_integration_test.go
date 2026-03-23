@@ -27,8 +27,7 @@ import (
 	"time"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	irisclient "github.com/park285/iris-client-go/client"
-	iriswebhook "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 
@@ -39,11 +38,11 @@ import (
 func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	t.Parallel()
 
-	reqCh := make(chan irisclient.ReplyRequest, 1)
+	reqCh := make(chan iris.ReplyRequest, 1)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/reply", func(w http.ResponseWriter, r *http.Request) {
-		var req irisclient.ReplyRequest
+		var req iris.ReplyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -61,7 +60,7 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	srv.Start()
 	t.Cleanup(srv.Close)
 
-	irisClient := irisclient.NewH2CClient(srv.URL, "bot-token")
+	irisClient := iris.NewH2CClient(srv.URL, "bot-token")
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: command.NewRegistry(),
@@ -72,11 +71,11 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 
 	threadID := "12345"
 	sender := "user"
-	b.HandleMessage(t.Context(), &iriswebhook.Message{
+	b.HandleMessage(t.Context(), &iris.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
-		JSON: &iriswebhook.MessageJSON{
+		JSON: &iris.MessageJSON{
 			UserID:   "user-1",
 			ChatID:   "room-1",
 			ThreadID: &threadID,

@@ -11,7 +11,7 @@ import (
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/settlement-go/pkg/settlement"
 )

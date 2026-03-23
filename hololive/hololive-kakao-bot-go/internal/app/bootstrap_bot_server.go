@@ -34,7 +34,7 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	alarmsvc "github.com/kapu/hololive-shared/pkg/service/alarm"
-	iris "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 )
 
 // buildBotServer: Bot HTTP 서버를 구성합니다.
@@ -43,7 +43,7 @@ import (
 func buildBotServer(
 	ctx context.Context,
 	cfg *config.Config,
-	webhookHandler *iris.Handler,
+	webhookHandler *iris.WebhookHandler,
 	triggerHandler *sharedserver.TriggerHandler,
 	alarmCRUD domain.AlarmCRUD,
 	adminDeps *botAdminServerDependencies,
