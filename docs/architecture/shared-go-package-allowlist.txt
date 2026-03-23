@@ -1,11 +1,30 @@
-# Keep this list in sync with hololive-bot/shared-go/pkg/* non-test packages.
+# Keep this list in sync with the active shared-go workspace non-test packages.
+# Default active source: ../llm/shared-go/pkg/*
+cache
+ctxutil
+dbx
 envutil
+errors
+flagx
 ginjson
+ginserver
+grpcx
+httpclient
 httputil
+httpx
 json
 jsonutil
 logging
+processinglock
+ptrutil
+retry
 runtime/automaxprocs
+shutdown
+sliceutil
 stringutil
 telemetry
+textutil
+timeutil
+valkeyx
+valkeyx/mqutil
 workerpool

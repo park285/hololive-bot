@@ -22,6 +22,8 @@ package app
 
 import (
 	"context"
+	"log/slog"
+	"reflect"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -34,7 +36,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-	iris "github.com/park285/iris-client-go/client"
+	"github.com/park285/iris-client-go/iris"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -86,6 +90,21 @@ type stubSettingsReadWriter struct{}
 func (s *stubSettingsReadWriter) Get() settings.Settings { return settings.Settings{} }
 func (s *stubSettingsReadWriter) Update(newSettings settings.Settings) error {
 	return nil
+}
+
+func TestProvideIrisClient_UsesLoggerOption(t *testing.T) {
+	t.Setenv("IRIS_BASE_URL", "http://iris.example")
+	t.Setenv("IRIS_BOT_TOKEN", "bot-token")
+
+	logger := slog.New(slog.DiscardHandler)
+	client, err := providers.ProvideIrisClient(logger)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+
+	value := reflect.ValueOf(client).Elem()
+	loggerField := value.FieldByName("logger")
+	require.True(t, loggerField.IsValid(), "reflect: field 'logger' not found on H2CClient")
+	assert.False(t, loggerField.IsNil())
 }
 
 func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {

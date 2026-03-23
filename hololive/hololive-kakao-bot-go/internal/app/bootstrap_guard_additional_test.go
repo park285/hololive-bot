@@ -23,6 +23,8 @@ package app
 import (
 	"context"
 	"log/slog"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	iris "github.com/park285/iris-client-go/webhook"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,7 +138,7 @@ func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
 }
 
 func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
-	t.Parallel()
+	t.Setenv("IRIS_WEBHOOK_TOKEN", "token")
 
 	cfg := &config.Config{
 		Iris: config.IrisConfig{WebhookToken: "token"},
@@ -148,13 +150,28 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 		},
 	}
 
-	handler := buildBotWebhookHandler(
+	handler, err := buildBotWebhookHandler(
 		cfg,
 		stubWebhookMessageHandler{},
 		botWebhookRuntimeDependencies{cache: &cache.Service{}},
 		testBootstrapGuardLogger(),
 	)
+	require.NoError(t, err)
 	require.NotNil(t, handler)
+
+	options := reflect.ValueOf(handler).Elem().FieldByName("options")
+	require.True(t, options.IsValid(), "reflect: field 'options' not found on Handler")
+	assert.Equal(t, int64(cfg.Webhook.WorkerCount), options.FieldByName("WorkerCount").Int())
+	assert.Equal(t, int64(cfg.Webhook.QueueSize), options.FieldByName("QueueSize").Int())
+	assert.Equal(t, int64(cfg.Webhook.EnqueueTimeout), options.FieldByName("EnqueueTimeout").Int())
+	assert.Equal(t, int64(cfg.Webhook.HandlerTimeout), options.FieldByName("HandlerTimeout").Int())
+	assert.Equal(t, cfg.Webhook.RequireHTTP2, options.FieldByName("RequireHTTP2").Bool())
+
+	dedupField := reflect.ValueOf(handler).Elem().FieldByName("dedup")
+	require.True(t, dedupField.IsValid(), "reflect: field 'dedup' not found on Handler")
+	require.False(t, dedupField.IsNil(), "dedup must not be nil")
+	dedupType := dedupField.Elem().Type().String()
+	assert.True(t, strings.Contains(dedupType, "ValkeyDeduplicator"), "dedup type = %s", dedupType)
 	require.NoError(t, handler.Close())
 }
 

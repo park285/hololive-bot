@@ -37,7 +37,10 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		return nil, err
 	}
 
-	webhookHandler := buildBotWebhookHandler(cfg, botBot, runtimeViews.webhook, logger)
+	webhookHandler, err := buildBotWebhookHandler(cfg, botBot, runtimeViews.webhook, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
+	}
 
 	alarmScheduler, err := buildAlarmRuntimeScheduler(cfg, infra, logger)
 	if err != nil {

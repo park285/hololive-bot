@@ -350,7 +350,10 @@ func buildLLMSchedulerComponents(
 
 	deliveryLocker := ProvideDeliveryLocker(cacheService, logger)
 	outboxRepo := ProvideOutboxRepository(postgresService, logger)
-	irisClient := providers.ProvideIrisClient(cfg.Iris, logger)
+	irisClient, err := providers.ProvideIrisClient(logger)
+	if err != nil {
+		return nil, fmt.Errorf("init iris client: %w", err)
+	}
 	deliverySender := ProvideDeliverySender(irisClient)
 	deliveryDispatcher := ProvideDeliveryDispatcher(outboxRepo, deliverySender, logger)
 

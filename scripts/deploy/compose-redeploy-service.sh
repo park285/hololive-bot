@@ -4,9 +4,22 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
+
+resolve_shared_go_workspace_path() {
+    local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
+    if [ ! -d "$candidate" ]; then
+        echo "[ERROR] Active shared-go workspace not found: $candidate"
+        exit 1
+    fi
+
+    printf '%s\n' "$candidate"
+}
+
+SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
 
 usage() {
     echo "Usage: $0 <service|all>"
@@ -87,6 +100,7 @@ export HOLO_BOT_VERSION="$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/nul
 echo "[INFO] COMPOSE_MODE=$COMPOSE_MODE"
 echo "[INFO] COMPOSE_FILE=$COMPOSE_FILE"
 echo "[INFO] HOLO_BOT_VERSION=$HOLO_BOT_VERSION"
+echo "[INFO] SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
 
 if [ -n "$TARGET" ]; then
     echo "[UP] $TARGET"
