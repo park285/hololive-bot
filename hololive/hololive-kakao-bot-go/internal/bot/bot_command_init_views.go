@@ -28,6 +28,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
@@ -47,7 +48,7 @@ type commandInitView struct {
 	membersData      member.DataProvider
 	formatter        *adapter.ResponseFormatter
 	sendMessage      func(ctx context.Context, room, message string) error
-	sendImage        func(ctx context.Context, room, imageBase64 string) error
+	sendImage        func(ctx context.Context, room, imageBase64 string, opts ...iris.SendOption) error
 	sendError        func(ctx context.Context, room, message string) error
 	logger           *slog.Logger
 	majorEventRepo   command.MajorEventRepository
