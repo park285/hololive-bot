@@ -6,6 +6,7 @@ go 1.26.1
 // Gin uses goccy/go-json instead of sonic with -tags=go_json
 
 require (
+	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-contrib/gzip v1.2.5
@@ -13,7 +14,7 @@ require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.5.0
+	github.com/park285/iris-client-go v0.6.0
 	github.com/park285/llm-kakao-bots/shared-go v0.1.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/shirou/gopsutil/v4 v4.26.2
@@ -33,7 +34,6 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/PuerkitoBio/goquery v1.11.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
