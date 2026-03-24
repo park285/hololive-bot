@@ -25,6 +25,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/park285/iris-client-go/iris"
+
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
@@ -33,8 +35,8 @@ func (b *Bot) sendMessage(ctx context.Context, room, message string) error {
 	return b.ensureTransport().SendMessage(ctx, room, message)
 }
 
-func (b *Bot) sendImage(ctx context.Context, room, imageBase64 string) error {
-	return b.ensureTransport().SendImage(ctx, room, imageBase64)
+func (b *Bot) sendImage(ctx context.Context, room, imageBase64 string, opts ...iris.SendOption) error {
+	return b.ensureTransport().SendImage(ctx, room, imageBase64, opts...)
 }
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {

@@ -90,7 +90,7 @@ func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, 
 	return c.sendMessageErr
 }
 
-func (c *testIrisClient) SendImage(ctx context.Context, room, imageBase64 string) error {
+func (c *testIrisClient) SendImage(ctx context.Context, room, imageBase64 string, _ ...iris.SendOption) error {
 	c.mu.Lock()
 	c.lastImageRoom = room
 	c.lastImage = imageBase64
