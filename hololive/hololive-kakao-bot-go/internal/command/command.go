@@ -29,6 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
@@ -79,7 +80,7 @@ type Dependencies struct {
 	MembersData      member.DataProvider
 	Formatter        *adapter.ResponseFormatter
 	SendMessage      func(ctx context.Context, room, message string) error
-	SendImage        func(ctx context.Context, room, imageBase64 string) error
+	SendImage        func(ctx context.Context, room, imageBase64 string, opts ...iris.SendOption) error
 	SendError        func(ctx context.Context, room, message string) error
 	Dispatcher       Dispatcher
 	Logger           *slog.Logger

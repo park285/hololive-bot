@@ -50,7 +50,9 @@ type stubIrisClient struct{}
 func (s *stubIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
 	return nil
 }
-func (s *stubIrisClient) SendImage(ctx context.Context, room, imageBase64 string) error { return nil }
+func (s *stubIrisClient) SendImage(_ context.Context, _, _ string, _ ...iris.SendOption) error {
+	return nil
+}
 func (s *stubIrisClient) Ping(ctx context.Context) bool                                 { return true }
 func (s *stubIrisClient) GetConfig(ctx context.Context) (*iris.Config, error)           { return nil, nil }
 func (s *stubIrisClient) Decrypt(ctx context.Context, data string) (string, error)      { return data, nil }
