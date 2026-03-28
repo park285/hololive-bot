@@ -69,10 +69,19 @@ func (f *fakeSender) SendMessage(_ context.Context, room, message string, _ ...i
 	return nil
 }
 
-func (f *fakeSender) SendImage(_ context.Context, _, _ string) error { return nil }
-func (f *fakeSender) Ping(_ context.Context) bool                    { return true }
-func (f *fakeSender) GetConfig(_ context.Context) (*iris.Config, error) {
-	return &iris.Config{}, nil
+func (f *fakeSender) SendImage(_ context.Context, _, _ string, _ ...iris.SendOption) error { return nil }
+func (f *fakeSender) SendMultipleImages(_ context.Context, _ string, _ []string, _ ...iris.SendOption) error {
+	return nil
+}
+func (f *fakeSender) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
+func (f *fakeSender) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
+	return nil, nil
+}
+func (f *fakeSender) Ping(_ context.Context) bool { return true }
+func (f *fakeSender) GetConfig(_ context.Context) (*iris.ConfigResponse, error) {
+	return &iris.ConfigResponse{}, nil
 }
 func (f *fakeSender) Decrypt(_ context.Context, data string) (string, error) { return data, nil }
 
