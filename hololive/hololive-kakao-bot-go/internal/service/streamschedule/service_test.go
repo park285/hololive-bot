@@ -59,8 +59,9 @@ func (s *stubMemberDataProvider) FindMembersByAlias(string) []*domain.Member { r
 func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 	t.Parallel()
 
+	scheduledStartAt := time.Now().In(time.FixedZone("KST", 9*60*60)).Add(2 * time.Hour).Format(chzzk.ChzzkTimeLayout)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/service/v1/channels/chzzk-1/live-schedule" {
+		if r.URL.Path != "/service/v1/channels/chzzk-1/scheduled-lives" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 
@@ -68,11 +69,10 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code": 200,
 			"content": map[string]any{
-				"schedules": []map[string]any{
+				"scheduledLives": []map[string]any{
 					{
-						"type":          "LIVE",
-						"scheduleTitle": "치지직 일정",
-						"scheduleDate":  "2026-03-23 20:00:00",
+						"liveTitle":        "치지직 일정",
+						"scheduledStartAt": scheduledStartAt,
 					},
 				},
 			},
@@ -114,17 +114,20 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 	t.Parallel()
 
-	scheduled := time.Date(2026, 3, 23, 20, 0, 0, 0, time.UTC)
+	scheduled := time.Now().In(time.FixedZone("KST", 9*60*60)).Add(2 * time.Hour).Truncate(time.Minute)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/service/v1/channels/chzzk-1/scheduled-lives" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code": 200,
 			"content": map[string]any{
-				"schedules": []map[string]any{
+				"scheduledLives": []map[string]any{
 					{
-						"type":          "LIVE",
-						"scheduleTitle": "동시송출 일정",
-						"scheduleDate":  "2026-03-24 05:00:00",
+						"liveTitle":        "동시송출 일정",
+						"scheduledStartAt": scheduled.Format(chzzk.ChzzkTimeLayout),
 					},
 				},
 			},
@@ -178,16 +181,19 @@ func TestServiceGetChannelSchedule_FiltersChzzkSchedulesOutsideHoursWindow(t *te
 	t.Parallel()
 
 	farFuture := time.Now().In(time.FixedZone("KST", 9*60*60)).Add(48 * time.Hour).Format(chzzk.ChzzkTimeLayout)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/service/v1/channels/chzzk-1/scheduled-lives" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code": 200,
 			"content": map[string]any{
-				"schedules": []map[string]any{
+				"scheduledLives": []map[string]any{
 					{
-						"type":          "LIVE",
-						"scheduleTitle": "먼 미래 일정",
-						"scheduleDate":  farFuture,
+						"liveTitle":        "먼 미래 일정",
+						"scheduledStartAt": farFuture,
 					},
 				},
 			},
