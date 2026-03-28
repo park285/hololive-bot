@@ -99,10 +99,22 @@ func (c *testIrisClient) SendImage(ctx context.Context, room, imageBase64 string
 	return c.sendImageErr
 }
 
+func (c *testIrisClient) SendMultipleImages(_ context.Context, _ string, _ []string, _ ...iris.SendOption) error {
+	return nil
+}
+
+func (c *testIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
+
+func (c *testIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
+	return nil, nil
+}
+
 func (c *testIrisClient) Ping(ctx context.Context) bool { return true }
 
-func (c *testIrisClient) GetConfig(ctx context.Context) (*iris.Config, error) {
-	return &iris.Config{}, nil
+func (c *testIrisClient) GetConfig(ctx context.Context) (*iris.ConfigResponse, error) {
+	return &iris.ConfigResponse{}, nil
 }
 
 func (c *testIrisClient) Decrypt(ctx context.Context, data string) (string, error) {
