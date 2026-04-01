@@ -64,7 +64,8 @@ type testIrisClient struct {
 	lastMessageRoom string
 	lastMessage     string
 	lastImageRoom   string
-	lastImage       string
+	lastImage       []byte
+	lastMultiImages [][]byte
 }
 
 type sentMessage struct {
@@ -90,17 +91,21 @@ func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, 
 	return c.sendMessageErr
 }
 
-func (c *testIrisClient) SendImage(ctx context.Context, room, imageBase64 string, _ ...iris.SendOption) error {
+func (c *testIrisClient) SendImage(ctx context.Context, room string, imageData []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.mu.Lock()
 	c.lastImageRoom = room
-	c.lastImage = imageBase64
+	c.lastImage = imageData
 	c.mu.Unlock()
 
-	return c.sendImageErr
+	return nil, c.sendImageErr
 }
 
-func (c *testIrisClient) SendMultipleImages(_ context.Context, _ string, _ []string, _ ...iris.SendOption) error {
-	return nil
+func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, images [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.mu.Lock()
+	c.lastMultiImages = images
+	c.mu.Unlock()
+
+	return nil, nil
 }
 
 func (c *testIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -222,9 +227,42 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		client := &testIrisClient{sendImageErr: errors.New("image failed")}
 		transport := NewCommandTransport(client, nil)
 
-		err := transport.SendImage(ctx, "room", "img")
+		err := transport.SendImage(ctx, "room", []byte("img"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send image to room room")
+	})
+
+	t.Run("send image forwards byte data to client", func(t *testing.T) {
+		client := &testIrisClient{}
+		transport := NewCommandTransport(client, nil)
+
+		imageData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG 매직 바이트
+		err := transport.SendImage(ctx, "room-1", imageData)
+		require.NoError(t, err)
+		assert.Equal(t, "room-1", client.lastImageRoom)
+		assert.Equal(t, imageData, client.lastImage)
+	})
+
+	t.Run("send multiple images forwards byte slices to client", func(t *testing.T) {
+		client := &testIrisClient{}
+		transport := NewCommandTransport(client, nil)
+
+		images := [][]byte{
+			{0x89, 0x50, 0x4E, 0x47}, // PNG 매직 바이트
+			{0xFF, 0xD8, 0xFF, 0xE0}, // JPEG 매직 바이트
+		}
+		err := transport.SendMultipleImages(ctx, "room-2", images)
+		require.NoError(t, err)
+		require.Len(t, client.lastMultiImages, 2)
+		assert.Equal(t, images[0], client.lastMultiImages[0])
+		assert.Equal(t, images[1], client.lastMultiImages[1])
+	})
+
+	t.Run("send image with nil client returns error", func(t *testing.T) {
+		var transport *CommandTransport
+		err := transport.SendImage(ctx, "room", []byte("data"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "iris client is not configured")
 	})
 
 	t.Run("send error uses formatter", func(t *testing.T) {

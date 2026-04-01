@@ -80,7 +80,7 @@ type Dependencies struct {
 	MembersData      member.DataProvider
 	Formatter        *adapter.ResponseFormatter
 	SendMessage      func(ctx context.Context, room, message string) error
-	SendImage        func(ctx context.Context, room, imageBase64 string, opts ...iris.SendOption) error
+	SendImage        func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
 	SendError        func(ctx context.Context, room, message string) error
 	Dispatcher       Dispatcher
 	Logger           *slog.Logger

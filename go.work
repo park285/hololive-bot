@@ -1,7 +1,6 @@
 go 1.26.1
 
 use (
-	../iris-client-go
 	../llm/shared-go
 	./hololive/hololive-dispatcher-go
 	./hololive/hololive-kakao-bot-go

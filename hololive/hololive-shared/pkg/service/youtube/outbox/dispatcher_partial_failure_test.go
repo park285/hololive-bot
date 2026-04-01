@@ -76,9 +76,20 @@ func (s *testSender) SendMessage(_ context.Context, roomID, message string, _ ..
 	return nil
 }
 
-func (s *testSender) SendImage(context.Context, string, string) error { return nil }
-func (s *testSender) Ping(context.Context) bool                       { return true }
-func (s *testSender) GetConfig(context.Context) (*iris.Config, error) { return &iris.Config{}, nil }
+func (s *testSender) SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) { return nil, nil }
+func (s *testSender) SendMultipleImages(context.Context, string, [][]byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
+func (s *testSender) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
+func (s *testSender) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
+	return nil, nil
+}
+func (s *testSender) Ping(context.Context) bool { return true }
+func (s *testSender) GetConfig(context.Context) (*iris.ConfigResponse, error) {
+	return &iris.ConfigResponse{}, nil
+}
 func (s *testSender) Decrypt(_ context.Context, data string) (string, error) {
 	return data, nil
 }
