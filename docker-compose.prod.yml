@@ -144,7 +144,6 @@ services:
       context: .
       dockerfile: hololive/hololive-kakao-bot-go/Dockerfile
       additional_contexts:
-        iris_client_go: ../iris-client-go
         shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -158,7 +157,6 @@ services:
       <<: *app-file-log-env
       GOGC: "60"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h2c}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -234,7 +232,6 @@ services:
       context: .
       dockerfile: hololive/hololive-dispatcher-go/Dockerfile
       additional_contexts:
-        iris_client_go: ../iris-client-go
         shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -248,7 +245,6 @@ services:
       <<: *app-file-log-env
       DISPATCHER_PORT: "30020"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h2c}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
@@ -292,7 +288,6 @@ services:
       context: .
       dockerfile: hololive/hololive-stream-ingester/Dockerfile
       additional_contexts:
-        iris_client_go: ../iris-client-go
         shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -308,7 +303,6 @@ services:
       YOUTUBE_INGESTION_ENABLED: "false"
       PHOTO_SYNC_ENABLED: "true"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h2c}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -371,7 +365,6 @@ services:
       context: .
       dockerfile: hololive/hololive-stream-ingester/Dockerfile.youtube-scraper
       additional_contexts:
-        iris_client_go: ../iris-client-go
         shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -387,7 +380,6 @@ services:
       YOUTUBE_INGESTION_ENABLED: "true"
       PHOTO_SYNC_ENABLED: "false"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h2c}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -450,7 +442,6 @@ services:
       context: .
       dockerfile: hololive/hololive-llm-sched/Dockerfile
       additional_contexts:
-        iris_client_go: ../iris-client-go
         shared_go_workspace: ../llm/shared-go
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -464,7 +455,6 @@ services:
       <<: *app-file-log-env
       LLM_SCHEDULER_PORT: 30003
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h2c}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
