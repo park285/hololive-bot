@@ -69,9 +69,9 @@ func (f *fakeSender) SendMessage(_ context.Context, room, message string, _ ...i
 	return nil
 }
 
-func (f *fakeSender) SendImage(_ context.Context, _, _ string, _ ...iris.SendOption) error { return nil }
-func (f *fakeSender) SendMultipleImages(_ context.Context, _ string, _ []string, _ ...iris.SendOption) error {
-	return nil
+func (f *fakeSender) SendImage(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) { return nil, nil }
+func (f *fakeSender) SendMultipleImages(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
 }
 func (f *fakeSender) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, nil
