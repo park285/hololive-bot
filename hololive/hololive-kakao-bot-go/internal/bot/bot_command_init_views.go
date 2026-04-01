@@ -48,7 +48,7 @@ type commandInitView struct {
 	membersData      member.DataProvider
 	formatter        *adapter.ResponseFormatter
 	sendMessage      func(ctx context.Context, room, message string) error
-	sendImage        func(ctx context.Context, room, imageBase64 string, opts ...iris.SendOption) error
+	sendImage        func(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error
 	sendError        func(ctx context.Context, room, message string) error
 	logger           *slog.Logger
 	majorEventRepo   command.MajorEventRepository

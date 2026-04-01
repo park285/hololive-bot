@@ -35,8 +35,8 @@ func (b *Bot) sendMessage(ctx context.Context, room, message string) error {
 	return b.ensureTransport().SendMessage(ctx, room, message)
 }
 
-func (b *Bot) sendImage(ctx context.Context, room, imageBase64 string, opts ...iris.SendOption) error {
-	return b.ensureTransport().SendImage(ctx, room, imageBase64, opts...)
+func (b *Bot) sendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error {
+	return b.ensureTransport().SendImage(ctx, room, imageData, opts...)
 }
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {

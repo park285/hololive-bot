@@ -69,7 +69,7 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 	return nil
 }
 
-func (t *CommandTransport) SendImage(ctx context.Context, room, imageBase64 string, opts ...iris.SendOption) error {
+func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error {
 	if t == nil || t.irisClient == nil {
 		return errors.New("send image: iris client is not configured")
 	}
@@ -77,9 +77,20 @@ func (t *CommandTransport) SendImage(ctx context.Context, room, imageBase64 stri
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
-	if err := t.irisClient.SendImage(sendCtx, room, imageBase64, opts...); err != nil {
+	if _, err := t.irisClient.SendImage(sendCtx, room, imageData, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send image", serviceNameIris, "send_image", err)
 		return fmt.Errorf("send image to room %s: %w", room, serviceErr)
+	}
+
+	return nil
+}
+
+func (t *CommandTransport) SendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
+	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
+	defer cancel()
+
+	if _, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...); err != nil {
+		return fmt.Errorf("send iris multiple images: %w", err)
 	}
 
 	return nil

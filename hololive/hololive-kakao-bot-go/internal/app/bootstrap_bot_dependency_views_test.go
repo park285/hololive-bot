@@ -50,12 +50,23 @@ type stubIrisClient struct{}
 func (s *stubIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
 	return nil
 }
-func (s *stubIrisClient) SendImage(_ context.Context, _, _ string, _ ...iris.SendOption) error {
-	return nil
+func (s *stubIrisClient) SendImage(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
 }
-func (s *stubIrisClient) Ping(ctx context.Context) bool                                 { return true }
-func (s *stubIrisClient) GetConfig(ctx context.Context) (*iris.Config, error)           { return nil, nil }
-func (s *stubIrisClient) Decrypt(ctx context.Context, data string) (string, error)      { return data, nil }
+func (s *stubIrisClient) SendMultipleImages(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
+func (s *stubIrisClient) Ping(ctx context.Context) bool { return true }
+func (s *stubIrisClient) GetConfig(ctx context.Context) (*iris.ConfigResponse, error) {
+	return nil, nil
+}
+func (s *stubIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
+func (s *stubIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
+	return nil, nil
+}
+func (s *stubIrisClient) Decrypt(ctx context.Context, data string) (string, error) { return data, nil }
 
 type stubMemberDataProvider struct{}
 
