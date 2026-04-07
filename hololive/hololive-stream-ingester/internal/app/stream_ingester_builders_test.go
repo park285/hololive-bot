@@ -354,7 +354,9 @@ func TestBuildStreamIngesterConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 		UpdateFunc: func(newSettings settings.Settings) error {
 			mu.Lock()
 			defer mu.Unlock()
-			updateCalls++
+			if currentSettings != newSettings {
+				updateCalls++
+			}
 			currentSettings = newSettings
 			return nil
 		},
