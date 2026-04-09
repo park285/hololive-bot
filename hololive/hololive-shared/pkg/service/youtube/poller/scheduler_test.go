@@ -82,3 +82,33 @@ func TestNextPollAt_KeepsAnchor(t *testing.T) {
 
 	assert.Equal(t, want, got)
 }
+
+func TestDispatchDueJobs_WorkerChannelFullKeepsAnchoredNextRunAt(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	scheduledAt := time.Now().Add(-time.Second).UTC().Truncate(time.Second)
+	job := &Job{
+		ChannelID: "channel-1",
+		Poller:    &togglePollerStub{name: "videos"},
+		Priority:  PriorityNormal,
+		NextRunAt: scheduledAt,
+		Interval:  5 * time.Minute,
+	}
+	job.index = 0
+	scheduler.jobs = jobHeap{job}
+
+	jobCh := make(chan *Job)
+	scheduler.dispatchDueJobs(context.Background(), jobCh)
+
+	require.Len(t, scheduler.jobs, 1)
+	assert.Equal(t, scheduledAt, scheduler.jobs[0].NextRunAt)
+}
+
+func TestAdvanceNextRunAt_PreservesAnchorAcrossBacklog(t *testing.T) {
+	scheduledAt := time.Date(2026, time.April, 9, 10, 7, 0, 0, time.UTC)
+	now := time.Date(2026, time.April, 9, 10, 17, 30, 0, time.UTC)
+
+	got := advanceNextRunAt(scheduledAt, 5*time.Minute, now)
+	want := time.Date(2026, time.April, 9, 10, 22, 0, 0, time.UTC)
+
+	assert.Equal(t, want, got)
+}

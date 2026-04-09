@@ -21,6 +21,15 @@
 `docker-compose.prod.yml` 기준:
 - `stream-ingester`: `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`, `SERVER_PORT=30004`
 - `youtube-scraper`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `SERVER_PORT=30005`
+- `shared_go_workspace`: 기본값 `./shared-go` (필요 시 `SHARED_GO_WORKSPACE_PATH`로 override 가능)
+
+스크래퍼 튜닝 env:
+- `SCRAPER_WORKER_COUNT` 기본값 `2`
+- `SCRAPER_VIDEOS_SECONDS` 기본값 `300`
+- `SCRAPER_SHORTS_SECONDS` 기본값 `600`
+- `SCRAPER_COMMUNITY_SECONDS` 기본값 `600`
+- `SCRAPER_STATS_SECONDS` 기본값 `21600`
+- `SCRAPER_LIVE_SECONDS` 기본값 `300`
 
 재배포:
 
@@ -95,6 +104,7 @@ docker logs --since 15m hololive-youtube-scraper | grep "ingestion_lease"
 ## 7) 수동 점검 항목
 
 - `scraper_proxy` 설정 변경 시 `youtube-scraper` 로그에서 반영 여부 확인
+- poll interval 또는 worker count 변경 시 `youtube-scraper`만 재배포하고 10~15분 동안 backlog/지연 로그 증가 여부 확인
 - outbox 처리량 증가/정체 여부 확인
 - 스케줄러 시작 로그가 모두 남는지 확인
 

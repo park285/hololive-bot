@@ -80,10 +80,15 @@ type ScraperPoll struct {
 	Live      time.Duration
 }
 
+func DefaultScraperWorkerCount() int {
+	return 2
+}
+
 // ScraperConfig: YouTube 스크래퍼 프록시 설정 (SOCKS5)
 type ScraperConfig struct {
 	ProxyEnabled bool   // 프록시 사용 여부
 	ProxyURL     string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
+	WorkerCount  int
 	Poll         ScraperPoll
 }
 
@@ -117,6 +122,14 @@ func (c ScraperConfig) PollOrDefault() ScraperPoll {
 	}
 
 	return poll
+}
+
+func (c ScraperConfig) WorkerCountOrDefault() int {
+	if c.WorkerCount > 0 {
+		return c.WorkerCount
+	}
+
+	return DefaultScraperWorkerCount()
 }
 
 // CORSConfig: CORS 허용 Origin 설정
