@@ -124,6 +124,44 @@ func TestFormatScheduleChangeMessage(t *testing.T) {
 	}
 }
 
+func TestNormalizeTargetMinutes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []int
+		want  []int
+	}{
+		{
+			name:  "nil uses defaults",
+			input: nil,
+			want:  []int{5, 3, 1},
+		},
+		{
+			name:  "filters duplicates and invalid values",
+			input: []int{10, 0, 10, -1, 3},
+			want:  []int{10, 3, 1},
+		},
+		{
+			name:  "keeps fallback minute once",
+			input: []int{15, 1, 5},
+			want:  []int{15, 5, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeTargetMinutes(tt.input)
+			if len(got) != len(tt.want) {
+				t.Fatalf("NormalizeTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.want), got)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("NormalizeTargetMinutes() = %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
 func TestIsTargetMinute(t *testing.T) {
 	tests := []struct {
 		name          string

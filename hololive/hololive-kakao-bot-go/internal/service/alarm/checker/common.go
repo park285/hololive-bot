@@ -24,11 +24,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"golang.org/x/sync/errgroup"
 
@@ -185,37 +185,7 @@ func loadSubscriberRoomsByChannel(
 }
 
 func normalizeTargetMinutes(targetMinutes []int) []int {
-	if len(targetMinutes) == 0 {
-		return []int{5, 3, 1}
-	}
-
-	seen := make(map[int]struct{}, len(targetMinutes))
-
-	normalized := make([]int, 0, len(targetMinutes))
-	for _, minute := range targetMinutes {
-		if minute <= 0 {
-			continue
-		}
-
-		if _, ok := seen[minute]; ok {
-			continue
-		}
-
-		seen[minute] = struct{}{}
-		normalized = append(normalized, minute)
-	}
-
-	if len(normalized) == 0 {
-		return []int{5, 3, 1}
-	}
-
-	slices.SortFunc(normalized, func(a, b int) int { return b - a })
-
-	if _, ok := seen[1]; !ok {
-		normalized = append(normalized, 1)
-	}
-
-	return normalized
+	return sharedchecker.NormalizeTargetMinutes(targetMinutes)
 }
 
 func safeLogger(logger *slog.Logger) *slog.Logger {

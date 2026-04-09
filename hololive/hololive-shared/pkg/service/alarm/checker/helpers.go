@@ -25,6 +25,8 @@ import (
 	"time"
 )
 
+var defaultTargetMinutes = []int{5, 3, 1}
+
 // MinutesUntilFloor는 start까지 남은 시간을 분 단위로 내림 계산한다.
 // 과거이거나 현재이면 0을 반환한다.
 func MinutesUntilFloor(start, now time.Time) int {
@@ -45,6 +47,39 @@ func FormatScheduleChangeMessage(oldTime, newTime time.Time) string {
 		return "일정이 앞당겨졌습니다."
 	}
 	return ""
+}
+
+// NormalizeTargetMinutes는 알림 target minute 정책을 단일 규칙으로 정규화한다.
+func NormalizeTargetMinutes(targetMinutes []int) []int {
+	if len(targetMinutes) == 0 {
+		return append([]int(nil), defaultTargetMinutes...)
+	}
+
+	seen := make(map[int]struct{}, len(targetMinutes))
+	normalized := make([]int, 0, len(targetMinutes))
+	for _, minute := range targetMinutes {
+		if minute <= 0 {
+			continue
+		}
+		if _, ok := seen[minute]; ok {
+			continue
+		}
+
+		seen[minute] = struct{}{}
+		normalized = append(normalized, minute)
+	}
+
+	if len(normalized) == 0 {
+		return append([]int(nil), defaultTargetMinutes...)
+	}
+
+	slices.SortFunc(normalized, func(a, b int) int { return b - a })
+
+	if _, ok := seen[1]; !ok {
+		normalized = append(normalized, 1)
+	}
+
+	return normalized
 }
 
 // IsTargetMinute는 minutesUntil 값이 targetMinutes에 포함되는지 확인한다.

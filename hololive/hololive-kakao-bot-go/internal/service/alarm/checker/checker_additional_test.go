@@ -100,6 +100,9 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, checker)
 		assert.Equal(t, []int{10, 1}, checker.targetMinutes)
+
+		checker.UpdateTargetMinutes([]int{15, 0, 15, 3})
+		assert.Equal(t, []int{15, 3, 1}, checker.targetMinutes)
 	})
 
 	t.Run("new notifier nil deps", func(t *testing.T) {
