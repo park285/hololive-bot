@@ -29,7 +29,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lmittmann/tint"
@@ -38,8 +40,12 @@ import (
 )
 
 const (
-	logFilePerm os.FileMode = 0o644
-	logDirPerm  os.FileMode = 0o755
+	logFilePerm         os.FileMode = 0o644
+	logDirPerm          os.FileMode = 0o755
+	compressSuffix                  = ".gz"
+	backupTimeFormat                = "2006-01-02T15-04-05.000"
+	archiveDirName                  = "archive"
+	archiveScanInterval             = 5 * time.Second
 )
 
 // Config: 파일 로그 로테이션 설정입니다.
@@ -135,6 +141,7 @@ func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
 		return nil, fmt.Errorf("prepare log file failed: %w", err)
 	}
 
+	logArchiver := newCompressedLogArchiver(logPath, cfg.MaxBackups, cfg.MaxAgeDays, cfg.Compress)
 	logFile := &lumberjack.Logger{
 		Filename:   logPath,
 		MaxSize:    cfg.MaxSizeMB,
@@ -143,7 +150,7 @@ func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
 		Compress:   cfg.Compress,
 	}
 
-	w := io.MultiWriter(os.Stdout, logFile)
+	w := io.MultiWriter(os.Stdout, &archiveAwareWriter{inner: logFile, archiver: logArchiver})
 
 	var handler slog.Handler
 	handler = tint.NewHandler(w, &tint.Options{
@@ -158,8 +165,218 @@ func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
 	slog.SetDefault(logger)
 	logger.Info("file_logging_enabled",
 		slog.String("path", logFile.Filename),
+		slog.String("archive_dir", filepath.Join(logDir, archiveDirName)),
 	)
+	logArchiver.Trigger()
 	return logger, nil
+}
+
+type archiveAwareWriter struct {
+	inner    io.Writer
+	archiver *compressedLogArchiver
+}
+
+func (w *archiveAwareWriter) Write(p []byte) (int, error) {
+	n, err := w.inner.Write(p)
+	if w.archiver != nil {
+		w.archiver.Trigger()
+	}
+	return n, err
+}
+
+type compressedLogArchiver struct {
+	logPath    string
+	maxBackups int
+	maxAgeDays int
+
+	mu      sync.Mutex
+	running bool
+	lastRun time.Time
+}
+
+func newCompressedLogArchiver(logPath string, maxBackups, maxAgeDays int, enabled bool) *compressedLogArchiver {
+	if !enabled || strings.TrimSpace(logPath) == "" {
+		return nil
+	}
+
+	return &compressedLogArchiver{
+		logPath:    logPath,
+		maxBackups: maxBackups,
+		maxAgeDays: maxAgeDays,
+	}
+}
+
+func (a *compressedLogArchiver) Trigger() {
+	if a == nil {
+		return
+	}
+
+	a.mu.Lock()
+	if a.running || (!a.lastRun.IsZero() && time.Since(a.lastRun) < archiveScanInterval) {
+		a.mu.Unlock()
+		return
+	}
+	a.running = true
+	a.lastRun = time.Now()
+	a.mu.Unlock()
+
+	err := archiveCompressedLogFiles(a.logPath, a.maxBackups, a.maxAgeDays)
+
+	a.mu.Lock()
+	a.running = false
+	a.mu.Unlock()
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "log archive warning: path=%s err=%v\n", a.logPath, err)
+	}
+}
+
+type archivedLogFile struct {
+	path      string
+	timestamp time.Time
+}
+
+func archiveCompressedLogFiles(logPath string, maxBackups, maxAgeDays int) error {
+	logDir := filepath.Dir(logPath)
+	archiveDir := filepath.Join(logDir, archiveDirName)
+	if err := os.MkdirAll(archiveDir, logDirPerm); err != nil {
+		return fmt.Errorf("create archive dir: %w", err)
+	}
+
+	names, err := matchingCompressedBackupNames(logDir, filepath.Base(logPath))
+	if err != nil {
+		return fmt.Errorf("list compressed backups: %w", err)
+	}
+
+	for _, name := range names {
+		source := filepath.Join(logDir, name)
+		target := filepath.Join(archiveDir, name)
+		if err := os.Rename(source, target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("move compressed backup %s: %w", name, err)
+		}
+	}
+
+	if err := pruneArchivedCompressedBackups(archiveDir, filepath.Base(logPath), maxBackups, maxAgeDays); err != nil {
+		return fmt.Errorf("prune archived backups: %w", err)
+	}
+
+	return nil
+}
+
+func matchingCompressedBackupNames(dir, baseName string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	prefix, ext := backupPrefixAndExt(baseName)
+	suffix := ext + compressSuffix
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+			continue
+		}
+		names = append(names, name)
+	}
+
+	slices.Sort(names)
+	return names, nil
+}
+
+func pruneArchivedCompressedBackups(archiveDir, baseName string, maxBackups, maxAgeDays int) error {
+	files, err := archivedCompressedBackups(archiveDir, baseName)
+	if err != nil {
+		return err
+	}
+
+	removeByPath := make(map[string]struct{})
+	if maxAgeDays > 0 {
+		cutoff := time.Now().Add(-time.Duration(maxAgeDays) * 24 * time.Hour)
+		for _, file := range files {
+			if file.timestamp.Before(cutoff) {
+				removeByPath[file.path] = struct{}{}
+			}
+		}
+	}
+
+	slices.SortFunc(files, func(a, b archivedLogFile) int {
+		switch {
+		case a.timestamp.After(b.timestamp):
+			return -1
+		case a.timestamp.Before(b.timestamp):
+			return 1
+		default:
+			return 0
+		}
+	})
+	if maxBackups > 0 && len(files) > maxBackups {
+		for _, file := range files[maxBackups:] {
+			removeByPath[file.path] = struct{}{}
+		}
+	}
+
+	for path := range removeByPath {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove archived backup %s: %w", filepath.Base(path), err)
+		}
+	}
+
+	return nil
+}
+
+func archivedCompressedBackups(archiveDir, baseName string) ([]archivedLogFile, error) {
+	entries, err := os.ReadDir(archiveDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	prefix, ext := backupPrefixAndExt(baseName)
+	suffix := ext + compressSuffix
+	files := make([]archivedLogFile, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+			continue
+		}
+
+		timestamp, err := backupTimestampFromName(name, prefix, suffix)
+		if err != nil {
+			continue
+		}
+
+		files = append(files, archivedLogFile{
+			path:      filepath.Join(archiveDir, name),
+			timestamp: timestamp,
+		})
+	}
+
+	return files, nil
+}
+
+func backupPrefixAndExt(baseName string) (string, string) {
+	ext := filepath.Ext(baseName)
+	return strings.TrimSuffix(baseName, ext) + "-", ext
+}
+
+func backupTimestampFromName(name, prefix, suffix string) (time.Time, error) {
+	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+		return time.Time{}, fmt.Errorf("unexpected backup name: %s", name)
+	}
+
+	timestamp := strings.TrimSuffix(strings.TrimPrefix(name, prefix), suffix)
+	return time.Parse(backupTimeFormat, timestamp)
 }
 
 func ensureLogFilePerm(path string) error {
