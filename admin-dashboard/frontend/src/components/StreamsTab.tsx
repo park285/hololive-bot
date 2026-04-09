@@ -1,12 +1,12 @@
 import { useState, type SyntheticEvent } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { streamsApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
+import { streamsApi } from '@/features/streams/api'
+import type { Stream, StreamOrg } from '@/features/streams/types'
 import ExternalLink from 'lucide-react/dist/esm/icons/external-link';
 import Calendar from 'lucide-react/dist/esm/icons/calendar';
 import PlayCircle from 'lucide-react/dist/esm/icons/play-circle';
 import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down';
-import type { Stream, StreamOrg } from '@/types'
 
 /**
  * YouTube 썸네일 품질 옵션

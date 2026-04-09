@@ -74,7 +74,7 @@ type Bot struct {
 	acl              *acl.Service
 	majorEventRepo   command.MajorEventRepository
 	memberNews       command.MemberNewsService
-	commandFactories []command.Factory
+	commandBuilders  []CommandBuilder
 	membersData      member.DataProvider
 	stopCh           chan struct{}
 	doneCh           chan struct{}
@@ -120,7 +120,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		acl:              support.acl,
 		majorEventRepo:   feature.majorEventRepo,
 		memberNews:       feature.memberNews,
-		commandFactories: feature.commandFactories,
+		commandBuilders:  feature.commandBuilders,
 		membersData:      stream.membersData,
 		workerPool:       support.workerPool,
 		stopCh:           make(chan struct{}),
@@ -157,9 +157,7 @@ func (b *Bot) initializeCommands() {
 
 	b.logger.Info("Stats repository detected", slog.Bool("available", deps.StatsRepo != nil))
 
-	factories := view.buildFactories()
-
-	commandsList := command.BuildCommands(deps, factories...)
+	commandsList := view.buildCommands(deps)
 	for _, cmd := range commandsList {
 		registry.Register(cmd)
 	}

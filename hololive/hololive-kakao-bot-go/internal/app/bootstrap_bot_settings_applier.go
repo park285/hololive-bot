@@ -32,7 +32,7 @@ type memberNewsWeeklyRunNowTrigger interface {
 }
 
 type botSettingsApplier struct {
-	base             sharedsettings.SettingsApplier
+	sharedsettings.SettingsApplier
 	memberNewsRunNow memberNewsWeeklyRunNowTrigger
 	logger           *slog.Logger
 }
@@ -47,18 +47,10 @@ func newBotSettingsApplier(
 	}
 
 	return &botSettingsApplier{
-		base:             base,
+		SettingsApplier:  base,
 		memberNewsRunNow: memberNewsRunNow,
 		logger:           logger,
 	}
-}
-
-func (a *botSettingsApplier) ApplyScraperProxy(ctx context.Context, enabled bool) sharedsettings.ScraperProxyApplyResult {
-	return a.base.ApplyScraperProxy(ctx, enabled)
-}
-
-func (a *botSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
-	return a.base.ApplyAlarmAdvanceMinutes(ctx, minutes)
 }
 
 func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {
@@ -83,8 +75,4 @@ func (a *botSettingsApplier) ApplyMemberNewsWeeklyRunNow(ctx context.Context) sh
 		Applied: true,
 		Source:  "member_news_trigger",
 	}
-}
-
-func (a *botSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedsettings.ScraperProxyRuntimeStateResult {
-	return a.base.ScraperProxyRuntimeState(requested)
 }

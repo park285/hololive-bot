@@ -30,6 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 )
@@ -38,6 +39,7 @@ type coreIntegrationServices struct {
 	aclService        *acl.Service
 	majorEventRepo    command.MajorEventRepository
 	memberNewsService command.MemberNewsService
+	commandBuilders   []bot.CommandBuilder
 	workerPool        *workerpool.Pool
 }
 
@@ -71,6 +73,7 @@ func initCoreIntegrationServices(
 		aclService:        aclService,
 		majorEventRepo:    majorEventRepo,
 		memberNewsService: memberNewsService,
+		commandBuilders:   []bot.CommandBuilder{},
 		workerPool:        workerPool,
 	}, nil
 }

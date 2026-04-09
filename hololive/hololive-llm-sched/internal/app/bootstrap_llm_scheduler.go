@@ -27,10 +27,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
@@ -48,6 +46,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 // LLMSchedulerRuntime: llm-scheduler 전용 런타임
@@ -64,7 +63,15 @@ type LLMSchedulerRuntime struct {
 
 	configSubscriber *configsub.Subscriber
 	httpServer       *http.Server
-	cleanup          func()
+	lifecycle.CleanupCloser
+}
+
+func (r *LLMSchedulerRuntime) Close() {
+	if r == nil {
+		return
+	}
+
+	r.CleanupCloser.Close()
 }
 
 type memberNewsWeeklyDigestSender interface {
@@ -150,46 +157,30 @@ func (e *memberNewsRunNowExecutor) runOnce() {
 	e.logger.Info("Member news weekly run-now completed via config update")
 }
 
-// Close: 리소스를 정리합니다.
-func (r *LLMSchedulerRuntime) Close() {
-	if r != nil && r.cleanup != nil {
-		r.cleanup()
-	}
-}
-
 // Run: SIGINT/SIGTERM 신호를 대기하며 graceful shutdown을 수행합니다. (블로킹)
 func (r *LLMSchedulerRuntime) Run() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	if err := lifecycle.Run(lifecycle.Options{
+		ShutdownTimeout: constants.AppTimeout.Shutdown,
+		Start: func(ctx context.Context, errCh chan<- error) {
+			if r.configSubscriber != nil {
+				go r.configSubscriber.Run(ctx)
+				r.Logger.Info("LLM scheduler config subscriber started")
+			}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-
-	errCh := make(chan error, 1)
-
-	if r.configSubscriber != nil {
-		go r.configSubscriber.Run(ctx)
-		r.Logger.Info("LLM scheduler config subscriber started")
-	}
-
-	r.startSchedulers(ctx)
-	r.startHTTPServer(errCh)
-
-	select {
-	case sig := <-sigCh:
-		r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
-	case err := <-errCh:
-		r.Logger.Error("Server error", slog.Any("error", err))
-	}
-
-	r.Logger.Info("Shutting down gracefully...")
-	cancel()
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
-	defer shutdownCancel()
-
-	if err := r.Shutdown(shutdownCtx); err != nil {
+			r.startSchedulers(ctx)
+			r.startHTTPServer(errCh)
+		},
+		OnSignal: func(sig os.Signal) {
+			r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
+		},
+		OnError: func(err error) {
+			r.Logger.Error("Server error", slog.Any("error", err))
+		},
+		BeforeShutdown: func() {
+			r.Logger.Info("Shutting down gracefully...")
+		},
+		Shutdown: r.Shutdown,
+	}); err != nil {
 		r.Logger.Error("Shutdown completed with errors", slog.Any("error", err))
 	}
 
@@ -319,7 +310,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, cfg *config.LLMSchedulerConfi
 		cleanup()
 		return nil, err
 	}
-	runtime.cleanup = cleanup
+	runtime.CleanupCloser = lifecycle.NewCleanupCloser(cleanup)
 	return runtime, nil
 }
 
@@ -375,7 +366,7 @@ func buildLLMSchedulerComponents(
 	)
 	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryLocker, outboxRepo, logger)
 
-	triggerHandler := ProvideTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
+	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
 	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey, majorEventRepo, memberNewsService)
 	if err != nil {
 		return nil, err

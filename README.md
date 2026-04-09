@@ -10,7 +10,7 @@ Go 단일 언어 구조:
 
 | 영역 | 언어 | 역할 |
 |------|------|------|
-| Runtime | Go | bot(+admin API), dispatcher-go, llm-scheduler, stream-ingester, youtube-scraper |
+| Runtime | Go | bot(+admin API), dispatcher-go, llm-scheduler, settlement, stream-ingester, youtube-scraper |
 
 데이터 흐름: `webhook → handler → service → repository → PostgreSQL/Valkey`
 
@@ -18,34 +18,38 @@ Go 단일 언어 구조:
 
 ## 모듈 구조
 
-### Go 모듈 (6개, go.work: 런타임 4 + 라이브러리 2)
+### Go 모듈 (7개, go.work: 런타임 5 + 라이브러리 2)
 | 모듈 | 역할 | 포트 |
 |------|------|------|
 | `hololive-kakao-bot-go` | Main bot (webhook + command routing + admin API) | 30001 |
 | `hololive-dispatcher-go` | Alarm dispatch consumer (BRPOP → Iris) | 30020 |
 | `hololive-llm-sched` | LLM scheduler (major event + member news + delivery) | 30003 |
+| `settlement-go` | Settlement service runtime | 30002 |
 | `hololive-stream-ingester` | Photo sync + ingestion-adjacent runtime builders (`stream-ingester`, `youtube-scraper`) | 30004 / 30005 |
 | `hololive-shared` | Shared Go library (hololive domain) | - |
-| `shared-go` | Active shared Go utilities workspace (`../llm/shared-go`) | - |
+| `shared-go` | In-repo shared Go utilities workspace (`shared-go/`) | - |
 
-### Runtime 바이너리 (5개)
+### Runtime 바이너리 (6개)
 | 바이너리 | 역할 | 포트 |
 |------|------|------|
 | `bot` | Main bot (+ admin API) | 30001 |
 | `dispatcher-go` | Alarm dispatch consumer | 30020 |
 | `llm-scheduler` | LLM scheduler | 30003 |
+| `settlement` | Settlement service runtime | 30002 |
 | `stream-ingester` | Photo sync + ingestion-adjacent health/config runtime | 30004 |
 | `youtube-scraper` | YouTube polling/scraping + outbox runtime | 30005 |
+
+현재 `docker-compose.prod.yml` 운영 스택은 `bot`, `dispatcher-go`, `llm-scheduler`, `stream-ingester`, `youtube-scraper` 5개 서비스 기준입니다. `settlement`는 워크스페이스/바이너리 인벤토리에는 포함되지만, 현재 compose 배포 스택에는 연결되어 있지 않습니다.
 
 ### 인프라
 | 항목 | 설명 |
 |------|------|
 | PostgreSQL | 메인 데이터베이스 (Docker) |
 | Valkey | 캐시/큐 (Docker) |
-| Docker Compose | Go 서비스 배포 (bot, dispatcher-go, llm-scheduler, stream-ingester, youtube-scraper) |
+| Docker Compose | 현재 운영 Go 서비스 배포 (bot, dispatcher-go, llm-scheduler, stream-ingester, youtube-scraper) |
 | Iris (Redroid) | KakaoTalk 자동화 |
 
-상세: `docs/PROJECT_MAP.md`
+상세: `docs/current/PROJECT_MAP.md`
 
 ## 개발
 
@@ -57,23 +61,25 @@ Go 단일 언어 구조:
 ```bash
 # Go (workspace 기준)
 go work sync
-go build ./hololive/hololive-kakao-bot-go/... \
+go build ./shared-go/... \
+  ./hololive/hololive-shared/... \
   ./hololive/hololive-dispatcher-go/... \
+  ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/... \
-  ./hololive/hololive-shared/... \
-  ../llm/shared-go/...
+  ./hololive/settlement-go/...
 ```
 
 ### 테스트
 ```bash
 # Go (workspace 주요 모듈)
-go test ./hololive/hololive-kakao-bot-go/... \
+go test ./shared-go/... \
+  ./hololive/hololive-shared/... \
   ./hololive/hololive-dispatcher-go/... \
+  ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/... \
-  ./hololive/hololive-shared/... \
-  ../llm/shared-go/...
+  ./hololive/settlement-go/...
 ```
 
 ## 배포
@@ -84,13 +90,15 @@ go test ./hololive/hololive-kakao-bot-go/... \
 # 전체 스택 기동/빌드
 ./build-all.sh --no-bump
 
-# 단일 서비스 재배포
+# 단일 compose 서비스 재배포
 ./scripts/deploy/compose-redeploy-service.sh hololive-bot
 ./scripts/deploy/compose-redeploy-service.sh dispatcher-go
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
 ./scripts/deploy/compose-redeploy-service.sh stream-ingester
 ./scripts/deploy/compose-redeploy-service.sh youtube-scraper
 ```
+
+`settlement`는 현재 `docker-compose.prod.yml` 서비스가 아니므로 위 compose 재배포 목록에는 포함되지 않습니다.
 
 ### 로그 정책
 - SSOT: **application stdout/stderr → `docker compose logs`**
@@ -108,9 +116,10 @@ go test ./hololive/hololive-kakao-bot-go/... \
 - 보조 로그 정리: `./scripts/logs/logs.sh prune`
 - 상태 확인: `docker compose -f docker-compose.prod.yml ps`
 - Health endpoint: `bot(30001)`, `dispatcher-go(30020)`, `llm-scheduler(30003)`, `stream-ingester(30004)`, `youtube-scraper(30005)`
+- `settlement`는 현재 compose 로그/health 목록 대상이 아닙니다.
 
 ## 문서
 
 - `docs/README.md` — 문서 인덱스
-- `docs/PROJECT_MAP.md` — 모듈 구조
+- `docs/current/PROJECT_MAP.md` — 모듈 구조
 - `docs/20260307/COMPOSE_HISTORY_NOTES_20260307.md` — compose 회귀 기준 메모

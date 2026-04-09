@@ -21,12 +21,13 @@
 package app
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
@@ -37,14 +38,15 @@ type Container struct {
 	Logger *slog.Logger
 
 	botDeps *bot.Dependencies
-	cleanup func()
+	lifecycle.CleanupCloser
 }
 
-// Close - 컨테이너 리소스 정리 (DB, 캐시 연결 해제).
 func (c *Container) Close() {
-	if c != nil && c.cleanup != nil {
-		c.cleanup()
+	if c == nil {
+		return
 	}
+
+	c.CleanupCloser.Close()
 }
 
 // Build: 주어진 설정과 로거를 기반으로 애플리케이션 컨테이너를 구성하고 모든 의존성을 초기화합니다.
@@ -68,9 +70,9 @@ func Build(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Conta
 	}
 
 	return &Container{
-		Config:  cfg,
-		Logger:  logger,
-		botDeps: deps,
-		cleanup: cleanup,
+		Config:        cfg,
+		Logger:        logger,
+		botDeps:       deps,
+		CleanupCloser: lifecycle.NewCleanupCloser(cleanup),
 	}, nil
 }

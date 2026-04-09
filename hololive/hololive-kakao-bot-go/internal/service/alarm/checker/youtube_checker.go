@@ -21,8 +21,8 @@
 package checker
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -131,6 +131,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 			channelStreams = []*domain.Stream{}
 		}
 
+		prevCheckedAt := c.tierScheduler.LastCheckedAt(channelID)
 		c.tierScheduler.UpdateChannelState(channelID, channelStreams)
 
 		subscriberRooms := subscriberMap[channelID]
@@ -144,6 +145,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 				channelID,
 				subscriberRooms,
 				channelStreams,
+				prevCheckedAt,
 				now,
 			)
 			if channelErr != nil {
@@ -175,6 +177,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 	channelID string,
 	subscriberRooms []string,
 	streams []*domain.Stream,
+	prevCheckedAt time.Time,
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(streams)*len(subscriberRooms))
@@ -183,7 +186,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 			continue
 		}
 
-		upcomingNotifications, err := c.buildUpcomingNotifications(ctx, stream, subscriberRooms, now)
+		upcomingNotifications, err := c.buildUpcomingNotifications(ctx, stream, subscriberRooms, prevCheckedAt, now)
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build upcoming notifications: %w", err)
 		}
@@ -205,6 +208,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	ctx context.Context,
 	stream *domain.Stream,
 	subscriberRooms []string,
+	prevCheckedAt time.Time,
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	if stream == nil || !stream.IsUpcoming() || stream.StartScheduled == nil {
@@ -215,8 +219,8 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 		return nil, nil
 	}
 
-	minutesUntil := sharedchecker.MinutesUntilFloor(*stream.StartScheduled, now)
-	if !sharedchecker.IsTargetMinute(c.targetMinutes, minutesUntil) {
+	minutesUntil, ok := sharedchecker.CrossedTarget(c.targetMinutes, *stream.StartScheduled, prevCheckedAt, now)
+	if !ok {
 		return nil, nil
 	}
 

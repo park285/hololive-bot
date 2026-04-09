@@ -2,15 +2,15 @@ import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { statusApi } from '@/api/core'
-import { statsApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
 import { Button } from '@/components/ui/Button'
 import { StatCard } from '@/components/ui/StatCard'
+import { StatsQuickLinks } from '@/components/dashboard/StatsQuickLinks'
+import { statsApi } from '@/features/stats/api'
 import Users from 'lucide-react/dist/esm/icons/users'
 import Bell from 'lucide-react/dist/esm/icons/bell'
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square'
 import Loader2 from 'lucide-react/dist/esm/icons/loader-2'
-import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right'
 import Activity from 'lucide-react/dist/esm/icons/activity'
 import Server from 'lucide-react/dist/esm/icons/server'
 import Play from 'lucide-react/dist/esm/icons/play'
@@ -276,33 +276,7 @@ const StatsTab = () => {
           </Suspense>
         </div>
 
-        {/* 4. 바로가기 */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col h-fit animate-fade-in-up stagger-4">
-          <h3 className="text-lg font-display font-bold text-slate-800 mb-4">바로가기</h3>
-          <div className="space-y-3 flex-1">
-            <button
-              onClick={() => { go('/dashboard/members') }}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors group text-left"
-            >
-              <span className="font-medium">멤버 관리하기</span>
-              <ArrowRight size={18} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-            </button>
-            <button
-              onClick={() => { go('/dashboard/alarms') }}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors group text-left"
-            >
-              <span className="font-medium">알람 설정 확인</span>
-              <ArrowRight size={18} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-            </button>
-            <button
-              onClick={() => { go('/dashboard/rooms') }}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors group text-left"
-            >
-              <span className="font-medium">채팅방 목록</span>
-              <ArrowRight size={18} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
+        <StatsQuickLinks onNavigate={go} />
       </div>
 
 

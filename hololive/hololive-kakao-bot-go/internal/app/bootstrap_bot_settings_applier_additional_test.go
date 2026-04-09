@@ -187,7 +187,7 @@ func TestNewBotSettingsApplier_DefaultLogger(t *testing.T) {
 	wrapped, ok := applier.(*botSettingsApplier)
 	require.True(t, ok)
 	require.NotNil(t, wrapped)
-	assert.Same(t, base, wrapped.base)
+	assert.Same(t, base, wrapped.SettingsApplier)
 	assert.NotNil(t, wrapped.logger)
 }
 
@@ -211,8 +211,8 @@ func TestBotSettingsApplier_DelegatesToBase(t *testing.T) {
 		runtimeResult: expectedRuntime,
 	}
 	applier := &botSettingsApplier{
-		base:   base,
-		logger: testAppLogger(),
+		SettingsApplier: base,
+		logger:          testAppLogger(),
 	}
 
 	assert.Equal(t, expectedScraper, applier.ApplyScraperProxy(t.Context(), true))
@@ -229,7 +229,7 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 
 	t.Run("nil trigger", func(t *testing.T) {
 		applier := &botSettingsApplier{
-			base:             nil,
+			SettingsApplier:  nil,
 			memberNewsRunNow: nil,
 			logger:           testAppLogger(),
 		}
@@ -300,31 +300,20 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	assert.False(t, enabled)
 }
 
-func TestApplyScraperProxyToggle_UpdatesHolodexProxyService(t *testing.T) {
+func TestYouTubeStackAndSchedulerAccessors_Defaults(t *testing.T) {
 	t.Parallel()
 
-	logger := testAppLogger()
-	holodexSvc := &trackingHolodexProxySvc{}
+	var stack *providers.YouTubeStack
 
-	applyScraperProxyToggle(true, nil, holodexSvc, nil, logger)
-	assert.True(t, holodexSvc.isProxyEnabled())
-
-	applyScraperProxyToggle(false, nil, holodexSvc, nil, logger)
-	assert.False(t, holodexSvc.isProxyEnabled())
-}
-
-func TestProvideYouTubeServiceAndScheduler_Defaults(t *testing.T) {
-	t.Parallel()
-
-	assert.Nil(t, ProvideYouTubeService(nil))
+	assert.Nil(t, stack.GetService())
 	assert.Nil(t, ProvideYouTubeScheduler(nil))
 
 	svc := &trackingYouTubeSvc{}
 	scheduler := &stubYouTubeScheduler{}
-	stack := &providers.YouTubeStack{Service: svc}
+	ytStack := &providers.YouTubeStack{Service: svc}
 	deps := &bot.Dependencies{Scheduler: scheduler}
 
-	assert.Same(t, svc, ProvideYouTubeService(stack))
+	assert.Same(t, svc, ytStack.GetService())
 	assert.Same(t, scheduler, ProvideYouTubeScheduler(deps))
 }
 

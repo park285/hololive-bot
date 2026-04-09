@@ -64,7 +64,7 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 		t.Fatal("supportDeps nil-safety failed")
 	}
 
-	if got := deps.featureDeps(); len(got.commandFactories) != 0 || got.majorEventRepo != nil || got.memberNews != nil {
+	if got := deps.featureDeps(); len(got.commandBuilders) != 0 || got.majorEventRepo != nil || got.memberNews != nil {
 		t.Fatal("featureDeps nil-safety failed")
 	}
 }
@@ -79,23 +79,25 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	memberCache := &member.Cache{}
 	scheduler := &stubYouTubeScheduler{}
 	workerPool := &workerpool.Pool{}
-	factory := command.Factory(func(deps *command.Dependencies) command.Command { return nil })
+	externalBuilder := CommandBuilder(func(_ *command.Dependencies) command.Command {
+		return command.NewHelpCommand(nil)
+	})
 
 	deps := &Dependencies{
-		BotSelfUser:      "bot-self",
-		IrisBaseURL:      "https://iris.internal",
-		Notification:     config.NotificationConfig{},
-		Logger:           logger,
-		Client:           &fakeIrisClient{},
-		MessageAdapter:   messageAdapter,
-		Formatter:        formatter,
-		Cache:            cacheSvc,
-		Postgres:         postgresSvc,
-		MemberRepo:       memberRepo,
-		MemberCache:      memberCache,
-		Scheduler:        scheduler,
-		CommandFactories: []command.Factory{factory},
-		WorkerPool:       workerPool,
+		BotSelfUser:     "bot-self",
+		IrisBaseURL:     "https://iris.internal",
+		Notification:    config.NotificationConfig{},
+		Logger:          logger,
+		Client:          &fakeIrisClient{},
+		MessageAdapter:  messageAdapter,
+		Formatter:       formatter,
+		Cache:           cacheSvc,
+		Postgres:        postgresSvc,
+		MemberRepo:      memberRepo,
+		MemberCache:     memberCache,
+		Scheduler:       scheduler,
+		CommandBuilders: []CommandBuilder{externalBuilder},
+		WorkerPool:      workerPool,
 	}
 
 	core := deps.coreDeps()
@@ -124,15 +126,15 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	}
 
 	feature := deps.featureDeps()
-	if len(feature.commandFactories) != 1 || feature.commandFactories[0] == nil {
-		t.Fatal("featureDeps commandFactories mapping mismatch")
+	if len(feature.commandBuilders) != 1 || feature.commandBuilders[0] == nil {
+		t.Fatal("featureDeps commandBuilders mapping mismatch")
 	}
 
 	// defensive copy 보장
-	deps.CommandFactories[0] = nil
+	deps.CommandBuilders[0] = nil
 
-	if feature.commandFactories[0] == nil {
-		t.Fatal("featureDeps commandFactories must be copied defensively")
+	if feature.commandBuilders[0] == nil {
+		t.Fatal("featureDeps commandBuilders must be copied defensively")
 	}
 }
 

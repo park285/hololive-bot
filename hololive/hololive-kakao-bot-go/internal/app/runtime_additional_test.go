@@ -28,6 +28,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 func TestBotRuntimeClose_CallsCleanup(t *testing.T) {
@@ -35,7 +37,7 @@ func TestBotRuntimeClose_CallsCleanup(t *testing.T) {
 
 	calls := 0
 	runtime := &BotRuntime{
-		cleanup: func() { calls++ },
+		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
 	}
 
 	runtime.Close()

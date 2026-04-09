@@ -211,6 +211,14 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 	}
 }
 
+func TestScheduler_LifecycleNilGuards(t *testing.T) {
+	var scheduler *Scheduler
+
+	scheduler.SetClock(func() time.Time { return time.Now() })
+	scheduler.Start(context.Background())
+	scheduler.Stop()
+}
+
 func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 	service := &mockDigestService{
 		rooms: []model.SubscribedRoom{

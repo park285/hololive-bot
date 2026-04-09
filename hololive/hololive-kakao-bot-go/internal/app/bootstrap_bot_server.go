@@ -90,7 +90,7 @@ func buildBotServer(
 		alarmAPI.RegisterInternalRoutes(internalAlarmGroup)
 	}
 
-	addr := ProvideAPIAddr(cfg)
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 
 	return ProvideAPIServer(addr, botRouter), nil
 }

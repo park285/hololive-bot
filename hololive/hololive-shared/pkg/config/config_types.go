@@ -72,10 +72,51 @@ type ServicesConfig struct {
 	GameBotTurtleHealthURL  string // game-bot-go turtlesoup health URL
 }
 
+type ScraperPoll struct {
+	Videos    time.Duration
+	Shorts    time.Duration
+	Community time.Duration
+	Stats     time.Duration
+	Live      time.Duration
+}
+
 // ScraperConfig: YouTube 스크래퍼 프록시 설정 (SOCKS5)
 type ScraperConfig struct {
 	ProxyEnabled bool   // 프록시 사용 여부
 	ProxyURL     string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
+	Poll         ScraperPoll
+}
+
+func DefaultScraperPoll() ScraperPoll {
+	return ScraperPoll{
+		Videos:    5 * time.Minute,
+		Shorts:    10 * time.Minute,
+		Community: 10 * time.Minute,
+		Stats:     6 * time.Hour,
+		Live:      5 * time.Minute,
+	}
+}
+
+func (c ScraperConfig) PollOrDefault() ScraperPoll {
+	poll := DefaultScraperPoll()
+
+	if c.Poll.Videos > 0 {
+		poll.Videos = c.Poll.Videos
+	}
+	if c.Poll.Shorts > 0 {
+		poll.Shorts = c.Poll.Shorts
+	}
+	if c.Poll.Community > 0 {
+		poll.Community = c.Poll.Community
+	}
+	if c.Poll.Stats > 0 {
+		poll.Stats = c.Poll.Stats
+	}
+	if c.Poll.Live > 0 {
+		poll.Live = c.Poll.Live
+	}
+
+	return poll
 }
 
 // CORSConfig: CORS 허용 Origin 설정

@@ -51,3 +51,27 @@ func FormatScheduleChangeMessage(oldTime, newTime time.Time) string {
 func IsTargetMinute(targetMinutes []int, minutesUntil int) bool {
 	return slices.Contains(targetMinutes, minutesUntil)
 }
+
+func CrossedTarget(targetMinutes []int, start, prev, now time.Time) (int, bool) {
+	current := MinutesUntilFloor(start, now)
+	if IsTargetMinute(targetMinutes, current) {
+		return current, true
+	}
+
+	if prev.IsZero() || !prev.Before(now) {
+		return 0, false
+	}
+
+	previous := MinutesUntilFloor(start, prev)
+	if previous <= current {
+		return 0, false
+	}
+
+	for _, target := range targetMinutes {
+		if current < target && target <= previous {
+			return target, true
+		}
+	}
+
+	return 0, false
+}

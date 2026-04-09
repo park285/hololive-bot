@@ -21,8 +21,8 @@
 package scheduler
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -207,9 +207,22 @@ func (s *RuntimeScheduler) runLoop(
 				)
 			}
 
-			next.Reset(interval)
+			next.Reset(time.Until(nextAligned(time.Now(), interval)))
 		}
 	}
+}
+
+func nextAligned(now time.Time, interval time.Duration) time.Time {
+	if interval <= 0 {
+		return now
+	}
+
+	next := now.Truncate(interval).Add(interval)
+	if next.After(now) {
+		return next
+	}
+
+	return next.Add(interval)
 }
 
 func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {

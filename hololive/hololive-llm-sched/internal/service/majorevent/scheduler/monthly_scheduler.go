@@ -24,9 +24,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -43,11 +43,7 @@ type MonthlyScheduler struct {
 	summarizer *mesummarizer.EventSummarizer
 	locker     delivery.NotificationLocker
 	logger     *slog.Logger
-	now        func() time.Time
-
-	stopCh   chan struct{}
-	wg       sync.WaitGroup
-	stopOnce sync.Once
+	runtime    *schedulerkit.Runtime
 }
 
 // NewMonthlyScheduler: 월간 스케줄러를 생성합니다.
@@ -69,66 +65,44 @@ func NewMonthlyScheduler(
 		summarizer: summarizer,
 		locker:     locker,
 		logger:     logger,
-		now:        time.Now,
-		stopCh:     make(chan struct{}),
+		runtime:    schedulerkit.NewRuntime(),
 	}
 }
 
 // SetClock: 테스트용 시간 주입.
 func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
-	if s == nil || clockFn == nil {
+	if s == nil {
 		return
 	}
-	s.now = clockFn
+	s.runtime.SetClock(clockFn)
 }
 
 func (s *MonthlyScheduler) clock() time.Time {
-	if s.now != nil {
-		return s.now()
+	if s == nil || s.runtime == nil {
+		return time.Now()
 	}
-	return time.Now()
+	return s.runtime.Now()
 }
 
 // Start: 월간 스케줄러를 시작합니다.
 func (s *MonthlyScheduler) Start(ctx context.Context) {
-	s.wg.Add(1)
-	go s.run(ctx)
+	s.runtime.Start(ctx, schedulerkit.Config{
+		Logger:           s.logger,
+		WaitingLog:       "Monthly event scheduler waiting",
+		ContextStopLog:   "Monthly scheduler stopped by context",
+		StopLog:          "Monthly scheduler stopped",
+		CalculateNextRun: s.calculateNextRun,
+		OnTick: func(ctx context.Context) {
+			if err := s.SendMonthlyNotification(ctx); err != nil {
+				s.logger.Error("Failed to send monthly notification", slog.String("error", err.Error()))
+			}
+		},
+	})
 }
 
 // Stop: 월간 스케줄러를 중지합니다.
 func (s *MonthlyScheduler) Stop() {
-	s.stopOnce.Do(func() {
-		close(s.stopCh)
-	})
-	s.wg.Wait()
-}
-
-func (s *MonthlyScheduler) run(ctx context.Context) {
-	defer s.wg.Done()
-
-	for {
-		nextRun := s.calculateNextRun(s.clock())
-		s.logger.Info("Monthly event scheduler waiting",
-			slog.Time("next_run", nextRun),
-			slog.Duration("wait_duration", time.Until(nextRun)))
-
-		timer := time.NewTimer(time.Until(nextRun))
-
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			s.logger.Info("Monthly scheduler stopped by context")
-			return
-		case <-s.stopCh:
-			timer.Stop()
-			s.logger.Info("Monthly scheduler stopped")
-			return
-		case <-timer.C:
-			if err := s.SendMonthlyNotification(ctx); err != nil {
-				s.logger.Error("Failed to send monthly notification", slog.String("error", err.Error()))
-			}
-		}
-	}
+	s.runtime.Stop()
 }
 
 func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {

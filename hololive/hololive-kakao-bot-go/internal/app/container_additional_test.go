@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -60,7 +61,7 @@ func TestContainerClose_CallsCleanupOnce(t *testing.T) {
 
 	calls := 0
 	container := &Container{
-		cleanup: func() { calls++ },
+		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
 	}
 
 	container.Close()

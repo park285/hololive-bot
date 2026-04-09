@@ -24,9 +24,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-llm-sched/internal/service/majorevent/summarizer"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -81,11 +81,7 @@ type Scheduler struct {
 	summarizer *mesummarizer.EventSummarizer // nil 허용
 	locker     delivery.NotificationLocker
 	logger     *slog.Logger
-	now        func() time.Time
-
-	stopCh   chan struct{}
-	wg       sync.WaitGroup
-	stopOnce sync.Once
+	runtime    *schedulerkit.Runtime
 }
 
 func NewScheduler(
@@ -106,64 +102,42 @@ func NewScheduler(
 		summarizer: summarizer,
 		locker:     locker,
 		logger:     logger,
-		now:        time.Now,
-		stopCh:     make(chan struct{}),
+		runtime:    schedulerkit.NewRuntime(),
 	}
 }
 
 // SetClock: 테스트용 시간 주입.
 func (s *Scheduler) SetClock(clockFn func() time.Time) {
-	if s == nil || clockFn == nil {
+	if s == nil {
 		return
 	}
-	s.now = clockFn
+	s.runtime.SetClock(clockFn)
 }
 
 func (s *Scheduler) clock() time.Time {
-	if s.now != nil {
-		return s.now()
+	if s == nil || s.runtime == nil {
+		return time.Now()
 	}
-	return time.Now()
+	return s.runtime.Now()
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
-	s.wg.Add(1)
-	go s.run(ctx)
-}
-
-func (s *Scheduler) Stop() {
-	s.stopOnce.Do(func() {
-		close(s.stopCh)
-	})
-	s.wg.Wait()
-}
-
-func (s *Scheduler) run(ctx context.Context) {
-	defer s.wg.Done()
-
-	for {
-		nextRun := s.calculateNextRun(s.clock())
-		s.logger.Info("Major event scheduler waiting",
-			slog.Time("next_run", nextRun),
-			slog.Duration("wait_duration", time.Until(nextRun)))
-
-		timer := time.NewTimer(time.Until(nextRun))
-
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			s.logger.Info("Scheduler stopped by context")
-			return
-		case <-s.stopCh:
-			timer.Stop()
-			s.logger.Info("Scheduler stopped")
-			return
-		case <-timer.C:
+	s.runtime.Start(ctx, schedulerkit.Config{
+		Logger:           s.logger,
+		WaitingLog:       "Major event scheduler waiting",
+		ContextStopLog:   "Scheduler stopped by context",
+		StopLog:          "Scheduler stopped",
+		CalculateNextRun: s.calculateNextRun,
+		OnTick: func(ctx context.Context) {
 			if err := s.SendWeeklyNotification(ctx); err != nil {
 				s.logger.Error("Failed to send weekly notification", slog.String("error", err.Error()))
 			}
-		}
-	}
+		},
+	})
+}
+
+func (s *Scheduler) Stop() {
+	s.runtime.Stop()
 }
 
 func (s *Scheduler) calculateNextRun(now time.Time) time.Time {

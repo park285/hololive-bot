@@ -166,3 +166,62 @@ func TestIsTargetMinute(t *testing.T) {
 		})
 	}
 }
+
+func TestCrossedTarget(t *testing.T) {
+	base := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+	start := base.Add(5*time.Minute + 10*time.Second)
+
+	tests := []struct {
+		name    string
+		targets []int
+		prev    time.Time
+		now     time.Time
+		want    int
+		wantOK  bool
+	}{
+		{
+			name:    "exact current target wins",
+			targets: []int{5, 3, 1},
+			prev:    base.Add(2 * time.Second),
+			now:     base.Add(10 * time.Second),
+			want:    5,
+			wantOK:  true,
+		},
+		{
+			name:    "crossed target returns missed boundary",
+			targets: []int{5, 3, 1},
+			prev:    base,
+			now:     base.Add(50 * time.Second),
+			want:    5,
+			wantOK:  true,
+		},
+		{
+			name:    "no previous tick means no crossed fallback",
+			targets: []int{5, 3, 1},
+			prev:    time.Time{},
+			now:     base.Add(50 * time.Second),
+			want:    0,
+			wantOK:  false,
+		},
+		{
+			name:    "older target outside window is ignored",
+			targets: []int{5, 3, 1},
+			prev:    base.Add(70 * time.Second),
+			now:     base.Add(130 * time.Second),
+			want:    3,
+			wantOK:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := CrossedTarget(tt.targets, start, tt.prev, tt.now)
+			if ok != tt.wantOK {
+				t.Fatalf("CrossedTarget() ok = %t, want %t", ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Fatalf("CrossedTarget() minute = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

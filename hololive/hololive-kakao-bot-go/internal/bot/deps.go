@@ -70,7 +70,7 @@ type Dependencies struct {
 	ACL              *acl.Service
 	MajorEventRepo   command.MajorEventRepository
 	MemberNews       command.MemberNewsService
-	CommandFactories []command.Factory
+	CommandBuilders  []CommandBuilder
 	WorkerPool       *workerpool.Pool
 }
 
@@ -115,9 +115,9 @@ type supportDependencies struct {
 }
 
 type featureDependencies struct {
-	majorEventRepo   command.MajorEventRepository
-	memberNews       command.MemberNewsService
-	commandFactories []command.Factory
+	majorEventRepo  command.MajorEventRepository
+	memberNews      command.MemberNewsService
+	commandBuilders []CommandBuilder
 }
 
 func (d *Dependencies) coreDeps() coreDependencies {
@@ -196,8 +196,8 @@ func (d *Dependencies) featureDeps() featureDependencies {
 	}
 
 	return featureDependencies{
-		majorEventRepo:   d.MajorEventRepo,
-		memberNews:       d.MemberNews,
-		commandFactories: append([]command.Factory(nil), d.CommandFactories...),
+		majorEventRepo:  d.MajorEventRepo,
+		memberNews:      d.MemberNews,
+		commandBuilders: cloneCommandBuilders(d.CommandBuilders),
 	}
 }

@@ -29,5 +29,5 @@ import (
 type irisClient interface {
 	iris.Sender
 	Ping(ctx context.Context) bool
-	GetConfig(ctx context.Context) (*iris.Config, error)
+	GetConfig(ctx context.Context) (*iris.ConfigResponse, error)
 }

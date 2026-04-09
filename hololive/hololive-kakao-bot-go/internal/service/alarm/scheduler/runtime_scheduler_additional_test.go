@@ -210,3 +210,40 @@ func TestRuntimeSchedulerRunLoop_StopsOnContextCancel(t *testing.T) {
 		t.Fatal("runLoop did not stop after context cancellation")
 	}
 }
+
+func TestNextAligned(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		now      time.Time
+		interval time.Duration
+		want     time.Time
+	}{
+		{
+			name:     "minute interval snaps to next minute",
+			now:      time.Date(2026, time.April, 9, 10, 0, 5, 0, time.UTC),
+			interval: time.Minute,
+			want:     time.Date(2026, time.April, 9, 10, 1, 0, 0, time.UTC),
+		},
+		{
+			name:     "exact boundary advances one interval",
+			now:      time.Date(2026, time.April, 9, 10, 1, 0, 0, time.UTC),
+			interval: time.Minute,
+			want:     time.Date(2026, time.April, 9, 10, 2, 0, 0, time.UTC),
+		},
+		{
+			name:     "three minute interval aligns to shared boundary",
+			now:      time.Date(2026, time.April, 9, 10, 1, 10, 0, time.UTC),
+			interval: 3 * time.Minute,
+			want:     time.Date(2026, time.April, 9, 10, 3, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := nextAligned(tc.now, tc.interval)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

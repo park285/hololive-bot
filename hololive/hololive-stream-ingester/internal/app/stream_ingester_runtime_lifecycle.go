@@ -26,9 +26,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func (r *StreamIngesterRuntime) startBackgroundServices(ctx context.Context, errCh chan<- error) {
@@ -69,34 +66,10 @@ func (r *StreamIngesterRuntime) startHTTPServer(errCh chan<- error) {
 	)
 }
 
-func (r *StreamIngesterRuntime) waitForShutdown(sigCh <-chan os.Signal, errCh <-chan error) {
-	select {
-	case sig := <-sigCh:
-		if r.Readiness != nil {
-			r.Readiness.markStopping("")
-		}
-		r.Logger.Info("Received shutdown signal",
-			slog.String("runtime", r.runtimeName()),
-			slog.String("signal", sig.String()),
-		)
-	case err := <-errCh:
-		if r.Readiness != nil {
-			r.Readiness.markStopping(err.Error())
-		}
-		r.Logger.Error("Server error",
-			slog.String("runtime", r.runtimeName()),
-			slog.Any("error", err),
-		)
-	}
-}
-
-func (r *StreamIngesterRuntime) shutdown() {
+func (r *StreamIngesterRuntime) shutdown(ctx context.Context) {
 	if r.Readiness != nil {
 		r.Readiness.markStopping("")
 	}
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
-	defer shutdownCancel()
 
 	if r.Scheduler != nil {
 		r.Scheduler.Stop()
@@ -105,7 +78,7 @@ func (r *StreamIngesterRuntime) shutdown() {
 		r.ScraperScheduler.Stop()
 	}
 	if r.HttpServer != nil {
-		if err := r.HttpServer.Shutdown(shutdownCtx); err != nil {
+		if err := r.HttpServer.Shutdown(ctx); err != nil {
 			r.Logger.Error("Ingestion runtime HTTP shutdown failed",
 				slog.String("runtime", r.runtimeName()),
 				slog.Any("error", err),
@@ -113,7 +86,7 @@ func (r *StreamIngesterRuntime) shutdown() {
 		}
 	}
 	if r.ingestionLease != nil {
-		if err := r.ingestionLease.Release(shutdownCtx); err != nil {
+		if err := r.ingestionLease.Release(ctx); err != nil {
 			r.Logger.Error("Ingestion runtime lease release failed",
 				slog.String("runtime", r.runtimeName()),
 				slog.Any("error", err),

@@ -21,8 +21,6 @@
 package providers
 
 import (
-	"time"
-
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
@@ -56,24 +54,4 @@ func (s *YouTubeStack) GetStatsRepo() *ytstats.StatsRepository {
 		return nil
 	}
 	return s.StatsRepo
-}
-
-// PollerIntervals - 폴러별 실행 간격 설정
-type PollerIntervals struct {
-	Videos    time.Duration // 영상 감지 (기본: 2분)
-	Shorts    time.Duration // 쇼츠 감지 (기본: 2분)
-	Community time.Duration // 커뮤니티 포스트 (기본: 2분)
-	Stats     time.Duration // 채널 통계 (기본: 6시간)
-	Live      time.Duration // 라이브 상태 (기본: 2분)
-}
-
-// DefaultPollerIntervals - 기본 폴러 실행 간격
-func DefaultPollerIntervals() PollerIntervals {
-	return PollerIntervals{
-		Videos:    2 * time.Minute,
-		Shorts:    2 * time.Minute,
-		Community: 2 * time.Minute,
-		Stats:     6 * time.Hour,
-		Live:      2 * time.Minute,
-	}
 }
