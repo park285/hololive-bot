@@ -46,12 +46,13 @@ const (
 
 // YouTubeChecker는 Holodex live status 기반 알림 후보를 생성한다.
 type YouTubeChecker struct {
-	cacheSvc      cache.Client
-	holodexSvc    *holodex.Service
-	tierScheduler *tier.TieredScheduler
-	dedupSvc      *dedup.Service
-	targetMinutes []int
-	logger        *slog.Logger
+	cacheSvc        cache.Client
+	holodexSvc      *holodex.Service
+	tierScheduler   *tier.TieredScheduler
+	dedupSvc        *dedup.Service
+	targetMinutes   []int
+	targetMinutesMu sync.RWMutex
+	logger          *slog.Logger
 }
 
 // NewYouTubeChecker는 YouTube 체커를 생성한다.
@@ -87,6 +88,14 @@ func NewYouTubeChecker(
 		targetMinutes: normalizeTargetMinutes(targetMinutes),
 		logger:        safeLogger(logger),
 	}, nil
+}
+
+// UpdateTargetMinutes는 runtime 설정 변경 시 target minute 정책을 갱신한다.
+func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
+	c.targetMinutesMu.Lock()
+	defer c.targetMinutesMu.Unlock()
+
+	c.targetMinutes = normalizeTargetMinutes(targetMinutes)
 }
 
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
@@ -219,7 +228,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 		return nil, nil
 	}
 
-	minutesUntil, ok := sharedchecker.CrossedTarget(c.targetMinutes, *stream.StartScheduled, prevCheckedAt, now)
+	minutesUntil, ok := sharedchecker.CrossedTarget(c.targetMinutesSnapshot(), *stream.StartScheduled, prevCheckedAt, now)
 	if !ok {
 		return nil, nil
 	}
@@ -236,6 +245,13 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	resolvedStream := ensureScheduledTime(stream, *stream.StartScheduled)
 
 	return roomNotifications(subscriberRooms, resolvedStream.Channel, resolvedStream, minutesUntil, ""), nil
+}
+
+func (c *YouTubeChecker) targetMinutesSnapshot() []int {
+	c.targetMinutesMu.RLock()
+	defer c.targetMinutesMu.RUnlock()
+
+	return append([]int(nil), c.targetMinutes...)
 }
 
 func (c *YouTubeChecker) buildLiveCatchupNotifications(

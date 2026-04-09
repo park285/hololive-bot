@@ -39,6 +39,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 type trackingSettingsReadWriter struct {
@@ -275,6 +277,67 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 		return settingsSvc.calls() >= 1
 	}, 2*time.Second, 50*time.Millisecond)
 	assert.Equal(t, 5, settingsSvc.Get().AlarmAdvanceMinutes)
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscriber did not stop after cancel")
+	}
+}
+
+func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceTargets(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.DiscardHandler)
+	client, _, addr := newTestValkeyClient(t)
+	publisher, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:       []string{addr},
+		DisableCache:      true,
+		ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { publisher.Close() })
+
+	cacheSvc := &cachemocks.Client{
+		GetClientFunc: func() valkey.Client { return client },
+	}
+	settingsSvc := &trackingSettingsReadWriter{
+		current: settings.Settings{
+			AlarmAdvanceMinutes: 5,
+			ScraperProxyEnabled: false,
+		},
+	}
+	alarmSvc, err := notification.NewAlarmService(nil, nil, nil, nil, nil, nil, logger, []int{5, 3, 1})
+	require.NoError(t, err)
+
+	deps := botConfigSubscriberDependencies{
+		cache:    cacheSvc,
+		settings: settingsSvc,
+	}
+	runtimeDeps := botConfigSubscriberRuntimeDependencies{
+		alarmCRUD: alarmSvc,
+	}
+	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
+	require.NotNil(t, subscriber)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	done := make(chan struct{})
+
+	go func() {
+		subscriber.Run(ctx)
+		close(done)
+	}()
+
+	require.Eventually(t, func() bool {
+		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 12})
+
+		return assert.ObjectsAreEqual([]int{12, 3, 1}, alarmSvc.GetTargetMinutes()) &&
+			settingsSvc.Get().AlarmAdvanceMinutes == 12
+	}, 2*time.Second, 50*time.Millisecond)
 
 	cancel()
 

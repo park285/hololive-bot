@@ -25,12 +25,12 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/valkey-io/valkey-go"
@@ -99,33 +99,7 @@ func NewAlarmService(
 }
 
 func buildTargetMinutes(advanceMinutes []int) []int {
-	filtered := make([]int, 0, len(advanceMinutes))
-	seen := make(map[int]struct{})
-
-	for _, minute := range advanceMinutes {
-		if minute <= 0 {
-			continue
-		}
-
-		if _, exists := seen[minute]; exists {
-			continue
-		}
-
-		seen[minute] = struct{}{}
-		filtered = append(filtered, minute)
-	}
-
-	if len(filtered) == 0 {
-		return []int{5, 3, 1}
-	}
-
-	slices.SortFunc(filtered, func(a, b int) int { return b - a })
-
-	if _, hasFallback := seen[1]; !hasFallback {
-		filtered = append(filtered, 1)
-	}
-
-	return filtered
+	return sharedchecker.NormalizeTargetMinutes(advanceMinutes)
 }
 
 func buildRuntimeTargetMinutes(alarmAdvanceMinutes int) []int {
