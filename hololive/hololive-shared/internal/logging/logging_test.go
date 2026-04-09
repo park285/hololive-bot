@@ -22,10 +22,13 @@ package logging
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewLogger(t *testing.T) {
@@ -155,5 +158,56 @@ func TestShouldDisableColor_WithNoColorEnv(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	if !shouldDisableColor(os.Stdout) {
 		t.Fatal("expected NO_COLOR env to disable color")
+	}
+}
+
+func TestArchiveCompressedLogFiles_MovesAndPrunesBackups(t *testing.T) {
+	logDir := t.TempDir()
+	logPath := filepath.Join(logDir, "service.log")
+	if err := os.WriteFile(logPath, []byte("active\n"), 0o644); err != nil {
+		t.Fatalf("write active log failed: %v", err)
+	}
+
+	now := time.Now().UTC()
+	names := []string{
+		"service-" + now.Add(-48*time.Hour).Format(backupTimeFormat) + ".log.gz",
+		"service-" + now.Add(-24*time.Hour).Format(backupTimeFormat) + ".log.gz",
+		"service-" + now.Add(-(31*24)*time.Hour).Format(backupTimeFormat) + ".log.gz",
+	}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(logDir, name), []byte(name), 0o644); err != nil {
+			t.Fatalf("write compressed backup failed: %v", err)
+		}
+	}
+
+	if err := archiveCompressedLogFiles(logPath, 2, 30); err != nil {
+		t.Fatalf("archiveCompressedLogFiles failed: %v", err)
+	}
+
+	archiveDir := filepath.Join(logDir, archiveDirName)
+	entries, err := os.ReadDir(archiveDir)
+	if err != nil {
+		t.Fatalf("read archive dir failed: %v", err)
+	}
+
+	got := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		got = append(got, entry.Name())
+	}
+	slices.Sort(got)
+
+	want := []string{
+		"service-" + now.Add(-48*time.Hour).Format(backupTimeFormat) + ".log.gz",
+		"service-" + now.Add(-24*time.Hour).Format(backupTimeFormat) + ".log.gz",
+	}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("archived backups = %v, want %v", got, want)
+	}
+
+	for _, name := range names {
+		if _, err := os.Stat(filepath.Join(logDir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected source backup %s to be moved or removed, err=%v", name, err)
+		}
 	}
 }
