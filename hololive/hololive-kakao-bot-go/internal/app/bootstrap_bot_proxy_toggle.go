@@ -23,6 +23,7 @@ package app
 import (
 	"log/slog"
 
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -35,26 +36,5 @@ func applyScraperProxyToggle(
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
 ) {
-	youtubeApplied := false
-	holodexApplied := false
-	schedulerApplied := 0
-
-	if youtubeService != nil {
-		youtubeApplied = youtubeService.SetScraperProxyEnabled(enabled)
-	}
-
-	if holodexService != nil {
-		holodexApplied = holodexService.SetScraperProxyEnabled(enabled)
-	}
-
-	if scraperScheduler != nil {
-		schedulerApplied = scraperScheduler.SetProxyEnabled(enabled)
-	}
-
-	logger.Info("Applied scraper proxy toggle",
-		slog.Bool("enabled", enabled),
-		slog.Bool("youtube_applied", youtubeApplied),
-		slog.Bool("holodex_applied", holodexApplied),
-		slog.Int("scheduler_pollers_applied", schedulerApplied),
-	)
+	sharedsettings.ApplyScraperProxyToggle(enabled, youtubeService, holodexService, scraperScheduler, logger)
 }
