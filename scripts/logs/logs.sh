@@ -440,11 +440,13 @@ cmd_prune() {
   local log_root="${REPO_ROOT}/logs"
   local backfill_dir="${log_root}/backfill"
   local mirror_dir="${log_root}/mirror"
+  local archive_dir="${log_root}/archive"
   local cron_dir="${log_root}/cron"
   local canary_dir="${log_root}/canary"
   local pid_dir="${log_root}/runtime/pids"
   local backfill_retention_days="${BACKFILL_RETENTION_DAYS:-7}"
   local aux_retention_days="${AUX_RETENTION_DAYS:-30}"
+  local archive_retention_days="${ARCHIVE_RETENTION_DAYS:-${LOG_MAX_AGE_DAYS:-30}}"
   local pid_file=""
   local pid=""
 
@@ -453,6 +455,9 @@ cmd_prune() {
   fi
   if [[ -d "${mirror_dir}" ]]; then
     find "${mirror_dir}" -type f -name '*.log.1' -mtime +"${aux_retention_days}" -delete >/dev/null 2>&1 || true
+  fi
+  if [[ -d "${archive_dir}" ]]; then
+    find "${archive_dir}" -type f -name '*.gz' -mtime +"${archive_retention_days}" -delete >/dev/null 2>&1 || true
   fi
   if [[ -d "${cron_dir}" ]]; then
     find "${cron_dir}" -type f -name '*.log*' -mtime +"${aux_retention_days}" -delete >/dev/null 2>&1 || true
@@ -471,7 +476,7 @@ cmd_prune() {
     done
   fi
 
-  echo "prune complete: backfill>${backfill_retention_days}d aux>${aux_retention_days}d"
+  echo "prune complete: backfill>${backfill_retention_days}d archive>${archive_retention_days}d aux>${aux_retention_days}d"
 }
 
 cmd_canary() {

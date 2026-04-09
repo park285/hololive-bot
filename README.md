@@ -104,9 +104,10 @@ go test ./shared-go/... \
 - SSOT: **application stdout/stderr → `docker compose logs`**
 - 파일 미러링: `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`, `./logs/youtube-scraper.log`
 - 앱 파일 로그 로테이션: **100MB × 5 backups × 30일 보관 × gzip 압축**
+- 압축 백업 보관: `./logs/archive/*.gz`
 - 컨테이너 로그 드라이버(`json-file`) 로테이션: **10MB × 3 files**
 - 보조 로그 디렉터리:
-  - 기본 운영 경로는 `logs/*.log`만 사용
+  - 기본 운영 경로는 `logs/*.log`와 `logs/archive/*.gz`
   - `logs/mirror/`, `logs/backfill/`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 opt-in 보조 산출물
 - 기본 확인: `docker compose -f docker-compose.prod.yml logs -f <service>`
 - 범위 조회: `./scripts/logs/logs.sh query <service> --since 1h --limit 1000`
