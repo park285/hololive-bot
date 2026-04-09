@@ -641,6 +641,11 @@ volumes:
   holo-pg-data:
   valkey-cache-data:
   valkey-cache-socket:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=0777
 
 networks:
   hololive-net:
