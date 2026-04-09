@@ -141,6 +141,18 @@ func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domai
 	)
 }
 
+func (ts *TieredScheduler) LastCheckedAt(channelID string) time.Time {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	st, ok := ts.states[channelID]
+	if !ok {
+		return time.Time{}
+	}
+
+	return st.lastCheckedAt
+}
+
 // MarkChannelDue: 채널을 즉시 체크 대상으로 표시한다.
 func (ts *TieredScheduler) MarkChannelDue(channelID string) {
 	now := time.Now()

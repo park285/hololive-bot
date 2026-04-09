@@ -1,0 +1,18 @@
+# Current Docs
+
+현재 운영 기준의 SSOT만 둡니다.
+
+## 포함 기준
+- 현재 배포/운영/runbook
+- 현재 모듈 맵과 ownership 문서
+- 현재 architecture governance 기준
+
+## 제외 기준
+- 완료된 migration 기록
+- 과거 장애/회고/폐기 설계
+- 아직 채택되지 않은 제안 문서
+
+## 현재 SSOT
+- `PROJECT_MAP.md` — 현재 모듈/런타임 인벤토리
+- `runbooks/README.md` — 현재 운영 runbook 인덱스
+- `architecture/README.md` — 현재 governance/architecture 인덱스

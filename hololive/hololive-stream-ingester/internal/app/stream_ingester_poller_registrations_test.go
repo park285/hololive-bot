@@ -26,7 +26,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	membermocks "github.com/kapu/hololive-shared/pkg/service/member/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -45,7 +44,15 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 
 	registrations := buildStreamIngesterChannelPollerRegistrations(
 		postgres,
-		scraper.ProxyConfig{},
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
 		scraper.NewRateLimiter(time.Second),
 		nil,
 	)
@@ -54,17 +61,16 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 		t.Fatalf("len(registrations) = %d, want 5", len(registrations))
 	}
 
-	intervals := providers.DefaultPollerIntervals()
 	expected := []struct {
 		name     string
 		priority poller.Priority
 		interval time.Duration
 	}{
-		{name: "videos", priority: poller.PriorityNormal, interval: intervals.Videos},
-		{name: "shorts", priority: poller.PriorityLow, interval: intervals.Shorts},
-		{name: "community", priority: poller.PriorityLow, interval: intervals.Community},
-		{name: "channel_stats", priority: poller.PriorityLow, interval: intervals.Stats},
-		{name: "live", priority: poller.PriorityHigh, interval: intervals.Live},
+		{name: "videos", priority: poller.PriorityNormal, interval: 7 * time.Minute},
+		{name: "shorts", priority: poller.PriorityLow, interval: 11 * time.Minute},
+		{name: "community", priority: poller.PriorityLow, interval: 13 * time.Minute},
+		{name: "channel_stats", priority: poller.PriorityLow, interval: 4 * time.Hour},
+		{name: "live", priority: poller.PriorityHigh, interval: 3 * time.Minute},
 	}
 
 	for idx, reg := range registrations {
@@ -102,7 +108,15 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 	}
 
 	scheduler, dispatcher := buildStreamIngesterYouTubeComponents(
-		config.ScraperConfig{},
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    5 * time.Minute,
+				Shorts:    10 * time.Minute,
+				Community: 10 * time.Minute,
+				Stats:     6 * time.Hour,
+				Live:      5 * time.Minute,
+			},
+		},
 		postgres,
 		membersData,
 		nil,

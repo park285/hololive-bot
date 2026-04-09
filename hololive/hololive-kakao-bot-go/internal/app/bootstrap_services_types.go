@@ -88,7 +88,7 @@ type botCoreModule struct {
 type botIrisClient interface {
 	iris.Sender
 	Ping(ctx context.Context) bool
-	GetConfig(ctx context.Context) (*iris.Config, error)
+	GetConfig(ctx context.Context) (*iris.ConfigResponse, error)
 }
 
 type botMessagingModule struct {
@@ -123,9 +123,9 @@ type botSupportModule struct {
 }
 
 type botFeatureModule struct {
-	majorEventRepo   command.MajorEventRepository
-	memberNewsSvc    command.MemberNewsService
-	commandFactories []command.Factory
+	majorEventRepo  command.MajorEventRepository
+	memberNewsSvc   command.MemberNewsService
+	commandBuilders []bot.CommandBuilder
 }
 
 type botDependencyModules struct {

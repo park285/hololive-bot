@@ -26,12 +26,9 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
 // InitializeBotDependencies - 봇 의존성을 초기화합니다.
@@ -82,15 +79,6 @@ func ProvideBot(deps *bot.Dependencies) (*bot.Bot, error) {
 	return created, nil
 }
 
-// ProvideYouTubeService: YouTube 서비스 인스턴스를 제공합니다.
-func ProvideYouTubeService(ytStack *providers.YouTubeStack) youtube.Service {
-	if ytStack == nil {
-		return nil
-	}
-
-	return ytStack.Service
-}
-
 // ProvideYouTubeScheduler: YouTube 스케줄러 인스턴스를 제공합니다.
 func ProvideYouTubeScheduler(deps *bot.Dependencies) youtube.Scheduler {
 	if deps == nil {
@@ -98,14 +86,4 @@ func ProvideYouTubeScheduler(deps *bot.Dependencies) youtube.Scheduler {
 	}
 
 	return deps.Scheduler
-}
-
-// ProvideTriggerHandler: 내부 트리거 핸들러를 생성하여 제공합니다.
-func ProvideTriggerHandler(
-	majorEventScheduler server.MajorEventScheduler,
-	majorEventMonthlyScheduler server.MajorEventMonthlyScheduler,
-	memberNewsWeeklyScheduler sharedserver.MemberNewsWeeklyScheduler,
-	logger *slog.Logger,
-) *sharedserver.TriggerHandler {
-	return sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsWeeklyScheduler, logger)
 }

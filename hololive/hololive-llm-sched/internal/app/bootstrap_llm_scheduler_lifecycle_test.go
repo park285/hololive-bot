@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 func testRuntimeLogger() *slog.Logger {
@@ -49,7 +50,7 @@ func TestLLMSchedulerRuntimeClose(t *testing.T) {
 	t.Run("invokes cleanup", func(t *testing.T) {
 		calls := 0
 		runtime := &LLMSchedulerRuntime{
-			cleanup: func() { calls++ },
+			CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
 		}
 
 		runtime.Close()

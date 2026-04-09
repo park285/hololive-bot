@@ -44,7 +44,7 @@ func buildStreamIngesterConfigSubscriber(
 ) *configsub.Subscriber {
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
-			applyScraperProxyToggle(payload.Enabled, ProvideYouTubeService(ytStack), holodexService, scraperScheduler, logger)
+			applyScraperProxyToggle(payload.Enabled, ytStack.GetService(), holodexService, scraperScheduler, logger)
 			current := settingsService.Get()
 			current.ScraperProxyEnabled = payload.Enabled
 			if err := settingsService.Update(current); err != nil {

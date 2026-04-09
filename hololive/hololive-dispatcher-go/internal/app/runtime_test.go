@@ -25,7 +25,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -183,6 +185,85 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestRuntimeRun_SignalWaitsForDispatchLoopShutdown(t *testing.T) {
+	dispatchStarted := make(chan struct{})
+	dispatchStopped := make(chan struct{})
+
+	consumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, _ int) ([]domain.AlarmQueueEnvelope, error) {
+			select {
+			case <-dispatchStarted:
+			default:
+				close(dispatchStarted)
+			}
+
+			<-ctx.Done()
+
+			select {
+			case <-dispatchStopped:
+			default:
+				close(dispatchStopped)
+			}
+
+			return nil, ctx.Err()
+		},
+	}
+
+	dispatcher, err := dispatch.NewDispatcher(
+		consumer,
+		&testMessageSender{},
+		dispatch.NewSimpleRenderer(),
+		1,
+		1,
+		testLogger(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	rt := &Runtime{
+		cfg: &Config{
+			Dispatch: DispatchConfig{ReconnectBackoff: 5 * time.Second},
+		},
+		logger:     testLogger(),
+		dispatcher: dispatcher,
+		httpServer: &http.Server{Addr: "127.0.0.1:0", Handler: http.NewServeMux()},
+		readyState: newReadinessState(),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		rt.Run()
+	}()
+
+	select {
+	case <-dispatchStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatch loop did not start in time")
+	}
+
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatalf("Kill(SIGTERM) error = %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run() did not stop after SIGTERM")
+	}
+
+	select {
+	case <-dispatchStopped:
+	default:
+		t.Fatal("Run() returned before dispatch loop shutdown completed")
+	}
+
+	if rt.readyState.dispatchLoopRunning.Load() {
+		t.Fatal("dispatch loop running flag should be false after Run() returns")
+	}
 }
 
 func TestRunDispatchLoop_ErrorThenRecoveryClearsLastError(t *testing.T) {

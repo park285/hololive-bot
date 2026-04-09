@@ -26,8 +26,8 @@ import (
 	"log/slog"
 	"time"
 
+	appproviders "github.com/kapu/hololive-kakao-bot-go/internal/app/providers"
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -51,7 +51,7 @@ func initAlarmDependencies(
 	twitchClient := ProvideTwitchClient(twitchCfg, logger)
 	memberDataProvider := memberServiceAdapter
 
-	resolved := providers.ResolveAlarmAdvanceMinutes(advanceMinutes, scraperProxyEnabled, logger)
+	resolved := appproviders.ResolveAlarmAdvanceMinutes(advanceMinutes, scraperProxyEnabled, logger)
 
 	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, chzzkClient, twitchClient, memberDataProvider, alarmRepository, logger)
 	if err != nil {

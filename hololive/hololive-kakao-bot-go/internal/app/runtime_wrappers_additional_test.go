@@ -26,6 +26,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,7 @@ func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
 
 	calls := 0
 	runtime := &DBIntegrationRuntime{
-		cleanup: func() { calls++ },
+		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
 	}
 
 	runtime.Close()
@@ -62,7 +63,7 @@ func TestFetchProfilesRuntimeClose_CallsCleanupOnce(t *testing.T) {
 
 	calls := 0
 	runtime := &FetchProfilesRuntime{
-		cleanup: func() { calls++ },
+		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
 	}
 
 	runtime.Close()

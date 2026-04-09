@@ -3,9 +3,9 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { statsApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { statsApi } from '@/features/stats/api'
 
 const numberFormatter = new Intl.NumberFormat('ko-KR')
 

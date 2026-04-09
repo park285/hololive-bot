@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -170,6 +171,61 @@ func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 	}
 	if cfg.Iris.BotToken != "bot-token" {
 		t.Fatalf("BotToken = %q, want %q", cfg.Iris.BotToken, "bot-token")
+	}
+}
+
+func TestLoad_ScraperPollDefaults(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.Poll.Videos != 5*time.Minute {
+		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 5*time.Minute)
+	}
+	if cfg.Scraper.Poll.Shorts != 10*time.Minute {
+		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 10*time.Minute)
+	}
+	if cfg.Scraper.Poll.Community != 10*time.Minute {
+		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 10*time.Minute)
+	}
+	if cfg.Scraper.Poll.Stats != 6*time.Hour {
+		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 6*time.Hour)
+	}
+	if cfg.Scraper.Poll.Live != 5*time.Minute {
+		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 5*time.Minute)
+	}
+}
+
+func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_VIDEOS_SECONDS", "420")
+	t.Setenv("SCRAPER_SHORTS_SECONDS", "660")
+	t.Setenv("SCRAPER_COMMUNITY_SECONDS", "780")
+	t.Setenv("SCRAPER_STATS_SECONDS", "14400")
+	t.Setenv("SCRAPER_LIVE_SECONDS", "180")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.Poll.Videos != 7*time.Minute {
+		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 7*time.Minute)
+	}
+	if cfg.Scraper.Poll.Shorts != 11*time.Minute {
+		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 11*time.Minute)
+	}
+	if cfg.Scraper.Poll.Community != 13*time.Minute {
+		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 13*time.Minute)
+	}
+	if cfg.Scraper.Poll.Stats != 4*time.Hour {
+		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 4*time.Hour)
+	}
+	if cfg.Scraper.Poll.Live != 3*time.Minute {
+		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 3*time.Minute)
 	}
 }
 

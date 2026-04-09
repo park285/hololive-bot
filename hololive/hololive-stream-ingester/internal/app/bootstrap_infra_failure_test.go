@@ -65,10 +65,10 @@ func canceledContext() context.Context {
 	return ctx
 }
 
-func TestInitInfraResources_ReturnsErrorOnCanceledContext(t *testing.T) {
+func TestInitStreamInfra_ReturnsErrorOnCanceledContext(t *testing.T) {
 	t.Parallel()
 
-	infra, err := initInfraResources(canceledContext(), buildInfraFailureConfig(), testLogger())
+	infra, err := initStreamInfra(canceledContext(), buildInfraFailureConfig(), testLogger())
 	require.Error(t, err)
 	assert.Nil(t, infra)
 	assert.Contains(t, err.Error(), "provide cache resources")

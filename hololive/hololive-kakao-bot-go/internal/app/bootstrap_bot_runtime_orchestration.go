@@ -70,7 +70,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		Bot:                  botBot,
 		AlarmScheduler:       alarmScheduler,
 		ConfigSubscriber:     configSubscriber,
-		ServerAddr:           ProvideAPIAddr(cfg),
+		ServerAddr:           fmt.Sprintf(":%d", cfg.Server.Port),
 		HttpServer:           botServer,
 		webhookHandlerCloser: webhookHandler,
 	}, nil

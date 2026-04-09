@@ -5,11 +5,11 @@ import AddMemberModal from '@/components/AddMemberModal'
 import EditNameModal from '@/components/EditNameModal'
 import MemberCard from '@/components/MemberCard'
 import { useQuery } from '@tanstack/react-query'
-import { membersApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
-import type { Member, MembersResponse } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Label } from '@/components/ui/Label'
+import { membersApi } from '@/features/members/api'
+import type { Member, MembersResponse } from '@/features/members/types'
 import Search from 'lucide-react/dist/esm/icons/search';
 import Plus from 'lucide-react/dist/esm/icons/plus';
 import { useSSRData } from '@/hooks/useSSRData'

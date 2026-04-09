@@ -23,6 +23,7 @@ package bot
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"testing"
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
@@ -82,21 +83,47 @@ func (s *stubCommandInitMemberNewsService) IsRoomSubscribed(ctx context.Context,
 	return false, nil
 }
 
-func TestCommandInitView_DefensiveCopyFactories(t *testing.T) {
-	factory := command.Factory(func(_ *command.Dependencies) command.Command { return nil })
+type stubCommandInitCommand struct {
+	name     string
+	exec     func(context.Context, *domain.CommandContext, map[string]any) error
+	executed int
+}
+
+func (s *stubCommandInitCommand) Name() string {
+	return s.name
+}
+
+func (s *stubCommandInitCommand) Description() string {
+	return "stub"
+}
+
+func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+	s.executed++
+
+	if s.exec != nil {
+		return s.exec(ctx, cmdCtx, params)
+	}
+
+	return nil
+}
+
+func TestCommandInitView_DefensiveCopyCommandBuilders(t *testing.T) {
+	external := CommandBuilder(func(_ *command.Dependencies) command.Command {
+		return &stubCommandInitCommand{name: "external"}
+	})
 	b := &Bot{
-		commandFactories: []command.Factory{factory},
-		logger:           slog.New(slog.DiscardHandler),
+		commandBuilders: []CommandBuilder{external},
+		logger:          slog.New(slog.DiscardHandler),
 	}
 
 	view := b.commandInitView()
-	if len(view.commandFactories) != 1 {
-		t.Fatalf("command factory count = %d, want 1", len(view.commandFactories))
+	if len(view.commandBuilders) != 1 {
+		t.Fatalf("command builder count = %d, want 1", len(view.commandBuilders))
 	}
 
-	b.commandFactories[0] = nil
-	if view.commandFactories[0] == nil {
-		t.Fatal("view command factories must be copied defensively")
+	b.commandBuilders[0] = nil
+	if view.commandBuilders[0] == nil {
+		t.Fatal("view command builders must be copied defensively")
 	}
 }
 
@@ -132,20 +159,103 @@ func TestCommandInitView_ToCommandDependencies(t *testing.T) {
 	}
 }
 
-func TestCommandInitView_BuildFactoriesCount(t *testing.T) {
-	defaultCount := len(command.DefaultFactories())
+func TestCommandInitView_AssemblesCommands(t *testing.T) {
+	registry := command.NewRegistry()
 	view := commandInitView{
-		logger:           slog.New(slog.DiscardHandler),
-		majorEventRepo:   &stubCommandInitMajorEventRepo{},
-		memberNews:       &stubCommandInitMemberNewsService{},
-		commandFactories: []command.Factory{func(_ *command.Dependencies) command.Command { return nil }},
+		logger:         slog.New(slog.DiscardHandler),
+		majorEventRepo: &stubCommandInitMajorEventRepo{},
+		memberNews:     &stubCommandInitMemberNewsService{},
+		commandBuilders: []CommandBuilder{
+			nil,
+			func(_ *command.Dependencies) command.Command {
+				return &stubCommandInitCommand{name: "external"}
+			},
+		},
 	}
 
-	factories := view.buildFactories()
+	deps := view.toCommandDependencies(registry)
+	commands := view.buildCommands(deps)
 
-	expected := defaultCount + 1 + len(command.MemberNewsFactories()) + 1
-	if len(factories) != expected {
-		t.Fatalf("factory count = %d, want %d", len(factories), expected)
+	gotNames := make([]string, 0, len(commands))
+	for _, cmd := range commands {
+		if cmd == nil {
+			t.Fatal("buildCommands() returned nil command")
+		}
+
+		gotNames = append(gotNames, cmd.Name())
+	}
+
+	wantNames := []string{
+		"help",
+		"live",
+		"upcoming",
+		"schedule",
+		"alarm",
+		"member_info",
+		"subscriber",
+		"stats",
+		"major_event",
+		"member_news",
+		"news_subscription",
+		"external",
+	}
+	if !slices.Equal(gotNames, wantNames) {
+		t.Fatalf("command names = %v, want %v", gotNames, wantNames)
+	}
+}
+
+func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testing.T) {
+	registry := command.NewRegistry()
+	target := &stubCommandInitCommand{name: string(domain.CommandSettlementStatus)}
+	registry.Register(target)
+
+	var builtDeps *command.Dependencies
+	builder := CommandBuilder(func(deps *command.Dependencies) command.Command {
+		builtDeps = deps
+
+		return &stubCommandInitCommand{
+			name: "external",
+			exec: func(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+				_, err := deps.Dispatcher.Publish(ctx, cmdCtx, command.Event{Type: domain.CommandSettlementStatus})
+				return err
+			},
+		}
+	})
+
+	view := commandInitView{
+		logger:          slog.New(slog.DiscardHandler),
+		commandBuilders: []CommandBuilder{builder},
+	}
+
+	deps := view.toCommandDependencies(registry)
+	commands := view.buildCommands(deps)
+
+	var external command.Command
+	for _, cmd := range commands {
+		if cmd.Name() == "external" {
+			external = cmd
+			break
+		}
+	}
+
+	if external == nil {
+		t.Fatal("external command was not assembled")
+	}
+
+	if builtDeps != deps {
+		t.Fatal("external builder did not receive current command dependencies")
+	}
+
+	if builtDeps.Dispatcher == nil {
+		t.Fatal("external builder dispatcher was not initialized")
+	}
+
+	if err := external.Execute(t.Context(), &domain.CommandContext{}, nil); err != nil {
+		t.Fatalf("external command execute failed: %v", err)
+	}
+
+	if target.executed != 1 {
+		t.Fatalf("dispatcher target executed = %d, want 1", target.executed)
 	}
 }
 

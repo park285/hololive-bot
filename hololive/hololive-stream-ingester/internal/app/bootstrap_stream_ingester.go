@@ -33,6 +33,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 const (
@@ -45,17 +46,23 @@ type ingestionRuntimeFeatures struct {
 	photoSyncEnabled bool
 }
 
+type ingestionRuntimeSpec struct {
+	name              string
+	requestedFeatures ingestionRuntimeFeatures
+	features          ingestionRuntimeFeatures
+}
+
 // BuildStreamIngesterRuntime: stream-ingester 런타임을 구성합니다.
 func BuildStreamIngesterRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*StreamIngesterRuntime, error) {
-	return buildIngestionRuntime(ctx, cfg, logger, streamIngesterRuntimeName)
+	return buildIngestionRuntime(ctx, cfg, logger, streamIngesterSpec(cfg))
 }
 
 // BuildYouTubeScraperRuntime: youtube-scraper 런타임을 구성합니다.
 func BuildYouTubeScraperRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*StreamIngesterRuntime, error) {
-	return buildIngestionRuntime(ctx, cfg, logger, youtubeScraperRuntimeName)
+	return buildIngestionRuntime(ctx, cfg, logger, youtubeScraperSpec(cfg))
 }
 
-func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, runtimeName string) (*StreamIngesterRuntime, error) {
+func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, spec ingestionRuntimeSpec) (*StreamIngesterRuntime, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config must not be nil")
 	}
@@ -63,11 +70,13 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		return nil, fmt.Errorf("logger must not be nil")
 	}
 
-	features := resolveIngestionRuntimeFeatures(cfg, runtimeName, logger)
-	readiness := newIngestionReadinessState(runtimeName, features)
+	logFeatureOverride(logger, spec)
+
+	features := spec.features
+	readiness := newIngestionReadinessState(spec.name, features)
 
 	logger.Info("Ingestion runtime configured",
-		slog.String("runtime", runtimeName),
+		slog.String("runtime", spec.name),
 		slog.String("event", "ingestion_runtime_configured"),
 		slog.Bool("youtube_enabled", features.youtubeEnabled),
 		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
@@ -81,7 +90,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 
 	var ingestionLeaseRef *providers.IngestionLease
 	if features.youtubeEnabled {
-		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, infra.cacheService, runtimeName, logger)
+		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, infra.cacheService, spec.name, logger)
 		if err != nil {
 			infra.cleanupDB()
 			infra.cleanupCache()
@@ -108,7 +117,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 
 	configSubscriber := buildRuntimeConfigSubscriber(features, infra, scraperScheduler, logger)
 
-	httpServer, err := buildStreamIngesterHTTPServer(ctx, cfg, logger, runtimeName, readiness)
+	httpServer, err := buildStreamIngesterHTTPServer(ctx, cfg, logger, spec.name, readiness)
 	if err != nil {
 		infra.cleanupDB()
 		infra.cleanupCache()
@@ -121,7 +130,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	}
 
 	return &StreamIngesterRuntime{
-		RuntimeName:      runtimeName,
+		RuntimeName:      spec.name,
 		Config:           cfg,
 		Logger:           logger,
 		Scheduler:        youtubeScheduler,
@@ -129,11 +138,11 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		PhotoSync:        selectPhotoSyncService(features.photoSyncEnabled, infra.photoSync),
 		OutboxDispatcher: outboxDispatcher,
 		ConfigSubscriber: configSubscriber,
-		ServerAddr:       ProvideAPIAddr(cfg),
+		ServerAddr:       fmt.Sprintf(":%d", cfg.Server.Port),
 		HttpServer:       httpServer,
 		Readiness:        readiness,
 		ingestionLease:   ingestionLeaseRef,
-		cleanup:          cleanup,
+		CleanupCloser:    lifecycle.NewCleanupCloser(cleanup),
 	}, nil
 }
 
@@ -148,34 +157,56 @@ func buildStreamIngesterHTTPServer(
 	if err != nil {
 		return nil, fmt.Errorf("build stream ingester router: %w", err)
 	}
-	return ProvideAPIServer(ProvideAPIAddr(cfg), router, runtimeHTTPServerOperationName(runtimeName)), nil
+	return ProvideAPIServer(fmt.Sprintf(":%d", cfg.Server.Port), router, runtimeHTTPServerOperationName(runtimeName)), nil
 }
 
-func resolveIngestionRuntimeFeatures(cfg *config.Config, runtimeName string, logger *slog.Logger) ingestionRuntimeFeatures {
-	requested := ingestionRuntimeFeatures{
+func streamIngesterSpec(cfg *config.Config) ingestionRuntimeSpec {
+	requested := requestedFeatures(cfg)
+
+	return ingestionRuntimeSpec{
+		name:              streamIngesterRuntimeName,
+		requestedFeatures: requested,
+		features:          requested,
+	}
+}
+
+func youtubeScraperSpec(cfg *config.Config) ingestionRuntimeSpec {
+	return ingestionRuntimeSpec{
+		name:              youtubeScraperRuntimeName,
+		requestedFeatures: requestedFeatures(cfg),
+		features: ingestionRuntimeFeatures{
+			youtubeEnabled:   true,
+			photoSyncEnabled: false,
+		},
+	}
+}
+
+func requestedFeatures(cfg *config.Config) ingestionRuntimeFeatures {
+	if cfg == nil {
+		return ingestionRuntimeFeatures{}
+	}
+
+	return ingestionRuntimeFeatures{
 		youtubeEnabled:   cfg.Ingestion.YouTubeEnabled,
 		photoSyncEnabled: cfg.Ingestion.PhotoSyncEnabled,
 	}
+}
 
-	if runtimeName != youtubeScraperRuntimeName {
-		return requested
+func logFeatureOverride(logger *slog.Logger, spec ingestionRuntimeSpec) {
+	if logger == nil {
+		return
+	}
+	if spec.requestedFeatures == spec.features {
+		return
 	}
 
-	effective := ingestionRuntimeFeatures{
-		youtubeEnabled:   true,
-		photoSyncEnabled: false,
-	}
-	if logger != nil && (requested.youtubeEnabled != effective.youtubeEnabled || requested.photoSyncEnabled != effective.photoSyncEnabled) {
-		logger.Warn("YouTube scraper runtime overrides ingestion feature toggles",
-			slog.String("runtime", runtimeName),
-			slog.Bool("requested_youtube_enabled", requested.youtubeEnabled),
-			slog.Bool("effective_youtube_enabled", effective.youtubeEnabled),
-			slog.Bool("requested_photo_sync_enabled", requested.photoSyncEnabled),
-			slog.Bool("effective_photo_sync_enabled", effective.photoSyncEnabled),
-		)
-	}
-
-	return effective
+	logger.Warn("YouTube scraper runtime overrides ingestion feature toggles",
+		slog.String("runtime", spec.name),
+		slog.Bool("requested_youtube_enabled", spec.requestedFeatures.youtubeEnabled),
+		slog.Bool("effective_youtube_enabled", spec.features.youtubeEnabled),
+		slog.Bool("requested_photo_sync_enabled", spec.requestedFeatures.photoSyncEnabled),
+		slog.Bool("effective_photo_sync_enabled", spec.features.photoSyncEnabled),
+	)
 }
 
 func selectPhotoSyncService(enabled bool, service *holodex.PhotoSyncService) *holodex.PhotoSyncService {
@@ -207,7 +238,7 @@ func buildRuntimeConfigSubscriber(
 	desiredProxyState := infra.settingsService.Get().ScraperProxyEnabled
 	applyScraperProxyToggle(
 		desiredProxyState,
-		ProvideYouTubeService(infra.ytStack),
+		infra.ytStack.GetService(),
 		infra.holodexService,
 		scraperScheduler,
 		logger,

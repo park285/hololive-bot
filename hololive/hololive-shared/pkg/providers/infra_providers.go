@@ -28,7 +28,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/iris"
 )
 
@@ -118,17 +117,4 @@ func ProvidePostgresService(resources *DatabaseResources) database.Client {
 func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*iris.H2CClient, error) {
 	defaultOpts := []iris.ClientOption{iris.WithLogger(logger)}
 	return iris.NewClient(append(defaultOpts, opts...)...)
-}
-
-// ProvideSettingsService - 설정 서비스 생성
-func ProvideSettingsService(advanceMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) settings.ReadWriter {
-	settingsPath := resolveSettingsFilePath()
-	if logger != nil {
-		logger.Info("Using settings file path", slog.String("path", settingsPath))
-	}
-
-	return settings.NewSettingsService(settingsPath, settings.Settings{
-		AlarmAdvanceMinutes: defaultAlarmAdvanceMinute(advanceMinutes),
-		ScraperProxyEnabled: scraperProxyEnabled,
-	}, logger)
 }

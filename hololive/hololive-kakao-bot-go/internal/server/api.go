@@ -27,13 +27,13 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -60,11 +60,11 @@ type APIHandler struct {
 	alarm                      domain.AlarmCRUD
 	holodex                    *holodex.Service
 	youtube                    youtube.Service
-	scraperProxyToggler        sharedsettings.ScraperProxyToggler
+	scraperProxyToggler        *poller.Scheduler
 	statsRepo                  stats.StatsDashboardRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
-	settingsApplier            sharedsettings.SettingsApplier
+	settingsApplier            SettingsApplier
 	acl                        *acl.Service
 	logger                     *slog.Logger
 	systemStats                *system.Collector
@@ -122,11 +122,11 @@ func NewAPIHandler(
 	alarm domain.AlarmCRUD,
 	holodexSvc *holodex.Service,
 	youtubeSvc youtube.Service,
-	scraperProxyToggler sharedsettings.ScraperProxyToggler,
+	scraperProxyToggler *poller.Scheduler,
 	statsRepo stats.StatsDashboardRepository,
 	activityLogger *activity.Logger,
 	settingsSvc settings.ReadWriter,
-	settingsApplier sharedsettings.SettingsApplier,
+	settingsApplier SettingsApplier,
 	aclSvc *acl.Service,
 	systemSvc *system.Collector,
 	templateAdmin *template.AdminService,

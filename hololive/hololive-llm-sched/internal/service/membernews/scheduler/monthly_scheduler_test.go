@@ -74,6 +74,14 @@ func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
 	}
 }
 
+func TestMonthlyScheduler_LifecycleNilGuards(t *testing.T) {
+	var scheduler *MonthlyScheduler
+
+	scheduler.SetClock(func() time.Time { return time.Now() })
+	scheduler.Start(context.Background())
+	scheduler.Stop()
+}
+
 func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
 	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}

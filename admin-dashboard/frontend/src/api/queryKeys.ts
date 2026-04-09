@@ -5,7 +5,7 @@
  * @see https://tkdodo.eu/blog/effective-react-query-keys#use-query-key-factories
  */
 
-import type { StreamOrg } from '@/types'
+import type { StreamOrg } from '@/features/streams/types'
 
 export const queryKeys = {
     /** 멤버 관련 쿼리 키 */

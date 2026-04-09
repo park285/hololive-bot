@@ -24,8 +24,9 @@ import (
 	"context"
 	"log/slog"
 
+	appproviders "github.com/kapu/hololive-kakao-bot-go/internal/app/providers"
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/iris"
 
@@ -37,7 +38,7 @@ import (
 type alarmYouTubeStackComponents struct {
 	alarmMode       *alarmModeComponents
 	memberMatcher   *matcher.MemberMatcher
-	youTubeStack    *providers.YouTubeStack
+	youTubeStack    *appproviders.YouTubeStack
 	activityLogger  *activity.Logger
 	settingsService settings.ReadWriter
 }
@@ -73,8 +74,8 @@ func initAlarmYouTubeStack(
 		foundation.holodexService,
 		logger,
 	)
-	youTubeStatsRepository := providers.ProvideYouTubeStatsRepository(infra.postgresService, logger)
-	youTubeStack := providers.ProvideYouTubeStack(
+	youTubeStatsRepository := sharedproviders.ProvideYouTubeStatsRepository(infra.postgresService, logger)
+	youTubeStack := appproviders.ProvideYouTubeStack(
 		ctx,
 		cfg.YouTube,
 		cfg.Scraper,
@@ -94,7 +95,7 @@ func initAlarmYouTubeStack(
 		memberMatcher:  memberMatcher,
 		youTubeStack:   youTubeStack,
 		activityLogger: ProvideActivityLogger(logger),
-		settingsService: providers.ProvideSettingsService(
+		settingsService: appproviders.ProvideSettingsService(
 			cfg.Notification.AdvanceMinutes,
 			cfg.Scraper.ProxyEnabled,
 			logger,
