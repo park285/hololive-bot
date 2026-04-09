@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { milestonesApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
 import { Badge } from '@/components/ui/Badge'
 import { Progress } from '@/components/ui/Progress'
 import { StatCard } from '@/components/ui/StatCard'
+import { milestonesApi } from '@/features/milestones/api'
 import { Loader2, TrendingUp, Trophy, BellOff, Award, Video } from 'lucide-react'
 
 const MilestonesTab = () => {

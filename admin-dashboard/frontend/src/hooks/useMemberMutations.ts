@@ -4,9 +4,9 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { membersApi } from '@/api/holo'
 import { queryKeys } from '@/api/queryKeys'
-import type { Member, AddAliasRequest, RemoveAliasRequest } from '@/types'
+import { membersApi } from '@/features/members/api'
+import type { AddAliasRequest, Member, RemoveAliasRequest } from '@/features/members/types'
 import toast from '@/lib/toast-api'
 
 /**

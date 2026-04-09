@@ -463,14 +463,14 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 			Channel:        &domain.Channel{ID: "ch1", Name: "Channel 1"},
 		}
 
-		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1", "room2"}, now)
+		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1", "room2"}, time.Time{}, now)
 		require.NoError(t, err)
 		require.Len(t, notifications, 2)
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
 		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
 
-		notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, now)
+		notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, time.Time{}, now)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
 
@@ -480,9 +480,27 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 			ID:             "upcoming-2",
 			Status:         domain.StreamStatusUpcoming,
 			StartScheduled: &nonTarget,
-		}, []string{"room1"}, now)
+		}, []string{"room1"}, time.Time{}, now)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
+	})
+
+	t.Run("build upcoming notifications across crossed target window", func(t *testing.T) {
+		start := now.Add(4*time.Minute + 20*time.Second)
+		stream := &domain.Stream{
+			ID:             "upcoming-crossed",
+			ChannelID:      "ch1",
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &start,
+			Channel:        &domain.Channel{ID: "ch1", Name: "Channel 1"},
+		}
+
+		prev := now.Add(-40 * time.Second)
+
+		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, prev, now)
+		require.NoError(t, err)
+		require.Len(t, notifications, 1)
+		assert.Equal(t, 5, notifications[0].MinutesUntil)
 	})
 
 	t.Run("build live catchup notifications", func(t *testing.T) {
@@ -550,7 +568,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 			},
 		}
 
-		notifications, err := checker.buildChannelNotifications(ctx, "ch-1", []string{"room1", "room2"}, streams, now)
+		notifications, err := checker.buildChannelNotifications(ctx, "ch-1", []string{"room1", "room2"}, streams, time.Time{}, now)
 		require.NoError(t, err)
 		assert.NotEmpty(t, notifications)
 	})

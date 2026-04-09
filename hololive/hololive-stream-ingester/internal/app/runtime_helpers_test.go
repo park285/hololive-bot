@@ -25,10 +25,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 type fakeYouTubeService struct {
@@ -79,38 +78,6 @@ func (f *fakeScheduler) Stop()                 { f.stopCalls++ }
 
 var testLogger = sharedlogging.NewLogger
 
-func TestProvideAPIAddr(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.Config{Server: config.ServerConfig{Port: 30004}}
-	if got := ProvideAPIAddr(cfg); got != ":30004" {
-		t.Fatalf("ProvideAPIAddr() = %q, want %q", got, ":30004")
-	}
-}
-
-func TestProvideYouTubeService(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil stack", func(t *testing.T) {
-		if got := ProvideYouTubeService(nil); got != nil {
-			t.Fatalf("ProvideYouTubeService(nil) = %#v, want nil", got)
-		}
-	})
-
-	t.Run("returns stack service", func(t *testing.T) {
-		service := &fakeYouTubeService{}
-		stack := &providers.YouTubeStack{Service: service}
-
-		got := ProvideYouTubeService(stack)
-		if got == nil {
-			t.Fatal("ProvideYouTubeService() returned nil")
-		}
-		if got != service {
-			t.Fatalf("ProvideYouTubeService() = %#v, want %#v", got, service)
-		}
-	})
-}
-
 func TestApplyScraperProxyToggle(t *testing.T) {
 	t.Parallel()
 
@@ -137,18 +104,6 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 	t.Run("nil dependencies do not panic", func(t *testing.T) {
 		applyScraperProxyToggle(true, nil, nil, nil, testLogger())
 	})
-
-	t.Run("applies toggle to holodex proxy service", func(t *testing.T) {
-		service := &fakeHolodexProxyService{}
-
-		applyScraperProxyToggle(true, nil, service, nil, testLogger())
-		if service.setCalls != 1 {
-			t.Fatalf("SetScraperProxyEnabled calls = %d, want 1", service.setCalls)
-		}
-		if !service.lastEnabled {
-			t.Fatal("lastEnabled = false, want true")
-		}
-	})
 }
 
 func TestStreamIngesterRuntimeClose(t *testing.T) {
@@ -162,7 +117,7 @@ func TestStreamIngesterRuntimeClose(t *testing.T) {
 	t.Run("invokes cleanup once", func(t *testing.T) {
 		calls := 0
 		runtime := &StreamIngesterRuntime{
-			cleanup: func() { calls++ },
+			CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
 		}
 
 		runtime.Close()
@@ -185,7 +140,7 @@ func TestStreamIngesterRuntimeShutdown(t *testing.T) {
 		},
 	}
 
-	runtime.shutdown()
+	runtime.shutdown(context.Background())
 	if scheduler.stopCalls != 1 {
 		t.Fatalf("scheduler Stop calls = %d, want 1", scheduler.stopCalls)
 	}

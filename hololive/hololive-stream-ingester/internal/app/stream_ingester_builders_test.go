@@ -47,7 +47,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 type fakeMemberDataProvider struct {
@@ -185,24 +184,33 @@ func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
 	postgres := &databasemocks.Client{}
 	registrations := buildStreamIngesterChannelPollerRegistrations(
 		postgres,
-		scraper.ProxyConfig{Enabled: true, URL: "socks5://proxy.internal:1080"},
+		config.ScraperConfig{
+			ProxyEnabled: true,
+			ProxyURL:     "socks5://proxy.internal:1080",
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
 		nil,
 		nil,
 	)
 
 	require.Len(t, registrations, 5)
-	intervals := providers.DefaultPollerIntervals()
 
 	expected := []struct {
 		name     string
 		priority poller.Priority
 		interval int64
 	}{
-		{name: "videos", priority: poller.PriorityNormal, interval: int64(intervals.Videos)},
-		{name: "shorts", priority: poller.PriorityLow, interval: int64(intervals.Shorts)},
-		{name: "community", priority: poller.PriorityLow, interval: int64(intervals.Community)},
-		{name: "channel_stats", priority: poller.PriorityLow, interval: int64(intervals.Stats)},
-		{name: "live", priority: poller.PriorityHigh, interval: int64(intervals.Live)},
+		{name: "videos", priority: poller.PriorityNormal, interval: int64(7 * time.Minute)},
+		{name: "shorts", priority: poller.PriorityLow, interval: int64(11 * time.Minute)},
+		{name: "community", priority: poller.PriorityLow, interval: int64(13 * time.Minute)},
+		{name: "channel_stats", priority: poller.PriorityLow, interval: int64(4 * time.Hour)},
+		{name: "live", priority: poller.PriorityHigh, interval: int64(3 * time.Minute)},
 	}
 
 	for idx, registration := range registrations {
@@ -223,7 +231,17 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 	}
 
 	scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
-		config.ScraperConfig{ProxyEnabled: true, ProxyURL: "socks5://proxy.internal:1080"},
+		config.ScraperConfig{
+			ProxyEnabled: true,
+			ProxyURL:     "socks5://proxy.internal:1080",
+			Poll: config.ScraperPoll{
+				Videos:    5 * time.Minute,
+				Shorts:    10 * time.Minute,
+				Community: 10 * time.Minute,
+				Stats:     6 * time.Hour,
+				Live:      5 * time.Minute,
+			},
+		},
 		&databasemocks.Client{},
 		membersData,
 		nil,

@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { dockerApi, type DockerContainer } from '@/api/core'
+import { dockerApi, type DockerContainer, type StatusOnlyResponse } from '@/api/core'
 import { queryKeys } from '@/api/queryKeys'
-import type { ApiResponse } from '@/types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -62,7 +61,7 @@ export const DockerContainerList = ({ initialHealth, initialContainers }: Docker
 
     const restartMutation = useMutation({
         mutationFn: (containerName: string) => dockerApi.restartContainer(containerName),
-        onSuccess: (_data: ApiResponse, containerName: string) => {
+        onSuccess: (_data: StatusOnlyResponse, containerName: string) => {
             setActionInProgress(null)
             toast.success(
                 <span>
@@ -79,7 +78,7 @@ export const DockerContainerList = ({ initialHealth, initialContainers }: Docker
 
     const stopMutation = useMutation({
         mutationFn: (containerName: string) => dockerApi.stopContainer(containerName),
-        onSuccess: (_data: ApiResponse, containerName: string) => {
+        onSuccess: (_data: StatusOnlyResponse, containerName: string) => {
             setActionInProgress(null)
             toast.success(
                 <span>
@@ -96,7 +95,7 @@ export const DockerContainerList = ({ initialHealth, initialContainers }: Docker
 
     const startMutation = useMutation({
         mutationFn: (containerName: string) => dockerApi.startContainer(containerName),
-        onSuccess: (_data: ApiResponse, containerName: string) => {
+        onSuccess: (_data: StatusOnlyResponse, containerName: string) => {
             setActionInProgress(null)
             toast.success(
                 <span>

@@ -52,7 +52,7 @@ type commandInitView struct {
 	sendError        func(ctx context.Context, room, message string) error
 	logger           *slog.Logger
 	majorEventRepo   command.MajorEventRepository
-	commandFactories []command.Factory
+	commandBuilders  []CommandBuilder
 }
 
 func (b *Bot) commandInitView() commandInitView {
@@ -76,7 +76,7 @@ func (b *Bot) commandInitView() commandInitView {
 		sendError:        b.sendError,
 		logger:           b.logger,
 		majorEventRepo:   b.majorEventRepo,
-		commandFactories: append([]command.Factory(nil), b.commandFactories...),
+		commandBuilders:  cloneCommandBuilders(b.commandBuilders),
 	}
 }
 
@@ -103,28 +103,59 @@ func (v commandInitView) toCommandDependencies(registry *command.Registry) *comm
 	return deps
 }
 
-func (v commandInitView) buildFactories() []command.Factory {
-	factories := append([]command.Factory{}, command.DefaultFactories()...)
+func (v commandInitView) buildCommands(deps *command.Dependencies) []command.Command {
+	commands := []command.Command{
+		command.NewHelpCommand(deps),
+		command.NewLiveCommand(deps),
+		command.NewUpcomingCommand(deps),
+		command.NewScheduleCommand(deps),
+		command.NewAlarmCommand(deps),
+		command.NewMemberInfoCommand(deps),
+		command.NewSubscriberCommand(deps),
+		command.NewStatsCommand(deps),
+	}
 
 	if v.majorEventRepo != nil {
 		v.logInfo("MajorEvent command enabled")
 
-		factories = append(factories, command.NewMajorEventFactory(v.majorEventRepo))
+		commands = append(commands, command.NewMajorEventCommand(deps, v.majorEventRepo))
 	}
 
 	if v.memberNews != nil {
 		v.logInfo("MemberNews commands enabled")
 
-		factories = append(factories, command.MemberNewsFactories()...)
+		commands = append(commands,
+			command.NewMemberNewsCommand(deps),
+			command.NewMemberNewsSubscriptionCommand(deps),
+		)
 	}
 
-	if len(v.commandFactories) > 0 {
-		v.logInfo("External command factories enabled", slog.Int("count", len(v.commandFactories)))
+	if len(v.commandBuilders) > 0 {
+		v.logInfo("External command builders enabled", slog.Int("count", len(v.commandBuilders)))
 
-		factories = append(factories, v.commandFactories...)
+		for _, builder := range v.commandBuilders {
+			if builder == nil {
+				continue
+			}
+
+			commands = append(commands, builder(deps))
+		}
 	}
 
-	return factories
+	return compactCommands(commands)
+}
+
+func compactCommands(commands []command.Command) []command.Command {
+	compacted := make([]command.Command, 0, len(commands))
+	for _, cmd := range commands {
+		if cmd == nil {
+			continue
+		}
+
+		compacted = append(compacted, cmd)
+	}
+
+	return compacted
 }
 
 func (v commandInitView) logInfo(msg string, args ...any) {

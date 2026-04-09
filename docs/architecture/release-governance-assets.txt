@@ -1,3 +1,9 @@
 # Release governance assets for architecture gate.
 # Format:
 # relative/path|version marker|required token|another token
+README.md||docs/current/PROJECT_MAP.md|docker-compose.prod.yml
+README.md||docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md|./build-all.sh
+docs/current/PROJECT_MAP.md||go.work|docker-compose.prod.yml
+docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md||./build-all.sh|./scripts/deploy/compose-redeploy-service.sh|docker-compose.prod.yml
+docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md|release-governance-template-version: 2026-03-03.v1|./scripts/architecture/ci-boundary-gate.sh|{{CI_ARTIFACT_URL}}
+.github/pull_request_template.md|release-governance-template-version: 2026-03-03.v1|./scripts/architecture/ci-boundary-gate.sh|docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md

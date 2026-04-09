@@ -26,10 +26,10 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	appproviders "github.com/kapu/hololive-stream-ingester/internal/app/providers"
 )
 
 // infraResources 는 캐시/DB 리소스를 담습니다.
@@ -42,9 +42,9 @@ type infraResources struct {
 	cleanupDB       func()
 }
 
-// initInfraResources 는 stream-ingester에 필요한 캐시/DB 리소스를 초기화합니다.
-func initInfraResources(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*infraResources, error) {
-	resources, err := providers.ProvideInfraResources(ctx, cfg, logger)
+// initStreamInfra 는 stream-ingester에 필요한 캐시/DB 리소스를 초기화합니다.
+func initStreamInfra(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*infraResources, error) {
+	resources, err := appproviders.ProvideInfraResources(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide infra resources: %w", err)
 	}

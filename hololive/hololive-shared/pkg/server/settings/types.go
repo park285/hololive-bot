@@ -20,53 +20,7 @@
 
 package settings
 
-import (
-	"context"
-	"reflect"
-)
-
-// ScraperProxyToggler: 스크래퍼 스케줄러 프록시 토글 인터페이스
-type ScraperProxyToggler interface {
-	SetProxyEnabled(enabled bool) int
-	ProxyEnabled() (enabled bool, known bool)
-}
-
-type scraperProxyRuntimeService interface {
-	SetScraperProxyEnabled(enabled bool) bool
-	ScraperProxyEnabled() bool
-}
-
-func normalizeScraperProxyRuntimeService(service scraperProxyRuntimeService) scraperProxyRuntimeService {
-	if service == nil {
-		return nil
-	}
-
-	value := reflect.ValueOf(service)
-	switch value.Kind() {
-	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func:
-		if value.IsNil() {
-			return nil
-		}
-	}
-
-	return service
-}
-
-func normalizeScraperProxyToggler(toggler ScraperProxyToggler) ScraperProxyToggler {
-	if toggler == nil {
-		return nil
-	}
-
-	value := reflect.ValueOf(toggler)
-	switch value.Kind() {
-	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func:
-		if value.IsNil() {
-			return nil
-		}
-	}
-
-	return toggler
-}
+import "context"
 
 // SettingsApplier: 설정 변경을 런타임에 적용하는 인터페이스
 type SettingsApplier interface {
@@ -74,10 +28,4 @@ type SettingsApplier interface {
 	ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) AlarmAdvanceMinutesApplyResult
 	ApplyMemberNewsWeeklyRunNow(ctx context.Context) MemberNewsWeeklyRunNowResult
 	ScraperProxyRuntimeState(requested bool) ScraperProxyRuntimeStateResult
-}
-
-// ConfigPublisher는 설정 변경을 다른 런타임으로 전파하는 인터페이스입니다.
-type ConfigPublisher interface {
-	PublishScraperProxy(ctx context.Context, enabled bool) error
-	PublishAlarmAdvanceMinutes(ctx context.Context, minutes int) error
 }

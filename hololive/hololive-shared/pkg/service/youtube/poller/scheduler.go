@@ -54,6 +54,7 @@ type Job struct {
 	Priority  Priority
 	NextRunAt time.Time
 	Interval  time.Duration
+	Offset    time.Duration
 	index     int // heap 인덱스
 }
 
@@ -123,14 +124,13 @@ func (s *Scheduler) Register(channelID string, poller Poller, priority Priority,
 
 	// 채널 ID와 폴러 이름으로 분산 오프셋 계산
 	offset := calculateOffset(key, interval)
-	nextRun := time.Now().Add(offset)
-
 	job := &Job{
 		ChannelID: channelID,
 		Poller:    poller,
 		Priority:  priority,
-		NextRunAt: nextRun,
+		NextRunAt: nextPollAt(time.Now(), interval, offset),
 		Interval:  interval,
+		Offset:    offset,
 	}
 
 	heap.Push(&s.jobs, job)
@@ -363,11 +363,29 @@ func (s *Scheduler) rescheduleJob(job *Job) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 지터 적용 (±10%)
-	jitter := time.Duration(float64(job.Interval) * (0.9 + 0.2*hashFloat(job.ChannelID+time.Now().String())))
-	job.NextRunAt = time.Now().Add(jitter)
+	job.NextRunAt = nextPollAt(time.Now(), job.Interval, job.Offset)
 
 	heap.Push(&s.jobs, job)
+}
+
+func nextPollAt(now time.Time, interval, offset time.Duration) time.Time {
+	if interval <= 0 {
+		return now
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= interval {
+		offset = offset % interval
+	}
+
+	next := now.Truncate(interval).Add(offset)
+	if next.After(now) {
+		return next
+	}
+
+	return next.Add(interval)
 }
 
 // calculateOffset: 채널별 분산 오프셋 계산
@@ -375,12 +393,6 @@ func calculateOffset(key string, interval time.Duration) time.Duration {
 	h := sha256.Sum256([]byte(key))
 	fraction := float64(binary.BigEndian.Uint32(h[:4])) / float64(^uint32(0))
 	return time.Duration(float64(interval) * fraction)
-}
-
-// hashFloat: 문자열을 0~1 사이 float로 해시
-func hashFloat(s string) float64 {
-	h := sha256.Sum256([]byte(s))
-	return float64(binary.BigEndian.Uint32(h[:4])) / float64(^uint32(0))
 }
 
 // jobHeap: 우선순위 큐 (min-heap by NextRunAt)

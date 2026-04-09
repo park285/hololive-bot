@@ -88,12 +88,13 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 		alarmYouTubeStack.youTubeStack,
 		alarmYouTubeStack.activityLogger,
 		alarmYouTubeStack.settingsService,
-			integrationServices.aclService,
-			integrationServices.majorEventRepo,
-			integrationServices.memberNewsService,
-			integrationServices.workerPool,
-			logger,
-		)
+		integrationServices.aclService,
+		integrationServices.majorEventRepo,
+		integrationServices.memberNewsService,
+		integrationServices.commandBuilders,
+		integrationServices.workerPool,
+		logger,
+	)
 	deps := ProvideBotDependencies(modules)
 
 	return &coreInfrastructure{

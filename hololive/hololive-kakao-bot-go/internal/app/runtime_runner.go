@@ -24,40 +24,32 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 // Run: 봇 애플리케이션을 실행하고 종료 신호(SIGINT, SIGTERM)를 대기한다. (블로킹).
 func (r *BotRuntime) Run() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-
-	errCh := make(chan error, 1)
-	r.Start(ctx, errCh)
-	r.Logger.Info("Bot started, waiting for signals...")
-
-	select {
-	case sig := <-sigCh:
-		r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
-	case err := <-errCh:
-		r.Logger.Error("Server error", slog.Any("error", err))
-	}
-
-	r.Logger.Info("Shutting down gracefully...")
-	cancel()
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
-	defer shutdownCancel()
-
-	r.Shutdown(shutdownCtx)
-
+	_ = lifecycle.Run(lifecycle.Options{
+		ShutdownTimeout: constants.AppTimeout.Shutdown,
+		Start: func(ctx context.Context, errCh chan<- error) {
+			r.Start(ctx, errCh)
+			r.Logger.Info("Bot started, waiting for signals...")
+		},
+		OnSignal: func(sig os.Signal) {
+			r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
+		},
+		OnError: func(err error) {
+			r.Logger.Error("Server error", slog.Any("error", err))
+		},
+		BeforeShutdown: func() {
+			r.Logger.Info("Shutting down gracefully...")
+		},
+		Shutdown: func(ctx context.Context) error {
+			r.Shutdown(ctx)
+			return nil
+		},
+	})
 	r.Logger.Info("Shutdown complete")
 }

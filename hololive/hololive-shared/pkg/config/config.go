@@ -154,6 +154,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Scraper: ScraperConfig{
 			ProxyEnabled: envutil.Bool("SCRAPER_PROXY_ENABLED", false),
 			ProxyURL:     envutil.String("SCRAPER_PROXY_URL", ""),
+			Poll:         loadScraperPoll(),
 		},
 		Webhook: WebhookConfig{
 			WorkerCount:    envutil.Int("WEBHOOK_WORKER_COUNT", 16),
@@ -217,6 +218,27 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 	return nil
+}
+
+func loadScraperPoll() ScraperPoll {
+	defaults := DefaultScraperPoll()
+
+	return ScraperPoll{
+		Videos:    secondsEnv("SCRAPER_VIDEOS_SECONDS", defaults.Videos),
+		Shorts:    secondsEnv("SCRAPER_SHORTS_SECONDS", defaults.Shorts),
+		Community: secondsEnv("SCRAPER_COMMUNITY_SECONDS", defaults.Community),
+		Stats:     secondsEnv("SCRAPER_STATS_SECONDS", defaults.Stats),
+		Live:      secondsEnv("SCRAPER_LIVE_SECONDS", defaults.Live),
+	}
+}
+
+func secondsEnv(key string, fallback time.Duration) time.Duration {
+	seconds := envutil.Int(key, int(fallback/time.Second))
+	if seconds <= 0 {
+		return fallback
+	}
+
+	return time.Duration(seconds) * time.Second
 }
 
 func isPlaceholderAPIKey(value string) bool {

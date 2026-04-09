@@ -26,10 +26,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os/signal"
+	"os"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
@@ -40,6 +39,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 const readyCheckTimeout = 2 * time.Second
@@ -142,37 +142,41 @@ func (r *Runtime) Run() {
 		return
 	}
 
-	runCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	dispatchCtx, dispatchCancel := context.WithCancel(runCtx)
+	dispatchCancel := func() {}
 	var wg sync.WaitGroup
-	wg.Go(func() {
-		r.runDispatchLoop(dispatchCtx)
+	_ = lifecycle.Run(lifecycle.Options{
+		ShutdownTimeout: constants.AppTimeout.Shutdown,
+		Start: func(ctx context.Context, errCh chan<- error) {
+			dispatchCtx, cancel := context.WithCancel(ctx)
+			dispatchCancel = cancel
+			wg.Go(func() {
+				r.runDispatchLoop(dispatchCtx)
+			})
+
+			go func() {
+				if err := r.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					errCh <- fmt.Errorf("run runtime: http server: %w", err)
+				}
+			}()
+			r.logger.Info("Dispatcher HTTP server started", slog.String("addr", r.httpServer.Addr))
+		},
+		OnSignal: func(os.Signal) {
+			r.logger.Info("Dispatcher shutdown signal received")
+		},
+		OnError: func(err error) {
+			r.logger.Error("Dispatcher HTTP server failed", slog.Any("error", err))
+		},
+		Shutdown: func(ctx context.Context) error {
+			dispatchCancel()
+			defer wg.Wait()
+
+			if err := r.httpServer.Shutdown(ctx); err != nil {
+				r.logger.Error("Dispatcher HTTP shutdown failed", slog.Any("error", err))
+				return err
+			}
+			return nil
+		},
 	})
-
-	serverErrCh := make(chan error, 1)
-	go func() {
-		if err := r.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErrCh <- fmt.Errorf("run runtime: http server: %w", err)
-		}
-	}()
-	r.logger.Info("Dispatcher HTTP server started", slog.String("addr", r.httpServer.Addr))
-
-	select {
-	case <-runCtx.Done():
-		r.logger.Info("Dispatcher shutdown signal received")
-	case err := <-serverErrCh:
-		r.logger.Error("Dispatcher HTTP server failed", slog.Any("error", err))
-	}
-
-	dispatchCancel()
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Shutdown)
-	defer shutdownCancel()
-	if err := r.httpServer.Shutdown(shutdownCtx); err != nil {
-		r.logger.Error("Dispatcher HTTP shutdown failed", slog.Any("error", err))
-	}
-	wg.Wait()
 }
 
 func (r *Runtime) runDispatchLoop(ctx context.Context) {

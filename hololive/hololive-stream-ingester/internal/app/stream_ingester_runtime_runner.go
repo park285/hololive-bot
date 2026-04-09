@@ -25,17 +25,17 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 // StreamIngesterRuntime: stream-ingester 전용 런타임 (YouTube/스크래퍼/PhotoSync/Outbox).
@@ -56,14 +56,15 @@ type StreamIngesterRuntime struct {
 	Readiness *ingestionReadinessState
 
 	ingestionLease *providers.IngestionLease
-	cleanup        func()
+	lifecycle.CleanupCloser
 }
 
-// Close: 리소스를 정리합니다.
 func (r *StreamIngesterRuntime) Close() {
-	if r != nil && r.cleanup != nil {
-		r.cleanup()
+	if r == nil {
+		return
 	}
+
+	r.CleanupCloser.Close()
 }
 
 func (r *StreamIngesterRuntime) runtimeName() string {
@@ -79,22 +80,36 @@ func (r *StreamIngesterRuntime) runtimeName() string {
 
 // Run: SIGINT/SIGTERM 신호를 대기하며 graceful shutdown을 수행합니다. (블로킹)
 func (r *StreamIngesterRuntime) Run() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-
-	errCh := make(chan error, 1)
-	r.startBackgroundServices(ctx, errCh)
-	r.startHTTPServer(errCh)
-	if r.Readiness != nil {
-		r.Readiness.markRunning()
-	}
-
-	r.waitForShutdown(sigCh, errCh)
-
-	cancel()
-	r.shutdown()
+	_ = lifecycle.Run(lifecycle.Options{
+		ShutdownTimeout: constants.AppTimeout.Shutdown,
+		Start: func(ctx context.Context, errCh chan<- error) {
+			r.startBackgroundServices(ctx, errCh)
+			r.startHTTPServer(errCh)
+			if r.Readiness != nil {
+				r.Readiness.markRunning()
+			}
+		},
+		OnSignal: func(sig os.Signal) {
+			if r.Readiness != nil {
+				r.Readiness.markStopping("")
+			}
+			r.Logger.Info("Received shutdown signal",
+				slog.String("runtime", r.runtimeName()),
+				slog.String("signal", sig.String()),
+			)
+		},
+		OnError: func(err error) {
+			if r.Readiness != nil {
+				r.Readiness.markStopping(err.Error())
+			}
+			r.Logger.Error("Server error",
+				slog.String("runtime", r.runtimeName()),
+				slog.Any("error", err),
+			)
+		},
+		Shutdown: func(ctx context.Context) error {
+			r.shutdown(ctx)
+			return nil
+		},
+	})
 }

@@ -1,7 +1,7 @@
-import type { SettingsResponse } from '@/types'
 import { useSSRData } from '@/hooks/useSSRData'
 import { SettingsForm } from '@/components/settings/SettingsForm'
 import { DockerContainerList } from '@/components/settings/DockerContainerList'
+import type { SettingsResponse } from '@/features/settings/types'
 
 const SettingsTab = () => {
     // SSR 데이터 소비 (useSSRData 훅 활용)
@@ -31,4 +31,3 @@ const SettingsTab = () => {
 }
 
 export default SettingsTab
-

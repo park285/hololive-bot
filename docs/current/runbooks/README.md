@@ -1,0 +1,12 @@
+# Current Runbooks
+
+현재 운영 runbook의 루트 인덱스입니다.
+
+## Canonical runbooks
+- `../../runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
+- `../../runbook_execution/YOUTUBE_SCRAPER_RUNBOOK.md`
+- `../../runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`
+
+## Rule
+- 새로운 현재 운영 runbook은 이 인덱스에서 발견 가능해야 합니다.
+- 실제 파일이 다른 디렉터리에 남아 있더라도 current-layer 인덱스에 연결되어야 합니다.

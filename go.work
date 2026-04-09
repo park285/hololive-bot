@@ -1,7 +1,7 @@
 go 1.26.1
 
 use (
-	../llm/shared-go
+	./shared-go
 	./hololive/hololive-dispatcher-go
 	./hololive/hololive-kakao-bot-go
 	./hololive/hololive-llm-sched

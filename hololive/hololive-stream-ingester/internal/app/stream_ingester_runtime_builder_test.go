@@ -23,6 +23,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,6 +41,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 func TestBuildStreamIngesterHTTPServer_Success(t *testing.T) {
@@ -83,8 +85,8 @@ func TestBuildStreamIngesterHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvalid
 	assert.Contains(t, err.Error(), "build stream ingester router: set trusted proxies")
 }
 
-func TestResolveIngestionRuntimeFeatures(t *testing.T) {
-	t.Run("stream ingester preserves configured flags", func(t *testing.T) {
+func TestBuildIngestionRuntimeSpec(t *testing.T) {
+	t.Run("stream ingester spec preserves configured flags", func(t *testing.T) {
 		cfg := &config.Config{
 			Ingestion: config.IngestionConfig{
 				YouTubeEnabled:   false,
@@ -92,12 +94,13 @@ func TestResolveIngestionRuntimeFeatures(t *testing.T) {
 			},
 		}
 
-		features := resolveIngestionRuntimeFeatures(cfg, streamIngesterRuntimeName, testLogger())
-		assert.False(t, features.youtubeEnabled)
-		assert.True(t, features.photoSyncEnabled)
+		spec := streamIngesterSpec(cfg)
+		assert.Equal(t, streamIngesterRuntimeName, spec.name)
+		assert.False(t, spec.features.youtubeEnabled)
+		assert.True(t, spec.features.photoSyncEnabled)
 	})
 
-	t.Run("youtube scraper enforces dedicated ingestion role", func(t *testing.T) {
+	t.Run("youtube scraper spec applies dedicated feature overrides", func(t *testing.T) {
 		cfg := &config.Config{
 			Ingestion: config.IngestionConfig{
 				YouTubeEnabled:   false,
@@ -105,9 +108,10 @@ func TestResolveIngestionRuntimeFeatures(t *testing.T) {
 			},
 		}
 
-		features := resolveIngestionRuntimeFeatures(cfg, youtubeScraperRuntimeName, testLogger())
-		assert.True(t, features.youtubeEnabled)
-		assert.False(t, features.photoSyncEnabled)
+		spec := youtubeScraperSpec(cfg)
+		assert.Equal(t, youtubeScraperRuntimeName, spec.name)
+		assert.True(t, spec.features.youtubeEnabled)
+		assert.False(t, spec.features.photoSyncEnabled)
 	})
 }
 
@@ -206,7 +210,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			desiredProxyState := infra.settingsService.Get().ScraperProxyEnabled
 			applyScraperProxyToggle(
 				desiredProxyState,
-				ProvideYouTubeService(infra.ytStack),
+				infra.ytStack.GetService(),
 				infra.holodexService,
 				scraperScheduler,
 				testLogger(),
@@ -243,13 +247,13 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				PhotoSync:        infra.photoSync,
 				OutboxDispatcher: outboxDispatcher,
 				ConfigSubscriber: configSubscriber,
-				ServerAddr:       ProvideAPIAddr(cfg),
+				ServerAddr:       fmt.Sprintf(":%d", cfg.Server.Port),
 				HttpServer:       httpServer,
 				Readiness:        readiness,
-				cleanup: func() {
+				CleanupCloser: lifecycle.NewCleanupCloser(func() {
 					infra.cleanupDB()
 					infra.cleanupCache()
-				},
+				}),
 			}
 
 			require.NotNil(t, runtime)

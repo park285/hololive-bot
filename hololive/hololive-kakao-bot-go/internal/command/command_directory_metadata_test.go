@@ -58,23 +58,15 @@ func TestCommandConstructorsNameDescription(t *testing.T) {
 	}
 }
 
-func TestFactoryHelpers(t *testing.T) {
+func TestOptionalCommandConstructors(t *testing.T) {
 	t.Parallel()
 
-	majorFactory := NewMajorEventFactory(nil)
-	require.NotNil(t, majorFactory)
-
-	majorCommand := majorFactory(nil)
+	majorCommand := NewMajorEventCommand(nil, nil)
 	require.NotNil(t, majorCommand)
 	assert.Equal(t, "major_event", majorCommand.Name())
 
-	newsFactories := MemberNewsFactories()
-	require.Len(t, newsFactories, 2)
-	require.NotNil(t, newsFactories[0])
-	require.NotNil(t, newsFactories[1])
-
-	newsCommand := newsFactories[0](nil)
-	subscriptionCommand := newsFactories[1](nil)
+	newsCommand := NewMemberNewsCommand(nil)
+	subscriptionCommand := NewMemberNewsSubscriptionCommand(nil)
 
 	require.NotNil(t, newsCommand)
 	require.NotNil(t, subscriptionCommand)

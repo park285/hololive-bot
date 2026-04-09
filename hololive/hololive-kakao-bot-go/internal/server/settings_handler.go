@@ -1,24 +1,4 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
-package settings
+package server
 
 import (
 	"context"
@@ -33,15 +13,6 @@ import (
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-// SettingsActivityLogger는 설정 변경 이벤트를 기록하는 최소 인터페이스입니다.
-type SettingsActivityLogger interface {
-	Log(entryType, summary string, details map[string]any)
-}
-
-// SettingsReadRecentLogsFunc는 최근 활동 로그 조회 함수 시그니처입니다.
-type SettingsReadRecentLogsFunc func(limit int) (any, error)
-
-// SettingsHandler는 설정 관련 공통 HTTP 핸들러 로직을 제공합니다.
 type SettingsHandler struct {
 	Logger          *slog.Logger
 	Alarm           domain.AlarmCRUD
@@ -52,7 +23,6 @@ type SettingsHandler struct {
 	SettingsApplier
 }
 
-// SetRoomName: 방 ID에 대한 표시 이름을 설정합니다.
 func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	var req struct {
 		RoomID   string `json:"roomId" binding:"required"`
@@ -90,7 +60,6 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	})
 }
 
-// SetUserName: 사용자 ID에 대한 표시 이름을 설정합니다.
 func (h *SettingsHandler) SetUserName(c *gin.Context) {
 	var req struct {
 		UserID   string `json:"userId" binding:"required"`
@@ -123,7 +92,6 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 	})
 }
 
-// GetLogs: 활동 로그를 반환합니다.
 func (h *SettingsHandler) GetLogs(c *gin.Context) {
 	logs, err := h.ReadRecentLogs(100)
 	if err != nil {
@@ -134,14 +102,12 @@ func (h *SettingsHandler) GetLogs(c *gin.Context) {
 	c.JSON(200, gin.H{"status": "ok", "logs": logs})
 }
 
-// GetSettings: 현재 설정을 반환합니다.
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	s := h.Settings.Get()
 	runtime := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled).AsMap()
 	c.JSON(200, gin.H{"status": "ok", "settings": s, "runtime": runtime})
 }
 
-// UpdateSettings: 설정을 업데이트합니다.
 func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	var req struct {
 		AlarmAdvanceMinutes *int  `json:"alarmAdvanceMinutes"`
@@ -192,7 +158,7 @@ func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[s
 	if scraperProxyEnabled != nil {
 		if err := h.ConfigPublisher.PublishScraperProxy(ctx, *scraperProxyEnabled); err != nil {
 			runtime["config_publish_scraper_proxy"] = false
-			runtime["config_publish_scraper_proxy_error"] = err.Error()
+			runtime["config_publish_scraper_proxy_error"] = fmt.Sprint(err)
 			h.Logger.Warn("Failed to publish scraper proxy update", slog.Any("error", err))
 		} else {
 			runtime["config_publish_scraper_proxy"] = true
@@ -202,7 +168,7 @@ func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[s
 	if alarmAdvanceMinutes != nil {
 		if err := h.ConfigPublisher.PublishAlarmAdvanceMinutes(ctx, *alarmAdvanceMinutes); err != nil {
 			runtime["config_publish_alarm_advance_minutes"] = false
-			runtime["config_publish_alarm_advance_minutes_error"] = err.Error()
+			runtime["config_publish_alarm_advance_minutes_error"] = fmt.Sprint(err)
 			h.Logger.Warn("Failed to publish alarm advance minutes update", slog.Any("error", err))
 		} else {
 			runtime["config_publish_alarm_advance_minutes"] = true
@@ -210,7 +176,6 @@ func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[s
 	}
 }
 
-// UpdateLLMSettings: llm-scheduler 런타임 설정/실행 트리거를 업데이트합니다.
 func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 	var req struct {
 		MajorEventScrapeHourKST *int  `json:"majorEventScrapeHourKST"`
