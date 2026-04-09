@@ -70,7 +70,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         );
 
     let proxy_routes = Router::new().route(
-        "/admin/api/holo/{*path}",
+        crate::proxy::HOLO_PROXY_ROUTE,
         any(crate::proxy::bot_proxy::proxy_holo),
     );
 
