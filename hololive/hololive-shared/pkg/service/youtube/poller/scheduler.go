@@ -94,6 +94,14 @@ func DefaultSchedulerConfig() SchedulerConfig {
 	}
 }
 
+// WorkerCount는 현재 스케줄러의 워커 수를 반환한다.
+func (s *Scheduler) WorkerCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.workerCount
+}
+
 // NewScheduler: 새 스케줄러 생성
 func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	if cfg.WorkerCount <= 0 {
@@ -286,9 +294,8 @@ func (s *Scheduler) dispatchDueJobs(ctx context.Context, jobCh chan<- *Job) {
 		select {
 		case jobCh <- job:
 		default:
-			// 채널 가득 참 - 다음 슬롯으로 미룸
+			// 채널 가득 참 - 현재 슬롯 anchor를 유지한 채 재시도한다.
 			schedulerDispatchDefer.WithLabelValues("worker_channel_full").Inc()
-			job.NextRunAt = now.Add(10 * time.Second)
 			heap.Push(&s.jobs, job)
 			return
 		}
@@ -363,9 +370,24 @@ func (s *Scheduler) rescheduleJob(job *Job) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	job.NextRunAt = nextPollAt(time.Now(), job.Interval, job.Offset)
+	job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, time.Now())
 
 	heap.Push(&s.jobs, job)
+}
+
+func advanceNextRunAt(scheduledAt time.Time, interval time.Duration, now time.Time) time.Time {
+	if interval <= 0 {
+		return now
+	}
+	if scheduledAt.IsZero() {
+		return now
+	}
+	if scheduledAt.After(now) {
+		return scheduledAt
+	}
+
+	skipped := now.Sub(scheduledAt)/interval + 1
+	return scheduledAt.Add(skipped * interval)
 }
 
 func nextPollAt(now time.Time, interval, offset time.Duration) time.Time {

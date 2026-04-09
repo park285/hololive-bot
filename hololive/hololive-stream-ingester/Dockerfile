@@ -33,7 +33,7 @@ WORKDIR /workspace/hololive-bot
 
 COPY go.work go.work.sum ./
 COPY --from=iris_client_go . ../iris-client-go
-COPY --from=shared_go_workspace . ../llm/shared-go
+COPY --from=shared_go_workspace . ./shared-go
 COPY hololive/hololive-dispatcher-go ./hololive/hololive-dispatcher-go
 COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
 COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
