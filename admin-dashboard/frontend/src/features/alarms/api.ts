@@ -1,12 +1,5 @@
-import apiClient from '@/api/client'
+import { holoApi, type HoloApiResponse } from '@/api/holo'
 import type { AlarmsResponse } from './types'
-
-interface ApiResponse<T = unknown> {
-  status: string
-  message?: string
-  error?: string
-  data?: T
-}
 
 interface DeleteAlarmRequest {
   roomId: string
@@ -15,33 +8,21 @@ interface DeleteAlarmRequest {
 }
 
 export const alarmsApi = {
-  getAll: async () => {
-    const response = await apiClient.get<AlarmsResponse>('/holo/alarms')
-    return response.data
-  },
+  getAll: async () => holoApi.get<AlarmsResponse>('/alarms'),
 
-  delete: async (request: DeleteAlarmRequest) => {
-    const response = await apiClient.delete<ApiResponse>('/holo/alarms', {
-      data: request,
-    })
-    return response.data
-  },
+  delete: async (request: DeleteAlarmRequest) => holoApi.delete<HoloApiResponse>('/alarms', {
+    data: request,
+  }),
 }
 
 export const namesApi = {
-  setRoomName: async (roomId: string, roomName: string) => {
-    const response = await apiClient.post<ApiResponse>('/holo/names/room', {
-      roomId,
-      roomName,
-    })
-    return response.data
-  },
+  setRoomName: async (roomId: string, roomName: string) => holoApi.post<HoloApiResponse>('/names/room', {
+    roomId,
+    roomName,
+  }),
 
-  setUserName: async (userId: string, userName: string) => {
-    const response = await apiClient.post<ApiResponse>('/holo/names/user', {
-      userId,
-      userName,
-    })
-    return response.data
-  },
+  setUserName: async (userId: string, userName: string) => holoApi.post<HoloApiResponse>('/names/user', {
+    userId,
+    userName,
+  }),
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
 
-const sourcePath = new URL('./media.ts', import.meta.url)
+const sourcePath = new URL('../../features/streams/lib/media.ts', import.meta.url)
 const source = await readFile(sourcePath, 'utf8')
 const transpiled = ts.transpileModule(source, {
   compilerOptions: {
