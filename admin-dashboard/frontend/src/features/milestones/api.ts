@@ -1,4 +1,4 @@
-import apiClient from '@/api/client'
+import { holoApi } from '@/api/holo'
 import type {
   GetMilestonesParams,
   MilestonesResponse,
@@ -9,25 +9,17 @@ import type {
 export type { GetMilestonesParams } from './types'
 
 export const milestonesApi = {
-  getAchieved: async (params?: GetMilestonesParams) => {
-    const response = await apiClient.get<MilestonesResponse>('/holo/milestones', {
-      params: {
-        limit: 50,
-        ...params,
-      },
-    })
-    return response.data
-  },
+  getAchieved: async (params?: GetMilestonesParams) => holoApi.get<MilestonesResponse>('/milestones', {
+    params: {
+      limit: 50,
+      ...params,
+    },
+  }),
 
-  getNear: async (threshold = 0.9) => {
-    const response = await apiClient.get<NearMilestonesResponse>('/holo/milestones/near', {
+  getNear: async (threshold = 0.9) =>
+    holoApi.get<NearMilestonesResponse>('/milestones/near', {
       params: { threshold },
-    })
-    return response.data
-  },
+    }),
 
-  getStats: async () => {
-    const response = await apiClient.get<MilestoneStatsResponse>('/holo/milestones/stats')
-    return response.data
-  },
+  getStats: async () => holoApi.get<MilestoneStatsResponse>('/milestones/stats'),
 }
