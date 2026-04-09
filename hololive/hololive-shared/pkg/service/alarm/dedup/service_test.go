@@ -392,6 +392,26 @@ func TestService_MarkAsNotified_TargetMinutePolicyAndScheduleReset(t *testing.T)
 	assert.True(t, already)
 }
 
+func TestService_UpdateTargetMinutes_AffectsTargetPolicy(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	streamID := "vid-dynamic-targets"
+	start := time.Date(2026, 3, 4, 10, 0, 0, 0, time.UTC)
+
+	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 10))
+
+	already, err := svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
+	require.NoError(t, err)
+	assert.False(t, already, "10분은 아직 target이 아니라서 3분을 막으면 안 됨")
+
+	svc.UpdateTargetMinutes([]int{10, 3, 1})
+
+	already, err = svc.IsAlreadyNotifiedForSchedule(t.Context(), streamID, start, 3)
+	require.NoError(t, err)
+	assert.True(t, already, "10분이 target으로 승격되면 같은 스케줄의 3분 target은 차단돼야 함")
+}
+
 func TestIsAlreadyNotified_PropagatesCacheError(t *testing.T) {
 	t.Parallel()
 
