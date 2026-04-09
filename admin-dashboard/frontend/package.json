@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "node --test src/components/streams/media.test.mjs",
     "preview": "vite preview",
     "generate:api": "mkdir -p ../backend/docs && (cd ../backend && cargo run --quiet --bin export-openapi > docs/swagger.json) && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
   },
