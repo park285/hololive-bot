@@ -27,10 +27,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
@@ -48,10 +50,11 @@ type UpcomingEventNotifiedData struct {
 
 // Service: SETNX 기반 4단계 알림 중복 방지 서비스
 type Service struct {
-	cache         cache.Client
-	targetMinutes []int
-	fallback      *LocalFallback
-	logger        *slog.Logger
+	cache           cache.Client
+	targetMinutes   []int
+	targetMinutesMu sync.RWMutex
+	fallback        *LocalFallback
+	logger          *slog.Logger
 }
 
 type notifiedDataSource int
@@ -70,10 +73,18 @@ func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Servi
 
 	return &Service{
 		cache:         c,
-		targetMinutes: targetMinutes,
+		targetMinutes: sharedchecker.NormalizeTargetMinutes(targetMinutes),
 		fallback:      NewLocalFallback(logger),
 		logger:        logger,
 	}
+}
+
+// UpdateTargetMinutes는 runtime target minute 정책을 원자적으로 교체한다.
+func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
+	s.targetMinutesMu.Lock()
+	defer s.targetMinutesMu.Unlock()
+
+	s.targetMinutes = sharedchecker.NormalizeTargetMinutes(targetMinutes)
 }
 
 // TryClaimNotification: 알림 발송 권한 선점 시도
@@ -83,7 +94,7 @@ func (s *Service) TryClaimNotification(ctx context.Context, roomID, streamID str
 		return "", false, nil
 	}
 
-	category := keys.NotificationCategory(s.targetMinutes, minutesUntil)
+	category := keys.NotificationCategory(s.targetMinutesSnapshot(), minutesUntil)
 	key := keys.BuildNotifyClaimKey(roomID, streamID, startScheduled, category)
 	acquired := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
 	return key, acquired, nil
@@ -99,7 +110,7 @@ func (s *Service) TryClaimLogicalEvent(ctx context.Context, roomID, channelID st
 		return "", false, nil
 	}
 
-	category := keys.NotificationCategory(s.targetMinutes, minutesUntil)
+	category := keys.NotificationCategory(s.targetMinutesSnapshot(), minutesUntil)
 	key := keys.BuildLogicalEventClaimKey(roomID, channelID, stream.ID, stream.Title, *stream.StartScheduled, category)
 	acquired := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
 	return key, acquired, nil
@@ -197,9 +208,11 @@ func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID str
 		return data.SentAt[0], nil
 	}
 
+	targetMinutes := s.targetMinutesSnapshot()
+
 	// target 분: 어떤 target이라도 발송됐으면 차단 (1회 정책)
-	if s.isTargetMinute(minutesUntil) {
-		for _, target := range s.targetMinutes {
+	if slices.Contains(targetMinutes, minutesUntil) {
+		for _, target := range targetMinutes {
 			if data.SentAt[target] {
 				return true, nil
 			}
@@ -287,7 +300,14 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 }
 
 func (s *Service) isTargetMinute(minutesUntil int) bool {
-	return slices.Contains(s.targetMinutes, minutesUntil)
+	return slices.Contains(s.targetMinutesSnapshot(), minutesUntil)
+}
+
+func (s *Service) targetMinutesSnapshot() []int {
+	s.targetMinutesMu.RLock()
+	defer s.targetMinutesMu.RUnlock()
+
+	return append([]int(nil), s.targetMinutes...)
 }
 
 // readNotifiedData: Valkey에서 NotifiedData 해시를 조회합니다.

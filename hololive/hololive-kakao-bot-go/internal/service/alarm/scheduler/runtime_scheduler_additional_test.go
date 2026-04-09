@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/alarm/checker"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 type runnerFunc struct {
@@ -57,6 +58,22 @@ func (s *senderFunc) Send(ctx context.Context, notifications []*domain.AlarmNoti
 	}
 
 	return s.send(ctx, notifications)
+}
+
+type targetMinutesSourceStub struct {
+	targets []int
+}
+
+func (s *targetMinutesSourceStub) GetTargetMinutes() []int {
+	return append([]int(nil), s.targets...)
+}
+
+type targetMinutesUpdaterStub struct {
+	calls [][]int
+}
+
+func (s *targetMinutesUpdaterStub) UpdateTargetMinutes(targets []int) {
+	s.calls = append(s.calls, append([]int(nil), targets...))
 }
 
 func testSchedulerLogger() *slog.Logger {
@@ -135,6 +152,54 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 		err := s.runYouTubeIteration(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dispatch notifications: send notifications")
+	})
+
+	t.Run("youtube iteration syncs target minutes before check", func(t *testing.T) {
+		youtubeUpdater := &targetMinutesUpdaterStub{}
+		dedupUpdater := &targetMinutesUpdaterStub{}
+		s := &RuntimeScheduler{
+			youtubeChecker: &runnerFunc{
+				check: func(context.Context) ([]*domain.AlarmNotification, error) {
+					return nil, nil
+				},
+			},
+			youtubeTargetUpdater: youtubeUpdater,
+			dedupTargetUpdater:   dedupUpdater,
+			targetMinutesSource:  &targetMinutesSourceStub{targets: []int{10, 3, 1}},
+			notifier:             &senderFunc{},
+			logger:               testSchedulerLogger(),
+		}
+
+		require.NoError(t, s.runYouTubeIteration(t.Context()))
+		assert.Equal(t, [][]int{{10, 3, 1}}, youtubeUpdater.calls)
+		assert.Equal(t, [][]int{{10, 3, 1}}, dedupUpdater.calls)
+	})
+
+	t.Run("youtube iteration picks up updated alarm service targets", func(t *testing.T) {
+		alarmSvc, err := notification.NewAlarmService(nil, nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+		require.NoError(t, err)
+
+		youtubeUpdater := &targetMinutesUpdaterStub{}
+		dedupUpdater := &targetMinutesUpdaterStub{}
+		s := &RuntimeScheduler{
+			youtubeChecker: &runnerFunc{
+				check: func(context.Context) ([]*domain.AlarmNotification, error) {
+					return nil, nil
+				},
+			},
+			youtubeTargetUpdater: youtubeUpdater,
+			dedupTargetUpdater:   dedupUpdater,
+			targetMinutesSource:  alarmSvc,
+			notifier:             &senderFunc{},
+			logger:               testSchedulerLogger(),
+		}
+
+		updated := alarmSvc.UpdateAlarmAdvanceMinutes(t.Context(), 12)
+		require.Equal(t, []int{12, 3, 1}, updated)
+
+		require.NoError(t, s.runYouTubeIteration(t.Context()))
+		assert.Equal(t, [][]int{{12, 3, 1}}, youtubeUpdater.calls)
+		assert.Equal(t, [][]int{{12, 3, 1}}, dedupUpdater.calls)
 	})
 
 	t.Run("chzzk success", func(t *testing.T) {

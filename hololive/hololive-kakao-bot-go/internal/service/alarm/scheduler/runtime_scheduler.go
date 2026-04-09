@@ -25,11 +25,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
@@ -51,12 +51,24 @@ const (
 	defaultPlatformTimeout = 30 * time.Second
 )
 
+type targetMinutesSource interface {
+	GetTargetMinutes() []int
+}
+
+type targetMinutesUpdater interface {
+	UpdateTargetMinutes([]int)
+}
+
 // RuntimeScheduler는 런타임 알람 체크 루프를 관리한다.
 type RuntimeScheduler struct {
 	youtubeChecker checker.Runner
 	chzzkChecker   checker.Runner
 	twitchChecker  checker.Runner
 	notifier       checker.Sender
+
+	youtubeTargetUpdater targetMinutesUpdater
+	dedupTargetUpdater   targetMinutesUpdater
+	targetMinutesSource  targetMinutesSource
 
 	youtubeInterval time.Duration
 	chzzkInterval   time.Duration
@@ -103,10 +115,7 @@ func NewRuntimeScheduler(
 		logger = slog.Default()
 	}
 
-	targetMinutes := normalizeTargetMinutes(notifCfg.AdvanceMinutes)
-	if len(targetMinutes) == 0 {
-		targetMinutes = normalizeTargetMinutes(alarmSvc.GetTargetMinutes())
-	}
+	targetMinutes := normalizeTargetMinutes(alarmSvc.GetTargetMinutes())
 
 	tierScheduler := tier.NewTieredScheduler(logger)
 	dedupSvc := dedup.NewService(cacheSvc, targetMinutes, logger)
@@ -142,6 +151,10 @@ func NewRuntimeScheduler(
 		chzzkChecker:   chzzkChecker,
 		twitchChecker:  twitchChecker,
 		notifier:       notifierSvc,
+
+		youtubeTargetUpdater: youtubeChecker,
+		dedupTargetUpdater:   dedupSvc,
+		targetMinutesSource:  alarmSvc,
 
 		youtubeInterval: youtubeInterval,
 		chzzkInterval:   defaultLiveInterval,
@@ -226,12 +239,28 @@ func nextAligned(now time.Time, interval time.Duration) time.Time {
 }
 
 func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
+	s.syncYouTubeTargetMinutes()
+
 	notifications, err := s.youtubeChecker.Check(ctx)
 	if err != nil {
 		return fmt.Errorf("run youtube iteration: check notifications: %w", err)
 	}
 
 	return s.dispatchNotifications(ctx, "youtube", notifications)
+}
+
+func (s *RuntimeScheduler) syncYouTubeTargetMinutes() {
+	if s.targetMinutesSource == nil {
+		return
+	}
+
+	targetMinutes := s.targetMinutesSource.GetTargetMinutes()
+	if s.youtubeTargetUpdater != nil {
+		s.youtubeTargetUpdater.UpdateTargetMinutes(targetMinutes)
+	}
+	if s.dedupTargetUpdater != nil {
+		s.dedupTargetUpdater.UpdateTargetMinutes(targetMinutes)
+	}
 }
 
 func (s *RuntimeScheduler) runChzzkIteration(ctx context.Context) error {
@@ -277,31 +306,5 @@ func (s *RuntimeScheduler) dispatchNotifications(
 }
 
 func normalizeTargetMinutes(targetMinutes []int) []int {
-	normalized := make([]int, 0, len(targetMinutes))
-
-	seen := make(map[int]struct{}, len(targetMinutes))
-	for _, minute := range targetMinutes {
-		if minute <= 0 {
-			continue
-		}
-
-		if _, ok := seen[minute]; ok {
-			continue
-		}
-
-		seen[minute] = struct{}{}
-		normalized = append(normalized, minute)
-	}
-
-	if len(normalized) == 0 {
-		return []int{5, 3, 1}
-	}
-
-	slices.SortFunc(normalized, func(a, b int) int { return b - a })
-
-	if _, ok := seen[1]; !ok {
-		normalized = append(normalized, 1)
-	}
-
-	return normalized
+	return sharedchecker.NormalizeTargetMinutes(targetMinutes)
 }
