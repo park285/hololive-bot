@@ -81,13 +81,16 @@ func ProvideScraperScheduler(
 	logger *slog.Logger,
 	opts ...ScraperSchedulerOption,
 ) *poller.Scheduler {
-	// 스케줄러 생성 (RequestInterval=0: 외부 sharedRL에 rate limiting 위임)
-	scheduler := poller.NewScheduler(poller.SchedulerConfig{
-		WorkerCount:     2,
-		RequestInterval: 0,
-	})
-
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
+
+	// 스케줄러 생성 (RequestInterval=0: 외부 sharedRL에 rate limiting 위임)
+	schedulerCfg := poller.DefaultSchedulerConfig()
+	schedulerCfg.RequestInterval = 0
+	if resolvedOpts.workerCount > 0 {
+		schedulerCfg.WorkerCount = resolvedOpts.workerCount
+	}
+	scheduler := poller.NewScheduler(schedulerCfg)
+
 	channelPollerRegistrations := resolvedOpts.channelPollerRegistrations
 	if len(channelPollerRegistrations) == 0 {
 		logger.Warn("Scraper scheduler initialized without poller registrations")

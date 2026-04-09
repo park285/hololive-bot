@@ -229,6 +229,20 @@ func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_WORKER_COUNT", "6")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.WorkerCount != 6 {
+		t.Fatalf("Scraper.WorkerCount = %d, want %d", cfg.Scraper.WorkerCount, 6)
+	}
+}
+
 func TestLoad_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")

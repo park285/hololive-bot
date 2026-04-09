@@ -16,7 +16,7 @@ cd "$SCRIPT_DIR"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 resolve_shared_go_workspace_path() {
-    local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
+    local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/shared-go}"
     if [ ! -d "$candidate" ]; then
         echo "[ERROR] Active shared-go workspace not found: $candidate"
         exit 1
@@ -25,7 +25,19 @@ resolve_shared_go_workspace_path() {
     printf '%s\n' "$candidate"
 }
 
-SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
+export SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
+
+resolve_iris_client_go_path() {
+    local candidate="${IRIS_CLIENT_GO_PATH:-${REPO_CANONICAL_ROOT}/../iris-client-go}"
+    if [ ! -d "$candidate" ]; then
+        echo "[ERROR] Active iris-client-go workspace not found: $candidate"
+        exit 1
+    fi
+
+    printf '%s\n' "$candidate"
+}
+
+export IRIS_CLIENT_GO_PATH="$(resolve_iris_client_go_path)"
 
 # 컨테이너 런타임 CLI (docker / podman)
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"

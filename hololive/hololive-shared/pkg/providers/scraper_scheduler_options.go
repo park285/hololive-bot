@@ -47,6 +47,7 @@ type ScraperSchedulerOption func(*scraperSchedulerOptions)
 
 type scraperSchedulerOptions struct {
 	channelPollerRegistrations []ChannelPollerRegistration
+	workerCount                int
 }
 
 // WithChannelPollerRegistrations: 채널 폴러 등록 정책을 주입한다.
@@ -56,6 +57,13 @@ func WithChannelPollerRegistrations(registrations []ChannelPollerRegistration) S
 
 	return func(options *scraperSchedulerOptions) {
 		options.channelPollerRegistrations = copied
+	}
+}
+
+// WithSchedulerWorkerCount: scraper scheduler worker 수를 주입한다.
+func WithSchedulerWorkerCount(workerCount int) ScraperSchedulerOption {
+	return func(options *scraperSchedulerOptions) {
+		options.workerCount = workerCount
 	}
 }
 
