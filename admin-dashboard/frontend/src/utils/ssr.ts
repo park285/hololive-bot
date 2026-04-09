@@ -5,7 +5,8 @@
  * 이를 TanStack Query의 initialData로 사용하여 초기 로딩 시 데이터 페칭을 생략합니다.
  */
 
-import type { Member, DockerContainer } from '@/types'
+import type { DockerContainer } from '@/api/core'
+import type { Member } from '@/features/members/types'
 
 export interface SSRData {
     members?: MembersSSRData
@@ -97,4 +98,3 @@ export function consumeSSRData<K extends keyof SSRData>(key: K): SSRData[K] | un
 export function hasSSRData(): boolean {
     return typeof window !== 'undefined' && window.__SSR_DATA__ !== undefined
 }
-

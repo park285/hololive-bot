@@ -1,4 +1,4 @@
-import type { Stream } from '@/types'
+import type { Stream } from '@/features/streams/types'
 
 export type ThumbnailQuality = 'max' | 'sd' | 'high'
 

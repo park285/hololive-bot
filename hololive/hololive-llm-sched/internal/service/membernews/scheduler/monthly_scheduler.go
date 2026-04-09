@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/schedulerkit"
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -49,11 +50,7 @@ type MonthlyScheduler struct {
 	locker     delivery.NotificationLocker
 	outboxRepo outboxEnqueuer
 	logger     *slog.Logger
-	now        func() time.Time
-
-	stopCh   chan struct{}
-	stopOnce sync.Once
-	wg       sync.WaitGroup
+	runtime    *schedulerkit.Runtime
 }
 
 // NewMonthlyScheduler: 월간 스케줄러 생성.
@@ -77,17 +74,23 @@ func NewMonthlyScheduler(
 		locker:     locker,
 		outboxRepo: outboxRepo,
 		logger:     logger,
-		now:        time.Now,
-		stopCh:     make(chan struct{}),
+		runtime:    schedulerkit.NewRuntime(),
 	}
 }
 
 // SetClock: 테스트용 시간 주입.
 func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
-	if s == nil || clockFn == nil {
+	if s == nil {
 		return
 	}
-	s.now = clockFn
+	s.runtime.SetClock(clockFn)
+}
+
+func (s *MonthlyScheduler) clock() time.Time {
+	if s == nil || s.runtime == nil {
+		return time.Now()
+	}
+	return s.runtime.Now()
 }
 
 // Start: 월간 발송 루프 시작.
@@ -95,8 +98,18 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	s.wg.Add(1)
-	go s.run(ctx)
+	s.runtime.Start(ctx, schedulerkit.Config{
+		Logger:           s.logger,
+		WaitingLog:       "Member news monthly scheduler waiting",
+		ContextStopLog:   "Member news monthly scheduler stopped by context",
+		StopLog:          "Member news monthly scheduler stopped",
+		CalculateNextRun: s.calculateNextRun,
+		OnTick: func(ctx context.Context) {
+			if err := s.SendMonthlyDigest(ctx); err != nil {
+				s.logger.Error("Member news monthly send failed", slog.String("error", err.Error()))
+			}
+		},
+	})
 }
 
 // Stop: 루프 중단.
@@ -104,38 +117,7 @@ func (s *MonthlyScheduler) Stop() {
 	if s == nil {
 		return
 	}
-	s.stopOnce.Do(func() {
-		close(s.stopCh)
-	})
-	s.wg.Wait()
-}
-
-func (s *MonthlyScheduler) run(ctx context.Context) {
-	defer s.wg.Done()
-
-	for {
-		nextRun := s.calculateNextRun(s.now())
-		s.logger.Info("Member news monthly scheduler waiting",
-			slog.Time("next_run", nextRun),
-			slog.Duration("wait_duration", time.Until(nextRun)),
-		)
-
-		timer := time.NewTimer(time.Until(nextRun))
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			s.logger.Info("Member news monthly scheduler stopped by context")
-			return
-		case <-s.stopCh:
-			timer.Stop()
-			s.logger.Info("Member news monthly scheduler stopped")
-			return
-		case <-timer.C:
-			if err := s.SendMonthlyDigest(ctx); err != nil {
-				s.logger.Error("Member news monthly send failed", slog.String("error", err.Error()))
-			}
-		}
-	}
+	s.runtime.Stop()
 }
 
 func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
@@ -232,6 +214,6 @@ func (s *MonthlyScheduler) processRoomDigest(ctx context.Context, monthKey, room
 }
 
 func (s *MonthlyScheduler) getMonthKey() string {
-	now := s.now().In(model.KST)
+	now := s.clock().In(model.KST)
 	return fmt.Sprintf("%d-%02d", now.Year(), now.Month())
 }

@@ -38,6 +38,7 @@ import (
 
 	membernewssvc "github.com/kapu/hololive-llm-sched/internal/service/membernews"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -84,7 +85,7 @@ func TestProvideDeliveryAndTriggerProviders(t *testing.T) {
 	assert.True(t, acquired)
 	assert.Empty(t, token)
 
-	triggerHandler := ProvideTriggerHandler(nil, nil, nil, logger)
+	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 	require.NotNil(t, triggerHandler)
 }
 

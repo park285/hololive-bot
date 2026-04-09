@@ -46,16 +46,7 @@ func buildStreamIngesterYouTubeComponents(
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) (*poller.Scheduler, *outbox.Dispatcher) {
-	scraperProxyConfig := scraper.ProxyConfig{
-		Enabled: scraperCfg.ProxyEnabled,
-		URL:     scraperCfg.ProxyURL,
-	}
-	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(
-		postgresService,
-		scraperProxyConfig,
-		sharedRL,
-		cacheService,
-	)
+	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(postgresService, scraperCfg, sharedRL, cacheService)
 
 	scraperScheduler := providers.ProvideScraperScheduler(
 		membersData,
@@ -69,12 +60,8 @@ func buildStreamIngesterYouTubeComponents(
 		irisClient,
 		templateRenderer,
 		logger,
-		outboxConfigFromEnv(),
+		outbox.DefaultConfig(),
 	)
 
 	return scraperScheduler, outboxDispatcher
-}
-
-func outboxConfigFromEnv() outbox.Config {
-	return outbox.DefaultConfig()
 }

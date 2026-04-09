@@ -25,8 +25,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	appproviders "github.com/kapu/hololive-kakao-bot-go/internal/app/providers"
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -44,7 +44,7 @@ type infraResources struct {
 
 // initInfraResources 는 캐시/DB 리소스를 초기화한다.
 func initInfraResources(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*infraResources, error) {
-	resources, err := providers.ProvideInfraResources(ctx, cfg, logger)
+	resources, err := appproviders.ProvideInfraResources(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide infra resources: %w", err)
 	}

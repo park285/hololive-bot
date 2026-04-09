@@ -100,12 +100,12 @@ func ProvideBotDependencies(modules botDependencyModules) *bot.Dependencies {
 		Service:          youTubeService,
 		Scheduler:        youTubeScheduler,
 		YouTubeStatsRepo: youTubeStatsRepo,
-			Activity:         modules.support.activityLogger,
-			Settings:         modules.support.settingsSvc,
-			ACL:              modules.support.aclSvc,
-			MajorEventRepo:   modules.feature.majorEventRepo,
-			MemberNews:       modules.feature.memberNewsSvc,
-			CommandFactories: modules.feature.commandFactories,
-			WorkerPool:       modules.support.workerPool,
-		}
+		Activity:         modules.support.activityLogger,
+		Settings:         modules.support.settingsSvc,
+		ACL:              modules.support.aclSvc,
+		MajorEventRepo:   modules.feature.majorEventRepo,
+		MemberNews:       modules.feature.memberNewsSvc,
+		CommandBuilders:  modules.feature.commandBuilders,
+		WorkerPool:       modules.support.workerPool,
+	}
 }

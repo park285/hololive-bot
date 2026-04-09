@@ -42,11 +42,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
-// ProvideAPIAddr: 관리자 서버가 리슨할 주소를 반환합니다.
-func ProvideAPIAddr(cfg *config.Config) string {
-	return fmt.Sprintf(":%d", cfg.Server.Port)
-}
-
 // ProvideAPIServer: 관리자용 HTTP 서버 인스턴스를 생성합니다.
 // H2C(HTTP/2 Cleartext)를 기본으로 사용하여 멀티플렉싱과 헤더 압축 이점을 제공한다.
 func ProvideAPIServer(addr string, router *gin.Engine) *http.Server {

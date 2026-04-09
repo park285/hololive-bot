@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-llm-sched/internal/schedulerkit"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -148,14 +149,14 @@ func TestNewScheduler(t *testing.T) {
 	if scheduler.formatter == nil {
 		t.Error("formatter not set")
 	}
-	if scheduler.stopCh == nil {
-		t.Error("stopCh not initialized")
+	if scheduler.runtime == nil {
+		t.Error("runtime not initialized")
 	}
 }
 
 func TestScheduler_StopOnce(t *testing.T) {
 	scheduler := &Scheduler{
-		stopCh: make(chan struct{}),
+		runtime: schedulerkit.NewRuntime(),
 	}
 
 	scheduler.Stop()
@@ -427,7 +428,6 @@ func TestSendWeeklyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing.
 	scheduler := &Scheduler{
 		locker: locker,
 		logger: testLogger(),
-		stopCh: make(chan struct{}),
 	}
 
 	err := scheduler.SendWeeklyNotification(context.Background())
@@ -445,7 +445,6 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 	scheduler := &MonthlyScheduler{
 		locker: locker,
 		logger: testLogger(),
-		stopCh: make(chan struct{}),
 	}
 
 	err := scheduler.SendMonthlyNotification(context.Background())

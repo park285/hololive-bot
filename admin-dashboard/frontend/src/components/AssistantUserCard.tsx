@@ -1,5 +1,4 @@
 import { Badge, Button, Card } from '@/components/ui'
-import type { AssistantUser } from '@/types'
 import Calendar from 'lucide-react/dist/esm/icons/calendar'
 import CheckSquare from 'lucide-react/dist/esm/icons/check-square'
 import Clock from 'lucide-react/dist/esm/icons/clock'
@@ -9,6 +8,23 @@ import Link2 from 'lucide-react/dist/esm/icons/link-2'
 import Link2Off from 'lucide-react/dist/esm/icons/link-2-off'
 import Power from 'lucide-react/dist/esm/icons/power'
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2'
+
+type AssistantUser = {
+  id: string
+  internalId: string
+  isConnected: boolean
+  lastActivity: string
+  stats: {
+    memos: number
+    todos: number
+    reminders: number
+  }
+  features: {
+    morningBriefing: boolean
+    weatherAlerts: boolean
+    reminders: boolean
+  }
+}
 
 type AssistantUserCardProps = {
   user: AssistantUser

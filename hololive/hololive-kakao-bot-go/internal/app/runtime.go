@@ -21,8 +21,8 @@
 package app
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
@@ -54,14 +55,15 @@ type BotRuntime struct {
 	webhookHandlerCloser interface{ Close() error }
 	alarmSchedulerMu     sync.Mutex
 	alarmSchedulerCancel context.CancelFunc
-	cleanup              func()
+	lifecycle.CleanupCloser
 }
 
-// Close - 런타임 리소스 정리 (DB, 캐시 연결 해제).
 func (r *BotRuntime) Close() {
-	if r != nil && r.cleanup != nil {
-		r.cleanup()
+	if r == nil {
+		return
 	}
+
+	r.CleanupCloser.Close()
 }
 
 // BuildRuntime: 설정과 로거를 기반으로 봇 런타임 환경을 구성하고 모든 의존성을 초기화합니다.
@@ -83,7 +85,7 @@ func BuildRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}
 
-	runtime.cleanup = cleanup
+	runtime.CleanupCloser = lifecycle.NewCleanupCloser(cleanup)
 
 	return runtime, nil
 }

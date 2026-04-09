@@ -30,6 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/stretchr/testify/assert"
@@ -55,7 +56,7 @@ func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	handler := ProvideTriggerHandler(nil, nil, nil, logger)
+	handler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 	require.NotNil(t, handler)
 
 	router := gin.New()

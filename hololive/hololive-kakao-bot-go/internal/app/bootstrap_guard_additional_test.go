@@ -31,6 +31,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -43,6 +44,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
@@ -133,7 +136,7 @@ func TestInitializeDBIntegrationRuntime_ContextCanceled(t *testing.T) {
 func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
 	t.Parallel()
 
-	handler := ProvideTriggerHandler(nil, nil, nil, testBootstrapGuardLogger())
+	handler := sharedserver.NewTriggerHandler(nil, nil, nil, testBootstrapGuardLogger())
 	require.NotNil(t, handler)
 }
 
@@ -232,6 +235,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	settingsSvc := &settings.Service{}
 	aclSvc := &acl.Service{}
 	workerPool := &workerpool.Pool{}
+	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command { return nil })
 
 	modules := buildBotDependencyModules(
 		&config.Config{
@@ -253,6 +257,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 		aclSvc,
 		&stubMajorEventRepo{},
 		&stubMemberNewsService{},
+		[]bot.CommandBuilder{commandBuilder},
 		workerPool,
 		logger,
 	)
@@ -271,6 +276,8 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	assert.Same(t, activityLogger, modules.support.activityLogger)
 	assert.Same(t, settingsSvc, modules.support.settingsSvc)
 	assert.Same(t, aclSvc, modules.support.aclSvc)
+	require.Len(t, modules.feature.commandBuilders, 1)
+	assert.NotNil(t, modules.feature.commandBuilders[0])
 	assert.Same(t, workerPool, modules.support.workerPool)
 }
 

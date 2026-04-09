@@ -26,7 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	appproviders "github.com/kapu/hololive-stream-ingester/internal/app/providers"
 	"github.com/park285/iris-client-go/iris"
 )
 
@@ -45,7 +46,7 @@ type streamIngesterInfrastructure struct {
 	irisClient       iris.Sender
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
-	ytStack          *providers.YouTubeStack
+	ytStack          *appproviders.YouTubeStack
 	photoSync        *holodex.PhotoSyncService
 	templateRenderer *template.Renderer
 	sharedRL         *scraper.RateLimiter
@@ -56,7 +57,7 @@ type streamIngesterInfrastructure struct {
 // initStreamIngesterInfrastructure: stream-ingester에 필요한 최소 인프라만 초기화한다.
 // alarm/ACL/activity/workerPool 등 bot 전용 구성요소를 제외한다.
 func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *streamIngesterInfrastructure, retErr error) {
-	infra, err := initInfraResources(ctx, cfg, logger)
+	infra, err := initStreamInfra(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -67,36 +68,36 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		}
 	}()
 
-	irisClient, err := providers.ProvideIrisClient(logger)
+	irisClient, err := sharedproviders.ProvideIrisClient(logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide iris client: %w", err)
 	}
 	templateRenderer := template.NewRenderer(infra.postgresService.GetGormDB(), logger)
 
-	holodexAPIKey := providers.ProvideHolodexAPIKey(cfg.Holodex)
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.memberCache, logger)
+	holodexAPIKey := sharedproviders.ProvideHolodexAPIKey(cfg.Holodex)
+	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.memberCache, logger)
 	membersData := memberServiceAdapter
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: cfg.Scraper.ProxyEnabled,
 		URL:     cfg.Scraper.ProxyURL,
 	}
 
-	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.cacheService, logger)
+	sharedRL, err := sharedproviders.ProvideYouTubeScraperRateLimiter(infra.cacheService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
 	}
 
-	scraperService := providers.ProvideScraperService(infra.cacheService, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
-	holodexService, err := providers.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKey, infra.cacheService, scraperService, logger)
+	scraperService := sharedproviders.ProvideScraperService(infra.cacheService, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
+	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKey, infra.cacheService, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	youTubeStatsRepository := providers.ProvideYouTubeStatsRepository(infra.postgresService, logger)
+	youTubeStatsRepository := sharedproviders.ProvideYouTubeStatsRepository(infra.postgresService, logger)
 	// stream-ingester는 alarm dispatch가 없으므로 alarmSvc=nil로 전달
-	youTubeStack := providers.ProvideYouTubeStack(ctx, cfg.YouTube, cfg.Scraper, infra.cacheService, holodexService, memberServiceAdapter, youTubeStatsRepository, nil, irisClient, nil, sharedRL, logger)
+	youTubeStack := appproviders.ProvideYouTubeStack(ctx, cfg.YouTube, cfg.Scraper, infra.cacheService, holodexService, memberServiceAdapter, youTubeStatsRepository, nil, irisClient, nil, sharedRL, logger)
 
-	settingsService := providers.ProvideSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
+	settingsService := appproviders.ProvideSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
 
 	return &streamIngesterInfrastructure{
 		cacheService:     infra.cacheService,

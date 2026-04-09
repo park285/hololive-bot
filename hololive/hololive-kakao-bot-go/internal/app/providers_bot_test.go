@@ -38,6 +38,8 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
@@ -119,6 +121,9 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	majorEventRepo := &stubMajorEventRepo{}
 	memberNewsSvc := &stubMemberNewsService{}
 	workerPool := &workerpool.Pool{}
+	commandBuilder := bot.CommandBuilder(func(_ *command.Dependencies) command.Command {
+		return nil
+	})
 
 	deps := ProvideBotDependencies(botDependencyModules{
 		core: botCoreModule{
@@ -155,8 +160,9 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			workerPool:     workerPool,
 		},
 		feature: botFeatureModule{
-			majorEventRepo: majorEventRepo,
-			memberNewsSvc:  memberNewsSvc,
+			majorEventRepo:  majorEventRepo,
+			memberNewsSvc:   memberNewsSvc,
+			commandBuilders: []bot.CommandBuilder{commandBuilder},
 		},
 	})
 
@@ -202,6 +208,10 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 
 	if deps.WorkerPool != workerPool {
 		t.Fatal("worker pool wiring mismatch")
+	}
+
+	if len(deps.CommandBuilders) != 1 || deps.CommandBuilders[0] == nil {
+		t.Fatal("command builder wiring mismatch")
 	}
 }
 

@@ -71,3 +71,14 @@ func TestScheduler_SetProxyEnabled(t *testing.T) {
 	assert.True(t, known)
 	assert.True(t, enabled)
 }
+
+func TestNextPollAt_KeepsAnchor(t *testing.T) {
+	now := time.Date(2026, time.April, 9, 10, 2, 10, 0, time.UTC)
+	interval := 5 * time.Minute
+	offset := 2 * time.Minute
+
+	got := nextPollAt(now, interval, offset)
+	want := time.Date(2026, time.April, 9, 10, 7, 0, 0, time.UTC)
+
+	assert.Equal(t, want, got)
+}
