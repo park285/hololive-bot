@@ -52,6 +52,7 @@ func buildStreamIngesterYouTubeComponents(
 		membersData,
 		logger,
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
+		providers.WithSchedulerWorkerCount(scraperCfg.WorkerCountOrDefault()),
 	)
 
 	outboxDispatcher := outbox.NewDispatcher(

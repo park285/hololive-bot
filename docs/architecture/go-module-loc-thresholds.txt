@@ -1,3 +1,8 @@
 # File-level LOC thresholds for architecture gate.
 # Format:
 # relative/path/to/file.go:MAX_LINES
+hololive/hololive-shared/pkg/service/youtube/scheduler.go:1150
+hololive/hololive-shared/pkg/service/youtube/service.go:950
+hololive/hololive-shared/pkg/service/member/repository.go:850
+hololive/hololive-shared/pkg/service/holodex/scraper.go:750
+hololive/hololive-shared/pkg/service/youtube/poller/pollers.go:700

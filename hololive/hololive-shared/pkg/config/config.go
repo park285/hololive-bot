@@ -154,6 +154,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Scraper: ScraperConfig{
 			ProxyEnabled: envutil.Bool("SCRAPER_PROXY_ENABLED", false),
 			ProxyURL:     envutil.String("SCRAPER_PROXY_URL", ""),
+			WorkerCount:  intEnv("SCRAPER_WORKER_COUNT", DefaultScraperWorkerCount()),
 			Poll:         loadScraperPoll(),
 		},
 		Webhook: WebhookConfig{
@@ -239,6 +240,15 @@ func secondsEnv(key string, fallback time.Duration) time.Duration {
 	}
 
 	return time.Duration(seconds) * time.Second
+}
+
+func intEnv(key string, fallback int) int {
+	value := envutil.Int(key, fallback)
+	if value <= 0 {
+		return fallback
+	}
+
+	return value
 }
 
 func isPlaceholderAPIKey(value string) bool {

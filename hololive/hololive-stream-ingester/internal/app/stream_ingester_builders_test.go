@@ -234,6 +234,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		config.ScraperConfig{
 			ProxyEnabled: true,
 			ProxyURL:     "socks5://proxy.internal:1080",
+			WorkerCount:  7,
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
 				Shorts:    10 * time.Minute,
@@ -256,6 +257,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 
 	// active 멤버 1명 * 기본 poller 5종
 	assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
+	assert.Equal(t, 7, scraperScheduler.WorkerCount())
 	assert.Equal(t, 5, scraperScheduler.SetProxyEnabled(false))
 }
 
