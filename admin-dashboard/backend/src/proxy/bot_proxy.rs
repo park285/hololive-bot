@@ -95,9 +95,12 @@ pub async fn proxy_holo(
 
     // Path rewrite: /admin/api/holo/<path> -> /api/holo/<path>
     let original_path = parts.uri.path();
-    let new_path = original_path
-        .strip_prefix("/admin")
-        .unwrap_or(original_path);
+    let new_path =
+        if let Some(rewritten) = original_path.strip_prefix(crate::proxy::HOLO_PROXY_PREFIX) {
+            format!("{}{}", crate::proxy::HOLO_UPSTREAM_PREFIX, rewritten)
+        } else {
+            original_path.to_string()
+        };
     let query = parts
         .uri
         .path_and_query()
@@ -170,14 +173,26 @@ mod tests {
     #[test]
     fn test_path_rewrite() {
         let original = "/admin/api/holo/members";
-        let rewritten = original.strip_prefix("/admin").unwrap();
+        let rewritten = format!(
+            "{}{}",
+            crate::proxy::HOLO_UPSTREAM_PREFIX,
+            original
+                .strip_prefix(crate::proxy::HOLO_PROXY_PREFIX)
+                .unwrap()
+        );
         assert_eq!(rewritten, "/api/holo/members");
     }
 
     #[test]
     fn test_path_rewrite_nested() {
         let original = "/admin/api/holo/rooms/list";
-        let rewritten = original.strip_prefix("/admin").unwrap();
+        let rewritten = format!(
+            "{}{}",
+            crate::proxy::HOLO_UPSTREAM_PREFIX,
+            original
+                .strip_prefix(crate::proxy::HOLO_PROXY_PREFIX)
+                .unwrap()
+        );
         assert_eq!(rewritten, "/api/holo/rooms/list");
     }
 
