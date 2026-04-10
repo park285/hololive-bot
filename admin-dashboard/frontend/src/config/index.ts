@@ -1,1 +1,1 @@
-export { CONFIG, type AppConfig } from '@/config/constants'
+export { type AppConfig, CONFIG } from "@/config/constants";

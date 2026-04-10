@@ -1,8 +1,4 @@
-export interface Settings {
-  alarmAdvanceMinutes: number
-}
-
-export interface SettingsResponse {
-  status: string
-  settings: Settings
-}
+export type {
+	Settings,
+	SettingsResponse,
+} from "@/api/generated/data-contracts";

@@ -3,78 +3,86 @@
  * TanStack Query 에러를 graceful하게 처리하는 Error Boundary
  */
 
-import { Component, type ReactNode, type ErrorInfo } from 'react'
-import AlertTriangle from 'lucide-react/dist/esm/icons/alert-triangle'
-import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw'
-import { Button } from '@/components/ui'
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "@/components/ui";
 
 interface ErrorBoundaryProps {
-    children: ReactNode
-    fallback?: ReactNode
-    onError?: (error: Error, errorInfo: ErrorInfo) => void
+	children: ReactNode;
+	fallback?: ReactNode;
+	onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface ErrorBoundaryState {
-    hasError: boolean
-    error: Error | null
+	hasError: boolean;
+	error: Error | null;
 }
 
-export class QueryErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-    constructor(props: ErrorBoundaryProps) {
-        super(props)
-        this.state = { hasError: false, error: null }
-    }
+export class QueryErrorBoundary extends Component<
+	ErrorBoundaryProps,
+	ErrorBoundaryState
+> {
+	constructor(props: ErrorBoundaryProps) {
+		super(props);
+		this.state = { hasError: false, error: null };
+	}
 
-    static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-        return { hasError: true, error }
-    }
+	static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+		return { hasError: true, error };
+	}
 
-    componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-        console.error('QueryErrorBoundary caught an error:', error, errorInfo)
-        this.props.onError?.(error, errorInfo)
-    }
+	componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+		console.error("QueryErrorBoundary caught an error:", error, errorInfo);
+		this.props.onError?.(error, errorInfo);
+	}
 
-    handleRetry = (): void => {
-        this.setState({ hasError: false, error: null })
-    }
+	handleRetry = (): void => {
+		this.setState({ hasError: false, error: null });
+	};
 
-    render(): ReactNode {
-        if (this.state.hasError) {
-            if (this.props.fallback) {
-                return this.props.fallback
-            }
+	render(): ReactNode {
+		if (this.state.hasError) {
+			if (this.props.fallback) {
+				return this.props.fallback;
+			}
 
-            return (
-                <div className="flex flex-col items-center justify-center min-h-[300px] p-8 rounded-2xl border border-border/60 bg-white/50 backdrop-blur-sm shadow-sm">
-                    <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mb-5 ring-4 ring-rose-50/50">
-                        <AlertTriangle className="w-7 h-7 text-rose-500" strokeWidth={1.5} />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900 mb-2 tracking-tight">문제가 발생했습니다</h3>
-                    <p className="text-sm text-slate-500 mb-6 text-center max-w-md leading-relaxed break-keep">
-                        {this.state.error?.message ?? '알 수 없는 오류가 발생했습니다.'}
-                    </p>
-                    <Button
-                        onClick={this.handleRetry}
-                        variant="outline"
-                        className="gap-2 pl-3 pr-4 h-10 shadow-sm hover:border-slate-300 hover:bg-white transition-all"
-                    >
-                        <RefreshCw size={16} />
-                        다시 시도
-                    </Button>
-                </div>
-            )
-        }
+			return (
+				<div className="flex flex-col items-center justify-center min-h-[300px] p-8 rounded-2xl border border-border/60 bg-white/50 backdrop-blur-sm shadow-sm">
+					<div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mb-5 ring-4 ring-rose-50/50">
+						<AlertTriangle
+							className="w-7 h-7 text-rose-500"
+							strokeWidth={1.5}
+						/>
+					</div>
+					<h3 className="text-lg font-bold text-slate-900 mb-2 tracking-tight">
+						문제가 발생했습니다
+					</h3>
+					<p className="text-sm text-slate-500 mb-6 text-center max-w-md leading-relaxed break-keep">
+						{this.state.error?.message ?? "알 수 없는 오류가 발생했습니다."}
+					</p>
+					<Button
+						onClick={this.handleRetry}
+						variant="outline"
+						className="gap-2 pl-3 pr-4 h-10 shadow-sm hover:border-slate-300 hover:bg-white transition-all"
+					>
+						<RefreshCw size={16} />
+						다시 시도
+					</Button>
+				</div>
+			);
+		}
 
-        return this.props.children
-    }
+		return this.props.children;
+	}
 }
 
 /**
  * Suspense와 함께 사용하는 간단한 로딩 Fallback
  */
 export const QueryLoadingFallback = () => (
-    <div className="flex items-center justify-center min-h-[200px] text-slate-400">
-        <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-        <span className="text-sm font-medium">로딩 중…</span>
-    </div>
-)
+	<div className="flex items-center justify-center min-h-[200px] text-slate-400">
+		<RefreshCw className="w-5 h-5 animate-spin mr-2" />
+		<span className="text-sm font-medium">로딩 중…</span>
+	</div>
+);

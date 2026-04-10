@@ -10,10 +10,64 @@
  * ---------------------------------------------------------------
  */
 
+export interface AddAliasRequest {
+  alias: string;
+  /** @example "ko" */
+  type: string;
+}
+
+export interface AddMemberRequest {
+  aliases: Aliases;
+  channelId: string;
+  isGraduated: boolean;
+  name: string;
+  nameJa?: string | null;
+  nameKo?: string | null;
+}
+
+export interface AddRoomRequest {
+  room: string;
+}
+
 export interface AggregatedStatus {
   services: ServiceStatus[];
   uptime: string;
   version: string;
+}
+
+export interface Alarm {
+  channelId: string;
+  memberName: string;
+  roomId: string;
+  roomName: string;
+  userId: string;
+  userName: string;
+}
+
+export interface AlarmsResponse {
+  alarms: Alarm[];
+  status: string;
+}
+
+export interface Aliases {
+  ja: string[];
+  ko: string[];
+}
+
+export interface ChannelStat {
+  ChannelID: string;
+  ChannelTitle: string;
+  /** @format int64 */
+  SubscriberCount: number;
+  /** @format int64 */
+  VideoCount: number;
+  /** @format int64 */
+  ViewCount: number;
+}
+
+export interface ChannelStatsResponse {
+  stats: Partial<Record<string, ChannelStat>>;
+  status: string;
 }
 
 export interface Container {
@@ -26,6 +80,12 @@ export interface Container {
   ports: PortMapping[];
   state: string;
   status: string;
+}
+
+export interface DeleteAlarmRequest {
+  channelId: string;
+  roomId: string;
+  userId: string;
 }
 
 export interface DockerActionResponse {
@@ -65,6 +125,81 @@ export interface LoginResponse {
   status: string;
 }
 
+export interface Member {
+  aliases: Aliases;
+  channelId: string;
+  /** @format int64 */
+  id: number;
+  isGraduated: boolean;
+  name: string;
+  nameJa?: string | null;
+  nameKo?: string | null;
+}
+
+export interface MembersResponse {
+  members: Member[];
+  status: string;
+}
+
+export interface Milestone {
+  achievedAt: string;
+  channelId: string;
+  memberName: string;
+  notified: boolean;
+  type: string;
+  /** @format int64 */
+  value: number;
+}
+
+export interface MilestoneStats {
+  /** @format int64 */
+  notNotifiedCount: number;
+  /** @format int64 */
+  recentAchievements: number;
+  /** @format int64 */
+  totalAchieved: number;
+  /** @format int64 */
+  totalNearMilestone: number;
+}
+
+export interface MilestoneStatsResponse {
+  stats: MilestoneStats;
+  status: string;
+}
+
+export interface MilestonesResponse {
+  /** @format int64 */
+  limit: number;
+  milestones: Milestone[];
+  /** @format int64 */
+  offset: number;
+  status: string;
+  /** @format int64 */
+  total: number;
+}
+
+export interface NearMilestone {
+  channelId: string;
+  /** @format int64 */
+  currentSubs: number;
+  memberName: string;
+  /** @format int64 */
+  nextMilestone: number;
+  /** @format double */
+  progressPct: number;
+  /** @format int64 */
+  remaining: number;
+}
+
+export interface NearMilestonesResponse {
+  /** @format int64 */
+  count: number;
+  members: NearMilestone[];
+  status: string;
+  /** @format double */
+  threshold: number;
+}
+
 export interface PortMapping {
   port_type: string;
   /**
@@ -77,6 +212,28 @@ export interface PortMapping {
    * @min 0
    */
   public_port?: number | null;
+}
+
+export interface RemoveAliasRequest {
+  alias: string;
+  /** @example "ja" */
+  type: string;
+}
+
+export interface RemoveRoomRequest {
+  room: string;
+}
+
+export interface RoomNameUpdateRequest {
+  roomId: string;
+  roomName: string;
+}
+
+export interface RoomsResponse {
+  aclEnabled: boolean;
+  aclMode: string;
+  rooms: string[];
+  status: string;
 }
 
 export interface ServiceStatus {
@@ -94,4 +251,77 @@ export interface SessionStatusResponse {
   authenticated: boolean;
   status: string;
   username: string;
+}
+
+export interface SetAclRequest {
+  enabled?: boolean | null;
+  mode?: string | null;
+}
+
+export interface SetAclResponse {
+  enabled: boolean;
+  mode: string;
+  status: string;
+}
+
+export interface SetGraduationRequest {
+  isGraduated: boolean;
+}
+
+export interface Settings {
+  /** @format int32 */
+  alarmAdvanceMinutes: number;
+}
+
+export interface SettingsResponse {
+  settings: Settings;
+  status: string;
+}
+
+export interface StatsResponse {
+  /** @format int32 */
+  alarms: number;
+  /** @format int32 */
+  members: number;
+  /** @format int32 */
+  rooms: number;
+  status: string;
+  uptime: string;
+  version: string;
+}
+
+export interface StatusOnlyResponse {
+  message?: string | null;
+  status: string;
+}
+
+export interface Stream {
+  channel_id: string;
+  channel_name?: string | null;
+  id: string;
+  link?: string | null;
+  start_actual?: string | null;
+  start_scheduled?: string | null;
+  status: string;
+  thumbnail?: string | null;
+  title: string;
+}
+
+export interface StreamsResponse {
+  org?: string | null;
+  status: string;
+  streams: Stream[];
+}
+
+export interface UpdateChannelRequest {
+  channelId: string;
+}
+
+export interface UpdateMemberNameRequest {
+  name: string;
+}
+
+export interface UserNameUpdateRequest {
+  userId: string;
+  userName: string;
 }

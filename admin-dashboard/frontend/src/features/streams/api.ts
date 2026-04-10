@@ -1,23 +1,19 @@
-import { holoApi } from '@/api/holo'
-import type { StreamOrg, StreamsResponse } from './types'
+import { holoClient } from "@/api/holoClient";
+import type { StreamOrg } from "./types";
 
 export const streamsApi = {
-  getLive: async (org: StreamOrg = 'hololive') => {
-    const response = await holoApi.get<StreamsResponse>('/streams/live', {
-      params: { org },
-    })
-    return {
-      ...response,
-      streams: Array.isArray(response.streams) ? response.streams : [],
-    }
-  },
-  getUpcoming: async (org: StreamOrg = 'hololive') => {
-    const response = await holoApi.get<StreamsResponse>('/streams/upcoming', {
-      params: { org },
-    })
-    return {
-      ...response,
-      streams: Array.isArray(response.streams) ? response.streams : [],
-    }
-  },
-}
+	getLive: async (org: StreamOrg = "hololive") => {
+		const response = await holoClient.getLiveStreams(org);
+		return {
+			...response,
+			streams: Array.isArray(response.streams) ? response.streams : [],
+		};
+	},
+	getUpcoming: async (org: StreamOrg = "hololive") => {
+		const response = await holoClient.getUpcomingStreams(org);
+		return {
+			...response,
+			streams: Array.isArray(response.streams) ? response.streams : [],
+		};
+	},
+};

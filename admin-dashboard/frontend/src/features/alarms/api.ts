@@ -1,28 +1,14 @@
-import { holoApi, type HoloApiResponse } from '@/api/holo'
-import type { AlarmsResponse } from './types'
-
-interface DeleteAlarmRequest {
-  roomId: string
-  userId: string
-  channelId: string
-}
+import type { DeleteAlarmRequest } from "@/api/generated/data-contracts";
+import { holoClient } from "@/api/holoClient";
 
 export const alarmsApi = {
-  getAll: async () => holoApi.get<AlarmsResponse>('/alarms'),
-
-  delete: async (request: DeleteAlarmRequest) => holoApi.delete<HoloApiResponse>('/alarms', {
-    data: request,
-  }),
-}
+	getAll: holoClient.getAlarms,
+	delete: (request: DeleteAlarmRequest) => holoClient.deleteAlarm(request),
+};
 
 export const namesApi = {
-  setRoomName: async (roomId: string, roomName: string) => holoApi.post<HoloApiResponse>('/names/room', {
-    roomId,
-    roomName,
-  }),
-
-  setUserName: async (userId: string, userName: string) => holoApi.post<HoloApiResponse>('/names/user', {
-    userId,
-    userName,
-  }),
-}
+	setRoomName: (roomId: string, roomName: string) =>
+		holoClient.setRoomName({ roomId, roomName }),
+	setUserName: (userId: string, userName: string) =>
+		holoClient.setUserName({ userId, userName }),
+};
