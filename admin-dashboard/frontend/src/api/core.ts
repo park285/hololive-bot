@@ -1,10 +1,3 @@
-/**
- * Core Admin API (자동 생성 클라이언트 래퍼)
- *
- * 이 파일은 swagger-typescript-api로 생성된 클라이언트를 래핑하여
- * 기존 코드와의 호환성을 유지합니다.
- */
-
 import { isAxiosError } from "axios";
 import { adminClient } from "@/api/adminClient";
 import type {

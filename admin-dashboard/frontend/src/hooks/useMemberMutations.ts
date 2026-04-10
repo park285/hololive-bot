@@ -1,8 +1,3 @@
-/**
- * 멤버 관련 Mutation 훅
- * 반복되는 mutation 로직을 중앙화하여 재사용성 향상
- */
-
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/api/queryKeys";
 import { membersApi } from "@/features/members/api";
@@ -13,10 +8,6 @@ import type {
 } from "@/features/members/types";
 import toast from "@/lib/toast-api";
 
-/**
- * 멤버 쿼리 무효화 헬퍼
- * 성공/실패 모두 최신 데이터로 동기화
- */
 const useInvalidateMembers = () => {
 	const queryClient = useQueryClient();
 	return () => {
@@ -24,7 +15,6 @@ const useInvalidateMembers = () => {
 	};
 };
 
-/** 별명 추가 Mutation */
 export const useAddAliasMutation = () => {
 	const invalidate = useInvalidateMembers();
 	return useMutation({
@@ -43,7 +33,6 @@ export const useAddAliasMutation = () => {
 	});
 };
 
-/** 별명 삭제 Mutation */
 export const useRemoveAliasMutation = () => {
 	const invalidate = useInvalidateMembers();
 	return useMutation({
@@ -65,7 +54,6 @@ export const useRemoveAliasMutation = () => {
 	});
 };
 
-/** 채널 ID 업데이트 Mutation */
 export const useUpdateChannelMutation = () => {
 	const invalidate = useInvalidateMembers();
 	return useMutation({
@@ -81,7 +69,6 @@ export const useUpdateChannelMutation = () => {
 	});
 };
 
-/** 이름 업데이트 Mutation */
 export const useUpdateNameMutation = () => {
 	const invalidate = useInvalidateMembers();
 	return useMutation({
@@ -92,7 +79,6 @@ export const useUpdateNameMutation = () => {
 	});
 };
 
-/** 졸업 상태 변경 Mutation */
 export const useSetGraduationMutation = () => {
 	const invalidate = useInvalidateMembers();
 	return useMutation({
@@ -108,7 +94,6 @@ export const useSetGraduationMutation = () => {
 	});
 };
 
-/** 멤버 추가 Mutation */
 export const useAddMemberMutation = () => {
 	const invalidate = useInvalidateMembers();
 	return useMutation({
@@ -121,10 +106,6 @@ export const useAddMemberMutation = () => {
 	});
 };
 
-/**
- * 모든 멤버 mutation을 한번에 반환하는 통합 훅
- * 컴포넌트에서 필요한 mutation만 destructuring해서 사용
- */
 export const useMemberMutations = () => ({
 	addAlias: useAddAliasMutation(),
 	removeAlias: useRemoveAliasMutation(),
@@ -134,7 +115,6 @@ export const useMemberMutations = () => ({
 	addMember: useAddMemberMutation(),
 });
 
-/** 멤버 데이터에 대한 Optimistic Update 액션 타입 */
 export type OptimisticUpdate =
 	| { type: "graduation"; memberId: number; isGraduated: boolean }
 	| {
@@ -152,7 +132,6 @@ export type OptimisticUpdate =
 	| { type: "updateChannel"; memberId: number; channelId: string }
 	| { type: "updateName"; memberId: number; name: string };
 
-/** Optimistic Update Reducer */
 export const optimisticMemberReducer = (
 	state: Member[],
 	update: OptimisticUpdate,

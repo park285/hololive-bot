@@ -1,8 +1,3 @@
-/**
- * Query Error Boundary
- * TanStack Query 에러를 graceful하게 처리하는 Error Boundary
- */
-
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import { Component, type ErrorInfo, type ReactNode } from "react";
@@ -77,9 +72,6 @@ export class QueryErrorBoundary extends Component<
 	}
 }
 
-/**
- * Suspense와 함께 사용하는 간단한 로딩 Fallback
- */
 export const QueryLoadingFallback = () => (
 	<div className="flex items-center justify-center min-h-[200px] text-slate-400">
 		<RefreshCw className="w-5 h-5 animate-spin mr-2" />

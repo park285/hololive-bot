@@ -1,32 +1,23 @@
-/**
- * 전역 모달 상태 관리 Store
- * 복잡한 Discriminated Union 타입 대신 개별 모달 상태로 분리
- */
-
 import { create } from "zustand";
 
-/** 별명 삭제 모달 데이터 */
 interface AliasRemovalData {
 	memberId: number;
 	aliasType: "ko" | "ja";
 	alias: string;
 }
 
-/** 졸업 상태 변경 모달 데이터 */
 interface GraduationData {
 	memberId: number;
 	memberName: string;
 	currentStatus: boolean;
 }
 
-/** 채널 ID 수정 모달 데이터 */
 interface ChannelEditData {
 	memberId: number;
 	memberName: string;
 	currentChannelId: string;
 }
 
-/** 이름 수정 모달 데이터 */
 interface NameEditData {
 	memberId: number;
 	currentName: string;
