@@ -272,6 +272,752 @@
         }
       }
     },
+    "/admin/api/holo/alarms": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetAlarms",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoDeleteAlarm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAlarmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/members": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetMembers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoAddMember",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/members/{id}/aliases": {
+      "post": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoAddAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAliasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoRemoveAlias",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveAliasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/members/{id}/channel": {
+      "patch": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoUpdateChannel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateChannelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/members/{id}/graduation": {
+      "patch": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoSetGraduation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGraduationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/members/{id}/name": {
+      "patch": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoUpdateMemberName",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberNameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/milestones": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetMilestones",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "channelId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "memberName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestonesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/milestones/near": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetNearMilestones",
+        "parameters": [
+          {
+            "name": "threshold",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearMilestonesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/milestones/stats": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetMilestoneStats",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/names/room": {
+      "post": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoSetRoomName",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomNameUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/names/user": {
+      "post": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoSetUserName",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserNameUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/rooms": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetRooms",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoAddRoom",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddRoomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoRemoveRoom",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveRoomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/rooms/acl": {
+      "post": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoSetAcl",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAclRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetAclResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/settings": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetSettings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoUpdateSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/stats": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetStats",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/stats/channels": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetChannelStats",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/streams/live": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetLiveStreams",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/api/holo/streams/upcoming": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetUpcomingStreams",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/api/status": {
       "get": {
         "tags": [
@@ -295,6 +1041,68 @@
   },
   "components": {
     "schemas": {
+      "AddAliasRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "alias"
+        ],
+        "properties": {
+          "alias": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "example": "ko"
+          }
+        }
+      },
+      "AddMemberRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "channelId",
+          "aliases",
+          "isGraduated"
+        ],
+        "properties": {
+          "aliases": {
+            "$ref": "#/components/schemas/Aliases"
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "isGraduated": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nameJa": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nameKo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AddRoomRequest": {
+        "type": "object",
+        "required": [
+          "room"
+        ],
+        "properties": {
+          "room": {
+            "type": "string"
+          }
+        }
+      },
       "AggregatedStatus": {
         "type": "object",
         "required": [
@@ -313,6 +1121,127 @@
             "type": "string"
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "Alarm": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "roomName",
+          "userId",
+          "userName",
+          "channelId",
+          "memberName"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "roomName": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          }
+        }
+      },
+      "AlarmsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "alarms"
+        ],
+        "properties": {
+          "alarms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Alarm"
+            }
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Aliases": {
+        "type": "object",
+        "required": [
+          "ko",
+          "ja"
+        ],
+        "properties": {
+          "ja": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ko": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ChannelStat": {
+        "type": "object",
+        "required": [
+          "ChannelID",
+          "ChannelTitle",
+          "SubscriberCount",
+          "VideoCount",
+          "ViewCount"
+        ],
+        "properties": {
+          "ChannelID": {
+            "type": "string"
+          },
+          "ChannelTitle": {
+            "type": "string"
+          },
+          "SubscriberCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "VideoCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ViewCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ChannelStatsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "stats"
+        ],
+        "properties": {
+          "stats": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChannelStat"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "status": {
             "type": "string"
           }
         }
@@ -358,6 +1287,25 @@
             "type": "string"
           },
           "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DeleteAlarmRequest": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "userId",
+          "channelId"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "userId": {
             "type": "string"
           }
         }
@@ -481,6 +1429,234 @@
           }
         }
       },
+      "Member": {
+        "type": "object",
+        "required": [
+          "id",
+          "channelId",
+          "name",
+          "aliases",
+          "isGraduated"
+        ],
+        "properties": {
+          "aliases": {
+            "$ref": "#/components/schemas/Aliases"
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isGraduated": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nameJa": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nameKo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MembersResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "members"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Milestone": {
+        "type": "object",
+        "required": [
+          "channelId",
+          "memberName",
+          "type",
+          "value",
+          "achievedAt",
+          "notified"
+        ],
+        "properties": {
+          "achievedAt": {
+            "type": "string"
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "notified": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "MilestoneStats": {
+        "type": "object",
+        "required": [
+          "totalAchieved",
+          "totalNearMilestone",
+          "recentAchievements",
+          "notNotifiedCount"
+        ],
+        "properties": {
+          "notNotifiedCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "recentAchievements": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalAchieved": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalNearMilestone": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "MilestoneStatsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "stats"
+        ],
+        "properties": {
+          "stats": {
+            "$ref": "#/components/schemas/MilestoneStats"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "MilestonesResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "milestones",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "milestones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Milestone"
+            }
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "NearMilestone": {
+        "type": "object",
+        "required": [
+          "channelId",
+          "memberName",
+          "currentSubs",
+          "nextMilestone",
+          "remaining",
+          "progressPct"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string"
+          },
+          "currentSubs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "memberName": {
+            "type": "string"
+          },
+          "nextMilestone": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "progressPct": {
+            "type": "number",
+            "format": "double"
+          },
+          "remaining": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "NearMilestonesResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "members",
+          "count",
+          "threshold"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NearMilestone"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "PortMapping": {
         "type": "object",
         "required": [
@@ -503,6 +1679,74 @@
             ],
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "RemoveAliasRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "alias"
+        ],
+        "properties": {
+          "alias": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "example": "ja"
+          }
+        }
+      },
+      "RemoveRoomRequest": {
+        "type": "object",
+        "required": [
+          "room"
+        ],
+        "properties": {
+          "room": {
+            "type": "string"
+          }
+        }
+      },
+      "RoomNameUpdateRequest": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "roomName"
+        ],
+        "properties": {
+          "roomId": {
+            "type": "string"
+          },
+          "roomName": {
+            "type": "string"
+          }
+        }
+      },
+      "RoomsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "rooms",
+          "aclEnabled",
+          "aclMode"
+        ],
+        "properties": {
+          "aclEnabled": {
+            "type": "boolean"
+          },
+          "aclMode": {
+            "type": "string"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
@@ -553,6 +1797,245 @@
             "type": "string"
           }
         }
+      },
+      "SetAclRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SetAclResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "enabled",
+          "mode"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "SetGraduationRequest": {
+        "type": "object",
+        "required": [
+          "isGraduated"
+        ],
+        "properties": {
+          "isGraduated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "required": [
+          "alarmAdvanceMinutes"
+        ],
+        "properties": {
+          "alarmAdvanceMinutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SettingsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "settings"
+        ],
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "StatsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "members",
+          "alarms",
+          "rooms",
+          "version",
+          "uptime"
+        ],
+        "properties": {
+          "alarms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "members": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rooms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
+          },
+          "uptime": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "StatusOnlyResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Stream": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "channel_id"
+        ],
+        "properties": {
+          "channel_id": {
+            "type": "string"
+          },
+          "channel_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_actual": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_scheduled": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "thumbnail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "StreamsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "streams"
+        ],
+        "properties": {
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "streams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Stream"
+            }
+          }
+        }
+      },
+      "UpdateChannelRequest": {
+        "type": "object",
+        "required": [
+          "channelId"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateMemberNameRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UserNameUpdateRequest": {
+        "type": "object",
+        "required": [
+          "userId",
+          "userName"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          }
+        }
       }
     }
   },
@@ -568,6 +2051,10 @@
     {
       "name": "status",
       "description": "Status and monitoring endpoints"
+    },
+    {
+      "name": "holo",
+      "description": "Typed admin contract for holo dashboard endpoints"
     }
   ]
 }

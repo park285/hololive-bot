@@ -46,8 +46,6 @@ pub enum DockerError {
 pub enum ProxyError {
     #[error("upstream unavailable")]
     Unavailable,
-    #[error("websocket upstream unavailable")]
-    WsUnavailable,
 }
 
 impl IntoResponse for AppError {
@@ -89,10 +87,6 @@ impl IntoResponse for AppError {
                 ProxyError::Unavailable => (
                     StatusCode::BAD_GATEWAY,
                     json!({"error": "Service unavailable"}),
-                ),
-                ProxyError::WsUnavailable => (
-                    StatusCode::BAD_GATEWAY,
-                    json!({"error": "WebSocket service unavailable"}),
                 ),
             },
             Self::Internal(e) => {
@@ -180,13 +174,6 @@ mod tests {
     #[test]
     fn test_proxy_unavailable_status() {
         let err = AppError::Proxy(ProxyError::Unavailable);
-        let response = err.into_response();
-        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
-    }
-
-    #[test]
-    fn test_proxy_ws_unavailable_status() {
-        let err = AppError::Proxy(ProxyError::WsUnavailable);
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     }
