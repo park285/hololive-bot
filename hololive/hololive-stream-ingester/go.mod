@@ -2,19 +2,14 @@ module github.com/kapu/hololive-stream-ingester
 
 go 1.26.2
 
-toolchain go1.26.2
-
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
-	github.com/gin-contrib/gzip v1.2.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go v0.11.1
 	github.com/park285/llm-kakao-bots/shared-go v0.1.2
-	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.73
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 	gorm.io/gorm v1.31.1
@@ -36,6 +31,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
+	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -68,6 +64,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
@@ -81,6 +78,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.2 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
@@ -103,5 +101,7 @@ require (
 	gorm.io/driver/mysql v1.6.0 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
 )
+
+replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
 
 replace github.com/kapu/hololive-shared => ../hololive-shared
