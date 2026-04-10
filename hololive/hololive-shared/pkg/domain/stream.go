@@ -21,8 +21,9 @@
 package domain
 
 import (
-	"math"
 	"time"
+
+	sharedtime "github.com/kapu/hololive-shared/pkg/util"
 )
 
 // StreamStatus: 방송 상태(진행 중, 예정, 종료)를 나타내는 열거형
@@ -124,27 +125,7 @@ func (s *Stream) TimeUntilStart() *time.Duration {
 
 // MinutesUntilStart: 방송 시작까지 남은 시간을 '분' 단위(내림)로 계산하여 반환합니다.
 func (s *Stream) MinutesUntilStart() int {
-	return minutesUntilFloor(s.StartScheduled, time.Now())
-}
-
-// minutesUntilFloor: target 시각까지 남은 시간을 내림(분 단위)으로 반환합니다.
-// target이 nil이거나 reference보다 이전이면 -1을 반환합니다.
-//
-// 내림 사용 이유: 카카오톡은 메시지 도착 시각을 분 단위 절삭으로 표시하므로,
-// 올림 시 "N+1분 전"으로 보이는 UX 이슈가 발생한다.
-func minutesUntilFloor(target *time.Time, reference time.Time) int {
-	if target == nil {
-		return -1
-	}
-	if target.Before(reference) {
-		return -1
-	}
-	duration := target.Sub(reference)
-	minutesUntil := math.Floor(duration.Minutes())
-	if minutesUntil < 0 {
-		return -1
-	}
-	return int(minutesUntil)
+	return sharedtime.MinutesUntilFloor(s.StartScheduled, time.Now())
 }
 
 // GetChzzkLiveURL: Chzzk Live URL을 반환합니다. (비어있으면 빈 문자열)
