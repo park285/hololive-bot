@@ -36,12 +36,12 @@ import (
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 
-	"github.com/kapu/hololive-shared/internal/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 func newTestLogger() *slog.Logger {
-	return logging.NewTestLogger()
+	return sharedlogging.NewTestLogger()
 }
 
 func newTestDB(t *testing.T) *gorm.DB {
