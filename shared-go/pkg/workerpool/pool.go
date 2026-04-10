@@ -83,30 +83,6 @@ func (p *Pool) Shutdown() {
 	p.pool.Release()
 }
 
-// ShutdownWait gracefully shuts down the worker pool with context-aware timeout.
-//
-// Behavior:
-//   - Normal case: Waits for all in-flight tasks to complete, then releases the pool
-//   - Context canceled: Attempts graceful shutdown with a grace period, then releases the pool
-//
-// Goroutine Lifecycle:
-//
-//	This function spawns an internal goroutine to monitor task completion (via WaitGroup).
-//	- If all tasks complete before context cancellation, the goroutine exits naturally
-//	- If context is canceled first, the goroutine remains active until remaining tasks finish
-//	- This is intentional: the goroutine ensures proper WaitGroup cleanup and is bounded
-//	  (it will complete when the last task finishes, which is guaranteed to happen eventually)
-//
-// Grace Period on Cancellation:
-//
-//	When context is canceled, the function uses ReleaseTimeout() to give workers a grace period:
-//	- If ctx has a deadline, grace period = time until deadline
-//	- Otherwise, grace period = 5 seconds (default)
-//	- This allows tasks to complete cleanly before forceful termination
-//
-// Return Values:
-//   - nil: All tasks completed successfully and pool is released
-//   - ctx.Err(): Context was canceled (pool is released but some tasks may still be finishing)
 func (p *Pool) ShutdownWait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
@@ -116,21 +92,16 @@ func (p *Pool) ShutdownWait(ctx context.Context) error {
 
 	select {
 	case <-done:
-		// All tasks completed naturally
 		p.pool.Release()
 		return nil
 	case <-ctx.Done():
-		// Context canceled - determine grace period from context deadline
 		gracePeriod := 5 * time.Second
 		if deadline, ok := ctx.Deadline(); ok {
 			remaining := time.Until(deadline)
 			gracePeriod = max(remaining,
-				// Deadline already passed
 				0)
 		}
 
-		// ReleaseTimeout waits for workers to exit before timing out
-		// This gives in-flight tasks a chance to complete cleanly
 		_ = p.pool.ReleaseTimeout(gracePeriod) //nolint:errcheck
 		return ctx.Err()
 	}

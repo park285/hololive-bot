@@ -1,5 +1,3 @@
-// Package envutil provides environment variable helper utilities
-// with consistent parsing semantics across the workspace.
 package envutil
 
 import (
@@ -11,8 +9,6 @@ import (
 	"time"
 )
 
-// String returns environment variable with TrimSpace applied.
-// Returns default value if variable is empty or not set.
 func String(key, def string) string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -21,8 +17,6 @@ func String(key, def string) string {
 	return value
 }
 
-// StringRaw returns environment variable without trimming.
-// Returns default value if variable is empty or not set.
 func StringRaw(key, def string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -31,8 +25,6 @@ func StringRaw(key, def string) string {
 	return value
 }
 
-// Int parses environment variable as int with TrimSpace applied.
-// Returns default value if variable is empty, not set, or parsing fails.
 func Int(key string, def int) int {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -45,8 +37,6 @@ func Int(key string, def int) int {
 	return parsed
 }
 
-// IntRaw parses environment variable as int without trimming.
-// Returns default value if variable is empty, not set, or parsing fails.
 func IntRaw(key string, def int) int {
 	value := os.Getenv(key)
 	if value == "" {
@@ -59,9 +49,6 @@ func IntRaw(key string, def int) int {
 	return parsed
 }
 
-// IntNonNegative parses environment variable as int and ensures non-negative.
-// Returns 0 if value is negative (NOT default).
-// Returns default value if variable is empty, not set, or parsing fails.
 func IntNonNegative(key string, def int) int {
 	value := Int(key, def)
 	if value < 0 {
@@ -70,8 +57,6 @@ func IntNonNegative(key string, def int) int {
 	return value
 }
 
-// Int64 parses environment variable as int64 with TrimSpace applied.
-// Returns default value if variable is empty, not set, or parsing fails.
 func Int64(key string, def int64) int64 {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -84,10 +69,6 @@ func Int64(key string, def int64) int64 {
 	return parsed
 }
 
-// Bool parses environment variable as boolean.
-// Truthy values (case-insensitive): "true", "1", "yes", "y"
-// Any other non-empty value returns false (NOT default).
-// Returns default value if variable is empty or not set.
 func Bool(key string, def bool) bool {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -97,10 +78,6 @@ func Bool(key string, def bool) bool {
 	return value == "true" || value == "1" || value == "yes" || value == "y"
 }
 
-// BoolStrict parses environment variable as strict boolean.
-// Only accepts "true" or "false" (case-insensitive).
-// Returns default value and logs warning if value is invalid.
-// Returns default value if variable is empty or not set.
 func BoolStrict(key string, def bool) bool {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -117,8 +94,6 @@ func BoolStrict(key string, def bool) bool {
 	return value == "true"
 }
 
-// Float parses environment variable as float64 with TrimSpace applied.
-// Returns default value if variable is empty, not set, or parsing fails.
 func Float(key string, def float64) float64 {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -131,9 +106,6 @@ func Float(key string, def float64) float64 {
 	return parsed
 }
 
-// Duration parses environment variable as time.Duration.
-// Accepts format like "30s", "1h30m", "500ms".
-// Returns default value if variable is empty, not set, or parsing fails.
 func Duration(key string, def time.Duration) time.Duration {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -146,8 +118,6 @@ func Duration(key string, def time.Duration) time.Duration {
 	return parsed
 }
 
-// Required returns environment variable value or panics if not set or empty.
-// This is for critical configuration that cannot have defaults.
 func Required(key string) string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -156,8 +126,6 @@ func Required(key string) string {
 	return value
 }
 
-// StringAny returns the first non-empty value from multiple keys (with TrimSpace).
-// Returns empty string if all keys are unset or empty.
 func StringAny(keys ...string) string {
 	for _, key := range keys {
 		value := strings.TrimSpace(os.Getenv(key))
