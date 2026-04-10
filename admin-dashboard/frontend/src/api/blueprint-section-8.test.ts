@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -22,10 +22,9 @@ test("client 401 handler no longer exempts stale holo paths", () => {
 	assert.equal(source.includes('startsWith("/holo/")'), false);
 });
 
-test("api wrappers import the shared adminClient singleton", () => {
+test("api wrappers import the shared adminClient singleton without an extra holoClient layer", () => {
 	const coreSource = readSource("core.ts");
-	const holoClientSource = readSource("holoClient.ts");
 
 	assert.match(coreSource, /from ["']@\/api\/adminClient["']/);
-	assert.match(holoClientSource, /from ["']@\/api\/adminClient["']/);
+	assert.equal(existsSync(path.join(dirname, "holoClient.ts")), false);
 });

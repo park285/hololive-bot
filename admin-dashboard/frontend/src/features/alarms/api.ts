@@ -1,14 +1,15 @@
 import type { DeleteAlarmRequest } from "@/api/generated/data-contracts";
-import { holoClient } from "@/api/holoClient";
+import { adminClient } from "@/api/adminClient";
 
 export const alarmsApi = {
-	getAll: holoClient.getAlarms,
-	delete: (request: DeleteAlarmRequest) => holoClient.deleteAlarm(request),
+	getAll: async () => (await adminClient.holoGetAlarms()).data,
+	delete: async (request: DeleteAlarmRequest) =>
+		(await adminClient.holoDeleteAlarm(request)).data,
 };
 
 export const namesApi = {
-	setRoomName: (roomId: string, roomName: string) =>
-		holoClient.setRoomName({ roomId, roomName }),
-	setUserName: (userId: string, userName: string) =>
-		holoClient.setUserName({ userId, userName }),
+	setRoomName: async (roomId: string, roomName: string) =>
+		(await adminClient.holoSetRoomName({ roomId, roomName })).data,
+	setUserName: async (userId: string, userName: string) =>
+		(await adminClient.holoSetUserName({ userId, userName })).data,
 };
