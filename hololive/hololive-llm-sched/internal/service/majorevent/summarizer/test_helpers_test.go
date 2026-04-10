@@ -21,7 +21,7 @@
 package summarizer
 
 import (
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 var testLogger = sharedlogging.NewLogger
