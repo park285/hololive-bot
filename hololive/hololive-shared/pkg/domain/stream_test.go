@@ -23,6 +23,8 @@ package domain
 import (
 	"testing"
 	"time"
+
+	sharedtime "github.com/kapu/hololive-shared/pkg/util"
 )
 
 func TestStreamStatus_IsValid(t *testing.T) {
@@ -92,6 +94,35 @@ func TestStream_MinutesUntilStart(t *testing.T) {
 			got := tt.stream.MinutesUntilStart()
 			if got != tt.want {
 				t.Errorf("Stream.MinutesUntilStart() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStream_MinutesUntilStartUsesSharedTimeSemantics(t *testing.T) {
+	now := time.Now()
+	future := now.Add(7*time.Minute + 20*time.Second)
+	past := now.Add(-1 * time.Minute)
+
+	tests := []struct {
+		name   string
+		target *time.Time
+	}{
+		{name: "nil target", target: nil},
+		{name: "past target", target: &past},
+		{name: "future target", target: &future},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream := &Stream{StartScheduled: tt.target}
+			got := stream.MinutesUntilStart()
+			want := sharedtime.MinutesUntilFloor(tt.target, time.Now())
+			if tt.target != nil {
+				want = sharedtime.MinutesUntilFloor(tt.target, time.Now())
+			}
+			if got != want {
+				t.Fatalf("MinutesUntilStart() = %d, want %d", got, want)
 			}
 		})
 	}
