@@ -27,6 +27,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 // MajorEventScheduler: 대형 행사 주간 스케줄러 인터페이스.
@@ -52,7 +53,7 @@ func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
 			return
 		}
 
-		h.respondInternalError(c, "failed to send notification", "failed to send weekly major event notification", err)
+		sharedserver.RespondInternalError(h.logger, c, "failed to send notification", "failed to send weekly major event notification", err)
 
 		return
 	}
@@ -73,7 +74,7 @@ func (h *MajorEventAPIHandler) TriggerMajorEventMonthlyNotification(c *gin.Conte
 			return
 		}
 
-		h.respondInternalError(c, "failed to send notification", "failed to send monthly major event notification", err)
+		sharedserver.RespondInternalError(h.logger, c, "failed to send notification", "failed to send monthly major event notification", err)
 
 		return
 	}

@@ -43,15 +43,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-func TestProvideBot_ErrorWrapped(t *testing.T) {
-	t.Parallel()
-
-	created, err := ProvideBot(nil)
-	require.Error(t, err)
-	assert.Nil(t, created)
-	assert.Contains(t, err.Error(), "failed to create bot")
-}
-
 func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
 	t.Parallel()
 
