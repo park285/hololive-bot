@@ -4,12 +4,10 @@ on:
   pull_request:
     paths:
       - 'admin-dashboard/backend/**'
-      - 'admin-dashboard/backend/**'
   push:
     branches:
       - main
     paths:
-      - 'admin-dashboard/backend/**'
       - 'admin-dashboard/backend/**'
   workflow_dispatch:
 

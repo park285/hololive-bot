@@ -41,7 +41,7 @@ jobs:
           toolchain: nightly-2026-02-23
           components: rustfmt, clippy
 
-      - name: Run architecture boundary gates (M0 + M1)
+      - name: Run architecture boundary gates (M0 + M1 + M4 + M6)
         run: ./scripts/architecture/ci-boundary-gate.sh
 
       - name: Upload Go import graph artifact
