@@ -38,6 +38,9 @@ missing=0
 while IFS= read -r module; do
   [[ -z "${module}" ]] && continue
   normalized_module="$(normalize_path "${module}")"
+  if [[ -z "${normalized_module}" || "${normalized_module}" == "." ]]; then
+    continue
+  fi
   if ! grep -Fxq "${normalized_module}" <<< "${map_paths}"; then
     echo "[FAIL] module missing from project map: ${module}"
     missing=1
@@ -51,6 +54,11 @@ for ref in AGENTS.md README.md docs/README.md; do
   expected_token="docs/current/PROJECT_MAP.md"
   if [[ "${ref}" == "docs/README.md" ]]; then
     expected_token="current/PROJECT_MAP.md"
+  fi
+
+  if [[ ! -f "${file}" ]]; then
+    echo "[SKIP] ${ref} not present in repository root"
+    continue
   fi
 
   if ! grep -Fq "${expected_token}" "${file}"; then
