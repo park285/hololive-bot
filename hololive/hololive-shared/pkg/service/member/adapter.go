@@ -23,6 +23,7 @@ package member
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -91,6 +92,9 @@ func (a *ServiceAdapter) GetChannelIDs() []string {
 
 // GetAllMembers: MemberDataProvider 인터페이스 구현
 func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
+	if a == nil || a.cache == nil || a.cache.repo == nil {
+		return []*domain.Member{}
+	}
 	members, err := a.cache.repo.GetAllMembers(a.ctx)
 	if err != nil {
 		a.logger.Warn("repository lookup failed in GetAllMembers", "error", err)
@@ -113,10 +117,119 @@ func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvi
 
 // FindMembersByName: 이름으로 매칭되는 모든 멤버를 반환합니다.
 func (a *ServiceAdapter) FindMembersByName(name string) []*domain.Member {
-	return []*domain.Member{}
+	needle := strings.TrimSpace(name)
+	if needle == "" {
+		return []*domain.Member{}
+	}
+
+	members := a.searchableMembers()
+	matched := make([]*domain.Member, 0, len(members))
+	for _, member := range members {
+		if member == nil {
+			continue
+		}
+		if equalFoldAny(needle, member.Name, member.NameJa, member.NameKo) {
+			matched = append(matched, member)
+		}
+	}
+	return cloneMemberSlice(matched)
 }
 
 // FindMembersByAlias: 별명으로 매칭되는 모든 멤버를 반환합니다.
 func (a *ServiceAdapter) FindMembersByAlias(alias string) []*domain.Member {
-	return []*domain.Member{}
+	needle := strings.TrimSpace(alias)
+	if needle == "" {
+		return []*domain.Member{}
+	}
+
+	members := a.searchableMembers()
+	matched := make([]*domain.Member, 0, len(members))
+	for _, member := range members {
+		if member == nil {
+			continue
+		}
+		for _, candidate := range member.GetAllAliases() {
+			if strings.EqualFold(strings.TrimSpace(candidate), needle) {
+				matched = append(matched, member)
+				break
+			}
+		}
+	}
+	return cloneMemberSlice(matched)
+}
+
+func (a *ServiceAdapter) searchableMembers() []*domain.Member {
+	if a == nil || a.cache == nil {
+		return []*domain.Member{}
+	}
+
+	if members, ok := a.membersFromCacheSnapshot(); ok {
+		return members
+	}
+	return a.GetAllMembers()
+}
+
+func (a *ServiceAdapter) membersFromCacheSnapshot() ([]*domain.Member, bool) {
+	raw, ok := a.cache.allMembers.Load(allChannelIDsKey)
+	if !ok {
+		return nil, false
+	}
+
+	channelIDs, ok := raw.([]string)
+	if !ok {
+		return nil, false
+	}
+
+	members := make([]*domain.Member, 0, len(channelIDs))
+	seen := make(map[*domain.Member]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		value, ok := a.cache.byChannelID.Load(channelID)
+		if !ok {
+			return nil, false
+		}
+
+		member, ok := value.(*domain.Member)
+		if !ok || member == nil {
+			return nil, false
+		}
+		if _, exists := seen[member]; exists {
+			continue
+		}
+		members = append(members, member)
+		seen[member] = struct{}{}
+	}
+
+	a.cache.byName.Range(func(_, value any) bool {
+		member, ok := value.(*domain.Member)
+		if !ok || member == nil || member.ChannelID != "" {
+			return true
+		}
+		if _, exists := seen[member]; exists {
+			return true
+		}
+		members = append(members, member)
+		seen[member] = struct{}{}
+		return true
+	})
+
+	return cloneMemberSlice(members), true
+}
+
+func equalFoldAny(target string, values ...string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneMemberSlice(in []*domain.Member) []*domain.Member {
+	if len(in) == 0 {
+		return []*domain.Member{}
+	}
+
+	out := make([]*domain.Member, len(in))
+	copy(out, in)
+	return out
 }
