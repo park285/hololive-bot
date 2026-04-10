@@ -6,11 +6,6 @@ use axum::response::Response;
 use http_body_util::BodyExt;
 use xxhash_rust::xxh3::xxh3_64;
 
-/// ETag middleware for API GET responses.
-///
-/// Buffers response body, computes xxhash, supports If-None-Match -> 304.
-/// Only applies to GET requests on /admin/api/* paths.
-/// Excludes WebSocket upgrades and non-API paths.
 pub async fn etag_middleware(req: Request, next: Next) -> Response {
     if req.method() != Method::GET {
         return next.run(req).await;
