@@ -91,6 +91,7 @@ Desktop.ini
 tmp/
 backup/
 backups/
+artifacts/
 
 # Compressed archives
 *.tar.gz
@@ -211,6 +212,5 @@ docs/superpowers/
 
 # Build outputs
 admin-dashboard/backend/admin
-hololive/settlement-go/settlement
 
 .worktrees/

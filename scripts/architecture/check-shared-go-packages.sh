@@ -7,10 +7,7 @@ REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolu
 ALLOWLIST_FILE="${1:-${ROOT_DIR}/docs/architecture/shared-go-package-allowlist.txt}"
 
 resolve_shared_go_pkg_dir() {
-  local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
-  if [[ ! -d "${candidate}/pkg" ]]; then
-    candidate="${ROOT_DIR}/shared-go"
-  fi
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/shared-go}"
   if [[ ! -d "${candidate}/pkg" ]]; then
     echo "error: active shared-go pkg dir not found" >&2
     exit 1
@@ -56,7 +53,7 @@ count="$(wc -l < "${tmp_found}" | tr -d '[:space:]')"
 echo "OK: no new shared-go packages (count: ${count})"
 
 if [[ -n "${stale_allowlist}" ]]; then
-  echo
-  echo "Info: remove stale allowlist entries:"
-  echo "${stale_allowlist}"
+  echo "FAIL: stale shared-go allowlist entries detected" >&2
+  echo "${stale_allowlist}" >&2
+  exit 1
 fi
