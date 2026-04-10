@@ -137,8 +137,8 @@ func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 	})
 }
 
-func TestProvideTriggerRouter_NoTriggerHandler(t *testing.T) {
-	router, err := ProvideTriggerRouter(context.Background(), testRuntimeLogger(), nil, "")
+func TestBuildTriggerRouter_NoTriggerHandler(t *testing.T) {
+	router, err := buildTriggerRouter(context.Background(), testRuntimeLogger(), nil, "")
 	require.NoError(t, err)
 	require.NotNil(t, router)
 

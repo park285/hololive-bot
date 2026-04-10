@@ -42,22 +42,27 @@ func (s irisDeliverySender) SendMessage(ctx context.Context, roomID, message str
 	return nil
 }
 
-// ProvideDeliveryLocker - 분산 락 인스턴스 생성
-func ProvideDeliveryLocker(cacheSvc cache.Client, logger *slog.Logger) delivery.NotificationLocker {
-	return delivery.NewLocker(cacheSvc, logger)
+type DeliveryModule struct {
+	Locker     delivery.NotificationLocker
+	Repository *delivery.OutboxRepository
+	Sender     delivery.MessageSender
+	Dispatcher *delivery.Dispatcher
 }
 
-// ProvideOutboxRepository - 알림 delivery outbox 저장소 생성
-func ProvideOutboxRepository(postgres database.Client, logger *slog.Logger) *delivery.OutboxRepository {
-	return delivery.NewOutboxRepository(postgres.GetGormDB(), logger)
-}
+func BuildDeliveryModule(
+	cacheSvc cache.Client,
+	postgres database.Client,
+	sender delivery.MessageSender,
+	logger *slog.Logger,
+) *DeliveryModule {
+	locker := delivery.NewLocker(cacheSvc, logger)
+	repository := delivery.NewOutboxRepository(postgres.GetGormDB(), logger)
+	dispatcher := delivery.NewDispatcher(repository, sender, logger, delivery.DefaultDispatcherConfig())
 
-// ProvideDeliverySender - Iris client를 delivery.MessageSender로 어댑트한다.
-func ProvideDeliverySender(client iris.Sender) delivery.MessageSender {
-	return irisDeliverySender{client: client}
-}
-
-// ProvideDeliveryDispatcher - outbox 발송 워커 생성
-func ProvideDeliveryDispatcher(repo *delivery.OutboxRepository, sender delivery.MessageSender, logger *slog.Logger) *delivery.Dispatcher {
-	return delivery.NewDispatcher(repo, sender, logger, delivery.DefaultDispatcherConfig())
+	return &DeliveryModule{
+		Locker:     locker,
+		Repository: repository,
+		Sender:     sender,
+		Dispatcher: dispatcher,
+	}
 }
