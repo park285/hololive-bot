@@ -21,7 +21,12 @@ use super::types::{
     path = "/admin/api/holo/alarms",
     operation_id = "holoDeleteAlarm",
     request_body = DeleteAlarmRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn delete_alarm(
@@ -36,7 +41,12 @@ pub async fn delete_alarm(
     path = "/admin/api/holo/names/room",
     operation_id = "holoSetRoomName",
     request_body = RoomNameUpdateRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn set_room_name(
@@ -51,7 +61,12 @@ pub async fn set_room_name(
     path = "/admin/api/holo/names/user",
     operation_id = "holoSetUserName",
     request_body = UserNameUpdateRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn set_user_name(
@@ -66,7 +81,12 @@ pub async fn set_user_name(
     path = "/admin/api/holo/members",
     operation_id = "holoAddMember",
     request_body = AddMemberRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn add_member(
@@ -82,7 +102,12 @@ pub async fn add_member(
     operation_id = "holoAddAlias",
     params(("id" = i64, Path, description = "Member ID")),
     request_body = AddAliasRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn add_alias(
@@ -105,7 +130,12 @@ pub async fn add_alias(
     operation_id = "holoRemoveAlias",
     params(("id" = i64, Path, description = "Member ID")),
     request_body = RemoveAliasRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn remove_alias(
@@ -128,7 +158,12 @@ pub async fn remove_alias(
     operation_id = "holoSetGraduation",
     params(("id" = i64, Path, description = "Member ID")),
     request_body = SetGraduationRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn set_graduation(
@@ -151,7 +186,12 @@ pub async fn set_graduation(
     operation_id = "holoUpdateChannel",
     params(("id" = i64, Path, description = "Member ID")),
     request_body = UpdateChannelRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn update_channel(
@@ -174,7 +214,12 @@ pub async fn update_channel(
     operation_id = "holoUpdateMemberName",
     params(("id" = i64, Path, description = "Member ID")),
     request_body = UpdateMemberNameRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn update_member_name(
@@ -196,7 +241,12 @@ pub async fn update_member_name(
     path = "/admin/api/holo/rooms",
     operation_id = "holoAddRoom",
     request_body = AddRoomRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn add_room(
@@ -211,7 +261,12 @@ pub async fn add_room(
     path = "/admin/api/holo/rooms",
     operation_id = "holoRemoveRoom",
     request_body = RemoveRoomRequest,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn remove_room(
@@ -226,7 +281,12 @@ pub async fn remove_room(
     path = "/admin/api/holo/rooms/acl",
     operation_id = "holoSetAcl",
     request_body = SetAclRequest,
-    responses((status = 200, body = SetAclResponse)),
+    responses(
+        (status = 200, body = SetAclResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn set_acl(
@@ -241,7 +301,12 @@ pub async fn set_acl(
     path = "/admin/api/holo/settings",
     operation_id = "holoUpdateSettings",
     request_body = Settings,
-    responses((status = 200, body = StatusOnlyResponse)),
+    responses(
+        (status = 200, body = StatusOnlyResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn update_settings(

@@ -50,7 +50,7 @@ use utoipa::OpenApi;
         crate::handlers::docker::DockerHealthResponse,
         crate::handlers::docker::DockerContainerListResponse,
         crate::handlers::docker::DockerActionResponse,
-        crate::error::ApiErrorResponse,
+        crate::error::ErrorResponse,
         crate::docker::Container,
         crate::docker::PortMapping,
         crate::status::AggregatedStatus,
@@ -113,6 +113,47 @@ mod tests {
     #[test]
     fn test_openapi_includes_api_error_schema() {
         let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
-        assert!(json["components"]["schemas"]["ApiErrorResponse"].is_object());
+        assert!(json["components"]["schemas"]["ErrorResponse"].is_object());
+    }
+
+    #[test]
+    fn test_openapi_holo_query_documents_typed_error_responses() {
+        let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
+        let responses = &json["paths"]["/admin/api/holo/members"]["get"]["responses"];
+        assert!(responses["400"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+        assert!(responses["401"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+        assert!(responses["502"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+    }
+
+    #[test]
+    fn test_openapi_holo_command_documents_typed_error_responses() {
+        let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
+        let responses = &json["paths"]["/admin/api/holo/members"]["post"]["responses"];
+        assert!(responses["400"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+        assert!(responses["401"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+        assert!(responses["502"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+
+        let remove_room_responses = &json["paths"]["/admin/api/holo/rooms"]["delete"]["responses"];
+        assert!(remove_room_responses["400"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+        assert!(remove_room_responses["401"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
+        assert!(remove_room_responses["502"]["content"]["application/json"]["schema"]["$ref"]
+            .as_str()
+            .is_some_and(|value| value.ends_with("/ErrorResponse")));
     }
 }
