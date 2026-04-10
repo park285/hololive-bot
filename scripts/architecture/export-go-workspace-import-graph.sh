@@ -7,10 +7,7 @@ REPO_CANONICAL_ROOT="$(cd "$(git -C "${ROOT_DIR}" rev-parse --path-format=absolu
 OUTPUT_FILE="${1:-${ROOT_DIR}/artifacts/architecture/go-workspace-import-graph.txt}"
 
 resolve_shared_go_dir() {
-  local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../llm/shared-go}"
-  if [[ ! -d "${candidate}" ]]; then
-    candidate="${ROOT_DIR}/shared-go"
-  fi
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/shared-go}"
   if [[ ! -d "${candidate}" ]]; then
     echo "error: active shared-go dir not found" >&2
     exit 1

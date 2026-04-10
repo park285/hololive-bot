@@ -144,7 +144,6 @@ services:
       context: .
       dockerfile: hololive/hololive-kakao-bot-go/Dockerfile
       additional_contexts:
-        iris_client_go: ${IRIS_CLIENT_GO_PATH:-../iris-client-go}
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -233,7 +232,6 @@ services:
       context: .
       dockerfile: hololive/hololive-dispatcher-go/Dockerfile
       additional_contexts:
-        iris_client_go: ${IRIS_CLIENT_GO_PATH:-../iris-client-go}
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -290,7 +288,6 @@ services:
       context: .
       dockerfile: hololive/hololive-stream-ingester/Dockerfile
       additional_contexts:
-        iris_client_go: ${IRIS_CLIENT_GO_PATH:-../iris-client-go}
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -320,12 +317,12 @@ services:
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
-      SCRAPER_WORKER_COUNT: "${SCRAPER_WORKER_COUNT:-2}"
-      SCRAPER_VIDEOS_SECONDS: "${SCRAPER_VIDEOS_SECONDS:-300}"
-      SCRAPER_SHORTS_SECONDS: "${SCRAPER_SHORTS_SECONDS:-600}"
-      SCRAPER_COMMUNITY_SECONDS: "${SCRAPER_COMMUNITY_SECONDS:-600}"
-      SCRAPER_STATS_SECONDS: "${SCRAPER_STATS_SECONDS:-21600}"
-      SCRAPER_LIVE_SECONDS: "${SCRAPER_LIVE_SECONDS:-300}"
+      SCRAPER_SCHEDULER_WORKER_COUNT: "${SCRAPER_SCHEDULER_WORKER_COUNT:-4}"
+      SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS: "${SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS:-900}"
+      SCRAPER_POLL_SHORTS_INTERVAL_SECONDS: "${SCRAPER_POLL_SHORTS_INTERVAL_SECONDS:-1800}"
+      SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS: "${SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS:-1800}"
+      SCRAPER_POLL_STATS_INTERVAL_SECONDS: "${SCRAPER_POLL_STATS_INTERVAL_SECONDS:-21600}"
+      SCRAPER_POLL_LIVE_INTERVAL_SECONDS: "${SCRAPER_POLL_LIVE_INTERVAL_SECONDS:-600}"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
       MAJOREVENT_SCRAPE_HOUR_KST: "4"
       GOGC: "100"
@@ -374,7 +371,6 @@ services:
       context: .
       dockerfile: hololive/hololive-stream-ingester/Dockerfile.youtube-scraper
       additional_contexts:
-        iris_client_go: ${IRIS_CLIENT_GO_PATH:-../iris-client-go}
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
@@ -404,12 +400,12 @@ services:
       POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
-      SCRAPER_WORKER_COUNT: "${SCRAPER_WORKER_COUNT:-2}"
-      SCRAPER_VIDEOS_SECONDS: "${SCRAPER_VIDEOS_SECONDS:-300}"
-      SCRAPER_SHORTS_SECONDS: "${SCRAPER_SHORTS_SECONDS:-600}"
-      SCRAPER_COMMUNITY_SECONDS: "${SCRAPER_COMMUNITY_SECONDS:-600}"
-      SCRAPER_STATS_SECONDS: "${SCRAPER_STATS_SECONDS:-21600}"
-      SCRAPER_LIVE_SECONDS: "${SCRAPER_LIVE_SECONDS:-300}"
+      SCRAPER_SCHEDULER_WORKER_COUNT: "${SCRAPER_SCHEDULER_WORKER_COUNT:-4}"
+      SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS: "${SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS:-900}"
+      SCRAPER_POLL_SHORTS_INTERVAL_SECONDS: "${SCRAPER_POLL_SHORTS_INTERVAL_SECONDS:-1800}"
+      SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS: "${SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS:-1800}"
+      SCRAPER_POLL_STATS_INTERVAL_SECONDS: "${SCRAPER_POLL_STATS_INTERVAL_SECONDS:-21600}"
+      SCRAPER_POLL_LIVE_INTERVAL_SECONDS: "${SCRAPER_POLL_LIVE_INTERVAL_SECONDS:-600}"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
       MAJOREVENT_SCRAPE_HOUR_KST: "4"
       GOGC: "100"
@@ -458,7 +454,6 @@ services:
       context: .
       dockerfile: hololive/hololive-llm-sched/Dockerfile
       additional_contexts:
-        iris_client_go: ${IRIS_CLIENT_GO_PATH:-../iris-client-go}
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
       args:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}

@@ -1,0 +1,25 @@
+version: "2"
+
+run:
+  timeout: 10m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+issues:
+  exclude-dirs:
+    - vendor
+    - proto
+    - admin-dashboard/frontend/node_modules
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - staticcheck
+        - unused

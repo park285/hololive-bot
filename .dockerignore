@@ -8,6 +8,10 @@
 .github/
 .tasklists/
 .runlogs/
+.worktrees/
+.deploy-snapshots/
+artifacts/
+BUNDLE_MANIFEST.txt
 
 **/.idea
 **/.vscode
@@ -23,6 +27,7 @@
 **/node_modules
 **/dist
 **/coverage
+**/artifacts
 **/*.log
 **/*.tmp
 **/*.out
