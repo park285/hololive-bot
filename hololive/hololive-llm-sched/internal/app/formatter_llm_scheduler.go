@@ -33,6 +33,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -126,19 +127,7 @@ func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateK
 }
 
 func splitTemplateInstruction(rendered string) (instruction string, body string) {
-	trimmed := strings.TrimLeft(rendered, "\r\n")
-	if trimmed == "" {
-		return "", ""
-	}
-
-	parts := strings.SplitN(trimmed, "\n", 2)
-	instruction = stringutil.TrimSpace(strings.TrimSuffix(parts[0], "\r"))
-	if len(parts) < 2 {
-		return instruction, ""
-	}
-
-	body = strings.TrimLeft(parts[1], "\r\n")
-	return instruction, body
+	return templateview.SplitTemplateInstruction(rendered)
 }
 
 // --- MajorEvent formatter (majorevent.Formatter) ---
@@ -157,13 +146,7 @@ type majorEventMonthlySummaryData struct {
 	LLMSummary string
 }
 
-type majorEventView struct {
-	Title    string
-	DateStr  string
-	Members  string
-	Link     string
-	HasDates bool
-}
+type majorEventView = templateview.MajorEventView
 
 func (f *llmSchedulerFormatter) FormatMajorEventWeeklySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
 	if len(events) == 0 {
@@ -229,35 +212,11 @@ func (f *llmSchedulerFormatter) FormatMajorEventMonthlySummary(ctx context.Conte
 }
 
 func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
-	views := make([]majorEventView, 0, len(events))
-	for i := range events {
-		event := &events[i]
-		views = append(views, majorEventView{
-			Title:    event.Title,
-			DateStr:  formatMajorEventDatesFromDB(event.EventStartDate, event.EventEndDate),
-			Members:  strings.Join(event.Members, ", "),
-			Link:     event.Link,
-			HasDates: event.EventStartDate != nil,
-		})
-	}
-	return views
+	return templateview.BuildMajorEventViews(events)
 }
 
 func formatMajorEventDatesFromDB(start, end *time.Time) string {
-	if start == nil {
-		return "TBA"
-	}
-
-	weekdays := []string{"일", "월", "화", "수", "목", "금", "토"}
-	formatDate := func(t time.Time) string {
-		return fmt.Sprintf("%d년 %d월 %d일(%s)", t.Year(), t.Month(), t.Day(), weekdays[t.Weekday()])
-	}
-
-	if end == nil || start.Equal(*end) {
-		return formatDate(*start)
-	}
-
-	return fmt.Sprintf("%s ~ %s", formatDate(*start), formatDate(*end))
+	return templateview.FormatMajorEventDatesFromDB(start, end)
 }
 
 // --- MemberNews formatter (membernews.DigestFormatter) ---
@@ -307,20 +266,5 @@ func localizeMemberNewsItems(items []membernews.SummaryItem) []membernews.Summar
 }
 
 func memberNewsCategoryLabel(raw string) string {
-	switch strings.TrimSpace(strings.ToLower(raw)) {
-	case "birthday_live":
-		return "생일 라이브"
-	case "solo_live":
-		return "솔로 라이브"
-	case "collab":
-		return "콜라보"
-	case "event":
-		return "이벤트"
-	case "goods":
-		return "굿즈"
-	case "other":
-		return "기타"
-	default:
-		return raw
-	}
+	return templateview.MemberNewsCategoryLabel(raw)
 }
