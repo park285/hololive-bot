@@ -32,16 +32,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/internal/logging"
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 func newTestLogger() *slog.Logger {
-	return logging.NewTestLogger()
+	return sharedlogging.NewTestLogger()
 }
 
 func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {

@@ -26,9 +26,9 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/kapu/hololive-shared/internal/logging"
 	"github.com/kapu/hololive-shared/internal/testredis"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 // NewTestCacheService는 miniredis 기반 테스트용 캐시 서비스를 생성합니다.
@@ -50,7 +50,7 @@ func NewTestCacheServiceWithMini(t *testing.T, ctx context.Context) (*cache.Serv
 		Port:         port,
 		DB:           0,
 		DisableCache: true,
-	}, logging.NewTestLogger())
+	}, sharedlogging.NewTestLogger())
 	if err != nil {
 		mini.Close()
 		t.Fatalf("new cache service: %v", err)
