@@ -184,3 +184,42 @@ func TestEnableFileLogging_EnsuresReadableFilePerms(t *testing.T) {
 		}
 	}
 }
+
+func TestNewLoggerWithLevel(t *testing.T) {
+	tests := []struct {
+		name  string
+		level string
+	}{
+		{name: "debug level", level: "debug"},
+		{name: "info level", level: "info"},
+		{name: "invalid level falls back", level: "invalid_level"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := NewLoggerWithLevel(tt.level)
+			if logger == nil {
+				t.Fatalf("NewLoggerWithLevel(%q) returned nil", tt.level)
+			}
+		})
+	}
+}
+
+func TestEnableFileLoggingWithLevel(t *testing.T) {
+	logDir := t.TempDir()
+	cfg := Config{
+		Dir:        logDir,
+		MaxSizeMB:  10,
+		MaxBackups: 5,
+		MaxAgeDays: 7,
+		Compress:   false,
+	}
+
+	logger, err := EnableFileLoggingWithLevel(cfg, "with-level.log", "warn")
+	if err != nil {
+		t.Fatalf("EnableFileLoggingWithLevel failed: %v", err)
+	}
+	if logger == nil {
+		t.Fatal("EnableFileLoggingWithLevel returned nil")
+	}
+}
