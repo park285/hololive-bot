@@ -29,6 +29,10 @@ echo "[M0] go workspace import graph export"
 "${SCRIPT_DIR}/export-go-workspace-import-graph.sh" "${GO_GRAPH_OUT}"
 echo
 
+echo "[M0] project map consistency check"
+"${SCRIPT_DIR}/check-project-map.sh"
+echo
+
 echo "[CI] Run M1 contract gate"
 echo "[M1] Go alarm contract sanity check"
 "${SCRIPT_DIR}/check-go-alarm-contracts.sh"
@@ -40,6 +44,10 @@ echo
 
 echo "[CI] Run M4 Go module LOC gate"
 "${SCRIPT_DIR}/check-go-module-loc.sh"
+echo
+
+echo "[CI] Run M4 multi-language file LOC gate"
+"${SCRIPT_DIR}/check-file-loc.sh"
 echo
 
 echo "[CI] Run M6 deprecated deadline gate"
