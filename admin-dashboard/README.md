@@ -48,6 +48,7 @@ cargo run --bin export-openapi > docs/swagger.json
 ```bash
 cd admin-dashboard/frontend
 npm ci
+npm test
 npm run generate:api
 npm run lint
 npm run build
@@ -72,7 +73,8 @@ ADMIN_DASHBOARD_PROXY_TARGET=http://localhost:30190 npm run dev
 - `GET /admin/api/docker/containers`
 - `GET /admin/api/status`
 - `GET /admin/api/ws/system-stats`
-- `ANY /admin/api/holo/*`
+- typed holo contract: `GET/POST/PATCH/DELETE /admin/api/holo/*`
+- wildcard proxy fallback: `ANY /admin/api/holo/{*path}` for websocket or 아직 이관하지 않은 compatibility 경로
 
 ## OpenAPI / Generated Client
 
@@ -84,3 +86,12 @@ npm run generate:api
 ```
 
 이 스크립트는 내부적으로 backend OpenAPI를 `backend/docs/swagger.json`으로 export한 뒤 `src/api/generated/`를 갱신합니다.
+
+`src/api/adminClient.ts`가 generated `Admin` singleton의 단일 소유자입니다. `src/api/core.ts`와 `src/api/holoClient.ts`는 이 인스턴스만 공유해서 interceptor, base URL, 인증 동작이 갈라지지 않게 유지합니다.
+
+CI도 같은 경로를 강제합니다. `admin-dashboard-frontend` workflow는 `npm run generate:api` 뒤에 `git diff --exit-code -- ../backend/docs/swagger.json src/api/generated`를 실행해서 generated client drift를 즉시 실패시킵니다.
+
+주의:
+- `src/api/generated/*`는 수동 수정 금지
+- holo dashboard endpoint는 `/admin/api/holo/*` typed contract에 먼저 추가
+- wildcard proxy route는 websocket / 미이관 compatibility fallback 용도로만 유지

@@ -1,7 +1,6 @@
-import { holoApi } from '@/api/holo'
-import type { ChannelStatsResponse, StatsResponse } from './types'
+import { holoClient } from "@/api/holoClient";
 
 export const statsApi = {
-  get: async () => holoApi.get<StatsResponse>('/stats'),
-  getChannels: async () => holoApi.get<ChannelStatsResponse>('/stats/channels'),
-}
+	get: holoClient.getStats,
+	getChannels: holoClient.getChannelStats,
+};

@@ -10,8 +10,14 @@
  * ---------------------------------------------------------------
  */
 
-import {
+import type {
+  AddAliasRequest,
+  AddMemberRequest,
+  AddRoomRequest,
   AggregatedStatus,
+  AlarmsResponse,
+  ChannelStatsResponse,
+  DeleteAlarmRequest,
   DockerActionResponse,
   DockerContainerListResponse,
   DockerHealthResponse,
@@ -19,9 +25,28 @@ import {
   HeartbeatResponse,
   LoginRequest,
   LoginResponse,
+  MembersResponse,
+  MilestoneStatsResponse,
+  MilestonesResponse,
+  NearMilestonesResponse,
+  RemoveAliasRequest,
+  RemoveRoomRequest,
+  RoomNameUpdateRequest,
+  RoomsResponse,
   SessionStatusResponse,
+  SetAclRequest,
+  SetAclResponse,
+  SetGraduationRequest,
+  Settings,
+  SettingsResponse,
+  StatsResponse,
+  StatusOnlyResponse,
+  StreamsResponse,
+  UpdateChannelRequest,
+  UpdateMemberNameRequest,
+  UserNameUpdateRequest,
 } from "./data-contracts";
-import { ContentType, HttpClient, RequestParams } from "./http-client";
+import { ContentType, HttpClient, type RequestParams } from "./http-client";
 
 export class Admin<
   SecurityDataType = unknown,
@@ -152,6 +177,418 @@ export class Admin<
     this.request<DockerHealthResponse, any>({
       path: `/admin/api/docker/health`,
       method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetAlarms
+   * @request GET:/admin/api/holo/alarms
+   */
+  holoGetAlarms = (params: RequestParams = {}) =>
+    this.request<AlarmsResponse, any>({
+      path: `/admin/api/holo/alarms`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloDeleteAlarm
+   * @request DELETE:/admin/api/holo/alarms
+   */
+  holoDeleteAlarm = (data: DeleteAlarmRequest, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/alarms`,
+      method: "DELETE",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetMembers
+   * @request GET:/admin/api/holo/members
+   */
+  holoGetMembers = (params: RequestParams = {}) =>
+    this.request<MembersResponse, any>({
+      path: `/admin/api/holo/members`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloAddMember
+   * @request POST:/admin/api/holo/members
+   */
+  holoAddMember = (data: AddMemberRequest, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/members`,
+      method: "POST",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloAddAlias
+   * @request POST:/admin/api/holo/members/{id}/aliases
+   */
+  holoAddAlias = (
+    id: number,
+    data: AddAliasRequest,
+    params: RequestParams = {},
+  ) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/members/${id}/aliases`,
+      method: "POST",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloRemoveAlias
+   * @request DELETE:/admin/api/holo/members/{id}/aliases
+   */
+  holoRemoveAlias = (
+    id: number,
+    data: RemoveAliasRequest,
+    params: RequestParams = {},
+  ) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/members/${id}/aliases`,
+      method: "DELETE",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloUpdateChannel
+   * @request PATCH:/admin/api/holo/members/{id}/channel
+   */
+  holoUpdateChannel = (
+    id: number,
+    data: UpdateChannelRequest,
+    params: RequestParams = {},
+  ) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/members/${id}/channel`,
+      method: "PATCH",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloSetGraduation
+   * @request PATCH:/admin/api/holo/members/{id}/graduation
+   */
+  holoSetGraduation = (
+    id: number,
+    data: SetGraduationRequest,
+    params: RequestParams = {},
+  ) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/members/${id}/graduation`,
+      method: "PATCH",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloUpdateMemberName
+   * @request PATCH:/admin/api/holo/members/{id}/name
+   */
+  holoUpdateMemberName = (
+    id: number,
+    data: UpdateMemberNameRequest,
+    params: RequestParams = {},
+  ) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/members/${id}/name`,
+      method: "PATCH",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetMilestones
+   * @request GET:/admin/api/holo/milestones
+   */
+  holoGetMilestones = (
+    query?: {
+      /** @format int64 */
+      limit?: number | null;
+      /** @format int64 */
+      offset?: number | null;
+      channelId?: string | null;
+      memberName?: string | null;
+    },
+    params: RequestParams = {},
+  ) =>
+    this.request<MilestonesResponse, any>({
+      path: `/admin/api/holo/milestones`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetNearMilestones
+   * @request GET:/admin/api/holo/milestones/near
+   */
+  holoGetNearMilestones = (
+    query?: {
+      /** @format double */
+      threshold?: number | null;
+    },
+    params: RequestParams = {},
+  ) =>
+    this.request<NearMilestonesResponse, any>({
+      path: `/admin/api/holo/milestones/near`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetMilestoneStats
+   * @request GET:/admin/api/holo/milestones/stats
+   */
+  holoGetMilestoneStats = (params: RequestParams = {}) =>
+    this.request<MilestoneStatsResponse, any>({
+      path: `/admin/api/holo/milestones/stats`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloSetRoomName
+   * @request POST:/admin/api/holo/names/room
+   */
+  holoSetRoomName = (data: RoomNameUpdateRequest, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/names/room`,
+      method: "POST",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloSetUserName
+   * @request POST:/admin/api/holo/names/user
+   */
+  holoSetUserName = (data: UserNameUpdateRequest, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/names/user`,
+      method: "POST",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetRooms
+   * @request GET:/admin/api/holo/rooms
+   */
+  holoGetRooms = (params: RequestParams = {}) =>
+    this.request<RoomsResponse, any>({
+      path: `/admin/api/holo/rooms`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloAddRoom
+   * @request POST:/admin/api/holo/rooms
+   */
+  holoAddRoom = (data: AddRoomRequest, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/rooms`,
+      method: "POST",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloRemoveRoom
+   * @request DELETE:/admin/api/holo/rooms
+   */
+  holoRemoveRoom = (data: RemoveRoomRequest, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/rooms`,
+      method: "DELETE",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloSetAcl
+   * @request POST:/admin/api/holo/rooms/acl
+   */
+  holoSetAcl = (data: SetAclRequest, params: RequestParams = {}) =>
+    this.request<SetAclResponse, any>({
+      path: `/admin/api/holo/rooms/acl`,
+      method: "POST",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetSettings
+   * @request GET:/admin/api/holo/settings
+   */
+  holoGetSettings = (params: RequestParams = {}) =>
+    this.request<SettingsResponse, any>({
+      path: `/admin/api/holo/settings`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloUpdateSettings
+   * @request POST:/admin/api/holo/settings
+   */
+  holoUpdateSettings = (data: Settings, params: RequestParams = {}) =>
+    this.request<StatusOnlyResponse, any>({
+      path: `/admin/api/holo/settings`,
+      method: "POST",
+      body: data,
+      type: ContentType.Json,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetStats
+   * @request GET:/admin/api/holo/stats
+   */
+  holoGetStats = (params: RequestParams = {}) =>
+    this.request<StatsResponse, any>({
+      path: `/admin/api/holo/stats`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetChannelStats
+   * @request GET:/admin/api/holo/stats/channels
+   */
+  holoGetChannelStats = (params: RequestParams = {}) =>
+    this.request<ChannelStatsResponse, any>({
+      path: `/admin/api/holo/stats/channels`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetLiveStreams
+   * @request GET:/admin/api/holo/streams/live
+   */
+  holoGetLiveStreams = (
+    query?: {
+      org?: string | null;
+    },
+    params: RequestParams = {},
+  ) =>
+    this.request<StreamsResponse, any>({
+      path: `/admin/api/holo/streams/live`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetUpcomingStreams
+   * @request GET:/admin/api/holo/streams/upcoming
+   */
+  holoGetUpcomingStreams = (
+    query?: {
+      org?: string | null;
+    },
+    params: RequestParams = {},
+  ) =>
+    this.request<StreamsResponse, any>({
+      path: `/admin/api/holo/streams/upcoming`,
+      method: "GET",
+      query: query,
       format: "json",
       ...params,
     });
