@@ -1,6 +1,6 @@
-import { holoClient } from "@/api/holoClient";
+import { adminClient } from "@/api/adminClient";
 
 export const statsApi = {
-	get: holoClient.getStats,
-	getChannels: holoClient.getChannelStats,
+	get: async () => (await adminClient.holoGetStats()).data,
+	getChannels: async () => (await adminClient.holoGetChannelStats()).data,
 };
