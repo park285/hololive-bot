@@ -47,10 +47,6 @@ pub async fn auth_middleware(
     Ok(next.run(req).await)
 }
 
-// ---------------------------------------------------------------------------
-// Cookie helpers
-// ---------------------------------------------------------------------------
-
 /// Cookie 헤더에서 name 에 해당하는 값을 추출
 pub fn extract_cookie(req: &Request, name: &str) -> Option<String> {
     let header = req
@@ -96,10 +92,6 @@ pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool) 
     }
 }
 
-// ---------------------------------------------------------------------------
-// Security headers
-// ---------------------------------------------------------------------------
-
 const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
                     img-src 'self' data: https://*.ytimg.com https://*.ggpht.com; \
                     connect-src 'self' ws: wss:; frame-ancestors 'none'";
@@ -141,10 +133,6 @@ pub async fn apply_security_headers_with_hsts(response: Response) -> Response {
     );
     response
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

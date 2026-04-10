@@ -3,10 +3,10 @@ mod config;
 mod docker;
 mod error;
 mod handlers;
+mod holo;
 mod logging;
 mod middleware;
 mod openapi;
-mod proxy;
 mod routes;
 mod ssr;
 mod state;
@@ -33,10 +33,17 @@ async fn main() {
     let docker_svc = docker::DockerService::new(&cfg.docker_host)
         .ok()
         .map(Arc::new);
-    let bot_proxy = Some(proxy::BotProxy::new(&cfg.holo_bot_url, {
-        let key = cfg.holo_bot_api_key.clone();
-        if key.is_empty() { None } else { Some(key) }
-    }));
+    let holo_api = Arc::new(
+        holo::client::HoloApiClient::new(
+            &cfg.holo_bot_url,
+            if cfg.holo_bot_api_key.is_empty() {
+                None
+            } else {
+                Some(cfg.holo_bot_api_key.clone())
+            },
+        )
+        .expect("holo api client init failed"),
+    );
 
     let endpoints = vec![status::ServiceEndpoint {
         name: "hololive-bot".to_string(),
@@ -58,7 +65,7 @@ async fn main() {
         config: cfg.clone(),
         sessions,
         rate_limiter: rate_limiter.clone(),
-        bot_proxy,
+        holo_api,
         docker_svc,
         status_collector,
         stats_tx,

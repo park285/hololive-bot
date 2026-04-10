@@ -11,6 +11,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::state::AppState;
 
+#[allow(clippy::too_many_lines)]
 pub fn build_router(state: Arc<AppState>) -> Router {
     let auth_layer =
         middleware::from_fn_with_state(state.clone(), crate::auth::middleware::auth_middleware);
@@ -69,15 +70,86 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(crate::handlers::status::handle_system_stats_stream),
         );
 
-    let proxy_routes = Router::new().route(
-        crate::proxy::HOLO_PROXY_ROUTE,
-        any(crate::proxy::bot_proxy::proxy_holo),
-    );
+    let holo_routes = Router::new()
+        .route(
+            "/admin/api/holo/alarms",
+            get(crate::holo::handlers::get_alarms).delete(crate::holo::handlers::delete_alarm),
+        )
+        .route(
+            "/admin/api/holo/names/room",
+            post(crate::holo::handlers::set_room_name),
+        )
+        .route(
+            "/admin/api/holo/names/user",
+            post(crate::holo::handlers::set_user_name),
+        )
+        .route(
+            "/admin/api/holo/members",
+            get(crate::holo::handlers::get_members).post(crate::holo::handlers::add_member),
+        )
+        .route(
+            "/admin/api/holo/members/{id}/aliases",
+            post(crate::holo::handlers::add_alias).delete(crate::holo::handlers::remove_alias),
+        )
+        .route(
+            "/admin/api/holo/members/{id}/graduation",
+            axum::routing::patch(crate::holo::handlers::set_graduation),
+        )
+        .route(
+            "/admin/api/holo/members/{id}/channel",
+            axum::routing::patch(crate::holo::handlers::update_channel),
+        )
+        .route(
+            "/admin/api/holo/members/{id}/name",
+            axum::routing::patch(crate::holo::handlers::update_member_name),
+        )
+        .route(
+            "/admin/api/holo/rooms",
+            get(crate::holo::handlers::get_rooms)
+                .post(crate::holo::handlers::add_room)
+                .delete(crate::holo::handlers::remove_room),
+        )
+        .route(
+            "/admin/api/holo/rooms/acl",
+            post(crate::holo::handlers::set_acl),
+        )
+        .route(
+            "/admin/api/holo/settings",
+            get(crate::holo::handlers::get_settings).post(crate::holo::handlers::update_settings),
+        )
+        .route(
+            "/admin/api/holo/stats",
+            get(crate::holo::handlers::get_stats),
+        )
+        .route(
+            "/admin/api/holo/stats/channels",
+            get(crate::holo::handlers::get_channel_stats),
+        )
+        .route(
+            "/admin/api/holo/streams/live",
+            get(crate::holo::handlers::get_live_streams),
+        )
+        .route(
+            "/admin/api/holo/streams/upcoming",
+            get(crate::holo::handlers::get_upcoming_streams),
+        )
+        .route(
+            "/admin/api/holo/milestones",
+            get(crate::holo::handlers::get_milestones),
+        )
+        .route(
+            "/admin/api/holo/milestones/near",
+            get(crate::holo::handlers::get_near_milestones),
+        )
+        .route(
+            "/admin/api/holo/milestones/stats",
+            get(crate::holo::handlers::get_milestone_stats),
+        );
 
     let authenticated = Router::new()
         .merge(auth_csrf)
         .merge(auth_get)
-        .merge(proxy_routes)
+        .merge(holo_routes)
         .layer(auth_layer);
 
     let api_fallback = Router::new().route(
