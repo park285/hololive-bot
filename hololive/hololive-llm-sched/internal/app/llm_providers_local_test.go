@@ -26,7 +26,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 func TestProvideMajorEventLLMClient_Disabled(t *testing.T) {

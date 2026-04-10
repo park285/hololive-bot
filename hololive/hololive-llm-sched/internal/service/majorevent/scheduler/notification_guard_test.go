@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 // --- mock OutboxRepository (enqueue 기록용) ---
