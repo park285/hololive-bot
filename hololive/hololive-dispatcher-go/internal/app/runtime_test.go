@@ -33,10 +33,10 @@ import (
 
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 type testQueueConsumer struct {

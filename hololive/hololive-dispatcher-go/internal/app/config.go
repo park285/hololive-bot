@@ -30,8 +30,8 @@ import (
 	"github.com/joho/godotenv"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 const (
