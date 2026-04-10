@@ -64,6 +64,9 @@ func TestCommandType_IsValid(t *testing.T) {
 	}{
 		{"정의되지 않은 명령어", domain.CommandType("invalid_cmd")},
 		{"빈 문자열", domain.CommandType("")},
+		{"제거된 legacy status 명령어", domain.CommandType("settlement" + "_status")},
+		{"제거된 legacy paid 명령어", domain.CommandType("settlement" + "_paid")},
+		{"제거된 legacy register 명령어", domain.CommandType("settlement" + "_register")},
 	}
 
 	for _, tt := range invalidCmds {

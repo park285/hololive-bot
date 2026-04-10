@@ -20,7 +20,7 @@
 # SOFTWARE.
 
 
-ARG GO_VERSION=1.26.1
+ARG GO_VERSION=1.26.2
 ARG ALPINE_VERSION=3.23
 
 # Stage 1: Build Backend
@@ -33,13 +33,11 @@ ENV GOWORK=/workspace/hololive-bot/go.work
 
 WORKDIR /workspace/hololive-bot
 
-COPY go.work go.work.sum ./
-COPY --from=iris_client_go . ../iris-client-go
+COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace . ./shared-go
 COPY hololive/hololive-dispatcher-go ./hololive/hololive-dispatcher-go
 COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-stream-ingester ./hololive/hololive-stream-ingester
-COPY hololive/settlement-go ./hololive/settlement-go
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
 
@@ -48,7 +46,6 @@ WORKDIR /workspace/hololive-bot/hololive/hololive-kakao-bot-go
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go mod edit -replace github.com/park285/iris-client-go=/workspace/iris-client-go && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=greenteagc \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/bot ./cmd/bot && \
     mkdir -p /dist/internal/domain && \
