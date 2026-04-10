@@ -29,14 +29,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
-	router, err := ProvideHealthOnlyRouter(t.Context(), logger, "test-key")
+	router, err := sharedserver.NewHealthOnlyRuntimeRouter(t.Context(), logger, "test-key")
 	if err != nil {
-		t.Fatalf("ProvideHealthOnlyRouter() error = %v", err)
+		t.Fatalf("NewHealthOnlyRuntimeRouter() error = %v", err)
 	}
 
 	server := httptest.NewServer(router)
@@ -47,7 +48,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("GET /health error = %v", err)
 	}
 
-	resp.Body.Close()
+	require.NoError(t, resp.Body.Close())
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -58,7 +59,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("GET /ready error = %v", err)
 	}
 
-	readyResp.Body.Close()
+	require.NoError(t, readyResp.Body.Close())
 
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
@@ -76,7 +77,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 		t.Fatalf("GET /metrics error = %v", err)
 	}
 
-	metricsResp.Body.Close()
+	require.NoError(t, metricsResp.Body.Close())
 
 	if metricsResp.StatusCode != http.StatusOK {
 		t.Fatalf("/metrics status = %d, want %d", metricsResp.StatusCode, http.StatusOK)
@@ -99,7 +100,7 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 		t.Fatalf("GET /health error = %v", err)
 	}
 
-	resp.Body.Close()
+	require.NoError(t, resp.Body.Close())
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("/health status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -110,7 +111,7 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 		t.Fatalf("GET /ready error = %v", err)
 	}
 
-	readyResp.Body.Close()
+	require.NoError(t, readyResp.Body.Close())
 
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)

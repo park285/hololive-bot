@@ -52,6 +52,7 @@ type Runtime struct {
 	dispatcher *dispatch.Dispatcher
 	httpServer *http.Server
 	readyState *readinessState
+	lifecycle.Managed
 }
 
 type readinessState struct {
@@ -121,19 +122,17 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		dispatcher: dispatcher,
 		readyState: newReadinessState(),
 	}
+	runtime.Managed = lifecycle.NewManaged(func() {
+		if runtime.cacheSvc == nil {
+			return
+		}
+		if err := runtime.cacheSvc.Close(); err != nil {
+			runtime.logger.Warn("Close cache service failed", slog.Any("error", err))
+		}
+	})
 
 	runtime.httpServer = buildHTTPServer(cfg.Server.Port, runtime.routes())
 	return runtime, nil
-}
-
-// Close: 런타임 리소스를 정리한다.
-func (r *Runtime) Close() {
-	if r == nil || r.cacheSvc == nil {
-		return
-	}
-	if err := r.cacheSvc.Close(); err != nil {
-		r.logger.Warn("Close cache service failed", slog.Any("error", err))
-	}
 }
 
 // Run: dispatcher-go 메인 실행 루프.

@@ -65,8 +65,3 @@ func TestMinutesUntilFloor(t *testing.T) {
 		})
 	}
 }
-
-//go:fix inline
-func ptr(t time.Time) *time.Time {
-	return new(t)
-}

@@ -39,8 +39,7 @@ func InitializeBotDependencies(ctx context.Context, cfg *config.Config, logger *
 	}
 
 	cleanup := func() {
-		infra.cleanupDB()
-		infra.cleanupCache()
+		infra.cleanup()
 	}
 
 	return infra.deps, cleanup, nil
@@ -55,15 +54,13 @@ func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 
 	runtime, err := buildBotRuntime(ctx, cfg, logger, infra)
 	if err != nil {
-		infra.cleanupDB()
-		infra.cleanupCache()
+		infra.cleanup()
 
 		return nil, nil, err
 	}
 
 	cleanup := func() {
-		infra.cleanupDB()
-		infra.cleanupCache()
+		infra.cleanup()
 	}
 
 	return runtime, cleanup, nil

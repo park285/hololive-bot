@@ -1,5 +1,6 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
+GOLANGCI_CONFIG ?= ../../.golangci.yml
 IMAGE_NAME ?= hololive-kakao-bot
 
 VERSION := $(shell cat VERSION)
@@ -10,11 +11,11 @@ PATCH := $(word 3,$(VERSION_PARTS))
 
 .PHONY: lint
 lint:
-	$(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_LINT) run -c $(GOLANGCI_CONFIG) ./...
 
 .PHONY: fmt
 fmt:
-	$(GOLANGCI_LINT) run --fix ./...
+	$(GOLANGCI_LINT) run -c $(GOLANGCI_CONFIG) --fix ./...
 
 .PHONY: test
 test:

@@ -205,60 +205,138 @@ func TestIsTargetMinute(t *testing.T) {
 	}
 }
 
-func TestCrossedTarget(t *testing.T) {
-	base := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
-	start := base.Add(5*time.Minute + 10*time.Second)
+func TestResolveEvaluationWindow(t *testing.T) {
+	now := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name    string
-		targets []int
-		prev    time.Time
-		now     time.Time
-		want    int
-		wantOK  bool
+		name        string
+		prev        time.Time
+		now         time.Time
+		maxLookback time.Duration
+		wantStart   time.Time
+		wantEnd     time.Time
+		wantCapped  bool
 	}{
 		{
-			name:    "exact current target wins",
-			targets: []int{5, 3, 1},
-			prev:    base.Add(2 * time.Second),
-			now:     base.Add(10 * time.Second),
-			want:    5,
-			wantOK:  true,
+			name:        "uses recent previous check inside cap",
+			prev:        now.Add(-45 * time.Second),
+			now:         now,
+			maxLookback: 75 * time.Second,
+			wantStart:   now.Add(-45 * time.Second),
+			wantEnd:     now,
+			wantCapped:  false,
 		},
 		{
-			name:    "crossed target returns missed boundary",
-			targets: []int{5, 3, 1},
-			prev:    base,
-			now:     base.Add(50 * time.Second),
-			want:    5,
-			wantOK:  true,
+			name:        "caps stale previous check at max lookback",
+			prev:        now.Add(-5 * time.Minute),
+			now:         now,
+			maxLookback: 75 * time.Second,
+			wantStart:   now.Add(-75 * time.Second),
+			wantEnd:     now,
+			wantCapped:  true,
 		},
 		{
-			name:    "no previous tick means no crossed fallback",
-			targets: []int{5, 3, 1},
-			prev:    time.Time{},
-			now:     base.Add(50 * time.Second),
-			want:    0,
-			wantOK:  false,
+			name:        "keeps minimum non-empty window when prev is not before now",
+			prev:        now,
+			now:         now,
+			maxLookback: 75 * time.Second,
+			wantStart:   now.Add(-1 * time.Second),
+			wantEnd:     now,
+			wantCapped:  true,
 		},
 		{
-			name:    "older target outside window is ignored",
-			targets: []int{5, 3, 1},
-			prev:    base.Add(70 * time.Second),
-			now:     base.Add(130 * time.Second),
-			want:    3,
-			wantOK:  true,
+			name:        "falls back to one minute cap when max lookback is non-positive",
+			prev:        time.Time{},
+			now:         now,
+			maxLookback: 0,
+			wantStart:   now.Add(-1 * time.Minute),
+			wantEnd:     now,
+			wantCapped:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := CrossedTarget(tt.targets, start, tt.prev, tt.now)
+			got := ResolveEvaluationWindow(tt.prev, tt.now, tt.maxLookback)
+			if !got.Start.Equal(tt.wantStart) {
+				t.Fatalf("ResolveEvaluationWindow() start = %s, want %s", got.Start, tt.wantStart)
+			}
+			if !got.End.Equal(tt.wantEnd) {
+				t.Fatalf("ResolveEvaluationWindow() end = %s, want %s", got.End, tt.wantEnd)
+			}
+			if got.Capped != tt.wantCapped {
+				t.Fatalf("ResolveEvaluationWindow() capped = %t, want %t", got.Capped, tt.wantCapped)
+			}
+		})
+	}
+}
+
+func TestHighestCrossedTarget(t *testing.T) {
+	base := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name    string
+		targets []int
+		start   time.Time
+		window  EvaluationWindow
+		want    int
+		wantOK  bool
+	}{
+		{
+			name:    "returns highest target crossed within bounded window",
+			targets: []int{5, 3, 1},
+			start:   base.Add(4*time.Minute + 20*time.Second),
+			window: EvaluationWindow{
+				Start: base.Add(-40 * time.Second),
+				End:   base,
+			},
+			want:   5,
+			wantOK: true,
+		},
+		{
+			name:    "does not backfill stale five minute target outside cap",
+			targets: []int{5, 3, 1},
+			start:   base.Add(4 * time.Minute),
+			window: EvaluationWindow{
+				Start:  base.Add(-75 * time.Second),
+				End:    base,
+				Capped: true,
+			},
+			want:   0,
+			wantOK: false,
+		},
+		{
+			name:    "finds three minute target when five minute is stale",
+			targets: []int{5, 3, 1},
+			start:   base.Add(3*time.Minute + 20*time.Second),
+			window: EvaluationWindow{
+				Start: base.Add(-75 * time.Second),
+				End:   base,
+			},
+			want:   3,
+			wantOK: true,
+		},
+		{
+			name:    "returns false for invalid window",
+			targets: []int{5, 3, 1},
+			start:   base.Add(5 * time.Minute),
+			window: EvaluationWindow{
+				Start: base,
+				End:   base,
+			},
+			want:   0,
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := HighestCrossedTarget(tt.targets, tt.start, tt.window)
 			if ok != tt.wantOK {
-				t.Fatalf("CrossedTarget() ok = %t, want %t", ok, tt.wantOK)
+				t.Fatalf("HighestCrossedTarget() ok = %t, want %t", ok, tt.wantOK)
 			}
 			if got != tt.want {
-				t.Fatalf("CrossedTarget() minute = %d, want %d", got, tt.want)
+				t.Fatalf("HighestCrossedTarget() minute = %d, want %d", got, tt.want)
 			}
 		})
 	}

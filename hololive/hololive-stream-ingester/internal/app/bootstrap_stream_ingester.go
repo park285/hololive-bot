@@ -26,8 +26,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
@@ -92,8 +95,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	if features.youtubeEnabled {
 		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, infra.cacheService, spec.name, logger)
 		if err != nil {
-			infra.cleanupDB()
-			infra.cleanupCache()
+			infra.cleanup()
 			return nil, fmt.Errorf("acquire ingestion lease: %w", err)
 		}
 	}
@@ -119,14 +121,12 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 
 	httpServer, err := buildStreamIngesterHTTPServer(ctx, cfg, logger, spec.name, readiness)
 	if err != nil {
-		infra.cleanupDB()
-		infra.cleanupCache()
+		infra.cleanup()
 		return nil, err
 	}
 
 	cleanup := func() {
-		infra.cleanupDB()
-		infra.cleanupCache()
+		infra.cleanup()
 	}
 
 	return &StreamIngesterRuntime{
@@ -142,7 +142,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		HttpServer:       httpServer,
 		Readiness:        readiness,
 		ingestionLease:   ingestionLeaseRef,
-		CleanupCloser:    lifecycle.NewCleanupCloser(cleanup),
+		Managed:          lifecycle.NewManaged(cleanup),
 	}, nil
 }
 
@@ -153,11 +153,21 @@ func buildStreamIngesterHTTPServer(
 	runtimeName string,
 	readiness *ingestionReadinessState,
 ) (*http.Server, error) {
-	router, err := ProvideHealthOnlyRouter(ctx, logger, readiness, cfg.Server.APIKey)
+	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, cfg.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
+		opts.EnableGzip = true
+		opts.ReadyResponder = func(c *gin.Context) {
+			statusCode, payload := readiness.response()
+			c.JSON(statusCode, payload)
+		}
+	})
 	if err != nil {
 		return nil, fmt.Errorf("build stream ingester router: %w", err)
 	}
-	return ProvideAPIServer(fmt.Sprintf(":%d", cfg.Server.Port), router, runtimeHTTPServerOperationName(runtimeName)), nil
+	return sharedserver.NewH2CServer(
+		fmt.Sprintf(":%d", cfg.Server.Port),
+		router,
+		runtimeHTTPServerOperationName(runtimeName),
+	), nil
 }
 
 func streamIngesterSpec(cfg *config.Config) ingestionRuntimeSpec {
@@ -236,7 +246,7 @@ func buildRuntimeConfigSubscriber(
 	)
 
 	desiredProxyState := infra.settingsService.Get().ScraperProxyEnabled
-	applyScraperProxyToggle(
+	sharedsettings.ApplyScraperProxyToggle(
 		desiredProxyState,
 		infra.ytStack.GetService(),
 		infra.holodexService,

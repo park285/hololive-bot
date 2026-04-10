@@ -34,14 +34,14 @@ func testBotLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-func callNewBotSafely(deps *Dependencies) (_ *Bot, _ error, recovered any) {
+func callNewBotSafely(deps *Dependencies) (_ *Bot, recovered any, _ error) {
 	defer func() {
 		recovered = recover()
 	}()
 
 	created, err := NewBot(deps)
 
-	return created, err, nil
+	return created, nil, err
 }
 
 func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
@@ -91,7 +91,7 @@ func TestNewBot_FailFastOnNilDependencies(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			created, err, recovered := callNewBotSafely(tc.deps)
+			created, recovered, err := callNewBotSafely(tc.deps)
 			if recovered != nil {
 				t.Fatalf("NewBot panic = %v", recovered)
 			}

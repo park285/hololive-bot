@@ -31,6 +31,7 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProvideTriggerRouter_Integration(t *testing.T) {
@@ -70,7 +71,7 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST without API key error = %v", err)
 	}
-	resp.Body.Close()
+	require.NoError(t, resp.Body.Close())
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status without API key = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
@@ -84,7 +85,7 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST with API key error = %v", err)
 	}
-	respWithKey.Body.Close()
+	require.NoError(t, respWithKey.Body.Close())
 	if respWithKey.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status with API key = %d, want %d", respWithKey.StatusCode, http.StatusServiceUnavailable)
 	}
@@ -97,7 +98,7 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /metrics without API key error = %v", err)
 	}
-	metricsResp.Body.Close()
+	require.NoError(t, metricsResp.Body.Close())
 	if metricsResp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("/metrics status without API key = %d, want %d", metricsResp.StatusCode, http.StatusUnauthorized)
 	}
@@ -111,7 +112,7 @@ func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /metrics with API key error = %v", err)
 	}
-	metricsRespWithKey.Body.Close()
+	require.NoError(t, metricsRespWithKey.Body.Close())
 	if metricsRespWithKey.StatusCode != http.StatusOK {
 		t.Fatalf("/metrics status with API key = %d, want %d", metricsRespWithKey.StatusCode, http.StatusOK)
 	}

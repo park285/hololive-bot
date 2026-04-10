@@ -90,19 +90,6 @@ func (m *mockNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string
 	return nil
 }
 
-// --- mock sender (사용되지 않지만 테스트 호환용) ---
-
-type mockNotifSender struct {
-	failRooms map[string]bool
-}
-
-func (m *mockNotifSender) SendMessage(_ context.Context, roomID, _ string) error {
-	if m.failRooms[roomID] {
-		return fmt.Errorf("send failed for %s", roomID)
-	}
-	return nil
-}
-
 var testLogger = sharedlogging.NewLogger
 
 // === enqueueToRooms 단위 테스트 ===

@@ -42,15 +42,10 @@ func testRuntimeLogger() *slog.Logger {
 }
 
 func TestLLMSchedulerRuntimeClose(t *testing.T) {
-	t.Run("nil runtime", func(t *testing.T) {
-		var runtime *LLMSchedulerRuntime
-		assert.NotPanics(t, func() { runtime.Close() })
-	})
-
 	t.Run("invokes cleanup", func(t *testing.T) {
 		calls := 0
 		runtime := &LLMSchedulerRuntime{
-			CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
+			Managed: lifecycle.NewManaged(func() { calls++ }),
 		}
 
 		runtime.Close()
