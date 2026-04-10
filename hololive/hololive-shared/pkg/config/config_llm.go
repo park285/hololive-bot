@@ -25,7 +25,7 @@ type CliproxyConfig struct {
 	APIKey          string
 	Model           string
 	Enabled         bool
-	ReasoningEffort string // reasoning 모델용 사고 깊이 (high, xhigh 등)
+	ReasoningEffort string
 }
 
 type ConsensusLLMConfig struct {
@@ -38,11 +38,11 @@ type ConsensusLLMConfig struct {
 }
 
 type LLMConfig struct {
-	MemberNewsModel       string  // 최종 모델명 (dual-read 해결 완료, 빈 문자열이면 Cliproxy.Model 사용)
-	MemberNewsTemperature float64 // MEMBER_NEWS_TEMPERATURE
+	MemberNewsModel       string
+	MemberNewsTemperature float64
 
-	MemberNews ConsensusLLMConfig // MEMBER_NEWS_CONSENSUS_* 환경변수 그룹
-	MajorEvent ConsensusLLMConfig // MAJOREVENT_CONSENSUS_* 환경변수 그룹
+	MemberNews ConsensusLLMConfig
+	MajorEvent ConsensusLLMConfig
 }
 
 type ExaConfig struct {
