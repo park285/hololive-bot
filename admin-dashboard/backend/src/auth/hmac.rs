@@ -4,7 +4,7 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
-#[allow(clippy::expect_used)] // HMAC-SHA256은 모든 키 길이를 허용
+#[allow(clippy::expect_used)]
 pub fn sign_session_id(session_id: &str, secret: &str) -> String {
     assert!(!secret.is_empty(), "session secret must not be empty");
     let mut mac =
@@ -14,7 +14,7 @@ pub fn sign_session_id(session_id: &str, secret: &str) -> String {
     format!("{session_id}.{signature}")
 }
 
-#[allow(clippy::expect_used)] // HMAC-SHA256은 모든 키 길이를 허용
+#[allow(clippy::expect_used)]
 pub fn validate_session_signature(full_id: &str, secret: &str) -> (String, bool) {
     assert!(!secret.is_empty(), "session secret must not be empty");
     let Some((session_id, provided_sig)) = full_id.split_once('.') else {
