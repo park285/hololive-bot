@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from "react";
 
-const CHANNEL_NAME = 'admin_session'
-const THROTTLE_MS = 1000 // Local throttle: 1s
-const BROADCAST_THROTTLE_MS = 5000 // Broadcast throttle: 5s
+const CHANNEL_NAME = "admin_session";
+const THROTTLE_MS = 1000; // Local throttle: 1s
+const BROADCAST_THROTTLE_MS = 5000; // Broadcast throttle: 5s
 
 interface TabSyncMessage {
-    type: 'ACTIVITY' | 'LOGOUT'
-    timestamp: number
+	type: "ACTIVITY" | "LOGOUT";
+	timestamp: number;
 }
 
 /**
@@ -21,91 +21,95 @@ interface TabSyncMessage {
  * @returns isIdle: 유휴 상태 여부
  */
 export function useActivityDetection(idleTimeoutMs: number) {
-    const [isIdle, setIsIdle] = useState(false)
-    const timeoutRef = useRef<number | null>(null)
-    const channelRef = useRef<BroadcastChannel | null>(null)
-    const lastActivityRef = useRef<number>(0)
-    const lastBroadcastRef = useRef<number>(0)
+	const [isIdle, setIsIdle] = useState(false);
+	const timeoutRef = useRef<number | null>(null);
+	const channelRef = useRef<BroadcastChannel | null>(null);
+	const lastActivityRef = useRef<number>(0);
+	const lastBroadcastRef = useRef<number>(0);
 
-    // 타이머 리셋 (로컬 전용, 브로드캐스트 안 함)
-    const resetTimerInternal = useCallback(() => {
-        setIsIdle(false)
+	// 타이머 리셋 (로컬 전용, 브로드캐스트 안 함)
+	const resetTimerInternal = useCallback(() => {
+		setIsIdle(false);
 
-        if (timeoutRef.current) {
-            window.clearTimeout(timeoutRef.current)
-        }
+		if (timeoutRef.current) {
+			window.clearTimeout(timeoutRef.current);
+		}
 
-        timeoutRef.current = window.setTimeout(() => {
-            setIsIdle(true)
-        }, idleTimeoutMs)
-    }, [idleTimeoutMs])
+		timeoutRef.current = window.setTimeout(() => {
+			setIsIdle(true);
+		}, idleTimeoutMs);
+	}, [idleTimeoutMs]);
 
-    // 타이머 리셋 + 다른 탭에 브로드캐스트 (Throttled)
-    const resetTimer = useCallback(() => {
-        const now = Date.now()
+	// 타이머 리셋 + 다른 탭에 브로드캐스트 (Throttled)
+	const resetTimer = useCallback(() => {
+		const now = Date.now();
 
-        // 1. Local Throttle
-        if (now - lastActivityRef.current < THROTTLE_MS) {
-            return
-        }
-        lastActivityRef.current = now
-        resetTimerInternal()
+		// 1. Local Throttle
+		if (now - lastActivityRef.current < THROTTLE_MS) {
+			return;
+		}
+		lastActivityRef.current = now;
+		resetTimerInternal();
 
-        // 2. Broadcast Throttle
-        if (now - lastBroadcastRef.current < BROADCAST_THROTTLE_MS) {
-            return
-        }
+		// 2. Broadcast Throttle
+		if (now - lastBroadcastRef.current < BROADCAST_THROTTLE_MS) {
+			return;
+		}
 
-        // 다른 탭에 활동 알림 (BroadcastChannel)
-        if (channelRef.current) {
-            const message: TabSyncMessage = {
-                type: 'ACTIVITY',
-                timestamp: now,
-            }
-            channelRef.current.postMessage(message)
-            lastBroadcastRef.current = now
-        }
-    }, [resetTimerInternal])
+		// 다른 탭에 활동 알림 (BroadcastChannel)
+		if (channelRef.current) {
+			const message: TabSyncMessage = {
+				type: "ACTIVITY",
+				timestamp: now,
+			};
+			channelRef.current.postMessage(message);
+			lastBroadcastRef.current = now;
+		}
+	}, [resetTimerInternal]);
 
-    // BroadcastChannel 설정 (다른 탭에서 활동 수신 시 타이머 리셋)
-    useEffect(() => {
-        if (typeof BroadcastChannel === 'undefined') {
-            // BroadcastChannel 미지원 브라우저
-            return
-        }
+	// BroadcastChannel 설정 (다른 탭에서 활동 수신 시 타이머 리셋)
+	useEffect(() => {
+		if (typeof BroadcastChannel === "undefined") {
+			// BroadcastChannel 미지원 브라우저
+			return;
+		}
 
-        channelRef.current = new BroadcastChannel(CHANNEL_NAME)
+		channelRef.current = new BroadcastChannel(CHANNEL_NAME);
 
-        channelRef.current.onmessage = (event: MessageEvent<TabSyncMessage>) => {
-            if (event.data.type === 'ACTIVITY') {
-                // 다른 탭에서 활동 감지 → 현재 탭 타이머 리셋 (브로드캐스트 안 함)
-                resetTimerInternal()
-            }
-        }
+		channelRef.current.onmessage = (event: MessageEvent<TabSyncMessage>) => {
+			if (event.data.type === "ACTIVITY") {
+				// 다른 탭에서 활동 감지 → 현재 탭 타이머 리셋 (브로드캐스트 안 함)
+				resetTimerInternal();
+			}
+		};
 
-        return () => {
-            channelRef.current?.close()
-            channelRef.current = null
-        }
-    }, [resetTimerInternal])
+		return () => {
+			channelRef.current?.close();
+			channelRef.current = null;
+		};
+	}, [resetTimerInternal]);
 
-    // 이벤트 리스너 설정
-    useEffect(() => {
-        const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+	// 이벤트 리스너 설정
+	useEffect(() => {
+		const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
 
-        // Passive listener for better scroll performance
-        events.forEach(event => { document.addEventListener(event, resetTimer, { passive: true }); })
+		// Passive listener for better scroll performance
+		events.forEach((event) => {
+			document.addEventListener(event, resetTimer, { passive: true });
+		});
 
-        // 초기 타이머 시작
-        resetTimerInternal()
+		// 초기 타이머 시작
+		resetTimerInternal();
 
-        return () => {
-            events.forEach(event => { document.removeEventListener(event, resetTimer); })
-            if (timeoutRef.current) {
-                window.clearTimeout(timeoutRef.current)
-            }
-        }
-    }, [resetTimer, resetTimerInternal])
+		return () => {
+			events.forEach((event) => {
+				document.removeEventListener(event, resetTimer);
+			});
+			if (timeoutRef.current) {
+				window.clearTimeout(timeoutRef.current);
+			}
+		};
+	}, [resetTimer, resetTimerInternal]);
 
-    return isIdle
+	return isIdle;
 }

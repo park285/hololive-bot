@@ -1,13 +1,4 @@
-export interface Alarm {
-  roomId: string
-  roomName: string
-  userId: string
-  userName: string
-  channelId: string
-  memberName: string
-}
-
-export interface AlarmsResponse {
-  status: string
-  alarms: Alarm[]
-}
+export type {
+	Alarm,
+	AlarmsResponse,
+} from "@/api/generated/data-contracts";

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --test src/components/streams/media.test.mjs",
+    "test": "npx tsx --test src/features/alarms/selectors.test.ts src/features/members/selectors.test.ts src/features/stats/selectors.test.ts src/components/streams/media.test.mjs src/api/blueprint-section-8.test.ts src/routes/route-definitions.test.ts",
     "preview": "vite preview",
     "generate:api": "mkdir -p ../backend/docs && (cd ../backend && cargo run --quiet --bin export-openapi > docs/swagger.json) && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
   },
@@ -50,6 +50,7 @@
     "globals": "^17.4.0",
     "swagger-typescript-api": "^13.6.7",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",
     "vite": "^8.0.5"

@@ -1,16 +1,9 @@
-export type ACLMode = 'whitelist' | 'blacklist'
+export type ACLMode = "whitelist" | "blacklist";
 
-export interface RoomsResponse {
-  status: string
-  rooms: string[]
-  aclEnabled: boolean
-  aclMode: ACLMode
-}
-
-export interface AddRoomRequest {
-  room: string
-}
-
-export interface RemoveRoomRequest {
-  room: string
-}
+export type {
+	AddRoomRequest,
+	RemoveRoomRequest,
+	RoomsResponse,
+	SetAclRequest as SetACLRequest,
+	SetAclResponse as SetACLResponse,
+} from "@/api/generated/data-contracts";

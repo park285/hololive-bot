@@ -1,45 +1,34 @@
-import { holoApi, type HoloApiResponse } from '@/api/holo'
+import { holoClient } from "@/api/holoClient";
 import type {
-  AddAliasRequest,
-  Member,
-  MembersResponse,
-  RemoveAliasRequest,
-  SetGraduationRequest,
-  UpdateChannelRequest,
-} from './types'
+	AddAliasRequest,
+	AddMemberRequest,
+	Member,
+	RemoveAliasRequest,
+	SetGraduationRequest,
+	UpdateChannelRequest,
+} from "./types";
 
 export const membersApi = {
-  getAll: async () => holoApi.get<MembersResponse>('/members'),
-
-  add: async (member: Partial<Member>) => holoApi.post<HoloApiResponse>('/members', member),
-
-  addAlias: async (memberId: number, request: AddAliasRequest) =>
-    holoApi.post<HoloApiResponse>(
-      `/members/${String(memberId)}/aliases`,
-      request,
-    ),
-
-  removeAlias: async (memberId: number, request: RemoveAliasRequest) =>
-    holoApi.delete<HoloApiResponse>(
-      `/members/${String(memberId)}/aliases`,
-      { data: request },
-    ),
-
-  setGraduation: async (memberId: number, request: SetGraduationRequest) =>
-    holoApi.patch<HoloApiResponse>(
-      `/members/${String(memberId)}/graduation`,
-      request,
-    ),
-
-  updateChannel: async (memberId: number, request: UpdateChannelRequest) =>
-    holoApi.patch<HoloApiResponse>(
-      `/members/${String(memberId)}/channel`,
-      request,
-    ),
-
-  updateName: async (memberId: number, name: string) =>
-    holoApi.patch<HoloApiResponse>(
-      `/members/${String(memberId)}/name`,
-      { name },
-    ),
-}
+	getAll: holoClient.getMembers,
+	add: async (member: Partial<Member>) => {
+		const request: AddMemberRequest = {
+			name: member.name ?? "",
+			channelId: member.channelId ?? "",
+			aliases: member.aliases ?? { ko: [], ja: [] },
+			nameJa: member.nameJa,
+			nameKo: member.nameKo,
+			isGraduated: member.isGraduated ?? false,
+		};
+		return holoClient.addMember(request);
+	},
+	addAlias: (memberId: number, request: AddAliasRequest) =>
+		holoClient.addAlias(memberId, request),
+	removeAlias: (memberId: number, request: RemoveAliasRequest) =>
+		holoClient.removeAlias(memberId, request),
+	setGraduation: (memberId: number, request: SetGraduationRequest) =>
+		holoClient.setGraduation(memberId, request),
+	updateChannel: (memberId: number, request: UpdateChannelRequest) =>
+		holoClient.updateChannel(memberId, request),
+	updateName: (memberId: number, name: string) =>
+		holoClient.updateMemberName(memberId, { name }),
+};
