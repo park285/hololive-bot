@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
@@ -131,7 +132,7 @@ func TestAPIHandler_EnsureDefaults_BackfillsDerivedFields(t *testing.T) {
 func TestAPIHandler_RespondHelpers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	h := &APIHandler{logger: slog.New(slog.DiscardHandler)}
+	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("respondError", func(t *testing.T) {
 		rec := httptest.NewRecorder()
@@ -139,7 +140,7 @@ func TestAPIHandler_RespondHelpers(t *testing.T) {
 
 		ctx.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 
-		h.respondError(ctx, http.StatusBadRequest, "bad request", gin.H{"field": "email"})
+		sharedserver.RespondError(ctx, http.StatusBadRequest, "bad request", gin.H{"field": "email"})
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusBadRequest)
@@ -157,7 +158,7 @@ func TestAPIHandler_RespondHelpers(t *testing.T) {
 
 		ctx.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 
-		h.respondInternalError(ctx, "internal", "log-message", io.EOF)
+		sharedserver.RespondInternalError(logger, ctx, "internal", "log-message", io.EOF)
 
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d want=%d", rec.Code, http.StatusInternalServerError)

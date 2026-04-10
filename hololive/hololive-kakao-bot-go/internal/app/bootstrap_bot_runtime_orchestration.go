@@ -26,15 +26,17 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
 // buildBotRuntime 는 런타임 구성요소를 조립한다.
 func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *coreInfrastructure) (*BotRuntime, error) {
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
 
-	botBot, err := ProvideBot(runtimeViews.botDeps)
+	botBot, err := bot.NewBot(runtimeViews.botDeps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
 	webhookHandler, err := buildBotWebhookHandler(cfg, botBot, runtimeViews.webhook, logger)
