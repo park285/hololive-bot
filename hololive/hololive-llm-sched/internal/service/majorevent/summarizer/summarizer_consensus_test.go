@@ -21,9 +21,13 @@
 package summarizer
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/consensus"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestNeedsSummaryAdjudication(t *testing.T) {
@@ -108,4 +112,162 @@ func TestNormalizeSummarySeverity(t *testing.T) {
 			t.Errorf("NormalizeSeverity(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
+}
+
+func TestDeriveConsensusBudget_CapsToParentDeadline(t *testing.T) {
+	parent, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	parentDeadline, ok := parent.Deadline()
+	if !ok {
+		t.Fatal("parent deadline missing")
+	}
+
+	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second, 250*time.Millisecond)
+	if !ok {
+		t.Fatal("deriveConsensusBudget() ok = false, want true")
+	}
+	defer childCancel()
+
+	childDeadline, ok := child.Deadline()
+	if !ok {
+		t.Fatal("child deadline missing")
+	}
+
+	gap := parentDeadline.Sub(childDeadline)
+	if gap < 150*time.Millisecond || gap > 500*time.Millisecond {
+		t.Fatalf("deadline gap = %v, want around 250ms reserve", gap)
+	}
+}
+
+func TestDeriveConsensusBudget_ReturnsFalseWhenNoBudgetLeft(t *testing.T) {
+	parent, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	child, childCancel, ok := deriveConsensusBudget(parent, 10*time.Second, 250*time.Millisecond)
+	if ok {
+		t.Fatal("deriveConsensusBudget() ok = true, want false")
+	}
+	if child != nil {
+		t.Fatalf("deriveConsensusBudget() child = %v, want nil", child)
+	}
+	if childCancel != nil {
+		t.Fatal("deriveConsensusBudget() cancel should be nil when budget is exhausted")
+	}
+}
+
+func TestEventSummarizer_RunConsensus_UsesReservedParentBudgetForReview(t *testing.T) {
+	reviewer := &deadlineCapturingSummarizer{
+		jsonResponse: `{"approved":true,"confidence":0.99,"issues":[]}`,
+	}
+	summarizer := NewEventSummarizer(
+		nil,
+		nil,
+		nil,
+		testLogger(),
+		WithSummarizerConsensus(reviewer, nil, SummarizerConsensusConfig{
+			Enabled:             true,
+			ConfidenceThreshold: 0.85,
+			ReviewTimeout:       30 * time.Second,
+			AdjudicateTimeout:   45 * time.Second,
+		}),
+	)
+
+	parent, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	parentDeadline, ok := parent.Deadline()
+	if !ok {
+		t.Fatal("parent deadline missing")
+	}
+
+	primary := &summaryResponse{
+		Highlights: []eventHighlight{
+			{Name: "fes"},
+			{Name: "expo"},
+		},
+	}
+	result, used := summarizer.runConsensus(
+		parent,
+		[]domain.MajorEvent{{ID: 1, Title: "fes"}},
+		SummaryTypeWeekly,
+		"2026-02-15",
+		"",
+		primary,
+	)
+
+	if reviewer.callCount != 1 {
+		t.Fatalf("reviewer callCount = %d, want 1", reviewer.callCount)
+	}
+	if result != primary {
+		t.Fatal("runConsensus() should keep primary summary when review passes")
+	}
+	if used {
+		t.Fatal("runConsensus() used = true, want false")
+	}
+	deadlineGap := parentDeadline.Sub(reviewer.deadline)
+	if deadlineGap < 150*time.Millisecond || deadlineGap > 500*time.Millisecond {
+		t.Fatalf("reviewer deadline gap = %v, want around 250ms reserve", deadlineGap)
+	}
+}
+
+func TestEventSummarizer_RunConsensus_SkipsWhenReviewBudgetExhausted(t *testing.T) {
+	reviewer := &mockSummarizer{
+		jsonResponse: `{"approved":true,"confidence":0.99,"issues":[]}`,
+	}
+	summarizer := NewEventSummarizer(
+		nil,
+		nil,
+		nil,
+		testLogger(),
+		WithSummarizerConsensus(reviewer, nil, SummarizerConsensusConfig{
+			Enabled:             true,
+			ConfidenceThreshold: 0.85,
+			ReviewTimeout:       30 * time.Second,
+			AdjudicateTimeout:   45 * time.Second,
+		}),
+	)
+
+	parent, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	primary := &summaryResponse{
+		Highlights: []eventHighlight{
+			{Name: "fes"},
+			{Name: "expo"},
+		},
+	}
+	result, used := summarizer.runConsensus(
+		parent,
+		[]domain.MajorEvent{{ID: 1, Title: "fes"}},
+		SummaryTypeWeekly,
+		"2026-02-15",
+		"",
+		primary,
+	)
+
+	if reviewer.callCount != 0 {
+		t.Fatalf("reviewer callCount = %d, want 0", reviewer.callCount)
+	}
+	if result != primary {
+		t.Fatal("runConsensus() should keep primary summary when budget is exhausted")
+	}
+	if used {
+		t.Fatal("runConsensus() used = true, want false")
+	}
+}
+
+type deadlineCapturingSummarizer struct {
+	jsonResponse string
+	err          error
+	callCount    int
+	deadline     time.Time
+}
+
+func (m *deadlineCapturingSummarizer) GenerateJSON(ctx context.Context, _, _ string, _ map[string]any) (string, error) {
+	m.callCount++
+	deadline, ok := ctx.Deadline()
+	if ok {
+		m.deadline = deadline
+	}
+	return m.jsonResponse, m.err
 }
