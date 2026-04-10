@@ -17,7 +17,6 @@ pub fn session_key(session_id: &str) -> String {
     format!("{KEY_PREFIX}{session_id}")
 }
 
-/// 절대 만료 시각 초과 여부
 pub fn is_absolutely_expired(session: &Session) -> bool {
     Utc::now() >= session.absolute_expires_at
 }
@@ -169,7 +168,6 @@ impl SessionProvider for ValkeySessionStore {
 
         let session: Session = serde_json::from_str(&data)?;
 
-        // 절대 만료 검사
         if is_absolutely_expired(&session) {
             debug!(
                 session_id = %super::truncate_session_id(session_id),
@@ -192,7 +190,6 @@ impl SessionProvider for ValkeySessionStore {
     }
 
     async fn rotate_session(&self, old_session_id: &str) -> Result<Option<Session>, anyhow::Error> {
-        // 기존 세션 조회
         let mut conn = self.pool.get().await?;
         let old_data: Option<String> = conn.get(session_key(old_session_id)).await?;
 
@@ -202,13 +199,11 @@ impl SessionProvider for ValkeySessionStore {
 
         let old_session: Session = serde_json::from_str(&old_data)?;
 
-        // 절대 만료 검사
         if is_absolutely_expired(&old_session) {
             conn.del::<_, ()>(session_key(old_session_id)).await?;
             return Ok(None);
         }
 
-        // 교체 간격 검사: 마지막 교체 후 rotation_interval 미경과 시 스킵
         let elapsed = Utc::now()
             .signed_duration_since(old_session.last_rotated_at)
             .to_std()
@@ -223,7 +218,6 @@ impl SessionProvider for ValkeySessionStore {
             return Ok(None);
         }
 
-        // 새 세션 생성
         let new_id = super::generate_session_id();
         let now = Utc::now();
         let new_session = Session {
@@ -237,7 +231,6 @@ impl SessionProvider for ValkeySessionStore {
         let ttl_secs = self.config.expiry_duration.as_secs() as i64;
         let grace_secs = self.config.grace_period.as_secs() as i64;
 
-        // Lua 원자적 교체
         let result: Option<String> = redis::Script::new(ROTATE_LUA)
             .key(session_key(old_session_id))
             .key(session_key(&new_id))
@@ -301,7 +294,6 @@ mod tests {
 
     #[test]
     fn test_session_deserialization_without_last_rotated_at() {
-        // last_rotated_at 필드 누락 시 serde default 적용 확인
         let json = r#"{
             "id": "session-no-rotated",
             "created_at": "2026-03-22T10:00:00Z",
@@ -311,7 +303,6 @@ mod tests {
 
         let session: Session = serde_json::from_str(json).expect("deserialize");
         assert_eq!(session.id, "session-no-rotated");
-        // default 함수가 Utc::now()를 호출하므로 역직렬화 시점의 시각이 설정됨
         assert!(session.last_rotated_at <= Utc::now());
     }
 

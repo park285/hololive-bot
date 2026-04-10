@@ -1,7 +1,3 @@
-//! Integration tests for route structure and API contracts.
-//! These tests verify response shapes and routing behavior using axum's test utilities.
-//! Full auth flow tests require a Valkey instance and are skipped in CI.
-
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 

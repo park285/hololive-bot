@@ -26,8 +26,8 @@ hyper-util = { version = "0.1", features = ["client-legacy", "http1", "http2", "
 http-body-util = "0.1"
 
 # Auth
-hmac = "0.12"
-sha2 = "0.10"
+hmac = "0.13"
+sha2 = "0.11"
 bcrypt = "0.19"
 getrandom = "0.4"
 hex = "0.4"
