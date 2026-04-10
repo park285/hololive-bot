@@ -2,8 +2,6 @@ module github.com/kapu/hololive-dispatcher-go
 
 go 1.26.2
 
-toolchain go1.26.2
-
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/joho/godotenv v1.5.1
@@ -28,6 +26,7 @@ require (
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
+	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/gin-gonic/gin v1.12.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -100,5 +99,7 @@ require (
 	gorm.io/driver/postgres v1.6.0 // indirect
 	gorm.io/gorm v1.31.1 // indirect
 )
+
+replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
 
 replace github.com/kapu/hololive-shared => ../hololive-shared
