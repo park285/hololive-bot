@@ -25,9 +25,8 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
-
-	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
 // AdminAPIConfig: 운영 API(호환) 설정
@@ -59,38 +58,38 @@ func LoadAdminAPI() (*AdminAPIConfig, error) {
 
 func buildAdminAPIConfig() *AdminAPIConfig {
 	_, _, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
-	llmSchedulerHealthURL := envutil.StringAny(
+	llmSchedulerHealthURL := sharedenv.StringAny(
 		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
 		"SERVICES_LLM_SERVER_HEALTH_URL",
 	)
 
 	return &AdminAPIConfig{
 		Server: ServerConfig{
-			Port:   envutil.Int("ADMIN_API_PORT", 30002),
-			APIKey: envutil.String("API_SECRET_KEY", ""),
+			Port:   sharedenv.Int("ADMIN_API_PORT", 30002),
+			APIKey: sharedenv.String("API_SECRET_KEY", ""),
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Holodex: HolodexConfig{
-			BaseURL: envutil.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
+			BaseURL: sharedenv.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
 			APIKey:  resolveHolodexAPIKey(),
 		},
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,
-			Enforce:             envutil.Bool("CORS_ENFORCE", false),
+			Enforce:             sharedenv.Bool("CORS_ENFORCE", false),
 			MissingInProduction: corsMissingInProduction,
 		},
 		Environment: loadAppEnvironment(),
 		Services: ServicesConfig{
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
-			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-			GameBotTurtleHealthURL:  envutil.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+			GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
+			GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
 		},
 		Logging: LoggingConfig{
-			Level: envutil.String("LOG_LEVEL", "info"),
+			Level: sharedenv.String("LOG_LEVEL", "info"),
 		},
-		LLMSchedulerURL: envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		Version:         envutil.String("APP_VERSION", "1.0.0-bot-admin"),
+		LLMSchedulerURL: sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
+		Version:         sharedenv.String("APP_VERSION", "1.0.0-bot-admin"),
 	}
 }
 
