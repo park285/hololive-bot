@@ -25,9 +25,9 @@ import (
 	"net/http"
 	"testing"
 
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
