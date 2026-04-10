@@ -10,7 +10,6 @@ struct AttemptInfo {
     locked_until: Option<Instant>,
 }
 
-// Mutex 내부로 인해 수동 Debug 불가
 #[allow(missing_debug_implementations)]
 pub struct LoginRateLimiter {
     attempts: Mutex<HashMap<String, AttemptInfo>>,
@@ -37,31 +36,26 @@ impl LoginRateLimiter {
         }
     }
 
-    /// IP 허용 여부 확인. (allowed, remaining_lockout) 반환
     pub fn is_allowed(&self, ip: &str) -> (bool, Duration) {
         let mut attempts = self.attempts.lock().unwrap();
         let Some(info) = attempts.get_mut(ip) else {
             return (true, Duration::ZERO);
         };
 
-        // 잠금 상태 확인
         if let Some(locked_until) = info.locked_until {
             let now = Instant::now();
             if now < locked_until {
                 return (false, locked_until - now);
             }
-            // 잠금 만료 -> 항목 제거
             attempts.remove(ip);
             return (true, Duration::ZERO);
         }
 
-        // 시도 윈도우 만료 확인
         if info.first_attempt.elapsed() > self.window {
             attempts.remove(ip);
             return (true, Duration::ZERO);
         }
 
-        // 최대 시도 횟수 미만이면 허용
         if info.count < self.max_attempts {
             return (true, Duration::ZERO);
         }
@@ -69,7 +63,6 @@ impl LoginRateLimiter {
         (false, Duration::ZERO)
     }
 
-    /// 실패 기록. 현재 실패 횟수 반환
     pub fn record_failure(&self, ip: &str) -> usize {
         let mut attempts = self.attempts.lock().unwrap();
         let info = attempts
@@ -89,13 +82,11 @@ impl LoginRateLimiter {
         info.count
     }
 
-    /// 성공 시 IP 항목 제거
     pub fn record_success(&self, ip: &str) {
         let mut attempts = self.attempts.lock().unwrap();
         attempts.remove(ip);
     }
 
-    /// 만료 항목 주기적 정리 태스크 시작
     pub fn start_cleanup_task(self: &Arc<Self>) {
         let limiter = Arc::clone(self);
         let cancel = self.cancel.clone();
@@ -107,13 +98,11 @@ impl LoginRateLimiter {
                         let mut attempts = limiter.attempts.lock().unwrap();
                         let now = Instant::now();
                         attempts.retain(|_, info| {
-                            // 잠금 만료 항목 제거
                             if let Some(locked_until) = info.locked_until
                                 && now >= locked_until
                             {
                                 return false;
                             }
-                            // 윈도우 만료 항목 제거
                             if info.first_attempt.elapsed() > limiter.window {
                                 return false;
                             }

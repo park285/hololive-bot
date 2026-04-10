@@ -6,23 +6,19 @@ use rust_embed::RustEmbed;
 #[folder = "static/dist/"]
 struct StaticAssets;
 
-/// Check if embedded assets exist (index.html present)
 #[allow(dead_code)]
 pub fn has_embedded() -> bool {
     StaticAssets::get("index.html").is_some()
 }
 
-/// Get index.html content
 pub fn index_html() -> Option<Vec<u8>> {
     StaticAssets::get("index.html").map(|f| f.data.to_vec())
 }
 
-/// Get favicon
 pub fn favicon() -> Option<Vec<u8>> {
     StaticAssets::get("favicon.svg").map(|f| f.data.to_vec())
 }
 
-/// Serve static files from embedded assets
 pub async fn serve_static(uri: axum::http::Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches("/assets/");
     let asset_path = format!("assets/{path}");
@@ -46,7 +42,6 @@ pub async fn serve_static(uri: axum::http::Uri) -> impl IntoResponse {
     }
 }
 
-/// Serve favicon with cache
 pub async fn serve_favicon() -> impl IntoResponse {
     match favicon() {
         Some(data) => {
@@ -65,7 +60,6 @@ pub async fn serve_favicon() -> impl IntoResponse {
     }
 }
 
-/// Serve index.html for SPA fallback (no-cache)
 pub async fn serve_index() -> impl IntoResponse {
     match index_html() {
         Some(data) => {
