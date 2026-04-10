@@ -1,9 +1,9 @@
 use reqwest::Method;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use crate::error::{AppError, ProxyError};
+use crate::error::{AppError, ErrorResponse, ProxyError};
 
 #[derive(Debug, Clone)]
 pub struct HoloApiClient {
@@ -78,9 +78,9 @@ impl HoloApiClient {
             .bytes()
             .await
             .map_err(|_| AppError::Proxy(ProxyError::Unavailable))?;
-        if status.is_client_error() {
-            let body = parse_upstream_error_body(&bytes);
-            return Err(AppError::Proxy(ProxyError::UpstreamClient { status, body }));
+        if !status.is_success() {
+            let body = parse_upstream_error_body(&bytes, status);
+            return Err(AppError::Proxy(ProxyError::Upstream { status, body }));
         }
         let parsed = serde_json::from_slice::<T>(&bytes)
             .map_err(|_| AppError::Proxy(ProxyError::Unavailable))?;
@@ -89,16 +89,17 @@ impl HoloApiClient {
     }
 }
 
-fn parse_upstream_error_body(bytes: &[u8]) -> Value {
+fn parse_upstream_error_body(bytes: &[u8], status: reqwest::StatusCode) -> ErrorResponse {
+    let fallback = status
+        .canonical_reason()
+        .unwrap_or("The upstream service rejected the request");
     if bytes.is_empty() {
-        return json!({ "error": "Upstream client error" });
+        return ErrorResponse::simple(fallback);
     }
 
-    match serde_json::from_slice(bytes) {
-        Ok(Value::Object(map)) => Value::Object(map),
-        Ok(Value::String(text)) => json!({ "error": text }),
-        Ok(other) => json!({ "error": other.to_string() }),
-        Err(_) => json!({ "error": String::from_utf8_lossy(bytes).to_string() }),
+    match serde_json::from_slice::<Value>(bytes) {
+        Ok(value) => ErrorResponse::from_value(value, fallback),
+        Err(_) => ErrorResponse::simple(String::from_utf8_lossy(bytes).trim().to_string()),
     }
 }
 
@@ -245,11 +246,17 @@ mod tests {
             .expect_err("400 response should map to proxy client error");
 
         match err {
-            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+            AppError::Proxy(ProxyError::Upstream { status, body }) => {
                 assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
                 assert_eq!(
                     body,
-                    json!({ "error": "invalid filter", "code": "bad_filter" })
+                    ErrorResponse {
+                        error: "invalid filter".into(),
+                        code: Some("bad_filter".into()),
+                        details: None,
+                        absolute_expired: None,
+                        retry_after: None,
+                    }
                 );
             }
             other => panic!("unexpected error: {other:?}"),
@@ -268,9 +275,9 @@ mod tests {
             .expect_err("400 response should map to proxy client error");
 
         match err {
-            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+            AppError::Proxy(ProxyError::Upstream { status, body }) => {
                 assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
-                assert_eq!(body, json!({ "error": "plain upstream error" }));
+                assert_eq!(body, ErrorResponse::simple("plain upstream error"));
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -288,9 +295,9 @@ mod tests {
             .expect_err("400 response should map to proxy client error");
 
         match err {
-            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+            AppError::Proxy(ProxyError::Upstream { status, body }) => {
                 assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
-                assert_eq!(body, json!({ "error": "json string error" }));
+                assert_eq!(body, ErrorResponse::simple("json string error"));
             }
             other => panic!("unexpected error: {other:?}"),
         }
@@ -308,9 +315,12 @@ mod tests {
             .expect_err("400 response should map to proxy client error");
 
         match err {
-            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+            AppError::Proxy(ProxyError::Upstream { status, body }) => {
                 assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
-                assert_eq!(body, json!({ "error": "Upstream client error" }));
+                assert_eq!(
+                    body,
+                    ErrorResponse::simple("Bad Request")
+                );
             }
             other => panic!("unexpected error: {other:?}"),
         }

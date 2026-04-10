@@ -12,6 +12,7 @@ mod state;
 mod static_files;
 mod status;
 
+use anyhow::Context;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -19,36 +20,35 @@ use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() {
+    if let Err(err) = run().await {
+        eprintln!("fatal: {err:#}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
-    let cfg = match config::Config::load() {
-        Ok(cfg) => cfg,
-        Err(err) => {
-            eprintln!("admin-dashboard config load failed: {err}");
-            std::process::exit(1);
-        }
-    };
+    let cfg = config::Config::load().context("admin-dashboard config load failed")?;
     let _tracing_guards = logging::init_tracing(&cfg);
     tracing::info!(port = %cfg.port, env = %cfg.env, "starting admin-dashboard");
 
     let pool = deadpool_redis::Config::from_url(format!("redis://{}", cfg.valkey_url))
         .create_pool(Some(deadpool_redis::Runtime::Tokio1))
-        .expect("valkey pool creation failed");
+        .context("valkey pool creation failed")?;
 
     let docker_svc = docker::DockerService::new(&cfg.docker_host)
         .ok()
         .map(Arc::new);
-    let holo_api = Arc::new(
-        holo::client::HoloApiClient::new(
-            &cfg.holo_bot_url,
-            if cfg.holo_bot_api_key.is_empty() {
-                None
-            } else {
-                Some(cfg.holo_bot_api_key.clone())
-            },
-        )
-        .expect("holo api client init failed"),
-    );
+    let holo_api = Arc::new(holo::client::HoloApiClient::new(
+        &cfg.holo_bot_url,
+        if cfg.holo_bot_api_key.is_empty() {
+            None
+        } else {
+            Some(cfg.holo_bot_api_key.clone())
+        },
+    )
+    .context("holo api client init failed")?);
 
     let endpoints = vec![status::ServiceEndpoint {
         name: "hololive-bot".to_string(),
@@ -80,29 +80,35 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .expect("failed to bind");
+        .context("failed to bind")?;
     tracing::info!(%addr, "listening");
 
     axum::serve(
         listener,
         router.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(async {
+        if let Err(err) = shutdown_signal().await {
+            tracing::error!(error = %err, "shutdown signal handler failed");
+        }
+    })
     .await
-    .expect("server error");
+    .context("server error")?;
 
     cancel_token.cancel();
     rate_limiter.shutdown();
     tracing::info!("shutdown complete");
+    Ok(())
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal() -> anyhow::Result<()> {
     let ctrl_c = tokio::signal::ctrl_c();
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .expect("sigterm handler");
+        .context("sigterm handler")?;
 
     tokio::select! {
         _ = ctrl_c => tracing::info!("SIGINT received"),
         _ = sigterm.recv() => tracing::info!("SIGTERM received"),
     }
+    Ok(())
 }

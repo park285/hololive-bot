@@ -18,7 +18,12 @@ use super::types::{
     get,
     path = "/admin/api/holo/alarms",
     operation_id = "holoGetAlarms",
-    responses((status = 200, body = AlarmsResponse)),
+    responses(
+        (status = 200, body = AlarmsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_alarms(
@@ -31,7 +36,12 @@ pub async fn get_alarms(
     get,
     path = "/admin/api/holo/members",
     operation_id = "holoGetMembers",
-    responses((status = 200, body = MembersResponse)),
+    responses(
+        (status = 200, body = MembersResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_members(
@@ -44,7 +54,12 @@ pub async fn get_members(
     get,
     path = "/admin/api/holo/rooms",
     operation_id = "holoGetRooms",
-    responses((status = 200, body = RoomsResponse)),
+    responses(
+        (status = 200, body = RoomsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_rooms(
@@ -57,7 +72,12 @@ pub async fn get_rooms(
     get,
     path = "/admin/api/holo/settings",
     operation_id = "holoGetSettings",
-    responses((status = 200, body = SettingsResponse)),
+    responses(
+        (status = 200, body = SettingsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_settings(
@@ -70,7 +90,12 @@ pub async fn get_settings(
     get,
     path = "/admin/api/holo/stats",
     operation_id = "holoGetStats",
-    responses((status = 200, body = StatsResponse)),
+    responses(
+        (status = 200, body = StatsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_stats(
@@ -83,7 +108,12 @@ pub async fn get_stats(
     get,
     path = "/admin/api/holo/stats/channels",
     operation_id = "holoGetChannelStats",
-    responses((status = 200, body = ChannelStatsResponse)),
+    responses(
+        (status = 200, body = ChannelStatsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_channel_stats(
@@ -97,7 +127,12 @@ pub async fn get_channel_stats(
     path = "/admin/api/holo/streams/live",
     operation_id = "holoGetLiveStreams",
     params(StreamsQuery),
-    responses((status = 200, body = StreamsResponse)),
+    responses(
+        (status = 200, body = StreamsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_live_streams(
@@ -113,7 +148,12 @@ pub async fn get_live_streams(
     path = "/admin/api/holo/streams/upcoming",
     operation_id = "holoGetUpcomingStreams",
     params(StreamsQuery),
-    responses((status = 200, body = StreamsResponse)),
+    responses(
+        (status = 200, body = StreamsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_upcoming_streams(
@@ -129,7 +169,12 @@ pub async fn get_upcoming_streams(
     path = "/admin/api/holo/milestones",
     operation_id = "holoGetMilestones",
     params(MilestonesQuery),
-    responses((status = 200, body = MilestonesResponse)),
+    responses(
+        (status = 200, body = MilestonesResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_milestones(
@@ -162,7 +207,12 @@ pub async fn get_milestones(
     path = "/admin/api/holo/milestones/near",
     operation_id = "holoGetNearMilestones",
     params(NearMilestonesQuery),
-    responses((status = 200, body = NearMilestonesResponse)),
+    responses(
+        (status = 200, body = NearMilestonesResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_near_milestones(
@@ -179,7 +229,12 @@ pub async fn get_near_milestones(
     get,
     path = "/admin/api/holo/milestones/stats",
     operation_id = "holoGetMilestoneStats",
-    responses((status = 200, body = MilestoneStatsResponse)),
+    responses(
+        (status = 200, body = MilestoneStatsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
     tag = "holo"
 )]
 pub async fn get_milestone_stats(
