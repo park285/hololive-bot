@@ -117,9 +117,9 @@ func TestStream_MinutesUntilStartUsesSharedTimeSemantics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stream := &Stream{StartScheduled: tt.target}
 			got := stream.MinutesUntilStart()
-			want := sharedtime.MinutesUntilFloor(tt.target, time.Now())
+			want := sharedtime.MinutesUntilFloorPtr(tt.target, time.Now())
 			if tt.target != nil {
-				want = sharedtime.MinutesUntilFloor(tt.target, time.Now())
+				want = sharedtime.MinutesUntilFloorPtr(tt.target, time.Now())
 			}
 			if got != want {
 				t.Fatalf("MinutesUntilStart() = %d, want %d", got, want)

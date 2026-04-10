@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-func TestMinutesUntilFloor(t *testing.T) {
+func TestMinutesUntilFloorPtr(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
@@ -59,8 +59,8 @@ func TestMinutesUntilFloor(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if got := MinutesUntilFloor(tc.target, now); got != tc.expected {
-				t.Fatalf("MinutesUntilFloor() = %d, expected %d", got, tc.expected)
+			if got := MinutesUntilFloorPtr(tc.target, now); got != tc.expected {
+				t.Fatalf("MinutesUntilFloorPtr() = %d, expected %d", got, tc.expected)
 			}
 		})
 	}

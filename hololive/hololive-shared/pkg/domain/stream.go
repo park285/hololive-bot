@@ -125,7 +125,7 @@ func (s *Stream) TimeUntilStart() *time.Duration {
 
 // MinutesUntilStart: 방송 시작까지 남은 시간을 '분' 단위(내림)로 계산하여 반환합니다.
 func (s *Stream) MinutesUntilStart() int {
-	return sharedtime.MinutesUntilFloor(s.StartScheduled, time.Now())
+	return sharedtime.MinutesUntilFloorPtr(s.StartScheduled, time.Now())
 }
 
 // GetChzzkLiveURL: Chzzk Live URL을 반환합니다. (비어있으면 빈 문자열)

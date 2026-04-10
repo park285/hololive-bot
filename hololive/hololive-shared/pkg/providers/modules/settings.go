@@ -40,7 +40,7 @@ func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool
 		return sharedchecker.NormalizeTargetMinutes(targetMinutes)
 	}
 
-	return sharedchecker.NormalizeTargetMinutes([]int{current, 3, 1})
+	return sharedchecker.BuildRuntimeTargetMinutes(current)
 }
 
 func resolveSettingsFilePath() string {
