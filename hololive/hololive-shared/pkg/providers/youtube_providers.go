@@ -25,6 +25,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -99,10 +100,12 @@ func ProvideScraperScheduler(
 
 	// 모든 멤버 채널에 대해 폴러 등록
 	members := membersData.GetAllMembers()
+	activeMembers := 0
 	for _, m := range members {
 		if m.IsGraduated {
 			continue // 졸업 멤버 제외
 		}
+		activeMembers++
 
 		channelID := m.ChannelID
 
@@ -116,8 +119,32 @@ func ProvideScraperScheduler(
 
 	logger.Info("Scraper scheduler initialized",
 		slog.Int("members", len(members)),
+		slog.Int("active_members", activeMembers),
 		slog.Int("poller_templates", len(channelPollerRegistrations)),
 		slog.Int("total_jobs", len(members)*len(channelPollerRegistrations)))
 
+	perChannelRPM := estimatedRequestsPerMinute(channelPollerRegistrations)
+	totalRPM := perChannelRPM * float64(activeMembers)
+	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
+	if totalRPM > budgetRPM {
+		logger.Warn("scraper_poll_budget_exceeds_rate_limit",
+			slog.Float64("per_channel_rpm", perChannelRPM),
+			slog.Float64("expected_total_rpm", totalRPM),
+			slog.Float64("budget_rpm", budgetRPM),
+			slog.Int("active_members", activeMembers),
+		)
+	}
+
 	return scheduler
+}
+
+func estimatedRequestsPerMinute(registrations []ChannelPollerRegistration) float64 {
+	var rpm float64
+	for _, registration := range registrations {
+		if registration.Interval <= 0 {
+			continue
+		}
+		rpm += 60.0 / registration.Interval.Seconds()
+	}
+	return rpm
 }

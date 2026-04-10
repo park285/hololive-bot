@@ -82,11 +82,6 @@ type trackingYouTubeSvc struct {
 	proxyEnabled bool
 }
 
-type trackingHolodexProxySvc struct {
-	mu           sync.Mutex
-	proxyEnabled bool
-}
-
 func (s *trackingYouTubeSvc) SetScraperProxyEnabled(enabled bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -104,29 +99,6 @@ func (s *trackingYouTubeSvc) ScraperProxyEnabled() bool {
 }
 
 func (s *trackingYouTubeSvc) isProxyEnabled() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.proxyEnabled
-}
-
-func (s *trackingHolodexProxySvc) SetScraperProxyEnabled(enabled bool) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.proxyEnabled = enabled
-
-	return true
-}
-
-func (s *trackingHolodexProxySvc) ScraperProxyEnabled() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.proxyEnabled
-}
-
-func (s *trackingHolodexProxySvc) isProxyEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -283,7 +255,7 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	trackingPoller := &trackingProxyTogglePoller{}
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
-	applyScraperProxyToggle(true, youtubeSvc, nil, scheduler, logger)
+	sharedserver.ApplyScraperProxyToggle(true, youtubeSvc, nil, scheduler, logger)
 	assert.True(t, youtubeSvc.isProxyEnabled())
 	assert.True(t, trackingPoller.isEnabled())
 
@@ -291,7 +263,7 @@ func TestApplyScraperProxyToggle_UpdatesYouTubeAndScheduler(t *testing.T) {
 	assert.True(t, known)
 	assert.True(t, enabled)
 
-	applyScraperProxyToggle(false, youtubeSvc, nil, scheduler, logger)
+	sharedserver.ApplyScraperProxyToggle(false, youtubeSvc, nil, scheduler, logger)
 	assert.False(t, youtubeSvc.isProxyEnabled())
 	assert.False(t, trackingPoller.isEnabled())
 

@@ -82,14 +82,14 @@ type Scheduler struct {
 
 // SchedulerConfig: 스케줄러 설정
 type SchedulerConfig struct {
-	WorkerCount     int           // 동시 워커 수 (기본: 2)
+	WorkerCount     int           // 동시 워커 수 (기본: 4)
 	RequestInterval time.Duration // 요청 간 최소 간격 (기본: 4초)
 }
 
 // DefaultSchedulerConfig: 기본 스케줄러 설정
 func DefaultSchedulerConfig() SchedulerConfig {
 	return SchedulerConfig{
-		WorkerCount:     2,
+		WorkerCount:     4,
 		RequestInterval: 4 * time.Second,
 	}
 }
@@ -105,7 +105,7 @@ func (s *Scheduler) WorkerCount() int {
 // NewScheduler: 새 스케줄러 생성
 func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	if cfg.WorkerCount <= 0 {
-		cfg.WorkerCount = 2
+		cfg.WorkerCount = DefaultSchedulerConfig().WorkerCount
 	}
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
@@ -387,7 +387,7 @@ func advanceNextRunAt(scheduledAt time.Time, interval time.Duration, now time.Ti
 	}
 
 	skipped := now.Sub(scheduledAt)/interval + 1
-	return scheduledAt.Add(skipped * interval)
+	return scheduledAt.Add(time.Duration(int64(skipped) * interval.Nanoseconds()))
 }
 
 func nextPollAt(now time.Time, interval, offset time.Duration) time.Time {
@@ -399,7 +399,7 @@ func nextPollAt(now time.Time, interval, offset time.Duration) time.Time {
 		offset = 0
 	}
 	if offset >= interval {
-		offset = offset % interval
+		offset %= interval
 	}
 
 	next := now.Truncate(interval).Add(offset)

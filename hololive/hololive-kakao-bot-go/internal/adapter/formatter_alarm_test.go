@@ -29,11 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-//go:fix inline
-func stringPtr(s string) *string {
-	return new(s)
-}
-
 func TestAlarmChannelName_WithStelliveOrg(t *testing.T) {
 	tests := []struct {
 		name         string

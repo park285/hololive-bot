@@ -49,6 +49,7 @@ const (
 
 	defaultYouTubeTimeout  = 45 * time.Second
 	defaultPlatformTimeout = 30 * time.Second
+	evaluationWindowSlack  = 15 * time.Second
 )
 
 type targetMinutesSource interface {
@@ -115,13 +116,26 @@ func NewRuntimeScheduler(
 		logger = slog.Default()
 	}
 
-	targetMinutes := normalizeTargetMinutes(alarmSvc.GetTargetMinutes())
+	targetMinutes := sharedchecker.NormalizeTargetMinutes(alarmSvc.GetTargetMinutes())
+	youtubeInterval := notifCfg.CheckInterval
+	youtubeEvaluationWindowCap := youtubeEvaluationWindowCap(youtubeInterval)
+	if youtubeInterval <= 0 {
+		youtubeInterval = defaultYouTubeInterval
+	}
 
 	tierScheduler := tier.NewTieredScheduler(logger)
 	dedupSvc := dedup.NewService(cacheSvc, targetMinutes, logger)
 	queuePublisher := queue.NewPublisher(cacheSvc, logger)
 
-	youtubeChecker, err := checker.NewYouTubeChecker(cacheSvc, holodexSvc, tierScheduler, dedupSvc, targetMinutes, logger)
+	youtubeChecker, err := checker.NewYouTubeChecker(
+		cacheSvc,
+		holodexSvc,
+		tierScheduler,
+		dedupSvc,
+		targetMinutes,
+		youtubeEvaluationWindowCap,
+		logger,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create youtube checker: %w", err)
 	}
@@ -139,11 +153,6 @@ func NewRuntimeScheduler(
 	notifierSvc, err := checker.NewNotifier(dedupSvc, queuePublisher, alarmSvc, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
-	}
-
-	youtubeInterval := notifCfg.CheckInterval
-	if youtubeInterval <= 0 {
-		youtubeInterval = defaultYouTubeInterval
 	}
 
 	return &RuntimeScheduler{
@@ -238,6 +247,17 @@ func nextAligned(now time.Time, interval time.Duration) time.Time {
 	return next.Add(interval)
 }
 
+func youtubeEvaluationWindowCap(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		interval = defaultYouTubeInterval
+	}
+	if interval < time.Minute {
+		return time.Minute + evaluationWindowSlack
+	}
+
+	return interval + evaluationWindowSlack
+}
+
 func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
 	s.syncYouTubeTargetMinutes()
 
@@ -303,8 +323,4 @@ func (s *RuntimeScheduler) dispatchNotifications(
 	)
 
 	return nil
-}
-
-func normalizeTargetMinutes(targetMinutes []int) []int {
-	return sharedchecker.NormalizeTargetMinutes(targetMinutes)
 }

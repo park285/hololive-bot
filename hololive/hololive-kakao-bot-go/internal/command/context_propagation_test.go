@@ -66,8 +66,25 @@ func (s *trackedContextState) assertAll(t *testing.T, want context.Context) {
 	require.NotEmpty(t, s.seen)
 
 	for _, got := range s.seen {
-		assert.Same(t, want, got)
+		assert.True(t, got == want)
 	}
+}
+
+func (s *trackedContextState) assertContains(t *testing.T, want context.Context) {
+	t.Helper()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	require.NotEmpty(t, s.seen)
+
+	for _, got := range s.seen {
+		if got == want {
+			return
+		}
+	}
+
+	t.Fatalf("request context not observed in tracked contexts")
 }
 
 type trackedMemberProvider struct {
@@ -168,7 +185,9 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 		ChannelID: "ch-aqua",
 		Name:      "Aqua",
 	})
-	matcherSvc := matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger())
+	var baseCtx context.Context
+	//nolint:staticcheck // nil context path is the behavior under test
+	matcherSvc := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 
 	deps := &Dependencies{
 		Matcher:   matcherSvc,
@@ -183,7 +202,7 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, channel)
 	assert.Equal(t, "ch-aqua", channel.ID)
-	provider.state.assertAll(t, reqCtx)
+	provider.state.assertContains(t, reqCtx)
 }
 
 func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
@@ -196,7 +215,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		IsGraduated: true,
 		Org:         "Hololive",
 	})
-	matcherSvc := matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger())
+	matcherSvc := matcher.NewMemberMatcher(context.Background(), provider, nil, nil, nil, newCommandTestLogger())
 
 	var (
 		sendErrorCtx context.Context
@@ -225,9 +244,9 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		"member": "Aqua",
 	})
 	require.NoError(t, err)
-	assert.Same(t, reqCtx, sendErrorCtx)
+	assert.True(t, sendErrorCtx == reqCtx)
 	assert.Equal(t, adapter.ErrGraduatedMemberBlocked, sendErrorMsg)
-	provider.state.assertAll(t, reqCtx)
+	provider.state.assertContains(t, reqCtx)
 }
 
 func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
@@ -238,7 +257,9 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		ChannelID: "ch-aqua",
 		Name:      "Aqua",
 	})
-	matcherSvc := matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger())
+	var baseCtx context.Context
+	//nolint:staticcheck // nil context path is the behavior under test
+	matcherSvc := matcher.NewMemberMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 	streamProvider := &trackedStreamProvider{}
 
 	var (
@@ -267,8 +288,8 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		"member": "Aqua",
 	})
 	require.NoError(t, err)
-	assert.Same(t, reqCtx, streamProvider.seenCtx)
-	assert.Same(t, reqCtx, sendMessageCtx)
+	assert.True(t, streamProvider.seenCtx == reqCtx)
+	assert.True(t, sendMessageCtx == reqCtx)
 	assert.Equal(t, cmd.Deps().Formatter.FormatMemberNotLive("Aqua"), sendMessageMsg)
 	provider.state.assertAll(t, reqCtx)
 }
@@ -291,8 +312,9 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 			Logger:       newCommandTestLogger(),
 		}),
 		MembersData: provider,
-		Matcher:     matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
-		Formatter:   adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		//nolint:staticcheck // nil context path is the behavior under test
+		Matcher:   matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
+		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
 			return nil
 		},

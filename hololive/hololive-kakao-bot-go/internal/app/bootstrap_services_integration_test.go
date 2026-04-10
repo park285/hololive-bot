@@ -28,10 +28,10 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	infra := &infraResources{
-		postgresService: &dbmocks.Client{
+		Postgres: &dbmocks.Client{
 			GetGormDBFunc: func() *gorm.DB { return db },
 		},
-		cacheService: &cachemocks.Client{
+		Cache: &cachemocks.Client{
 			SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },
 			DelFunc:  func(context.Context, string) error { return nil },
 			SAddFunc: func(context.Context, string, []string) (int64, error) { return 1, nil },
@@ -56,10 +56,10 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	infra := &infraResources{
-		postgresService: &dbmocks.Client{
+		Postgres: &dbmocks.Client{
 			GetGormDBFunc: func() *gorm.DB { return db },
 		},
-		cacheService: &cachemocks.Client{
+		Cache: &cachemocks.Client{
 			SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },
 			DelFunc:  func(context.Context, string) error { return nil },
 			SAddFunc: func(context.Context, string, []string) (int64, error) { return 1, nil },

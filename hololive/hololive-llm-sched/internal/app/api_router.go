@@ -24,54 +24,17 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
-
-// ProvideAPIServer: HTTP 서버 인스턴스를 생성합니다.
-func ProvideAPIServer(addr string, router *gin.Engine) *http.Server {
-	return &http.Server{
-		Addr:              addr,
-		Handler:           sharedserver.WrapH2C(router),
-		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
-		ReadTimeout:       constants.ServerTimeout.Read,
-		WriteTimeout:      constants.ServerTimeout.Write,
-		IdleTimeout:       constants.ServerTimeout.Idle,
-		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
-	}
-}
 
 // ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
 func ProvideHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
-		return nil, fmt.Errorf("set trusted proxies: %w", err)
-	}
-	router.TrustedPlatform = gin.PlatformCloudflare
-
-	router.Use(gin.Recovery())
-	sharedserver.ApplyBaseMiddleware(router, ctx, logger, sharedserver.BaseMiddlewareOptions{
-		SkipLogPaths: []string{
-			"/health",
-			"/ready",
-			"/metrics",
-		},
+	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+		APIKey: apiKey,
 	})
-
-	sharedserver.RegisterHealthRoutes(router)
-	metrics := router.Group("")
-	metrics.Use(middleware.APIKeyAuthMiddleware(apiKey))
-	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
-
-	return router, nil
 }
 
 // ProvideTriggerRouter: health + metrics + 내부 트리거 엔드포인트를 제공하는 라우터.
@@ -81,17 +44,17 @@ func ProvideTriggerRouter(
 	triggerHandler *sharedserver.TriggerHandler,
 	apiKey string,
 ) (*gin.Engine, error) {
-	router, err := ProvideHealthOnlyRouter(ctx, logger, apiKey)
-	if err != nil {
-		return nil, err
-	}
-
-	if triggerHandler != nil {
-		if strings.TrimSpace(apiKey) == "" {
-			return nil, fmt.Errorf("API_SECRET_KEY required")
-		}
-		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
-	}
-
-	return router, nil
+	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+		APIKey: apiKey,
+		RegisterRoutes: func(router *gin.Engine) error {
+			if triggerHandler == nil {
+				return nil
+			}
+			if strings.TrimSpace(apiKey) == "" {
+				return fmt.Errorf("API_SECRET_KEY required")
+			}
+			triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
+			return nil
+		},
+	})
 }

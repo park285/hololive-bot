@@ -25,6 +25,7 @@ import (
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -44,7 +45,7 @@ func buildStreamIngesterConfigSubscriber(
 ) *configsub.Subscriber {
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
-			applyScraperProxyToggle(payload.Enabled, ytStack.GetService(), holodexService, scraperScheduler, logger)
+			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, ytStack.GetService(), holodexService, scraperScheduler, logger)
 			current := settingsService.Get()
 			current.ScraperProxyEnabled = payload.Enabled
 			if err := settingsService.Update(current); err != nil {

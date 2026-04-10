@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
@@ -41,7 +40,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
@@ -58,15 +56,7 @@ type stubWebhookMessageHandler struct{}
 
 func (stubWebhookMessageHandler) HandleMessage(context.Context, *iris.Message) {}
 
-type stubPollerPostgres struct {
-	db *gorm.DB
-}
-
-func (s *stubPollerPostgres) GetPool() *pgxpool.Pool     { return nil }
-func (s *stubPollerPostgres) GetGormDB() *gorm.DB        { return s.db }
-func (s *stubPollerPostgres) Ping(context.Context) error { return nil }
-func (s *stubPollerPostgres) Close() error               { return nil }
-func testBootstrapGuardLogger() *slog.Logger             { return slog.New(slog.DiscardHandler) }
+func testBootstrapGuardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 func canceledContext() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -243,7 +233,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Iris:         config.IrisConfig{BaseURL: "https://iris.example"},
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
-		&infraResources{cacheService: cacheSvc, postgresService: postgresSvc, memberRepo: memberRepo, memberCache: memberCache},
+		&infraResources{Cache: cacheSvc, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
 		&alarmModeComponents{alarmCRUD: testAlarmCRUD{}, chzzkClient: chzzkClient, twitchClient: twitchClient, memberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},

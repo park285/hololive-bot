@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
@@ -73,19 +74,19 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
 		tierScheduler := tier.NewTieredScheduler(newCheckerTestLogger())
 
-		_, err := NewYouTubeChecker(nil, &holodex.Service{}, tierScheduler, dedupSvc, []int{5}, newCheckerTestLogger())
+		_, err := NewYouTubeChecker(nil, &holodex.Service{}, tierScheduler, dedupSvc, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cache service is nil")
 
-		_, err = NewYouTubeChecker(cacheSvc, nil, tierScheduler, dedupSvc, []int{5}, newCheckerTestLogger())
+		_, err = NewYouTubeChecker(cacheSvc, nil, tierScheduler, dedupSvc, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "holodex service is nil")
 
-		_, err = NewYouTubeChecker(cacheSvc, &holodex.Service{}, nil, dedupSvc, []int{5}, newCheckerTestLogger())
+		_, err = NewYouTubeChecker(cacheSvc, &holodex.Service{}, nil, dedupSvc, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "tier scheduler is nil")
 
-		_, err = NewYouTubeChecker(cacheSvc, &holodex.Service{}, tierScheduler, nil, []int{5}, newCheckerTestLogger())
+		_, err = NewYouTubeChecker(cacheSvc, &holodex.Service{}, tierScheduler, nil, []int{5}, 0, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dedup service is nil")
 
@@ -95,11 +96,13 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 			tierScheduler,
 			dedupSvc,
 			[]int{10, 0, 10},
+			0,
 			newCheckerTestLogger(),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, checker)
 		assert.Equal(t, []int{10, 1}, checker.targetMinutes)
+		assert.Equal(t, 75*time.Second, checker.evaluationWindowCap)
 
 		checker.UpdateTargetMinutes([]int{15, 0, 15, 3})
 		assert.Equal(t, []int{15, 3, 1}, checker.targetMinutes)
@@ -185,10 +188,10 @@ func TestCommonHelperFunctions(t *testing.T) {
 	})
 
 	t.Run("normalize target minutes", func(t *testing.T) {
-		assert.Equal(t, []int{5, 3, 1}, normalizeTargetMinutes(nil))
-		assert.Equal(t, []int{5, 3, 1}, normalizeTargetMinutes([]int{0, -1}))
-		assert.Equal(t, []int{10, 5, 1}, normalizeTargetMinutes([]int{5, 10, 10, 0}))
-		assert.Equal(t, []int{10, 3, 1}, normalizeTargetMinutes([]int{1, 3, 10, 3}))
+		assert.Equal(t, []int{5, 3, 1}, sharedchecker.NormalizeTargetMinutes(nil))
+		assert.Equal(t, []int{5, 3, 1}, sharedchecker.NormalizeTargetMinutes([]int{0, -1}))
+		assert.Equal(t, []int{10, 5, 1}, sharedchecker.NormalizeTargetMinutes([]int{5, 10, 10, 0}))
+		assert.Equal(t, []int{10, 3, 1}, sharedchecker.NormalizeTargetMinutes([]int{1, 3, 10, 3}))
 	})
 
 	t.Run("safe logger", func(t *testing.T) {
@@ -448,9 +451,10 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 	cacheSvc := newCheckerTestCacheClient(t)
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
 	checker := &YouTubeChecker{
-		dedupSvc:      dedupSvc,
-		targetMinutes: []int{5, 3, 1},
-		logger:        newCheckerTestLogger(),
+		dedupSvc:            dedupSvc,
+		targetMinutes:       []int{5, 3, 1},
+		evaluationWindowCap: 75 * time.Second,
+		logger:              newCheckerTestLogger(),
 	}
 
 	ctx := t.Context()
@@ -466,24 +470,29 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 			Channel:        &domain.Channel{ID: "ch1", Name: "Channel 1"},
 		}
 
-		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1", "room2"}, time.Time{}, now)
+		window := sharedchecker.EvaluationWindow{
+			Start: now.Add(-75 * time.Second),
+			End:   now,
+		}
+
+		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1", "room2"}, window)
 		require.NoError(t, err)
 		require.Len(t, notifications, 2)
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
 		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
 
-		notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, time.Time{}, now)
+		notifications, err = checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
 
-		nonTarget := now.Add(4 * time.Minute)
+		nonTarget := now.Add(10 * time.Minute)
 
 		notifications, err = checker.buildUpcomingNotifications(ctx, &domain.Stream{
 			ID:             "upcoming-2",
 			Status:         domain.StreamStatusUpcoming,
 			StartScheduled: &nonTarget,
-		}, []string{"room1"}, time.Time{}, now)
+		}, []string{"room1"}, window)
 		require.NoError(t, err)
 		assert.Empty(t, notifications)
 	})
@@ -498,12 +507,36 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 			Channel:        &domain.Channel{ID: "ch1", Name: "Channel 1"},
 		}
 
-		prev := now.Add(-40 * time.Second)
+		window := sharedchecker.EvaluationWindow{
+			Start: now.Add(-40 * time.Second),
+			End:   now,
+		}
 
-		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, prev, now)
+		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
 		require.NoError(t, err)
 		require.Len(t, notifications, 1)
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
+	})
+
+	t.Run("build upcoming notifications does not backfill stale five minute target", func(t *testing.T) {
+		start := now.Add(4 * time.Minute)
+		stream := &domain.Stream{
+			ID:             "upcoming-stale-five",
+			ChannelID:      "ch1",
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &start,
+			Channel:        &domain.Channel{ID: "ch1", Name: "Channel 1"},
+		}
+
+		window := sharedchecker.EvaluationWindow{
+			Start:  now.Add(-75 * time.Second),
+			End:    now,
+			Capped: true,
+		}
+
+		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
+		require.NoError(t, err)
+		assert.Empty(t, notifications)
 	})
 
 	t.Run("build live catchup notifications", func(t *testing.T) {
@@ -571,7 +604,12 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 			},
 		}
 
-		notifications, err := checker.buildChannelNotifications(ctx, "ch-1", []string{"room1", "room2"}, streams, time.Time{}, now)
+		window := sharedchecker.EvaluationWindow{
+			Start: now.Add(-45 * time.Second),
+			End:   now,
+		}
+
+		notifications, err := checker.buildChannelNotifications(ctx, "ch-1", []string{"room1", "room2"}, streams, window, now)
 		require.NoError(t, err)
 		assert.NotEmpty(t, notifications)
 	})

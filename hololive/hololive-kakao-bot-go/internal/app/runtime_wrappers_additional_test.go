@@ -21,6 +21,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 
@@ -36,17 +37,11 @@ func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
 
 	calls := 0
 	runtime := &DBIntegrationRuntime{
-		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
+		Managed: lifecycle.NewManaged(func() { calls++ }),
 	}
 
 	runtime.Close()
 	assert.Equal(t, 1, calls)
-
-	var nilRuntime *DBIntegrationRuntime
-
-	require.NotPanics(t, func() {
-		nilRuntime.Close()
-	})
 }
 
 func TestBuildDBIntegrationRuntime_ReturnsErrorOnNilLogger(t *testing.T) {
@@ -63,23 +58,17 @@ func TestFetchProfilesRuntimeClose_CallsCleanupOnce(t *testing.T) {
 
 	calls := 0
 	runtime := &FetchProfilesRuntime{
-		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
+		Managed: lifecycle.NewManaged(func() { calls++ }),
 	}
 
 	runtime.Close()
 	assert.Equal(t, 1, calls)
-
-	var nilRuntime *FetchProfilesRuntime
-
-	require.NotPanics(t, func() {
-		nilRuntime.Close()
-	})
 }
 
 func TestBuildFetchProfilesRuntime_WithNilContext(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := BuildFetchProfilesRuntime(nil)
+	runtime, err := BuildFetchProfilesRuntime(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 	require.NotNil(t, runtime.Logger)
@@ -93,7 +82,7 @@ func TestBuildDBIntegrationRuntime_InitializesContextWhenNil(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	runtime, err := BuildDBIntegrationRuntime(nil, config.PostgresConfig{}, logger)
+	runtime, err := BuildDBIntegrationRuntime(context.Background(), config.PostgresConfig{}, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to initialize DB integration runtime")

@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"golang.org/x/sync/errgroup"
 
@@ -183,11 +182,6 @@ func loadSubscriberRoomsByChannel(
 
 	return result, nil
 }
-
-func normalizeTargetMinutes(targetMinutes []int) []int {
-	return sharedchecker.NormalizeTargetMinutes(targetMinutes)
-}
-
 func safeLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
 		return slog.Default()

@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/stretchr/testify/require"
 )
 
 var errSendFailed = errors.New("send failed")
@@ -69,7 +70,9 @@ func (f *fakeSender) SendMessage(_ context.Context, room, message string, _ ...i
 	return nil
 }
 
-func (f *fakeSender) SendImage(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) { return nil, nil }
+func (f *fakeSender) SendImage(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
 func (f *fakeSender) SendMultipleImages(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, nil
 }
@@ -731,7 +734,7 @@ func setupCacheService(t *testing.T) *cache.Service {
 	}
 
 	t.Cleanup(func() {
-		cacheService.Close()
+		require.NoError(t, cacheService.Close())
 	})
 
 	return cacheService
@@ -741,28 +744,31 @@ func setupTestSubscribers(t *testing.T, cacheService *cache.Service) {
 	t.Helper()
 	ctx := context.Background()
 
-	cacheService.SAdd(ctx, "alarm:channel_subscribers:SHORTS:UCtest123", []string{"testroom"})
-	cacheService.SAdd(ctx, "alarm:channel_subscribers:UCtest456", []string{"testroom"})
-	cacheService.HSet(ctx, "alarm:member_names", "UCtest123", "TestMember")
-	cacheService.HSet(ctx, "alarm:member_names", "UCtest456", "TestMember2")
+	_, err := cacheService.SAdd(ctx, "alarm:channel_subscribers:SHORTS:UCtest123", []string{"testroom"})
+	require.NoError(t, err)
+	_, err = cacheService.SAdd(ctx, "alarm:channel_subscribers:UCtest456", []string{"testroom"})
+	require.NoError(t, err)
+	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", "UCtest123", "TestMember"))
+	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", "UCtest456", "TestMember2"))
 
 	t.Cleanup(func() {
-		cacheService.Del(ctx, "alarm:channel_subscribers:SHORTS:UCtest123")
-		cacheService.Del(ctx, "alarm:channel_subscribers:UCtest456")
+		require.NoError(t, cacheService.Del(ctx, "alarm:channel_subscribers:SHORTS:UCtest123"))
+		require.NoError(t, cacheService.Del(ctx, "alarm:channel_subscribers:UCtest456"))
 	})
 }
 
 func setupChannelSubscribers(t *testing.T, cacheService *cache.Service, key string, subscribers []string) {
 	t.Helper()
 	ctx := context.Background()
-	cacheService.SAdd(ctx, key, subscribers)
-	t.Cleanup(func() { cacheService.Del(ctx, key) })
+	_, err := cacheService.SAdd(ctx, key, subscribers)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cacheService.Del(ctx, key)) })
 }
 
 func setupMemberName(t *testing.T, cacheService *cache.Service, channelID, name string) {
 	t.Helper()
 	ctx := context.Background()
-	cacheService.HSet(ctx, "alarm:member_names", channelID, name)
+	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", channelID, name))
 }
 
 func fetchDeliveryRows(t *testing.T, db *gorm.DB, outboxID int64) []domain.YouTubeNotificationDelivery {

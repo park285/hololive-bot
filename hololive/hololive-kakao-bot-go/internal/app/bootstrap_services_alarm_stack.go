@@ -24,10 +24,11 @@ import (
 	"context"
 	"log/slog"
 
-	appproviders "github.com/kapu/hololive-kakao-bot-go/internal/app/providers"
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
@@ -38,7 +39,7 @@ import (
 type alarmYouTubeStackComponents struct {
 	alarmMode       *alarmModeComponents
 	memberMatcher   *matcher.MemberMatcher
-	youTubeStack    *appproviders.YouTubeStack
+	youTubeStack    *sharedproviders.YouTubeStack
 	activityLogger  *activity.Logger
 	settingsService settings.ReadWriter
 }
@@ -52,7 +53,7 @@ func initAlarmYouTubeStack(
 	formatter *adapter.ResponseFormatter,
 	logger *slog.Logger,
 ) (*alarmYouTubeStackComponents, error) {
-	alarmRepository := ProvideAlarmRepository(infra.postgresService, logger)
+	alarmRepository := ProvideAlarmRepository(infra.Postgres, logger)
 
 	alarmMode, err := initAlarmModeComponents(
 		ctx,
@@ -70,32 +71,31 @@ func initAlarmYouTubeStack(
 	memberMatcher := ProvideMemberMatcher(
 		ctx,
 		alarmMode.memberDataSource,
-		infra.cacheService,
+		infra.Cache,
 		foundation.holodexService,
 		logger,
 	)
-	youTubeStatsRepository := sharedproviders.ProvideYouTubeStatsRepository(infra.postgresService, logger)
-	youTubeStack := appproviders.ProvideYouTubeStack(
-		ctx,
-		cfg.YouTube,
-		cfg.Scraper,
-		infra.cacheService,
-		foundation.holodexService,
-		foundation.memberServiceAdapter,
-		youTubeStatsRepository,
-		alarmMode.alarmService,
-		irisClient,
-		formatter,
-		foundation.sharedRL,
-		logger,
-	)
+	youTubeStatsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
+	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, sharedmodules.YouTubeStackParams{
+		YouTubeConfig:   cfg.YouTube,
+		ScraperConfig:   cfg.Scraper,
+		CacheService:    infra.Cache,
+		HolodexService:  foundation.holodexService,
+		Members:         foundation.memberServiceAdapter,
+		StatsRepo:       youTubeStatsRepository,
+		AlarmState:      alarmMode.alarmService,
+		IrisClient:      irisClient,
+		Formatter:       formatter,
+		SharedRateLimit: foundation.sharedRL,
+		Logger:          logger,
+	})
 
 	return &alarmYouTubeStackComponents{
 		alarmMode:      alarmMode,
 		memberMatcher:  memberMatcher,
 		youTubeStack:   youTubeStack,
 		activityLogger: ProvideActivityLogger(logger),
-		settingsService: appproviders.ProvideSettingsService(
+		settingsService: sharedmodules.BuildSettingsService(
 			cfg.Notification.AdvanceMinutes,
 			cfg.Scraper.ProxyEnabled,
 			logger,

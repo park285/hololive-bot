@@ -182,24 +182,54 @@ func TestLoad_ScraperPollDefaults(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.Poll.Videos != 5*time.Minute {
-		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 5*time.Minute)
+	if cfg.Scraper.Poll.Videos != 15*time.Minute {
+		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 15*time.Minute)
 	}
-	if cfg.Scraper.Poll.Shorts != 10*time.Minute {
-		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 10*time.Minute)
+	if cfg.Scraper.Poll.Shorts != 30*time.Minute {
+		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 30*time.Minute)
 	}
-	if cfg.Scraper.Poll.Community != 10*time.Minute {
-		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 10*time.Minute)
+	if cfg.Scraper.Poll.Community != 30*time.Minute {
+		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 30*time.Minute)
 	}
 	if cfg.Scraper.Poll.Stats != 6*time.Hour {
 		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 6*time.Hour)
 	}
-	if cfg.Scraper.Poll.Live != 5*time.Minute {
-		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 5*time.Minute)
+	if cfg.Scraper.Poll.Live != 10*time.Minute {
+		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 10*time.Minute)
 	}
 }
 
 func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS", "420")
+	t.Setenv("SCRAPER_POLL_SHORTS_INTERVAL_SECONDS", "660")
+	t.Setenv("SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS", "780")
+	t.Setenv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", "14400")
+	t.Setenv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", "180")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.Poll.Videos != 7*time.Minute {
+		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 7*time.Minute)
+	}
+	if cfg.Scraper.Poll.Shorts != 11*time.Minute {
+		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 11*time.Minute)
+	}
+	if cfg.Scraper.Poll.Community != 13*time.Minute {
+		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 13*time.Minute)
+	}
+	if cfg.Scraper.Poll.Stats != 4*time.Hour {
+		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 4*time.Hour)
+	}
+	if cfg.Scraper.Poll.Live != 3*time.Minute {
+		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 3*time.Minute)
+	}
+}
+
+func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_VIDEOS_SECONDS", "420")
 	t.Setenv("SCRAPER_SHORTS_SECONDS", "660")
@@ -230,6 +260,20 @@ func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
 }
 
 func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_SCHEDULER_WORKER_COUNT", "6")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.WorkerCount != 6 {
+		t.Fatalf("Scraper.WorkerCount = %d, want %d", cfg.Scraper.WorkerCount, 6)
+	}
+}
+
+func TestLoad_ScraperWorkerCountLegacyEnvFallback(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_WORKER_COUNT", "6")
 

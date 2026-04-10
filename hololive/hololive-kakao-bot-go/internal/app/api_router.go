@@ -23,38 +23,19 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/park285/iris-client-go/iris"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
-
-// ProvideAPIServer: 관리자용 HTTP 서버 인스턴스를 생성합니다.
-// H2C(HTTP/2 Cleartext)를 기본으로 사용하여 멀티플렉싱과 헤더 압축 이점을 제공한다.
-func ProvideAPIServer(addr string, router *gin.Engine) *http.Server {
-	return &http.Server{
-		Addr:              addr,
-		Handler:           sharedserver.WrapH2C(router),
-		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
-		ReadTimeout:       constants.ServerTimeout.Read,
-		WriteTimeout:      constants.ServerTimeout.Write,
-		IdleTimeout:       constants.ServerTimeout.Idle,
-		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
-	}
-}
 
 // ProvideAPIRouter: hololive-bot 도메인 API를 서빙하는 Gin 라우터를 설정합니다.
 // Admin Dashboard와 Tauri 앱에서 사용됩니다.
@@ -102,24 +83,19 @@ func ProvideAPIRouter(
 }
 
 func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*gin.Engine, error) {
-	gin.SetMode(gin.ReleaseMode)
-
-	router := gin.New()
-	if err := router.SetTrustedProxies(constants.ServerConfig.TrustedProxies); err != nil {
-		return nil, fmt.Errorf("failed to set trusted proxies: %w", err)
-	}
-
-	router.TrustedPlatform = gin.PlatformCloudflare
-
-	router.Use(gin.Recovery())
-	router.Use(gzip.Gzip(gzip.DefaultCompression)) // 응답 압축 (HTTP/2 호환)
-	sharedserver.ApplyBaseMiddleware(router, ctx, logger, sharedserver.BaseMiddlewareOptions{
-		SkipLogPaths: []string{
-			"/health",
-			"/ready",
-			"/metrics", // Prometheus 메트릭 폴링 (15초 간격)
+	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+		APIKey:       cfg.Server.APIKey,
+		EnableGzip:   true,
+		SkipLogPaths: []string{"/metrics"},
+		PreRouteUse: []gin.HandlerFunc{
+			corsOriginGuard(cfg.CORS.AllowedOrigins),
+			cors.New(newAPICORSConfig(cfg)),
+			middleware.ClientHintsMiddleware(),
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Environment), "production")
 	if isProduction && cfg.CORS.MissingInProduction {
@@ -130,23 +106,9 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 		)
 	}
 
-	router.Use(corsOriginGuard(cfg.CORS.AllowedOrigins))
-	router.Use(cors.New(newAPICORSConfig(cfg)))
-	router.Use(middleware.ClientHintsMiddleware()) // Client Hints 요청 (실제 기기 정보 수집)
-
-	registerAPIHealthRoutes(router, cfg.Server.APIKey)
-
 	// NoRoute 핸들러: 미등록 경로 접근 시 API Key 검증 후 401/404 반환
 	// 크롤러/스캐너가 루트 경로 등에 접근할 때 404 대신 401 Unauthorized 반환
 	router.NoRoute(middleware.NoRouteAuthHandler(cfg.Server.APIKey))
 
 	return router, nil
-}
-
-func registerAPIHealthRoutes(router *gin.Engine, apiKey string) {
-	sharedserver.RegisterHealthRoutes(router)
-	// Prometheus 메트릭 (장기 히스토리 분석용)
-	metrics := router.Group("")
-	metrics.Use(middleware.APIKeyAuthMiddleware(apiKey))
-	metrics.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }

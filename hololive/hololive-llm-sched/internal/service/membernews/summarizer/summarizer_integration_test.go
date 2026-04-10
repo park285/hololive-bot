@@ -75,7 +75,7 @@ func loadEnv() error {
 		}
 		if k, v, ok := strings.Cut(line, "="); ok {
 			if os.Getenv(k) == "" {
-				os.Setenv(k, v)
+				_ = os.Setenv(k, v)
 			}
 		}
 	}

@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -34,7 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	appproviders "github.com/kapu/hololive-stream-ingester/internal/app/providers"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 )
 
@@ -46,12 +47,11 @@ type streamIngesterInfrastructure struct {
 	irisClient       iris.Sender
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
-	ytStack          *appproviders.YouTubeStack
+	ytStack          *sharedproviders.YouTubeStack
 	photoSync        *holodex.PhotoSyncService
 	templateRenderer *template.Renderer
 	sharedRL         *scraper.RateLimiter
-	cleanupCache     func()
-	cleanupDB        func()
+	cleanup          func()
 }
 
 // initStreamIngesterInfrastructure: stream-ingester에 필요한 최소 인프라만 초기화한다.
@@ -63,8 +63,7 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	}
 	defer func() {
 		if retErr != nil {
-			infra.cleanupDB()
-			infra.cleanupCache()
+			infra.Cleanup()
 		}
 	}()
 
@@ -72,45 +71,55 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	if err != nil {
 		return nil, fmt.Errorf("provide iris client: %w", err)
 	}
-	templateRenderer := template.NewRenderer(infra.postgresService.GetGormDB(), logger)
+	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
 
 	holodexAPIKey := sharedproviders.ProvideHolodexAPIKey(cfg.Holodex)
-	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.memberCache, logger)
+	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 	membersData := memberServiceAdapter
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: cfg.Scraper.ProxyEnabled,
 		URL:     cfg.Scraper.ProxyURL,
 	}
 
-	sharedRL, err := sharedproviders.ProvideYouTubeScraperRateLimiter(infra.cacheService, logger)
+	sharedRL, err := sharedproviders.ProvideYouTubeScraperRateLimiter(infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
 	}
 
-	scraperService := sharedproviders.ProvideScraperService(infra.cacheService, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
-	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKey, infra.cacheService, scraperService, logger)
+	scraperService := sharedproviders.ProvideScraperService(infra.Cache, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
+	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKey, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	youTubeStatsRepository := sharedproviders.ProvideYouTubeStatsRepository(infra.postgresService, logger)
-	// stream-ingester는 alarm dispatch가 없으므로 alarmSvc=nil로 전달
-	youTubeStack := appproviders.ProvideYouTubeStack(ctx, cfg.YouTube, cfg.Scraper, infra.cacheService, holodexService, memberServiceAdapter, youTubeStatsRepository, nil, irisClient, nil, sharedRL, logger)
+	youTubeStatsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
+	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, sharedmodules.YouTubeStackParams{
+		YouTubeConfig:   cfg.YouTube,
+		ScraperConfig:   cfg.Scraper,
+		CacheService:    infra.Cache,
+		HolodexService:  holodexService,
+		Members:         memberServiceAdapter,
+		StatsRepo:       youTubeStatsRepository,
+		AlarmState:      nil,
+		IrisClient:      irisClient,
+		Formatter:       nil,
+		SharedRateLimit: sharedRL,
+		Logger:          logger,
+	})
 
-	settingsService := appproviders.ProvideSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
+	settingsService := sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
 
 	return &streamIngesterInfrastructure{
-		cacheService:     infra.cacheService,
-		postgresService:  infra.postgresService,
+		cacheService:     infra.Cache,
+		postgresService:  infra.Postgres,
 		membersData:      membersData,
 		irisClient:       irisClient,
 		settingsService:  settingsService,
 		holodexService:   holodexService,
 		ytStack:          youTubeStack,
-		photoSync:        holodex.NewPhotoSyncService(holodexService, infra.memberRepo, logger),
+		photoSync:        holodex.NewPhotoSyncService(holodexService, infra.MemberRepo, logger),
 		templateRenderer: templateRenderer,
 		sharedRL:         sharedRL,
-		cleanupCache:     infra.cleanupCache,
-		cleanupDB:        infra.cleanupDB,
+		cleanup:          infra.Cleanup,
 	}, nil
 }

@@ -23,6 +23,7 @@ package app
 import (
 	"testing"
 
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,7 +32,7 @@ func TestApplyScraperProxyToggle_NilDeps(t *testing.T) {
 
 	// nil 의존성에서 패닉 없이 실행되어야 함
 	assert.NotPanics(t, func() {
-		applyScraperProxyToggle(true, nil, nil, nil, testLogger())
+		sharedsettings.ApplyScraperProxyToggle(true, nil, nil, nil, testLogger())
 	})
 }
 
@@ -40,11 +41,11 @@ func TestApplyScraperProxyToggle_EnableDisable(t *testing.T) {
 
 	svc := &fakeYouTubeService{}
 
-	applyScraperProxyToggle(true, svc, nil, nil, testLogger())
+	sharedsettings.ApplyScraperProxyToggle(true, svc, nil, nil, testLogger())
 	assert.Equal(t, 1, svc.setCalls)
 	assert.True(t, svc.lastEnabled)
 
-	applyScraperProxyToggle(false, svc, nil, nil, testLogger())
+	sharedsettings.ApplyScraperProxyToggle(false, svc, nil, nil, testLogger())
 	assert.Equal(t, 2, svc.setCalls)
 	assert.False(t, svc.lastEnabled)
 }

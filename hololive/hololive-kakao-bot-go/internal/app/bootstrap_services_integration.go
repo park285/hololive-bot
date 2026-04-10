@@ -54,8 +54,8 @@ func initCoreIntegrationServices(
 		cfg.Kakao.ACLEnabled,
 		acl.ParseACLMode(cfg.Kakao.ACLMode),
 		cfg.Kakao.Rooms,
-		infra.postgresService,
-		infra.cacheService,
+		infra.Postgres,
+		infra.Cache,
 		logger,
 	)
 	if err != nil {
@@ -84,7 +84,7 @@ func buildTemplateAdminService(
 	logger *slog.Logger,
 ) *template.AdminService {
 	return template.NewAdminService(
-		repository.NewTemplateRepository(infra.postgresService.GetGormDB(), logger),
+		repository.NewTemplateRepository(infra.Postgres.GetGormDB(), logger),
 		templateRenderer,
 		logger,
 	)

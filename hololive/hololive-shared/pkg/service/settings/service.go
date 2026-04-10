@@ -86,7 +86,9 @@ func (s *Service) load() {
 	if err != nil {
 		return // 파일이 없으면 기본값 사용함
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	var disk settingsDisk
 	if err := json.NewDecoder(f).Decode(&disk); err != nil {
@@ -130,7 +132,9 @@ func (s *Service) Update(newSettings Settings) error {
 	if err != nil {
 		return fmt.Errorf("failed to create settings file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	if err := json.NewEncoder(f).Encode(s.cache); err != nil {
 		return fmt.Errorf("failed to write settings: %w", err)
