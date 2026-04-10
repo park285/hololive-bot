@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-func TestMinutesUntilFloor(t *testing.T) {
+func TestMinutesUntilFloorZeroClamped(t *testing.T) {
 	now := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -77,12 +77,12 @@ func TestMinutesUntilFloor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := MinutesUntilFloor(tt.start, now)
-			if got != tt.want {
-				t.Fatalf("MinutesUntilFloor() = %d, want %d", got, tt.want)
-			}
-		})
-	}
+            got := minutesUntilFloorZeroClamped(tt.start, now)
+            if got != tt.want {
+                t.Fatalf("minutesUntilFloorZeroClamped() = %d, want %d", got, tt.want)
+            }
+        })
+    }
 }
 
 func TestFormatScheduleChangeMessage(t *testing.T) {
