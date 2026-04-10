@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -44,13 +45,7 @@ type majorEventMonthlySummaryData struct {
 	LLMSummary string
 }
 
-type majorEventView struct {
-	Title    string
-	DateStr  string
-	Members  string
-	Link     string
-	HasDates bool
-}
+type majorEventView = templateview.MajorEventView
 
 type majorEventSubscribedData struct {
 	Emoji  UIEmoji
@@ -136,20 +131,7 @@ func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, 
 }
 
 func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
-	views := make([]majorEventView, 0, len(events))
-	for i := range events {
-		event := &events[i]
-
-		views = append(views, majorEventView{
-			Title:    event.Title,
-			DateStr:  formatMajorEventDatesFromDB(event.EventStartDate, event.EventEndDate),
-			Members:  strings.Join(event.Members, ", "),
-			Link:     event.Link,
-			HasDates: event.EventStartDate != nil,
-		})
-	}
-
-	return views
+	return templateview.BuildMajorEventViews(events)
 }
 
 func (f *ResponseFormatter) FormatMajorEventSubscribed(ctx context.Context) string {
@@ -243,18 +225,5 @@ func formatMajorEventDates(dates []time.Time) string {
 
 // formatMajorEventDatesFromDB는 DB에서 조회된 EventStartDate/EventEndDate를 기반으로 날짜 문자열을 생성합니다.
 func formatMajorEventDatesFromDB(start, end *time.Time) string {
-	if start == nil {
-		return "TBA"
-	}
-
-	weekdays := []string{"일", "월", "화", "수", "목", "금", "토"}
-	formatDate := func(t time.Time) string {
-		return fmt.Sprintf("%d년 %d월 %d일(%s)", t.Year(), t.Month(), t.Day(), weekdays[t.Weekday()])
-	}
-
-	if end == nil || start.Equal(*end) {
-		return formatDate(*start)
-	}
-
-	return fmt.Sprintf("%s ~ %s", formatDate(*start), formatDate(*end))
+	return templateview.FormatMajorEventDatesFromDB(start, end)
 }
