@@ -25,8 +25,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
-
-	"github.com/kapu/hololive-shared/internal/envutil"
+	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
 // LLMSchedulerConfig: llm-scheduler 바이너리 전용 설정
@@ -60,33 +59,33 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 
 	return &LLMSchedulerConfig{
 		Server: ServerConfig{
-			Port:   envutil.Int("LLM_SCHEDULER_PORT", 30003),
-			APIKey: envutil.String("API_SECRET_KEY", ""),
+			Port:   sharedenv.Int("LLM_SCHEDULER_PORT", 30003),
+			APIKey: sharedenv.String("API_SECRET_KEY", ""),
 		},
 		Iris: IrisConfig{
-			BaseURL:      envutil.String("IRIS_BASE_URL", "http://localhost:3000"),
+			BaseURL:      sharedenv.String("IRIS_BASE_URL", "http://localhost:3000"),
 			WebhookToken: webhookToken,
 			BotToken:     botToken,
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Logging: LoggingConfig{
-			Level:      envutil.String("LOG_LEVEL", "info"),
-			Dir:        envutil.String("LOG_DIR", ""),
-			MaxSizeMB:  envutil.Int("LOG_MAX_SIZE_MB", 100),
-			MaxBackups: envutil.Int("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: envutil.Int("LOG_MAX_AGE_DAYS", 30),
-			Compress:   envutil.Bool("LOG_COMPRESS", true),
+			Level:      sharedenv.String("LOG_LEVEL", "info"),
+			Dir:        sharedenv.String("LOG_DIR", ""),
+			MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 100),
+			MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
+			MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
+			Compress:   sharedenv.Bool("LOG_COMPRESS", true),
 		},
 		Bot: BotConfig{
-			Prefix:   envutil.String("BOT_PREFIX", "!"),
-			SelfUser: envutil.String("BOT_SELF_USER", "iris"),
+			Prefix:   sharedenv.String("BOT_PREFIX", "!"),
+			SelfUser: sharedenv.String("BOT_SELF_USER", "iris"),
 		},
 		Environment: loadAppEnvironment(),
 		Cliproxy:    loadCliproxyConfig(),
 		LLM:         loadLLMConfig(),
 		Exa:         loadExaConfig(),
-		Version:     envutil.String("APP_VERSION", "1.0.0-llm-scheduler"),
+		Version:     sharedenv.String("APP_VERSION", "1.0.0-llm-scheduler"),
 	}
 }
 
