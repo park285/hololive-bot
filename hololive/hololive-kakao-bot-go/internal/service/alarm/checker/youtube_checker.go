@@ -46,13 +46,14 @@ const (
 
 // YouTubeChecker는 Holodex live status 기반 알림 후보를 생성한다.
 type YouTubeChecker struct {
-	cacheSvc        cache.Client
-	holodexSvc      *holodex.Service
-	tierScheduler   *tier.TieredScheduler
-	dedupSvc        *dedup.Service
-	targetMinutes   []int
-	targetMinutesMu sync.RWMutex
-	logger          *slog.Logger
+	cacheSvc            cache.Client
+	holodexSvc          *holodex.Service
+	tierScheduler       *tier.TieredScheduler
+	dedupSvc            *dedup.Service
+	targetMinutes       []int
+	targetMinutesMu     sync.RWMutex
+	evaluationWindowCap time.Duration
+	logger              *slog.Logger
 }
 
 // NewYouTubeChecker는 YouTube 체커를 생성한다.
@@ -62,6 +63,7 @@ func NewYouTubeChecker(
 	tierScheduler *tier.TieredScheduler,
 	dedupSvc *dedup.Service,
 	targetMinutes []int,
+	evaluationWindowCap time.Duration,
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
 	if cacheSvc == nil {
@@ -80,13 +82,18 @@ func NewYouTubeChecker(
 		return nil, errors.New("new youtube checker: dedup service is nil")
 	}
 
+	if evaluationWindowCap <= 0 {
+		evaluationWindowCap = 75 * time.Second
+	}
+
 	return &YouTubeChecker{
-		cacheSvc:      cacheSvc,
-		holodexSvc:    holodexSvc,
-		tierScheduler: tierScheduler,
-		dedupSvc:      dedupSvc,
-		targetMinutes: normalizeTargetMinutes(targetMinutes),
-		logger:        safeLogger(logger),
+		cacheSvc:            cacheSvc,
+		holodexSvc:          holodexSvc,
+		tierScheduler:       tierScheduler,
+		dedupSvc:            dedupSvc,
+		targetMinutes:       sharedchecker.NormalizeTargetMinutes(targetMinutes),
+		evaluationWindowCap: evaluationWindowCap,
+		logger:              safeLogger(logger),
 	}, nil
 }
 
@@ -95,7 +102,7 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 	c.targetMinutesMu.Lock()
 	defer c.targetMinutesMu.Unlock()
 
-	c.targetMinutes = normalizeTargetMinutes(targetMinutes)
+	c.targetMinutes = sharedchecker.NormalizeTargetMinutes(targetMinutes)
 }
 
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
@@ -148,13 +155,15 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 			continue
 		}
 
+		window := sharedchecker.ResolveEvaluationWindow(prevCheckedAt, now, c.evaluationWindowCap)
+
 		eg.Go(func() error {
 			channelNotifications, channelErr := c.buildChannelNotifications(
 				egCtx,
 				channelID,
 				subscriberRooms,
 				channelStreams,
-				prevCheckedAt,
+				window,
 				now,
 			)
 			if channelErr != nil {
@@ -186,7 +195,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 	channelID string,
 	subscriberRooms []string,
 	streams []*domain.Stream,
-	prevCheckedAt time.Time,
+	window sharedchecker.EvaluationWindow,
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(streams)*len(subscriberRooms))
@@ -195,7 +204,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 			continue
 		}
 
-		upcomingNotifications, err := c.buildUpcomingNotifications(ctx, stream, subscriberRooms, prevCheckedAt, now)
+		upcomingNotifications, err := c.buildUpcomingNotifications(ctx, stream, subscriberRooms, window)
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build upcoming notifications: %w", err)
 		}
@@ -217,18 +226,17 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	ctx context.Context,
 	stream *domain.Stream,
 	subscriberRooms []string,
-	prevCheckedAt time.Time,
-	now time.Time,
+	window sharedchecker.EvaluationWindow,
 ) ([]*domain.AlarmNotification, error) {
 	if stream == nil || !stream.IsUpcoming() || stream.StartScheduled == nil {
 		return nil, nil
 	}
 
-	if !stream.StartScheduled.After(now) {
+	if !stream.StartScheduled.After(window.End) {
 		return nil, nil
 	}
 
-	minutesUntil, ok := sharedchecker.CrossedTarget(c.targetMinutesSnapshot(), *stream.StartScheduled, prevCheckedAt, now)
+	minutesUntil, ok := sharedchecker.HighestCrossedTarget(c.targetMinutesSnapshot(), *stream.StartScheduled, window)
 	if !ok {
 		return nil, nil
 	}

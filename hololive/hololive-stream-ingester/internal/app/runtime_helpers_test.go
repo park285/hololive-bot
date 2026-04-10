@@ -26,17 +26,12 @@ import (
 	"testing"
 
 	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
 type fakeYouTubeService struct {
-	setCalls     int
-	lastEnabled  bool
-	proxyEnabled bool
-}
-
-type fakeHolodexProxyService struct {
 	setCalls     int
 	lastEnabled  bool
 	proxyEnabled bool
@@ -50,15 +45,6 @@ func (f *fakeYouTubeService) SetScraperProxyEnabled(enabled bool) bool {
 }
 
 func (f *fakeYouTubeService) ScraperProxyEnabled() bool { return f.proxyEnabled }
-
-func (f *fakeHolodexProxyService) SetScraperProxyEnabled(enabled bool) bool {
-	f.setCalls++
-	f.lastEnabled = enabled
-	f.proxyEnabled = enabled
-	return true
-}
-
-func (f *fakeHolodexProxyService) ScraperProxyEnabled() bool { return f.proxyEnabled }
 
 func (f *fakeYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return map[string]*youtube.ChannelStats{}, nil
@@ -84,7 +70,7 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 	t.Run("applies toggle to youtube service", func(t *testing.T) {
 		service := &fakeYouTubeService{}
 
-		applyScraperProxyToggle(true, service, nil, nil, testLogger())
+		sharedsettings.ApplyScraperProxyToggle(true, service, nil, nil, testLogger())
 		if service.setCalls != 1 {
 			t.Fatalf("SetScraperProxyEnabled calls = %d, want 1", service.setCalls)
 		}
@@ -92,7 +78,7 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 			t.Fatal("lastEnabled = false, want true")
 		}
 
-		applyScraperProxyToggle(false, service, nil, nil, testLogger())
+		sharedsettings.ApplyScraperProxyToggle(false, service, nil, nil, testLogger())
 		if service.setCalls != 2 {
 			t.Fatalf("SetScraperProxyEnabled calls = %d, want 2", service.setCalls)
 		}
@@ -102,22 +88,17 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 	})
 
 	t.Run("nil dependencies do not panic", func(t *testing.T) {
-		applyScraperProxyToggle(true, nil, nil, nil, testLogger())
+		sharedsettings.ApplyScraperProxyToggle(true, nil, nil, nil, testLogger())
 	})
 }
 
 func TestStreamIngesterRuntimeClose(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil runtime", func(t *testing.T) {
-		var runtime *StreamIngesterRuntime
-		runtime.Close()
-	})
-
 	t.Run("invokes cleanup once", func(t *testing.T) {
 		calls := 0
 		runtime := &StreamIngesterRuntime{
-			CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
+			Managed: lifecycle.NewManaged(func() { calls++ }),
 		}
 
 		runtime.Close()

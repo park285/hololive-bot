@@ -25,6 +25,7 @@ import (
 	"log/slog"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
@@ -40,7 +41,7 @@ func buildBotConfigSubscriber(
 ) *configsub.Subscriber {
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
-			applyScraperProxyToggle(payload.Enabled, runtimeDeps.youtubeService, runtimeDeps.holodexService, scraperScheduler, logger)
+			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, runtimeDeps.youtubeService, runtimeDeps.holodexService, scraperScheduler, logger)
 			// 설정 파일에도 반영
 			current := deps.settings.Get()
 

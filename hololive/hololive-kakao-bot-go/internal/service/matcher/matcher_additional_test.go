@@ -39,8 +39,10 @@ func newMatcherTestLogger() *slog.Logger {
 func TestNewMemberMatcher_Defaults(t *testing.T) {
 	t.Parallel()
 
+	var baseCtx context.Context
 	provider := newStubMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
-	matcher := NewMemberMatcher(nil, provider, &cachemocks.Client{
+	//nolint:staticcheck // nil context path is the behavior under test
+	matcher := NewMemberMatcher(baseCtx, provider, &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
 		},
@@ -125,8 +127,10 @@ func (p *trackingMemberProvider) FindMembersByAlias(string) []*domain.Member {
 func TestGetAllMembers_DoesNotInjectBackgroundContext(t *testing.T) {
 	t.Parallel()
 
+	var baseCtx context.Context
 	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
-	matcher := NewMemberMatcher(nil, provider, &cachemocks.Client{
+	//nolint:staticcheck // nil context path is the behavior under test
+	matcher := NewMemberMatcher(baseCtx, provider, &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
 		},
@@ -141,7 +145,9 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 	t.Parallel()
 
 	provider := newTrackingMemberProvider([]*domain.Member{{ChannelID: "ch1", Name: "m1"}})
-	matcher := NewMemberMatcher(nil, provider, &cachemocks.Client{
+	var baseCtx context.Context
+	//nolint:staticcheck // nil context path is the behavior under test
+	matcher := NewMemberMatcher(baseCtx, provider, &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
 		},
@@ -151,7 +157,7 @@ func TestGetMemberByChannelID_UsesRequestContext(t *testing.T) {
 	member := matcher.GetMemberByChannelID(reqCtx, "ch1")
 	require.NotNil(t, member)
 	require.Len(t, *provider.ctxCalls, 1)
-	assert.Same(t, reqCtx, (*provider.ctxCalls)[0])
+	assert.True(t, (*provider.ctxCalls)[0] == reqCtx)
 }
 
 func TestTryExactValkeyMatch_PrefersHololiveCandidate(t *testing.T) {

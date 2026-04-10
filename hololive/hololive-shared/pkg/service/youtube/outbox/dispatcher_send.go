@@ -25,9 +25,8 @@ import (
 	"log/slog"
 	"sync"
 
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -286,7 +285,8 @@ func (d *Dispatcher) recordDeliveryFailure(
 func (d *Dispatcher) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
 	messages = make(map[int64]string, len(outboxByID))
 	failures = make(map[int64]bool)
-	for id, item := range outboxByID {
+	for id := range outboxByID {
+		item := outboxByID[id]
 		msg, err := d.formatter.formatMessage(ctx, item)
 		if err != nil {
 			d.logger.Warn("Failed to pre-format outbox message",

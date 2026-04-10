@@ -59,8 +59,7 @@ type coreInfrastructure struct {
 	templateRenderer *template.Renderer
 	templateAdminSvc *template.AdminService
 	sharedRL         *scraper.RateLimiter // YouTube 전역 RateLimiter
-	cleanupCache     func()
-	cleanupDB        func()
+	cleanup          func()
 }
 
 type alarmModeComponents struct {

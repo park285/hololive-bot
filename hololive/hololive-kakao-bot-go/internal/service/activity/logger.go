@@ -95,7 +95,11 @@ func (l *Logger) Log(entryType, summary string, details map[string]any) {
 		l.logger.Error("Failed to open activity log file", slog.Any("error", err))
 		return
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			l.logger.Error("Failed to close activity log file", slog.Any("error", closeErr))
+		}
+	}()
 
 	if err := json.NewEncoder(f).Encode(entry); err != nil {
 		l.logger.Error("Failed to write activity log", slog.Any("error", err))
@@ -123,7 +127,11 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 
 		return nil, fmt.Errorf("failed to open activity log: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			l.logger.Error("Failed to close activity log file", slog.Any("error", closeErr))
+		}
+	}()
 
 	ring := make([]LogEntry, limit)
 	count := 0

@@ -119,11 +119,6 @@ func TestFormatMajorEventDatesFromDB(t *testing.T) {
 	}
 }
 
-//go:fix inline
-func ptrTime(t time.Time) *time.Time {
-	return new(t)
-}
-
 func TestFormatMajorEventMonthlySummary_NoDuplicateListWhenLLMSummaryExists(t *testing.T) {
 	renderer := setupMajorEventRenderer(t)
 	formatter := NewResponseFormatter("!", renderer)

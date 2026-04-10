@@ -25,36 +25,17 @@ import (
 	"fmt"
 	"log/slog"
 
-	appproviders "github.com/kapu/hololive-kakao-bot-go/internal/app/providers"
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/member"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-// infraResources 는 캐시/DB 리소스를 담는다.
-type infraResources struct {
-	cacheService    cache.Client
-	postgresService database.Client
-	memberRepo      *member.Repository
-	memberCache     *member.Cache
-	cleanupCache    func()
-	cleanupDB       func()
-}
+type infraResources = sharedmodules.InfraModule
 
 // initInfraResources 는 캐시/DB 리소스를 초기화한다.
 func initInfraResources(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*infraResources, error) {
-	resources, err := appproviders.ProvideInfraResources(ctx, cfg, logger)
+	module, err := sharedmodules.BuildInfraModule(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide infra resources: %w", err)
 	}
-
-	return &infraResources{
-		cacheService:    resources.CacheService,
-		postgresService: resources.PostgresService,
-		memberRepo:      resources.MemberRepository,
-		memberCache:     resources.MemberCache,
-		cleanupCache:    resources.CleanupCache,
-		cleanupDB:       resources.CleanupDB,
-	}, nil
+	return module, nil
 }

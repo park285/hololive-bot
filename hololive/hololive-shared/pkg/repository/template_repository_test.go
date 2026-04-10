@@ -169,7 +169,7 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 				key,
 				"racing body",
 			).Error; execErr != nil {
-				tx.AddError(execErr)
+				_ = tx.AddError(execErr)
 			}
 		})
 		require.NoError(t, err)

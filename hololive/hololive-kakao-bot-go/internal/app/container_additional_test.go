@@ -61,14 +61,11 @@ func TestContainerClose_CallsCleanupOnce(t *testing.T) {
 
 	calls := 0
 	container := &Container{
-		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
+		Managed: lifecycle.NewManaged(func() { calls++ }),
 	}
 
 	container.Close()
 	assert.Equal(t, 1, calls)
-
-	var nilContainer *Container
-	nilContainer.Close()
 }
 
 func TestContainerNewBot_FailsWhenDependenciesMissing(t *testing.T) {

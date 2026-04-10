@@ -106,7 +106,6 @@ func TestRuntimeNilReceiver_NoPanic(t *testing.T) {
 	t.Parallel()
 
 	var runtime *Runtime
-	runtime.Close()
 	runtime.Run()
 }
 

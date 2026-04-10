@@ -1,6 +1,7 @@
 package alarm
 
 import (
+	"context"
 	"net/http"
 	"testing"
 )
@@ -16,7 +17,9 @@ func TestClient_UpdateAlarmAdvanceMinutes_NilContextSkipsRequest(t *testing.T) {
 	})
 	client, _ := newTestClient(t, mux)
 
-	got := client.UpdateAlarmAdvanceMinutes(nil, 5)
+	var nilCtx context.Context
+	//nolint:staticcheck // nil context path is the behavior under test
+	got := client.UpdateAlarmAdvanceMinutes(nilCtx, 5)
 	if len(got) != 0 {
 		t.Fatalf("len(got) = %d, want 0", len(got))
 	}

@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestString(t *testing.T) {
@@ -24,7 +26,7 @@ func TestString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.key == "UNSET_KEY" {
-				os.Unsetenv(tt.key)
+				require.NoError(t, os.Unsetenv(tt.key))
 			} else {
 				t.Setenv(tt.key, tt.value)
 			}
@@ -53,7 +55,7 @@ func TestStringRaw(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.key == "UNSET_KEY" {
-				os.Unsetenv(tt.key)
+				require.NoError(t, os.Unsetenv(tt.key))
 			} else {
 				t.Setenv(tt.key, tt.value)
 			}
@@ -84,7 +86,7 @@ func TestInt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.key == "UNSET_KEY" {
-				os.Unsetenv(tt.key)
+				require.NoError(t, os.Unsetenv(tt.key))
 			} else {
 				t.Setenv(tt.key, tt.value)
 			}
@@ -315,7 +317,7 @@ func TestRequired(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.key == "UNSET_REQUIRED" {
-				os.Unsetenv(tt.key)
+				require.NoError(t, os.Unsetenv(tt.key))
 			} else {
 				t.Setenv(tt.key, tt.value)
 			}

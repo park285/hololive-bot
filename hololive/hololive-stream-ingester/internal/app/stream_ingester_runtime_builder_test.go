@@ -35,6 +35,7 @@ import (
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -161,8 +162,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			youtubeService := &fakeYouTubeService{}
 			youtubeScheduler := &fakeScheduler{}
 
-			cleanupDBCalls := 0
-			cleanupCacheCalls := 0
+			cleanupCalls := 0
 			infra := &streamIngesterInfrastructure{
 				cacheService:    cacheService,
 				postgresService: &databasemocks.Client{},
@@ -178,9 +178,8 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 					Service:   youtubeService,
 					Scheduler: youtubeScheduler,
 				},
-				photoSync:    &holodex.PhotoSyncService{},
-				cleanupDB:    func() { cleanupDBCalls++ },
-				cleanupCache: func() { cleanupCacheCalls++ },
+				photoSync: &holodex.PhotoSyncService{},
+				cleanup:   func() { cleanupCalls++ },
 			}
 
 			scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
@@ -208,7 +207,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			require.NotNil(t, configSubscriber)
 
 			desiredProxyState := infra.settingsService.Get().ScraperProxyEnabled
-			applyScraperProxyToggle(
+			sharedsettings.ApplyScraperProxyToggle(
 				desiredProxyState,
 				infra.ytStack.GetService(),
 				infra.holodexService,
@@ -250,10 +249,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				ServerAddr:       fmt.Sprintf(":%d", cfg.Server.Port),
 				HttpServer:       httpServer,
 				Readiness:        readiness,
-				CleanupCloser: lifecycle.NewCleanupCloser(func() {
-					infra.cleanupDB()
-					infra.cleanupCache()
-				}),
+				Managed:          lifecycle.NewManaged(infra.cleanup),
 			}
 
 			require.NotNil(t, runtime)
@@ -264,12 +260,10 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			assert.NotNil(t, runtime.ConfigSubscriber)
 			assert.NotNil(t, runtime.PhotoSync)
 			assert.NotNil(t, runtime.HttpServer)
-			assert.Equal(t, 0, cleanupDBCalls)
-			assert.Equal(t, 0, cleanupCacheCalls)
+			assert.Equal(t, 0, cleanupCalls)
 
 			runtime.Close()
-			assert.Equal(t, 1, cleanupDBCalls)
-			assert.Equal(t, 1, cleanupCacheCalls)
+			assert.Equal(t, 1, cleanupCalls)
 		})
 	}
 }

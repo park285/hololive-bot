@@ -217,6 +217,6 @@ func TestTargetMinutesAndCloseHelpers(t *testing.T) {
 	assert.Equal(t, []int{3, 1}, as.GetTargetMinutes())
 
 	var nilService *AlarmService
-	require.NoError(t, nilService.Close(nil))
+	require.NoError(t, nilService.Close(context.Background()))
 	require.NoError(t, as.Close(t.Context()))
 }

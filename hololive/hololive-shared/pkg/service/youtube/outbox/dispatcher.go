@@ -26,13 +26,13 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/iris-client-go/iris"
 	"github.com/valkey-io/valkey-go"
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/iris-client-go/iris"
 )
 
 // Config: Dispatcher 설정
