@@ -88,6 +88,7 @@ func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
 	return webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction
 }
 
+//nolint:funlen // central environment-to-config assembly is intentionally kept in one place
 func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) *Config {
 	llmSchedulerHealthURL := envutil.StringAny(
 		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
@@ -139,11 +140,10 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			Compress:   envutil.Bool("LOG_COMPRESS", true),
 		},
 		Bot: BotConfig{
-			Prefix:           envutil.String("BOT_PREFIX", "!"),
-			SelfUser:         envutil.String("BOT_SELF_USER", "iris"),
-			AdminEnabled:     envutil.Bool("BOT_ADMIN_ENABLED", true),
-			SettlementRoomID: envutil.String("SETTLEMENT_ROOM_ID", ""),
-			MentionPrefix:    envutil.String("BOT_MENTION_PREFIX", "#kapu봇"),
+			Prefix:        envutil.String("BOT_PREFIX", "!"),
+			SelfUser:      envutil.String("BOT_SELF_USER", "iris"),
+			AdminEnabled:  envutil.Bool("BOT_ADMIN_ENABLED", true),
+			MentionPrefix: envutil.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		},
 		Services: ServicesConfig{
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
@@ -154,8 +154,11 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Scraper: ScraperConfig{
 			ProxyEnabled: envutil.Bool("SCRAPER_PROXY_ENABLED", false),
 			ProxyURL:     envutil.String("SCRAPER_PROXY_URL", ""),
-			WorkerCount:  intEnv("SCRAPER_WORKER_COUNT", DefaultScraperWorkerCount()),
-			Poll:         loadScraperPoll(),
+			WorkerCount: intAliasEnv([]string{
+				"SCRAPER_SCHEDULER_WORKER_COUNT",
+				"SCRAPER_WORKER_COUNT",
+			}, DefaultScraperWorkerCount()),
+			Poll: loadScraperPoll(),
 		},
 		Webhook: WebhookConfig{
 			WorkerCount:    envutil.Int("WEBHOOK_WORKER_COUNT", 16),
@@ -225,30 +228,47 @@ func loadScraperPoll() ScraperPoll {
 	defaults := DefaultScraperPoll()
 
 	return ScraperPoll{
-		Videos:    secondsEnv("SCRAPER_VIDEOS_SECONDS", defaults.Videos),
-		Shorts:    secondsEnv("SCRAPER_SHORTS_SECONDS", defaults.Shorts),
-		Community: secondsEnv("SCRAPER_COMMUNITY_SECONDS", defaults.Community),
-		Stats:     secondsEnv("SCRAPER_STATS_SECONDS", defaults.Stats),
-		Live:      secondsEnv("SCRAPER_LIVE_SECONDS", defaults.Live),
+		Videos: secondsAliasEnv([]string{
+			"SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS",
+			"SCRAPER_VIDEOS_SECONDS",
+		}, defaults.Videos),
+		Shorts: secondsAliasEnv([]string{
+			"SCRAPER_POLL_SHORTS_INTERVAL_SECONDS",
+			"SCRAPER_SHORTS_SECONDS",
+		}, defaults.Shorts),
+		Community: secondsAliasEnv([]string{
+			"SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS",
+			"SCRAPER_COMMUNITY_SECONDS",
+		}, defaults.Community),
+		Stats: secondsAliasEnv([]string{
+			"SCRAPER_POLL_STATS_INTERVAL_SECONDS",
+			"SCRAPER_STATS_SECONDS",
+		}, defaults.Stats),
+		Live: secondsAliasEnv([]string{
+			"SCRAPER_POLL_LIVE_INTERVAL_SECONDS",
+			"SCRAPER_LIVE_SECONDS",
+		}, defaults.Live),
 	}
 }
 
-func secondsEnv(key string, fallback time.Duration) time.Duration {
-	seconds := envutil.Int(key, int(fallback/time.Second))
-	if seconds <= 0 {
-		return fallback
+func secondsAliasEnv(keys []string, fallback time.Duration) time.Duration {
+	for _, key := range keys {
+		seconds := envutil.Int(key, 0)
+		if seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
 	}
-
-	return time.Duration(seconds) * time.Second
+	return fallback
 }
 
-func intEnv(key string, fallback int) int {
-	value := envutil.Int(key, fallback)
-	if value <= 0 {
-		return fallback
+func intAliasEnv(keys []string, fallback int) int {
+	for _, key := range keys {
+		value := envutil.Int(key, 0)
+		if value > 0 {
+			return value
+		}
 	}
-
-	return value
+	return fallback
 }
 
 func isPlaceholderAPIKey(value string) bool {

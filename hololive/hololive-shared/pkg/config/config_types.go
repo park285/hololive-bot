@@ -58,11 +58,10 @@ type LoggingConfig struct {
 
 // BotConfig: 봇의 기본 동작(명령어 접두사, 자기 자신 식별자) 설정
 type BotConfig struct {
-	Prefix           string
-	SelfUser         string
-	AdminEnabled     bool
-	SettlementRoomID string // 정산 알람 대상 방 ID (빈 문자열이면 비활성)
-	MentionPrefix    string // 멘션 기반 명령어 접두사 (예: @카푸봇)
+	Prefix        string
+	SelfUser      string
+	AdminEnabled  bool
+	MentionPrefix string // 멘션 기반 명령어 접두사 (예: @카푸봇)
 }
 
 // ServicesConfig: 외부 Go 서비스 연결 설정 (goroutine 통합 모니터링용)
@@ -81,7 +80,7 @@ type ScraperPoll struct {
 }
 
 func DefaultScraperWorkerCount() int {
-	return 2
+	return 4
 }
 
 // ScraperConfig: YouTube 스크래퍼 프록시 설정 (SOCKS5)
@@ -94,12 +93,32 @@ type ScraperConfig struct {
 
 func DefaultScraperPoll() ScraperPoll {
 	return ScraperPoll{
-		Videos:    5 * time.Minute,
-		Shorts:    10 * time.Minute,
-		Community: 10 * time.Minute,
+		Videos:    15 * time.Minute,
+		Shorts:    30 * time.Minute,
+		Community: 30 * time.Minute,
 		Stats:     6 * time.Hour,
-		Live:      5 * time.Minute,
+		Live:      10 * time.Minute,
 	}
+}
+
+func (p ScraperPoll) EstimatedRequestsPerMinute() float64 {
+	var rpm float64
+	if p.Videos > 0 {
+		rpm += 60.0 / p.Videos.Seconds()
+	}
+	if p.Shorts > 0 {
+		rpm += 60.0 / p.Shorts.Seconds()
+	}
+	if p.Community > 0 {
+		rpm += 60.0 / p.Community.Seconds()
+	}
+	if p.Stats > 0 {
+		rpm += 60.0 / p.Stats.Seconds()
+	}
+	if p.Live > 0 {
+		rpm += 60.0 / p.Live.Seconds()
+	}
+	return rpm
 }
 
 func (c ScraperConfig) PollOrDefault() ScraperPoll {

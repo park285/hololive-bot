@@ -114,12 +114,6 @@ func TestNormalizeCommandKey(t *testing.T) {
 				params:  map[string]any{},
 				wantKey: "help",
 			},
-			{
-				name:    "settlement_status → 변환 없이 원래 타입 유지",
-				cmdType: domain.CommandSettlementStatus,
-				params:  map[string]any{"action": "status"},
-				wantKey: "settlement_status",
-			},
 		}
 
 	for _, tc := range tests {
