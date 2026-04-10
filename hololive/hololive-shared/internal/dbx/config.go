@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/envutil"
+	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
 // Config: PostgreSQL 접속 설정
@@ -108,9 +108,9 @@ type PoolConfig struct {
 // DefaultPoolConfig: 기본 풀 설정 반환
 // 환경변수로 오버라이드 가능: DB_POOL_MIN_CONNS, DB_POOL_MAX_CONNS, DB_POOL_MAX_IDLE_CONNS
 func DefaultPoolConfig() PoolConfig {
-	minConns := clamp(envutil.Int("DB_POOL_MIN_CONNS", 5), 1, 100)
-	maxConns := clamp(envutil.Int("DB_POOL_MAX_CONNS", 20), 1, 200)
-	maxIdleConns := envutil.Int("DB_POOL_MAX_IDLE_CONNS", 0)
+	minConns := clamp(sharedenv.Int("DB_POOL_MIN_CONNS", 5), 1, 100)
+	maxConns := clamp(sharedenv.Int("DB_POOL_MAX_CONNS", 20), 1, 200)
+	maxIdleConns := sharedenv.Int("DB_POOL_MAX_IDLE_CONNS", 0)
 
 	return PoolConfig{
 		MinConns:        minConns,
