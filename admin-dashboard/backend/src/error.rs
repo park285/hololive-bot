@@ -1,7 +1,9 @@
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use serde::Serialize;
 use serde_json::json;
+use utoipa::ToSchema;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -46,6 +48,20 @@ pub enum DockerError {
 pub enum ProxyError {
     #[error("upstream unavailable")]
     Unavailable,
+    #[error("upstream client error: {status}")]
+    UpstreamClient {
+        status: StatusCode,
+        body: serde_json::Value,
+    },
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ApiErrorResponse {
+    pub error: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_expired: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_after: Option<u64>,
 }
 
 impl IntoResponse for AppError {
@@ -88,6 +104,7 @@ impl IntoResponse for AppError {
                     StatusCode::BAD_GATEWAY,
                     json!({"error": "Service unavailable"}),
                 ),
+                ProxyError::UpstreamClient { status, body } => (*status, body.clone()),
             },
             Self::Internal(e) => {
                 tracing::error!(error = %e, "internal error");
@@ -104,7 +121,9 @@ impl IntoResponse for AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::to_bytes;
     use axum::http::StatusCode;
+    use serde_json::json;
 
     #[test]
     fn test_auth_error_unauthorized_status() {
@@ -176,5 +195,24 @@ mod tests {
         let err = AppError::Proxy(ProxyError::Unavailable);
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[tokio::test]
+    async fn test_proxy_upstream_client_preserves_status_and_body() {
+        let err = AppError::Proxy(ProxyError::UpstreamClient {
+            status: StatusCode::BAD_REQUEST,
+            body: json!({"error": "invalid filter", "code": "bad_filter"}),
+        });
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(
+            parsed,
+            json!({"error": "invalid filter", "code": "bad_filter"})
+        );
     }
 }
