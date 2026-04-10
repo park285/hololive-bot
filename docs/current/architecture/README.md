@@ -4,6 +4,7 @@
 
 ## Current assets
 - `../../architecture/go-module-loc-thresholds.txt`
+- `../../architecture/file-loc-thresholds.txt`
 - `../../architecture/release-governance-assets.txt`
 - `../../architecture/shared-go-package-allowlist.txt`
 
