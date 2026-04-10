@@ -89,18 +89,34 @@ var _ cache.Client = (*Client)(nil)
 
 var ErrUnimplemented = errors.New("cache mock: method not configured")
 
+func NewStrictClient() *Client {
+	return &Client{Strict: true}
+}
+
+func NewLenientClient() *Client {
+	return &Client{Strict: false}
+}
+
+func (m *Client) panicIfUnset(name string) {
+	if m != nil && m.Strict {
+		panic("cache mock: " + name + " not set")
+	}
+}
+
 func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	if m.GetFunc != nil {
 		return m.GetFunc(ctx, key, dest)
 	}
-	panic("cache mock: GetFunc not set")
+	m.panicIfUnset("GetFunc")
+	return nil
 }
 
 func (m *Client) MGet(ctx context.Context, keys []string) (map[string]string, error) {
 	if m.MGetFunc != nil {
 		return m.MGetFunc(ctx, keys)
 	}
-	panic("cache mock: MGetFunc not set")
+	m.panicIfUnset("MGetFunc")
+	return nil, nil
 }
 
 func (m *Client) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
@@ -135,7 +151,8 @@ func (m *Client) ScanKeys(ctx context.Context, pattern string, batchSize int64) 
 	if m.ScanKeysFunc != nil {
 		return m.ScanKeysFunc(ctx, pattern, batchSize)
 	}
-	panic("cache mock: ScanKeysFunc not set")
+	m.panicIfUnset("ScanKeysFunc")
+	return nil, nil
 }
 
 func (m *Client) SAdd(ctx context.Context, key string, members []string) (int64, error) {
@@ -156,14 +173,16 @@ func (m *Client) SMembers(ctx context.Context, key string) ([]string, error) {
 	if m.SMembersFunc != nil {
 		return m.SMembersFunc(ctx, key)
 	}
-	panic("cache mock: SMembersFunc not set")
+	m.panicIfUnset("SMembersFunc")
+	return nil, nil
 }
 
 func (m *Client) SIsMember(ctx context.Context, key, member string) (bool, error) {
 	if m.SIsMemberFunc != nil {
 		return m.SIsMemberFunc(ctx, key, member)
 	}
-	panic("cache mock: SIsMemberFunc not set")
+	m.panicIfUnset("SIsMemberFunc")
+	return false, nil
 }
 
 func (m *Client) HSet(ctx context.Context, key, field, value string) error {
@@ -184,7 +203,8 @@ func (m *Client) HGet(ctx context.Context, key, field string) (string, error) {
 	if m.HGetFunc != nil {
 		return m.HGetFunc(ctx, key, field)
 	}
-	panic("cache mock: HGetFunc not set")
+	m.panicIfUnset("HGetFunc")
+	return "", nil
 }
 
 func (m *Client) HDel(ctx context.Context, key string, fields ...string) error {
@@ -198,7 +218,8 @@ func (m *Client) HGetAll(ctx context.Context, key string) (map[string]string, er
 	if m.HGetAllFunc != nil {
 		return m.HGetAllFunc(ctx, key)
 	}
-	panic("cache mock: HGetAllFunc not set")
+	m.panicIfUnset("HGetAllFunc")
+	return nil, nil
 }
 
 func (m *Client) Expire(ctx context.Context, key string, ttl time.Duration) error {
@@ -212,7 +233,8 @@ func (m *Client) Exists(ctx context.Context, key string) (bool, error) {
 	if m.ExistsFunc != nil {
 		return m.ExistsFunc(ctx, key)
 	}
-	panic("cache mock: ExistsFunc not set")
+	m.panicIfUnset("ExistsFunc")
+	return false, nil
 }
 
 func (m *Client) Close() error {
@@ -239,63 +261,72 @@ func (m *Client) WaitUntilReady(ctx context.Context, timeout time.Duration) erro
 	if m.WaitUntilReadyFunc != nil {
 		return m.WaitUntilReadyFunc(ctx, timeout)
 	}
-	panic("cache mock: WaitUntilReadyFunc not set")
+	m.panicIfUnset("WaitUntilReadyFunc")
+	return nil
 }
 
 func (m *Client) GetClient() valkey.Client {
 	if m.GetClientFunc != nil {
 		return m.GetClientFunc()
 	}
-	panic("cache mock: GetClientFunc not set")
+	m.panicIfUnset("GetClientFunc")
+	return nil
 }
 
 func (m *Client) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	if m.SetNXFunc != nil {
 		return m.SetNXFunc(ctx, key, value, ttl)
 	}
-	panic("cache mock: SetNXFunc not set")
+	m.panicIfUnset("SetNXFunc")
+	return false, nil
 }
 
 func (m *Client) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
 	if m.DoMultiFunc != nil {
 		return m.DoMultiFunc(ctx, cmds...)
 	}
-	panic("cache mock: DoMultiFunc not set")
+	m.panicIfUnset("DoMultiFunc")
+	return nil
 }
 
 func (m *Client) Builder() valkey.Builder {
 	if m.BuilderFunc != nil {
 		return m.BuilderFunc()
 	}
-	panic("cache mock: BuilderFunc not set")
+	m.panicIfUnset("BuilderFunc")
+	return valkey.Builder{}
 }
 
 func (m *Client) B() valkey.Builder {
 	if m.BFunc != nil {
 		return m.BFunc()
 	}
-	panic("cache mock: BFunc not set")
+	m.panicIfUnset("BFunc")
+	return valkey.Builder{}
 }
 
 func (m *Client) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {
 	if m.CompareAndDeleteFunc != nil {
 		return m.CompareAndDeleteFunc(ctx, key, expectedValue)
 	}
-	panic("cache mock: CompareAndDeleteFunc not set")
+	m.panicIfUnset("CompareAndDeleteFunc")
+	return false, nil
 }
 
 func (m *Client) CompareAndExpire(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error) {
 	if m.CompareAndExpireFunc != nil {
 		return m.CompareAndExpireFunc(ctx, key, expectedValue, ttl)
 	}
-	panic("cache mock: CompareAndExpireFunc not set")
+	m.panicIfUnset("CompareAndExpireFunc")
+	return false, nil
 }
 
 func (m *Client) GetStreams(ctx context.Context, key string) ([]*domain.Stream, bool) {
 	if m.GetStreamsFunc != nil {
 		return m.GetStreamsFunc(ctx, key)
 	}
-	panic("cache mock: GetStreamsFunc not set")
+	m.panicIfUnset("GetStreamsFunc")
+	return nil, false
 }
 
 func (m *Client) SetStreams(ctx context.Context, key string, streams []*domain.Stream, ttl time.Duration) {
@@ -303,47 +334,53 @@ func (m *Client) SetStreams(ctx context.Context, key string, streams []*domain.S
 		m.SetStreamsFunc(ctx, key, streams, ttl)
 		return
 	}
-	panic("cache mock: SetStreamsFunc not set")
+	m.panicIfUnset("SetStreamsFunc")
 }
 
 func (m *Client) InitializeMemberDatabase(ctx context.Context, memberData map[string]string) error {
 	if m.InitializeMemberDatabaseFunc != nil {
 		return m.InitializeMemberDatabaseFunc(ctx, memberData)
 	}
-	panic("cache mock: InitializeMemberDatabaseFunc not set")
+	m.panicIfUnset("InitializeMemberDatabaseFunc")
+	return nil
 }
 
 func (m *Client) GetMemberChannelID(ctx context.Context, memberName string) (string, error) {
 	if m.GetMemberChannelIDFunc != nil {
 		return m.GetMemberChannelIDFunc(ctx, memberName)
 	}
-	panic("cache mock: GetMemberChannelIDFunc not set")
+	m.panicIfUnset("GetMemberChannelIDFunc")
+	return "", nil
 }
 
 func (m *Client) GetAllMembers(ctx context.Context) (map[string]string, error) {
 	if m.GetAllMembersFunc != nil {
 		return m.GetAllMembersFunc(ctx)
 	}
-	panic("cache mock: GetAllMembersFunc not set")
+	m.panicIfUnset("GetAllMembersFunc")
+	return nil, nil
 }
 
 func (m *Client) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org string) (string, error) {
 	if m.GetMemberChannelIDWithOrgFunc != nil {
 		return m.GetMemberChannelIDWithOrgFunc(ctx, memberName, org)
 	}
-	panic("cache mock: GetMemberChannelIDWithOrgFunc not set")
+	m.panicIfUnset("GetMemberChannelIDWithOrgFunc")
+	return "", nil
 }
 
 func (m *Client) GetMemberChannelIDs(ctx context.Context, memberName string) ([]string, error) {
 	if m.GetMemberChannelIDsFunc != nil {
 		return m.GetMemberChannelIDsFunc(ctx, memberName)
 	}
-	panic("cache mock: GetMemberChannelIDsFunc not set")
+	m.panicIfUnset("GetMemberChannelIDsFunc")
+	return nil, nil
 }
 
 func (m *Client) AddMember(ctx context.Context, memberName, channelID string) error {
 	if m.AddMemberFunc != nil {
 		return m.AddMemberFunc(ctx, memberName, channelID)
 	}
-	panic("cache mock: AddMemberFunc not set")
+	m.panicIfUnset("AddMemberFunc")
+	return nil
 }
