@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/streamcommon"
 )
 
 type Service struct {
@@ -118,7 +119,7 @@ func mergeScheduleStreams(baseStreams, chzzkStreams []*domain.Stream) []*domain.
 			continue
 		}
 
-		if existing := findMatchingScheduleStream(merged, chzzkStream); existing != nil {
+		if existing := streamcommon.FindByChannelAndScheduledMinute(merged, chzzkStream); existing != nil {
 			existing.ChzzkChannelID = chzzkStream.ChzzkChannelID
 			existing.ChzzkLiveURL = chzzkStream.ChzzkLiveURL
 
@@ -139,28 +140,6 @@ func mergeScheduleStreams(baseStreams, chzzkStreams []*domain.Stream) []*domain.
 	slices.SortStableFunc(merged, compareScheduleStreams)
 
 	return merged
-}
-
-func findMatchingScheduleStream(streams []*domain.Stream, candidate *domain.Stream) *domain.Stream {
-	if candidate == nil || candidate.StartScheduled == nil {
-		return nil
-	}
-
-	for _, stream := range streams {
-		if stream == nil || stream.StartScheduled == nil {
-			continue
-		}
-
-		if stream.ChannelID != candidate.ChannelID {
-			continue
-		}
-
-		if stream.StartScheduled.UTC().Unix()/60 == candidate.StartScheduled.UTC().Unix()/60 {
-			return stream
-		}
-	}
-
-	return nil
 }
 
 func compareScheduleStreams(a, b *domain.Stream) int {
