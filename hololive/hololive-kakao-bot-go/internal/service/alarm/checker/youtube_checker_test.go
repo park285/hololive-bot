@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -89,7 +90,7 @@ func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 				d = nil
 			}
 
-			_, err := NewYouTubeChecker(c, h, ts, d, []int{5}, logger)
+			_, err := NewYouTubeChecker(c, h, ts, d, []int{5}, 0, logger)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErr)
 		})
@@ -108,7 +109,7 @@ func TestYouTubeCheckerCheck_EmptyChannelRegistry(t *testing.T) {
 	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
 	require.NoError(t, err)
 
-	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, logger)
+	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 
 	notifications, checkErr := checker.Check(t.Context())
@@ -222,7 +223,7 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 			holodexSvc, err := holodex.NewHolodexService(server.URL, "test-key", cacheSvc, nil, logger)
 			require.NoError(t, err)
 
-			checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, logger)
+			checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
 			require.NoError(t, err)
 
 			setupCtx := t.Context()
@@ -260,6 +261,38 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 			assert.Len(t, notifications, tc.wantCount)
 		})
 	}
+}
+
+func TestYouTubeChecker_DoesNotBackfillLateFiveMinuteAlarm(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 75*time.Second, logger)
+	require.NoError(t, err)
+
+	now := time.Date(2026, 4, 9, 11, 56, 0, 0, time.UTC)
+	startScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	window := sharedchecker.ResolveEvaluationWindow(
+		time.Date(2026, 4, 9, 11, 51, 0, 0, time.UTC),
+		now,
+		75*time.Second,
+	)
+
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+		ID:             "late-stream",
+		ChannelID:      "ch-1",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &startScheduled,
+		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
+	}, []string{"room-1"}, window)
+	require.NoError(t, err)
+	assert.Empty(t, notifications)
 }
 
 // -- common.go 보조 함수 --
@@ -309,7 +342,7 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, normalizeTargetMinutes(tc.input))
+			assert.Equal(t, tc.want, sharedchecker.NormalizeTargetMinutes(tc.input))
 		})
 	}
 }

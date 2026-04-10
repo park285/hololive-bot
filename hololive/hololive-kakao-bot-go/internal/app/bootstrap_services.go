@@ -41,8 +41,7 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 
 	irisClient, err := providers.ProvideIrisClient(logger)
 	if err != nil {
-		infra.cleanupDB()
-		infra.cleanupCache()
+		infra.Cleanup()
 		return nil, err
 	}
 	if err != nil {
@@ -51,12 +50,11 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 
 	defer func() {
 		if retErr != nil {
-			infra.cleanupDB()
-			infra.cleanupCache()
+			infra.Cleanup()
 		}
 	}()
 
-	templateRenderer := template.NewRenderer(infra.postgresService.GetGormDB(), logger)
+	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
 	messageAdapter := adapter.NewMessageAdapter(cfg.Bot.Prefix, cfg.Bot.MentionPrefix)
 	formatter := adapter.NewResponseFormatter(cfg.Bot.Prefix, templateRenderer)
 
@@ -103,11 +101,10 @@ func initCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 		alarmCRUD:        alarmYouTubeStack.alarmMode.alarmCRUD,
 		holodexService:   streamFoundation.holodexService,
 		ytStack:          alarmYouTubeStack.youTubeStack,
-		photoSync:        holodex.NewPhotoSyncService(streamFoundation.holodexService, infra.memberRepo, logger),
+		photoSync:        holodex.NewPhotoSyncService(streamFoundation.holodexService, infra.MemberRepo, logger),
 		templateRenderer: templateRenderer,
 		templateAdminSvc: buildTemplateAdminService(infra, templateRenderer, logger),
 		sharedRL:         streamFoundation.sharedRL,
-		cleanupCache:     infra.cleanupCache,
-		cleanupDB:        infra.cleanupDB,
+		cleanup:          infra.Cleanup,
 	}, nil
 }

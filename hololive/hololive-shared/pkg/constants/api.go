@@ -139,7 +139,7 @@ var YouTubeConfig = struct {
 	ScraperHTTPTimeout:    15 * time.Second, // VPN/SOCKS 불안정 시 장시간 블로킹 완화
 	ScraperDialTimeout:    5 * time.Second,  // 프록시/원격 연결 지연의 빠른 실패
 	ScraperHeaderTimeout:  12 * time.Second, // 헤더 수신 지연(blackhole) 조기 감지
-	ScraperPhaseTimeout:   45 * time.Second, // 69채널 × 세마포어5 = 14 batch + 안전마진
+	ScraperPhaseTimeout:   45 * time.Second, // 느린 프록시 / 대형 배치에서도 한 phase가 영구 정지하지 않도록 제한
 	APIFallbackTimeout:    30 * time.Second, // 배치 50개 × 2 batch + 여유
 	CacheSaveTimeout:      5 * time.Second,  // 캐시 저장용
 	CommunityMissingTTL:   24 * time.Hour,   // /posts 404 채널은 하루 후 재검증

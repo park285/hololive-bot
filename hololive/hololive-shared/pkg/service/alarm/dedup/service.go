@@ -299,10 +299,6 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 	return acquired
 }
 
-func (s *Service) isTargetMinute(minutesUntil int) bool {
-	return slices.Contains(s.targetMinutesSnapshot(), minutesUntil)
-}
-
 func (s *Service) targetMinutesSnapshot() []int {
 	s.targetMinutesMu.RLock()
 	defer s.targetMinutesMu.RUnlock()
@@ -314,7 +310,7 @@ func (s *Service) targetMinutesSnapshot() []int {
 func (s *Service) readNotifiedData(ctx context.Context, key string) (*NotifiedData, error) {
 	data, source, err := s.loadNotifiedData(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read notified data: load notified data: %w", err)
 	}
 	if data == nil {
 		return nil, nil

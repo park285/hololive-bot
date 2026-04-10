@@ -1,14 +1,15 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
+GOLANGCI_CONFIG ?= ../../.golangci.yml
 BINARY_NAME ?= llm-scheduler
 
 .PHONY: lint
 lint:
-	$(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_LINT) run -c $(GOLANGCI_CONFIG) ./...
 
 .PHONY: fmt
 fmt:
-	$(GOLANGCI_LINT) run --fix ./...
+	$(GOLANGCI_LINT) run -c $(GOLANGCI_CONFIG) --fix ./...
 
 .PHONY: test
 test:

@@ -56,15 +56,7 @@ type StreamIngesterRuntime struct {
 	Readiness *ingestionReadinessState
 
 	ingestionLease *providers.IngestionLease
-	lifecycle.CleanupCloser
-}
-
-func (r *StreamIngesterRuntime) Close() {
-	if r == nil {
-		return
-	}
-
-	r.CleanupCloser.Close()
+	lifecycle.Managed
 }
 
 func (r *StreamIngesterRuntime) runtimeName() string {

@@ -304,7 +304,8 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	}})
 	alarm := &alarmAddRecorder{}
 	deps := &Dependencies{
-		Alarm:     alarm,
+		Alarm: alarm,
+		//nolint:staticcheck // nil context path is the behavior under test
 		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {

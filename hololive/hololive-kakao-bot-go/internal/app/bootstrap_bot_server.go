@@ -92,5 +92,5 @@ func buildBotServer(
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 
-	return ProvideAPIServer(addr, botRouter), nil
+	return sharedserver.NewH2CServer(addr, botRouter, "hololive-bot.http"), nil
 }

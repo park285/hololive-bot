@@ -63,15 +63,7 @@ type LLMSchedulerRuntime struct {
 
 	configSubscriber *configsub.Subscriber
 	httpServer       *http.Server
-	lifecycle.CleanupCloser
-}
-
-func (r *LLMSchedulerRuntime) Close() {
-	if r == nil {
-		return
-	}
-
-	r.CleanupCloser.Close()
+	lifecycle.Managed
 }
 
 type memberNewsWeeklyDigestSender interface {
@@ -310,7 +302,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, cfg *config.LLMSchedulerConfi
 		cleanup()
 		return nil, err
 	}
-	runtime.CleanupCloser = lifecycle.NewCleanupCloser(cleanup)
+	runtime.Managed = lifecycle.NewManaged(cleanup)
 	return runtime, nil
 }
 
@@ -411,7 +403,7 @@ func buildLLMSchedulerHTTPServer(
 	registerMemberNewsInternalRoutes(router, apiKey, memberNewsService)
 
 	addr := fmt.Sprintf(":%d", port)
-	return ProvideAPIServer(addr, router), nil
+	return sharedserver.NewH2CServer(addr, router, "hololive-llm-sched.http"), nil
 }
 
 func buildLLMSchedulerConfigSubscriber(

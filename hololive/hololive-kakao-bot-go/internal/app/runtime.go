@@ -55,15 +55,7 @@ type BotRuntime struct {
 	webhookHandlerCloser interface{ Close() error }
 	alarmSchedulerMu     sync.Mutex
 	alarmSchedulerCancel context.CancelFunc
-	lifecycle.CleanupCloser
-}
-
-func (r *BotRuntime) Close() {
-	if r == nil {
-		return
-	}
-
-	r.CleanupCloser.Close()
+	lifecycle.Managed
 }
 
 // BuildRuntime: 설정과 로거를 기반으로 봇 런타임 환경을 구성하고 모든 의존성을 초기화합니다.
@@ -85,7 +77,7 @@ func BuildRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}
 
-	runtime.CleanupCloser = lifecycle.NewCleanupCloser(cleanup)
+	runtime.Managed = lifecycle.NewManaged(cleanup)
 
 	return runtime, nil
 }

@@ -36,9 +36,9 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("nil trigger handler keeps health only", func(t *testing.T) {
-		router, err := ProvideTriggerRouter(t.Context(), logger, nil, "api-key")
+		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, nil, "api-key")
 		if err != nil {
-			t.Fatalf("ProvideTriggerRouter() error = %v", err)
+			t.Fatalf("NewTriggerRuntimeRouter() error = %v", err)
 		}
 
 		healthReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
@@ -69,9 +69,9 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 	t.Run("trigger routes require api key and are registered", func(t *testing.T) {
 		triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-		router, err := ProvideTriggerRouter(t.Context(), logger, triggerHandler, "api-key")
+		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "api-key")
 		if err != nil {
-			t.Fatalf("ProvideTriggerRouter() error = %v", err)
+			t.Fatalf("NewTriggerRuntimeRouter() error = %v", err)
 		}
 
 		noAuthReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
@@ -96,17 +96,17 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 	t.Run("trigger routes fail closed when api key missing", func(t *testing.T) {
 		triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-		router, err := ProvideTriggerRouter(t.Context(), logger, triggerHandler, "")
+		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "")
 		if err == nil {
-			t.Fatal("ProvideTriggerRouter() error = nil, want non-nil")
+			t.Fatal("NewTriggerRuntimeRouter() error = nil, want non-nil")
 		}
 
 		if router != nil {
-			t.Fatal("ProvideTriggerRouter() router = non-nil, want nil")
+			t.Fatal("NewTriggerRuntimeRouter() router = non-nil, want nil")
 		}
 
 		if err.Error() != "API_SECRET_KEY required" {
-			t.Fatalf("ProvideTriggerRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
+			t.Fatalf("NewTriggerRuntimeRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
 		}
 	})
 }

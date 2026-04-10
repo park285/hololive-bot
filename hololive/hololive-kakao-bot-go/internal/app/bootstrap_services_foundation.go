@@ -46,20 +46,20 @@ func initScraperHolodexProfileFoundation(
 	logger *slog.Logger,
 ) (*scraperHolodexProfileFoundation, error) {
 	holodexAPIKey := providers.ProvideHolodexAPIKey(cfg.Holodex)
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.memberCache, logger)
+	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: cfg.Scraper.ProxyEnabled,
 		URL:     cfg.Scraper.ProxyURL,
 	}
 
-	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.cacheService, logger)
+	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
 	}
 
 	scraperService := providers.ProvideScraperService(
-		infra.cacheService,
+		infra.Cache,
 		memberServiceAdapter,
 		scraperProxyConfig,
 		sharedRL,
@@ -69,7 +69,7 @@ func initScraperHolodexProfileFoundation(
 	holodexService, err := providers.ProvideHolodexService(
 		cfg.Holodex.BaseURL,
 		holodexAPIKey,
-		infra.cacheService,
+		infra.Cache,
 		scraperService,
 		logger,
 	)
@@ -77,7 +77,7 @@ func initScraperHolodexProfileFoundation(
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	profileService, err := providers.ProvideProfileService(ctx, infra.cacheService, memberServiceAdapter, logger)
+	profileService, err := providers.ProvideProfileService(ctx, infra.Cache, memberServiceAdapter, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide profile service: %w", err)
 	}

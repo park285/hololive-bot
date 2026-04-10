@@ -34,6 +34,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
@@ -44,9 +45,9 @@ func TestProvideAPIServer(t *testing.T) {
 		c.String(http.StatusOK, "pong")
 	})
 
-	server := ProvideAPIServer(":31004", router, "test-http")
+	server := sharedserver.NewH2CServer(":31004", router, "test-http")
 	if server == nil {
-		t.Fatal("ProvideAPIServer() returned nil")
+		t.Fatal("NewH2CServer() returned nil")
 	}
 	if server.Addr != ":31004" {
 		t.Fatalf("server.Addr = %q, want %q", server.Addr, ":31004")
@@ -118,12 +119,18 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		youtubeEnabled:   true,
 		photoSyncEnabled: false,
 	})
-	router, err := ProvideHealthOnlyRouter(ctx, testLogger(), readiness, "")
+	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, testLogger(), "", func(opts *sharedserver.RuntimeRouterOptions) {
+		opts.EnableGzip = true
+		opts.ReadyResponder = func(c *gin.Context) {
+			statusCode, payload := readiness.response()
+			c.JSON(statusCode, payload)
+		}
+	})
 	if err != nil {
-		t.Fatalf("ProvideHealthOnlyRouter() error = %v", err)
+		t.Fatalf("NewHealthOnlyRuntimeRouter() error = %v", err)
 	}
 	if router == nil {
-		t.Fatal("ProvideHealthOnlyRouter() returned nil router")
+		t.Fatal("NewHealthOnlyRuntimeRouter() returned nil router")
 	}
 	if gin.Mode() != gin.ReleaseMode {
 		t.Fatalf("gin mode = %q, want %q", gin.Mode(), gin.ReleaseMode)
@@ -168,9 +175,15 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 	})
 
 	t.Run("metrics endpoint requires api key when configured", func(t *testing.T) {
-		protectedRouter, err := ProvideHealthOnlyRouter(ctx, testLogger(), readiness, "test-key")
+		protectedRouter, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, testLogger(), "test-key", func(opts *sharedserver.RuntimeRouterOptions) {
+			opts.EnableGzip = true
+			opts.ReadyResponder = func(c *gin.Context) {
+				statusCode, payload := readiness.response()
+				c.JSON(statusCode, payload)
+			}
+		})
 		if err != nil {
-			t.Fatalf("ProvideHealthOnlyRouter() protected error = %v", err)
+			t.Fatalf("NewHealthOnlyRuntimeRouter() protected error = %v", err)
 		}
 
 		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)

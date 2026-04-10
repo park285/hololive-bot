@@ -374,7 +374,7 @@ func TestGetACLStatus_ReturnsCopy(t *testing.T) {
 	origLen := len(rooms)
 
 	// 반환된 슬라이스를 수정해도 서비스 내부 상태에 영향 없어야 한다
-	rooms = append(rooms, "injected-room")
+	_ = append(rooms, "injected-room")
 
 	_, _, roomsAfter := svc.GetACLStatus()
 	if len(roomsAfter) != origLen {

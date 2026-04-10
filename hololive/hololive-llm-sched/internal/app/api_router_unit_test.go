@@ -54,7 +54,7 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 		c.String(http.StatusOK, "pong")
 	})
 
-	server := ProvideAPIServer(":32004", router)
+	server := sharedserver.NewH2CServer(":32004", router, "")
 	require.NotNil(t, server)
 
 	assert.Equal(t, ":32004", server.Addr)

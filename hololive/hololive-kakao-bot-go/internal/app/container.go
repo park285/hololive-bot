@@ -38,15 +38,7 @@ type Container struct {
 	Logger *slog.Logger
 
 	botDeps *bot.Dependencies
-	lifecycle.CleanupCloser
-}
-
-func (c *Container) Close() {
-	if c == nil {
-		return
-	}
-
-	c.CleanupCloser.Close()
+	lifecycle.Managed
 }
 
 // Build: 주어진 설정과 로거를 기반으로 애플리케이션 컨테이너를 구성하고 모든 의존성을 초기화합니다.
@@ -70,9 +62,9 @@ func Build(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Conta
 	}
 
 	return &Container{
-		Config:        cfg,
-		Logger:        logger,
-		botDeps:       deps,
-		CleanupCloser: lifecycle.NewCleanupCloser(cleanup),
+		Config:  cfg,
+		Logger:  logger,
+		botDeps: deps,
+		Managed: lifecycle.NewManaged(cleanup),
 	}, nil
 }

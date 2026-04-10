@@ -25,10 +25,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/iris-client-go/iris"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/park285/iris-client-go/iris"
 )
 
 // CacheResources: 초기화된 캐시 서비스 인스턴스와 리소스 해제(Close) 함수를 캡슐화한 구조체
@@ -115,6 +116,13 @@ func ProvidePostgresService(resources *DatabaseResources) database.Client {
 
 // ProvideIrisClient - Iris h2c(HTTP/2 Cleartext) 클라이언트 생성
 func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*iris.H2CClient, error) {
-	defaultOpts := []iris.ClientOption{iris.WithLogger(logger)}
-	return iris.NewClient(append(defaultOpts, opts...)...)
+	defaultOpts := make([]iris.ClientOption, 0, 1+len(opts))
+	defaultOpts = append(defaultOpts, iris.WithLogger(logger))
+	defaultOpts = append(defaultOpts, opts...)
+
+	client, err := iris.NewClient(defaultOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("provide iris client: %w", err)
+	}
+	return client, nil
 }

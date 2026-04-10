@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -96,9 +97,17 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.expected, normalizeTargetMinutes(tc.input))
+			assert.Equal(t, tc.expected, sharedchecker.NormalizeTargetMinutes(tc.input))
 		})
 	}
+}
+
+func TestYouTubeEvaluationWindowCap(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 75*time.Second, youtubeEvaluationWindowCap(0))
+	assert.Equal(t, 75*time.Second, youtubeEvaluationWindowCap(30*time.Second))
+	assert.Equal(t, 135*time.Second, youtubeEvaluationWindowCap(2*time.Minute))
 }
 
 func TestRuntimeSchedulerStart_NilContext(t *testing.T) {
@@ -108,7 +117,9 @@ func TestRuntimeSchedulerStart_NilContext(t *testing.T) {
 		logger: testSchedulerLogger(),
 	}
 
-	s.Start(nil)
+	var nilCtx context.Context
+	//nolint:staticcheck // nil context path is the behavior under test
+	s.Start(nilCtx)
 }
 
 func TestRuntimeSchedulerRunIterations(t *testing.T) {

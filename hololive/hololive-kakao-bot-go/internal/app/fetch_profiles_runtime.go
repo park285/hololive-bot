@@ -34,15 +34,7 @@ type FetchProfilesRuntime struct {
 	Logger     *slog.Logger
 	HTTPClient *http.Client
 
-	lifecycle.CleanupCloser
-}
-
-func (r *FetchProfilesRuntime) Close() {
-	if r == nil {
-		return
-	}
-
-	r.CleanupCloser.Close()
+	lifecycle.Managed
 }
 
 // BuildFetchProfilesRuntime: 프로필 수집 런타임 환경을 구성하고 초기화합니다.
@@ -56,7 +48,7 @@ func BuildFetchProfilesRuntime(ctx context.Context) (*FetchProfilesRuntime, erro
 		return nil, fmt.Errorf("failed to initialize fetch profiles runtime: %w", err)
 	}
 
-	runtime.CleanupCloser = lifecycle.NewCleanupCloser(cleanup)
+	runtime.Managed = lifecycle.NewManaged(cleanup)
 
 	return runtime, nil
 }

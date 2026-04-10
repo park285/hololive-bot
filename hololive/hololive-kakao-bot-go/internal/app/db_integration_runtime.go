@@ -38,15 +38,7 @@ type DBIntegrationRuntime struct {
 	Cache         *member.Cache
 	MemberAdapter member.DataProvider
 
-	lifecycle.CleanupCloser
-}
-
-func (r *DBIntegrationRuntime) Close() {
-	if r == nil {
-		return
-	}
-
-	r.CleanupCloser.Close()
+	lifecycle.Managed
 }
 
 // BuildDBIntegrationRuntime: PostgreSQL 설정을 기반으로 DB 통합 런타임 환경을 구축합니다.
@@ -68,7 +60,7 @@ func BuildDBIntegrationRuntime(
 		return nil, fmt.Errorf("failed to initialize DB integration runtime: %w", err)
 	}
 
-	runtime.CleanupCloser = lifecycle.NewCleanupCloser(cleanup)
+	runtime.Managed = lifecycle.NewManaged(cleanup)
 
 	return runtime, nil
 }

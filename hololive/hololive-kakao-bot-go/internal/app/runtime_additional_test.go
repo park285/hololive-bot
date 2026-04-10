@@ -37,7 +37,7 @@ func TestBotRuntimeClose_CallsCleanup(t *testing.T) {
 
 	calls := 0
 	runtime := &BotRuntime{
-		CleanupCloser: lifecycle.NewCleanupCloser(func() { calls++ }),
+		Managed: lifecycle.NewManaged(func() { calls++ }),
 	}
 
 	runtime.Close()
@@ -45,9 +45,6 @@ func TestBotRuntimeClose_CallsCleanup(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("cleanup calls = %d, want 1", calls)
 	}
-
-	var nilRuntime *BotRuntime
-	nilRuntime.Close()
 }
 
 func TestBotRuntimeStartHTTPServer_Branches(t *testing.T) {

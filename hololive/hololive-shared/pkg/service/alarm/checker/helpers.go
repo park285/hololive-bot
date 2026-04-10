@@ -87,22 +87,70 @@ func IsTargetMinute(targetMinutes []int, minutesUntil int) bool {
 	return slices.Contains(targetMinutes, minutesUntil)
 }
 
-func CrossedTarget(targetMinutes []int, start, prev, now time.Time) (int, bool) {
-	current := MinutesUntilFloor(start, now)
+type EvaluationWindow struct {
+	Start  time.Time
+	End    time.Time
+	Capped bool
+}
+
+func ResolveEvaluationWindow(prevCheckedAt, now time.Time, maxLookback time.Duration) EvaluationWindow {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	} else {
+		now = now.UTC()
+	}
+
+	if maxLookback <= 0 {
+		maxLookback = time.Minute
+	}
+
+	windowStart := now.Add(-maxLookback)
+	window := EvaluationWindow{
+		Start:  windowStart,
+		End:    now,
+		Capped: true,
+	}
+
+	if !prevCheckedAt.IsZero() {
+		prevUTC := prevCheckedAt.UTC()
+		if !prevUTC.Before(now) {
+			window.Start = now.Add(-time.Second)
+			return window
+		}
+
+		if prevUTC.After(windowStart) {
+			window.Start = prevUTC
+			window.Capped = false
+		}
+	}
+
+	if !window.Start.Before(now) {
+		window.Start = now.Add(-time.Second)
+	}
+
+	return window
+}
+
+func HighestCrossedTarget(targetMinutes []int, startScheduled time.Time, window EvaluationWindow) (int, bool) {
+	if startScheduled.IsZero() || !window.Start.Before(window.End) {
+		return 0, false
+	}
+
+	current := MinutesUntilFloor(startScheduled, window.End)
 	if IsTargetMinute(targetMinutes, current) {
 		return current, true
 	}
 
-	if prev.IsZero() || !prev.Before(now) {
+	if window.Capped {
 		return 0, false
 	}
 
-	previous := MinutesUntilFloor(start, prev)
+	previous := MinutesUntilFloor(startScheduled, window.Start)
 	if previous <= current {
 		return 0, false
 	}
 
-	for _, target := range targetMinutes {
+	for _, target := range NormalizeTargetMinutes(targetMinutes) {
 		if current < target && target <= previous {
 			return target, true
 		}
