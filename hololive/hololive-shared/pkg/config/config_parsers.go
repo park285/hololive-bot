@@ -25,9 +25,8 @@ import (
 	"strconv"
 	"strings"
 
+	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
-
-	"github.com/kapu/hololive-shared/internal/envutil"
 )
 
 // clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.
@@ -76,7 +75,7 @@ func parseIntList(value string) []int {
 }
 
 func resolveHolodexAPIKey() string {
-	return envutil.StringAny("HOLODEX_API_KEY", "HOLODEX_API_KEY_1")
+	return sharedenv.StringAny("HOLODEX_API_KEY", "HOLODEX_API_KEY_1")
 }
 
 func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bool) {
