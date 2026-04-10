@@ -27,9 +27,9 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/internal/envutil"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
@@ -75,13 +75,13 @@ func Load() (*Config, error) {
 }
 
 func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
-	webhookToken := strings.TrimSpace(envutil.String("IRIS_WEBHOOK_TOKEN", ""))
-	botToken := strings.TrimSpace(envutil.String("IRIS_BOT_TOKEN", ""))
+	webhookToken := strings.TrimSpace(sharedenv.String("IRIS_WEBHOOK_TOKEN", ""))
+	botToken := strings.TrimSpace(sharedenv.String("IRIS_BOT_TOKEN", ""))
 
 	runtimeEnv := loadAppEnvironment()
 	isProduction := strings.EqualFold(runtimeEnv, "production")
 	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
-		envutil.String("CORS_ALLOWED_ORIGINS", ""),
+		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),
 		isProduction,
 	)
 
@@ -90,70 +90,70 @@ func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
 
 //nolint:funlen // central environment-to-config assembly is intentionally kept in one place
 func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) *Config {
-	llmSchedulerHealthURL := envutil.StringAny(
+	llmSchedulerHealthURL := sharedenv.StringAny(
 		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
 		"SERVICES_LLM_SERVER_HEALTH_URL",
 	)
 
 	return &Config{
 		Iris: IrisConfig{
-			BaseURL:                   envutil.String("IRIS_BASE_URL", "http://localhost:3000"),
+			BaseURL:                   sharedenv.String("IRIS_BASE_URL", "http://localhost:3000"),
 			WebhookToken:              webhookToken,
 			BotToken:                  botToken,
-			HTTPTimeout:               time.Duration(envutil.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
-			HTTPDialTimeout:           time.Duration(envutil.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
-			HTTPResponseHeaderTimeout: time.Duration(envutil.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
+			HTTPTimeout:               time.Duration(sharedenv.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
+			HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
+			HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
 		},
 		Server: ServerConfig{
-			Port:   envutil.Int("SERVER_PORT", 30001),
-			APIKey: envutil.String("API_SECRET_KEY", ""),
+			Port:   sharedenv.Int("SERVER_PORT", 30001),
+			APIKey: sharedenv.String("API_SECRET_KEY", ""),
 		},
 		Kakao: KakaoConfig{
-			Rooms:      parseCommaSeparated(envutil.String("KAKAO_ROOMS", "홀로라이브 알림방")),
-			ACLEnabled: envutil.Bool("KAKAO_ACL_ENABLED", true),
-			ACLMode:    envutil.String("KAKAO_ACL_MODE", "whitelist"),
+			Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
+			ACLEnabled: sharedenv.Bool("KAKAO_ACL_ENABLED", true),
+			ACLMode:    sharedenv.String("KAKAO_ACL_MODE", "whitelist"),
 		},
 		Holodex: HolodexConfig{
-			BaseURL: envutil.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
+			BaseURL: sharedenv.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
 			APIKey:  resolveHolodexAPIKey(),
 		},
 		YouTube: YouTubeConfig{
-			APIKey:              envutil.String("YOUTUBE_API_KEY", ""),
-			EnableQuotaBuilding: envutil.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
+			APIKey:              sharedenv.String("YOUTUBE_API_KEY", ""),
+			EnableQuotaBuilding: sharedenv.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
 		},
 		Ingestion: IngestionConfig{
-			YouTubeEnabled:   envutil.Bool("YOUTUBE_INGESTION_ENABLED", true),
-			PhotoSyncEnabled: envutil.Bool("PHOTO_SYNC_ENABLED", true),
+			YouTubeEnabled:   sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
+			PhotoSyncEnabled: sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
 		Notification: NotificationConfig{
-			AdvanceMinutes: parseIntList(envutil.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
-			CheckInterval:  time.Duration(envutil.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
+			AdvanceMinutes: parseIntList(sharedenv.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
+			CheckInterval:  time.Duration(sharedenv.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
 		},
 		Logging: LoggingConfig{
-			Level:      envutil.String("LOG_LEVEL", "info"),
-			Dir:        envutil.String("LOG_DIR", ""),
-			MaxSizeMB:  envutil.Int("LOG_MAX_SIZE_MB", 100),
-			MaxBackups: envutil.Int("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: envutil.Int("LOG_MAX_AGE_DAYS", 30),
-			Compress:   envutil.Bool("LOG_COMPRESS", true),
+			Level:      sharedenv.String("LOG_LEVEL", "info"),
+			Dir:        sharedenv.String("LOG_DIR", ""),
+			MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 100),
+			MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
+			MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
+			Compress:   sharedenv.Bool("LOG_COMPRESS", true),
 		},
 		Bot: BotConfig{
-			Prefix:        envutil.String("BOT_PREFIX", "!"),
-			SelfUser:      envutil.String("BOT_SELF_USER", "iris"),
-			AdminEnabled:  envutil.Bool("BOT_ADMIN_ENABLED", true),
-			MentionPrefix: envutil.String("BOT_MENTION_PREFIX", "#kapu봇"),
+			Prefix:        sharedenv.String("BOT_PREFIX", "!"),
+			SelfUser:      sharedenv.String("BOT_SELF_USER", "iris"),
+			AdminEnabled:  sharedenv.Bool("BOT_ADMIN_ENABLED", true),
+			MentionPrefix: sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		},
 		Services: ServicesConfig{
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
-			GameBotTwentyQHealthURL: envutil.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-			GameBotTurtleHealthURL:  envutil.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
+			GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
+			GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
 		},
 		Environment: loadAppEnvironment(),
 		Scraper: ScraperConfig{
-			ProxyEnabled: envutil.Bool("SCRAPER_PROXY_ENABLED", false),
-			ProxyURL:     envutil.String("SCRAPER_PROXY_URL", ""),
+			ProxyEnabled: sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
+			ProxyURL:     sharedenv.String("SCRAPER_PROXY_URL", ""),
 			WorkerCount: intAliasEnv([]string{
 				"SCRAPER_SCHEDULER_WORKER_COUNT",
 				"SCRAPER_WORKER_COUNT",
@@ -161,30 +161,30 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			Poll: loadScraperPoll(),
 		},
 		Webhook: WebhookConfig{
-			WorkerCount:    envutil.Int("WEBHOOK_WORKER_COUNT", 16),
-			QueueSize:      envutil.Int("WEBHOOK_QUEUE_SIZE", 1000),
-			EnqueueTimeout: time.Duration(envutil.Int("WEBHOOK_ENQUEUE_TIMEOUT_MS", 50)) * time.Millisecond,
-			HandlerTimeout: time.Duration(envutil.Int("WEBHOOK_HANDLER_TIMEOUT_SECONDS", 30)) * time.Second,
-			RequireHTTP2:   envutil.Bool("WEBHOOK_REQUIRE_HTTP2", false),
+			WorkerCount:    sharedenv.Int("WEBHOOK_WORKER_COUNT", 16),
+			QueueSize:      sharedenv.Int("WEBHOOK_QUEUE_SIZE", 1000),
+			EnqueueTimeout: time.Duration(sharedenv.Int("WEBHOOK_ENQUEUE_TIMEOUT_MS", 50)) * time.Millisecond,
+			HandlerTimeout: time.Duration(sharedenv.Int("WEBHOOK_HANDLER_TIMEOUT_SECONDS", 30)) * time.Second,
+			RequireHTTP2:   sharedenv.Bool("WEBHOOK_REQUIRE_HTTP2", false),
 		},
 		Chzzk: ChzzkConfig{
-			ClientID:     envutil.String("CHZZK_CLIENT_ID", ""),
-			ClientSecret: envutil.String("CHZZK_CLIENT_SECRET", ""),
+			ClientID:     sharedenv.String("CHZZK_CLIENT_ID", ""),
+			ClientSecret: sharedenv.String("CHZZK_CLIENT_SECRET", ""),
 		},
 		Twitch: TwitchConfig{
-			ClientID:     envutil.String("TWITCH_CLIENT_ID", ""),
-			ClientSecret: envutil.String("TWITCH_CLIENT_SECRET", ""),
+			ClientID:     sharedenv.String("TWITCH_CLIENT_ID", ""),
+			ClientSecret: sharedenv.String("TWITCH_CLIENT_SECRET", ""),
 		},
 		Cliproxy:        loadCliproxyConfig(),
 		LLM:             loadLLMConfig(),
 		Exa:             loadExaConfig(),
-		LLMSchedulerURL: envutil.String("LLM_SCHEDULER_INTERNAL_URL", ""),
+		LLMSchedulerURL: sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		CORS: CORSConfig{
 			AllowedOrigins:      corsAllowedOrigins,
-			Enforce:             envutil.Bool("CORS_ENFORCE", false),
+			Enforce:             sharedenv.Bool("CORS_ENFORCE", false),
 			MissingInProduction: corsMissingInProduction,
 		},
-		Version: envutil.String("APP_VERSION", "1.1.0-go"),
+		Version: sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}
 }
 
@@ -253,7 +253,7 @@ func loadScraperPoll() ScraperPoll {
 
 func secondsAliasEnv(keys []string, fallback time.Duration) time.Duration {
 	for _, key := range keys {
-		seconds := envutil.Int(key, 0)
+		seconds := sharedenv.Int(key, 0)
 		if seconds > 0 {
 			return time.Duration(seconds) * time.Second
 		}
@@ -263,7 +263,7 @@ func secondsAliasEnv(keys []string, fallback time.Duration) time.Duration {
 
 func intAliasEnv(keys []string, fallback int) int {
 	for _, key := range keys {
-		value := envutil.Int(key, 0)
+		value := sharedenv.Int(key, 0)
 		if value > 0 {
 			return value
 		}
@@ -314,7 +314,7 @@ func validatePostgresSSLMode(environment, sslMode string) error {
 	}
 
 	if strings.EqualFold(strings.TrimSpace(environment), "production") {
-		if envutil.Bool("POSTGRES_SSLMODE_ALLOW_INSECURE", false) {
+		if sharedenv.Bool("POSTGRES_SSLMODE_ALLOW_INSECURE", false) {
 			return nil
 		}
 
