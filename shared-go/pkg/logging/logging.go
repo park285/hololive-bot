@@ -80,6 +80,16 @@ func NewLogger() *slog.Logger {
 	}))
 }
 
+// NewLoggerWithLevel: 지정된 레벨로 콘솔 출력용 slog 로거를 생성합니다.
+func NewLoggerWithLevel(level string) *slog.Logger {
+	cfg := Config{Level: level}
+	logger, err := EnableFileLogging(cfg, "")
+	if err != nil || logger == nil {
+		return NewLogger()
+	}
+	return logger
+}
+
 // NewTestLogger: 테스트용 로거를 생성합니다. 모든 출력을 폐기하여 테스트 로그를 깔끔하게 유지합니다.
 func NewTestLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
@@ -93,6 +103,12 @@ func NewTestLoggerWithOutput(w io.Writer) *slog.Logger {
 // EnableFileLogging: 파일 로깅을 활성화하고, 파일과 stdout에 동시에 출력하는 로거를 반환합니다.
 func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
 	return EnableFileLoggingWithOTel(cfg, fileName, false)
+}
+
+// EnableFileLoggingWithLevel: 지정된 레벨과 파일 로깅을 활성화합니다.
+func EnableFileLoggingWithLevel(cfg Config, fileName, level string) (*slog.Logger, error) {
+	cfg.Level = level
+	return EnableFileLogging(cfg, fileName)
 }
 
 // EnableFileLoggingWithOTel: OTel 상관관계 기능을 포함한 파일 로깅을 활성화합니다.
