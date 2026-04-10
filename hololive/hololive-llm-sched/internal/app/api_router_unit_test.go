@@ -72,13 +72,13 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 	assert.Equal(t, "pong", strings.TrimSpace(rr.Body.String()))
 }
 
-func TestProvideHealthOnlyRouter_Endpoints(t *testing.T) {
+func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	prevMode := gin.Mode()
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
 	})
 
-	router, err := ProvideHealthOnlyRouter(context.Background(), newDiscardLogger(), "")
+	router, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), "")
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
@@ -108,7 +108,7 @@ func TestProvideHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 
 	t.Run("metrics require api key when configured", func(t *testing.T) {
-		protectedRouter, err := ProvideHealthOnlyRouter(context.Background(), newDiscardLogger(), "test-key")
+		protectedRouter, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), "test-key")
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
