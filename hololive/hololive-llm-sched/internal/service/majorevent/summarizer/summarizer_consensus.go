@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
@@ -40,12 +41,15 @@ func (s *EventSummarizer) runConsensus(
 	periodKey, searchContext string,
 	primary *summaryResponse,
 ) (*summaryResponse, bool) {
-	// consensus: deadline budget TODO
 	if primary == nil || s.reviewer == nil {
 		return primary, false
 	}
 
-	reviewCtx, cancel := context.WithTimeout(ctx, s.consensus.ReviewTimeout)
+	reviewCtx, cancel, ok := deriveConsensusBudget(ctx, s.consensus.ReviewTimeout, 250*time.Millisecond)
+	if !ok {
+		s.logger.Warn("major event consensus skipped: insufficient budget for review")
+		return primary, false
+	}
 	defer cancel()
 
 	verdict, err := s.reviewSummary(reviewCtx, events, summaryType, periodKey, primary)
@@ -66,7 +70,11 @@ func (s *EventSummarizer) runConsensus(
 		return primary, false
 	}
 
-	adjCtx, adjCancel := context.WithTimeout(ctx, s.consensus.AdjudicateTimeout)
+	adjCtx, adjCancel, ok := deriveConsensusBudget(ctx, s.consensus.AdjudicateTimeout, 250*time.Millisecond)
+	if !ok {
+		s.logger.Warn("major event consensus skipped: insufficient budget for adjudication")
+		return primary, false
+	}
 	defer adjCancel()
 
 	adjusted, err := s.adjudicateSummary(adjCtx, events, summaryType, periodKey, searchContext, primary, verdict)
@@ -79,6 +87,28 @@ func (s *EventSummarizer) runConsensus(
 		slog.Float64("confidence", verdict.Confidence),
 		slog.Int("issues", len(verdict.Issues)))
 	return adjusted, true
+}
+
+func deriveConsensusBudget(parent context.Context, requested, reserve time.Duration) (context.Context, context.CancelFunc, bool) {
+	if requested <= 0 {
+		requested = time.Second
+	}
+	if reserve < 0 {
+		reserve = 0
+	}
+
+	if deadline, ok := parent.Deadline(); ok {
+		remaining := time.Until(deadline) - reserve
+		if remaining <= 0 {
+			return nil, nil, false
+		}
+		if remaining < requested {
+			requested = remaining
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(parent, requested)
+	return ctx, cancel, true
 }
 
 func (s *EventSummarizer) reviewSummary(
