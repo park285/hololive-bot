@@ -31,7 +31,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/health"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-stream-ingester/internal/app"
 )
