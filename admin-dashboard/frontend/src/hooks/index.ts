@@ -9,5 +9,4 @@ export {
 	useUpdateChannelMutation,
 	useUpdateNameMutation,
 } from "@/hooks/useMemberMutations";
-export { useSSRData } from "@/hooks/useSSRData";
 export { useWebSocket } from "@/hooks/useWebSocket";

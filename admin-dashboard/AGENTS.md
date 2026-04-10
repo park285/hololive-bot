@@ -43,7 +43,6 @@ INHERIT: ../AGENTS.md
 
 ### Architecture Patterns
 - **Proxy Mode**: Authenticate and relay upstream bot service APIs
-- **SSR Data**: Inject initial data via `window.__SSR_DATA__`
 - **WebSocket**: Real-time system stats and Docker log streaming
 
 ### Security
