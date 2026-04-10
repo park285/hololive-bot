@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/streamcommon"
 )
 
 type orgStreamSource interface {
@@ -289,7 +290,7 @@ func mergeUpcomingStreams(base []*domain.Stream, additions []*domain.Stream) []*
 			continue
 		}
 
-		if existing := findUpcomingStreamMatch(merged, addition); existing != nil {
+		if existing := streamcommon.FindByChannelAndScheduledMinute(merged, addition); existing != nil {
 			existing.ChzzkChannelID = addition.ChzzkChannelID
 			existing.ChzzkLiveURL = addition.ChzzkLiveURL
 			if existing.HasYouTubeInfo() {
@@ -337,25 +338,5 @@ func findLiveStreamByChannel(streams []*domain.Stream, channelID string) *domain
 			return stream
 		}
 	}
-	return nil
-}
-
-func findUpcomingStreamMatch(streams []*domain.Stream, candidate *domain.Stream) *domain.Stream {
-	if candidate == nil || candidate.StartScheduled == nil {
-		return nil
-	}
-
-	for _, stream := range streams {
-		if stream == nil || stream.StartScheduled == nil {
-			continue
-		}
-		if stream.ChannelID != candidate.ChannelID {
-			continue
-		}
-		if stream.StartScheduled.UTC().Unix()/60 == candidate.StartScheduled.UTC().Unix()/60 {
-			return stream
-		}
-	}
-
 	return nil
 }
