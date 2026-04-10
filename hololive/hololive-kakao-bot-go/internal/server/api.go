@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -64,7 +65,7 @@ type APIHandler struct {
 	statsRepo                  stats.StatsDashboardRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
-	settingsApplier            SettingsApplier
+	settingsApplier            sharedsettings.SettingsApplier
 	acl                        *acl.Service
 	logger                     *slog.Logger
 	systemStats                *system.Collector
@@ -126,7 +127,7 @@ func NewAPIHandler(
 	statsRepo stats.StatsDashboardRepository,
 	activityLogger *activity.Logger,
 	settingsSvc settings.ReadWriter,
-	settingsApplier SettingsApplier,
+	settingsApplier sharedsettings.SettingsApplier,
 	aclSvc *acl.Service,
 	systemSvc *system.Collector,
 	templateAdmin *template.AdminService,

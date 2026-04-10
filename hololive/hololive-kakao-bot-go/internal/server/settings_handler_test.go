@@ -12,29 +12,30 @@ import (
 	"github.com/gin-gonic/gin"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 type testSettingsApplier struct{}
 
-func (testSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) ScraperProxyApplyResult {
-	return ScraperProxyApplyResult{Requested: enabled}
+func (testSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) sharedsettings.ScraperProxyApplyResult {
+	return sharedsettings.ScraperProxyApplyResult{Requested: enabled}
 }
 
-func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) AlarmAdvanceMinutesApplyResult {
-	return AlarmAdvanceMinutesApplyResult{
+func (testSettingsApplier) ApplyAlarmAdvanceMinutes(_ context.Context, minutes int) sharedsettings.AlarmAdvanceMinutesApplyResult {
+	return sharedsettings.AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
 		AlarmApplied:                 true,
 		AlarmTargetMinutes:           []int{minutes},
 	}
 }
 
-func (testSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) MemberNewsWeeklyRunNowResult {
-	return MemberNewsWeeklyRunNowResult{Applied: true}
+func (testSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) sharedsettings.MemberNewsWeeklyRunNowResult {
+	return sharedsettings.MemberNewsWeeklyRunNowResult{Applied: true}
 }
 
-func (testSettingsApplier) ScraperProxyRuntimeState(requested bool) ScraperProxyRuntimeStateResult {
-	return ScraperProxyRuntimeStateResult{Requested: requested}
+func (testSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedsettings.ScraperProxyRuntimeStateResult {
+	return sharedsettings.ScraperProxyRuntimeStateResult{Requested: requested}
 }
 
 type testActivityLogger struct{}

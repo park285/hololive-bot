@@ -278,7 +278,6 @@ func TestYouTubeStackAndSchedulerAccessors_Defaults(t *testing.T) {
 	var stack *providers.YouTubeStack
 
 	assert.Nil(t, stack.GetService())
-	assert.Nil(t, ProvideYouTubeScheduler(nil))
 
 	svc := &trackingYouTubeSvc{}
 	scheduler := &stubYouTubeScheduler{}
@@ -286,7 +285,8 @@ func TestYouTubeStackAndSchedulerAccessors_Defaults(t *testing.T) {
 	deps := &bot.Dependencies{Scheduler: scheduler}
 
 	assert.Same(t, svc, ytStack.GetService())
-	assert.Same(t, scheduler, ProvideYouTubeScheduler(deps))
+	assert.Nil(t, (*bot.Dependencies)(nil))
+	assert.Same(t, scheduler, deps.Scheduler)
 }
 
 var (

@@ -23,6 +23,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
@@ -35,16 +36,18 @@ const (
 
 func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 	return &sharedserver.StreamHandler{
-		Logger:               h.logger,
-		Holodex:              h.holodex,
-		YouTube:              h.youtube,
-		ValkeyCache:          h.valkeyCache,
-		StatsRepo:            h.statsRepo,
-		MemberRepo:           h.repo,
-		MemberIndexLoader:    h.memberIndexLoader,
-		State:                h.ensureStreamState(),
-		RespondError:         h.respondError,
-		RespondInternalError: h.respondInternalError,
+		Logger:            h.logger,
+		Holodex:           h.holodex,
+		YouTube:           h.youtube,
+		ValkeyCache:       h.valkeyCache,
+		StatsRepo:         h.statsRepo,
+		MemberRepo:        h.repo,
+		MemberIndexLoader: h.memberIndexLoader,
+		State:             h.ensureStreamState(),
+		RespondError:      sharedserver.RespondError,
+		RespondInternalError: func(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr) {
+			sharedserver.RespondInternalError(h.logger, c, userMessage, logMessage, err, attrs...)
+		},
 	}
 }
 
