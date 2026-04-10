@@ -7,7 +7,6 @@ pub mod holo;
 pub mod middleware;
 pub mod openapi;
 pub mod routes;
-pub mod ssr;
 pub mod state;
 pub mod static_files;
 pub mod status;
