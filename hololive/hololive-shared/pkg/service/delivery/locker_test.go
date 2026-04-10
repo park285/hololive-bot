@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/logging"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 // mockLockCache: lockCache mock 구현
@@ -59,7 +59,7 @@ func (m *mockLockCache) DelMany(ctx context.Context, keys []string) (int64, erro
 }
 
 func testLogger() *slog.Logger {
-	return logging.NewTestLogger()
+	return sharedlogging.NewTestLogger()
 }
 
 func TestNewLocker_NilCache_ReturnsNoop(t *testing.T) {
