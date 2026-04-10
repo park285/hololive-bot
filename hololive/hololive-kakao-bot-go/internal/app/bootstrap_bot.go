@@ -22,11 +22,9 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
@@ -64,23 +62,4 @@ func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 	}
 
 	return runtime, cleanup, nil
-}
-
-// ProvideBot: 봇 인스턴스를 생성하여 제공함.
-func ProvideBot(deps *bot.Dependencies) (*bot.Bot, error) {
-	created, err := bot.NewBot(deps)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bot: %w", err)
-	}
-
-	return created, nil
-}
-
-// ProvideYouTubeScheduler: YouTube 스케줄러 인스턴스를 제공합니다.
-func ProvideYouTubeScheduler(deps *bot.Dependencies) youtube.Scheduler {
-	if deps == nil {
-		return nil
-	}
-
-	return deps.Scheduler
 }

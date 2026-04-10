@@ -10,8 +10,20 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
+
+type SettingsActivityLogger interface {
+	Log(entryType, summary string, details map[string]any)
+}
+
+type SettingsReadRecentLogsFunc func(limit int) (any, error)
+
+type ConfigPublisher interface {
+	PublishScraperProxy(ctx context.Context, enabled bool) error
+	PublishAlarmAdvanceMinutes(ctx context.Context, minutes int) error
+}
 
 type SettingsHandler struct {
 	Logger          *slog.Logger
@@ -20,7 +32,7 @@ type SettingsHandler struct {
 	ReadRecentLogs  SettingsReadRecentLogsFunc
 	Settings        settingssvc.ReadWriter
 	ConfigPublisher ConfigPublisher
-	SettingsApplier
+	sharedsettings.SettingsApplier
 }
 
 func (h *SettingsHandler) SetRoomName(c *gin.Context) {
