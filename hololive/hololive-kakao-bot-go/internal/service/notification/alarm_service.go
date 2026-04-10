@@ -72,7 +72,7 @@ func NewAlarmService(
 
 	initAlarmMetrics()
 
-	targetMinutes := buildTargetMinutes(advanceMinutes)
+	targetMinutes := sharedchecker.NormalizeTargetMinutes(advanceMinutes)
 
 	var writer alarmWriter
 
@@ -98,14 +98,6 @@ func NewAlarmService(
 	return svc, nil
 }
 
-func buildTargetMinutes(advanceMinutes []int) []int {
-	return sharedchecker.NormalizeTargetMinutes(advanceMinutes)
-}
-
-func buildRuntimeTargetMinutes(alarmAdvanceMinutes int) []int {
-	return buildTargetMinutes([]int{alarmAdvanceMinutes, 3, 1})
-}
-
 func (as *AlarmService) getTargetMinutes() []int {
 	as.targetMinutesMu.RLock()
 	defer as.targetMinutesMu.RUnlock()
@@ -125,7 +117,7 @@ func (as *AlarmService) GetTargetMinutes() []int {
 }
 
 func (as *AlarmService) UpdateAlarmAdvanceMinutes(_ context.Context, alarmAdvanceMinutes int) []int {
-	normalized := buildRuntimeTargetMinutes(alarmAdvanceMinutes)
+	normalized := sharedchecker.BuildRuntimeTargetMinutes(alarmAdvanceMinutes)
 
 	as.targetMinutesMu.Lock()
 	as.targetMinutes = normalized

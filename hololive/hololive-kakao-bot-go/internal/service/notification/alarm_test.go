@@ -20,9 +20,13 @@
 
 package notification
 
-import "testing"
+import (
+	"testing"
 
-func TestBuildTargetMinutes(t *testing.T) {
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+)
+
+func TestNormalizeTargetMinutes(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -51,7 +55,7 @@ func TestBuildTargetMinutes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := buildTargetMinutes(tc.input)
+			got := sharedchecker.NormalizeTargetMinutes(tc.input)
 			if len(got) != len(tc.expected) {
 				t.Fatalf("unexpected length: got=%v expected=%v", got, tc.expected)
 			}
@@ -62,5 +66,21 @@ func TestBuildTargetMinutes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildRuntimeTargetMinutes(t *testing.T) {
+	t.Parallel()
+
+	got := sharedchecker.BuildRuntimeTargetMinutes(10)
+	expected := []int{10, 3, 1}
+	if len(got) != len(expected) {
+		t.Fatalf("unexpected length: got=%v expected=%v", got, expected)
+	}
+
+	for i := range got {
+		if got[i] != expected[i] {
+			t.Fatalf("unexpected targets: got=%v expected=%v", got, expected)
+		}
 	}
 }
