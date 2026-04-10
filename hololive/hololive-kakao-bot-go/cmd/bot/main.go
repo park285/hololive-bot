@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/app"
