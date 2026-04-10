@@ -206,7 +206,8 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 
 func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testing.T) {
 	registry := command.NewRegistry()
-	target := &stubCommandInitCommand{name: string(domain.CommandSettlementStatus)}
+	targetName := domain.CommandType("external_target")
+	target := &stubCommandInitCommand{name: string(targetName)}
 	registry.Register(target)
 
 	var builtDeps *command.Dependencies
@@ -216,7 +217,7 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 		return &stubCommandInitCommand{
 			name: "external",
 			exec: func(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-				_, err := deps.Dispatcher.Publish(ctx, cmdCtx, command.Event{Type: domain.CommandSettlementStatus})
+				_, err := deps.Dispatcher.Publish(ctx, cmdCtx, command.Event{Type: targetName})
 				return err
 			},
 		}
