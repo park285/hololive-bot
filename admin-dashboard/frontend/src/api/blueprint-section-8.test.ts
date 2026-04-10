@@ -28,3 +28,20 @@ test("api wrappers import the shared adminClient singleton without an extra holo
 	assert.match(coreSource, /from ["']@\/api\/adminClient["']/);
 	assert.equal(existsSync(path.join(dirname, "holoClient.ts")), false);
 });
+
+test("dead SSR helpers are removed from the frontend bundle", () => {
+	assert.equal(existsSync(path.join(dirname, "../hooks/useSSRData.ts")), false);
+	assert.equal(existsSync(path.join(dirname, "../utils/ssr.ts")), false);
+});
+
+test("members and settings pages no longer depend on SSR-derived initial data", () => {
+	const membersPageSource = readSource("../features/members/hooks/useMembersPage.ts");
+	const settingsPageSource = readSource("../features/settings/pages/SettingsPage.tsx");
+
+	assert.equal(membersPageSource.includes("useSSRData"), false);
+	assert.equal(membersPageSource.includes("initialData:"), false);
+	assert.equal(settingsPageSource.includes("useSSRData"), false);
+	assert.equal(settingsPageSource.includes("initialData={"), false);
+	assert.equal(settingsPageSource.includes("initialHealth={"), false);
+	assert.equal(settingsPageSource.includes("initialContainers={"), false);
+});

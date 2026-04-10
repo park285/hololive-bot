@@ -15,12 +15,10 @@ import {
 	filterMembers,
 	sortMembers,
 } from "@/features/members/selectors";
-import type { MembersResponse } from "@/features/members/types";
 import {
 	optimisticMemberReducer,
 	useMemberMutations,
 } from "@/hooks/useMemberMutations";
-import { useSSRData } from "@/hooks/useSSRData";
 
 const MEMBER_PAGE_SIZE = 48;
 
@@ -47,16 +45,9 @@ export type MembersModalState =
 	| { type: "nameEdit"; memberId: number; currentName: string };
 
 export function useMembersPage() {
-	const ssrInitialData = useSSRData("members", (data) =>
-		data?.status === "ok" && data.members
-			? (data as MembersResponse)
-			: undefined,
-	);
-
 	const query = useQuery({
 		queryKey: queryKeys.members.all,
 		queryFn: membersApi.getAll,
-		initialData: ssrInitialData,
 	});
 
 	const mutations = useMemberMutations();
