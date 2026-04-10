@@ -50,8 +50,8 @@ func NowKST() time.Time {
 	return time.Now().In(kstLocation)
 }
 
-// MinutesUntilFloor: 기준 시간(reference)으로부터 목표 시간(target)까지 남은 분(minute)을 내림하여 계산합니다.
-func MinutesUntilFloor(target *time.Time, reference time.Time) int {
+// MinutesUntilFloorPtr: 포인터 기반 목표 시간(target)까지 남은 분(minute)을 내림하여 계산합니다.
+func MinutesUntilFloorPtr(target *time.Time, reference time.Time) int {
 	if target == nil {
 		return -1
 	}
