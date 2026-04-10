@@ -1,9 +1,12 @@
-import { holoClient } from "@/api/holoClient";
+import { adminClient } from "@/api/adminClient";
 import type { AddRoomRequest, RemoveRoomRequest, SetACLRequest } from "./types";
 
 export const roomsApi = {
-	getAll: holoClient.getRooms,
-	add: (request: AddRoomRequest) => holoClient.addRoom(request),
-	remove: (request: RemoveRoomRequest) => holoClient.removeRoom(request),
-	setACL: (params: SetACLRequest) => holoClient.setAcl(params),
+	getAll: async () => (await adminClient.holoGetRooms()).data,
+	add: async (request: AddRoomRequest) =>
+		(await adminClient.holoAddRoom(request)).data,
+	remove: async (request: RemoveRoomRequest) =>
+		(await adminClient.holoRemoveRoom(request)).data,
+	setACL: async (params: SetACLRequest) =>
+		(await adminClient.holoSetAcl(params)).data,
 };

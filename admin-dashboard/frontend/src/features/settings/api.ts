@@ -1,7 +1,8 @@
-import { holoClient } from "@/api/holoClient";
+import { adminClient } from "@/api/adminClient";
 import type { Settings } from "./types";
 
 export const settingsApi = {
-	get: holoClient.getSettings,
-	update: (settings: Settings) => holoClient.updateSettings(settings),
+	get: async () => (await adminClient.holoGetSettings()).data,
+	update: async (settings: Settings) =>
+		(await adminClient.holoUpdateSettings(settings)).data,
 };
