@@ -41,5 +41,7 @@ jobs:
           cache-dependency-path: admin-dashboard/frontend/package-lock.json
       - run: npm ci
       - run: npm run generate:api
+      - run: git diff --exit-code -- ../backend/docs/swagger.json src/api/generated
+      - run: npm test
       - run: npm run lint
       - run: npm run build

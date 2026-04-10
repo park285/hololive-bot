@@ -1,3 +1,3 @@
-export { SystemStatsChart } from '@/components/dashboard/SystemStatsChart'
-export { ChannelStatsTable } from '@/components/dashboard/ChannelStatsTable'
-export { ServiceStatusGrid } from '@/components/dashboard/ServiceStatusGrid'
+export { ChannelStatsTable } from "@/components/dashboard/ChannelStatsTable";
+export { ServiceStatusGrid } from "@/components/dashboard/ServiceStatusGrid";
+export { SystemStatsChart } from "@/components/dashboard/SystemStatsChart";
