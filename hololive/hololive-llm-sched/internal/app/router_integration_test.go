@@ -34,29 +34,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProvideTriggerRouter_Integration(t *testing.T) {
+func TestBuildTriggerRouter_Integration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	router, err := ProvideTriggerRouter(context.Background(), logger, triggerHandler, "")
+	router, err := buildTriggerRouter(context.Background(), logger, triggerHandler, "")
 	if err == nil {
-		t.Fatal("ProvideTriggerRouter() error = nil, want non-nil")
+		t.Fatal("buildTriggerRouter() error = nil, want non-nil")
 	}
 	if router != nil {
-		t.Fatal("ProvideTriggerRouter() router = non-nil, want nil")
+		t.Fatal("buildTriggerRouter() router = non-nil, want nil")
 	}
 	if err.Error() != "API_SECRET_KEY required" {
-		t.Fatalf("ProvideTriggerRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
+		t.Fatalf("buildTriggerRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
 	}
 }
 
-func TestProvideTriggerRouter_Integration_WithAPIKey(t *testing.T) {
+func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	router, err := ProvideTriggerRouter(context.Background(), logger, triggerHandler, "test-key")
+	router, err := buildTriggerRouter(context.Background(), logger, triggerHandler, "test-key")
 	if err != nil {
-		t.Fatalf("ProvideTriggerRouter() error = %v", err)
+		t.Fatalf("buildTriggerRouter() error = %v", err)
 	}
 
 	server := httptest.NewServer(router)

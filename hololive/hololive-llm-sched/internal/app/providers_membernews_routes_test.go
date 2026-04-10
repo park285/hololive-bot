@@ -63,7 +63,7 @@ func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func TestProvideDeliveryAndTriggerProviders(t *testing.T) {
+func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	t.Parallel()
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -72,13 +72,11 @@ func TestProvideDeliveryAndTriggerProviders(t *testing.T) {
 	var postgres database.Client = &fakePostgresClient{db: db}
 	logger := newTestLogger()
 
-	repo := ProvideOutboxRepository(postgres, logger)
-	require.NotNil(t, repo)
-
-	dispatcher := ProvideDeliveryDispatcher(repo, fakeSender{}, logger)
-	require.NotNil(t, dispatcher)
-
-	locker := ProvideDeliveryLocker(nil, logger)
+	module := BuildDeliveryModule(nil, postgres, fakeSender{}, logger)
+	require.NotNil(t, module)
+	require.NotNil(t, module.Repository)
+	require.NotNil(t, module.Dispatcher)
+	locker := module.Locker
 	require.NotNil(t, locker)
 	token, acquired, err := locker.TryAcquire(context.Background(), "test-lock", time.Second)
 	require.NoError(t, err)
@@ -224,7 +222,7 @@ func newMemberNewsRouter(t *testing.T, apiKey string, svc *membernewssvc.Service
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
-	engine, err := ProvideHealthOnlyRouter(context.Background(), newTestLogger(), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
 	require.NoError(t, err)
 	registerMemberNewsInternalRoutes(engine, apiKey, svc)
 

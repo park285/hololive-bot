@@ -7,8 +7,12 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 forbidden_files=(
   "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server/shared_compat.go"
   "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server/api_trigger_compat.go"
+  "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server/settings_types.go"
+  "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server/settings_result.go"
+  "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server/api_response.go"
   "${ROOT_DIR}/hololive/hololive-shared/internal/envutil/env.go"
   "${ROOT_DIR}/hololive/hololive-shared/pkg/logging/logging.go"
+  "${ROOT_DIR}/hololive/hololive-llm-sched/internal/app/delivery_providers_local.go"
 )
 
 found_file=0
