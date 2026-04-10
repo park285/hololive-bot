@@ -22,6 +22,7 @@ package mocks
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/valkey-io/valkey-go"
@@ -36,6 +37,8 @@ import (
 // For unit tests, set only the function fields you need; unconfigured calls will panic
 // to avoid silent false-positives.
 type Client struct {
+	Strict bool
+
 	GetFunc      func(ctx context.Context, key string, dest any) error
 	MGetFunc     func(ctx context.Context, keys []string) (map[string]string, error)
 	SetFunc      func(ctx context.Context, key string, value any, ttl time.Duration) error
@@ -83,6 +86,8 @@ type Client struct {
 }
 
 var _ cache.Client = (*Client)(nil)
+
+var ErrUnimplemented = errors.New("cache mock: method not configured")
 
 func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	if m.GetFunc != nil {
@@ -214,14 +219,20 @@ func (m *Client) Close() error {
 	if m.CloseFunc != nil {
 		return m.CloseFunc()
 	}
-	panic("cache mock: CloseFunc not set")
+	if m.Strict {
+		panic("cache mock: CloseFunc not set")
+	}
+	return nil
 }
 
 func (m *Client) IsConnected(ctx context.Context) bool {
 	if m.IsConnectedFunc != nil {
 		return m.IsConnectedFunc(ctx)
 	}
-	panic("cache mock: IsConnectedFunc not set")
+	if m.Strict {
+		panic("cache mock: IsConnectedFunc not set")
+	}
+	return false
 }
 
 func (m *Client) WaitUntilReady(ctx context.Context, timeout time.Duration) error {
