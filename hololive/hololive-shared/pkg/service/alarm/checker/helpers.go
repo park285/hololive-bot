@@ -27,9 +27,9 @@ import (
 
 var defaultTargetMinutes = []int{5, 3, 1}
 
-// MinutesUntilFloor는 start까지 남은 시간을 분 단위로 내림 계산한다.
+// minutesUntilFloorZeroClamped는 start까지 남은 시간을 분 단위로 내림 계산한다.
 // 과거이거나 현재이면 0을 반환한다.
-func MinutesUntilFloor(start, now time.Time) int {
+func minutesUntilFloorZeroClamped(start, now time.Time) int {
 	secs := start.Sub(now) / time.Second
 	if secs <= 0 {
 		return 0
@@ -80,6 +80,10 @@ func NormalizeTargetMinutes(targetMinutes []int) []int {
 	}
 
 	return normalized
+}
+
+func BuildRuntimeTargetMinutes(alarmAdvanceMinutes int) []int {
+	return NormalizeTargetMinutes([]int{alarmAdvanceMinutes, 3, 1})
 }
 
 // IsTargetMinute는 minutesUntil 값이 targetMinutes에 포함되는지 확인한다.
@@ -136,7 +140,7 @@ func HighestCrossedTarget(targetMinutes []int, startScheduled time.Time, window 
 		return 0, false
 	}
 
-	current := MinutesUntilFloor(startScheduled, window.End)
+	current := minutesUntilFloorZeroClamped(startScheduled, window.End)
 	if IsTargetMinute(targetMinutes, current) {
 		return current, true
 	}
@@ -145,7 +149,7 @@ func HighestCrossedTarget(targetMinutes []int, startScheduled time.Time, window 
 		return 0, false
 	}
 
-	previous := MinutesUntilFloor(startScheduled, window.Start)
+	previous := minutesUntilFloorZeroClamped(startScheduled, window.Start)
 	if previous <= current {
 		return 0, false
 	}
