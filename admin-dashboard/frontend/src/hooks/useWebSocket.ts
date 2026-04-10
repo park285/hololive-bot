@@ -10,7 +10,6 @@ interface WebSocketOptions<T> {
 	autoConnect?: boolean;
 	reconnectAttempts?: number;
 	reconnectInterval?: number;
-	/** Keep-alive ping 활성화 여부 (기본: true) */
 	enablePing?: boolean;
 }
 
@@ -20,7 +19,6 @@ interface WebSocketState {
 	error: Event | null;
 }
 
-// Ping 메시지 타입 (서버에서 무시)
 const PING_MESSAGE = JSON.stringify({ type: "ping" });
 
 export function useWebSocket<T = unknown>(
@@ -46,14 +44,12 @@ export function useWebSocket<T = unknown>(
 	const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const isMountedRef = useRef(true);
 
-	// 콜백을 Ref에 저장하여 렌더링 사이클에서 분리 (Latest Ref Pattern)
 	const parseMessageRef = useRef(options.parseMessage);
 	const onMessageRef = useRef(options.onMessage);
 	const onOpenRef = useRef(options.onOpen);
 	const onCloseRef = useRef(options.onClose);
 	const onErrorRef = useRef(options.onError);
 
-	// 매 렌더링마다 최신 콜백으로 Ref 업데이트
 	useEffect(() => {
 		parseMessageRef.current = options.parseMessage;
 		onMessageRef.current = options.onMessage;
@@ -76,11 +72,9 @@ export function useWebSocket<T = unknown>(
 		}
 	};
 
-	// Ping 타이머 시작
 	const startPingTimer = useCallback(() => {
 		if (!enablePing) return;
 
-		// 기존 타이머 정리
 		if (pingTimerRef.current) {
 			clearInterval(pingTimerRef.current);
 		}
@@ -92,7 +86,6 @@ export function useWebSocket<T = unknown>(
 		}, CONFIG.websocket.pingIntervalMs);
 	}, [enablePing]);
 
-	// Ping 타이머 정지
 	const stopPingTimer = useCallback(() => {
 		if (pingTimerRef.current) {
 			clearInterval(pingTimerRef.current);
@@ -136,7 +129,6 @@ export function useWebSocket<T = unknown>(
 					const decodedData =
 						typeof rawData === "string" ? tryParseJson(rawData) : rawData;
 
-					// pong 메시지 무시
 					if (
 						typeof decodedData === "object" &&
 						decodedData !== null &&
@@ -169,7 +161,6 @@ export function useWebSocket<T = unknown>(
 				onCloseRef.current?.();
 
 				if (autoConnect && reconnectCountRef.current < reconnectAttempts) {
-					// Exponential Backoff: baseInterval * 2^retryCount (최대 CONFIG.websocket.maxBackoffMs)
 					const backoffDelay = Math.min(
 						reconnectInterval * 2 ** reconnectCountRef.current,
 						CONFIG.websocket.maxBackoffMs,
@@ -192,7 +183,6 @@ export function useWebSocket<T = unknown>(
 			}
 			console.error("WebSocket connection error:", e);
 		}
-		// 의존성 배열에서 콜백 제거 → connect 함수 안정화
 	}, [
 		url,
 		autoConnect,
