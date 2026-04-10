@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
@@ -46,21 +47,7 @@ func (f *ResponseFormatter) render(ctx context.Context, key domain.TemplateKey, 
 }
 
 func splitTemplateInstruction(rendered string) (instruction, body string) {
-	trimmed := strings.TrimLeft(rendered, "\r\n")
-	if trimmed == "" {
-		return "", ""
-	}
-
-	parts := strings.SplitN(trimmed, "\n", 2)
-
-	instruction = stringutil.TrimSpace(strings.TrimSuffix(parts[0], "\r"))
-	if len(parts) < 2 {
-		return instruction, ""
-	}
-
-	body = strings.TrimLeft(parts[1], "\r\n")
-
-	return instruction, body
+	return templateview.SplitTemplateInstruction(rendered)
 }
 
 // NewResponseFormatter: 새로운 ResponseFormatter 인스턴스를 생성합니다.

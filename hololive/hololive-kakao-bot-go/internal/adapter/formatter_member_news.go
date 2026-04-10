@@ -22,10 +22,10 @@ package adapter
 
 import (
 	"context"
-	"strings"
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 )
 
 type memberNewsDigestTemplateData struct {
@@ -180,20 +180,5 @@ func localizeMemberNewsItems(items []membernewscontracts.SummaryItem) []memberne
 }
 
 func memberNewsCategoryLabel(raw string) string {
-	switch strings.TrimSpace(strings.ToLower(raw)) {
-	case "birthday_live":
-		return "생일 라이브"
-	case "solo_live":
-		return "솔로 라이브"
-	case "collab":
-		return "콜라보"
-	case "event":
-		return "이벤트"
-	case "goods":
-		return "굿즈"
-	case "other":
-		return "기타"
-	default:
-		return raw
-	}
+	return templateview.MemberNewsCategoryLabel(raw)
 }
