@@ -2,16 +2,12 @@ module github.com/kapu/hololive-kakao-bot-go
 
 go 1.26.2
 
-toolchain go1.26.2
-
 // Gin uses goccy/go-json instead of sonic with -tags=go_json
 // Gin uses goccy/go-json instead of sonic with -tags=go_json
 
 require (
-	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/gin-contrib/cors v1.7.7
-	github.com/gin-contrib/gzip v1.2.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/jackc/pgx/v5 v5.9.1
@@ -29,6 +25,8 @@ require (
 	gorm.io/gorm v1.31.1
 )
 
+replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
+
 replace github.com/kapu/hololive-shared => ../hololive-shared
 
 require (
@@ -36,6 +34,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
+	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
@@ -48,6 +47,7 @@ require (
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
+	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
