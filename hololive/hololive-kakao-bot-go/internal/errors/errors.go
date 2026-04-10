@@ -18,17 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package errors: hololive-kakao-bot-go 내부에서 사용하는 에러 타입들을 정의합니다.
-//
-// hololive-shared/pkg/errors 에서 분리된 copy이며, Phase 2 완료 후 shared 쪽은 제거됩니다.
 package errors
 
 import "fmt"
 
 type APIError struct {
-	Operation  string // 수행 중이던 API 작업
-	StatusCode int    // HTTP 상태 코드 (0이면 네트워크 오류)
-	Err        error  // 원인 에러
+	Operation  string
+	StatusCode int
+	Err        error
 }
 
 func (e APIError) Error() string {
@@ -81,9 +78,9 @@ func NewKeyRotationError(message string, statusCode int, context map[string]any)
 }
 
 type CacheError struct {
-	Operation string // get, set, delete 등
-	Key       string // 캐시 키
-	Err       error  // 원인 에러
+	Operation string
+	Key       string
+	Err       error
 }
 
 func (e CacheError) Error() string {
@@ -133,9 +130,9 @@ func NewValidationError(message, field string, value any) *ValidationError {
 }
 
 type ServiceError struct {
-	Service   string // 서비스 이름
-	Operation string // 작업 이름
-	Err       error  // 원인 에러
+	Service   string
+	Operation string
+	Err       error
 }
 
 func (e ServiceError) Error() string {

@@ -8,7 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.3.0
-	github.com/openai/openai-go/v3 v3.30.0
+	github.com/openai/openai-go/v3 v3.31.0
 	github.com/park285/iris-client-go v0.11.1
 	github.com/park285/llm-kakao-bots/shared-go v0.1.2
 	github.com/stretchr/testify v1.11.1
