@@ -40,7 +40,7 @@ func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
 
 	registerMajorEventInternalRoutes(nil, "", nil)
 
-	engine, err := ProvideHealthOnlyRouter(context.Background(), newTestLogger(), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
 	require.NoError(t, err)
 
 	registerMajorEventInternalRoutes(engine, "", nil)
@@ -129,7 +129,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 func newMajorEventRouter(t *testing.T, apiKey string, repo *majorevent.Repository) *http.ServeMux {
 	t.Helper()
 
-	engine, err := ProvideHealthOnlyRouter(context.Background(), newTestLogger(), "")
+	engine, err := buildHealthOnlyRouter(context.Background(), newTestLogger(), "")
 	require.NoError(t, err)
 
 	registerMajorEventInternalRoutes(engine, apiKey, repo)

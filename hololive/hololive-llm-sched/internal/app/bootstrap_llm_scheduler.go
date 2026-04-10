@@ -331,14 +331,12 @@ func buildLLMSchedulerComponents(
 	}
 	memberNewsService := initMemberNewsService(ctx, cfg.Cliproxy, cfg.LLM, cfg.Exa, postgresService, cacheService, memberDataProvider, logger)
 
-	deliveryLocker := ProvideDeliveryLocker(cacheService, logger)
-	outboxRepo := ProvideOutboxRepository(postgresService, logger)
 	irisClient, err := providers.ProvideIrisClient(logger)
 	if err != nil {
 		return nil, fmt.Errorf("init iris client: %w", err)
 	}
-	deliverySender := ProvideDeliverySender(irisClient)
-	deliveryDispatcher := ProvideDeliveryDispatcher(outboxRepo, deliverySender, logger)
+	deliverySender := irisDeliverySender{client: irisClient}
+	deliveryModule := BuildDeliveryModule(cacheService, postgresService, deliverySender, logger)
 
 	majorEventLLMClient := ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
 	majorEventReviewer := ProvideMajorEventReviewerClient(cfg.Cliproxy, cfg.LLM, logger)
@@ -351,12 +349,12 @@ func buildLLMSchedulerComponents(
 		majorEventRepo,
 		formatter,
 		summarizer,
-		deliveryLocker,
-		outboxRepo,
+		deliveryModule.Locker,
+		deliveryModule.Repository,
 		logger,
 		cfg.Postgres.AutoPrepareSchema,
 	)
-	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryLocker, outboxRepo, logger)
+	memberNewsScheduler, memberNewsMonthlyScheduler := buildMemberNewsComponents(memberNewsService, formatter, deliveryModule.Locker, deliveryModule.Repository, logger)
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
 	httpServer, err := buildLLMSchedulerHTTPServer(ctx, cfg.Server.Port, logger, triggerHandler, cfg.Server.APIKey, majorEventRepo, memberNewsService)
@@ -368,7 +366,7 @@ func buildLLMSchedulerComponents(
 	return &LLMSchedulerRuntime{
 		Config:                     cfg,
 		Logger:                     logger,
-		DeliveryDispatcher:         deliveryDispatcher,
+		DeliveryDispatcher:         deliveryModule.Dispatcher,
 		MajorEventScheduler:        majorEventScheduler,
 		MajorEventMonthlyScheduler: majorEventMonthlyScheduler,
 		MajorEventScraperScheduler: majorEventScraperScheduler,
@@ -392,7 +390,7 @@ func buildLLMSchedulerHTTPServer(
 		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
 	}
 
-	router, err := ProvideTriggerRouter(ctx, logger, triggerHandler, apiKey)
+	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey)
 	if err != nil {
 		return nil, fmt.Errorf("build llm scheduler router: %w", err)
 	}
