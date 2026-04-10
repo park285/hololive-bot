@@ -50,6 +50,7 @@ use utoipa::OpenApi;
         crate::handlers::docker::DockerHealthResponse,
         crate::handlers::docker::DockerContainerListResponse,
         crate::handlers::docker::DockerActionResponse,
+        crate::error::ApiErrorResponse,
         crate::docker::Container,
         crate::docker::PortMapping,
         crate::status::AggregatedStatus,
@@ -107,5 +108,11 @@ mod tests {
         let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
         assert!(json["paths"]["/admin/api/holo/alarms"].is_object());
         assert!(json["paths"]["/admin/api/holo/members"].is_object());
+    }
+
+    #[test]
+    fn test_openapi_includes_api_error_schema() {
+        let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
+        assert!(json["components"]["schemas"]["ApiErrorResponse"].is_object());
     }
 }

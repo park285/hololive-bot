@@ -1,6 +1,7 @@
 use reqwest::Method;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
 
 use crate::error::{AppError, ProxyError};
 
@@ -77,10 +78,27 @@ impl HoloApiClient {
             .bytes()
             .await
             .map_err(|_| AppError::Proxy(ProxyError::Unavailable))?;
+        if status.is_client_error() {
+            let body = parse_upstream_error_body(&bytes);
+            return Err(AppError::Proxy(ProxyError::UpstreamClient { status, body }));
+        }
         let parsed = serde_json::from_slice::<T>(&bytes)
             .map_err(|_| AppError::Proxy(ProxyError::Unavailable))?;
 
         Ok((status, parsed))
+    }
+}
+
+fn parse_upstream_error_body(bytes: &[u8]) -> Value {
+    if bytes.is_empty() {
+        return json!({ "error": "Upstream client error" });
+    }
+
+    match serde_json::from_slice(bytes) {
+        Ok(Value::Object(map)) => Value::Object(map),
+        Ok(Value::String(text)) => json!({ "error": text }),
+        Ok(other) => json!({ "error": other.to_string() }),
+        Err(_) => json!({ "error": String::from_utf8_lossy(bytes).to_string() }),
     }
 }
 
@@ -121,6 +139,37 @@ mod tests {
                         Json(json!({ "status": "ok", "members": [] }))
                     },
                 ),
+            )
+            .route(
+                "/api/holo/bad-request",
+                get(|| async {
+                    (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        Json(json!({ "error": "invalid filter", "code": "bad_filter" })),
+                    )
+                }),
+            )
+            .route(
+                "/api/holo/plain-error",
+                get(|| async {
+                    (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        "plain upstream error",
+                    )
+                }),
+            )
+            .route(
+                "/api/holo/string-error",
+                get(|| async {
+                    (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        Json(json!("json string error")),
+                    )
+                }),
+            )
+            .route(
+                "/api/holo/empty-error",
+                get(|| async { axum::http::StatusCode::BAD_REQUEST }),
             )
             .route(
                 "/api/holo/rooms",
@@ -182,5 +231,88 @@ mod tests {
         let guard = capture.lock().await;
         assert_eq!(guard.api_key.as_deref(), Some("secret"));
         assert_eq!(guard.body.as_ref(), Some(&body));
+    }
+
+    #[tokio::test]
+    async fn test_get_preserves_upstream_client_error_body() {
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        let base_url = spawn_server(Arc::clone(&capture)).await;
+        let client = HoloApiClient::new(&base_url, Some("secret".to_string())).unwrap();
+
+        let err = client
+            .get::<serde_json::Value>("/api/holo/bad-request", None)
+            .await
+            .expect_err("400 response should map to proxy client error");
+
+        match err {
+            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+                assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+                assert_eq!(
+                    body,
+                    json!({ "error": "invalid filter", "code": "bad_filter" })
+                );
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_wraps_plaintext_upstream_client_error_body() {
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        let base_url = spawn_server(Arc::clone(&capture)).await;
+        let client = HoloApiClient::new(&base_url, Some("secret".to_string())).unwrap();
+
+        let err = client
+            .get::<serde_json::Value>("/api/holo/plain-error", None)
+            .await
+            .expect_err("400 response should map to proxy client error");
+
+        match err {
+            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+                assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+                assert_eq!(body, json!({ "error": "plain upstream error" }));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_wraps_json_string_upstream_client_error_body() {
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        let base_url = spawn_server(Arc::clone(&capture)).await;
+        let client = HoloApiClient::new(&base_url, Some("secret".to_string())).unwrap();
+
+        let err = client
+            .get::<serde_json::Value>("/api/holo/string-error", None)
+            .await
+            .expect_err("400 response should map to proxy client error");
+
+        match err {
+            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+                assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+                assert_eq!(body, json!({ "error": "json string error" }));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_wraps_empty_upstream_client_error_body() {
+        let capture = Arc::new(Mutex::new(Capture::default()));
+        let base_url = spawn_server(Arc::clone(&capture)).await;
+        let client = HoloApiClient::new(&base_url, Some("secret".to_string())).unwrap();
+
+        let err = client
+            .get::<serde_json::Value>("/api/holo/empty-error", None)
+            .await
+            .expect_err("400 response should map to proxy client error");
+
+        match err {
+            AppError::Proxy(ProxyError::UpstreamClient { status, body }) => {
+                assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+                assert_eq!(body, json!({ "error": "Upstream client error" }));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }
