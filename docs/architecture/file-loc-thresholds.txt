@@ -1,0 +1,8 @@
+# relative/path:MAX_LINES
+admin-dashboard/backend/src/holo/handlers.rs:700
+admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:620
+scripts/logs/logs.sh:760
+hololive/hololive-kakao-bot-go/internal/service/chzzk/client.go:620
+hololive/hololive-kakao-bot-go/internal/service/notification/alarm_service.go:600
+hololive/hololive-shared/pkg/service/cache/service.go:650
+shared-go/pkg/logging/logging.go:520
