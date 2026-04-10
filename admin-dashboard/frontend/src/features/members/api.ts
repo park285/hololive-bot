@@ -1,4 +1,4 @@
-import { holoClient } from "@/api/holoClient";
+import { adminClient } from "@/api/adminClient";
 import type {
 	AddAliasRequest,
 	AddMemberRequest,
@@ -9,7 +9,7 @@ import type {
 } from "./types";
 
 export const membersApi = {
-	getAll: holoClient.getMembers,
+	getAll: async () => (await adminClient.holoGetMembers()).data,
 	add: async (member: Partial<Member>) => {
 		const request: AddMemberRequest = {
 			name: member.name ?? "",
@@ -19,16 +19,16 @@ export const membersApi = {
 			nameKo: member.nameKo,
 			isGraduated: member.isGraduated ?? false,
 		};
-		return holoClient.addMember(request);
+		return (await adminClient.holoAddMember(request)).data;
 	},
-	addAlias: (memberId: number, request: AddAliasRequest) =>
-		holoClient.addAlias(memberId, request),
-	removeAlias: (memberId: number, request: RemoveAliasRequest) =>
-		holoClient.removeAlias(memberId, request),
-	setGraduation: (memberId: number, request: SetGraduationRequest) =>
-		holoClient.setGraduation(memberId, request),
-	updateChannel: (memberId: number, request: UpdateChannelRequest) =>
-		holoClient.updateChannel(memberId, request),
-	updateName: (memberId: number, name: string) =>
-		holoClient.updateMemberName(memberId, { name }),
+	addAlias: async (memberId: number, request: AddAliasRequest) =>
+		(await adminClient.holoAddAlias(memberId, request)).data,
+	removeAlias: async (memberId: number, request: RemoveAliasRequest) =>
+		(await adminClient.holoRemoveAlias(memberId, request)).data,
+	setGraduation: async (memberId: number, request: SetGraduationRequest) =>
+		(await adminClient.holoSetGraduation(memberId, request)).data,
+	updateChannel: async (memberId: number, request: UpdateChannelRequest) =>
+		(await adminClient.holoUpdateChannel(memberId, request)).data,
+	updateName: async (memberId: number, name: string) =>
+		(await adminClient.holoUpdateMemberName(memberId, { name })).data,
 };
