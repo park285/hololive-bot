@@ -1,4 +1,5 @@
 use std::{env, time::Duration};
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecurityMode {
@@ -69,8 +70,16 @@ pub struct Config {
     pub session: SessionConfig,
 }
 
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ConfigError {
+    #[error("invalid port: {0}")]
+    InvalidPort(String),
+    #[error("required environment variable missing: {0}")]
+    MissingEnv(String),
+}
+
 impl Config {
-    pub fn load() -> Self {
+    pub fn load() -> Result<Self, ConfigError> {
         let environment = env_string("ENV", "production");
         let allow_localhost_in_prod = env_bool("ALLOW_LOCALHOST_IN_PROD", false);
         let allowed_origins = parse_allowed_origins(&environment, allow_localhost_in_prod);
@@ -91,16 +100,16 @@ impl Config {
             tls_key_path: env_string("TLS_KEY_PATH", "/certs/localhost.key"),
         };
 
-        Self {
+        Ok(Self {
             port: {
                 let p = env_int("PORT", 30190);
-                u16::try_from(p).unwrap_or_else(|_| panic!("PORT={p} is out of u16 range"))
+                u16::try_from(p).map_err(|_| ConfigError::InvalidPort(p.to_string()))?
             },
             env: environment,
             log_level: env_string("LOG_LEVEL", "info"),
             admin_user: env_string("ADMIN_USER", "admin"),
-            admin_pass_hash: required_alias(&["ADMIN_PASS_HASH", "ADMIN_PASS_BCRYPT"]),
-            session_secret: required_alias(&["SESSION_SECRET", "ADMIN_SECRET_KEY"]),
+            admin_pass_hash: required_alias(&["ADMIN_PASS_HASH", "ADMIN_PASS_BCRYPT"])?,
+            session_secret: required_alias(&["SESSION_SECRET", "ADMIN_SECRET_KEY"])?,
             valkey_url: env_string("VALKEY_URL", "valkey-cache:6379"),
             docker_host: env_string("DOCKER_HOST", "tcp://docker-proxy:2375"),
             holo_bot_url: env_string("HOLO_BOT_URL", "http://hololive-kakao-bot-go:30001"),
@@ -108,7 +117,7 @@ impl Config {
             log_dir: env_string("LOG_DIR", "/app/logs"),
             security,
             session,
-        }
+        })
     }
 }
 
@@ -207,7 +216,7 @@ fn fallback_origins() -> Vec<String> {
     .collect()
 }
 
-fn required_alias(keys: &[&str]) -> String {
+fn required_alias(keys: &[&str]) -> Result<String, ConfigError> {
     keys.iter()
         .find_map(|key| {
             env::var(key)
@@ -215,12 +224,7 @@ fn required_alias(keys: &[&str]) -> String {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
         })
-        .unwrap_or_else(|| {
-            panic!(
-                "required environment variable missing: {}",
-                keys.join(" or ")
-            )
-        })
+        .ok_or_else(|| ConfigError::MissingEnv(keys.join(" or ")))
 }
 
 #[cfg(test)]
@@ -333,7 +337,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
-                let cfg = Config::load();
+                let cfg = Config::load().expect("config load");
                 assert_eq!(cfg.admin_pass_hash, "hash-primary");
             },
         );
@@ -346,7 +350,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
-                let cfg = Config::load();
+                let cfg = Config::load().expect("config load");
                 assert_eq!(cfg.admin_pass_hash, "hash-alias");
             },
         );
@@ -359,7 +363,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
-                let result = std::panic::catch_unwind(Config::load);
+                let result = Config::load();
                 assert!(result.is_err());
             },
         );
@@ -375,7 +379,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", Some("secret-alias")),
             ],
             || {
-                let cfg = Config::load();
+                let cfg = Config::load().expect("config load");
                 assert_eq!(cfg.session_secret, "secret-primary");
             },
         );
@@ -388,7 +392,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", Some("secret-alias")),
             ],
             || {
-                let cfg = Config::load();
+                let cfg = Config::load().expect("config load");
                 assert_eq!(cfg.session_secret, "secret-alias");
             },
         );
@@ -401,7 +405,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
-                let result = std::panic::catch_unwind(Config::load);
+                let result = Config::load();
                 assert!(result.is_err());
             },
         );
@@ -423,7 +427,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
-                let cfg = Config::load();
+                let cfg = Config::load().expect("config load");
                 assert_eq!(
                     cfg.security.allowed_origins,
                     vec!["https://admin.capu.blog"]
@@ -445,7 +449,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
-                let cfg = Config::load();
+                let cfg = Config::load().expect("config load");
                 assert_eq!(
                     cfg.security.allowed_origins,
                     vec!["https://admin.capu.blog", "http://localhost:5173"]
@@ -467,7 +471,7 @@ mod tests {
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
-                let cfg = Config::load();
+                let cfg = Config::load().expect("config load");
                 assert_eq!(
                     cfg.security.allowed_origins,
                     vec![
@@ -478,6 +482,23 @@ mod tests {
                         "http://127.0.0.1:30190",
                     ]
                 );
+            },
+        );
+    }
+
+    #[test]
+    fn test_invalid_port_returns_error() {
+        with_env_vars(
+            &[
+                ("PORT", Some("70000")),
+                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+            ],
+            || {
+                let result = Config::load();
+                assert_eq!(result, Err(ConfigError::InvalidPort("70000".to_string())));
             },
         );
     }
