@@ -8,7 +8,6 @@ mod logging;
 mod middleware;
 mod openapi;
 mod routes;
-mod ssr;
 mod state;
 mod static_files;
 mod status;
@@ -22,7 +21,13 @@ use tokio_util::sync::CancellationToken;
 async fn main() {
     dotenvy::dotenv().ok();
 
-    let cfg = config::Config::load();
+    let cfg = match config::Config::load() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            eprintln!("admin-dashboard config load failed: {err}");
+            std::process::exit(1);
+        }
+    };
     let _tracing_guards = logging::init_tracing(&cfg);
     tracing::info!(port = %cfg.port, env = %cfg.env, "starting admin-dashboard");
 
