@@ -2,8 +2,6 @@ module github.com/kapu/hololive-shared
 
 go 1.26.2
 
-toolchain go1.26.2
-
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alicebob/miniredis/v2 v2.37.0
@@ -14,8 +12,8 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/joho/godotenv v1.5.1
-	github.com/lmittmann/tint v1.1.3
-	github.com/mattn/go-isatty v0.0.20
+	github.com/lmittmann/tint v1.1.3 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/park285/llm-kakao-bots/shared-go v0.1.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
@@ -28,13 +26,18 @@ require (
 	golang.org/x/sync v0.20.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.274.0
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
 
-require github.com/park285/iris-client-go v0.11.1
+replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
+
+require (
+	github.com/gin-contrib/gzip v1.2.6
+	github.com/park285/iris-client-go v0.11.1
+)
 
 require (
 	cloud.google.com/go/auth v0.20.0 // indirect
