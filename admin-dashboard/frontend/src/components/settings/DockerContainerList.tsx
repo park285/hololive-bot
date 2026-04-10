@@ -28,7 +28,6 @@ export const DockerContainerList = ({
 	const [isManualRefetching, setIsManualRefetching] = useState(false);
 	const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
-	// Confirm Modal State
 	const [confirmModal, setConfirmModal] = useState<{
 		isOpen: boolean;
 		containerName: string | null;
@@ -47,8 +46,6 @@ export const DockerContainerList = ({
 		initialData: initialHealth,
 	});
 
-	// initialData가 올바른 구조를 가지고 있는지 확인하고 기본값 설정
-	// initialContainers prop의 타입을 맞추기 위해 타입 단언 사용
 	const safeInitialContainers =
 		initialContainers && initialContainers.status
 			? initialContainers

@@ -1,7 +1,3 @@
-/**
- * 채널 통계 테이블 컴포넌트
- */
-
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/api/queryKeys";
 import { Skeleton } from "@/components/ui/Skeleton";
