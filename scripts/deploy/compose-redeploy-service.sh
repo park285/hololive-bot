@@ -21,18 +21,6 @@ resolve_shared_go_workspace_path() {
 
 export SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
 
-resolve_iris_client_go_path() {
-    local candidate="${IRIS_CLIENT_GO_PATH:-${REPO_CANONICAL_ROOT}/../iris-client-go}"
-    if [ ! -d "$candidate" ]; then
-        echo "[ERROR] Active iris-client-go workspace not found: $candidate"
-        exit 1
-    fi
-
-    printf '%s\n' "$candidate"
-}
-
-export IRIS_CLIENT_GO_PATH="$(resolve_iris_client_go_path)"
-
 usage() {
     echo "Usage: $0 <service|all>"
     echo
