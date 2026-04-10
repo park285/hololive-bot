@@ -11,9 +11,7 @@ const babelOptions = {
 } as unknown as Parameters<typeof babel>[0]
 const adminApiProxyTarget = process.env.ADMIN_DASHBOARD_PROXY_TARGET ?? 'http://localhost:30190'
 
-// https://vite.dev/config/
 export default defineConfig({
-  // P0: Barrel file imports 최적화 (lucide-react 1,583 모듈 → 필요한 것만)
   optimizeDeps: {
     include: [
       'lucide-react',
@@ -36,16 +34,13 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
-    // Vite 8: Oxc 기반 React Refresh (Babel 제거)
     react(),
-    // React Compiler는 @rolldown/plugin-babel 경유로 적용
     babel(babelOptions),
   ],
   build: {
     target: 'esnext',
     sourcemap: false,
     cssCodeSplit: true,
-    // Vite 8: Rolldown 기반 code splitting (manualChunks 제거됨)
     rolldownOptions: {
       checks: {
         pluginTimings: false,
@@ -54,17 +49,14 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
-              // 라우팅
               name: 'vendor-router',
               test: /react-router-dom/,
             },
             {
-              // 데이터 fetching
               name: 'vendor-query',
               test: /@tanstack\/react-query/,
             },
             {
-              // 아이콘
               name: 'vendor-icons',
               test: /lucide-react/,
             },

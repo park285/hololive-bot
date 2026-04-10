@@ -30,7 +30,6 @@ export const useHeartbeat = (isIdle: boolean) => {
 
 				if (response.idle_rejected) {
 					console.warn("Session idle warning (grace period)");
-					// 즉시 logout() 하지 않음 (2-4 정책 완화)
 					return;
 				}
 
@@ -93,7 +92,6 @@ export const useHeartbeat = (isIdle: boolean) => {
 	useEffect(() => {
 		if (!isAuthenticated) return;
 
-		// 초기 1회 전송
 		void sendHeartbeat(isIdleRef.current);
 
 		intervalRef.current = window.setInterval(() => {
