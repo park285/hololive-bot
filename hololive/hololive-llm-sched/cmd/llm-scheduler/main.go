@@ -33,7 +33,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/health"
-	sharedlogging "github.com/kapu/hololive-shared/pkg/logging"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 // Version: 빌드 시 ldflags로 주입됨 (예: -ldflags="-X main.Version=1.0.0")
