@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import Activity from "lucide-react/dist/esm/icons/activity";
 import Bell from "lucide-react/dist/esm/icons/bell";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
@@ -27,6 +28,12 @@ const ROUTE_METADATA: Record<
 		id: "stats",
 		label: "통합 대시보드",
 		icon: LayoutDashboard,
+		group: "Overview",
+	},
+	"youtube-ops": {
+		id: "youtube-ops",
+		label: "유튜브 운영",
+		icon: Activity,
 		group: "Overview",
 	},
 	streams: {

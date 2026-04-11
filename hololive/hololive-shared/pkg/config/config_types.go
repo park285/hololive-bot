@@ -42,8 +42,10 @@ type YouTubeConfig struct {
 
 // IngestionConfig: ingestion 런타임 기능 토글 설정
 type IngestionConfig struct {
-	YouTubeEnabled   bool
-	PhotoSyncEnabled bool
+	YouTubeEnabled                  bool
+	PhotoSyncEnabled                bool
+	CommunityShortsBigBangEnabled   bool
+	CommunityShortsBigBangCutoverAt time.Time
 }
 
 // LoggingConfig: 애플리케이션 로그 설정

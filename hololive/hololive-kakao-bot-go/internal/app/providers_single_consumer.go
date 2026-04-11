@@ -29,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
@@ -69,17 +68,4 @@ func ProvideMemberCacheWithoutValkey(
 	}
 
 	return memberCache, nil
-}
-
-// ProvideFetchProfilesLogger - fetch_profiles 전용 로거.
-func ProvideFetchProfilesLogger() (*slog.Logger, func(), error) {
-	logger := slog.Default()
-	cleanup := func() {} // slog는 Sync 필요 없음
-
-	return logger, cleanup, nil
-}
-
-// ProvideFetchProfilesHTTPClient - fetch_profiles 전용 HTTP 클라이언트.
-func ProvideFetchProfilesHTTPClient() *http.Client {
-	return httputil.NewExternalAPIClient(constants.OfficialProfileConfig.RequestTimeout)
 }

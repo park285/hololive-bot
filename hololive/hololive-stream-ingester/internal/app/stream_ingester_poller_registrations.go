@@ -34,6 +34,7 @@ func buildStreamIngesterChannelPollerRegistrations(
 	scraperCfg config.ScraperConfig,
 	sharedRL *scraper.RateLimiter,
 	cacheSvc cache.Client,
+	routeDecider poller.NotificationRouteDecider,
 ) []providers.ChannelPollerRegistration {
 	proxyConfig := scraper.ProxyConfig{
 		Enabled: scraperCfg.ProxyEnabled,
@@ -50,8 +51,8 @@ func buildStreamIngesterChannelPollerRegistrations(
 	db := postgres.GetGormDB()
 
 	videosPoller := poller.NewVideosPoller(scraperClient, db, 10)
-	shortsPoller := poller.NewShortsPoller(scraperClient, db, 10)
-	communityPoller := poller.NewCommunityPoller(scraperClient, db, 10, communityKeywords)
+	shortsPoller := poller.NewShortsPoller(scraperClient, db, 10, routeDecider)
+	communityPoller := poller.NewCommunityPoller(scraperClient, db, 10, communityKeywords, routeDecider)
 	statsPoller := poller.NewChannelStatsPoller(scraperClient, db)
 	livePoller := poller.NewLivePoller(scraperClient, db)
 

@@ -4,7 +4,7 @@ mod session;
 
 use anyhow::{Result, anyhow};
 
-use self::env::{env_bool, env_int, env_string, required_alias};
+use self::env::{env_bool, env_int, env_string, optional_alias, required_alias};
 pub use self::security::{SecurityConfig, SecurityMode};
 pub use self::session::SessionConfig;
 
@@ -20,6 +20,8 @@ pub struct Config {
     pub docker_host: String,
     pub holo_bot_url: String,
     pub holo_bot_api_key: String,
+    pub enable_openapi: bool,
+    pub enable_swagger_ui: bool,
     pub log_dir: String,
     pub security: SecurityConfig,
     pub session: SessionConfig,
@@ -29,6 +31,11 @@ impl Config {
     pub fn load() -> Result<Self> {
         let environment = env_string("ENV", "production");
         let allow_localhost_in_prod = env_bool("ALLOW_LOCALHOST_IN_PROD", false);
+        let enable_swagger_ui = env_bool("ENABLE_SWAGGER_UI", environment != "production");
+        let enable_openapi = env_bool(
+            "ENABLE_OPENAPI",
+            enable_swagger_ui || environment != "production",
+        );
 
         Ok(Self {
             port: {
@@ -43,7 +50,10 @@ impl Config {
             valkey_url: env_string("VALKEY_URL", "valkey-cache:6379"),
             docker_host: env_string("DOCKER_HOST", "tcp://docker-proxy:2375"),
             holo_bot_url: env_string("HOLO_BOT_URL", "http://hololive-kakao-bot-go:30001"),
-            holo_bot_api_key: env_string("HOLO_BOT_API_KEY", ""),
+            holo_bot_api_key: optional_alias(&["HOLO_BOT_API_KEY", "API_SECRET_KEY"])
+                .unwrap_or_default(),
+            enable_openapi,
+            enable_swagger_ui,
             log_dir: env_string("LOG_DIR", "/app/logs"),
             security: SecurityConfig::load(&environment, allow_localhost_in_prod),
             session: SessionConfig::load(),
@@ -93,9 +103,9 @@ mod tests {
             ],
             || {
                 let err = Config::load().expect_err("missing admin pass hash should fail");
-                assert!(err
-                    .to_string()
-                    .contains("required environment variable missing: ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT"));
+                assert!(err.to_string().contains(
+                    "required environment variable missing: ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT"
+                ));
             },
         );
     }
@@ -137,9 +147,9 @@ mod tests {
             ],
             || {
                 let err = Config::load().expect_err("missing session secret should fail");
-                assert!(err
-                    .to_string()
-                    .contains("required environment variable missing: SESSION_SECRET or ADMIN_SECRET_KEY"));
+                assert!(err.to_string().contains(
+                    "required environment variable missing: SESSION_SECRET or ADMIN_SECRET_KEY"
+                ));
             },
         );
     }
@@ -157,6 +167,64 @@ mod tests {
             || {
                 let err = Config::load().expect_err("invalid port should fail");
                 assert_eq!(err.to_string(), "PORT=70000 is out of u16 range");
+            },
+        );
+    }
+
+    #[test]
+    fn test_openapi_defaults_disabled_in_production() {
+        with_env_vars(
+            &[
+                ("ENV", Some("production")),
+                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+                ("ENABLE_OPENAPI", None),
+                ("ENABLE_SWAGGER_UI", None),
+            ],
+            || {
+                let cfg = Config::load().expect("config load");
+                assert!(!cfg.enable_openapi);
+                assert!(!cfg.enable_swagger_ui);
+            },
+        );
+    }
+
+    #[test]
+    fn test_swagger_flag_enables_openapi() {
+        with_env_vars(
+            &[
+                ("ENV", Some("production")),
+                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+                ("ENABLE_SWAGGER_UI", Some("true")),
+                ("ENABLE_OPENAPI", None),
+            ],
+            || {
+                let cfg = Config::load().expect("config load");
+                assert!(cfg.enable_swagger_ui);
+                assert!(cfg.enable_openapi);
+            },
+        );
+    }
+
+    #[test]
+    fn test_holo_bot_api_key_falls_back_to_api_secret_key() {
+        with_env_vars(
+            &[
+                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+                ("HOLO_BOT_API_KEY", None),
+                ("API_SECRET_KEY", Some("shared-secret")),
+            ],
+            || {
+                let cfg = Config::load().expect("config load");
+                assert_eq!(cfg.holo_bot_api_key, "shared-secret");
             },
         );
     }

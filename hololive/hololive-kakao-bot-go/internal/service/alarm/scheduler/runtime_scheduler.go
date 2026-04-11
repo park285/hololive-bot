@@ -186,15 +186,15 @@ func (s *RuntimeScheduler) Start(ctx context.Context) {
 
 	var eg errgroup.Group
 	eg.Go(func() error {
-		s.runLoop(ctx, "youtube", s.youtubeInterval, s.youtubeTimeout, s.runYouTubeIteration)
+		s.runLoop(ctx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
 		return nil
 	})
 	eg.Go(func() error {
-		s.runLoop(ctx, "chzzk", s.chzzkInterval, s.chzzkTimeout, s.runChzzkIteration)
+		s.runLoop(ctx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
 		return nil
 	})
 	eg.Go(func() error {
-		s.runLoop(ctx, "twitch", s.twitchInterval, s.twitchTimeout, s.runTwitchIteration)
+		s.runLoop(ctx, "twitch", s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
 		return nil
 	})
 
@@ -206,9 +206,10 @@ func (s *RuntimeScheduler) runLoop(
 	name string,
 	interval time.Duration,
 	timeout time.Duration,
+	runImmediately bool,
 	run func(context.Context) error,
 ) {
-	next := time.NewTimer(0)
+	next := time.NewTimer(initialLoopDelay(time.Now(), interval, runImmediately))
 	defer next.Stop()
 
 	for {
@@ -232,6 +233,31 @@ func (s *RuntimeScheduler) runLoop(
 			next.Reset(time.Until(nextAligned(time.Now(), interval)))
 		}
 	}
+}
+
+func initialLoopDelay(now time.Time, interval time.Duration, runImmediately bool) time.Duration {
+	if runImmediately || interval <= 0 {
+		return 0
+	}
+
+	firstRunAt := firstAlignedRunAt(now, interval)
+	if !firstRunAt.After(now) {
+		return 0
+	}
+
+	return firstRunAt.Sub(now)
+}
+
+func firstAlignedRunAt(now time.Time, interval time.Duration) time.Time {
+	if interval <= 0 {
+		return now
+	}
+
+	if now.Equal(now.Truncate(interval)) {
+		return now
+	}
+
+	return nextAligned(now, interval)
 }
 
 func nextAligned(now time.Time, interval time.Duration) time.Time {

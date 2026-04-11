@@ -14,6 +14,27 @@ TMP_DIR="$(mktemp -d)"
 FILE_LIST="${TMP_DIR}/files.txt"
 MANIFEST="${TMP_DIR}/BUNDLE_MANIFEST.txt"
 
+BUNDLE_EXCLUDES=(
+  ".git"
+  ".worktrees"
+  ".tasklists"
+  ".runlogs"
+  ".codex"
+  ".claude"
+  ".serena"
+  ".gemini"
+  "artifacts"
+  "logs"
+  "node_modules"
+  "dist"
+  "coverage"
+  "*.tar.gz"
+  "BUNDLE_MANIFEST.txt"
+  ".idea"
+  ".vscode"
+  ".omc"
+)
+
 cleanup() {
   rm -rf "${TMP_DIR}"
 }
@@ -21,19 +42,57 @@ trap cleanup EXIT
 
 mkdir -p "${OUT_DIR}"
 
-(
-  cd "${ROOT_DIR}"
+should_exclude_path() {
+  local path="$1"
+
+  case "${path}" in
+    .git|.git/*|\
+    .worktrees|.worktrees/*|\
+    .tasklists|.tasklists/*|\
+    .runlogs|.runlogs/*|\
+    .codex|.codex/*|\
+    .claude|.claude/*|\
+    .serena|.serena/*|\
+    .gemini|.gemini/*|\
+    artifacts|artifacts/*|\
+    logs|logs/*|\
+    node_modules|node_modules/*|\
+    dist|dist/*|\
+    coverage|coverage/*|\
+    BUNDLE_MANIFEST.txt|\
+    *.tar.gz|\
+    .idea|.idea/*|\
+    .vscode|.vscode/*|\
+    .omc|.omc/*|\
+    */.idea|*/.idea/*|\
+    */.vscode|*/.vscode/*|\
+    */.omc|*/.omc/*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+append_git_paths() {
   while IFS= read -r -d '' path; do
     [[ -e "${path}" ]] || continue
+    if should_exclude_path "${path}"; then
+      continue
+    fi
     printf '%s\0' "${path}" >> "${FILE_LIST}"
-  done < <(git ls-files -z --cached)
+  done
+}
+
+(
+  cd "${ROOT_DIR}"
+  append_git_paths < <(git ls-files -z --cached)
   if [[ "${INCLUDE_UNTRACKED}" == "true" ]]; then
-    while IFS= read -r -d '' path; do
-      [[ -e "${path}" ]] || continue
-      printf '%s\0' "${path}" >> "${FILE_LIST}"
-    done < <(git ls-files -z --others --exclude-standard)
+    append_git_paths < <(git ls-files -z --others --exclude-standard)
   fi
 )
+
+sort -zu "${FILE_LIST}" -o "${FILE_LIST}"
 
 cat > "${MANIFEST}" <<MANIFEST
 repo_root: ${ROOT_DIR}
@@ -43,6 +102,7 @@ generated_at: $(date -u +%FT%TZ)
 branch: $(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD)
 commit: $(git -C "${ROOT_DIR}" rev-parse HEAD)
 included_files: $(tr -cd '\0' < "${FILE_LIST}" | wc -c | tr -d ' ')
+excluded_patterns: $(IFS=,; echo "${BUNDLE_EXCLUDES[*]}")
 MANIFEST
 
 (

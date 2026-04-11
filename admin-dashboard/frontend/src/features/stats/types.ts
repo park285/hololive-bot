@@ -4,10 +4,14 @@ export type {
 	StatsResponse,
 } from "@/api/generated/data-contracts";
 
-export interface ServiceGoroutines {
+export type RuntimeMetricKind = "goroutine" | "thread";
+
+export interface ServiceRuntimeStat {
 	name: string;
-	goroutines: number;
+	count: number;
+	metricKind: RuntimeMetricKind;
 	available: boolean;
+	error?: string | null;
 }
 
 export interface SystemStats {
@@ -15,7 +19,8 @@ export interface SystemStats {
 	memoryUsage: number;
 	memoryTotal: number;
 	memoryUsed: number;
-	goroutines: number;
-	totalGoroutines: number;
-	serviceGoroutines: ServiceGoroutines[];
+	threadCount: number;
+	totalGoGoroutines: number;
+	totalRuntimeUnits: number;
+	serviceRuntime: ServiceRuntimeStat[];
 }

@@ -26,31 +26,29 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 )
 
 // InitializeWarmMemberCache - cmd/tools/warm_member_cache 전용.
 func InitializeWarmMemberCache(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*member.Cache, func(), error) {
-	postgresConfig := providers.ProvidePostgresConfig(cfg)
-
-	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, postgresConfig, logger)
+	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
 
-	postgresService := providers.ProvidePostgresService(databaseResources)
+	postgresService := databaseResources.Service
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 
-	valkeyConfig := providers.ProvideValkeyConfig(cfg)
-
-	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, valkeyConfig, logger)
+	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, cfg.Valkey, logger)
 	if err != nil {
 		cleanupDB()
 		return nil, nil, fmt.Errorf("provide cache resources: %w", err)
 	}
 
-	cacheService := providers.ProvideCacheService(cacheResources)
+	cacheService := cacheResources.Service
 
 	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
@@ -75,7 +73,7 @@ func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresCo
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
 	}
 
-	postgresService := providers.ProvidePostgresService(databaseResources)
+	postgresService := databaseResources.Service
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 
 	memberCache, err := ProvideMemberCacheWithoutValkey(ctx, memberRepository, logger)
@@ -98,12 +96,9 @@ func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresCo
 
 // InitializeFetchProfilesRuntime - cmd/tools/fetch_profiles 전용.
 func InitializeFetchProfilesRuntime(_ context.Context) (*FetchProfilesRuntime, func(), error) {
-	logger, cleanupLogger, err := ProvideFetchProfilesLogger()
-	if err != nil {
-		return nil, nil, fmt.Errorf("provide fetch profiles logger: %w", err)
-	}
-
-	httpClient := ProvideFetchProfilesHTTPClient()
+	logger := slog.Default()
+	cleanupLogger := func() {}
+	httpClient := httputil.NewExternalAPIClient(constants.OfficialProfileConfig.RequestTimeout)
 
 	runtime := &FetchProfilesRuntime{
 		Logger:     logger,

@@ -26,6 +26,10 @@
 - `stream-ingester`: `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`, `SERVER_PORT=30004`
 - `youtube-scraper`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `SERVER_PORT=30005`
 
+운영 기준:
+- YouTube 커뮤니티/쇼츠 알람 라우팅은 `stream-ingester`가 아닌 `youtube-scraper` outbox dispatcher가 전담합니다.
+- compose 운영 경로에는 canary/legacy fallback 선택 분기를 두지 않습니다.
+
 ## 3) 헬스체크
 
 ```bash

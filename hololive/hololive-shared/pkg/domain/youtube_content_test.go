@@ -122,19 +122,82 @@ func TestOutboxKind_ToTemplateKey(t *testing.T) {
 	}
 }
 
+func TestYouTubeNotificationOutbox_DedupeKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		item    domain.YouTubeNotificationOutbox
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "shorts outbox uses kind and content id",
+			item: domain.YouTubeNotificationOutbox{
+				Kind:      domain.OutboxKindNewShort,
+				ContentID: "short-123",
+			},
+			want: "youtube-notification:NEW_SHORT:short-123",
+		},
+		{
+			name: "community outbox trims content id",
+			item: domain.YouTubeNotificationOutbox{
+				Kind:      domain.OutboxKindCommunityPost,
+				ContentID: "  post-123  ",
+			},
+			want: "youtube-notification:COMMUNITY_POST:post-123",
+		},
+		{
+			name: "empty kind is rejected",
+			item: domain.YouTubeNotificationOutbox{
+				ContentID: "post-123",
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty content id is rejected",
+			item: domain.YouTubeNotificationOutbox{
+				Kind:      domain.OutboxKindCommunityPost,
+				ContentID: "   ",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tt.item.DedupeKey()
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("DedupeKey() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DedupeKey() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("DedupeKey() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestThumbnailsJSON_Value(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
+		name       string
 		thumbnails domain.ThumbnailsJSON
-		wantNil   bool
+		wantNil    bool
 	}{
 		{
 			// nil 슬라이스 → (nil, nil) 반환
-			name:      "nil 슬라이스",
+			name:       "nil 슬라이스",
 			thumbnails: nil,
-			wantNil:   true,
+			wantNil:    true,
 		},
 		{
 			// 유효한 항목 → JSON 문자열 반환

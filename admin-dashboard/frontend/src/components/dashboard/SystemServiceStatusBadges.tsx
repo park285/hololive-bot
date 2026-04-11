@@ -4,9 +4,14 @@ import type { SystemStats } from "@/features/stats/types";
 import { cn } from "@/lib/utils";
 
 interface SystemServiceStatusBadgesProps {
-	services: SystemStats["serviceGoroutines"];
+	services: SystemStats["serviceRuntime"];
 	getServiceColor: (name: string) => string;
 }
+
+const formatRuntimeLabel = (
+	count: number,
+	metricKind: "goroutine" | "thread",
+) => `${String(count)} ${metricKind === "thread" ? "threads" : "goroutines"}`;
 
 export const SystemServiceStatusBadges = ({
 	services,
@@ -48,7 +53,11 @@ export const SystemServiceStatusBadges = ({
 						{service.name}
 					</span>
 					<span className="text-slate-600 ml-1">
-						: {service.available ? service.goroutines : "OFFLINE"}
+						: {service.available
+							? formatRuntimeLabel(service.count, service.metricKind)
+							: service.error
+								? "ERROR"
+								: "OFFLINE"}
 					</span>
 				</Badge>
 			))}

@@ -78,6 +78,7 @@ func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 	publisher := NewPublisher(cacheClient, newTestLogger())
 
 	notification := &domain.AlarmNotification{
+		AlarmType:    domain.AlarmTypeLive,
 		RoomID:       "room-1",
 		MinutesUntil: 5,
 		Users:        []string{"user-1"},
@@ -104,8 +105,8 @@ func TestPublisherPublishLPushOrderNewestFirst(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	publisher := NewPublisher(cacheClient, newTestLogger())
 
-	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{RoomID: "room-1"}, nil))
-	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{RoomID: "room-2"}, nil))
+	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"}, nil))
+	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"}, nil))
 
 	items, err := mini.List(AlarmDispatchQueue)
 	require.NoError(t, err)
@@ -118,6 +119,24 @@ func TestPublisherPublishLPushOrderNewestFirst(t *testing.T) {
 
 	assert.Equal(t, "room-2", first.Notification.RoomID)
 	assert.Equal(t, "room-1", second.Notification.RoomID)
+}
+
+func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
+	t.Parallel()
+
+	publisher := NewPublisher(cachemocks.NewStrictClient(), newTestLogger())
+
+	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
+		t.Run(string(alarmType), func(t *testing.T) {
+			err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+				AlarmType: alarmType,
+				RoomID:    "room-blocked",
+			}, nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "youtube outbox path")
+
+		})
+	}
 }
 
 func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
@@ -206,7 +225,7 @@ func TestConsumerDrainBatch_UsesBatchedDrain(t *testing.T) {
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 
 	for _, roomID := range []string{"room-1", "room-2", "room-3"} {
-		require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{RoomID: roomID}, nil))
+		require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: roomID}, nil))
 	}
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 3)
@@ -237,7 +256,7 @@ func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T
 
 	err := publisher.Publish(
 		context.Background(),
-		&domain.AlarmNotification{RoomID: "existing"},
+		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "existing"},
 		[]string{"notified:claim:existing"},
 	)
 	require.NoError(t, err)
@@ -251,4 +270,86 @@ func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T
 	assert.Equal(t, "existing", envelopes[0].Notification.RoomID)
 	assert.Equal(t, "retry-a", envelopes[1].Notification.RoomID)
 	assert.Equal(t, "retry-b", envelopes[2].Notification.RoomID)
+}
+
+func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	publisher := NewPublisher(cacheClient, newTestLogger())
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	claimKey := "notified:claim:blocked-community"
+	mini.Set(claimKey, "1")
+
+	blockedRaw, err := json.Marshal(domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeCommunity,
+			RoomID:    "room-blocked",
+		},
+		ClaimKeys:  []string{claimKey},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+	})
+	require.NoError(t, err)
+
+	cmd := cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(string(blockedRaw)).Build()
+	results := cacheClient.DoMulti(context.Background(), cmd)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
+
+	require.NoError(t, publisher.Publish(
+		context.Background(),
+		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-live"},
+		[]string{"notified:claim:room-live"},
+	))
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 2)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 1)
+	assert.Equal(t, domain.AlarmTypeLive, envelopes[0].Notification.AlarmType)
+	assert.Equal(t, "room-live", envelopes[0].Notification.RoomID)
+	assert.False(t, mini.Exists(claimKey))
+
+	remaining, err := mini.List(AlarmDispatchQueue)
+	require.NoError(t, err)
+	assert.Len(t, remaining, 0)
+}
+
+func TestConsumerRequeue_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	claimKey := "notified:claim:blocked-shorts"
+	mini.Set(claimKey, "1")
+
+	valid := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-live",
+		},
+		ClaimKeys:  []string{"notified:claim:room-live"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+	}
+	blocked := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeShorts,
+			RoomID:    "room-blocked",
+		},
+		ClaimKeys:  []string{claimKey},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+	}
+
+	require.NoError(t, consumer.Requeue(context.Background(), []domain.AlarmQueueEnvelope{valid, blocked}))
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 2)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 1)
+	assert.Equal(t, domain.AlarmTypeLive, envelopes[0].Notification.AlarmType)
+	assert.Equal(t, "room-live", envelopes[0].Notification.RoomID)
+	assert.False(t, mini.Exists(claimKey))
+
+	remaining, err := mini.List(AlarmDispatchQueue)
+	require.NoError(t, err)
+	assert.Len(t, remaining, 0)
 }

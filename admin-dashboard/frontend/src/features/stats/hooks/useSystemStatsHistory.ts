@@ -30,9 +30,9 @@ export const useSystemStatsHistory = () => {
 				second: "2-digit",
 			});
 
-			const serviceValues = data.serviceGoroutines.reduce<Record<string, number>>(
+			const serviceValues = data.serviceRuntime.reduce<Record<string, number>>(
 				(acc, service) => {
-					acc[service.name] = service.available ? service.goroutines : 0;
+					acc[service.name] = service.available ? service.count : 0;
 					return acc;
 				},
 				{},
@@ -58,7 +58,7 @@ export const useSystemStatsHistory = () => {
 				names.add(name);
 			});
 		});
-		currentStats?.serviceGoroutines.forEach((service) => {
+		currentStats?.serviceRuntime.forEach((service) => {
 			names.add(service.name);
 		});
 		return [...names];

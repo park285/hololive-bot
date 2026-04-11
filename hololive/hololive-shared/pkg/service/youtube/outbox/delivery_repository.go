@@ -24,12 +24,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
+	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 // DeliveryRepository: room 단위 전달 상태 저장소
@@ -42,6 +45,11 @@ type deliveryStatusCount struct {
 	OutboxID int64
 	Status   domain.OutboxStatus
 	Count    int64
+}
+
+type deliveryAlarmSentTarget struct {
+	Kind      domain.OutboxKind `gorm:"column:kind"`
+	ContentID string            `gorm:"column:content_id"`
 }
 
 func NewDeliveryRepository(db *gorm.DB, logger *slog.Logger) *DeliveryRepository {
@@ -83,6 +91,13 @@ func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, r
 
 // FetchAndLock: PENDING delivery를 배치 claim하고 locked_at을 갱신한다.
 func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDelivery, error) {
+	if r == nil || r.db == nil || batchSize <= 0 {
+		return nil, nil
+	}
+	if r.db.Dialector != nil && r.db.Dialector.Name() == "sqlite" {
+		return r.fetchAndLockSQLite(ctx, batchSize, lockTimeout)
+	}
+
 	lockExpiry := time.Now().Add(-lockTimeout)
 	now := time.Now()
 
@@ -112,26 +127,83 @@ func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lo
 	return rows, nil
 }
 
+func (r *DeliveryRepository) fetchAndLockSQLite(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDelivery, error) {
+	lockExpiry := time.Now().Add(-lockTimeout)
+	now := time.Now()
+
+	var rows []domain.YouTubeNotificationDelivery
+	if err := r.db.WithContext(ctx).
+		Where("status = ?", domain.OutboxStatusPending).
+		Where("(locked_at IS NULL OR locked_at < ?) AND next_attempt_at <= ?", lockExpiry, now).
+		Order("created_at ASC").
+		Limit(batchSize).
+		Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("fetch and lock delivery rows (sqlite): %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	ids := collectDeliveryIDs(rows)
+	if err := r.db.WithContext(ctx).
+		Model(&domain.YouTubeNotificationDelivery{}).
+		Where("id IN ?", ids).
+		Update("locked_at", now).Error; err != nil {
+		return nil, fmt.Errorf("lock delivery rows (sqlite): %w", err)
+	}
+
+	for i := range rows {
+		lockedAt := now
+		rows[i].LockedAt = &lockedAt
+	}
+
+	return rows, nil
+}
+
 // MarkSentBatch: 전달 성공 row를 배치로 SENT 처리한다.
-func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64) error {
+func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, claimTokens ...deliveryClaimToken) error {
 	uniqueIDs := uniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
 		return nil
 	}
-
-	result := r.db.WithContext(ctx).Model(&domain.YouTubeNotificationDelivery{}).
-		Where("id IN ? AND status = ?", uniqueIDs, domain.OutboxStatusPending).
-		Updates(map[string]any{
-			"status":    domain.OutboxStatusSent,
-			"sent_at":   time.Now(),
-			"locked_at": nil,
-			"error":     "",
-		})
-	if result.Error != nil {
-		return fmt.Errorf("mark delivery rows sent: %w", result.Error)
+	if r == nil || r.db == nil {
+		return fmt.Errorf("mark delivery rows sent: db is nil")
 	}
 
-	return nil
+	sentAt := canonicalSentAtNow()
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		trackingMarks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, claimTokens)
+		if err != nil {
+			return fmt.Errorf("load tracking marks: %w", err)
+		}
+
+		result := tx.Model(&domain.YouTubeNotificationDelivery{}).
+			Where("id IN ? AND status = ?", uniqueIDs, domain.OutboxStatusPending).
+			Updates(map[string]any{
+				"status":    domain.OutboxStatusSent,
+				"sent_at":   sentAt,
+				"locked_at": nil,
+				"error":     "",
+			})
+		if result.Error != nil {
+			return fmt.Errorf("update delivery rows: %w", result.Error)
+		}
+
+		if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
+			return fmt.Errorf("update tracking rows: %w", err)
+		}
+		if len(trackingMarks) > 0 {
+			identities := make([]PostTrackingIdentity, 0, len(trackingMarks))
+			for i := range trackingMarks {
+				identities = append(identities, PostTrackingIdentity{Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID})
+			}
+			if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+				return fmt.Errorf("persist tracking latency classifications: %w", err)
+			}
+		}
+
+		return nil
+	})
 }
 
 // MarkFailed: 전달 실패 row를 retry 또는 FAILED로 전환한다.
@@ -223,9 +295,10 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 		"status":    status,
 		"locked_at": nil,
 	}
+	sentAt := canonicalSentAtNow()
 	switch status {
 	case domain.OutboxStatusSent:
-		updates["sent_at"] = time.Now()
+		updates["sent_at"] = sentAt
 		updates["error"] = ""
 	case domain.OutboxStatusFailed:
 		updates["error"] = "per-room delivery failed"
@@ -239,6 +312,111 @@ func (r *DeliveryRepository) updateOutboxStatusBatch(ctx context.Context, outbox
 	}
 
 	return nil
+}
+
+func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Context, batchSize int) ([]int64, error) {
+	if r == nil || r.db == nil || batchSize <= 0 {
+		return nil, nil
+	}
+
+	var outboxIDs []int64
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT d.outbox_id
+		FROM youtube_notification_delivery d
+		JOIN youtube_notification_outbox o ON o.id = d.outbox_id
+		WHERE o.status = ?
+		GROUP BY d.outbox_id
+		HAVING SUM(CASE WHEN d.status = ? THEN 1 ELSE 0 END) = 0
+		ORDER BY d.outbox_id ASC
+		LIMIT ?
+	`, domain.OutboxStatusPending, domain.OutboxStatusPending, batchSize).Scan(&outboxIDs).Error; err != nil {
+		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
+	}
+
+	return outboxIDs, nil
+}
+
+func loadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db *gorm.DB, ids []int64, sentAt time.Time, claimTokens []deliveryClaimToken) ([]trackingrepo.AlarmSentMark, error) {
+	uniqueIDs := uniqueInt64s(ids)
+	if len(uniqueIDs) == 0 {
+		return nil, nil
+	}
+
+	claimTokensByIdentity, err := collectClaimTokensByIdentity(claimTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var targets []deliveryAlarmSentTarget
+	if err := db.WithContext(ctx).
+		Table("youtube_notification_delivery AS d").
+		Select("o.kind AS kind, o.content_id AS content_id").
+		Joins("JOIN youtube_notification_outbox o ON o.id = d.outbox_id").
+		Where("d.id IN ? AND d.status = ?", uniqueIDs, domain.OutboxStatusPending).
+		Where("o.kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
+		Scan(&targets).Error; err != nil {
+		return nil, fmt.Errorf("query delivery alarm sent targets: %w", err)
+	}
+
+	marks := make([]trackingrepo.AlarmSentMark, 0, len(targets))
+	for i := range targets {
+		mark := trackingrepo.AlarmSentMark{
+			Kind:        targets[i].Kind,
+			ContentID:   targets[i].ContentID,
+			AlarmSentAt: sentAt,
+		}
+		claimIdentity := deliveryClaimIdentityKey(targets[i].Kind, canonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID))
+		if authorizedAt, ok := claimTokensByIdentity[claimIdentity]; ok {
+			authorizedAtCopy := authorizedAt
+			mark.AuthorizedAt = &authorizedAtCopy
+		}
+		marks = append(marks, mark)
+	}
+
+	return marks, nil
+}
+
+func collectClaimTokensByIdentity(claimTokens []deliveryClaimToken) (map[string]time.Time, error) {
+	if len(claimTokens) == 0 {
+		return map[string]time.Time{}, nil
+	}
+
+	collected := make(map[string]time.Time, len(claimTokens))
+	for i := range claimTokens {
+		postID := strings.TrimSpace(claimTokens[i].postID)
+		if postID == "" {
+			return nil, fmt.Errorf("collect claim tokens: post id is empty at index %d", i)
+		}
+		if claimTokens[i].authorizedAt.IsZero() {
+			return nil, fmt.Errorf("collect claim tokens: authorized_at is empty at index %d", i)
+		}
+
+		identity := deliveryClaimIdentityKey(claimTokens[i].kind, postID)
+		authorizedAt := claimTokens[i].authorizedAt.UTC()
+		if existingAuthorizedAt, ok := collected[identity]; ok {
+			if !existingAuthorizedAt.Equal(authorizedAt) {
+				return nil, fmt.Errorf("collect claim tokens: conflicting authorized_at for %s", identity)
+			}
+			continue
+		}
+
+		collected[identity] = authorizedAt
+	}
+
+	return collected, nil
+}
+
+func deliveryClaimIdentityKey(kind domain.OutboxKind, postID string) string {
+	return string(kind) + "\x00" + strings.TrimSpace(postID)
+}
+
+func canonicalDeliveryPostID(kind domain.OutboxKind, contentID string) string {
+	normalizedContentID := strings.TrimSpace(contentID)
+	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, normalizedContentID)
+	if err != nil {
+		return normalizedContentID
+	}
+	return canonicalContentID
 }
 
 func groupOutboxIDsByAggregateStatus(outboxIDs []int64, counts []deliveryStatusCount) map[domain.OutboxStatus][]int64 {

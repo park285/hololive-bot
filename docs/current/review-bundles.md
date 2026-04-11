@@ -32,5 +32,6 @@ Default output directory: `artifacts/review`
 ### Full bundle policy
 
 - 기본값은 tracked file only 입니다.
-- `.worktrees`, `.tasklists`, agent 실행 디렉터리, `logs`, `artifacts`, 기존 tarball 같은 로컬 오염물은 기본적으로 포함되지 않습니다.
+- tracked 상태로 들어간 파일이라도 `.worktrees`, `.tasklists`, IDE metadata, agent 실행 디렉터리, `logs`, `artifacts`, 기존 tarball, `BUNDLE_MANIFEST.txt` 같은 로컬 오염물은 항상 제외합니다.
 - untracked 파일이 정말 필요할 때만 `INCLUDE_UNTRACKED=true`를 명시합니다.
+- full bundle의 `BUNDLE_MANIFEST.txt`는 export script가 생성하는 내부 manifest만 포함합니다.

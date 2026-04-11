@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -55,6 +56,10 @@ type StreamIngesterRuntime struct {
 
 	Readiness *ingestionReadinessState
 
+	CommunityShortsBigBangPolicy           communityShortsBigBangPolicy
+	communityShortsObservationWindowWriter communityShortsObservationWindowWriter
+	timeNow                                func() time.Time
+
 	ingestionLease *providers.IngestionLease
 	lifecycle.Managed
 }
@@ -77,6 +82,10 @@ func (r *StreamIngesterRuntime) Run() {
 		Start: func(ctx context.Context, errCh chan<- error) {
 			r.startBackgroundServices(ctx, errCh)
 			r.startHTTPServer(errCh)
+			if err := r.ensureCommunityShortsObservationWindow(ctx); err != nil {
+				errCh <- err
+				return
+			}
 			if r.Readiness != nil {
 				r.Readiness.markRunning()
 			}
