@@ -81,6 +81,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 ./scripts/deploy/compose-redeploy-service.sh dispatcher-go
 ```
 
+- worktree에서 재배포할 때도 deploy 스크립트가 현재 worktree의 `.env`를 우선 사용하고, 없으면 canonical repo root의 `.env`를 fallback으로 사용합니다.
+
 ## 상태 확인
 
 ```bash
