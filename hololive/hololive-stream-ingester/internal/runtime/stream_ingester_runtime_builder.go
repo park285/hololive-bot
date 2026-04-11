@@ -74,7 +74,7 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	}
 	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
 
-	holodexAPIKey := sharedproviders.ProvideHolodexAPIKey(cfg.Holodex)
+	holodexAPIKey := cfg.Holodex.APIKey
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 	membersData := memberServiceAdapter
 	scraperProxyConfig := scraper.ProxyConfig{
