@@ -116,7 +116,7 @@ func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
 	}
 	infra := &coreInfrastructure{
 		deps: &bot.Dependencies{
-			Cache:  &cachemocks.Client{},
+			Cache:  cachemocks.NewStrictClient(),
 			Chzzk:  &chzzk.Client{},
 			Twitch: &twitch.Client{},
 		},
