@@ -75,7 +75,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 
 		svc, err := ProvideAlarmService(
 			[]int{10, 3},
-			&cachemocks.Client{},
+			cachemocks.NewStrictClient(),
 			nil,
 			nil,
 			nil,
@@ -89,7 +89,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	})
 
 	t.Run("member matcher", func(t *testing.T) {
-		matcher := ProvideMemberMatcher(t.Context(), &stubMemberDataProvider{}, &cachemocks.Client{}, nil, logger)
+		matcher := ProvideMemberMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
 		require.NotNil(t, matcher)
 	})
 
