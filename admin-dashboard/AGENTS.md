@@ -62,6 +62,12 @@ cd frontend && npm run lint && npm run build
 cd frontend && npm run generate:api
 ```
 
+### Delegation Runtime
+- Assume active parent and subagent work may legitimately take time and that sufficient computing power is available for their scoped work.
+- Do not treat elapsed time alone as a reason to recall, restart, close, or abandon a running subagent or workstream.
+- Treat subagent wait timeouts, empty wait results, and delayed completion messages as `running`, not terminal.
+- Prefer longer waits or useful parallel parent work over recall churn while a needed subagent is still running.
+
 ### Conventions (Frontend)
 - **Components**: `src/components/{feature}/` split by feature
 - **Hooks**: `src/hooks/` custom hooks
