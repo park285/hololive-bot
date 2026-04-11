@@ -46,7 +46,7 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-route-re
 ## 기준 코드
 
 - 운영 채널 SSOT: `hololive/hololive-stream-ingester/internal/app/channel_target_validation.go`
-- baseline 수집: `hololive/hololive-stream-ingester/internal/app/community_shorts_target_baseline.go`
+- baseline 수집: `hololive/hololive-stream-ingester/internal/app/community_shorts_target_baseline_build.go`
 - typed key SSOT: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
 - legacy 차단: `hololive/hololive-shared/pkg/domain/alarm.go`
 - 신규 경로 fan-out: `hololive/hololive-shared/pkg/service/youtube/outbox/dispatcher.go`

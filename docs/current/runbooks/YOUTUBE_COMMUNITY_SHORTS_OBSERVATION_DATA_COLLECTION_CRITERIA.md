@@ -219,7 +219,7 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-shorts-alarm-sent-history
 ## Source Of Truth
 
 - 운영 채널 계산: `hololive/hololive-stream-ingester/internal/app/channel_target_validation.go`
-- baseline 수집: `hololive/hololive-stream-ingester/internal/app/community_shorts_target_baseline.go`
+- baseline 수집: `hololive/hololive-stream-ingester/internal/app/community_shorts_target_baseline_build.go`
 - repo-known official roster data: `hololive/hololive-shared/pkg/domain/data/official_talents.json`
 - repo-known official channel profile data: `hololive/hololive-shared/pkg/domain/data/official_profiles_raw.json`
 - manual non-Hololive member roster seed: `hololive/hololive-kakao-bot-go/scripts/migrations/016-add-multi-group-support.sql`, `017-add-stellive-chzzk-support.sql`, `018-add-twitch-user-id-and-vspo-members.sql`, `040_unify_indie_org.sql`
