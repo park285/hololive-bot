@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use axum::Json;
 use axum::extract::{ConnectInfo, Request, State};
+use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -47,6 +48,7 @@ pub struct SessionStatusResponse {
 pub async fn handle_login(
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let ip = addr.ip().to_string();
@@ -96,12 +98,18 @@ pub async fn handle_login(
         response.headers_mut(),
         "admin_session",
         &signed,
-        state.config.security.force_https,
+        crate::auth::middleware::should_set_secure_cookie(
+            &headers,
+            state.config.security.force_https,
+        ),
     );
     crate::auth::middleware::set_csrf_cookie(
         response.headers_mut(),
         &csrf_token,
-        state.config.security.force_https,
+        crate::auth::middleware::should_set_secure_cookie(
+            &headers,
+            state.config.security.force_https,
+        ),
     );
 
     Ok(response)
@@ -124,7 +132,10 @@ pub async fn handle_logout(State(state): State<Arc<AppState>>, req: Request) -> 
     crate::auth::middleware::set_clear_cookie(
         response.headers_mut(),
         "admin_session",
-        state.config.security.force_https,
+        crate::auth::middleware::should_set_secure_cookie(
+            req.headers(),
+            state.config.security.force_https,
+        ),
     );
     crate::auth::middleware::set_clear_cookie(response.headers_mut(), "csrf_token", false);
     response
@@ -187,6 +198,10 @@ pub async fn handle_heartbeat(
     State(state): State<Arc<AppState>>,
     req: Request,
 ) -> Result<impl IntoResponse, AppError> {
+    let secure_cookie = crate::auth::middleware::should_set_secure_cookie(
+        req.headers(),
+        state.config.security.force_https,
+    );
     let session_id = req
         .extensions()
         .get::<SessionId>()
@@ -257,13 +272,9 @@ pub async fn handle_heartbeat(
             response.headers_mut(),
             "admin_session",
             &new_signed,
-            state.config.security.force_https,
+            secure_cookie,
         );
-        crate::auth::middleware::set_csrf_cookie(
-            response.headers_mut(),
-            &new_csrf,
-            state.config.security.force_https,
-        );
+        crate::auth::middleware::set_csrf_cookie(response.headers_mut(), &new_csrf, secure_cookie);
         return Ok(response);
     }
 
