@@ -14,6 +14,21 @@ import (
 func TestBuildCommunityShortsTargetBaseline(t *testing.T) {
 	t.Parallel()
 
+	t.Run("buildCommunityShortsOperationalChannelsFromMembers deduplicates shared channel ids", func(t *testing.T) {
+		t.Parallel()
+
+		channels := buildCommunityShortsOperationalChannelsFromMembers([]*domain.Member{
+			{Name: "Fuwawa Abyssgard", Org: "Hololive", ChannelID: "UCt9H_RpQzhxzlyBxFqrdHqA"},
+			{Name: "Mococo Abyssgard", Org: "Hololive", ChannelID: "UCt9H_RpQzhxzlyBxFqrdHqA"},
+			{Name: "Miko", Org: "Hololive", ChannelID: "UCmiko"},
+		})
+
+		require.Len(t, channels, 2)
+		require.Equal(t, "Fuwawa Abyssgard (Hololive)", channels[0].ownerLabel)
+		require.Equal(t, "UCt9H_RpQzhxzlyBxFqrdHqA", channels[0].channelID)
+		require.Equal(t, "UCmiko", channels[1].channelID)
+	})
+
 	t.Run("collects sorted enabled channels and exposes new-only activation state", func(t *testing.T) {
 		t.Parallel()
 
