@@ -16,6 +16,7 @@ pub struct Member {
     pub aliases: Aliases,
     pub name_ja: Option<String>,
     pub name_ko: Option<String>,
+    #[serde(default)]
     pub is_graduated: bool,
 }
 
@@ -33,6 +34,7 @@ pub struct AddMemberRequest {
     pub aliases: Aliases,
     pub name_ja: Option<String>,
     pub name_ko: Option<String>,
+    #[serde(default)]
     pub is_graduated: bool,
 }
 
@@ -53,6 +55,7 @@ pub struct RemoveAliasRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SetGraduationRequest {
+    #[serde(default)]
     pub is_graduated: bool,
 }
 
