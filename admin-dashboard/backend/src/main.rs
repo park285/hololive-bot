@@ -19,11 +19,8 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
-async fn main() {
-    if let Err(err) = run().await {
-        eprintln!("fatal: {err:#}");
-        std::process::exit(1);
-    }
+async fn main() -> anyhow::Result<()> {
+    run().await
 }
 
 async fn run() -> anyhow::Result<()> {

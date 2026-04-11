@@ -45,10 +45,20 @@ type deliveryClaimSelection struct {
 	retryOutboxIDs         []int64
 }
 
+type deliveryClaimReuse struct {
+	decision deliveryClaimDecision
+}
+
+type deliveryClaimReuseCache struct {
+	mu      sync.Mutex
+	entries map[string]deliveryClaimReuse
+}
+
 func (d *Dispatcher) selectClaimedDeliveries(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxes []domain.YouTubeNotificationOutbox,
+	reuseCache *deliveryClaimReuseCache,
 ) deliveryClaimSelection {
 	selection := deliveryClaimSelection{
 		sendRows:     make([]domain.YouTubeNotificationDelivery, 0, len(rows)),
@@ -61,7 +71,22 @@ func (d *Dispatcher) selectClaimedDeliveries(
 	}
 
 	for i := 0; i < limit; i++ {
-		decision, claimToken, err := d.tryClaimDelivery(ctx, rows[i], outboxes[i])
+		claimIdentity, identityErr := deliveryClaimIdentityForOutbox(outboxes[i])
+		if identityErr != nil {
+			d.logClaimIssue(
+				"Failed to resolve community/shorts delivery claim identity before send",
+				rows[i],
+				outboxes[i],
+				slog.LevelWarn,
+				slog.Any("error", identityErr),
+			)
+			selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, rows[i].ID)
+			selection.retryOutboxIDs = append(selection.retryOutboxIDs, outboxes[i].ID)
+			continue
+		}
+		decision, claimToken, reused, err := reuseCache.resolve(claimIdentity, func() (deliveryClaimDecision, *deliveryClaimToken, error) {
+			return d.tryClaimDelivery(ctx, rows[i], outboxes[i])
+		})
 		if err != nil {
 			d.logClaimIssue("Failed to claim community/shorts alarm state before send", rows[i], outboxes[i], slog.LevelWarn, slog.Any("error", err))
 			selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, rows[i].ID)
@@ -73,7 +98,7 @@ func (d *Dispatcher) selectClaimedDeliveries(
 		case deliveryClaimDecisionProceed:
 			selection.sendRows = append(selection.sendRows, rows[i])
 			selection.sendOutboxes = append(selection.sendOutboxes, outboxes[i])
-			if claimToken != nil {
+			if claimToken != nil && !reused {
 				selection.claimTokens = append(selection.claimTokens, *claimToken)
 			}
 		case deliveryClaimDecisionAlreadySent:
@@ -88,6 +113,44 @@ func (d *Dispatcher) selectClaimedDeliveries(
 	}
 
 	return selection
+}
+
+func newDeliveryClaimReuseCache(capacity int) *deliveryClaimReuseCache {
+	if capacity < 1 {
+		capacity = 1
+	}
+	return &deliveryClaimReuseCache{
+		entries: make(map[string]deliveryClaimReuse, capacity),
+	}
+}
+
+func (c *deliveryClaimReuseCache) resolve(
+	identity string,
+	compute func() (deliveryClaimDecision, *deliveryClaimToken, error),
+) (deliveryClaimDecision, *deliveryClaimToken, bool, error) {
+	if identity == "" {
+		decision, token, err := compute()
+		return decision, token, false, err
+	}
+	if c == nil {
+		decision, token, err := compute()
+		return decision, token, false, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if reuse, ok := c.entries[identity]; ok {
+		return reuse.decision, nil, true, nil
+	}
+
+	decision, token, err := compute()
+	if err != nil {
+		return deliveryClaimDecisionRetryLater, nil, false, err
+	}
+
+	c.entries[identity] = deliveryClaimReuse{decision: decision}
+	return decision, token, false, nil
 }
 
 func (d *Dispatcher) applyClaimSelection(result *deliveryDispatchResult, mu *sync.Mutex, selection deliveryClaimSelection) {
@@ -117,7 +180,7 @@ func (d *Dispatcher) tryClaimDelivery(
 	}
 
 	repo := trackingrepo.NewRepository(d.db)
-	claimAt := yttimestamp.Normalize(time.Now())
+	claimAt := resolveDeliveryClaimTime(row, outbox)
 	postID := strings.TrimSpace(resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
 	if postID == "" {
 		return deliveryClaimDecisionRetryLater, nil, fmt.Errorf("resolve post id: empty")
@@ -161,6 +224,16 @@ func (d *Dispatcher) tryClaimDelivery(
 		return deliveryClaimDecisionRetryLater, nil, fmt.Errorf("try claim alarm state: %w", err)
 	}
 	if claimed {
+		state, err = repo.FindAlarmStateByPostID(ctx, outbox.Kind, postID)
+		if err != nil {
+			return deliveryClaimDecisionRetryLater, nil, fmt.Errorf("reload alarm state after claim success: %w", err)
+		}
+		if communityShortsAlarmStateMarkedSent(state) {
+			return deliveryClaimDecisionAlreadySent, nil, nil
+		}
+		if state == nil || state.AuthorizedAt == nil || !state.AuthorizedAt.UTC().Equal(claimAt) {
+			return deliveryClaimDecisionRetryLater, nil, nil
+		}
 		return deliveryClaimDecisionProceed, &deliveryClaimToken{
 			kind:         outbox.Kind,
 			postID:       postID,
@@ -181,6 +254,32 @@ func (d *Dispatcher) tryClaimDelivery(
 	}
 
 	return deliveryClaimDecisionRetryLater, nil, nil
+}
+
+func resolveDeliveryClaimTime(row domain.YouTubeNotificationDelivery, outbox domain.YouTubeNotificationOutbox) time.Time {
+	switch {
+	case !outbox.NextAttemptAt.IsZero():
+		return yttimestamp.Normalize(outbox.NextAttemptAt)
+	case !row.CreatedAt.IsZero():
+		return yttimestamp.Normalize(row.CreatedAt)
+	case !outbox.CreatedAt.IsZero():
+		return yttimestamp.Normalize(outbox.CreatedAt)
+	default:
+		return yttimestamp.Normalize(time.Now())
+	}
+}
+
+func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (string, error) {
+	if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
+		return "", nil
+	}
+
+	postID := strings.TrimSpace(resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
+	if postID == "" {
+		return "", fmt.Errorf("resolve post id: empty")
+	}
+
+	return deliveryClaimIdentityKey(outbox.Kind, postID), nil
 }
 
 func (d *Dispatcher) isCommunityShortsDeliveryAlreadyCompleted(
