@@ -74,6 +74,15 @@ should_exclude_path() {
   return 1
 }
 
+compute_content_sha256() {
+  (
+    cd "${ROOT_DIR}"
+    while IFS= read -r -d '' path; do
+      sha256sum "${path}"
+    done < "${FILE_LIST}"
+  ) | sha256sum | awk '{print $1}'
+}
+
 append_git_paths() {
   while IFS= read -r -d '' path; do
     [[ -e "${path}" ]] || continue
@@ -93,6 +102,7 @@ append_git_paths() {
 )
 
 sort -zu "${FILE_LIST}" -o "${FILE_LIST}"
+CONTENT_SHA256="$(compute_content_sha256)"
 
 cat > "${MANIFEST}" <<MANIFEST
 repo_root: ${ROOT_DIR}
@@ -103,6 +113,7 @@ branch: $(git -C "${ROOT_DIR}" rev-parse --abbrev-ref HEAD)
 commit: $(git -C "${ROOT_DIR}" rev-parse HEAD)
 included_files: $(tr -cd '\0' < "${FILE_LIST}" | wc -c | tr -d ' ')
 excluded_patterns: $(IFS=,; echo "${BUNDLE_EXCLUDES[*]}")
+content_sha256: ${CONTENT_SHA256}
 MANIFEST
 
 (
