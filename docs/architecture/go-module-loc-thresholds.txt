@@ -5,7 +5,7 @@ hololive/hololive-shared/pkg/service/youtube/scheduler.go:1150
 hololive/hololive-shared/pkg/service/youtube/service.go:950
 hololive/hololive-shared/pkg/service/member/repository.go:850
 hololive/hololive-shared/pkg/service/holodex/scraper.go:750
-hololive/hololive-shared/pkg/service/youtube/poller/pollers.go:700
+hololive/hololive-shared/pkg/service/youtube/poller/pollers.go:850
 hololive/hololive-llm-sched/internal/service/majorevent/summarizer/summarizer_prompt.go:720
 hololive/hololive-llm-sched/internal/service/majorevent/repository.go:650
 hololive/hololive-shared/pkg/service/holodex/service_channels.go:620

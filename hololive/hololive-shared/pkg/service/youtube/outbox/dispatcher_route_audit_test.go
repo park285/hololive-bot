@@ -186,8 +186,8 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	}
 
 	result := dispatcher.dispatchDeliveryRows(ctx, deliveryRows, outboxByID)
-	require.Zero(t, result.failedDeliveries)
-	require.Empty(t, result.failureBuckets)
+	require.Zerof(t, result.failedDeliveries, "failure buckets: %+v", result.failureBuckets)
+	require.Emptyf(t, result.failureBuckets, "failure buckets: %+v", result.failureBuckets)
 	require.Len(t, result.successDeliveryIDs, totalRouteAuditDeliveries(expectedTargets))
 	require.NoError(t, dispatcher.delivery.MarkSentBatch(ctx, result.successDeliveryIDs))
 	require.NoError(t, dispatcher.delivery.UpdateOutboxAggregateStatuses(ctx, result.touchedOutboxIDs))

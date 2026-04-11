@@ -26,6 +26,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 // AlarmType: 알람 종류
@@ -162,7 +164,7 @@ func NewAlarm(roomID, userID, channelID, memberName string) *Alarm {
 // AlarmNotification: 방송 시작 임박 등의 이벤트로 인해 발송될 알림 메시지 정보
 // 여러 사용자(Users)에게 동일한 내용이 전송될 수 있다.
 type AlarmNotification struct {
-	AlarmType             AlarmType `json:"-"`
+	AlarmType             AlarmType `json:"alarm_type,omitempty"`
 	RoomID                string    `json:"room_id"`
 	Channel               *Channel  `json:"channel"`
 	Stream                *Stream   `json:"stream"`
@@ -212,4 +214,67 @@ type AlarmQueueEnvelope struct {
 	ClaimKeys    []string          `json:"claim_keys"`
 	EnqueuedAt   string            `json:"enqueued_at"`
 	Version      uint8             `json:"version"`
+}
+
+type alarmQueueEnvelopeNotificationWire struct {
+	AlarmType             AlarmType `json:"alarm_type,omitempty"`
+	RoomID                string    `json:"room_id"`
+	Channel               *Channel  `json:"channel"`
+	Stream                *Stream   `json:"stream"`
+	MinutesUntil          int       `json:"minutes_until"`
+	Users                 []string  `json:"users"`
+	ScheduleChangeMessage string    `json:"schedule_change_message,omitempty"`
+}
+
+type alarmQueueEnvelopeWire struct {
+	Notification alarmQueueEnvelopeNotificationWire `json:"notification"`
+	ClaimKeys    []string                           `json:"claim_keys"`
+	EnqueuedAt   string                             `json:"enqueued_at"`
+	Version      uint8                              `json:"version"`
+}
+
+func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
+	return json.Marshal(alarmQueueEnvelopeWire{
+		Notification: alarmQueueEnvelopeNotificationWire{
+			AlarmType:             e.Notification.AlarmType,
+			RoomID:                e.Notification.RoomID,
+			Channel:               e.Notification.Channel,
+			Stream:                e.Notification.Stream,
+			MinutesUntil:          e.Notification.MinutesUntil,
+			Users:                 e.Notification.Users,
+			ScheduleChangeMessage: e.Notification.ScheduleChangeMessage,
+		},
+		ClaimKeys:  e.ClaimKeys,
+		EnqueuedAt: e.EnqueuedAt,
+		Version:    e.Version,
+	})
+}
+
+func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
+	var wire alarmQueueEnvelopeWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+
+	alarmType := wire.Notification.AlarmType
+	if alarmType == "" {
+		alarmType = AlarmTypeLive
+	}
+
+	*e = AlarmQueueEnvelope{
+		Notification: AlarmNotification{
+			AlarmType:             alarmType,
+			RoomID:                wire.Notification.RoomID,
+			Channel:               wire.Notification.Channel,
+			Stream:                wire.Notification.Stream,
+			MinutesUntil:          wire.Notification.MinutesUntil,
+			Users:                 wire.Notification.Users,
+			ScheduleChangeMessage: wire.Notification.ScheduleChangeMessage,
+		},
+		ClaimKeys:  wire.ClaimKeys,
+		EnqueuedAt: wire.EnqueuedAt,
+		Version:    wire.Version,
+	}
+
+	return nil
 }
