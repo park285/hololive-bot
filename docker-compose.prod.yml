@@ -152,7 +152,7 @@ services:
     labels:
       deunhealth.restart.on.unhealthy: "true"
     env_file:
-      - ./.env
+      - ${COMPOSE_ENV_FILE:-./.env}
     environment:
       <<: *app-file-log-env
       GOGC: "60"
@@ -240,7 +240,7 @@ services:
     labels:
       deunhealth.restart.on.unhealthy: "true"
     env_file:
-      - ./.env
+      - ${COMPOSE_ENV_FILE:-./.env}
     environment:
       <<: *app-file-log-env
       DISPATCHER_PORT: "30020"
@@ -296,7 +296,7 @@ services:
     labels:
       deunhealth.restart.on.unhealthy: "true"
     env_file:
-      - ./.env
+      - ${COMPOSE_ENV_FILE:-./.env}
     environment:
       <<: *app-file-log-env
       SERVER_PORT: 30004
@@ -386,7 +386,7 @@ services:
     labels:
       deunhealth.restart.on.unhealthy: "true"
     env_file:
-      - ./.env
+      - ${COMPOSE_ENV_FILE:-./.env}
     environment:
       <<: *app-file-log-env
       SERVER_PORT: 30005
@@ -476,7 +476,7 @@ services:
     labels:
       deunhealth.restart.on.unhealthy: "true"
     env_file:
-      - ./.env
+      - ${COMPOSE_ENV_FILE:-./.env}
     environment:
       <<: *app-file-log-env
       LLM_SCHEDULER_PORT: 30003
@@ -548,7 +548,7 @@ services:
     labels:
       deunhealth.restart.on.unhealthy: "true"
     env_file:
-      - ./.env
+      - ${COMPOSE_ENV_FILE:-./.env}
     environment:
       PORT: "30190"
       ENV: "production"
