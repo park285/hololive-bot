@@ -85,7 +85,7 @@ func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 			},
 		}
 		deps := botAdminRuntimeDependencies{
-			cache:    &cachemocks.Client{},
+			cache:    cachemocks.NewStrictClient(),
 			postgres: &nilGormPostgres{},
 		}
 
