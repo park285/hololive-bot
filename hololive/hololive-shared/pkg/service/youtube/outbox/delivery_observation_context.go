@@ -157,6 +157,10 @@ func (r *DeliveryTelemetryRepository) loadObservationWindows(
 	ctx context.Context,
 	trackingByIdentity map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot,
 ) ([]domain.YouTubeCommunityShortsObservationWindow, error) {
+	if !r.db.Migrator().HasTable(&domain.YouTubeCommunityShortsObservationWindow{}) {
+		return nil, nil
+	}
+
 	var earliest time.Time
 	var latest time.Time
 	for _, snapshot := range trackingByIdentity {
