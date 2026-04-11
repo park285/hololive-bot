@@ -87,33 +87,151 @@ func TestBuildStreamIngesterHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvalid
 }
 
 func TestBuildIngestionRuntimeSpec(t *testing.T) {
-	t.Run("stream ingester spec preserves configured flags", func(t *testing.T) {
+	t.Run("stream ingester spec preserves configured flags before big-bang cutover", func(t *testing.T) {
 		cfg := &config.Config{
 			Ingestion: config.IngestionConfig{
-				YouTubeEnabled:   false,
-				PhotoSyncEnabled: true,
+				YouTubeEnabled:                true,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: false,
 			},
 		}
 
 		spec := streamIngesterSpec(cfg)
 		assert.Equal(t, streamIngesterRuntimeName, spec.name)
-		assert.False(t, spec.features.youtubeEnabled)
+		assert.Equal(t, spec.requestedFeatures, spec.features)
+		assert.True(t, spec.features.youtubeEnabled)
 		assert.True(t, spec.features.photoSyncEnabled)
+		assert.False(t, spec.features.communityShortsBigBangEnabled)
 	})
 
-	t.Run("youtube scraper spec applies dedicated feature overrides", func(t *testing.T) {
+	t.Run("stream ingester spec disables youtube routing after big-bang cutover", func(t *testing.T) {
 		cfg := &config.Config{
 			Ingestion: config.IngestionConfig{
-				YouTubeEnabled:   false,
-				PhotoSyncEnabled: true,
+				YouTubeEnabled:                true,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: true,
+			},
+		}
+
+		spec := streamIngesterSpec(cfg)
+		assert.Equal(t, streamIngesterRuntimeName, spec.name)
+		assert.True(t, spec.requestedFeatures.youtubeEnabled)
+		assert.True(t, spec.requestedFeatures.communityShortsBigBangEnabled)
+		assert.False(t, spec.features.youtubeEnabled)
+		assert.True(t, spec.features.photoSyncEnabled)
+		assert.False(t, spec.features.communityShortsBigBangEnabled)
+	})
+
+	t.Run("youtube scraper spec stays idle until big-bang cutover", func(t *testing.T) {
+		cfg := &config.Config{
+			Ingestion: config.IngestionConfig{
+				YouTubeEnabled:                true,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: false,
 			},
 		}
 
 		spec := youtubeScraperSpec(cfg)
 		assert.Equal(t, youtubeScraperRuntimeName, spec.name)
+		assert.False(t, spec.features.youtubeEnabled)
+		assert.False(t, spec.features.photoSyncEnabled)
+		assert.False(t, spec.features.communityShortsBigBangEnabled)
+	})
+
+	t.Run("youtube scraper spec becomes exclusive youtube runtime after big-bang cutover", func(t *testing.T) {
+		cfg := &config.Config{
+			Ingestion: config.IngestionConfig{
+				YouTubeEnabled:                false,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: true,
+			},
+		}
+
+		spec := youtubeScraperSpec(cfg)
+		assert.Equal(t, youtubeScraperRuntimeName, spec.name)
+		assert.False(t, spec.requestedFeatures.youtubeEnabled)
+		assert.True(t, spec.requestedFeatures.communityShortsBigBangEnabled)
 		assert.True(t, spec.features.youtubeEnabled)
 		assert.False(t, spec.features.photoSyncEnabled)
+		assert.True(t, spec.features.communityShortsBigBangEnabled)
 	})
+}
+
+func TestIngestionRuntimeSpecs_KeepYouTubeOwnershipExclusiveAcrossRolloutStates(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		cfg                config.IngestionConfig
+		wantStreamYouTube  bool
+		wantScraperYouTube bool
+		wantActiveOwners   int
+	}{
+		"legacy rollout keeps stream-ingester as the only youtube owner": {
+			cfg: config.IngestionConfig{
+				YouTubeEnabled:                true,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: false,
+			},
+			wantStreamYouTube:  true,
+			wantScraperYouTube: false,
+			wantActiveOwners:   1,
+		},
+		"big-bang rollout moves youtube ownership to youtube-scraper": {
+			cfg: config.IngestionConfig{
+				YouTubeEnabled:                true,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: true,
+			},
+			wantStreamYouTube:  false,
+			wantScraperYouTube: true,
+			wantActiveOwners:   1,
+		},
+		"big-bang rollout still activates youtube-scraper when legacy youtube is off": {
+			cfg: config.IngestionConfig{
+				YouTubeEnabled:                false,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: true,
+			},
+			wantStreamYouTube:  false,
+			wantScraperYouTube: true,
+			wantActiveOwners:   1,
+		},
+		"youtube disabled everywhere leaves both runtimes idle": {
+			cfg: config.IngestionConfig{
+				YouTubeEnabled:                false,
+				PhotoSyncEnabled:              true,
+				CommunityShortsBigBangEnabled: false,
+			},
+			wantStreamYouTube:  false,
+			wantScraperYouTube: false,
+			wantActiveOwners:   0,
+		},
+	}
+
+	for name, tc := range tests {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &config.Config{Ingestion: tc.cfg}
+			streamSpec := streamIngesterSpec(cfg)
+			scraperSpec := youtubeScraperSpec(cfg)
+
+			assert.Equal(t, tc.wantStreamYouTube, streamSpec.features.youtubeEnabled)
+			assert.Equal(t, tc.wantScraperYouTube, scraperSpec.features.youtubeEnabled)
+			assert.Equal(t, tc.wantScraperYouTube, scraperSpec.features.communityShortsBigBangEnabled)
+			assert.False(t, streamSpec.features.communityShortsBigBangEnabled)
+
+			activeOwners := 0
+			if streamSpec.features.youtubeEnabled {
+				activeOwners++
+			}
+			if scraperSpec.features.youtubeEnabled {
+				activeOwners++
+			}
+			assert.Equal(t, tc.wantActiveOwners, activeOwners)
+		})
+	}
 }
 
 func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T) {
@@ -182,14 +300,17 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				cleanup:   func() { cleanupCalls++ },
 			}
 
+			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, infra.membersData)
+
 			scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
 				cfg.Scraper,
 				infra.postgresService,
-				infra.membersData,
+				communityShortsEnabledChannelIDs(operationalChannels),
 				infra.cacheService,
 				infra.irisClient,
 				infra.templateRenderer,
 				infra.sharedRL,
+				nil,
 				testLogger(),
 			)
 			require.NotNil(t, scraperScheduler)

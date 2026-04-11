@@ -103,6 +103,18 @@ export interface DockerHealthResponse {
   status: string;
 }
 
+export interface ErrorResponse {
+  absolute_expired?: boolean | null;
+  code?: string | null;
+  details?: any;
+  error: string;
+  /**
+   * @format int64
+   * @min 0
+   */
+  retry_after?: number | null;
+}
+
 export interface HeartbeatRequest {
   idle?: boolean;
 }

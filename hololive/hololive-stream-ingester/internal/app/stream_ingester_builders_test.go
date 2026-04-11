@@ -131,6 +131,89 @@ func (f *fakeMemberDataProvider) FindMembersByAlias(alias string) []*domain.Memb
 	return []*domain.Member{member}
 }
 
+func mustResolveCommunityShortsOperationalChannels(t *testing.T, membersData domain.MemberDataProvider) []communityShortsOperationalChannel {
+	t.Helper()
+
+	channels, err := resolveCommunityShortsOperationalChannels(membersData)
+	require.NoError(t, err)
+	return channels
+}
+
+func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts distinct active channel targets", func(t *testing.T) {
+		t.Parallel()
+
+		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+			members: []*domain.Member{
+				{Name: "Pekora", Org: "Hololive", ChannelID: "UCpekora"},
+				{Name: "Miko", Org: "Hololive", ChannelID: "UCmiko"},
+				{Name: "Graduated", Org: "Hololive", ChannelID: "", IsGraduated: true},
+			},
+		}))
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects active member without channel id", func(t *testing.T) {
+		t.Parallel()
+
+		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+			members: []*domain.Member{
+				{Name: "Pekora", Org: "Hololive", ChannelID: ""},
+			},
+		}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing operating channel targets")
+		assert.Contains(t, err.Error(), "Pekora (Hololive)")
+	})
+
+	t.Run("rejects duplicate channel deployment targets", func(t *testing.T) {
+		t.Parallel()
+
+		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+			members: []*domain.Member{
+				{Name: "Pekora", Org: "Hololive", ChannelID: "UCdup"},
+				{Name: "Miko", Org: "Hololive", ChannelID: "UCdup"},
+			},
+		}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate deployment targets")
+		assert.Contains(t, err.Error(), "Miko (Hololive):community duplicates Pekora (Hololive):community")
+	})
+}
+
+func TestResolveCommunityShortsOperationalChannels(t *testing.T) {
+	t.Parallel()
+
+	channels, err := resolveCommunityShortsOperationalChannels(&fakeMemberDataProvider{
+		members: []*domain.Member{
+			{Name: "Pekora", Org: "Hololive", ChannelID: "  UCpekora  "},
+			{Name: "Miko", Org: "Hololive", ChannelID: "   "},
+			{Name: "Graduated", Org: "Hololive", ChannelID: "UCgraduated", IsGraduated: true},
+			nil,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, channels, 2)
+	assert.Equal(t, "Pekora (Hololive)", channels[0].ownerLabel)
+	assert.Equal(t, "UCpekora", channels[0].channelID)
+	assert.True(t, channels[0].enabled)
+	assert.Equal(t, "Miko (Hololive)", channels[1].ownerLabel)
+	assert.Equal(t, "", channels[1].channelID)
+	assert.False(t, channels[1].enabled)
+	assert.Equal(t, []string{"UCpekora"}, communityShortsEnabledChannelIDs(channels))
+}
+
+func TestCommunityShortsEnabledChannelIDs_UsesResolverEnablement(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []string{"UCenabled"}, communityShortsEnabledChannelIDs([]communityShortsOperationalChannel{
+		{ownerLabel: "Enabled", channelID: "UCenabled", enabled: true},
+		{ownerLabel: "Disabled", channelID: "UCshadow", enabled: false},
+	}))
+}
+
 func extractSubscriberApplyFn(t *testing.T, subscriber *configsub.Subscriber) func(configsub.ConfigUpdate) {
 	t.Helper()
 
@@ -197,6 +280,7 @@ func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
 		},
 		nil,
 		nil,
+		nil,
 	)
 
 	require.Len(t, registrations, 5)
@@ -223,12 +307,13 @@ func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
 func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 	t.Parallel()
 
-	membersData := &fakeMemberDataProvider{
+	operationalChannels := mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
 		members: []*domain.Member{
-			{ChannelID: "active-channel", Name: "active", IsGraduated: false},
+			{ChannelID: " active-channel ", Name: "active", IsGraduated: false},
 			{ChannelID: "graduated-channel", Name: "graduated", IsGraduated: true},
+			{ChannelID: "   ", Name: "missing", IsGraduated: false},
 		},
-	}
+	})
 
 	scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
@@ -244,7 +329,8 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 			},
 		},
 		&databasemocks.Client{},
-		membersData,
+		communityShortsEnabledChannelIDs(operationalChannels),
+		nil,
 		nil,
 		nil,
 		nil,

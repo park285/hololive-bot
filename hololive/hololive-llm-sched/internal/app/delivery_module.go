@@ -21,26 +21,12 @@
 package app
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/park285/iris-client-go/iris"
 )
-
-type irisDeliverySender struct {
-	client iris.Sender
-}
-
-func (s irisDeliverySender) SendMessage(ctx context.Context, roomID, message string) error {
-	if err := s.client.SendMessage(ctx, roomID, message); err != nil {
-		return fmt.Errorf("iris send message: %w", err)
-	}
-	return nil
-}
 
 type DeliveryModule struct {
 	Locker     delivery.NotificationLocker

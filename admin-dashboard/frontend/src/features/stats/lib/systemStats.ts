@@ -45,58 +45,83 @@ export const parseSystemStats = (value: unknown): SystemStats | null => {
 	);
 	const memoryTotal = asNumber(record["memoryTotal"] ?? record["memory_total"]);
 	const memoryUsed = asNumber(record["memoryUsed"] ?? record["memory_used"]);
-	const goroutines = asNumber(record["goroutines"]);
-	const totalGoroutines = asNumber(
-		record["totalGoroutines"] ??
+	const threadCount = asNumber(
+		record["threadCount"] ??
+			record["thread_count"] ??
+			record["goroutines"],
+	);
+	const totalGoGoroutines = asNumber(
+		record["totalGoGoroutines"] ??
+			record["total_go_goroutines"] ??
+			record["totalGoroutines"] ??
 			record["total_goroutines"] ??
 			record["goroutines"],
 	);
-	const serviceGoroutinesValue = Array.isArray(record["serviceGoroutines"])
-		? record["serviceGoroutines"]
-		: Array.isArray(record["service_goroutines"])
-			? record["service_goroutines"]
-			: [];
+	const totalRuntimeUnits = asNumber(
+		record["totalRuntimeUnits"] ??
+			record["total_runtime_units"] ??
+			record["totalGoroutines"] ??
+			record["total_goroutines"] ??
+			record["goroutines"],
+	);
+	const serviceRuntimeValue = Array.isArray(record["serviceRuntime"])
+		? record["serviceRuntime"]
+		: Array.isArray(record["service_runtime"])
+			? record["service_runtime"]
+			: Array.isArray(record["serviceGoroutines"])
+				? record["serviceGoroutines"]
+				: Array.isArray(record["service_goroutines"])
+					? record["service_goroutines"]
+					: [];
 
 	if (
 		cpuUsage === null ||
 		memoryUsage === null ||
 		memoryTotal === null ||
 		memoryUsed === null ||
-		goroutines === null ||
-		totalGoroutines === null
+		threadCount === null ||
+		totalGoGoroutines === null ||
+		totalRuntimeUnits === null
 	) {
 		return null;
 	}
 
-	const serviceGoroutines = serviceGoroutinesValue
-		.map((entry) => {
+	const serviceRuntime = serviceRuntimeValue
+		.map<SystemStats["serviceRuntime"][number] | null>((entry) => {
 			const item = asRecord(entry);
 			if (!item || typeof item["name"] !== "string") return null;
 
-			const itemGoroutines = asNumber(item["goroutines"]);
-			if (itemGoroutines === null || typeof item["available"] !== "boolean") {
+			const count = asNumber(item["count"] ?? item["goroutines"]);
+			if (count === null || typeof item["available"] !== "boolean") {
 				return null;
 			}
 
+			const metricKind: SystemStats["serviceRuntime"][number]["metricKind"] =
+				item["metricKind"] === "thread" || item["metric_kind"] === "thread"
+					? "thread"
+					: "goroutine";
+
 			return {
 				name: item["name"],
-				goroutines: itemGoroutines,
+				count,
+				metricKind,
 				available: item["available"],
+				...(typeof item["error"] === "string"
+					? { error: item["error"] }
+					: {}),
 			};
 		})
-		.filter(
-			(entry): entry is SystemStats["serviceGoroutines"][number] =>
-				entry !== null,
-		);
+		.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
 	return {
 		cpuUsage,
 		memoryUsage,
 		memoryTotal,
 		memoryUsed,
-		goroutines,
-		totalGoroutines,
-		serviceGoroutines,
+		threadCount,
+		totalGoGoroutines,
+		totalRuntimeUnits,
+		serviceRuntime,
 	};
 };
 

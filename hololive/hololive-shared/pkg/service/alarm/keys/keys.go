@@ -29,17 +29,67 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
 // Valkey 키 접두사 (Go alarm_types.go, Rust keys.rs 1:1 대응)
 const (
-	NotifiedKeyPrefix           = "notified:"
-	NotifyClaimKeyPrefix        = "notified:claim:"
-	NotifyLogicalClaimKeyPrefix = "notified:claim:event:"
-	UpcomingEventKeyPrefix      = "notified:upcoming:event:"
-	ScheduleTransitionKeyPrefix = "notified:schedule:transition:"
+	AlarmKeyPrefix                    = "alarm:"
+	AlarmRegistryKey                  = "alarm:registry"
+	AlarmChannelRegistryKey           = "alarm:channel_registry"
+	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
+	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
+	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
+	MemberNameKey                     = "alarm:member_names"
+	RoomNamesCacheKey                 = "alarm:room_names"
+	UserNamesCacheKey                 = "alarm:user_names"
+	NotifiedKeyPrefix                 = "notified:"
+	NotifyClaimKeyPrefix              = "notified:claim:"
+	NotifyLogicalClaimKeyPrefix       = "notified:claim:event:"
+	UpcomingEventKeyPrefix            = "notified:upcoming:event:"
+	ScheduleTransitionKeyPrefix       = "notified:schedule:transition:"
 )
+
+func BuildRoomAlarmKey(roomID string) string {
+	return AlarmKeyPrefix + roomID
+}
+
+type ChannelContentAlarmTargetKeys struct {
+	ChannelID               string `json:"channel_id"`
+	CommunitySubscribersKey string `json:"community_subscribers_key"`
+	ShortsSubscribersKey    string `json:"shorts_subscribers_key"`
+}
+
+func BuildChannelSubscriberKey(channelID string, alarmType domain.AlarmType) string {
+	switch alarmType {
+	case domain.AlarmTypeCommunity:
+		return ChannelSubscribersCommunityPrefix + channelID
+	case domain.AlarmTypeShorts:
+		return ChannelSubscribersShortsPrefix + channelID
+	default:
+		return ChannelSubscribersKeyPrefix + channelID
+	}
+}
+
+func BuildChannelContentAlarmTargetKeys(channelID string) ChannelContentAlarmTargetKeys {
+	return ChannelContentAlarmTargetKeys{
+		ChannelID:               channelID,
+		CommunitySubscribersKey: BuildChannelSubscriberKey(channelID, domain.AlarmTypeCommunity),
+		ShortsSubscribersKey:    BuildChannelSubscriberKey(channelID, domain.AlarmTypeShorts),
+	}
+}
+
+func (k ChannelContentAlarmTargetKeys) KeyFor(alarmType domain.AlarmType) string {
+	switch alarmType {
+	case domain.AlarmTypeCommunity:
+		return k.CommunitySubscribersKey
+	case domain.AlarmTypeShorts:
+		return k.ShortsSubscribersKey
+	default:
+		return ""
+	}
+}
 
 // NotifiedKey: "notified:{streamID}"
 func NotifiedKey(streamID string) string {

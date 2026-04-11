@@ -1,15 +1,15 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::Json;
-use axum::extract::{Query, State};
-use axum::response::IntoResponse;
 use crate::auth::rate_limiter::LoginRateLimiter;
 use crate::auth::session::ValkeySessionStore;
 use crate::config::{Config, SecurityConfig, SecurityMode, SessionConfig};
 use crate::holo::client::HoloApiClient;
-use crate::status::{StatusCollector, SystemStats};
 use crate::state::AppState;
+use crate::status::{StatusCollector, SystemStats};
+use axum::Json;
+use axum::extract::{Query, State};
+use axum::response::IntoResponse;
 use deadpool_redis::Runtime;
 use tokio::net::TcpListener;
 
@@ -28,6 +28,8 @@ fn test_state(base_url: String) -> Arc<AppState> {
         docker_host: "tcp://127.0.0.1:2375".to_string(),
         holo_bot_url: base_url.clone(),
         holo_bot_api_key: String::new(),
+        enable_openapi: true,
+        enable_swagger_ui: true,
         log_dir: "/tmp/admin-dashboard-test-logs".to_string(),
         security: SecurityConfig {
             allowed_origins: vec!["http://localhost:5173".to_string()],
@@ -80,6 +82,52 @@ async fn spawn_holo_server() -> String {
             "/api/holo/settings" => Json(json!({ "status": "ok", "settings": { "alarmAdvanceMinutes": 5 } })).into_response(),
             "/api/holo/stats" => Json(json!({ "status": "ok", "members": 1, "alarms": 2, "rooms": 3, "version": "v1", "uptime": "1h" })).into_response(),
             "/api/holo/stats/channels" => Json(json!({ "status": "ok", "stats": { "ch-1": { "ChannelID": "ch-1", "ChannelTitle": "Mio", "SubscriberCount": 100, "VideoCount": 10, "ViewCount": 1000 } } })).into_response(),
+            "/api/holo/stats/youtube/community-shorts" => Json(json!({
+                "status": "ok",
+                "generatedAt": "2026-04-10T00:00:00Z",
+                "windowStart": "2026-04-09T00:00:00Z",
+                "windowEnd": "2026-04-10T00:00:00Z",
+                "windowHours": 24,
+                "observedAtBasis": "COALESCE(actual_published_at, detected_at)",
+                "slaThresholdMillis": 120000,
+                "overview": {
+                    "channelCount": 1,
+                    "detectedPostCount": 2,
+                    "alarmSentPostCount": 1,
+                    "successPostCount": 1,
+                    "failedPostCount": 1,
+                    "detectedUnsentPostCount": 1,
+                    "pendingPostCount": 1,
+                    "latencyMeasuredPostCount": 2,
+                    "withinTargetPostCount": 1,
+                    "exceededPostCount": 1,
+                    "communityDetectedPostCount": 1,
+                    "shortsDetectedPostCount": 1,
+                    "communityExceededPostCount": 0,
+                    "shortsExceededPostCount": 1,
+                    "averageLatencyMillis": 90000,
+                    "maxLatencyMillis": 180000
+                },
+                "channels": [{
+                    "channelId": "ch-1",
+                    "memberName": "Mio",
+                    "earliestObservedAt": "2026-04-09T12:00:00Z",
+                    "latestObservedAt": "2026-04-09T23:00:00Z",
+                    "detectedPostCount": 2,
+                    "alarmSentPostCount": 1,
+                    "successPostCount": 1,
+                    "failedPostCount": 1,
+                    "detectedUnsentPostCount": 1,
+                    "pendingPostCount": 1,
+                    "latencyMeasuredPostCount": 2,
+                    "withinTargetPostCount": 1,
+                    "exceededPostCount": 1,
+                    "communityPostCount": 1,
+                    "shortsPostCount": 1,
+                    "averageLatencyMillis": 90000,
+                    "maxLatencyMillis": 180000
+                }]
+            })).into_response(),
             "/api/holo/streams/live" => Json(json!({ "status": "ok", "org": if query.contains("org=") { "hololive" } else { "" }, "streams": [{ "id": "s1", "title": "Live", "status": "live", "channel_name": "Mio", "channel_id": "ch-1", "thumbnail": null, "link": null, "start_scheduled": null, "start_actual": null }] })).into_response(),
             "/api/holo/streams/upcoming" => Json(json!({ "status": "ok", "org": "hololive", "streams": [] })).into_response(),
             "/api/holo/milestones" => Json(json!({ "status": "ok", "milestones": [{ "channelId": "ch-1", "memberName": "Mio", "type": "subs", "value": 100000, "achievedAt": "2026-01-01T00:00:00Z", "notified": true }], "total": 1, "limit": 50, "offset": 0 })).into_response(),
@@ -118,6 +166,10 @@ async fn spawn_holo_server() -> String {
         )
         .route("/api/holo/stats", get(route_response))
         .route("/api/holo/stats/channels", get(route_response))
+        .route(
+            "/api/holo/stats/youtube/community-shorts",
+            get(route_response),
+        )
         .route("/api/holo/streams/live", get(route_response))
         .route("/api/holo/streams/upcoming", get(route_response))
         .route("/api/holo/milestones", get(route_response))
@@ -151,6 +203,11 @@ async fn test_holo_handlers_return_typed_bodies() {
 
     let (_, Json(stats)) = get_stats(State(Arc::clone(&state))).await.unwrap();
     assert_eq!(stats.version, "v1");
+
+    let (_, Json(youtube_ops)) = get_youtube_community_shorts_ops(State(Arc::clone(&state)))
+        .await
+        .unwrap();
+    assert_eq!(youtube_ops.overview.exceeded_post_count, 1);
 
     let (_, Json(streams)) = get_live_streams(
         State(Arc::clone(&state)),
@@ -205,7 +262,10 @@ async fn test_holo_handler_invalid_json_returns_502() {
     let error = get_members(State(state))
         .await
         .expect_err("expected proxy error");
-    assert_eq!(error.into_response().status(), axum::http::StatusCode::BAD_GATEWAY);
+    assert_eq!(
+        error.into_response().status(),
+        axum::http::StatusCode::BAD_GATEWAY
+    );
 }
 
 #[tokio::test]
@@ -224,5 +284,8 @@ async fn test_holo_handler_upstream_5xx_returns_502() {
     let error = get_alarms(State(state))
         .await
         .expect_err("expected proxy error");
-    assert_eq!(error.into_response().status(), axum::http::StatusCode::BAD_GATEWAY);
+    assert_eq!(
+        error.into_response().status(),
+        axum::http::StatusCode::BAD_GATEWAY
+    );
 }

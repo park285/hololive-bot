@@ -31,7 +31,14 @@ import (
 	"gorm.io/gorm/clause"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
+)
+
+const (
+	communityPostDetectedLogMessage = logschema.CommunityPostDetectedMessage
+	shortDetectedLogMessage         = logschema.ShortDetectedMessage
 )
 
 // ChannelStatsPoller: 채널 통계 폴러
@@ -242,7 +249,7 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 		}
 	}
 
-	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, &domain.YouTubeContentWatermark{
+	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, nil, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeVideo,
 		Initialized:   true,
@@ -438,24 +445,64 @@ func (p *LivePoller) finalizeStreamStats(ctx context.Context, videoID, channelID
 		"avg_viewers", result.AvgViewers)
 }
 
+func shouldEnqueueRoutedNotification(
+	routeDecider NotificationRouteDecider,
+	alarmType domain.AlarmType,
+	channelID string,
+	publishedAt time.Time,
+) bool {
+	if routeDecider == nil {
+		return true
+	}
+	return routeDecider(NotificationRouteRequest{
+		AlarmType:   alarmType,
+		ChannelID:   channelID,
+		PublishedAt: yttimestamp.Normalize(publishedAt),
+	})
+}
+
+func resolveWatermarkLastContentID(defaultLastContentID, previousLastContentID string, routePending bool) string {
+	if routePending && strings.TrimSpace(previousLastContentID) != "" {
+		return previousLastContentID
+	}
+	return defaultLastContentID
+}
+
+func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string, alarmType domain.AlarmType, detectedCount int, detectedAt time.Time) {
+	if detectedCount <= 0 {
+		return
+	}
+
+	ensureMetrics()
+	communityShortsDetectedPostsTotal.WithLabelValues(channelID, string(alarmType)).Add(float64(detectedCount))
+	slog.LogAttrs(ctx, slog.LevelInfo, logschema.CommunityShortsDetectionBatchMessage,
+		slog.String(logschema.FieldChannelID, channelID),
+		slog.String(logschema.FieldAlarmType, string(alarmType)),
+		slog.Int(logschema.FieldDetectedCount, detectedCount),
+		slog.String(logschema.FieldDetectedAt, yttimestamp.Format(detectedAt)),
+	)
+}
+
 // ShortsPoller: 쇼츠 감지 폴러
 type ShortsPoller struct {
-	client     *scraper.Client
-	db         *gorm.DB
-	repo       batchRepository
-	maxResults int
+	client       *scraper.Client
+	db           *gorm.DB
+	repo         batchRepository
+	maxResults   int
+	routeDecider NotificationRouteDecider
 }
 
 // NewShortsPoller: 새 쇼츠 폴러 생성
-func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int) *ShortsPoller {
+func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider NotificationRouteDecider) *ShortsPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
 	return &ShortsPoller{
-		client:     scraperClient,
-		db:         db,
-		repo:       newBatchRepository(db),
-		maxResults: maxResults,
+		client:       scraperClient,
+		db:           db,
+		repo:         newBatchRepository(db),
+		maxResults:   maxResults,
+		routeDecider: routeDecider,
 	}
 }
 
@@ -487,6 +534,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		return fmt.Errorf("failed to get shorts: %w", err)
 	}
 
+	shorts = normalizeCollectedShortsByCanonicalPostID(shorts)
 	if len(shorts) == 0 {
 		return nil
 	}
@@ -498,11 +546,12 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	).First(&watermark).Error
 
 	isInitialized := err == nil && watermark.Initialized
-	lastSeenID := watermark.LastContentID
+	lastSeenID := normalizeContentID(domain.OutboxKindNewShort, watermark.LastContentID)
 
 	newShorts := make([]*scraper.Short, 0, len(shorts))
 	for _, short := range shorts {
-		if isInitialized && short.VideoID == lastSeenID {
+		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
+		if isInitialized && canonicalPostID == lastSeenID {
 			break
 		}
 		newShorts = append(newShorts, short)
@@ -510,36 +559,85 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 
 	dbVideos := make([]*domain.YouTubeVideo, 0, len(newShorts))
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newShorts))
+	trackingRows := make([]*domain.YouTubeContentAlarmTracking, 0, len(newShorts))
+	detectedAt := yttimestamp.Normalize(time.Now())
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt)
+	routePending := false
 	for _, short := range newShorts {
+		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
+		resourceVideoID := normalizeShortVideoResourceID(short.VideoID)
+		publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
 		thumbnails := convertThumbnails(short.Thumbnail)
 
 		dbVideo := &domain.YouTubeVideo{
-			VideoID:   short.VideoID,
-			ChannelID: channelID,
-			Title:     short.Title,
-			Thumbnail: thumbnails,
-			IsShort:   true,
-			ViewCount: short.ViewCount,
+			VideoID:     resourceVideoID,
+			ChannelID:   channelID,
+			Title:       short.Title,
+			Thumbnail:   thumbnails,
+			PublishedAt: publishedAt,
+			IsShort:     true,
+			ViewCount:   short.ViewCount,
 		}
 
 		dbVideos = append(dbVideos, dbVideo)
 
 		if isInitialized {
-			notifications = append(notifications, &domain.YouTubeNotificationOutbox{
-				Kind:      domain.OutboxKindNewShort,
-				ChannelID: channelID,
-				ContentID: short.VideoID,
-				Payload:   mustMarshalJSON(dbVideo),
-				Status:    domain.OutboxStatusPending,
+			if dbVideo.PublishedAt == nil {
+				resolvedPublishedAt, resolveErr := p.client.ResolveVideoPublishedAt(ctx, resourceVideoID)
+				if resolveErr != nil {
+					slog.Warn("Failed to resolve short published_at",
+						"channel_id", channelID,
+						"video_id", resourceVideoID,
+						"error", resolveErr)
+					if p.routeDecider != nil {
+						routePending = true
+					}
+				} else if resolvedPublishedAt == nil || resolvedPublishedAt.IsZero() {
+					if p.routeDecider != nil {
+						routePending = true
+					}
+				} else {
+					dbVideo.PublishedAt = yttimestamp.NormalizePtr(resolvedPublishedAt)
+				}
+			}
+
+			logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
+
+			trackingRows = append(trackingRows, &domain.YouTubeContentAlarmTracking{
+				Kind:              domain.OutboxKindNewShort,
+				ContentID:         canonicalPostID,
+				ChannelID:         channelID,
+				ActualPublishedAt: dbVideo.PublishedAt,
+				DetectedAt:        detectedAt,
 			})
+
+			var routePublishedAt time.Time
+			if dbVideo.PublishedAt != nil {
+				routePublishedAt = *dbVideo.PublishedAt
+			}
+			if p.routeDecider != nil && routePublishedAt.IsZero() {
+				continue
+			}
+
+			if shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
+				notifications = append(notifications, &domain.YouTubeNotificationOutbox{
+					Kind:      domain.OutboxKindNewShort,
+					ChannelID: channelID,
+					ContentID: canonicalPostID,
+					Payload:   buildShortNotificationPayload(dbVideo, canonicalPostID),
+					Status:    domain.OutboxStatusPending,
+				})
+			}
+		} else {
+			logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
 		}
 	}
 
-	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, &domain.YouTubeContentWatermark{
+	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, trackingRows, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
-		LastContentID: shorts[0].VideoID,
+		LastContentID: resolveWatermarkLastContentID(normalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID), lastSeenID, routePending),
 	}); err != nil {
 		return fmt.Errorf("persist short batch: %w", err)
 	}
@@ -547,26 +645,37 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	return nil
 }
 
+func logShortDetected(ctx context.Context, channelID, postID string, actualPublishedAt *time.Time, detectedAt time.Time) {
+	slog.LogAttrs(ctx, slog.LevelInfo, shortDetectedLogMessage,
+		slog.String(logschema.FieldChannelID, channelID),
+		slog.String(logschema.FieldPostID, postID),
+		optionalTimestampAttr(logschema.FieldActualPublishedAt, actualPublishedAt),
+		slog.String(logschema.FieldDetectedAt, yttimestamp.Format(detectedAt)),
+	)
+}
+
 // CommunityPoller: 커뮤니티 포스트 감지 폴러
 type CommunityPoller struct {
-	client     *scraper.Client
-	db         *gorm.DB
-	repo       batchRepository
-	maxResults int
-	keywords   []string
+	client       *scraper.Client
+	db           *gorm.DB
+	repo         batchRepository
+	maxResults   int
+	keywords     []string
+	routeDecider NotificationRouteDecider
 }
 
 // NewCommunityPoller: 새 커뮤니티 폴러 생성
-func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string) *CommunityPoller {
+func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider NotificationRouteDecider) *CommunityPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
 	return &CommunityPoller{
-		client:     scraperClient,
-		db:         db,
-		repo:       newBatchRepository(db),
-		maxResults: maxResults,
-		keywords:   keywords,
+		client:       scraperClient,
+		db:           db,
+		repo:         newBatchRepository(db),
+		maxResults:   maxResults,
+		keywords:     keywords,
+		routeDecider: routeDecider,
 	}
 }
 
@@ -598,6 +707,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		return fmt.Errorf("failed to get community posts: %w", err)
 	}
 
+	posts = normalizeCollectedCommunityPostsByCanonicalPostID(posts)
 	if len(posts) == 0 {
 		return nil
 	}
@@ -609,11 +719,12 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 	).First(&watermark).Error
 
 	isInitialized := err == nil && watermark.Initialized
-	lastSeenID := watermark.LastContentID
+	lastSeenID := normalizeContentID(domain.OutboxKindCommunityPost, watermark.LastContentID)
 
 	newPosts := make([]*scraper.CommunityPost, 0, len(posts))
 	for _, post := range posts {
-		if isInitialized && post.PostID == lastSeenID {
+		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
+		if isInitialized && canonicalPostID == lastSeenID {
 			break
 		}
 		newPosts = append(newPosts, post)
@@ -621,17 +732,38 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 
 	dbPosts := make([]*domain.YouTubeCommunityPost, 0, len(newPosts))
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newPosts))
+	trackingRows := make([]*domain.YouTubeContentAlarmTracking, 0, len(newPosts))
+	detectedAt := yttimestamp.Normalize(time.Now())
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt)
+	routePending := false
 	for _, post := range newPosts {
+		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
+		resourcePostID := normalizeCommunityResourceID(post.PostID)
 		authorPhoto := convertThumbnails(post.AuthorPhoto)
 		images := convertThumbnails(post.Images)
+		publishedAt := post.PublishedAt
+		if publishedAt == nil {
+			resolvedPublishedAt, resolveErr := p.client.ResolveCommunityPostPublishedAt(ctx, resourcePostID)
+			if resolveErr != nil {
+				slog.Warn("Failed to resolve community published_at",
+					"channel_id", channelID,
+					"post_id", canonicalPostID,
+					"error", resolveErr)
+			} else {
+				publishedAt = resolvedPublishedAt
+			}
+		}
+		publishedAt = yttimestamp.NormalizePtr(publishedAt)
+		logCommunityPostDetected(ctx, channelID, canonicalPostID, publishedAt, detectedAt)
 
 		dbPost := &domain.YouTubeCommunityPost{
-			PostID:        post.PostID,
+			PostID:        canonicalPostID,
 			ChannelID:     channelID,
 			AuthorName:    post.AuthorName,
 			AuthorPhoto:   authorPhoto,
 			ContentText:   post.ContentText,
 			PublishedText: post.PublishedText,
+			PublishedAt:   publishedAt,
 			LikeCount:     post.LikeCount,
 			CommentCount:  post.CommentCount,
 			Images:        images,
@@ -641,26 +773,60 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		dbPosts = append(dbPosts, dbPost)
 
 		if isInitialized && p.matchesKeywords(post.ContentText) {
-			notifications = append(notifications, &domain.YouTubeNotificationOutbox{
-				Kind:      domain.OutboxKindCommunityPost,
-				ChannelID: channelID,
-				ContentID: post.PostID,
-				Payload:   mustMarshalJSON(dbPost),
-				Status:    domain.OutboxStatusPending,
+			trackingRows = append(trackingRows, &domain.YouTubeContentAlarmTracking{
+				Kind:              domain.OutboxKindCommunityPost,
+				ContentID:         canonicalPostID,
+				ChannelID:         channelID,
+				ActualPublishedAt: dbPost.PublishedAt,
+				DetectedAt:        detectedAt,
 			})
+
+			var routePublishedAt time.Time
+			if dbPost.PublishedAt != nil {
+				routePublishedAt = *dbPost.PublishedAt
+			}
+			if p.routeDecider != nil && routePublishedAt.IsZero() {
+				routePending = true
+				continue
+			}
+			if shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
+				notifications = append(notifications, &domain.YouTubeNotificationOutbox{
+					Kind:      domain.OutboxKindCommunityPost,
+					ChannelID: channelID,
+					ContentID: canonicalPostID,
+					Payload:   buildCommunityNotificationPayload(dbPost, canonicalPostID),
+					Status:    domain.OutboxStatusPending,
+				})
+			}
 		}
 	}
 
-	if err := p.repo.PersistCommunityPosts(ctx, dbPosts, notifications, &domain.YouTubeContentWatermark{
+	if err := p.repo.PersistCommunityPosts(ctx, dbPosts, notifications, trackingRows, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeCommunityPost,
 		Initialized:   true,
-		LastContentID: posts[0].PostID,
+		LastContentID: resolveWatermarkLastContentID(normalizeContentID(domain.OutboxKindCommunityPost, posts[0].PostID), lastSeenID, routePending),
 	}); err != nil {
 		return fmt.Errorf("persist community batch: %w", err)
 	}
 
 	return nil
+}
+
+func logCommunityPostDetected(ctx context.Context, channelID, postID string, actualPublishedAt *time.Time, detectedAt time.Time) {
+	slog.LogAttrs(ctx, slog.LevelInfo, communityPostDetectedLogMessage,
+		slog.String(logschema.FieldChannelID, channelID),
+		slog.String(logschema.FieldPostID, postID),
+		optionalTimestampAttr(logschema.FieldActualPublishedAt, actualPublishedAt),
+		slog.String(logschema.FieldDetectedAt, yttimestamp.Format(detectedAt)),
+	)
+}
+
+func optionalTimestampAttr(key string, value *time.Time) slog.Attr {
+	if value == nil {
+		return slog.Any(key, nil)
+	}
+	return slog.String(key, yttimestamp.Format(*value))
 }
 
 // matchesKeywords: 텍스트가 키워드 조건에 맞는지 확인

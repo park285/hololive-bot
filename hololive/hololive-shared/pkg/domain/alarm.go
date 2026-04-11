@@ -162,17 +162,19 @@ func NewAlarm(roomID, userID, channelID, memberName string) *Alarm {
 // AlarmNotification: 방송 시작 임박 등의 이벤트로 인해 발송될 알림 메시지 정보
 // 여러 사용자(Users)에게 동일한 내용이 전송될 수 있다.
 type AlarmNotification struct {
-	RoomID                string   `json:"room_id"`
-	Channel               *Channel `json:"channel"`
-	Stream                *Stream  `json:"stream"`
-	MinutesUntil          int      `json:"minutes_until"`
-	Users                 []string `json:"users"`
-	ScheduleChangeMessage string   `json:"schedule_change_message,omitempty"`
+	AlarmType             AlarmType `json:"-"`
+	RoomID                string    `json:"room_id"`
+	Channel               *Channel  `json:"channel"`
+	Stream                *Stream   `json:"stream"`
+	MinutesUntil          int       `json:"minutes_until"`
+	Users                 []string  `json:"users"`
+	ScheduleChangeMessage string    `json:"schedule_change_message,omitempty"`
 }
 
 // NewAlarmNotification: 알림 발송을 위한 새로운 Notification 객체를 생성합니다.
 func NewAlarmNotification(roomID string, channel *Channel, stream *Stream, minutesUntil int, users []string, scheduleMessage string) *AlarmNotification {
 	return &AlarmNotification{
+		AlarmType:             AlarmTypeLive,
 		RoomID:                roomID,
 		Channel:               channel,
 		Stream:                stream,
@@ -185,6 +187,23 @@ func NewAlarmNotification(roomID string, channel *Channel, stream *Stream, minut
 // UserCount: 이 알림을 수신하게 될 사용자의 수를 반환합니다.
 func (n *AlarmNotification) UserCount() int {
 	return len(n.Users)
+}
+
+func (n *AlarmNotification) ValidateLegacyRoute() error {
+	if n == nil {
+		return fmt.Errorf("legacy alarm route: notification is nil")
+	}
+
+	switch n.AlarmType {
+	case AlarmTypeLive:
+		return nil
+	case AlarmTypeCommunity, AlarmTypeShorts:
+		return fmt.Errorf("legacy alarm route only supports %s notifications; use youtube outbox path for %s", AlarmTypeLive, n.AlarmType)
+	case "":
+		return fmt.Errorf("legacy alarm route requires explicit alarm type")
+	default:
+		return fmt.Errorf("legacy alarm route does not support alarm type %q", n.AlarmType)
+	}
 }
 
 // AlarmQueueEnvelope: Rust 알람 서비스에서 Valkey List 큐를 통해 전달하는 알림 발송 봉투

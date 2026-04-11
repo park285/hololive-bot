@@ -96,6 +96,7 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		"stats_stream": {
 			{method: "GET", path: "/api/holo/stats"},
 			{method: "GET", path: "/api/holo/stats/channels"},
+			{method: "GET", path: "/api/holo/stats/youtube/community-shorts"},
 			{method: "GET", path: "/api/holo/streams/live"},
 			{method: "GET", path: "/api/holo/streams/upcoming"},
 			{method: "GET", path: "/api/holo/channels"},

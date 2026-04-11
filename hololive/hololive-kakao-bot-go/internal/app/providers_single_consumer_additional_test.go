@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -94,16 +93,4 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		require.NotNil(t, matcher)
 	})
 
-	t.Run("fetch profiles helpers", func(t *testing.T) {
-		fetchLogger, cleanup, err := ProvideFetchProfilesLogger()
-		require.NoError(t, err)
-		require.NotNil(t, fetchLogger)
-		require.NotNil(t, cleanup)
-		cleanup()
-
-		client := ProvideFetchProfilesHTTPClient()
-		require.NotNil(t, client)
-		assert.Equal(t, constants.OfficialProfileConfig.RequestTimeout, client.Timeout)
-		assert.NotNil(t, client.Transport)
-	})
 }

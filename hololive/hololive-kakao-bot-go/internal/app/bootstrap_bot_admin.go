@@ -21,8 +21,8 @@
 package app
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -31,6 +31,7 @@ import (
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	authsvc "github.com/kapu/hololive-shared/pkg/service/auth"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
@@ -160,6 +161,11 @@ func buildBotAdminAPIHandlers(
 	systemCollector *system.Collector,
 	logger *slog.Logger,
 ) *server.DomainAPIHandlers {
+	var communityShortsOpsRepo server.YouTubeCommunityShortsOpsRepository
+	if deps.postgres != nil && deps.postgres.GetGormDB() != nil {
+		communityShortsOpsRepo = outbox.NewDeliveryTelemetryRepository(deps.postgres.GetGormDB())
+	}
+
 	return server.NewAPIHandler(
 		deps.memberRepo,
 		deps.memberCache,
@@ -170,6 +176,7 @@ func buildBotAdminAPIHandlers(
 		deps.youtubeService,
 		scraperScheduler,
 		deps.statsRepo,
+		communityShortsOpsRepo,
 		deps.activityLogger,
 		deps.settings,
 		settingsApplier,

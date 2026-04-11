@@ -279,10 +279,8 @@ mod tests {
 
     #[test]
     fn test_error_response_from_value_promotes_unknown_fields_to_details() {
-        let response = ErrorResponse::from_value(
-            json!({"code": "bad_filter", "field": "org"}),
-            "Bad Request",
-        );
+        let response =
+            ErrorResponse::from_value(json!({"code": "bad_filter", "field": "org"}), "Bad Request");
 
         assert_eq!(response.error, "Bad Request");
         assert_eq!(response.code.as_deref(), Some("bad_filter"));

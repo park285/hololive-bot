@@ -10,7 +10,7 @@
  * ---------------------------------------------------------------
  */
 
-import type {
+import {
   AddAliasRequest,
   AddMemberRequest,
   AddRoomRequest,
@@ -21,6 +21,7 @@ import type {
   DockerActionResponse,
   DockerContainerListResponse,
   DockerHealthResponse,
+  ErrorResponse,
   HeartbeatRequest,
   HeartbeatResponse,
   LoginRequest,
@@ -46,7 +47,7 @@ import type {
   UpdateMemberNameRequest,
   UserNameUpdateRequest,
 } from "./data-contracts";
-import { ContentType, HttpClient, type RequestParams } from "./http-client";
+import { ContentType, HttpClient, RequestParams } from "./http-client";
 
 export class Admin<
   SecurityDataType = unknown,
@@ -188,7 +189,7 @@ export class Admin<
    * @request GET:/admin/api/holo/alarms
    */
   holoGetAlarms = (params: RequestParams = {}) =>
-    this.request<AlarmsResponse, any>({
+    this.request<AlarmsResponse, ErrorResponse>({
       path: `/admin/api/holo/alarms`,
       method: "GET",
       format: "json",
@@ -202,7 +203,7 @@ export class Admin<
    * @request DELETE:/admin/api/holo/alarms
    */
   holoDeleteAlarm = (data: DeleteAlarmRequest, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/alarms`,
       method: "DELETE",
       body: data,
@@ -218,7 +219,7 @@ export class Admin<
    * @request GET:/admin/api/holo/members
    */
   holoGetMembers = (params: RequestParams = {}) =>
-    this.request<MembersResponse, any>({
+    this.request<MembersResponse, ErrorResponse>({
       path: `/admin/api/holo/members`,
       method: "GET",
       format: "json",
@@ -232,7 +233,7 @@ export class Admin<
    * @request POST:/admin/api/holo/members
    */
   holoAddMember = (data: AddMemberRequest, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/members`,
       method: "POST",
       body: data,
@@ -252,7 +253,7 @@ export class Admin<
     data: AddAliasRequest,
     params: RequestParams = {},
   ) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/members/${id}/aliases`,
       method: "POST",
       body: data,
@@ -272,7 +273,7 @@ export class Admin<
     data: RemoveAliasRequest,
     params: RequestParams = {},
   ) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/members/${id}/aliases`,
       method: "DELETE",
       body: data,
@@ -292,7 +293,7 @@ export class Admin<
     data: UpdateChannelRequest,
     params: RequestParams = {},
   ) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/members/${id}/channel`,
       method: "PATCH",
       body: data,
@@ -312,7 +313,7 @@ export class Admin<
     data: SetGraduationRequest,
     params: RequestParams = {},
   ) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/members/${id}/graduation`,
       method: "PATCH",
       body: data,
@@ -332,7 +333,7 @@ export class Admin<
     data: UpdateMemberNameRequest,
     params: RequestParams = {},
   ) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/members/${id}/name`,
       method: "PATCH",
       body: data,
@@ -358,7 +359,7 @@ export class Admin<
     },
     params: RequestParams = {},
   ) =>
-    this.request<MilestonesResponse, any>({
+    this.request<MilestonesResponse, ErrorResponse>({
       path: `/admin/api/holo/milestones`,
       method: "GET",
       query: query,
@@ -379,7 +380,7 @@ export class Admin<
     },
     params: RequestParams = {},
   ) =>
-    this.request<NearMilestonesResponse, any>({
+    this.request<NearMilestonesResponse, ErrorResponse>({
       path: `/admin/api/holo/milestones/near`,
       method: "GET",
       query: query,
@@ -394,7 +395,7 @@ export class Admin<
    * @request GET:/admin/api/holo/milestones/stats
    */
   holoGetMilestoneStats = (params: RequestParams = {}) =>
-    this.request<MilestoneStatsResponse, any>({
+    this.request<MilestoneStatsResponse, ErrorResponse>({
       path: `/admin/api/holo/milestones/stats`,
       method: "GET",
       format: "json",
@@ -408,7 +409,7 @@ export class Admin<
    * @request POST:/admin/api/holo/names/room
    */
   holoSetRoomName = (data: RoomNameUpdateRequest, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/names/room`,
       method: "POST",
       body: data,
@@ -424,7 +425,7 @@ export class Admin<
    * @request POST:/admin/api/holo/names/user
    */
   holoSetUserName = (data: UserNameUpdateRequest, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/names/user`,
       method: "POST",
       body: data,
@@ -440,7 +441,7 @@ export class Admin<
    * @request GET:/admin/api/holo/rooms
    */
   holoGetRooms = (params: RequestParams = {}) =>
-    this.request<RoomsResponse, any>({
+    this.request<RoomsResponse, ErrorResponse>({
       path: `/admin/api/holo/rooms`,
       method: "GET",
       format: "json",
@@ -454,7 +455,7 @@ export class Admin<
    * @request POST:/admin/api/holo/rooms
    */
   holoAddRoom = (data: AddRoomRequest, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/rooms`,
       method: "POST",
       body: data,
@@ -470,7 +471,7 @@ export class Admin<
    * @request DELETE:/admin/api/holo/rooms
    */
   holoRemoveRoom = (data: RemoveRoomRequest, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/rooms`,
       method: "DELETE",
       body: data,
@@ -486,7 +487,7 @@ export class Admin<
    * @request POST:/admin/api/holo/rooms/acl
    */
   holoSetAcl = (data: SetAclRequest, params: RequestParams = {}) =>
-    this.request<SetAclResponse, any>({
+    this.request<SetAclResponse, ErrorResponse>({
       path: `/admin/api/holo/rooms/acl`,
       method: "POST",
       body: data,
@@ -502,7 +503,7 @@ export class Admin<
    * @request GET:/admin/api/holo/settings
    */
   holoGetSettings = (params: RequestParams = {}) =>
-    this.request<SettingsResponse, any>({
+    this.request<SettingsResponse, ErrorResponse>({
       path: `/admin/api/holo/settings`,
       method: "GET",
       format: "json",
@@ -516,7 +517,7 @@ export class Admin<
    * @request POST:/admin/api/holo/settings
    */
   holoUpdateSettings = (data: Settings, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/holo/settings`,
       method: "POST",
       body: data,
@@ -532,7 +533,7 @@ export class Admin<
    * @request GET:/admin/api/holo/stats
    */
   holoGetStats = (params: RequestParams = {}) =>
-    this.request<StatsResponse, any>({
+    this.request<StatsResponse, ErrorResponse>({
       path: `/admin/api/holo/stats`,
       method: "GET",
       format: "json",
@@ -546,7 +547,7 @@ export class Admin<
    * @request GET:/admin/api/holo/stats/channels
    */
   holoGetChannelStats = (params: RequestParams = {}) =>
-    this.request<ChannelStatsResponse, any>({
+    this.request<ChannelStatsResponse, ErrorResponse>({
       path: `/admin/api/holo/stats/channels`,
       method: "GET",
       format: "json",
@@ -565,7 +566,7 @@ export class Admin<
     },
     params: RequestParams = {},
   ) =>
-    this.request<StreamsResponse, any>({
+    this.request<StreamsResponse, ErrorResponse>({
       path: `/admin/api/holo/streams/live`,
       method: "GET",
       query: query,
@@ -585,7 +586,7 @@ export class Admin<
     },
     params: RequestParams = {},
   ) =>
-    this.request<StreamsResponse, any>({
+    this.request<StreamsResponse, ErrorResponse>({
       path: `/admin/api/holo/streams/upcoming`,
       method: "GET",
       query: query,

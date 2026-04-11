@@ -103,6 +103,16 @@ func (m *Client) panicIfUnset(name string) {
 	}
 }
 
+func (m *Client) unsetError(name string) error {
+	m.panicIfUnset(name)
+	return nil
+}
+
+func (m *Client) unsetInt64(name string) (int64, error) {
+	m.panicIfUnset(name)
+	return 0, nil
+}
+
 func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	if m.GetFunc != nil {
 		return m.GetFunc(ctx, key, dest)
@@ -123,28 +133,28 @@ func (m *Client) Set(ctx context.Context, key string, value any, ttl time.Durati
 	if m.SetFunc != nil {
 		return m.SetFunc(ctx, key, value, ttl)
 	}
-	panic("cache mock: SetFunc not set")
+	return m.unsetError("SetFunc")
 }
 
 func (m *Client) MSet(ctx context.Context, pairs map[string]any, ttl time.Duration) error {
 	if m.MSetFunc != nil {
 		return m.MSetFunc(ctx, pairs, ttl)
 	}
-	panic("cache mock: MSetFunc not set")
+	return m.unsetError("MSetFunc")
 }
 
 func (m *Client) Del(ctx context.Context, key string) error {
 	if m.DelFunc != nil {
 		return m.DelFunc(ctx, key)
 	}
-	panic("cache mock: DelFunc not set")
+	return m.unsetError("DelFunc")
 }
 
 func (m *Client) DelMany(ctx context.Context, keys []string) (int64, error) {
 	if m.DelManyFunc != nil {
 		return m.DelManyFunc(ctx, keys)
 	}
-	panic("cache mock: DelManyFunc not set")
+	return m.unsetInt64("DelManyFunc")
 }
 
 func (m *Client) ScanKeys(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
@@ -159,14 +169,14 @@ func (m *Client) SAdd(ctx context.Context, key string, members []string) (int64,
 	if m.SAddFunc != nil {
 		return m.SAddFunc(ctx, key, members)
 	}
-	panic("cache mock: SAddFunc not set")
+	return m.unsetInt64("SAddFunc")
 }
 
 func (m *Client) SRem(ctx context.Context, key string, members []string) (int64, error) {
 	if m.SRemFunc != nil {
 		return m.SRemFunc(ctx, key, members)
 	}
-	panic("cache mock: SRemFunc not set")
+	return m.unsetInt64("SRemFunc")
 }
 
 func (m *Client) SMembers(ctx context.Context, key string) ([]string, error) {
@@ -189,14 +199,14 @@ func (m *Client) HSet(ctx context.Context, key, field, value string) error {
 	if m.HSetFunc != nil {
 		return m.HSetFunc(ctx, key, field, value)
 	}
-	panic("cache mock: HSetFunc not set")
+	return m.unsetError("HSetFunc")
 }
 
 func (m *Client) HMSet(ctx context.Context, key string, fields map[string]any) error {
 	if m.HMSetFunc != nil {
 		return m.HMSetFunc(ctx, key, fields)
 	}
-	panic("cache mock: HMSetFunc not set")
+	return m.unsetError("HMSetFunc")
 }
 
 func (m *Client) HGet(ctx context.Context, key, field string) (string, error) {
@@ -211,7 +221,7 @@ func (m *Client) HDel(ctx context.Context, key string, fields ...string) error {
 	if m.HDelFunc != nil {
 		return m.HDelFunc(ctx, key, fields...)
 	}
-	panic("cache mock: HDelFunc not set")
+	return m.unsetError("HDelFunc")
 }
 
 func (m *Client) HGetAll(ctx context.Context, key string) (map[string]string, error) {
@@ -226,7 +236,7 @@ func (m *Client) Expire(ctx context.Context, key string, ttl time.Duration) erro
 	if m.ExpireFunc != nil {
 		return m.ExpireFunc(ctx, key, ttl)
 	}
-	panic("cache mock: ExpireFunc not set")
+	return m.unsetError("ExpireFunc")
 }
 
 func (m *Client) Exists(ctx context.Context, key string) (bool, error) {

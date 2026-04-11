@@ -109,7 +109,9 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	}
 
 	if envelope, ok := parseEnvelope(firstRaw, c.logger); ok {
-		envelopes = append(envelopes, envelope)
+		if c.acceptLegacyEnvelope(ctx, envelope, "drain") {
+			envelopes = append(envelopes, envelope)
+		}
 	}
 
 	remaining := limit - len(envelopes)
@@ -124,7 +126,9 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	}
 	for _, raw := range drained {
 		if envelope, ok := parseEnvelope(raw, c.logger); ok {
-			envelopes = append(envelopes, envelope)
+			if c.acceptLegacyEnvelope(ctx, envelope, "drain") {
+				envelopes = append(envelopes, envelope)
+			}
 		}
 	}
 
@@ -139,11 +143,19 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 
 	elements := make([]string, 0, len(envelopes))
 	for i := range envelopes {
+		if !c.acceptLegacyEnvelope(ctx, envelopes[i], "requeue") {
+			continue
+		}
+
 		jsonBytes, err := json.Marshal(envelopes[i])
 		if err != nil {
 			return fmt.Errorf("requeue envelopes: marshal envelope: %w", err)
 		}
 		elements = append(elements, string(jsonBytes))
+	}
+
+	if len(elements) == 0 {
+		return nil
 	}
 
 	cmd := c.cache.B().Lpush().Key(c.queueKey).Element(elements...).Build()
@@ -179,6 +191,30 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 	}
 	alarmQueueClaimReleased.Add(float64(len(filtered)))
 	return nil
+}
+
+func (c *Consumer) acceptLegacyEnvelope(ctx context.Context, envelope domain.AlarmQueueEnvelope, source string) bool {
+	if err := envelope.Notification.ValidateLegacyRoute(); err != nil {
+		alarmQueueEnvelopeTotal.WithLabelValues("rejected_legacy_route").Inc()
+		c.logger.Warn("dropping unsupported legacy alarm queue envelope",
+			slog.String("source", source),
+			slog.String("queue", c.queueKey),
+			slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
+			slog.String("alarm_type", string(envelope.Notification.AlarmType)),
+			slog.Any("error", err),
+		)
+		if releaseErr := c.ReleaseClaimKeys(ctx, envelope.ClaimKeys); releaseErr != nil {
+			c.logger.Warn("failed to release claim keys for dropped alarm queue envelope",
+				slog.String("source", source),
+				slog.String("queue", c.queueKey),
+				slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
+				slog.Any("error", releaseErr),
+			)
+		}
+		return false
+	}
+
+	return true
 }
 
 // brpop: Valkey BRPOP 래퍼

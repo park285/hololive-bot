@@ -136,3 +136,15 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 		t.Error("schedule_change_message는 빈 값일 때 직렬화에 포함되면 안 됨")
 	}
 }
+
+func TestNewAlarmNotification_UsesExplicitLiveRoute(t *testing.T) {
+	t.Parallel()
+
+	notification := domain.NewAlarmNotification("room-live", nil, nil, 5, nil, "")
+	if notification.AlarmType != domain.AlarmTypeLive {
+		t.Fatalf("AlarmType = %q, want %q", notification.AlarmType, domain.AlarmTypeLive)
+	}
+	if err := notification.ValidateLegacyRoute(); err != nil {
+		t.Fatalf("ValidateLegacyRoute() error = %v", err)
+	}
+}

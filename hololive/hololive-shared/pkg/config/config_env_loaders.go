@@ -21,7 +21,9 @@
 package config
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
@@ -61,6 +63,20 @@ func loadPostgresConfig() PostgresConfig {
 		PoolMaxIdleConns:  sharedenv.Int("POSTGRES_POOL_MAX_IDLE_CONNS", constants.DatabaseConfig.MaxIdleConns),
 		AutoPrepareSchema: sharedenv.Bool("POSTGRES_AUTO_PREPARE_SCHEMA", true),
 	}
+}
+
+func loadCommunityShortsBigBangCutoverAt() (time.Time, error) {
+	raw := strings.TrimSpace(sharedenv.String("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", ""))
+	if raw == "" {
+		return time.Time{}, nil
+	}
+
+	cutoverAt, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT must be RFC3339: %w", err)
+	}
+
+	return cutoverAt.UTC(), nil
 }
 
 func loadCliproxyConfig() CliproxyConfig {

@@ -283,14 +283,14 @@ func BuildLLMSchedulerRuntime(ctx context.Context, cfg *config.LLMSchedulerConfi
 	if err != nil {
 		return nil, fmt.Errorf("init cache: %w", err)
 	}
-	cacheService := providers.ProvideCacheService(cacheResources)
+	cacheService := cacheResources.Service
 
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
 	if err != nil {
 		cleanupCache()
 		return nil, fmt.Errorf("init database: %w", err)
 	}
-	postgresService := providers.ProvidePostgresService(databaseResources)
+	postgresService := databaseResources.Service
 
 	cleanup := func() {
 		cleanupDB()
@@ -335,7 +335,7 @@ func buildLLMSchedulerComponents(
 	if err != nil {
 		return nil, fmt.Errorf("init iris client: %w", err)
 	}
-	deliverySender := irisDeliverySender{client: irisClient}
+	deliverySender := delivery.NewIrisMessageSender(irisClient)
 	deliveryModule := BuildDeliveryModule(cacheService, postgresService, deliverySender, logger)
 
 	majorEventLLMClient := ProvideMajorEventLLMClient(cfg.Cliproxy, logger)

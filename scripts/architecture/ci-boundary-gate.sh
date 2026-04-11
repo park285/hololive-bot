@@ -25,6 +25,10 @@ echo "[M0] removed runtime reference check"
 "${SCRIPT_DIR}/check-removed-runtime-references.sh"
 echo
 
+echo "[M0] tracked local artifact check"
+"${SCRIPT_DIR}/check-tracked-local-artifacts.sh"
+echo
+
 echo "[M0] go workspace import graph export"
 "${SCRIPT_DIR}/export-go-workspace-import-graph.sh" "${GO_GRAPH_OUT}"
 echo

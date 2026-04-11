@@ -40,15 +40,17 @@ async fn run() -> anyhow::Result<()> {
     let docker_svc = docker::DockerService::new(&cfg.docker_host)
         .ok()
         .map(Arc::new);
-    let holo_api = Arc::new(holo::client::HoloApiClient::new(
-        &cfg.holo_bot_url,
-        if cfg.holo_bot_api_key.is_empty() {
-            None
-        } else {
-            Some(cfg.holo_bot_api_key.clone())
-        },
-    )
-    .context("holo api client init failed")?);
+    let holo_api = Arc::new(
+        holo::client::HoloApiClient::new(
+            &cfg.holo_bot_url,
+            if cfg.holo_bot_api_key.is_empty() {
+                None
+            } else {
+                Some(cfg.holo_bot_api_key.clone())
+            },
+        )
+        .context("holo api client init failed")?,
+    );
 
     let endpoints = vec![status::ServiceEndpoint {
         name: "hololive-bot".to_string(),

@@ -26,14 +26,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
 
-// ChannelPollerRegistration: 채널별로 스케줄러에 등록할 폴러/우선순위/간격 정책 단위.
 type ChannelPollerRegistration struct {
 	Poller   poller.Poller
 	Priority poller.Priority
 	Interval time.Duration
 }
 
-// NewChannelPollerRegistration: ChannelPollerRegistration 생성 헬퍼.
 func NewChannelPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
 	return ChannelPollerRegistration{
 		Poller:   p,
@@ -42,15 +40,14 @@ func NewChannelPollerRegistration(p poller.Poller, priority poller.Priority, int
 	}
 }
 
-// ScraperSchedulerOption: ProvideScraperScheduler 구성 옵션.
 type ScraperSchedulerOption func(*scraperSchedulerOptions)
 
 type scraperSchedulerOptions struct {
 	channelPollerRegistrations []ChannelPollerRegistration
 	workerCount                int
+	channelIDs                 []string
 }
 
-// WithChannelPollerRegistrations: 채널 폴러 등록 정책을 주입한다.
 func WithChannelPollerRegistrations(registrations []ChannelPollerRegistration) ScraperSchedulerOption {
 	copied := make([]ChannelPollerRegistration, len(registrations))
 	copy(copied, registrations)
@@ -60,10 +57,17 @@ func WithChannelPollerRegistrations(registrations []ChannelPollerRegistration) S
 	}
 }
 
-// WithSchedulerWorkerCount: scraper scheduler worker 수를 주입한다.
 func WithSchedulerWorkerCount(workerCount int) ScraperSchedulerOption {
 	return func(options *scraperSchedulerOptions) {
 		options.workerCount = workerCount
+	}
+}
+
+func WithSchedulerChannelIDs(channelIDs []string) ScraperSchedulerOption {
+	copied := append([]string(nil), channelIDs...)
+
+	return func(options *scraperSchedulerOptions) {
+		options.channelIDs = copied
 	}
 }
 

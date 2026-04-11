@@ -115,3 +115,47 @@ func TestClientReadMethodsPanicWhenStrict(t *testing.T) {
 
 	_, _ = client.SMembers(context.Background(), "rooms")
 }
+
+func TestClientWriteMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
+	client := NewLenientClient()
+
+	if err := client.Set(context.Background(), "k", "v", time.Second); err != nil {
+		t.Fatalf("Set() error = %v, want nil", err)
+	}
+
+	if err := client.MSet(context.Background(), map[string]any{"k": "v"}, time.Second); err != nil {
+		t.Fatalf("MSet() error = %v, want nil", err)
+	}
+
+	if err := client.Del(context.Background(), "k"); err != nil {
+		t.Fatalf("Del() error = %v, want nil", err)
+	}
+
+	if deleted, err := client.DelMany(context.Background(), []string{"k1", "k2"}); err != nil || deleted != 0 {
+		t.Fatalf("DelMany() = (%v, %v), want (0, nil)", deleted, err)
+	}
+
+	if added, err := client.SAdd(context.Background(), "rooms", []string{"r1"}); err != nil || added != 0 {
+		t.Fatalf("SAdd() = (%v, %v), want (0, nil)", added, err)
+	}
+
+	if removed, err := client.SRem(context.Background(), "rooms", []string{"r1"}); err != nil || removed != 0 {
+		t.Fatalf("SRem() = (%v, %v), want (0, nil)", removed, err)
+	}
+
+	if err := client.HSet(context.Background(), "rooms", "name", "mio"); err != nil {
+		t.Fatalf("HSet() error = %v, want nil", err)
+	}
+
+	if err := client.HMSet(context.Background(), "rooms", map[string]any{"name": "mio"}); err != nil {
+		t.Fatalf("HMSet() error = %v, want nil", err)
+	}
+
+	if err := client.HDel(context.Background(), "rooms", "name"); err != nil {
+		t.Fatalf("HDel() error = %v, want nil", err)
+	}
+
+	if err := client.Expire(context.Background(), "rooms", time.Second); err != nil {
+		t.Fatalf("Expire() error = %v, want nil", err)
+	}
+}

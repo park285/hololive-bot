@@ -10,6 +10,11 @@ const source = readFileSync(path.join(dirname, "route-definitions.ts"), "utf8");
 const featureRoutes = [
 	["StatsPage", "@/features/stats/pages/StatsPage", "@/components/StatsTab"],
 	[
+		"YouTubeOpsPage",
+		"@/features/youtube-ops/pages/YouTubeOpsPage",
+		"@/components/YouTubeOpsTab",
+	],
+	[
 		"StreamsPage",
 		"@/features/streams/pages/StreamsPage",
 		"@/components/StreamsTab",
@@ -41,6 +46,7 @@ const deletedWrappers = [
 	"../components/SettingsTab.tsx",
 	"../components/StatsTab.tsx",
 	"../components/StreamsTab.tsx",
+	"../components/YouTubeOpsTab.tsx",
 ];
 
 test("dashboard routes lazy-load feature pages directly", () => {

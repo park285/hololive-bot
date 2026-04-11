@@ -28,6 +28,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -65,6 +66,200 @@ func mustMarshalJSON(v any) string {
 		return "{}"
 	}
 	return string(data)
+}
+
+type shortNotificationPayload struct {
+	domain.YouTubeVideo
+	CanonicalPostID string `json:"canonical_post_id"`
+}
+
+type communityNotificationPayload struct {
+	domain.YouTubeCommunityPost
+	CanonicalPostID string `json:"canonical_post_id"`
+}
+
+func normalizeNotificationCanonicalPostID(kind domain.OutboxKind, id string) string {
+	canonicalID, err := ytcontentid.ForOutboxKind(kind, id)
+	if err != nil {
+		return strings.TrimSpace(id)
+	}
+	return canonicalID
+}
+
+func normalizeContentID(kind domain.OutboxKind, id string) string {
+	trimmed := strings.TrimSpace(id)
+	switch kind {
+	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:
+		normalized, err := ytcontentid.ForOutboxKind(kind, trimmed)
+		if err != nil {
+			return trimmed
+		}
+		return normalized
+	default:
+		return trimmed
+	}
+}
+
+func normalizeShortVideoResourceID(id string) string {
+	normalized, err := ytcontentid.NormalizeShortVideoID(id)
+	if err != nil {
+		return strings.TrimSpace(id)
+	}
+	return normalized
+}
+
+func normalizeCommunityResourceID(id string) string {
+	normalized, err := ytcontentid.NormalizeCommunityPostID(id)
+	if err != nil {
+		return strings.TrimSpace(id)
+	}
+	return normalized
+}
+
+func normalizeCollectedShortsByCanonicalPostID(shorts []*scraper.Short) []*scraper.Short {
+	if len(shorts) == 0 {
+		return nil
+	}
+
+	normalized := make([]*scraper.Short, 0, len(shorts))
+	indexByPostID := make(map[string]int, len(shorts))
+	for _, short := range shorts {
+		if short == nil {
+			continue
+		}
+
+		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
+		if canonicalPostID == "" {
+			copyShort := *short
+			normalized = append(normalized, &copyShort)
+			continue
+		}
+		if idx, ok := indexByPostID[canonicalPostID]; ok {
+			mergeCollectedShort(normalized[idx], short)
+			continue
+		}
+
+		copyShort := *short
+		normalized = append(normalized, &copyShort)
+		indexByPostID[canonicalPostID] = len(normalized) - 1
+	}
+
+	return normalized
+}
+
+func mergeCollectedShort(dst *scraper.Short, src *scraper.Short) {
+	if dst == nil || src == nil {
+		return
+	}
+	if dst.Title == "" {
+		dst.Title = src.Title
+	}
+	if len(dst.Thumbnail) == 0 && len(src.Thumbnail) > 0 {
+		dst.Thumbnail = append([]scraper.Thumbnail(nil), src.Thumbnail...)
+	}
+	if dst.ViewCount == 0 && src.ViewCount != 0 {
+		dst.ViewCount = src.ViewCount
+	}
+	if dst.PublishedAt == nil && src.PublishedAt != nil {
+		publishedAt := *src.PublishedAt
+		dst.PublishedAt = &publishedAt
+	}
+}
+
+func normalizeCollectedCommunityPostsByCanonicalPostID(posts []*scraper.CommunityPost) []*scraper.CommunityPost {
+	if len(posts) == 0 {
+		return nil
+	}
+
+	normalized := make([]*scraper.CommunityPost, 0, len(posts))
+	indexByPostID := make(map[string]int, len(posts))
+	for _, post := range posts {
+		if post == nil {
+			continue
+		}
+
+		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
+		if canonicalPostID == "" {
+			copyPost := *post
+			normalized = append(normalized, &copyPost)
+			continue
+		}
+		if idx, ok := indexByPostID[canonicalPostID]; ok {
+			mergeCollectedCommunityPost(normalized[idx], post)
+			continue
+		}
+
+		copyPost := *post
+		normalized = append(normalized, &copyPost)
+		indexByPostID[canonicalPostID] = len(normalized) - 1
+	}
+
+	return normalized
+}
+
+func mergeCollectedCommunityPost(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
+	if dst == nil || src == nil {
+		return
+	}
+	if dst.UpstreamPostID == "" {
+		dst.UpstreamPostID = src.UpstreamPostID
+	}
+	if dst.AuthorID == "" {
+		dst.AuthorID = src.AuthorID
+	}
+	if dst.AuthorName == "" {
+		dst.AuthorName = src.AuthorName
+	}
+	if len(dst.AuthorPhoto) == 0 && len(src.AuthorPhoto) > 0 {
+		dst.AuthorPhoto = append([]scraper.Thumbnail(nil), src.AuthorPhoto...)
+	}
+	if dst.ContentText == "" {
+		dst.ContentText = src.ContentText
+	}
+	if dst.PublishedText == "" {
+		dst.PublishedText = src.PublishedText
+	}
+	if dst.PublishedAt == nil && src.PublishedAt != nil {
+		publishedAt := *src.PublishedAt
+		dst.PublishedAt = &publishedAt
+	}
+	if dst.LikeCount == 0 && src.LikeCount != 0 {
+		dst.LikeCount = src.LikeCount
+	}
+	if dst.CommentCount == 0 && src.CommentCount != 0 {
+		dst.CommentCount = src.CommentCount
+	}
+	if len(dst.Images) == 0 && len(src.Images) > 0 {
+		dst.Images = append([]scraper.Thumbnail(nil), src.Images...)
+	}
+	if dst.VideoID == "" {
+		dst.VideoID = src.VideoID
+	}
+}
+
+func buildShortNotificationPayload(video *domain.YouTubeVideo, canonicalPostID string) string {
+	if video == nil {
+		return "{}"
+	}
+
+	return mustMarshalJSON(shortNotificationPayload{
+		YouTubeVideo:    *video,
+		CanonicalPostID: normalizeNotificationCanonicalPostID(domain.OutboxKindNewShort, canonicalPostID),
+	})
+}
+
+func buildCommunityNotificationPayload(post *domain.YouTubeCommunityPost, canonicalPostID string) string {
+	if post == nil {
+		return "{}"
+	}
+
+	payloadPost := *post
+	payloadPost.PostID = normalizeCommunityResourceID(payloadPost.PostID)
+
+	return mustMarshalJSON(communityNotificationPayload{
+		YouTubeCommunityPost: payloadPost,
+		CanonicalPostID:      normalizeNotificationCanonicalPostID(domain.OutboxKindCommunityPost, canonicalPostID),
+	})
 }
 
 // parseViewerCount: 시청자 수 텍스트 파싱

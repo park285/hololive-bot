@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
@@ -156,15 +157,19 @@ func (mf *MessageFormatter) formatMessageFallback(memberName string, item domain
 
 // videoPayload: 영상 payload 구조
 type videoPayload struct {
-	VideoID       string `json:"video_id"`
-	Title         string `json:"title"`
-	PublishedText string `json:"published_text,omitempty"`
+	CanonicalPostID string     `json:"canonical_post_id,omitempty"`
+	VideoID         string     `json:"video_id"`
+	Title           string     `json:"title"`
+	PublishedText   string     `json:"published_text,omitempty"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
 }
 
 // communityPayload: 커뮤니티 payload 구조
 type communityPayload struct {
-	PostID      string `json:"post_id"`
-	ContentText string `json:"content_text"`
+	CanonicalPostID string     `json:"canonical_post_id,omitempty"`
+	PostID          string     `json:"post_id"`
+	ContentText     string     `json:"content_text"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
 }
 
 // milestonePayload: 마일스톤 payload 구조

@@ -19,9 +19,13 @@
 ## 2) 배포 구성
 
 `docker-compose.prod.yml` 기준:
-- `stream-ingester`: `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`, `SERVER_PORT=30004`
-- `youtube-scraper`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `SERVER_PORT=30005`
+- `stream-ingester`: `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=false`, `SERVER_PORT=30004`
+- `youtube-scraper`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`, `SERVER_PORT=30005`
 - `shared_go_workspace`: 기본값 `./shared-go` (필요 시 `SHARED_GO_WORKSPACE_PATH`로 override 가능)
+
+운영 기준:
+- YouTube 커뮤니티/쇼츠 알람 라우팅은 `youtube-scraper` outbox dispatcher로 고정합니다.
+- canary/legacy 선택 플래그 없이 전체 운영 채널에 동일 경로를 적용합니다.
 
 스크래퍼 튜닝 env:
 - `SCRAPER_WORKER_COUNT` 기본값 `2`
@@ -60,6 +64,7 @@ docker logs --tail 200 hololive-youtube-scraper
 3. 로그에서 `event=ingestion_runtime_configured`와 `runtime=youtube-scraper` 확인
 4. 로그에서 `event=ingestion_lease_acquired`, `role=youtube-scraper` 확인
 5. 10~15분 관찰 시 중복 수집/중복 알림/락 상실 로그 없음
+6. 배포 직후 24시간 검증은 `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_POST_DEPLOY_24H_VERIFICATION.md` 기준으로 진행
 
 ## 5) 장애 대응
 
@@ -107,10 +112,16 @@ docker logs --since 15m hololive-youtube-scraper | grep "ingestion_lease"
 - poll interval 또는 worker count 변경 시 `youtube-scraper`만 재배포하고 10~15분 동안 backlog/지연 로그 증가 여부 확인
 - outbox 처리량 증가/정체 여부 확인
 - 스케줄러 시작 로그가 모두 남는지 확인
+- 커뮤니티/쇼츠 big-bang 배포 직후에는 첫 24시간 동안 `detected/success/unsent/pending/duplicate/latency` 지표를 전용 runbook 기준으로 재확인
 
 ## 8) 관련 문서
 
 - `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
+- `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_POST_DEPLOY_24H_VERIFICATION.md`
+- `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md`
+- `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`
+- `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md`
+- `docs/current/YOUTUBE_COMMUNITY_SHORTS_CHANNEL_ROUTE_VERIFICATION.md`
 - `hololive/hololive-kakao-bot-go/docs/STREAM_INGESTER_RUNBOOK.md`
 - `docs/SERVICE_DECOMPOSITION_ROADMAP.md`
 - `docs/DISTRIBUTED_RATE_LIMITING.md`
