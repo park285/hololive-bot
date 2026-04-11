@@ -22,6 +22,8 @@
 // YouTube Data API v3 quota 절약을 위한 대안으로 사용됨
 package scraper
 
+import "time"
+
 // ChannelStats: 채널 통계 정보 (aboutChannelViewModel에서 추출)
 type ChannelStats struct {
 	ChannelID       string `json:"channelId"`
@@ -73,16 +75,18 @@ type Video struct {
 
 // CommunityPost: 커뮤니티 포스트 정보
 type CommunityPost struct {
-	PostID        string      `json:"postId"`
-	AuthorID      string      `json:"authorId"`
-	AuthorName    string      `json:"authorName"`
-	AuthorPhoto   []Thumbnail `json:"authorPhoto"`
-	ContentText   string      `json:"contentText"`
-	PublishedText string      `json:"publishedText"`
-	LikeCount     int64       `json:"likeCount"`
-	CommentCount  int64       `json:"commentCount"`
-	Images        []Thumbnail `json:"images,omitempty"`
-	VideoID       string      `json:"videoId,omitempty"` // 첨부 비디오
+	PostID         string      `json:"postId"`
+	UpstreamPostID string      `json:"upstreamPostId,omitempty"`
+	AuthorID       string      `json:"authorId"`
+	AuthorName     string      `json:"authorName"`
+	AuthorPhoto    []Thumbnail `json:"authorPhoto"`
+	ContentText    string      `json:"contentText"`
+	PublishedText  string      `json:"publishedText"`
+	PublishedAt    *time.Time  `json:"publishedAt,omitempty"`
+	LikeCount      int64       `json:"likeCount"`
+	CommentCount   int64       `json:"commentCount"`
+	Images         []Thumbnail `json:"images,omitempty"`
+	VideoID        string      `json:"videoId,omitempty"` // 첨부 비디오
 }
 
 // Playlist: 플레이리스트 정보
@@ -97,8 +101,9 @@ type Playlist struct {
 
 // Short: 쇼츠 비디오 정보
 type Short struct {
-	VideoID   string      `json:"videoId"`
-	Title     string      `json:"title"`
-	Thumbnail []Thumbnail `json:"thumbnail"`
-	ViewCount int64       `json:"viewCount"`
+	VideoID     string      `json:"videoId"`
+	Title       string      `json:"title"`
+	Thumbnail   []Thumbnail `json:"thumbnail"`
+	ViewCount   int64       `json:"viewCount"`
+	PublishedAt *time.Time  `json:"publishedAt,omitempty"`
 }

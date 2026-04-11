@@ -36,12 +36,23 @@ import (
 
 type nilGormPostgres struct{}
 
+type gormOnlyPostgres struct {
+	db *gorm.DB
+}
+
 func (p *nilGormPostgres) GetPool() *pgxpool.Pool { return nil }
 func (p *nilGormPostgres) GetGormDB() *gorm.DB    { return nil }
 func (p *nilGormPostgres) Ping(context.Context) error {
 	return nil
 }
 func (p *nilGormPostgres) Close() error { return nil }
+
+func (p *gormOnlyPostgres) GetPool() *pgxpool.Pool { return nil }
+func (p *gormOnlyPostgres) GetGormDB() *gorm.DB    { return p.db }
+func (p *gormOnlyPostgres) Ping(context.Context) error {
+	return nil
+}
+func (p *gormOnlyPostgres) Close() error { return nil }
 
 func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 	t.Parallel()
@@ -86,4 +97,37 @@ func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 	})
 }
 
+func TestBuildBotAdminAPIHandlers_WiresCommunityShortsOpsRepository(t *testing.T) {
+	t.Parallel()
+
+	handlers := buildBotAdminAPIHandlers(
+		botAdminRuntimeDependencies{postgres: &gormOnlyPostgres{db: &gorm.DB{}}},
+		nil,
+		nil,
+		nil,
+		nil,
+		slog.New(slog.DiscardHandler),
+	)
+	require.NotNil(t, handlers)
+	require.NotNil(t, handlers.Stats)
+	assert.True(t, handlers.Stats.APIHandler.HasCommunityShortsOpsRepository())
+}
+
+func TestBuildBotAdminAPIHandlers_LeavesCommunityShortsOpsRepositoryNilWithoutGorm(t *testing.T) {
+	t.Parallel()
+
+	handlers := buildBotAdminAPIHandlers(
+		botAdminRuntimeDependencies{postgres: &nilGormPostgres{}},
+		nil,
+		nil,
+		nil,
+		nil,
+		slog.New(slog.DiscardHandler),
+	)
+	require.NotNil(t, handlers)
+	require.NotNil(t, handlers.Stats)
+	assert.False(t, handlers.Stats.APIHandler.HasCommunityShortsOpsRepository())
+}
+
 var _ database.Client = (*nilGormPostgres)(nil)
+var _ database.Client = (*gormOnlyPostgres)(nil)

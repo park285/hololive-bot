@@ -174,6 +174,71 @@ func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 	}
 }
 
+func TestLoad_CommunityShortsBigBangFlagDefaultsFalse(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Ingestion.CommunityShortsBigBangEnabled {
+		t.Fatal("Ingestion.CommunityShortsBigBangEnabled = true, want false")
+	}
+}
+
+func TestLoad_CommunityShortsBigBangCutoverDefaultsZero(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Ingestion.CommunityShortsBigBangCutoverAt.IsZero() {
+		t.Fatalf("Ingestion.CommunityShortsBigBangCutoverAt = %s, want zero", cfg.Ingestion.CommunityShortsBigBangCutoverAt)
+	}
+}
+
+func TestLoad_CommunityShortsBigBangFlagEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Ingestion.CommunityShortsBigBangEnabled {
+		t.Fatal("Ingestion.CommunityShortsBigBangEnabled = false, want true")
+	}
+}
+
+func TestLoad_CommunityShortsBigBangCutoverEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10T01:11:12+09:00")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := time.Date(2026, 4, 9, 16, 11, 12, 0, time.UTC)
+	if !cfg.Ingestion.CommunityShortsBigBangCutoverAt.Equal(want) {
+		t.Fatalf("Ingestion.CommunityShortsBigBangCutoverAt = %s, want %s", cfg.Ingestion.CommunityShortsBigBangCutoverAt, want)
+	}
+}
+
+func TestLoad_CommunityShortsBigBangCutoverRejectsInvalidRFC3339(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10 01:11:12")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT must be RFC3339") {
+		t.Fatalf("Load() error = %v, want RFC3339 parse error", err)
+	}
+}
+
 func TestLoad_ScraperPollDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 

@@ -7,8 +7,10 @@
 - `backend/src/openapi.rs`가 export 대상 경로와 schema를 소유합니다.
 - `backend/src/bin/export-openapi.rs`가 OpenAPI JSON을 stdout으로 내보냅니다.
 - `frontend/src/api/generated/*`는 generated output이므로 수동 수정하지 않습니다.
-- `frontend/src/api/adminClient.ts`가 generated `Admin` singleton을 소유하고, `core.ts`와 `holoClient.ts`는 이 인스턴스만 사용합니다.
-- `/admin/api/holo/*`는 backend가 소유하는 typed contract를 먼저 추가하고, wildcard proxy는 websocket/compatibility fallback으로만 남깁니다.
+- `frontend/src/api/adminClient.ts`가 generated `Admin` singleton을 소유합니다.
+- `frontend/src/api/core.ts`는 compatibility wrapper이며, 별도의 `holoClient.ts` 레이어는 사용하지 않습니다.
+- `/admin/api/holo/*`는 backend가 소유하는 typed contract만 유지합니다.
+- runtime OpenAPI/Swagger 노출은 build-time export와 분리되며, 필요한 경우 인증 뒤에서만 활성화합니다.
 
 ## 생성 명령
 
@@ -39,6 +41,6 @@ npm run build
 1. backend handler와 `openapi.rs`를 같이 수정합니다.
 2. `npm run generate:api`로 generated client를 갱신합니다.
 3. 생성된 `Admin` client는 `src/api/adminClient.ts` singleton 하나로만 연결합니다.
-4. generated wrapper는 `src/api/core.ts`, `src/api/holoClient.ts`에서만 얇게 감쌉니다.
+4. generated wrapper는 `src/api/adminClient.ts`를 단일 transport entry로 사용하고, 필요 시 `src/api/core.ts`에서만 compatibility 레이어를 둡니다.
 5. `git diff --exit-code -- ../backend/docs/swagger.json src/api/generated`로 drift가 없는지 확인합니다.
 6. 테스트와 빌드를 다시 돌려 contract drift가 없는지 확인합니다.

@@ -25,14 +25,18 @@
 
 `docker-compose.prod.yml` 기준 현재 ingestion 책임은 두 서비스로 분리되어 있습니다.
 
-- `stream-ingester` (`30004`): `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`
+- `stream-ingester` (`30004`): `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=false`
   - Holodex photo sync
   - ingestion-adjacent health/config runtime
-- `youtube-scraper` (`30005`): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`
+- `youtube-scraper` (`30005`): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`
   - YouTube ingestion scheduler
   - YouTube scraper scheduler
   - YouTube outbox dispatcher
   - `config:update` 구독 (`scraper_proxy` 반영)
+
+운영 라우팅 고정:
+- YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-scraper`의 outbox dispatcher 경로로만 발송합니다.
+- compose 기준 rollout key는 `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED` 하나만 사용하고, canary fallback은 두지 않습니다. 운영 compose에서는 `youtube-scraper=true`, `stream-ingester=false`로 고정합니다.
 
 ## 사전 준비
 

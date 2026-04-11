@@ -36,6 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -45,8 +46,9 @@ const (
 )
 
 type ingestionRuntimeFeatures struct {
-	youtubeEnabled   bool
-	photoSyncEnabled bool
+	youtubeEnabled                bool
+	photoSyncEnabled              bool
+	communityShortsBigBangEnabled bool
 }
 
 type ingestionRuntimeSpec struct {
@@ -83,12 +85,46 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		slog.String("event", "ingestion_runtime_configured"),
 		slog.Bool("youtube_enabled", features.youtubeEnabled),
 		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
+		slog.Bool("community_shorts_bigbang_enabled", features.communityShortsBigBangEnabled),
 		slog.String("lock_key", providers.IngestionLeaseKey),
 	)
 
 	infra, err := initStreamIngesterInfrastructure(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
+	}
+
+	var operationalChannels []communityShortsOperationalChannel
+	if features.youtubeEnabled {
+		operationalChannels, err = resolveCommunityShortsOperationalChannels(infra.membersData)
+		if err != nil {
+			infra.cleanup()
+			return nil, fmt.Errorf("resolve community shorts operational channels: %w", err)
+		}
+	}
+
+	var communityShortsPolicy communityShortsBigBangPolicy
+	if features.youtubeEnabled && features.communityShortsBigBangEnabled {
+		communityShortsPolicy, err = buildCommunityShortsBigBangPolicy(cfg.Ingestion, operationalChannels)
+		if err != nil {
+			infra.cleanup()
+			return nil, err
+		}
+		if communityShortsPolicy.Enabled() {
+			logger.Info("Community/shorts big-bang request switch configured",
+				slog.Time("community_shorts_bigbang_cutover_at", communityShortsPolicy.CutoverAt()),
+				slog.Int("community_shorts_bigbang_target_channels", communityShortsPolicy.TargetChannelCount()),
+			)
+		} else {
+			logger.Warn("Community/shorts big-bang request switch is missing cutover criteria",
+				slog.Int("community_shorts_bigbang_target_channels", communityShortsPolicy.TargetChannelCount()))
+		}
+		if warnErr := warmSubscriberCacheFromDB(ctx, infra.cacheService, infra.postgresService, logger); warnErr != nil {
+			logger.Warn("Failed to warm subscriber cache from DB",
+				slog.String("runtime", spec.name),
+				slog.Any("error", warnErr),
+			)
+		}
 	}
 
 	var ingestionLeaseRef *providers.IngestionLease
@@ -107,17 +143,23 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		scraperScheduler, outboxDispatcher = buildStreamIngesterYouTubeComponents(
 			cfg.Scraper,
 			infra.postgresService,
-			infra.membersData,
+			communityShortsEnabledChannelIDs(operationalChannels),
 			infra.cacheService,
 			infra.irisClient,
 			infra.templateRenderer,
 			infra.sharedRL,
+			buildCommunityShortsRouteDecider(communityShortsPolicy),
 			logger,
 		)
 		youtubeScheduler = infra.ytStack.Scheduler
 	}
 
 	configSubscriber := buildRuntimeConfigSubscriber(features, infra, scraperScheduler, logger)
+
+	var observationWindowWriter communityShortsObservationWindowWriter
+	if spec.name == youtubeScraperRuntimeName && communityShortsPolicy.Enabled() {
+		observationWindowWriter = trackingrepo.NewRepository(infra.postgresService.GetGormDB())
+	}
 
 	httpServer, err := buildStreamIngesterHTTPServer(ctx, cfg, logger, spec.name, readiness)
 	if err != nil {
@@ -130,19 +172,21 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	}
 
 	return &StreamIngesterRuntime{
-		RuntimeName:      spec.name,
-		Config:           cfg,
-		Logger:           logger,
-		Scheduler:        youtubeScheduler,
-		ScraperScheduler: scraperScheduler,
-		PhotoSync:        selectPhotoSyncService(features.photoSyncEnabled, infra.photoSync),
-		OutboxDispatcher: outboxDispatcher,
-		ConfigSubscriber: configSubscriber,
-		ServerAddr:       fmt.Sprintf(":%d", cfg.Server.Port),
-		HttpServer:       httpServer,
-		Readiness:        readiness,
-		ingestionLease:   ingestionLeaseRef,
-		Managed:          lifecycle.NewManaged(cleanup),
+		RuntimeName:                            spec.name,
+		Config:                                 cfg,
+		Logger:                                 logger,
+		Scheduler:                              youtubeScheduler,
+		ScraperScheduler:                       scraperScheduler,
+		PhotoSync:                              selectPhotoSyncService(features.photoSyncEnabled, infra.photoSync),
+		OutboxDispatcher:                       outboxDispatcher,
+		ConfigSubscriber:                       configSubscriber,
+		ServerAddr:                             fmt.Sprintf(":%d", cfg.Server.Port),
+		HttpServer:                             httpServer,
+		Readiness:                              readiness,
+		CommunityShortsBigBangPolicy:           communityShortsPolicy,
+		communityShortsObservationWindowWriter: observationWindowWriter,
+		ingestionLease:                         ingestionLeaseRef,
+		Managed:                                lifecycle.NewManaged(cleanup),
 	}, nil
 }
 
@@ -172,21 +216,29 @@ func buildStreamIngesterHTTPServer(
 
 func streamIngesterSpec(cfg *config.Config) ingestionRuntimeSpec {
 	requested := requestedFeatures(cfg)
+	features := requested
+	if requested.communityShortsBigBangEnabled {
+		features.youtubeEnabled = false
+		features.communityShortsBigBangEnabled = false
+	}
 
 	return ingestionRuntimeSpec{
 		name:              streamIngesterRuntimeName,
 		requestedFeatures: requested,
-		features:          requested,
+		features:          features,
 	}
 }
 
 func youtubeScraperSpec(cfg *config.Config) ingestionRuntimeSpec {
+	requested := requestedFeatures(cfg)
+
 	return ingestionRuntimeSpec{
 		name:              youtubeScraperRuntimeName,
-		requestedFeatures: requestedFeatures(cfg),
+		requestedFeatures: requested,
 		features: ingestionRuntimeFeatures{
-			youtubeEnabled:   true,
-			photoSyncEnabled: false,
+			youtubeEnabled:                requested.communityShortsBigBangEnabled,
+			photoSyncEnabled:              false,
+			communityShortsBigBangEnabled: requested.communityShortsBigBangEnabled,
 		},
 	}
 }
@@ -197,8 +249,9 @@ func requestedFeatures(cfg *config.Config) ingestionRuntimeFeatures {
 	}
 
 	return ingestionRuntimeFeatures{
-		youtubeEnabled:   cfg.Ingestion.YouTubeEnabled,
-		photoSyncEnabled: cfg.Ingestion.PhotoSyncEnabled,
+		youtubeEnabled:                cfg.Ingestion.YouTubeEnabled,
+		photoSyncEnabled:              cfg.Ingestion.PhotoSyncEnabled,
+		communityShortsBigBangEnabled: cfg.Ingestion.CommunityShortsBigBangEnabled,
 	}
 }
 
@@ -216,6 +269,8 @@ func logFeatureOverride(logger *slog.Logger, spec ingestionRuntimeSpec) {
 		slog.Bool("effective_youtube_enabled", spec.features.youtubeEnabled),
 		slog.Bool("requested_photo_sync_enabled", spec.requestedFeatures.photoSyncEnabled),
 		slog.Bool("effective_photo_sync_enabled", spec.features.photoSyncEnabled),
+		slog.Bool("requested_community_shorts_bigbang_enabled", spec.requestedFeatures.communityShortsBigBangEnabled),
+		slog.Bool("effective_community_shorts_bigbang_enabled", spec.features.communityShortsBigBangEnabled),
 	)
 }
 

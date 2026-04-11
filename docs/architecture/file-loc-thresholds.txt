@@ -5,10 +5,11 @@ admin-dashboard/backend/src/holo/handlers_commands.rs:340
 admin-dashboard/backend/src/holo/types.rs:80
 admin-dashboard/backend/src/holo/types/members.rs:160
 admin-dashboard/backend/src/holo/types/milestones.rs:180
-admin-dashboard/backend/src/config.rs:220
+admin-dashboard/backend/src/config.rs:260
 admin-dashboard/backend/src/config/security.rs:220
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/logs.sh:760
+hololive/hololive-kakao-bot-go/scripts/bot.sh:560
 hololive/hololive-kakao-bot-go/internal/service/chzzk/client.go:620
 hololive/hololive-kakao-bot-go/internal/service/notification/alarm_service.go:600
 hololive/hololive-shared/pkg/service/cache/service.go:650

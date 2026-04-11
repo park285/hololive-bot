@@ -152,12 +152,7 @@ mod tests {
             )
             .route(
                 "/api/holo/plain-error",
-                get(|| async {
-                    (
-                        axum::http::StatusCode::BAD_REQUEST,
-                        "plain upstream error",
-                    )
-                }),
+                get(|| async { (axum::http::StatusCode::BAD_REQUEST, "plain upstream error") }),
             )
             .route(
                 "/api/holo/string-error",
@@ -317,10 +312,7 @@ mod tests {
         match err {
             AppError::Proxy(ProxyError::Upstream { status, body }) => {
                 assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
-                assert_eq!(
-                    body,
-                    ErrorResponse::simple("Bad Request")
-                );
+                assert_eq!(body, ErrorResponse::simple("Bad Request"));
             }
             other => panic!("unexpected error: {other:?}"),
         }

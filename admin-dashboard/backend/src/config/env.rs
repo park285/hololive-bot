@@ -44,7 +44,21 @@ pub fn required_alias(keys: &[&str]) -> Result<String> {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
         })
-        .ok_or_else(|| anyhow!("required environment variable missing: {}", keys.join(" or ")))
+        .ok_or_else(|| {
+            anyhow!(
+                "required environment variable missing: {}",
+                keys.join(" or ")
+            )
+        })
+}
+
+pub fn optional_alias(keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
 }
 
 #[cfg(test)]
@@ -58,10 +72,7 @@ pub(crate) mod test_support {
     }
 
     #[allow(unsafe_code)]
-    pub(crate) fn with_env_vars<R>(
-        vars: &[(&str, Option<&str>)],
-        test: impl FnOnce() -> R,
-    ) -> R {
+    pub(crate) fn with_env_vars<R>(vars: &[(&str, Option<&str>)], test: impl FnOnce() -> R) -> R {
         let _guard = env_lock().lock().expect("env lock");
         let snapshot = vars
             .iter()

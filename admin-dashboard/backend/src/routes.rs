@@ -11,6 +11,31 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::state::AppState;
 
+fn build_docs_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    if !state.config.enable_openapi && !state.config.enable_swagger_ui {
+        return Router::new().with_state(state);
+    }
+
+    let auth_layer =
+        middleware::from_fn_with_state(state.clone(), crate::auth::middleware::auth_middleware);
+
+    let docs = if state.config.enable_swagger_ui {
+        Router::new().merge(
+            SwaggerUi::new("/admin/docs")
+                .url("/admin/api/openapi.json", crate::openapi::ApiDoc::openapi()),
+        )
+    } else if state.config.enable_openapi {
+        Router::new().route(
+            "/admin/api/openapi.json",
+            get(|| async { Json(crate::openapi::ApiDoc::openapi()) }),
+        )
+    } else {
+        Router::new()
+    };
+
+    docs.layer(auth_layer).with_state(state)
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn build_router(state: Arc<AppState>) -> Router {
     let auth_layer =
@@ -126,6 +151,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(crate::holo::handlers::get_channel_stats),
         )
         .route(
+            "/admin/api/holo/stats/youtube/community-shorts",
+            get(crate::holo::handlers::get_youtube_community_shorts_ops),
+        )
+        .route(
             "/admin/api/holo/streams/live",
             get(crate::holo::handlers::get_live_streams),
         )
@@ -161,14 +190,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/favicon.svg", get(crate::static_files::serve_favicon))
         .route("/assets/{*path}", get(crate::static_files::serve_static))
         .fallback(get(crate::static_files::serve_index));
+    let docs_router = build_docs_router(state.clone());
 
     Router::new()
         .merge(public)
         .merge(authenticated)
-        .merge(
-            SwaggerUi::new("/swagger-ui")
-                .url("/api-docs/openapi.json", crate::openapi::ApiDoc::openapi()),
-        )
+        .merge(docs_router)
         .merge(api_fallback)
         .merge(spa)
         .layer(middleware::map_response(

@@ -41,7 +41,7 @@ func (d *Dispatcher) markSentBatch(ctx context.Context, ids []int64) {
 		return
 	}
 
-	now := time.Now()
+	now := canonicalSentAtNow()
 	for start := 0; start < len(uniqueIDs); start += markSentBatchChunkSize {
 		end := min(start+markSentBatchChunkSize, len(uniqueIDs))
 		chunk := uniqueIDs[start:end]

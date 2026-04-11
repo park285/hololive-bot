@@ -35,7 +35,9 @@ cargo run --bin export-openapi > docs/swagger.json
 | `VALKEY_URL` | 세션 저장소 주소 | `valkey-cache:6379` |
 | `DOCKER_HOST` | Docker API 주소 | `tcp://docker-proxy:2375` |
 | `HOLO_BOT_URL` | 업스트림 hololive bot API | `http://hololive-kakao-bot-go:30001` |
-| `HOLO_BOT_API_KEY` | 업스트림 내부 인증 헤더 값 | 빈 값 |
+| `HOLO_BOT_API_KEY` | 업스트림 내부 인증 헤더 값 (`API_SECRET_KEY` fallback 지원) | 빈 값 |
+| `ENABLE_OPENAPI` | 인증 뒤 OpenAPI JSON 노출 여부 | production에서는 기본 `false` |
+| `ENABLE_SWAGGER_UI` | 인증 뒤 Swagger UI 노출 여부 | production에서는 기본 `false` |
 | `ADMIN_USER` | 관리자 계정명 | `admin` |
 | `ADMIN_PASS_HASH` | bcrypt 비밀번호 해시 | 필수 |
 | `SESSION_SECRET` | 세션/HMAC/CSRF 시크릿 | 필수 |
@@ -74,7 +76,6 @@ ADMIN_DASHBOARD_PROXY_TARGET=http://localhost:30190 npm run dev
 - `GET /admin/api/status`
 - `GET /admin/api/ws/system-stats`
 - typed holo contract: `GET/POST/PATCH/DELETE /admin/api/holo/*`
-- wildcard proxy fallback: `ANY /admin/api/holo/{*path}` for websocket or 아직 이관하지 않은 compatibility 경로
 
 ## OpenAPI / Generated Client
 
@@ -87,11 +88,11 @@ npm run generate:api
 
 이 스크립트는 내부적으로 backend OpenAPI를 `backend/docs/swagger.json`으로 export한 뒤 `src/api/generated/`를 갱신합니다.
 
-`src/api/adminClient.ts`가 generated `Admin` singleton의 단일 소유자입니다. `src/api/core.ts`와 `src/api/holoClient.ts`는 이 인스턴스만 공유해서 interceptor, base URL, 인증 동작이 갈라지지 않게 유지합니다.
+`src/api/adminClient.ts`가 generated `Admin` singleton의 단일 소유자입니다. transport source-of-truth는 이 인스턴스 하나만 사용합니다. `src/api/core.ts`는 compatibility wrapper이고, 별도의 `holoClient.ts` 레이어는 더 이상 존재하지 않습니다.
 
 CI도 같은 경로를 강제합니다. `admin-dashboard-frontend` workflow는 `npm run generate:api` 뒤에 `git diff --exit-code -- ../backend/docs/swagger.json src/api/generated`를 실행해서 generated client drift를 즉시 실패시킵니다.
 
 주의:
 - `src/api/generated/*`는 수동 수정 금지
 - holo dashboard endpoint는 `/admin/api/holo/*` typed contract에 먼저 추가
-- wildcard proxy route는 websocket / 미이관 compatibility fallback 용도로만 유지
+- `/admin/docs`와 `/admin/api/openapi.json`은 runtime에서 인증 뒤에만 노출됩니다.

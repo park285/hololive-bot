@@ -27,7 +27,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	membermocks "github.com/kapu/hololive-shared/pkg/service/member/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"gorm.io/gorm"
@@ -54,6 +53,7 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 			},
 		},
 		scraper.NewRateLimiter(time.Second),
+		nil,
 		nil,
 	)
 
@@ -98,14 +98,13 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		},
 	}
 
-	membersData := &membermocks.DataProvider{
-		GetAllMembersFunc: func() []*domain.Member {
-			return []*domain.Member{
-				{ChannelID: "UCACTIVE"},
-				{ChannelID: "UCGRADUATED", IsGraduated: true},
-			}
+	operationalChannels := mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+		members: []*domain.Member{
+			{ChannelID: " UCACTIVE "},
+			{ChannelID: " ", Name: "missing"},
+			{ChannelID: "UCGRADUATED", IsGraduated: true},
 		},
-	}
+	})
 
 	scheduler, dispatcher := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
@@ -118,11 +117,12 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 			},
 		},
 		postgres,
-		membersData,
+		communityShortsEnabledChannelIDs(operationalChannels),
 		nil,
 		nil,
 		nil,
 		scraper.NewRateLimiter(time.Second),
+		nil,
 		testLogger(),
 	)
 

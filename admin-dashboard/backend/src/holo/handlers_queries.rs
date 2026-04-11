@@ -9,9 +9,10 @@ use crate::state::AppState;
 
 use super::helpers::get_typed;
 use super::types::{
-    AlarmsResponse, ChannelStatsResponse, MembersResponse, MilestoneStatsResponse,
-    MilestonesQuery, MilestonesResponse, NearMilestonesQuery, NearMilestonesResponse,
-    RoomsResponse, SettingsResponse, StatsResponse, StreamsQuery, StreamsResponse,
+    AlarmsResponse, ChannelStatsResponse, MembersResponse, MilestoneStatsResponse, MilestonesQuery,
+    MilestonesResponse, NearMilestonesQuery, NearMilestonesResponse, RoomsResponse,
+    SettingsResponse, StatsResponse, StreamsQuery, StreamsResponse,
+    YouTubeCommunityShortsOpsResponse,
 };
 
 #[utoipa::path(
@@ -120,6 +121,24 @@ pub async fn get_channel_stats(
     State(state): State<Arc<AppState>>,
 ) -> Result<(StatusCode, Json<ChannelStatsResponse>), AppError> {
     get_typed(&state, "/api/holo/stats/channels", None).await
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/api/holo/stats/youtube/community-shorts",
+    operation_id = "holoGetYouTubeCommunityShortsOps",
+    responses(
+        (status = 200, body = YouTubeCommunityShortsOpsResponse),
+        (status = 400, body = crate::error::ErrorResponse),
+        (status = 401, body = crate::error::ErrorResponse),
+        (status = 502, body = crate::error::ErrorResponse),
+    ),
+    tag = "holo"
+)]
+pub async fn get_youtube_community_shorts_ops(
+    State(state): State<Arc<AppState>>,
+) -> Result<(StatusCode, Json<YouTubeCommunityShortsOpsResponse>), AppError> {
+    get_typed(&state, "/api/holo/stats/youtube/community-shorts", None).await
 }
 
 #[utoipa::path(

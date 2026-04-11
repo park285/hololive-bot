@@ -44,16 +44,6 @@ type DatabaseResources struct {
 	Close   func()
 }
 
-// ProvideValkeyConfig - 설정에서 Valkey 캐시 설정 추출
-func ProvideValkeyConfig(cfg *config.Config) config.ValkeyConfig {
-	return cfg.Valkey
-}
-
-// ProvidePostgresConfig - 설정에서 PostgreSQL 설정 추출
-func ProvidePostgresConfig(cfg *config.Config) config.PostgresConfig {
-	return cfg.Postgres
-}
-
 // ProvideCacheResources - 캐시 리소스 생성 (정리 함수 포함)
 func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger *slog.Logger) (*CacheResources, func(), error) {
 	cacheSvc, err := cache.NewCacheService(ctx, cache.Config{
@@ -74,11 +64,6 @@ func ProvideCacheResources(ctx context.Context, cfg config.ValkeyConfig, logger 
 		},
 	}
 	return resources, resources.Close, nil
-}
-
-// ProvideCacheService - 캐시 리소스에서 서비스 추출
-func ProvideCacheService(resources *CacheResources) cache.Client {
-	return resources.Service
 }
 
 // ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
@@ -107,11 +92,6 @@ func ProvideDatabaseResources(ctx context.Context, cfg config.PostgresConfig, lo
 		},
 	}
 	return resources, resources.Close, nil
-}
-
-// ProvidePostgresService - 데이터베이스 리소스에서 서비스 추출
-func ProvidePostgresService(resources *DatabaseResources) database.Client {
-	return resources.Service
 }
 
 // ProvideIrisClient - Iris h2c(HTTP/2 Cleartext) 클라이언트 생성

@@ -9,6 +9,7 @@ use admin_dashboard::auth::rate_limiter::LoginRateLimiter;
 use admin_dashboard::auth::session::ValkeySessionStore;
 use admin_dashboard::config::{Config, SecurityConfig, SecurityMode, SessionConfig};
 use admin_dashboard::holo::client::HoloApiClient;
+use admin_dashboard::openapi::ApiDoc;
 use admin_dashboard::routes::build_router;
 use admin_dashboard::state::AppState;
 use admin_dashboard::status::{StatusCollector, SystemStats};
@@ -17,6 +18,7 @@ use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode, header};
 use deadpool_redis::Runtime;
 use tower::ServiceExt;
+use utoipa::OpenApi;
 
 fn test_admin_pass_hash() -> &'static str {
     static HASH: OnceLock<String> = OnceLock::new();
@@ -36,6 +38,8 @@ fn test_config() -> Config {
         docker_host: "tcp://127.0.0.1:2375".to_string(),
         holo_bot_url: "http://127.0.0.1:30001".to_string(),
         holo_bot_api_key: String::new(),
+        enable_openapi: true,
+        enable_swagger_ui: true,
         log_dir: "/tmp/admin-dashboard-test-logs".to_string(),
         security: SecurityConfig {
             allowed_origins: vec!["http://localhost:5173".to_string()],
@@ -149,6 +153,16 @@ async fn test_typed_holo_route_without_cookie_returns_401() {
 }
 
 #[tokio::test]
+async fn test_youtube_ops_route_without_cookie_returns_401() {
+    let app = build_test_app();
+    let req = Request::get("/admin/api/holo/stats/youtube/community-shorts")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn test_unknown_holo_route_without_cookie_returns_404() {
     let app = build_test_app();
     let req = Request::get("/admin/api/holo/legacy")
@@ -163,15 +177,11 @@ async fn test_unknown_holo_route_without_cookie_returns_404() {
 }
 
 #[tokio::test]
-async fn test_swagger_ui_accessible() {
+async fn test_swagger_ui_requires_auth() {
     let app = build_test_app();
-    let req = Request::get("/swagger-ui/").body(Body::empty()).unwrap();
+    let req = Request::get("/admin/docs/").body(Body::empty()).unwrap();
     let resp = app.oneshot(req).await.unwrap();
-    assert!(
-        resp.status().is_success() || resp.status().is_redirection(),
-        "Swagger UI should be accessible, got: {}",
-        resp.status()
-    );
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -220,17 +230,17 @@ async fn test_auth_session_store_failure_returns_503() {
 }
 
 #[tokio::test]
-async fn test_openapi_contains_auth_session_route() {
+async fn test_openapi_endpoint_requires_auth() {
     let app = build_test_app();
-    let req = Request::get("/api-docs/openapi.json")
+    let req = Request::get("/admin/api/openapi.json")
         .body(Body::empty())
         .unwrap();
     let resp = app.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
 
-    let body = axum::body::to_bytes(resp.into_body(), 256 * 1024)
-        .await
-        .unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+#[test]
+fn test_openapi_contains_auth_session_route() {
+    let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
     assert!(json["paths"]["/admin/api/auth/session"].is_object());
 }

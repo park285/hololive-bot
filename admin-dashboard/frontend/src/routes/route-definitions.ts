@@ -18,6 +18,15 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
 			})),
 	},
 	{
+		id: "youtube-ops",
+		path: "youtube-ops",
+		absolutePath: "/dashboard/youtube-ops",
+		load: () =>
+			import("@/features/youtube-ops/pages/YouTubeOpsPage").then((module) => ({
+				default: module.YouTubeOpsPage,
+			})),
+	},
+	{
 		id: "streams",
 		path: "streams",
 		absolutePath: "/dashboard/streams",

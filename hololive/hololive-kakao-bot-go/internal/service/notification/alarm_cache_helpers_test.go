@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ import (
 func TestChannelSubscribersKeyByType(t *testing.T) {
 	t.Parallel()
 
-	as := newTestAlarmService(t)
+	as := &AlarmService{}
 	tests := []struct {
 		name      string
 		channelID string
@@ -79,6 +80,17 @@ func TestChannelSubscribersKeyByType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChannelContentAlarmTargetKeysMatchSharedSchema(t *testing.T) {
+	t.Parallel()
+
+	as := &AlarmService{}
+	targets := sharedalarmkeys.BuildChannelContentAlarmTargetKeys("UC_bundle")
+
+	assert.Equal(t, targets.CommunitySubscribersKey, as.channelSubscribersKeyByType("UC_bundle", domain.AlarmTypeCommunity))
+	assert.Equal(t, targets.ShortsSubscribersKey, as.channelSubscribersKeyByType("UC_bundle", domain.AlarmTypeShorts))
+	assert.Empty(t, targets.KeyFor(domain.AlarmTypeLive))
 }
 
 func TestBuildTitleFingerprint(t *testing.T) {
@@ -174,7 +186,7 @@ func TestResolveStreamChannelID(t *testing.T) {
 func TestBuildUpcomingEventKey(t *testing.T) {
 	t.Parallel()
 
-	as := newTestAlarmService(t)
+	as := &AlarmService{}
 	start := time.Date(2026, time.March, 2, 10, 30, 59, 0, time.UTC)
 	key := as.buildUpcomingEventKey("room1", "channel1", "stream1", "Title", start)
 

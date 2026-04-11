@@ -30,9 +30,10 @@ import (
 var (
 	pollerMetricsOnce sync.Once
 
-	schedulerRegisteredJobs prometheus.Gauge
-	schedulerDispatchDefer  *prometheus.CounterVec
-	schedulerPollDuration   *prometheus.HistogramVec
+	schedulerRegisteredJobs           prometheus.Gauge
+	schedulerDispatchDefer            *prometheus.CounterVec
+	schedulerPollDuration             *prometheus.HistogramVec
+	communityShortsDetectedPostsTotal *prometheus.CounterVec
 )
 
 func ensureMetrics() {
@@ -50,5 +51,9 @@ func ensureMetrics() {
 			Help:    "poller별 channel poll 실행 시간",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"poller", "status"})
+		communityShortsDetectedPostsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "youtube_poller_community_shorts_detected_posts_total",
+			Help: "채널별 커뮤니티/쇼츠 감지 게시물 수",
+		}, []string{"channel_id", "alarm_type"})
 	})
 }

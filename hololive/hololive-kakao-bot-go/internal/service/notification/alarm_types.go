@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 
@@ -36,16 +37,16 @@ import (
 
 // 알람 키 상수 목록.
 const (
-	AlarmKeyPrefix              = "alarm:"
-	AlarmRegistryKey            = "alarm:registry"
-	AlarmChannelRegistryKey     = "alarm:channel_registry"
-	ChannelSubscribersKeyPrefix = "alarm:channel_subscribers:"
+	AlarmKeyPrefix              = sharedalarmkeys.AlarmKeyPrefix
+	AlarmRegistryKey            = sharedalarmkeys.AlarmRegistryKey
+	AlarmChannelRegistryKey     = sharedalarmkeys.AlarmChannelRegistryKey
+	ChannelSubscribersKeyPrefix = sharedalarmkeys.ChannelSubscribersKeyPrefix
 	ChzzkChannelMapKey          = "alarm:chzzk_channels"
 	TwitchLoginMapKey           = "alarm:twitch_logins"
 	TwitchChannelLoginMapKey    = "alarm:twitch_channel_logins"
-	MemberNameKey               = "alarm:member_names"
-	RoomNamesCacheKey           = "alarm:room_names"
-	UserNamesCacheKey           = "alarm:user_names"
+	MemberNameKey               = sharedalarmkeys.MemberNameKey
+	RoomNamesCacheKey           = sharedalarmkeys.RoomNamesCacheKey
+	UserNamesCacheKey           = sharedalarmkeys.UserNamesCacheKey
 	NotifiedKeyPrefix           = "notified:"
 	NotifyClaimKeyPrefix        = "notified:claim:"
 	NotifyLogicalClaimKeyPrefix = "notified:claim:event:"
@@ -54,8 +55,8 @@ const (
 	NextStreamKeyPrefix         = "alarm:next_stream:"
 
 	// 타입별 구독자 키 접두사 (COMMUNITY, SHORTS용).
-	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
-	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
+	ChannelSubscribersCommunityPrefix = sharedalarmkeys.ChannelSubscribersCommunityPrefix
+	ChannelSubscribersShortsPrefix    = sharedalarmkeys.ChannelSubscribersShortsPrefix
 
 	// Chzzk 알림 키 접두사.
 	ChzzkLiveNotifiedKeyPrefix  = "notified:chzzk:live:"

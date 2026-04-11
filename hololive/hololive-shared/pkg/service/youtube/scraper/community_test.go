@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
@@ -68,4 +69,42 @@ func TestGetCommunityPosts_404TreatAsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, posts)
 	require.Equal(t, int32(1), attempts.Load(), "community missing cache should skip second network call")
+}
+
+func TestParseBackstagePostIncludesUpstreamPostID(t *testing.T) {
+	client := &Client{}
+	post := client.parseBackstagePost(gjson.Parse(`{
+		"postId": "UgkxDirect123",
+		"publishedTimeText": {"simpleText": "2026-04-10T10:11:12+09:00"}
+	}`))
+
+	require.NotNil(t, post)
+	require.Equal(t, "UgkxDirect123", post.PostID)
+	require.Equal(t, "UgkxDirect123", post.UpstreamPostID)
+}
+
+func TestParseBackstagePostFallsBackToPostURLForUpstreamPostID(t *testing.T) {
+	client := &Client{}
+	post := client.parseBackstagePost(gjson.Parse(`{
+		"actionButtons": {
+			"commentActionButtonsRenderer": {
+				"replyButton": {
+					"buttonRenderer": {
+						"navigationEndpoint": {
+							"commandMetadata": {
+								"webCommandMetadata": {
+									"url": "/post/UgkxFallback456?lc=1"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"publishedTimeText": {"simpleText": "2026-04-10T10:11:12+09:00"}
+	}`))
+
+	require.NotNil(t, post)
+	require.Equal(t, "UgkxFallback456", post.PostID)
+	require.Equal(t, "UgkxFallback456", post.UpstreamPostID)
 }

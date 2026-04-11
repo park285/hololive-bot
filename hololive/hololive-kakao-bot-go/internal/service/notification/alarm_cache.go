@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 	"github.com/valkey-io/valkey-go"
@@ -53,14 +54,7 @@ func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (st
 }
 
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-	key := as.channelSubscribersKeyByType(channelID, alarmType)
-
-	subscribers, err := as.cache.SMembers(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("get channel subscribers by type: %w", err)
-	}
-
-	return subscribers, nil
+	return sharedalarm.LookupChannelSubscribersByType(ctx, as.cache, channelID, alarmType)
 }
 
 // SetRoomName: 방 ID에 대한 표시 이름을 설정합니다.

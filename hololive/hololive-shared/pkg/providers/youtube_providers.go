@@ -84,7 +84,6 @@ func ProvideScraperScheduler(
 ) *poller.Scheduler {
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
 
-	// 스케줄러 생성 (RequestInterval=0: 외부 sharedRL에 rate limiting 위임)
 	schedulerCfg := poller.DefaultSchedulerConfig()
 	schedulerCfg.RequestInterval = 0
 	if resolvedOpts.workerCount > 0 {
@@ -98,17 +97,26 @@ func ProvideScraperScheduler(
 		return scheduler
 	}
 
-	// 모든 멤버 채널에 대해 폴러 등록
-	members := membersData.GetAllMembers()
-	activeMembers := 0
-	for _, m := range members {
-		if m.IsGraduated {
-			continue // 졸업 멤버 제외
+	channelIDs := append([]string(nil), resolvedOpts.channelIDs...)
+	membersCount := len(channelIDs)
+	if len(channelIDs) == 0 {
+		if membersData == nil {
+			logger.Warn("Scraper scheduler initialized without members data")
+			return scheduler
 		}
-		activeMembers++
 
-		channelID := m.ChannelID
+		members := membersData.GetAllMembers()
+		membersCount = len(members)
+		channelIDs = make([]string, 0, len(members))
+		for _, m := range members {
+			if m == nil || m.IsGraduated {
+				continue
+			}
+			channelIDs = append(channelIDs, m.ChannelID)
+		}
+	}
 
+	for _, channelID := range channelIDs {
 		for _, registration := range channelPollerRegistrations {
 			if registration.Poller == nil || registration.Interval <= 0 {
 				continue
@@ -117,11 +125,12 @@ func ProvideScraperScheduler(
 		}
 	}
 
+	activeMembers := len(channelIDs)
 	logger.Info("Scraper scheduler initialized",
-		slog.Int("members", len(members)),
+		slog.Int("members", membersCount),
 		slog.Int("active_members", activeMembers),
 		slog.Int("poller_templates", len(channelPollerRegistrations)),
-		slog.Int("total_jobs", len(members)*len(channelPollerRegistrations)))
+		slog.Int("total_jobs", activeMembers*len(channelPollerRegistrations)))
 
 	perChannelRPM := estimatedRequestsPerMinute(channelPollerRegistrations)
 	totalRPM := perChannelRPM * float64(activeMembers)

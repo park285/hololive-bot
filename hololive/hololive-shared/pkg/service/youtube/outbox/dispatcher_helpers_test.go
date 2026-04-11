@@ -213,8 +213,11 @@ func TestGroupOutboxItems(t *testing.T) {
 		{ID: 3, ChannelID: "ch1", Kind: domain.OutboxKindNewShort},
 		{ID: 4, ChannelID: "ch2", Kind: domain.OutboxKindNewVideo}, // no rooms
 	}
-	roomsByChannel := map[string]map[string]bool{
-		"ch1": {"room1": true, "room2": true},
+	roomsByChannel := map[string]channelAlarmRoomTargets{
+		"ch1": {
+			domain.AlarmTypeLive:   {"room1": true, "room2": true},
+			domain.AlarmTypeShorts: {"room1": true, "room2": true},
+		},
 	}
 
 	groups := d.groupOutboxItems(items, roomsByChannel)

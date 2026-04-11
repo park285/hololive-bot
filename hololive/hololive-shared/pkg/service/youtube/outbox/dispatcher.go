@@ -26,38 +26,48 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/iris-client-go/iris"
-	"github.com/valkey-io/valkey-go"
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
+const defaultTelemetryRetention = 24 * time.Hour
+
 // Config: Dispatcher 설정
 type Config struct {
-	BatchSize           int           // 한 번에 처리할 알림 수
-	LockTimeout         time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
-	PollInterval        time.Duration // 폴링 간격
-	MaxRetries          int           // 최대 재시도 횟수
-	RetryBackoff        time.Duration // 재시도 간격
-	CleanupAfter        time.Duration // 완료된 알림 정리 기간
-	CleanupEnabled      bool          // 정리 활성화 여부
-	DeliveryParallelism int           // room/delivery send 제한 병렬성
+	BatchSize              int           // 한 번에 처리할 알림 수
+	LockTimeout            time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
+	PollInterval           time.Duration // 폴링 간격
+	MaxRetries             int           // 최대 재시도 횟수
+	RetryBackoff           time.Duration // 재시도 간격
+	CleanupAfter           time.Duration // 완료된 알림 정리 기간
+	CleanupEnabled         bool          // 정리 활성화 여부
+	DeliveryParallelism    int           // room/delivery send 제한 병렬성
+	TelemetryBackfillBatch int           // delivery 상태에서 telemetry 버퍼로 역보강할 최대 건수
+	TelemetryFlushBatch    int           // telemetry 버퍼 플러시 최대 건수
+	TelemetryRetryBackoff  time.Duration // telemetry 플러시 실패 재시도 간격
+	TelemetryRetention     time.Duration // telemetry 버퍼 최소 보존 기간
 }
 
 // DefaultConfig: 기본 설정
 func DefaultConfig() Config {
 	return Config{
-		BatchSize:           50,
-		LockTimeout:         5 * time.Minute,
-		PollInterval:        30 * time.Second,
-		MaxRetries:          3,
-		RetryBackoff:        1 * time.Minute,
-		CleanupAfter:        7 * 24 * time.Hour, // 7일
-		CleanupEnabled:      true,
-		DeliveryParallelism: 4,
+		BatchSize:              50,
+		LockTimeout:            5 * time.Minute,
+		PollInterval:           30 * time.Second,
+		MaxRetries:             3,
+		RetryBackoff:           1 * time.Minute,
+		CleanupAfter:           7 * 24 * time.Hour, // 7일
+		CleanupEnabled:         true,
+		DeliveryParallelism:    4,
+		TelemetryBackfillBatch: 200,
+		TelemetryFlushBatch:    200,
+		TelemetryRetryBackoff:  30 * time.Second,
+		TelemetryRetention:     defaultTelemetryRetention,
 	}
 }
 
@@ -65,16 +75,17 @@ func DefaultConfig() Config {
 type Dispatcher struct {
 	db        *gorm.DB
 	cache     cache.Client
-	sender    iris.Sender
+	sender    delivery.MessageSender
 	renderer  *template.Renderer
 	logger    *slog.Logger
 	cfg       Config
 	delivery  *DeliveryRepository
+	telemetry *DeliveryTelemetryRepository
 	formatter *MessageFormatter
 }
 
 // NewDispatcher: 새 Dispatcher 생성
-func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender iris.Sender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
+func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
 	initOutboxMetrics()
 
 	if cfg.BatchSize <= 0 {
@@ -86,15 +97,33 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender iris.Sender, rende
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = DefaultConfig().PollInterval
 	}
+	if cfg.TelemetryBackfillBatch <= 0 {
+		cfg.TelemetryBackfillBatch = DefaultConfig().TelemetryBackfillBatch
+	}
+	if cfg.TelemetryFlushBatch <= 0 {
+		cfg.TelemetryFlushBatch = DefaultConfig().TelemetryFlushBatch
+	}
+	if cfg.TelemetryRetryBackoff <= 0 {
+		cfg.TelemetryRetryBackoff = DefaultConfig().TelemetryRetryBackoff
+	}
+	if cfg.TelemetryRetention <= 0 {
+		cfg.TelemetryRetention = DefaultConfig().TelemetryRetention
+	}
+
+	var telemetryRepo *DeliveryTelemetryRepository
+	if db != nil {
+		telemetryRepo = NewDeliveryTelemetryRepository(db)
+	}
 
 	return &Dispatcher{
-		db:       db,
-		cache:    cacheSvc,
-		sender:   sender,
-		renderer: renderer,
-		logger:   logger,
-		cfg:      cfg,
-		delivery: NewDeliveryRepository(db, logger),
+		db:        db,
+		cache:     cacheSvc,
+		sender:    sender,
+		renderer:  renderer,
+		logger:    logger,
+		cfg:       cfg,
+		delivery:  NewDeliveryRepository(db, logger),
+		telemetry: telemetryRepo,
 		formatter: &MessageFormatter{
 			renderer: renderer,
 			cache:    cacheSvc,
@@ -133,18 +162,20 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 // processOnce: 한 번의 폴링 사이클
 func (d *Dispatcher) processOnce(ctx context.Context) {
+	d.processDeliveryTelemetry(ctx)
+
 	outboxItems, err := d.claimOutboxBatch(ctx)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 		return
 	}
 
-	if len(outboxItems) == 0 {
-		return
+	if len(outboxItems) > 0 {
+		d.logger.Debug("Processing outbox batch", slog.Int("count", len(outboxItems)))
 	}
 
-	d.logger.Debug("Processing outbox batch", slog.Int("count", len(outboxItems)))
 	d.processPerRoomBatch(ctx, outboxItems)
+	d.processDeliveryTelemetry(ctx)
 }
 
 // cleanupLoop: 오래된 완료 알림 정리 루프
@@ -164,10 +195,15 @@ func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 
 // cleanup: 오래된 완료 알림 삭제
 func (d *Dispatcher) cleanup(ctx context.Context) {
-	cutoff := time.Now().Add(-d.cfg.CleanupAfter)
+	if d == nil || d.db == nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	outboxCutoff := now.Add(-d.cfg.CleanupAfter)
 
 	result := d.db.WithContext(ctx).
-		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, cutoff).
+		Where("status IN (?, ?) AND COALESCE(sent_at, created_at) < ?", domain.OutboxStatusSent, domain.OutboxStatusFailed, outboxCutoff).
 		Delete(&domain.YouTubeNotificationOutbox{})
 
 	if result.Error != nil {
@@ -177,6 +213,23 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 
 	if result.RowsAffected > 0 {
 		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", result.RowsAffected))
+	}
+
+	if d.telemetry == nil || d.cfg.TelemetryRetention <= 0 {
+		return
+	}
+
+	telemetryCutoff := now.Add(-d.cfg.TelemetryRetention)
+	deletedTelemetry, err := d.telemetry.DeleteLoggedBefore(ctx, telemetryCutoff)
+	if err != nil {
+		d.logger.Warn("Failed to cleanup old delivery telemetry", slog.Any("error", err))
+		return
+	}
+
+	if deletedTelemetry > 0 {
+		d.logger.Info("Cleaned up old delivery telemetry",
+			slog.Int64("deleted", deletedTelemetry),
+			slog.Duration("retention", d.cfg.TelemetryRetention))
 	}
 }
 
@@ -188,7 +241,23 @@ type outboxItemGroup struct {
 	items     []domain.YouTubeNotificationOutbox
 }
 
-func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]map[string]bool) []*outboxItemGroup {
+type channelAlarmRoomTargets map[domain.AlarmType]map[string]bool
+
+func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item domain.YouTubeNotificationOutbox) (map[string]bool, bool) {
+	alarmTargets, ok := roomsByChannel[item.ChannelID]
+	if !ok {
+		return nil, false
+	}
+
+	rooms, ok := alarmTargets[item.Kind.ToAlarmType()]
+	if !ok {
+		return nil, false
+	}
+
+	return rooms, true
+}
+
+func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) []*outboxItemGroup {
 	if len(items) == 0 {
 		return nil
 	}
@@ -198,7 +267,7 @@ func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, 
 
 	for i := range items {
 		item := &items[i]
-		rooms, ok := roomsByChannel[item.ChannelID]
+		rooms, ok := roomsForItem(roomsByChannel, *item)
 		if !ok || len(rooms) == 0 {
 			continue
 		}
@@ -223,72 +292,55 @@ func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, 
 	return groups
 }
 
-func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]map[string]bool {
-	result := make(map[string]map[string]bool)
+func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
+	result := make(map[string]channelAlarmRoomTargets)
 
-	// 고유 채널 ID 추출 + 키 생성
+	// 고유 채널 ID + 알람 타입 추출
 	type channelEntry struct {
 		channelID string
-		key       string
+		alarmType domain.AlarmType
 	}
 	var entries []channelEntry
 	seen := make(map[string]bool)
 	for i := range items {
 		item := &items[i]
-		if seen[item.ChannelID] {
+		alarmType := item.Kind.ToAlarmType()
+		lookupKey := item.ChannelID + "|" + string(alarmType)
+		if seen[lookupKey] {
 			continue
 		}
-		seen[item.ChannelID] = true
-		key := channelSubscribersKey(item.ChannelID, item.Kind.ToAlarmType())
-		entries = append(entries, channelEntry{channelID: item.ChannelID, key: key})
+		seen[lookupKey] = true
+		entries = append(entries, channelEntry{channelID: item.ChannelID, alarmType: alarmType})
 	}
 
 	if len(entries) == 0 {
 		return result
 	}
 
-	// DoMulti pipeline: 모든 SMEMBERS를 한 번에 실행 (RTT N→1)
-	b := d.cache.B()
-	cmds := make([]valkey.Completed, len(entries))
-	for i, e := range entries {
-		cmds[i] = b.Smembers().Key(e.key).Build()
-	}
-	results := d.cache.DoMulti(ctx, cmds...)
-
-	for i, e := range entries {
-		members, err := results[i].AsStrSlice()
+	for _, e := range entries {
+		members, err := sharedalarm.LookupChannelSubscribersByType(ctx, d.cache, e.channelID, e.alarmType)
 		if err != nil {
 			d.logger.Warn("Failed to get subscribers for channel",
 				slog.String("channel_id", e.channelID),
+				slog.String("alarm_type", string(e.alarmType)),
 				slog.Any("error", err))
 			continue
 		}
 
-		result[e.channelID] = map[string]bool{}
-		if len(members) == 0 {
-			continue
+		alarmTargets, ok := result[e.channelID]
+		if !ok {
+			alarmTargets = make(channelAlarmRoomTargets)
+			result[e.channelID] = alarmTargets
 		}
 
 		roomSet := make(map[string]bool, len(members))
 		for _, roomID := range members {
 			roomSet[roomID] = true
 		}
-		result[e.channelID] = roomSet
+		alarmTargets[e.alarmType] = roomSet
 	}
 
 	return result
-}
-
-// channelSubscribersKey: 채널 ID와 알람 타입으로 Valkey 키를 생성한다.
-func channelSubscribersKey(channelID string, alarmType domain.AlarmType) string {
-	switch alarmType {
-	case domain.AlarmTypeCommunity:
-		return "alarm:channel_subscribers:COMMUNITY:" + channelID
-	case domain.AlarmTypeShorts:
-		return "alarm:channel_subscribers:SHORTS:" + channelID
-	default:
-		return "alarm:channel_subscribers:" + channelID
-	}
 }
 
 // ProcessOnceForTest: 테스트용 - 한 번의 폴링 사이클 실행

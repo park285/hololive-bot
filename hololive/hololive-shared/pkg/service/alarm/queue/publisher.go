@@ -59,6 +59,9 @@ func (p *Publisher) Publish(ctx context.Context, notification *domain.AlarmNotif
 	if notification == nil {
 		return fmt.Errorf("publish alarm queue: notification is nil")
 	}
+	if err := notification.ValidateLegacyRoute(); err != nil {
+		return fmt.Errorf("publish alarm queue: validate legacy route: %w", err)
+	}
 
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: *notification,

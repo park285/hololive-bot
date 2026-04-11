@@ -65,7 +65,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
-	cfg := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
+	cfg, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
@@ -89,11 +92,15 @@ func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
 }
 
 //nolint:funlen // central environment-to-config assembly is intentionally kept in one place
-func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) *Config {
+func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) (*Config, error) {
 	llmSchedulerHealthURL := sharedenv.StringAny(
 		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
 		"SERVICES_LLM_SERVER_HEALTH_URL",
 	)
+	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
+	if err != nil {
+		return nil, err
+	}
 
 	return &Config{
 		Iris: IrisConfig{
@@ -122,8 +129,10 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			EnableQuotaBuilding: sharedenv.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
 		},
 		Ingestion: IngestionConfig{
-			YouTubeEnabled:   sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
-			PhotoSyncEnabled: sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
+			YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
+			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
+			CommunityShortsBigBangEnabled:   sharedenv.Bool("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED", false),
+			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
@@ -185,7 +194,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			MissingInProduction: corsMissingInProduction,
 		},
 		Version: sharedenv.String("APP_VERSION", "1.1.0-go"),
-	}
+	}, nil
 }
 
 // Validate: 필수 설정값이 누락되지 않았는지 검증합니다.

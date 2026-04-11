@@ -74,6 +74,7 @@ func TestBuildFetchProfilesRuntime_WithNilContext(t *testing.T) {
 	require.NotNil(t, runtime.Logger)
 	require.NotNil(t, runtime.HTTPClient)
 	assert.Equal(t, constants.OfficialProfileConfig.RequestTimeout, runtime.HTTPClient.Timeout)
+	assert.NotNil(t, runtime.HTTPClient.Transport)
 
 	runtime.Close()
 }

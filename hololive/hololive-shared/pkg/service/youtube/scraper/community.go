@@ -26,9 +26,15 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/tidwall/gjson"
+)
+
+var (
+	communityPostIDJSONPattern = regexp.MustCompile(`"postId"\s*:\s*"([^"]+)"`)
+	communityPostURLPattern    = regexp.MustCompile(`/post/([^"?#&/]+)`)
 )
 
 // GetCommunityPosts: 채널의 커뮤니티 포스트 목록 조회 (/channel/{id}/posts)
@@ -104,8 +110,8 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 
 // parseBackstagePost: backstagePostRenderer JSON을 CommunityPost 구조체로 변환
 func (c *Client) parseBackstagePost(post gjson.Result) *CommunityPost {
-	postID := post.Get("postId").String()
-	if postID == "" {
+	upstreamPostID := extractCommunityPostID(post)
+	if upstreamPostID == "" {
 		return nil
 	}
 
@@ -144,17 +150,78 @@ func (c *Client) parseBackstagePost(post gjson.Result) *CommunityPost {
 
 	// 첨부 비디오
 	videoID := post.Get("backstageAttachment.videoRenderer.videoId").String()
+	publishedText := firstNonEmptyString(
+		post.Get("publishedTimeText.simpleText").String(),
+		post.Get("publishedTimeText.runs.0.text").String(),
+	)
+	publishedAt, _ := normalizePublishedAtCandidate(publishedText)
 
 	return &CommunityPost{
-		PostID:        postID,
-		AuthorID:      post.Get("authorEndpoint.browseEndpoint.browseId").String(),
-		AuthorName:    post.Get("authorText.runs.0.text").String(),
-		AuthorPhoto:   authorPhoto,
-		ContentText:   contentText,
-		PublishedText: post.Get("publishedTimeText.runs.0.text").String(),
-		LikeCount:     likeCount,
-		CommentCount:  post.Get("actionButtons.commentActionButtonsRenderer.replyButton.buttonRenderer.text.simpleText").Int(),
-		Images:        images,
-		VideoID:       videoID,
+		PostID:         upstreamPostID,
+		UpstreamPostID: upstreamPostID,
+		AuthorID:       post.Get("authorEndpoint.browseEndpoint.browseId").String(),
+		AuthorName:     post.Get("authorText.runs.0.text").String(),
+		AuthorPhoto:    authorPhoto,
+		ContentText:    contentText,
+		PublishedText:  publishedText,
+		PublishedAt:    publishedAt,
+		LikeCount:      likeCount,
+		CommentCount:   post.Get("actionButtons.commentActionButtonsRenderer.replyButton.buttonRenderer.text.simpleText").Int(),
+		Images:         images,
+		VideoID:        videoID,
 	}
+}
+
+func extractCommunityPostID(post gjson.Result) string {
+	for _, candidate := range []string{
+		post.Get("postId").String(),
+		post.Get("navigationEndpoint.commandMetadata.webCommandMetadata.url").String(),
+		post.Get("actionButtons.commentActionButtonsRenderer.replyButton.buttonRenderer.navigationEndpoint.commandMetadata.webCommandMetadata.url").String(),
+	} {
+		if postID := extractCommunityPostIDFromCandidate(candidate); postID != "" {
+			return postID
+		}
+	}
+
+	return extractCommunityPostIDFromRaw(post.Raw)
+}
+
+func extractCommunityPostIDFromCandidate(value string) string {
+	normalized := strings.TrimSpace(strings.ReplaceAll(value, `\/`, `/`))
+	if normalized == "" {
+		return ""
+	}
+
+	if postID := extractCommunityPostIDFromURL(normalized); postID != "" {
+		return postID
+	}
+
+	return normalized
+}
+
+func extractCommunityPostIDFromRaw(raw string) string {
+	normalized := strings.ReplaceAll(raw, `\/`, `/`)
+	if matches := communityPostIDJSONPattern.FindStringSubmatch(normalized); len(matches) == 2 {
+		return strings.TrimSpace(matches[1])
+	}
+
+	return extractCommunityPostIDFromURL(normalized)
+}
+
+func extractCommunityPostIDFromURL(value string) string {
+	matches := communityPostURLPattern.FindStringSubmatch(value)
+	if len(matches) != 2 {
+		return ""
+	}
+
+	return strings.TrimSpace(matches[1])
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
