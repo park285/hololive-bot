@@ -29,9 +29,7 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
-type infraResources = sharedmodules.InfraModule
-
-func initStreamInfra(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*infraResources, error) {
+func initStreamInfra(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*sharedmodules.InfraModule, error) {
 	module, err := sharedmodules.BuildInfraModule(ctx, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide infra resources: %w", err)
