@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { getCookie } from "@/api/client";
 import { authApi } from "@/api/core";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -9,14 +8,6 @@ export function useAuthBootstrap() {
 
 	useEffect(() => {
 		const lifecycle = { cancelled: false };
-		const sessionCookie = getCookie("admin_session");
-
-		if (sessionCookie == null || sessionCookie === "") {
-			setAuthenticated(false);
-			return () => {
-				lifecycle.cancelled = true;
-			};
-		}
 
 		markAuthPending();
 
