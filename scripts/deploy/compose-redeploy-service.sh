@@ -21,6 +21,34 @@ resolve_shared_go_workspace_path() {
 
 export SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
 
+resolve_compose_env_file() {
+    if [ -n "${COMPOSE_ENV_FILE:-}" ]; then
+        if [ ! -f "${COMPOSE_ENV_FILE}" ]; then
+            echo "[ERROR] COMPOSE_ENV_FILE not found: ${COMPOSE_ENV_FILE}"
+            exit 1
+        fi
+        printf '%s\n' "${COMPOSE_ENV_FILE}"
+        return
+    fi
+
+    local worktree_env="${ROOT_DIR}/.env"
+    if [ -f "$worktree_env" ]; then
+        printf '%s\n' "$worktree_env"
+        return
+    fi
+
+    local canonical_env="${REPO_CANONICAL_ROOT}/.env"
+    if [ -f "$canonical_env" ]; then
+        printf '%s\n' "$canonical_env"
+        return
+    fi
+
+    echo "[ERROR] Compose env file not found. Checked: $worktree_env, $canonical_env"
+    exit 1
+}
+
+export COMPOSE_ENV_FILE="$(resolve_compose_env_file)"
+
 usage() {
     echo "Usage: $0 <service|all>"
     echo
@@ -101,15 +129,16 @@ echo "[INFO] COMPOSE_MODE=$COMPOSE_MODE"
 echo "[INFO] COMPOSE_FILE=$COMPOSE_FILE"
 echo "[INFO] HOLO_BOT_VERSION=$HOLO_BOT_VERSION"
 echo "[INFO] SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
+echo "[INFO] COMPOSE_ENV_FILE=$COMPOSE_ENV_FILE"
 
 if [ -n "$TARGET" ]; then
     echo "[UP] $TARGET"
-    "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" up -d --build "$TARGET"
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build "$TARGET"
     echo "[PS] $TARGET"
-    "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" ps "$TARGET"
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps "$TARGET"
 else
     echo "[UP] all services"
-    "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" up -d --build
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build
     echo "[PS] all services"
-    "${COMPOSE_CMD[@]}" -f "$COMPOSE_FILE" ps
+    "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps
 fi
