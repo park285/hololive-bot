@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -233,7 +234,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Iris:         config.IrisConfig{BaseURL: "https://iris.example"},
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
-		&infraResources{Cache: cacheSvc, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
+		&sharedmodules.InfraModule{Cache: cacheSvc, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
 		&alarmModeComponents{alarmCRUD: testAlarmCRUD{}, chzzkClient: chzzkClient, twitchClient: twitchClient, memberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
@@ -306,7 +307,7 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 			Scraper:      config.ScraperConfig{},
 		},
-		&infraResources{},
+		&sharedmodules.InfraModule{},
 		&holodex.Service{},
 		memberData,
 		nil,

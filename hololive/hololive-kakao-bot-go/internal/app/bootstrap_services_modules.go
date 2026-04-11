@@ -25,6 +25,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
@@ -40,7 +41,7 @@ import (
 
 func buildBotDependencyModules(
 	cfg *config.Config,
-	infra *infraResources,
+	infra *sharedmodules.InfraModule,
 	alarmMode *alarmModeComponents,
 	holodexService *holodex.Service,
 	messageAdapter *adapter.MessageAdapter,
