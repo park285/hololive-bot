@@ -219,7 +219,7 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		result, err := loadSubscriberRoomsByChannel(t.Context(), &cachemocks.Client{}, nil)
+		result, err := loadSubscriberRoomsByChannel(t.Context(), cachemocks.NewStrictClient(), nil)
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
