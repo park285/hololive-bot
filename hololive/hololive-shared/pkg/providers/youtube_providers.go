@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -35,11 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
-
-// ProvideHolodexAPIKey - 설정에서 API 키 추출
-func ProvideHolodexAPIKey(cfg config.HolodexConfig) string {
-	return cfg.APIKey
-}
 
 // ProvideScraperService - 스크래퍼 서비스 생성
 func ProvideScraperService(
