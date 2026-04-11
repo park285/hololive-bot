@@ -170,10 +170,10 @@ func TestBuildCommunityShortsBigBangPolicy(t *testing.T) {
 		assert.Zero(t, policy.TargetChannelCount())
 	})
 
-	t.Run("reuses operational target validation for duplicate channels", func(t *testing.T) {
+	t.Run("deduplicates shared operating channels before policy validation", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := buildCommunityShortsBigBangPolicy(config.IngestionConfig{
+		policy, err := buildCommunityShortsBigBangPolicy(config.IngestionConfig{
 			CommunityShortsBigBangEnabled:   true,
 			CommunityShortsBigBangCutoverAt: time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC),
 		}, mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
@@ -182,8 +182,9 @@ func TestBuildCommunityShortsBigBangPolicy(t *testing.T) {
 				{Name: "Miko", Org: "Hololive", ChannelID: "UCdup"},
 			},
 		}))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "duplicate deployment targets")
+		require.NoError(t, err)
+		assert.True(t, policy.Enabled())
+		assert.Equal(t, 1, policy.TargetChannelCount())
 	})
 }
 
