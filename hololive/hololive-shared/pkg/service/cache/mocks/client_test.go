@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+func TestZeroValueClientIsStrict(t *testing.T) {
+	client := &Client{}
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+
+	_, _ = client.Exists(context.Background(), "rooms")
+}
+
 func TestClientCloseDefaultsToNoopWhenNotStrict(t *testing.T) {
 	client := NewLenientClient()
 
@@ -114,6 +126,18 @@ func TestClientReadMethodsPanicWhenStrict(t *testing.T) {
 	}()
 
 	_, _ = client.SMembers(context.Background(), "rooms")
+}
+
+func TestNewLenientClientDoesNotPanicOnUnsetExists(t *testing.T) {
+	client := NewLenientClient()
+
+	exists, err := client.Exists(context.Background(), "rooms")
+	if err != nil {
+		t.Fatalf("Exists() error = %v, want nil", err)
+	}
+	if exists {
+		t.Fatal("Exists() = true, want false")
+	}
 }
 
 func TestClientWriteMethodsDefaultToZeroValuesWhenLenient(t *testing.T) {
