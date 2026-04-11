@@ -26,6 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/repository"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
@@ -46,7 +47,7 @@ type coreIntegrationServices struct {
 func initCoreIntegrationServices(
 	ctx context.Context,
 	cfg *config.Config,
-	infra *infraResources,
+	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*coreIntegrationServices, error) {
 	aclService, err := ProvideACLService(
@@ -79,7 +80,7 @@ func initCoreIntegrationServices(
 }
 
 func buildTemplateAdminService(
-	infra *infraResources,
+	infra *sharedmodules.InfraModule,
 	templateRenderer *template.Renderer,
 	logger *slog.Logger,
 ) *template.AdminService {
