@@ -46,6 +46,10 @@ echo "[M1] Go trigger route hardcoding check"
 "${SCRIPT_DIR}/check-go-trigger-route-hardcoding.sh"
 echo
 
+echo "[M1] migration manifest check"
+"${SCRIPT_DIR}/check-migration-manifest.sh"
+echo
+
 echo "[CI] Run M4 Go module LOC gate"
 "${SCRIPT_DIR}/check-go-module-loc.sh"
 echo
