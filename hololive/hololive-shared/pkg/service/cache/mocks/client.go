@@ -34,10 +34,10 @@ import (
 // Client is a manual mock for cache.Client.
 //
 // NOTE: cache.Client is intentionally broad (matches *cache.Service public surface).
-// For unit tests, set only the function fields you need; unconfigured calls will panic
-// to avoid silent false-positives.
+// For unit tests, zero-value Client is strict by default; unconfigured calls panic
+// unless Lenient is explicitly enabled.
 type Client struct {
-	Strict bool
+	Lenient bool
 
 	GetFunc      func(ctx context.Context, key string, dest any) error
 	MGetFunc     func(ctx context.Context, keys []string) (map[string]string, error)
@@ -90,15 +90,15 @@ var _ cache.Client = (*Client)(nil)
 var ErrUnimplemented = errors.New("cache mock: method not configured")
 
 func NewStrictClient() *Client {
-	return &Client{Strict: true}
+	return &Client{}
 }
 
 func NewLenientClient() *Client {
-	return &Client{Strict: false}
+	return &Client{Lenient: true}
 }
 
 func (m *Client) panicIfUnset(name string) {
-	if m != nil && m.Strict {
+	if m == nil || !m.Lenient {
 		panic("cache mock: " + name + " not set")
 	}
 }
@@ -251,9 +251,7 @@ func (m *Client) Close() error {
 	if m.CloseFunc != nil {
 		return m.CloseFunc()
 	}
-	if m.Strict {
-		panic("cache mock: CloseFunc not set")
-	}
+	m.panicIfUnset("CloseFunc")
 	return nil
 }
 
@@ -261,9 +259,7 @@ func (m *Client) IsConnected(ctx context.Context) bool {
 	if m.IsConnectedFunc != nil {
 		return m.IsConnectedFunc(ctx)
 	}
-	if m.Strict {
-		panic("cache mock: IsConnectedFunc not set")
-	}
+	m.panicIfUnset("IsConnectedFunc")
 	return false
 }
 
