@@ -35,3 +35,10 @@ Default output directory: `artifacts/review`
 - tracked 상태로 들어간 파일이라도 `.worktrees`, `.tasklists`, IDE metadata, agent 실행 디렉터리, `logs`, `artifacts`, 기존 tarball, `BUNDLE_MANIFEST.txt` 같은 로컬 오염물은 항상 제외합니다.
 - untracked 파일이 정말 필요할 때만 `INCLUDE_UNTRACKED=true`를 명시합니다.
 - full bundle의 `BUNDLE_MANIFEST.txt`는 export script가 생성하는 내부 manifest만 포함합니다.
+
+## Verification
+
+- 검토용 bundle은 `scripts/review/export-full-bundle.sh`만 정식 경로로 사용합니다.
+- 외부 경로 또는 수동 tar로 bundle을 재구성하지 않습니다.
+- 전달 전 같은 git checkout에서 `scripts/review/verify-full-bundle.sh <bundle.tar.gz>`를 실행합니다.
+- verifier는 excluded path, manifest schema, 현재 checkout의 branch/commit, export policy 기준 파일 집합, 그리고 파일 내용 hash 일치를 함께 검증합니다.
