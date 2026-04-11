@@ -9,11 +9,12 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 const readSource = (filename: string) =>
 	readFileSync(path.join(dirname, filename), "utf8");
 
-test("adminClient owns the single generated Admin instance wired to apiClient", () => {
+test("adminClient owns the single generated Admin instance wired to root api client", () => {
 	const source = readSource("adminClient.ts");
 
 	assert.match(source, /new Admin\(\)/);
-	assert.match(source, /adminClient\.instance = apiClient/);
+	assert.match(source, /createApiClient\(""\)/);
+	assert.equal(source.includes("adminClient.instance = apiClient"), false);
 });
 
 test("client 401 handler no longer exempts stale holo paths", () => {
