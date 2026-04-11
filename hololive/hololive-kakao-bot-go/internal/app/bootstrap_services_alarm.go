@@ -69,7 +69,7 @@ func initAlarmDependencies(
 func initAlarmModeComponents(
 	ctx context.Context,
 	cfg *config.Config,
-	infra *infraResources,
+	infra *sharedmodules.InfraModule,
 	holodexService *holodex.Service,
 	memberServiceAdapter member.DataProvider,
 	alarmRepository *alarm.Repository,
