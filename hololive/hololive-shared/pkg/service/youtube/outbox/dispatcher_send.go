@@ -499,6 +499,7 @@ func (d *Dispatcher) dispatchDeliveryRows(
 		failureBuckets:     make(map[string][]int64),
 	}
 	var mu sync.Mutex
+	reuseCache := newDeliveryClaimReuseCache(len(rows))
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
 
@@ -515,7 +516,7 @@ func (d *Dispatcher) dispatchDeliveryRows(
 	for i := range groups {
 		group := groups[i]
 		eg.Go(func() error {
-			d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, &result, &mu)
+			d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result, &mu)
 			return nil
 		})
 	}
@@ -529,6 +530,7 @@ func (d *Dispatcher) dispatchGroup(
 	group deliveryGroup,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
+	reuseCache *deliveryClaimReuseCache,
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -539,7 +541,7 @@ func (d *Dispatcher) dispatchGroup(
 
 	// 단건 그룹: 기존 개별 dispatch 경로
 	if len(group.rows) == 1 {
-		d.dispatchDeliveryRow(ctx, group.rows[0], groupOutboxByID, formattedMessages, formatFailures, result, mu)
+		d.dispatchDeliveryRow(ctx, group.rows[0], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
 		return
 	}
 
@@ -559,18 +561,18 @@ func (d *Dispatcher) dispatchGroup(
 
 	// payload 검증 실패 항목 -> 개별 dispatch
 	for i := range invalidRows {
-		d.dispatchDeliveryRow(ctx, invalidRows[i], groupOutboxByID, formattedMessages, formatFailures, result, mu)
+		d.dispatchDeliveryRow(ctx, invalidRows[i], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
 	}
 
 	// 검증 후 1건 이하 -> 개별 dispatch
 	if len(validRows) <= 1 {
 		for i := range validRows {
-			d.dispatchDeliveryRow(ctx, validRows[i], groupOutboxByID, formattedMessages, formatFailures, result, mu)
+			d.dispatchDeliveryRow(ctx, validRows[i], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
 		}
 		return
 	}
 
-	claimSelection := d.selectClaimedDeliveries(ctx, validRows, validOutboxes)
+	claimSelection := d.selectClaimedDeliveries(ctx, validRows, validOutboxes, reuseCache)
 	d.applyClaimSelection(result, mu, claimSelection)
 	validRows = claimSelection.sendRows
 	validOutboxes = claimSelection.sendOutboxes
@@ -677,6 +679,7 @@ func (d *Dispatcher) dispatchDeliveryRow(
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
+	reuseCache *deliveryClaimReuseCache,
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -686,7 +689,7 @@ func (d *Dispatcher) dispatchDeliveryRow(
 		return
 	}
 
-	claimSelection := d.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox})
+	claimSelection := d.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
 	d.applyClaimSelection(result, mu, claimSelection)
 	if len(claimSelection.sendRows) == 0 {
 		return

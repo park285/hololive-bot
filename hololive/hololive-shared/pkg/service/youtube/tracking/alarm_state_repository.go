@@ -89,8 +89,22 @@ func (r *GormRepository) TryClaimAlarmState(ctx context.Context, record *domain.
 	if result.Error != nil {
 		return false, fmt.Errorf("try claim alarm state: exec query: %w", result.Error)
 	}
+	if result.RowsAffected == 0 {
+		return false, nil
+	}
 
-	return result.RowsAffected > 0, nil
+	current, err := r.FindAlarmStateByPostID(ctx, normalizedRecord.Kind, normalizedRecord.PostID)
+	if err != nil {
+		return false, fmt.Errorf("try claim alarm state: reload row: %w", err)
+	}
+	if current == nil || current.AuthorizedAt == nil || current.AuthorizedAt.IsZero() {
+		return false, nil
+	}
+	if current.AlarmSentAt != nil && !current.AlarmSentAt.IsZero() {
+		return false, nil
+	}
+
+	return current.AuthorizedAt.UTC().Equal(normalizedRecord.AuthorizedAt.UTC()), nil
 }
 
 func (r *GormRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {

@@ -110,7 +110,7 @@ func TestBuildBotAdminAPIHandlers_WiresCommunityShortsOpsRepository(t *testing.T
 	)
 	require.NotNil(t, handlers)
 	require.NotNil(t, handlers.Stats)
-	assert.True(t, handlers.Stats.APIHandler.HasCommunityShortsOpsRepository())
+	assert.True(t, handlers.Stats.HasCommunityShortsOpsRepository())
 }
 
 func TestBuildBotAdminAPIHandlers_LeavesCommunityShortsOpsRepositoryNilWithoutGorm(t *testing.T) {
@@ -126,7 +126,7 @@ func TestBuildBotAdminAPIHandlers_LeavesCommunityShortsOpsRepositoryNilWithoutGo
 	)
 	require.NotNil(t, handlers)
 	require.NotNil(t, handlers.Stats)
-	assert.False(t, handlers.Stats.APIHandler.HasCommunityShortsOpsRepository())
+	assert.False(t, handlers.Stats.HasCommunityShortsOpsRepository())
 }
 
 var _ database.Client = (*nilGormPostgres)(nil)

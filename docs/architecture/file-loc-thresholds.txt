@@ -1,6 +1,6 @@
 # relative/path:MAX_LINES
 admin-dashboard/backend/src/holo/handlers.rs:80
-admin-dashboard/backend/src/holo/handlers_queries.rs:260
+admin-dashboard/backend/src/holo/handlers_queries.rs:280
 admin-dashboard/backend/src/holo/handlers_commands.rs:340
 admin-dashboard/backend/src/holo/types.rs:80
 admin-dashboard/backend/src/holo/types/members.rs:160
@@ -8,9 +8,27 @@ admin-dashboard/backend/src/holo/types/milestones.rs:180
 admin-dashboard/backend/src/config.rs:260
 admin-dashboard/backend/src/config/security.rs:220
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
+admin-dashboard/frontend/src/features/youtube-ops/pages/YouTubeOpsPage.tsx:480
 scripts/logs/logs.sh:760
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
 hololive/hololive-kakao-bot-go/internal/service/chzzk/client.go:620
 hololive/hololive-kakao-bot-go/internal/service/notification/alarm_service.go:600
 hololive/hololive-shared/pkg/service/cache/service.go:650
+hololive/hololive-shared/pkg/domain/youtube_content.go:480
+hololive/hololive-shared/pkg/service/youtube/outbox/delivery_observation_context.go:420
+hololive/hololive-shared/pkg/service/youtube/outbox/delivery_post_send_counts.go:460
+hololive/hololive-shared/pkg/service/youtube/outbox/delivery_repository.go:500
+hololive/hololive-shared/pkg/service/youtube/outbox/delivery_timelines.go:950
+hololive/hololive-shared/pkg/service/youtube/outbox/dispatcher_claim_gate.go:500
+hololive/hololive-shared/pkg/service/youtube/outbox/dispatcher_send.go:850
+hololive/hololive-shared/pkg/service/youtube/poller/repository_batch.go:1220
+hololive/hololive-shared/pkg/service/youtube/tracking/observation_compare.go:720
+hololive/hololive-shared/pkg/service/youtube/tracking/repository.go:820
+hololive/hololive-stream-ingester/internal/app/community_shorts_alarm_sent_history_dataset.go:1360
+hololive/hololive-stream-ingester/internal/app/community_shorts_continuous_observation_report.go:780
+hololive/hololive-stream-ingester/internal/app/community_shorts_delivery_logs_report.go:440
+hololive/hololive-stream-ingester/internal/app/community_shorts_latency_cause_report.go:980
+hololive/hololive-stream-ingester/internal/app/community_shorts_route_report.go:580
+hololive/hololive-stream-ingester/internal/app/community_shorts_send_counts_report.go:760
+hololive/hololive-stream-ingester/internal/app/community_shorts_send_state_report.go:420
 shared-go/pkg/logging/logging.go:520

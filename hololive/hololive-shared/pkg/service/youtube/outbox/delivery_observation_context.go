@@ -182,10 +182,22 @@ func (r *DeliveryTelemetryRepository) loadObservationWindows(
 		Order("observation_started_at DESC").
 		Order("bigbang_cutover_at DESC").
 		Find(&windows).Error; err != nil {
+		if isMissingObservationWindowTableError(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("enrich delivery telemetry context: load observation windows: %w", err)
 	}
 
 	return windows, nil
+}
+
+func isMissingObservationWindowTableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "no such table: youtube_community_shorts_observation_windows") ||
+		strings.Contains(message, `relation "youtube_community_shorts_observation_windows" does not exist`)
 }
 
 func applyDeliveryTelemetryObservationContext(
