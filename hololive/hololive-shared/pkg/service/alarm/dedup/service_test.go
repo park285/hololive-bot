@@ -60,7 +60,7 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		strings: make(map[string]string),
 	}
 
-	client := &cachemocks.Client{}
+	client := cachemocks.NewStrictClient()
 	client.SetNXFunc = func(_ context.Context, key, _ string, ttl time.Duration) (bool, error) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
