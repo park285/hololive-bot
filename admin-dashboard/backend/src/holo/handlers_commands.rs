@@ -11,9 +11,9 @@ use crate::state::AppState;
 use super::helpers::send_typed;
 use super::types::{
     AddAliasRequest, AddMemberRequest, AddRoomRequest, DeleteAlarmRequest, RemoveAliasRequest,
-    RemoveRoomRequest, RoomNameUpdateRequest, SetAclRequest, SetAclResponse,
-    SetGraduationRequest, Settings, StatusOnlyResponse, UpdateChannelRequest,
-    UpdateMemberNameRequest, UserNameUpdateRequest,
+    RemoveRoomRequest, RoomNameUpdateRequest, SetAclRequest, SetAclResponse, SetGraduationRequest,
+    Settings, StatusOnlyResponse, UpdateChannelRequest, UpdateMemberNameRequest,
+    UserNameUpdateRequest,
 };
 
 #[utoipa::path(

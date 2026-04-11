@@ -95,6 +95,7 @@ artifacts/
 
 # Compressed archives
 *.tar.gz
+BUNDLE_MANIFEST.txt
 
 # ============================================
 # AI Tooling Artifacts (Local Only)

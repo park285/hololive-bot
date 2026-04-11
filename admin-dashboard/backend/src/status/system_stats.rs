@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -11,10 +12,20 @@ use super::ServiceEndpoint;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub enum RuntimeMetricKind {
+    Goroutine,
+    Thread,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServiceRuntimeStats {
     pub name: String,
-    pub goroutines: usize,
+    pub count: usize,
+    pub metric_kind: RuntimeMetricKind,
     pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -24,9 +35,10 @@ pub struct SystemStats {
     pub memory_total: u64,
     pub memory_used: u64,
     pub memory_usage: f32,
-    pub goroutines: usize,
-    pub total_goroutines: usize,
-    pub service_goroutines: Vec<ServiceRuntimeStats>,
+    pub thread_count: usize,
+    pub total_go_goroutines: usize,
+    pub total_runtime_units: usize,
+    pub service_runtime: Vec<ServiceRuntimeStats>,
     pub load_avg_1: f64,
     pub load_avg_5: f64,
     pub load_avg_15: f64,
@@ -64,26 +76,36 @@ impl SystemStatsCollector {
                         let load = System::load_average();
                         let total_memory = sys.total_memory();
                         let used_memory = sys.used_memory();
-                        let goroutines = current_pid
+                        let thread_count = current_pid
                             .and_then(|pid| sys.process(pid))
                             .and_then(|process| process.tasks())
                             .map_or(0, std::collections::HashSet::len);
-                        let external_service_goroutines =
+                        let external_service_runtime =
                             fetch_service_runtime_stats(&http_client, &endpoints).await;
-                        let total_goroutines = goroutines
-                            + external_service_goroutines
+                        let total_go_goroutines = external_service_runtime
+                                .iter()
+                                .filter(|service| {
+                                    service.available
+                                        && matches!(service.metric_kind, RuntimeMetricKind::Goroutine)
+                                })
+                                .map(|service| service.count)
+                                .sum::<usize>();
+                        let total_runtime_units = thread_count
+                            + external_service_runtime
                                 .iter()
                                 .filter(|service| service.available)
-                                .map(|service| service.goroutines)
+                                .map(|service| service.count)
                                 .sum::<usize>();
-                        let mut service_goroutines =
-                            Vec::with_capacity(external_service_goroutines.len() + 1);
-                        service_goroutines.push(ServiceRuntimeStats {
+                        let mut service_runtime =
+                            Vec::with_capacity(external_service_runtime.len() + 1);
+                        service_runtime.push(ServiceRuntimeStats {
                             name: "admin-dashboard".to_string(),
-                            goroutines,
+                            count: thread_count,
+                            metric_kind: RuntimeMetricKind::Thread,
                             available: true,
+                            error: None,
                         });
-                        service_goroutines.extend(external_service_goroutines);
+                        service_runtime.extend(external_service_runtime);
                         let stats = SystemStats {
                             cpu_usage: sys.global_cpu_usage(),
                             memory_total: total_memory,
@@ -93,9 +115,10 @@ impl SystemStatsCollector {
                             } else {
                                 0.0
                             },
-                            goroutines,
-                            total_goroutines,
-                            service_goroutines,
+                            thread_count,
+                            total_go_goroutines,
+                            total_runtime_units,
+                            service_runtime,
                             load_avg_1: load.one,
                             load_avg_5: load.five,
                             load_avg_15: load.fifteen,
@@ -126,13 +149,12 @@ async fn fetch_service_runtime_stats(
     client: &Client,
     endpoints: &[ServiceEndpoint],
 ) -> Vec<ServiceRuntimeStats> {
-    let mut services = Vec::with_capacity(endpoints.len());
-
-    for endpoint in endpoints {
-        services.push(fetch_service_runtime_stat(client, endpoint).await);
-    }
-
-    services
+    join_all(
+        endpoints
+            .iter()
+            .map(|endpoint| fetch_service_runtime_stat(client, endpoint)),
+    )
+    .await
 }
 
 async fn fetch_service_runtime_stat(
@@ -146,19 +168,32 @@ async fn fetch_service_runtime_stat(
         Ok(resp) if resp.status().is_success() => match resp.json::<HealthResponse>().await {
             Ok(health) => ServiceRuntimeStats {
                 name: endpoint.name.clone(),
-                goroutines: extract_goroutines(&health),
+                count: extract_goroutines(&health),
+                metric_kind: RuntimeMetricKind::Goroutine,
                 available: true,
+                error: None,
             },
-            Err(_) => ServiceRuntimeStats {
+            Err(err) => ServiceRuntimeStats {
                 name: endpoint.name.clone(),
-                goroutines: 0,
-                available: true,
+                count: 0,
+                metric_kind: RuntimeMetricKind::Goroutine,
+                available: false,
+                error: Some(format!("invalid health payload: {err}")),
             },
         },
-        _ => ServiceRuntimeStats {
+        Err(err) => ServiceRuntimeStats {
             name: endpoint.name.clone(),
-            goroutines: 0,
+            count: 0,
+            metric_kind: RuntimeMetricKind::Goroutine,
             available: false,
+            error: Some(err.to_string()),
+        },
+        Ok(resp) => ServiceRuntimeStats {
+            name: endpoint.name.clone(),
+            count: 0,
+            metric_kind: RuntimeMetricKind::Goroutine,
+            available: false,
+            error: Some(format!("status: {}", resp.status())),
         },
     }
 }
@@ -214,12 +249,15 @@ mod tests {
             memory_total: 1024,
             memory_used: 256,
             memory_usage: 25.0,
-            goroutines: 7,
-            total_goroutines: 7,
-            service_goroutines: vec![ServiceRuntimeStats {
+            thread_count: 7,
+            total_go_goroutines: 42,
+            total_runtime_units: 49,
+            service_runtime: vec![ServiceRuntimeStats {
                 name: "admin-dashboard".to_string(),
-                goroutines: 7,
+                count: 7,
+                metric_kind: RuntimeMetricKind::Thread,
                 available: true,
+                error: None,
             }],
             load_avg_1: 0.1,
             load_avg_5: 0.2,
@@ -232,12 +270,11 @@ mod tests {
         assert_eq!(value["memoryTotal"], json!(1024));
         assert_eq!(value["memoryUsed"], json!(256));
         assert_eq!(value["memoryUsage"], json!(25.0));
-        assert_eq!(value["goroutines"], json!(7));
-        assert_eq!(value["totalGoroutines"], json!(7));
-        assert_eq!(
-            value["serviceGoroutines"][0]["name"],
-            json!("admin-dashboard")
-        );
+        assert_eq!(value["threadCount"], json!(7));
+        assert_eq!(value["totalGoGoroutines"], json!(42));
+        assert_eq!(value["totalRuntimeUnits"], json!(49));
+        assert_eq!(value["serviceRuntime"][0]["name"], json!("admin-dashboard"));
+        assert_eq!(value["serviceRuntime"][0]["metricKind"], json!("thread"));
         assert!(value.get("cpu_usage").is_none());
         assert!(value.get("memory_usage_percent").is_none());
     }
@@ -255,6 +292,6 @@ mod tests {
         assert!(stats.is_ok());
         let stats = stats.unwrap().unwrap();
         assert!(stats.memory_total > 0);
-        assert_eq!(stats.service_goroutines[0].name, "admin-dashboard");
+        assert_eq!(stats.service_runtime[0].name, "admin-dashboard");
     }
 }

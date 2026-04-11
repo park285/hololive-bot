@@ -21,6 +21,8 @@
 package checker
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -29,6 +31,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 func TestNotifierSend_DedupSkip(t *testing.T) {
@@ -142,6 +149,51 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 
 	if minuteSent != "1" {
 		t.Fatalf("expected minute field to be 1, got %q", minuteSent)
+	}
+}
+
+func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	logBuffer := &bytes.Buffer{}
+	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+
+	notifier, err := NewNotifier(
+		dedupSvc,
+		queue.NewPublisher(cacheSvc, logger),
+		&notification.AlarmService{},
+		nil,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewNotifier() error = %v", err)
+	}
+
+	start := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Minute)
+	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
+		t.Run(string(alarmType), func(t *testing.T) {
+			stream := &domain.Stream{
+				ID:             "blocked-" + string(alarmType),
+				Title:          "blocked route",
+				ChannelID:      "UC_BLOCKED",
+				Status:         domain.StreamStatusUpcoming,
+				StartScheduled: &start,
+				Channel:        &domain.Channel{ID: "UC_BLOCKED", Name: "blocked"},
+			}
+			notification := domain.NewAlarmNotification("room-blocked", stream.Channel, stream, 5, []string{}, "")
+			notification.AlarmType = alarmType
+			logBuffer.Reset()
+
+			result, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
+			require.Error(t, sendErr)
+			assert.Contains(t, sendErr.Error(), "youtube outbox path")
+			assert.Equal(t, SendResult{}, result)
+			assert.Contains(t, logBuffer.String(), legacyCommunityShortsRouteAuditLogMessage)
+			assert.Contains(t, logBuffer.String(), "\"delivery_path\":\""+legacyCommunityShortsDeliveryPath+"\"")
+			assert.Contains(t, logBuffer.String(), "\"alarm_type\":\""+string(alarmType)+"\"")
+		})
 	}
 }
 

@@ -23,9 +23,14 @@ package scraper
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/tidwall/gjson"
 )
+
+const shortsPublishedAtLookupWindow = 30
 
 // GetShorts: 채널의 쇼츠 비디오 목록 조회 (/channel/{id}/shorts)
 func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*Short, error) {
@@ -76,7 +81,44 @@ func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int
 		}
 	}
 
+	c.enrichShortsPublishedAt(ctx, channelID, shorts)
+
 	return shorts, nil
+}
+
+func (c *Client) enrichShortsPublishedAt(ctx context.Context, channelID string, shorts []*Short) {
+	if len(shorts) == 0 {
+		return
+	}
+
+	lookupLimit := max(len(shorts)*3, shortsPublishedAtLookupWindow)
+	videos, err := c.getRecentVideosFromRSS(ctx, channelID, lookupLimit)
+	if err != nil {
+		slog.Debug("shorts published_at rss lookup failed",
+			"channel_id", channelID,
+			"error", err.Error())
+		return
+	}
+
+	if len(videos) == 0 {
+		return
+	}
+
+	publishedAtByVideoID := make(map[string]*time.Time, len(videos))
+	for _, video := range videos {
+		if video == nil || video.VideoID == "" {
+			continue
+		}
+		publishedAt, ok := yttimestamp.ParsePublishedAt(video.PublishedText)
+		if !ok {
+			continue
+		}
+		publishedAtByVideoID[video.VideoID] = publishedAt
+	}
+
+	for _, short := range shorts {
+		short.PublishedAt = yttimestamp.NormalizePtr(publishedAtByVideoID[short.VideoID])
+	}
 }
 
 // parseShortsLockupViewModel: shortsLockupViewModel JSON을 Short 구조체로 변환

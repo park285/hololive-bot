@@ -21,8 +21,8 @@
 package checker
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -112,10 +112,19 @@ type sendInput struct {
 	startScheduled time.Time
 }
 
+const (
+	legacyCommunityShortsRouteAuditLogMessage = "YouTube community/shorts legacy route audit"
+	legacyCommunityShortsDeliveryPath         = "legacy_alarm_queue"
+)
+
 func (n *Notifier) sendOne(ctx context.Context, notif *domain.AlarmNotification) (sendOutcome, error) {
 	payload := resolveSendInput(notif, time.Now().UTC())
 	if payload == nil {
 		return sendOutcomeSkipped, nil
+	}
+	if err := payload.notification.ValidateLegacyRoute(); err != nil {
+		n.logLegacyCommunityShortsRoute(payload, err)
+		return sendOutcomeFailed, fmt.Errorf("send one: validate legacy route: %w", err)
 	}
 
 	claimKeys, claimed, err := n.claimDedup(ctx, payload)
@@ -136,6 +145,33 @@ func (n *Notifier) sendOne(ctx context.Context, notif *domain.AlarmNotification)
 	}
 
 	return sendOutcomeSent, nil
+}
+
+func (n *Notifier) logLegacyCommunityShortsRoute(payload *sendInput, routeErr error) {
+	if n == nil || payload == nil || payload.notification == nil {
+		return
+	}
+
+	attrs := []any{
+		slog.String("delivery_path", legacyCommunityShortsDeliveryPath),
+		slog.String("send_result", "blocked"),
+		slog.String("failure_reason", "legacy route blocked"),
+		slog.String("alarm_type", string(payload.notification.AlarmType)),
+	}
+	if payload.notification.RoomID != "" {
+		attrs = append(attrs, slog.String("room_id", payload.notification.RoomID))
+	}
+	if payload.channelID != "" {
+		attrs = append(attrs, slog.String("channel_id", payload.channelID))
+	}
+	if payload.streamID != "" {
+		attrs = append(attrs, slog.String("stream_id", payload.streamID))
+	}
+	if routeErr != nil {
+		attrs = append(attrs, slog.String("error", routeErr.Error()))
+	}
+
+	n.logger.Warn(legacyCommunityShortsRouteAuditLogMessage, attrs...)
 }
 
 func resolveSendInput(notif *domain.AlarmNotification, now time.Time) *sendInput {

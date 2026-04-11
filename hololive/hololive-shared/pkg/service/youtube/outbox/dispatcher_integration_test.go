@@ -36,7 +36,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +54,7 @@ type sentMessage struct {
 	Message string
 }
 
-func (f *fakeSender) SendMessage(_ context.Context, room, message string, _ ...iris.SendOption) error {
+func (f *fakeSender) SendMessage(_ context.Context, room, message string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failNext {
@@ -69,24 +68,6 @@ func (f *fakeSender) SendMessage(_ context.Context, room, message string, _ ...i
 	f.messages = append(f.messages, sentMessage{Room: room, Message: message})
 	return nil
 }
-
-func (f *fakeSender) SendImage(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
-}
-func (f *fakeSender) SendMultipleImages(_ context.Context, _ string, _ [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
-}
-func (f *fakeSender) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
-}
-func (f *fakeSender) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, nil
-}
-func (f *fakeSender) Ping(_ context.Context) bool { return true }
-func (f *fakeSender) GetConfig(_ context.Context) (*iris.ConfigResponse, error) {
-	return &iris.ConfigResponse{}, nil
-}
-func (f *fakeSender) Decrypt(_ context.Context, data string) (string, error) { return data, nil }
 
 func (f *fakeSender) getMessages() []sentMessage {
 	f.mu.Lock()
@@ -607,6 +588,160 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 	}
 }
 
+func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "true" {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+
+	testCases := []struct {
+		name            string
+		kind            domain.OutboxKind
+		channelID       string
+		roomID          string
+		memberName      string
+		contentPrefix   string
+		messageFragment string
+		postID          func(contentID string) string
+		payload         func(contentID string, publishedAt time.Time) string
+	}{
+		{
+			name:            "community post",
+			kind:            domain.OutboxKindCommunityPost,
+			channelID:       "UCintegration_race_community",
+			roomID:          "room-community-race",
+			memberName:      "ConcurrentCommunityMember",
+			contentPrefix:   "community_race",
+			messageFragment: "커뮤니티 알림",
+			postID: func(contentID string) string {
+				return "community:" + contentID
+			},
+			payload: func(contentID string, publishedAt time.Time) string {
+				payload, _ := json.Marshal(map[string]any{
+					"canonical_post_id": "community:" + contentID,
+					"post_id":           contentID,
+					"content_text":      "Concurrent community delivery body",
+					"published_at":      publishedAt,
+				})
+				return string(payload)
+			},
+		},
+		{
+			name:            "short",
+			kind:            domain.OutboxKindNewShort,
+			channelID:       "UCintegration_race_short",
+			roomID:          "room-short-race",
+			memberName:      "ConcurrentShortMember",
+			contentPrefix:   "short_race",
+			messageFragment: "쇼츠 알림",
+			postID: func(contentID string) string {
+				return "short:" + contentID
+			},
+			payload: func(contentID string, publishedAt time.Time) string {
+				payload, _ := json.Marshal(map[string]any{
+					"canonical_post_id": "short:" + contentID,
+					"video_id":          contentID,
+					"title":             "Concurrent short delivery title",
+					"published_at":      publishedAt,
+				})
+				return string(payload)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			dbPrimary := setupTestDB(t)
+			dbSecondary := setupTestDB(t)
+			cleanupOutbox(t, dbPrimary)
+
+			sender := &fakeSender{}
+			cacheService := setupCacheService(t)
+			setupMemberName(t, cacheService, tc.channelID, tc.memberName)
+			testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+			cfg := outbox.Config{
+				BatchSize:    10,
+				LockTimeout:  1 * time.Minute,
+				PollInterval: 100 * time.Millisecond,
+				MaxRetries:   3,
+				RetryBackoff: 30 * time.Millisecond,
+			}
+
+			dispatchers := []*outbox.Dispatcher{
+				outbox.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, cfg),
+				outbox.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, cfg),
+			}
+
+			contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
+			publishedAt := time.Date(2026, 4, 10, 1, 2, 3, 0, time.UTC)
+			postID := tc.postID(contentID)
+			item := &domain.YouTubeNotificationOutbox{
+				Kind:          tc.kind,
+				ChannelID:     tc.channelID,
+				ContentID:     contentID,
+				Payload:       tc.payload(contentID, publishedAt),
+				Status:        domain.OutboxStatusPending,
+				AttemptCount:  0,
+				NextAttemptAt: time.Now(),
+			}
+			require.NoError(t, dbPrimary.Create(item).Error)
+
+			delivery := &domain.YouTubeNotificationDelivery{
+				OutboxID:      item.ID,
+				RoomID:        tc.roomID,
+				Status:        domain.OutboxStatusPending,
+				AttemptCount:  0,
+				NextAttemptAt: time.Now(),
+			}
+			require.NoError(t, dbPrimary.Create(delivery).Error)
+
+			t.Cleanup(func() {
+				dbPrimary.Where("kind = ? AND post_id = ?", tc.kind, postID).Delete(&domain.YouTubeCommunityShortsAlarmState{})
+				dbPrimary.Delete(delivery)
+				dbPrimary.Delete(item)
+			})
+
+			start := make(chan struct{})
+			var wg sync.WaitGroup
+			for i := range dispatchers {
+				wg.Add(1)
+				go func(dispatcher *outbox.Dispatcher) {
+					defer wg.Done()
+					<-start
+					dispatcher.ProcessOnceForTest(ctx)
+				}(dispatchers[i])
+			}
+
+			close(start)
+			wg.Wait()
+
+			msgs := sender.getMessages()
+			require.Len(t, msgs, 1)
+			require.Equal(t, tc.roomID, msgs[0].Room)
+			require.Contains(t, msgs[0].Message, tc.messageFragment)
+
+			var updated domain.YouTubeNotificationOutbox
+			require.NoError(t, dbPrimary.First(&updated, item.ID).Error)
+			require.Equal(t, domain.OutboxStatusSent, updated.Status)
+			require.NotNil(t, updated.SentAt)
+
+			deliveries := fetchDeliveryRows(t, dbPrimary, item.ID)
+			require.Len(t, deliveries, 1)
+			require.Equal(t, domain.OutboxStatusSent, deliveries[0].Status)
+			require.NotNil(t, deliveries[0].SentAt)
+
+			var state domain.YouTubeCommunityShortsAlarmState
+			require.NoError(t, dbPrimary.First(&state, "kind = ? AND post_id = ?", tc.kind, postID).Error)
+			require.Equal(t, postID, state.PostID)
+			require.Equal(t, contentID, state.ContentID)
+			require.NotNil(t, state.AlarmSentAt)
+			require.Nil(t, state.AuthorizedAt)
+			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, state.DeliveryStatus)
+		})
+	}
+}
+
 func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 	if os.Getenv("INTEGRATION_TEST") != "true" {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
@@ -695,7 +830,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("Failed to connect to test database: %v", err)
 	}
-	if err := db.AutoMigrate(&domain.YouTubeNotificationDelivery{}); err != nil {
+	if err := db.AutoMigrate(&domain.YouTubeNotificationDelivery{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	); err != nil {
 		t.Fatalf("Failed to migrate youtube_notification_delivery table: %v", err)
 	}
 

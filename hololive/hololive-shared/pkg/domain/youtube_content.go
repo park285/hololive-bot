@@ -23,6 +23,7 @@ package domain
 import (
 	"database/sql/driver"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -67,6 +68,7 @@ type YouTubeVideo struct {
 	Thumbnail     ThumbnailsJSON `gorm:"type:jsonb" json:"thumbnail,omitempty"`
 	Duration      string         `gorm:"size:20" json:"duration,omitempty"`
 	PublishedText string         `gorm:"size:100" json:"published_text,omitempty"`
+	PublishedAt   *time.Time     `json:"published_at,omitempty"`
 	IsShort       bool           `gorm:"default:false;index:idx_yv_channel_is_short" json:"is_short"`
 	IsLiveReplay  bool           `gorm:"default:false" json:"is_live_replay"`
 	ViewCount     int64          `json:"view_count,omitempty"`
@@ -87,6 +89,7 @@ type YouTubeCommunityPost struct {
 	AuthorPhoto   ThumbnailsJSON `gorm:"type:jsonb" json:"author_photo,omitempty"`
 	ContentText   string         `gorm:"type:text" json:"content_text,omitempty"`
 	PublishedText string         `gorm:"size:100" json:"published_text,omitempty"`
+	PublishedAt   *time.Time     `json:"published_at,omitempty"`
 	LikeCount     int64          `json:"like_count,omitempty"`
 	CommentCount  int64          `json:"comment_count,omitempty"`
 	Images        ThumbnailsJSON `gorm:"type:jsonb" json:"images,omitempty"`
@@ -98,6 +101,142 @@ type YouTubeCommunityPost struct {
 // TableName: GORM 테이블 이름
 func (YouTubeCommunityPost) TableName() string {
 	return "youtube_community_posts"
+}
+
+// YouTubeContentAlarmTracking: 커뮤니티/쇼츠 알람 시각 추적
+// 동일 콘텐츠에 대해 실제 게시 시각, 최초 감지 시각, 최초 성공 발송 시각과 저장된 지연 분류값을 보존한다.
+type YouTubeContentAlarmTracking struct {
+	Kind                        OutboxKind                        `gorm:"primaryKey;size:20;uniqueIndex:idx_ycat_kind_canonical_content,priority:1" json:"kind"`
+	ContentID                   string                            `gorm:"primaryKey;size:50" json:"content_id"`
+	CanonicalContentID          string                            `gorm:"size:50;not null;uniqueIndex:idx_ycat_kind_canonical_content,priority:2" json:"canonical_content_id"`
+	ChannelID                   string                            `gorm:"size:50;not null;index:idx_ycat_channel_detected" json:"channel_id"`
+	ActualPublishedAt           *time.Time                        `json:"actual_published_at,omitempty"`
+	DetectedAt                  time.Time                         `gorm:"not null;index:idx_ycat_detected_at;index:idx_ycat_channel_detected" json:"detected_at"`
+	AlarmSentAt                 *time.Time                        `gorm:"index:idx_ycat_alarm_sent_at" json:"alarm_sent_at,omitempty"`
+	AlarmLatencyMillis          *int64                            `json:"alarm_latency_millis,omitempty"`
+	AlarmLatencyExceeded        *bool                             `json:"alarm_latency_exceeded,omitempty"`
+	DeliveryStatus              YouTubeContentAlarmDeliveryStatus `gorm:"size:20;not null;default:'PENDING';index:idx_ycat_delivery_status" json:"delivery_status"`
+	LatencyClassificationStatus string                            `gorm:"size:40" json:"latency_classification_status,omitempty"`
+	DelaySource                 string                            `gorm:"size:40" json:"delay_source,omitempty"`
+	InternalDelayCause          string                            `gorm:"size:40" json:"internal_delay_cause,omitempty"`
+	CreatedAt                   time.Time                         `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt                   time.Time                         `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// TableName: GORM 테이블 이름
+func (YouTubeContentAlarmTracking) TableName() string {
+	return "youtube_content_alarm_tracking"
+}
+
+type YouTubeContentAlarmDeliveryStatus string
+
+const (
+	YouTubeContentAlarmDeliveryStatusPending YouTubeContentAlarmDeliveryStatus = "PENDING"
+	YouTubeContentAlarmDeliveryStatusSent    YouTubeContentAlarmDeliveryStatus = "SENT"
+)
+
+func ResolveYouTubeContentAlarmDeliveryStatus(alarmSentAt *time.Time) YouTubeContentAlarmDeliveryStatus {
+	if alarmSentAt != nil && !alarmSentAt.IsZero() {
+		return YouTubeContentAlarmDeliveryStatusSent
+	}
+	return YouTubeContentAlarmDeliveryStatusPending
+}
+
+// YouTubeCommunityShortsSourcePost: community/shorts 검증용 원본 수집 목록
+// 감지된 게시물의 채널 정보와 canonical post identifier를 관찰용 원본 집합으로 보존한다.
+type YouTubeCommunityShortsSourcePost struct {
+	Kind              OutboxKind `gorm:"primaryKey;size:20" json:"kind"`
+	PostID            string     `gorm:"primaryKey;size:50" json:"post_id"`
+	ChannelID         string     `gorm:"size:50;not null;index:idx_ycssp_channel_detected" json:"channel_id"`
+	ActualPublishedAt *time.Time `json:"actual_published_at,omitempty"`
+	DetectedAt        time.Time  `gorm:"not null;index:idx_ycssp_detected_at;index:idx_ycssp_channel_detected" json:"detected_at"`
+	CreatedAt         time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt         time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// TableName: GORM 테이블 이름
+func (YouTubeCommunityShortsSourcePost) TableName() string {
+	return "youtube_community_shorts_source_posts"
+}
+
+// YouTubeCommunityShortsAlarmState: community/shorts 게시물별 단일 알람 발송 상태
+// canonical post identifier를 루트 키로 사용해 게시물당 하나의 상태 레코드만 유지한다.
+type YouTubeCommunityShortsAlarmState struct {
+	Kind              OutboxKind                             `gorm:"primaryKey;size:20;uniqueIndex:idx_ycsas_kind_content,priority:1" json:"kind"`
+	PostID            string                                 `gorm:"primaryKey;size:50" json:"post_id"`
+	ContentID         string                                 `gorm:"size:50;not null;uniqueIndex:idx_ycsas_kind_content,priority:2" json:"content_id"`
+	ChannelID         string                                 `gorm:"size:50;not null;index:idx_ycsas_channel_detected" json:"channel_id"`
+	ActualPublishedAt *time.Time                             `json:"actual_published_at,omitempty"`
+	DetectedAt        time.Time                              `gorm:"not null;index:idx_ycsas_detected_at;index:idx_ycsas_channel_detected" json:"detected_at"`
+	AuthorizedAt      *time.Time                             `gorm:"index:idx_ycsas_authorized_at" json:"authorized_at,omitempty"`
+	AlarmSentAt       *time.Time                             `gorm:"index:idx_ycsas_alarm_sent_at" json:"alarm_sent_at,omitempty"`
+	DeliveryStatus    YouTubeCommunityShortsAlarmStateStatus `gorm:"size:20;not null;default:'DETECTED';index:idx_ycsas_delivery_status" json:"delivery_status"`
+	CreatedAt         time.Time                              `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt         time.Time                              `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (YouTubeCommunityShortsAlarmState) TableName() string {
+	return "youtube_community_shorts_alarm_states"
+}
+
+type YouTubeCommunityShortsAlarmStateStatus string
+
+const (
+	YouTubeCommunityShortsAlarmStateStatusDetected YouTubeCommunityShortsAlarmStateStatus = "DETECTED"
+	YouTubeCommunityShortsAlarmStateStatusEnqueued YouTubeCommunityShortsAlarmStateStatus = "ENQUEUED"
+	YouTubeCommunityShortsAlarmStateStatusSent     YouTubeCommunityShortsAlarmStateStatus = "SENT"
+)
+
+func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt *time.Time, alarmSentAt *time.Time) YouTubeCommunityShortsAlarmStateStatus {
+	if alarmSentAt != nil && !alarmSentAt.IsZero() {
+		return YouTubeCommunityShortsAlarmStateStatusSent
+	}
+	if authorizedAt != nil && !authorizedAt.IsZero() {
+		return YouTubeCommunityShortsAlarmStateStatusEnqueued
+	}
+	return YouTubeCommunityShortsAlarmStateStatusDetected
+}
+
+// YouTubeCommunityShortsObservationPostBaseline: 24시간 관찰 종료 시점에 고정한 community/shorts 게시물 기준 목록
+// 동일 observation key에 대해 dedup 완료된 게시물 집합을 이후 검증에서 재사용한다.
+type YouTubeCommunityShortsObservationPostBaseline struct {
+	RuntimeName       string     `gorm:"primaryKey;size:50" json:"runtime_name"`
+	BigBangCutoverAt  time.Time  `gorm:"column:bigbang_cutover_at;primaryKey" json:"bigbang_cutover_at"`
+	Kind              OutboxKind `gorm:"primaryKey;size:20" json:"kind"`
+	PostID            string     `gorm:"primaryKey;size:50" json:"post_id"`
+	ChannelID         string     `gorm:"size:50;not null;index:idx_ycsopb_channel_detected" json:"channel_id"`
+	ActualPublishedAt *time.Time `json:"actual_published_at,omitempty"`
+	DetectedAt        time.Time  `gorm:"not null;index:idx_ycsopb_channel_detected" json:"detected_at"`
+	FinalizedAt       time.Time  `gorm:"not null" json:"finalized_at"`
+	CreatedAt         time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt         time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// TableName: GORM 테이블 이름
+func (YouTubeCommunityShortsObservationPostBaseline) TableName() string {
+	return "youtube_community_shorts_observation_post_baselines"
+}
+
+// YouTubeCommunityShortsObservationWindow: 빅뱅 배포 직후 24시간 관찰 구간 메타데이터
+// 동일 cutover/runtime 조합에 대해 최초 감지된 배포 완료 시각과 관찰 창을 보존한다.
+type YouTubeCommunityShortsObservationWindow struct {
+	RuntimeName             string     `gorm:"primaryKey;size:50" json:"runtime_name"`
+	BigBangCutoverAt        time.Time  `gorm:"column:bigbang_cutover_at;primaryKey" json:"bigbang_cutover_at"`
+	AppVersion              string     `gorm:"size:100;not null" json:"app_version"`
+	TargetChannelCount      int        `gorm:"not null" json:"target_channel_count"`
+	DeploymentCompletedAt   time.Time  `gorm:"not null;index:idx_ycsow_deploy_completed" json:"deployment_completed_at"`
+	ObservationStartedAt    time.Time  `gorm:"not null;index:idx_ycsow_window_start" json:"observation_started_at"`
+	ObservationEndedAt      time.Time  `gorm:"not null;index:idx_ycsow_window_end" json:"observation_ended_at"`
+	ClosedAt                *time.Time `gorm:"column:closed_at;index:idx_ycsow_closed_at" json:"closed_at,omitempty"`
+	FinalizedPostBaselineAt *time.Time `gorm:"column:finalized_post_baseline_at;index:idx_ycsow_finalized_post_baseline_at" json:"finalized_post_baseline_at,omitempty"`
+	FinalizedPostCount      int        `gorm:"not null;default:0" json:"finalized_post_count"`
+	CreatedAt               time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt               time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// TableName: GORM 테이블 이름
+func (YouTubeCommunityShortsObservationWindow) TableName() string {
+	return "youtube_community_shorts_observation_windows"
 }
 
 // WatermarkType: 워터마크 타입
@@ -132,6 +271,8 @@ const (
 	OutboxKindCommunityPost OutboxKind = "COMMUNITY_POST"
 	OutboxKindMilestone     OutboxKind = "MILESTONE"
 )
+
+const youtubeNotificationDedupeKeyPrefix = "youtube-notification"
 
 func (k OutboxKind) ToAlarmType() AlarmType {
 	switch k {
@@ -187,6 +328,26 @@ type YouTubeNotificationOutbox struct {
 // TableName: GORM 테이블 이름
 func (YouTubeNotificationOutbox) TableName() string {
 	return "youtube_notification_outbox"
+}
+
+// BuildYouTubeNotificationDedupeKey는 outbox kind/content_id에서 dedupe key를 생성한다.
+func BuildYouTubeNotificationDedupeKey(kind OutboxKind, contentID string) (string, error) {
+	normalizedKind := strings.TrimSpace(string(kind))
+	if normalizedKind == "" {
+		return "", fmt.Errorf("build youtube notification dedupe key: kind is empty")
+	}
+
+	normalizedContentID := strings.TrimSpace(contentID)
+	if normalizedContentID == "" {
+		return "", fmt.Errorf("build youtube notification dedupe key: content id is empty")
+	}
+
+	return fmt.Sprintf("%s:%s:%s", youtubeNotificationDedupeKeyPrefix, normalizedKind, normalizedContentID), nil
+}
+
+// DedupeKey는 outbox row의 dedupe key를 반환한다.
+func (o YouTubeNotificationOutbox) DedupeKey() (string, error) {
+	return BuildYouTubeNotificationDedupeKey(o.Kind, o.ContentID)
 }
 
 // LiveStatus: 라이브 상태
@@ -292,6 +453,11 @@ var YouTubeModels = []any{
 	&YouTubeCommunityPost{},
 	&YouTubeContentWatermark{},
 	&YouTubeNotificationOutbox{},
+	&YouTubeContentAlarmTracking{},
+	&YouTubeCommunityShortsSourcePost{},
+	&YouTubeCommunityShortsAlarmState{},
+	&YouTubeCommunityShortsObservationWindow{},
+	&YouTubeNotificationDeliveryTelemetry{},
 	&YouTubeNotificationDelivery{},
 	&YouTubeLiveSession{},
 	&YouTubeLiveViewerSample{},

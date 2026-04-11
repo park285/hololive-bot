@@ -271,7 +271,7 @@ func TestRuntimeSchedulerRunLoop_StopsOnContextCancel(t *testing.T) {
 	go func() {
 		defer close(done)
 
-		s.runLoop(ctx, "test", 10*time.Millisecond, 50*time.Millisecond, func(context.Context) error {
+		s.runLoop(ctx, "test", 10*time.Millisecond, 50*time.Millisecond, true, func(context.Context) error {
 			calls.Add(1)
 			return errors.New("expected failure branch")
 		})
@@ -320,6 +320,54 @@ func TestNextAligned(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := nextAligned(tc.now, tc.interval)
 			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestInitialLoopDelay(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		now            time.Time
+		interval       time.Duration
+		runImmediately bool
+		want           time.Duration
+	}{
+		{
+			name:           "immediate loop starts without delay",
+			now:            time.Date(2026, time.April, 10, 10, 54, 1, 0, time.UTC),
+			interval:       time.Minute,
+			runImmediately: true,
+			want:           0,
+		},
+		{
+			name:           "youtube loop waits until next minute when off boundary",
+			now:            time.Date(2026, time.April, 10, 10, 54, 1, 0, time.UTC),
+			interval:       time.Minute,
+			runImmediately: false,
+			want:           59 * time.Second,
+		},
+		{
+			name:           "youtube loop runs immediately on exact boundary",
+			now:            time.Date(2026, time.April, 10, 10, 55, 0, 0, time.UTC),
+			interval:       time.Minute,
+			runImmediately: false,
+			want:           0,
+		},
+		{
+			name:           "non-positive interval falls back to immediate run",
+			now:            time.Date(2026, time.April, 10, 10, 55, 1, 0, time.UTC),
+			interval:       0,
+			runImmediately: false,
+			want:           0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, initialLoopDelay(tc.now, tc.interval, tc.runImmediately))
 		})
 	}
 }

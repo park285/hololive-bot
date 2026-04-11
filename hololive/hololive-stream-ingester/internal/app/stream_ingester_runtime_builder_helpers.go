@@ -27,7 +27,7 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -35,30 +35,31 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
-// buildStreamIngesterYouTubeComponents: stream-ingester 전용 YouTube 컴포넌트를 구성한다.
 func buildStreamIngesterYouTubeComponents(
 	scraperCfg config.ScraperConfig,
 	postgresService database.Client,
-	membersData member.DataProvider,
+	channelIDs []string,
 	cacheService cache.Client,
 	irisClient iris.Sender,
 	templateRenderer *template.Renderer,
 	sharedRL *scraper.RateLimiter,
+	routeDecider poller.NotificationRouteDecider,
 	logger *slog.Logger,
 ) (*poller.Scheduler, *outbox.Dispatcher) {
-	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(postgresService, scraperCfg, sharedRL, cacheService)
+	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(postgresService, scraperCfg, sharedRL, cacheService, routeDecider)
 
 	scraperScheduler := providers.ProvideScraperScheduler(
-		membersData,
+		nil,
 		logger,
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
 		providers.WithSchedulerWorkerCount(scraperCfg.WorkerCountOrDefault()),
+		providers.WithSchedulerChannelIDs(channelIDs),
 	)
 
 	outboxDispatcher := outbox.NewDispatcher(
 		postgresService.GetGormDB(),
 		cacheService,
-		irisClient,
+		delivery.NewIrisMessageSender(irisClient),
 		templateRenderer,
 		logger,
 		outbox.DefaultConfig(),

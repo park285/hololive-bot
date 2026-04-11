@@ -26,7 +26,10 @@ import (
 	"log/slog"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
+	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 func (d *Dispatcher) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
@@ -35,6 +38,13 @@ func (d *Dispatcher) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNoti
 
 // fetchAndLockForPerRoom: delivery row가 아직 없는 outbox만 claim
 func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
+	if d == nil || d.db == nil {
+		return nil, nil
+	}
+	if d.db.Dialector != nil && d.db.Dialector.Name() == "sqlite" {
+		return d.fetchAndLockForPerRoomSQLite(ctx)
+	}
+
 	var items []domain.YouTubeNotificationOutbox
 	now := time.Now()
 	lockExpiry := now.Add(-d.cfg.LockTimeout)
@@ -73,13 +83,75 @@ func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTu
 	return items, nil
 }
 
+func (d *Dispatcher) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
+	now := time.Now()
+	lockExpiry := now.Add(-d.cfg.LockTimeout)
+
+	var items []domain.YouTubeNotificationOutbox
+	if err := d.db.WithContext(ctx).
+		Where("status = ?", domain.OutboxStatusPending).
+		Where("(locked_at IS NULL OR locked_at < ?) AND next_attempt_at <= ?", lockExpiry, now).
+		Where("NOT EXISTS (SELECT 1 FROM youtube_notification_delivery d WHERE d.outbox_id = youtube_notification_outbox.id)").
+		Order("created_at ASC").
+		Limit(d.cfg.BatchSize).
+		Find(&items).Error; err != nil {
+		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode (sqlite): %w", err)
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+
+	ids := collectOutboxIDs(items)
+	if err := d.db.WithContext(ctx).
+		Model(&domain.YouTubeNotificationOutbox{}).
+		Where("id IN ?", ids).
+		Update("locked_at", now).Error; err != nil {
+		return nil, fmt.Errorf("lock outbox items for per-room mode (sqlite): %w", err)
+	}
+
+	for i := range items {
+		lockedAt := now
+		items[i].LockedAt = &lockedAt
+	}
+
+	return items, nil
+}
+
 func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) {
 	roomsByChannel := d.collectRoomsByChannel(ctx, outboxItems)
 	d.enqueueDeliveries(ctx, outboxItems, roomsByChannel)
 	d.processPendingDeliveries(ctx)
+	d.reconcileTerminalOutboxStatuses(ctx)
 }
 
-func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]map[string]bool) {
+func (d *Dispatcher) reconcileTerminalOutboxStatuses(ctx context.Context) {
+	if d == nil || d.delivery == nil {
+		return
+	}
+
+	outboxIDs, err := d.delivery.FindPendingOutboxIDsForAggregateSync(ctx, d.cfg.BatchSize)
+	if err != nil {
+		d.logger.Warn("Failed to find terminal outbox rows for aggregate sync", slog.Any("error", err))
+		return
+	}
+	if len(outboxIDs) == 0 {
+		return
+	}
+
+	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, outboxIDs); err != nil {
+		d.logger.Warn("Failed to reconcile outbox aggregate statuses", slog.Any("error", err))
+		return
+	}
+	if err := d.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs); err != nil {
+		d.logger.Warn("Failed to log finalized community/shorts outbox results", slog.Any("error", err))
+		return
+	}
+
+	d.logger.Info("Recovered outbox aggregate statuses from persisted delivery rows",
+		slog.Int("outbox_count", len(outboxIDs)))
+}
+
+func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) {
 	startedAt := time.Now()
 	defer func() {
 		outboxEnqueueDuration.Observe(time.Since(startedAt).Seconds())
@@ -93,7 +165,7 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 
 	for i := range outboxItems {
 		item := &outboxItems[i]
-		rooms, ok := roomsByChannel[item.ChannelID]
+		rooms, ok := roomsForItem(roomsByChannel, *item)
 		if !ok {
 			subscriberLookupFailures++
 			d.releaseOutboxLock(ctx, item.ID)
@@ -169,8 +241,13 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 
 	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
 
-	if err := d.delivery.MarkSentBatch(ctx, result.successDeliveryIDs); err != nil {
+	if err := d.delivery.MarkSentBatch(ctx, result.successDeliveryIDs, result.successClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
+		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.successDeliveryIDs); recoverErr != nil {
+			d.logger.Warn("Failed to persist community/shorts sent-state recovery after mark-sent error",
+				slog.Any("error", recoverErr),
+				slog.Int("delivery_count", len(result.successDeliveryIDs)))
+		}
 	}
 	for reason, ids := range result.failureBuckets {
 		if err := d.delivery.MarkFailedRetryBatch(ctx, ids, d.cfg.MaxRetries, d.cfg.RetryBackoff, reason); err != nil {
@@ -185,6 +262,8 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, touchedOutboxIDs); err != nil {
 		aggregateFailures++
 		d.logger.Warn("Failed to update outbox aggregate statuses", slog.Any("error", err))
+	} else if err := d.logFinalizedCommunityShortsOutboxResults(ctx, touchedOutboxIDs); err != nil {
+		d.logger.Warn("Failed to log finalized community/shorts outbox results", slog.Any("error", err))
 	}
 
 	outboxDeliveryProcessedTotal.WithLabelValues("sent").Add(float64(len(result.successDeliveryIDs)))
@@ -197,6 +276,38 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 		slog.Int("delivery_failed", result.failedDeliveries),
 		slog.Int("outbox_touched", len(touchedOutboxIDs)),
 		slog.Int("aggregate_failures", aggregateFailures))
+}
+
+func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
+	uniqueIDs := uniqueInt64s(deliveryIDs)
+	if d == nil || d.db == nil || len(uniqueIDs) == 0 {
+		return nil
+	}
+
+	sentAt := canonicalSentAtNow()
+	return d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		marks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
+		if err != nil {
+			return fmt.Errorf("load sent-state recovery marks: %w", err)
+		}
+		if len(marks) == 0 {
+			return nil
+		}
+
+		if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, marks); err != nil {
+			return fmt.Errorf("persist sent-state recovery marks: %w", err)
+		}
+
+		identities := make([]PostTrackingIdentity, 0, len(marks))
+		for i := range marks {
+			identities = append(identities, PostTrackingIdentity{Kind: marks[i].Kind, ContentID: marks[i].ContentID})
+		}
+		if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+			return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func collectDeliveryOutboxIDs(rows []domain.YouTubeNotificationDelivery) []int64 {

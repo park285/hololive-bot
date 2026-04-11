@@ -63,6 +63,7 @@ type APIHandler struct {
 	youtube                    youtube.Service
 	scraperProxyToggler        *poller.Scheduler
 	statsRepo                  stats.StatsDashboardRepository
+	communityShortsOps         YouTubeCommunityShortsOpsRepository
 	activity                   *activity.Logger
 	settings                   settings.ReadWriter
 	settingsApplier            sharedsettings.SettingsApplier
@@ -114,6 +115,10 @@ func (h *APIHandler) ensureStreamState() *sharedserver.StreamState {
 	return h.streamState
 }
 
+func (h *APIHandler) HasCommunityShortsOpsRepository() bool {
+	return h != nil && h.communityShortsOps != nil
+}
+
 // NewAPIHandler: 새로운 API 핸들러를 생성합니다.
 func NewAPIHandler(
 	repo *member.Repository,
@@ -125,6 +130,7 @@ func NewAPIHandler(
 	youtubeSvc youtube.Service,
 	scraperProxyToggler *poller.Scheduler,
 	statsRepo stats.StatsDashboardRepository,
+	communityShortsOps YouTubeCommunityShortsOpsRepository,
 	activityLogger *activity.Logger,
 	settingsSvc settings.ReadWriter,
 	settingsApplier sharedsettings.SettingsApplier,
@@ -151,6 +157,7 @@ func NewAPIHandler(
 		youtube:                    youtubeSvc,
 		scraperProxyToggler:        scraperProxyToggler,
 		statsRepo:                  statsRepo,
+		communityShortsOps:         communityShortsOps,
 		activity:                   activityLogger,
 		settings:                   settingsSvc,
 		settingsApplier:            settingsApplier,

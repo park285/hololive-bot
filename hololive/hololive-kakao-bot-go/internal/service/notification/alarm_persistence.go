@@ -26,6 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
 func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
@@ -125,55 +126,20 @@ func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 		return nil
 	}
 
-	alarms, err := as.alarmRepo.LoadAll(ctx)
+	summary, err := sharedalarm.WarmSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepo)
 	if err != nil {
-		return fmt.Errorf("load alarms from DB: %w", err)
+		return fmt.Errorf("warm subscriber cache from DB: %w", err)
 	}
 
-	if len(alarms) == 0 {
+	if summary.AlarmCount == 0 {
 		as.logger.Info("No alarms found in DB, cache warming skipped")
 		return nil
 	}
 
-	for _, a := range alarms {
-		// 방 기반 키: alarm:{roomID}
-		alarmKey := as.getAlarmKey(a.RoomID)
-		registryKey := a.RegistryKey()
-		channelSubsKey := as.channelSubscribersKey(a.ChannelID)
-
-		if _, err := as.cache.SAdd(ctx, alarmKey, []string{a.ChannelID}); err != nil {
-			as.logger.Warn("Failed to warm alarm cache",
-				slog.String("alarm_key", alarmKey),
-				slog.Any("error", err),
-			)
-		}
-
-		_, _ = as.cache.SAdd(ctx, AlarmRegistryKey, []string{registryKey})
-		_, _ = as.cache.SAdd(ctx, channelSubsKey, []string{registryKey})
-		_, _ = as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{a.ChannelID})
-
-		for _, alarmType := range a.AlarmTypes {
-			typeKey := as.channelSubscribersKeyByType(a.ChannelID, alarmType)
-			if typeKey != channelSubsKey {
-				_, _ = as.cache.SAdd(ctx, typeKey, []string{registryKey})
-			}
-		}
-
-		if a.MemberName != "" {
-			_ = as.CacheMemberName(ctx, a.ChannelID, a.MemberName)
-		}
-
-		if a.RoomName != "" {
-			_ = as.cache.HSet(ctx, RoomNamesCacheKey, a.RoomID, a.RoomName)
-		}
-
-		if a.UserName != "" {
-			_ = as.cache.HSet(ctx, UserNamesCacheKey, a.UserID, a.UserName)
-		}
-	}
-
 	as.logger.Info("Cache warmed from DB",
-		slog.Int("alarms_loaded", len(alarms)),
+		slog.Int("alarms_loaded", summary.AlarmCount),
+		slog.Int("rooms_loaded", summary.RoomCount),
+		slog.Int("channels_loaded", summary.ChannelCount),
 	)
 
 	return nil

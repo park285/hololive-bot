@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS youtube_videos (
     thumbnail      JSONB,
     duration       VARCHAR(20),
     published_text VARCHAR(100),
+    published_at   TIMESTAMPTZ,
     is_short       BOOLEAN NOT NULL DEFAULT FALSE,
     is_live_replay BOOLEAN NOT NULL DEFAULT FALSE,
     view_count     BIGINT DEFAULT 0,
@@ -151,3 +152,29 @@ CREATE TABLE IF NOT EXISTS youtube_stream_stats (
 );
 
 CREATE INDEX IF NOT EXISTS idx_yss_channel_ended ON youtube_stream_stats(channel_id, ended_at DESC);
+
+-- ============================================================================
+-- 10. youtube_content_alarm_tracking - 커뮤니티/쇼츠 알람 시각 추적
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS youtube_content_alarm_tracking (
+    kind                VARCHAR(20) NOT NULL, -- 'NEW_SHORT', 'COMMUNITY_POST'
+    content_id          VARCHAR(50) NOT NULL,
+    channel_id          VARCHAR(50) NOT NULL,
+    actual_published_at TIMESTAMPTZ,
+    detected_at         TIMESTAMPTZ NOT NULL,
+    alarm_sent_at       TIMESTAMPTZ,
+    alarm_latency_millis BIGINT,
+    alarm_latency_exceeded BOOLEAN,
+    delivery_status     VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    latency_classification_status VARCHAR(40),
+    delay_source        VARCHAR(40),
+    internal_delay_cause VARCHAR(40),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (kind, content_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ycat_detected_at ON youtube_content_alarm_tracking(detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ycat_channel_detected ON youtube_content_alarm_tracking(channel_id, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ycat_alarm_sent_at ON youtube_content_alarm_tracking(alarm_sent_at) WHERE alarm_sent_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ycat_delivery_status ON youtube_content_alarm_tracking(delivery_status, detected_at DESC);
