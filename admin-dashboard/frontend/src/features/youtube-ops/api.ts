@@ -5,7 +5,7 @@ export const youtubeOpsApi = {
 	get: async () =>
 		(
 			await apiClient.get<YouTubeCommunityShortsOpsResponse>(
-				"/admin/api/holo/stats/youtube/community-shorts",
+				"/holo/stats/youtube/community-shorts",
 			)
 		).data,
 };
