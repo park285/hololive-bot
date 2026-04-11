@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -42,10 +43,10 @@ type scraperHolodexProfileFoundation struct {
 func initScraperHolodexProfileFoundation(
 	ctx context.Context,
 	cfg *config.Config,
-	infra *infraResources,
+	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*scraperHolodexProfileFoundation, error) {
-	holodexAPIKey := providers.ProvideHolodexAPIKey(cfg.Holodex)
+	holodexAPIKey := cfg.Holodex.APIKey
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 
 	scraperProxyConfig := scraper.ProxyConfig{
