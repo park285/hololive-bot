@@ -77,7 +77,7 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-route-re
 ## 근거 코드
 
 - 리포트 수집/렌더링: `hololive/hololive-stream-ingester/internal/app/community_shorts_route_report.go`
-- baseline SSOT: `hololive/hololive-stream-ingester/internal/app/community_shorts_target_baseline.go`
+- baseline SSOT: `hololive/hololive-stream-ingester/internal/app/community_shorts_target_baseline_build.go`
 - 신규 경로 fan-out: `hololive/hololive-shared/pkg/service/youtube/outbox/dispatcher_send.go`
 - 실제 경로 조회: `hololive/hololive-shared/pkg/service/youtube/outbox/delivery_path_usage.go`
 - 게시물별 발송 집계: `hololive/hololive-shared/pkg/service/youtube/outbox/delivery_post_send_counts.go`
