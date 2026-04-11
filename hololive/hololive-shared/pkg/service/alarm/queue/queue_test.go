@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +74,19 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	return svc, mini
 }
 
+func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
+	t.Helper()
+
+	items, err := mini.List(AlarmDispatchQueue)
+	if err != nil {
+		if strings.Contains(err.Error(), "no such key") {
+			return nil
+		}
+		require.NoError(t, err)
+	}
+	return items
+}
+
 func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	publisher := NewPublisher(cacheClient, newTestLogger())
@@ -88,8 +102,7 @@ func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 	err := publisher.Publish(context.Background(), notification, claimKeys)
 	require.NoError(t, err)
 
-	items, err := mini.List(AlarmDispatchQueue)
-	require.NoError(t, err)
+	items := queueItemsOrEmpty(t, mini)
 	require.Len(t, items, 1)
 
 	var envelope domain.AlarmQueueEnvelope
@@ -108,8 +121,7 @@ func TestPublisherPublishLPushOrderNewestFirst(t *testing.T) {
 	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"}, nil))
 	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"}, nil))
 
-	items, err := mini.List(AlarmDispatchQueue)
-	require.NoError(t, err)
+	items := queueItemsOrEmpty(t, mini)
 	require.Len(t, items, 2)
 
 	var first domain.AlarmQueueEnvelope
@@ -151,8 +163,11 @@ func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := json.Marshal(domain.AlarmQueueEnvelope{
-				Notification: domain.AlarmNotification{RoomID: "room"},
-				Version:      tc.version,
+				Notification: domain.AlarmNotification{
+					AlarmType: domain.AlarmTypeLive,
+					RoomID:    "room",
+				},
+				Version: tc.version,
 			})
 			require.NoError(t, err)
 
@@ -165,8 +180,11 @@ func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
 
 func TestParseEnvelopeSkipsUnsupportedVersion(t *testing.T) {
 	raw, err := json.Marshal(domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: "room"},
-		Version:      2,
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room",
+		},
+		Version: 2,
 	})
 	require.NoError(t, err)
 
@@ -242,16 +260,22 @@ func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 
 	retryA := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: "retry-a"},
-		ClaimKeys:    []string{"notified:claim:retry-a"},
-		EnqueuedAt:   time.Now().UTC().Format(time.RFC3339),
-		Version:      contractsalarm.QueueEnvelopeVersionV1,
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-a",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-a"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
 	}
 	retryB := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: "retry-b"},
-		ClaimKeys:    []string{"notified:claim:retry-b"},
-		EnqueuedAt:   time.Now().UTC().Format(time.RFC3339),
-		Version:      contractsalarm.QueueEnvelopeVersionV1,
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-b",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-b"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
 	}
 
 	err := publisher.Publish(
@@ -309,8 +333,7 @@ func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T
 	assert.Equal(t, "room-live", envelopes[0].Notification.RoomID)
 	assert.False(t, mini.Exists(claimKey))
 
-	remaining, err := mini.List(AlarmDispatchQueue)
-	require.NoError(t, err)
+	remaining := queueItemsOrEmpty(t, mini)
 	assert.Len(t, remaining, 0)
 }
 
@@ -349,7 +372,6 @@ func TestConsumerRequeue_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
 	assert.Equal(t, "room-live", envelopes[0].Notification.RoomID)
 	assert.False(t, mini.Exists(claimKey))
 
-	remaining, err := mini.List(AlarmDispatchQueue)
-	require.NoError(t, err)
+	remaining := queueItemsOrEmpty(t, mini)
 	assert.Len(t, remaining, 0)
 }
