@@ -50,7 +50,7 @@ RUN \
     go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/bot ./cmd/bot && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/data /dist/internal/domain/ && \
-    cp config.example.json config.json official_japanese_names.json /dist/
+    cp config.example.json official_japanese_names.json /dist/
 
 # Stage 2: Production Runtime
 FROM alpine:${ALPINE_VERSION}
