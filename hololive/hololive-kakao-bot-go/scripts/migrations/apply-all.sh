@@ -28,15 +28,112 @@ PGPASSWORD="${PGPASSWORD:-}"
 PGDATABASE="${PGDATABASE:-hololive}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-/migrations}"
 MIGRATION_GLOB="${MIGRATION_GLOB:-[0-9]*.sql}"
+MIGRATION_MANIFEST="${MIGRATION_MANIFEST:-${MIGRATIONS_DIR}/manifest.txt}"
+MANIFEST_ALL_ORDERED="$(mktemp)"
+MANIFEST_ALL_SORTED="$(mktemp)"
+MANIFEST_SELECTED_ORDERED="$(mktemp)"
+MANIFEST_SELECTED_SORTED="$(mktemp)"
+ACTUAL_ALL_SQL_SORTED="$(mktemp)"
+
+cleanup() {
+  rm -f "${MANIFEST_ALL_ORDERED}" "${MANIFEST_ALL_SORTED}" "${MANIFEST_SELECTED_ORDERED}" "${MANIFEST_SELECTED_SORTED}" "${ACTUAL_ALL_SQL_SORTED}"
+}
+trap cleanup EXIT INT TERM HUP
 
 if [ -z "${PGPASSWORD}" ]; then
   echo "PGPASSWORD is required" >&2
   exit 1
 fi
 
-echo "==> applying migrations in ${MIGRATIONS_DIR}/${MIGRATION_GLOB} to ${PGDATABASE}@${PGHOST}:${PGPORT}"
+if [ ! -f "${MIGRATION_MANIFEST}" ]; then
+  echo "migration manifest not found: ${MIGRATION_MANIFEST}" >&2
+  exit 1
+fi
 
-for file in $(ls -1 "${MIGRATIONS_DIR}"/${MIGRATION_GLOB} 2>/dev/null | sort); do
+for path in "${MIGRATIONS_DIR}"/[0-9]*.sql; do
+  [ -f "${path}" ] || continue
+  basename "${path}" >> "${ACTUAL_ALL_SQL_SORTED}"
+done
+sort -u "${ACTUAL_ALL_SQL_SORTED}" -o "${ACTUAL_ALL_SQL_SORTED}"
+
+echo "==> applying migrations from manifest ${MIGRATION_MANIFEST} to ${PGDATABASE}@${PGHOST}:${PGPORT}"
+
+expected_order=1
+
+while IFS= read -r entry || [ -n "${entry}" ]; do
+  trimmed_entry=$(printf '%s' "${entry}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  case "${trimmed_entry}" in
+    ''|'#'*)
+      continue
+      ;;
+  esac
+
+  set -- ${trimmed_entry}
+  order="${1:-}"
+  filename="${2:-}"
+  extra="${3:-}"
+  if [ -z "${order}" ] || [ -z "${filename}" ] || [ -n "${extra}" ]; then
+    echo "invalid manifest entry: ${trimmed_entry}" >&2
+    exit 1
+  fi
+
+  expected_label=$(printf '%03d' "${expected_order}")
+  if [ "${order}" != "${expected_label}" ]; then
+    echo "migration manifest order drift: expected ${expected_label}, got ${order}" >&2
+    exit 1
+  fi
+  expected_order=$((expected_order + 1))
+
+  case "${filename}" in
+    [0-9]*.sql)
+      ;;
+    *)
+      echo "invalid migration manifest SQL filename: ${filename}" >&2
+      exit 1
+      ;;
+  esac
+
+  printf '%s\n' "${filename}" >> "${MANIFEST_ALL_ORDERED}"
+
+  case "${filename}" in
+    ${MIGRATION_GLOB})
+      printf '%s\n' "${filename}" >> "${MANIFEST_SELECTED_ORDERED}"
+      ;;
+  esac
+done < "${MIGRATION_MANIFEST}"
+
+sort -u "${MANIFEST_ALL_ORDERED}" -o "${MANIFEST_ALL_SORTED}"
+sort -u "${MANIFEST_SELECTED_ORDERED}" -o "${MANIFEST_SELECTED_SORTED}"
+
+manifest_all_count="$(wc -l < "${MANIFEST_ALL_ORDERED}" | tr -d '[:space:]')"
+manifest_all_unique_count="$(wc -l < "${MANIFEST_ALL_SORTED}" | tr -d '[:space:]')"
+if [ "${manifest_all_count}" = "0" ]; then
+  echo "migration manifest is empty" >&2
+  exit 1
+fi
+
+if [ "${manifest_all_count}" != "${manifest_all_unique_count}" ]; then
+  echo "duplicate migration filenames in manifest" >&2
+  exit 1
+fi
+
+if ! cmp -s "${MANIFEST_ALL_SORTED}" "${ACTUAL_ALL_SQL_SORTED}"; then
+  echo "migration manifest and actual SQL files differ" >&2
+  echo "--- manifest files" >&2
+  cat "${MANIFEST_ALL_SORTED}" >&2
+  echo "--- actual files" >&2
+  cat "${ACTUAL_ALL_SQL_SORTED}" >&2
+  exit 1
+fi
+
+while IFS= read -r filename || [ -n "${filename}" ]; do
+  [ -n "${filename}" ] || continue
+  file="${MIGRATIONS_DIR}/${filename}"
+  if [ ! -f "${file}" ]; then
+    echo "manifest entry not found: ${file}" >&2
+    exit 1
+  fi
+
   echo "==> apply ${file}"
   PGPASSWORD="${PGPASSWORD}" psql \
     -v ON_ERROR_STOP=1 \
@@ -45,6 +142,6 @@ for file in $(ls -1 "${MIGRATIONS_DIR}"/${MIGRATION_GLOB} 2>/dev/null | sort); d
     -U "${PGUSER}" \
     -d "${PGDATABASE}" \
     -f "${file}"
-done
+done < "${MANIFEST_SELECTED_ORDERED}"
 
 echo "==> hololive migrations applied"
