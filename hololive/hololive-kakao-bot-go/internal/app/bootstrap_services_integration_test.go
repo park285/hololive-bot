@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/stretchr/testify/assert"
@@ -27,7 +28,7 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&acl.Settings{}, &acl.Room{}))
 
 	logger := slog.New(slog.DiscardHandler)
-	infra := &infraResources{
+	infra := &sharedmodules.InfraModule{
 		Postgres: &dbmocks.Client{
 			GetGormDBFunc: func() *gorm.DB { return db },
 		},
@@ -55,7 +56,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&acl.Settings{}, &acl.Room{}))
 
 	logger := slog.New(slog.DiscardHandler)
-	infra := &infraResources{
+	infra := &sharedmodules.InfraModule{
 		Postgres: &dbmocks.Client{
 			GetGormDBFunc: func() *gorm.DB { return db },
 		},
@@ -71,7 +72,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 
 	modules := buildBotDependencyModules(
 		&config.Config{},
-		&infraResources{},
+		&sharedmodules.InfraModule{},
 		&alarmModeComponents{},
 		nil,
 		nil,

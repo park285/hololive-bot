@@ -47,7 +47,7 @@ type alarmYouTubeStackComponents struct {
 func initAlarmYouTubeStack(
 	ctx context.Context,
 	cfg *config.Config,
-	infra *infraResources,
+	infra *sharedmodules.InfraModule,
 	foundation *scraperHolodexProfileFoundation,
 	irisClient iris.Sender,
 	formatter *adapter.ResponseFormatter,
