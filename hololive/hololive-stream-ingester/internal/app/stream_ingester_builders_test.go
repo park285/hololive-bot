@@ -168,18 +168,19 @@ func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
 		assert.Contains(t, err.Error(), "Pekora (Hololive)")
 	})
 
-	t.Run("rejects duplicate channel deployment targets", func(t *testing.T) {
+	t.Run("deduplicates shared channel deployment targets", func(t *testing.T) {
 		t.Parallel()
 
-		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+		channels := mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
 			members: []*domain.Member{
 				{Name: "Pekora", Org: "Hololive", ChannelID: "UCdup"},
 				{Name: "Miko", Org: "Hololive", ChannelID: "UCdup"},
 			},
-		}))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "duplicate deployment targets")
-		assert.Contains(t, err.Error(), "Miko (Hololive):community duplicates Pekora (Hololive):community")
+		})
+		require.Len(t, channels, 1)
+		assert.Equal(t, "Pekora (Hololive)", channels[0].ownerLabel)
+		assert.Equal(t, "UCdup", channels[0].channelID)
+		require.NoError(t, validateCommunityShortsOperationalTargets(channels))
 	})
 }
 
