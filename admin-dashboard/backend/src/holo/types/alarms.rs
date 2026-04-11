@@ -6,7 +6,9 @@ use utoipa::ToSchema;
 pub struct Alarm {
     pub room_id: String,
     pub room_name: String,
+    #[serde(default)]
     pub user_id: String,
+    #[serde(default)]
     pub user_name: String,
     pub channel_id: String,
     pub member_name: String,
@@ -14,8 +16,13 @@ pub struct Alarm {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AlarmsResponse {
+    #[serde(default = "default_ok_status")]
     pub status: String,
     pub alarms: Vec<Alarm>,
+}
+
+fn default_ok_status() -> String {
+    "ok".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -37,6 +44,8 @@ pub struct RoomNameUpdateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserNameUpdateRequest {
+    #[serde(default)]
     pub user_id: String,
+    #[serde(default)]
     pub user_name: String,
 }
