@@ -1,6 +1,6 @@
 # Scripts
 
-루트 `scripts/`는 현재 3개 영역만 운영합니다.
+루트 `scripts/`는 현재 4개 영역만 운영합니다.
 
 ## 1. architecture/
 PR/릴리스 전 경계 게이트와 릴리스 노트 렌더링 도구입니다.
@@ -33,6 +33,14 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh prune`
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
+
+## 4. review/
+리뷰 전달용 source/full bundle export와 사후 검증 스크립트입니다.
+
+- `./scripts/review/export-source-bundle.sh [output_dir]`
+- `./scripts/review/export-full-bundle.sh [output_dir]`
+- `INCLUDE_UNTRACKED=true ./scripts/review/export-full-bundle.sh [output_dir]`
+- `./scripts/review/verify-full-bundle.sh <bundle.tar.gz>`
 
 정리 원칙:
 - retired/no-op 스크립트는 유지하지 않습니다.

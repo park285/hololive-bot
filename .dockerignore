@@ -1,5 +1,6 @@
 .git
-.omx
+.omc
+.gemini
 .codex
 .claude
 .serena
@@ -15,6 +16,8 @@ BUNDLE_MANIFEST.txt
 
 **/.idea
 **/.vscode
+**/.gemini
+**/.omc
 **/.serena
 **/.gomodcache
 **/.gocache
