@@ -21,12 +21,19 @@ func resolveCommunityShortsOperationalChannels(membersData domain.MemberDataProv
 
 	members := membersData.GetAllMembers()
 	channels := make([]communityShortsOperationalChannel, 0, len(members))
+	seenChannelIDs := make(map[string]struct{}, len(members))
 	for i := range members {
 		member := members[i]
 		if member == nil || member.IsGraduated {
 			continue
 		}
 		channelID := strings.TrimSpace(member.ChannelID)
+		if channelID != "" {
+			if _, exists := seenChannelIDs[channelID]; exists {
+				continue
+			}
+			seenChannelIDs[channelID] = struct{}{}
+		}
 		channels = append(channels, communityShortsOperationalChannel{
 			ownerLabel: communityShortsTargetOwnerLabel(member),
 			channelID:  channelID,
