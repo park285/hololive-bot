@@ -5,6 +5,7 @@ on:
     paths:
       - 'admin-dashboard/frontend/**'
       - 'admin-dashboard/backend/src/**'
+      - 'admin-dashboard/backend/tests/export_openapi_smoke.rs'
       - 'admin-dashboard/backend/src/bin/export-openapi.rs'
       - 'admin-dashboard/backend/docs/swagger.json'
       - 'admin-dashboard/backend/Cargo.toml'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'admin-dashboard/frontend/**'
       - 'admin-dashboard/backend/src/**'
+      - 'admin-dashboard/backend/tests/export_openapi_smoke.rs'
       - 'admin-dashboard/backend/src/bin/export-openapi.rs'
       - 'admin-dashboard/backend/docs/swagger.json'
       - 'admin-dashboard/backend/Cargo.toml'
