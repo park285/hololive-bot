@@ -29,13 +29,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// APIHandler: alarm-dispatcher internal API 핸들러
 type APIHandler struct {
 	alarm  domain.AlarmCRUD
 	logger *slog.Logger
 }
 
-// NewAPIHandler: 새로운 APIHandler를 생성합니다.
 func NewAPIHandler(alarm domain.AlarmCRUD, logger *slog.Logger) *APIHandler {
 	return &APIHandler{
 		alarm:  alarm,
@@ -43,7 +41,6 @@ func NewAPIHandler(alarm domain.AlarmCRUD, logger *slog.Logger) *APIHandler {
 	}
 }
 
-// RegisterRoutes: 라우터 그룹에 알람 internal API 엔드포인트를 등록합니다.
 func (h *APIHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	h.RegisterInternalRoutes(rg)
 
@@ -51,7 +48,6 @@ func (h *APIHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/ready", h.Ready)
 }
 
-// RegisterInternalRoutes: 알람 internal API 엔드포인트만 등록합니다. (/health, /ready 제외)
 func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal := rg.Group("/internal/alarm")
 	internal.POST("/add", h.AddAlarm)
@@ -66,7 +62,6 @@ func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal.GET("/keys", h.GetAllAlarmKeys)
 }
 
-// AddAlarm: 알람을 추가합니다.
 func (h *APIHandler) AddAlarm(c *gin.Context) {
 	var req AddAlarmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -76,7 +71,6 @@ func (h *APIHandler) AddAlarm(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// []string → domain.AlarmTypes 변환
 	alarmTypes := make(domain.AlarmTypes, 0, len(req.AlarmTypes))
 	for _, t := range req.AlarmTypes {
 		alarmTypes = append(alarmTypes, domain.AlarmType(t))
@@ -102,7 +96,6 @@ func (h *APIHandler) AddAlarm(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"added": added}})
 }
 
-// RemoveAlarm: 알람을 제거합니다.
 func (h *APIHandler) RemoveAlarm(c *gin.Context) {
 	var req RemoveAlarmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -127,7 +120,6 @@ func (h *APIHandler) RemoveAlarm(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"removed": removed}})
 }
 
-// GetRoomAlarmsWithTypes: 방의 알람 목록(타입 포함)을 조회합니다.
 func (h *APIHandler) GetRoomAlarmsWithTypes(c *gin.Context) {
 	roomID := c.Param("id")
 	ctx := c.Request.Context()
@@ -142,7 +134,6 @@ func (h *APIHandler) GetRoomAlarmsWithTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: alarms})
 }
 
-// GetRoomAlarmsView: 방의 알람 목록 표시용 조합 조회 결과를 반환합니다.
 func (h *APIHandler) GetRoomAlarmsView(c *gin.Context) {
 	roomID := c.Param("id")
 	ctx := c.Request.Context()
@@ -157,7 +148,6 @@ func (h *APIHandler) GetRoomAlarmsView(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: entries})
 }
 
-// ClearRoomAlarms: 방의 모든 알람을 삭제합니다.
 func (h *APIHandler) ClearRoomAlarms(c *gin.Context) {
 	var req ClearAlarmsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -177,7 +167,6 @@ func (h *APIHandler) ClearRoomAlarms(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"deleted": count}})
 }
 
-// GetNextStreamInfo: 채널의 다음 방송 정보를 조회합니다.
 func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
 	channelID := c.Param("id")
 	ctx := c.Request.Context()
@@ -189,7 +178,6 @@ func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
 		return
 	}
 
-	// nil이면 예정 방송 없음
 	if info == nil {
 		c.JSON(http.StatusOK, APIResponse{Success: true, Data: nil})
 		return
@@ -198,7 +186,6 @@ func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: info})
 }
 
-// UpdateAlarmAdvanceMinutes: 알림 발송 시간(분)을 업데이트합니다.
 func (h *APIHandler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	var req UpdateAdvanceMinutesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -210,7 +197,6 @@ func (h *APIHandler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: gin.H{"target_minutes": targets}})
 }
 
-// SetRoomName: 방 이름을 설정합니다.
 func (h *APIHandler) SetRoomName(c *gin.Context) {
 	var req SetRoomNameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -229,7 +215,6 @@ func (h *APIHandler) SetRoomName(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true})
 }
 
-// SetUserName: 사용자 이름을 설정합니다.
 func (h *APIHandler) SetUserName(c *gin.Context) {
 	var req SetUserNameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -248,7 +233,6 @@ func (h *APIHandler) SetUserName(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true})
 }
 
-// GetAllAlarmKeys: 모든 알람 키 목록을 조회합니다.
 func (h *APIHandler) GetAllAlarmKeys(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -262,12 +246,10 @@ func (h *APIHandler) GetAllAlarmKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, APIResponse{Success: true, Data: keys})
 }
 
-// Health: liveness probe — 서비스가 살아있는지 확인합니다.
 func (h *APIHandler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// Ready: readiness probe — 트래픽을 받을 준비가 됐는지 확인합니다.
 func (h *APIHandler) Ready(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ready"})
 }
