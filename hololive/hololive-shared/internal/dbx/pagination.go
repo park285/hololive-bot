@@ -40,14 +40,12 @@ const maxCursorTokenLength = 4096
 
 var cursorFieldRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$`)
 
-// CursorData: 커서 페이지네이션 데이터
 type CursorData struct {
 	Field     string `json:"f"`
 	Value     any    `json:"v"`
 	Direction string `json:"d"` // ASC or DESC
 }
 
-// EncodeCursor: 커서 데이터를 base64 토큰으로 인코딩
 func EncodeCursor(field string, value any, direction string) (string, error) {
 	field = strings.TrimSpace(field)
 	if field == "" {
@@ -71,7 +69,6 @@ func EncodeCursor(field string, value any, direction string) (string, error) {
 	return base64.URLEncoding.EncodeToString(jsonBytes), nil
 }
 
-// DecodeCursor: base64 토큰을 CursorData로 디코딩
 func DecodeCursor(token string) (*CursorData, error) {
 	if token == "" {
 		return nil, nil
@@ -99,7 +96,6 @@ func DecodeCursor(token string) (*CursorData, error) {
 	return &data, nil
 }
 
-// BuildKeysetCondition: 커서 데이터로 WHERE 조건 생성
 // 반환: (whereClause, args)
 // 예시: ("achieved_at < $1", ["2026-01-20T10:00:00Z"])
 func BuildKeysetCondition(cursor *CursorData, paramIndex int) (string, []any) {
