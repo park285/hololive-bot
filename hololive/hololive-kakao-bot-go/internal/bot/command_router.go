@@ -32,14 +32,12 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 )
 
-// CommandRouter: 봇 명령어의 라우팅 및 실행을 담당하는 컴포넌트.
 type CommandRouter struct {
 	registry    *command.Registry
 	logger      *slog.Logger
 	sendMessage func(ctx context.Context, room, message string) error
 }
 
-// NewCommandRouter: 새로운 CommandRouter 인스턴스를 생성합니다.
 func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessage func(ctx context.Context, room, message string) error) *CommandRouter {
 	return &CommandRouter{
 		registry:    registry,
@@ -48,7 +46,6 @@ func NewCommandRouter(registry *command.Registry, logger *slog.Logger, sendMessa
 	}
 }
 
-// Execute: 명령어 타입과 파라미터를 기반으로 명령어를 실행합니다.
 func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
 	if r.registry == nil {
 		return errors.New("command registry is not initialized")

@@ -34,7 +34,6 @@ import (
 
 const serviceNameIris = "iris"
 
-// CommandTransport: 명령 실행 결과(텍스트/이미지/에러)를 Iris로 전달합니다.
 type CommandTransport struct {
 	irisClient irisClient
 	formatter  *adapter.ResponseFormatter
