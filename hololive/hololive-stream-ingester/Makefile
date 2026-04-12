@@ -30,7 +30,7 @@ build: lint build-bin
 .PHONY: build-bin
 build-bin:
 	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -o bin/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
+	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -o bin/$(BINARY_NAME) ./cmd/runtime/$(BINARY_NAME)
 
 .PHONY: clean
 clean:
