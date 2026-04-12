@@ -25,7 +25,6 @@ import (
 	"time"
 )
 
-// TestFormatDuration: Duration을 사람이 읽기 쉬운 문자열로 변환하는 로직을 검증합니다.
 func TestFormatDuration(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +50,6 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-// TestGetVersion_Default: Init 호출 없이 기본 버전이 "dev"인지 검증합니다.
 func TestGetVersion_Default(t *testing.T) {
 	t.Parallel()
 	got := GetVersion()
@@ -60,7 +58,6 @@ func TestGetVersion_Default(t *testing.T) {
 	}
 }
 
-// TestGet_StatusOK: Get()가 status="ok"인 Response를 반환하는지 검증합니다.
 func TestGet_StatusOK(t *testing.T) {
 	t.Parallel()
 	resp := Get()
