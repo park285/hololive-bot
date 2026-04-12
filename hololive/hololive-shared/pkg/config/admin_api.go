@@ -29,7 +29,6 @@ import (
 	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
-// AdminAPIConfig: 운영 API(호환) 설정
 type AdminAPIConfig struct {
 	Server          ServerConfig
 	Valkey          ValkeyConfig
@@ -43,7 +42,6 @@ type AdminAPIConfig struct {
 	Version         string
 }
 
-// LoadAdminAPI: 운영 API(호환) 설정을 환경변수에서 로드합니다.
 func LoadAdminAPI() (*AdminAPIConfig, error) {
 	_ = godotenv.Load()
 
