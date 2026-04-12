@@ -30,27 +30,22 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// UpcomingCommand: 예정된 방송 목록을 조회하는 커맨드 핸들러.
 type UpcomingCommand struct {
 	BaseCommand
 }
 
-// NewUpcomingCommand: 예정 방송 조회 커맨드 핸들러를 생성합니다.
 func NewUpcomingCommand(deps *Dependencies) *UpcomingCommand {
 	return &UpcomingCommand{BaseCommand: NewBaseCommand(deps)}
 }
 
-// Name: 커맨드의 이름("upcoming")을 반환합니다.
 func (c *UpcomingCommand) Name() string {
 	return "upcoming"
 }
 
-// Description: 커맨드에 대한 설명을 반환합니다.
 func (c *UpcomingCommand) Description() string {
 	return "예정된 방송 목록"
 }
 
-// Execute: 예정된 방송 목록을 Holodex API로부터 조회하여 출력한다. (멤버 필터링 가능).
 func (c *UpcomingCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
