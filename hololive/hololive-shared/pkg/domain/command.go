@@ -20,7 +20,6 @@
 
 package domain
 
-// CommandType: 봇이 인식하고 처리할 수 있는 명령어의 종류 (예: 라이브, 알림 관리 등)
 type CommandType string
 
 // CommandType 상수 목록.
@@ -64,7 +63,6 @@ func (c CommandType) String() string {
 	return string(c)
 }
 
-// IsValid: 해당 명령어 타입이 유효한지(정의된 목록에 존재하는지) 검증합니다.
 func (c CommandType) IsValid() bool {
 	switch c {
 	case CommandLive, CommandUpcoming, CommandSchedule, CommandHelp,
@@ -79,7 +77,6 @@ func (c CommandType) IsValid() bool {
 	}
 }
 
-// ParseResult: 사용자 입력을 파싱하여 도출된 단일 명령어 해석 결과 (신뢰도 포함)
 type ParseResult struct {
 	Command    CommandType    `json:"command"`
 	Params     map[string]any `json:"params"`
@@ -87,30 +84,25 @@ type ParseResult struct {
 	Reasoning  string         `json:"reasoning"`
 }
 
-// ParseResults: 파싱 결과의 집합. 단일 명령어일 수도 있고, 중의적일 경우 여러 후보를 포함할 수 있다.
 type ParseResults struct {
 	Single   *ParseResult
 	Multiple []*ParseResult
 }
 
-// ChannelSelection: 명령어 대상 채널(멤버)이 불분명할 때, 사용자가 선택할 수 있는 후보 정보
 type ChannelSelection struct {
 	SelectedIndex int     `json:"selectedIndex"`
 	Confidence    float64 `json:"confidence"`
 	Reasoning     string  `json:"reasoning"`
 }
 
-// IsSingle: 파싱 결과가 단 하나의 명확한 명령어로 해석되었는지 확인합니다.
 func (pr *ParseResults) IsSingle() bool {
 	return pr.Single != nil
 }
 
-// IsMultiple: 파싱 결과가 여러 개의 후보(중의적 해석)를 포함하고 있는지 확인합니다.
 func (pr *ParseResults) IsMultiple() bool {
 	return len(pr.Multiple) > 0
 }
 
-// GetCommands: 해석된 모든 명령어 후보 리스트를 반환합니다.
 func (pr *ParseResults) GetCommands() []*ParseResult {
 	if pr.IsSingle() {
 		return []*ParseResult{pr.Single}
