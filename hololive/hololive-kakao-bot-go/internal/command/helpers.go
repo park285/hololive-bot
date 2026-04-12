@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// FindMemberOrError: 멤버 이름으로 채널을 검색하고, 찾지 못한 경우 에러 메시지를 전송합니다.
 // 성공 시 (*domain.Channel, nil)을, 실패 시 (nil, error)를 반환한다.
 func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
 	if err := validateMemberLookupDependencies(deps); err != nil {
@@ -49,7 +48,6 @@ func FindMemberOrError(ctx context.Context, deps *Dependencies, room, memberName
 	return member, nil
 }
 
-// FindActiveMemberOrError: 멤버 이름으로 채널을 검색하고, 졸업 멤버는 차단합니다.
 // !라이브, !일정, !알람 명령에서 사용한다.
 // 성공 시 (*domain.Channel, nil)을, 실패 또는 졸업 멤버인 경우 (nil, error)를 반환한다.
 func FindActiveMemberOrError(ctx context.Context, deps *Dependencies, room, memberName string) (*domain.Channel, error) {
