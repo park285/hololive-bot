@@ -10,7 +10,7 @@ import { extractErrorMessage } from "@/lib/typeUtils";
 
 const ErrorPage = () => {
 	const error = useRouteError();
-	console.error(error); // 디버깅용 로그
+	console.error(error);
 
 	let errorMessage = "예기치 않은 오류가 발생했습니다.";
 	let errorTitle = "시스템 오류";
@@ -43,12 +43,10 @@ const ErrorPage = () => {
 
 	return (
 		<div className="min-h-screen w-full flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100 via-slate-50 to-rose-50 font-sans overflow-hidden relative">
-			{/* Background Decorative Elements */}
 			<div className="absolute top-[-10%] right-[-5%] w-96 h-96 bg-purple-200/30 rounded-full blur-3xl animate-pulse" />
 			<div className="absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-indigo-200/30 rounded-full blur-3xl animate-pulse delay-700" />
 
 			<div className="max-w-md w-full glass relative z-10 p-8 rounded-2xl text-center animate-in fade-in zoom-in-95 duration-500 border border-white/40 shadow-2xl shadow-indigo-500/10">
-				{/* Icon Wrapper */}
 				<div className="mb-8 flex justify-center">
 					<div className="relative group">
 						<div className="absolute inset-0 bg-gradient-to-tr from-rose-400 to-orange-400 rounded-full blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500"></div>
@@ -68,7 +66,6 @@ const ErrorPage = () => {
 					</div>
 				</div>
 
-				{/* Error Message */}
 				<div className="space-y-3 mb-8">
 					<h1 className="text-3xl font-bold text-slate-800 tracking-tight">
 						{errorTitle}
@@ -78,7 +75,6 @@ const ErrorPage = () => {
 					</p>
 				</div>
 
-				{/* Action Buttons */}
 				<div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
 					<button
 						onClick={handleReload}
@@ -97,7 +93,6 @@ const ErrorPage = () => {
 					</button>
 				</div>
 
-				{/* Developer Debug Info */}
 				{import.meta.env.DEV && error instanceof Error && (
 					<div className="mt-6 text-left animate-in slide-in-from-bottom-2 fade-in duration-500 delay-200">
 						<div className="bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-800/50">
@@ -117,7 +112,6 @@ const ErrorPage = () => {
 				)}
 			</div>
 
-			{/* Bottom Branding */}
 			<div className="absolute bottom-6 text-center w-full z-10">
 				<span className="text-xs font-medium text-slate-400/80 tracking-wide uppercase">
 					Hololive Kakao Bot Admin
