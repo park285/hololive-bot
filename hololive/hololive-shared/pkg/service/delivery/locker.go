@@ -36,7 +36,6 @@ type lockCache interface {
 	DelMany(ctx context.Context, keys []string) (int64, error)
 }
 
-// NotificationLocker: 분산 락 + Room별 delivery claim 인터페이스
 type NotificationLocker interface {
 	TryAcquire(ctx context.Context, lockKey string, ttl time.Duration) (token string, acquired bool, err error)
 	Release(ctx context.Context, lockKey, token string) error
@@ -44,7 +43,6 @@ type NotificationLocker interface {
 	ReleaseRoomClaims(ctx context.Context, claimKeys []string) error
 }
 
-// NewLocker: NotificationLocker 생성. cache가 nil이면 noop locker 반환.
 func NewLocker(cache lockCache, logger *slog.Logger) NotificationLocker {
 	if cache == nil {
 		return noopNotificationLocker{}
