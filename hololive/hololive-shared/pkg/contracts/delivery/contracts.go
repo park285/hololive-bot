@@ -41,14 +41,12 @@ const (
 	StatusFailed  domain.DeliveryOutboxStatus = domain.DeliveryStatusFailed
 )
 
-// OutboxPayloadV1: outbox에 저장되는 payload 스키마.
 //
 // 현재 구현(hololive-shared/pkg/service/delivery/outbox_repository.go)의 JSON({ "message": "..." })과 동일합니다.
 type OutboxPayloadV1 struct {
 	Message string `json:"message"`
 }
 
-// ContentID: outbox content_id 생성 규약(SSOT).
 //
 // 현재 구현은 periodKey + ":" + roomID 입니다.
 func ContentID(periodKey, roomID string) string {
