@@ -43,6 +43,7 @@ import (
 type streamIngesterInfrastructure struct {
 	cacheService     cache.Client
 	postgresService  database.Client
+	memberRepo       *member.Repository
 	membersData      member.DataProvider
 	irisClient       iris.Sender
 	settingsService  settings.ReadWriter
@@ -112,6 +113,7 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	return &streamIngesterInfrastructure{
 		cacheService:     infra.Cache,
 		postgresService:  infra.Postgres,
+		memberRepo:       infra.MemberRepo,
 		membersData:      membersData,
 		irisClient:       irisClient,
 		settingsService:  settingsService,
