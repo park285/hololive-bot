@@ -66,7 +66,6 @@ var (
 	}
 )
 
-// NormalizeStatsPeriodToken: 사용자가 입력한 기간 관련 토큰을 파싱하여 정규화된 형태(예: "days:7")로 변환합니다.
 func NormalizeStatsPeriodToken(raw string) string {
 	token := stringutil.TrimSpace(raw)
 	if token == "" {
@@ -104,7 +103,6 @@ func NormalizeStatsPeriodToken(raw string) string {
 	return ""
 }
 
-// ResolveStatsPeriod: 정규화된 기간 토큰을 해석하여 기준 시작 시간(Calculated Start Time)과 사용자 표시용 레이블을 반환합니다.
 // 기본값은 "최근 10일"이다.
 func ResolveStatsPeriod(now time.Time, raw string) (time.Time, string) {
 	normalized := NormalizeStatsPeriodToken(raw)

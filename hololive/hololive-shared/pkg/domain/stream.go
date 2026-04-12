@@ -26,7 +26,6 @@ import (
 	sharedtime "github.com/kapu/hololive-shared/pkg/util"
 )
 
-// StreamStatus: 방송 상태(진행 중, 예정, 종료)를 나타내는 열거형
 type StreamStatus string
 
 // StreamStatus 상수 목록.
@@ -43,7 +42,6 @@ func (s StreamStatus) String() string {
 	return string(s)
 }
 
-// IsValid: 방송 상태 값이 유효한지 검증합니다.
 func (s StreamStatus) IsValid() bool {
 	switch s {
 	case StreamStatusLive, StreamStatusUpcoming, StreamStatusPast:
@@ -53,7 +51,6 @@ func (s StreamStatus) IsValid() bool {
 	}
 }
 
-// Stream: Holodex 등에서 수집한 방송(스트림) 상세 정보
 type Stream struct {
 	ID             string       `json:"id"`
 	Title          string       `json:"title"`
@@ -84,22 +81,18 @@ type Stream struct {
 	IsTwitchOnly    bool   `json:"is_twitch_only,omitempty"`    // Twitch 단독 여부
 }
 
-// IsLive: 방송이 현재 진행 중('live')인지 확인합니다.
 func (s *Stream) IsLive() bool {
 	return s.Status == StreamStatusLive
 }
 
-// IsUpcoming: 방송이 예정('upcoming') 상태인지 확인합니다.
 func (s *Stream) IsUpcoming() bool {
 	return s.Status == StreamStatusUpcoming
 }
 
-// IsPast: 방송이 종료('past')되었는지 확인합니다.
 func (s *Stream) IsPast() bool {
 	return s.Status == StreamStatusPast
 }
 
-// GetYouTubeURL: 방송 시청을 위한 YouTube URL을 반환한다. (Link 필드가 없으면 ID로 생성)
 func (s *Stream) GetYouTubeURL() string {
 	if s.Link != nil && *s.Link != "" {
 		return *s.Link
@@ -107,7 +100,6 @@ func (s *Stream) GetYouTubeURL() string {
 	return "https://youtube.com/watch?v=" + s.ID
 }
 
-// TimeUntilStart: 예정된 방송 시작 시각까지 남은 시간을 Duration으로 반환합니다.
 // 이미 시작 시간이 지났거나 예정 시간이 없으면 nil을 반환한다.
 func (s *Stream) TimeUntilStart() *time.Duration {
 	if s.StartScheduled == nil {
@@ -123,22 +115,18 @@ func (s *Stream) TimeUntilStart() *time.Duration {
 	return new(duration)
 }
 
-// MinutesUntilStart: 방송 시작까지 남은 시간을 '분' 단위(내림)로 계산하여 반환합니다.
 func (s *Stream) MinutesUntilStart() int {
 	return sharedtime.MinutesUntilFloorPtr(s.StartScheduled, time.Now())
 }
 
-// GetChzzkLiveURL: Chzzk Live URL을 반환합니다. (비어있으면 빈 문자열)
 func (s *Stream) GetChzzkLiveURL() string {
 	return s.ChzzkLiveURL
 }
 
-// GetTwitchLiveURL: Twitch Live URL을 반환합니다. (비어있으면 빈 문자열)
 func (s *Stream) GetTwitchLiveURL() string {
 	return s.TwitchLiveURL
 }
 
-// HasYouTubeInfo: YouTube 정보(ID)가 있는지 확인합니다.
 func (s *Stream) HasYouTubeInfo() bool {
 	return s.ID != ""
 }
