@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// MessageFormatter: 아웃박스 메시지 포맷팅 전담
 type MessageFormatter struct {
 	renderer *template.Renderer
 	cache    cache.Client
