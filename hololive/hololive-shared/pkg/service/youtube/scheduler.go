@@ -38,16 +38,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// MilestoneMessageFormatter: 마일스톤 관련 메시지 포맷터 최소 계약.
 //
-// NOTE: adapter 패키지 이동(P9-1) 대비를 위해 구체 타입(*adapter.ResponseFormatter) 대신
 // 인터페이스를 통해 의존한다.
 type MilestoneMessageFormatter interface {
 	FormatMilestoneAchieved(ctx context.Context, memberName, milestone string) (string, error)
 	FormatMilestoneApproaching(ctx context.Context, memberName, milestone, remaining string) (string, error)
 }
 
-// Scheduler: YouTube 데이터 수집(통계, 영상 등) 작업을 주기적으로 실행하는 스케줄러
 type schedulerImpl struct {
 	youtube              Service
 	holodex              *holodex.Service
@@ -78,13 +75,11 @@ const (
 	recentVideosFetchParallelism = 4
 )
 
-// SubscriberMilestones: 구독자 수 마일스톤 목록 (중복 정의 방지)
 var SubscriberMilestones = []uint64{
 	100000, 250000, 500000, 750000, 1000000,
 	1500000, 2000000, 2500000, 3000000, 4000000, 5000000,
 }
 
-// NewScheduler: YouTube 데이터 수집 스케줄러를 생성합니다.
 func NewScheduler(
 	youtubeSvc Service,
 	holodexSvc *holodex.Service,
@@ -111,7 +106,6 @@ func NewScheduler(
 	}
 }
 
-// Start: 스케줄러를 시작하여 주기적인 작업을 등록합니다.
 func (ys *schedulerImpl) Start(ctx context.Context) {
 	ys.ticker = time.NewTicker(schedulerInterval)
 
@@ -163,7 +157,6 @@ func (ys *schedulerImpl) Start(ctx context.Context) {
 	}
 }
 
-// Stop: 스케줄러를 중지합니다.
 func (ys *schedulerImpl) Stop() {
 	if ys.ticker != nil {
 		ys.ticker.Stop()
@@ -691,7 +684,6 @@ func (ys *schedulerImpl) dispatchMilestoneAlerts(ctx context.Context) {
 	}
 }
 
-// SendMilestoneAlerts: 감지된 중요 통계 변화(마일스톤 등)에 대해 채팅방에 알림 메시지를 전송합니다.
 // 예고 알람(99% 도달)과 달성 알람 모두 처리한다.
 func (ys *schedulerImpl) SendMilestoneAlerts(ctx context.Context, sendMessage func(room, message string) error, rooms []string) error {
 	// 1. 예고 알람 처리 (99% 도달)
