@@ -22,7 +22,6 @@ package youtube
 
 import "context"
 
-// Service: youtube 패키지의 public API 경계를 위한 최소 인터페이스.
 //
 // NOTE:
 // - 외부 모듈은 구체 구현(serviceImpl)에 직접 의존하지 않고, 이 인터페이스를 통해 주입받는다.
@@ -34,7 +33,6 @@ type Service interface {
 	GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error)
 }
 
-// Scheduler: YouTube 데이터 수집 스케줄러의 public API.
 type Scheduler interface {
 	Start(ctx context.Context)
 	Stop()
