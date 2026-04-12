@@ -37,7 +37,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-// Model: members 테이블과 매핑되는 GORM 모델입니다.
 type Model struct {
 	ID             int            `gorm:"primaryKey;column:id"`
 	Slug           string         `gorm:"column:slug"`
@@ -56,19 +55,16 @@ type Model struct {
 	TwitchUserID   *string        `gorm:"column:twitch_user_id"`
 }
 
-// TableName: GORM 모델이 매핑될 데이터베이스 테이블 이름을 반환한다. ("members")
 func (Model) TableName() string {
 	return "members"
 }
 
-// Repository: 멤버 정보에 대한 데이터베이스 접근을 담당하는 저장소
 type Repository struct {
 	pool   *pgxpool.Pool
 	gormDB *gorm.DB
 	logger *slog.Logger
 }
 
-// NewMemberRepository: 새로운 MemberRepository 인스턴스를 생성합니다.
 func NewMemberRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	return &Repository{
 		pool:   postgres.GetPool(),
@@ -77,7 +73,6 @@ func NewMemberRepository(postgres database.Client, logger *slog.Logger) *Reposit
 	}
 }
 
-// FindByChannelID: 채널 ID로 멤버를 조회합니다.
 func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	query := `
 		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
@@ -118,7 +113,6 @@ func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*do
 	return r.scanMember(id, slug, channelIDVal, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
 }
 
-// FindByName: 이름으로 멤버를 조회합니다.
 func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Member, error) {
 	query := `
 		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
@@ -159,7 +153,6 @@ func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Membe
 	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
 }
 
-// FindByAlias: 별칭으로 멤버를 검색합니다.
 func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
 	query := `
 		SELECT m.id, m.slug, m.channel_id, m.english_name, m.japanese_name, m.korean_name,
@@ -204,7 +197,6 @@ func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Mem
 	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
 }
 
-// GetAllChannelIDs: 모든 멤버의 채널 ID 목록을 반환합니다.
 func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	query := `
 		SELECT channel_id
@@ -236,7 +228,6 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	return channelIDs, nil
 }
 
-// GetAllMembers: 모든 멤버 목록을 조회합니다.
 func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	query := `
 		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
@@ -292,7 +283,6 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 	return members, nil
 }
 
-// GetMembersWithPhoto: 프로필 이미지가 포함된 멤버 목록을 조회합니다. (API 응답용)
 func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []string) (map[string]*domain.Member, error) {
 	if len(channelIDs) == 0 {
 		return make(map[string]*domain.Member), nil
@@ -352,7 +342,6 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 	return result, nil
 }
 
-// GetMemberWithPhotoByChannelID: 채널 ID로 프로필 이미지가 포함된 멤버를 조회합니다.
 func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	query := `
 		SELECT id, channel_id, english_name, japanese_name, korean_name,
@@ -463,7 +452,6 @@ func (r *Repository) scanMemberWithPhoto(
 	return member, nil
 }
 
-// AddAlias: 멤버에게 별칭을 추가합니다.
 func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType string, alias string) error {
 	if aliasType != "ko" && aliasType != "ja" {
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
@@ -494,7 +482,6 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType strin
 	return nil
 }
 
-// RemoveAlias: 멤버의 별칭을 삭제합니다.
 func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType string, alias string) error {
 	if aliasType != "ko" && aliasType != "ja" {
 		return fmt.Errorf("invalid alias type: %s (must be 'ko' or 'ja')", aliasType)
@@ -529,7 +516,6 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType st
 	return nil
 }
 
-// SetGraduation: 멤버의 졸업 여부를 설정합니다.
 func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduated bool) error {
 	result := r.gormDB.WithContext(ctx).
 		Model(&Model{}).
@@ -544,7 +530,6 @@ func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduate
 	return nil
 }
 
-// UpdateChannelID: 멤버의 YouTube 채널 ID를 업데이트합니다.
 func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelID string) error {
 	result := r.gormDB.WithContext(ctx).
 		Model(&Model{}).
@@ -559,7 +544,6 @@ func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelI
 	return nil
 }
 
-// UpdateMemberName: 멤버의 영어 이름을 업데이트합니다.
 func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name string) error {
 	result := r.gormDB.WithContext(ctx).
 		Model(&Model{}).
@@ -574,7 +558,6 @@ func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name st
 	return nil
 }
 
-// CreateMember: 새로운 멤버를 데이터베이스에 생성합니다.
 func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) error {
 	aliasesJSON, err := json.Marshal(member.Aliases)
 	if err != nil {
@@ -627,7 +610,6 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	return nil
 }
 
-// UpdatePhoto: 채널 ID로 멤버의 프로필 이미지 URL을 업데이트합니다.
 func (r *Repository) UpdatePhoto(ctx context.Context, channelID string, photoURL string) error {
 	now := time.Now()
 	result := r.gormDB.WithContext(ctx).
@@ -645,7 +627,6 @@ func (r *Repository) UpdatePhoto(ctx context.Context, channelID string, photoURL
 	return nil
 }
 
-// GetPhotoByChannelID: 채널 ID로 프로필 이미지 URL을 조회합니다.
 func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) (string, error) {
 	var member Model
 	err := r.gormDB.WithContext(ctx).
@@ -667,7 +648,6 @@ func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) 
 	return *member.Photo, nil
 }
 
-// GetMembersNeedingPhotoSync: photo가 없거나 오래된 멤버 목록을 조회합니다.
 // staleThreshold: 이 기간보다 오래된 photo는 재동기화 대상
 func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error) {
 	staleTime := time.Now().Add(-staleThreshold)
@@ -687,7 +667,6 @@ func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThresh
 	return channelIDs, nil
 }
 
-// UpgradePhotoResolution: YouTube 프로필 이미지 URL을 고화질(1024x1024)로 변환합니다.
 func UpgradePhotoResolution(photoURL string) string {
 	if photoURL == "" {
 		return ""
@@ -723,7 +702,6 @@ func replaceFirst(s, old, replacement string) string {
 	return s[:idx] + replacement + s[idx+len(old):]
 }
 
-// FindAllByName: 이름으로 매칭되는 모든 멤버를 조회합니다 (동명이인 처리용).
 // 검색 대상: english_name, korean_name, aliases->>'ko', aliases->>'ja'
 func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.Member, error) {
 	query := `
@@ -782,7 +760,6 @@ func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.
 	return members, nil
 }
 
-// FindByNameAndOrg: 이름과 org로 정확히 일치하는 멤버를 조회합니다.
 func (r *Repository) FindByNameAndOrg(ctx context.Context, name, org string) (*domain.Member, error) {
 	query := `
 		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,

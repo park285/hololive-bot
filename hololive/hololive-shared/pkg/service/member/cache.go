@@ -40,28 +40,23 @@ const (
 	allChannelIDsKey       = "channel_ids"
 )
 
-// Cache: 멤버 정보를 인메모리(Local) 및 Redis(Valkey)에 이중 캐싱하여 관리하는 서비스
 // DB 부하를 줄이고 빠른 조회를 지원하며, 워밍업(Warm-up) 기능을 제공합니다.
 type Cache struct {
 	repo   *Repository
 	cache  cache.Client
 	logger *slog.Logger
 
-	// 인메모리 캐시
 	byChannelID sync.Map // map[string]*domain.Member
 	byName      sync.Map // map[string]*domain.Member
 	allMembers  sync.Map // []string (channel IDs)
 
-	// 캐시 설정
 	cacheTTL time.Duration
 	warmup   bool
 
-	// 워밍업 설정
 	warmUpChunkSize     int
 	warmUpMaxGoroutines int
 }
 
-// CacheConfig: 멤버 캐시 설정을 위한 구조체 (TTL, 워밍업 옵션 등)
 type CacheConfig struct {
 	ValkeyTTL           time.Duration
 	WarmUp              bool // 시작 시 전체 멤버를 메모리에 로드
@@ -69,7 +64,6 @@ type CacheConfig struct {
 	WarmUpMaxGoroutines int
 }
 
-// NewMemberCache: 새로운 멤버 캐시 서비스 인스턴스를 생성하고 초기화합니다.
 // 설정에 따라 생성 시점에 자동으로 캐시 워밍업을 수행할 수 있다.
 func NewMemberCache(ctx context.Context, repo *Repository, cacheService cache.Client, logger *slog.Logger, cfg CacheConfig) (*Cache, error) {
 	if cfg.ValkeyTTL == 0 {
@@ -93,7 +87,6 @@ func NewMemberCache(ctx context.Context, repo *Repository, cacheService cache.Cl
 		warmUpMaxGoroutines: cfg.WarmUpMaxGoroutines,
 	}
 
-	// 워밍업이 활성화된 경우 캐시 워밍업 수행함
 	if cfg.WarmUp {
 		if err := mc.WarmUpCache(ctx); err != nil {
 			logger.Warn("Failed to warm up member cache", slog.Any("error", err))
@@ -107,7 +100,6 @@ func (c *Cache) cacheEnabled() bool {
 	return c != nil && c.cache != nil
 }
 
-// WarmUpCache: DB에서 모든 멤버 정보를 로드하여 Redis 및 인메모리 캐시에 적재합니다.
 // 병렬 처리를 통해 대량의 데이터도 빠르게 처리한다.
 func (c *Cache) WarmUpCache(ctx context.Context) error {
 	members, err := c.repo.GetAllMembers(ctx)
@@ -115,7 +107,6 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 		return fmt.Errorf("failed to load all members: %w", err)
 	}
 
-	// 병렬 처리를 위한 청크 분할
 	chunkSize := c.warmUpChunkSize
 	chunks := chunkMembers(members, chunkSize)
 
@@ -123,7 +114,6 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	semaphore := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
 
-	// Worker pool로 병렬 캐싱 (stdlib 기반)
 	for _, chunk := range chunks {
 		wg.Go(func() {
 			semaphore <- struct{}{}
@@ -133,7 +123,6 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	}
 	wg.Wait()
 
-	// 인메모리 캐시 업데이트
 	for _, member := range members {
 		if member.ChannelID != "" {
 			c.byChannelID.Store(member.ChannelID, member)
@@ -149,7 +138,6 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	return nil
 }
 
-// 청크 단위로 Valkey에 파이프라이닝 저장
 func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member) {
 	if len(members) == 0 {
 		return
@@ -158,7 +146,6 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member) {
 		return
 	}
 
-	// 배치 저장을 위한 맵 준비
 	pairs := make(map[string]any, len(members)*2)
 
 	for _, member := range members {
@@ -171,7 +158,6 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member) {
 		pairs[nameKey] = member
 	}
 
-	// MSet으로 배치 저장
 	if err := c.cache.MSet(ctx, pairs, c.cacheTTL); err != nil {
 		c.logger.Warn("Failed to batch cache members",
 			slog.Int("count", len(members)),
@@ -179,25 +165,20 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member) {
 	}
 }
 
-// GetByChannelID: 채널 ID로 멤버 정보를 조회한다. (1. 인메모리 -> 2. Redis -> 3. DB 순서로 확인)
 func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
-	// 인메모리 캐시 먼저 확인
 	if val, ok := c.byChannelID.Load(channelID); ok {
 		return val.(*domain.Member), nil
 	}
 
 	if c.cacheEnabled() {
-		// Valkey 캐시 확인
 		cacheKey := memberChannelKeyPrefix + channelID
 		var member domain.Member
 		if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-			// 인메모리 캐시에 저장
 			c.byChannelID.Store(channelID, &member)
 			return &member, nil
 		}
 	}
 
-	// DB 조회
 	dbMember, err := c.repo.FindByChannelID(ctx, channelID)
 	if err != nil {
 		return nil, err
@@ -206,21 +187,17 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 		return nil, nil
 	}
 
-	// 캐시 저장
 	c.cacheMember(ctx, dbMember)
 
 	return dbMember, nil
 }
 
-// GetByName: 멤버 이름으로 정보를 조회한다. (1. 인메모리 -> 2. Redis -> 3. DB 순서로 확인)
 func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, error) {
-	// 인메모리 캐시 먼저 확인
 	if val, ok := c.byName.Load(name); ok {
 		return val.(*domain.Member), nil
 	}
 
 	if c.cacheEnabled() {
-		// Valkey 캐시 확인
 		cacheKey := memberNameKeyPrefix + name
 		var member domain.Member
 		if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
@@ -229,7 +206,6 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 		}
 	}
 
-	// DB 조회
 	dbMember, err := c.repo.FindByName(ctx, name)
 	if err != nil {
 		return nil, err
@@ -242,15 +218,12 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 	return dbMember, nil
 }
 
-// FindByAlias: 멤버 별명으로 정보를 조회한다. (Redis -> DB 순서)
 // 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.
 func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
 	if c.cacheEnabled() {
-		// Valkey 캐시 확인
 		cacheKey := memberAliasKeyPrefix + alias
 		var member domain.Member
 		if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-			// 인메모리 캐시에도 저장
 			if member.ChannelID != "" {
 				c.byChannelID.Store(member.ChannelID, &member)
 			}
@@ -259,7 +232,6 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 		}
 	}
 
-	// DB 조회
 	dbMember, err := c.repo.FindByAlias(ctx, alias)
 	if err != nil {
 		return nil, err
@@ -268,11 +240,9 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 		return nil, nil
 	}
 
-	// 캐시 저장
 	c.cacheMember(ctx, dbMember)
 
 	if c.cacheEnabled() {
-		// Alias 키도 캐싱
 		cacheKey := memberAliasKeyPrefix + alias
 		_ = c.cache.Set(ctx, cacheKey, dbMember, c.cacheTTL)
 	}
@@ -280,7 +250,6 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 	return dbMember, nil
 }
 
-// GetAllChannelIDs: 모든 멤버의 채널 ID 목록을 반환한다. (인메모리 캐싱됨)
 func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	if val, ok := c.allMembers.Load(allChannelIDsKey); ok {
 		return val.([]string), nil
@@ -326,7 +295,6 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member) {
 	}
 }
 
-// InvalidateAll: 모든 멤버 관련 캐시(인메모리 및 Redis)를 무효화(삭제)합니다.
 func (c *Cache) InvalidateAll(ctx context.Context) error {
 	// 인메모리 캐시 클리어
 	c.byChannelID = sync.Map{}
@@ -353,7 +321,6 @@ func (c *Cache) InvalidateAll(ctx context.Context) error {
 	return nil
 }
 
-// Refresh: 캐시를 전체 무효화한 후 다시 워밍업을 수행합니다.
 func (c *Cache) Refresh(ctx context.Context) error {
 	if err := c.InvalidateAll(ctx); err != nil {
 		return fmt.Errorf("failed to invalidate cache: %w", err)
@@ -361,7 +328,6 @@ func (c *Cache) Refresh(ctx context.Context) error {
 	return c.WarmUpCache(ctx)
 }
 
-// InvalidateAliasCache: 특정 별칭에 대한 Valkey 캐시를 무효화합니다.
 func (c *Cache) InvalidateAliasCache(ctx context.Context, alias string) error {
 	if !c.cacheEnabled() {
 		c.logger.Info("Alias cache invalidated", slog.String("alias", alias))
