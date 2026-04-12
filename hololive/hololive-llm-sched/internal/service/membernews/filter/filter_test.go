@@ -107,7 +107,6 @@ func (m *mockMemberDataForFilter) WithContext(_ context.Context) domain.MemberDa
 func (m *mockMemberDataForFilter) FindMembersByName(_ string) []*domain.Member  { return nil }
 func (m *mockMemberDataForFilter) FindMembersByAlias(_ string) []*domain.Member { return nil }
 
-// === FilterCandidates 기존 테스트 ===
 
 func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	validator := &testSourceValidator{}
@@ -152,7 +151,6 @@ func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	}
 }
 
-// === classifyCategory ===
 
 func TestClassifyCategory(t *testing.T) {
 	tests := []struct {
@@ -208,7 +206,6 @@ func TestClassifyCategory(t *testing.T) {
 	}
 }
 
-// === matchMembers ===
 
 func TestMatchMembers(t *testing.T) {
 	tests := []struct {
@@ -301,7 +298,6 @@ func TestMatchMembers(t *testing.T) {
 	}
 }
 
-// === applyPeriodFilter ===
 
 func TestApplyPeriodFilter(t *testing.T) {
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
@@ -373,7 +369,6 @@ func TestApplyPeriodFilter(t *testing.T) {
 	})
 }
 
-// === buildMemberProfiles ===
 
 func TestBuildMemberProfiles(t *testing.T) {
 	t.Run("nil membersData → display name token only", func(t *testing.T) {
@@ -453,7 +448,6 @@ func TestBuildMemberProfiles(t *testing.T) {
 	})
 }
 
-// === FilterCandidates 통합 추가 테스트 ===
 
 func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 	validator := &testSourceValidator{}
