@@ -45,6 +45,8 @@ const (
 	youtubeScraperRuntimeName = "youtube-scraper"
 )
 
+var initStreamIngesterInfrastructureFn = initStreamIngesterInfrastructure
+
 type ingestionRuntimeFeatures struct {
 	youtubeEnabled                bool
 	photoSyncEnabled              bool
@@ -87,7 +89,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		slog.String("lock_key", providers.IngestionLeaseKey),
 	)
 
-	infra, err := initStreamIngesterInfrastructure(ctx, cfg, logger)
+	infra, err := initStreamIngesterInfrastructureFn(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +97,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	var operationalChannels []communityShortsOperationalChannel
 	var ytPollTargets youtubePollTargets
 	if features.youtubeEnabled {
-		operationalChannels, err = resolveCommunityShortsOperationalChannels(infra.membersData)
+		operationalChannels, err = resolveCommunityShortsOperationalChannelsFromRepository(ctx, infra.memberRepo)
 		if err != nil {
 			infra.cleanup()
 			return nil, fmt.Errorf("resolve community shorts operational channels: %w", err)
@@ -157,11 +159,10 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	if features.youtubeEnabled {
 		routeDecider := buildCommunityShortsRouteDecider(communityShortsPolicy)
 		sharedScraperClient := buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL)
-		if err := validatePublishedAtResolverSchema(ctx, infra.postgresService); err != nil {
+		if err := validatePublishedAtResolverSchemaIfEnabled(ctx, cfg.Scraper, infra.postgresService, logger); err != nil {
 			infra.cleanup()
 			return nil, fmt.Errorf("validate published_at resolver schema: %w", err)
 		}
-		logger.Info("published_at_resolver_schema_validated")
 		scraperScheduler, outboxDispatcher, pollerRegistrations, err = buildStreamIngesterYouTubeComponents(
 			cfg.Scraper,
 			infra.postgresService,
@@ -195,7 +196,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			},
 			logger,
 		).withOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
-			return resolveCommunityShortsOperationalChannels(infra.membersData)
+			return resolveCommunityShortsOperationalChannelsFromRepository(ctx, infra.memberRepo)
 		})
 		youtubeScheduler = infra.ytStack.Scheduler
 	}
