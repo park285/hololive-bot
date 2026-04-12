@@ -32,22 +32,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
-// MajorEventScheduler: 대형 행사 주간 스케줄러 인터페이스
 type MajorEventScheduler interface {
 	SendWeeklyNotification(ctx context.Context) error
 }
 
-// MajorEventMonthlyScheduler: 대형 행사 월간 스케줄러 인터페이스
 type MajorEventMonthlyScheduler interface {
 	SendMonthlyNotification(ctx context.Context) error
 }
 
-// MemberNewsWeeklyScheduler: 구독 멤버 뉴스 주간 스케줄러 인터페이스
 type MemberNewsWeeklyScheduler interface {
 	SendWeeklyDigest(ctx context.Context) error
 }
 
-// TriggerHandler: 내부 트리거 API 핸들러 (운영 API에서 스케줄러 수동 실행용)
 type TriggerHandler struct {
 	majorEvent        MajorEventScheduler
 	majorEventMonthly MajorEventMonthlyScheduler
@@ -55,7 +51,6 @@ type TriggerHandler struct {
 	logger            *slog.Logger
 }
 
-// NewTriggerHandler: TriggerHandler를 생성합니다.
 func NewTriggerHandler(
 	majorEvent MajorEventScheduler,
 	majorEventMonthly MajorEventMonthlyScheduler,
@@ -70,12 +65,10 @@ func NewTriggerHandler(
 	}
 }
 
-// RegisterInternalRoutes: 내부 트리거 라우트를 등록합니다.
 func (h *TriggerHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	h.RegisterInternalRoutesWithAuth(rg, "")
 }
 
-// RegisterInternalRoutesWithAuth: 내부 트리거 라우트를 등록합니다.
 // apiKey가 설정된 경우 X-API-Key 미들웨어를 강제합니다.
 func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, apiKey string) {
 	internal := rg.Group("/internal/trigger")
@@ -85,7 +78,6 @@ func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, api
 	internal.POST("/membernews-weekly", h.TriggerMemberNewsWeekly)
 }
 
-// TriggerWeeklyNotification: 대형 행사 주간 알림을 수동으로 트리거합니다.
 func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 	if h.majorEvent == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "major event scheduler not initialized"})
@@ -105,7 +97,6 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "weekly notification sent"})
 }
 
-// TriggerMonthlyNotification: 대형 행사 월간 알림을 수동으로 트리거합니다.
 func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 	if h.majorEventMonthly == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "major event monthly scheduler not initialized"})
@@ -125,7 +116,6 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "monthly notification sent"})
 }
 
-// TriggerMemberNewsWeekly: 멤버 뉴스 주간 알림을 수동으로 트리거합니다.
 func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 	if h.memberNewsWeekly == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "member news weekly scheduler not initialized"})

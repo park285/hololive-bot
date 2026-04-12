@@ -22,7 +22,6 @@ package settings
 
 import "context"
 
-// SettingsApplier: 설정 변경을 런타임에 적용하는 인터페이스
 type SettingsApplier interface {
 	ApplyScraperProxy(ctx context.Context, enabled bool) ScraperProxyApplyResult
 	ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) AlarmAdvanceMinutesApplyResult
