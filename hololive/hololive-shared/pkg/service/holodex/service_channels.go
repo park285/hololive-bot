@@ -40,7 +40,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetChannelSchedule: 특정 채널의 방송 일정(예정된 방송)을 조회합니다.
 // includeLive가 true이면 현재 진행 중인 방송도 포함한다.
 func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, error) {
 	if cached, found := h.cacheManager.GetChannelSchedule(ctx, channelID, hours, includeLive); found {
@@ -126,7 +125,6 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 	return result, nil
 }
 
-// SearchChannels: 채널 이름 검색 쿼리를 통해 해당하는 Hololive 채널 목록을 조회합니다.
 func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.Channel, error) {
 	if cached, found := h.cacheManager.GetSearchChannels(ctx, query); found {
 		return cached, nil
@@ -189,7 +187,6 @@ func buildSearchChannelsCacheKey(query string) string {
 	return searchChannelsCacheKeyPrefix + hex.EncodeToString(sum[:])
 }
 
-// GetChannel: 채널 ID로 특정 채널의 상세 정보를 조회합니다.
 // retryable Holodex 오류(5xx/timeout/circuit/key rotation)에서만 YouTube 스크래퍼로 폴백하고,
 // non-retryable 오류는 그대로 반환합니다.
 func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Channel, error) {
@@ -276,7 +273,6 @@ func (h *Service) getChannelFromScraper(ctx context.Context, channelID string) (
 	return channel, nil
 }
 
-// GetChannels: 여러 채널 ID로 채널 정보를 배치 조회합니다.
 // 캐시를 우선 조회하고, 캐시 미스된 채널은 /channels 리스트 API로 한 번에 조회합니다.
 // 기존 N+1 개별 호출 패턴을 단일 호출로 최적화하여 rate limit 부담을 대폭 감소시킵니다.
 func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[string]*domain.Channel, error) {
@@ -339,7 +335,6 @@ func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[str
 	return result, nil
 }
 
-// GetChannelsLiveStatus: 특정 채널들의 현재 생방송/예정 상태를 빠르게 조회합니다.
 // /users/live 엔드포인트를 우선 사용하고, retryable 오류에서만 채널별 YouTube scraper 경로로 제한 폴백합니다.
 // 이 경로는 공식 스케줄 페이지 재조회 없이 YouTube scraper 결과만 사용합니다.
 // 주의: org, status, sort 필터링 미지원 - live+upcoming 모두 반환됨
