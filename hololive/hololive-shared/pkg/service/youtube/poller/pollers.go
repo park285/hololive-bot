@@ -22,6 +22,7 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -37,8 +38,9 @@ import (
 )
 
 const (
-	communityPostDetectedLogMessage = logschema.CommunityPostDetectedMessage
-	shortDetectedLogMessage         = logschema.ShortDetectedMessage
+	communityPostDetectedLogMessage  = logschema.CommunityPostDetectedMessage
+	shortDetectedLogMessage          = logschema.ShortDetectedMessage
+	inlinePublishedAtFallbackTimeout = 10 * time.Second
 )
 
 type ChannelStatsPoller struct {
@@ -459,23 +461,25 @@ func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string,
 }
 
 type ShortsPoller struct {
-	client       *scraper.Client
-	db           *gorm.DB
-	repo         batchRepository
-	maxResults   int
-	routeDecider NotificationRouteDecider
+	client                           *scraper.Client
+	db                               *gorm.DB
+	repo                             batchRepository
+	maxResults                       int
+	routeDecider                     NotificationRouteDecider
+	inlinePublishedAtFallbackEnabled bool
 }
 
-func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider NotificationRouteDecider) *ShortsPoller {
+func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *ShortsPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
 	return &ShortsPoller{
-		client:       scraperClient,
-		db:           db,
-		repo:         newBatchRepository(db),
-		maxResults:   maxResults,
-		routeDecider: routeDecider,
+		client:                           scraperClient,
+		db:                               db,
+		repo:                             newBatchRepository(db),
+		maxResults:                       maxResults,
+		routeDecider:                     routeDecider,
+		inlinePublishedAtFallbackEnabled: len(inlinePublishedAtFallbackEnabled) > 0 && inlinePublishedAtFallbackEnabled[0],
 	}
 }
 
@@ -528,11 +532,15 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newShorts))
 	trackingRows := make([]*domain.YouTubeContentAlarmTracking, 0, len(newShorts))
 	detectedAt := yttimestamp.Normalize(time.Now())
+	keepExistingWatermark := false
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt)
 	for _, short := range newShorts {
 		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
 		resourceVideoID := normalizeShortVideoResourceID(short.VideoID)
 		publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
+		if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
+			publishedAt = p.resolveShortPublishedAtInline(ctx, resourceVideoID)
+		}
 		thumbnails := convertThumbnails(short.Thumbnail)
 
 		dbVideo := &domain.YouTubeVideo{
@@ -563,6 +571,9 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 				routePublishedAt = *dbVideo.PublishedAt
 			}
 			if routePublishedAt.IsZero() {
+				if p.inlinePublishedAtFallbackEnabled {
+					keepExistingWatermark = true
+				}
 				continue
 			}
 
@@ -579,17 +590,44 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 			logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
 		}
 	}
+	lastContentID := normalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID)
+	if keepExistingWatermark && strings.TrimSpace(watermark.LastContentID) != "" {
+		lastContentID = watermark.LastContentID
+	}
 
 	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, trackingRows, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
-		LastContentID: normalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID),
+		LastContentID: lastContentID,
 	}); err != nil {
 		return fmt.Errorf("persist short batch: %w", err)
 	}
 
 	return nil
+}
+
+func (p *ShortsPoller) resolveShortPublishedAtInline(ctx context.Context, videoID string) *time.Time {
+	if strings.TrimSpace(videoID) == "" {
+		return nil
+	}
+
+	resolveCtx, cancel := context.WithTimeout(ctx, inlinePublishedAtFallbackTimeout)
+	defer cancel()
+
+	publishedAt, err := p.client.ResolveVideoPublishedAt(resolveCtx, videoID)
+	if err != nil {
+		if errors.Is(err, scraper.ErrPublishedAtNotFound) {
+			return nil
+		}
+		slog.WarnContext(ctx, "short published_at inline fallback failed",
+			"video_id", videoID,
+			"error", err,
+		)
+		return nil
+	}
+
+	return yttimestamp.NormalizePtr(publishedAt)
 }
 
 func logShortDetected(ctx context.Context, channelID, postID string, actualPublishedAt *time.Time, detectedAt time.Time) {
@@ -602,25 +640,27 @@ func logShortDetected(ctx context.Context, channelID, postID string, actualPubli
 }
 
 type CommunityPoller struct {
-	client       *scraper.Client
-	db           *gorm.DB
-	repo         batchRepository
-	maxResults   int
-	keywords     []string
-	routeDecider NotificationRouteDecider
+	client                           *scraper.Client
+	db                               *gorm.DB
+	repo                             batchRepository
+	maxResults                       int
+	keywords                         []string
+	routeDecider                     NotificationRouteDecider
+	inlinePublishedAtFallbackEnabled bool
 }
 
-func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider NotificationRouteDecider) *CommunityPoller {
+func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider NotificationRouteDecider, inlinePublishedAtFallbackEnabled ...bool) *CommunityPoller {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
 	return &CommunityPoller{
-		client:       scraperClient,
-		db:           db,
-		repo:         newBatchRepository(db),
-		maxResults:   maxResults,
-		keywords:     keywords,
-		routeDecider: routeDecider,
+		client:                           scraperClient,
+		db:                               db,
+		repo:                             newBatchRepository(db),
+		maxResults:                       maxResults,
+		keywords:                         keywords,
+		routeDecider:                     routeDecider,
+		inlinePublishedAtFallbackEnabled: len(inlinePublishedAtFallbackEnabled) > 0 && inlinePublishedAtFallbackEnabled[0],
 	}
 }
 
