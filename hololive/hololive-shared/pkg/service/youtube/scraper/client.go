@@ -39,6 +39,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
+const FetchPageMaxAttempts = 3
+
 var ErrRateLimited = errors.New("rate limited by YouTube (429)")
 
 var ErrForbidden = errors.New("forbidden by YouTube (403)")
@@ -268,7 +270,7 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string) (string, error) 
 	var result string
 
 	err := retry.WithRetry(ctx, retry.RetryOptions{
-		MaxAttempts: 3,
+		MaxAttempts: FetchPageMaxAttempts,
 		BaseDelay:   2 * time.Second,
 		Jitter:      1500 * time.Millisecond,
 		ShouldRetry: func(err error) bool {

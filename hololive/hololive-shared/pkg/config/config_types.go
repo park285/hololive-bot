@@ -80,6 +80,7 @@ type ScraperPublishedAtResolverConfig struct {
 	BatchSize         int
 	MaxResolvePerRun  int
 	MaxRunDuration    time.Duration
+	ResolveTimeout    time.Duration
 	MinDetectedAge    time.Duration
 	FailureBackoffTTL time.Duration
 }
@@ -99,7 +100,7 @@ type ScraperConfig struct {
 func DefaultScraperPoll() ScraperPoll {
 	return ScraperPoll{
 		Videos:    15 * time.Minute,
-		Shorts:    30 * time.Minute,
+		Shorts:    2 * time.Minute,
 		Community: 30 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
@@ -112,7 +113,8 @@ func DefaultScraperPublishedAtResolverConfig() ScraperPublishedAtResolverConfig 
 		Interval:          15 * time.Second,
 		BatchSize:         10,
 		MaxResolvePerRun:  1,
-		MaxRunDuration:    2 * time.Second,
+		MaxRunDuration:    12 * time.Second,
+		ResolveTimeout:    10 * time.Second,
 		MinDetectedAge:    30 * time.Second,
 		FailureBackoffTTL: 5 * time.Minute,
 	}
