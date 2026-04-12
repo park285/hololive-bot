@@ -37,12 +37,10 @@ import (
 
 const searchChannelsCacheKeyPrefix = "search_channels:"
 
-// ErrInvalidStreamOrg: 지원하지 않는 org 파라미터가 전달될 때 반환됩니다.
 var ErrInvalidStreamOrg = stdErrors.New("invalid stream org parameter")
 
 var _ domain.StreamProvider = (*Service)(nil)
 
-// ChannelRaw: Holodex API로부터 수신한 채널 정보의 Raw 데이터 구조체
 type ChannelRaw struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
@@ -56,7 +54,6 @@ type ChannelRaw struct {
 	Group           *string `json:"group,omitempty"`
 }
 
-// StreamRaw: Holodex API로부터 수신한 방송(스트림) 정보의 Raw 데이터 구조체
 type StreamRaw struct {
 	ID             string              `json:"id"`
 	Title          string              `json:"title"`
@@ -72,7 +69,6 @@ type StreamRaw struct {
 	Channel        *ChannelRaw         `json:"channel,omitempty"`
 }
 
-// Service: Holodex External API와 통신하여 채널 및 스트림 정보를 가져오는 클라이언트 서비스
 // 캐싱 및 스크래핑 폴백(Fallback) 기능을 포함한다.
 type Service struct {
 	requester    Requester
@@ -84,7 +80,6 @@ type Service struct {
 	retry        *retryScheduler
 }
 
-// NewHolodexService: 새로운 Holodex API 서비스 인스턴스를 생성한다. (API Key 검증 포함)
 func NewHolodexService(baseURL string, apiKey string, cacheSvc cache.Client, scraperSvc *ScraperService, logger *slog.Logger) (*Service, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, fmt.Errorf("holodex api key is required")
@@ -131,7 +126,6 @@ func NewHolodexService(baseURL string, apiKey string, cacheSvc cache.Client, scr
 	return svc, nil
 }
 
-// SetScraperProxyEnabled: Holodex fallback 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
 func (h *Service) SetScraperProxyEnabled(enabled bool) bool {
 	if h.scraper == nil {
 		return false
@@ -139,7 +133,6 @@ func (h *Service) SetScraperProxyEnabled(enabled bool) bool {
 	return h.scraper.SetYouTubeProxyEnabled(enabled)
 }
 
-// ScraperProxyEnabled: Holodex fallback 스크래퍼의 현재 프록시 활성 상태를 반환합니다.
 func (h *Service) ScraperProxyEnabled() bool {
 	if h.scraper == nil {
 		return false
@@ -147,7 +140,6 @@ func (h *Service) ScraperProxyEnabled() bool {
 	return h.scraper.YouTubeProxyEnabled()
 }
 
-// Stop: 서비스 리소스를 정리합니다.
 func (h *Service) Stop() {
 	if h.retry != nil {
 		h.retry.stop()
