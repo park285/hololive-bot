@@ -134,6 +134,13 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	case cacheErr == nil && len(cacheAlarmChannelIDs) == 0:
 		if !r.lastNonEmptyCacheAt.IsZero() && now.Sub(r.lastNonEmptyCacheAt) < youtubePollTargetEmptyCacheGracePeriod {
 			if hasYouTubePollTargets(r.lastResolvedTargets) {
+				if operational.changed {
+					targets := r.lastResolvedTargets
+					targets.StatsChannelIDs = communityShortsEnabledChannelIDs(operationalChannels)
+					if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
+						r.applyResolvedTargets(targets)
+					}
+				}
 				return
 			}
 			alarmChannelIDs = cacheAlarmChannelIDs
@@ -221,6 +228,13 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		)
 	}
 	if !targetsChanged {
+		return
+	}
+	r.applyResolvedTargets(targets)
+}
+
+func (r *youTubePollTargetRefresher) applyResolvedTargets(targets youtubePollTargets) {
+	if r == nil || r.scheduler == nil {
 		return
 	}
 	for _, registration := range r.registrations {

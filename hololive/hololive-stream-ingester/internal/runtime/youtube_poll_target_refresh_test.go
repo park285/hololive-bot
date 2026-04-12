@@ -623,6 +623,73 @@ func TestYouTubePollTargetRefresherRecentEmptyCacheKeepsPreviousResolvedTargetsD
 	require.Contains(t, jobKeys, "UC_STATS:channel_stats")
 }
 
+func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		if key == "alarm:channel_registry" {
+			return []string{}, nil
+		}
+		return nil, nil
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		&databasemocks.Client{},
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
+		scraper.NewRateLimiter(time.Second),
+		cacheSvc,
+		nil,
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_NOTIFY", "UC_STATS_A"},
+	)
+
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS_A"}),
+	)
+	dbCalled := false
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{
+			{channelID: "UC_NOTIFY", enabled: true},
+			{channelID: "UC_STATS_A", enabled: true},
+		},
+		func(context.Context) ([]string, error) {
+			dbCalled = true
+			return []string{"UC_NOTIFY"}, nil
+		},
+		newYouTubePollTargetTestLogger(),
+	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
+		return []communityShortsOperationalChannel{
+			{channelID: "UC_NOTIFY", enabled: true},
+			{channelID: "UC_STATS_B", enabled: true},
+		}, nil
+	})
+	refresher.lastNonEmptyCacheAt = time.Now()
+	refresher.timeNow = time.Now
+
+	refresher.refresh(context.Background())
+
+	assert.False(t, dbCalled)
+	jobKeys := schedulerJobKeys(t, scheduler)
+	require.Contains(t, jobKeys, "UC_NOTIFY:videos")
+	require.Contains(t, jobKeys, "UC_STATS_B:channel_stats")
+	require.NotContains(t, jobKeys, "UC_STATS_A:channel_stats")
+}
+
 func TestYouTubePollTargetRefresherPreservesExplicitEmptyNotificationTargets(t *testing.T) {
 	t.Parallel()
 
