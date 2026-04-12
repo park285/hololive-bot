@@ -35,7 +35,6 @@ const (
 	TriggerOnEmptyPrimaryWithError Trigger = "on_empty_primary_with_error"
 )
 
-// Policy: 후속 fallback 실행 조건 초안.
 type Policy struct {
 	Trigger Trigger
 }
@@ -53,7 +52,6 @@ func (p Policy) ShouldRun(primaryResults int, failedTargets int) bool {
 	}
 }
 
-// FetchPlan: primary fan-out 실행 계획 초안.
 // 현재는 제한 병렬성과 성공 callback만 공통화하고, 호출자는 후속 fallback 실행을 직접 담당한다.
 // OnSuccess는 Parallelism > 1일 때 동시 호출될 수 있으므로, 호출자 측에서 필요한 동기화를 해야 한다.
 type FetchPlan[K any, V any] struct {
@@ -63,7 +61,6 @@ type FetchPlan[K any, V any] struct {
 	OnSuccess   func(K, V)
 }
 
-// Summary: primary phase fan-out 실행 결과.
 type Summary[K any] struct {
 	SuccessCount  int
 	FailedCount   int
@@ -78,7 +75,6 @@ func (s Summary[K]) AllFailed(totalTargets int) bool {
 	return totalTargets > 0 && s.SuccessCount == 0 && s.FailedCount == totalTargets
 }
 
-// Execute: key fan-out primary fetch를 실행하고 실패 key를 원래 순서대로 수집한다.
 // 개별 key 실패는 전체 실행을 중단하지 않고 후속 fallback 후보로 남긴다.
 func Execute[K any, V any](
 	ctx context.Context,
@@ -144,7 +140,6 @@ func Execute[K any, V any](
 	return summary
 }
 
-// PrimaryResult: 기존 call site 호환용 실행 결과.
 type PrimaryResult[K any] struct {
 	Attempted int
 	Succeeded int
@@ -159,7 +154,6 @@ func (r PrimaryResult[K]) AllFailed() bool {
 	return r.Attempted > 0 && r.Succeeded == 0 && len(r.Failed) == r.Attempted
 }
 
-// RunPrimary: 기존 call site용 thin wrapper.
 func RunPrimary[K any](
 	ctx context.Context,
 	keys []K,
