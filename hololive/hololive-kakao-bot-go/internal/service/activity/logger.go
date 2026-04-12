@@ -32,7 +32,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// LogEntry: 활동 로그의 한 항목을 나타내는 구조체.
 type LogEntry struct {
 	Timestamp time.Time      `json:"timestamp"`
 	Type      string         `json:"type"` // e.g., "command", "auth", "system"
@@ -40,7 +39,6 @@ type LogEntry struct {
 	Details   map[string]any `json:"details,omitempty"`
 }
 
-// Logger: 파일 기반의 간단한 활동 로그 기록기.
 type Logger struct {
 	filePath   string
 	logger     *slog.Logger
@@ -55,7 +53,6 @@ var (
 
 const activityLogFilePerm = 0o600
 
-// NewActivityLogger: 새로운 활동 로그 기록기를 생성합니다.
 func NewActivityLogger(filePath string, logger *slog.Logger) *Logger {
 	return &Logger{
 		filePath:   filePath,
@@ -64,7 +61,6 @@ func NewActivityLogger(filePath string, logger *slog.Logger) *Logger {
 	}
 }
 
-// Log: 새로운 활동 로그를 파일에 추가한다. (Thread-safe).
 func (l *Logger) Log(entryType, summary string, details map[string]any) {
 	if l.stdoutOnly {
 		l.logger.Info("activity",
@@ -106,7 +102,6 @@ func (l *Logger) Log(entryType, summary string, details map[string]any) {
 	}
 }
 
-// GetRecentLogs: 최근 활동 로그를 조회합니다.
 func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 	if limit <= 0 {
 		return []LogEntry{}, nil
