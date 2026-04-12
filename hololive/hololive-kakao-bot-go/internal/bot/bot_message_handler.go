@@ -29,7 +29,6 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
-// HandleMessage: Iris webhook으로부터 수신한 메시지를 처리합니다.
 // HTTP webhook 핸들러에서 호출하기 위해 public으로 노출됩니다.
 func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 	commandType := "unknown"
