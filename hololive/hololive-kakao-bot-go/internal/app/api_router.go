@@ -37,7 +37,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
-// ProvideAPIRouter: hololive-bot 도메인 API를 서빙하는 Gin 라우터를 설정합니다.
 // Admin Dashboard와 Tauri 앱에서 사용됩니다.
 func ProvideAPIRouter(
 	ctx context.Context,
