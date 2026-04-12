@@ -22,7 +22,6 @@ package domain
 
 import "github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
-// MemberIntentType: 사용자의 의도(Intent)를 분류하는 타입 (예: 멤버 정보 조회, 기타)
 type MemberIntentType string
 
 // MemberIntentType 상수 목록.
@@ -35,14 +34,12 @@ const (
 	MemberIntentOther MemberIntentType = "other"
 )
 
-// MemberIntent: 의도 분석 결과 (분류된 의도, 신뢰도, 추론 근거)
 type MemberIntent struct {
 	Intent     MemberIntentType `json:"intent"`
 	Confidence float64          `json:"confidence"`
 	Reasoning  string           `json:"reasoning"`
 }
 
-// NormalizeMemberIntent: 문자열 형태의 의도를 표준 열거형 타입으로 변환합니다.
 func NormalizeMemberIntent(raw string) MemberIntentType {
 	switch stringutil.Normalize(raw) {
 	case string(MemberIntentMemberInfo):
@@ -54,7 +51,6 @@ func NormalizeMemberIntent(raw string) MemberIntentType {
 	}
 }
 
-// IsMemberInfoIntent: 분석된 의도가 '멤버 정보 조회'이고 신뢰도가 기준치(0.35) 이상인지 확인합니다.
 func (mic *MemberIntent) IsMemberInfoIntent() bool {
 	if mic == nil {
 		return false
