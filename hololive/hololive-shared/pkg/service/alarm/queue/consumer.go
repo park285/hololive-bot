@@ -35,10 +35,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// ClaimKeyPrefix: claim 키 접두사 (release 시 필터링용)
 const ClaimKeyPrefix = contractsalarm.NotifyClaimKeyPrefix
 
-// Consumer: Valkey BRPOP 기반 큐 소비자
 type Consumer struct {
 	cache        cache.Client
 	queueKey     string
@@ -48,20 +46,16 @@ type Consumer struct {
 	logger       *slog.Logger
 }
 
-// ConsumerOption: Consumer 설정 옵션
 type ConsumerOption func(*Consumer)
 
-// WithQueueKey: 큐 키 변경
 func WithQueueKey(key string) ConsumerOption {
 	return func(c *Consumer) { c.queueKey = key }
 }
 
-// WithMaxBatch: 최대 배치 크기 변경
 func WithMaxBatch(n int) ConsumerOption {
 	return func(c *Consumer) { c.maxBatch = n }
 }
 
-// NewConsumer: QueueConsumer 생성
 func NewConsumer(c cache.Client, logger *slog.Logger, opts ...ConsumerOption) *Consumer {
 	if logger == nil {
 		logger = slog.Default()
@@ -82,7 +76,6 @@ func NewConsumer(c cache.Client, logger *slog.Logger, opts ...ConsumerOption) *C
 	return consumer
 }
 
-// DrainBatch: BRPOP으로 큐에서 최대 maxItems개의 envelope을 꺼낸다.
 // 첫 항목은 blockTimeout으로 대기, 이후 항목은 drainTimeout으로 짧게 반복 조회한다.
 func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
 	initQueueMetrics()
@@ -135,7 +128,6 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	return envelopes, nil
 }
 
-// Requeue: 드레인된 envelope를 큐 앞으로 다시 넣어 재시도 대상에 포함한다.
 func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	if len(envelopes) == 0 {
 		return nil
@@ -171,7 +163,6 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 	return nil
 }
 
-// ReleaseClaimKeys: claim 키를 prefix 필터링 후 Valkey DEL
 func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
 	initQueueMetrics()
 
