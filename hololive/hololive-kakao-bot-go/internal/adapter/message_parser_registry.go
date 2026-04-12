@@ -20,7 +20,6 @@
 
 package adapter
 
-// CommandParser: 단일 커맨드 파서 단위를 나타낸다.
 type CommandParser interface {
 	Parse(command string, args []string, raw string) (*ParsedCommand, bool)
 }

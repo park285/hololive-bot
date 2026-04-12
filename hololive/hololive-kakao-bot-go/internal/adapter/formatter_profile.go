@@ -178,7 +178,6 @@ func formatProfileOfficialURL(raw *domain.TalentProfile) string {
 	return fmt.Sprintf("\n%s 공식 프로필: %s", DefaultEmoji.Web, stringutil.TrimSpace(raw.OfficialURL))
 }
 
-// FormatTalentProfile: 탤런트 프로필 정보를 포맷팅하여 메시지 문자열을 생성합니다.
 func (f *ResponseFormatter) FormatTalentProfile(raw *domain.TalentProfile, translated *domain.Translated) string {
 	if raw == nil {
 		return ErrorMessage(ErrDisplayProfileDataFailed)
