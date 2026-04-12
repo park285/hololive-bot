@@ -10,11 +10,9 @@ use super::session::SessionProvider;
 use crate::error::{AppError, AuthError};
 use crate::state::AppState;
 
-/// request extensions 에 저장되는 세션 ID newtype
 #[derive(Debug, Clone)]
 pub struct SessionId(pub String);
 
-/// 인증 미들웨어: admin_session 쿠키 검증 후 SessionId 를 extensions 에 삽입
 pub async fn auth_middleware(
     State(state): State<Arc<AppState>>,
     mut req: Request,
@@ -131,7 +129,6 @@ pub fn set_csrf_cookie(headers: &mut HeaderMap, token: &str, force_https: bool) 
     }
 }
 
-/// 쿠키 삭제 (Max-Age=-1 으로 즉시 만료)
 pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool) {
     let secure = if force_https { "; Secure" } else { "" };
     let cookie = format!("{name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=-1{secure}");
@@ -188,7 +185,6 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request as HttpRequest, header};
 
-
     fn make_request_with_cookie(cookie_header: &str) -> Request {
         HttpRequest::builder()
             .header(header::COOKIE, cookie_header)
@@ -239,7 +235,6 @@ mod tests {
         assert!(should_set_secure_cookie(req.headers(), true));
     }
 
-
     #[test]
     fn test_set_session_cookie_https() {
         let mut headers = HeaderMap::new();
@@ -262,7 +257,6 @@ mod tests {
         assert!(cookie.contains("HttpOnly"));
     }
 
-
     #[test]
     fn test_set_csrf_cookie_not_httponly() {
         let mut headers = HeaderMap::new();
@@ -283,7 +277,6 @@ mod tests {
         assert!(!cookie.contains("Secure"));
         assert!(!cookie.contains("HttpOnly"));
     }
-
 
     #[test]
     fn test_set_clear_cookie_attributes() {
@@ -306,7 +299,6 @@ mod tests {
         assert!(cookie.contains("Max-Age=-1"));
         assert!(!cookie.contains("Secure"));
     }
-
 
     #[tokio::test]
     async fn test_security_headers_present() {
