@@ -39,7 +39,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
-// StreamIngesterRuntime: stream-ingester 전용 런타임 (YouTube/스크래퍼/PhotoSync/Outbox).
 type StreamIngesterRuntime struct {
 	RuntimeName string
 	Config      *config.Config
@@ -77,7 +76,6 @@ func (r *StreamIngesterRuntime) runtimeName() string {
 	return name
 }
 
-// Run: SIGINT/SIGTERM 신호를 대기하며 graceful shutdown을 수행합니다. (블로킹)
 func (r *StreamIngesterRuntime) Run() {
 	_ = lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
