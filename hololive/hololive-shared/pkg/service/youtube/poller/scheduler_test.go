@@ -21,6 +21,7 @@
 package poller
 
 import (
+	"container/heap"
 	"context"
 	"testing"
 	"time"
@@ -97,10 +98,126 @@ func TestDispatchDueJobs_WorkerChannelFullKeepsAnchoredNextRunAt(t *testing.T) {
 	scheduler.jobs = jobHeap{job}
 
 	jobCh := make(chan *Job)
-	scheduler.dispatchDueJobs(context.Background(), jobCh)
+	retrySoon := scheduler.dispatchDueJobs(jobCh)
 
 	require.Len(t, scheduler.jobs, 1)
 	assert.Equal(t, scheduledAt, scheduler.jobs[0].NextRunAt)
+	assert.True(t, retrySoon)
+}
+
+func TestSchedulerNextDispatchDelay_UsesShortRetryWhenWorkerChannelFull(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+
+	delay := scheduler.nextDispatchDelay(true)
+	assert.Equal(t, 50*time.Millisecond, delay)
+}
+
+func TestSchedulerRegisterSignalsWakeChannel(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+
+	scheduler.Register("channel-1", &togglePollerStub{name: "videos"}, PriorityNormal, time.Minute)
+
+	select {
+	case <-scheduler.wakeCh:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected scheduler register to signal wakeCh")
+	}
+}
+
+func TestSchedulerSyncPollerTargetsAddsAndRemovesJobs(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	p := &togglePollerStub{name: "videos"}
+	scheduler.Register("channel-old", p, PriorityNormal, time.Minute)
+
+	scheduler.SyncPollerTargets(PollerTargetSync{
+		Poller:     p,
+		Priority:   PriorityHigh,
+		Interval:   2 * time.Minute,
+		ChannelIDs: []string{"channel-new"},
+	})
+
+	require.NotContains(t, scheduler.jobMap, "channel-old:videos")
+	require.Contains(t, scheduler.jobMap, "channel-new:videos")
+	assert.Equal(t, PriorityHigh, scheduler.jobMap["channel-new:videos"].Priority)
+	assert.Equal(t, 2*time.Minute, scheduler.jobMap["channel-new:videos"].Interval)
+}
+
+func TestSchedulerSyncPollerTargetsRetiresInflightJobWithoutRequeue(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	p := &togglePollerStub{name: "videos"}
+	scheduler.Register("channel-old", p, PriorityNormal, time.Minute)
+
+	job := scheduler.jobMap["channel-old:videos"]
+	require.NotNil(t, job)
+	heap.Pop(&scheduler.jobs)
+	require.Equal(t, -1, job.index)
+
+	scheduler.SyncPollerTargets(PollerTargetSync{
+		Poller:     p,
+		Priority:   PriorityNormal,
+		Interval:   time.Minute,
+		ChannelIDs: nil,
+	})
+
+	scheduler.rescheduleJob(job)
+
+	require.NotContains(t, scheduler.jobMap, "channel-old:videos")
+	require.Len(t, scheduler.jobs, 0)
+}
+
+func TestSchedulerSyncPollerTargetsForceImmediateFirstRunOnlyForNewJobs(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	p := &togglePollerStub{name: "videos"}
+	scheduler.Register("channel-existing", p, PriorityNormal, time.Hour)
+
+	existing := scheduler.jobMap["channel-existing:videos"]
+	require.NotNil(t, existing)
+	existingNextRunAt := existing.NextRunAt
+
+	before := time.Now()
+	scheduler.SyncPollerTargets(PollerTargetSync{
+		Poller:                 p,
+		Priority:               PriorityHigh,
+		Interval:               time.Hour,
+		ChannelIDs:             []string{"channel-existing", "channel-new"},
+		ForceImmediateFirstRun: true,
+	})
+	after := time.Now()
+
+	require.Contains(t, scheduler.jobMap, "channel-new:videos")
+	assert.Equal(t, existingNextRunAt, scheduler.jobMap["channel-existing:videos"].NextRunAt)
+
+	newJob := scheduler.jobMap["channel-new:videos"]
+	require.NotNil(t, newJob)
+	assert.False(t, newJob.NextRunAt.Before(before))
+	assert.False(t, newJob.NextRunAt.After(after))
+}
+
+func TestSchedulerRescheduleJobReanchorsAfterImmediateFirstRun(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+	p := &togglePollerStub{name: "videos"}
+
+	scheduler.SyncPollerTargets(PollerTargetSync{
+		Poller:                 p,
+		Priority:               PriorityNormal,
+		Interval:               time.Hour,
+		ChannelIDs:             []string{"channel-new"},
+		ForceImmediateFirstRun: true,
+	})
+
+	job := scheduler.jobMap["channel-new:videos"]
+	require.NotNil(t, job)
+	require.True(t, job.immediateFirstRun)
+
+	before := time.Now()
+	scheduler.rescheduleJob(job)
+	after := time.Now()
+
+	assert.False(t, job.immediateFirstRun)
+	lowerBound := nextPollAt(before, job.Interval, job.Offset)
+	upperBound := nextPollAt(after, job.Interval, job.Offset)
+	assert.False(t, job.NextRunAt.Before(lowerBound))
+	assert.False(t, job.NextRunAt.After(upperBound))
 }
 
 func TestAdvanceNextRunAt_PreservesAnchorAcrossBacklog(t *testing.T) {

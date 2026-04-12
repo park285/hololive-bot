@@ -35,19 +35,29 @@ func buildStreamIngesterChannelPollerRegistrations(
 	sharedRL *scraper.RateLimiter,
 	cacheSvc cache.Client,
 	routeDecider poller.NotificationRouteDecider,
+	notificationChannelIDs []string,
+	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
-	proxyConfig := scraper.ProxyConfig{
-		Enabled: scraperCfg.ProxyEnabled,
-		URL:     scraperCfg.ProxyURL,
-	}
+	return buildStreamIngesterChannelPollerRegistrationsWithClient(
+		postgres,
+		scraperCfg,
+		buildSharedYouTubeScraperClient(scraperCfg, cacheSvc, sharedRL),
+		routeDecider,
+		notificationChannelIDs,
+		statsChannelIDs,
+	)
+}
+
+func buildStreamIngesterChannelPollerRegistrationsWithClient(
+	postgres database.Client,
+	scraperCfg config.ScraperConfig,
+	scraperClient *scraper.Client,
+	routeDecider poller.NotificationRouteDecider,
+	notificationChannelIDs []string,
+	statsChannelIDs []string,
+) []providers.ChannelPollerRegistration {
 	poll := scraperCfg.PollOrDefault()
 	communityKeywords := []string{}
-
-	scraperClient := scraper.NewClient(
-		scraper.WithProxy(proxyConfig),
-		scraper.WithRateLimiter(sharedRL),
-		scraper.WithStateStore(cacheSvc),
-	)
 	db := postgres.GetGormDB()
 
 	videosPoller := poller.NewVideosPoller(scraperClient, db, 10)
@@ -57,10 +67,20 @@ func buildStreamIngesterChannelPollerRegistrations(
 	livePoller := poller.NewLivePoller(scraperClient, db)
 
 	return []providers.ChannelPollerRegistration{
-		providers.NewChannelPollerRegistration(videosPoller, poller.PriorityNormal, poll.Videos),
-		providers.NewChannelPollerRegistration(shortsPoller, poller.PriorityLow, poll.Shorts),
-		providers.NewChannelPollerRegistration(communityPoller, poller.PriorityLow, poll.Community),
-		providers.NewChannelPollerRegistration(statsPoller, poller.PriorityLow, poll.Stats),
-		providers.NewChannelPollerRegistration(livePoller, poller.PriorityHigh, poll.Live),
+		providers.NewChannelPollerRegistration(videosPoller, poller.PriorityNormal, poll.Videos).
+			WithChannelIDs(notificationChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupNotification),
+		providers.NewChannelPollerRegistration(shortsPoller, poller.PriorityLow, poll.Shorts).
+			WithChannelIDs(notificationChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupNotification),
+		providers.NewChannelPollerRegistration(communityPoller, poller.PriorityLow, poll.Community).
+			WithChannelIDs(notificationChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupNotification),
+		providers.NewChannelPollerRegistration(statsPoller, poller.PriorityLow, poll.Stats).
+			WithChannelIDs(statsChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupStats),
+		providers.NewChannelPollerRegistration(livePoller, poller.PriorityHigh, poll.Live).
+			WithChannelIDs(notificationChannelIDs).
+			WithTargetGroup(providers.ChannelTargetGroupNotification),
 	}
 }

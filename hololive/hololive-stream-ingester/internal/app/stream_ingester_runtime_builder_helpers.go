@@ -21,7 +21,10 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -38,22 +41,32 @@ import (
 func buildStreamIngesterYouTubeComponents(
 	scraperCfg config.ScraperConfig,
 	postgresService database.Client,
-	channelIDs []string,
+	notificationChannelIDs []string,
+	statsChannelIDs []string,
+	scraperClient *scraper.Client,
 	cacheService cache.Client,
 	irisClient iris.Sender,
 	templateRenderer *template.Renderer,
-	sharedRL *scraper.RateLimiter,
 	routeDecider poller.NotificationRouteDecider,
 	logger *slog.Logger,
-) (*poller.Scheduler, *outbox.Dispatcher) {
-	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(postgresService, scraperCfg, sharedRL, cacheService, routeDecider)
+) (*poller.Scheduler, *outbox.Dispatcher, []providers.ChannelPollerRegistration, error) {
+	pollerRegistrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+		postgresService,
+		scraperCfg,
+		scraperClient,
+		routeDecider,
+		notificationChannelIDs,
+		statsChannelIDs,
+	)
+	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
+		return nil, nil, nil, err
+	}
 
 	scraperScheduler := providers.ProvideScraperScheduler(
 		nil,
 		logger,
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
 		providers.WithSchedulerWorkerCount(scraperCfg.WorkerCountOrDefault()),
-		providers.WithSchedulerChannelIDs(channelIDs),
 	)
 
 	outboxDispatcher := outbox.NewDispatcher(
@@ -65,5 +78,71 @@ func buildStreamIngesterYouTubeComponents(
 		outbox.DefaultConfig(),
 	)
 
-	return scraperScheduler, outboxDispatcher
+	return scraperScheduler, outboxDispatcher, pollerRegistrations, nil
+}
+
+func buildSharedYouTubeScraperClient(
+	scraperCfg config.ScraperConfig,
+	cacheService cache.Client,
+	sharedRL *scraper.RateLimiter,
+) *scraper.Client {
+	proxyConfig := scraper.ProxyConfig{
+		Enabled: scraperCfg.ProxyEnabled,
+		URL:     scraperCfg.ProxyURL,
+	}
+
+	return scraper.NewClient(
+		scraper.WithProxy(proxyConfig),
+		scraper.WithRateLimiter(sharedRL),
+		scraper.WithStateStore(cacheService),
+	)
+}
+
+func buildPendingPublishedAtResolver(
+	postgresService database.Client,
+	scraperClient *scraper.Client,
+	cacheService cache.Client,
+	routeDecider poller.NotificationRouteDecider,
+	logger *slog.Logger,
+) *poller.PendingPublishedAtResolver {
+	if postgresService == nil || scraperClient == nil {
+		return nil
+	}
+
+	softLimiter := scraper.NewRateLimiter(15 * time.Second)
+	backoffStore := poller.NewCachePublishedAtBackoffStore(cacheService)
+
+	return poller.NewPendingPublishedAtResolverWithControls(
+		postgresService.GetGormDB(),
+		scraperClient,
+		routeDecider,
+		15*time.Second,
+		50,
+		20,
+		20*time.Second,
+		5*time.Minute,
+		softLimiter,
+		backoffStore,
+		logger,
+	)
+}
+
+func validateExplicitPollerRegistrations(registrations []providers.ChannelPollerRegistration) error {
+	missing := make([]string, 0)
+	for _, registration := range registrations {
+		if registration.Poller == nil || registration.Interval <= 0 {
+			continue
+		}
+		if registration.HasExplicitChannelIDs {
+			continue
+		}
+		missing = append(missing, registration.Poller.Name())
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"stream-ingester poller registrations require explicit channel IDs: %s",
+		strings.Join(missing, ", "),
+	)
 }

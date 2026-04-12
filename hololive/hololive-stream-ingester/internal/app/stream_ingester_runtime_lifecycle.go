@@ -44,6 +44,14 @@ func (r *StreamIngesterRuntime) startBackgroundServices(ctx context.Context, err
 		r.ScraperScheduler.Start(ctx)
 		r.Logger.Info("Scraper scheduler started", slog.String("runtime", r.runtimeName()))
 	}
+	if r.PublishedAtResolver != nil {
+		go r.PublishedAtResolver.Start(ctx)
+		r.Logger.Info("Pending published_at resolver started", slog.String("runtime", r.runtimeName()))
+	}
+	if r.PollTargetRefresher != nil {
+		go r.PollTargetRefresher.Start(ctx)
+		r.Logger.Info("YouTube poll target refresher started", slog.String("runtime", r.runtimeName()))
+	}
 	if r.OutboxDispatcher != nil {
 		r.OutboxDispatcher.Start(ctx)
 		r.Logger.Info("YouTube outbox dispatcher started", slog.String("runtime", r.runtimeName()))

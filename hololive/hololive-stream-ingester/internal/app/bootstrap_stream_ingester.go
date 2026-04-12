@@ -95,12 +95,25 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	}
 
 	var operationalChannels []communityShortsOperationalChannel
+	var ytPollTargets youtubePollTargets
 	if features.youtubeEnabled {
 		operationalChannels, err = resolveCommunityShortsOperationalChannels(infra.membersData)
 		if err != nil {
 			infra.cleanup()
 			return nil, fmt.Errorf("resolve community shorts operational channels: %w", err)
 		}
+
+		ytPollTargets, err = resolveYouTubePollTargets(ctx, infra.cacheService, infra.postgresService, operationalChannels)
+		if err != nil {
+			infra.cleanup()
+			return nil, err
+		}
+
+		logger.Info("Resolved YouTube poll targets",
+			slog.Int("notification_target_channels", len(ytPollTargets.NotificationChannelIDs)),
+			slog.Int("stats_target_channels", len(ytPollTargets.StatsChannelIDs)),
+			slog.Int("dropped_alarm_targets", ytPollTargets.DroppedAlarmTargets),
+		)
 	}
 
 	var communityShortsPolicy communityShortsBigBangPolicy
@@ -138,17 +151,44 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 
 	var scraperScheduler *poller.Scheduler
 	var outboxDispatcher *outbox.Dispatcher
+	var publishedAtResolver *poller.PendingPublishedAtResolver
+	var pollerRegistrations []providers.ChannelPollerRegistration
+	var pollTargetRefresher *youTubePollTargetRefresher
 	var youtubeScheduler youtube.Scheduler
 	if features.youtubeEnabled {
-		scraperScheduler, outboxDispatcher = buildStreamIngesterYouTubeComponents(
+		routeDecider := buildCommunityShortsRouteDecider(communityShortsPolicy)
+		sharedScraperClient := buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL)
+		scraperScheduler, outboxDispatcher, pollerRegistrations, err = buildStreamIngesterYouTubeComponents(
 			cfg.Scraper,
 			infra.postgresService,
-			communityShortsEnabledChannelIDs(operationalChannels),
+			ytPollTargets.NotificationChannelIDs,
+			ytPollTargets.StatsChannelIDs,
+			sharedScraperClient,
 			infra.cacheService,
 			infra.irisClient,
 			infra.templateRenderer,
-			infra.sharedRL,
-			buildCommunityShortsRouteDecider(communityShortsPolicy),
+			routeDecider,
+			logger,
+		)
+		if err != nil {
+			infra.cleanup()
+			return nil, err
+		}
+		publishedAtResolver = buildPendingPublishedAtResolver(
+			infra.postgresService,
+			sharedScraperClient,
+			infra.cacheService,
+			routeDecider,
+			logger,
+		)
+		pollTargetRefresher = newYouTubePollTargetRefresher(
+			infra.cacheService,
+			scraperScheduler,
+			pollerRegistrations,
+			operationalChannels,
+			func(ctx context.Context) ([]string, error) {
+				return loadAlarmChannelIDs(ctx, infra.postgresService)
+			},
 			logger,
 		)
 		youtubeScheduler = infra.ytStack.Scheduler
@@ -177,9 +217,11 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		Logger:                                 logger,
 		Scheduler:                              youtubeScheduler,
 		ScraperScheduler:                       scraperScheduler,
+		PublishedAtResolver:                    publishedAtResolver,
 		PhotoSync:                              selectPhotoSyncService(features.photoSyncEnabled, infra.photoSync),
 		OutboxDispatcher:                       outboxDispatcher,
 		ConfigSubscriber:                       configSubscriber,
+		PollTargetRefresher:                    pollTargetRefresher,
 		ServerAddr:                             fmt.Sprintf(":%d", cfg.Server.Port),
 		HttpServer:                             httpServer,
 		Readiness:                              readiness,

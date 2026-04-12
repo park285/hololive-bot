@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -47,6 +48,8 @@ type Config struct {
 	CleanupAfter           time.Duration // 완료된 알림 정리 기간
 	CleanupEnabled         bool          // 정리 활성화 여부
 	DeliveryParallelism    int           // room/delivery send 제한 병렬성
+	AggregateSyncInterval  time.Duration // aggregate sync maintenance interval
+	TelemetryPollInterval  time.Duration // telemetry loop polling interval
 	TelemetryBackfillBatch int           // delivery 상태에서 telemetry 버퍼로 역보강할 최대 건수
 	TelemetryFlushBatch    int           // telemetry 버퍼 플러시 최대 건수
 	TelemetryRetryBackoff  time.Duration // telemetry 플러시 실패 재시도 간격
@@ -58,12 +61,14 @@ func DefaultConfig() Config {
 	return Config{
 		BatchSize:              50,
 		LockTimeout:            5 * time.Minute,
-		PollInterval:           30 * time.Second,
+		PollInterval:           2 * time.Second,
 		MaxRetries:             3,
 		RetryBackoff:           1 * time.Minute,
 		CleanupAfter:           7 * 24 * time.Hour, // 7일
 		CleanupEnabled:         true,
 		DeliveryParallelism:    4,
+		AggregateSyncInterval:  30 * time.Second,
+		TelemetryPollInterval:  30 * time.Second,
 		TelemetryBackfillBatch: 200,
 		TelemetryFlushBatch:    200,
 		TelemetryRetryBackoff:  30 * time.Second,
@@ -100,6 +105,12 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 	if cfg.TelemetryBackfillBatch <= 0 {
 		cfg.TelemetryBackfillBatch = DefaultConfig().TelemetryBackfillBatch
 	}
+	if cfg.TelemetryPollInterval <= 0 {
+		cfg.TelemetryPollInterval = DefaultConfig().TelemetryPollInterval
+	}
+	if cfg.AggregateSyncInterval <= 0 {
+		cfg.AggregateSyncInterval = DefaultConfig().AggregateSyncInterval
+	}
 	if cfg.TelemetryFlushBatch <= 0 {
 		cfg.TelemetryFlushBatch = DefaultConfig().TelemetryFlushBatch
 	}
@@ -135,8 +146,30 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 // Start: 백그라운드 폴링 루프 시작
 func (d *Dispatcher) Start(ctx context.Context) {
 	go d.run(ctx)
+	if d.delivery != nil {
+		go d.aggregateSyncLoop(ctx)
+	}
+	if d.telemetry != nil {
+		go d.telemetryLoop(ctx)
+	}
 	if d.cfg.CleanupEnabled {
 		go d.cleanupLoop(ctx)
+	}
+}
+
+func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
+	ticker := time.NewTicker(d.cfg.AggregateSyncInterval)
+	defer ticker.Stop()
+
+	d.reconcileTerminalOutboxStatuses(ctx)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			d.reconcileTerminalOutboxStatuses(ctx)
+		}
 	}
 }
 
@@ -148,6 +181,8 @@ func (d *Dispatcher) run(ctx context.Context) {
 	d.logger.Info("Outbox dispatcher started",
 		slog.Duration("poll_interval", d.cfg.PollInterval),
 		slog.Int("batch_size", d.cfg.BatchSize))
+
+	d.processOnce(ctx)
 
 	for {
 		select {
@@ -162,20 +197,35 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 // processOnce: 한 번의 폴링 사이클
 func (d *Dispatcher) processOnce(ctx context.Context) {
-	d.processDeliveryTelemetry(ctx)
+	d.processAvailable(ctx, 4)
+}
 
-	outboxItems, err := d.claimOutboxBatch(ctx)
-	if err != nil {
-		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
-		return
+func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
+	if maxRounds <= 0 {
+		maxRounds = 1
 	}
 
-	if len(outboxItems) > 0 {
-		d.logger.Debug("Processing outbox batch", slog.Int("count", len(outboxItems)))
-	}
+	for round := 0; round < maxRounds; round++ {
+		outboxItems, err := d.claimOutboxBatch(ctx)
+		if err != nil {
+			d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
+			return
+		}
 
-	d.processPerRoomBatch(ctx, outboxItems)
-	d.processDeliveryTelemetry(ctx)
+		deliveryCount := 0
+		if len(outboxItems) > 0 {
+			d.logger.Debug("Processing outbox batch",
+				slog.Int("count", len(outboxItems)),
+				slog.Int("round", round+1))
+			deliveryCount = d.processPerRoomBatch(ctx, outboxItems)
+		} else {
+			deliveryCount = d.processPendingDeliveries(ctx)
+		}
+
+		if len(outboxItems) == 0 && deliveryCount == 0 {
+			return
+		}
+	}
 }
 
 // cleanupLoop: 오래된 완료 알림 정리 루프
@@ -317,27 +367,55 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 		return result
 	}
 
-	for _, e := range entries {
-		members, err := sharedalarm.LookupChannelSubscribersByType(ctx, d.cache, e.channelID, e.alarmType)
-		if err != nil {
-			d.logger.Warn("Failed to get subscribers for channel",
-				slog.String("channel_id", e.channelID),
-				slog.String("alarm_type", string(e.alarmType)),
-				slog.Any("error", err))
+	type lookupResult struct {
+		channelID string
+		alarmType domain.AlarmType
+		rooms     map[string]bool
+		ok        bool
+	}
+
+	results := make([]lookupResult, len(entries))
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(16)
+	for idx := range entries {
+		idx := idx
+		eg.Go(func() error {
+			e := entries[idx]
+			members, err := sharedalarm.ResolveChannelSubscribersByType(egCtx, d.cache, d.db, e.channelID, e.alarmType)
+			if err != nil {
+				d.logger.Warn("Failed to get subscribers for channel",
+					slog.String("channel_id", e.channelID),
+					slog.String("alarm_type", string(e.alarmType)),
+					slog.Any("error", err))
+				return nil
+			}
+
+			roomSet := make(map[string]bool, len(members))
+			for _, roomID := range members {
+				roomSet[roomID] = true
+			}
+			results[idx] = lookupResult{
+				channelID: e.channelID,
+				alarmType: e.alarmType,
+				rooms:     roomSet,
+				ok:        true,
+			}
+			return nil
+		})
+	}
+	_ = eg.Wait()
+
+	for i := range results {
+		if !results[i].ok {
 			continue
 		}
 
-		alarmTargets, ok := result[e.channelID]
+		alarmTargets, ok := result[results[i].channelID]
 		if !ok {
 			alarmTargets = make(channelAlarmRoomTargets)
-			result[e.channelID] = alarmTargets
+			result[results[i].channelID] = alarmTargets
 		}
-
-		roomSet := make(map[string]bool, len(members))
-		for _, roomID := range members {
-			roomSet[roomID] = true
-		}
-		alarmTargets[e.alarmType] = roomSet
+		alarmTargets[results[i].alarmType] = results[i].rooms
 	}
 
 	return result
@@ -351,4 +429,9 @@ func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {
 // CleanupForTest: 테스트용 - 정리 루프 본문 실행
 func (d *Dispatcher) CleanupForTest(ctx context.Context) {
 	d.cleanup(ctx)
+}
+
+// AggregateSyncForTest: 테스트용 - aggregate sync 루프 본문 실행
+func (d *Dispatcher) AggregateSyncForTest(ctx context.Context) {
+	d.reconcileTerminalOutboxStatuses(ctx)
 }

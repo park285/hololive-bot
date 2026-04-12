@@ -49,13 +49,16 @@ type proxyTogglePoller interface {
 
 // Job: 스케줄링 대상 작업
 type Job struct {
-	ChannelID string
-	Poller    Poller
-	Priority  Priority
-	NextRunAt time.Time
-	Interval  time.Duration
-	Offset    time.Duration
-	index     int // heap 인덱스
+	ChannelID         string
+	Poller            Poller
+	Priority          Priority
+	NextRunAt         time.Time
+	Interval          time.Duration
+	Offset            time.Duration
+	key               string
+	retired           bool
+	immediateFirstRun bool
+	index             int // heap 인덱스
 }
 
 // Priority: 작업 우선순위
@@ -76,8 +79,17 @@ type Scheduler struct {
 	rateLimiter *RateLimiter
 	workerCount int
 	stopCh      chan struct{}
+	wakeCh      chan struct{}
 	wg          sync.WaitGroup
 	running     bool
+}
+
+type PollerTargetSync struct {
+	Poller                 Poller
+	Priority               Priority
+	Interval               time.Duration
+	ChannelIDs             []string
+	ForceImmediateFirstRun bool
 }
 
 // SchedulerConfig: 스케줄러 설정
@@ -117,6 +129,7 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		rateLimiter: NewRateLimiter(cfg.RequestInterval),
 		workerCount: cfg.WorkerCount,
 		stopCh:      make(chan struct{}),
+		wakeCh:      make(chan struct{}, 1),
 	}
 }
 
@@ -139,11 +152,13 @@ func (s *Scheduler) Register(channelID string, poller Poller, priority Priority,
 		NextRunAt: nextPollAt(time.Now(), interval, offset),
 		Interval:  interval,
 		Offset:    offset,
+		key:       key,
 	}
 
 	heap.Push(&s.jobs, job)
 	s.jobMap[key] = job
 	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
+	s.notifyDispatcher()
 }
 
 // UpdatePriority: 작업 우선순위 업데이트
@@ -159,7 +174,76 @@ func (s *Scheduler) UpdatePriority(channelID string, pollerName string, priority
 
 	job.Priority = priority
 	job.Interval = interval
-	heap.Fix(&s.jobs, job.index)
+	if job.index >= 0 {
+		heap.Fix(&s.jobs, job.index)
+	}
+	s.notifyDispatcher()
+}
+
+func (s *Scheduler) SyncPollerTargets(sync PollerTargetSync) {
+	if sync.Poller == nil || sync.Interval <= 0 {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pollerName := sync.Poller.Name()
+	desired := make(map[string]struct{}, len(sync.ChannelIDs))
+	for _, channelID := range sync.ChannelIDs {
+		if channelID == "" {
+			continue
+		}
+		desired[channelID] = struct{}{}
+	}
+
+	for key, job := range s.jobMap {
+		if job == nil || job.Poller == nil || job.Poller.Name() != pollerName {
+			continue
+		}
+
+		if _, keep := desired[job.ChannelID]; !keep {
+			job.retired = true
+			if job.index >= 0 {
+				heap.Remove(&s.jobs, job.index)
+			}
+			delete(s.jobMap, key)
+			continue
+		}
+
+		job.Poller = sync.Poller
+		job.Priority = sync.Priority
+		job.Interval = sync.Interval
+		if job.index >= 0 {
+			heap.Fix(&s.jobs, job.index)
+		}
+		delete(desired, job.ChannelID)
+	}
+
+	now := time.Now()
+	for channelID := range desired {
+		key := channelID + ":" + pollerName
+		offset := calculateOffset(key, sync.Interval)
+		nextRunAt := nextPollAt(now, sync.Interval, offset)
+		if sync.ForceImmediateFirstRun {
+			nextRunAt = now
+		}
+		job := &Job{
+			ChannelID:         channelID,
+			Poller:            sync.Poller,
+			Priority:          sync.Priority,
+			NextRunAt:         nextRunAt,
+			Interval:          sync.Interval,
+			Offset:            offset,
+			key:               key,
+			immediateFirstRun: sync.ForceImmediateFirstRun,
+		}
+		heap.Push(&s.jobs, job)
+		s.jobMap[key] = job
+	}
+
+	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
+	s.notifyDispatcher()
 }
 
 // SetProxyEnabled: 등록된 폴러들에 런타임 프록시 토글을 전파합니다.
@@ -260,23 +344,52 @@ func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job) {
 	defer s.wg.Done()
 	defer close(jobCh)
 
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	workerChannelFull := false
 
 	for {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(s.nextDispatchDelay(workerChannelFull))
+
 		select {
 		case <-ctx.Done():
 			return
 		case <-s.stopCh:
 			return
-		case <-ticker.C:
-			s.dispatchDueJobs(ctx, jobCh)
+		case <-s.wakeCh:
+			workerChannelFull = false
+		case <-timer.C:
+			workerChannelFull = s.dispatchDueJobs(jobCh)
 		}
 	}
 }
 
+func (s *Scheduler) nextDispatchDelay(workerChannelFull bool) time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if workerChannelFull {
+		return 50 * time.Millisecond
+	}
+	if len(s.jobs) == 0 {
+		return time.Second
+	}
+
+	wait := time.Until(s.jobs[0].NextRunAt)
+	if wait < 0 {
+		return 0
+	}
+	return wait
+}
+
 // dispatchDueJobs: 실행 시간이 된 작업 전달
-func (s *Scheduler) dispatchDueJobs(ctx context.Context, jobCh chan<- *Job) {
+func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -297,9 +410,11 @@ func (s *Scheduler) dispatchDueJobs(ctx context.Context, jobCh chan<- *Job) {
 			// 채널 가득 참 - 현재 슬롯 anchor를 유지한 채 재시도한다.
 			schedulerDispatchDefer.WithLabelValues("worker_channel_full").Inc()
 			heap.Push(&s.jobs, job)
-			return
+			return true
 		}
 	}
+
+	return false
 }
 
 // worker: 작업 실행 워커
@@ -370,9 +485,34 @@ func (s *Scheduler) rescheduleJob(job *Job) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, time.Now())
+	if job == nil || job.retired {
+		return
+	}
+	current, ok := s.jobMap[job.key]
+	if !ok || current != job {
+		return
+	}
 
-	heap.Push(&s.jobs, job)
+	now := time.Now()
+	if job.immediateFirstRun {
+		job.NextRunAt = nextPollAt(now, job.Interval, job.Offset)
+		job.immediateFirstRun = false
+	} else {
+		job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, now)
+	}
+	if job.index >= 0 {
+		heap.Fix(&s.jobs, job.index)
+	} else {
+		heap.Push(&s.jobs, job)
+	}
+	s.notifyDispatcher()
+}
+
+func (s *Scheduler) notifyDispatcher() {
+	select {
+	case s.wakeCh <- struct{}{}:
+	default:
+	}
 }
 
 func advanceNextRunAt(scheduledAt time.Time, interval time.Duration, now time.Time) time.Time {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,9 +40,12 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 	t.Parallel()
 
 	lookedUpKeys := make([]string, 0, 2)
+	var lookedUpKeysMu sync.Mutex
 	cacheSvc := cachemocks.NewStrictClient()
 	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		lookedUpKeysMu.Lock()
 		lookedUpKeys = append(lookedUpKeys, key)
+		lookedUpKeysMu.Unlock()
 		switch key {
 		case sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeShorts):
 			return []string{"room-shorts"}, nil
@@ -59,14 +63,18 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 		{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
 	})
 
-	if len(lookedUpKeys) != 2 {
-		t.Fatalf("lookup count = %d, want 2", len(lookedUpKeys))
+	lookedUpKeysMu.Lock()
+	recordedKeys := append([]string(nil), lookedUpKeys...)
+	lookedUpKeysMu.Unlock()
+
+	if len(recordedKeys) != 2 {
+		t.Fatalf("lookup count = %d, want 2", len(recordedKeys))
 	}
-	if !sameStrings(lookedUpKeys, []string{
+	if !sameStrings(recordedKeys, []string{
 		sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeShorts),
 		sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeCommunity),
 	}) {
-		t.Fatalf("lookedUpKeys = %#v", lookedUpKeys)
+		t.Fatalf("lookedUpKeys = %#v", recordedKeys)
 	}
 
 	targets, ok := roomsByChannel["UCtarget"]
@@ -922,11 +930,36 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsAudit(t *testing.T) 
 	}
 }
 
-func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *template.Renderer) (*Dispatcher, *bytes.Buffer) {
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) Bytes() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	cloned := make([]byte, b.buf.Len())
+	copy(cloned, b.buf.Bytes())
+	return cloned
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *template.Renderer) (*Dispatcher, *safeBuffer) {
 	t.Helper()
 
 	cacheSvc := cachemocks.NewLenientClient()
-	logBuffer := &bytes.Buffer{}
+	logBuffer := &safeBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	return NewDispatcher(nil, cacheSvc, sender, renderer, logger, Config{
@@ -958,7 +991,7 @@ func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body strin
 	return template.NewRenderer(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-func findLogEntryByMessage(t *testing.T, logBuffer *bytes.Buffer, message string) map[string]any {
+func findLogEntryByMessage(t *testing.T, logBuffer *safeBuffer, message string) map[string]any {
 	t.Helper()
 
 	for _, line := range bytes.Split(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
@@ -978,7 +1011,7 @@ func findLogEntryByMessage(t *testing.T, logBuffer *bytes.Buffer, message string
 	return nil
 }
 
-func findAllSendLogEntriesByMessage(t *testing.T, logBuffer *bytes.Buffer, message string) []map[string]any {
+func findAllSendLogEntriesByMessage(t *testing.T, logBuffer *safeBuffer, message string) []map[string]any {
 	t.Helper()
 
 	entries := make([]map[string]any, 0)
