@@ -64,5 +64,4 @@ const (
 	LocalFallbackCleanupMaxKeys = 4096
 )
 
-// DefaultTargetMinutes: 기본 알림 대상 분 목록 (내림차순)
 var DefaultTargetMinutes = []int{5, 3, 1}

@@ -22,7 +22,6 @@ package constants
 
 import "time"
 
-// APIConfig: 패키지 변수다.
 var APIConfig = struct {
 	HolodexBaseURL       string
 	HolodexTimeout       time.Duration
@@ -37,7 +36,6 @@ var APIConfig = struct {
 	MaxResponseBodyBytes: 2 << 20, // 2MiB
 }
 
-// HolodexTransportConfig: Holodex HTTP Transport 설정입니다.
 // 동시 요청 시 커넥션 풀 고갈 방지를 위해 디폴트(MaxIdleConnsPerHost=2)보다 높게 설정한다.
 var HolodexTransportConfig = struct {
 	MaxConnsPerHost     int
@@ -59,7 +57,6 @@ var HolodexConcurrencyConfig = struct {
 	RequestDelay:          500 * time.Millisecond,
 }
 
-// HolodexDistributedRateLimitConfig: 멀티 인스턴스 환경에서 Holodex 요청 총량을 제한합니다.
 var HolodexDistributedRateLimitConfig = struct {
 	Enabled    bool
 	Limit      int
@@ -74,7 +71,6 @@ var HolodexDistributedRateLimitConfig = struct {
 	BucketBase: "holodex:api",
 }
 
-// HolodexAPIParams: Holodex API 호출 시 사용하는 파라미터 상수입니다.
 var HolodexAPIParams = struct {
 	OrgHololive         string
 	OrgVSpo             string
@@ -107,7 +103,6 @@ var HolodexAPIParams = struct {
 	AllowedFilterOrgs:   []string{"Hololive", "VSpo", "Independents", "Stellive"},
 }
 
-// YouTubeConfig: 패키지 변수다.
 var YouTubeConfig = struct {
 	DailyQuotaLimit       int
 	SearchQuotaCost       int
@@ -146,14 +141,12 @@ var YouTubeConfig = struct {
 	VideoRSSBackoffTTL:    6 * time.Hour,    // 5xx 반복 채널은 6시간 RSS 우선
 }
 
-// YouTubeScraperRateLimitConfig: 단일 인스턴스 기준 YouTube HTML 스크래퍼 요청 간격입니다.
 var YouTubeScraperRateLimitConfig = struct {
 	RequestInterval time.Duration
 }{
 	RequestInterval: 3 * time.Second,
 }
 
-// YouTubeScraperDistributedRateLimitConfig: 멀티 인스턴스 환경에서 YouTube HTML 스크래퍼 총량을 제한합니다.
 var YouTubeScraperDistributedRateLimitConfig = struct {
 	Enabled    bool
 	Limit      int
@@ -168,7 +161,6 @@ var YouTubeScraperDistributedRateLimitConfig = struct {
 	BucketBase: "youtube:scraper",
 }
 
-// OfficialScheduleConfig: 패키지 변수다.
 var OfficialScheduleConfig = struct {
 	BaseURL      string
 	Timeout      time.Duration
@@ -181,7 +173,6 @@ var OfficialScheduleConfig = struct {
 	PageCacheTTL: 15 * time.Second,
 }
 
-// OfficialProfileConfig: 패키지 변수다.
 var OfficialProfileConfig = struct {
 	BaseURL        string
 	UserAgent      string
@@ -198,7 +189,6 @@ var OfficialProfileConfig = struct {
 	OutputFile:     "internal/domain/data/official_profiles_raw.json",
 }
 
-// TwitchConfig: Twitch API 설정입니다.
 var TwitchConfig = struct {
 	BaseURL            string
 	AuthURL            string
@@ -217,7 +207,6 @@ var TwitchConfig = struct {
 	MaxUsersPerRequest: 100,
 }
 
-// ChzzkConfig: Chzzk API 조회 전략 설정입니다.
 var ChzzkConfig = struct {
 	MaxLivesPageSize          int
 	BatchLookupThreshold      int
@@ -228,7 +217,6 @@ var ChzzkConfig = struct {
 	MaxConcurrentStatusChecks: 4,
 }
 
-// IndieChannelIDs: 개인세 VTuber 채널 ID 목록 (Holodex /users/live API용)
 var IndieChannelIDs = []string{
 	"UCrV1Hf5r8P148idjoSfrGEQ", // 結城さくな (Yuuki Sakuna)
 	"UCxsZ6NCzjU_t4YSxQLBcM5A", // 사메코 사바 (Sameko Saba)
