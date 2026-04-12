@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetUnnotifiedChanges: 아직 알림이 발송되지 않은 통계 변화 내역을 최신순으로 조회합니다.
 // PreviousStats와 CurrentStats를 복원하여 마일스톤 검출이 가능하도록 한다.
 func (r *StatsRepository) GetUnnotifiedChanges(ctx context.Context, limit int) ([]*domain.StatsChange, error) {
 	query := `
@@ -94,7 +93,6 @@ func (r *StatsRepository) GetUnnotifiedChanges(ctx context.Context, limit int) (
 	return changes, nil
 }
 
-// MarkChangeNotified: 특정 통계 변화 내역을 알림 발송 완료 상태로 처리합니다.
 func (r *StatsRepository) MarkChangeNotified(ctx context.Context, channelID string, detectedAt time.Time) error {
 	query := `
 		UPDATE youtube_stats_changes
@@ -110,7 +108,6 @@ func (r *StatsRepository) MarkChangeNotified(ctx context.Context, channelID stri
 	return nil
 }
 
-// ApproachingNotification: 마일스톤 접근 예고 알림 정보
 type ApproachingNotification struct {
 	ChannelID      string    `json:"channelId"`
 	MemberName     string    `json:"memberName"`
@@ -120,7 +117,6 @@ type ApproachingNotification struct {
 	NotifiedAt     time.Time `json:"notifiedAt"`
 }
 
-// HasApproachingNotified: 특정 마일스톤에 대해 예고 알림이 이미 발송되었는지 확인합니다.
 func (r *StatsRepository) HasApproachingNotified(ctx context.Context, channelID string, milestoneValue uint64) (bool, error) {
 	query := `
 		SELECT EXISTS(
@@ -138,7 +134,6 @@ func (r *StatsRepository) HasApproachingNotified(ctx context.Context, channelID 
 	return exists, nil
 }
 
-// SaveApproachingNotification: 마일스톤 접근 예고 알림 기록을 저장합니다.
 func (r *StatsRepository) SaveApproachingNotification(ctx context.Context, channelID string, milestoneValue, currentSubs uint64, notifiedAt time.Time) error {
 	query := `
 		INSERT INTO youtube_milestone_approaching (channel_id, milestone_value, current_subs, notified_at)
@@ -159,7 +154,6 @@ func (r *StatsRepository) SaveApproachingNotification(ctx context.Context, chann
 	return nil
 }
 
-// GetUnnotifiedApproaching: 아직 채팅방에 발송되지 않은 예고 알림 목록을 조회합니다.
 // 이 함수는 SendMilestoneAlerts와 유사한 패턴으로 예고 알람을 발송할 때 사용된다.
 func (r *StatsRepository) GetUnnotifiedApproaching(ctx context.Context, limit int) ([]ApproachingNotification, error) {
 	query := `
@@ -195,7 +189,6 @@ func (r *StatsRepository) GetUnnotifiedApproaching(ctx context.Context, limit in
 	return notifications, nil
 }
 
-// MarkApproachingChatNotified: 예고 알림의 채팅방 발송 완료 상태를 업데이트합니다.
 func (r *StatsRepository) MarkApproachingChatNotified(ctx context.Context, channelID string, milestoneValue uint64) error {
 	query := `
 		UPDATE youtube_milestone_approaching
@@ -211,7 +204,6 @@ func (r *StatsRepository) MarkApproachingChatNotified(ctx context.Context, chann
 	return nil
 }
 
-// MilestoneNotification: 마일스톤 달성 알림 정보 (youtube_milestones 테이블 기반)
 type MilestoneNotification struct {
 	ChannelID  string    `json:"channelId"`
 	MemberName string    `json:"memberName"`
@@ -220,7 +212,6 @@ type MilestoneNotification struct {
 	AchievedAt time.Time `json:"achievedAt"`
 }
 
-// GetUnnotifiedMilestones: 아직 알림이 발송되지 않은 마일스톤 목록을 조회합니다.
 func (r *StatsRepository) GetUnnotifiedMilestones(ctx context.Context, limit int) ([]MilestoneNotification, error) {
 	query := `
 		SELECT channel_id, member_name, type, value, achieved_at
@@ -253,7 +244,6 @@ func (r *StatsRepository) GetUnnotifiedMilestones(ctx context.Context, limit int
 	return notifications, nil
 }
 
-// MarkMilestoneNotified: 마일스톤 알림 발송 완료 표시
 func (r *StatsRepository) MarkMilestoneNotified(ctx context.Context, channelID string, milestoneType string, value uint64) error {
 	query := `
 		UPDATE youtube_milestones
@@ -269,7 +259,6 @@ func (r *StatsRepository) MarkMilestoneNotified(ctx context.Context, channelID s
 	return nil
 }
 
-// MarkMilestonesNotifiedBatch: 여러 마일스톤의 알림 발송 완료를 한 번에 처리합니다.
 func (r *StatsRepository) MarkMilestonesNotifiedBatch(ctx context.Context, milestones []MilestoneNotification) error {
 	if len(milestones) == 0 {
 		return nil
@@ -303,7 +292,6 @@ func (r *StatsRepository) MarkMilestonesNotifiedBatch(ctx context.Context, miles
 	return nil
 }
 
-// MarkApproachingChatNotifiedBatch: 여러 예고 알림의 채팅방 발송 완료를 한 번에 처리합니다.
 func (r *StatsRepository) MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error {
 	if len(notifications) == 0 {
 		return nil

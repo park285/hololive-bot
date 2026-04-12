@@ -37,7 +37,6 @@ const (
 	columnsPerRow = 6
 )
 
-// SaveStats: 채널 통계 데이터를 저장합니다.
 func (r *StatsRepository) SaveStats(ctx context.Context, stats *domain.TimestampedStats) error {
 	query := `
 		INSERT INTO youtube_stats_history (time, channel_id, member_name, subscribers, videos, views)
@@ -109,7 +108,6 @@ func (r *StatsRepository) upsertLatestStats(ctx context.Context, stats *domain.T
 	return nil
 }
 
-// SaveStatsBatch: 여러 채널의 통계 데이터를 배치 INSERT 합니다.
 // saveBatchMaxSize 단위로 분할하여 PostgreSQL 파라미터 한도를 초과하지 않도록 합니다.
 func (r *StatsRepository) SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error {
 	if len(stats) == 0 {
@@ -206,7 +204,6 @@ func (r *StatsRepository) upsertLatestStatsBatch(ctx context.Context, stats []*d
 	return nil
 }
 
-// RecordChange: 구독자 수 등의 변화를 기록합니다.
 func (r *StatsRepository) RecordChange(ctx context.Context, change *domain.StatsChange) error {
 	query := `
 		INSERT INTO youtube_stats_changes
@@ -254,7 +251,6 @@ func (r *StatsRepository) RecordChange(ctx context.Context, change *domain.Stats
 // recordChangeColumnsPerRow: RecordChangeBatch INSERT VALUES 절 한 행의 파라미터 수
 const recordChangeColumnsPerRow = 10
 
-// RecordChangeBatch: 여러 통계 변화를 한 번에 INSERT 합니다.
 func (r *StatsRepository) RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error {
 	if len(changes) == 0 {
 		return nil
