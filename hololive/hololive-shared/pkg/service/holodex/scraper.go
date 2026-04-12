@@ -41,7 +41,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-// ScraperService: Holodex API 실패 시 백업으로 YouTube 스크래핑 및 공식 스케줄 페이지를 크롤링하는 서비스
 // 폴백 순서: YouTube HTML 스크래핑 → 홀로라이브 공식 스케줄 페이지
 type ScraperService struct {
 	httpClient     *http.Client
@@ -68,7 +67,6 @@ type officialSchedulePageCache struct {
 	expiresAt time.Time
 }
 
-// NewScraperService: 새로운 ScraperService 인스턴스를 생성합니다.
 // 멤버 정보와 매핑 데이터를 초기화하여 크롤링 데이터 파싱에 활용한다.
 func NewScraperService(
 	cacheSvc cache.Client,
@@ -113,7 +111,6 @@ func NewScraperService(
 	}
 }
 
-// FetchChannel: 특정 채널의 방송 일정을 보조 소스에서 가져온다. (캐시 우선 확인)
 // 우선 YouTube HTML 스크래핑을 사용하고, 스크래퍼 오류 시에만 공식 스케줄 페이지로 전환한다.
 func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]*domain.Stream, error) {
 	cacheKey := scraperChannelCacheKeyPrefix + channelID
@@ -253,12 +250,10 @@ func (s *ScraperService) mapEventStatus(status string) domain.StreamStatus {
 	}
 }
 
-// FetchAllStreams: 전체 방송 일정을 공식 홈페이지에서 크롤링하여 가져온다.
 func (s *ScraperService) FetchAllStreams(ctx context.Context) ([]*domain.Stream, error) {
 	return s.fetchAllStreams(ctx)
 }
 
-// SetYouTubeProxyEnabled: YouTube HTML fallback 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
 func (s *ScraperService) SetYouTubeProxyEnabled(enabled bool) bool {
 	if s == nil || s.youtubeScraper == nil {
 		return false
@@ -266,7 +261,6 @@ func (s *ScraperService) SetYouTubeProxyEnabled(enabled bool) bool {
 	return s.youtubeScraper.SetProxyEnabled(enabled)
 }
 
-// YouTubeProxyEnabled: YouTube HTML fallback 스크래퍼의 현재 프록시 활성 상태를 반환합니다.
 func (s *ScraperService) YouTubeProxyEnabled() bool {
 	if s == nil || s.youtubeScraper == nil {
 		return false
@@ -625,7 +619,6 @@ func (s *ScraperService) extractMemberFromOnClick(onclick string) string {
 	return onclick[startIdx : startIdx+endIdx]
 }
 
-// ValidateStructure: 공식 홈페이지의 HTML 구조가 변경되었는지 확인한다. (정상 파싱 여부 테스트)
 func (s *ScraperService) ValidateStructure(ctx context.Context) error {
 	_, err := s.fetchAllStreams(ctx)
 	if err != nil {
@@ -634,7 +627,6 @@ func (s *ScraperService) ValidateStructure(ctx context.Context) error {
 	return nil
 }
 
-// StructureChangedError: 웹사이트 구조 변경으로 인해 파싱 실패 비율이 높을 때 발생하는 에러
 type StructureChangedError struct {
 	Message     string
 	ParseErrors int
@@ -644,14 +636,12 @@ func (e *StructureChangedError) Error() string {
 	return fmt.Sprintf("%s (parse errors: %d)", e.Message, e.ParseErrors)
 }
 
-// IsStructureError: 에러가 HTML 구조 변경으로 인한 것인지 확인합니다.
 func IsStructureError(err error) bool {
 	structureChangedError := &StructureChangedError{}
 	ok := errors.As(err, &structureChangedError)
 	return ok
 }
 
-// GetRecentVideos: YouTube 스크래퍼를 사용하여 채널의 최근 비디오 목록을 조회합니다.
 // Holodex API 폴백 시 YouTube 스크래퍼 데이터 활용
 func (s *ScraperService) GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*scraper.Video, error) {
 	if s.youtubeScraper == nil {
@@ -670,7 +660,6 @@ func (s *ScraperService) GetRecentVideos(ctx context.Context, channelID string, 
 	return videos, nil
 }
 
-// GetChannelStats: YouTube 스크래퍼를 사용하여 채널 통계를 조회합니다.
 // Holodex API 폴백 시 YouTube 스크래퍼 데이터 활용
 func (s *ScraperService) GetChannelStats(ctx context.Context, channelID string) (*scraper.ChannelStats, error) {
 	if s.youtubeScraper == nil {
@@ -689,7 +678,6 @@ func (s *ScraperService) GetChannelStats(ctx context.Context, channelID string) 
 	return stats, nil
 }
 
-// GetChannelSnippet: YouTube 스크래퍼를 사용하여 채널 프로필 정보를 조회합니다.
 func (s *ScraperService) GetChannelSnippet(ctx context.Context, channelID string) (*scraper.ChannelSnippet, error) {
 	if s.youtubeScraper == nil {
 		return nil, fmt.Errorf("youtube scraper not initialized")
@@ -708,7 +696,6 @@ func (s *ScraperService) GetChannelSnippet(ctx context.Context, channelID string
 	return snippet, nil
 }
 
-// GetPopularVideos: YouTube 스크래퍼를 사용하여 채널의 인기 비디오 목록을 조회합니다.
 func (s *ScraperService) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*scraper.Video, error) {
 	if s.youtubeScraper == nil {
 		return nil, fmt.Errorf("youtube scraper not initialized")
