@@ -28,20 +28,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Renderer: 알림 그룹을 사용자 메시지로 렌더링한다.
 type Renderer interface {
 	RenderGroup(ctx context.Context, group NotificationGroup) (string, error)
 }
 
-// SimpleRenderer: 기본 문자열 포맷 렌더러.
 type SimpleRenderer struct{}
 
-// NewSimpleRenderer: 기본 렌더러 생성.
 func NewSimpleRenderer() *SimpleRenderer {
 	return &SimpleRenderer{}
 }
 
-// RenderGroup: 그룹 메시지를 렌더링한다.
 func (r *SimpleRenderer) RenderGroup(_ context.Context, group NotificationGroup) (string, error) {
 	if len(group.Notifications) == 0 {
 		return "", fmt.Errorf("render group: notifications is empty")
