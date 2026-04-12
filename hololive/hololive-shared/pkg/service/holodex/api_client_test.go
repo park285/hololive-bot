@@ -92,7 +92,6 @@ func newTestClientWithHandler(handler http.HandlerFunc, apiKey string) (*APIClie
 	return client, server
 }
 
-// TestAPIClientWithMockServer_Success: 정상 응답 시나리오 테스트
 func TestAPIClientWithMockServer_Success(t *testing.T) {
 	expectedBody := `{"status":"ok","data":[]}`
 	client, server := newTestClientWithHandler(func(w http.ResponseWriter, _ *http.Request) {
@@ -112,7 +111,6 @@ func TestAPIClientWithMockServer_Success(t *testing.T) {
 	}
 }
 
-// TestAPIClient_CircuitBreakerOpens: 서킷 브레이커 동작 테스트
 func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 	client := &APIClient{
 		httpClient:  &http.Client{},
@@ -143,7 +141,6 @@ func TestAPIClient_CircuitBreakerOpens(t *testing.T) {
 	}
 }
 
-// TestAPIClient_FailureCountIncrement: 실패 카운트 증가 테스트
 func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	client := &APIClient{
 		httpClient: &http.Client{},
@@ -160,7 +157,6 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	}
 }
 
-// TestPerAttemptTimeout: per-attempt context timeout이 서버 지연보다 먼저 발동하는지 확인
 func TestPerAttemptTimeout(t *testing.T) {
 	// 테스트용 PerAttemptTimeout 설정 (짧게)
 	origTimeout := constants.APIConfig.PerAttemptTimeout
@@ -190,7 +186,6 @@ func TestPerAttemptTimeout(t *testing.T) {
 	}
 }
 
-// TestTimeoutMaxRetries: timeout 3회 연속 시 조기 종료 확인
 func TestTimeoutMaxRetries(t *testing.T) {
 	origTimeout := constants.APIConfig.PerAttemptTimeout
 	constants.APIConfig.PerAttemptTimeout = 100 * time.Millisecond
@@ -366,7 +361,6 @@ func TestDistributedRateLimitBucket(t *testing.T) {
 	}
 }
 
-// TestParentContextCancel: 부모 context 취소 시 즉시 에러 반환 확인
 func TestParentContextCancel(t *testing.T) {
 	origTimeout := constants.APIConfig.PerAttemptTimeout
 	constants.APIConfig.PerAttemptTimeout = 5 * time.Second
@@ -405,7 +399,6 @@ func (e *mockTimeoutError) Error() string   { return e.msg }
 func (e *mockTimeoutError) Timeout() bool   { return e.timeout }
 func (e *mockTimeoutError) Temporary() bool { return false }
 
-// TestIsTimeoutError: timeout 에러 분류 정확성 검증
 func TestIsTimeoutError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -460,7 +453,6 @@ func TestIsTimeoutError(t *testing.T) {
 	}
 }
 
-// TestShouldUseFallbackTimeout: timeout 에러 시 shouldUseFallback=true 확인
 func TestShouldUseFallbackTimeout(t *testing.T) {
 	svc := &Service{
 		requester: &APIClient{
@@ -524,7 +516,6 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 	}
 }
 
-// TestShouldUseFallbackCallerContextExpired: 호출자 context 만료 시 폴백 차단 확인
 func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
 	svc := &Service{
 		requester: &APIClient{

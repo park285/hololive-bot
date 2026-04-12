@@ -54,14 +54,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// Requester: HTTP 요청 수행 및 서킷 브레이커 상태 확인을 위한 인터페이스
 type Requester interface {
 	DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error)
 	IsCircuitOpen() bool
 }
 
-// APIClient: Holodex API 요청을 처리하는 클라이언트
-// 서킷 브레이커, 속도 제한(Rate Limiting) 기능을 포함합니다.
 type APIClient struct {
 	httpClient       *http.Client
 	baseURL          string
@@ -81,9 +78,6 @@ type distributedRateLimiter interface {
 
 var errNoAPIKeys = stdErrors.New("no Holodex API keys configured")
 
-// NewHolodexAPIClient: 새로운 Holodex API 클라이언트를 생성하고 초기화합니다.
-// 단일 API 키 사용, 초당 10회 요청 제한(Rate Limit)이 기본 설정된다.
-// Semaphore로 동시 요청 수를 제한하여 API 과부하를 방지한다.
 func NewHolodexAPIClient(
 	httpClient *http.Client,
 	baseURL string,
@@ -105,9 +99,6 @@ func NewHolodexAPIClient(
 	}
 }
 
-// DoRequest: Holodex API에 요청을 보낸다.
-// Rate Limit 준수, 서킷 브레이커 확인, API 키 로테이션 및 재시도 로직을 수행합니다.
-// 매 시도(재시도 포함)마다 Rate Limiter를 통과하여 burst 요청을 방지합니다.
 func (c *APIClient) DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
 	if err := c.rejectIfCircuitOpen(); err != nil {
 		return nil, err
@@ -174,7 +165,6 @@ func (c *APIClient) DoRequest(ctx context.Context, method, path string, params u
 	return nil, fmt.Errorf("holodex request failed after %d attempts", maxAttempts)
 }
 
-// waitForRateLimiter: Rate Limiter를 통과할 때까지 대기합니다.
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
 		return fmt.Errorf("rate limiter wait failed: %w", err)
@@ -226,7 +216,6 @@ func distributedRateLimitBucket(path string) string {
 	return constants.HolodexDistributedRateLimitConfig.BucketBase + ":" + normalized
 }
 
-// waitBackoff: 재시도 전 exponential backoff + jitter 대기를 수행합니다.
 func (c *APIClient) waitBackoff(ctx context.Context, attempt int) error {
 	delay := retry.ComputeBackoffDelay(attempt, constants.RetryConfig.BaseDelay, constants.RetryConfig.Jitter)
 	if !ctxutil.SleepWithContext(ctx, delay) {
@@ -330,7 +319,6 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 	return false
 }
 
-// isTimeoutError: timeout 계열 에러인지 판별
 func isTimeoutError(err error) bool {
 	if stdErrors.Is(err, context.DeadlineExceeded) {
 		return true
@@ -397,7 +385,6 @@ func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAtt
 	return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
 }
 
-// IsCircuitOpen: 현재 서킷 브레이커가 열려있는지(요청 차단 상태인지) 확인합니다.
 func (c *APIClient) IsCircuitOpen() bool {
 	c.circuitMu.RLock()
 	defer c.circuitMu.RUnlock()
