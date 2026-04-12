@@ -41,7 +41,8 @@ var (
 	publishedAtResolutionFailureTotal    *prometheus.CounterVec
 	publishedAtResolverSkippedTotal      *prometheus.CounterVec
 	publishedAtResolverEnqueuedTotal     *prometheus.CounterVec
-	publishedAtResolverPendingCandidates prometheus.Gauge
+	publishedAtResolverPageCandidates    prometheus.Gauge
+	publishedAtResolverScannedTotal      *prometheus.CounterVec
 )
 
 func ensureMetrics() {
@@ -83,10 +84,14 @@ func ensureMetrics() {
 			Name: "youtube_poller_published_at_resolver_enqueued_total",
 			Help: "resolver가 enqueue한 알림 수",
 		}, []string{"kind"})
-		publishedAtResolverPendingCandidates = promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "youtube_poller_published_at_resolver_pending_candidates",
-			Help: "현재 resolver iteration에서 본 pending candidate 수",
+		publishedAtResolverPageCandidates = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "youtube_poller_published_at_resolver_page_candidates",
+			Help: "현재 resolver iteration에서 마지막으로 조회한 candidate page 길이",
 		})
+		publishedAtResolverScannedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "youtube_poller_published_at_resolver_scanned_total",
+			Help: "resolver가 iteration 동안 스캔한 candidate 수",
+		}, []string{"kind"})
 	})
 }
 
@@ -119,7 +124,12 @@ func observePublishedAtResolverEnqueued(kind domain.OutboxKind) {
 	publishedAtResolverEnqueuedTotal.WithLabelValues(string(kind)).Inc()
 }
 
-func setPublishedAtResolverPendingCandidates(count int) {
+func setPublishedAtResolverPageCandidates(count int) {
 	ensureMetrics()
-	publishedAtResolverPendingCandidates.Set(float64(count))
+	publishedAtResolverPageCandidates.Set(float64(count))
+}
+
+func observePublishedAtResolverScanned(kind domain.OutboxKind) {
+	ensureMetrics()
+	publishedAtResolverScannedTotal.WithLabelValues(string(kind)).Inc()
 }
