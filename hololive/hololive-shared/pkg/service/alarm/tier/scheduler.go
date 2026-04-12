@@ -43,7 +43,6 @@ func (s *channelScheduleState) isDue(now time.Time) bool {
 	return s.forceDue || !now.Before(s.nextCheckAt)
 }
 
-// TieredScheduler: 채널별 폴링 빈도를 방송 임박도에 따라 동적으로 조절한다.
 type TieredScheduler struct {
 	mu            sync.RWMutex
 	states        map[string]*channelScheduleState
@@ -51,7 +50,6 @@ type TieredScheduler struct {
 	logger        *slog.Logger
 }
 
-// NewTieredScheduler: 새 스케줄러 생성
 func NewTieredScheduler(logger *slog.Logger) *TieredScheduler {
 	return &TieredScheduler{
 		states:        make(map[string]*channelScheduleState),
@@ -60,7 +58,6 @@ func NewTieredScheduler(logger *slog.Logger) *TieredScheduler {
 	}
 }
 
-// SelectDueChannels: 체크 대상 채널 목록 반환
 // fullRefreshAt이 지나면 모든 채널을 반환하고 타이머를 재설정한다.
 func (ts *TieredScheduler) SelectDueChannels(channelIDs []string) []string {
 	now := time.Now()
@@ -98,7 +95,6 @@ func (ts *TieredScheduler) SelectDueChannels(channelIDs []string) []string {
 	return due
 }
 
-// UpdateChannelState: 스트림 목록을 기반으로 채널 상태를 갱신한다.
 func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domain.Stream) {
 	now := time.Now()
 
@@ -153,7 +149,6 @@ func (ts *TieredScheduler) LastCheckedAt(channelID string) time.Time {
 	return st.lastCheckedAt
 }
 
-// MarkChannelDue: 채널을 즉시 체크 대상으로 표시한다.
 func (ts *TieredScheduler) MarkChannelDue(channelID string) {
 	now := time.Now()
 
@@ -174,7 +169,6 @@ func (ts *TieredScheduler) MarkChannelDue(channelID string) {
 	ts.logger.Debug("Channel marked due", slog.String("channel_id", channelID))
 }
 
-// MarkChannelRecentlyNotified: 알림 발송 후 고빈도 폴링 윈도우를 갱신한다.
 func (ts *TieredScheduler) MarkChannelRecentlyNotified(channelID string) {
 	now := time.Now()
 
@@ -192,7 +186,6 @@ func (ts *TieredScheduler) MarkChannelRecentlyNotified(channelID string) {
 	}
 }
 
-// ForgetChannel: 채널 상태를 삭제하여 스케줄러에서 제거한다.
 func (ts *TieredScheduler) ForgetChannel(channelID string) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -201,7 +194,6 @@ func (ts *TieredScheduler) ForgetChannel(channelID string) {
 	ts.logger.Debug("Channel schedule state forgotten", slog.String("channel_id", channelID))
 }
 
-// ChannelCount: 관리 중인 채널 수를 반환한다.
 func (ts *TieredScheduler) ChannelCount() int {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
