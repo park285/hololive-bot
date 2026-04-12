@@ -13,6 +13,7 @@ import (
 
 const youtubePollTargetRefreshInterval = 5 * time.Second
 const youtubePollTargetEmptyCacheGracePeriod = 30 * time.Second
+const youtubePollTargetCacheOnlyAdditionGracePeriod = 30 * time.Second
 
 type youTubePollTargetRefresher struct {
 	cacheService        cache.Client
@@ -22,6 +23,7 @@ type youTubePollTargetRefresher struct {
 	loadAlarmChannelIDs func(context.Context) ([]string, error)
 	lastNonEmptyCacheAt time.Time
 	lastResolvedTargets youtubePollTargets
+	cacheOnlyFirstSeen  map[string]time.Time
 	timeNow             func() time.Time
 	logger              *slog.Logger
 }
@@ -45,6 +47,7 @@ func newYouTubePollTargetRefresher(
 		operationalChannels: append([]communityShortsOperationalChannel(nil), operationalChannels...),
 		loadAlarmChannelIDs: loadAlarmChannelIDs,
 		lastResolvedTargets: resolveYouTubePollTargetsFromRegistrations(registrations),
+		cacheOnlyFirstSeen:  make(map[string]time.Time),
 		timeNow:             time.Now,
 		logger:              logger,
 	}
@@ -119,37 +122,51 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	}
 
 	candidateTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, r.operationalChannels)
-	if !candidateFromCache || !shouldValidateTargetShrink(r.lastResolvedTargets, candidateTargets) {
-		observeYouTubePollTargetShrinkValidation("skipped")
-	} else {
-		if r.logger != nil {
-			r.logger.Warn("YouTube poll targets shrinking; validating against DB",
-				slog.Int("previous_notification_channels", len(r.lastResolvedTargets.NotificationChannelIDs)),
-				slog.Int("candidate_notification_channels", len(candidateTargets.NotificationChannelIDs)),
-			)
-		}
-		dbAlarmChannelIDs, dbErr := r.loadAlarmChannelIDs(ctx)
-		if dbErr != nil {
-			observeYouTubePollTargetShrinkValidation("failed")
-			if r.logger != nil {
-				r.logger.Warn("Failed to validate YouTube poll target shrink from DB",
-					slog.Any("error", dbErr))
-			}
-			return
-		}
-		validatedTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(dbAlarmChannelIDs, r.operationalChannels)
-		observeYouTubePollTargetShrinkValidation("validated")
-		if r.logger != nil {
-			r.logger.Info("youtube_poll_target_refresh_cache_shrink_validated",
-				slog.Int("previous_notification_channels", len(r.lastResolvedTargets.NotificationChannelIDs)),
-				slog.Int("candidate_notification_channels", len(candidateTargets.NotificationChannelIDs)),
-				slog.Int("validated_notification_channels", len(validatedTargets.NotificationChannelIDs)),
-			)
-		}
-		candidateTargets = validatedTargets
-	}
-
 	targets := candidateTargets
+	if candidateFromCache {
+		if r.cacheOnlyFirstSeen == nil {
+			r.cacheOnlyFirstSeen = make(map[string]time.Time)
+		}
+		removed := removedChannelIDs(r.lastResolvedTargets.NotificationChannelIDs, candidateTargets.NotificationChannelIDs)
+		added := addedChannelIDs(r.lastResolvedTargets.NotificationChannelIDs, candidateTargets.NotificationChannelIDs)
+		needsDBValidation := len(removed) > 0 || len(added) > 0 || len(r.cacheOnlyFirstSeen) > 0
+		if !needsDBValidation {
+			observeYouTubePollTargetValidation("skipped")
+		} else {
+			dbAlarmChannelIDs, dbErr := r.loadAlarmChannelIDs(ctx)
+			if dbErr != nil {
+				observeYouTubePollTargetValidation("failed")
+				if r.logger != nil {
+					r.logger.Warn("Failed to validate YouTube poll targets from DB",
+						slog.Any("error", dbErr))
+				}
+				return
+			}
+			dbTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(dbAlarmChannelIDs, r.operationalChannels)
+			observeYouTubePollTargetValidation("validated")
+			cacheOnlyAdditions := diffChannelIDs(candidateTargets.NotificationChannelIDs, dbTargets.NotificationChannelIDs)
+			trackCacheOnlyAdditions(now, cacheOnlyAdditions, r.cacheOnlyFirstSeen)
+			allowedCacheOnly, expiredCacheOnly := filterGracefulCacheOnlyAdditions(
+				now,
+				cacheOnlyAdditions,
+				r.cacheOnlyFirstSeen,
+				youtubePollTargetCacheOnlyAdditionGracePeriod,
+			)
+			targets = dbTargets
+			targets.NotificationChannelIDs = unionChannelIDs(targets.NotificationChannelIDs, allowedCacheOnly)
+			clearExpiredOrResolvedCacheOnly(r.cacheOnlyFirstSeen, dbTargets.NotificationChannelIDs, candidateTargets.NotificationChannelIDs)
+			if r.logger != nil {
+				r.logger.Info("youtube_poll_target_refresh_db_validated",
+					slog.Int("previous_notification_channels", len(r.lastResolvedTargets.NotificationChannelIDs)),
+					slog.Int("candidate_notification_channels", len(candidateTargets.NotificationChannelIDs)),
+					slog.Int("db_notification_channels", len(dbTargets.NotificationChannelIDs)),
+					slog.Int("allowed_cache_only_additions", len(allowedCacheOnly)),
+					slog.Int("expired_cache_only_additions", len(expiredCacheOnly)),
+					slog.Int("removed_candidate_channels", len(removed)),
+				)
+				}
+			}
+		}
 	if equalYouTubePollTargets(r.lastResolvedTargets, targets) {
 		return
 	}
@@ -198,8 +215,89 @@ func hasYouTubePollTargets(targets youtubePollTargets) bool {
 	return len(targets.NotificationChannelIDs) > 0 || len(targets.StatsChannelIDs) > 0
 }
 
-func shouldValidateTargetShrink(prev, next youtubePollTargets) bool {
-	return len(next.NotificationChannelIDs) < len(prev.NotificationChannelIDs)
+func removedChannelIDs(prev, next []string) []string {
+	return diffChannelIDs(prev, next)
+}
+
+func addedChannelIDs(prev, next []string) []string {
+	return diffChannelIDs(next, prev)
+}
+
+func unionChannelIDs(left, right []string) []string {
+	return mergeUniqueChannelIDs(left, right)
+}
+
+func trackCacheOnlyAdditions(now time.Time, additions []string, state map[string]time.Time) {
+	if state == nil {
+		return
+	}
+	for _, channelID := range additions {
+		if channelID == "" {
+			continue
+		}
+		if _, exists := state[channelID]; !exists {
+			state[channelID] = now
+		}
+	}
+}
+
+func clearExpiredOrResolvedCacheOnly(
+	state map[string]time.Time,
+	authoritative []string,
+	candidate []string,
+) {
+	if state == nil {
+		return
+	}
+
+	authoritativeSet := make(map[string]struct{}, len(authoritative))
+	for _, channelID := range authoritative {
+		if channelID == "" {
+			continue
+		}
+		authoritativeSet[channelID] = struct{}{}
+	}
+	candidateSet := make(map[string]struct{}, len(candidate))
+	for _, channelID := range candidate {
+		if channelID == "" {
+			continue
+		}
+		candidateSet[channelID] = struct{}{}
+	}
+
+	for channelID := range state {
+		if _, stillCandidate := candidateSet[channelID]; !stillCandidate {
+			delete(state, channelID)
+			continue
+		}
+		if _, nowAuthoritative := authoritativeSet[channelID]; nowAuthoritative {
+			delete(state, channelID)
+		}
+	}
+}
+
+func filterGracefulCacheOnlyAdditions(
+	now time.Time,
+	additions []string,
+	state map[string]time.Time,
+	grace time.Duration,
+) (allowed []string, expired []string) {
+	if state == nil {
+		return nil, nil
+	}
+
+	for _, channelID := range additions {
+		firstSeenAt, exists := state[channelID]
+		if !exists {
+			continue
+		}
+		if now.Sub(firstSeenAt) <= grace {
+			allowed = append(allowed, channelID)
+			continue
+		}
+		expired = append(expired, channelID)
+	}
+	return allowed, expired
 }
 
 func equalYouTubePollTargets(a, b youtubePollTargets) bool {
