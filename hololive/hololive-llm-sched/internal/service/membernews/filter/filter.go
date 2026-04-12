@@ -61,7 +61,6 @@ var sourceTierPriority = map[model.SourceTier]int{
 	model.SourceTierCommunity: 2,
 }
 
-// FilterCandidates: 기간/멤버/카테고리/출처 검증을 모두 적용합니다.
 func FilterCandidates(
 	candidates []model.Candidate,
 	period model.Period,
