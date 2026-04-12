@@ -36,7 +36,6 @@ import (
 	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
 )
 
-// Version: 빌드 시 ldflags로 주입됨 (예: -ldflags="-X main.Version=1.0.0")
 var Version = "dev"
 
 func main() {
