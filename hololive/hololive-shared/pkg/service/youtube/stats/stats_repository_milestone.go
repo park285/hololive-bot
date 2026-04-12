@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetAchievedMilestones: 여러 채널의 달성된 마일스톤을 배치 조회한다. (N+1 쿼리 방지)
 // 반환: map[channelID][]uint64 (채널별 달성된 마일스톤 값 목록)
 func (r *StatsRepository) GetAchievedMilestones(ctx context.Context, channelIDs []string, milestoneType domain.MilestoneType) (map[string][]uint64, error) {
 	if len(channelIDs) == 0 {
@@ -70,7 +69,6 @@ func (r *StatsRepository) GetAchievedMilestones(ctx context.Context, channelIDs 
 	return result, nil
 }
 
-// RecordMilestone: 구독자 수 달성 등 마일스톤 이벤트를 기록합니다.
 func (r *StatsRepository) SaveMilestone(ctx context.Context, milestone *domain.Milestone) error {
 	query := `
 		INSERT INTO youtube_milestones (channel_id, member_name, type, value, achieved_at, notified)
@@ -99,7 +97,6 @@ func (r *StatsRepository) SaveMilestone(ctx context.Context, milestone *domain.M
 	return nil
 }
 
-// HasAchievedMilestone: 특정 채널이 특정 마일스톤을 이미 달성했는지 확인합니다.
 // 구독자가 감소 후 다시 증가해도 중복 달성으로 처리되지 않도록 방지한다.
 func (r *StatsRepository) HasAchievedMilestone(ctx context.Context, channelID string, milestoneType domain.MilestoneType, value uint64) (bool, error) {
 	query := `
@@ -118,7 +115,6 @@ func (r *StatsRepository) HasAchievedMilestone(ctx context.Context, channelID st
 	return exists, nil
 }
 
-// MilestoneEntry: API 응답용 마일스톤 정보
 type MilestoneEntry struct {
 	ChannelID  string    `json:"channelId"`
 	MemberName string    `json:"memberName"`
@@ -128,7 +124,6 @@ type MilestoneEntry struct {
 	Notified   bool      `json:"notified"`
 }
 
-// MilestoneFilter: 마일스톤 조회 필터
 type MilestoneFilter struct {
 	Limit      int
 	Offset     int
@@ -136,7 +131,6 @@ type MilestoneFilter struct {
 	MemberName string
 }
 
-// MilestoneResult: 마일스톤 조회 결과 (페이지네이션 정보 포함)
 type MilestoneResult struct {
 	Milestones []MilestoneEntry `json:"milestones"`
 	Total      int              `json:"total"`
@@ -168,7 +162,6 @@ func buildMilestoneWhereClause(filter MilestoneFilter) (string, []any, int) {
 	return whereSQL, args, argIdx
 }
 
-// GetAllMilestones: 달성된 마일스톤 목록을 조회한다 (페이지네이션/필터링 지원)
 func (r *StatsRepository) GetAllMilestones(ctx context.Context, filter MilestoneFilter) (*MilestoneResult, error) {
 	whereSQL, args, argIdx := buildMilestoneWhereClause(filter)
 
@@ -219,7 +212,6 @@ func (r *StatsRepository) GetAllMilestones(ctx context.Context, filter Milestone
 	}, nil
 }
 
-// NearMilestoneEntry: API 응답용 마일스톤 직전 멤버 정보
 type NearMilestoneEntry struct {
 	ChannelID     string  `json:"channelId"`
 	MemberName    string  `json:"memberName"`
@@ -229,7 +221,6 @@ type NearMilestoneEntry struct {
 	ProgressPct   float64 `json:"progressPct"`
 }
 
-// GetNearMilestoneMembers: 마일스톤 직전(threshold% 이상) 멤버를 조회한다. 졸업 멤버 제외, Limit 지원.
 func (r *StatsRepository) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]NearMilestoneEntry, error) {
 	if len(milestones) == 0 {
 		return nil, nil
@@ -295,7 +286,6 @@ func (r *StatsRepository) GetNearMilestoneMembers(ctx context.Context, threshold
 	return entries, nil
 }
 
-// CountNearMilestoneMembers: 마일스톤 직전(threshold% 이상) 멤버 수를 조회한다. 졸업 멤버 제외.
 func (r *StatsRepository) CountNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64) (int, error) {
 	if len(milestones) == 0 {
 		return 0, nil
@@ -336,7 +326,6 @@ func (r *StatsRepository) CountNearMilestoneMembers(ctx context.Context, thresho
 	return count, nil
 }
 
-// GetClosestMilestoneMembers: 마일스톤 달성률이 높은 순서대로 상위 멤버를 조회한다 (threshold 없음, 졸업 멤버 자동 제외)
 // allowedChannelIDs는 더 이상 사용하지 않고 DB JOIN으로 처리함
 func (r *StatsRepository) GetClosestMilestoneMembers(ctx context.Context, limit int, milestones []uint64) ([]NearMilestoneEntry, error) {
 	if len(milestones) == 0 {
@@ -403,7 +392,6 @@ func (r *StatsRepository) GetClosestMilestoneMembers(ctx context.Context, limit 
 	return entries, nil
 }
 
-// MilestoneStats: 마일스톤 관련 통계 요약
 type MilestoneStats struct {
 	TotalAchieved      int `json:"totalAchieved"`
 	TotalNearMilestone int `json:"totalNearMilestone"`
@@ -411,7 +399,6 @@ type MilestoneStats struct {
 	NotNotifiedCount   int `json:"notNotifiedCount"`
 }
 
-// GetMilestoneStats: 마일스톤 통계 요약을 조회한다
 func (r *StatsRepository) GetMilestoneStats(ctx context.Context) (*MilestoneStats, error) {
 	query := `
 		SELECT
