@@ -27,7 +27,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetAllAlarmKeys: 관리자 대시보드용 모든 알람 정보를 반환합니다.
 func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	registryKeys, err := as.cache.SMembers(ctx, AlarmRegistryKey)
 	if err != nil {
@@ -72,7 +71,6 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	return alarms, nil
 }
 
-// GetDistinctRooms: 알람이 설정된 고유한 방 ID 목록을 반환합니다.
 func (as *AlarmService) GetDistinctRooms(ctx context.Context) ([]string, error) {
 	// 방 기반: registry key = roomID (추가 파싱 불필요)
 	registryKeys, err := as.cache.SMembers(ctx, AlarmRegistryKey)
