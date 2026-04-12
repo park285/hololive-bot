@@ -29,7 +29,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// SyncPlatformMappings: Rust 알람 서비스가 참조하는 플랫폼 매핑 해시를 현재 구독 채널 기준으로 동기화합니다.
 // - alarm:chzzk_channels (youtube_channel_id -> chzzk_channel_id)
 // - alarm:twitch_logins  (twitch_user_login -> youtube_channel_id)
 // - alarm:twitch_channel_logins (youtube_channel_id -> twitch_user_login).
