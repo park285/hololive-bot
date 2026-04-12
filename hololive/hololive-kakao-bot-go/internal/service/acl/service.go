@@ -33,7 +33,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// ACLMode: ACL 동작 모드 (화이트리스트/블랙리스트).
 type ACLMode string
 
 const (
@@ -41,7 +40,6 @@ const (
 	ACLModeBlacklist ACLMode = "blacklist"
 )
 
-// ParseACLMode: 문자열을 ACLMode로 파싱한다. 유효하지 않으면 whitelist로 폴백.
 func ParseACLMode(s string) ACLMode {
 	switch stringutil.Normalize(s) {
 	case string(ACLModeBlacklist):
@@ -67,31 +65,26 @@ const (
 	listTypeBlacklist = "blacklist"
 )
 
-// Settings: ACL 설정을 저장하기 위한 GORM 모델 (key-value 형태).
 type Settings struct {
 	ID    uint   `gorm:"primaryKey"`
 	Key   string `gorm:"uniqueIndex;size:64"`
 	Value string `gorm:"type:text"`
 }
 
-// TableName: ACL 설정 테이블의 이름을 반환한다. ("acl_settings").
 func (Settings) TableName() string {
 	return "acl_settings"
 }
 
-// Room: ACL 목록에 포함된 방을 저장하기 위한 GORM 모델.
 type Room struct {
 	ID       uint   `gorm:"primaryKey"`
 	RoomID   string `gorm:"uniqueIndex:idx_room_list;size:64"`
 	ListType string `gorm:"uniqueIndex:idx_room_list;size:16;default:whitelist"`
 }
 
-// TableName: ACL 방 목록 테이블의 이름을 반환한다. ("acl_rooms").
 func (Room) TableName() string {
 	return "acl_rooms"
 }
 
-// Service: 접근 제어 목록(ACL)을 관리하는 서비스
 // PostgreSQL을 영구 저장소로 사용하고, 성능을 위해 인메모리 및 Valkey 캐시를 활용한다.
 type Service struct {
 	db     *gorm.DB
@@ -106,7 +99,6 @@ type Service struct {
 	blacklistRooms map[string]struct{}
 }
 
-// IsReady: ACL 서비스의 필수 의존성이 초기화되었는지 확인합니다.
 func (s *Service) IsReady() bool {
 	if s == nil {
 		return false
@@ -359,7 +351,6 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.enabled = enabled
 	s.mu.Unlock()
 
-	// PostgreSQL 저장
 	result := s.db.Where("key = ?", dbKeyEnabled).Assign(Settings{Value: fmt.Sprintf("%t", enabled)}).FirstOrCreate(&Settings{Key: dbKeyEnabled})
 	if result.Error != nil {
 		return fmt.Errorf("failed to save ACL enabled setting: %w", result.Error)
@@ -380,7 +371,6 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	s.mode = mode
 	s.mu.Unlock()
 
-	// PostgreSQL 저장
 	result := s.db.Where("key = ?", dbKeyMode).Assign(Settings{Value: string(mode)}).FirstOrCreate(&Settings{Key: dbKeyMode})
 	if result.Error != nil {
 		return fmt.Errorf("failed to save ACL mode setting: %w", result.Error)
@@ -414,7 +404,6 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	targetRooms[room] = struct{}{}
 	s.mu.Unlock()
 
-	// PostgreSQL 저장
 	result := s.db.Create(&Room{RoomID: room, ListType: lt})
 	if result.Error != nil {
 		s.mu.Lock()
