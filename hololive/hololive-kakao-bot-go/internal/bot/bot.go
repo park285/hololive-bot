@@ -52,7 +52,6 @@ type streamRuntime interface {
 	Stop()
 }
 
-// Bot: 홀로라이브 봇의 핵심 상태와 의존성(서비스, 캐시, 핸들러 등)을 관리하는 메인 구조체.
 type Bot struct {
 	botSelfUser      string
 	irisBaseURL      string
@@ -86,7 +85,6 @@ type Bot struct {
 	lifecycle        *BotLifecycle
 }
 
-// NewBot: 필요한 의존성(Dependencies)을 주입받아 새로운 Bot 인스턴스를 생성하고 초기화합니다.
 func NewBot(deps *Dependencies) (*Bot, error) {
 	holodexRuntime, err := validateBotDependencies(deps)
 	if err != nil {
@@ -166,7 +164,6 @@ func (b *Bot) initializeCommands() {
 	b.logger.Info("Commands initialized", slog.Int("count", registry.Count()))
 }
 
-// Start: 봇 서비스를 시작한다. Valkey/Iris 연결 확인 후 Context가 종료될 때까지 대기합니다.
 func (b *Bot) Start(ctx context.Context) error {
 	return b.ensureLifecycle().Start(ctx)
 }
@@ -175,7 +172,6 @@ func (b *Bot) waitUntilIrisReady(ctx context.Context, timeout, retryInterval, pi
 	return b.ensureLifecycle().WaitUntilIrisReady(ctx, timeout, retryInterval, pingTimeout)
 }
 
-// Shutdown: 봇의 리소스를 정리하고 안전하게 종료합니다.
 func (b *Bot) Shutdown(ctx context.Context) error {
 	return b.ensureLifecycle().Shutdown(ctx)
 }
