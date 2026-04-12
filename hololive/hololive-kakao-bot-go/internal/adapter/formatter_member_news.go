@@ -42,7 +42,6 @@ type memberNewsSubscriptionTemplateData struct {
 	IsSubscribed bool
 }
 
-// FormatMemberNewsDigest: 멤버 뉴스 다이제스트를 렌더링합니다.
 func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *membernewscontracts.Digest) string {
 	if digest == nil {
 		return ErrorMessage(ErrDisplayMemberNewsFailed)
@@ -68,7 +67,6 @@ func (f *ResponseFormatter) FormatMemberNewsDigest(ctx context.Context, digest *
 	return rendered
 }
 
-// FormatMemberNewsNoMembers: room 알람 멤버가 없는 경우 안내 메시지.
 func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsNoMembers
@@ -82,7 +80,6 @@ func (f *ResponseFormatter) FormatMemberNewsNoMembers(ctx context.Context) strin
 	return message
 }
 
-// FormatMemberNewsSubscribed: 구독 켜기 성공 메시지.
 func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsSubscribed
@@ -96,7 +93,6 @@ func (f *ResponseFormatter) FormatMemberNewsSubscribed(ctx context.Context) stri
 	return message
 }
 
-// FormatMemberNewsAlreadySubscribed: 이미 구독 중 안내 메시지.
 func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsAlreadySubscribed
@@ -110,7 +106,6 @@ func (f *ResponseFormatter) FormatMemberNewsAlreadySubscribed(ctx context.Contex
 	return message
 }
 
-// FormatMemberNewsUnsubscribed: 구독 해제 성공 메시지.
 func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsUnsubscribed
@@ -124,7 +119,6 @@ func (f *ResponseFormatter) FormatMemberNewsUnsubscribed(ctx context.Context) st
 	return message
 }
 
-// FormatMemberNewsNotSubscribed: 미구독 상태 안내 메시지.
 func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) string {
 	if f == nil || f.renderer == nil {
 		return MsgMemberNewsNotSubscribed
@@ -138,7 +132,6 @@ func (f *ResponseFormatter) FormatMemberNewsNotSubscribed(ctx context.Context) s
 	return message
 }
 
-// FormatMemberNewsStatus: 구독 상태 메시지.
 func (f *ResponseFormatter) FormatMemberNewsStatus(ctx context.Context, isSubscribed bool) string {
 	if f == nil || f.renderer == nil {
 		if isSubscribed {
