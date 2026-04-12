@@ -31,12 +31,10 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// MemberNewsCommand: 구독 멤버 뉴스 조회 명령어.
 type MemberNewsCommand struct {
 	BaseCommand
 }
 
-// NewMemberNewsCommand: 명령어 생성.
 func NewMemberNewsCommand(deps *Dependencies) *MemberNewsCommand {
 	return &MemberNewsCommand{BaseCommand: NewBaseCommand(deps)}
 }
