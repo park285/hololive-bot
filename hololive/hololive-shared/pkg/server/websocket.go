@@ -35,7 +35,6 @@ func init() {
 	InitWSUpgrader()
 }
 
-// InitWSUpgrader: WEBSOCKET_ALLOWED_ORIGINS 환경변수에서 허용 오리진을 로드하고 업그레이더를 초기화합니다.
 // 비어있으면 모든 WebSocket 연결을 거부합니다 (secure default).
 func InitWSUpgrader() {
 	raw := os.Getenv("WEBSOCKET_ALLOWED_ORIGINS")
@@ -85,7 +84,6 @@ func checkOrigin(r *http.Request) bool {
 	return false
 }
 
-// WSUpgrader: API WebSocket 업그레이더 기본 설정입니다.
 // InitWSUpgrader()를 호출하여 환경변수에서 허용 오리진을 로드해야 합니다.
 var WSUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
