@@ -1,0 +1,519 @@
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/providers/scraper_scheduler_options.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/providers/scraper_scheduler_options.go	2026-04-10 10:40:20.985947800 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/providers/scraper_scheduler_options.go	2026-04-11 10:04:48.358063863 +0000
+@@ -27,9 +27,10 @@
+ )
+ 
+ type ChannelPollerRegistration struct {
+-	Poller   poller.Poller
+-	Priority poller.Priority
+-	Interval time.Duration
++	Poller    poller.Poller
++	Priority  poller.Priority
++	Interval  time.Duration
++	ChannelIDs []string
+ }
+ 
+ func NewChannelPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
+@@ -40,6 +41,11 @@
+ 	}
+ }
+ 
++func (r ChannelPollerRegistration) WithChannelIDs(channelIDs []string) ChannelPollerRegistration {
++	r.ChannelIDs = append([]string(nil), channelIDs...)
++	return r
++}
++
+ type ScraperSchedulerOption func(*scraperSchedulerOptions)
+ 
+ type scraperSchedulerOptions struct {
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/providers/youtube_providers.go /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/providers/youtube_providers.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/providers/youtube_providers.go	2026-04-10 10:41:06.630123400 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/providers/youtube_providers.go	2026-04-11 10:04:48.358688095 +0000
+@@ -97,63 +97,94 @@
+ 		return scheduler
+ 	}
+ 
+-	channelIDs := append([]string(nil), resolvedOpts.channelIDs...)
+-	membersCount := len(channelIDs)
+-	if len(channelIDs) == 0 {
++	defaultChannelIDs := uniqueChannelIDs(resolvedOpts.channelIDs)
++	defaultTargetChannels := len(defaultChannelIDs)
++	if len(defaultChannelIDs) == 0 {
+ 		if membersData == nil {
+ 			logger.Warn("Scraper scheduler initialized without members data")
+ 			return scheduler
+ 		}
+ 
+ 		members := membersData.GetAllMembers()
+-		membersCount = len(members)
+-		channelIDs = make([]string, 0, len(members))
++		defaultTargetChannels = len(members)
++		defaultChannelIDs = make([]string, 0, len(members))
+ 		for _, m := range members {
+ 			if m == nil || m.IsGraduated {
+ 				continue
+ 			}
+-			channelIDs = append(channelIDs, m.ChannelID)
++			defaultChannelIDs = append(defaultChannelIDs, m.ChannelID)
+ 		}
++		defaultChannelIDs = uniqueChannelIDs(defaultChannelIDs)
+ 	}
+ 
+-	for _, channelID := range channelIDs {
+-		for _, registration := range channelPollerRegistrations {
+-			if registration.Poller == nil || registration.Interval <= 0 {
+-				continue
+-			}
++	distinctTargets := make(map[string]struct{}, len(defaultChannelIDs))
++	totalJobs := 0
++	var totalRPM float64
++	for _, registration := range channelPollerRegistrations {
++		if registration.Poller == nil || registration.Interval <= 0 {
++			continue
++		}
++
++		targetChannelIDs := defaultChannelIDs
++		if len(registration.ChannelIDs) > 0 {
++			targetChannelIDs = uniqueChannelIDs(registration.ChannelIDs)
++		}
++		if len(targetChannelIDs) == 0 {
++			continue
++		}
++
++		for _, channelID := range targetChannelIDs {
+ 			scheduler.Register(channelID, registration.Poller, registration.Priority, registration.Interval)
++			distinctTargets[channelID] = struct{}{}
+ 		}
++
++		pollerRPM := float64(len(targetChannelIDs)) * (60.0 / registration.Interval.Seconds())
++		totalJobs += len(targetChannelIDs)
++		totalRPM += pollerRPM
++		logger.Info("Scraper poller targets resolved",
++			slog.String("poller", registration.Poller.Name()),
++			slog.Int("target_channels", len(targetChannelIDs)),
++			slog.Duration("interval", registration.Interval),
++			slog.Float64("expected_rpm", pollerRPM))
+ 	}
+ 
+-	activeMembers := len(channelIDs)
++	distinctTargetChannels := len(distinctTargets)
+ 	logger.Info("Scraper scheduler initialized",
+-		slog.Int("members", membersCount),
+-		slog.Int("active_members", activeMembers),
++		slog.Int("default_target_channels", defaultTargetChannels),
++		slog.Int("distinct_target_channels", distinctTargetChannels),
+ 		slog.Int("poller_templates", len(channelPollerRegistrations)),
+-		slog.Int("total_jobs", activeMembers*len(channelPollerRegistrations)))
++		slog.Int("total_jobs", totalJobs),
++		slog.Float64("expected_total_rpm", totalRPM))
+ 
+-	perChannelRPM := estimatedRequestsPerMinute(channelPollerRegistrations)
+-	totalRPM := perChannelRPM * float64(activeMembers)
+ 	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
+ 	if totalRPM > budgetRPM {
+ 		logger.Warn("scraper_poll_budget_exceeds_rate_limit",
+-			slog.Float64("per_channel_rpm", perChannelRPM),
+ 			slog.Float64("expected_total_rpm", totalRPM),
+ 			slog.Float64("budget_rpm", budgetRPM),
+-			slog.Int("active_members", activeMembers),
++			slog.Int("distinct_target_channels", distinctTargetChannels),
++			slog.Int("total_jobs", totalJobs),
+ 		)
+ 	}
+ 
+ 	return scheduler
+ }
+ 
+-func estimatedRequestsPerMinute(registrations []ChannelPollerRegistration) float64 {
+-	var rpm float64
+-	for _, registration := range registrations {
+-		if registration.Interval <= 0 {
++func uniqueChannelIDs(channelIDs []string) []string {
++	if len(channelIDs) == 0 {
++		return nil
++	}
++
++	seen := make(map[string]struct{}, len(channelIDs))
++	unique := make([]string, 0, len(channelIDs))
++	for _, channelID := range channelIDs {
++		if channelID == "" {
++			continue
++		}
++		if _, exists := seen[channelID]; exists {
+ 			continue
+ 		}
+-		rpm += 60.0 / registration.Interval.Seconds()
++		seen[channelID] = struct{}{}
++		unique = append(unique, channelID)
+ 	}
+-	return rpm
++	return unique
+ }
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/service/youtube/outbox/dispatcher.go /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/service/youtube/outbox/dispatcher.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/service/youtube/outbox/dispatcher.go	2026-04-10 11:03:27.571651500 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/service/youtube/outbox/dispatcher.go	2026-04-11 10:04:48.361043987 +0000
+@@ -24,6 +24,7 @@
+ 	"context"
+ 	"fmt"
+ 	"log/slog"
++	"sync"
+ 	"time"
+ 
+ 	"gorm.io/gorm"
+@@ -33,6 +34,7 @@
+ 	"github.com/kapu/hololive-shared/pkg/service/cache"
+ 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+ 	"github.com/kapu/hololive-shared/pkg/service/template"
++	"golang.org/x/sync/errgroup"
+ )
+ 
+ const defaultTelemetryRetention = 24 * time.Hour
+@@ -58,7 +60,7 @@
+ 	return Config{
+ 		BatchSize:              50,
+ 		LockTimeout:            5 * time.Minute,
+-		PollInterval:           30 * time.Second,
++		PollInterval:           2 * time.Second,
+ 		MaxRetries:             3,
+ 		RetryBackoff:           1 * time.Minute,
+ 		CleanupAfter:           7 * 24 * time.Hour, // 7일
+@@ -149,6 +151,8 @@
+ 		slog.Duration("poll_interval", d.cfg.PollInterval),
+ 		slog.Int("batch_size", d.cfg.BatchSize))
+ 
++	d.processOnce(ctx)
++
+ 	for {
+ 		select {
+ 		case <-ctx.Done():
+@@ -317,29 +321,41 @@
+ 		return result
+ 	}
+ 
+-	for _, e := range entries {
+-		members, err := sharedalarm.LookupChannelSubscribersByType(ctx, d.cache, e.channelID, e.alarmType)
+-		if err != nil {
+-			d.logger.Warn("Failed to get subscribers for channel",
+-				slog.String("channel_id", e.channelID),
+-				slog.String("alarm_type", string(e.alarmType)),
+-				slog.Any("error", err))
+-			continue
+-		}
++	const subscriberLookupParallelism = 16
++	var mu sync.Mutex
++	eg, egCtx := errgroup.WithContext(ctx)
++	eg.SetLimit(subscriberLookupParallelism)
++
++	for _, entry := range entries {
++		e := entry
++		eg.Go(func() error {
++			members, err := sharedalarm.LookupChannelSubscribersByType(egCtx, d.cache, e.channelID, e.alarmType)
++			if err != nil {
++				d.logger.Warn("Failed to get subscribers for channel",
++					slog.String("channel_id", e.channelID),
++					slog.String("alarm_type", string(e.alarmType)),
++					slog.Any("error", err))
++				return nil
++			}
+ 
+-		alarmTargets, ok := result[e.channelID]
+-		if !ok {
+-			alarmTargets = make(channelAlarmRoomTargets)
+-			result[e.channelID] = alarmTargets
+-		}
++			roomSet := make(map[string]bool, len(members))
++			for _, roomID := range members {
++				roomSet[roomID] = true
++			}
+ 
+-		roomSet := make(map[string]bool, len(members))
+-		for _, roomID := range members {
+-			roomSet[roomID] = true
+-		}
+-		alarmTargets[e.alarmType] = roomSet
++			mu.Lock()
++			alarmTargets, ok := result[e.channelID]
++			if !ok {
++				alarmTargets = make(channelAlarmRoomTargets)
++				result[e.channelID] = alarmTargets
++			}
++			alarmTargets[e.alarmType] = roomSet
++			mu.Unlock()
++			return nil
++		})
+ 	}
+ 
++	_ = eg.Wait()
+ 	return result
+ }
+ 
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/service/youtube/poller/scheduler.go /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/service/youtube/poller/scheduler.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-shared/pkg/service/youtube/poller/scheduler.go	2026-04-09 16:55:27.887292000 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-shared/pkg/service/youtube/poller/scheduler.go	2026-04-11 10:04:48.361664103 +0000
+@@ -260,23 +260,50 @@
+ 	defer s.wg.Done()
+ 	defer close(jobCh)
+ 
+-	ticker := time.NewTicker(1 * time.Second)
+-	defer ticker.Stop()
++	timer := time.NewTimer(0)
++	defer timer.Stop()
++	workerChannelFull := false
+ 
+ 	for {
++		if !timer.Stop() {
++			select {
++			case <-timer.C:
++			default:
++			}
++		}
++		timer.Reset(s.nextDispatchDelay(workerChannelFull))
++
+ 		select {
+ 		case <-ctx.Done():
+ 			return
+ 		case <-s.stopCh:
+ 			return
+-		case <-ticker.C:
+-			s.dispatchDueJobs(ctx, jobCh)
++		case <-timer.C:
++			workerChannelFull = s.dispatchDueJobs(jobCh)
+ 		}
+ 	}
+ }
+ 
++func (s *Scheduler) nextDispatchDelay(workerChannelFull bool) time.Duration {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	if workerChannelFull {
++		return 50 * time.Millisecond
++	}
++	if len(s.jobs) == 0 {
++		return time.Second
++	}
++
++	wait := time.Until(s.jobs[0].NextRunAt)
++	if wait < 0 {
++		return 0
++	}
++	return wait
++}
++
+ // dispatchDueJobs: 실행 시간이 된 작업 전달
+-func (s *Scheduler) dispatchDueJobs(ctx context.Context, jobCh chan<- *Job) {
++func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+ 
+@@ -294,12 +321,13 @@
+ 		select {
+ 		case jobCh <- job:
+ 		default:
+-			// 채널 가득 참 - 현재 슬롯 anchor를 유지한 채 재시도한다.
++			// 채널 가득 참 - 현재 슬롯 anchor를 유지한 채 빠르게 재시도한다.
+ 			schedulerDispatchDefer.WithLabelValues("worker_channel_full").Inc()
+ 			heap.Push(&s.jobs, job)
+-			return
++			return true
+ 		}
+ 	}
++	return false
+ }
+ 
+ // worker: 작업 실행 워커
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/bootstrap_stream_ingester.go /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/bootstrap_stream_ingester.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/bootstrap_stream_ingester.go	2026-04-10 12:22:48.524658700 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/bootstrap_stream_ingester.go	2026-04-11 10:04:48.359603562 +0000
+@@ -95,12 +95,25 @@
+ 	}
+ 
+ 	var operationalChannels []communityShortsOperationalChannel
++	var ytPollTargets youtubePollTargets
+ 	if features.youtubeEnabled {
+ 		operationalChannels, err = resolveCommunityShortsOperationalChannels(infra.membersData)
+ 		if err != nil {
+ 			infra.cleanup()
+ 			return nil, fmt.Errorf("resolve community shorts operational channels: %w", err)
+ 		}
++
++		ytPollTargets, err = resolveYouTubePollTargets(ctx, infra.postgresService, operationalChannels)
++		if err != nil {
++			infra.cleanup()
++			return nil, err
++		}
++
++		logger.Info("Resolved YouTube poll targets",
++			slog.Int("notification_target_channels", len(ytPollTargets.NotificationChannelIDs)),
++			slog.Int("stats_target_channels", len(ytPollTargets.StatsChannelIDs)),
++			slog.Int("dropped_alarm_targets", ytPollTargets.DroppedAlarmTargets),
++		)
+ 	}
+ 
+ 	var communityShortsPolicy communityShortsBigBangPolicy
+@@ -143,7 +156,8 @@
+ 		scraperScheduler, outboxDispatcher = buildStreamIngesterYouTubeComponents(
+ 			cfg.Scraper,
+ 			infra.postgresService,
+-			communityShortsEnabledChannelIDs(operationalChannels),
++			ytPollTargets.NotificationChannelIDs,
++			ytPollTargets.StatsChannelIDs,
+ 			infra.cacheService,
+ 			infra.irisClient,
+ 			infra.templateRenderer,
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_builders_test.go /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_builders_test.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_builders_test.go	2026-04-11 04:39:02.460364600 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_builders_test.go	2026-04-11 10:06:29.294909164 +0000
+@@ -282,6 +282,9 @@
+ 		nil,
+ 		nil,
+ 		nil,
++		nil,
++		nil,
++		nil,
+ 	)
+ 
+ 	require.Len(t, registrations, 5)
+@@ -331,6 +334,7 @@
+ 		},
+ 		&databasemocks.Client{},
+ 		communityShortsEnabledChannelIDs(operationalChannels),
++		communityShortsEnabledChannelIDs(operationalChannels),
+ 		nil,
+ 		nil,
+ 		nil,
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_channel_route_audit_test.go /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_channel_route_audit_test.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_channel_route_audit_test.go	2026-04-10 10:43:13.839443400 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_channel_route_audit_test.go	2026-04-11 10:06:29.296087059 +0000
+@@ -40,6 +40,7 @@
+ 		},
+ 		&databasemocks.Client{},
+ 		communityShortsEnabledChannelIDs(operationalChannels),
++		communityShortsEnabledChannelIDs(operationalChannels),
+ 		nil,
+ 		nil,
+ 		nil,
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations.go /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations.go	2026-04-10 10:15:36.705652500 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations.go	2026-04-11 10:04:48.360437254 +0000
+@@ -35,6 +35,8 @@
+ 	sharedRL *scraper.RateLimiter,
+ 	cacheSvc cache.Client,
+ 	routeDecider poller.NotificationRouteDecider,
++	notificationChannelIDs []string,
++	statsChannelIDs []string,
+ ) []providers.ChannelPollerRegistration {
+ 	proxyConfig := scraper.ProxyConfig{
+ 		Enabled: scraperCfg.ProxyEnabled,
+@@ -57,10 +59,10 @@
+ 	livePoller := poller.NewLivePoller(scraperClient, db)
+ 
+ 	return []providers.ChannelPollerRegistration{
+-		providers.NewChannelPollerRegistration(videosPoller, poller.PriorityNormal, poll.Videos),
+-		providers.NewChannelPollerRegistration(shortsPoller, poller.PriorityLow, poll.Shorts),
+-		providers.NewChannelPollerRegistration(communityPoller, poller.PriorityLow, poll.Community),
+-		providers.NewChannelPollerRegistration(statsPoller, poller.PriorityLow, poll.Stats),
+-		providers.NewChannelPollerRegistration(livePoller, poller.PriorityHigh, poll.Live),
++		providers.NewChannelPollerRegistration(videosPoller, poller.PriorityNormal, poll.Videos).WithChannelIDs(notificationChannelIDs),
++		providers.NewChannelPollerRegistration(shortsPoller, poller.PriorityLow, poll.Shorts).WithChannelIDs(notificationChannelIDs),
++		providers.NewChannelPollerRegistration(communityPoller, poller.PriorityLow, poll.Community).WithChannelIDs(notificationChannelIDs),
++		providers.NewChannelPollerRegistration(statsPoller, poller.PriorityLow, poll.Stats).WithChannelIDs(statsChannelIDs),
++		providers.NewChannelPollerRegistration(livePoller, poller.PriorityHigh, poll.Live).WithChannelIDs(notificationChannelIDs),
+ 	}
+ }
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations_test.go /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations_test.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations_test.go	2026-04-10 10:45:24.573910700 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_poller_registrations_test.go	2026-04-11 10:06:29.295555046 +0000
+@@ -118,6 +118,7 @@
+ 		},
+ 		postgres,
+ 		communityShortsEnabledChannelIDs(operationalChannels),
++		communityShortsEnabledChannelIDs(operationalChannels),
+ 		nil,
+ 		nil,
+ 		nil,
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder_helpers.go /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder_helpers.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder_helpers.go	2026-04-10 10:40:05.067540200 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/stream_ingester_runtime_builder_helpers.go	2026-04-11 10:04:48.360066523 +0000
+@@ -38,7 +38,8 @@
+ func buildStreamIngesterYouTubeComponents(
+ 	scraperCfg config.ScraperConfig,
+ 	postgresService database.Client,
+-	channelIDs []string,
++	notificationChannelIDs []string,
++	statsChannelIDs []string,
+ 	cacheService cache.Client,
+ 	irisClient iris.Sender,
+ 	templateRenderer *template.Renderer,
+@@ -46,7 +47,15 @@
+ 	routeDecider poller.NotificationRouteDecider,
+ 	logger *slog.Logger,
+ ) (*poller.Scheduler, *outbox.Dispatcher) {
+-	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(postgresService, scraperCfg, sharedRL, cacheService, routeDecider)
++	pollerRegistrations := buildStreamIngesterChannelPollerRegistrations(
++		postgresService,
++		scraperCfg,
++		sharedRL,
++		cacheService,
++		routeDecider,
++		notificationChannelIDs,
++		statsChannelIDs,
++	)
+ 
+ 	scraperScheduler := providers.ProvideScraperScheduler(
+ 		nil,
+diff -ruN /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/youtube_poll_targets.go /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/youtube_poll_targets.go
+--- /mnt/data/hololive-bot-full-extracted/hololive-bot-review-bundle-full-20260411T094624Z/hololive/hololive-stream-ingester/internal/app/youtube_poll_targets.go	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/hololive-bot-patchwork/hololive-stream-ingester/internal/app/youtube_poll_targets.go	2026-04-11 10:04:48.358977481 +0000
+@@ -0,0 +1,50 @@
++package app
++
++import (
++	"context"
++	"fmt"
++
++	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
++	"github.com/kapu/hololive-shared/pkg/service/database"
++)
++
++type youtubePollTargets struct {
++	NotificationChannelIDs []string
++	StatsChannelIDs        []string
++	DroppedAlarmTargets    int
++}
++
++func resolveYouTubePollTargets(ctx context.Context, postgresService database.Client, operationalChannels []communityShortsOperationalChannel) (youtubePollTargets, error) {
++	statsChannelIDs := communityShortsEnabledChannelIDs(operationalChannels)
++	repo := sharedalarm.NewRepository(postgresService, nil)
++	alarmChannelIDs, err := repo.GetAllChannelIDs(ctx)
++	if err != nil {
++		return youtubePollTargets{}, fmt.Errorf("resolve youtube poll targets: get alarm channel ids: %w", err)
++	}
++
++	allowed := make(map[string]struct{}, len(statsChannelIDs))
++	for _, channelID := range statsChannelIDs {
++		allowed[channelID] = struct{}{}
++	}
++
++	notificationChannelIDs := make([]string, 0, len(alarmChannelIDs))
++	seen := make(map[string]struct{}, len(alarmChannelIDs))
++	dropped := 0
++	for _, channelID := range alarmChannelIDs {
++		if _, exists := seen[channelID]; exists {
++			continue
++		}
++		seen[channelID] = struct{}{}
++		if _, ok := allowed[channelID]; !ok {
++			dropped++
++			continue
++		}
++		notificationChannelIDs = append(notificationChannelIDs, channelID)
++	}
++
++	return youtubePollTargets{
++		NotificationChannelIDs: notificationChannelIDs,
++		StatsChannelIDs:        statsChannelIDs,
++		DroppedAlarmTargets:    dropped,
++	}, nil
++}
