@@ -15,7 +15,6 @@ type (
 	SyntaxError        = decoder.SyntaxError
 	UnmarshalTypeError = decoder.MismatchTypeError
 
-	// Stream Encoders/Decoders Interfaces
 	Encoder = sonic.Encoder
 	Decoder = sonic.Decoder
 )
