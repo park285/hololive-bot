@@ -22,10 +22,9 @@ type PendingPublishedAtResolver struct {
 	interval          time.Duration
 	batchSize         int
 	maxResolvePerRun  int
+	maxRunDuration    time.Duration
 	minDetectedAge    time.Duration
 	failureBackoffTTL time.Duration
-	softLimiter       *scraper.RateLimiter
-	backoffStore      pendingPublishedAtBackoffStore
 	logger            *slog.Logger
 }
 
@@ -44,10 +43,9 @@ func NewPendingPublishedAtResolver(
 		interval,
 		batchSize,
 		batchSize,
+		6*time.Second,
 		20*time.Second,
 		5*time.Minute,
-		nil,
-		nil,
 		logger,
 	)
 }
@@ -59,10 +57,9 @@ func NewPendingPublishedAtResolverWithControls(
 	interval time.Duration,
 	batchSize int,
 	maxResolvePerRun int,
+	maxRunDuration time.Duration,
 	minDetectedAge time.Duration,
 	failureBackoffTTL time.Duration,
-	softLimiter *scraper.RateLimiter,
-	backoffStore pendingPublishedAtBackoffStore,
 	logger *slog.Logger,
 ) *PendingPublishedAtResolver {
 	if interval <= 0 {
@@ -73,6 +70,9 @@ func NewPendingPublishedAtResolverWithControls(
 	}
 	if maxResolvePerRun <= 0 {
 		maxResolvePerRun = batchSize
+	}
+	if maxRunDuration <= 0 {
+		maxRunDuration = 6 * time.Second
 	}
 	if minDetectedAge <= 0 {
 		minDetectedAge = 20 * time.Second
@@ -91,10 +91,9 @@ func NewPendingPublishedAtResolverWithControls(
 		interval:          interval,
 		batchSize:         batchSize,
 		maxResolvePerRun:  maxResolvePerRun,
+		maxRunDuration:    maxRunDuration,
 		minDetectedAge:    minDetectedAge,
 		failureBackoffTTL: failureBackoffTTL,
-		softLimiter:       softLimiter,
-		backoffStore:      backoffStore,
 		logger:            logger,
 	}
 }
@@ -135,12 +134,18 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 	tracking := trackingrepo.NewRepository(r.db)
 	batchSize := r.resolverBatchSize()
 	maxResolvePerRun := r.resolverMaxResolvePerRun()
+	runDeadline := time.Now().Add(r.resolverMaxRunDuration())
 	failureBackoffTTL := r.resolverFailureBackoffTTL()
 	processed := 0
 	var cursor *trackingrepo.PublishedAtResolutionCursor
 	for processed < maxResolvePerRun {
+		if time.Now().After(runDeadline) {
+			return nil
+		}
+		now := time.Now()
 		candidates, nextCursor, err := tracking.ListPendingPublishedAtResolutionsPage(
 			ctx,
+			now,
 			detectedBefore,
 			cursor,
 			minInt(batchSize, maxResolvePerRun-processed),
@@ -148,7 +153,7 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 		if err != nil {
 			return fmt.Errorf("run pending published_at resolver: list candidates: %w", err)
 		}
-		setPublishedAtResolverPendingCandidates(len(candidates))
+		setPublishedAtResolverPageCandidates(len(candidates))
 		if len(candidates) == 0 {
 			return nil
 		}
@@ -161,27 +166,9 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 			}
 
 			candidate := candidates[i]
-
-			if r.backoffStore != nil {
-				active, err := r.backoffStore.Active(ctx, candidate)
-				if err != nil {
-					r.logger.Warn("Pending published_at resolver failed to read backoff state",
-						slog.String("kind", string(candidate.Kind)),
-						slog.String("post_id", candidate.PostID),
-						slog.String("content_id", candidate.ContentID),
-						slog.Any("error", err),
-					)
-				}
-				if active {
-					observePublishedAtResolverSkipped(candidate.Kind, "backoff_active")
-					continue
-				}
-			}
-
-			if r.softLimiter != nil {
-				if err := r.softLimiter.Wait(ctx); err != nil {
-					return fmt.Errorf("run pending published_at resolver: wait soft limiter: %w", err)
-				}
+			observePublishedAtResolverScanned(candidate.Kind)
+			if time.Now().After(runDeadline) {
+				return nil
 			}
 
 			processed++
@@ -189,9 +176,7 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 			publishedAt, err := r.resolveCandidatePublishedAt(ctx, candidate)
 			if err != nil {
 				observePublishedAtResolutionFailure(candidate.Kind)
-				if r.backoffStore != nil {
-					_ = r.backoffStore.Mark(ctx, candidate, failureBackoffTTL)
-				}
+				_ = tracking.MarkPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID, time.Now().Add(failureBackoffTTL))
 				r.logger.Warn("Pending published_at resolver failed to resolve candidate",
 					slog.String("kind", string(candidate.Kind)),
 					slog.String("post_id", candidate.PostID),
@@ -201,15 +186,11 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 				continue
 			}
 			if publishedAt == nil || publishedAt.IsZero() {
-				if r.backoffStore != nil {
-					_ = r.backoffStore.Mark(ctx, candidate, failureBackoffTTL)
-				}
+				_ = tracking.MarkPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID, time.Now().Add(failureBackoffTTL))
 				observePublishedAtResolverSkipped(candidate.Kind, "published_at_empty")
 				continue
 			}
-			if r.backoffStore != nil {
-				_ = r.backoffStore.Clear(ctx, candidate)
-			}
+			_ = tracking.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID)
 			observePublishedAtResolutionSuccess(candidate.Kind)
 
 			result, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
@@ -286,6 +267,13 @@ func (r *PendingPublishedAtResolver) resolverMaxResolvePerRun() int {
 		return 20
 	}
 	return batchSize
+}
+
+func (r *PendingPublishedAtResolver) resolverMaxRunDuration() time.Duration {
+	if r == nil || r.maxRunDuration <= 0 {
+		return 6 * time.Second
+	}
+	return r.maxRunDuration
 }
 
 func (r *PendingPublishedAtResolver) resolverMinDetectedAge() time.Duration {

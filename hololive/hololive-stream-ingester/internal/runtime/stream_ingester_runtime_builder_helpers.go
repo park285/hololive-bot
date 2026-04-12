@@ -101,7 +101,6 @@ func buildSharedYouTubeScraperClient(
 func buildPendingPublishedAtResolver(
 	postgresService database.Client,
 	scraperClient *scraper.Client,
-	cacheService cache.Client,
 	routeDecider poller.NotificationRouteDecider,
 	logger *slog.Logger,
 ) *poller.PendingPublishedAtResolver {
@@ -109,20 +108,16 @@ func buildPendingPublishedAtResolver(
 		return nil
 	}
 
-	softLimiter := scraper.NewRateLimiter(15 * time.Second)
-	backoffStore := poller.NewCachePublishedAtBackoffStore(cacheService)
-
 	return poller.NewPendingPublishedAtResolverWithControls(
 		postgresService.GetGormDB(),
 		scraperClient,
 		routeDecider,
-		15*time.Second,
-		50,
+		10*time.Second,
 		20,
+		2,
+		6*time.Second,
 		20*time.Second,
 		5*time.Minute,
-		softLimiter,
-		backoffStore,
 		logger,
 	)
 }
