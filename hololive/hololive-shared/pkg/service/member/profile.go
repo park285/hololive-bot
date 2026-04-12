@@ -36,8 +36,6 @@ const (
 	cacheKeyProfileTranslated = "hololive:profile:translated:%s:%s"
 )
 
-// ProfileService: 탤런트 상세 프로필 정보를 관리하는 서비스
-// 로컬 파일에서 데이터를 로드하고, 번역 정보를 관리하며 캐싱을 지원한다.
 type ProfileService struct {
 	cache         cache.Client
 	logger        *slog.Logger
@@ -48,8 +46,6 @@ type ProfileService struct {
 	channelToSlug map[string]string
 }
 
-// NewProfileService: 프로필 데이터와 번역 데이터를 로드하여 서비스 인스턴스를 초기화합니다.
-// 검색 최적화를 위한 인덱싱 작업도 수행한다.
 func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger) (*ProfileService, error) {
 	if membersData == nil {
 		return nil, fmt.Errorf("members data is nil")
@@ -113,7 +109,6 @@ func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvi
 	return service, nil
 }
 
-// GetWithTranslation: 영문 이름으로 프로필을 조회하고, 번역된 정보가 있다면 함께 반환합니다.
 func (s *ProfileService) GetWithTranslation(ctx context.Context, englishName string) (*domain.TalentProfile, *domain.Translated, error) {
 	if stringutil.TrimSpace(englishName) == "" {
 		return nil, nil, fmt.Errorf("member name is required")
@@ -132,7 +127,6 @@ func (s *ProfileService) GetWithTranslation(ctx context.Context, englishName str
 	return profile, translated, nil
 }
 
-// GetByEnglish: 영문 이름(정규화됨)으로 원본 프로필 정보를 조회합니다.
 func (s *ProfileService) GetByEnglish(englishName string) (*domain.TalentProfile, error) {
 	if profile, ok := s.byEnglish(englishName); ok {
 		return profile, nil
@@ -140,7 +134,6 @@ func (s *ProfileService) GetByEnglish(englishName string) (*domain.TalentProfile
 	return nil, fmt.Errorf("official profile not found for member '%s'", englishName)
 }
 
-// GetByChannel: 채널 ID로 원본 프로필 정보를 조회합니다.
 func (s *ProfileService) GetByChannel(channelID string) (*domain.TalentProfile, error) {
 	if channelID == "" {
 		return nil, fmt.Errorf("channel id is empty")
@@ -239,7 +232,6 @@ func convertToTranslatedRows(entries []domain.TalentProfileEntry) []domain.Trans
 	return rows
 }
 
-// PreloadTranslations: 모든 번역 데이터를 캐시에 미리 적재하여 조회 성능을 높인다.
 func (s *ProfileService) PreloadTranslations(ctx context.Context) {
 	if s == nil || s.cache == nil || len(s.translations) == 0 {
 		return
