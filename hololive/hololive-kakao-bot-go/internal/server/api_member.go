@@ -129,17 +129,14 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	})
 }
 
-// AddAlias: 멤버에게 별칭을 추가합니다.
 func (h *MemberAPIHandler) AddAlias(c *gin.Context) {
 	h.handleAliasOperation(c, h.repo.AddAlias, "add")
 }
 
-// RemoveAlias: 멤버의 별칭을 삭제합니다.
 func (h *MemberAPIHandler) RemoveAlias(c *gin.Context) {
 	h.handleAliasOperation(c, h.repo.RemoveAlias, "remove")
 }
 
-// SetGraduation: 졸업 상태를 갱신합니다.
 //
 
 func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
@@ -207,7 +204,6 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	})
 }
 
-// UpdateChannelID: 채널 ID를 갱신합니다.
 //
 //nolint:dupl // Similar patterns for different update operations
 func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
@@ -269,7 +265,6 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	})
 }
 
-// UpdateMemberName: 멤버의 이름을 업데이트합니다.
 //
 //nolint:dupl // Similar patterns for different update operations
 func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
@@ -331,7 +326,6 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 	})
 }
 
-// GetMembers: 모든 멤버 목록을 JSON으로 반환합니다.
 func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
@@ -350,7 +344,6 @@ func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 	})
 }
 
-// AddMember: 새로운 멤버를 추가합니다.
 func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	var req domain.Member
 	if err := c.ShouldBindJSON(&req); err != nil {

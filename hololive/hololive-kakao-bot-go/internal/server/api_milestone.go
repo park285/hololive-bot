@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
-// GetMilestones: 달성된 마일스톤 목록을 반환합니다.
 // GET /api/milestones?limit=50&offset=0&channelId=xxx&memberName=xxx.
 func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -89,7 +88,6 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	})
 }
 
-// GetNearMilestoneMembers: 마일스톤 달성 직전의 멤버 목록을 반환합니다.
 // GET /api/milestones/near?threshold=0.9
 // 기본 threshold: 백그라운드 워커와 동일한 95% (MilestoneThresholdRatio).
 func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
@@ -137,7 +135,6 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	})
 }
 
-// GetMilestoneStats: 마일스톤 관련 통계 요약을 반환합니다.
 // GET /api/milestones/stats.
 func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	ctx := c.Request.Context()
