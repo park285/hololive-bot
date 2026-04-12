@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 )
 
-// ConsensusSummarizer: Primary → Reviewer → Adjudicator(조건부) 3단계 consensus wrapper.
 type ConsensusSummarizer struct {
 	primary     model.Summarizer
 	reviewer    LLMClient
@@ -42,7 +41,6 @@ type ConsensusSummarizer struct {
 	logger      *slog.Logger
 }
 
-// NewConsensusSummarizer: consensus 요약기 생성.
 func NewConsensusSummarizer(
 	primary model.Summarizer,
 	reviewer LLMClient,
@@ -64,7 +62,6 @@ func NewConsensusSummarizer(
 	}
 }
 
-// Summarize: Summarizer 인터페이스 구현. Primary → Reviewer → Adjudicator(조건부) 파이프라인.
 func (c *ConsensusSummarizer) Summarize(ctx context.Context, input model.SummarizeInput) (*model.Digest, error) {
 	pipelineStart := time.Now()
 
@@ -260,7 +257,6 @@ func (c *ConsensusSummarizer) adjudicate(
 	return &response, nil
 }
 
-// --- 프롬프트 함수 ---
 
 func reviewSystemPrompt() string {
 	return `You are a fact-checking reviewer for hololive member-news summaries.
