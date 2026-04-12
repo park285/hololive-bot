@@ -35,7 +35,6 @@ const (
 	QueueEnvelopeVersionV1 uint8 = 1
 )
 
-// AlarmQueueEnvelope: cross-language queue envelope contract
 type AlarmQueueEnvelope struct {
 	Notification domain.AlarmNotification `json:"notification"`
 	ClaimKeys    []string                 `json:"claim_keys"`
