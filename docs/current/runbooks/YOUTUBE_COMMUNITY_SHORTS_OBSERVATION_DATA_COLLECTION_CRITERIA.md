@@ -229,5 +229,5 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-shorts-alarm-sent-history
 - sent-history dataset collection: `hololive/hololive-stream-ingester/internal/app/community_shorts_alarm_sent_history_dataset.go`
 - observation frozen baseline schema: `hololive/hololive-kakao-bot-go/scripts/migrations/054_create_youtube_community_shorts_observation_post_baselines.sql`
 - single-send state schema: `hololive/hololive-kakao-bot-go/scripts/migrations/055_create_youtube_community_shorts_alarm_states.sql`
-- dashboard time-basis note: `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_OPERATIONS_DASHBOARD.md`
+- channel summary time-basis note: `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_CHANNEL_SUMMARY_LAST_24H.md`
 - observation verification key mapping: `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_POST_DEPLOY_24H_VERIFICATION.md`
