@@ -279,17 +279,17 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 
 			youtubeService := &fakeYouTubeService{}
 			youtubeScheduler := &fakeScheduler{}
+			memberData := &fakeMemberDataProvider{
+				members: []*domain.Member{
+					{ChannelID: "active-channel", Name: "active", IsGraduated: false},
+					{ChannelID: "graduated-channel", Name: "graduated", IsGraduated: true},
+				},
+			}
 
 			cleanupCalls := 0
 			infra := &streamIngesterInfrastructure{
 				cacheService:    cacheService,
 				postgresService: &databasemocks.Client{},
-				membersData: &fakeMemberDataProvider{
-					members: []*domain.Member{
-						{ChannelID: "active-channel", Name: "active", IsGraduated: false},
-						{ChannelID: "graduated-channel", Name: "graduated", IsGraduated: true},
-					},
-				},
 				settingsService: settingsService,
 				holodexService:  &holodex.Service{},
 				ytStack: &providers.YouTubeStack{
@@ -300,7 +300,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				cleanup:   func() { cleanupCalls++ },
 			}
 
-			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, infra.membersData)
+			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, memberData)
 
 			scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
 				cfg.Scraper,

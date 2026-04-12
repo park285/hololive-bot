@@ -173,6 +173,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 				BatchSize:         sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE", publishedAtResolverDefaults.BatchSize),
 				MaxResolvePerRun:  sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN", publishedAtResolverDefaults.MaxResolvePerRun),
 				MaxRunDuration:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS", int(publishedAtResolverDefaults.MaxRunDuration/time.Second))) * time.Second,
+				ResolveTimeout:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS", int(publishedAtResolverDefaults.ResolveTimeout/time.Second))) * time.Second,
 				MinDetectedAge:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", int(publishedAtResolverDefaults.MinDetectedAge/time.Second))) * time.Second,
 				FailureBackoffTTL: time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", int(publishedAtResolverDefaults.FailureBackoffTTL/time.Second))) * time.Second,
 			},
@@ -233,9 +234,43 @@ func (c *Config) Validate() error {
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
+	if err := validateScraperPublishedAtResolverConfig(c.Scraper.PublishedAtResolver); err != nil {
+		return err
+	}
 	isProduction := strings.EqualFold(strings.TrimSpace(c.Environment), "production")
 	if isProduction && c.CORS.Enforce && len(c.CORS.AllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
+	}
+	return nil
+}
+
+func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if cfg.Interval <= 0 {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS must be positive when resolver is enabled")
+	}
+	if cfg.BatchSize <= 0 {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE must be positive when resolver is enabled")
+	}
+	if cfg.MaxResolvePerRun <= 0 {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN must be positive when resolver is enabled")
+	}
+	if cfg.MaxRunDuration <= 0 {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be positive when resolver is enabled")
+	}
+	if cfg.ResolveTimeout <= 0 {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS must be positive when resolver is enabled")
+	}
+	if cfg.MaxRunDuration < cfg.ResolveTimeout {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be >= SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS")
+	}
+	if cfg.MinDetectedAge <= 0 {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS must be positive when resolver is enabled")
+	}
+	if cfg.FailureBackoffTTL <= 0 {
+		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS must be positive when resolver is enabled")
 	}
 	return nil
 }

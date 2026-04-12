@@ -180,8 +180,22 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		}
 		removed := removedChannelIDs(r.lastResolvedTargets.NotificationChannelIDs, candidateTargets.NotificationChannelIDs)
 		added := addedChannelIDs(r.lastResolvedTargets.NotificationChannelIDs, candidateTargets.NotificationChannelIDs)
-		needsDBValidation := len(removed) > 0 || len(added) > 0 || len(r.cacheOnlyFirstSeen) > 0
+		trackCacheOnlyAdditions(now, added, r.cacheOnlyFirstSeen)
+		clearExpiredOrResolvedCacheOnly(r.cacheOnlyFirstSeen, nil, candidateTargets.NotificationChannelIDs)
+		_, expiredCacheOnly := filterGracefulCacheOnlyAdditions(
+			now,
+			candidateTargets.NotificationChannelIDs,
+			r.cacheOnlyFirstSeen,
+			youtubePollTargetCacheOnlyAdditionGracePeriod,
+		)
+		needsDBValidation := len(removed) > 0 || hasPendingCacheOnlyValidation(
+			now,
+			candidateTargets.NotificationChannelIDs,
+			r.cacheOnlyFirstSeen,
+			youtubePollTargetCacheOnlyAdditionGracePeriod,
+		)
 		if !needsDBValidation {
+			targets.NotificationChannelIDs = diffChannelIDs(targets.NotificationChannelIDs, expiredCacheOnly)
 			observeYouTubePollTargetValidation("skipped")
 		} else {
 			dbAlarmChannelIDs, dbErr := r.loadAlarmChannelIDs(ctx)
@@ -295,8 +309,18 @@ func equalOperationalChannels(left, right []communityShortsOperationalChannel) b
 	if len(left) != len(right) {
 		return false
 	}
-	for i := range left {
-		if left[i] != right[i] {
+	counts := make(map[communityShortsOperationalChannel]int, len(left))
+	for _, channel := range left {
+		counts[channel]++
+	}
+	for _, channel := range right {
+		counts[channel]--
+		if counts[channel] < 0 {
+			return false
+		}
+	}
+	for _, count := range counts {
+		if count != 0 {
 			return false
 		}
 	}
@@ -409,6 +433,36 @@ func filterGracefulCacheOnlyAdditions(
 		expired = append(expired, channelID)
 	}
 	return allowed, expired
+}
+
+func hasPendingCacheOnlyValidation(
+	now time.Time,
+	candidate []string,
+	state map[string]time.Time,
+	grace time.Duration,
+) bool {
+	if len(state) == 0 || len(candidate) == 0 {
+		return false
+	}
+
+	candidateSet := make(map[string]struct{}, len(candidate))
+	for _, channelID := range candidate {
+		if channelID == "" {
+			continue
+		}
+		candidateSet[channelID] = struct{}{}
+	}
+
+	for channelID, firstSeenAt := range state {
+		if _, stillCandidate := candidateSet[channelID]; !stillCandidate {
+			continue
+		}
+		if now.Sub(firstSeenAt) <= grace {
+			return true
+		}
+	}
+
+	return false
 }
 
 func equalYouTubePollTargets(a, b youtubePollTargets) bool {

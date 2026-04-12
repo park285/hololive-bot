@@ -44,7 +44,6 @@ type streamIngesterInfrastructure struct {
 	cacheService     cache.Client
 	postgresService  database.Client
 	memberRepo       *member.Repository
-	membersData      member.DataProvider
 	irisClient       iris.Sender
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
@@ -76,7 +75,6 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 
 	holodexAPIKey := cfg.Holodex.APIKey
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	membersData := memberServiceAdapter
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: cfg.Scraper.ProxyEnabled,
 		URL:     cfg.Scraper.ProxyURL,
@@ -114,7 +112,6 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		cacheService:     infra.Cache,
 		postgresService:  infra.Postgres,
 		memberRepo:       infra.MemberRepo,
-		membersData:      membersData,
 		irisClient:       irisClient,
 		settingsService:  settingsService,
 		holodexService:   holodexService,

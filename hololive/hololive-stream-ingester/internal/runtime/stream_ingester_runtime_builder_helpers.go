@@ -122,6 +122,7 @@ func buildPendingPublishedAtResolver(
 		resolverCfg.BatchSize,
 		resolverCfg.MaxResolvePerRun,
 		resolverCfg.MaxRunDuration,
+		resolverCfg.ResolveTimeout,
 		resolverCfg.MinDetectedAge,
 		resolverCfg.FailureBackoffTTL,
 		logger,
@@ -132,6 +133,7 @@ func buildPendingPublishedAtResolver(
 			slog.Int("batch_size", resolverCfg.BatchSize),
 			slog.Int("max_resolve_per_run", resolverCfg.MaxResolvePerRun),
 			slog.Duration("max_run_duration", resolverCfg.MaxRunDuration),
+			slog.Duration("resolve_timeout", resolverCfg.ResolveTimeout),
 			slog.Duration("min_detected_age", resolverCfg.MinDetectedAge),
 			slog.Duration("failure_backoff_ttl", resolverCfg.FailureBackoffTTL),
 			slog.Float64("estimated_max_rpm", estimatedPublishedAtResolverMaxRPM(resolverCfg)),
@@ -159,6 +161,9 @@ func effectivePublishedAtResolverConfig(scraperCfg config.ScraperConfig) config.
 	if resolverCfg.MaxRunDuration <= 0 {
 		resolverCfg.MaxRunDuration = defaults.MaxRunDuration
 	}
+	if resolverCfg.ResolveTimeout <= 0 {
+		resolverCfg.ResolveTimeout = defaults.ResolveTimeout
+	}
 	if resolverCfg.MinDetectedAge <= 0 {
 		resolverCfg.MinDetectedAge = defaults.MinDetectedAge
 	}
@@ -185,18 +190,25 @@ func logCombinedYouTubeScraperBudget(
 	}
 
 	pollerRPM := estimateResolvedPollerRPM(registrations)
+	pollerRetryAmplifiedRPM := estimatedPollerWorstCaseRPM(registrations)
 	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
 	resolverRPM := 0.0
+	resolverRetryAmplifiedRPM := 0.0
 	if resolverCfg.Enabled {
 		resolverRPM = estimatedPublishedAtResolverMaxRPM(resolverCfg)
+		resolverRetryAmplifiedRPM = estimatedPublishedAtResolverWorstCaseRPM(resolverCfg)
 	}
 	combinedRPM := pollerRPM + resolverRPM
+	combinedRetryAmplifiedRPM := pollerRetryAmplifiedRPM + resolverRetryAmplifiedRPM
 	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
 
 	logger.Info("youtube_scraper_combined_budget_summary",
 		slog.Float64("expected_poller_rpm", pollerRPM),
+		slog.Float64("expected_poller_retry_amplified_rpm_max", pollerRetryAmplifiedRPM),
 		slog.Float64("expected_resolver_rpm", resolverRPM),
+		slog.Float64("expected_resolver_retry_amplified_rpm_max", resolverRetryAmplifiedRPM),
 		slog.Float64("expected_combined_rpm", combinedRPM),
+		slog.Float64("expected_combined_retry_amplified_rpm_max", combinedRetryAmplifiedRPM),
 		slog.Float64("budget_rpm", budgetRPM),
 	)
 	if combinedRPM > budgetRPM {
@@ -207,6 +219,23 @@ func logCombinedYouTubeScraperBudget(
 			slog.Float64("budget_rpm", budgetRPM),
 		)
 	}
+	if combinedRetryAmplifiedRPM > budgetRPM {
+		logger.Warn("youtube_scraper_retry_amplified_budget_exceeds_rate_limit",
+			slog.Float64("expected_poller_rpm", pollerRPM),
+			slog.Float64("expected_poller_retry_amplified_rpm_max", pollerRetryAmplifiedRPM),
+			slog.Float64("expected_resolver_retry_amplified_rpm_max", resolverRetryAmplifiedRPM),
+			slog.Float64("expected_combined_retry_amplified_rpm_max", combinedRetryAmplifiedRPM),
+			slog.Float64("budget_rpm", budgetRPM),
+		)
+	}
+}
+
+func estimatedPollerWorstCaseRPM(registrations []providers.ChannelPollerRegistration) float64 {
+	return estimateResolvedPollerRPM(registrations) * float64(scraper.FetchPageMaxAttempts)
+}
+
+func estimatedPublishedAtResolverWorstCaseRPM(cfg config.ScraperPublishedAtResolverConfig) float64 {
+	return estimatedPublishedAtResolverMaxRPM(cfg) * float64(scraper.FetchPageMaxAttempts)
 }
 
 func estimateResolvedPollerRPM(registrations []providers.ChannelPollerRegistration) float64 {

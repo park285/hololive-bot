@@ -422,16 +422,137 @@ func TestPendingPublishedAtResolver_StopsWhenMaxRunDurationExceeded(t *testing.T
 		interval:         15 * time.Second,
 		batchSize:        3,
 		maxResolvePerRun: 3,
-		maxRunDuration:   time.Nanosecond,
+		maxRunDuration:   9 * time.Second,
+		resolveTimeout:   10 * time.Second,
 		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
+	skippedBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "run_budget_exhausted"))
 	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "run_budget_exhausted"))
 	assert.Equal(t, 0, resolveCalls)
+	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
 
 	var outboxCount int64
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
 	assert.Equal(t, int64(0), outboxCount)
+}
+
+func TestPendingPublishedAtResolver_StartWaitsIntervalAfterCompletion(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	now := time.Now().UTC()
+	seedPendingShortResolution(t, db, "channel-1", "short-1", now.Add(-2*time.Minute))
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:                db,
+		client:            newShortPublishedAtResolverDelayedHTTPClient(t, `<html><body>no date</body></html>`, 40*time.Millisecond, &resolveCalls),
+		interval:          50 * time.Millisecond,
+		batchSize:         1,
+		maxResolvePerRun:  1,
+		maxRunDuration:    500 * time.Millisecond,
+		resolveTimeout:    200 * time.Millisecond,
+		minDetectedAge:    20 * time.Second,
+		failureBackoffTTL: time.Millisecond,
+		logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		resolver.Start(ctx)
+	}()
+
+	time.Sleep(145 * time.Millisecond)
+	cancel()
+	<-done
+
+	assert.Equal(t, 2, resolveCalls)
+}
+
+func TestPendingPublishedAtResolver_SkipsCandidateWhenRemainingRunBudgetIsTooSmall(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Now().UTC().Add(-time.Minute)
+	publishedAt := detectedAt.Add(-time.Minute)
+	seedPendingShortResolution(t, db, "channel-1", "short-1", detectedAt)
+	seedPendingShortResolution(t, db, "channel-1", "short-2", detectedAt.Add(time.Second))
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:               db,
+		client:           newShortPublishedAtResolverDelayedClient(t, publishedAt, 80*time.Millisecond, &resolveCalls),
+		routeDecider:     func(NotificationRouteRequest) bool { return true },
+		interval:         15 * time.Second,
+		batchSize:        2,
+		maxResolvePerRun: 2,
+		maxRunDuration:   150 * time.Millisecond,
+		resolveTimeout:   100 * time.Millisecond,
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	skippedBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "run_budget_exhausted"))
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "run_budget_exhausted"))
+
+	assert.Equal(t, 1, resolveCalls)
+	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
+
+	var firstVideo domain.YouTubeVideo
+	require.NoError(t, db.First(&firstVideo, "video_id = ?", "short-1").Error)
+	require.NotNil(t, firstVideo.PublishedAt)
+
+	var secondVideo domain.YouTubeVideo
+	require.NoError(t, db.First(&secondVideo, "video_id = ?", "short-2").Error)
+	assert.Nil(t, secondVideo.PublishedAt)
+}
+
+func TestPendingPublishedAtResolver_UsesPerCandidateResolveTimeout(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-timeout", "short-timeout", detectedAt)
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:                db,
+		client:            newShortPublishedAtResolverDelayedClient(t, detectedAt.Add(-time.Minute), 80*time.Millisecond, &resolveCalls),
+		interval:          15 * time.Second,
+		batchSize:         1,
+		maxResolvePerRun:  1,
+		maxRunDuration:    200 * time.Millisecond,
+		resolveTimeout:    20 * time.Millisecond,
+		failureBackoffTTL: time.Minute,
+		logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	skippedBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "resolve_timeout"))
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "resolve_timeout"))
+
+	assert.Zero(t, resolveCalls)
+	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-timeout").Error)
+	require.NotNil(t, alarmState.PublishedAtRetryAfter)
 }
 
 func TestPendingPublishedAtResolver_SkipsFreshCandidatesBeforeMinDetectedAge(t *testing.T) {
@@ -480,6 +601,48 @@ func TestPendingPublishedAtResolver_SkipsFreshCandidatesBeforeMinDetectedAge(t *
 	var freshVideo domain.YouTubeVideo
 	require.NoError(t, db.First(&freshVideo, "video_id = ?", "short-fresh").Error)
 	assert.Nil(t, freshVideo.PublishedAt)
+}
+
+func TestPendingPublishedAtResolver_CancelDuringCandidateResolutionSetsRetryAfter(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-cancel", "short-cancel", detectedAt)
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:                db,
+		client:            newShortPublishedAtResolverDelayedClient(t, detectedAt.Add(-time.Minute), 80*time.Millisecond, &resolveCalls),
+		interval:          15 * time.Second,
+		batchSize:         1,
+		maxResolvePerRun:  1,
+		maxRunDuration:    200 * time.Millisecond,
+		resolveTimeout:    100 * time.Millisecond,
+		failureBackoffTTL: time.Minute,
+		logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	skippedBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "resolve_timeout"))
+	require.NoError(t, resolver.runOnce(ctx, detectedAt.Add(time.Minute)))
+	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "resolve_timeout"))
+
+	assert.Zero(t, resolveCalls)
+	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-cancel").Error)
+	require.NotNil(t, alarmState.PublishedAtRetryAfter)
 }
 
 func TestPendingPublishedAtResolver_SetsRetryAfterOnFailure(t *testing.T) {
@@ -689,6 +852,12 @@ func newShortPublishedAtResolverDelayedClient(t *testing.T, publishedAt time.Tim
 	t.Helper()
 
 	watchHTML := `<html><head><meta itemprop="uploadDate" content="` + publishedAt.Format(time.RFC3339) + `"></head></html>`
+	return newShortPublishedAtResolverDelayedHTTPClient(t, watchHTML, delay, resolveCalls)
+}
+
+func newShortPublishedAtResolverDelayedHTTPClient(t *testing.T, watchHTML string, delay time.Duration, resolveCalls *int) *scraper.Client {
+	t.Helper()
+
 	return scraper.NewClient(
 		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
 		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
@@ -696,7 +865,13 @@ func newShortPublishedAtResolverDelayedClient(t *testing.T, publishedAt time.Tim
 			Timeout: time.Second,
 			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if req.URL.Path == "/watch" {
-					time.Sleep(delay)
+					timer := time.NewTimer(delay)
+					defer timer.Stop()
+					select {
+					case <-req.Context().Done():
+						return nil, req.Context().Err()
+					case <-timer.C:
+					}
 					if resolveCalls != nil {
 						*resolveCalls = *resolveCalls + 1
 					}
