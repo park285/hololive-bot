@@ -58,14 +58,12 @@ type memberNewsQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) rowScanner
 }
 
-// Repository: member news 구독/후보 조회 저장소.
 type Repository struct {
 	pool  memberNewsQuerier
 	cache cache.Client
 	log   *slog.Logger
 }
 
-// NewRepository: 저장소 생성.
 func NewRepository(postgres database.Client, cacheSvc cache.Client, logger *slog.Logger) *Repository {
 	if logger == nil {
 		logger = slog.Default()
@@ -81,7 +79,6 @@ func NewRepository(postgres database.Client, cacheSvc cache.Client, logger *slog
 	}
 }
 
-// Subscribe: 뉴스 알림 구독 등록/갱신.
 func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if r.pool == nil {
 		return fmt.Errorf("membernews repository pool is nil")
@@ -103,7 +100,6 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 	return nil
 }
 
-// Unsubscribe: 뉴스 알림 구독 해제.
 func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	if r.pool == nil {
 		return fmt.Errorf("membernews repository pool is nil")
@@ -118,7 +114,6 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	return nil
 }
 
-// IsSubscribed: 구독 여부 조회.
 func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	if r.pool == nil {
 		return false, fmt.Errorf("membernews repository pool is nil")
@@ -132,7 +127,6 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 	return exists, nil
 }
 
-// ListSubscribedRooms: 구독 방 목록 조회(created_at 오름차순).
 func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
@@ -163,7 +157,6 @@ func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.Subscribe
 	return rooms, nil
 }
 
-// WarmupCacheFromDB: 부팅 시 DB 기준으로 Valkey set/hash를 재적재합니다.
 func (r *Repository) WarmupCacheFromDB(ctx context.Context) error {
 	rooms, err := r.ListSubscribedRooms(ctx)
 	if err != nil {
@@ -215,7 +208,6 @@ func (r *Repository) WarmupCacheFromDB(ctx context.Context) error {
 	return nil
 }
 
-// GetRoomMembers: alarms 기반 room 구독 멤버 목록 조회.
 func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]string, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
@@ -265,7 +257,6 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 	return members, nil
 }
 
-// ListActiveMajorEvents: major_events(active)에서 뉴스/행사 후보를 모두 읽습니다.
 func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candidate, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("membernews repository pool is nil")
