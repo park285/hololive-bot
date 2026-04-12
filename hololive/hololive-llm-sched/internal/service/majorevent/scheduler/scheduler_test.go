@@ -192,7 +192,6 @@ func TestScheduler_Interface(t *testing.T) {
 	t.Log("Scheduler interface verified")
 }
 
-// --- mockEventRepository ---
 
 type mockEventRepository struct {
 	rooms          []*domain.EventRoomSubscription
@@ -236,7 +235,6 @@ func (m *mockEventRepository) MarkEventsAsMonthlyNotified(_ context.Context, eve
 	return m.markMonthlyErr
 }
 
-// === SendWeeklyNotification 통합 테스트 ===
 
 func newTestScheduler(repo EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *Scheduler {
 	return NewScheduler(
@@ -362,7 +360,6 @@ func TestSendWeeklyNotification_NoRooms_ReturnsNil(t *testing.T) {
 	}
 }
 
-// === SendMonthlyNotification 통합 테스트 ===
 
 func newTestMonthlyScheduler(repo EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *MonthlyScheduler {
 	return NewMonthlyScheduler(
@@ -417,7 +414,6 @@ func TestSendMonthlyNotification_PartialFailure_NoMarking(t *testing.T) {
 	}
 }
 
-// === 통합 시나리오 (Scheduler 레벨, 락 미획득 테스트) ===
 
 func TestSendWeeklyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing.T) {
 	locker := &mockNotificationLocker{
@@ -453,7 +449,6 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 	}
 }
 
-// === 마킹 결정표 테스트 ===
 
 func TestSendWeeklyNotification_EnqueueMarking_AllSuccess_Marks(t *testing.T) {
 	repo := &mockEventRepository{
