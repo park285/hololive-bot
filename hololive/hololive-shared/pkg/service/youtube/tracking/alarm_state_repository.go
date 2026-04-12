@@ -54,20 +54,18 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 	}
 
 	var rows []pendingResolutionRow
+	if err := r.requirePublishedAtRetryAfterColumn("list pending published_at resolutions page"); err != nil {
+		return nil, nil, err
+	}
 	query := r.db.WithContext(ctx).
 		Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
 		Where("actual_published_at IS NULL").
 		Where("alarm_sent_at IS NULL").
 		Where("authorized_at IS NULL").
-		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore))
-	if hasPublishedAtRetryAfterColumn(r.db) {
-		query = query.
-			Select("kind, post_id, content_id, channel_id, detected_at, published_at_retry_after").
-			Where("(published_at_retry_after IS NULL OR published_at_retry_after <= ?)", yttimestamp.Normalize(referenceNow))
-	} else {
-		query = query.Select("kind, post_id, content_id, channel_id, detected_at")
-	}
+		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore)).
+		Select("kind, post_id, content_id, channel_id, detected_at, published_at_retry_after").
+		Where("(published_at_retry_after IS NULL OR published_at_retry_after <= ?)", yttimestamp.Normalize(referenceNow))
 	if cursor != nil {
 		query = query.Where(
 			"(detected_at > ?) OR (detected_at = ? AND post_id > ?)",
@@ -131,8 +129,8 @@ func (r *GormRepository) MarkPublishedAtRetryAfter(
 	if r == nil || r.db == nil {
 		return fmt.Errorf("mark published_at retry after: db is nil")
 	}
-	if !hasPublishedAtRetryAfterColumn(r.db) {
-		return nil
+	if err := r.requirePublishedAtRetryAfterColumn("mark published_at retry after"); err != nil {
+		return err
 	}
 
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(kind, postID)
@@ -162,8 +160,8 @@ func (r *GormRepository) ClearPublishedAtRetryAfter(
 	if r == nil || r.db == nil {
 		return fmt.Errorf("clear published_at retry after: db is nil")
 	}
-	if !hasPublishedAtRetryAfterColumn(r.db) {
-		return nil
+	if err := r.requirePublishedAtRetryAfterColumn("clear published_at retry after"); err != nil {
+		return err
 	}
 
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(kind, postID)
@@ -215,6 +213,13 @@ func hasPublishedAtRetryAfterColumn(db *gorm.DB) bool {
 		return false
 	}
 	return db.Migrator().HasColumn(&domain.YouTubeCommunityShortsAlarmState{}, "published_at_retry_after")
+}
+
+func (r *GormRepository) requirePublishedAtRetryAfterColumn(action string) error {
+	if r == nil || r.hasPublishedAtRetryAfter {
+		return nil
+	}
+	return fmt.Errorf("%s: missing required column published_at_retry_after", action)
 }
 
 func (r *GormRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
