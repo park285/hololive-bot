@@ -13,7 +13,6 @@ import type {
 } from "@/api/generated/data-contracts";
 import apiClient from "./client";
 
-// 기존 인터페이스 유지를 위한 타입 변환
 export interface HeartbeatResponse {
 	status?: string;
 	rotated?: boolean;
@@ -29,19 +28,16 @@ export interface SessionStatusResponse {
 	username: string;
 }
 
-// DockerContainer 타입 (기존 타입과 호환 유지)
 export interface DockerContainer {
 	id: string;
 	name: string;
 	state: string;
 	status: string;
-	// 기존 UI에서 사용하는 필드 (Backend에서 제공하지 않으면 기본값)
 	image: string;
 	health: string;
 	managed: boolean;
 	paused: boolean;
 	startedAt?: string;
-	// 리소스 메트릭
 	cpuPercent?: number;
 	memoryUsageMB?: number;
 	memoryLimitMB?: number;
@@ -75,7 +71,6 @@ interface AuthStatusResponse {
 	message?: string;
 }
 
-// Auth API: 기존 인터페이스 유지
 export const authApi = {
 	login: async (username: string, password: string): Promise<void> => {
 		const response = await apiClient.post<AuthStatusResponse>("/auth/login", {
@@ -124,7 +119,6 @@ export const authApi = {
 	},
 };
 
-// Docker API
 export const dockerApi = {
 	checkHealth: async (): Promise<DockerHealthResponse> => {
 		const { data } = await adminClient.handleDockerHealth();
@@ -169,7 +163,6 @@ export const dockerApi = {
 	},
 };
 
-// Status API
 export interface ServiceStatus {
 	name: string;
 	available: boolean;
