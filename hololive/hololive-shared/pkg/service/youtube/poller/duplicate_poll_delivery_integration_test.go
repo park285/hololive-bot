@@ -110,7 +110,7 @@ func TestCommunityPollerDuplicatePollDispatchesExactlyOnce(t *testing.T) {
 	require.EqualValues(t, 1, postCount)
 }
 
-func TestShortsPollerDuplicatePollEnqueuesExactlyOnceAfterResolver(t *testing.T) {
+func TestShortsPollerDuplicatePollEnqueuesExactlyOnceWithInlineFallback(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -163,24 +163,15 @@ func TestShortsPollerDuplicatePollEnqueuesExactlyOnceAfterResolver(t *testing.T)
 		}),
 	)
 
-	poller := NewShortsPoller(client, db, 10, nil)
-	resolver := &PendingPublishedAtResolver{
-		db:        db,
-		client:    client,
-		interval:  15 * time.Second,
-		batchSize: 50,
-		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	poller := NewShortsPoller(client, db, 10, nil, true)
 	ctx := context.Background()
 
 	require.NoError(t, poller.Poll(ctx, channelID))
-	require.NoError(t, resolver.runOnce(ctx, time.Now().Add(time.Minute)))
 	requireDuplicatePollSingleEnqueuedState(t, db, domain.OutboxKindNewShort, postID)
 
 	rewindDuplicatePollWatermark(t, db, channelID, domain.WatermarkTypeShort, lastContent)
 
 	require.NoError(t, poller.Poll(ctx, channelID))
-	require.NoError(t, resolver.runOnce(ctx, time.Now().Add(2*time.Minute)))
 	requireDuplicatePollSingleEnqueuedState(t, db, domain.OutboxKindNewShort, postID)
 
 	var videoCount int64
@@ -289,6 +280,7 @@ func requireDuplicatePollSingleEnqueuedState(t *testing.T, db *gorm.DB, kind dom
 	require.Equal(t, canonicalPostID, stateRow.PostID)
 	require.Equal(t, canonicalPostID, stateRow.ContentID)
 	require.Nil(t, stateRow.AlarmSentAt)
-	require.NotNil(t, stateRow.AuthorizedAt)
-	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, stateRow.DeliveryStatus)
+	require.NotNil(t, stateRow.ActualPublishedAt)
+	require.Nil(t, stateRow.AuthorizedAt)
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, stateRow.DeliveryStatus)
 }
