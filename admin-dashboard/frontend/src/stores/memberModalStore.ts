@@ -33,40 +33,32 @@ interface NameEditData {
 }
 
 interface MemberModalStore {
-	// 각 모달별 상태 (null이면 닫힘)
 	aliasRemoval: AliasRemovalData | null;
 	graduation: GraduationData | null;
 	channelEdit: ChannelEditData | null;
 	nameEdit: NameEditData | null;
 
-	// 별명 삭제 모달
 	openAliasRemoval: (data: AliasRemovalData) => void;
 	closeAliasRemoval: () => void;
 
-	// 졸업 상태 모달
 	openGraduation: (data: GraduationData) => void;
 	closeGraduation: () => void;
 
-	// 채널 수정 모달
 	openChannelEdit: (data: ChannelEditData) => void;
 	closeChannelEdit: () => void;
 
-	// 이름 수정 모달
 	openNameEdit: (data: NameEditData) => void;
 	closeNameEdit: () => void;
 
-	// 모든 모달 닫기
 	closeAll: () => void;
 }
 
 export const useMemberModalStore = create<MemberModalStore>()((set) => ({
-	// 초기 상태
 	aliasRemoval: null,
 	graduation: null,
 	channelEdit: null,
 	nameEdit: null,
 
-	// 별명 삭제
 	openAliasRemoval: (data) => {
 		set({ aliasRemoval: data });
 	},
@@ -74,7 +66,6 @@ export const useMemberModalStore = create<MemberModalStore>()((set) => ({
 		set({ aliasRemoval: null });
 	},
 
-	// 졸업 상태
 	openGraduation: (data) => {
 		set({ graduation: data });
 	},
@@ -82,7 +73,6 @@ export const useMemberModalStore = create<MemberModalStore>()((set) => ({
 		set({ graduation: null });
 	},
 
-	// 채널 수정
 	openChannelEdit: (data) => {
 		set({ channelEdit: data });
 	},
@@ -90,7 +80,6 @@ export const useMemberModalStore = create<MemberModalStore>()((set) => ({
 		set({ channelEdit: null });
 	},
 
-	// 이름 수정
 	openNameEdit: (data) => {
 		set({ nameEdit: data });
 	},
@@ -98,7 +87,6 @@ export const useMemberModalStore = create<MemberModalStore>()((set) => ({
 		set({ nameEdit: null });
 	},
 
-	// 전체 닫기
 	closeAll: () => {
 		set({
 			aliasRemoval: null,
@@ -109,5 +97,4 @@ export const useMemberModalStore = create<MemberModalStore>()((set) => ({
 	},
 }));
 
-// 타입 export
 export type { AliasRemovalData, ChannelEditData, GraduationData, NameEditData };
