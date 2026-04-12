@@ -39,13 +39,11 @@ import (
 	apperrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
 
-// ClientConfig: Twitch 클라이언트 설정.
 type ClientConfig struct {
 	ClientID     string
 	ClientSecret string
 }
 
-// Client: Twitch Helix API 클라이언트.
 type Client struct {
 	httpClient   *http.Client
 	clientID     string
@@ -63,7 +61,6 @@ type Client struct {
 	failureCount    atomic.Int32
 }
 
-// NewClient: 새 Twitch 클라이언트를 생성합니다.
 func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 	c := &Client{
 		httpClient: &http.Client{
@@ -79,12 +76,10 @@ func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 	return c
 }
 
-// IsConfigured: 클라이언트가 올바르게 설정되었는지 확인.
 func (c *Client) IsConfigured() bool {
 	return c != nil && c.clientID != "" && c.clientSecret != ""
 }
 
-// GetStreams: 지정된 user_login들의 현재 라이브 스트림을 조회합니다.
 // 최대 100개까지 한 번에 조회 가능
 // user_login은 Twitch username (예: tokoyamitowa_holo).
 func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsResponse, error) {
@@ -292,7 +287,6 @@ func (c *Client) recordSuccess() {
 	c.failureCount.Store(0)
 }
 
-// IsCircuitOpen: Circuit Breaker 상태 확인 (외부 노출용).
 func (c *Client) IsCircuitOpen() bool {
 	return c.isCircuitOpen()
 }
