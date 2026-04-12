@@ -30,7 +30,6 @@ import (
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
-// --- mock OutboxRepository (enqueue 기록용) ---
 
 type mockOutboxRepo struct {
 	enqueuedItems []enqueueRecord
@@ -63,7 +62,6 @@ func (m *mockOutboxRepo) Enqueue(_ context.Context, kind domain.DeliveryOutboxKi
 	return nil
 }
 
-// --- mock NotificationLocker ---
 
 type mockNotificationLocker struct {
 	acquireToken    string
@@ -92,7 +90,6 @@ func (m *mockNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string
 
 var testLogger = sharedlogging.NewLogger
 
-// === enqueueToRooms 단위 테스트 ===
 
 func TestEnqueueToRooms_AllSuccess(t *testing.T) {
 	repo := newMockOutboxRepo()
