@@ -44,7 +44,7 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=greenteagc \
-    go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-scraper ./cmd/youtube-scraper && \
+    go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/youtube-scraper ./cmd/runtime/youtube-scraper && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/data /dist/internal/domain/
 

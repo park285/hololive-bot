@@ -1,0 +1,650 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package runtime
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net"
+	"reflect"
+	"sync"
+	"testing"
+	"time"
+	"unsafe"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
+	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+)
+
+type fakeMemberDataProvider struct {
+	members []*domain.Member
+}
+
+type trackingProxyTogglePoller struct {
+	mu      sync.Mutex
+	enabled bool
+}
+
+func (p *trackingProxyTogglePoller) Poll(context.Context, string) error { return nil }
+func (p *trackingProxyTogglePoller) Name() string                       { return "tracking_proxy_toggle" }
+func (p *trackingProxyTogglePoller) SetProxyEnabled(enabled bool) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.enabled = enabled
+	return true
+}
+func (p *trackingProxyTogglePoller) ProxyEnabled() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.enabled
+}
+
+func (f *fakeMemberDataProvider) FindMemberByChannelID(channelID string) *domain.Member {
+	for _, member := range f.members {
+		if member.ChannelID == channelID {
+			return member
+		}
+	}
+	return nil
+}
+
+func (f *fakeMemberDataProvider) FindMemberByName(name string) *domain.Member {
+	for _, member := range f.members {
+		if member.Name == name {
+			return member
+		}
+	}
+	return nil
+}
+
+func (f *fakeMemberDataProvider) FindMemberByAlias(alias string) *domain.Member {
+	for _, member := range f.members {
+		if member.HasAlias(alias) {
+			return member
+		}
+	}
+	return nil
+}
+
+func (f *fakeMemberDataProvider) GetChannelIDs() []string {
+	ids := make([]string, 0, len(f.members))
+	for _, member := range f.members {
+		ids = append(ids, member.ChannelID)
+	}
+	return ids
+}
+
+func (f *fakeMemberDataProvider) GetAllMembers() []*domain.Member {
+	return f.members
+}
+
+func (f *fakeMemberDataProvider) WithContext(context.Context) domain.MemberDataProvider {
+	return f
+}
+
+func (f *fakeMemberDataProvider) FindMembersByName(name string) []*domain.Member {
+	member := f.FindMemberByName(name)
+	if member == nil {
+		return nil
+	}
+	return []*domain.Member{member}
+}
+
+func (f *fakeMemberDataProvider) FindMembersByAlias(alias string) []*domain.Member {
+	member := f.FindMemberByAlias(alias)
+	if member == nil {
+		return nil
+	}
+	return []*domain.Member{member}
+}
+
+func mustResolveCommunityShortsOperationalChannels(t *testing.T, membersData domain.MemberDataProvider) []communityShortsOperationalChannel {
+	t.Helper()
+
+	channels, err := resolveCommunityShortsOperationalChannels(membersData)
+	require.NoError(t, err)
+	return channels
+}
+
+func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts distinct active channel targets", func(t *testing.T) {
+		t.Parallel()
+
+		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+			members: []*domain.Member{
+				{Name: "Pekora", Org: "Hololive", ChannelID: "UCpekora"},
+				{Name: "Miko", Org: "Hololive", ChannelID: "UCmiko"},
+				{Name: "Graduated", Org: "Hololive", ChannelID: "", IsGraduated: true},
+			},
+		}))
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects active member without channel id", func(t *testing.T) {
+		t.Parallel()
+
+		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+			members: []*domain.Member{
+				{Name: "Pekora", Org: "Hololive", ChannelID: ""},
+			},
+		}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing operating channel targets")
+		assert.Contains(t, err.Error(), "Pekora (Hololive)")
+	})
+
+	t.Run("deduplicates shared channel deployment targets", func(t *testing.T) {
+		t.Parallel()
+
+		channels := mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+			members: []*domain.Member{
+				{Name: "Pekora", Org: "Hololive", ChannelID: "UCdup"},
+				{Name: "Miko", Org: "Hololive", ChannelID: "UCdup"},
+			},
+		})
+		require.Len(t, channels, 1)
+		assert.Equal(t, "Pekora (Hololive)", channels[0].ownerLabel)
+		assert.Equal(t, "UCdup", channels[0].channelID)
+		require.NoError(t, validateCommunityShortsOperationalTargets(channels))
+	})
+}
+
+func TestResolveCommunityShortsOperationalChannels(t *testing.T) {
+	t.Parallel()
+
+	channels, err := resolveCommunityShortsOperationalChannels(&fakeMemberDataProvider{
+		members: []*domain.Member{
+			{Name: "Pekora", Org: "Hololive", ChannelID: "  UCpekora  "},
+			{Name: "Miko", Org: "Hololive", ChannelID: "   "},
+			{Name: "Graduated", Org: "Hololive", ChannelID: "UCgraduated", IsGraduated: true},
+			nil,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, channels, 2)
+	assert.Equal(t, "Pekora (Hololive)", channels[0].ownerLabel)
+	assert.Equal(t, "UCpekora", channels[0].channelID)
+	assert.True(t, channels[0].enabled)
+	assert.Equal(t, "Miko (Hololive)", channels[1].ownerLabel)
+	assert.Equal(t, "", channels[1].channelID)
+	assert.False(t, channels[1].enabled)
+	assert.Equal(t, []string{"UCpekora"}, communityShortsEnabledChannelIDs(channels))
+}
+
+func TestCommunityShortsEnabledChannelIDs_UsesResolverEnablement(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []string{"UCenabled"}, communityShortsEnabledChannelIDs([]communityShortsOperationalChannel{
+		{ownerLabel: "Enabled", channelID: "UCenabled", enabled: true},
+		{ownerLabel: "Disabled", channelID: "UCshadow", enabled: false},
+	}))
+}
+
+func extractSubscriberApplyFn(t *testing.T, subscriber *configsub.Subscriber) func(configsub.ConfigUpdate) {
+	t.Helper()
+
+	require.NotNil(t, subscriber)
+	field := reflect.ValueOf(subscriber).Elem().FieldByName("applyFn")
+	require.True(t, field.IsValid(), "applyFn field must exist")
+
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	applyFn, ok := field.Interface().(func(configsub.ConfigUpdate))
+	require.True(t, ok, "applyFn must be func(configsub.ConfigUpdate)")
+	return applyFn
+}
+
+func schedulerJobCount(t *testing.T, scheduler *poller.Scheduler) int {
+	t.Helper()
+
+	require.NotNil(t, scheduler)
+	field := reflect.ValueOf(scheduler).Elem().FieldByName("jobMap")
+	require.True(t, field.IsValid(), "jobMap field must exist")
+
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	return field.Len()
+}
+
+func extractScraperClientFromPoller(t *testing.T, channelPoller poller.Poller) *scraper.Client {
+	t.Helper()
+
+	value := reflect.ValueOf(channelPoller)
+	require.True(t, value.IsValid())
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+	field := value.FieldByName("client")
+	require.True(t, field.IsValid(), "client field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	client, ok := field.Interface().(*scraper.Client)
+	require.True(t, ok, "client field must be *scraper.Client")
+	return client
+}
+
+func extractResolverScraperClient(t *testing.T, resolver *poller.PendingPublishedAtResolver) *scraper.Client {
+	t.Helper()
+
+	value := reflect.ValueOf(resolver).Elem()
+	field := value.FieldByName("client")
+	require.True(t, field.IsValid(), "resolver client field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	client, ok := field.Interface().(*scraper.Client)
+	require.True(t, ok, "resolver client field must be *scraper.Client")
+	return client
+}
+
+func extractScraperRateLimiter(t *testing.T, client *scraper.Client) *scraper.RateLimiter {
+	t.Helper()
+
+	value := reflect.ValueOf(client).Elem()
+	field := value.FieldByName("rateLimiter")
+	require.True(t, field.IsValid(), "rateLimiter field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	limiter, ok := field.Interface().(*scraper.RateLimiter)
+	require.True(t, ok, "rateLimiter field must be *scraper.RateLimiter")
+	return limiter
+}
+
+func extractScraperStateStorePointer(t *testing.T, client *scraper.Client) uintptr {
+	t.Helper()
+
+	value := reflect.ValueOf(client).Elem()
+	field := value.FieldByName("stateStore")
+	require.True(t, field.IsValid(), "stateStore field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	stateStore := field.Interface()
+	require.NotNil(t, stateStore)
+	return reflect.ValueOf(stateStore).Pointer()
+}
+
+func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
+	t.Helper()
+
+	mini := miniredis.RunT(t)
+	host, portStr, err := net.SplitHostPort(mini.Addr())
+	require.NoError(t, err)
+	addr := net.JoinHostPort(host, portStr)
+
+	client, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:       []string{addr},
+		DisableCache:      true,
+		ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		client.Close()
+		mini.Close()
+	})
+
+	return client, addr
+}
+
+func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
+	t.Parallel()
+
+	postgres := &databasemocks.Client{}
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		postgres,
+		config.ScraperConfig{
+			ProxyEnabled: true,
+			ProxyURL:     "socks5://proxy.internal:1080",
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	require.Len(t, registrations, 5)
+
+	expected := []struct {
+		name     string
+		priority poller.Priority
+		interval int64
+	}{
+		{name: "videos", priority: poller.PriorityNormal, interval: int64(7 * time.Minute)},
+		{name: "shorts", priority: poller.PriorityLow, interval: int64(11 * time.Minute)},
+		{name: "community", priority: poller.PriorityLow, interval: int64(13 * time.Minute)},
+		{name: "channel_stats", priority: poller.PriorityLow, interval: int64(4 * time.Hour)},
+		{name: "live", priority: poller.PriorityHigh, interval: int64(3 * time.Minute)},
+	}
+
+	for idx, registration := range registrations {
+		assert.Equal(t, expected[idx].name, registration.Poller.Name())
+		assert.Equal(t, expected[idx].priority, registration.Priority)
+		assert.Equal(t, expected[idx].interval, int64(registration.Interval))
+	}
+}
+
+func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewLenientClient()
+	sharedRL := scraper.NewRateLimiter(time.Second)
+	cfg := config.ScraperConfig{
+		ProxyEnabled: true,
+		ProxyURL:     "socks5://proxy.internal:1080",
+		Poll: config.ScraperPoll{
+			Videos:    7 * time.Minute,
+			Shorts:    11 * time.Minute,
+			Community: 13 * time.Minute,
+			Stats:     4 * time.Hour,
+			Live:      3 * time.Minute,
+		},
+	}
+	sharedClient := buildSharedYouTubeScraperClient(cfg, cacheSvc, sharedRL)
+	registrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+		&databasemocks.Client{},
+		cfg,
+		sharedClient,
+		nil,
+		[]string{"UC_NOTIFY_A"},
+		[]string{"UC_STATS_A"},
+	)
+	resolver := buildPendingPublishedAtResolver(
+		&databasemocks.Client{},
+		sharedClient,
+		cacheSvc,
+		nil,
+		testLogger(),
+	)
+
+	require.NotNil(t, sharedClient)
+	require.NotNil(t, resolver)
+	require.NotEmpty(t, registrations)
+
+	pollerClient := extractScraperClientFromPoller(t, registrations[0].Poller)
+	resolverClient := extractResolverScraperClient(t, resolver)
+
+	require.Same(t, sharedClient, pollerClient)
+	require.Same(t, sharedClient, resolverClient)
+	require.Same(t, sharedRL, extractScraperRateLimiter(t, pollerClient))
+	require.Same(t, sharedRL, extractScraperRateLimiter(t, resolverClient))
+	require.Equal(t, extractScraperStateStorePointer(t, pollerClient), extractScraperStateStorePointer(t, resolverClient))
+	require.True(t, sharedClient.ProxyEnabled())
+
+	require.True(t, sharedClient.SetProxyEnabled(false))
+	assert.False(t, pollerClient.ProxyEnabled())
+	assert.False(t, resolverClient.ProxyEnabled())
+}
+
+func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
+	t.Parallel()
+
+	operationalChannels := mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+		members: []*domain.Member{
+			{ChannelID: " active-channel ", Name: "active", IsGraduated: false},
+			{ChannelID: "graduated-channel", Name: "graduated", IsGraduated: true},
+			{ChannelID: "   ", Name: "missing", IsGraduated: false},
+		},
+	})
+
+	scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
+		config.ScraperConfig{
+			ProxyEnabled: true,
+			ProxyURL:     "socks5://proxy.internal:1080",
+			WorkerCount:  7,
+			Poll: config.ScraperPoll{
+				Videos:    5 * time.Minute,
+				Shorts:    10 * time.Minute,
+				Community: 10 * time.Minute,
+				Stats:     6 * time.Hour,
+				Live:      5 * time.Minute,
+			},
+		},
+		&databasemocks.Client{},
+		communityShortsEnabledChannelIDs(operationalChannels),
+		communityShortsEnabledChannelIDs(operationalChannels),
+		buildSharedYouTubeScraperClient(
+			config.ScraperConfig{
+				ProxyEnabled: true,
+				ProxyURL:     "socks5://proxy.internal:1080",
+				WorkerCount:  7,
+				Poll: config.ScraperPoll{
+					Videos:    5 * time.Minute,
+					Shorts:    10 * time.Minute,
+					Community: 10 * time.Minute,
+					Stats:     6 * time.Hour,
+					Live:      5 * time.Minute,
+				},
+			},
+			nil,
+			nil,
+		),
+		nil,
+		nil,
+		nil,
+		nil,
+		testLogger(),
+	)
+	require.NoError(t, err)
+
+	require.NotNil(t, scraperScheduler)
+	require.NotNil(t, outboxDispatcher)
+	require.Len(t, registrations, 5)
+
+	// active 멤버 1명 * 기본 poller 5종
+	assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
+	assert.Equal(t, 7, scraperScheduler.WorkerCount())
+	assert.Equal(t, 5, scraperScheduler.SetProxyEnabled(false))
+}
+
+func TestBuildStreamIngesterConfigSubscriber_ApplyScraperProxyToggle(t *testing.T) {
+	t.Parallel()
+
+	currentSettings := settings.Settings{
+		AlarmAdvanceMinutes: 5,
+		ScraperProxyEnabled: false,
+	}
+	updateCalls := 0
+
+	settingsService := &settingsmocks.ReadWriter{
+		GetFunc: func() settings.Settings {
+			return currentSettings
+		},
+		UpdateFunc: func(newSettings settings.Settings) error {
+			updateCalls++
+			currentSettings = newSettings
+			return nil
+		},
+	}
+	cacheService := &cachemocks.Client{
+		GetClientFunc: func() valkey.Client { return nil },
+	}
+
+	subscriber := buildStreamIngesterConfigSubscriber(
+		cacheService,
+		settingsService,
+		nil,
+		nil,
+		nil,
+		testLogger(),
+	)
+	applyFn := extractSubscriberApplyFn(t, subscriber)
+
+	applyFn(configsub.ConfigUpdate{
+		Type:    contractssettings.UpdateTypeScraperProxy,
+		Payload: []byte(`{"enabled":true}`),
+	})
+
+	assert.Equal(t, 1, updateCalls)
+	assert.True(t, currentSettings.ScraperProxyEnabled)
+}
+
+func TestBuildStreamIngesterConfigSubscriber_InvalidAndIgnoredUpdates(t *testing.T) {
+	t.Parallel()
+
+	currentSettings := settings.Settings{
+		AlarmAdvanceMinutes: 5,
+		ScraperProxyEnabled: false,
+	}
+	updateCalls := 0
+
+	settingsService := &settingsmocks.ReadWriter{
+		GetFunc: func() settings.Settings {
+			return currentSettings
+		},
+		UpdateFunc: func(newSettings settings.Settings) error {
+			updateCalls++
+			currentSettings = newSettings
+			return nil
+		},
+	}
+	cacheService := &cachemocks.Client{
+		GetClientFunc: func() valkey.Client { return nil },
+	}
+
+	applyFn := extractSubscriberApplyFn(t, buildStreamIngesterConfigSubscriber(
+		cacheService,
+		settingsService,
+		nil,
+		nil,
+		nil,
+		testLogger(),
+	))
+
+	applyFn(configsub.ConfigUpdate{
+		Type:    contractssettings.UpdateTypeScraperProxy,
+		Payload: []byte(`{"enabled":`),
+	})
+	applyFn(configsub.ConfigUpdate{Type: contractssettings.UpdateTypeAlarmAdvanceMinutes})
+	applyFn(configsub.ConfigUpdate{Type: "unknown_update_type"})
+
+	assert.Equal(t, 0, updateCalls)
+	assert.False(t, currentSettings.ScraperProxyEnabled)
+}
+
+func TestBuildStreamIngesterConfigSubscriber_PublisherRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	client, addr := newTestValkeyClient(t)
+	publisherClient, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:       []string{addr},
+		DisableCache:      true,
+		ForceSingleClient: true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { publisherClient.Close() })
+
+	var mu sync.Mutex
+	currentSettings := settings.Settings{
+		AlarmAdvanceMinutes: 5,
+		ScraperProxyEnabled: false,
+	}
+	updateCalls := 0
+	settingsService := &settingsmocks.ReadWriter{
+		GetFunc: func() settings.Settings {
+			mu.Lock()
+			defer mu.Unlock()
+			return currentSettings
+		},
+		UpdateFunc: func(newSettings settings.Settings) error {
+			mu.Lock()
+			defer mu.Unlock()
+			if currentSettings != newSettings {
+				updateCalls++
+			}
+			currentSettings = newSettings
+			return nil
+		},
+	}
+	cacheService := &cachemocks.Client{
+		GetClientFunc: func() valkey.Client { return client },
+	}
+	youtubeService := &fakeYouTubeService{}
+	scheduler := poller.NewScheduler(poller.SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: time.Millisecond,
+	})
+	trackingPoller := &trackingProxyTogglePoller{}
+	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
+
+	subscriber := buildStreamIngesterConfigSubscriber(
+		cacheService,
+		settingsService,
+		nil,
+		&providers.YouTubeStack{Service: youtubeService},
+		scheduler,
+		logger,
+	)
+	require.NotNil(t, subscriber)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		subscriber.Run(ctx)
+		close(done)
+	}()
+
+	configPublisher := configsub.NewPublisher(publisherClient)
+	require.Eventually(t, func() bool {
+		if err := configPublisher.PublishScraperProxy(context.Background(), true); err != nil {
+			return false
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		return currentSettings.ScraperProxyEnabled && youtubeService.ScraperProxyEnabled() && trackingPoller.ProxyEnabled()
+	}, 2*time.Second, 50*time.Millisecond)
+
+	mu.Lock()
+	assert.Equal(t, 1, updateCalls)
+	mu.Unlock()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscriber did not stop after cancel")
+	}
+}
+
+var _ domain.MemberDataProvider = (*fakeMemberDataProvider)(nil)
+var _ cache.Client = (*cachemocks.Client)(nil)
