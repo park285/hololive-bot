@@ -268,6 +268,28 @@ func extractResolverScraperClient(t *testing.T, resolver *poller.PendingPublishe
 	return client
 }
 
+func extractResolverDurationField(t *testing.T, resolver *poller.PendingPublishedAtResolver, fieldName string) time.Duration {
+	t.Helper()
+
+	value := reflect.ValueOf(resolver).Elem()
+	field := value.FieldByName(fieldName)
+	require.True(t, field.IsValid(), "%s field must exist", fieldName)
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	duration, ok := field.Interface().(time.Duration)
+	require.True(t, ok, "%s field must be time.Duration", fieldName)
+	return duration
+}
+
+func extractResolverIntField(t *testing.T, resolver *poller.PendingPublishedAtResolver, fieldName string) int {
+	t.Helper()
+
+	value := reflect.ValueOf(resolver).Elem()
+	field := value.FieldByName(fieldName)
+	require.True(t, field.IsValid(), "%s field must exist", fieldName)
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	return int(field.Int())
+}
+
 func extractScraperRateLimiter(t *testing.T, client *scraper.Client) *scraper.RateLimiter {
 	t.Helper()
 
@@ -388,7 +410,6 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	resolver := buildPendingPublishedAtResolver(
 		&databasemocks.Client{},
 		sharedClient,
-		cacheSvc,
 		nil,
 		testLogger(),
 	)
@@ -405,11 +426,19 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	require.Same(t, sharedRL, extractScraperRateLimiter(t, pollerClient))
 	require.Same(t, sharedRL, extractScraperRateLimiter(t, resolverClient))
 	require.Equal(t, extractScraperStateStorePointer(t, pollerClient), extractScraperStateStorePointer(t, resolverClient))
+	require.Equal(t, 10*time.Second, extractResolverDurationField(t, resolver, "interval"))
+	require.Equal(t, 20, extractResolverIntField(t, resolver, "batchSize"))
+	require.Equal(t, 2, extractResolverIntField(t, resolver, "maxResolvePerRun"))
+	require.Equal(t, 6*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
 	require.True(t, sharedClient.ProxyEnabled())
 
 	require.True(t, sharedClient.SetProxyEnabled(false))
 	assert.False(t, pollerClient.ProxyEnabled())
 	assert.False(t, resolverClient.ProxyEnabled())
+
+	value := reflect.ValueOf(resolver).Elem()
+	softLimiterField := value.FieldByName("softLimiter")
+	assert.False(t, softLimiterField.IsValid())
 }
 
 func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {

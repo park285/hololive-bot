@@ -16,10 +16,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 func TestPendingPublishedAtResolver_EnqueuesOnceAfterResolution(t *testing.T) {
@@ -238,15 +236,18 @@ func TestPendingPublishedAtResolver_RecordsMetricsAndEnqueueLog(t *testing.T) {
 	attemptBefore := testutil.ToFloat64(publishedAtResolutionAttemptTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
 	successBefore := testutil.ToFloat64(publishedAtResolutionSuccessTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
 	enqueuedBefore := testutil.ToFloat64(publishedAtResolverEnqueuedTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
+	scannedBefore := testutil.ToFloat64(publishedAtResolverScannedTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
 	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
 	attemptAfter := testutil.ToFloat64(publishedAtResolutionAttemptTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
 	successAfter := testutil.ToFloat64(publishedAtResolutionSuccessTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
 	enqueuedAfter := testutil.ToFloat64(publishedAtResolverEnqueuedTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
+	scannedAfter := testutil.ToFloat64(publishedAtResolverScannedTotal.WithLabelValues(string(domain.OutboxKindNewShort)))
 
 	assert.Equal(t, float64(1), attemptAfter-attemptBefore)
 	assert.Equal(t, float64(1), successAfter-successBefore)
 	assert.Equal(t, float64(1), enqueuedAfter-enqueuedBefore)
-	assert.Equal(t, float64(1), testutil.ToFloat64(publishedAtResolverPendingCandidates))
+	assert.Equal(t, float64(1), scannedAfter-scannedBefore)
+	assert.Equal(t, float64(1), testutil.ToFloat64(publishedAtResolverPageCandidates))
 	assert.Contains(t, buf.String(), `"msg":"published_at_resolver_enqueued"`)
 	assert.Contains(t, buf.String(), `"kind":"NEW_SHORT"`)
 	assert.Contains(t, buf.String(), `"post_id":"short:short-metric"`)
@@ -320,6 +321,40 @@ func TestPendingPublishedAtResolver_RespectsMaxResolvePerRun(t *testing.T) {
 	assert.Nil(t, unresolvedVideo.PublishedAt)
 }
 
+func TestPendingPublishedAtResolver_StopsWhenMaxRunDurationExceeded(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-1", "short-1", detectedAt)
+	seedPendingShortResolution(t, db, "channel-1", "short-2", detectedAt.Add(time.Second))
+	seedPendingShortResolution(t, db, "channel-1", "short-3", detectedAt.Add(2*time.Second))
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:               db,
+		client:           newShortPublishedAtResolverDelayedClient(t, publishedAt, 15*time.Millisecond, &resolveCalls),
+		routeDecider:     func(NotificationRouteRequest) bool { return true },
+		interval:         15 * time.Second,
+		batchSize:        3,
+		maxResolvePerRun: 3,
+		maxRunDuration:   time.Nanosecond,
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+	assert.Equal(t, 0, resolveCalls)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	assert.Equal(t, int64(0), outboxCount)
+}
+
 func TestPendingPublishedAtResolver_SkipsFreshCandidatesBeforeMinDetectedAge(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
@@ -368,7 +403,7 @@ func TestPendingPublishedAtResolver_SkipsFreshCandidatesBeforeMinDetectedAge(t *
 	assert.Nil(t, freshVideo.PublishedAt)
 }
 
-func TestPendingPublishedAtResolver_AppliesFailureBackoff(t *testing.T) {
+func TestPendingPublishedAtResolver_SetsRetryAfterOnFailure(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -387,7 +422,6 @@ func TestPendingPublishedAtResolver_AppliesFailureBackoff(t *testing.T) {
 		batchSize:         10,
 		maxResolvePerRun:  10,
 		failureBackoffTTL: time.Minute,
-		backoffStore:      newPublishedAtResolverTestBackoffStore(),
 		logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
@@ -395,9 +429,44 @@ func TestPendingPublishedAtResolver_AppliesFailureBackoff(t *testing.T) {
 	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(2*time.Minute)))
 
 	assert.Equal(t, 1, resolveCalls)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-backoff").Error)
+	require.NotNil(t, alarmState.PublishedAtRetryAfter)
 }
 
-func TestPendingPublishedAtResolver_RecordsBackoffSkipAndEnqueueSkipLog(t *testing.T) {
+func TestPendingPublishedAtResolver_SetsRetryAfterOnPublishedAtEmpty(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-empty", "short-empty", detectedAt)
+
+	resolver := &PendingPublishedAtResolver{
+		db:                db,
+		client:            newShortPublishedAtResolverHTTPClient(t, `<html><body>no date</body></html>`),
+		interval:          15 * time.Second,
+		batchSize:         10,
+		maxResolvePerRun:  10,
+		failureBackoffTTL: time.Minute,
+		logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	skippedBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "published_at_empty"))
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "published_at_empty"))
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-empty").Error)
+	require.NotNil(t, alarmState.PublishedAtRetryAfter)
+	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
+}
+
+func TestPendingPublishedAtResolver_ClearsRetryAfterOnSuccess(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -407,54 +476,28 @@ func TestPendingPublishedAtResolver_RecordsBackoffSkipAndEnqueueSkipLog(t *testi
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
-	seedPendingShortResolution(t, db, "channel-skip", "short-skip", detectedAt)
-	seedPendingShortResolution(t, db, "channel-backoff", "short-backoff", detectedAt.Add(time.Second))
+	seedPendingShortResolution(t, db, "channel-clear", "short-clear", detectedAt)
+	retryAfter := detectedAt.Add(5 * time.Minute)
+	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-clear").
+		Update("published_at_retry_after", retryAfter).Error)
 
-	var buf bytes.Buffer
-	backoffStore := newPublishedAtResolverTestBackoffStore()
-	require.NoError(t, backoffStore.Mark(context.Background(), trackingrepo.PublishedAtResolutionCandidate{
-		Kind:   domain.OutboxKindNewShort,
-		PostID: "short:short-backoff",
-	}, time.Minute))
 	resolver := &PendingPublishedAtResolver{
-		db: db,
-		client: scraper.NewClient(
-			scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
-			scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
-			scraper.WithHTTPClient(&http.Client{
-				Timeout: 5 * time.Second,
-				Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-					switch req.URL.Query().Get("v") {
-					case "short-skip":
-						return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<html><head><meta itemprop="uploadDate" content="` + publishedAt.Format(time.RFC3339) + `"></head></html>`)), Header: make(http.Header), Request: req}, nil
-					case "short-backoff":
-						return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<html><body>no date</body></html>`)), Header: make(http.Header), Request: req}, nil
-					default:
-						return nil, assert.AnError
-					}
-				}),
-			}),
-		),
-		routeDecider: func(req NotificationRouteRequest) bool {
-			return req.ChannelID != "channel-skip"
+		db:     db,
+		client: newShortPublishedAtResolverTestClient(t, publishedAt, nil),
+		routeDecider: func(NotificationRouteRequest) bool {
+			return true
 		},
-		interval:     15 * time.Second,
-		batchSize:    50,
-		backoffStore: backoffStore,
-		logger:       slog.New(slog.NewJSONHandler(&buf, nil)),
+		interval:  15 * time.Second,
+		batchSize: 50,
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
-	routeSkipBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "route_decider_rejected"))
-	backoffSkipBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "backoff_active"))
 	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
-	routeSkipAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "route_decider_rejected"))
-	backoffSkipAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "backoff_active"))
 
-	assert.Equal(t, float64(1), routeSkipAfter-routeSkipBefore)
-	assert.Equal(t, float64(1), backoffSkipAfter-backoffSkipBefore)
-	assert.Contains(t, buf.String(), `"msg":"published_at_resolver_enqueue_skipped"`)
-	assert.Contains(t, buf.String(), `"post_id":"short:short-skip"`)
-	assert.Contains(t, buf.String(), `"reason":"route_decider_rejected"`)
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-clear").Error)
+	assert.Nil(t, alarmState.PublishedAtRetryAfter)
 }
 
 func TestPendingPublishedAtResolver_FailedCandidateDoesNotStarveFollowingCandidate(t *testing.T) {
@@ -497,53 +540,6 @@ func TestPendingPublishedAtResolver_FailedCandidateDoesNotStarveFollowingCandida
 	require.NoError(t, db.First(&goodVideo, "video_id = ?", "short-good").Error)
 	require.NotNil(t, goodVideo.PublishedAt)
 	assert.Equal(t, publishedAt.UTC(), goodVideo.PublishedAt.UTC())
-}
-
-func TestCachePublishedAtResolverBackoffStore_RoundTrip(t *testing.T) {
-	candidate := trackingrepo.PublishedAtResolutionCandidate{
-		Kind:   domain.OutboxKindNewShort,
-		PostID: " short:test-post ",
-	}
-
-	var (
-		storedKey string
-		storedTTL time.Duration
-		active    bool
-	)
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SetFunc = func(_ context.Context, key string, _ any, ttl time.Duration) error {
-		storedKey = key
-		storedTTL = ttl
-		active = true
-		return nil
-	}
-	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-		if key != storedKey {
-			return false, nil
-		}
-		return active, nil
-	}
-	cacheSvc.DelFunc = func(_ context.Context, key string) error {
-		if key == storedKey {
-			active = false
-		}
-		return nil
-	}
-
-	store := newCachePublishedAtResolverBackoffStore(cacheSvc)
-
-	require.NoError(t, store.Mark(context.Background(), candidate, 2*time.Minute))
-	assert.Equal(t, "youtube:published_at_backoff:NEW_SHORT:short:test-post", storedKey)
-	assert.Equal(t, 2*time.Minute, storedTTL)
-
-	isActive, err := store.Active(context.Background(), candidate)
-	require.NoError(t, err)
-	assert.True(t, isActive)
-
-	require.NoError(t, store.Clear(context.Background(), candidate))
-	isActive, err = store.Active(context.Background(), candidate)
-	require.NoError(t, err)
-	assert.False(t, isActive)
 }
 
 func seedPendingShortResolution(t *testing.T, db *gorm.DB, channelID, videoID string, detectedAt time.Time) {
@@ -610,6 +606,29 @@ func newShortPublishedAtResolverHTTPClient(t *testing.T, watchHTML string, resol
 	)
 }
 
+func newShortPublishedAtResolverDelayedClient(t *testing.T, publishedAt time.Time, delay time.Duration, resolveCalls *int) *scraper.Client {
+	t.Helper()
+
+	watchHTML := `<html><head><meta itemprop="uploadDate" content="` + publishedAt.Format(time.RFC3339) + `"></head></html>`
+	return scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
+		scraper.WithHTTPClient(&http.Client{
+			Timeout: time.Second,
+			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Path == "/watch" {
+					time.Sleep(delay)
+					if resolveCalls != nil {
+						*resolveCalls = *resolveCalls + 1
+					}
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(watchHTML)), Header: make(http.Header), Request: req}, nil
+				}
+				return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
+			}),
+		}),
+	)
+}
+
 func newShortPublishedAtResolverErrorClient(t *testing.T) *scraper.Client {
 	t.Helper()
 
@@ -654,28 +673,4 @@ func assertResolvedShortState(t *testing.T, db *gorm.DB, channelID, videoID stri
 	require.NotNil(t, alarmState.AuthorizedAt)
 	assert.Equal(t, channelID, alarmState.ChannelID)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, alarmState.DeliveryStatus)
-}
-
-type publishedAtResolverTestBackoffStore struct {
-	active map[string]bool
-}
-
-func newPublishedAtResolverTestBackoffStore() *publishedAtResolverTestBackoffStore {
-	return &publishedAtResolverTestBackoffStore{
-		active: make(map[string]bool),
-	}
-}
-
-func (s *publishedAtResolverTestBackoffStore) Active(_ context.Context, candidate trackingrepo.PublishedAtResolutionCandidate) (bool, error) {
-	return s.active[pendingPublishedAtCandidateKey(candidate)], nil
-}
-
-func (s *publishedAtResolverTestBackoffStore) Mark(_ context.Context, candidate trackingrepo.PublishedAtResolutionCandidate, _ time.Duration) error {
-	s.active[pendingPublishedAtCandidateKey(candidate)] = true
-	return nil
-}
-
-func (s *publishedAtResolverTestBackoffStore) Clear(_ context.Context, candidate trackingrepo.PublishedAtResolutionCandidate) error {
-	delete(s.active, pendingPublishedAtCandidateKey(candidate))
-	return nil
 }
