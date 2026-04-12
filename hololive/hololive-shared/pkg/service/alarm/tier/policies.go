@@ -26,7 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// ComputeNextCheckAt: 방송 시작까지 남은 시간 기반으로 다음 체크 시각을 계산한다.
 // nearestStart가 nil이면 예정 없음 로직을 적용한다.
 func ComputeNextCheckAt(nearestStart *time.Time, lastNotifiedAt *time.Time) time.Time {
 	now := time.Now()
