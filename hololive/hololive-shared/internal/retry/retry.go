@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-shared/internal/ctxutil"
 )
 
-// RetryOptions: 재시도 로직의 설정 옵션
 type RetryOptions struct {
 	// MaxAttempts: 최대 재시도 횟수 (1 이상)
 	MaxAttempts int
@@ -48,7 +47,6 @@ type RetryOptions struct {
 	Sleep func(ctx context.Context, d time.Duration) bool
 }
 
-// ComputeBackoffDelay: 지수 백오프 + 지터를 적용한 대기 시간을 계산합니다.
 // attempt는 0부터 시작합니다 (첫 번째 재시도 = attempt 0).
 // 계산식: base * 2^attempt + random(0, jitter)
 func ComputeBackoffDelay(attempt int, base, jitter time.Duration) time.Duration {
@@ -70,7 +68,6 @@ func randomJitter(maxDuration time.Duration) time.Duration {
 	return time.Duration(n.Int64())
 }
 
-// WithRetry: 주어진 함수를 재시도 로직으로 감싸서 실행합니다.
 // fn이 nil 에러를 반환하면 즉시 성공으로 종료됩니다.
 // 모든 재시도가 실패하면 마지막 에러를 반환합니다.
 func WithRetry(ctx context.Context, opts RetryOptions, fn func(ctx context.Context) error) error {
@@ -120,7 +117,6 @@ func WithRetry(ctx context.Context, opts RetryOptions, fn func(ctx context.Conte
 	return lastErr
 }
 
-// DefaultRetryOptions: 기본 재시도 옵션을 반환합니다.
 func DefaultRetryOptions(maxAttempts int, baseDelay, jitter time.Duration) RetryOptions {
 	return RetryOptions{
 		MaxAttempts: maxAttempts,
