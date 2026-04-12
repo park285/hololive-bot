@@ -33,7 +33,6 @@ const (
 	KakaoZeroWidthSpace = "\u200b"
 )
 
-// ApplyKakaoSeeMorePadding: 텍스트에 투명 공백(Zero Width Space)을 추가하여 카카오톡에서 '전체 보기'로 접히도록 만든다.
 func ApplyKakaoSeeMorePadding(text, instruction string) string {
 	if stringutil.TrimSpace(text) == "" {
 		return text
