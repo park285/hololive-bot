@@ -27,7 +27,6 @@ import (
 	"time"
 )
 
-// OpenWithRetry: exponential backoff로 PostgreSQL 연결을 재시도합니다.
 // 스키마 마이그레이션이 완료되기 전 앱이 시작되는 Race Condition 방어용.
 func OpenWithRetry(
 	ctx context.Context,
