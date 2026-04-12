@@ -15,7 +15,6 @@ var jsonContentType = []string{"application/json; charset=utf-8"}
 
 func (r JSON) Render(w http.ResponseWriter) error {
 	r.WriteContentType(w)
-	// Sonic의 Encoder 인터페이스는 표준 라이브러리의 Encode 메서드와 호환됨
 	enc := sonic.ConfigDefault.NewEncoder(w)
 	enc.SetEscapeHTML(true)
 	return enc.Encode(r.Data)
