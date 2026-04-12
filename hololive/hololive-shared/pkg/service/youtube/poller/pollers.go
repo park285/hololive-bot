@@ -41,14 +41,12 @@ const (
 	shortDetectedLogMessage         = logschema.ShortDetectedMessage
 )
 
-// ChannelStatsPoller: 채널 통계 폴러
 type ChannelStatsPoller struct {
 	client          *scraper.Client
 	db              *gorm.DB
 	profileCacheTTL time.Duration
 }
 
-// NewChannelStatsPoller: 새 채널 통계 폴러 생성
 func NewChannelStatsPoller(scraperClient *scraper.Client, db *gorm.DB) *ChannelStatsPoller {
 	return &ChannelStatsPoller{
 		client:          scraperClient,
@@ -57,12 +55,10 @@ func NewChannelStatsPoller(scraperClient *scraper.Client, db *gorm.DB) *ChannelS
 	}
 }
 
-// Name: 폴러 이름 반환
 func (p *ChannelStatsPoller) Name() string {
 	return "channel_stats"
 }
 
-// SetProxyEnabled: 런타임 프록시 토글
 func (p *ChannelStatsPoller) SetProxyEnabled(enabled bool) bool {
 	if p == nil || p.client == nil {
 		return false
@@ -70,7 +66,6 @@ func (p *ChannelStatsPoller) SetProxyEnabled(enabled bool) bool {
 	return p.client.SetProxyEnabled(enabled)
 }
 
-// ProxyEnabled: 현재 프록시 활성 상태
 func (p *ChannelStatsPoller) ProxyEnabled() bool {
 	if p == nil || p.client == nil {
 		return false
@@ -78,7 +73,6 @@ func (p *ChannelStatsPoller) ProxyEnabled() bool {
 	return p.client.ProxyEnabled()
 }
 
-// Poll: 채널 통계 폴링 수행
 func (p *ChannelStatsPoller) Poll(ctx context.Context, channelID string) error {
 	stats, err := p.client.GetChannelStats(ctx, channelID)
 	if err != nil {
@@ -148,7 +142,6 @@ func (p *ChannelStatsPoller) updateProfileIfStale(ctx context.Context, channelID
 		"banner_count", len(banners))
 }
 
-// VideosPoller: 새 영상 감지 폴러
 type VideosPoller struct {
 	client     *scraper.Client
 	db         *gorm.DB
@@ -156,7 +149,6 @@ type VideosPoller struct {
 	maxResults int
 }
 
-// NewVideosPoller: 새 영상 폴러 생성
 func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int) *VideosPoller {
 	if maxResults <= 0 {
 		maxResults = 10
@@ -169,12 +161,10 @@ func NewVideosPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int)
 	}
 }
 
-// Name: 폴러 이름 반환
 func (p *VideosPoller) Name() string {
 	return "videos"
 }
 
-// SetProxyEnabled: 런타임 프록시 토글
 func (p *VideosPoller) SetProxyEnabled(enabled bool) bool {
 	if p == nil || p.client == nil {
 		return false
@@ -182,7 +172,6 @@ func (p *VideosPoller) SetProxyEnabled(enabled bool) bool {
 	return p.client.SetProxyEnabled(enabled)
 }
 
-// ProxyEnabled: 현재 프록시 활성 상태
 func (p *VideosPoller) ProxyEnabled() bool {
 	if p == nil || p.client == nil {
 		return false
@@ -190,7 +179,6 @@ func (p *VideosPoller) ProxyEnabled() bool {
 	return p.client.ProxyEnabled()
 }
 
-// Poll: 새 영상 폴링 수행
 func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	videos, err := p.client.GetRecentVideos(ctx, channelID, p.maxResults)
 	if err != nil {
@@ -261,13 +249,11 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 	return nil
 }
 
-// LivePoller: 라이브 상태 및 시청자 샘플 폴러
 type LivePoller struct {
 	client *scraper.Client
 	db     *gorm.DB
 }
 
-// NewLivePoller: 새 라이브 폴러 생성
 func NewLivePoller(scraperClient *scraper.Client, db *gorm.DB) *LivePoller {
 	return &LivePoller{
 		client: scraperClient,
@@ -275,12 +261,10 @@ func NewLivePoller(scraperClient *scraper.Client, db *gorm.DB) *LivePoller {
 	}
 }
 
-// Name: 폴러 이름 반환
 func (p *LivePoller) Name() string {
 	return "live"
 }
 
-// SetProxyEnabled: 런타임 프록시 토글
 func (p *LivePoller) SetProxyEnabled(enabled bool) bool {
 	if p == nil || p.client == nil {
 		return false
@@ -288,7 +272,6 @@ func (p *LivePoller) SetProxyEnabled(enabled bool) bool {
 	return p.client.SetProxyEnabled(enabled)
 }
 
-// ProxyEnabled: 현재 프록시 활성 상태
 func (p *LivePoller) ProxyEnabled() bool {
 	if p == nil || p.client == nil {
 		return false
@@ -296,7 +279,6 @@ func (p *LivePoller) ProxyEnabled() bool {
 	return p.client.ProxyEnabled()
 }
 
-// Poll: 라이브 상태 폴링 수행
 func (p *LivePoller) Poll(ctx context.Context, channelID string) error {
 	events, err := p.client.GetUpcomingEvents(ctx, channelID)
 	if err != nil {
@@ -476,7 +458,6 @@ func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string,
 	)
 }
 
-// ShortsPoller: 쇼츠 감지 폴러
 type ShortsPoller struct {
 	client       *scraper.Client
 	db           *gorm.DB
@@ -485,7 +466,6 @@ type ShortsPoller struct {
 	routeDecider NotificationRouteDecider
 }
 
-// NewShortsPoller: 새 쇼츠 폴러 생성
 func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, routeDecider NotificationRouteDecider) *ShortsPoller {
 	if maxResults <= 0 {
 		maxResults = 10
@@ -499,12 +479,10 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 	}
 }
 
-// Name: 폴러 이름 반환
 func (p *ShortsPoller) Name() string {
 	return "shorts"
 }
 
-// SetProxyEnabled: 런타임 프록시 토글
 func (p *ShortsPoller) SetProxyEnabled(enabled bool) bool {
 	if p == nil || p.client == nil {
 		return false
@@ -512,7 +490,6 @@ func (p *ShortsPoller) SetProxyEnabled(enabled bool) bool {
 	return p.client.SetProxyEnabled(enabled)
 }
 
-// ProxyEnabled: 현재 프록시 활성 상태
 func (p *ShortsPoller) ProxyEnabled() bool {
 	if p == nil || p.client == nil {
 		return false
@@ -520,7 +497,6 @@ func (p *ShortsPoller) ProxyEnabled() bool {
 	return p.client.ProxyEnabled()
 }
 
-// Poll: 쇼츠 폴링 수행
 func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	shorts, err := p.client.GetShorts(ctx, channelID, p.maxResults)
 	if err != nil {
@@ -625,7 +601,6 @@ func logShortDetected(ctx context.Context, channelID, postID string, actualPubli
 	)
 }
 
-// CommunityPoller: 커뮤니티 포스트 감지 폴러
 type CommunityPoller struct {
 	client       *scraper.Client
 	db           *gorm.DB
@@ -635,7 +610,6 @@ type CommunityPoller struct {
 	routeDecider NotificationRouteDecider
 }
 
-// NewCommunityPoller: 새 커뮤니티 폴러 생성
 func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int, keywords []string, routeDecider NotificationRouteDecider) *CommunityPoller {
 	if maxResults <= 0 {
 		maxResults = 10
@@ -650,12 +624,10 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 	}
 }
 
-// Name: 폴러 이름 반환
 func (p *CommunityPoller) Name() string {
 	return "community"
 }
 
-// SetProxyEnabled: 런타임 프록시 토글
 func (p *CommunityPoller) SetProxyEnabled(enabled bool) bool {
 	if p == nil || p.client == nil {
 		return false
@@ -663,7 +635,6 @@ func (p *CommunityPoller) SetProxyEnabled(enabled bool) bool {
 	return p.client.SetProxyEnabled(enabled)
 }
 
-// ProxyEnabled: 현재 프록시 활성 상태
 func (p *CommunityPoller) ProxyEnabled() bool {
 	if p == nil || p.client == nil {
 		return false
@@ -671,7 +642,6 @@ func (p *CommunityPoller) ProxyEnabled() bool {
 	return p.client.ProxyEnabled()
 }
 
-// Poll: 커뮤니티 포스트 폴링 수행
 func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 	posts, err := p.client.GetCommunityPosts(ctx, channelID, p.maxResults)
 	if err != nil {
