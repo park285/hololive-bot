@@ -37,7 +37,6 @@ type distributedLimiter interface {
 	Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimit.Decision, error)
 }
 
-// RateLimiter: 간격 기반 레이트 리미터 (slot 예약 패턴, 취소 시 rollback)
 type RateLimiter struct {
 	mu       sync.Mutex
 	interval time.Duration
@@ -53,7 +52,6 @@ func NewRateLimiter(interval time.Duration) *RateLimiter {
 	return &RateLimiter{interval: interval}
 }
 
-// ConfigureDistributed: 분산 레이트 리미터를 설정합니다.
 func (r *RateLimiter) ConfigureDistributed(limiter distributedLimiter, limit int, window time.Duration) error {
 	if limiter == nil {
 		return fmt.Errorf("configure distributed limiter: limiter must not be nil")
@@ -74,7 +72,6 @@ func (r *RateLimiter) Wait(ctx context.Context) error {
 	return r.WaitWithBucket(ctx, "default")
 }
 
-// WaitWithBucket: 로컬 + 분산 레이트 리미터를 함께 적용합니다.
 func (r *RateLimiter) WaitWithBucket(ctx context.Context, bucket string) error {
 	if bucket == "" {
 		bucket = "default"
