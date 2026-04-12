@@ -37,7 +37,6 @@ type statsRepositoryDB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// StatsRepository: YouTube 채널 통계 데이터(구독자 수 등)를 관리하는 저장소 (TimescaleDB)
 type StatsRepository struct {
 	pool   statsRepositoryDB
 	logger *slog.Logger
@@ -46,7 +45,6 @@ type StatsRepository struct {
 	latestTableAvailable bool
 }
 
-// NewYouTubeStatsRepository: 새로운 StatsRepository 인스턴스를 생성합니다.
 func NewYouTubeStatsRepository(postgres database.Client, logger *slog.Logger) *StatsRepository {
 	return &StatsRepository{
 		pool:                 postgres.GetPool(),
