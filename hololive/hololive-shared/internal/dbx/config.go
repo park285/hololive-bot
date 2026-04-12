@@ -30,7 +30,6 @@ import (
 	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
-// Config: PostgreSQL 접속 설정
 type Config struct {
 	Host       string // TCP 호스트 (예: "localhost", "postgres")
 	Port       int    // TCP 포트 (예: 5432)
@@ -44,7 +43,6 @@ type Config struct {
 	QueryExecMode string
 }
 
-// SafeDSN: 비밀번호를 마스킹한 DSN 문자열 반환 (로깅/에러 메시지용)
 func (c Config) SafeDSN() string {
 	masked := c
 	if masked.Password != "" {
@@ -53,7 +51,6 @@ func (c Config) SafeDSN() string {
 	return masked.DSN()
 }
 
-// DSN: lib/pq 스타일 DSN 문자열 반환
 // SocketPath가 설정되면 UDS 우선 사용
 func (c Config) DSN() string {
 	sslmode := c.SSLMode
@@ -96,7 +93,6 @@ func normalizeQueryExecMode(mode string) string {
 	}
 }
 
-// PoolConfig: 커넥션 풀 설정
 type PoolConfig struct {
 	MinConns        int           // 최소 연결 수 (pgxpool용, 기본: 5)
 	MaxConns        int           // 최대 연결 수 (기본: 20)
@@ -105,7 +101,6 @@ type PoolConfig struct {
 	ConnMaxIdleTime time.Duration // 유휴 연결 최대 시간 (기본: 30분)
 }
 
-// DefaultPoolConfig: 기본 풀 설정 반환
 // 환경변수로 오버라이드 가능: DB_POOL_MIN_CONNS, DB_POOL_MAX_CONNS, DB_POOL_MAX_IDLE_CONNS
 func DefaultPoolConfig() PoolConfig {
 	minConns := clamp(sharedenv.Int("DB_POOL_MIN_CONNS", 5), 1, 100)
@@ -132,7 +127,6 @@ func clamp(value, minVal, maxVal int) int {
 	return value
 }
 
-// RetryConfig: 연결 재시도 설정
 type RetryConfig struct {
 	MaxAttempts int           // 최대 시도 횟수 (기본: 5)
 	BaseDelay   time.Duration // 초기 대기 시간 (기본: 2초)
@@ -140,7 +134,6 @@ type RetryConfig struct {
 	PingTimeout time.Duration // Ping 타임아웃 (기본: 5초)
 }
 
-// DefaultRetryConfig: 기본 재시도 설정 반환
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
 		MaxAttempts: 5,
