@@ -37,7 +37,6 @@ func newTestScheduler() *TieredScheduler {
 	return NewTieredScheduler(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
 }
 
-// --- ComputeNextCheckAt 테스트 ---
 
 func TestComputeNextCheckAt(t *testing.T) {
 	tolerance := 2 * time.Second
@@ -120,7 +119,6 @@ func TestComputeNextCheckAt(t *testing.T) {
 	}
 }
 
-// --- SelectDueChannels 테스트 ---
 
 func TestSelectDueChannels_UnknownChannelsAreDue(t *testing.T) {
 	ts := newTestScheduler()
@@ -174,7 +172,6 @@ func TestSelectDueChannels_FullRefreshReturnsAll(t *testing.T) {
 	assert.Len(t, due, 3)
 }
 
-// --- UpdateChannelState 테스트 ---
 
 func TestUpdateChannelState_SetsNearestStart(t *testing.T) {
 	ts := newTestScheduler()
@@ -220,7 +217,6 @@ func TestUpdateChannelState_PreservesLastNotifiedAt(t *testing.T) {
 	assert.Equal(t, notifiedAt, *st.lastNotifiedAt)
 }
 
-// --- MarkChannelDue 테스트 ---
 
 func TestMarkChannelDue_ThenSelectReturnsIt(t *testing.T) {
 	ts := newTestScheduler()
@@ -239,7 +235,6 @@ func TestMarkChannelDue_ThenSelectReturnsIt(t *testing.T) {
 	assert.Len(t, due, 1)
 }
 
-// --- MarkChannelRecentlyNotified 테스트 ---
 
 func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 	ts := newTestScheduler()
@@ -260,7 +255,6 @@ func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 	assert.Less(t, diff, 2*time.Second)
 }
 
-// --- ForgetChannel 테스트 ---
 
 func TestForgetChannel(t *testing.T) {
 	ts := newTestScheduler()
