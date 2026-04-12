@@ -33,7 +33,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 )
 
-// BotLifecycle: 봇의 시작/준비대기/종료 수명주기를 담당합니다.
 type BotLifecycle struct {
 	logger      *slog.Logger
 	cache       cache.Client
