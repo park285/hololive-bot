@@ -51,7 +51,6 @@ func ProvideMajorEventLLMClient(cliproxy config.CliproxyConfig, logger *slog.Log
 	return client
 }
 
-// ProvideMemberNewsLLMClient: member news 전용 LLM 클라이언트 (schema name + temperature 오버라이드)
 func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
 	if !cliproxy.Enabled || cliproxy.APIKey == "" {
 		logger.Info("Member news LLM disabled")
@@ -91,7 +90,6 @@ func ProvideMemberNewsLLMClient(cliproxy config.CliproxyConfig, llmCfg config.LL
 	return client
 }
 
-// ProvideMemberNewsReviewerClient: consensus reviewer 전용 LLM 클라이언트.
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
 func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
 	if !llmCfg.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
@@ -121,7 +119,6 @@ func ProvideMemberNewsReviewerClient(cliproxy config.CliproxyConfig, llmCfg conf
 	return client
 }
 
-// ProvideMajorEventReviewerClient: major event consensus reviewer 전용 LLM 클라이언트.
 func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
 	if !llmCfg.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
@@ -143,7 +140,6 @@ func ProvideMajorEventReviewerClient(cliproxy config.CliproxyConfig, llmCfg conf
 	)
 }
 
-// ProvideMajorEventAdjudicatorClient: major event consensus adjudicator 전용 LLM 클라이언트.
 func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
 	if !llmCfg.MajorEvent.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
@@ -165,7 +161,6 @@ func ProvideMajorEventAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg c
 	)
 }
 
-// ProvideMemberNewsAdjudicatorClient: consensus adjudicator 전용 LLM 클라이언트.
 // consensus 비활성 또는 Cliproxy 비활성 시 nil 반환.
 func ProvideMemberNewsAdjudicatorClient(cliproxy config.CliproxyConfig, llmCfg config.LLMConfig, logger *slog.Logger) llm.Client {
 	if !llmCfg.MemberNews.Enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
