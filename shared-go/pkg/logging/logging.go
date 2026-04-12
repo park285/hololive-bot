@@ -30,7 +30,6 @@ const (
 	archiveScanInterval             = 5 * time.Second
 )
 
-// Config: 파일 로그 로테이션 설정입니다.
 type Config struct {
 	Level      string // 로그 레벨 (debug, info, warn, error)
 	Dir        string // 로그 파일 디렉터리
@@ -40,7 +39,6 @@ type Config struct {
 	Compress   bool   // 백업 파일 압축 여부
 }
 
-// ParseLevel: 문자열 로그 레벨을 slog.Level로 변환합니다.
 func ParseLevel(level string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":
@@ -54,7 +52,6 @@ func ParseLevel(level string) slog.Level {
 	}
 }
 
-// LogError: 이벤트와 에러를 로그로 기록합니다. err이 nil이면 아무것도 하지 않습니다.
 func LogError(logger *slog.Logger, event string, err error) {
 	if logger == nil || err == nil {
 		return
@@ -62,7 +59,6 @@ func LogError(logger *slog.Logger, event string, err error) {
 	logger.Warn(event, "err", err)
 }
 
-// LogInfo: 이벤트와 추가 필드를 로그로 기록합니다.
 func LogInfo(logger *slog.Logger, event string, fields ...any) {
 	if logger == nil {
 		return
@@ -70,7 +66,6 @@ func LogInfo(logger *slog.Logger, event string, fields ...any) {
 	logger.Info(event, fields...)
 }
 
-// NewLogger: 기본 slog 로거를 생성합니다. (stdout, tint 핸들러 사용)
 func NewLogger() *slog.Logger {
 	return slog.New(tint.NewHandler(os.Stdout, &tint.Options{
 		Level:      slog.LevelInfo,
@@ -80,7 +75,6 @@ func NewLogger() *slog.Logger {
 	}))
 }
 
-// NewLoggerWithLevel: 지정된 레벨로 콘솔 출력용 slog 로거를 생성합니다.
 func NewLoggerWithLevel(level string) *slog.Logger {
 	cfg := Config{Level: level}
 	logger, err := EnableFileLogging(cfg, "")
@@ -90,28 +84,23 @@ func NewLoggerWithLevel(level string) *slog.Logger {
 	return logger
 }
 
-// NewTestLogger: 테스트용 로거를 생성합니다. 모든 출력을 폐기하여 테스트 로그를 깔끔하게 유지합니다.
 func NewTestLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-// NewTestLoggerWithOutput: 테스트용 로거를 생성합니다. 제공된 Writer로 로그를 출력합니다.
 func NewTestLoggerWithOutput(w io.Writer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, nil))
 }
 
-// EnableFileLogging: 파일 로깅을 활성화하고, 파일과 stdout에 동시에 출력하는 로거를 반환합니다.
 func EnableFileLogging(cfg Config, fileName string) (*slog.Logger, error) {
 	return EnableFileLoggingWithOTel(cfg, fileName, false)
 }
 
-// EnableFileLoggingWithLevel: 지정된 레벨과 파일 로깅을 활성화합니다.
 func EnableFileLoggingWithLevel(cfg Config, fileName, level string) (*slog.Logger, error) {
 	cfg.Level = level
 	return EnableFileLogging(cfg, fileName)
 }
 
-// EnableFileLoggingWithOTel: OTel 상관관계 기능을 포함한 파일 로깅을 활성화합니다.
 func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*slog.Logger, error) {
 	level := ParseLevel(cfg.Level)
 	logDir := strings.TrimSpace(cfg.Dir)
@@ -437,22 +426,18 @@ func shouldDisableColor(w io.Writer) bool {
 	return !isatty.IsTerminal(fd) && !isatty.IsCygwinTerminal(fd)
 }
 
-// OTelHandler: slog.Handler를 래핑하여 trace_id/span_id를 자동으로 로그에 추가합니다.
 type OTelHandler struct {
 	inner slog.Handler
 }
 
-// NewOTelHandler: OTel 상관관계가 추가된 slog.Handler를 생성합니다.
 func NewOTelHandler(inner slog.Handler) *OTelHandler {
 	return &OTelHandler{inner: inner}
 }
 
-// Enabled: 로그 레벨 활성화 여부를 확인합니다.
 func (h *OTelHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.inner.Enabled(ctx, level)
 }
 
-// Handle: 로그 레코드에 trace_id/span_id를 추가하고 내부 핸들러로 전달합니다.
 func (h *OTelHandler) Handle(ctx context.Context, record slog.Record) error {
 	span := trace.SpanFromContext(ctx)
 	if span.SpanContext().IsValid() {
@@ -465,12 +450,10 @@ func (h *OTelHandler) Handle(ctx context.Context, record slog.Record) error {
 	return h.inner.Handle(ctx, record)
 }
 
-// WithAttrs: 속성을 추가한 새로운 Handler를 반환합니다.
 func (h *OTelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &OTelHandler{inner: h.inner.WithAttrs(attrs)}
 }
 
-// WithGroup: 그룹을 추가한 새로운 Handler를 반환합니다.
 func (h *OTelHandler) WithGroup(name string) slog.Handler {
 	return &OTelHandler{inner: h.inner.WithGroup(name)}
 }

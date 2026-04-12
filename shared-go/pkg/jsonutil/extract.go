@@ -10,13 +10,11 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// ErrNoJSONFound: 유효한 JSON을 찾지 못했을 때 반환됩니다.
 var ErrNoJSONFound = errors.New("no valid JSON found in response")
 
 // 코드펜스 정규식
 var fenceRe = regexp.MustCompile("(?s)```(?:json)?\\s*([\\s\\S]*?)```")
 
-// Extract: LLM 응답에서 JSON을 추출합니다.
 // 1. 코드펜스 내 JSON 우선 시도
 // 2. 브라켓 매칭으로 폴백
 func Extract(text string) ([]byte, error) {
@@ -34,7 +32,6 @@ func Extract(text string) ([]byte, error) {
 	return extractFirstJSON(text)
 }
 
-// ExtractToMap: LLM 응답에서 JSON을 추출하고 map으로 파싱합니다.
 func ExtractToMap(text string) (map[string]any, error) {
 	data, err := Extract(text)
 	if err != nil {
