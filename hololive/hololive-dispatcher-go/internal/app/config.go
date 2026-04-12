@@ -41,7 +41,6 @@ const (
 	defaultLoggingLevel        = "info"
 )
 
-// Config: dispatcher-go 런타임 설정.
 type Config struct {
 	Server      ServerConfig
 	Iris        IrisConfig
@@ -51,18 +50,15 @@ type Config struct {
 	Environment string
 }
 
-// ServerConfig: HTTP 서버 설정.
 type ServerConfig struct {
 	Port int
 }
 
-// IrisConfig: Iris 메시지 전송 설정.
 type IrisConfig struct {
 	BaseURL  string
 	BotToken string
 }
 
-// DispatchConfig: 큐 소비 및 디스패치 설정.
 type DispatchConfig struct {
 	QueueKey         string
 	MaxBatch         int
@@ -70,7 +66,6 @@ type DispatchConfig struct {
 	ReconnectBackoff time.Duration
 }
 
-// LoadConfig: 환경 변수에서 dispatcher-go 설정을 로드한다.
 func LoadConfig() (*Config, error) {
 	_ = godotenv.Load()
 
@@ -135,7 +130,6 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate: 설정값 기본 검증.
 func (c *Config) Validate() error {
 	if c.Server.Port <= 0 {
 		return fmt.Errorf("validate config: DISPATCHER_PORT must be positive")
