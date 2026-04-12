@@ -66,7 +66,6 @@ export function StatCard({
 				</div>
 			</div>
 
-			{/* Decorative background circle */}
 			<div
 				className={cn(
 					"absolute -bottom-6 -right-6 w-24 h-24 rounded-full opacity-10",

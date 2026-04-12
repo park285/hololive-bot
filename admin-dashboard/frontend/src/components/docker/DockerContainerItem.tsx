@@ -28,7 +28,6 @@ export const DockerContainerItem = ({
 
 	return (
 		<div className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white hover:shadow-md hover:border-slate-200 transition-all duration-200 focus-within:ring-2 focus-within:ring-sky-100">
-			{/* Icon Section */}
 			<div
 				className={clsx(
 					"w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 shadow-sm transition-colors",
@@ -49,7 +48,6 @@ export const DockerContainerItem = ({
 				)}
 			</div>
 
-			{/* Information Section */}
 			<div className="flex-1 min-w-0 flex flex-col gap-1 w-full">
 				<div className="flex items-center justify-between sm:justify-start gap-2">
 					<span className="font-bold text-slate-800 text-base truncate">
@@ -91,7 +89,6 @@ export const DockerContainerItem = ({
 				</div>
 			</div>
 
-			{/* Action Section */}
 			<div className="shrink-0 flex gap-2 w-full sm:w-auto mt-2 sm:mt-0 justify-end">
 				{container.state === "running" ? (
 					<>
