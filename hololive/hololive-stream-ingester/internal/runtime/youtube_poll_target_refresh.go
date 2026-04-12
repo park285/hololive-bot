@@ -16,16 +16,24 @@ const youtubePollTargetEmptyCacheGracePeriod = 30 * time.Second
 const youtubePollTargetCacheOnlyAdditionGracePeriod = 30 * time.Second
 
 type youTubePollTargetRefresher struct {
-	cacheService        cache.Client
-	scheduler           *poller.Scheduler
-	registrations       []providers.ChannelPollerRegistration
-	operationalChannels []communityShortsOperationalChannel
-	loadAlarmChannelIDs func(context.Context) ([]string, error)
-	lastNonEmptyCacheAt time.Time
-	lastResolvedTargets youtubePollTargets
-	cacheOnlyFirstSeen  map[string]time.Time
-	timeNow             func() time.Time
-	logger              *slog.Logger
+	cacheService            cache.Client
+	scheduler               *poller.Scheduler
+	registrations           []providers.ChannelPollerRegistration
+	loadOperationalChannels func(context.Context) ([]communityShortsOperationalChannel, error)
+	lastOperationalChannels []communityShortsOperationalChannel
+	lastOperationalFallback bool
+	loadAlarmChannelIDs     func(context.Context) ([]string, error)
+	lastNonEmptyCacheAt     time.Time
+	lastResolvedTargets     youtubePollTargets
+	cacheOnlyFirstSeen      map[string]time.Time
+	timeNow                 func() time.Time
+	logger                  *slog.Logger
+}
+
+type operationalChannelResolution struct {
+	channels     []communityShortsOperationalChannel
+	changed      bool
+	fallbackUsed bool
 }
 
 func newYouTubePollTargetRefresher(
@@ -39,18 +47,32 @@ func newYouTubePollTargetRefresher(
 	if cacheService == nil || scheduler == nil || len(registrations) == 0 || loadAlarmChannelIDs == nil {
 		return nil
 	}
+	snapshot := append([]communityShortsOperationalChannel(nil), operationalChannels...)
 
 	return &youTubePollTargetRefresher{
-		cacheService:        cacheService,
-		scheduler:           scheduler,
-		registrations:       append([]providers.ChannelPollerRegistration(nil), registrations...),
-		operationalChannels: append([]communityShortsOperationalChannel(nil), operationalChannels...),
-		loadAlarmChannelIDs: loadAlarmChannelIDs,
-		lastResolvedTargets: resolveYouTubePollTargetsFromRegistrations(registrations),
-		cacheOnlyFirstSeen:  make(map[string]time.Time),
-		timeNow:             time.Now,
-		logger:              logger,
+		cacheService:  cacheService,
+		scheduler:     scheduler,
+		registrations: append([]providers.ChannelPollerRegistration(nil), registrations...),
+		loadOperationalChannels: func(context.Context) ([]communityShortsOperationalChannel, error) {
+			return append([]communityShortsOperationalChannel(nil), snapshot...), nil
+		},
+		lastOperationalChannels: snapshot,
+		loadAlarmChannelIDs:     loadAlarmChannelIDs,
+		lastResolvedTargets:     resolveYouTubePollTargetsFromRegistrations(registrations),
+		cacheOnlyFirstSeen:      make(map[string]time.Time),
+		timeNow:                 time.Now,
+		logger:                  logger,
 	}
+}
+
+func (r *youTubePollTargetRefresher) withOperationalChannelLoader(
+	loadOperationalChannels func(context.Context) ([]communityShortsOperationalChannel, error),
+) *youTubePollTargetRefresher {
+	if r == nil || loadOperationalChannels == nil {
+		return r
+	}
+	r.loadOperationalChannels = loadOperationalChannels
+	return r
 }
 
 func (r *youTubePollTargetRefresher) Start(ctx context.Context) {
@@ -79,6 +101,28 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		nowFn = time.Now
 	}
 	now := nowFn()
+	operational, err := r.resolveOperationalChannels(ctx)
+	if err != nil {
+		if r.logger != nil {
+			r.logger.Warn("Failed to refresh operational channels for YouTube poll targets",
+				slog.Any("error", err))
+		}
+		return
+	}
+	operationalChannels := operational.channels
+	if operational.fallbackUsed {
+		if !r.lastOperationalFallback && r.logger != nil {
+			r.logger.Warn("Using last known operational channels for YouTube poll targets",
+				slog.Int("operational_channel_count", len(operationalChannels)))
+		}
+		r.lastOperationalFallback = true
+	} else {
+		if r.lastOperationalFallback && r.logger != nil {
+			r.logger.Info("Recovered operational channel refresh for YouTube poll targets",
+				slog.Int("operational_channel_count", len(operationalChannels)))
+		}
+		r.lastOperationalFallback = false
+	}
 	cacheAlarmChannelIDs, cacheErr := r.cacheService.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	var alarmChannelIDs []string
 	candidateFromCache := false
@@ -121,7 +165,7 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		alarmChannelIDs = dbAlarmChannelIDs
 	}
 
-	candidateTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, r.operationalChannels)
+	candidateTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, operationalChannels)
 	targets := candidateTargets
 	if candidateFromCache {
 		if r.cacheOnlyFirstSeen == nil {
@@ -142,7 +186,7 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 				}
 				return
 			}
-			dbTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(dbAlarmChannelIDs, r.operationalChannels)
+			dbTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(dbAlarmChannelIDs, operationalChannels)
 			observeYouTubePollTargetValidation("validated")
 			cacheOnlyAdditions := diffChannelIDs(candidateTargets.NotificationChannelIDs, dbTargets.NotificationChannelIDs)
 			trackCacheOnlyAdditions(now, cacheOnlyAdditions, r.cacheOnlyFirstSeen)
@@ -164,10 +208,19 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 					slog.Int("expired_cache_only_additions", len(expiredCacheOnly)),
 					slog.Int("removed_candidate_channels", len(removed)),
 				)
-				}
 			}
 		}
-	if equalYouTubePollTargets(r.lastResolvedTargets, targets) {
+	}
+	targetsChanged := !equalYouTubePollTargets(r.lastResolvedTargets, targets)
+	if r.logger != nil && (operational.changed || targetsChanged) {
+		r.logger.Info("youtube_poll_target_operational_channels_refreshed",
+			slog.Int("operational_channel_count", len(operationalChannels)),
+			slog.Int("notification_target_channels", len(targets.NotificationChannelIDs)),
+			slog.Int("stats_target_channels", len(targets.StatsChannelIDs)),
+			slog.Bool("fallback_used", operational.fallbackUsed),
+		)
+	}
+	if !targetsChanged {
 		return
 	}
 	for _, registration := range r.registrations {
@@ -190,6 +243,50 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		r.scheduler.SyncPollerTargets(sync)
 	}
 	r.lastResolvedTargets = targets
+}
+
+func (r *youTubePollTargetRefresher) resolveOperationalChannels(ctx context.Context) (operationalChannelResolution, error) {
+	if r == nil {
+		return operationalChannelResolution{}, nil
+	}
+	if r.loadOperationalChannels == nil {
+		if len(r.lastOperationalChannels) == 0 {
+			return operationalChannelResolution{}, nil
+		}
+		return operationalChannelResolution{
+			channels: append([]communityShortsOperationalChannel(nil), r.lastOperationalChannels...),
+		}, nil
+	}
+
+	operationalChannels, err := r.loadOperationalChannels(ctx)
+	if err != nil {
+		if len(r.lastOperationalChannels) == 0 {
+			return operationalChannelResolution{}, err
+		}
+		return operationalChannelResolution{
+			channels:     append([]communityShortsOperationalChannel(nil), r.lastOperationalChannels...),
+			fallbackUsed: true,
+		}, nil
+	}
+
+	changed := !equalOperationalChannels(r.lastOperationalChannels, operationalChannels)
+	r.lastOperationalChannels = append([]communityShortsOperationalChannel(nil), operationalChannels...)
+	return operationalChannelResolution{
+		channels: append([]communityShortsOperationalChannel(nil), operationalChannels...),
+		changed:  changed,
+	}, nil
+}
+
+func equalOperationalChannels(left, right []communityShortsOperationalChannel) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func resolveYouTubePollTargetsFromRegistrations(registrations []providers.ChannelPollerRegistration) youtubePollTargets {

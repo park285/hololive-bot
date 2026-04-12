@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -134,6 +135,255 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 	require.Contains(t, jobKeys, "UC_NEW:live")
 	require.NotContains(t, jobKeys, "UC_OLD:videos")
 	require.Contains(t, jobKeys, "UC_STATS:channel_stats")
+}
+
+func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		if key == "alarm:channel_registry" {
+			return []string{"UC_NOTIFY"}, nil
+		}
+		return nil, nil
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		&databasemocks.Client{},
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
+		scraper.NewRateLimiter(time.Second),
+		cacheSvc,
+		nil,
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_STATS_A"},
+	)
+
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS_A"}),
+	)
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{
+			{channelID: "UC_NOTIFY", enabled: true},
+			{channelID: "UC_STATS_A", enabled: true},
+		},
+		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
+		newYouTubePollTargetTestLogger(),
+	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
+		return []communityShortsOperationalChannel{
+			{channelID: "UC_NOTIFY", enabled: true},
+			{channelID: "UC_STATS_B", enabled: true},
+		}, nil
+	})
+
+	refresher.refresh(context.Background())
+
+	jobKeys := schedulerJobKeys(t, scheduler)
+	require.Contains(t, jobKeys, "UC_NOTIFY:videos")
+	require.Contains(t, jobKeys, "UC_STATS_B:channel_stats")
+	require.NotContains(t, jobKeys, "UC_STATS_A:channel_stats")
+}
+
+func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderError(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		if key == "alarm:channel_registry" {
+			return []string{"UC_NOTIFY"}, nil
+		}
+		return nil, nil
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		&databasemocks.Client{},
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
+		scraper.NewRateLimiter(time.Second),
+		cacheSvc,
+		nil,
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_STATS_A"},
+	)
+
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS_A"}),
+	)
+
+	loadCalls := 0
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{
+			{channelID: "UC_NOTIFY", enabled: true},
+			{channelID: "UC_STATS_A", enabled: true},
+		},
+		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
+		newYouTubePollTargetTestLogger(),
+	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
+		loadCalls++
+		if loadCalls == 1 {
+			return []communityShortsOperationalChannel{
+				{channelID: "UC_NOTIFY", enabled: true},
+				{channelID: "UC_STATS_B", enabled: true},
+			}, nil
+		}
+		return nil, assert.AnError
+	})
+
+	refresher.refresh(context.Background())
+	refresher.refresh(context.Background())
+
+	jobKeys := schedulerJobKeys(t, scheduler)
+	require.Contains(t, jobKeys, "UC_NOTIFY:videos")
+	require.Contains(t, jobKeys, "UC_STATS_B:channel_stats")
+	require.NotContains(t, jobKeys, "UC_STATS_A:channel_stats")
+}
+
+func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		if key == "alarm:channel_registry" {
+			return []string{"UC_NOTIFY"}, nil
+		}
+		return nil, nil
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		&databasemocks.Client{},
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
+		scraper.NewRateLimiter(time.Second),
+		cacheSvc,
+		nil,
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_STATS_A"},
+	)
+
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS_A"}),
+	)
+
+	logger, logBuf := newBufferedYouTubePollTargetTestLogger()
+	loadCalls := 0
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{
+			{channelID: "UC_NOTIFY", enabled: true},
+			{channelID: "UC_STATS_A", enabled: true},
+		},
+		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
+		logger,
+	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
+		loadCalls++
+		if loadCalls == 1 {
+			return []communityShortsOperationalChannel{
+				{channelID: "UC_NOTIFY", enabled: true},
+				{channelID: "UC_STATS_B", enabled: true},
+			}, nil
+		}
+		return nil, assert.AnError
+	})
+
+	refresher.refresh(context.Background())
+	refresher.refresh(context.Background())
+	refresher.refresh(context.Background())
+
+	assert.Equal(t, 1, strings.Count(logBuf.String(), `"msg":"Using last known operational channels for YouTube poll targets"`))
+}
+
+func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		if key == "alarm:channel_registry" {
+			return []string{"UC_NOTIFY"}, nil
+		}
+		return nil, nil
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		&databasemocks.Client{},
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
+		scraper.NewRateLimiter(time.Second),
+		cacheSvc,
+		nil,
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_STATS_A"},
+	)
+
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_NOTIFY", "UC_STATS_A"}),
+	)
+
+	logger, logBuf := newBufferedYouTubePollTargetTestLogger()
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{
+			{channelID: "UC_NOTIFY", enabled: true},
+			{channelID: "UC_STATS_A", enabled: true},
+		},
+		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
+		logger,
+	)
+
+	refresher.refresh(context.Background())
+	logBuf.Reset()
+	refresher.refresh(context.Background())
+
+	assert.NotContains(t, logBuf.String(), `"msg":"youtube_poll_target_operational_channels_refreshed"`)
 }
 
 func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsAreUnchanged(t *testing.T) {
