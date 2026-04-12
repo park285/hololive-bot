@@ -1539,6 +1539,7 @@ func createBatchTestTable(db *gorm.DB, model any) error {
 				channel_id TEXT NOT NULL,
 				actual_published_at DATETIME,
 				detected_at DATETIME NOT NULL,
+				published_at_retry_after DATETIME,
 				authorized_at DATETIME,
 				alarm_sent_at DATETIME,
 				delivery_status TEXT NOT NULL DEFAULT 'DETECTED',

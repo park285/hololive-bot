@@ -23,6 +23,7 @@ package poller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -80,18 +81,6 @@ func (r *gormBatchRepository) PersistVideos(ctx context.Context, videos []*domai
 		if err := trackingrepo.NewRepository(tx).UpsertAlarmStateBatch(ctx, alarmStates); err != nil {
 			return fmt.Errorf("upsert short alarm states: %w", err)
 		}
-		if len(trackingRows) > 0 {
-			identities := make([]outbox.PostTrackingIdentity, 0, len(trackingRows))
-			for i := range trackingRows {
-				if trackingRows[i] == nil {
-					continue
-				}
-				identities = append(identities, outbox.PostTrackingIdentity{Kind: trackingRows[i].Kind, ContentID: trackingRows[i].ContentID})
-			}
-			if err := outbox.NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-				return fmt.Errorf("persist video latency classifications: %w", err)
-			}
-		}
 		if err := r.upsertWatermark(ctx, tx, watermark); err != nil {
 			return fmt.Errorf("upsert watermark: %w", err)
 		}
@@ -99,6 +88,7 @@ func (r *gormBatchRepository) PersistVideos(ctx context.Context, videos []*domai
 	}); err != nil {
 		return fmt.Errorf("persist videos transaction: %w", err)
 	}
+	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
 	return nil
 }
 
@@ -128,18 +118,6 @@ func (r *gormBatchRepository) PersistCommunityPosts(ctx context.Context, posts [
 		if err := trackingrepo.NewRepository(tx).UpsertAlarmStateBatch(ctx, alarmStates); err != nil {
 			return fmt.Errorf("upsert community alarm states: %w", err)
 		}
-		if len(trackingRows) > 0 {
-			identities := make([]outbox.PostTrackingIdentity, 0, len(trackingRows))
-			for i := range trackingRows {
-				if trackingRows[i] == nil {
-					continue
-				}
-				identities = append(identities, outbox.PostTrackingIdentity{Kind: trackingRows[i].Kind, ContentID: trackingRows[i].ContentID})
-			}
-			if err := outbox.NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-				return fmt.Errorf("persist community latency classifications: %w", err)
-			}
-		}
 		if err := r.upsertWatermark(ctx, tx, watermark); err != nil {
 			return fmt.Errorf("upsert watermark: %w", err)
 		}
@@ -147,7 +125,38 @@ func (r *gormBatchRepository) PersistCommunityPosts(ctx context.Context, posts [
 	}); err != nil {
 		return fmt.Errorf("persist community posts transaction: %w", err)
 	}
+	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
 	return nil
+}
+
+func (r *gormBatchRepository) persistLatencyClassificationsAfterCommit(
+	ctx context.Context,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+) {
+	if r == nil || r.db == nil || len(trackingRows) == 0 {
+		return
+	}
+
+	identities := make([]outbox.PostTrackingIdentity, 0, len(trackingRows))
+	for i := range trackingRows {
+		if trackingRows[i] == nil {
+			continue
+		}
+		identities = append(identities, outbox.PostTrackingIdentity{
+			Kind:      trackingRows[i].Kind,
+			ContentID: trackingRows[i].ContentID,
+		})
+	}
+	if len(identities) == 0 {
+		return
+	}
+
+	if err := outbox.NewDeliveryTelemetryRepository(r.db).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+		slog.Default().Warn("Failed to persist post latency classifications after detection commit",
+			slog.Int("tracking_rows", len(identities)),
+			slog.Any("error", err),
+		)
+	}
 }
 
 type communityNotificationPublishedAtPayload struct {
