@@ -9,7 +9,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// CheckStatus: 2xx 외 상태코드 시 에러 반환
 func CheckStatus(resp *http.Response) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
@@ -22,7 +21,6 @@ func CheckStatus(resp *http.Response) error {
 	return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 }
 
-// DecodeJSON: 응답 body를 JSON 디코딩 후 닫기
 func DecodeJSON(resp *http.Response, v any) error {
 	defer func() { _ = resp.Body.Close() }()
 	//nolint:wrapcheck // 호출부에서 컨텍스트 추가
