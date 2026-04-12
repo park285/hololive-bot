@@ -27,7 +27,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// GetChannelStats: 채널 통계 정보 조회 (구독자 수, 조회수, 비디오 수 등)
 func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*ChannelStats, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/about", channelID)
 
@@ -55,7 +54,6 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*Channe
 	return stats, nil
 }
 
-// GetChannelSnippet: 채널 프로필 정보 조회 (아바타, 배너)
 func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*ChannelSnippet, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 
