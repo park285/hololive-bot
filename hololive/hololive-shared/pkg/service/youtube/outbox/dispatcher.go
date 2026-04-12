@@ -38,7 +38,6 @@ import (
 
 const defaultTelemetryRetention = 24 * time.Hour
 
-// Config: Dispatcher 설정
 type Config struct {
 	BatchSize              int           // 한 번에 처리할 알림 수
 	LockTimeout            time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
@@ -56,7 +55,6 @@ type Config struct {
 	TelemetryRetention     time.Duration // telemetry 버퍼 최소 보존 기간
 }
 
-// DefaultConfig: 기본 설정
 func DefaultConfig() Config {
 	return Config{
 		BatchSize:              50,
@@ -76,7 +74,6 @@ func DefaultConfig() Config {
 	}
 }
 
-// Dispatcher: Outbox 알림 발송 처리기
 type Dispatcher struct {
 	db        *gorm.DB
 	cache     cache.Client
@@ -89,7 +86,6 @@ type Dispatcher struct {
 	formatter *MessageFormatter
 }
 
-// NewDispatcher: 새 Dispatcher 생성
 func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
 	initOutboxMetrics()
 
@@ -143,7 +139,6 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 	}
 }
 
-// Start: 백그라운드 폴링 루프 시작
 func (d *Dispatcher) Start(ctx context.Context) {
 	go d.run(ctx)
 	if d.delivery != nil {
@@ -421,17 +416,14 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 	return result
 }
 
-// ProcessOnceForTest: 테스트용 - 한 번의 폴링 사이클 실행
 func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {
 	d.processOnce(ctx)
 }
 
-// CleanupForTest: 테스트용 - 정리 루프 본문 실행
 func (d *Dispatcher) CleanupForTest(ctx context.Context) {
 	d.cleanup(ctx)
 }
 
-// AggregateSyncForTest: 테스트용 - aggregate sync 루프 본문 실행
 func (d *Dispatcher) AggregateSyncForTest(ctx context.Context) {
 	d.reconcileTerminalOutboxStatuses(ctx)
 }
