@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -99,6 +98,7 @@ func buildSharedYouTubeScraperClient(
 }
 
 func buildPendingPublishedAtResolver(
+	scraperCfg config.ScraperConfig,
 	postgresService database.Client,
 	scraperClient *scraper.Client,
 	routeDecider poller.NotificationRouteDecider,
@@ -107,19 +107,70 @@ func buildPendingPublishedAtResolver(
 	if postgresService == nil || scraperClient == nil {
 		return nil
 	}
+	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
+	if !resolverCfg.Enabled {
+		return nil
+	}
 
-	return poller.NewPendingPublishedAtResolverWithControls(
+	resolver := poller.NewPendingPublishedAtResolverWithControls(
 		postgresService.GetGormDB(),
 		scraperClient,
 		routeDecider,
-		10*time.Second,
-		20,
-		2,
-		6*time.Second,
-		20*time.Second,
-		5*time.Minute,
+		resolverCfg.Interval,
+		resolverCfg.BatchSize,
+		resolverCfg.MaxResolvePerRun,
+		resolverCfg.MaxRunDuration,
+		resolverCfg.MinDetectedAge,
+		resolverCfg.FailureBackoffTTL,
 		logger,
 	)
+	if logger != nil {
+		logger.Info("published_at_resolver_configured",
+			slog.Duration("interval", resolverCfg.Interval),
+			slog.Int("batch_size", resolverCfg.BatchSize),
+			slog.Int("max_resolve_per_run", resolverCfg.MaxResolvePerRun),
+			slog.Duration("max_run_duration", resolverCfg.MaxRunDuration),
+			slog.Duration("min_detected_age", resolverCfg.MinDetectedAge),
+			slog.Duration("failure_backoff_ttl", resolverCfg.FailureBackoffTTL),
+			slog.Float64("estimated_max_rpm", estimatedPublishedAtResolverMaxRPM(resolverCfg)),
+		)
+	}
+	return resolver
+}
+
+func effectivePublishedAtResolverConfig(scraperCfg config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
+	resolverCfg := scraperCfg.PublishedAtResolver
+	if !resolverCfg.Enabled {
+		return resolverCfg
+	}
+
+	defaults := config.DefaultScraperPublishedAtResolverConfig()
+	if resolverCfg.Interval <= 0 {
+		resolverCfg.Interval = defaults.Interval
+	}
+	if resolverCfg.BatchSize <= 0 {
+		resolverCfg.BatchSize = defaults.BatchSize
+	}
+	if resolverCfg.MaxResolvePerRun <= 0 {
+		resolverCfg.MaxResolvePerRun = defaults.MaxResolvePerRun
+	}
+	if resolverCfg.MaxRunDuration <= 0 {
+		resolverCfg.MaxRunDuration = defaults.MaxRunDuration
+	}
+	if resolverCfg.MinDetectedAge <= 0 {
+		resolverCfg.MinDetectedAge = defaults.MinDetectedAge
+	}
+	if resolverCfg.FailureBackoffTTL <= 0 {
+		resolverCfg.FailureBackoffTTL = defaults.FailureBackoffTTL
+	}
+	return resolverCfg
+}
+
+func estimatedPublishedAtResolverMaxRPM(cfg config.ScraperPublishedAtResolverConfig) float64 {
+	if cfg.Interval <= 0 || cfg.MaxResolvePerRun <= 0 {
+		return 0
+	}
+	return float64(cfg.MaxResolvePerRun) * 60 / cfg.Interval.Seconds()
 }
 
 func validateExplicitPollerRegistrations(registrations []providers.ChannelPollerRegistration) error {
