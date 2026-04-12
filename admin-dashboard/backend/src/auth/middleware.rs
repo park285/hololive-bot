@@ -188,7 +188,6 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request as HttpRequest, header};
 
-    // -- extract_cookie --
 
     fn make_request_with_cookie(cookie_header: &str) -> Request {
         HttpRequest::builder()
@@ -240,7 +239,6 @@ mod tests {
         assert!(should_set_secure_cookie(req.headers(), true));
     }
 
-    // -- set_session_cookie --
 
     #[test]
     fn test_set_session_cookie_https() {
@@ -264,7 +262,6 @@ mod tests {
         assert!(cookie.contains("HttpOnly"));
     }
 
-    // -- set_csrf_cookie --
 
     #[test]
     fn test_set_csrf_cookie_not_httponly() {
@@ -287,7 +284,6 @@ mod tests {
         assert!(!cookie.contains("HttpOnly"));
     }
 
-    // -- set_clear_cookie --
 
     #[test]
     fn test_set_clear_cookie_attributes() {
@@ -311,7 +307,6 @@ mod tests {
         assert!(!cookie.contains("Secure"));
     }
 
-    // -- security headers --
 
     #[tokio::test]
     async fn test_security_headers_present() {
