@@ -91,7 +91,6 @@ func (f *StreamFilter) FilterUpcomingStreams(streams []*domain.Stream) []*domain
 	return filtered
 }
 
-// IsHolostarsChannel: 채널이 HOLOSTARS 소속인지 확인합니다.
 func (f *StreamFilter) IsHolostarsChannel(channel *domain.Channel) bool {
 	if channel == nil {
 		return false
