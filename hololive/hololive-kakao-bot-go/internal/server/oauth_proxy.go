@@ -25,7 +25,6 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
-// OAuthCallbackHandler: OAuth 프록시 콜백을 처리하여 Deep Link로 리디렉트합니다.
 // GET /oauth/callback?code=XXX&state=YYY
 // -> hololive-app://callback?code=XXX&state=YYY
 func (h *OAuthAPIHandler) OAuthCallbackHandler(c *gin.Context) {
