@@ -46,7 +46,6 @@ func healthHandler() http.Handler {
 	})
 }
 
-// TestH2CProtocolDetection: H2C 프로토콜이 실제로 사용되는지 확인
 func TestH2CProtocolDetection(t *testing.T) {
 	// H2C 서버 생성
 	h2cHandler := sharedserver.WrapH2C(healthHandler())
@@ -85,7 +84,6 @@ func TestH2CProtocolDetection(t *testing.T) {
 	t.Logf("응답: %s", string(body))
 }
 
-// TestHTTP1Fallback: H2C 서버가 HTTP/1.1 클라이언트도 지원하는지 확인
 func TestHTTP1Fallback(t *testing.T) {
 	h2cHandler := sharedserver.WrapH2C(healthHandler())
 	ts := httptest.NewUnstartedServer(h2cHandler)
@@ -116,7 +114,6 @@ func TestHTTP1Fallback(t *testing.T) {
 	}
 }
 
-// BenchmarkHTTP1: HTTP/1.1 성능 측정
 func BenchmarkHTTP1(b *testing.B) {
 	handler := healthHandler()
 	ts := httptest.NewUnstartedServer(handler)
@@ -143,7 +140,6 @@ func BenchmarkHTTP1(b *testing.B) {
 	}
 }
 
-// BenchmarkH2C: H2C 성능 측정
 func BenchmarkH2C(b *testing.B) {
 	h2cHandler := sharedserver.WrapH2C(healthHandler())
 	ts := httptest.NewUnstartedServer(h2cHandler)
@@ -170,7 +166,6 @@ func BenchmarkH2C(b *testing.B) {
 	}
 }
 
-// BenchmarkHTTP1Concurrent: HTTP/1.1 동시 요청 성능
 func BenchmarkHTTP1Concurrent(b *testing.B) {
 	handler := healthHandler()
 	ts := httptest.NewUnstartedServer(handler)
@@ -197,7 +192,6 @@ func BenchmarkHTTP1Concurrent(b *testing.B) {
 	})
 }
 
-// BenchmarkH2CConcurrent: H2C 동시 요청 성능 (멀티플렉싱 이점)
 func BenchmarkH2CConcurrent(b *testing.B) {
 	h2cHandler := sharedserver.WrapH2C(healthHandler())
 	ts := httptest.NewUnstartedServer(h2cHandler)
@@ -226,7 +220,6 @@ func BenchmarkH2CConcurrent(b *testing.B) {
 	})
 }
 
-// TestLatencyComparison: 레이턴시 비교 (실용적 테스트)
 func TestLatencyComparison(t *testing.T) {
 	// HTTP/1.1 서버
 	h1Handler := healthHandler()
@@ -349,7 +342,6 @@ func max(vals []float64) float64 {
 	return m
 }
 
-// TestMultiplexingBenefit: H2C 멀티플렉싱 이점 테스트
 func TestMultiplexingBenefit(t *testing.T) {
 	h2cHandler := sharedserver.WrapH2C(healthHandler())
 	ts := httptest.NewUnstartedServer(h2cHandler)
