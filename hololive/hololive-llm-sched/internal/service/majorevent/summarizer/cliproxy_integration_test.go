@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/llm"
 )
 
-// --- 테스트 헬퍼 ---
 
 func skipIfNoCliproxy(t *testing.T) {
 	t.Helper()
@@ -106,7 +105,6 @@ func newTestClient(t *testing.T, model string) *llm.OpenAIClient {
 	)
 }
 
-// === GPT 모델 통합 테스트 (Chat Completions — 웹 검색 없음) ===
 
 func TestIntegration_Summarize_RawJSON_GPT(t *testing.T) {
 	skipIfNoCliproxy(t)
@@ -227,7 +225,6 @@ func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 	}
 }
 
-// === GPT 모델 통합 테스트 (Responses API — web_search 그라운딩) ===
 
 func TestIntegration_Summarize_RawJSON_GPT_WebSearch(t *testing.T) {
 	skipIfNoCliproxy(t)
@@ -361,7 +358,6 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 	}
 }
 
-// === GPT 모델 통합 테스트 (Exa pre-search + Responses API web_search 병행) ===
 
 // exaSearchContext: Exa MCP 검색 결과를 시뮬레이션한 참고 자료
 // 실제 운영에서는 Exa MCP 또는 REST API를 통해 동적으로 수집
@@ -560,7 +556,6 @@ func TestIntegration_Summarize_Monthly_ExaPlusWebSearch(t *testing.T) {
 	}
 }
 
-// === Phase 1 검증: LLM 날짜 정확도 (example 오염 제거 후) ===
 
 // exaFeb2026WithANIPLUS: 기존 exaFeb2026Context + ANIPLUS 한국 파트너 이벤트 추가
 const exaFeb2026WithANIPLUS = exaFeb2026Context + `
