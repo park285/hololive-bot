@@ -27,16 +27,48 @@ import (
 )
 
 type ChannelPollerRegistration struct {
-	Poller   poller.Poller
-	Priority poller.Priority
-	Interval time.Duration
+	Poller                poller.Poller
+	Priority              poller.Priority
+	Interval              time.Duration
+	ChannelIDs            []string
+	HasExplicitChannelIDs bool
+	TargetGroup           ChannelTargetGroup
 }
+
+type ChannelTargetGroup string
+
+const (
+	ChannelTargetGroupDefault      ChannelTargetGroup = "default"
+	ChannelTargetGroupNotification ChannelTargetGroup = "notification"
+	ChannelTargetGroupStats        ChannelTargetGroup = "stats"
+)
 
 func NewChannelPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
 	return ChannelPollerRegistration{
-		Poller:   p,
-		Priority: priority,
-		Interval: interval,
+		Poller:      p,
+		Priority:    priority,
+		Interval:    interval,
+		TargetGroup: ChannelTargetGroupDefault,
+	}
+}
+
+func (r ChannelPollerRegistration) WithChannelIDs(channelIDs []string) ChannelPollerRegistration {
+	r.ChannelIDs = append([]string(nil), channelIDs...)
+	r.HasExplicitChannelIDs = true
+	return r
+}
+
+func (r ChannelPollerRegistration) WithTargetGroup(group ChannelTargetGroup) ChannelPollerRegistration {
+	r.TargetGroup = group
+	return r
+}
+
+func (r ChannelPollerRegistration) ToTargetSync() poller.PollerTargetSync {
+	return poller.PollerTargetSync{
+		Poller:     r.Poller,
+		Priority:   r.Priority,
+		Interval:   r.Interval,
+		ChannelIDs: append([]string(nil), r.ChannelIDs...),
 	}
 }
 

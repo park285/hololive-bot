@@ -186,6 +186,56 @@ func TestRepositoryUpsertRecomputesLatencyWhenPublishedAtBackfillsAfterSentAt(t 
 	require.False(t, *record.AlarmLatencyExceeded)
 }
 
+func TestPendingPublishedAtResolver_KeysetPaginationStableWithSameDetectedAt(t *testing.T) {
+	db := newTrackingTestDB(t)
+	repo := NewRepository(db)
+	ctx := context.Background()
+	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+
+	rows := []*domain.YouTubeCommunityShortsAlarmState{
+		{
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:short-a",
+			ContentID:      "short:short-a",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt,
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
+		},
+		{
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:short-b",
+			ContentID:      "short:short-b",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt,
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
+		},
+		{
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:short-c",
+			ContentID:      "short:short-c",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt,
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
+		},
+	}
+	require.NoError(t, db.Create(&rows).Error)
+
+	firstPage, cursor, err := repo.ListPendingPublishedAtResolutionsPage(ctx, detectedAt.Add(time.Minute), nil, 2)
+	require.NoError(t, err)
+	require.Len(t, firstPage, 2)
+	require.NotNil(t, cursor)
+	require.Equal(t, "short:short-a", firstPage[0].PostID)
+	require.Equal(t, "short:short-b", firstPage[1].PostID)
+	require.Equal(t, detectedAt, cursor.DetectedAt.UTC())
+	require.Equal(t, "short:short-b", cursor.PostID)
+
+	secondPage, nextCursor, err := repo.ListPendingPublishedAtResolutionsPage(ctx, detectedAt.Add(time.Minute), cursor, 2)
+	require.NoError(t, err)
+	require.Len(t, secondPage, 1)
+	require.Nil(t, nextCursor)
+	require.Equal(t, "short:short-c", secondPage[0].PostID)
+}
+
 func TestRepositoryRejectsUnsupportedKind(t *testing.T) {
 	repo := NewRepository(newTrackingTestDB(t))
 	err := repo.Upsert(context.Background(), &domain.YouTubeContentAlarmTracking{

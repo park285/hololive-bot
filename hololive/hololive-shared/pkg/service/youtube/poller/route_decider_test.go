@@ -28,11 +28,3 @@ func TestShouldEnqueueRoutedNotification(t *testing.T) {
 	}, captured)
 	assert.True(t, shouldEnqueueRoutedNotification(nil, domain.AlarmTypeCommunity, "UCfallback", time.Time{}))
 }
-
-func TestResolveWatermarkLastContentID(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "old-id", resolveWatermarkLastContentID("new-id", "old-id", true))
-	assert.Equal(t, "new-id", resolveWatermarkLastContentID("new-id", "old-id", false))
-	assert.Equal(t, "new-id", resolveWatermarkLastContentID("new-id", "", true))
-}

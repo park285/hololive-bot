@@ -45,11 +45,13 @@ type StreamIngesterRuntime struct {
 	Config      *config.Config
 	Logger      *slog.Logger
 
-	Scheduler        youtube.Scheduler
-	ScraperScheduler *poller.Scheduler
-	PhotoSync        *holodex.PhotoSyncService
-	OutboxDispatcher *outbox.Dispatcher
-	ConfigSubscriber *configsub.Subscriber
+	Scheduler           youtube.Scheduler
+	ScraperScheduler    *poller.Scheduler
+	PublishedAtResolver *poller.PendingPublishedAtResolver
+	PhotoSync           *holodex.PhotoSyncService
+	OutboxDispatcher    *outbox.Dispatcher
+	ConfigSubscriber    *configsub.Subscriber
+	PollTargetRefresher *youTubePollTargetRefresher
 
 	ServerAddr string
 	HttpServer *http.Server

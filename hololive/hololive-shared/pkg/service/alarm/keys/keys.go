@@ -41,6 +41,7 @@ const (
 	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
 	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
 	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
+	ChannelSubscribersEmptyKeyPrefix  = "alarm:channel_subscribers_empty:"
 	MemberNameKey                     = "alarm:member_names"
 	RoomNamesCacheKey                 = "alarm:room_names"
 	UserNamesCacheKey                 = "alarm:user_names"
@@ -78,6 +79,10 @@ func BuildChannelContentAlarmTargetKeys(channelID string) ChannelContentAlarmTar
 		CommunitySubscribersKey: BuildChannelSubscriberKey(channelID, domain.AlarmTypeCommunity),
 		ShortsSubscribersKey:    BuildChannelSubscriberKey(channelID, domain.AlarmTypeShorts),
 	}
+}
+
+func BuildChannelSubscriberEmptyKey(channelID string, alarmType domain.AlarmType) string {
+	return ChannelSubscribersEmptyKeyPrefix + string(alarmType) + ":" + channelID
 }
 
 func (k ChannelContentAlarmTargetKeys) KeyFor(alarmType domain.AlarmType) string {

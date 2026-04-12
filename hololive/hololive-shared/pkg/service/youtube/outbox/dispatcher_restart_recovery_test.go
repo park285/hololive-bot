@@ -126,7 +126,7 @@ func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.
 		DeliveryParallelism: 1,
 	})
 
-	dispatcher.ProcessOnceForTest(ctx)
+	dispatcher.AggregateSyncForTest(ctx)
 
 	var updatedOutbox sqliteOutboxModel
 	require.NoError(t, db.First(&updatedOutbox, item.ID).Error)

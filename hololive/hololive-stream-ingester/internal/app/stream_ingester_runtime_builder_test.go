@@ -302,19 +302,22 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 
 			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, infra.membersData)
 
-			scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
+			scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
 				cfg.Scraper,
 				infra.postgresService,
 				communityShortsEnabledChannelIDs(operationalChannels),
+				communityShortsEnabledChannelIDs(operationalChannels),
+				buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL),
 				infra.cacheService,
 				infra.irisClient,
 				infra.templateRenderer,
-				infra.sharedRL,
 				nil,
 				testLogger(),
 			)
+			require.NoError(t, err)
 			require.NotNil(t, scraperScheduler)
 			require.NotNil(t, outboxDispatcher)
+			require.Len(t, registrations, 5)
 			assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
 
 			configSubscriber := buildStreamIngesterConfigSubscriber(

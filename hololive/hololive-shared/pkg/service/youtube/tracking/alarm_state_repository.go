@@ -10,6 +10,105 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
+func (r *GormRepository) ListPendingPublishedAtResolutions(
+	ctx context.Context,
+	detectedBefore time.Time,
+	limit int,
+) ([]PublishedAtResolutionCandidate, error) {
+	candidates, _, err := r.ListPendingPublishedAtResolutionsPage(ctx, detectedBefore, nil, limit)
+	if err != nil {
+		return nil, err
+	}
+	return candidates, nil
+}
+
+func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
+	ctx context.Context,
+	detectedBefore time.Time,
+	cursor *PublishedAtResolutionCursor,
+	limit int,
+) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error) {
+	if r == nil || r.db == nil {
+		return nil, nil, fmt.Errorf("list pending published_at resolutions page: db is nil")
+	}
+	if detectedBefore.IsZero() {
+		return nil, nil, fmt.Errorf("list pending published_at resolutions page: detected before is empty")
+	}
+	if limit <= 0 {
+		return nil, nil, fmt.Errorf("list pending published_at resolutions page: limit must be positive")
+	}
+
+	type pendingResolutionRow struct {
+		Kind       domain.OutboxKind `gorm:"column:kind"`
+		PostID     string            `gorm:"column:post_id"`
+		ContentID  string            `gorm:"column:content_id"`
+		ChannelID  string            `gorm:"column:channel_id"`
+		DetectedAt time.Time         `gorm:"column:detected_at"`
+	}
+
+	var rows []pendingResolutionRow
+	query := r.db.WithContext(ctx).
+		Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Select("kind, post_id, content_id, channel_id, detected_at").
+		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
+		Where("actual_published_at IS NULL").
+		Where("alarm_sent_at IS NULL").
+		Where("authorized_at IS NULL").
+		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore))
+	if cursor != nil {
+		query = query.Where(
+			"(detected_at > ?) OR (detected_at = ? AND post_id > ?)",
+			yttimestamp.Normalize(cursor.DetectedAt),
+			yttimestamp.Normalize(cursor.DetectedAt),
+			strings.TrimSpace(cursor.PostID),
+		)
+	}
+	if err := query.
+		Order("detected_at ASC").
+		Order("post_id ASC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, nil, fmt.Errorf("list pending published_at resolutions page: query rows: %w", err)
+	}
+
+	candidates := make([]PublishedAtResolutionCandidate, 0, len(rows))
+	for i := range rows {
+		normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(rows[i].Kind, rows[i].PostID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("list pending published_at resolutions page: normalize post id at index %d: %w", i, err)
+		}
+		normalizedContentKind, normalizedContentID, err := normalizeIdentity(rows[i].Kind, rows[i].ContentID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("list pending published_at resolutions page: normalize content id at index %d: %w", i, err)
+		}
+		if normalizedKind != normalizedContentKind {
+			return nil, nil, fmt.Errorf("list pending published_at resolutions page: kind mismatch at index %d", i)
+		}
+		candidates = append(candidates, PublishedAtResolutionCandidate{
+			Kind:       normalizedKind,
+			PostID:     normalizedPostID,
+			ContentID:  canonicalTrackingIdentity(normalizedKind, normalizedContentID),
+			ChannelID:  strings.TrimSpace(rows[i].ChannelID),
+			DetectedAt: yttimestamp.Normalize(rows[i].DetectedAt),
+		})
+	}
+
+	if len(candidates) == 0 {
+		return nil, nil, nil
+	}
+
+	last := candidates[len(candidates)-1]
+	nextCursor := &PublishedAtResolutionCursor{
+		DetectedAt: last.DetectedAt,
+		PostID:     last.PostID,
+	}
+	if len(candidates) < limit {
+		nextCursor = nil
+	}
+
+	return candidates, nextCursor, nil
+}
+
 func (r *GormRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("find alarm state by post id: db is nil")
