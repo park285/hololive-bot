@@ -29,7 +29,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 )
 
-// GetRooms: 설정된 방 목록을 반환합니다.
 func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
 	if h.acl == nil {
 		c.JSON(503, gin.H{"error": "ACL service not available"})
@@ -45,7 +44,6 @@ func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
 	})
 }
 
-// AddRoom: 현재 활성 모드의 ACL 목록에 새로운 방을 추가합니다.
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
@@ -88,7 +86,6 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 	h.activity.Log("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
-// RemoveRoom: 현재 활성 모드의 ACL 목록에서 방을 제거합니다.
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
@@ -131,7 +128,6 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 	h.activity.Log("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
-// SetACL: 방 ACL을 활성화/비활성화하거나 모드를 변경합니다.
 func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	if h.acl == nil {
 		c.JSON(503, gin.H{"error": "ACL service not available"})
