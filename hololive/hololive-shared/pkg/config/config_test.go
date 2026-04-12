@@ -352,6 +352,75 @@ func TestLoad_ScraperWorkerCountLegacyEnvFallback(t *testing.T) {
 	}
 }
 
+func TestLoad_ScraperPublishedAtResolverDefaults(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.Scraper.PublishedAtResolver.Enabled {
+		t.Fatal("Scraper.PublishedAtResolver.Enabled = false, want true")
+	}
+	if cfg.Scraper.PublishedAtResolver.Interval != 15*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", cfg.Scraper.PublishedAtResolver.Interval, 15*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.BatchSize != 10 {
+		t.Fatalf("Scraper.PublishedAtResolver.BatchSize = %d, want %d", cfg.Scraper.PublishedAtResolver.BatchSize, 10)
+	}
+	if cfg.Scraper.PublishedAtResolver.MaxResolvePerRun != 1 {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", cfg.Scraper.PublishedAtResolver.MaxResolvePerRun, 1)
+	}
+	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 2*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 2*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.MinDetectedAge != 30*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", cfg.Scraper.PublishedAtResolver.MinDetectedAge, 30*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.FailureBackoffTTL != 5*time.Minute {
+		t.Fatalf("Scraper.PublishedAtResolver.FailureBackoffTTL = %s, want %s", cfg.Scraper.PublishedAtResolver.FailureBackoffTTL, 5*time.Minute)
+	}
+}
+
+func TestLoad_ScraperPublishedAtResolverEnvOverrides(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_ENABLED", "false")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS", "21")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE", "7")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN", "3")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS", "4")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", "35")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", "420")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.PublishedAtResolver.Enabled {
+		t.Fatal("Scraper.PublishedAtResolver.Enabled = true, want false")
+	}
+	if cfg.Scraper.PublishedAtResolver.Interval != 21*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", cfg.Scraper.PublishedAtResolver.Interval, 21*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.BatchSize != 7 {
+		t.Fatalf("Scraper.PublishedAtResolver.BatchSize = %d, want %d", cfg.Scraper.PublishedAtResolver.BatchSize, 7)
+	}
+	if cfg.Scraper.PublishedAtResolver.MaxResolvePerRun != 3 {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", cfg.Scraper.PublishedAtResolver.MaxResolvePerRun, 3)
+	}
+	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 4*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 4*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.MinDetectedAge != 35*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", cfg.Scraper.PublishedAtResolver.MinDetectedAge, 35*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.FailureBackoffTTL != 7*time.Minute {
+		t.Fatalf("Scraper.PublishedAtResolver.FailureBackoffTTL = %s, want %s", cfg.Scraper.PublishedAtResolver.FailureBackoffTTL, 7*time.Minute)
+	}
+}
+
 func TestLoad_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")

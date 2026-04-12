@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// Config: 홀로라이브 봇의 전체 동작에 필요한 설정을 담는 구조체
 type Config struct {
 	Iris            IrisConfig
 	Server          ServerConfig
@@ -60,7 +59,6 @@ type Config struct {
 	Version         string
 }
 
-// Load: .env 파일 및 환경 변수로부터 설정을 로드하고, 기본값을 적용하여 Config 객체를 생성합니다.
 func Load() (*Config, error) {
 	_ = godotenv.Load()
 
@@ -97,6 +95,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
 		"SERVICES_LLM_SERVER_HEALTH_URL",
 	)
+	publishedAtResolverDefaults := DefaultScraperPublishedAtResolverConfig()
 	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
 	if err != nil {
 		return nil, err
@@ -168,6 +167,15 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 				"SCRAPER_WORKER_COUNT",
 			}, DefaultScraperWorkerCount()),
 			Poll: loadScraperPoll(),
+			PublishedAtResolver: ScraperPublishedAtResolverConfig{
+				Enabled:           sharedenv.Bool("SCRAPER_PUBLISHED_AT_RESOLVER_ENABLED", publishedAtResolverDefaults.Enabled),
+				Interval:          time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS", int(publishedAtResolverDefaults.Interval/time.Second))) * time.Second,
+				BatchSize:         sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE", publishedAtResolverDefaults.BatchSize),
+				MaxResolvePerRun:  sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN", publishedAtResolverDefaults.MaxResolvePerRun),
+				MaxRunDuration:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS", int(publishedAtResolverDefaults.MaxRunDuration/time.Second))) * time.Second,
+				MinDetectedAge:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", int(publishedAtResolverDefaults.MinDetectedAge/time.Second))) * time.Second,
+				FailureBackoffTTL: time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", int(publishedAtResolverDefaults.FailureBackoffTTL/time.Second))) * time.Second,
+			},
 		},
 		Webhook: WebhookConfig{
 			WorkerCount:    sharedenv.Int("WEBHOOK_WORKER_COUNT", 16),
@@ -197,7 +205,6 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 	}, nil
 }
 
-// Validate: 필수 설정값이 누락되지 않았는지 검증합니다.
 func (c *Config) Validate() error {
 	if err := validateDeprecatedEnvUsage(); err != nil {
 		return err
