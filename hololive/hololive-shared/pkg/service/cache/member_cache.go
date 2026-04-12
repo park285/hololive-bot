@@ -31,7 +31,6 @@ import (
 
 const memberHashKey = "hololive:members"
 
-// InitializeMemberDatabase: 멤버 데이터베이스를 캐시 스토어에 초기화한다. (기존 데이터 삭제 후 갱신)
 func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[string]string) error {
 	if err := c.client.Do(ctx, c.client.B().Del().Key(memberHashKey).Build()).Error(); err != nil {
 		c.logger.Error("Failed to clear member database", slog.Any("error", err))
@@ -59,7 +58,6 @@ func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[s
 	return nil
 }
 
-// GetMemberChannelID: 멤버 이름으로 채널 ID를 조회합니다.
 // 역호환을 위해 먼저 name:Hololive 키를 시도하고, 실패 시 레거시 키(name만)를 시도합니다.
 func (c *Service) GetMemberChannelID(ctx context.Context, memberName string) (string, error) {
 	if memberName == "" {
@@ -93,7 +91,6 @@ func (c *Service) GetMemberChannelID(ctx context.Context, memberName string) (st
 	return value, nil
 }
 
-// GetAllMembers: 캐시에 저장된 모든 멤버 정보를 조회합니다.
 func (c *Service) GetAllMembers(ctx context.Context) (map[string]string, error) {
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(memberHashKey).Build())
 	if resp.Error() != nil {
@@ -109,7 +106,6 @@ func (c *Service) GetAllMembers(ctx context.Context) (map[string]string, error) 
 	return values, nil
 }
 
-// GetMemberChannelIDWithOrg: org가 지정된 경우 name:org 키로 채널 ID를 조회합니다.
 func (c *Service) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org string) (string, error) {
 	if memberName == "" {
 		return "", nil
@@ -140,7 +136,6 @@ func (c *Service) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org
 	return value, nil
 }
 
-// GetMemberChannelIDs: 이름으로 매칭되는 모든 채널 ID를 반환합니다 (동명이인 처리용).
 // name:org 형식의 키에서 name 부분이 일치하는 모든 항목을 반환합니다.
 func (c *Service) GetMemberChannelIDs(ctx context.Context, memberName string) ([]string, error) {
 	if memberName == "" {
@@ -167,7 +162,6 @@ func (c *Service) GetMemberChannelIDs(ctx context.Context, memberName string) ([
 	return channelIDs, nil
 }
 
-// AddMember: 멤버 정보를 캐시에 추가하거나 갱신합니다.
 func (c *Service) AddMember(ctx context.Context, memberName, channelID string) error {
 	if memberName == "" || channelID == "" {
 		return fmt.Errorf("member name and channel ID must be provided")

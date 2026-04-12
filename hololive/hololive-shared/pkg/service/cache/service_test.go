@@ -298,13 +298,11 @@ func TestService_DoMulti(t *testing.T) {
 	svc, _ := newTestCacheService(t)
 	ctx := context.Background()
 
-	// Test with empty commands
 	result := svc.DoMulti(ctx)
 	if result != nil {
 		t.Errorf("DoMulti() with empty commands should return nil, got %v", result)
 	}
 
-	// Test with valid commands
 	cmds := []valkey.Completed{
 		svc.Builder().Set().Key("multi1").Value("val1").Build(),
 		svc.Builder().Set().Key("multi2").Value("val2").Build(),
@@ -319,7 +317,6 @@ func TestService_DoMulti(t *testing.T) {
 		}
 	}
 
-	// Verify values
 	val1, _ := svc.GetClient().Do(ctx, svc.Builder().Get().Key("multi1").Build()).ToString()
 	if val1 != "val1" {
 		t.Errorf("expected val1, got %s", val1)
@@ -330,7 +327,6 @@ func TestService_Builder(t *testing.T) {
 	svc, _ := newTestCacheService(t)
 	builder := svc.Builder()
 
-	// Test if it works
 	cmd := builder.Ping().Build()
 	if cmd.Commands()[0] != "PING" {
 		t.Errorf("expected PING command, got %v", cmd.Commands())
