@@ -33,16 +33,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// AlarmDispatchQueue: Valkey 큐 키
 const AlarmDispatchQueue = contractsalarm.DispatchQueueKey
 
-// Publisher: 알림 봉투를 Valkey List로 발행하는 퍼블리셔
 type Publisher struct {
 	cache  cache.Client
 	logger *slog.Logger
 }
 
-// NewPublisher: QueuePublisher 생성
 func NewPublisher(c cache.Client, logger *slog.Logger) *Publisher {
 	if logger == nil {
 		logger = slog.Default()
@@ -54,7 +51,6 @@ func NewPublisher(c cache.Client, logger *slog.Logger) *Publisher {
 	}
 }
 
-// Publish: 알림 봉투를 JSON 직렬화 후 Valkey 큐에 LPUSH 한다.
 func (p *Publisher) Publish(ctx context.Context, notification *domain.AlarmNotification, claimKeys []string) error {
 	if notification == nil {
 		return fmt.Errorf("publish alarm queue: notification is nil")
