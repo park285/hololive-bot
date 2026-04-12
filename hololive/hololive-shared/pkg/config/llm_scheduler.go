@@ -28,7 +28,6 @@ import (
 	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
-// LLMSchedulerConfig: llm-scheduler 바이너리 전용 설정
 type LLMSchedulerConfig struct {
 	Server      ServerConfig
 	Iris        IrisConfig
@@ -43,7 +42,6 @@ type LLMSchedulerConfig struct {
 	Version     string
 }
 
-// LoadLLMScheduler: llm-scheduler 전용 설정을 환경변수에서 로드합니다.
 func LoadLLMScheduler() (*LLMSchedulerConfig, error) {
 	_ = godotenv.Load()
 
