@@ -27,7 +27,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// StatsWriteRepository: 통계 쓰기 경로를 담당한다.
 type StatsWriteRepository interface {
 	SaveStats(ctx context.Context, stats *domain.TimestampedStats) error
 	SaveStatsBatch(ctx context.Context, stats []*domain.TimestampedStats) error
@@ -35,14 +34,12 @@ type StatsWriteRepository interface {
 	RecordChangeBatch(ctx context.Context, changes []*domain.StatsChange) error
 }
 
-// StatsReadRepository: 통계 읽기 경로를 담당한다.
 type StatsReadRepository interface {
 	GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error)
 	GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error)
 	GetTopGainers(ctx context.Context, since time.Time, limit int) ([]domain.RankEntry, error)
 }
 
-// MilestoneRepository: 마일스톤 조회/기록 경로를 담당한다.
 type MilestoneRepository interface {
 	GetAchievedMilestones(ctx context.Context, channelIDs []string, milestoneType domain.MilestoneType) (map[string][]uint64, error)
 	SaveMilestone(ctx context.Context, milestone *domain.Milestone) error
@@ -54,12 +51,10 @@ type MilestoneRepository interface {
 	GetMilestoneStats(ctx context.Context) (*MilestoneStats, error)
 }
 
-// SubscriberGraphRepository: 구독자 그래프 조회 경로를 담당한다.
 type SubscriberGraphRepository interface {
 	GetSubscriberGraph(ctx context.Context, channelID string, days int) (*SubscriberGraphData, error)
 }
 
-// NotificationRepository: 통계 변경/마일스톤 알림 큐 경로를 담당한다.
 type NotificationRepository interface {
 	GetUnnotifiedChanges(ctx context.Context, limit int) ([]*domain.StatsChange, error)
 	MarkChangeNotified(ctx context.Context, channelID string, detectedAt time.Time) error
@@ -73,13 +68,11 @@ type NotificationRepository interface {
 	MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error
 }
 
-// StatsServiceRepository: StatsService가 요구하는 최소 read/write 계약.
 type StatsServiceRepository interface {
 	GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error)
 	SaveStats(ctx context.Context, stats *domain.TimestampedStats) error
 }
 
-// StatsSchedulerRepository: Scheduler가 요구하는 최소 계약.
 type StatsSchedulerRepository interface {
 	GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error)
 	GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error)
@@ -101,13 +94,11 @@ type StatsSchedulerRepository interface {
 	MarkApproachingChatNotifiedBatch(ctx context.Context, notifications []ApproachingNotification) error
 }
 
-// StatsCommandRepository: 카카오 봇 command 경로가 요구하는 최소 계약.
 type StatsCommandRepository interface {
 	GetTopGainers(ctx context.Context, since time.Time, limit int) ([]domain.RankEntry, error)
 	GetSubscriberGraph(ctx context.Context, channelID string, days int) (*SubscriberGraphData, error)
 }
 
-// StatsDashboardRepository: admin/kakao dashboard API 경로가 요구하는 최소 계약.
 type StatsDashboardRepository interface {
 	GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error)
 	GetAllMilestones(ctx context.Context, filter MilestoneFilter) (*MilestoneResult, error)

@@ -79,13 +79,11 @@ const subscriberGraphQuery = `
 	LEFT JOIN stats_30d s30 ON true
 `
 
-// SubscriberGraphPoint: 구독자 그래프 데이터 포인트 (일별 다운샘플링)
 type SubscriberGraphPoint struct {
 	Date        time.Time `json:"date"`
 	Subscribers int64     `json:"subscribers"`
 }
 
-// SubscriberGraphData: 구독자 그래프 전체 데이터
 type SubscriberGraphData struct {
 	ChannelID   string                 `json:"channelId"`
 	MemberName  string                 `json:"memberName"`
@@ -97,7 +95,6 @@ type SubscriberGraphData struct {
 	SampleCount int                    `json:"sampleCount"`
 }
 
-// GetSubscriberGraph: 채널의 구독자 추이를 일별 다운샘플링하여 조회 (7/30/90일)
 func (r *StatsRepository) GetSubscriberGraph(ctx context.Context, channelID string, days int) (*SubscriberGraphData, error) {
 	if days <= 0 {
 		days = 30
