@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// --- 2월 테스트 데이터 (실제 DB 기반) ---
 
 func feb2026Events() []domain.MajorEvent {
 	date := func(y, m, d int) *time.Time {
@@ -65,7 +64,6 @@ func feb2026Events() []domain.MajorEvent {
 	}
 }
 
-// --- 3월 테스트 데이터 (실제 DB 기반) ---
 
 func mar2026Events() []domain.MajorEvent {
 	date := func(y, m, d int) *time.Time {
