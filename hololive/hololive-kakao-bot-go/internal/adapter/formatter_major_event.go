@@ -96,7 +96,6 @@ func (f *ResponseFormatter) FormatMajorEventWeeklySummary(ctx context.Context, e
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
 }
 
-// FormatMajorEventMonthlySummary: 월간 행사 요약을 포맷합니다.
 func (f *ResponseFormatter) FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string {
 	if len(events) == 0 {
 		return ""
