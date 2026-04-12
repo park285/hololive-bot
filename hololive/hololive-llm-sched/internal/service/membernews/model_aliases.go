@@ -72,7 +72,6 @@ const (
 	CategoryOther        = model.CategoryOther
 )
 
-// NormalizePeriod: 입력 period를 canonical 값으로 정규화합니다.
 func NormalizePeriod(period Period) Period {
 	return model.NormalizePeriod(period)
 }
