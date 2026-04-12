@@ -168,6 +168,7 @@ type YouTubeCommunityShortsAlarmState struct {
 	ChannelID         string                                 `gorm:"size:50;not null;index:idx_ycsas_channel_detected" json:"channel_id"`
 	ActualPublishedAt *time.Time                             `json:"actual_published_at,omitempty"`
 	DetectedAt        time.Time                              `gorm:"not null;index:idx_ycsas_detected_at;index:idx_ycsas_channel_detected" json:"detected_at"`
+	PublishedAtRetryAfter *time.Time                         `gorm:"index:idx_ycsas_published_at_retry_after" json:"published_at_retry_after,omitempty"`
 	AuthorizedAt      *time.Time                             `gorm:"index:idx_ycsas_authorized_at" json:"authorized_at,omitempty"`
 	AlarmSentAt       *time.Time                             `gorm:"index:idx_ycsas_alarm_sent_at" json:"alarm_sent_at,omitempty"`
 	DeliveryStatus    YouTubeCommunityShortsAlarmStateStatus `gorm:"size:20;not null;default:'DETECTED';index:idx_ycsas_delivery_status" json:"delivery_status"`
