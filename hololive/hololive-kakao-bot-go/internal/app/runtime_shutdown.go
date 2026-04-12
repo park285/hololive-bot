@@ -26,7 +26,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
-// Shutdown: 봇의 모든 구성 요소를 안전하게 종료하고 리소스를 정리합니다.
 func (r *BotRuntime) Shutdown(ctx context.Context) {
 	if r == nil {
 		return
