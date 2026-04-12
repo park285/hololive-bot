@@ -34,7 +34,6 @@ PGO_BINARY="bin/bot-pgo"
 echo "=== PGO (Profile-Guided Optimization) Build ==="
 echo ""
 
-# === Step 1: 프로파일 수집용 바이너리 빌드 ===
 echo "[1/4] Building profiling binary..."
 CGO_ENABLED=0 go build -tags go_json -o bin/bot-profiling ./cmd/bot
 
@@ -78,12 +77,10 @@ else
     fi
 fi
 
-# === Step 3: 프로파일 분석 ===
 echo ""
 echo "[3/4] Analyzing profile..."
 go tool pprof -top -cum "$PROFILE_FILE" 2>/dev/null | head -15 || echo "   (프로파일 내용 생략)"
 
-# === Step 4: PGO 빌드 ===
 echo ""
 echo "[4/4] Building with PGO..."
 
@@ -93,7 +90,6 @@ cp "$PROFILE_FILE" default.pgo
 # PGO 활성화 빌드
 time CGO_ENABLED=0 go build -tags netgo,go_json -ldflags="-s -w" -pgo=auto -o "$PGO_BINARY" ./cmd/bot
 
-# === 완료 ===
 echo ""
 echo "✓ PGO build completed!"
 echo ""
