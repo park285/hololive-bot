@@ -30,13 +30,11 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// Settings: 봇의 동적 설정을 담는 구조체 (예: 알림 전송 시점)
 type Settings struct {
 	AlarmAdvanceMinutes int  `json:"alarmAdvanceMinutes"`
 	ScraperProxyEnabled bool `json:"scraperProxyEnabled"`
 }
 
-// Service: 설정 파일을 로드하고 관리하며, 변경 시 파일에 실시간으로 반영하는 서비스
 type Service struct {
 	filePath string
 	logger   *slog.Logger
@@ -61,7 +59,6 @@ func ensureParentDir(filePath string) error {
 	return nil
 }
 
-// NewSettingsService: 지정된 파일 경로에서 설정을 로드하여 서비스 인스턴스를 생성합니다.
 func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger) *Service {
 	if defaults.AlarmAdvanceMinutes <= 0 {
 		defaults.AlarmAdvanceMinutes = 5
@@ -106,14 +103,12 @@ func (s *Service) load() {
 	}
 }
 
-// Get: 현재 메모리에 캐시된 설정 값을 조회한다. (Thread-safe)
 func (s *Service) Get() Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return *s.cache
 }
 
-// Update: 설정을 업데이트하고 파일에 즉시 영구 저장합니다.
 func (s *Service) Update(newSettings Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
