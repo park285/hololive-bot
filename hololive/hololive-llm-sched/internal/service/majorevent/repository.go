@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-// Repository: 대형 행사 구독 데이터의 영속 저장소 (PostgreSQL)
 type Repository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
@@ -53,7 +52,6 @@ func (r *Repository) requirePool(action string) error {
 	return nil
 }
 
-// NewRepository: 새로운 Repository를 생성합니다.
 func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	return &Repository{
 		pool:   postgres.GetPool(),
@@ -75,7 +73,6 @@ func normalizeEventForUpsert(event *domain.MajorEvent) (domain.MajorEventType, d
 	return eventType, linkStatus
 }
 
-// Subscribe: 방의 대형 행사 알림을 구독합니다. 이미 구독 중이면 무시합니다.
 func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if err := r.requirePool("subscribe major event"); err != nil {
 		return err
@@ -95,7 +92,6 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 	return nil
 }
 
-// Unsubscribe: 방의 대형 행사 알림 구독을 해제합니다.
 func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	if err := r.requirePool("unsubscribe major event"); err != nil {
 		return err
@@ -109,7 +105,6 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	return nil
 }
 
-// IsSubscribed: 방이 대형 행사 알림을 구독 중인지 확인합니다.
 func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	if err := r.requirePool("check subscription"); err != nil {
 		return false, err
@@ -125,7 +120,6 @@ func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, err
 	return exists, nil
 }
 
-// GetSubscribedRooms: 구독 중인 모든 방 목록을 조회합니다.
 func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error) {
 	if err := r.requirePool("get subscribed rooms"); err != nil {
 		return nil, err
@@ -185,7 +179,6 @@ func (r *Repository) scanSubscriptions(rows pgx.Rows) ([]*domain.EventRoomSubscr
 	return subscriptions, nil
 }
 
-// CreateTable: 테이블이 없으면 생성합니다. (마이그레이션용)
 func (r *Repository) CreateTable(ctx context.Context) error {
 	if err := r.requirePool("create major_event_subscriptions table"); err != nil {
 		return err
@@ -207,7 +200,6 @@ func (r *Repository) CreateTable(ctx context.Context) error {
 	return nil
 }
 
-// CreateEventsTable: major_events 테이블을 생성합니다. (마이그레이션용)
 func (r *Repository) CreateEventsTable(ctx context.Context) error {
 	if err := r.requirePool("create major_events table"); err != nil {
 		return err
@@ -362,7 +354,6 @@ func (r *Repository) createIndexes(ctx context.Context) error {
 	return nil
 }
 
-// GetRecentExternalIDs: 최근 저장된 이벤트 external_id 목록과 최신 pub_date를 조회합니다.
 func (r *Repository) GetRecentExternalIDs(ctx context.Context, eventType domain.MajorEventType, limit int) ([]string, *time.Time, error) {
 	if limit <= 0 {
 		limit = 1
@@ -417,7 +408,6 @@ func (r *Repository) queryEvents(ctx context.Context, action string, query strin
 	return r.scanEvents(rows)
 }
 
-// UpsertEvent: 이벤트를 삽입하거나 업데이트합니다. (external_id 기준)
 func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) error {
 	query := `
 		INSERT INTO major_events (external_id, type, title, link, description, members, pub_date, event_start_date, event_end_date, status, link_status)
@@ -469,7 +459,6 @@ func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) 
 	return nil
 }
 
-// GetEventsByDateRange: 날짜 범위 내의 활성 행사를 조회합니다. (event + news, 주간 중복 방지)
 func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDate time.Time, weekKey string) ([]*domain.MajorEvent, error) {
 	query := majorEventSelectColumns + `
 		WHERE status = $1
@@ -493,7 +482,6 @@ func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDat
 	)
 }
 
-// GetEventsByMonth: 특정 월에 걸친 활성 행사를 조회합니다. (event + news, 월간 중복 방지)
 func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, monthKey string) ([]*domain.MajorEvent, error) {
 	monthStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	monthEnd := monthStart.AddDate(0, 1, -1)
@@ -520,7 +508,6 @@ func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, mont
 	)
 }
 
-// MarkEventsAsMonthlyNotified: 이벤트들을 월간 알림 발송 완료로 표시합니다.
 func (r *Repository) MarkEventsAsMonthlyNotified(ctx context.Context, eventIDs []int, monthKey string) error {
 	if len(eventIDs) == 0 {
 		return nil
@@ -540,7 +527,6 @@ func (r *Repository) MarkEventsAsMonthlyNotified(ctx context.Context, eventIDs [
 	return nil
 }
 
-// MarkEventsAsNotified: 이벤트들을 알림 발송 완료로 표시합니다.
 func (r *Repository) MarkEventsAsNotified(ctx context.Context, eventIDs []int, weekKey string) error {
 	if len(eventIDs) == 0 {
 		return nil
@@ -561,7 +547,6 @@ func (r *Repository) MarkEventsAsNotified(ctx context.Context, eventIDs []int, w
 	return nil
 }
 
-// UpdateExpiredEvents: 종료된 이벤트의 상태를 업데이트합니다.
 func (r *Repository) UpdateExpiredEvents(ctx context.Context) (int64, error) {
 	query := `
 		UPDATE major_events
@@ -581,7 +566,6 @@ func (r *Repository) UpdateExpiredEvents(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
-// GetAllActiveEvents: 모든 활성 이벤트를 조회합니다.
 func (r *Repository) GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEvent, error) {
 	query := majorEventSelectColumns + `
 		WHERE status = $1
