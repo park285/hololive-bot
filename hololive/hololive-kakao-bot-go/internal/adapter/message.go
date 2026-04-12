@@ -29,7 +29,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// MessageAdapter: 카카오톡 메시지를 커맨드로 파싱하는 어댑터입니다.
 type MessageAdapter struct {
 	prefix        string
 	mentionPrefix string
@@ -89,7 +88,6 @@ func (ma *MessageAdapter) extractCommandText(raw string) (normalized, commandTex
 	return text, cmd, true
 }
 
-// NewMessageAdapter: MessageAdapter 인스턴스를 생성합니다.
 func NewMessageAdapter(prefix string, mentionPrefix string) *MessageAdapter {
 	adapter := &MessageAdapter{
 		prefix:        normalizeCommandPrefix(prefix),
@@ -101,14 +99,12 @@ func NewMessageAdapter(prefix string, mentionPrefix string) *MessageAdapter {
 	return adapter
 }
 
-// ParsedCommand: 파싱된 커맨드 정보를 담는 구조체입니다.
 type ParsedCommand struct {
 	Type       domain.CommandType
 	Params     map[string]any
 	RawMessage string
 }
 
-// ParseMessage: 입력 메시지를 분석하여 커맨드 유형과 파라미터를 추출합니다.
 func (ma *MessageAdapter) ParseMessage(message *iris.Message) *ParsedCommand {
 	if message == nil || message.Msg == "" {
 		return ma.createUnknownCommand("")
