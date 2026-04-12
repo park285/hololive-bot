@@ -33,27 +33,22 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// StatsCommand: 구독자 순위 및 통계 조회 명령어를 처리하는 커맨드입니다.
 type StatsCommand struct {
 	deps *Dependencies
 }
 
-// NewStatsCommand: StatsCommand 인스턴스를 생성합니다.
 func NewStatsCommand(deps *Dependencies) *StatsCommand {
 	return &StatsCommand{deps: deps}
 }
 
-// Name: 커맨드 이름을 반환합니다.
 func (c *StatsCommand) Name() string {
 	return "stats"
 }
 
-// Description: 커맨드 설명을 반환합니다.
 func (c *StatsCommand) Description() string {
 	return "구독자 순위 및 통계 조회"
 }
 
-// Execute: 통계 커맨드를 실행합니다.
 func (c *StatsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(cmdCtx); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)

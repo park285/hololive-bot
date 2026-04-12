@@ -32,27 +32,22 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// SubscriberCommand: 특정 멤버의 구독자 수를 조회하는 명령어.
 type SubscriberCommand struct {
 	BaseCommand
 }
 
-// NewSubscriberCommand: 새로운 SubscriberCommand 인스턴스를 생성합니다.
 func NewSubscriberCommand(deps *Dependencies) *SubscriberCommand {
 	return &SubscriberCommand{BaseCommand: NewBaseCommand(deps)}
 }
 
-// Name: 명령어 이름을 반환합니다.
 func (c *SubscriberCommand) Name() string {
 	return string(domain.CommandSubscriber)
 }
 
-// Description: 명령어 설명을 반환합니다.
 func (c *SubscriberCommand) Description() string {
 	return "특정 멤버의 구독자 수 조회"
 }
 
-// Execute: 명령어를 실행합니다.
 func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
