@@ -32,7 +32,6 @@ var (
 	ErrNoSubscribedMembers = errors.New("no subscribed members")
 )
 
-// Period: 뉴스 요약 기간 타입.
 type Period string
 
 const (
@@ -40,7 +39,6 @@ const (
 	PeriodMonthly Period = "monthly"
 )
 
-// SummaryItem: 최종 뉴스 항목.
 type SummaryItem struct {
 	Member    string `json:"member"`
 	Category  string `json:"category"`
@@ -50,7 +48,6 @@ type SummaryItem struct {
 	SourceURL string `json:"source_url"`
 }
 
-// Digest: 룸별 뉴스 결과.
 type Digest struct {
 	Period       Period        `json:"period"`
 	Headline     string        `json:"headline"`
@@ -60,7 +57,6 @@ type Digest struct {
 	TotalCount   int           `json:"total_count"`
 }
 
-// SubscribedRoom: 뉴스 알림 구독 방 정보.
 type SubscribedRoom struct {
 	ID        int       `json:"id"`
 	RoomID    string    `json:"room_id"`
@@ -68,7 +64,6 @@ type SubscribedRoom struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// NormalizePeriod: 입력 기간 문자열을 canonical period로 정규화합니다.
 func NormalizePeriod(period Period) Period {
 	normalized := stringutil.Normalize(string(period))
 	switch normalized {
