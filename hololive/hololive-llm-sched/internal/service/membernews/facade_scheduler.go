@@ -49,7 +49,6 @@ type outboxEnqueuer interface {
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error
 }
 
-// NewScheduler: 주간 뉴스 자동 발송 스케줄러 생성. (호환 wrapper)
 func NewScheduler(
 	service model.DigestService,
 	formatter DigestFormatter,
@@ -60,7 +59,6 @@ func NewScheduler(
 	return mnscheduler.NewScheduler(service, formatter, locker, outboxRepo, logger)
 }
 
-// NewMonthlyScheduler: 월간 뉴스 자동 발송 스케줄러 생성. (호환 wrapper)
 func NewMonthlyScheduler(
 	service model.DigestService,
 	formatter DigestFormatter,

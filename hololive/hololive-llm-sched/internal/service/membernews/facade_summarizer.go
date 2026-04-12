@@ -37,7 +37,6 @@ type (
 	ConsensusSummarizer = summarizer.ConsensusSummarizer
 )
 
-// NewSummarizer: 요약기 생성. (호환 wrapper)
 func NewSummarizer(
 	llm LLMClient,
 	searcher WebSearcher,
@@ -51,7 +50,6 @@ func NewSummarizer(
 	return summarizer.NewSummarizer(llm, searcher, v, logger)
 }
 
-// NewConsensusSummarizer: consensus 요약기 생성. (호환 wrapper)
 func NewConsensusSummarizer(
 	primary Summarizer,
 	reviewer LLMClient,
@@ -67,7 +65,6 @@ func NewConsensusSummarizer(
 	return summarizer.NewConsensusSummarizer(primary, reviewer, adjudicator, v, cfg, logger)
 }
 
-// BuildDeterministicFallback: LLM 실패/검증 실패 시 고정 규칙 출력 생성.
 func BuildDeterministicFallback(period Period, candidates []FilteredCandidate) *Digest {
 	return summarizer.BuildDeterministicFallback(period, candidates)
 }
