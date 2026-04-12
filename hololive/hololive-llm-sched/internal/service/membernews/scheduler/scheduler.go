@@ -50,7 +50,6 @@ type outboxEnqueuer interface {
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error
 }
 
-// Scheduler: 주간 뉴스 자동 발송 스케줄러.
 type Scheduler struct {
 	service    model.DigestService
 	formatter  model.DigestFormatter
@@ -60,7 +59,6 @@ type Scheduler struct {
 	runtime    *schedulerkit.Runtime
 }
 
-// NewScheduler: 스케줄러 생성.
 func NewScheduler(
 	service model.DigestService,
 	formatter model.DigestFormatter,
@@ -85,7 +83,6 @@ func NewScheduler(
 	}
 }
 
-// SetClock: 테스트용 시간 주입.
 func (s *Scheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
@@ -100,7 +97,6 @@ func (s *Scheduler) clock() time.Time {
 	return s.runtime.Now()
 }
 
-// Start: 주간 발송 루프 시작.
 func (s *Scheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
@@ -119,7 +115,6 @@ func (s *Scheduler) Start(ctx context.Context) {
 	})
 }
 
-// Stop: 루프 중단.
 func (s *Scheduler) Stop() {
 	if s == nil {
 		return
@@ -142,7 +137,6 @@ func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
 	return target
 }
 
-// SendWeeklyDigest: 즉시 주간 다이제스트 발송.
 func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("member news scheduler is nil")
@@ -154,7 +148,6 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 	weekKey := startOfWeek(s.clock()).Format("2006-01-02")
 	lockKey := fmt.Sprintf("membernews:lock:weekly:%s", weekKey)
 
-	// 분산 락 획득
 	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire weekly execution lock: %w", err)
