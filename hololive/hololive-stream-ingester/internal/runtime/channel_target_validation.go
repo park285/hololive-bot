@@ -1,7 +1,9 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -14,12 +16,38 @@ type communityShortsOperationalChannel struct {
 	enabled    bool
 }
 
+type communityShortsMemberRepository interface {
+	GetAllMembers(context.Context) ([]*domain.Member, error)
+}
+
 func resolveCommunityShortsOperationalChannels(membersData domain.MemberDataProvider) ([]communityShortsOperationalChannel, error) {
 	if membersData == nil {
 		return nil, fmt.Errorf("members data provider is nil")
 	}
 
-	members := membersData.GetAllMembers()
+	return resolveCommunityShortsOperationalChannelsFromMembers(membersData.GetAllMembers()), nil
+}
+
+func resolveCommunityShortsOperationalChannelsFromRepository(
+	ctx context.Context,
+	repo communityShortsMemberRepository,
+) ([]communityShortsOperationalChannel, error) {
+	if repo == nil {
+		return nil, fmt.Errorf("member repository is nil")
+	}
+	value := reflect.ValueOf(repo)
+	if value.Kind() == reflect.Ptr && value.IsNil() {
+		return nil, fmt.Errorf("member repository is nil")
+	}
+
+	members, err := repo.GetAllMembers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load members from repository: %w", err)
+	}
+	return resolveCommunityShortsOperationalChannelsFromMembers(members), nil
+}
+
+func resolveCommunityShortsOperationalChannelsFromMembers(members []*domain.Member) []communityShortsOperationalChannel {
 	channels := make([]communityShortsOperationalChannel, 0, len(members))
 	seenChannelIDs := make(map[string]struct{}, len(members))
 	for i := range members {
@@ -41,7 +69,7 @@ func resolveCommunityShortsOperationalChannels(membersData domain.MemberDataProv
 		})
 	}
 
-	return channels, nil
+	return channels
 }
 
 func buildCommunityShortsOperationalTargetDefinitions(channels []communityShortsOperationalChannel) []sharedalarmkeys.ChannelContentAlarmTargetDefinition {
