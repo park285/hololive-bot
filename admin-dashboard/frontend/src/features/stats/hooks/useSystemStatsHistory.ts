@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { getCookie } from "@/api/client";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAuthStore } from "@/stores/authStore";
 import type { SystemStats } from "@/features/stats/types";
@@ -7,19 +6,24 @@ import {
 	MAX_DATA_POINTS,
 	type SystemStatsPoint,
 	parseSystemStats,
+	shouldConnectSystemStatsStream,
 } from "../lib/systemStats";
 
 export const useSystemStatsHistory = () => {
 	const [statsHistory, setStatsHistory] = useState<SystemStatsPoint[]>([]);
 	const [currentStats, setCurrentStats] = useState<SystemStats | null>(null);
 	const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+	const isAuthResolved = useAuthStore((state) => state.isAuthResolved);
 
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 	const wsUrl = `${protocol}//${window.location.host}/admin/api/ws/system-stats`;
-	const hasSessionCookie = getCookie("admin_session") != null;
+	const shouldConnect = shouldConnectSystemStatsStream({
+		isAuthenticated,
+		isAuthResolved,
+	});
 
 	const { isConnected } = useWebSocket<SystemStats>(wsUrl, {
-		autoConnect: isAuthenticated && hasSessionCookie,
+		autoConnect: shouldConnect,
 		parseMessage: (data) => parseSystemStats(data),
 		onMessage: (data) => {
 			const now = new Date();

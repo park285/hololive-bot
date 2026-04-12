@@ -60,3 +60,27 @@ test("parseSystemStats still accepts legacy goroutine payload", () => {
 	assert.equal(parsed?.threadCount, 7);
 	assert.equal(parsed?.serviceRuntime[0]?.count, 7);
 });
+
+test("shouldConnectSystemStatsStream only depends on resolved auth state", () => {
+	assert.equal(
+		mod.shouldConnectSystemStatsStream({
+			isAuthenticated: true,
+			isAuthResolved: true,
+		}),
+		true,
+	);
+	assert.equal(
+		mod.shouldConnectSystemStatsStream({
+			isAuthenticated: true,
+			isAuthResolved: false,
+		}),
+		false,
+	);
+	assert.equal(
+		mod.shouldConnectSystemStatsStream({
+			isAuthenticated: false,
+			isAuthResolved: true,
+		}),
+		false,
+	);
+});
