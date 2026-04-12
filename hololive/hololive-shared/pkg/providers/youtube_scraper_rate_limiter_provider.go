@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-// ProvideYouTubeScraperRateLimiter: YouTube HTML 스크래퍼용 공유 레이트리미터를 생성합니다.
 // 분산 제한이 활성화된 경우 Valkey 기반 SlidingWindowLimiter를 함께 구성합니다.
 func ProvideYouTubeScraperRateLimiter(cacheSvc cache.Client, logger *slog.Logger) (*scraper.RateLimiter, error) {
 	limiter := scraper.NewRateLimiter(constants.YouTubeScraperRateLimitConfig.RequestInterval)

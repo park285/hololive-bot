@@ -32,13 +32,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
-// CacheResources: 초기화된 캐시 서비스 인스턴스와 리소스 해제(Close) 함수를 캡슐화한 구조체
 type CacheResources struct {
 	Service *cache.Service
 	Close   func()
 }
 
-// DatabaseResources: 초기화된 DB 서비스 인스턴스와 리소스 해제(Close) 함수를 캡슐화한 구조체
 type DatabaseResources struct {
 	Service *database.PostgresService
 	Close   func()
