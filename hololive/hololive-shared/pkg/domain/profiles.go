@@ -42,7 +42,6 @@ type profileCache[T any] struct {
 
 var rawProfilesCache profileCache[TalentProfile]
 
-// LoadProfiles: data/official_profiles_raw 디렉토리에 임베딩된 JSON 파일들을 읽어 멤버별 심층 프로필 정보를 로드합니다.
 func LoadProfiles() (map[string]*TalentProfile, error) {
 	return loadEmbeddedProfiles(
 		&rawProfilesCache,
