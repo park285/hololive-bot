@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -60,6 +61,7 @@ func buildStreamIngesterYouTubeComponents(
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
 		return nil, nil, nil, err
 	}
+	logCombinedYouTubeScraperBudget(scraperCfg, pollerRegistrations, logger)
 
 	scraperScheduler := providers.ProvideScraperScheduler(
 		nil,
@@ -171,6 +173,55 @@ func estimatedPublishedAtResolverMaxRPM(cfg config.ScraperPublishedAtResolverCon
 		return 0
 	}
 	return float64(cfg.MaxResolvePerRun) * 60 / cfg.Interval.Seconds()
+}
+
+func logCombinedYouTubeScraperBudget(
+	scraperCfg config.ScraperConfig,
+	registrations []providers.ChannelPollerRegistration,
+	logger *slog.Logger,
+) {
+	if logger == nil {
+		return
+	}
+
+	pollerRPM := estimateResolvedPollerRPM(registrations)
+	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
+	resolverRPM := 0.0
+	if resolverCfg.Enabled {
+		resolverRPM = estimatedPublishedAtResolverMaxRPM(resolverCfg)
+	}
+	combinedRPM := pollerRPM + resolverRPM
+	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
+
+	logger.Info("youtube_scraper_combined_budget_summary",
+		slog.Float64("expected_poller_rpm", pollerRPM),
+		slog.Float64("expected_resolver_rpm", resolverRPM),
+		slog.Float64("expected_combined_rpm", combinedRPM),
+		slog.Float64("budget_rpm", budgetRPM),
+	)
+	if combinedRPM > budgetRPM {
+		logger.Warn("youtube_scraper_combined_budget_exceeds_rate_limit",
+			slog.Float64("expected_poller_rpm", pollerRPM),
+			slog.Float64("expected_resolver_rpm", resolverRPM),
+			slog.Float64("expected_combined_rpm", combinedRPM),
+			slog.Float64("budget_rpm", budgetRPM),
+		)
+	}
+}
+
+func estimateResolvedPollerRPM(registrations []providers.ChannelPollerRegistration) float64 {
+	var rpm float64
+	for _, registration := range registrations {
+		if registration.Poller == nil || registration.Interval <= 0 {
+			continue
+		}
+		channelCount := len(mergeUniqueChannelIDs(registration.ChannelIDs))
+		if channelCount == 0 {
+			continue
+		}
+		rpm += float64(channelCount) * (60.0 / registration.Interval.Seconds())
+	}
+	return rpm
 }
 
 func validateExplicitPollerRegistrations(registrations []providers.ChannelPollerRegistration) error {
