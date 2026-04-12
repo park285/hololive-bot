@@ -155,22 +155,18 @@ func TestGenerateRoomDigest(t *testing.T) {
 			}
 
 			srv := newTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
-				// HTTP 메서드 검증
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %q, want POST", r.Method)
 				}
 
-				// 경로 검증
 				if r.URL.Path != membernewscontracts.DigestPath {
 					t.Errorf("path = %q, want %q", r.URL.Path, membernewscontracts.DigestPath)
 				}
 
-				// Content-Type 검증
 				if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 					t.Errorf("Content-Type = %q, want application/json", ct)
 				}
 
-				// API 키 헤더 검증
 				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
@@ -251,17 +247,14 @@ func TestSubscribeRoom(t *testing.T) {
 			}
 
 			srv := newTestServer(t, tc.statusCode, nil, func(r *http.Request) {
-				// HTTP 메서드 검증
 				if r.Method != http.MethodPost {
 					t.Errorf("method = %q, want POST", r.Method)
 				}
 
-				// 경로 검증
 				if r.URL.Path != membernewscontracts.SubscriptionsPath {
 					t.Errorf("path = %q, want %q", r.URL.Path, membernewscontracts.SubscriptionsPath)
 				}
 
-				// API 키 헤더 검증
 				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
@@ -329,18 +322,15 @@ func TestUnsubscribeRoom(t *testing.T) {
 			}
 
 			srv := newTestServer(t, tc.statusCode, nil, func(r *http.Request) {
-				// HTTP 메서드 검증
 				if r.Method != http.MethodDelete {
 					t.Errorf("method = %q, want DELETE", r.Method)
 				}
 
-				// 경로 검증
 				wantPath := membernewscontracts.SubscriptionsPath + "/" + tc.roomID
 				if r.URL.Path != wantPath {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
 
-				// API 키 헤더 검증
 				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
@@ -421,18 +411,15 @@ func TestIsRoomSubscribed(t *testing.T) {
 			}
 
 			srv := newTestServer(t, tc.statusCode, tc.responseBody, func(r *http.Request) {
-				// HTTP 메서드 검증
 				if r.Method != http.MethodGet {
 					t.Errorf("method = %q, want GET", r.Method)
 				}
 
-				// 경로 검증
 				wantPath := membernewscontracts.SubscriptionsPath + "/" + tc.roomID
 				if r.URL.Path != wantPath {
 					t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 				}
 
-				// API 키 헤더 검증
 				if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 					t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 				}
