@@ -51,7 +51,6 @@ var ytInitialDataDOMFallbackAnchors = []string{
 	"ytInitialData",
 }
 
-// ErrYtInitialDataNotFound: HTML에서 ytInitialData를 찾을 수 없는 경우
 var ErrYtInitialDataNotFound = errors.New("ytInitialData not found in HTML")
 
 // extractYtInitialData: YouTube HTML에서 ytInitialData JSON을 추출
