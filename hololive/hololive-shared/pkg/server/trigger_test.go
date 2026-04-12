@@ -36,7 +36,6 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// --- 인라인 스케줄러 스텁 ---
 
 type stubMajorEvent struct {
 	err error
@@ -56,7 +55,6 @@ type stubMemberNewsWeekly struct {
 
 func (s *stubMemberNewsWeekly) SendWeeklyDigest(_ context.Context) error { return s.err }
 
-// --- 헬퍼 ---
 
 func newDiscardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -88,7 +86,6 @@ func unmarshalBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any 
 	return m
 }
 
-// --- TriggerWeeklyNotification 테스트 ---
 
 func TestTriggerWeeklyNotification(t *testing.T) {
 	t.Parallel()
@@ -150,7 +147,6 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 	}
 }
 
-// --- TriggerMonthlyNotification 테스트 ---
 
 func TestTriggerMonthlyNotification(t *testing.T) {
 	t.Parallel()
@@ -212,7 +208,6 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 	}
 }
 
-// --- TriggerMemberNewsWeekly 테스트 ---
 
 func TestTriggerMemberNewsWeekly(t *testing.T) {
 	t.Parallel()
@@ -267,7 +262,6 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 	}
 }
 
-// --- RegisterInternalRoutesWithAuth 테스트 ---
 
 func TestRegisterInternalRoutesWithAuth(t *testing.T) {
 	t.Parallel()
