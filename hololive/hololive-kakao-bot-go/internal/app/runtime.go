@@ -39,7 +39,6 @@ type runtimeAlarmScheduler interface {
 	Start(ctx context.Context)
 }
 
-// BotRuntime: 봇 애플리케이션의 전체 실행 환경 및 상태를 관리하는 구조체.
 type BotRuntime struct {
 	Config *config.Config
 	Logger *slog.Logger
@@ -58,7 +57,6 @@ type BotRuntime struct {
 	lifecycle.Managed
 }
 
-// BuildRuntime: 설정과 로거를 기반으로 봇 런타임 환경을 구성하고 모든 의존성을 초기화합니다.
 func BuildRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*BotRuntime, error) {
 	if cfg == nil {
 		return nil, errors.New("config must not be nil")
