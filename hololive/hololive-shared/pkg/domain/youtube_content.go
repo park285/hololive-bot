@@ -29,7 +29,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// YouTubeChannelStatsSnapshot: 채널 통계 스냅샷 (구독자 그래프의 원천)
 type YouTubeChannelStatsSnapshot struct {
 	ChannelID       string    `gorm:"primaryKey;size:50" json:"channel_id"`
 	CapturedAt      time.Time `gorm:"primaryKey" json:"captured_at"`
@@ -42,12 +41,10 @@ type YouTubeChannelStatsSnapshot struct {
 	Handle          string    `gorm:"size:100" json:"handle,omitempty"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeChannelStatsSnapshot) TableName() string {
 	return "youtube_channel_stats_snapshots"
 }
 
-// YouTubeChannelProfile: 채널 프로필 (아바타/배너)
 type YouTubeChannelProfile struct {
 	ChannelID string         `gorm:"primaryKey;size:50" json:"channel_id"`
 	Avatar    ThumbnailsJSON `gorm:"type:jsonb" json:"avatar,omitempty"`
@@ -55,12 +52,10 @@ type YouTubeChannelProfile struct {
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeChannelProfile) TableName() string {
 	return "youtube_channel_profiles"
 }
 
-// YouTubeVideo: 업로드된 영상 (일반 영상/쇼츠)
 type YouTubeVideo struct {
 	VideoID       string         `gorm:"primaryKey;size:20" json:"video_id"`
 	ChannelID     string         `gorm:"size:50;index:idx_yv_channel_first_seen" json:"channel_id"`
@@ -76,12 +71,10 @@ type YouTubeVideo struct {
 	LastSeenAt    time.Time      `gorm:"autoUpdateTime" json:"last_seen_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeVideo) TableName() string {
 	return "youtube_videos"
 }
 
-// YouTubeCommunityPost: 커뮤니티 포스트
 type YouTubeCommunityPost struct {
 	PostID        string         `gorm:"primaryKey;size:50" json:"post_id"`
 	ChannelID     string         `gorm:"size:50;index:idx_ycp_channel_first_seen" json:"channel_id"`
@@ -98,12 +91,10 @@ type YouTubeCommunityPost struct {
 	LastSeenAt    time.Time      `gorm:"autoUpdateTime" json:"last_seen_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeCommunityPost) TableName() string {
 	return "youtube_community_posts"
 }
 
-// YouTubeContentAlarmTracking: 커뮤니티/쇼츠 알람 시각 추적
 // 동일 콘텐츠에 대해 실제 게시 시각, 최초 감지 시각, 최초 성공 발송 시각과 저장된 지연 분류값을 보존한다.
 type YouTubeContentAlarmTracking struct {
 	Kind                        OutboxKind                        `gorm:"primaryKey;size:20;uniqueIndex:idx_ycat_kind_canonical_content,priority:1" json:"kind"`
@@ -123,7 +114,6 @@ type YouTubeContentAlarmTracking struct {
 	UpdatedAt                   time.Time                         `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeContentAlarmTracking) TableName() string {
 	return "youtube_content_alarm_tracking"
 }
@@ -142,7 +132,6 @@ func ResolveYouTubeContentAlarmDeliveryStatus(alarmSentAt *time.Time) YouTubeCon
 	return YouTubeContentAlarmDeliveryStatusPending
 }
 
-// YouTubeCommunityShortsSourcePost: community/shorts 검증용 원본 수집 목록
 // 감지된 게시물의 채널 정보와 canonical post identifier를 관찰용 원본 집합으로 보존한다.
 type YouTubeCommunityShortsSourcePost struct {
 	Kind              OutboxKind `gorm:"primaryKey;size:20" json:"kind"`
@@ -154,12 +143,10 @@ type YouTubeCommunityShortsSourcePost struct {
 	UpdatedAt         time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeCommunityShortsSourcePost) TableName() string {
 	return "youtube_community_shorts_source_posts"
 }
 
-// YouTubeCommunityShortsAlarmState: community/shorts 게시물별 단일 알람 발송 상태
 // canonical post identifier를 루트 키로 사용해 게시물당 하나의 상태 레코드만 유지한다.
 type YouTubeCommunityShortsAlarmState struct {
 	Kind              OutboxKind                             `gorm:"primaryKey;size:20;uniqueIndex:idx_ycsas_kind_content,priority:1" json:"kind"`
@@ -198,7 +185,6 @@ func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt *time.Time, alar
 	return YouTubeCommunityShortsAlarmStateStatusDetected
 }
 
-// YouTubeCommunityShortsObservationPostBaseline: 24시간 관찰 종료 시점에 고정한 community/shorts 게시물 기준 목록
 // 동일 observation key에 대해 dedup 완료된 게시물 집합을 이후 검증에서 재사용한다.
 type YouTubeCommunityShortsObservationPostBaseline struct {
 	RuntimeName       string     `gorm:"primaryKey;size:50" json:"runtime_name"`
@@ -213,12 +199,10 @@ type YouTubeCommunityShortsObservationPostBaseline struct {
 	UpdatedAt         time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeCommunityShortsObservationPostBaseline) TableName() string {
 	return "youtube_community_shorts_observation_post_baselines"
 }
 
-// YouTubeCommunityShortsObservationWindow: 빅뱅 배포 직후 24시간 관찰 구간 메타데이터
 // 동일 cutover/runtime 조합에 대해 최초 감지된 배포 완료 시각과 관찰 창을 보존한다.
 type YouTubeCommunityShortsObservationWindow struct {
 	RuntimeName             string     `gorm:"primaryKey;size:50" json:"runtime_name"`
@@ -235,12 +219,10 @@ type YouTubeCommunityShortsObservationWindow struct {
 	UpdatedAt               time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeCommunityShortsObservationWindow) TableName() string {
 	return "youtube_community_shorts_observation_windows"
 }
 
-// WatermarkType: 워터마크 타입
 type WatermarkType string
 
 const (
@@ -249,7 +231,6 @@ const (
 	WatermarkTypeCommunityPost WatermarkType = "COMMUNITY_POST"
 )
 
-// YouTubeContentWatermark: 콘텐츠 워터마크 (초기 동기화 및 중복 알림 방지)
 type YouTubeContentWatermark struct {
 	ChannelID     string        `gorm:"primaryKey;size:50" json:"channel_id"`
 	WatermarkType WatermarkType `gorm:"primaryKey;size:20" json:"watermark_type"`
@@ -258,12 +239,10 @@ type YouTubeContentWatermark struct {
 	UpdatedAt     time.Time     `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeContentWatermark) TableName() string {
 	return "youtube_content_watermarks"
 }
 
-// OutboxKind: 알림 종류
 type OutboxKind string
 
 const (
@@ -301,7 +280,6 @@ func (k OutboxKind) ToTemplateKey() TemplateKey {
 	}
 }
 
-// OutboxStatus: 알림 상태
 type OutboxStatus string
 
 const (
@@ -310,7 +288,6 @@ const (
 	OutboxStatusFailed  OutboxStatus = "FAILED"
 )
 
-// YouTubeNotificationOutbox: 알림 Outbox (전송/재시도/중복방지)
 type YouTubeNotificationOutbox struct {
 	ID            int64        `gorm:"primaryKey;autoIncrement" json:"id"`
 	Kind          OutboxKind   `gorm:"size:20;not null" json:"kind"`
@@ -326,7 +303,6 @@ type YouTubeNotificationOutbox struct {
 	Error         string       `gorm:"type:text" json:"error,omitempty"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeNotificationOutbox) TableName() string {
 	return "youtube_notification_outbox"
 }
@@ -351,7 +327,6 @@ func (o YouTubeNotificationOutbox) DedupeKey() (string, error) {
 	return BuildYouTubeNotificationDedupeKey(o.Kind, o.ContentID)
 }
 
-// LiveStatus: 라이브 상태
 type LiveStatus string
 
 const (
@@ -360,7 +335,6 @@ const (
 	LiveStatusEnded    LiveStatus = "ENDED"
 )
 
-// YouTubeLiveSession: 라이브 세션 (UPCOMING/LIVE/ENDED)
 type YouTubeLiveSession struct {
 	VideoID            string     `gorm:"primaryKey;size:20" json:"video_id"`
 	ChannelID          string     `gorm:"size:50;index:idx_yls_channel_last_seen" json:"channel_id"`
@@ -372,12 +346,10 @@ type YouTubeLiveSession struct {
 	LastSeenAt         time.Time  `gorm:"autoUpdateTime;index:idx_yls_status_last_seen,idx_yls_channel_last_seen" json:"last_seen_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeLiveSession) TableName() string {
 	return "youtube_live_sessions"
 }
 
-// YouTubeLiveViewerSample: 라이브 시청자 샘플 (시계열 데이터)
 type YouTubeLiveViewerSample struct {
 	VideoID           string    `gorm:"primaryKey;size:20" json:"video_id"`
 	CapturedAt        time.Time `gorm:"primaryKey" json:"captured_at"`
@@ -385,12 +357,10 @@ type YouTubeLiveViewerSample struct {
 	ConcurrentViewers int       `json:"concurrent_viewers"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeLiveViewerSample) TableName() string {
 	return "youtube_live_viewer_samples"
 }
 
-// YouTubeStreamStats: 방송 집계 통계 (평균/최대 시청자)
 type YouTubeStreamStats struct {
 	VideoID              string     `gorm:"primaryKey;size:20" json:"video_id"`
 	ChannelID            string     `gorm:"size:50;index:idx_yss_channel_ended" json:"channel_id"`
@@ -402,22 +372,18 @@ type YouTubeStreamStats struct {
 	UpdatedAt            time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// TableName: GORM 테이블 이름
 func (YouTubeStreamStats) TableName() string {
 	return "youtube_stream_stats"
 }
 
-// ThumbnailsJSON: JSON으로 저장되는 썸네일 배열
 type ThumbnailsJSON []ThumbnailEntry
 
-// ThumbnailEntry: 썸네일 엔트리
 type ThumbnailEntry struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width,omitempty"`
 	Height int    `json:"height,omitempty"`
 }
 
-// Value: driver.Valuer 구현 (DB 저장 시)
 func (t ThumbnailsJSON) Value() (driver.Value, error) {
 	if t == nil {
 		return nil, nil
@@ -430,7 +396,6 @@ func (t ThumbnailsJSON) Value() (driver.Value, error) {
 	return string(data), nil
 }
 
-// Scan: sql.Scanner 구현 (DB 로드 시)
 func (t *ThumbnailsJSON) Scan(value any) error {
 	if value == nil {
 		*t = nil
@@ -446,7 +411,6 @@ func (t *ThumbnailsJSON) Scan(value any) error {
 	return nil
 }
 
-// YouTubeModels: GORM AutoMigrate에 사용할 모델 목록
 var YouTubeModels = []any{
 	&YouTubeChannelStatsSnapshot{},
 	&YouTubeChannelProfile{},

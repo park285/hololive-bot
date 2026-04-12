@@ -27,7 +27,6 @@ var officialProfilesKoFS embed.FS
 
 var translatedProfilesCache profileCache[Translated]
 
-// LoadTranslated: 번역된 프로필 파일(official_profiles_ko 디렉토리)을 읽어 메모리에 로드합니다.
 func LoadTranslated() (map[string]*Translated, error) {
 	return loadEmbeddedProfiles(
 		&translatedProfilesCache,
