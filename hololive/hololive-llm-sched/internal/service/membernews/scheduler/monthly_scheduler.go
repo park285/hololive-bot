@@ -43,7 +43,6 @@ const (
 	MonthlyScheduleDay = 1
 )
 
-// MonthlyScheduler: 월간 뉴스 자동 발송 스케줄러.
 type MonthlyScheduler struct {
 	service    model.DigestService
 	formatter  model.DigestFormatter
@@ -53,7 +52,6 @@ type MonthlyScheduler struct {
 	runtime    *schedulerkit.Runtime
 }
 
-// NewMonthlyScheduler: 월간 스케줄러 생성.
 func NewMonthlyScheduler(
 	service model.DigestService,
 	formatter model.DigestFormatter,
@@ -78,7 +76,6 @@ func NewMonthlyScheduler(
 	}
 }
 
-// SetClock: 테스트용 시간 주입.
 func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
@@ -93,7 +90,6 @@ func (s *MonthlyScheduler) clock() time.Time {
 	return s.runtime.Now()
 }
 
-// Start: 월간 발송 루프 시작.
 func (s *MonthlyScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
@@ -112,7 +108,6 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 	})
 }
 
-// Stop: 루프 중단.
 func (s *MonthlyScheduler) Stop() {
 	if s == nil {
 		return
@@ -135,7 +130,6 @@ func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
 	return target
 }
 
-// SendMonthlyDigest: 즉시 월간 다이제스트 발송.
 func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("member news monthly scheduler is nil")
@@ -147,7 +141,6 @@ func (s *MonthlyScheduler) SendMonthlyDigest(ctx context.Context) error {
 	monthKey := s.getMonthKey()
 	lockKey := fmt.Sprintf("membernews:lock:monthly:%s", monthKey)
 
-	// 분산 락 획득
 	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire monthly execution lock: %w", err)
