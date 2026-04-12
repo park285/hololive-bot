@@ -37,7 +37,6 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// Client: PostgreSQL 클라이언트 (pgxpool + GORM 듀얼 구조)
 type Client struct {
 	cfg Config
 	opt OpenOptions
@@ -48,7 +47,6 @@ type Client struct {
 	gormDB *gorm.DB
 }
 
-// OpenOptions: Open 함수 옵션
 type OpenOptions struct {
 	Logger     *slog.Logger         // slog 로거 (nil이면 기본 로거 사용)
 	Pool       PoolConfig           // 커넥션 풀 설정
@@ -60,7 +58,6 @@ type OpenOptions struct {
 	DNSFallback bool
 }
 
-// DefaultOpenOptions: 기본 옵션 반환
 func DefaultOpenOptions() OpenOptions {
 	return OpenOptions{
 		Logger:     slog.Default(),
@@ -70,7 +67,6 @@ func DefaultOpenOptions() OpenOptions {
 	}
 }
 
-// Open: PostgreSQL 연결을 수립하고 Client 반환 (즉시 연결)
 func Open(ctx context.Context, cfg Config, opt OpenOptions) (*Client, error) {
 	client := NewLazy(cfg, opt)
 	if err := client.Connect(ctx); err != nil {
@@ -79,28 +75,24 @@ func Open(ctx context.Context, cfg Config, opt OpenOptions) (*Client, error) {
 	return client, nil
 }
 
-// Pool: pgxpool.Pool 인스턴스 반환 (raw SQL 사용 시 권장)
 func (c *Client) Pool() *pgxpool.Pool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.pool
 }
 
-// SQL: database/sql 호환 *sql.DB 반환
 func (c *Client) SQL() *sql.DB {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.sqlDB
 }
 
-// Gorm: GORM DB 인스턴스 반환 (ORM 기반 조작 시 활용)
 func (c *Client) Gorm() *gorm.DB {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.gormDB
 }
 
-// Ping: 데이터베이스 연결 상태 확인 (헬스 체크용)
 func (c *Client) Ping(ctx context.Context) error {
 	c.mu.RLock()
 	pool := c.pool
@@ -115,7 +107,6 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// Close: 데이터베이스 연결을 안전하게 종료
 // stdlib.OpenDBFromPool로 생성된 *sql.DB는 Close() 시 내부 pgxpool도 함께 닫음
 // 따라서 sqlDB.Close()만 호출 (Double Close 방지)
 func (c *Client) Close() error {
@@ -141,7 +132,6 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// NewLazy: 연결하지 않고 Client만 생성 (lazy-init용)
 // 실제 연결은 Connect() 호출 시 수행
 func NewLazy(cfg Config, opt OpenOptions) *Client {
 	if opt.Logger == nil {
@@ -156,7 +146,6 @@ func NewLazy(cfg Config, opt OpenOptions) *Client {
 	}
 }
 
-// Connect: 최초 1회 실제 연결 수행 (thread-safe)
 // 이미 연결된 경우 즉시 반환, 실패 시 다음 호출에서 재시도 가능
 func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
@@ -215,7 +204,6 @@ func (c *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
-// Connected: 연결 상태 확인
 func (c *Client) Connected() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
