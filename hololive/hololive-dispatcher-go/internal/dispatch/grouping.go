@@ -26,7 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// NotificationGroup: room_id 단위 메시지 그룹.
 type NotificationGroup struct {
 	RoomID        string
 	MinutesUntil  int
@@ -35,7 +34,6 @@ type NotificationGroup struct {
 	ClaimKeys     []string
 }
 
-// GroupEnvelopes: 큐 엔벨로프를 room/시각 기준으로 묶는다.
 func GroupEnvelopes(envelopes []domain.AlarmQueueEnvelope) []NotificationGroup {
 	if len(envelopes) == 0 {
 		return nil
