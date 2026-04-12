@@ -14,6 +14,11 @@ export const CHART_PADDING_X = 24;
 export const CHART_PADDING_Y = 18;
 export const GOROUTINE_CHART_HEIGHT = 160;
 
+export interface SystemStatsStreamAuthState {
+	isAuthenticated: boolean;
+	isAuthResolved: boolean;
+}
+
 const SERVICE_FALLBACK_COLORS = [
 	"#0ea5e9",
 	"#8b5cf6",
@@ -32,6 +37,11 @@ const asNumber = (value: unknown): number | null => {
 	const parsed = typeof value === "number" ? value : Number(value);
 	return Number.isFinite(parsed) ? parsed : null;
 };
+
+export const shouldConnectSystemStatsStream = ({
+	isAuthenticated,
+	isAuthResolved,
+}: SystemStatsStreamAuthState) => isAuthenticated && isAuthResolved;
 
 export const parseSystemStats = (value: unknown): SystemStats | null => {
 	const record = asRecord(value);
