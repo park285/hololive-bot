@@ -39,16 +39,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
-// ErrRateLimited: 레이트 리밋 초과 에러
 var ErrRateLimited = errors.New("rate limited by YouTube (429)")
 
-// ErrForbidden: 접근 차단 에러
 var ErrForbidden = errors.New("forbidden by YouTube (403)")
 
-// ErrChannelNotFound: 채널이 존재하지 않음 (삭제/비활성화)
 var ErrChannelNotFound = errors.New("channel does not exist")
 
-// ErrChannelUnavailable: 채널이 일시적으로 사용 불가
 var ErrChannelUnavailable = errors.New("channel is unavailable")
 
 // httpStatusError: HTTP 상태 코드 기반 에러 (재시도 판단용)
@@ -155,7 +151,6 @@ func hasTransientTransportSignature(msg string) bool {
 		strings.Contains(lower, "unexpected eof")
 }
 
-// Client: YouTube HTML 스크래퍼 클라이언트
 type Client struct {
 	httpClient       *http.Client // 테스트/특수 경로용 고정 클라이언트
 	directHTTPClient *http.Client
@@ -174,38 +169,32 @@ type Client struct {
 	videoRSSBackoff  *cacheState
 }
 
-// ClientOption: Client 생성 옵션
 type ClientOption func(*Client)
 
-// WithHTTPClient: 커스텀 HTTP 클라이언트 설정
 func WithHTTPClient(httpClient *http.Client) ClientOption {
 	return func(c *Client) {
 		c.httpClient = httpClient
 	}
 }
 
-// WithUAProvider: 커스텀 UA Provider 설정
 func WithUAProvider(provider ua.Provider) ClientOption {
 	return func(c *Client) {
 		c.uaProvider = provider
 	}
 }
 
-// WithRateLimiter: 커스텀 레이트 리미터 설정
 func WithRateLimiter(rl *RateLimiter) ClientOption {
 	return func(c *Client) {
 		c.rateLimiter = rl
 	}
 }
 
-// WithStateStore: scraper 상태(백오프/미지원 채널) 저장소를 주입합니다.
 func WithStateStore(store stateStore) ClientOption {
 	return func(c *Client) {
 		c.stateStore = store
 	}
 }
 
-// NewClient: 새 스크래퍼 클라이언트 생성
 func NewClient(opts ...ClientOption) *Client {
 	c := &Client{
 		uaProvider:   ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),

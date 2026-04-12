@@ -37,7 +37,6 @@ var (
 	communityPostURLPattern    = regexp.MustCompile(`/post/([^"?#&/]+)`)
 )
 
-// GetCommunityPosts: 채널의 커뮤니티 포스트 목록 조회 (/channel/{id}/posts)
 // 2025년 8월 YouTube URL 변경: /community → /posts
 func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxResults int) ([]*CommunityPost, error) {
 	if c.isCommunityMissing(ctx, channelID) {
