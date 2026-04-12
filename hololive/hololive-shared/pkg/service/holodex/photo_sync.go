@@ -31,19 +31,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// PhotoSyncService: Holodex API에서 채널 프로필 이미지를 DB로 동기화하는 서비스
-// 주기적으로 실행되어 API 호출을 최소화하고 DB에서 직접 조회 가능하게 함
 type PhotoSyncService struct {
 	holodex    *Service
 	memberRepo *member.Repository
 	logger     *slog.Logger
 
-	// 설정
 	syncInterval   time.Duration // 동기화 주기 (기본: 24시간)
 	staleThreshold time.Duration // 이 기간 이상 지난 photo는 재동기화 (기본: 24시간)
 }
 
-// NewPhotoSyncService: 새로운 PhotoSyncService 인스턴스를 생성합니다.
 func NewPhotoSyncService(
 	holodex *Service,
 	memberRepo *member.Repository,
@@ -58,7 +54,6 @@ func NewPhotoSyncService(
 	}
 }
 
-// Start: 백그라운드에서 주기적으로 프로필 이미지 동기화를 실행합니다.
 func (ps *PhotoSyncService) Start(ctx context.Context) {
 	ps.logger.Info("Starting photo sync service",
 		slog.Duration("interval", ps.syncInterval),
@@ -73,7 +68,6 @@ func (ps *PhotoSyncService) Start(ctx context.Context) {
 	case <-time.After(10 * time.Second):
 	}
 
-	// 시작 시 한 번 동기화 (최대 3회 재시도)
 	ps.syncWithRetry(ctx, 3)
 
 	ticker := time.NewTicker(ps.syncInterval)
@@ -90,7 +84,6 @@ func (ps *PhotoSyncService) Start(ctx context.Context) {
 	}
 }
 
-// syncWithRetry: 재시도 로직이 포함된 동기화
 func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, maxRetries int) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err := ps.doSync(ctx, false)
@@ -115,8 +108,6 @@ func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, maxRetries int) {
 	ps.logger.Error("Photo sync failed after all retries", slog.Int("max_retries", maxRetries))
 }
 
-// SyncAll: 모든 멤버의 프로필 이미지를 Holodex에서 동기화합니다.
-// 강제 동기화: staleThreshold와 관계없이 모든 멤버 업데이트
 func (ps *PhotoSyncService) SyncAll(ctx context.Context) error {
 	ps.logger.Info("Starting full photo sync")
 	return ps.doSync(ctx, true)
@@ -127,10 +118,8 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 	var err error
 
 	if forceAll {
-		// 전체 동기화: 모든 채널 ID 조회
 		channelIDs, err = ps.memberRepo.GetAllChannelIDs(ctx)
 	} else {
-		// 일반 동기화: stale photo만 조회
 		channelIDs, err = ps.memberRepo.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
 	}
 
@@ -154,7 +143,6 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 		return fmt.Errorf("failed to fetch Hololive channel list: %w", err)
 	}
 
-	// 채널 ID → Photo 매핑 생성
 	photoMap := make(map[string]string, len(allChannels))
 	for _, ch := range allChannels {
 		if ch.Photo != nil && *ch.Photo != "" {
@@ -164,7 +152,6 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 		}
 	}
 
-	// DB 업데이트
 	successCount := 0
 	failCount := 0
 
@@ -198,12 +185,10 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 	return nil
 }
 
-// SetSyncInterval: 동기화 주기를 설정합니다. (테스트용)
 func (ps *PhotoSyncService) SetSyncInterval(d time.Duration) {
 	ps.syncInterval = d
 }
 
-// SetStaleThreshold: stale 판정 기준 시간을 설정합니다. (테스트용)
 func (ps *PhotoSyncService) SetStaleThreshold(d time.Duration) {
 	ps.staleThreshold = d
 }
