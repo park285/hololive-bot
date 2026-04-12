@@ -30,14 +30,12 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
-// ProvideHealthOnlyRouter: health + metrics 엔드포인트만 제공하는 최소 라우터.
 func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, apiKey string) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
 		APIKey: apiKey,
 	})
 }
 
-// ProvideTriggerRouter: health + metrics + 내부 트리거 엔드포인트를 제공하는 라우터.
 func buildTriggerRouter(
 	ctx context.Context,
 	logger *slog.Logger,

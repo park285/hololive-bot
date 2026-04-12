@@ -130,7 +130,6 @@ func splitTemplateInstruction(rendered string) (instruction string, body string)
 	return templateview.SplitTemplateInstruction(rendered)
 }
 
-// --- MajorEvent formatter (majorevent.Formatter) ---
 
 type majorEventWeeklySummaryData struct {
 	Emoji      UIEmoji
@@ -219,7 +218,6 @@ func formatMajorEventDatesFromDB(start, end *time.Time) string {
 	return templateview.FormatMajorEventDatesFromDB(start, end)
 }
 
-// --- MemberNews formatter (membernews.DigestFormatter) ---
 
 type memberNewsDigestTemplateData struct {
 	Emoji       UIEmoji

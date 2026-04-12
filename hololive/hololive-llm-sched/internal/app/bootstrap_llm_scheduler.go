@@ -49,7 +49,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
-// LLMSchedulerRuntime: llm-scheduler 전용 런타임
 type LLMSchedulerRuntime struct {
 	Config *config.LLMSchedulerConfig
 	Logger *slog.Logger
@@ -149,7 +148,6 @@ func (e *memberNewsRunNowExecutor) runOnce() {
 	e.logger.Info("Member news weekly run-now completed via config update")
 }
 
-// Run: SIGINT/SIGTERM 신호를 대기하며 graceful shutdown을 수행합니다. (블로킹)
 func (r *LLMSchedulerRuntime) Run() {
 	if err := lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
@@ -257,7 +255,6 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 	}
 }
 
-// Shutdown: 모든 스케줄러와 HTTP 서버를 안전하게 종료하고 발생한 에러를 누적 반환합니다.
 func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	var errs []error
 	r.stopSchedulers()
@@ -270,7 +267,6 @@ func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// BuildLLMSchedulerRuntime: llm-scheduler 런타임을 구성합니다.
 func BuildLLMSchedulerRuntime(ctx context.Context, cfg *config.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("llm scheduler config must not be nil")
