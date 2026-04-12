@@ -159,7 +159,7 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 		{
 			name:            "timeout",
 			scenario:        "timeout",
-			ctxTimeout:      20 * time.Millisecond,
+			ctxTimeout:      100 * time.Millisecond,
 			wantErrContains: []string{"check youtube streams: fetch channels live status", "context deadline"},
 		},
 		{
