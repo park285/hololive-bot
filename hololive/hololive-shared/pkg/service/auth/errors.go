@@ -22,7 +22,6 @@ package auth
 
 import "fmt"
 
-// ErrorCode: API 스펙에서 정의한 인증 오류 코드
 type ErrorCode string
 
 const (
@@ -35,7 +34,6 @@ const (
 	CodeInternal           ErrorCode = "INTERNAL_ERROR"
 )
 
-// Error: 서비스 레벨 에러 (HTTP 레이어에서 status/code로 매핑)
 type Error struct {
 	Code    ErrorCode
 	Message string
@@ -60,7 +58,6 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-// NewError: exported 생성자 (외부 모듈에서 사용 가능)
 func NewError(code ErrorCode, message string, err error) *Error {
 	return &Error{Code: code, Message: message, Err: err}
 }

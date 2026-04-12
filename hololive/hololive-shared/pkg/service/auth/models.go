@@ -48,7 +48,6 @@ type passwordResetTokenModel struct {
 
 func (passwordResetTokenModel) TableName() string { return "auth_password_reset_tokens" }
 
-// User: API 응답용 유저 정보
 type User struct {
 	ID          string
 	Email       string

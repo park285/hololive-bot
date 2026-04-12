@@ -48,13 +48,11 @@ const (
 	accountLockKeyPrefix    = "auth:lock:"
 )
 
-// Session: API 응답용 세션 정보
 type Session struct {
 	Token     string
 	ExpiresAt time.Time
 }
 
-// Service: DB(유저) + Valkey(세션/레이트리밋) 기반 인증 서비스
 type Service struct {
 	db       *gorm.DB
 	cacheSvc cache.Client
@@ -62,7 +60,6 @@ type Service struct {
 	cfg      Config
 }
 
-// NewService: 인증 서비스를 생성하고 필요한 테이블을 준비합니다.
 func NewService(ctx context.Context, db *gorm.DB, cacheSvc cache.Client, logger *slog.Logger, cfg Config) (*Service, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("ctx must not be nil")
@@ -127,7 +124,6 @@ func (s *Service) createTablesIfNotExist(ctx context.Context) error {
 	return nil
 }
 
-// Register: 신규 사용자 등록
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (*User, error) {
 	email = normalizeEmail(email)
 	displayName = normalizeDisplayName(displayName)
@@ -161,7 +157,6 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 	return toUser(model), nil
 }
 
-// Login: 로그인 및 세션 토큰 발급
 func (s *Service) Login(ctx context.Context, email, password, clientIP string) (*Session, *User, error) {
 	email = normalizeEmail(email)
 
@@ -208,7 +203,6 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 	return session, toUser(&user), nil
 }
 
-// Logout: 세션 무효화
 func (s *Service) Logout(ctx context.Context, token string) error {
 	if s.cacheSvc == nil {
 		return newError(CodeInternal, "cache service not configured", nil)
@@ -233,7 +227,6 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return nil
 }
 
-// Refresh: 세션 토큰 갱신 (기존 세션을 무효화하고 새 토큰 발급)
 func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
 	if s.cacheSvc == nil {
 		return nil, newError(CodeInternal, "cache service not configured", nil)
@@ -266,7 +259,6 @@ func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
 	return newSession, nil
 }
 
-// Me: 현재 사용자 정보 조회 (세션 검증 포함)
 func (s *Service) Me(ctx context.Context, token string) (*User, error) {
 	userID, err := s.validateSession(ctx, token)
 	if err != nil {
@@ -284,7 +276,6 @@ func (s *Service) Me(ctx context.Context, token string) (*User, error) {
 	return toUser(&user), nil
 }
 
-// RequestPasswordReset: 비밀번호 재설정 토큰 생성 (이메일 발송은 외부에서 수행)
 func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP string) (string, error) {
 	email = normalizeEmail(email)
 	if !validateEmail(email) {
@@ -333,7 +324,6 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 	return rawToken, nil
 }
 
-// ResetPassword: 비밀번호 재설정 실행
 func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) error {
 	if token == "" || !validatePassword(newPassword) {
 		return newError(CodeInvalidInput, "invalid token/password", nil)
