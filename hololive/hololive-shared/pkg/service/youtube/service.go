@@ -44,7 +44,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-// Service: YouTube API와 상호작용하여 채널 및 영상 정보를 제공하는 서비스
 type serviceImpl struct {
 	service       *youtube.Service
 	scraper       *scraper.Client // HTML 스크래퍼 (quota 절약용)
@@ -80,7 +79,6 @@ type channelStatsScrapeResult struct {
 	scraped   int
 }
 
-// NewService: YouTube 서비스 인스턴스를 생성합니다.
 func NewYouTubeService(
 	ctx context.Context,
 	apiKey string,
@@ -132,7 +130,6 @@ func isPlaceholderYouTubeAPIKey(value string) bool {
 	}
 }
 
-// SetScraperProxyEnabled: YouTube 서비스 내부 HTML 스크래퍼의 프록시 사용 여부를 런타임에 토글합니다.
 func (ys *serviceImpl) SetScraperProxyEnabled(enabled bool) bool {
 	if ys == nil || ys.scraper == nil {
 		return false
@@ -140,7 +137,6 @@ func (ys *serviceImpl) SetScraperProxyEnabled(enabled bool) bool {
 	return ys.scraper.SetProxyEnabled(enabled)
 }
 
-// ScraperProxyEnabled: YouTube 서비스 내부 HTML 스크래퍼의 프록시 활성 상태를 반환합니다.
 func (ys *serviceImpl) ScraperProxyEnabled() bool {
 	if ys == nil || ys.scraper == nil {
 		return false
@@ -248,7 +244,6 @@ func (ys *serviceImpl) consumeQuota(cost int) {
 	}
 }
 
-// GetUpcomingStreams: 지정된 채널들의 예정된 방송(라이브 예정) 목록을 조회합니다.
 // 스크래퍼를 우선 사용하고, 실패한 채널만 YouTube API로 폴백합니다.
 func (ys *serviceImpl) GetUpcomingStreams(ctx context.Context, channelIDs []string) ([]*domain.Stream, error) {
 	channelIDs = ys.limitUpcomingChannelIDs(channelIDs)
@@ -575,7 +570,6 @@ func extractThumbnail(thumbnails *youtube.ThumbnailDetails) *string {
 	return nil
 }
 
-// GetQuotaStatus: 현재 API 할당량 사용량, 잔여량, 초기화 예정 시간을 반환합니다.
 func (ys *serviceImpl) GetQuotaStatus() (used int, remaining int, resetTime time.Time) {
 	ys.quotaMu.Lock()
 	defer ys.quotaMu.Unlock()
@@ -587,14 +581,12 @@ func (ys *serviceImpl) GetQuotaStatus() (used int, remaining int, resetTime time
 	return ys.quotaUsed, constants.YouTubeConfig.DailyQuotaLimit - ys.quotaUsed, ys.quotaReset
 }
 
-// IsQuotaAvailable: 지정된 채널 수만큼 조회할 수 있는 API 할당량이 남아있는지 확인합니다.
 func (ys *serviceImpl) IsQuotaAvailable(channelCount int) bool {
 	estimatedCost := channelCount * constants.YouTubeConfig.SearchQuotaCost
 	err := ys.checkQuota(estimatedCost)
 	return err == nil
 }
 
-// QuotaExceededError: API 할당량 초과 시 발생하는 에러 구조체
 type QuotaExceededError struct {
 	Used      int
 	Limit     int
@@ -607,7 +599,6 @@ func (e *QuotaExceededError) Error() string {
 		e.Used, e.Limit, e.Requested, e.ResetTime.Format(time.RFC3339))
 }
 
-// GetChannelStatistics: 지정된 채널들의 통계(구독자 수, 조회수 등)를 조회합니다.
 // 스크래퍼를 우선 사용하고, 실패한 채널만 YouTube API로 폴백합니다.
 // 이 방식으로 YouTube API quota를 절약합니다.
 func (ys *serviceImpl) GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error) {
@@ -811,7 +802,6 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 	}, nil
 }
 
-// GetRecentVideos: 특정 채널의 최근 업로드된 비디오 목록을 조회합니다.
 // 스크래퍼를 우선 사용하고, 실패 시 YouTube API로 폴백합니다.
 func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
 	// Phase 1: 스크래퍼로 우선 시도 (quota 0)
@@ -866,7 +856,6 @@ func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, ma
 	return videoIDs, nil
 }
 
-// ChannelStats: API로부터 조회된 단일 채널의 통계 정보
 type ChannelStats struct {
 	ChannelID       string
 	ChannelTitle    string

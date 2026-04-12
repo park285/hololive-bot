@@ -34,7 +34,6 @@ import (
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
 
-// StatsService: 상위 수준의 통계 서비스로, Repository와 YouTube Service를 조합하여 통계 데이터를 제공합니다.
 type StatsService struct {
 	oauth     *OAuthService
 	cache     cache.Client
@@ -47,7 +46,6 @@ const (
 	channelStatsCacheTTL    = 10 * time.Minute
 )
 
-// ChannelStatistics: 채널의 구독자 수, 비디오 수, 조회 수 정보를 담는 구조체 (변화량 포함)
 type ChannelStatistics struct {
 	ChannelID        string
 	SubscriberCount  uint64
@@ -56,7 +54,6 @@ type ChannelStatistics struct {
 	ViewCount        uint64
 }
 
-// NewStatsService: 통계 서비스 인스턴스를 생성합니다.
 func NewStatsService(oauth *OAuthService, cacheSvc cache.Client, statsRepo ytstats.StatsServiceRepository, logger *slog.Logger) *StatsService {
 	return &StatsService{
 		oauth:     oauth,
@@ -181,7 +178,6 @@ func (ys *StatsService) processBatchItem(ctx context.Context, item *youtube.Chan
 	return channelStat
 }
 
-// GetChannelStatisticsBatch: 여러 채널의 통계를 배치(최대 50개)로 조회한다. (OAuth 인증 필요)
 func (ys *StatsService) GetChannelStatisticsBatch(ctx context.Context, channelIDs []string) ([]*ChannelStatistics, error) {
 	if ys.oauth == nil || !ys.oauth.IsAuthorized() {
 		return nil, fmt.Errorf("YouTube OAuth not authorized")
@@ -219,7 +215,6 @@ func (ys *StatsService) GetChannelStatisticsBatch(ctx context.Context, channelID
 	return stats, nil
 }
 
-// GetRecentVideos: 채널의 최근 업로드 비디오를 검색한다. (OAuth 인증 필요)
 func (ys *StatsService) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]*youtube.SearchResult, error) {
 	if ys.oauth == nil || !ys.oauth.IsAuthorized() {
 		return nil, fmt.Errorf("YouTube OAuth not authorized")
