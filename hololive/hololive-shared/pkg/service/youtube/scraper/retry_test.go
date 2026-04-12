@@ -510,7 +510,6 @@ func TestHttpStatusError(t *testing.T) {
 	assert.Equal(t, "unexpected status code: 504", err.Error())
 }
 
-// --- Phase 3 테스트: BackoffState ---
 
 func TestBackoffState_DualState(t *testing.T) {
 	bs := NewBackoffState()
@@ -660,7 +659,6 @@ func TestFetchPageOnce_HardCooldownOnly(t *testing.T) {
 	assert.Contains(t, result, "ok")
 }
 
-// --- Phase 4 테스트: RateLimiter ---
 
 func TestRateLimiter_ConcurrentSlots(t *testing.T) {
 	rl := NewRateLimiter(100 * time.Millisecond)
@@ -771,7 +769,6 @@ func TestRateLimiter_ConcurrentCancelStress(t *testing.T) {
 	assert.Less(t, elapsed, 20*time.Millisecond, "concurrent canceled waiters should not consume future slots")
 }
 
-// --- Phase 5 테스트: 포인터 동일성 ---
 
 func TestSharedRL_PointerIdentity(t *testing.T) {
 	rl := NewRateLimiter(3 * time.Second)
