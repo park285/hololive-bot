@@ -217,8 +217,7 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 func TestAlarmNotification_UpcomingScheduledTime(t *testing.T) {
 	t.Parallel()
 
-	// 21:00 KST 예정 방송
-	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC) // 21:00 KST
+	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notification := &domain.AlarmNotification{
 		Stream: &domain.Stream{
 			ID:             "test-stream",
@@ -229,7 +228,6 @@ func TestAlarmNotification_UpcomingScheduledTime(t *testing.T) {
 		MinutesUntil: 5,
 	}
 
-	// MinutesUntil > 0 && StartScheduled != nil → ScheduledTimeKST 생성
 	var scheduledTimeKST string
 
 	if notification.MinutesUntil > 0 && notification.Stream.StartScheduled != nil {
@@ -248,7 +246,6 @@ func TestAlarmNotification_UpcomingScheduledTime(t *testing.T) {
 func TestAlarmNotification_LiveFallback(t *testing.T) {
 	t.Parallel()
 
-	// live catchup: MinutesUntil = 0
 	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notification := &domain.AlarmNotification{
 		Stream: &domain.Stream{
@@ -260,7 +257,6 @@ func TestAlarmNotification_LiveFallback(t *testing.T) {
 		MinutesUntil: 0,
 	}
 
-	// MinutesUntil <= 0 → ScheduledTimeKST 빈 문자열
 	var scheduledTimeKST string
 
 	if notification.MinutesUntil > 0 && notification.Stream.StartScheduled != nil {
@@ -276,7 +272,7 @@ func TestAlarmNotificationGroup_WithScheduledTime(t *testing.T) {
 	t.Parallel()
 
 	formatter := &ResponseFormatter{}
-	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC) // 21:00 KST
+	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
 			Channel: &domain.Channel{Name: "채널A"},
@@ -294,7 +290,6 @@ func TestAlarmNotificationGroup_WithScheduledTime(t *testing.T) {
 				ID:          "stream-b",
 				Title:       "방송 B",
 				ChannelName: "채널B",
-				// StartScheduled nil → 시각 미표시
 			},
 			MinutesUntil: 5,
 		},
@@ -318,7 +313,7 @@ func TestAlarmNotificationGroup_LiveStartedLabel(t *testing.T) {
 	t.Parallel()
 
 	formatter := &ResponseFormatter{}
-	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC) // 21:00 KST
+	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
 			Channel: &domain.Channel{Name: "채널A"},
@@ -346,8 +341,8 @@ func TestAlarmNotificationGroup_HeaderWithMultipleScheduledTimes(t *testing.T) {
 	t.Parallel()
 
 	formatter := &ResponseFormatter{}
-	scheduledA := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)  // 21:00 KST
-	scheduledB := time.Date(2026, time.February, 12, 12, 30, 0, 0, time.UTC) // 21:30 KST
+	scheduledA := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
+	scheduledB := time.Date(2026, time.February, 12, 12, 30, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
 			Channel: &domain.Channel{Name: "채널A"},

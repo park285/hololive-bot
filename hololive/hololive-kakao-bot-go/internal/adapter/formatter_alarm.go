@@ -33,7 +33,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// AlarmListEntry: 알림 목록 조회를 위한 개별 항목 (멤버 이름 및 다음 방송 정보 포함).
 type AlarmListEntry struct {
 	MemberName string
 	AlarmTypes domain.AlarmTypes
@@ -282,7 +281,6 @@ func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) s
 	return rendered
 }
 
-// InvalidAlarmUsage: 알림 명령어의 잘못된 사용법에 대한 안내 메시지를 반환합니다.
 func (f *ResponseFormatter) InvalidAlarmUsage() string {
 	return ErrInvalidAlarmUsage
 }
@@ -347,7 +345,6 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 	return rendered
 }
 
-// AlarmNotificationGroup: 여러 방송의 알림을 하나로 묶어 그룹 메시지를 생성한다. (알림 폭탄 방지).
 func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notifications []*domain.AlarmNotification) string {
 	if len(notifications) == 0 {
 		return ""
