@@ -132,7 +132,7 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 		ctxTimeout      time.Duration
 		preMarkDedup    bool
 		wantCount       int
-		wantErrContains string
+		wantErrContains []string
 	}
 
 	buildUpcomingResponse := func(startScheduled time.Time) string {
@@ -160,12 +160,12 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 			name:            "timeout",
 			scenario:        "timeout",
 			ctxTimeout:      20 * time.Millisecond,
-			wantErrContains: "context deadline exceeded",
+			wantErrContains: []string{"check youtube streams: fetch channels live status", "context deadline"},
 		},
 		{
 			name:            "5xx",
 			scenario:        "5xx",
-			wantErrContains: "Server error: 500",
+			wantErrContains: []string{"Server error: 500"},
 		},
 		{
 			name:         "dedup",
@@ -250,9 +250,11 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 
 			notifications, checkErr := checker.Check(runCtx)
 
-			if tc.wantErrContains != "" {
+			if len(tc.wantErrContains) > 0 {
 				require.Error(t, checkErr)
-				assert.Contains(t, checkErr.Error(), tc.wantErrContains)
+				for _, wantErrContains := range tc.wantErrContains {
+					assert.Contains(t, checkErr.Error(), wantErrContains)
+				}
 
 				return
 			}
