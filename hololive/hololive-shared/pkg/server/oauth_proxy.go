@@ -34,7 +34,6 @@ const (
 	CallbackPath = "callback"
 )
 
-// BuildOAuthDeepLinkURL: OAuth 결과를 앱 Deep Link URL로 변환합니다.
 func BuildOAuthDeepLinkURL(code, state, errorParam, errorDesc string) string {
 	baseURL := fmt.Sprintf("%s://%s", AppScheme, CallbackPath)
 	params := url.Values{}
@@ -133,7 +132,6 @@ type oauthRedirectData struct {
 	DeepLinkURL string
 }
 
-// BuildOAuthRedirectHTML: Deep Link로 리디렉트하는 HTML 페이지를 생성합니다.
 func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
 	data := oauthRedirectData{
 		Color:       "#667eea",

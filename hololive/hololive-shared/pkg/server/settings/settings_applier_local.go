@@ -39,7 +39,6 @@ type localSettingsApplier struct {
 
 var _ SettingsApplier = (*localSettingsApplier)(nil)
 
-// NewLocalSettingsApplier: Bot 프로세스용 SettingsApplier를 생성합니다.
 func NewLocalSettingsApplier(
 	youtubeSvc youtube.Service,
 	holodexSvc *holodex.Service,
@@ -54,7 +53,6 @@ func NewLocalSettingsApplier(
 	}
 }
 
-// ApplyScraperProxy: YouTube/Holodex/스케줄러 프록시 설정을 직접 적용합니다.
 func (a *localSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool) ScraperProxyApplyResult {
 	runtime := ScraperProxyApplyResult{
 		Requested: enabled,
@@ -83,7 +81,6 @@ func (a *localSettingsApplier) ApplyScraperProxy(_ context.Context, enabled bool
 	return runtime
 }
 
-// ApplyAlarmAdvanceMinutes: 알람 사전 알림 시간을 직접 적용합니다.
 func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, minutes int) AlarmAdvanceMinutesApplyResult {
 	runtime := AlarmAdvanceMinutesApplyResult{
 		AlarmRequestedAdvanceMinutes: minutes,
@@ -102,7 +99,6 @@ func (a *localSettingsApplier) ApplyAlarmAdvanceMinutes(ctx context.Context, min
 	return runtime
 }
 
-// ApplyMemberNewsWeeklyRunNow: bot 프로세스에서는 미지원(LLM scheduler 전용) 설정입니다.
 func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) MemberNewsWeeklyRunNowResult {
 	return MemberNewsWeeklyRunNowResult{
 		Applied: false,
@@ -110,7 +106,6 @@ func (a *localSettingsApplier) ApplyMemberNewsWeeklyRunNow(_ context.Context) Me
 	}
 }
 
-// ScraperProxyRuntimeState: 현재 프록시 런타임 상태를 반환합니다.
 func (a *localSettingsApplier) ScraperProxyRuntimeState(requested bool) ScraperProxyRuntimeStateResult {
 	runtime := ScraperProxyRuntimeStateResult{
 		Requested: requested,
