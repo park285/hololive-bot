@@ -71,7 +71,6 @@ type Decision struct {
 	RetryAfter time.Duration
 }
 
-// SlidingWindowLimiter: Valkey ZSET 기반 분산 슬라이딩 윈도우 레이트 리미터
 type SlidingWindowLimiter struct {
 	cacheSvc  cache.Client
 	keyPrefix string
@@ -79,7 +78,6 @@ type SlidingWindowLimiter struct {
 	sequence  atomic.Uint64
 }
 
-// NewSlidingWindowLimiter: 분산 슬라이딩 윈도우 레이트 리미터를 생성합니다.
 func NewSlidingWindowLimiter(cacheSvc cache.Client, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
 	if cacheSvc == nil {
 		return nil, fmt.Errorf("new sliding window limiter: cache service must not be nil")
@@ -97,7 +95,6 @@ func NewSlidingWindowLimiter(cacheSvc cache.Client, keyPrefix string, logger *sl
 	}, nil
 }
 
-// Allow: bucket 단위로 요청 허용 여부를 판정합니다.
 func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit int, window time.Duration) (Decision, error) {
 	if bucket == "" {
 		return Decision{}, fmt.Errorf("allow: bucket must not be empty")
