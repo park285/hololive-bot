@@ -120,7 +120,6 @@ func TestSleepWithContext(t *testing.T) {
 	}
 }
 
-// TestSleepWithContext_Concurrency: 동시성 안전성 테스트
 func TestSleepWithContext_Concurrency(t *testing.T) {
 	const numGoroutines = 100
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -154,7 +153,6 @@ func TestSleepWithContext_Concurrency(t *testing.T) {
 	}
 }
 
-// BenchmarkSleepWithContext: 성능 벤치마크
 func BenchmarkSleepWithContext(b *testing.B) {
 	ctx := context.Background()
 	b.ResetTimer()
@@ -163,7 +161,6 @@ func BenchmarkSleepWithContext(b *testing.B) {
 	}
 }
 
-// BenchmarkSleepWithContext_Cancelled: 취소된 context 벤치마크
 func BenchmarkSleepWithContext_Cancelled(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
