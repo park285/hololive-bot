@@ -43,7 +43,6 @@ import (
 
 var _ Client = (*OpenAIClient)(nil)
 
-// OpenAIClient: OpenAI SDK 기반 LLM 클라이언트 (Responses API / Chat Completions 선택)
 type OpenAIClient struct {
 	client          openai.Client
 	model           string
@@ -55,7 +54,6 @@ type OpenAIClient struct {
 	logger          *slog.Logger
 }
 
-// NewClient: OpenAI 호환 endpoint를 사용하는 LLM 클라이언트를 생성합니다.
 func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
 	// HTTP/2 비활성화: Cloudflare가 Go HTTP/2 fingerprint를 차단하는 문제 방지
 	httpClient := httputil.NewProfiledClient(httputil.TransportProfile{
@@ -100,7 +98,6 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 	}
 }
 
-// GenerateJSON: 구조화 JSON 출력을 생성합니다.
 // chatCompletions=true이면 Chat Completions API, 아니면 Responses API를 사용합니다.
 func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
 	if c.chatCompletions {
