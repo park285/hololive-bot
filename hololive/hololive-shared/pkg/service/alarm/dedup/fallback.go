@@ -38,7 +38,6 @@ func (e fallbackEntry) isExpired(now time.Time) bool {
 	return now.UnixNano() >= e.expiresAtUnixNano
 }
 
-// LocalFallback: Valkey 장애 시 로컬 in-memory dedup 폴백
 type LocalFallback struct {
 	logger   *slog.Logger
 	keys     sync.Map
@@ -46,7 +45,6 @@ type LocalFallback struct {
 	now      func() time.Time
 }
 
-// NewLocalFallback: 새 로컬 폴백 생성
 func NewLocalFallback(logger ...*slog.Logger) *LocalFallback {
 	log := slog.Default()
 	if len(logger) > 0 && logger[0] != nil {
@@ -59,7 +57,6 @@ func NewLocalFallback(logger ...*slog.Logger) *LocalFallback {
 	}
 }
 
-// TryClaimOnOutage: Valkey SETNX 실패 시 로컬 폴백으로 claim 시도
 func (f *LocalFallback) TryClaimOnOutage(key string, ttl time.Duration, err error) bool {
 	normalizedTTL := normalizeFallbackTTL(ttl)
 	acquired := f.tryClaim(key, normalizedTTL)
@@ -77,7 +74,6 @@ func (f *LocalFallback) TryClaimOnOutage(key string, ttl time.Duration, err erro
 	return acquired
 }
 
-// ReleaseClaims: 로컬 dedup claim 해제
 func (f *LocalFallback) ReleaseClaims(claimKeys []string) {
 	for _, key := range claimKeys {
 		if _, loaded := f.keys.LoadAndDelete(key); loaded {

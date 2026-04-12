@@ -231,7 +231,6 @@ func fallbackKeyCount(fb *LocalFallback) int {
 	return count
 }
 
-// --- LocalFallback 테스트 ---
 
 func TestLocalFallback_TryClaimReleaseAndExpiry(t *testing.T) {
 	current := time.Date(2026, 3, 4, 8, 0, 0, 0, time.UTC)
@@ -283,7 +282,6 @@ func TestNormalizeFallbackTTL(t *testing.T) {
 	}
 }
 
-// --- DedupService 테스트 ---
 
 func TestService_TryClaimNotification_ClaimKeyCategoryAndSchedulePolicy(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)

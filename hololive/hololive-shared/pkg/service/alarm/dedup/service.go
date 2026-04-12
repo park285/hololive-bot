@@ -37,18 +37,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// NotifiedData: 알림 중복 발송 방지를 위한 이력 정보
 type NotifiedData struct {
 	StartScheduled string       `json:"start_scheduled"`
 	SentAt         map[int]bool `json:"sent_at"`
 }
 
-// UpcomingEventNotifiedData: 예정 알림 발송 시각 기록
 type UpcomingEventNotifiedData struct {
 	NotifiedAt string `json:"notified_at"`
 }
 
-// Service: SETNX 기반 4단계 알림 중복 방지 서비스
 type Service struct {
 	cache           cache.Client
 	targetMinutes   []int
@@ -65,7 +62,6 @@ const (
 	notifiedDataSourceLegacyString
 )
 
-// NewService: DedupService 생성
 func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
@@ -87,7 +83,6 @@ func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
 	s.targetMinutes = sharedchecker.NormalizeTargetMinutes(targetMinutes)
 }
 
-// TryClaimNotification: 알림 발송 권한 선점 시도
 // startScheduled가 zero이면 ("", false, nil) 반환
 func (s *Service) TryClaimNotification(ctx context.Context, roomID, streamID string, startScheduled time.Time, minutesUntil int) (string, bool, error) {
 	if startScheduled.IsZero() {
@@ -100,7 +95,6 @@ func (s *Service) TryClaimNotification(ctx context.Context, roomID, streamID str
 	return key, acquired, nil
 }
 
-// TryClaimLogicalEvent: 논리적 이벤트 claim 시도 (stream_id 변경 대응)
 func (s *Service) TryClaimLogicalEvent(ctx context.Context, roomID, channelID string, stream *domain.Stream, minutesUntil int) (string, bool, error) {
 	if stream == nil {
 		return "", false, nil
@@ -116,14 +110,12 @@ func (s *Service) TryClaimLogicalEvent(ctx context.Context, roomID, channelID st
 	return key, acquired, nil
 }
 
-// TryClaimScheduleTransition: 일정 변경 전환 claim 시도
 func (s *Service) TryClaimScheduleTransition(ctx context.Context, streamID string, oldScheduled, newScheduled time.Time) (string, bool, error) {
 	key := keys.BuildScheduleTransitionKey(streamID, oldScheduled, newScheduled)
 	acquired := s.tryClaimKey(ctx, key, constants.CacheTTL.NotificationSent)
 	return key, acquired, nil
 }
 
-// ReleaseClaims: claim 키 해제 (발송 실패 시 재시도 허용)
 func (s *Service) ReleaseClaims(ctx context.Context, claimKeys []string) error {
 	if len(claimKeys) == 0 {
 		return nil
@@ -139,7 +131,6 @@ func (s *Service) ReleaseClaims(ctx context.Context, claimKeys []string) error {
 	return nil
 }
 
-// MarkAsNotified: 알림 발송 이력 기록 (HSET 원자적 갱신)
 func (s *Service) MarkAsNotified(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) error {
 	key := keys.NotifiedKey(streamID)
 	scheduledStr := keys.FormatScheduled(startScheduled)
@@ -185,7 +176,6 @@ func (s *Service) MarkAsNotified(ctx context.Context, streamID string, startSche
 	return nil
 }
 
-// IsAlreadyNotifiedForSchedule: 현재 스케줄에서 해당 분에 이미 알림 발송됐는지 확인
 func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) (bool, error) {
 	key := keys.NotifiedKey(streamID)
 	scheduledStr := keys.FormatScheduled(startScheduled)
@@ -224,7 +214,6 @@ func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID str
 	return data.SentAt[minutesUntil], nil
 }
 
-// IsAlreadyNotified: 어떤 분이라도 발송 이력이 있으면 true
 func (s *Service) IsAlreadyNotified(ctx context.Context, streamID string) (bool, error) {
 	key := keys.NotifiedKey(streamID)
 	data, err := s.readNotifiedData(ctx, key)
@@ -237,7 +226,6 @@ func (s *Service) IsAlreadyNotified(ctx context.Context, streamID string) (bool,
 	return len(data.SentAt) > 0, nil
 }
 
-// MarkUpcomingEventNotified: 예정 알림 발송 시각을 이벤트 단위로 기록
 func (s *Service) MarkUpcomingEventNotified(ctx context.Context, roomID, channelID string, stream *domain.Stream) error {
 	if stream == nil {
 		return nil
@@ -257,7 +245,6 @@ func (s *Service) MarkUpcomingEventNotified(ctx context.Context, roomID, channel
 	return nil
 }
 
-// WasUpcomingEventNotifiedRecently: 동일 이벤트의 예정 알림이 window 내에 발송됐는지 확인
 func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, channelID string, stream *domain.Stream, window time.Duration) (bool, error) {
 	if stream == nil {
 		return false, nil
@@ -288,7 +275,6 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 	return time.Since(notifiedAt) <= window, nil
 }
 
-// --- 비공개 헬퍼 ---
 
 // tryClaimKey: SETNX 기반 키 선점 (Valkey 장애 시 로컬 폴백)
 func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) bool {
