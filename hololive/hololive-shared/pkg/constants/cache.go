@@ -22,7 +22,6 @@ package constants
 
 import "time"
 
-// CacheTTL: 패키지 변수다.
 var CacheTTL = struct {
 	LiveStreams        time.Duration
 	UpcomingStreams    time.Duration
@@ -43,7 +42,6 @@ var CacheTTL = struct {
 	TwitchNotification: 168 * time.Hour,  // 7일 - Twitch 알림 발송 기록 (stream_id 기반)
 }
 
-// MemberCacheDefaults: 패키지 변수다.
 var MemberCacheDefaults = struct {
 	ValkeyTTL           time.Duration
 	WarmUpChunkSize     int
@@ -54,7 +52,6 @@ var MemberCacheDefaults = struct {
 	WarmUpMaxGoroutines: 10,
 }
 
-// WebSocketConfig: 패키지 변수다.
 var WebSocketConfig = struct {
 	MaxReconnectAttempts int
 	ReconnectDelay       time.Duration
@@ -63,7 +60,6 @@ var WebSocketConfig = struct {
 	ReconnectDelay:       5 * time.Second,
 }
 
-// ValkeyConfig: 패키지 변수다.
 var ValkeyConfig = struct {
 	ReadyTimeout      time.Duration
 	BlockingPoolSize  int
@@ -74,7 +70,6 @@ var ValkeyConfig = struct {
 	PipelineMultiplex: 4,
 }
 
-// RedisKeys: Redis/Valkey 키 이름 상수입니다.
 var RedisKeys = struct {
 	AlarmMemberNames string
 }{
