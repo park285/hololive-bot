@@ -49,7 +49,6 @@ func (mm *MemberMatcher) maybeCleanupMatchCache() {
 	mm.matchCacheLastCleanup = time.Now()
 }
 
-// FindBestMatch: 주어진 쿼리 문자열과 가장 잘 일치하는 멤버/채널을 찾는다.
 // 캐시된 결과가 있으면 반환하고, 없으면 여러 매칭 전략을 시도한다.
 func (mm *MemberMatcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, error) {
 	normalizedQuery := stringutil.Normalize(query)
@@ -102,7 +101,6 @@ func (mm *MemberMatcher) findBestMatchImpl(ctx context.Context, query string) (*
 	return nil, nil
 }
 
-// GetAllMembers: 등록된 모든 멤버 정보를 반환합니다.
 func (mm *MemberMatcher) GetAllMembers() []*domain.Member {
 	provider := mm.providerWithContext(mm.ctx)
 	if provider == nil {
@@ -112,7 +110,6 @@ func (mm *MemberMatcher) GetAllMembers() []*domain.Member {
 	return provider.GetAllMembers()
 }
 
-// GetMemberByChannelID: 채널 ID를 사용하여 멤버 정보를 조회합니다.
 func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID string) *domain.Member {
 	provider := mm.providerWithContext(ctx)
 	if provider == nil {
@@ -122,7 +119,6 @@ func (mm *MemberMatcher) GetMemberByChannelID(ctx context.Context, channelID str
 	return provider.FindMemberByChannelID(channelID)
 }
 
-// FindBestMatchWithCandidates: !알람 명령어 전용 매칭 API.
 // "이름 (그룹)" 형식을 파싱하고, 동명이인 발생 시 AmbiguousMatchError를 반환합니다.
 func (mm *MemberMatcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, error) {
 	name, org := ParseNameWithOrg(query)
