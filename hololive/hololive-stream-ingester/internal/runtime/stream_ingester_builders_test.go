@@ -135,9 +135,8 @@ func (f *fakeMemberDataProvider) FindMembersByAlias(alias string) []*domain.Memb
 func mustResolveCommunityShortsOperationalChannels(t *testing.T, membersData domain.MemberDataProvider) []communityShortsOperationalChannel {
 	t.Helper()
 
-	channels, err := resolveCommunityShortsOperationalChannels(membersData)
-	require.NoError(t, err)
-	return channels
+	require.NotNil(t, membersData)
+	return resolveCommunityShortsOperationalChannelsFromMembers(membersData.GetAllMembers())
 }
 
 func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
@@ -185,18 +184,17 @@ func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
 	})
 }
 
-func TestResolveCommunityShortsOperationalChannels(t *testing.T) {
+func TestResolveCommunityShortsOperationalChannelsFromMembers(t *testing.T) {
 	t.Parallel()
 
-	channels, err := resolveCommunityShortsOperationalChannels(&fakeMemberDataProvider{
+	channels := resolveCommunityShortsOperationalChannelsFromMembers((&fakeMemberDataProvider{
 		members: []*domain.Member{
 			{Name: "Pekora", Org: "Hololive", ChannelID: "  UCpekora  "},
 			{Name: "Miko", Org: "Hololive", ChannelID: "   "},
 			{Name: "Graduated", Org: "Hololive", ChannelID: "UCgraduated", IsGraduated: true},
 			nil,
 		},
-	})
-	require.NoError(t, err)
+	}).GetAllMembers())
 	require.Len(t, channels, 2)
 	assert.Equal(t, "Pekora (Hololive)", channels[0].ownerLabel)
 	assert.Equal(t, "UCpekora", channels[0].channelID)
@@ -431,7 +429,8 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	require.Equal(t, 15*time.Second, extractResolverDurationField(t, resolver, "interval"))
 	require.Equal(t, 10, extractResolverIntField(t, resolver, "batchSize"))
 	require.Equal(t, 1, extractResolverIntField(t, resolver, "maxResolvePerRun"))
-	require.Equal(t, 2*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
+	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
+	require.Equal(t, 10*time.Second, extractResolverDurationField(t, resolver, "resolveTimeout"))
 	require.Equal(t, 30*time.Second, extractResolverDurationField(t, resolver, "minDetectedAge"))
 	require.Equal(t, 5*time.Minute, extractResolverDurationField(t, resolver, "failureBackoffTTL"))
 	require.True(t, sharedClient.ProxyEnabled())
@@ -454,7 +453,8 @@ func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 			Interval:          12 * time.Second,
 			BatchSize:         9,
 			MaxResolvePerRun:  3,
-			MaxRunDuration:    4 * time.Second,
+			MaxRunDuration:    12 * time.Second,
+			ResolveTimeout:    10 * time.Second,
 			MinDetectedAge:    45 * time.Second,
 			FailureBackoffTTL: 7 * time.Minute,
 		},
@@ -472,7 +472,8 @@ func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "interval"))
 	require.Equal(t, 9, extractResolverIntField(t, resolver, "batchSize"))
 	require.Equal(t, 3, extractResolverIntField(t, resolver, "maxResolvePerRun"))
-	require.Equal(t, 4*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
+	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
+	require.Equal(t, 10*time.Second, extractResolverDurationField(t, resolver, "resolveTimeout"))
 	require.Equal(t, 45*time.Second, extractResolverDurationField(t, resolver, "minDetectedAge"))
 	require.Equal(t, 7*time.Minute, extractResolverDurationField(t, resolver, "failureBackoffTTL"))
 }

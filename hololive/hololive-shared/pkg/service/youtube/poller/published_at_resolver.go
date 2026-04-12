@@ -23,6 +23,7 @@ type PendingPublishedAtResolver struct {
 	batchSize         int
 	maxResolvePerRun  int
 	maxRunDuration    time.Duration
+	resolveTimeout    time.Duration
 	minDetectedAge    time.Duration
 	failureBackoffTTL time.Duration
 	logger            *slog.Logger
@@ -43,7 +44,8 @@ func NewPendingPublishedAtResolver(
 		interval,
 		batchSize,
 		batchSize,
-		6*time.Second,
+		12*time.Second,
+		10*time.Second,
 		20*time.Second,
 		5*time.Minute,
 		logger,
@@ -58,6 +60,7 @@ func NewPendingPublishedAtResolverWithControls(
 	batchSize int,
 	maxResolvePerRun int,
 	maxRunDuration time.Duration,
+	resolveTimeout time.Duration,
 	minDetectedAge time.Duration,
 	failureBackoffTTL time.Duration,
 	logger *slog.Logger,
@@ -72,7 +75,10 @@ func NewPendingPublishedAtResolverWithControls(
 		maxResolvePerRun = batchSize
 	}
 	if maxRunDuration <= 0 {
-		maxRunDuration = 6 * time.Second
+		maxRunDuration = 12 * time.Second
+	}
+	if resolveTimeout <= 0 {
+		resolveTimeout = 10 * time.Second
 	}
 	if minDetectedAge <= 0 {
 		minDetectedAge = 20 * time.Second
@@ -92,6 +98,7 @@ func NewPendingPublishedAtResolverWithControls(
 		batchSize:         batchSize,
 		maxResolvePerRun:  maxResolvePerRun,
 		maxRunDuration:    maxRunDuration,
+		resolveTimeout:    resolveTimeout,
 		minDetectedAge:    minDetectedAge,
 		failureBackoffTTL: failureBackoffTTL,
 		logger:            logger,
@@ -103,9 +110,6 @@ func (r *PendingPublishedAtResolver) Start(ctx context.Context) {
 		return
 	}
 
-	ticker := time.NewTicker(r.resolverInterval())
-	defer ticker.Stop()
-
 	for {
 		detectedBefore := time.Now().Add(-r.resolverMinDetectedAge())
 		if err := r.runOnce(ctx, detectedBefore); err != nil && ctx.Err() == nil {
@@ -114,10 +118,17 @@ func (r *PendingPublishedAtResolver) Start(ctx context.Context) {
 			)
 		}
 
+		timer := time.NewTimer(r.resolverInterval())
 		select {
 		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
 			return
-		case <-ticker.C:
+		case <-timer.C:
 		}
 	}
 }
@@ -135,6 +146,7 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 	batchSize := r.resolverBatchSize()
 	maxResolvePerRun := r.resolverMaxResolvePerRun()
 	runDeadline := time.Now().Add(r.resolverMaxRunDuration())
+	resolveTimeout := r.resolverResolveTimeout()
 	failureBackoffTTL := r.resolverFailureBackoffTTL()
 	processed := 0
 	var cursor *trackingrepo.PublishedAtResolutionCursor
@@ -170,17 +182,28 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 			if time.Now().After(runDeadline) {
 				return nil
 			}
+			if time.Until(runDeadline) < resolveTimeout {
+				observePublishedAtResolverSkipped(candidate.Kind, "run_budget_exhausted")
+				return nil
+			}
 
 			processed++
 			observePublishedAtResolutionAttempt(candidate.Kind)
-			publishedAt, err := r.resolveCandidatePublishedAt(ctx, candidate)
+			resolveCtx, cancel := context.WithTimeout(ctx, resolveTimeout)
+			publishedAt, err := r.resolveCandidatePublishedAt(resolveCtx, candidate)
+			cancel()
 			if err != nil {
 				observePublishedAtResolutionFailure(candidate.Kind)
-				_ = tracking.MarkPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID, time.Now().Add(failureBackoffTTL))
+				isResolveTimeout := errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
+				_ = r.markPublishedAtRetryAfter(tracking, ctx, candidate, time.Now().Add(failureBackoffTTL), isResolveTimeout)
+				if isResolveTimeout {
+					observePublishedAtResolverSkipped(candidate.Kind, "resolve_timeout")
+				}
 				r.logger.Warn("Pending published_at resolver failed to resolve candidate",
 					slog.String("kind", string(candidate.Kind)),
 					slog.String("post_id", candidate.PostID),
 					slog.String("content_id", candidate.ContentID),
+					slog.Duration("resolve_timeout", resolveTimeout),
 					slog.Any("error", err),
 				)
 				continue
@@ -271,9 +294,16 @@ func (r *PendingPublishedAtResolver) resolverMaxResolvePerRun() int {
 
 func (r *PendingPublishedAtResolver) resolverMaxRunDuration() time.Duration {
 	if r == nil || r.maxRunDuration <= 0 {
-		return 6 * time.Second
+		return 12 * time.Second
 	}
 	return r.maxRunDuration
+}
+
+func (r *PendingPublishedAtResolver) resolverResolveTimeout() time.Duration {
+	if r == nil || r.resolveTimeout <= 0 {
+		return 10 * time.Second
+	}
+	return r.resolveTimeout
 }
 
 func (r *PendingPublishedAtResolver) resolverMinDetectedAge() time.Duration {
@@ -288,6 +318,30 @@ func (r *PendingPublishedAtResolver) resolverFailureBackoffTTL() time.Duration {
 		return 5 * time.Minute
 	}
 	return r.failureBackoffTTL
+}
+
+func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
+	tracking *trackingrepo.GormRepository,
+	ctx context.Context,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	retryAfter time.Time,
+	forceLive bool,
+) error {
+	if tracking == nil {
+		return fmt.Errorf("mark published_at retry after: tracking repository is nil")
+	}
+	if !forceLive {
+		return tracking.MarkPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID, retryAfter)
+	}
+
+	retryTTL := r.resolverFailureBackoffTTL()
+	if retryTTL <= 0 || retryTTL > time.Second {
+		retryTTL = time.Second
+	}
+	retryCtx, cancel := context.WithTimeout(context.Background(), retryTTL)
+	defer cancel()
+
+	return tracking.MarkPublishedAtRetryAfter(retryCtx, candidate.Kind, candidate.PostID, retryAfter)
 }
 
 func (r *PendingPublishedAtResolver) resolveCandidatePublishedAt(
