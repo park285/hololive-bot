@@ -49,3 +49,5 @@
 049 053_create_youtube_community_shorts_source_posts.sql
 050 054_create_youtube_community_shorts_observation_post_baselines.sql
 051 055_create_youtube_community_shorts_alarm_states.sql
+052 056_add_ycsas_pending_published_at_resolution_index.sql
+053 057_add_ycsas_published_at_retry_after.sql
