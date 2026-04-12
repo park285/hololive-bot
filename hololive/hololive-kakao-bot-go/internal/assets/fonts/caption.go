@@ -40,12 +40,10 @@ var (
 	captionFaceCache sync.Map
 )
 
-// CaptionFace: 기본 크기(24pt)의 측션 폰트 Face를 반환합니다.
 func CaptionFace() (font.Face, error) {
 	return CaptionFaceSized(24)
 }
 
-// CaptionFaceSized: 지정된 크기의 측션 폰트 Face를 반환합니다.
 // 생성된 Face는 sync.Map으로 캐시되어 재사용됩니다.
 func CaptionFaceSized(size float64) (font.Face, error) {
 	if size <= 0 {
