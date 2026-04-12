@@ -22,7 +22,6 @@ package domain
 
 import "time"
 
-// YouTubeNotificationDelivery: room 단위 알림 전달 상태
 type YouTubeNotificationDelivery struct {
 	ID            int64        `gorm:"primaryKey;autoIncrement" json:"id"`
 	OutboxID      int64        `gorm:"not null;index:idx_ynd_outbox_room,unique" json:"outbox_id"`
