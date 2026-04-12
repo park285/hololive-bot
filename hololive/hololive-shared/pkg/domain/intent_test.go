@@ -26,7 +26,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// TestNormalizeMemberIntent: 문자열 의도를 MemberIntentType 열거형으로 변환하는 로직을 검증합니다.
 func TestNormalizeMemberIntent(t *testing.T) {
 	t.Parallel()
 
@@ -54,7 +53,6 @@ func TestNormalizeMemberIntent(t *testing.T) {
 	}
 }
 
-// TestMemberIntent_IsMemberInfoIntent: 멤버 정보 조회 의도 판별 로직과 신뢰도 임계값(0.35)을 검증합니다.
 func TestMemberIntent_IsMemberInfoIntent(t *testing.T) {
 	t.Parallel()
 

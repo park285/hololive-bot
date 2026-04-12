@@ -25,7 +25,6 @@ import (
 	"time"
 )
 
-// AddAlarmRequest: 알람 등록 요청 DTO
 type AddAlarmRequest struct {
 	Ctx        context.Context
 	RoomID     string
@@ -37,7 +36,6 @@ type AddAlarmRequest struct {
 	AlarmTypes AlarmTypes
 }
 
-// AlarmEntry: 관리자 대시보드용 알람 엔트리
 type AlarmEntry struct {
 	RoomID     string `json:"roomId"`
 	RoomName   string `json:"roomName"`
@@ -45,7 +43,6 @@ type AlarmEntry struct {
 	MemberName string `json:"memberName"`
 }
 
-// AlarmListView: 알람 목록 표시를 위한 조합 조회 결과.
 type AlarmListView struct {
 	ChannelID  string
 	MemberName string
@@ -53,7 +50,6 @@ type AlarmListView struct {
 	NextStream *NextStreamInfo
 }
 
-// AlarmCRUD: 커맨드와 Admin API에서 사용하는 알람 CRUD 인터페이스
 type AlarmCRUD interface {
 	AddAlarm(ctx context.Context, req AddAlarmRequest) (bool, error)
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes AlarmTypes) (bool, error)
@@ -70,7 +66,6 @@ type AlarmCRUD interface {
 	WarmCacheFromDB(ctx context.Context) error
 }
 
-// AlarmDispatchState: 큐 디스패처에서 사용하는 발송 상태 인터페이스
 type AlarmDispatchState interface {
 	MarkAsNotified(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) error
 	MarkUpcomingEventNotified(ctx context.Context, roomID, channelID string, stream *Stream) error
@@ -78,7 +73,6 @@ type AlarmDispatchState interface {
 	GetDistinctRooms(ctx context.Context) ([]string, error)
 }
 
-// StreamProvider: 커맨드에서 사용하는 Holodex 스트림 조회 인터페이스
 type StreamProvider interface {
 	GetLiveStreams(ctx context.Context) ([]*Stream, error)
 	GetUpcomingStreams(ctx context.Context, hours int) ([]*Stream, error)
