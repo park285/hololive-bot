@@ -31,10 +31,8 @@ export const AppLayout = () => {
 
 	const navGroups = getNavGroups();
 
-	// Find the current active route label
 	const activeRoute = ROUTE_MANIFEST.find((r) => {
-		const routePath = r.absolutePath; // e.g., /dashboard/stats
-		// Handle exact match or parent match for nested routes
+		const routePath = r.absolutePath;
 		if (location.pathname === routePath) return true;
 		if (location.pathname.startsWith(`${routePath}/`)) return true;
 		return false;
@@ -42,7 +40,6 @@ export const AppLayout = () => {
 
 	return (
 		<div className="flex h-screen bg-slate-50 overflow-hidden font-body selection:bg-sky-200">
-			{/* 동적 배경 */}
 			<div className="absolute inset-0 z-0 pointer-events-none">
 				<div className="absolute top-0 left-0 w-full h-96 bg-linear-to-b from-sky-50/50 to-transparent"></div>
 				<div
@@ -54,12 +51,10 @@ export const AppLayout = () => {
 				/>
 			</div>
 
-			{/* 사이드바 */}
 			<aside
 				style={{ width: isSidebarOpen ? 260 : 80 }}
 				className="bg-white/80 backdrop-blur-xl border-r border-slate-200 z-20 flex flex-col transition-[width] duration-300 relative shadow-sm"
 			>
-				{/* 로고 영역 */}
 				<div className="h-20 flex items-center justify-between px-6 border-b border-slate-100">
 					{isSidebarOpen ? (
 						<div className="flex items-center gap-3">
@@ -102,7 +97,6 @@ export const AppLayout = () => {
 					</div>
 				)}
 
-				{/* 네비게이션 */}
 				<nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-hide animate-fade-in">
 					{navGroups.map((group, groupIndex) => (
 						<div
@@ -165,7 +159,6 @@ export const AppLayout = () => {
 					))}
 				</nav>
 
-				{/* 유저 프로필 / 로그아웃 */}
 				<div className="p-4 border-t border-slate-100">
 					<button
 						onClick={handleLogout}
@@ -186,9 +179,7 @@ export const AppLayout = () => {
 				</div>
 			</aside>
 
-			{/* 메인 콘텐츠 */}
 			<main className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
-				{/* 헤더 - Glass 효과 */}
 				<header className="h-20 bg-white/60 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-8 sticky top-0 z-20">
 					<div className="animate-fade-in-up">
 						<h2 className="text-2xl font-display font-bold text-slate-800 tracking-tight">

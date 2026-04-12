@@ -68,12 +68,10 @@ const LoginPage = () => {
 
 	return (
 		<div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-50 font-body selection:bg-sky-200">
-			{/* Dynamic Background */}
 			<div className="absolute inset-0 bg-white z-0">
 				<div className="absolute top-0 left-0 right-0 h-[500px] bg-linear-to-b from-sky-100/50 to-transparent"></div>
 				<div className="absolute -top-24 right-0 w-[500px] h-[500px] bg-sky-200/30 rounded-full blur-[100px] animate-pulse"></div>
 				<div className="absolute top-1/2 -left-24 w-[400px] h-[400px] bg-cyan-100/40 rounded-full blur-[80px]"></div>
-				{/* Subtle noise texture */}
 				<div
 					className="absolute inset-0 opacity-[0.015]"
 					style={{
@@ -85,7 +83,6 @@ const LoginPage = () => {
 
 			<div className="w-full max-w-[400px] z-10 px-6">
 				<div className="relative">
-					{/* Logo Section */}
 					<div className="text-center mb-10 animate-fade-in-up">
 						<div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-tr from-sky-400 to-cyan-400 rounded-2xl shadow-lg shadow-sky-200/60 mb-6 transform rotate-3 hover:rotate-6 transition-transform duration-300">
 							<Play
@@ -99,7 +96,6 @@ const LoginPage = () => {
 						</h1>
 					</div>
 
-					{/* Login Form */}
 					<form
 						onSubmit={handleSubmit}
 						className="space-y-5 animate-fade-in-up stagger-2"
@@ -187,7 +183,6 @@ const LoginPage = () => {
 						</Button>
 					</form>
 
-					{/* Footer */}
 					<div className="mt-12 text-center space-y-2 animate-fade-in stagger-4">
 						<div className="flex justify-center space-x-2">
 							<div className="w-1.5 h-1.5 rounded-full bg-sky-400"></div>
