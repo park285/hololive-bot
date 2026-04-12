@@ -22,7 +22,6 @@ package constants
 
 import "time"
 
-// AppTimeout: 앱 빌드/종료 타임아웃 설정입니다.
 var AppTimeout = struct {
 	Build    time.Duration
 	Shutdown time.Duration
@@ -31,7 +30,6 @@ var AppTimeout = struct {
 	Shutdown: 10 * time.Second,
 }
 
-// ServerTimeout: HTTP 서버 타임아웃입니다.
 var ServerTimeout = struct {
 	ReadHeader     time.Duration
 	Read           time.Duration
@@ -46,7 +44,6 @@ var ServerTimeout = struct {
 	MaxHeaderBytes: 1 << 20, // 1MiB
 }
 
-// ServerConfig: 서버 기본 설정입니다.
 var ServerConfig = struct {
 	TrustedProxies []string
 	MaxBodyBytes   int64 // 요청 본문 최대 크기 (바이트)
@@ -55,7 +52,6 @@ var ServerConfig = struct {
 	MaxBodyBytes:   1 << 20, // 1MiB
 }
 
-// CORSConfig: CORS 기본 설정입니다.
 var CORSConfig = struct {
 	AllowMethods []string
 	AllowHeaders []string
@@ -70,7 +66,6 @@ var CORSConfig = struct {
 	},
 }
 
-// RequestTimeout: HTTP 요청 및 서비스 타임아웃 설정
 var RequestTimeout = struct {
 	AdminRequest      time.Duration
 	BotCommand        time.Duration
@@ -87,7 +82,6 @@ var RequestTimeout = struct {
 	DatabasePing:      5 * time.Second,
 }
 
-// LLMHTTPTimeout: LLM HTTP 클라이언트 타임아웃 설정
 var LLMHTTPTimeout = struct {
 	Request        time.Duration
 	Dial           time.Duration
@@ -102,7 +96,6 @@ var LLMHTTPTimeout = struct {
 	IdleConn:       90 * time.Second,
 }
 
-// IrisConnection: Bot 시작 시 Iris 연결 준비 대기 설정입니다.
 var IrisConnection = struct {
 	ReadyTimeout  time.Duration
 	RetryInterval time.Duration
@@ -113,15 +106,12 @@ var IrisConnection = struct {
 	PingTimeout:   3 * time.Second,
 }
 
-// IrisWebhookDedupTTL: Iris -> Bot webhook 메시지 중복 처리 방지용 TTL 입니다.
 // Iris 측 재시도(단기)에서 동일 메시지 ID를 스킵하기 위한 목적입니다.
 var IrisWebhookDedupTTL = 60 * time.Second
 
-// IrisWebhookDedupTimeout: Iris -> Bot webhook dedup 캐시 호출 타임아웃입니다.
 // ACK 지연이 Iris 재시도/백프레셔로 이어지지 않도록 짧게 유지합니다.
 var IrisWebhookDedupTimeout = 200 * time.Millisecond
 
-// DatabaseConfig: 데이터베이스 연결 설정입니다.
 var DatabaseConfig = struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
@@ -132,7 +122,6 @@ var DatabaseConfig = struct {
 	ConnMaxLifetime: 5 * time.Minute,
 }
 
-// QueryTimeout: DB 쿼리 타임아웃 기본값입니다.
 var QueryTimeout = struct {
 	Default time.Duration
 	Long    time.Duration
@@ -141,7 +130,6 @@ var QueryTimeout = struct {
 	Long:    30 * time.Second,
 }
 
-// DatabaseDefaults: PostgreSQL 기본값이다. (env 미설정 시)
 var DatabaseDefaults = struct {
 	Host     string
 	Port     int
