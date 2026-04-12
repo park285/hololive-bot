@@ -19,7 +19,7 @@ const alarmLatencyExceededThresholdMillis = alarmtiming.LatencyExceededThreshold
 // ReadRepository: 추적 레코드 조회 경로를 담당한다.
 type ReadRepository interface {
 	FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error)
-	ListPendingPublishedAtResolutionsPage(ctx context.Context, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error)
+	ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow time.Time, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error)
 	ListPendingPublishedAtResolutions(ctx context.Context, detectedBefore time.Time, limit int) ([]PublishedAtResolutionCandidate, error)
 }
 

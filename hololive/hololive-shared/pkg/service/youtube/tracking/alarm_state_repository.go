@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -15,7 +17,7 @@ func (r *GormRepository) ListPendingPublishedAtResolutions(
 	detectedBefore time.Time,
 	limit int,
 ) ([]PublishedAtResolutionCandidate, error) {
-	candidates, _, err := r.ListPendingPublishedAtResolutionsPage(ctx, detectedBefore, nil, limit)
+	candidates, _, err := r.ListPendingPublishedAtResolutionsPage(ctx, time.Now(), detectedBefore, nil, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -24,6 +26,7 @@ func (r *GormRepository) ListPendingPublishedAtResolutions(
 
 func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 	ctx context.Context,
+	referenceNow time.Time,
 	detectedBefore time.Time,
 	cursor *PublishedAtResolutionCursor,
 	limit int,
@@ -34,27 +37,37 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 	if detectedBefore.IsZero() {
 		return nil, nil, fmt.Errorf("list pending published_at resolutions page: detected before is empty")
 	}
+	if referenceNow.IsZero() {
+		return nil, nil, fmt.Errorf("list pending published_at resolutions page: reference now is empty")
+	}
 	if limit <= 0 {
 		return nil, nil, fmt.Errorf("list pending published_at resolutions page: limit must be positive")
 	}
 
 	type pendingResolutionRow struct {
-		Kind       domain.OutboxKind `gorm:"column:kind"`
-		PostID     string            `gorm:"column:post_id"`
-		ContentID  string            `gorm:"column:content_id"`
-		ChannelID  string            `gorm:"column:channel_id"`
-		DetectedAt time.Time         `gorm:"column:detected_at"`
+		Kind                  domain.OutboxKind `gorm:"column:kind"`
+		PostID                string            `gorm:"column:post_id"`
+		ContentID             string            `gorm:"column:content_id"`
+		ChannelID             string            `gorm:"column:channel_id"`
+		DetectedAt            time.Time         `gorm:"column:detected_at"`
+		PublishedAtRetryAfter *time.Time        `gorm:"column:published_at_retry_after"`
 	}
 
 	var rows []pendingResolutionRow
 	query := r.db.WithContext(ctx).
 		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Select("kind, post_id, content_id, channel_id, detected_at").
 		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
 		Where("actual_published_at IS NULL").
 		Where("alarm_sent_at IS NULL").
 		Where("authorized_at IS NULL").
 		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore))
+	if hasPublishedAtRetryAfterColumn(r.db) {
+		query = query.
+			Select("kind, post_id, content_id, channel_id, detected_at, published_at_retry_after").
+			Where("(published_at_retry_after IS NULL OR published_at_retry_after <= ?)", yttimestamp.Normalize(referenceNow))
+	} else {
+		query = query.Select("kind, post_id, content_id, channel_id, detected_at")
+	}
 	if cursor != nil {
 		query = query.Where(
 			"(detected_at > ?) OR (detected_at = ? AND post_id > ?)",
@@ -109,6 +122,69 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 	return candidates, nextCursor, nil
 }
 
+func (r *GormRepository) MarkPublishedAtRetryAfter(
+	ctx context.Context,
+	kind domain.OutboxKind,
+	postID string,
+	retryAfter time.Time,
+) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("mark published_at retry after: db is nil")
+	}
+	if !hasPublishedAtRetryAfterColumn(r.db) {
+		return nil
+	}
+
+	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(kind, postID)
+	if err != nil {
+		return fmt.Errorf("mark published_at retry after: %w", err)
+	}
+
+	result := r.db.WithContext(ctx).
+		Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
+		Updates(map[string]any{
+			"published_at_retry_after": yttimestamp.Normalize(retryAfter),
+			"updated_at":               yttimestamp.Normalize(time.Now()),
+		})
+	if result.Error != nil {
+		return fmt.Errorf("mark published_at retry after: %w", result.Error)
+	}
+
+	return nil
+}
+
+func (r *GormRepository) ClearPublishedAtRetryAfter(
+	ctx context.Context,
+	kind domain.OutboxKind,
+	postID string,
+) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("clear published_at retry after: db is nil")
+	}
+	if !hasPublishedAtRetryAfterColumn(r.db) {
+		return nil
+	}
+
+	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(kind, postID)
+	if err != nil {
+		return fmt.Errorf("clear published_at retry after: %w", err)
+	}
+
+	result := r.db.WithContext(ctx).
+		Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
+		Updates(map[string]any{
+			"published_at_retry_after": nil,
+			"updated_at":               yttimestamp.Normalize(time.Now()),
+		})
+	if result.Error != nil {
+		return fmt.Errorf("clear published_at retry after: %w", result.Error)
+	}
+
+	return nil
+}
+
 func (r *GormRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("find alarm state by post id: db is nil")
@@ -132,6 +208,13 @@ func (r *GormRepository) FindAlarmStateByPostID(ctx context.Context, kind domain
 	}
 
 	return &row, nil
+}
+
+func hasPublishedAtRetryAfterColumn(db *gorm.DB) bool {
+	if db == nil || db.Migrator() == nil {
+		return false
+	}
+	return db.Migrator().HasColumn(&domain.YouTubeCommunityShortsAlarmState{}, "published_at_retry_after")
 }
 
 func (r *GormRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
