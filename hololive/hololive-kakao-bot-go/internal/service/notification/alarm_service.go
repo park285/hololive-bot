@@ -55,7 +55,6 @@ var (
 	_ domain.AlarmDispatchState = (*AlarmService)(nil)
 )
 
-// NewAlarmService: 새로운 AlarmService 인스턴스를 생성하고 설정(목표 알림 시간 등)을 초기화합니다.
 func NewAlarmService(
 	cacheSvc cache.Client,
 	holodexSvc *holodex.Service,
@@ -183,7 +182,6 @@ func CloseAllAlarmServices(ctx context.Context) error {
 	return joinedErr
 }
 
-// AddAlarm: 특정 채팅방에 대해 특정 멤버(채널)의 방송 알림을 추가합니다.
 // 방 기반 시스템: room_id가 PRIMARY 키, user_id는 감사(audit) 목적으로 DB에만 기록.
 func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool, error) {
 	startedAt := time.Now()
@@ -288,7 +286,6 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 	return added > 0, nil
 }
 
-// RemoveAlarm: 특정 채팅방에서 특정 멤버(채널)의 방송 알림을 해제합니다. (방 기반).
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
 	startedAt := time.Now()
 
@@ -399,7 +396,6 @@ func (as *AlarmService) removeChannelSubscribers(
 	}
 }
 
-// GetRoomAlarms: 해당 방이 구독 중인 모든 채널 ID 목록을 반환합니다.
 func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
 	alarmKey := as.getAlarmKey(roomID)
 
@@ -412,7 +408,6 @@ func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]str
 	return channelIDs, nil
 }
 
-// GetRoomAlarmsWithTypes: 해당 방의 알람 목록을 타입 정보와 함께 반환합니다.
 func (as *AlarmService) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
 	if as.alarmRepo == nil {
 		return nil, stdErrors.New("alarm repository not configured")
@@ -426,7 +421,6 @@ func (as *AlarmService) GetRoomAlarmsWithTypes(ctx context.Context, roomID strin
 	return alarms, nil
 }
 
-// ClearRoomAlarms: 해당 방의 모든 알림 설정을 삭제(초기화)합니다.
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	startedAt := time.Now()
 

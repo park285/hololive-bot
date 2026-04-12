@@ -63,15 +63,12 @@ const (
 	IntegratedNotifiedKeyPrefix = "notified:integrated:"
 )
 
-// NotifiedData: 알림 중복 발송 방지를 위해 기록하는 알림 이력 정보
-// SentAt: 발송된 minutesUntil을 키로 기록 (예: {5: true, 3: true})
 // 스케줄 변경 시 StartScheduled 불일치 → SentAt 맵 리셋.
 type NotifiedData struct {
 	StartScheduled string       `json:"start_scheduled"`
 	SentAt         map[int]bool `json:"sent_at"`
 }
 
-// UpcomingEventNotifiedData: 예정 알림 발송 시각을 이벤트 단위로 기록합니다.
 type UpcomingEventNotifiedData struct {
 	NotifiedAt string `json:"notified_at"`
 }
@@ -82,7 +79,6 @@ type alarmWriter interface {
 	ClearByRoom(ctx context.Context, roomID string) (int64, error)
 }
 
-// AlarmService: 방송 알림(Alarm)을 관리하는 서비스 (Rust 이관 후 CRUD/상태 관리만 담당).
 type AlarmService struct {
 	cache           cache.Client
 	holodex         *holodex.Service
