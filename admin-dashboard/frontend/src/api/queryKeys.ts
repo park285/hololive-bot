@@ -30,10 +30,6 @@ export const queryKeys = {
 		channels: ["stats", "channels"] as const,
 	},
 
-	youtubeOps: {
-		summary: ["youtube-ops", "summary"] as const,
-	},
-
 	/** 스트림 관련 쿼리 키 */
 	streams: {
 		live: (org: StreamOrg) => ["streams", "live", org] as const,
