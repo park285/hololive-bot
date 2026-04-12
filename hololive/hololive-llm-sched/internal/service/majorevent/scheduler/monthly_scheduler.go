@@ -35,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// MonthlyScheduler: 매월 1일에 월간 행사 요약을 발송하는 스케줄러
 type MonthlyScheduler struct {
 	repository EventRepository
 	outboxRepo outboxEnqueuer
@@ -46,7 +45,6 @@ type MonthlyScheduler struct {
 	runtime    *schedulerkit.Runtime
 }
 
-// NewMonthlyScheduler: 월간 스케줄러를 생성합니다.
 func NewMonthlyScheduler(
 	repository EventRepository,
 	formatter Formatter,
@@ -69,7 +67,6 @@ func NewMonthlyScheduler(
 	}
 }
 
-// SetClock: 테스트용 시간 주입.
 func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
@@ -84,7 +81,6 @@ func (s *MonthlyScheduler) clock() time.Time {
 	return s.runtime.Now()
 }
 
-// Start: 월간 스케줄러를 시작합니다.
 func (s *MonthlyScheduler) Start(ctx context.Context) {
 	s.runtime.Start(ctx, schedulerkit.Config{
 		Logger:           s.logger,
@@ -100,7 +96,6 @@ func (s *MonthlyScheduler) Start(ctx context.Context) {
 	})
 }
 
-// Stop: 월간 스케줄러를 중지합니다.
 func (s *MonthlyScheduler) Stop() {
 	s.runtime.Stop()
 }
@@ -125,12 +120,10 @@ func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
 	return target
 }
 
-// SendMonthlyNotification: 월간 행사 알림을 발송합니다.
 func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 	monthKey := s.getMonthKey()
 	lockKey := fmt.Sprintf("majorevent:lock:monthly:%s", monthKey)
 
-	// 분산 락 획득
 	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)
