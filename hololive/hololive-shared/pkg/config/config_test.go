@@ -250,11 +250,11 @@ func TestLoad_ScraperPollDefaults(t *testing.T) {
 	if cfg.Scraper.Poll.Videos != 15*time.Minute {
 		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 15*time.Minute)
 	}
-	if cfg.Scraper.Poll.Shorts != 2*time.Minute {
-		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 2*time.Minute)
+	if cfg.Scraper.Poll.Shorts != 1*time.Minute {
+		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 1*time.Minute)
 	}
-	if cfg.Scraper.Poll.Community != 30*time.Minute {
-		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 30*time.Minute)
+	if cfg.Scraper.Poll.Community != 1*time.Minute {
+		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 1*time.Minute)
 	}
 	if cfg.Scraper.Poll.Stats != 6*time.Hour {
 		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 6*time.Hour)
