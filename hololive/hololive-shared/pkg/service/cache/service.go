@@ -38,7 +38,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// Service: Valkey(Redis) 클라이언트를 래핑하여 캐싱 기능을 제공하는 서비스
 // 기본 Key-Value 외에도 Set, Hash 등 다양한 자료구조 연산을 지원한다.
 type Service struct {
 	client    valkey.Client
@@ -46,7 +45,6 @@ type Service struct {
 	closeOnce sync.Once
 }
 
-// Config: Valkey 연결 설정을 담는 구조체
 type Config struct {
 	Host       string
 	Port       int
@@ -57,10 +55,8 @@ type Config struct {
 	DisableCache bool
 }
 
-// NewCacheService: 새로운 Valkey 캐시 서비스 인스턴스를 생성하고 연결을 수립합니다.
 // SocketPath가 설정되면 UDS로 연결하고, 비어있으면 TCP로 연결합니다.
 func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Service, error) {
-	// 주소 결정: UDS 모드면 소켓 경로, TCP 모드면 host:port
 	var addr string
 	var connMethod string
 	if cfg.SocketPath != "" {
@@ -81,7 +77,6 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 		DisableCache:      cfg.DisableCache,
 	}
 
-	// UDS 모드: 커스텀 DialCtxFn 설정
 	if cfg.SocketPath != "" {
 		socketPath := cfg.SocketPath
 		opts.DialCtxFn = func(ctx context.Context, _ string, _ *net.Dialer, _ *tls.Config) (net.Conn, error) {
@@ -90,7 +85,6 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 			return d.DialContext(ctx, "unix", socketPath)
 		}
 	} else {
-		// TCP 모드: Dialer 설정
 		opts.Dialer = net.Dialer{Timeout: constants.MQConfig.DialTimeout}
 	}
 
@@ -102,7 +96,6 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 	pingCtx, cancel := context.WithTimeout(ctx, constants.ValkeyConfig.ReadyTimeout)
 	defer cancel()
 
-	// Ping 테스트
 	if err := client.Do(pingCtx, client.B().Ping().Build()).Error(); err != nil {
 		client.Close()
 		return nil, NewCacheError("failed to connect to cache store", "ping", "", err)
@@ -121,7 +114,6 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 	}, nil
 }
 
-// Get: 키에 해당하는 값을 조회하고, 결과를 dest 인터페이스에 언마샬링합니다.
 func (c *Service) Get(ctx context.Context, key string, dest any) error {
 	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
 	if util.IsValkeyNil(resp.Error()) {
@@ -175,7 +167,6 @@ func (c *Service) MGet(ctx context.Context, keys []string) (map[string]string, e
 	return result, nil
 }
 
-// Set: 값을 JSON으로 마샬링하여 키에 저장한다. (TTL 지정 가능)
 func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	jsonData, err := json.Marshal(value)
 	if err != nil {
@@ -232,7 +223,6 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 	return nil
 }
 
-// Del: 지정된 키를 삭제합니다.
 func (c *Service) Del(ctx context.Context, key string) error {
 	if err := c.client.Do(ctx, c.client.B().Del().Key(key).Build()).Error(); err != nil {
 		c.logger.Error("Cache delete failed", slog.String("key", key), slog.Any("error", err))
@@ -241,7 +231,6 @@ func (c *Service) Del(ctx context.Context, key string) error {
 	return nil
 }
 
-// DelMany: 여러 키를 한 번에 삭제합니다.
 func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 	if len(keys) == 0 {
 		return 0, nil
@@ -261,7 +250,6 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 	return deleted, nil
 }
 
-// ScanKeys: SCAN 명령을 사용하여 패턴과 일치하는 키를 점진적으로 조회합니다.
 // KEYS와 달리 Redis를 블로킹하지 않아 대량 키 조회에 안전하다.
 // 단, 비원자적이므로 스캔 중 키 변경 시 누락/중복이 발생할 수 있다.
 func (c *Service) ScanKeys(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
@@ -296,7 +284,6 @@ func (c *Service) ScanKeys(ctx context.Context, pattern string, batchSize int64)
 	return keys, nil
 }
 
-// SAdd: Set 자료구조에 멤버들을 추가합니다.
 func (c *Service) SAdd(ctx context.Context, key string, members []string) (int64, error) {
 	if len(members) == 0 {
 		return 0, nil
@@ -316,7 +303,6 @@ func (c *Service) SAdd(ctx context.Context, key string, members []string) (int64
 	return added, nil
 }
 
-// SRem: Set 자료구조에서 멤버들을 제거합니다.
 func (c *Service) SRem(ctx context.Context, key string, members []string) (int64, error) {
 	if len(members) == 0 {
 		return 0, nil
@@ -336,7 +322,6 @@ func (c *Service) SRem(ctx context.Context, key string, members []string) (int64
 	return removed, nil
 }
 
-// SMembers: Set의 모든 멤버를 조회합니다.
 func (c *Service) SMembers(ctx context.Context, key string) ([]string, error) {
 	resp := c.client.Do(ctx, c.client.B().Smembers().Key(key).Build())
 	if resp.Error() != nil {
@@ -352,7 +337,6 @@ func (c *Service) SMembers(ctx context.Context, key string) ([]string, error) {
 	return members, nil
 }
 
-// SIsMember: 특정 값이 Set에 포함되어 있는지 확인합니다.
 func (c *Service) SIsMember(ctx context.Context, key, member string) (bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Sismember().Key(key).Member(member).Build())
 	if resp.Error() != nil {
@@ -368,7 +352,6 @@ func (c *Service) SIsMember(ctx context.Context, key, member string) (bool, erro
 	return exists, nil
 }
 
-// HSet: Hash 자료구조의 특정 필드에 값을 설정합니다.
 func (c *Service) HSet(ctx context.Context, key, field, value string) error {
 	if err := c.client.Do(ctx, c.client.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()).Error(); err != nil {
 		c.logger.Error("Cache hset failed", slog.String("key", key), slog.String("field", field), slog.Any("error", err))
@@ -377,7 +360,6 @@ func (c *Service) HSet(ctx context.Context, key, field, value string) error {
 	return nil
 }
 
-// HMSet: Hash 자료구조에 여러 필드와 값을 한 번에 설정합니다.
 func (c *Service) HMSet(ctx context.Context, key string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return nil
@@ -395,7 +377,6 @@ func (c *Service) HMSet(ctx context.Context, key string, fields map[string]any) 
 	return nil
 }
 
-// HGet: Hash 자료구조에서 특정 필드의 값을 조회합니다.
 func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 	resp := c.client.Do(ctx, c.client.B().Hget().Key(key).Field(field).Build())
 	if util.IsValkeyNil(resp.Error()) {
@@ -414,7 +395,6 @@ func (c *Service) HGet(ctx context.Context, key, field string) (string, error) {
 	return value, nil
 }
 
-// HDel: Hash 자료구조에서 특정 필드를 삭제합니다.
 func (c *Service) HDel(ctx context.Context, key string, fields ...string) error {
 	if len(fields) == 0 {
 		return nil
@@ -427,7 +407,6 @@ func (c *Service) HDel(ctx context.Context, key string, fields ...string) error 
 	return nil
 }
 
-// HGetAll: Hash의 모든 필드와 값을 조회합니다.
 func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, error) {
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(key).Build())
 	if resp.Error() != nil {
@@ -443,7 +422,6 @@ func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, e
 	return values, nil
 }
 
-// Expire: 키의 만료 시간을 설정합니다.
 func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	if err := c.client.Do(ctx, c.client.B().Expire().Key(key).Seconds(int64(ttl.Seconds())).Build()).Error(); err != nil {
 		c.logger.Error("Cache expire failed", slog.String("key", key), slog.Any("error", err))
@@ -452,7 +430,6 @@ func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) err
 	return nil
 }
 
-// Exists: 키가 존재하는지 확인합니다.
 func (c *Service) Exists(ctx context.Context, key string) (bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Exists().Key(key).Build())
 	if resp.Error() != nil {
@@ -468,7 +445,6 @@ func (c *Service) Exists(ctx context.Context, key string) (bool, error) {
 	return count > 0, nil
 }
 
-// Close: 캐시 스토어 연결을 안전하게 종료합니다.
 func (c *Service) Close() error {
 	var closeErr error
 
@@ -484,12 +460,10 @@ func (c *Service) Close() error {
 	return closeErr
 }
 
-// IsConnected: 캐시 스토어와 연결되어 있는지(PING 응답 여부) 확인합니다.
 func (c *Service) IsConnected(ctx context.Context) bool {
 	return c.client.Do(ctx, c.client.B().Ping().Build()).Error() == nil
 }
 
-// WaitUntilReady: 캐시 스토어 연결이 완료될 때까지 대기한다. (타임아웃 적용)
 func (c *Service) WaitUntilReady(ctx context.Context, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -509,12 +483,10 @@ func (c *Service) WaitUntilReady(ctx context.Context, timeout time.Duration) err
 	}
 }
 
-// GetClient: 고급 조작을 위해 내부 Valkey 클라이언트를 반환합니다.
 func (c *Service) GetClient() valkey.Client {
 	return c.client
 }
 
-// SetNX: 키가 존재하지 않을 때만 값을 설정합니다 (분산 락 용도).
 // 성공하면 true, 이미 존재하면 false를 반환합니다.
 func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	var cmd valkey.Completed
@@ -536,7 +508,6 @@ func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duratio
 	return true, nil
 }
 
-// DoMulti: 여러 Valkey 명령을 파이프라인으로 배치 실행합니다.
 func (c *Service) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
 	if len(cmds) == 0 {
 		return nil
@@ -544,7 +515,6 @@ func (c *Service) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valke
 	return c.client.DoMulti(ctx, cmds...)
 }
 
-// Builder: Valkey 명령 빌더를 반환합니다. 파이프라인 작업에 사용됩니다.
 func (c *Service) Builder() valkey.Builder {
 	return c.client.B()
 }
@@ -562,7 +532,6 @@ else
   return 0
 end`
 
-// CompareAndDelete: 키의 값이 expectedValue와 일치할 때만 삭제합니다 (원자적 CAS).
 // 분산 락의 안전한 해제에 사용됩니다.
 func (c *Service) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {
 	cmd := c.client.B().Eval().Script(compareAndDeleteScript).Numkeys(1).Key(key).Arg(expectedValue).Build()
@@ -588,7 +557,6 @@ else
   return 0
 end`
 
-// CompareAndExpire: 키의 값이 expectedValue와 일치할 때만 TTL을 갱신합니다 (원자적 CAS).
 // 분산 락 renew 시 소유권 보장을 위해 사용됩니다.
 func (c *Service) CompareAndExpire(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
