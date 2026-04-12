@@ -100,8 +100,8 @@ type ScraperConfig struct {
 func DefaultScraperPoll() ScraperPoll {
 	return ScraperPoll{
 		Videos:    15 * time.Minute,
-		Shorts:    2 * time.Minute,
-		Community: 30 * time.Minute,
+		Shorts:    1 * time.Minute,
+		Community: 1 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}
