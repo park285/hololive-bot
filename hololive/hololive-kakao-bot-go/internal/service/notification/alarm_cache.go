@@ -34,7 +34,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 )
 
-// CacheMemberName: 채널 ID에 해당하는 멤버 이름을 Redis에 캐싱한다. (표시 이름 최적화).
 func (as *AlarmService) CacheMemberName(ctx context.Context, channelID, memberName string) error {
 	if err := as.cache.HSet(ctx, MemberNameKey, channelID, memberName); err != nil {
 		return fmt.Errorf("cache member name: %w", err)
@@ -43,7 +42,6 @@ func (as *AlarmService) CacheMemberName(ctx context.Context, channelID, memberNa
 	return nil
 }
 
-// GetMemberName: 캐시된 멤버 이름을 조회한다. 없으면 빈 문자열을 반환합니다.
 func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (string, error) {
 	name, err := as.cache.HGet(ctx, MemberNameKey, channelID)
 	if err != nil {
@@ -57,7 +55,6 @@ func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channel
 	return sharedalarm.LookupChannelSubscribersByType(ctx, as.cache, channelID, alarmType)
 }
 
-// SetRoomName: 방 ID에 대한 표시 이름을 설정합니다.
 func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	if err := as.cache.HSet(ctx, RoomNamesCacheKey, roomID, roomName); err != nil {
 		return fmt.Errorf("set room name: %w", err)
@@ -66,7 +63,6 @@ func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string
 	return nil
 }
 
-// SetUserName: 사용자 ID에 대한 표시 이름을 설정합니다.
 func (as *AlarmService) SetUserName(ctx context.Context, userID, userName string) error {
 	if err := as.cache.HSet(ctx, UserNamesCacheKey, userID, userName); err != nil {
 		return fmt.Errorf("set user name: %w", err)
@@ -117,7 +113,6 @@ func (as *AlarmService) buildUpcomingEventKey(roomID, channelID, streamID, title
 	)
 }
 
-// MarkAsNotified: 해당 방송(streamID)에 대해 특정 시점(minutesUntil)의 알림을 발송했음을 기록합니다.
 // read-modify-write: 기존 데이터 조회 → 스케줄 변경 시 맵 리셋 → 플래그 추가 → 저장.
 //
 // 병렬 안전성: workerPool에서 동일 streamID에 대해 여러 room이 동시 호출할 수 있으나,
@@ -156,7 +151,6 @@ func (as *AlarmService) MarkAsNotified(ctx context.Context, streamID string, sta
 	return nil
 }
 
-// MarkUpcomingEventNotified: 예정 알림 발송 시각을 이벤트 단위로 기록합니다.
 func (as *AlarmService) MarkUpcomingEventNotified(
 	ctx context.Context,
 	roomID, channelID string,
@@ -191,7 +185,6 @@ func (as *AlarmService) MarkUpcomingEventNotified(
 	return nil
 }
 
-// WasUpcomingEventNotifiedRecently: 동일 이벤트의 예정 알림이 최근 window 내에 발송됐는지 확인합니다.
 func (as *AlarmService) WasUpcomingEventNotifiedRecently(
 	ctx context.Context,
 	roomID, channelID string,
@@ -226,7 +219,6 @@ func (as *AlarmService) WasUpcomingEventNotifiedRecently(
 	return time.Since(notifiedAt) <= window
 }
 
-// GetNextStreamInfo: 특정 채널의 다음 방송 정보(예정 또는 라이브)를 캐시에서 조회합니다.
 func (as *AlarmService) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
 	key := NextStreamKeyPrefix + channelID
 
