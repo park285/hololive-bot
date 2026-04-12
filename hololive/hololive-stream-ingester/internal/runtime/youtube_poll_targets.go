@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -23,30 +24,30 @@ func resolveYouTubePollTargets(
 	cacheService cache.Client,
 	postgresService database.Client,
 	operationalChannels []communityShortsOperationalChannel,
+	logger *slog.Logger,
 ) (youtubePollTargets, error) {
-	if cacheService != nil {
-		cacheChannelIDs, err := cacheService.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
-		if err == nil && len(cacheChannelIDs) > 0 {
-			cacheTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(cacheChannelIDs, operationalChannels)
-
-			dbAlarmChannelIDs, err := loadAlarmChannelIDsFromRepository(ctx, postgresService)
-			if err != nil {
-				return youtubePollTargets{}, fmt.Errorf("resolve youtube poll targets: validate cache targets from db: %w", err)
-			}
-			dbTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(dbAlarmChannelIDs, operationalChannels)
-			if shouldValidateTargetShrink(dbTargets, cacheTargets) {
-				return dbTargets, nil
-			}
-
-			return cacheTargets, nil
-		}
-	}
-
 	alarmChannelIDs, err := loadAlarmChannelIDsFromRepository(ctx, postgresService)
 	if err != nil {
 		return youtubePollTargets{}, err
 	}
-	return resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, operationalChannels), nil
+	dbTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(alarmChannelIDs, operationalChannels)
+
+	if cacheService != nil {
+		cacheChannelIDs, cacheErr := cacheService.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+		if cacheErr != nil {
+			if logger != nil {
+				logger.Warn("Failed to inspect cache-backed YouTube poll targets at startup",
+					slog.Any("error", cacheErr),
+				)
+			}
+			return dbTargets, nil
+		}
+
+		cacheTargets := resolveYouTubePollTargetsFromAlarmChannelIDs(cacheChannelIDs, operationalChannels)
+		logYouTubePollTargetStartupSourceState(logger, cacheTargets, dbTargets)
+	}
+
+	return dbTargets, nil
 }
 
 func loadAlarmChannelIDs(ctx context.Context, postgresService database.Client) ([]string, error) {
@@ -88,6 +89,60 @@ func resolveYouTubePollTargetsFromAlarmChannelIDs(
 		StatsChannelIDs:        statsChannelIDs,
 		DroppedAlarmTargets:    dropped,
 	}
+}
+
+func logYouTubePollTargetStartupSourceState(
+	logger *slog.Logger,
+	cacheTargets youtubePollTargets,
+	dbTargets youtubePollTargets,
+) {
+	if logger == nil {
+		return
+	}
+
+	cacheOnly := diffChannelIDs(cacheTargets.NotificationChannelIDs, dbTargets.NotificationChannelIDs)
+	dbOnly := diffChannelIDs(dbTargets.NotificationChannelIDs, cacheTargets.NotificationChannelIDs)
+	if len(cacheOnly) == 0 && len(dbOnly) == 0 {
+		logger.Info("youtube_poll_targets_startup_source_aligned",
+			slog.Int("notification_target_channels", len(dbTargets.NotificationChannelIDs)),
+			slog.Int("stats_target_channels", len(dbTargets.StatsChannelIDs)),
+		)
+		return
+	}
+
+	logger.Warn("youtube_poll_targets_startup_source_diverged",
+		slog.Int("db_notification_target_channels", len(dbTargets.NotificationChannelIDs)),
+		slog.Int("cache_notification_target_channels", len(cacheTargets.NotificationChannelIDs)),
+		slog.Int("cache_only_notification_channels", len(cacheOnly)),
+		slog.Int("db_only_notification_channels", len(dbOnly)),
+	)
+}
+
+func diffChannelIDs(left, right []string) []string {
+	rightSet := make(map[string]struct{}, len(right))
+	for _, channelID := range right {
+		if channelID == "" {
+			continue
+		}
+		rightSet[channelID] = struct{}{}
+	}
+
+	out := make([]string, 0)
+	seen := make(map[string]struct{}, len(left))
+	for _, channelID := range left {
+		if channelID == "" {
+			continue
+		}
+		if _, exists := seen[channelID]; exists {
+			continue
+		}
+		seen[channelID] = struct{}{}
+		if _, exists := rightSet[channelID]; exists {
+			continue
+		}
+		out = append(out, channelID)
+	}
+	return out
 }
 
 func mergeUniqueChannelIDs(channelIDSets ...[]string) []string {
