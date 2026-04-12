@@ -22,7 +22,6 @@ package delivery
 
 import "time"
 
-// SendResult: 발송 결과
 type SendResult struct {
 	Attempted   int      // claim 획득하여 발송 시도한 room 수
 	Sent        int      // 발송 성공 (enqueue 성공)
@@ -31,7 +30,6 @@ type SendResult struct {
 	FailedRooms []string // 실패 room ID 목록
 }
 
-// Merge: 하위 결과를 현재 결과에 병합
 func (r *SendResult) Merge(child SendResult) {
 	r.Attempted += child.Attempted
 	r.Sent += child.Sent
