@@ -24,7 +24,6 @@ package scraper
 
 import "time"
 
-// ChannelStats: 채널 통계 정보 (aboutChannelViewModel에서 추출)
 type ChannelStats struct {
 	ChannelID       string `json:"channelId"`
 	SubscriberCount int64  `json:"subscriberCount"`
@@ -36,20 +35,17 @@ type ChannelStats struct {
 	Handle          string `json:"handle"`
 }
 
-// ChannelSnippet: 채널 프로필 정보 (pageHeaderRenderer에서 추출)
 type ChannelSnippet struct {
 	Avatar []Thumbnail `json:"avatar"`
 	Banner []Thumbnail `json:"banner"`
 }
 
-// Thumbnail: 이미지 정보
 type Thumbnail struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
 }
 
-// UpcomingEvent: 예정/라이브 방송 정보
 type UpcomingEvent struct {
 	VideoID       string      `json:"videoId"`
 	Title         string      `json:"title"`
@@ -60,7 +56,6 @@ type UpcomingEvent struct {
 	ChannelTitle  string      `json:"channelTitle"`
 }
 
-// Video: 비디오 정보 (recent, popular에서 사용)
 type Video struct {
 	VideoID       string      `json:"videoId"`
 	Title         string      `json:"title"`
@@ -73,7 +68,6 @@ type Video struct {
 	ChannelHandle string      `json:"channelHandle"`
 }
 
-// CommunityPost: 커뮤니티 포스트 정보
 type CommunityPost struct {
 	PostID         string      `json:"postId"`
 	UpstreamPostID string      `json:"upstreamPostId,omitempty"`
@@ -89,7 +83,6 @@ type CommunityPost struct {
 	VideoID        string      `json:"videoId,omitempty"` // 첨부 비디오
 }
 
-// Playlist: 플레이리스트 정보
 type Playlist struct {
 	PlaylistID   string      `json:"playlistId"`
 	Title        string      `json:"title"`
@@ -99,7 +92,6 @@ type Playlist struct {
 	ChannelTitle string      `json:"channelTitle"`
 }
 
-// Short: 쇼츠 비디오 정보
 type Short struct {
 	VideoID     string      `json:"videoId"`
 	Title       string      `json:"title"`

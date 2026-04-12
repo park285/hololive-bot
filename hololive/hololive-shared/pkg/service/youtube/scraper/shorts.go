@@ -32,7 +32,6 @@ import (
 
 const shortsPublishedAtLookupWindow = 30
 
-// GetShorts: 채널의 쇼츠 비디오 목록 조회 (/channel/{id}/shorts)
 func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*Short, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
 	html, err := c.fetchPage(ctx, url)
