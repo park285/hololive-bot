@@ -32,7 +32,6 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// MatchCacheEntry: 멤버 매칭 결과를 캐싱하기 위한 구조체 (채널 정보 + 타임스탬프).
 type MatchCacheEntry struct {
 	Channel   *domain.Channel
 	Timestamp time.Time
@@ -65,12 +64,10 @@ type snapshotMatchStrategy struct {
 	find func(*memberMatcherSnapshot, string) *matchCandidate
 }
 
-// ChannelSelector: 모호한 검색어에 대해 모호성 해소를 돕는 채널 선택 인터페이스.
 type ChannelSelector interface {
 	SelectBestChannel(ctx context.Context, query string, candidates []*domain.Channel) (*domain.Channel, error)
 }
 
-// MemberMatcher: 사용자 검색어(이름, 별명 등)를 기반으로 Hololive 멤버(채널)를 식별하고 매칭하는 서비스
 // 다양한 매칭 전략(정확 일치, 부분 일치, 별명 검색 등)을 순차적으로 시도한다.
 type MemberMatcher struct {
 	ctx                   context.Context
@@ -89,7 +86,6 @@ type MemberMatcher struct {
 	snapshotGroup         singleflight.Group
 }
 
-// NewMemberMatcher: 새로운 MemberMatcher 인스턴스를 생성합니다.
 func NewMemberMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
