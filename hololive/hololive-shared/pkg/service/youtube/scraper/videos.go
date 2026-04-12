@@ -31,7 +31,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// GetUpcomingEvents: 예정/라이브 방송 목록 조회
 func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*UpcomingEvent, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 
@@ -55,7 +54,6 @@ func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*Up
 	return events, nil
 }
 
-// GetRecentVideos: 채널의 최근 업로드 비디오 목록 조회 (/channel/{id}/videos)
 func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {
 	if maxResults <= 0 {
 		return []*Video{}, nil
@@ -233,7 +231,6 @@ func parseVideosFromRSSFeed(feedXML, channelID string, maxResults int) ([]*Video
 	return videos, nil
 }
 
-// GetPopularVideos: 채널의 인기 비디오 목록 조회 (Home 탭의 Popular 섹션)
 func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 	html, err := c.fetchPage(ctx, url)

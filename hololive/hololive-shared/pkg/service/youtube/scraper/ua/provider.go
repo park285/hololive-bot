@@ -32,7 +32,6 @@ import (
 	"time"
 )
 
-// HeaderSnapshot: 요청 단위 원자적 브라우저 헤더 스냅샷
 type HeaderSnapshot struct {
 	UserAgent       string // User-Agent 값
 	SecChUA         string // Sec-CH-UA (빈 문자열 = 비-Chromium, 헤더 미설정)
@@ -40,13 +39,11 @@ type HeaderSnapshot struct {
 	Accept          string // Accept 헤더 값 (브라우저별 프로필 일치)
 }
 
-// Provider: User-Agent + Client Hints를 원자적으로 제공하는 인터페이스
 type Provider interface {
 	// Headers: 단일 호출로 UA + Client Hints를 원자적으로 반환
 	Headers(ctx context.Context) HeaderSnapshot
 }
 
-// Strategy: UA 회전 전략
 type Strategy int
 
 const (
@@ -56,7 +53,6 @@ const (
 	StrategySessionTTL
 )
 
-// RotatingProvider: 가중치 기반 동적 UA 생성기
 type RotatingProvider struct {
 	mu sync.Mutex
 	r  *rand.Rand
@@ -67,7 +63,6 @@ type RotatingProvider struct {
 	cachedSnapshot HeaderSnapshot
 }
 
-// NewRotatingProvider: 새 UA Provider 생성
 // strategy: UA 회전 전략 (StrategySessionTTL 권장)
 // ttl: 세션 TTL (기본값: 45분, StrategySessionTTL에서만 사용)
 func NewRotatingProvider(strategy Strategy, ttl time.Duration) *RotatingProvider {
@@ -81,7 +76,6 @@ func NewRotatingProvider(strategy Strategy, ttl time.Duration) *RotatingProvider
 	}
 }
 
-// Headers: 현재 전략에 따라 원자적 헤더 스냅샷 반환
 func (p *RotatingProvider) Headers(_ context.Context) HeaderSnapshot {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -322,17 +316,14 @@ func newRand() *rand.Rand {
 	return rand.New(rand.NewSource(seed))
 }
 
-// StaticProvider: 고정 UA를 반환하는 Provider (테스트용)
 type StaticProvider struct {
 	ua string
 }
 
-// NewStaticProvider: 고정 UA Provider 생성
 func NewStaticProvider(ua string) *StaticProvider {
 	return &StaticProvider{ua: ua}
 }
 
-// Headers: 고정된 UA로 HeaderSnapshot 반환 (CH 필드 빈 문자열)
 func (p *StaticProvider) Headers(_ context.Context) HeaderSnapshot {
 	return HeaderSnapshot{
 		UserAgent: p.ua,
