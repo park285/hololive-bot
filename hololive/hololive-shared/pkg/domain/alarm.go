@@ -30,25 +30,18 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// AlarmType: 알람 종류
 type AlarmType string
 
 const (
-	// AlarmTypeLive: 방송 시작 알람 (기존 기능)
 	AlarmTypeLive AlarmType = "LIVE"
-	// AlarmTypeCommunity: 커뮤니티 포스트 알람
 	AlarmTypeCommunity AlarmType = "COMMUNITY"
-	// AlarmTypeShorts: 쇼츠 영상 알람
 	AlarmTypeShorts AlarmType = "SHORTS"
 )
 
-// AllAlarmTypes: 모든 알람 타입 목록
 var AllAlarmTypes = []AlarmType{AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts}
 
-// DefaultAlarmTypes: 기본 알람 타입 (타입 미지정 시 전체)
 var DefaultAlarmTypes = AllAlarmTypes
 
-// IsValid: 유효한 알람 타입인지 확인
 func (t AlarmType) IsValid() bool {
 	switch t {
 	case AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts:
@@ -58,12 +51,10 @@ func (t AlarmType) IsValid() bool {
 	}
 }
 
-// String: 문자열 표현
 func (t AlarmType) String() string {
 	return string(t)
 }
 
-// DisplayName: 사용자에게 표시할 이름
 func (t AlarmType) DisplayName() string {
 	switch t {
 	case AlarmTypeLive:
@@ -77,10 +68,8 @@ func (t AlarmType) DisplayName() string {
 	}
 }
 
-// AlarmTypes: PostgreSQL alarm_type[] 배열 타입
 type AlarmTypes []AlarmType
 
-// Value: driver.Valuer 구현 (DB 저장 시)
 func (a AlarmTypes) Value() (driver.Value, error) {
 	if len(a) == 0 {
 		return "{}", nil
@@ -92,7 +81,6 @@ func (a AlarmTypes) Value() (driver.Value, error) {
 	return "{" + strings.Join(parts, ",") + "}", nil
 }
 
-// Scan: sql.Scanner 구현 (DB 로드 시)
 func (a *AlarmTypes) Scan(value any) error {
 	if value == nil {
 		*a = nil
@@ -127,12 +115,10 @@ func (a *AlarmTypes) Scan(value any) error {
 	return nil
 }
 
-// Contains: 특정 알람 타입 포함 여부
 func (a AlarmTypes) Contains(t AlarmType) bool {
 	return slices.Contains(a, t)
 }
 
-// Alarm: 특정 채팅방(user)이 특정 멤버(channel)의 방송 알림을 구독한 정보
 type Alarm struct {
 	ID         int        `json:"id,omitempty"`          // DB 기본 키
 	RoomID     string     `json:"room_id"`               // 카카오톡 방 ID
@@ -145,12 +131,10 @@ type Alarm struct {
 	CreatedAt  time.Time  `json:"created_at"`
 }
 
-// RegistryKey: 방 기반 레지스트리 키를 반환합니다. (room_id가 PRIMARY)
 func (a *Alarm) RegistryKey() string {
 	return a.RoomID
 }
 
-// NewAlarm: 새로운 알림 구독 객체를 생성합니다.
 func NewAlarm(roomID, userID, channelID, memberName string) *Alarm {
 	return &Alarm{
 		RoomID:     roomID,
@@ -161,8 +145,6 @@ func NewAlarm(roomID, userID, channelID, memberName string) *Alarm {
 	}
 }
 
-// AlarmNotification: 방송 시작 임박 등의 이벤트로 인해 발송될 알림 메시지 정보
-// 여러 사용자(Users)에게 동일한 내용이 전송될 수 있다.
 type AlarmNotification struct {
 	AlarmType             AlarmType `json:"alarm_type,omitempty"`
 	RoomID                string    `json:"room_id"`
@@ -173,7 +155,6 @@ type AlarmNotification struct {
 	ScheduleChangeMessage string    `json:"schedule_change_message,omitempty"`
 }
 
-// NewAlarmNotification: 알림 발송을 위한 새로운 Notification 객체를 생성합니다.
 func NewAlarmNotification(roomID string, channel *Channel, stream *Stream, minutesUntil int, users []string, scheduleMessage string) *AlarmNotification {
 	return &AlarmNotification{
 		AlarmType:             AlarmTypeLive,
@@ -186,7 +167,6 @@ func NewAlarmNotification(roomID string, channel *Channel, stream *Stream, minut
 	}
 }
 
-// UserCount: 이 알림을 수신하게 될 사용자의 수를 반환합니다.
 func (n *AlarmNotification) UserCount() int {
 	return len(n.Users)
 }
@@ -208,7 +188,6 @@ func (n *AlarmNotification) ValidateLegacyRoute() error {
 	}
 }
 
-// AlarmQueueEnvelope: Rust 알람 서비스에서 Valkey List 큐를 통해 전달하는 알림 발송 봉투
 type AlarmQueueEnvelope struct {
 	Notification AlarmNotification `json:"notification"`
 	ClaimKeys    []string          `json:"claim_keys"`
