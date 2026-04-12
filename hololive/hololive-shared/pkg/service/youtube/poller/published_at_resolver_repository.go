@@ -81,10 +81,16 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 			result.reason = reason
 		}
 		if notification == nil {
+			if err := txRepo.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID); err != nil {
+				return fmt.Errorf("clear published_at retry after: %w", err)
+			}
 			return nil
 		}
 		if err := r.batchRepo.batchInsertNotifications(ctx, tx, []*domain.YouTubeNotificationOutbox{notification}); err != nil {
 			return fmt.Errorf("insert pending notification: %w", err)
+		}
+		if err := txRepo.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID); err != nil {
+			return fmt.Errorf("clear published_at retry after: %w", err)
 		}
 		result.enqueued = true
 		if result.reason == "" {
