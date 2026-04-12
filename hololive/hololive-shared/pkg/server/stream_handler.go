@@ -60,7 +60,6 @@ type memberIndexSnapshot struct {
 	channelNames map[string]string
 }
 
-// StreamState: stream/stat 조회 경로에서 사용하는 내부 상태 캐시입니다.
 type StreamState struct {
 	channelStatsCacheLimiter   chan struct{}
 	channelStatsRefreshLimiter chan struct{}
@@ -72,7 +71,6 @@ type StreamState struct {
 	memberIndexBuildGroup      singleflight.Group
 }
 
-// NewStreamState: stream/stat 조회용 상태 캐시를 생성합니다.
 func NewStreamState(cacheWorkers, refreshWorkers int) *StreamState {
 	state := &StreamState{
 		memberChannelName: make(map[string]string),
@@ -86,7 +84,6 @@ func NewStreamState(cacheWorkers, refreshWorkers int) *StreamState {
 	return state
 }
 
-// InvalidateMemberIndex: 멤버 인덱스 캐시를 무효화합니다.
 func (s *StreamState) InvalidateMemberIndex() {
 	s.memberIndexMu.Lock()
 	defer s.memberIndexMu.Unlock()
@@ -97,18 +94,14 @@ func (s *StreamState) InvalidateMemberIndex() {
 	s.memberIndexReady = false
 }
 
-// StreamMemberRepository: 채널 배치 조회에서 사용하는 최소 인터페이스입니다.
 type StreamMemberRepository interface {
 	GetMembersWithPhoto(ctx context.Context, channelIDs []string) (map[string]*domain.Member, error)
 }
 
-// StreamRespondErrorFunc: API 에러 응답 함수 시그니처입니다.
 type StreamRespondErrorFunc func(c *gin.Context, status int, message string, extra gin.H)
 
-// StreamRespondInternalErrorFunc: 내부 에러 응답 함수 시그니처입니다.
 type StreamRespondInternalErrorFunc func(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr)
 
-// StreamHandler: stream API 공통 HTTP 핸들러 로직을 제공합니다.
 type StreamHandler struct {
 	Logger               *slog.Logger
 	Holodex              *holodex.Service
@@ -145,7 +138,6 @@ func (h *StreamHandler) respondInternalError(c *gin.Context, userMessage, logMes
 	RespondInternalError(h.Logger, c, userMessage, logMessage, err, attrs...)
 }
 
-// GetLiveStreams: 현재 라이브 방송 중인 스트림 목록을 반환합니다.
 func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 	ctx := c.Request.Context()
 	org := constants.HolodexAPIParams.OrgHololive
@@ -175,7 +167,6 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 	c.JSON(200, gin.H{"status": "ok", "org": org, "streams": streams})
 }
 
-// GetUpcomingStreams: 예정된 스트림 목록을 반환합니다.
 func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	ctx := c.Request.Context()
 	org := constants.HolodexAPIParams.OrgHololive
@@ -205,7 +196,6 @@ func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	c.JSON(200, gin.H{"status": "ok", "org": org, "streams": streams})
 }
 
-// GetChannelStats: 채널 통계를 반환합니다. (SWR 패턴: 캐시 → DB → 백그라운드 갱신)
 func (h *StreamHandler) GetChannelStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -367,7 +357,6 @@ func (h *StreamHandler) runAsyncWithLimiter(limiter chan struct{}, task string, 
 	}
 }
 
-// GetActiveMemberIndex: 활성 멤버 인덱스를 조회합니다.
 func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
 	state := h.ensureState()
 	now := time.Now()
@@ -432,7 +421,6 @@ func (h *StreamHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, 
 	return members, nil
 }
 
-// BuildActiveMemberIndex: 비졸업 멤버의 channelID/name 인덱스를 구성합니다.
 func BuildActiveMemberIndex(members []*domain.Member) ([]string, map[string]string) {
 	channelIDs := make([]string, 0, len(members))
 	channelToName := make(map[string]string, len(members))
@@ -447,7 +435,6 @@ func BuildActiveMemberIndex(members []*domain.Member) ([]string, map[string]stri
 	return channelIDs, channelToName
 }
 
-// GetChannel: channelIds 파라미터로 여러 채널을 한 번에 조회합니다.
 func (h *StreamHandler) GetChannel(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -498,14 +485,12 @@ func (h *StreamHandler) GetChannel(c *gin.Context) {
 	h.respondError(c, 400, "channelIds parameter required", nil)
 }
 
-// ChannelResponse: 채널 API 응답 구조체 (기존 Holodex 호환 형식)
 type ChannelResponse struct {
 	ID    string  `json:"id"`
 	Name  string  `json:"name"`
 	Photo *string `json:"photo,omitempty"`
 }
 
-// MemberToChannelResponse: domain.Member를 채널 API 응답 형식으로 변환합니다.
 func MemberToChannelResponse(m *domain.Member) *ChannelResponse {
 	if m == nil {
 		return nil
@@ -520,7 +505,6 @@ func MemberToChannelResponse(m *domain.Member) *ChannelResponse {
 	return resp
 }
 
-// SearchChannels: 이름으로 채널을 검색합니다.
 func (h *StreamHandler) SearchChannels(c *gin.Context) {
 	ctx := c.Request.Context()
 	query := c.Query("q")
