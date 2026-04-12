@@ -16,29 +16,26 @@ import (
 
 const alarmLatencyExceededThresholdMillis = alarmtiming.LatencyExceededThresholdMillis
 
-// ReadRepository: 추적 레코드 조회 경로를 담당한다.
 type ReadRepository interface {
 	FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error)
 	ListPendingPublishedAtResolutionsPage(ctx context.Context, referenceNow time.Time, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error)
 	ListPendingPublishedAtResolutions(ctx context.Context, detectedBefore time.Time, limit int) ([]PublishedAtResolutionCandidate, error)
 }
 
-// WriteRepository: 추적 레코드 업서트 경로를 담당한다.
 type WriteRepository interface {
 	Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error
 	UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error
 	MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error
 }
 
-// Repository: community/shorts 알람 추적 저장소 최소 계약.
 type Repository interface {
 	ReadRepository
 	WriteRepository
 }
 
-// GormRepository: GORM 기반 추적 저장소 구현.
 type GormRepository struct {
-	db *gorm.DB
+	db                       *gorm.DB
+	hasPublishedAtRetryAfter bool
 }
 
 type PublishedAtResolutionCandidate struct {
@@ -62,7 +59,10 @@ type AlarmSentMark struct {
 }
 
 func NewRepository(db *gorm.DB) *GormRepository {
-	return &GormRepository{db: db}
+	return &GormRepository{
+		db:                       db,
+		hasPublishedAtRetryAfter: hasPublishedAtRetryAfterColumn(db),
+	}
 }
 
 func (r *GormRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error) {

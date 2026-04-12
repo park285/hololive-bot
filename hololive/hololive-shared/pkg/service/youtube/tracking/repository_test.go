@@ -245,12 +245,12 @@ func TestListPendingPublishedAtResolutionsPage_ExcludesFutureRetryAfter(t *testi
 
 	require.NoError(t, repo.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{
 		{
-			Kind:                  domain.OutboxKindNewShort,
-			PostID:                "short:eligible",
-			ContentID:             "short:eligible",
-			ChannelID:             "UC_SHORT",
-			DetectedAt:            detectedAt,
-			DeliveryStatus:        domain.YouTubeCommunityShortsAlarmStateStatusDetected,
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:eligible",
+			ContentID:      "short:eligible",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt,
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
 		},
 		{
 			Kind:                  domain.OutboxKindNewShort,
@@ -325,7 +325,7 @@ func TestMarkAndClearPublishedAtRetryAfter(t *testing.T) {
 	require.Nil(t, row.PublishedAtRetryAfter)
 }
 
-func TestListPendingPublishedAtResolutionsPage_LegacySchemaWithoutRetryAfterColumn(t *testing.T) {
+func TestListPendingPublishedAtResolutionsPage_LegacySchemaWithoutRetryAfterColumnReturnsError(t *testing.T) {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s_legacy?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
@@ -361,12 +361,11 @@ func TestListPendingPublishedAtResolutionsPage_LegacySchemaWithoutRetryAfterColu
 	`, domain.OutboxKindNewShort, "short:legacy", "short:legacy", "UC_SHORT", detectedAt, domain.YouTubeCommunityShortsAlarmStateStatusDetected, now, now).Error)
 
 	candidates, _, err := repo.ListPendingPublishedAtResolutionsPage(ctx, now, detectedAt.Add(2*time.Minute), nil, 10)
-	require.NoError(t, err)
-	require.Len(t, candidates, 1)
-	require.Equal(t, "short:legacy", candidates[0].PostID)
+	require.ErrorContains(t, err, "published_at_retry_after")
+	require.Nil(t, candidates)
 }
 
-func TestMarkAndClearPublishedAtRetryAfter_NoOpWithoutRetryAfterColumn(t *testing.T) {
+func TestMarkAndClearPublishedAtRetryAfter_WithoutRetryAfterColumnReturnsError(t *testing.T) {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s_legacy_mark?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
@@ -400,8 +399,8 @@ func TestMarkAndClearPublishedAtRetryAfter_NoOpWithoutRetryAfterColumn(t *testin
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, domain.OutboxKindNewShort, "short:legacy", "short:legacy", "UC_SHORT", now, domain.YouTubeCommunityShortsAlarmStateStatusDetected, now, now).Error)
 
-	require.NoError(t, repo.MarkPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "short:legacy", now.Add(time.Minute)))
-	require.NoError(t, repo.ClearPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "short:legacy"))
+	require.ErrorContains(t, repo.MarkPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "short:legacy", now.Add(time.Minute)), "published_at_retry_after")
+	require.ErrorContains(t, repo.ClearPublishedAtRetryAfter(ctx, domain.OutboxKindNewShort, "short:legacy"), "published_at_retry_after")
 }
 
 func TestRepositoryRejectsUnsupportedKind(t *testing.T) {
