@@ -28,7 +28,6 @@ import (
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
 
-// ApplyHandlers: 설정 업데이트 타입별 적용 핸들러 집합.
 // nil 핸들러는 해당 타입을 무시하며, Unknown이 nil이면 기본 경고 로깅을 사용한다.
 type ApplyHandlers struct {
 	ScraperProxy        func(contractssettings.ScraperProxyPayloadV1)
@@ -37,7 +36,6 @@ type ApplyHandlers struct {
 	Unknown             func(updateType string)
 }
 
-// NewApplyFn: 타입 안전 설정 업데이트 적용 함수를 생성한다.
 func NewApplyFn(logger *slog.Logger, handlers ApplyHandlers) func(ConfigUpdate) {
 	if logger == nil {
 		logger = slog.Default()
