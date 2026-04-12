@@ -25,7 +25,6 @@ package errors
 
 import "fmt"
 
-// APIError: 외부 API 호출 중 발생한 에러 (Holodex, YouTube 등).
 type APIError struct {
 	Operation  string // 수행 중이던 API 작업
 	StatusCode int    // HTTP 상태 코드 (0이면 네트워크 오류)
@@ -42,7 +41,6 @@ func (e APIError) Error() string {
 
 func (e APIError) Unwrap() error { return e.Err }
 
-// NewAPIError: API 에러를 생성합니다.
 func NewAPIError(message string, statusCode int, context map[string]any) *APIError {
 	op := message
 
@@ -58,7 +56,6 @@ func NewAPIError(message string, statusCode int, context map[string]any) *APIErr
 	}
 }
 
-// KeyRotationError: 모든 API 키가 사용 불가능할 때 발생하는 에러.
 type KeyRotationError struct {
 	Operation  string
 	StatusCode int
@@ -68,7 +65,6 @@ func (e KeyRotationError) Error() string {
 	return fmt.Sprintf("key rotation exhausted operation=%s status=%d", e.Operation, e.StatusCode)
 }
 
-// NewKeyRotationError: 키 로테이션 에러를 생성합니다.
 func NewKeyRotationError(message string, statusCode int, context map[string]any) *KeyRotationError {
 	op := message
 
@@ -84,7 +80,6 @@ func NewKeyRotationError(message string, statusCode int, context map[string]any)
 	}
 }
 
-// CacheError: 캐시 작업 중 발생한 에러.
 type CacheError struct {
 	Operation string // get, set, delete 등
 	Key       string // 캐시 키
@@ -101,7 +96,6 @@ func (e CacheError) Error() string {
 
 func (e CacheError) Unwrap() error { return e.Err }
 
-// NewCacheError: 캐시 에러를 생성합니다.
 func NewCacheError(message, operation, key string, cause error) *CacheError {
 	return &CacheError{
 		Operation: operation,
@@ -110,7 +104,6 @@ func NewCacheError(message, operation, key string, cause error) *CacheError {
 	}
 }
 
-// CircuitOpenError: 서킷 브레이커가 열려있을 때 발생하는 에러.
 type CircuitOpenError struct {
 	RetryAfterMs int64
 }
@@ -119,7 +112,6 @@ func (e CircuitOpenError) Error() string {
 	return fmt.Sprintf("circuit breaker open retry_after_ms=%d", e.RetryAfterMs)
 }
 
-// ValidationError: 입력 검증 실패 에러.
 type ValidationError struct {
 	Field   string
 	Message string
@@ -133,7 +125,6 @@ func (e ValidationError) Error() string {
 	return fmt.Sprintf("validation error field=%s: %s", e.Field, e.Message)
 }
 
-// NewValidationError: 검증 에러를 생성합니다.
 func NewValidationError(message, field string, value any) *ValidationError {
 	return &ValidationError{
 		Field:   field,
@@ -141,7 +132,6 @@ func NewValidationError(message, field string, value any) *ValidationError {
 	}
 }
 
-// ServiceError: 내부 서비스 로직 에러.
 type ServiceError struct {
 	Service   string // 서비스 이름
 	Operation string // 작업 이름
@@ -158,7 +148,6 @@ func (e ServiceError) Error() string {
 
 func (e ServiceError) Unwrap() error { return e.Err }
 
-// NewServiceError: 서비스 에러를 생성합니다.
 func NewServiceError(message, service, operation string, cause error) *ServiceError {
 	return &ServiceError{
 		Service:   service,
