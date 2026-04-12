@@ -31,12 +31,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// MessageSender: 메시지 발송 인터페이스
 type MessageSender interface {
 	SendMessage(ctx context.Context, roomID, message string) error
 }
 
-// deliveryRepository: Dispatcher가 사용하는 outbox 저장소 인터페이스 (테스트 mock 용도)
 type deliveryRepository interface {
 	FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.NotificationDeliveryOutbox, error)
 	MarkSent(ctx context.Context, id int64) error
@@ -45,7 +43,6 @@ type deliveryRepository interface {
 	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
-// DispatcherConfig: Dispatcher 설정
 type DispatcherConfig struct {
 	BatchSize       int
 	MaxConcurrent   int
@@ -58,7 +55,6 @@ type DispatcherConfig struct {
 	CleanupEnabled  bool
 }
 
-// DefaultDispatcherConfig: 기본 설정
 func DefaultDispatcherConfig() DispatcherConfig {
 	return DispatcherConfig{
 		BatchSize:       50,
@@ -73,7 +69,6 @@ func DefaultDispatcherConfig() DispatcherConfig {
 	}
 }
 
-// Dispatcher: outbox 항목을 발송하는 goroutine worker
 type Dispatcher struct {
 	repo          deliveryRepository
 	sender        MessageSender
@@ -82,7 +77,6 @@ type Dispatcher struct {
 	lastCleanupAt time.Time
 }
 
-// NewDispatcher: Dispatcher 생성
 func NewDispatcher(repo deliveryRepository, sender MessageSender, logger *slog.Logger, cfg DispatcherConfig) *Dispatcher {
 	defaults := DefaultDispatcherConfig()
 	if cfg.BatchSize <= 0 {
@@ -112,7 +106,6 @@ func NewDispatcher(repo deliveryRepository, sender MessageSender, logger *slog.L
 	return &Dispatcher{repo: repo, sender: sender, logger: logger, cfg: cfg}
 }
 
-// Start: ctx cancel로만 종료. 별도 Stop() 없음.
 func (d *Dispatcher) Start(ctx context.Context) {
 	go d.run(ctx)
 }
@@ -121,7 +114,6 @@ func (d *Dispatcher) run(ctx context.Context) {
 	ticker := time.NewTicker(d.cfg.PollInterval)
 	defer ticker.Stop()
 
-	// 즉시 1회 실행
 	d.processOnce(ctx)
 
 	for {
@@ -148,12 +140,10 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 
 	d.processBatch(ctx, items)
 
-	// 모니터링: 실패 누적 경고
 	if cnt, _ := d.repo.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
 		d.logger.Error("delivery outbox accumulated failures", slog.Int64("count", cnt))
 	}
 
-	// Cleanup (CleanupInterval 주기로만 실행)
 	if d.cfg.CleanupEnabled && time.Since(d.lastCleanupAt) >= d.cfg.CleanupInterval {
 		if cleaned, cleanErr := d.repo.Cleanup(ctx, d.cfg.CleanupAfter); cleanErr != nil {
 			d.logger.Warn("Outbox cleanup failed", slog.String("error", cleanErr.Error()))
