@@ -23,7 +23,6 @@ package model
 
 import "context"
 
-// SummaryResultType: 요약/폴백 결과 출처 구분.
 type SummaryResultType string
 
 const (
@@ -32,7 +31,6 @@ const (
 	SummaryResultEmpty    SummaryResultType = "empty"
 )
 
-// SearchResult: 웹 검색 결과 단일 항목
 type SearchResult struct {
 	Title         string
 	URL           string
@@ -40,7 +38,6 @@ type SearchResult struct {
 	PublishedDate string
 }
 
-// WebSearcher: 외부 검색 추상화 인터페이스
 type WebSearcher interface {
 	Search(ctx context.Context, query string) ([]SearchResult, error)
 }
