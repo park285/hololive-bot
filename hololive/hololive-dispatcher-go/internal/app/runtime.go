@@ -44,7 +44,6 @@ import (
 
 const readyCheckTimeout = 2 * time.Second
 
-// Runtime: dispatcher-go 실행 컨테이너.
 type Runtime struct {
 	cfg        *Config
 	logger     *slog.Logger
@@ -79,7 +78,6 @@ func (s *readinessState) getLastError() string {
 	return value
 }
 
-// BuildRuntime: dispatcher-go 런타임 초기화.
 func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runtime, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("build runtime: config is nil")
@@ -135,7 +133,6 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 	return runtime, nil
 }
 
-// Run: dispatcher-go 메인 실행 루프.
 func (r *Runtime) Run() {
 	if r == nil {
 		return
