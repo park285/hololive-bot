@@ -250,8 +250,8 @@ func TestLoad_ScraperPollDefaults(t *testing.T) {
 	if cfg.Scraper.Poll.Videos != 15*time.Minute {
 		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 15*time.Minute)
 	}
-	if cfg.Scraper.Poll.Shorts != 30*time.Minute {
-		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 30*time.Minute)
+	if cfg.Scraper.Poll.Shorts != 2*time.Minute {
+		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 2*time.Minute)
 	}
 	if cfg.Scraper.Poll.Community != 30*time.Minute {
 		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 30*time.Minute)
@@ -372,8 +372,11 @@ func TestLoad_ScraperPublishedAtResolverDefaults(t *testing.T) {
 	if cfg.Scraper.PublishedAtResolver.MaxResolvePerRun != 1 {
 		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", cfg.Scraper.PublishedAtResolver.MaxResolvePerRun, 1)
 	}
-	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 2*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 2*time.Second)
+	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 12*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 12*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.ResolveTimeout != 10*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.ResolveTimeout = %s, want %s", cfg.Scraper.PublishedAtResolver.ResolveTimeout, 10*time.Second)
 	}
 	if cfg.Scraper.PublishedAtResolver.MinDetectedAge != 30*time.Second {
 		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", cfg.Scraper.PublishedAtResolver.MinDetectedAge, 30*time.Second)
@@ -389,7 +392,8 @@ func TestLoad_ScraperPublishedAtResolverEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS", "21")
 	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE", "7")
 	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN", "3")
-	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS", "4")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS", "12")
+	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS", "9")
 	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", "35")
 	t.Setenv("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", "420")
 
@@ -410,14 +414,48 @@ func TestLoad_ScraperPublishedAtResolverEnvOverrides(t *testing.T) {
 	if cfg.Scraper.PublishedAtResolver.MaxResolvePerRun != 3 {
 		t.Fatalf("Scraper.PublishedAtResolver.MaxResolvePerRun = %d, want %d", cfg.Scraper.PublishedAtResolver.MaxResolvePerRun, 3)
 	}
-	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 4*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 4*time.Second)
+	if cfg.Scraper.PublishedAtResolver.MaxRunDuration != 12*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.MaxRunDuration = %s, want %s", cfg.Scraper.PublishedAtResolver.MaxRunDuration, 12*time.Second)
+	}
+	if cfg.Scraper.PublishedAtResolver.ResolveTimeout != 9*time.Second {
+		t.Fatalf("Scraper.PublishedAtResolver.ResolveTimeout = %s, want %s", cfg.Scraper.PublishedAtResolver.ResolveTimeout, 9*time.Second)
 	}
 	if cfg.Scraper.PublishedAtResolver.MinDetectedAge != 35*time.Second {
 		t.Fatalf("Scraper.PublishedAtResolver.MinDetectedAge = %s, want %s", cfg.Scraper.PublishedAtResolver.MinDetectedAge, 35*time.Second)
 	}
 	if cfg.Scraper.PublishedAtResolver.FailureBackoffTTL != 7*time.Minute {
 		t.Fatalf("Scraper.PublishedAtResolver.FailureBackoffTTL = %s, want %s", cfg.Scraper.PublishedAtResolver.FailureBackoffTTL, 7*time.Minute)
+	}
+}
+
+func TestConfigValidate_ScraperPublishedAtResolverRejectsMaxRunDurationBelowResolveTimeout(t *testing.T) {
+	cfg := &Config{
+		Server:   ServerConfig{Port: 30001},
+		Kakao:    KakaoConfig{Rooms: []string{"test-room"}},
+		Iris:     IrisConfig{WebhookToken: "test-webhook-token", BotToken: "test-bot-token"},
+		Holodex:  HolodexConfig{APIKey: "test-key"},
+		YouTube:  YouTubeConfig{APIKey: "test-youtube-key"},
+		Postgres: PostgresConfig{SSLMode: "disable"},
+		Scraper: ScraperConfig{
+			PublishedAtResolver: ScraperPublishedAtResolverConfig{
+				Enabled:           true,
+				Interval:          15 * time.Second,
+				BatchSize:         10,
+				MaxResolvePerRun:  1,
+				MaxRunDuration:    5 * time.Second,
+				ResolveTimeout:    10 * time.Second,
+				MinDetectedAge:    30 * time.Second,
+				FailureBackoffTTL: 5 * time.Minute,
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() error = nil, want resolver duration validation error")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be >= SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS") {
+		t.Fatalf("Validate() error = %v, want max-run-duration/resolve-timeout validation error", err)
 	}
 }
 

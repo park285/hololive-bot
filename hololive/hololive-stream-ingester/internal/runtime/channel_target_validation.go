@@ -20,14 +20,6 @@ type communityShortsMemberRepository interface {
 	GetAllMembers(context.Context) ([]*domain.Member, error)
 }
 
-func resolveCommunityShortsOperationalChannels(membersData domain.MemberDataProvider) ([]communityShortsOperationalChannel, error) {
-	if membersData == nil {
-		return nil, fmt.Errorf("members data provider is nil")
-	}
-
-	return resolveCommunityShortsOperationalChannelsFromMembers(membersData.GetAllMembers()), nil
-}
-
 func resolveCommunityShortsOperationalChannelsFromRepository(
 	ctx context.Context,
 	repo communityShortsMemberRepository,
