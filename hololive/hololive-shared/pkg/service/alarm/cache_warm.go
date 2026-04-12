@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -15,6 +16,13 @@ type CacheWarmSummary struct {
 	AlarmCount   int
 	RoomCount    int
 	ChannelCount int
+	KeysDeleted  int
+}
+
+type alarmLoader func(context.Context) ([]*domain.Alarm, error)
+
+var loadAllAlarmsFromRepository = func(ctx context.Context, repo *Repository) ([]*domain.Alarm, error) {
+	return repo.LoadAll(ctx)
 }
 
 func WarmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
@@ -22,12 +30,50 @@ func WarmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Clien
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from repository: repository is nil")
 	}
 
-	alarms, err := repo.LoadAll(ctx)
+	return warmSubscriberCacheFromLoader(ctx, cacheSvc, func(ctx context.Context) ([]*domain.Alarm, error) {
+		return loadAllAlarmsFromRepository(ctx, repo)
+	})
+}
+
+func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
+	if repo == nil {
+		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
+	}
+	if cacheSvc == nil {
+		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: cache service is nil")
+	}
+
+	return rebuildSubscriberCacheFromLoader(ctx, cacheSvc, func(ctx context.Context) ([]*domain.Alarm, error) {
+		return loadAllAlarmsFromRepository(ctx, repo)
+	})
+}
+
+func warmSubscriberCacheFromLoader(ctx context.Context, cacheSvc cache.Client, load alarmLoader) (CacheWarmSummary, error) {
+	alarms, err := load(ctx)
 	if err != nil {
 		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from repository: load alarms: %w", err)
 	}
 
 	return WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
+}
+
+func rebuildSubscriberCacheFromLoader(ctx context.Context, cacheSvc cache.Client, load alarmLoader) (CacheWarmSummary, error) {
+	alarms, err := load(ctx)
+	if err != nil {
+		return CacheWarmSummary{}, fmt.Errorf("rebuild subscriber cache from repository: load alarms: %w", err)
+	}
+
+	deletedCount, err := resetSubscriberCacheKeys(ctx, cacheSvc)
+	if err != nil {
+		return CacheWarmSummary{}, fmt.Errorf("rebuild subscriber cache from repository: reset cache keys: %w", err)
+	}
+
+	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
+	if err != nil {
+		return CacheWarmSummary{}, err
+	}
+	summary.KeysDeleted = deletedCount
+	return summary, nil
 }
 
 func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, alarms []*domain.Alarm) (CacheWarmSummary, error) {
@@ -97,4 +143,121 @@ func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, a
 	summary.ChannelCount = len(channels)
 
 	return summary, nil
+}
+
+func resetSubscriberCacheKeys(ctx context.Context, cacheSvc cache.Client) (int, error) {
+	if cacheSvc == nil {
+		return 0, errors.New("reset subscriber cache keys: cache service is nil")
+	}
+
+	keysToDelete := map[string]struct{}{
+		sharedalarmkeys.AlarmRegistryKey:        {},
+		sharedalarmkeys.AlarmChannelRegistryKey: {},
+		sharedalarmkeys.MemberNameKey:           {},
+		sharedalarmkeys.RoomNamesCacheKey:       {},
+		sharedalarmkeys.UserNamesCacheKey:       {},
+	}
+
+	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	if err != nil {
+		return 0, fmt.Errorf("load alarm registry rooms: %w", err)
+	}
+	for _, roomID := range registryRooms {
+		roomID = strings.TrimSpace(roomID)
+		if roomID == "" {
+			continue
+		}
+		keysToDelete[sharedalarmkeys.BuildRoomAlarmKey(roomID)] = struct{}{}
+	}
+
+	channelIDs, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	if err != nil {
+		return 0, fmt.Errorf("load alarm channel registry: %w", err)
+	}
+	for _, channelID := range channelIDs {
+		channelID = strings.TrimSpace(channelID)
+		if channelID == "" {
+			continue
+		}
+		for _, alarmType := range domain.AllAlarmTypes {
+			keysToDelete[sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)] = struct{}{}
+			keysToDelete[sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)] = struct{}{}
+		}
+	}
+
+	roomKeys, err := cacheSvc.ScanKeys(ctx, sharedalarmkeys.AlarmKeyPrefix+"*", 500)
+	if err != nil {
+		return 0, fmt.Errorf("scan room alarm keys: %w", err)
+	}
+	for _, key := range roomKeys {
+		key = strings.TrimSpace(key)
+		if key == "" || !isRoomAlarmCacheKey(key) {
+			continue
+		}
+		keysToDelete[key] = struct{}{}
+	}
+
+	subscriberKeys, err := cacheSvc.ScanKeys(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"*", 500)
+	if err != nil {
+		return 0, fmt.Errorf("scan subscriber keys: %w", err)
+	}
+	for _, key := range subscriberKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		keysToDelete[key] = struct{}{}
+	}
+
+	emptyKeys, err := cacheSvc.ScanKeys(ctx, sharedalarmkeys.ChannelSubscribersEmptyKeyPrefix+"*", 500)
+	if err != nil {
+		return 0, fmt.Errorf("scan empty subscriber keys: %w", err)
+	}
+	for _, key := range emptyKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		keysToDelete[key] = struct{}{}
+	}
+
+	deleteList := make([]string, 0, len(keysToDelete))
+	for key := range keysToDelete {
+		deleteList = append(deleteList, key)
+	}
+	if len(deleteList) == 0 {
+		return 0, nil
+	}
+	sort.Strings(deleteList)
+
+	deletedCount, err := cacheSvc.DelMany(ctx, deleteList)
+	if err != nil {
+		return 0, fmt.Errorf("delete subscriber cache keys: %w", err)
+	}
+
+	return int(deletedCount), nil
+}
+
+func isRoomAlarmCacheKey(key string) bool {
+	if !strings.HasPrefix(key, sharedalarmkeys.AlarmKeyPrefix) {
+		return false
+	}
+
+	switch key {
+	case sharedalarmkeys.AlarmRegistryKey,
+		sharedalarmkeys.AlarmChannelRegistryKey,
+		sharedalarmkeys.MemberNameKey,
+		sharedalarmkeys.RoomNamesCacheKey,
+		sharedalarmkeys.UserNamesCacheKey:
+		return false
+	}
+
+	if strings.HasPrefix(key, sharedalarmkeys.ChannelSubscribersKeyPrefix) {
+		return false
+	}
+	if strings.HasPrefix(key, sharedalarmkeys.ChannelSubscribersEmptyKeyPrefix) {
+		return false
+	}
+
+	return true
 }

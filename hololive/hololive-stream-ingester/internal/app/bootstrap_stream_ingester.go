@@ -132,12 +132,16 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			logger.Warn("Community/shorts big-bang request switch is missing cutover criteria",
 				slog.Int("community_shorts_bigbang_target_channels", communityShortsPolicy.TargetChannelCount()))
 		}
-		if warnErr := warmSubscriberCacheFromDB(ctx, infra.cacheService, infra.postgresService, logger); warnErr != nil {
-			logger.Warn("Failed to warm subscriber cache from DB",
-				slog.String("runtime", spec.name),
-				slog.Any("error", warnErr),
-			)
-		}
+	}
+
+	if warnErr := warmSubscriberCacheOnYouTubeStartup(ctx, spec.name, features.youtubeEnabled, func(ctx context.Context) error {
+		_, err := warmSubscriberCacheFromDBIfCacheCold(ctx, infra.cacheService, infra.postgresService, logger)
+		return err
+	}); warnErr != nil {
+		logger.Warn("Failed to warm subscriber cache from DB",
+			slog.String("runtime", spec.name),
+			slog.Any("error", warnErr),
+		)
 	}
 
 	var ingestionLeaseRef *providers.IngestionLease
@@ -269,6 +273,23 @@ func streamIngesterSpec(cfg *config.Config) ingestionRuntimeSpec {
 		requestedFeatures: requested,
 		features:          features,
 	}
+}
+
+func warmSubscriberCacheOnYouTubeStartup(
+	ctx context.Context,
+	runtimeName string,
+	youtubeEnabled bool,
+	warm func(context.Context) error,
+) error {
+	if !youtubeEnabled || warm == nil {
+		return nil
+	}
+
+	if err := warm(ctx); err != nil {
+		return fmt.Errorf("warm subscriber cache on youtube startup for %s: %w", runtimeName, err)
+	}
+
+	return nil
 }
 
 func youtubeScraperSpec(cfg *config.Config) ingestionRuntimeSpec {
