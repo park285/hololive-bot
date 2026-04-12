@@ -32,14 +32,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// PostgresService: PostgreSQL 데이터베이스 연결 및 GORM 인스턴스를 관리하는 서비스
 // 내부적으로 hololive-shared/internal/dbx.Client를 사용한다.
 type PostgresService struct {
 	client *dbx.Client
 	logger *slog.Logger
 }
 
-// PostgresConfig: PostgreSQL 접속 정보(Host, Port, SocketPath, User, Password, Database)를 담는 설정 구조체
 type PostgresConfig struct {
 	Host             string
 	Port             int
@@ -54,7 +52,6 @@ type PostgresConfig struct {
 	PoolMaxIdleConns int
 }
 
-// NewPostgresService: 주어진 설정을 사용하여 PostgreSQL 연결을 수립하고 서비스를 초기화합니다.
 // hololive-shared/internal/dbx.Client를 사용하여 pgxpool + GORM 듀얼 구조를 제공한다.
 func NewPostgresService(ctx context.Context, cfg PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
 	dbxCfg := dbx.Config{
@@ -105,17 +102,14 @@ func NewPostgresService(ctx context.Context, cfg PostgresConfig, logger *slog.Lo
 	}, nil
 }
 
-// GetPool: pgxpool.Pool 인스턴스를 반환한다. (raw SQL 사용 시 권장)
 func (ps *PostgresService) GetPool() *pgxpool.Pool {
 	return ps.client.Pool()
 }
 
-// GetGormDB: GORM DB 인스턴스를 반환한다. (ORM 기반 DB 조작 시 활용)
 func (ps *PostgresService) GetGormDB() *gorm.DB {
 	return ps.client.Gorm()
 }
 
-// Close: 데이터베이스 연결을 안전하게 종료합니다.
 func (ps *PostgresService) Close() error {
 	if ps.client != nil {
 		if err := ps.client.Close(); err != nil {
@@ -125,7 +119,6 @@ func (ps *PostgresService) Close() error {
 	return nil
 }
 
-// Ping: 데이터베이스 연결 상태를 확인한다. (헬스 체크용)
 func (ps *PostgresService) Ping(ctx context.Context) error {
 	if err := ps.client.Ping(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
