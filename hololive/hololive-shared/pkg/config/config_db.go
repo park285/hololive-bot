@@ -20,7 +20,6 @@
 
 package config
 
-// PostgresConfig: 메인 데이터베이스(PostgreSQL) 연결 설정
 type PostgresConfig struct {
 	Host              string
 	Port              int
