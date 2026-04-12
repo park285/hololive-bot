@@ -105,7 +105,6 @@ const AssistantUserCard = ({
 		</Card.Header>
 
 		<Card.Body className="space-y-4 pt-3">
-			{/* Stats Grid */}
 			<div className="grid grid-cols-3 gap-2">
 				<div className="bg-slate-50 p-2 rounded-lg text-center border border-slate-100/50">
 					<div className="text-slate-400 mb-1 flex justify-center">
@@ -136,7 +135,6 @@ const AssistantUserCard = ({
 				</div>
 			</div>
 
-			{/* Feature Toggles */}
 			<div>
 				<div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
 					<span
