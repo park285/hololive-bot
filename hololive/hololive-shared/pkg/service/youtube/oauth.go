@@ -38,7 +38,6 @@ const (
 	credentialsFile = "credentials.json"
 )
 
-// OAuthService: YouTube API OAuth2 인증을 처리하고 관리하는 서비스
 type OAuthService struct {
 	service *youtube.Service
 	config  *oauth2.Config
@@ -46,7 +45,6 @@ type OAuthService struct {
 	logger  *slog.Logger
 }
 
-// NewYouTubeOAuthService: 저장된 토큰이나 자격 증명을 로드하여 OAuth 서비스를 초기화합니다.
 func NewYouTubeOAuthService(logger *slog.Logger) (*OAuthService, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -93,7 +91,6 @@ func NewYouTubeOAuthService(logger *slog.Logger) (*OAuthService, error) {
 	}, nil
 }
 
-// Authorize: CLI 기반의 대화형 OAuth 인증 프로세스를 시작한다. (브라우저 인증 URL 표시 및 코드 입력 대기)
 func (ys *OAuthService) Authorize(ctx context.Context) error {
 	if ys == nil {
 		return fmt.Errorf("service not initialized")
@@ -139,12 +136,10 @@ func (ys *OAuthService) Authorize(ctx context.Context) error {
 	return nil
 }
 
-// IsAuthorized: 현재 유효한 인증 토큰이 있는지 확인합니다.
 func (ys *OAuthService) IsAuthorized() bool {
 	return ys != nil && ys.service != nil && ys.token != nil
 }
 
-// GetService: 인증된 YouTube API 클라이언트를 반환합니다.
 func (ys *OAuthService) GetService() *youtube.Service {
 	if ys == nil {
 		return nil

@@ -35,7 +35,6 @@ import (
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
-// DeliveryRepository: room 단위 전달 상태 저장소
 type DeliveryRepository struct {
 	db     *gorm.DB
 	logger *slog.Logger
@@ -59,7 +58,6 @@ func NewDeliveryRepository(db *gorm.DB, logger *slog.Logger) *DeliveryRepository
 	}
 }
 
-// EnqueueBatch: outbox 이벤트를 room 단위 delivery row로 fan-out 저장한다.
 func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, roomIDs []string) error {
 	uniqueRoomIDs := uniqueStrings(roomIDs)
 	if len(uniqueRoomIDs) == 0 {
@@ -89,7 +87,6 @@ func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, r
 	return nil
 }
 
-// FetchAndLock: PENDING delivery를 배치 claim하고 locked_at을 갱신한다.
 func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lockTimeout time.Duration) ([]domain.YouTubeNotificationDelivery, error) {
 	if r == nil || r.db == nil || batchSize <= 0 {
 		return nil, nil
@@ -160,7 +157,6 @@ func (r *DeliveryRepository) fetchAndLockSQLite(ctx context.Context, batchSize i
 	return rows, nil
 }
 
-// MarkSentBatch: 전달 성공 row를 배치로 SENT 처리한다.
 func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, claimTokens ...deliveryClaimToken) error {
 	uniqueIDs := uniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
@@ -206,7 +202,6 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 	})
 }
 
-// MarkFailed: 전달 실패 row를 retry 또는 FAILED로 전환한다.
 func (r *DeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error {
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
@@ -227,7 +222,6 @@ func (r *DeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetrie
 	return nil
 }
 
-// MarkFailedRetryBatch: 전달 실패 row들을 retry-aware semantics로 배치 갱신한다.
 func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int64, maxRetries int, backoff time.Duration, errMsg string) error {
 	uniqueIDs := uniqueInt64s(ids)
 	if len(uniqueIDs) == 0 {
@@ -253,12 +247,10 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 	return nil
 }
 
-// UpdateOutboxAggregateStatus: delivery 상태를 집계해 outbox 상태를 갱신한다.
 func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, outboxID int64) error {
 	return r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID})
 }
 
-// UpdateOutboxAggregateStatuses: 여러 outbox의 delivery 상태를 한 번에 집계해 갱신한다.
 func (r *DeliveryRepository) UpdateOutboxAggregateStatuses(ctx context.Context, outboxIDs []int64) error {
 	uniqueIDs := uniqueInt64s(outboxIDs)
 	if len(uniqueIDs) == 0 {
