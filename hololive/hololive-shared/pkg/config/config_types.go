@@ -22,25 +22,21 @@ package config
 
 import "time"
 
-// ServerConfig: HTTP 서버 바인딩 포트 및 API 인증 설정
 type ServerConfig struct {
 	Port   int
 	APIKey string // API 인증용 시크릿 키 (X-API-Key 헤더로 검증)
 }
 
-// HolodexConfig: Holodex API 키 및 호출 관련 설정
 type HolodexConfig struct {
 	BaseURL string
 	APIKey  string
 }
 
-// YouTubeConfig: YouTube Data API 키 및 Quota 관리 설정
 type YouTubeConfig struct {
 	APIKey              string
 	EnableQuotaBuilding bool
 }
 
-// IngestionConfig: ingestion 런타임 기능 토글 설정
 type IngestionConfig struct {
 	YouTubeEnabled                  bool
 	PhotoSyncEnabled                bool
@@ -48,7 +44,6 @@ type IngestionConfig struct {
 	CommunityShortsBigBangCutoverAt time.Time
 }
 
-// LoggingConfig: 애플리케이션 로그 설정
 type LoggingConfig struct {
 	Level      string
 	Dir        string
@@ -58,7 +53,6 @@ type LoggingConfig struct {
 	Compress   bool
 }
 
-// BotConfig: 봇의 기본 동작(명령어 접두사, 자기 자신 식별자) 설정
 type BotConfig struct {
 	Prefix        string
 	SelfUser      string
@@ -66,7 +60,6 @@ type BotConfig struct {
 	MentionPrefix string // 멘션 기반 명령어 접두사 (예: @카푸봇)
 }
 
-// ServicesConfig: 외부 Go 서비스 연결 설정 (goroutine 통합 모니터링용)
 type ServicesConfig struct {
 	LLMSchedulerHealthURL   string // llm-scheduler health URL
 	GameBotTwentyQHealthURL string // game-bot-go twentyq health URL
@@ -81,16 +74,26 @@ type ScraperPoll struct {
 	Live      time.Duration
 }
 
+type ScraperPublishedAtResolverConfig struct {
+	Enabled           bool
+	Interval          time.Duration
+	BatchSize         int
+	MaxResolvePerRun  int
+	MaxRunDuration    time.Duration
+	MinDetectedAge    time.Duration
+	FailureBackoffTTL time.Duration
+}
+
 func DefaultScraperWorkerCount() int {
 	return 4
 }
 
-// ScraperConfig: YouTube 스크래퍼 프록시 설정 (SOCKS5)
 type ScraperConfig struct {
-	ProxyEnabled bool   // 프록시 사용 여부
-	ProxyURL     string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
-	WorkerCount  int
-	Poll         ScraperPoll
+	ProxyEnabled        bool   // 프록시 사용 여부
+	ProxyURL            string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
+	WorkerCount         int
+	Poll                ScraperPoll
+	PublishedAtResolver ScraperPublishedAtResolverConfig
 }
 
 func DefaultScraperPoll() ScraperPoll {
@@ -100,6 +103,18 @@ func DefaultScraperPoll() ScraperPoll {
 		Community: 30 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
+	}
+}
+
+func DefaultScraperPublishedAtResolverConfig() ScraperPublishedAtResolverConfig {
+	return ScraperPublishedAtResolverConfig{
+		Enabled:           true,
+		Interval:          15 * time.Second,
+		BatchSize:         10,
+		MaxResolvePerRun:  1,
+		MaxRunDuration:    2 * time.Second,
+		MinDetectedAge:    30 * time.Second,
+		FailureBackoffTTL: 5 * time.Minute,
 	}
 }
 
@@ -153,14 +168,12 @@ func (c ScraperConfig) WorkerCountOrDefault() int {
 	return DefaultScraperWorkerCount()
 }
 
-// CORSConfig: CORS 허용 Origin 설정
 type CORSConfig struct {
 	AllowedOrigins      []string
 	Enforce             bool
 	MissingInProduction bool
 }
 
-// WebhookConfig: Iris 웹훅 워커 및 큐 설정
 type WebhookConfig struct {
 	WorkerCount    int
 	QueueSize      int
@@ -169,13 +182,11 @@ type WebhookConfig struct {
 	RequireHTTP2   bool
 }
 
-// ChzzkConfig: 치지직 Open API 설정 (Client 인증 방식)
 type ChzzkConfig struct {
 	ClientID     string
 	ClientSecret string
 }
 
-// TwitchConfig: Twitch Helix API 설정 (Client Credentials 인증)
 type TwitchConfig struct {
 	ClientID     string
 	ClientSecret string
