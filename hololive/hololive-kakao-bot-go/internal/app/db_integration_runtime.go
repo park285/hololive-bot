@@ -31,7 +31,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
-// DBIntegrationRuntime: DB 통합 테스트 및 실행을 위한 런타임 환경 (Repository, Cache, Adapter 포함).
 type DBIntegrationRuntime struct {
 	Logger        *slog.Logger
 	Repository    *member.Repository
@@ -41,7 +40,6 @@ type DBIntegrationRuntime struct {
 	lifecycle.Managed
 }
 
-// BuildDBIntegrationRuntime: PostgreSQL 설정을 기반으로 DB 통합 런타임 환경을 구축합니다.
 func BuildDBIntegrationRuntime(
 	ctx context.Context,
 	pgCfg config.PostgresConfig,
