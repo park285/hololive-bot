@@ -29,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// FilterCandidates: 기간/멤버/카테고리/출처 검증을 모두 적용합니다. (호환 wrapper)
 func FilterCandidates(
 	candidates []Candidate,
 	period Period,

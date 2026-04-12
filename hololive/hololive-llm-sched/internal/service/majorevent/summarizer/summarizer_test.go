@@ -33,7 +33,6 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-// --- assembleSummaryText 단위 테스트 ---
 
 func TestAssembleSummaryText_WithHighlightsAndOngoing(t *testing.T) {
 	resp := &summaryResponse{
@@ -110,7 +109,6 @@ func TestAssembleSummaryText_NoNote(t *testing.T) {
 	assertNotContains(t, result, "- ") // note 없으면 하이픈 없음
 }
 
-// --- summaryResponseSchema 검증 ---
 
 func TestSummaryResponseSchema_Structure(t *testing.T) {
 	schema := summaryResponseSchema()
@@ -173,7 +171,6 @@ func TestSummaryResponseSchema_Structure(t *testing.T) {
 	}
 }
 
-// --- JSON 파싱 라운드트립 ---
 
 func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	original := summaryResponse{
@@ -218,7 +215,6 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	assertContains(t, text, "https://example.com/cafe")
 }
 
-// --- EventSummarizer + mock LLM 통합 ---
 
 type mockSummarizer struct {
 	jsonResponse string
@@ -410,7 +406,6 @@ func TestEventSummarizer_Summarize_NoEvents_ReturnsEmpty(t *testing.T) {
 	}
 }
 
-// --- 링크 렌더링 테스트 ---
 
 func TestAssembleSummaryText_HighlightWithLink(t *testing.T) {
 	resp := &summaryResponse{
@@ -611,7 +606,6 @@ func TestWriteDiscoveredEvents_HasSourcePrefix(t *testing.T) {
 	}
 }
 
-// --- 헬퍼 ---
 
 func assertContains(t *testing.T, s, substr string) {
 	t.Helper()
@@ -640,7 +634,6 @@ func searchStr(s, substr string) bool {
 	return false
 }
 
-// --- promptVersion / example 오염 제거 테스트 ---
 
 // mockCache: 캐시 키 캡처용 mock (캐시 키 버전 포함 여부 검증)
 type mockCache struct {
@@ -672,7 +665,6 @@ func (m *mockCache) Set(_ context.Context, key string, _ any, _ time.Duration) e
 	return m.setErr
 }
 
-// TestSystemPrompt_NoRealEventNamesInExample: example 블록에 실제 이벤트명이 없는지 확인
 func TestSystemPrompt_NoRealEventNamesInExample(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -708,7 +700,6 @@ func TestSystemPrompt_NoRealEventNamesInExample(t *testing.T) {
 	}
 }
 
-// TestBuildUserPrompt_EventDatePassthrough: 입력 이벤트 날짜가 user prompt에 올바르게 포함되는지 확인
 func TestBuildUserPrompt_EventDatePassthrough(t *testing.T) {
 	startDate := time.Date(2026, 2, 21, 0, 0, 0, 0, kst)
 	events := []domain.MajorEvent{
@@ -726,7 +717,6 @@ func TestBuildUserPrompt_EventDatePassthrough(t *testing.T) {
 	}
 }
 
-// TestSummarize_CacheKeyContainsPromptVersion: 캐시 키에 promptVersion이 포함되는지 확인
 func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
@@ -904,7 +894,6 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 	}
 }
 
-// TestRunDualSearch_DirectVerification: runDualSearch의 dedupe/cap/순서 직접 검증
 func TestRunDualSearch_DirectVerification(t *testing.T) {
 	t.Run("deduplication and cap", func(t *testing.T) {
 		// 1차 5건 + 2차 8건 (중복 2건) → dedupe 11건 → cap 10건
@@ -970,7 +959,6 @@ func TestRunDualSearch_DirectVerification(t *testing.T) {
 	})
 }
 
-// TestSystemPrompt_ContainsDateAuthority: 시스템 프롬프트에 date_authority 블록이 포함되는지 확인
 func TestSystemPrompt_ContainsDateAuthority(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -997,7 +985,6 @@ func TestSystemPrompt_ContainsDateAuthority(t *testing.T) {
 	}
 }
 
-// TestGraduatedMembersLoad: JSON 파싱 성공 + domainContext에 졸업 멤버 포함 확인
 func TestGraduatedMembersLoad(t *testing.T) {
 	dc := getDomainContext()
 	if !strings.Contains(dc, "天音かなた") {
@@ -1019,7 +1006,6 @@ func TestGraduatedMembersLoad(t *testing.T) {
 	}
 }
 
-// TestNoteMaxLength: 스키마에 maxLength 존재 확인
 func TestNoteMaxLength(t *testing.T) {
 	schema := summaryResponseSchema()
 	props := schema["properties"].(map[string]any)
@@ -1032,7 +1018,6 @@ func TestNoteMaxLength(t *testing.T) {
 	}
 }
 
-// TestNoteTruncation: 31자 이상 note → 30자+… 트렁케이션 확인
 func TestNoteTruncation(t *testing.T) {
 	// 30 rune 입력 — 트렁케이션 없음
 	input := "가나다라마바사아자차카타파하가나다라마바사아자차카타파하가나" // 30자

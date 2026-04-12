@@ -57,7 +57,6 @@ var parsedGraduatedData graduatedData
 // promptVersion: 프롬프트 변경 시 bump하여 캐시 자동 무효화
 const promptVersion = "v3"
 
-// SummaryType: 요약 유형
 type SummaryType string
 
 const (
@@ -65,7 +64,6 @@ const (
 	SummaryTypeMonthly SummaryType = "monthly"
 )
 
-// --- LLM 입력용 구조체 ---
 
 // eventForPrompt: LLM 프롬프트에 전달할 이벤트 요약 구조체
 type eventForPrompt struct {
@@ -76,7 +74,6 @@ type eventForPrompt struct {
 	Link      string `json:"link"`
 }
 
-// --- LLM 구조화 응답 구조체 ---
 
 // summaryResponse: LLM 구조화 응답
 type summaryResponse struct {
@@ -110,7 +107,6 @@ type discoveredEvent struct {
 	Source string `json:"source"`
 }
 
-// --- 시스템 프롬프트 ---
 
 // domainContextPart1: <domain> ~ </scope_fence> (member_filter 앞 부분)
 const domainContextPart1 = `<domain>
@@ -367,7 +363,6 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 	return r
 })
 
-// --- Schema / Prompt 빌더 ---
 
 // getSystemPrompt: summaryType에 따른 system prompt 반환, 초기화 실패 시 error를 반환합니다.
 func getSystemPrompt(summaryType SummaryType) (string, error) {
@@ -547,7 +542,6 @@ func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, period
 	return base
 }
 
-// --- 텍스트 조립 ---
 
 // truncateNote: rune 단위 maxRunes 초과 시 트렁케이션
 func truncateNote(s string, maxRunes int) string {
@@ -670,7 +664,6 @@ func writeDiscoveredEvents(sb *strings.Builder, events []discoveredEvent) {
 	}
 }
 
-// --- 유틸리티 ---
 
 func formatEventDateForPrompt(start, end *time.Time) string {
 	if start == nil {
