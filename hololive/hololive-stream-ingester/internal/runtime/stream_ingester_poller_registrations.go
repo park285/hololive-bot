@@ -57,12 +57,14 @@ func buildStreamIngesterChannelPollerRegistrationsWithClient(
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	poll := scraperCfg.PollOrDefault()
+	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
+	inlineResolveMissingPublishedAt := !resolverCfg.Enabled
 	communityKeywords := []string{}
 	db := postgres.GetGormDB()
 
 	videosPoller := poller.NewVideosPoller(scraperClient, db, 10)
-	shortsPoller := poller.NewShortsPoller(scraperClient, db, 10, routeDecider)
-	communityPoller := poller.NewCommunityPoller(scraperClient, db, 10, communityKeywords, routeDecider)
+	shortsPoller := poller.NewShortsPoller(scraperClient, db, 10, routeDecider, inlineResolveMissingPublishedAt)
+	communityPoller := poller.NewCommunityPoller(scraperClient, db, 10, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
 	statsPoller := poller.NewChannelStatsPoller(scraperClient, db)
 	livePoller := poller.NewLivePoller(scraperClient, db)
 
