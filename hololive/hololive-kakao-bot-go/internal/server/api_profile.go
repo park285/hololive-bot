@@ -29,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// ProfileResponse: 프로필 API 응답 구조체
 // 원본 프로필과 번역된 프로필 정보를 함께 반환함.
 type ProfileResponse struct {
 	Status     string          `json:"status"`
@@ -37,7 +36,6 @@ type ProfileResponse struct {
 	Translated *TranslatedData `json:"translated,omitempty"`
 }
 
-// ProfileData: 원본 프로필 데이터 (영문 기반).
 type ProfileData struct {
 	Slug         string       `json:"slug"`
 	EnglishName  string       `json:"english_name"`
@@ -49,19 +47,16 @@ type ProfileData struct {
 	OfficialURL  string       `json:"official_url"`
 }
 
-// DataEntry: 프로필 데이터 항목 (레이블-값 쌍).
 type DataEntry struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 }
 
-// SocialLink: 소셜 미디어 링크.
 type SocialLink struct {
 	Label string `json:"label"`
 	URL   string `json:"url"`
 }
 
-// TranslatedData: 번역된 프로필 데이터 (한국어).
 type TranslatedData struct {
 	DisplayName string      `json:"display_name"`
 	Catchphrase string      `json:"catchphrase"`
@@ -70,7 +65,6 @@ type TranslatedData struct {
 	Data        []DataEntry `json:"data"`
 }
 
-// GetProfile: 채널 ID로 멤버 프로필을 조회합니다.
 // Query params:
 //   - channelId: YouTube 채널 ID (필수)
 func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
@@ -133,7 +127,6 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	c.JSON(200, resp)
 }
 
-// GetProfileByName: 영문 이름으로 멤버 프로필을 조회합니다.
 // Query params:
 //   - name: 영문 이름 (필수)
 func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
