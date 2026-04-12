@@ -26,7 +26,6 @@ import (
 	"log/slog"
 )
 
-// Start: 봇의 모든 구성 요소(스케줄러, 알람 체커, 관리자 서버)를 시작합니다.
 func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return
