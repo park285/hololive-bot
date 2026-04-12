@@ -32,27 +32,22 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-// MemberInfoCommand: 홀로라이브 멤버 프로필 조회 명령어를 처리하는 커맨드입니다.
 type MemberInfoCommand struct {
 	BaseCommand
 }
 
-// NewMemberInfoCommand: MemberInfoCommand 인스턴스를 생성합니다.
 func NewMemberInfoCommand(deps *Dependencies) *MemberInfoCommand {
 	return &MemberInfoCommand{BaseCommand: NewBaseCommand(deps)}
 }
 
-// Name: 커맨드 이름을 반환합니다.
 func (c *MemberInfoCommand) Name() string {
 	return string(domain.CommandMemberInfo)
 }
 
-// Description: 커맨드 설명을 반환합니다.
 func (c *MemberInfoCommand) Description() string {
 	return "홀로라이브 멤버 공식 프로필"
 }
 
-// Execute: 멤버 정보 커맨드를 실행합니다.
 // 쿼리가 없으면 멤버 디렉터리를, 있으면 개별 프로필을 표시합니다.
 func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
