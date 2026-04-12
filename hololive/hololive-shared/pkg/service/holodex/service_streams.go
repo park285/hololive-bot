@@ -37,7 +37,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-// SupportedStreamOrgParams: stream 조회 API에서 허용하는 org 파라미터 목록을 반환합니다.
 func SupportedStreamOrgParams() []string {
 	return []string{
 		strings.ToLower(constants.HolodexAPIParams.OrgHololive),
@@ -48,12 +47,10 @@ func SupportedStreamOrgParams() []string {
 	}
 }
 
-// GetLiveStreams: 기본 org(Hololive)의 현재 진행 중인 VTuber 스트림 목록을 조회합니다.
 func (h *Service) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
 	return h.GetLiveStreamsByOrg(ctx, constants.HolodexAPIParams.OrgHololive)
 }
 
-// GetLiveStreamsByOrg: org별 현재 진행 중인 VTuber 스트림 목록을 조회합니다.
 // org 미지정 시 Hololive를 기본값으로 사용합니다.
 func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, error) {
 	resolvedOrg, err := resolveStreamOrg(org)
@@ -131,12 +128,10 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 	return allStreams, nil
 }
 
-// GetUpcomingStreams: 기본 org(Hololive)의 예정 스트림 목록을 조회합니다.
 func (h *Service) GetUpcomingStreams(ctx context.Context, hours int) ([]*domain.Stream, error) {
 	return h.GetUpcomingStreamsByOrg(ctx, hours, constants.HolodexAPIParams.OrgHololive)
 }
 
-// GetUpcomingStreamsByOrg: org별 예정 스트림 목록을 조회합니다.
 // org 미지정 시 Hololive를 기본값으로 사용합니다.
 func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org string) ([]*domain.Stream, error) {
 	resolvedOrg, err := resolveStreamOrg(org)
