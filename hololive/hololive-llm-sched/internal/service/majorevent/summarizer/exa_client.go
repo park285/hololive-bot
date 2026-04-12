@@ -39,7 +39,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// ExaMCPClient: Exa MCP JSON-RPC 2.0 검색 클라이언트
 type ExaMCPClient struct {
 	endpoint string
 	apiKey   string
@@ -47,7 +46,6 @@ type ExaMCPClient struct {
 	logger   *slog.Logger
 }
 
-// NewExaMCPClient: Exa MCP 클라이언트를 생성합니다.
 func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *slog.Logger) *ExaMCPClient {
 	if httpClient == nil {
 		httpClient = httputil.NewExternalAPIClient(30 * time.Second)
@@ -61,7 +59,6 @@ func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *s
 	}
 }
 
-// Search: web_search_exa 도구를 호출해 검색 결과를 반환합니다.
 func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.SearchResult, error) {
 	requestBody := map[string]any{
 		"jsonrpc": "2.0",
