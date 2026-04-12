@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// Config: OpenTelemetry 설정입니다.
 type Config struct {
 	// Enabled: true면 트레이싱을 활성화합니다.
 	Enabled bool
@@ -41,7 +40,6 @@ type Config struct {
 	SampleRate float64
 }
 
-// DefaultConfig: 기본 설정을 반환합니다. 기본값은 비활성화 상태입니다.
 func DefaultConfig() Config {
 	return Config{
 		Enabled:      false,
@@ -50,12 +48,10 @@ func DefaultConfig() Config {
 	}
 }
 
-// Provider: OpenTelemetry provider를 관리합니다.
 type Provider struct {
 	tracerProvider *sdktrace.TracerProvider
 }
 
-// NewProvider: TracerProvider를 초기화하고 글로벌로 설정합니다.
 // cfg.Enabled가 false면 no-op Provider를 반환합니다.
 func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 	if !cfg.Enabled {
@@ -115,7 +111,6 @@ func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 	return &Provider{tracerProvider: tp}, nil
 }
 
-// Shutdown: TracerProvider를 정리합니다. 애플리케이션 종료 시 호출하세요.
 // 버퍼에 남은 span들을 flush하여 데이터 유실을 방지합니다.
 func (p *Provider) Shutdown(ctx context.Context) error {
 	if p.tracerProvider == nil {
@@ -127,38 +122,31 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// IsEnabled: OpenTelemetry가 활성화되었는지 확인합니다.
 func (p *Provider) IsEnabled() bool {
 	return p.tracerProvider != nil
 }
 
-// InjectContext: context에서 trace context를 추출하여 carrier에 주입합니다.
 // gRPC metadata나 HTTP headers로 trace context를 전파할 때 사용합니다.
 func InjectContext(ctx context.Context, carrier propagation.TextMapCarrier) {
 	otel.GetTextMapPropagator().Inject(ctx, carrier)
 }
 
-// ExtractContext: carrier에서 trace context를 추출하여 새 context를 반환합니다.
 // 메시지 헤더나 HTTP headers에서 부모 trace context를 복원할 때 사용합니다.
 func ExtractContext(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
 	return otel.GetTextMapPropagator().Extract(ctx, carrier)
 }
 
-// MapCarrier: map[string]string을 TextMapCarrier로 사용할 수 있게 해주는 어댑터입니다.
 // Valkey 메시지의 Values 필드를 직접 사용할 수 있습니다.
 type MapCarrier map[string]string
 
-// Get: 주어진 키의 값을 반환합니다.
 func (c MapCarrier) Get(key string) string {
 	return c[key]
 }
 
-// Set: 주어진 키에 값을 설정합니다.
 func (c MapCarrier) Set(key, value string) {
 	c[key] = value
 }
 
-// Keys: 모든 키를 반환합니다.
 func (c MapCarrier) Keys() []string {
 	keys := make([]string, 0, len(c))
 	for k := range c {
