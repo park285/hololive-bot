@@ -25,7 +25,6 @@ import (
 	"time"
 )
 
-// MajorEventStatus: 대형 행사 상태
 type MajorEventStatus string
 
 const (
@@ -34,7 +33,6 @@ const (
 	MajorEventStatusCanceled MajorEventStatus = "canceled"
 )
 
-// MajorEventType: 행사/뉴스 유형
 type MajorEventType string
 
 const (
@@ -42,7 +40,6 @@ const (
 	MajorEventTypeNews  MajorEventType = "news"  // 공식 뉴스
 )
 
-// MajorEventLinkStatus: 링크 검증 상태
 type MajorEventLinkStatus string
 
 const (
@@ -52,7 +49,6 @@ const (
 	MajorEventLinkStatusBlocked   MajorEventLinkStatus = "blocked"
 )
 
-// MajorEvent: 홀로라이브 대형 행사/뉴스 정보 (콘서트, Fes, Expo, 공식 뉴스 등)
 // RSS Feed에서 파싱되어 DB에 저장됨
 type MajorEvent struct {
 	// Primary
@@ -87,12 +83,10 @@ type MajorEvent struct {
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
-// TableName: GORM 테이블 이름 지정
 func (MajorEvent) TableName() string {
 	return "major_events"
 }
 
-// NewMajorEvent: 새로운 대형 행사 객체를 생성합니다.
 func NewMajorEvent(title, link string, pubDate time.Time) *MajorEvent {
 	return &MajorEvent{
 		Title:      title,
@@ -105,7 +99,6 @@ func NewMajorEvent(title, link string, pubDate time.Time) *MajorEvent {
 	}
 }
 
-// NewMajorNews: 새로운 뉴스 객체를 생성합니다.
 func NewMajorNews(title, link string, pubDate time.Time) *MajorEvent {
 	return &MajorEvent{
 		Title:      title,
@@ -118,12 +111,10 @@ func NewMajorNews(title, link string, pubDate time.Time) *MajorEvent {
 	}
 }
 
-// HasEventDates: 행사 날짜가 설정되어 있는지 확인합니다.
 func (e *MajorEvent) HasEventDates() bool {
 	return e.EventStartDate != nil || len(e.EventDates) > 0
 }
 
-// GetEventStartDate: 행사 시작일을 반환합니다. DB 필드 우선, 없으면 EventDates[0] 사용.
 func (e *MajorEvent) GetEventStartDate() *time.Time {
 	if e.EventStartDate != nil {
 		return e.EventStartDate
@@ -134,7 +125,6 @@ func (e *MajorEvent) GetEventStartDate() *time.Time {
 	return nil
 }
 
-// SetEventDatesFromParsed: 파싱된 EventDates를 EventStartDate/EventEndDate로 변환합니다.
 func (e *MajorEvent) SetEventDatesFromParsed() {
 	if len(e.EventDates) == 0 {
 		return
@@ -150,23 +140,19 @@ func (e *MajorEvent) SetEventDatesFromParsed() {
 	e.EventEndDate = &endDate
 }
 
-// IsNotified: 특정 주차에 알림이 발송되었는지 확인합니다.
 func (e *MajorEvent) IsNotified(weekKey string) bool {
 	return e.NotifiedWeek == weekKey
 }
 
-// IsMonthlyNotified: 특정 월에 월간 알림이 발송되었는지 확인합니다.
 func (e *MajorEvent) IsMonthlyNotified(monthKey string) bool {
 	return e.NotifiedMonth == monthKey
 }
 
-// MarkAsNotified: 알림 발송 완료로 표시합니다.
 func (e *MajorEvent) MarkAsNotified(weekKey string, at time.Time) {
 	e.NotifiedWeek = weekKey
 	e.NotifiedAt = &at
 }
 
-// EventRoomSubscription: 대형 행사 알림 방 구독 정보 (DB 저장)
 type EventRoomSubscription struct {
 	ID        int       `json:"id" gorm:"primaryKey;autoIncrement"`
 	RoomID    string    `json:"room_id" gorm:"uniqueIndex;not null"` // 카카오톡 방 ID (고유)
@@ -174,12 +160,10 @@ type EventRoomSubscription struct {
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 
-// TableName: GORM 테이블 이름 지정
 func (EventRoomSubscription) TableName() string {
 	return "major_event_subscriptions"
 }
 
-// NewEventRoomSubscription: 새로운 행사 알림 구독 객체를 생성합니다.
 func NewEventRoomSubscription(roomID, roomName string) *EventRoomSubscription {
 	return &EventRoomSubscription{
 		RoomID:    roomID,
