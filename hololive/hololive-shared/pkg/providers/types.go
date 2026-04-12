@@ -32,7 +32,6 @@ type YouTubeStack struct {
 	StatsRepo *ytstats.StatsRepository
 }
 
-// GetService: nil-safe YouTube Service 반환.
 func (s *YouTubeStack) GetService() youtube.Service {
 	if s == nil {
 		return nil
@@ -40,7 +39,6 @@ func (s *YouTubeStack) GetService() youtube.Service {
 	return s.Service
 }
 
-// GetScheduler: nil-safe YouTube Scheduler 반환.
 func (s *YouTubeStack) GetScheduler() youtube.Scheduler {
 	if s == nil {
 		return nil
@@ -48,7 +46,6 @@ func (s *YouTubeStack) GetScheduler() youtube.Scheduler {
 	return s.Scheduler
 }
 
-// GetStatsRepo: nil-safe YouTube StatsRepository 반환.
 func (s *YouTubeStack) GetStatsRepo() *ytstats.StatsRepository {
 	if s == nil {
 		return nil
