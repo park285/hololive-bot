@@ -37,7 +37,6 @@ import (
 
 var urlPattern = regexp.MustCompile(`https?://[^\s)]+`)
 
-// SourceValidator: 도메인/x 계정 검증기.
 type SourceValidator struct {
 	officialDomains map[string]struct{}
 	mediaDomains    map[string]struct{}
@@ -47,7 +46,6 @@ type SourceValidator struct {
 	logger          *slog.Logger
 }
 
-// NewSourceValidator: 출처 검증기 생성.
 func NewSourceValidator(
 	xAllowlistPath string,
 	membersData domain.MemberDataProvider,
@@ -88,7 +86,6 @@ func NewSourceValidator(
 	return validator, nil
 }
 
-// ValidateSourceURL: URL 파싱 + 도메인/계정 검증 + 신뢰도 등급 판정을 수행합니다.
 func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
 	if v == nil {
 		return model.SourceTierCommunity, "", fmt.Errorf("source validator is nil")
@@ -139,7 +136,6 @@ func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, st
 	return model.SourceTierCommunity, parsed.String(), nil
 }
 
-// HasCorroboration: 본문 내 URL 중 official/media 출처가 하나라도 있으면 true.
 func (v *SourceValidator) HasCorroboration(text string) bool {
 	if v == nil {
 		return false

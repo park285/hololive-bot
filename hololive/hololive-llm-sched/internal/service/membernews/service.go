@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Service: 룸별 구독 멤버 뉴스를 생성합니다.
 type Service struct {
 	repository      *Repository
 	summarizer      model.Summarizer
@@ -44,7 +43,6 @@ type Service struct {
 	now             func() time.Time
 }
 
-// NewService: membernews 서비스 생성.
 func NewService(
 	repository *Repository,
 	summarizer model.Summarizer,
@@ -65,7 +63,6 @@ func NewService(
 	}
 }
 
-// SetClock: 테스트를 위한 시간 주입.
 func (s *Service) SetClock(clockFn func() time.Time) {
 	if s == nil || clockFn == nil {
 		return
@@ -73,7 +70,6 @@ func (s *Service) SetClock(clockFn func() time.Time) {
 	s.now = clockFn
 }
 
-// GenerateRoomDigest: room 기준 뉴스 다이제스트를 생성합니다.
 func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period model.Period) (*model.Digest, error) {
 	if s == nil {
 		return nil, fmt.Errorf("membernews service is nil")
@@ -155,7 +151,6 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 	return digest, nil
 }
 
-// SubscribeRoom: 방 뉴스 구독을 활성화합니다.
 func (s *Service) SubscribeRoom(ctx context.Context, roomID, roomName string) error {
 	if s == nil || s.repository == nil {
 		return fmt.Errorf("membernews repository is nil")
@@ -166,7 +161,6 @@ func (s *Service) SubscribeRoom(ctx context.Context, roomID, roomName string) er
 	return nil
 }
 
-// UnsubscribeRoom: 방 뉴스 구독을 비활성화합니다.
 func (s *Service) UnsubscribeRoom(ctx context.Context, roomID string) error {
 	if s == nil || s.repository == nil {
 		return fmt.Errorf("membernews repository is nil")
@@ -177,7 +171,6 @@ func (s *Service) UnsubscribeRoom(ctx context.Context, roomID string) error {
 	return nil
 }
 
-// IsRoomSubscribed: 방 구독 상태를 반환합니다.
 func (s *Service) IsRoomSubscribed(ctx context.Context, roomID string) (bool, error) {
 	if s == nil || s.repository == nil {
 		return false, fmt.Errorf("membernews repository is nil")
@@ -189,7 +182,6 @@ func (s *Service) IsRoomSubscribed(ctx context.Context, roomID string) (bool, er
 	return subscribed, nil
 }
 
-// ListSubscribedRooms: 구독 방 목록을 조회합니다.
 func (s *Service) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
 	if s == nil || s.repository == nil {
 		return nil, fmt.Errorf("membernews repository is nil")
@@ -201,7 +193,6 @@ func (s *Service) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRo
 	return rooms, nil
 }
 
-// WarmupSubscriptionCache: DB 기준으로 구독 캐시를 재적재합니다.
 func (s *Service) WarmupSubscriptionCache(ctx context.Context) error {
 	if s == nil || s.repository == nil {
 		return fmt.Errorf("membernews repository is nil")
