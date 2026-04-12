@@ -44,7 +44,6 @@ type ingressEnvelope struct {
 	Parsed      *adapter.ParsedCommand
 }
 
-// MessageIngress: 수신 메시지의 필터링(자기 자신/ACL)과 파싱을 담당합니다.
 type MessageIngress struct {
 	messageAdapter *adapter.MessageAdapter
 	acl            *acl.Service
