@@ -22,7 +22,6 @@ package auth
 
 import "time"
 
-// Config: 인증 서비스 동작 파라미터
 type Config struct {
 	// SessionTTL: 세션 토큰 유효 기간 (기본 7일)
 	SessionTTL time.Duration
