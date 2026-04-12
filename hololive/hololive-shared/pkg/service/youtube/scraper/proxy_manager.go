@@ -35,13 +35,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// ProxyConfig: 프록시 설정
 type ProxyConfig struct {
 	Enabled bool   // 프록시 사용 여부
 	URL     string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
 }
 
-// WithProxy: SOCKS5 프록시 설정
 func WithProxy(cfg ProxyConfig) ClientOption {
 	return func(c *Client) {
 		c.proxyConfig = cfg
@@ -92,7 +90,6 @@ func (c *Client) initHTTPClients() {
 	}
 }
 
-// SetProxyEnabled: 런타임에 프록시 사용 여부를 토글합니다.
 // proxy client가 준비되지 않았으면 true 요청은 적용되지 않고 direct 모드로 유지됩니다.
 func (c *Client) SetProxyEnabled(enabled bool) bool {
 	if c.httpClient != nil {
@@ -121,7 +118,6 @@ func (c *Client) SetProxyEnabled(enabled bool) bool {
 	return true
 }
 
-// ProxyEnabled: 현재 런타임 프록시 활성 상태를 반환합니다.
 func (c *Client) ProxyEnabled() bool {
 	return c.proxyEnabled.Load()
 }

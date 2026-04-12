@@ -28,7 +28,6 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// GetPlaylists: 채널의 플레이리스트 목록 조회 (/channel/{id}/playlists)
 func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults int) ([]*Playlist, error) {
 	if maxResults <= 0 {
 		return []*Playlist{}, nil
