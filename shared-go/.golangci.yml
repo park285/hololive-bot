@@ -46,7 +46,6 @@ linters:
     - bidichk
     - gosec
 
-    # 로깅
     - sloglint
 
     - durationcheck
