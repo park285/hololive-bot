@@ -29,7 +29,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// LoggerMiddleware: slog 기반 HTTP 접속 로깅 미들웨어 (고성능 최적화)
 // skipPaths는 다음 형식을 지원합니다:
 //   - "/exact/path": 정확히 일치하는 경로 스킵
 //   - "*/suffix": 해당 suffix로 끝나는 경로 스킵 (예: "*/stream")
@@ -159,7 +158,6 @@ func truncateUA(ua string) string {
 	return ua
 }
 
-// LogDebugf: Debug 레벨 로그를 조건부로 출력 (지연 평가)
 func LogDebugf(ctx context.Context, logger *slog.Logger, msg string, attrs ...any) {
 	if logger.Enabled(ctx, slog.LevelDebug) {
 		logger.Debug(msg, attrs...)
