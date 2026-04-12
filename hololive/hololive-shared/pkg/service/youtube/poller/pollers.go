@@ -461,13 +461,6 @@ func shouldEnqueueRoutedNotification(
 	})
 }
 
-func resolveWatermarkLastContentID(defaultLastContentID, previousLastContentID string, routePending bool) string {
-	if routePending && strings.TrimSpace(previousLastContentID) != "" {
-		return previousLastContentID
-	}
-	return defaultLastContentID
-}
-
 func observeCommunityShortsDetectionBatch(ctx context.Context, channelID string, alarmType domain.AlarmType, detectedCount int, detectedAt time.Time) {
 	if detectedCount <= 0 {
 		return
@@ -546,12 +539,10 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	).First(&watermark).Error
 
 	isInitialized := err == nil && watermark.Initialized
-	lastSeenID := normalizeContentID(domain.OutboxKindNewShort, watermark.LastContentID)
-
 	newShorts := make([]*scraper.Short, 0, len(shorts))
 	for _, short := range shorts {
 		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
-		if isInitialized && canonicalPostID == lastSeenID {
+		if isInitialized && canonicalPostID == normalizeContentID(domain.OutboxKindNewShort, watermark.LastContentID) {
 			break
 		}
 		newShorts = append(newShorts, short)
@@ -562,7 +553,6 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	trackingRows := make([]*domain.YouTubeContentAlarmTracking, 0, len(newShorts))
 	detectedAt := yttimestamp.Normalize(time.Now())
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt)
-	routePending := false
 	for _, short := range newShorts {
 		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
 		resourceVideoID := normalizeShortVideoResourceID(short.VideoID)
@@ -582,25 +572,6 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		dbVideos = append(dbVideos, dbVideo)
 
 		if isInitialized {
-			if dbVideo.PublishedAt == nil {
-				resolvedPublishedAt, resolveErr := p.client.ResolveVideoPublishedAt(ctx, resourceVideoID)
-				if resolveErr != nil {
-					slog.Warn("Failed to resolve short published_at",
-						"channel_id", channelID,
-						"video_id", resourceVideoID,
-						"error", resolveErr)
-					if p.routeDecider != nil {
-						routePending = true
-					}
-				} else if resolvedPublishedAt == nil || resolvedPublishedAt.IsZero() {
-					if p.routeDecider != nil {
-						routePending = true
-					}
-				} else {
-					dbVideo.PublishedAt = yttimestamp.NormalizePtr(resolvedPublishedAt)
-				}
-			}
-
 			logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
 
 			trackingRows = append(trackingRows, &domain.YouTubeContentAlarmTracking{
@@ -615,7 +586,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 			if dbVideo.PublishedAt != nil {
 				routePublishedAt = *dbVideo.PublishedAt
 			}
-			if p.routeDecider != nil && routePublishedAt.IsZero() {
+			if routePublishedAt.IsZero() {
 				continue
 			}
 
@@ -637,7 +608,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
-		LastContentID: resolveWatermarkLastContentID(normalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID), lastSeenID, routePending),
+		LastContentID: normalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID),
 	}); err != nil {
 		return fmt.Errorf("persist short batch: %w", err)
 	}
@@ -719,12 +690,10 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 	).First(&watermark).Error
 
 	isInitialized := err == nil && watermark.Initialized
-	lastSeenID := normalizeContentID(domain.OutboxKindCommunityPost, watermark.LastContentID)
-
 	newPosts := make([]*scraper.CommunityPost, 0, len(posts))
 	for _, post := range posts {
 		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
-		if isInitialized && canonicalPostID == lastSeenID {
+		if isInitialized && canonicalPostID == normalizeContentID(domain.OutboxKindCommunityPost, watermark.LastContentID) {
 			break
 		}
 		newPosts = append(newPosts, post)
@@ -735,24 +704,12 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 	trackingRows := make([]*domain.YouTubeContentAlarmTracking, 0, len(newPosts))
 	detectedAt := yttimestamp.Normalize(time.Now())
 	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt)
-	routePending := false
 	for _, post := range newPosts {
 		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
-		resourcePostID := normalizeCommunityResourceID(post.PostID)
 		authorPhoto := convertThumbnails(post.AuthorPhoto)
 		images := convertThumbnails(post.Images)
+		matchesKeywords := p.matchesKeywords(post.ContentText)
 		publishedAt := post.PublishedAt
-		if publishedAt == nil {
-			resolvedPublishedAt, resolveErr := p.client.ResolveCommunityPostPublishedAt(ctx, resourcePostID)
-			if resolveErr != nil {
-				slog.Warn("Failed to resolve community published_at",
-					"channel_id", channelID,
-					"post_id", canonicalPostID,
-					"error", resolveErr)
-			} else {
-				publishedAt = resolvedPublishedAt
-			}
-		}
 		publishedAt = yttimestamp.NormalizePtr(publishedAt)
 		logCommunityPostDetected(ctx, channelID, canonicalPostID, publishedAt, detectedAt)
 
@@ -772,7 +729,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 
 		dbPosts = append(dbPosts, dbPost)
 
-		if isInitialized && p.matchesKeywords(post.ContentText) {
+		if isInitialized && matchesKeywords {
 			trackingRows = append(trackingRows, &domain.YouTubeContentAlarmTracking{
 				Kind:              domain.OutboxKindCommunityPost,
 				ContentID:         canonicalPostID,
@@ -785,8 +742,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 			if dbPost.PublishedAt != nil {
 				routePublishedAt = *dbPost.PublishedAt
 			}
-			if p.routeDecider != nil && routePublishedAt.IsZero() {
-				routePending = true
+			if routePublishedAt.IsZero() {
 				continue
 			}
 			if shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
@@ -805,7 +761,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeCommunityPost,
 		Initialized:   true,
-		LastContentID: resolveWatermarkLastContentID(normalizeContentID(domain.OutboxKindCommunityPost, posts[0].PostID), lastSeenID, routePending),
+		LastContentID: normalizeContentID(domain.OutboxKindCommunityPost, posts[0].PostID),
 	}); err != nil {
 		return fmt.Errorf("persist community batch: %w", err)
 	}

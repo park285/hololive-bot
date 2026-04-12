@@ -11,6 +11,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 )
 
+func (d *Dispatcher) telemetryLoop(ctx context.Context) {
+	ticker := time.NewTicker(d.cfg.TelemetryPollInterval)
+	defer ticker.Stop()
+
+	d.processDeliveryTelemetry(ctx)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			d.processDeliveryTelemetry(ctx)
+		}
+	}
+}
+
 func (d *Dispatcher) processDeliveryTelemetry(ctx context.Context) {
 	if d == nil || d.telemetry == nil {
 		return

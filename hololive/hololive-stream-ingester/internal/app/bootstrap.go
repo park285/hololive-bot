@@ -31,7 +31,6 @@ import (
 
 type infraResources = sharedmodules.InfraModule
 
-// initStreamInfra 는 stream-ingester에 필요한 캐시/DB 리소스를 초기화합니다.
 func initStreamInfra(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*infraResources, error) {
 	module, err := sharedmodules.BuildInfraModule(ctx, cfg, logger)
 	if err != nil {

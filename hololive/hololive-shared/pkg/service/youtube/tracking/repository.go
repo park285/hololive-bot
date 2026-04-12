@@ -19,6 +19,8 @@ const alarmLatencyExceededThresholdMillis = alarmtiming.LatencyExceededThreshold
 // ReadRepository: 추적 레코드 조회 경로를 담당한다.
 type ReadRepository interface {
 	FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error)
+	ListPendingPublishedAtResolutionsPage(ctx context.Context, detectedBefore time.Time, cursor *PublishedAtResolutionCursor, limit int) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error)
+	ListPendingPublishedAtResolutions(ctx context.Context, detectedBefore time.Time, limit int) ([]PublishedAtResolutionCandidate, error)
 }
 
 // WriteRepository: 추적 레코드 업서트 경로를 담당한다.
@@ -37,6 +39,19 @@ type Repository interface {
 // GormRepository: GORM 기반 추적 저장소 구현.
 type GormRepository struct {
 	db *gorm.DB
+}
+
+type PublishedAtResolutionCandidate struct {
+	Kind       domain.OutboxKind
+	PostID     string
+	ContentID  string
+	ChannelID  string
+	DetectedAt time.Time
+}
+
+type PublishedAtResolutionCursor struct {
+	DetectedAt time.Time
+	PostID     string
 }
 
 type AlarmSentMark struct {

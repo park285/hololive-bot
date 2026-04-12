@@ -23,6 +23,7 @@ package app
 import (
 	"context"
 	"net/http"
+	"sync"
 	"testing"
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
@@ -32,19 +33,26 @@ import (
 )
 
 type fakeYouTubeService struct {
+	mu           sync.Mutex
 	setCalls     int
 	lastEnabled  bool
 	proxyEnabled bool
 }
 
 func (f *fakeYouTubeService) SetScraperProxyEnabled(enabled bool) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.setCalls++
 	f.lastEnabled = enabled
 	f.proxyEnabled = enabled
 	return true
 }
 
-func (f *fakeYouTubeService) ScraperProxyEnabled() bool { return f.proxyEnabled }
+func (f *fakeYouTubeService) ScraperProxyEnabled() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.proxyEnabled
+}
 
 func (f *fakeYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
 	return map[string]*youtube.ChannelStats{}, nil

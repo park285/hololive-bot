@@ -47,6 +47,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 type fakeMemberDataProvider struct {
@@ -239,6 +240,58 @@ func schedulerJobCount(t *testing.T, scheduler *poller.Scheduler) int {
 	return field.Len()
 }
 
+func extractScraperClientFromPoller(t *testing.T, channelPoller poller.Poller) *scraper.Client {
+	t.Helper()
+
+	value := reflect.ValueOf(channelPoller)
+	require.True(t, value.IsValid())
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+	field := value.FieldByName("client")
+	require.True(t, field.IsValid(), "client field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	client, ok := field.Interface().(*scraper.Client)
+	require.True(t, ok, "client field must be *scraper.Client")
+	return client
+}
+
+func extractResolverScraperClient(t *testing.T, resolver *poller.PendingPublishedAtResolver) *scraper.Client {
+	t.Helper()
+
+	value := reflect.ValueOf(resolver).Elem()
+	field := value.FieldByName("client")
+	require.True(t, field.IsValid(), "resolver client field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	client, ok := field.Interface().(*scraper.Client)
+	require.True(t, ok, "resolver client field must be *scraper.Client")
+	return client
+}
+
+func extractScraperRateLimiter(t *testing.T, client *scraper.Client) *scraper.RateLimiter {
+	t.Helper()
+
+	value := reflect.ValueOf(client).Elem()
+	field := value.FieldByName("rateLimiter")
+	require.True(t, field.IsValid(), "rateLimiter field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	limiter, ok := field.Interface().(*scraper.RateLimiter)
+	require.True(t, ok, "rateLimiter field must be *scraper.RateLimiter")
+	return limiter
+}
+
+func extractScraperStateStorePointer(t *testing.T, client *scraper.Client) uintptr {
+	t.Helper()
+
+	value := reflect.ValueOf(client).Elem()
+	field := value.FieldByName("stateStore")
+	require.True(t, field.IsValid(), "stateStore field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	stateStore := field.Interface()
+	require.NotNil(t, stateStore)
+	return reflect.ValueOf(stateStore).Pointer()
+}
+
 func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
 	t.Helper()
 
@@ -282,6 +335,8 @@ func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 
 	require.Len(t, registrations, 5)
@@ -305,6 +360,58 @@ func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
 	}
 }
 
+func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewLenientClient()
+	sharedRL := scraper.NewRateLimiter(time.Second)
+	cfg := config.ScraperConfig{
+		ProxyEnabled: true,
+		ProxyURL:     "socks5://proxy.internal:1080",
+		Poll: config.ScraperPoll{
+			Videos:    7 * time.Minute,
+			Shorts:    11 * time.Minute,
+			Community: 13 * time.Minute,
+			Stats:     4 * time.Hour,
+			Live:      3 * time.Minute,
+		},
+	}
+	sharedClient := buildSharedYouTubeScraperClient(cfg, cacheSvc, sharedRL)
+	registrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+		&databasemocks.Client{},
+		cfg,
+		sharedClient,
+		nil,
+		[]string{"UC_NOTIFY_A"},
+		[]string{"UC_STATS_A"},
+	)
+	resolver := buildPendingPublishedAtResolver(
+		&databasemocks.Client{},
+		sharedClient,
+		cacheSvc,
+		nil,
+		testLogger(),
+	)
+
+	require.NotNil(t, sharedClient)
+	require.NotNil(t, resolver)
+	require.NotEmpty(t, registrations)
+
+	pollerClient := extractScraperClientFromPoller(t, registrations[0].Poller)
+	resolverClient := extractResolverScraperClient(t, resolver)
+
+	require.Same(t, sharedClient, pollerClient)
+	require.Same(t, sharedClient, resolverClient)
+	require.Same(t, sharedRL, extractScraperRateLimiter(t, pollerClient))
+	require.Same(t, sharedRL, extractScraperRateLimiter(t, resolverClient))
+	require.Equal(t, extractScraperStateStorePointer(t, pollerClient), extractScraperStateStorePointer(t, resolverClient))
+	require.True(t, sharedClient.ProxyEnabled())
+
+	require.True(t, sharedClient.SetProxyEnabled(false))
+	assert.False(t, pollerClient.ProxyEnabled())
+	assert.False(t, resolverClient.ProxyEnabled())
+}
+
 func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 	t.Parallel()
 
@@ -316,7 +423,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		},
 	})
 
-	scraperScheduler, outboxDispatcher := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			ProxyEnabled: true,
 			ProxyURL:     "socks5://proxy.internal:1080",
@@ -331,16 +438,34 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		},
 		&databasemocks.Client{},
 		communityShortsEnabledChannelIDs(operationalChannels),
-		nil,
+		communityShortsEnabledChannelIDs(operationalChannels),
+		buildSharedYouTubeScraperClient(
+			config.ScraperConfig{
+				ProxyEnabled: true,
+				ProxyURL:     "socks5://proxy.internal:1080",
+				WorkerCount:  7,
+				Poll: config.ScraperPoll{
+					Videos:    5 * time.Minute,
+					Shorts:    10 * time.Minute,
+					Community: 10 * time.Minute,
+					Stats:     6 * time.Hour,
+					Live:      5 * time.Minute,
+				},
+			},
+			nil,
+			nil,
+		),
 		nil,
 		nil,
 		nil,
 		nil,
 		testLogger(),
 	)
+	require.NoError(t, err)
 
 	require.NotNil(t, scraperScheduler)
 	require.NotNil(t, outboxDispatcher)
+	require.Len(t, registrations, 5)
 
 	// active 멤버 1명 * 기본 poller 5종
 	assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
