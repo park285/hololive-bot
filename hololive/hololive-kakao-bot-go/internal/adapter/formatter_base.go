@@ -31,7 +31,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
-// ResponseFormatter: 봇의 응답 메시지를 생성하는 포맷터 (카카오톡 UI 템플릿 적용).
 type ResponseFormatter struct {
 	prefix   string
 	renderer *template.Renderer
@@ -50,7 +49,6 @@ func splitTemplateInstruction(rendered string) (instruction, body string) {
 	return templateview.SplitTemplateInstruction(rendered)
 }
 
-// NewResponseFormatter: 새로운 ResponseFormatter 인스턴스를 생성합니다.
 func NewResponseFormatter(prefix string, renderer *template.Renderer) *ResponseFormatter {
 	if stringutil.TrimSpace(prefix) == "" {
 		prefix = "!"
@@ -59,7 +57,6 @@ func NewResponseFormatter(prefix string, renderer *template.Renderer) *ResponseF
 	return &ResponseFormatter{prefix: prefix, renderer: renderer}
 }
 
-// Prefix: 현재 설정된 명령어 접두사를 반환합니다.
 func (f *ResponseFormatter) Prefix() string {
 	if f == nil {
 		return "!"
@@ -72,12 +69,10 @@ func (f *ResponseFormatter) Prefix() string {
 	return "!"
 }
 
-// FormatError: 에러 메시지를 사용자 친화적인 포맷으로 변환합니다.
 func (f *ResponseFormatter) FormatError(message string) string {
 	return ErrorMessage(message)
 }
 
-// MemberNotFound: 멤버를 찾을 수 없을 때의 에러 메시지를 생성합니다.
 func (f *ResponseFormatter) MemberNotFound(memberName string) string {
 	return f.FormatError(fmt.Sprintf("'%s' 멤버를 찾을 수 없습니다.", memberName))
 }
