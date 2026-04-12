@@ -7,28 +7,23 @@ run:
 linters:
   default: none
   enable:
-    # 기본 오류 검사
     - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
 
-    # 리소스 관리
     - bodyclose
     - rowserrcheck
     - sqlclosecheck
 
-    # Context 관리
     - contextcheck
     - noctx
 
-    # 에러 처리
     - errorlint
     - errname
     - wrapcheck
 
-    # 코드 품질
     - dupl
     - goconst
     - gocritic
@@ -40,27 +35,21 @@ linters:
     - wastedassign
     - whitespace
 
-    # 복잡도
     - gocyclo
     - gocognit
     - funlen
 
-    # 성능
     - prealloc
 
-    # 보안
     - bidichk
     - gosec
 
-    # 로깅
     - sloglint
 
-    # 기타
     - durationcheck
     - unconvert
     - nakedret
 
-    # 교차 서비스 의존 금지
     - depguard
 
   settings:
