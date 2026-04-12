@@ -21,16 +21,33 @@
 package app
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/providers"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+type fakeTestPoller struct {
+	name string
+}
+
+func (p fakeTestPoller) Poll(context.Context, string) error { return nil }
+func (p fakeTestPoller) Name() string                       { return p.name }
+
+func newPollerRegistrationTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testing.T) {
 	t.Parallel()
@@ -55,6 +72,8 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 		scraper.NewRateLimiter(time.Second),
 		nil,
 		nil,
+		[]string{"UC_NOTIFY_A", "UC_NOTIFY_B"},
+		[]string{"UC_STATS_A"},
 	)
 
 	if len(registrations) != 5 {
@@ -65,12 +84,13 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 		name     string
 		priority poller.Priority
 		interval time.Duration
+		group    providers.ChannelTargetGroup
 	}{
-		{name: "videos", priority: poller.PriorityNormal, interval: 7 * time.Minute},
-		{name: "shorts", priority: poller.PriorityLow, interval: 11 * time.Minute},
-		{name: "community", priority: poller.PriorityLow, interval: 13 * time.Minute},
-		{name: "channel_stats", priority: poller.PriorityLow, interval: 4 * time.Hour},
-		{name: "live", priority: poller.PriorityHigh, interval: 3 * time.Minute},
+		{name: "videos", priority: poller.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification},
+		{name: "shorts", priority: poller.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification},
+		{name: "community", priority: poller.PriorityLow, interval: 13 * time.Minute, group: providers.ChannelTargetGroupNotification},
+		{name: "channel_stats", priority: poller.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupStats},
+		{name: "live", priority: poller.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification},
 	}
 
 	for idx, reg := range registrations {
@@ -86,7 +106,71 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 		if reg.Interval != expected[idx].interval {
 			t.Fatalf("registrations[%d].Interval = %s, want %s", idx, reg.Interval, expected[idx].interval)
 		}
+		if reg.TargetGroup != expected[idx].group {
+			t.Fatalf("registrations[%d].TargetGroup = %q, want %q", idx, reg.TargetGroup, expected[idx].group)
+		}
+		switch reg.Poller.Name() {
+		case "channel_stats":
+			if len(reg.ChannelIDs) != 1 || reg.ChannelIDs[0] != "UC_STATS_A" {
+				t.Fatalf("registrations[%d].ChannelIDs = %#v, want [UC_STATS_A]", idx, reg.ChannelIDs)
+			}
+		default:
+			if len(reg.ChannelIDs) != 2 || reg.ChannelIDs[0] != "UC_NOTIFY_A" || reg.ChannelIDs[1] != "UC_NOTIFY_B" {
+				t.Fatalf("registrations[%d].ChannelIDs = %#v, want [UC_NOTIFY_A UC_NOTIFY_B]", idx, reg.ChannelIDs)
+			}
+		}
 	}
+}
+
+func TestBuildStreamIngesterChannelPollerRegistrations_AllExplicit(t *testing.T) {
+	t.Parallel()
+
+	postgres := &databasemocks.Client{
+		GetGormDBFunc: func() *gorm.DB {
+			return nil
+		},
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		postgres,
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+		},
+		scraper.NewRateLimiter(time.Second),
+		nil,
+		nil,
+		[]string{"UC_NOTIFY_A", "UC_NOTIFY_B"},
+		[]string{"UC_STATS_A"},
+	)
+
+	for idx, reg := range registrations {
+		if reg.Poller == nil || reg.Interval <= 0 {
+			continue
+		}
+		if !reg.HasExplicitChannelIDs {
+			t.Fatalf("registrations[%d] (%s) missing explicit channel IDs", idx, reg.Poller.Name())
+		}
+	}
+}
+
+func TestValidateExplicitPollerRegistrations_ReturnsErrorOnActiveNonExplicitRegistration(t *testing.T) {
+	t.Parallel()
+
+	err := validateExplicitPollerRegistrations([]providers.ChannelPollerRegistration{
+		providers.NewChannelPollerRegistration(
+			fakeTestPoller{name: "videos"},
+			poller.PriorityNormal,
+			time.Minute,
+		),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "videos")
 }
 
 func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testing.T) {
@@ -106,7 +190,7 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		},
 	})
 
-	scheduler, dispatcher := buildStreamIngesterYouTubeComponents(
+	scheduler, dispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
@@ -118,19 +202,24 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		},
 		postgres,
 		communityShortsEnabledChannelIDs(operationalChannels),
+		communityShortsEnabledChannelIDs(operationalChannels),
+		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		nil,
 		nil,
-		scraper.NewRateLimiter(time.Second),
 		nil,
-		testLogger(),
+		newPollerRegistrationTestLogger(),
 	)
+	require.NoError(t, err)
 
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
 	}
 	if dispatcher == nil {
 		t.Fatal("dispatcher is nil")
+	}
+	if len(registrations) != 5 {
+		t.Fatalf("len(registrations) = %d, want 5", len(registrations))
 	}
 
 	applied := scheduler.SetProxyEnabled(false)

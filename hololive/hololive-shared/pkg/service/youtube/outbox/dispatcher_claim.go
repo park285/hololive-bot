@@ -117,11 +117,10 @@ func (d *Dispatcher) fetchAndLockForPerRoomSQLite(ctx context.Context) ([]domain
 	return items, nil
 }
 
-func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) {
+func (d *Dispatcher) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) int {
 	roomsByChannel := d.collectRoomsByChannel(ctx, outboxItems)
 	d.enqueueDeliveries(ctx, outboxItems, roomsByChannel)
-	d.processPendingDeliveries(ctx)
-	d.reconcileTerminalOutboxStatuses(ctx)
+	return d.processPendingDeliveries(ctx)
 }
 
 func (d *Dispatcher) reconcileTerminalOutboxStatuses(ctx context.Context) {
@@ -197,13 +196,15 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 		d.releaseOutboxLock(ctx, item.ID)
 	}
 
-	d.logger.Info("Outbox per-room enqueue completed",
-		slog.Int("outbox_claimed", len(outboxItems)),
-		slog.Int("outbox_enqueued", enqueuedOutboxes),
-		slog.Int("outbox_no_subscribers", noSubscriberOutboxes),
-		slog.Int("subscriber_lookup_failures", subscriberLookupFailures),
-		slog.Int("enqueue_failures", enqueueFailures),
-		slog.Int("target_rooms", totalTargetRooms))
+	if len(outboxItems) > 0 || enqueuedOutboxes > 0 || noSubscriberOutboxes > 0 || subscriberLookupFailures > 0 || enqueueFailures > 0 || totalTargetRooms > 0 {
+		d.logger.Info("Outbox per-room enqueue completed",
+			slog.Int("outbox_claimed", len(outboxItems)),
+			slog.Int("outbox_enqueued", enqueuedOutboxes),
+			slog.Int("outbox_no_subscribers", noSubscriberOutboxes),
+			slog.Int("subscriber_lookup_failures", subscriberLookupFailures),
+			slog.Int("enqueue_failures", enqueueFailures),
+			slog.Int("target_rooms", totalTargetRooms))
+	}
 
 	outboxEnqueueOutboxesTotal.WithLabelValues("claimed").Add(float64(len(outboxItems)))
 	outboxEnqueueOutboxesTotal.WithLabelValues("enqueued").Add(float64(enqueuedOutboxes))
@@ -213,14 +214,14 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 	outboxEnqueueTargetRoomsTotal.Add(float64(totalTargetRooms))
 }
 
-func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
+func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
 	rows, err := d.delivery.FetchAndLock(ctx, d.cfg.BatchSize, d.cfg.LockTimeout)
 	if err != nil {
 		d.logger.Error("Failed to fetch delivery rows", slog.Any("error", err))
-		return
+		return 0
 	}
 	if len(rows) == 0 {
-		return
+		return 0
 	}
 
 	startedAt := time.Now()
@@ -236,7 +237,7 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 		d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
 		outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(len(rows)))
 		_ = d.delivery.MarkFailedRetryBatch(ctx, collectDeliveryIDs(rows), d.cfg.MaxRetries, d.cfg.RetryBackoff, "load outbox rows")
-		return
+		return len(rows)
 	}
 
 	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
@@ -276,6 +277,8 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) {
 		slog.Int("delivery_failed", result.failedDeliveries),
 		slog.Int("outbox_touched", len(touchedOutboxIDs)),
 		slog.Int("aggregate_failures", aggregateFailures))
+
+	return len(rows)
 }
 
 func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
