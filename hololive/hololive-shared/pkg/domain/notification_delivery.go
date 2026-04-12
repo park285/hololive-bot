@@ -25,7 +25,6 @@ import (
 	"time"
 )
 
-// DeliveryOutboxKind: outbox 항목 종류
 type DeliveryOutboxKind string
 
 const (
@@ -35,7 +34,6 @@ const (
 	DeliveryKindMemberNewsMonthly DeliveryOutboxKind = "MEMBER_NEWS_MONTHLY"
 )
 
-// DeliveryOutboxStatus: outbox 항목 상태
 type DeliveryOutboxStatus string
 
 const (
@@ -44,7 +42,6 @@ const (
 	DeliveryStatusFailed  DeliveryOutboxStatus = "FAILED"
 )
 
-// NotificationDeliveryOutbox: outbox 테이블 도메인 모델
 type NotificationDeliveryOutbox struct {
 	ID            int64                `gorm:"primaryKey;autoIncrement"`
 	Kind          DeliveryOutboxKind   `gorm:"column:kind;type:varchar(30);not null"`
