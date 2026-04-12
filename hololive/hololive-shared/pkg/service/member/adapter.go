@@ -28,7 +28,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// ServiceAdapter: MemberCache를 래핑하여 domain.MemberDataProvider 인터페이스를 구현하는 어댑터
 // 이를 통해 도메인 로직에서 구체적인 캐시 구현에 의존하지 않고 멤버 정보를 조회할 수 있다.
 type ServiceAdapter struct {
 	cache  *Cache
@@ -36,7 +35,6 @@ type ServiceAdapter struct {
 	logger *slog.Logger
 }
 
-// NewMemberServiceAdapter: 새로운 MemberServiceAdapter 인스턴스를 생성합니다.
 func NewMemberServiceAdapter(ctx context.Context, cache *Cache, logger *slog.Logger) *ServiceAdapter {
 	if ctx == nil {
 		ctx = context.TODO()
@@ -50,7 +48,6 @@ func NewMemberServiceAdapter(ctx context.Context, cache *Cache, logger *slog.Log
 	}
 }
 
-// FindMemberByChannelID: MembersData 인터페이스 구현
 func (a *ServiceAdapter) FindMemberByChannelID(channelID string) *domain.Member {
 	member, err := a.cache.GetByChannelID(a.ctx, channelID)
 	if err != nil {
@@ -60,7 +57,6 @@ func (a *ServiceAdapter) FindMemberByChannelID(channelID string) *domain.Member 
 	return member
 }
 
-// FindMemberByName: MembersData 인터페이스 구현
 func (a *ServiceAdapter) FindMemberByName(name string) *domain.Member {
 	member, err := a.cache.GetByName(a.ctx, name)
 	if err != nil {
@@ -70,7 +66,6 @@ func (a *ServiceAdapter) FindMemberByName(name string) *domain.Member {
 	return member
 }
 
-// FindMemberByAlias: MembersData 인터페이스 구현
 func (a *ServiceAdapter) FindMemberByAlias(alias string) *domain.Member {
 	member, err := a.cache.FindByAlias(a.ctx, alias)
 	if err != nil {
@@ -80,7 +75,6 @@ func (a *ServiceAdapter) FindMemberByAlias(alias string) *domain.Member {
 	return member
 }
 
-// GetChannelIDs: MemberDataProvider 인터페이스 구현
 func (a *ServiceAdapter) GetChannelIDs() []string {
 	channelIDs, err := a.cache.GetAllChannelIDs(a.ctx)
 	if err != nil {
@@ -90,7 +84,6 @@ func (a *ServiceAdapter) GetChannelIDs() []string {
 	return channelIDs
 }
 
-// GetAllMembers: MemberDataProvider 인터페이스 구현
 func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
 	if a == nil || a.cache == nil || a.cache.repo == nil {
 		return []*domain.Member{}
@@ -103,7 +96,6 @@ func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
 	return members
 }
 
-// WithContext: 커스텀 context를 가진 새 adapter를 생성합니다.
 func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvider {
 	if ctx == nil {
 		return a
@@ -115,7 +107,6 @@ func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvi
 	}
 }
 
-// FindMembersByName: 이름으로 매칭되는 모든 멤버를 반환합니다.
 func (a *ServiceAdapter) FindMembersByName(name string) []*domain.Member {
 	needle := strings.TrimSpace(name)
 	if needle == "" {
@@ -135,7 +126,6 @@ func (a *ServiceAdapter) FindMembersByName(name string) []*domain.Member {
 	return cloneMemberSlice(matched)
 }
 
-// FindMembersByAlias: 별명으로 매칭되는 모든 멤버를 반환합니다.
 func (a *ServiceAdapter) FindMembersByAlias(alias string) []*domain.Member {
 	needle := strings.TrimSpace(alias)
 	if needle == "" {
