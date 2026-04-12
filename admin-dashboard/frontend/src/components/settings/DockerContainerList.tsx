@@ -287,7 +287,7 @@ export const DockerContainerList = ({
 						: confirmModal.action === "start"
 							? "primary"
 							: "primary"
-				} // start=primary, restart=primary(amber handled via variant override? No confirmColor only supports primary/danger. Let's use primary for start/restart)
+				}
 			>
 				<div className="space-y-3">
 					<div className="flex items-center gap-3 mb-2">
