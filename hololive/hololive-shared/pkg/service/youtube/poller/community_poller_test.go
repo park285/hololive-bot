@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -480,4 +481,229 @@ func TestCommunityPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) 
 	var watermark domain.YouTubeContentWatermark
 	require.NoError(t, db.First(&watermark, "channel_id = ? AND watermark_type = ?", "UC_TEST", domain.WatermarkTypeCommunityPost).Error)
 	assert.Equal(t, "community:post-1", watermark.LastContentID)
+}
+
+func TestCommunityPoller_InlineFallbackResolvesPublishedAtAndEnqueues(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     "UC_TEST",
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: "old-post",
+	}).Error)
+
+	postsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Posts","content":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"backstagePostThreadRenderer":{"post":{"backstagePostRenderer":{"postId":"post-1","authorEndpoint":{"browseEndpoint":{"browseId":"UC_TEST"}},"authorText":{"runs":[{"text":"Author"}]},"authorThumbnail":{"thumbnails":[{"url":"https://img.test/a.jpg","width":88,"height":88}]},"contentText":{"runs":[{"text":"hello world"}]},"voteCount":{"simpleText":"1.2K"},"actionButtons":{"commentActionButtonsRenderer":{"replyButton":{"buttonRenderer":{"text":{"simpleText":"7"}}}}}}}}}]}}}}}]}}}`
+	postsHTML := "<script>var ytInitialData = " + postsJSON + ";</script>"
+	postHTML := `<html><head><meta itemprop="datePublished" content="2026-04-10T10:11:12+09:00"></head></html>`
+	resolveCalls := 0
+
+	client := scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
+		scraper.WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch {
+				case strings.HasSuffix(req.URL.Path, "/posts"):
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postsHTML)), Header: make(http.Header), Request: req}, nil
+				case req.URL.Path == "/post/post-1":
+					resolveCalls++
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postHTML)), Header: make(http.Header), Request: req}, nil
+				default:
+					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
+				}
+			}),
+		}),
+	)
+
+	captured := NotificationRouteRequest{}
+	poller := NewCommunityPoller(client, db, 10, nil, func(req NotificationRouteRequest) bool {
+		captured = req
+		return true
+	}, true)
+	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+
+	canonicalPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	assert.Equal(t, 1, resolveCalls)
+	assert.Equal(t, NotificationRouteRequest{
+		AlarmType:   domain.AlarmTypeCommunity,
+		ChannelID:   "UC_TEST",
+		PublishedAt: canonicalPublishedAt,
+	}, captured)
+
+	var stored struct {
+		PublishedAt *time.Time
+	}
+	require.NoError(t, db.Model(&domain.YouTubeCommunityPost{}).Select("published_at").Where("post_id = ?", "community:post-1").Take(&stored).Error)
+	require.NotNil(t, stored.PublishedAt)
+	assert.Equal(t, yttimestamp.Format(canonicalPublishedAt), stored.PublishedAt.Format(time.RFC3339Nano))
+
+	var outbox domain.YouTubeNotificationOutbox
+	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
+	assert.Contains(t, outbox.Payload, `"published_at":"`+yttimestamp.Format(canonicalPublishedAt)+`"`)
+
+	var tracking domain.YouTubeContentAlarmTracking
+	require.NoError(t, db.First(&tracking, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
+	require.NotNil(t, tracking.ActualPublishedAt)
+	assert.Equal(t, yttimestamp.Format(canonicalPublishedAt), tracking.ActualPublishedAt.Format(time.RFC3339Nano))
+}
+
+func TestCommunityPoller_InlineFallbackNotFoundSkipsNotification(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     "UC_TEST",
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: "old-post",
+	}).Error)
+
+	postsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Posts","content":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"backstagePostThreadRenderer":{"post":{"backstagePostRenderer":{"postId":"post-1","authorEndpoint":{"browseEndpoint":{"browseId":"UC_TEST"}},"authorText":{"runs":[{"text":"Author"}]},"authorThumbnail":{"thumbnails":[{"url":"https://img.test/a.jpg","width":88,"height":88}]},"contentText":{"runs":[{"text":"hello world"}]},"voteCount":{"simpleText":"1.2K"},"actionButtons":{"commentActionButtonsRenderer":{"replyButton":{"buttonRenderer":{"text":{"simpleText":"7"}}}}}}}}}]}}}}}]}}}`
+	postsHTML := "<script>var ytInitialData = " + postsJSON + ";</script>"
+	resolveCalls := 0
+	routeCalls := 0
+
+	client := scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
+		scraper.WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch {
+				case strings.HasSuffix(req.URL.Path, "/posts"):
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postsHTML)), Header: make(http.Header), Request: req}, nil
+				case req.URL.Path == "/post/post-1":
+					resolveCalls++
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("<html></html>")), Header: make(http.Header), Request: req}, nil
+				default:
+					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
+				}
+			}),
+		}),
+	)
+
+	poller := NewCommunityPoller(client, db, 10, nil, func(NotificationRouteRequest) bool {
+		routeCalls++
+		return true
+	}, true)
+	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+
+	assert.Equal(t, 1, resolveCalls)
+	assert.Zero(t, routeCalls)
+
+	var stored struct {
+		PublishedAt *time.Time
+	}
+	require.NoError(t, db.Model(&domain.YouTubeCommunityPost{}).Select("published_at").Where("post_id = ?", "community:post-1").Take(&stored).Error)
+	assert.Nil(t, stored.PublishedAt)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	assert.Zero(t, outboxCount)
+
+	var tracking domain.YouTubeContentAlarmTracking
+	require.NoError(t, db.First(&tracking, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
+	assert.Nil(t, tracking.ActualPublishedAt)
+	assert.False(t, tracking.DetectedAt.IsZero())
+
+	var sourcePost domain.YouTubeCommunityShortsSourcePost
+	require.NoError(t, db.First(&sourcePost, "kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
+	assert.Nil(t, sourcePost.ActualPublishedAt)
+	assert.Equal(t, tracking.DetectedAt, sourcePost.DetectedAt.UTC())
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
+	assert.Nil(t, alarmState.ActualPublishedAt)
+	assert.Nil(t, alarmState.AuthorizedAt)
+	assert.Nil(t, alarmState.AlarmSentAt)
+	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, alarmState.DeliveryStatus)
+
+	var watermark domain.YouTubeContentWatermark
+	require.NoError(t, db.First(&watermark, "channel_id = ? AND watermark_type = ?", "UC_TEST", domain.WatermarkTypeCommunityPost).Error)
+	assert.Equal(t, "old-post", watermark.LastContentID)
+}
+
+func TestCommunityPoller_InlineFallbackResolveErrorWarnsAndSkipsNotification(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     "UC_TEST",
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: "old-post",
+	}).Error)
+
+	postsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Posts","content":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"backstagePostThreadRenderer":{"post":{"backstagePostRenderer":{"postId":"post-1","authorEndpoint":{"browseEndpoint":{"browseId":"UC_TEST"}},"authorText":{"runs":[{"text":"Author"}]},"authorThumbnail":{"thumbnails":[{"url":"https://img.test/a.jpg","width":88,"height":88}]},"contentText":{"runs":[{"text":"hello world"}]},"voteCount":{"simpleText":"1.2K"},"actionButtons":{"commentActionButtonsRenderer":{"replyButton":{"buttonRenderer":{"text":{"simpleText":"7"}}}}}}}}}]}}}}}]}}}`
+	postsHTML := "<script>var ytInitialData = " + postsJSON + ";</script>"
+	routeCalls := 0
+
+	client := scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
+		scraper.WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch {
+				case strings.HasSuffix(req.URL.Path, "/posts"):
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postsHTML)), Header: make(http.Header), Request: req}, nil
+				case req.URL.Path == "/post/post-1":
+					return nil, errors.New("resolver boom")
+				default:
+					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
+				}
+			}),
+		}),
+	)
+
+	var logBuffer bytes.Buffer
+	previousDefaultLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(previousDefaultLogger)
+
+	poller := NewCommunityPoller(client, db, 10, nil, func(NotificationRouteRequest) bool {
+		routeCalls++
+		return true
+	}, true)
+	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+
+	assert.Zero(t, routeCalls)
+	assert.Contains(t, logBuffer.String(), "community published_at inline fallback failed")
+
+	var stored struct {
+		PublishedAt *time.Time
+	}
+	require.NoError(t, db.Model(&domain.YouTubeCommunityPost{}).Select("published_at").Where("post_id = ?", "community:post-1").Take(&stored).Error)
+	assert.Nil(t, stored.PublishedAt)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	assert.Zero(t, outboxCount)
+
+	var tracking domain.YouTubeContentAlarmTracking
+	require.NoError(t, db.First(&tracking, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
+	assert.Nil(t, tracking.ActualPublishedAt)
+	assert.False(t, tracking.DetectedAt.IsZero())
+
+	var watermark domain.YouTubeContentWatermark
+	require.NoError(t, db.First(&watermark, "channel_id = ? AND watermark_type = ?", "UC_TEST", domain.WatermarkTypeCommunityPost).Error)
+	assert.Equal(t, "old-post", watermark.LastContentID)
 }
