@@ -38,12 +38,10 @@ var (
 	kst = model.KST
 )
 
-// LLMClient: 구조화 JSON 응답 생성 인터페이스.
 type LLMClient interface {
 	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
 }
 
-// Summarizer: LLM + hard validator + deterministic fallback 요약기.
 type SummarizerImpl struct {
 	llm       LLMClient
 	searcher  sharedmodel.WebSearcher
@@ -51,7 +49,6 @@ type SummarizerImpl struct {
 	logger    *slog.Logger
 }
 
-// NewSummarizer: 요약기 생성.
 func NewSummarizer(
 	llm LLMClient,
 	searcher sharedmodel.WebSearcher,
@@ -69,7 +66,6 @@ func NewSummarizer(
 	}
 }
 
-// Summarize: 요약 생성(실패 시 deterministic fallback).
 func (s *SummarizerImpl) Summarize(ctx context.Context, input model.SummarizeInput) (*model.Digest, error) {
 	if len(input.Candidates) == 0 {
 		return newEmptyDigest(input.Period, 0), nil
@@ -224,7 +220,6 @@ func categoryLabel(cat model.Category) string {
 	}
 }
 
-// BuildDeterministicFallback: LLM 실패/검증 실패 시 고정 규칙 출력 생성.
 func BuildDeterministicFallback(period model.Period, candidates []model.FilteredCandidate) *model.Digest {
 	items := make([]model.SummaryItem, 0, min(5, len(candidates)))
 	for idx := range candidates {
