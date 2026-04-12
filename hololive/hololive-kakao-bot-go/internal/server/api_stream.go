@@ -51,17 +51,14 @@ func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 	}
 }
 
-// GetLiveStreams: 현재 라이브 방송 중인 스트림 목록을 반환합니다.
 func (h *StreamAPIHandler) GetLiveStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetLiveStreams(c)
 }
 
-// GetUpcomingStreams: 예정된 스트림 목록을 반환합니다.
 func (h *StreamAPIHandler) GetUpcomingStreams(c *gin.Context) {
 	h.sharedStreamHandler().GetUpcomingStreams(c)
 }
 
-// GetChannelStats: 채널 통계를 반환합니다. (SWR 패턴: 캐시 → DB → 백그라운드 갱신).
 func (h *StreamAPIHandler) GetChannelStats(c *gin.Context) {
 	h.sharedStreamHandler().GetChannelStats(c)
 }
@@ -79,12 +76,10 @@ func (h *MemberAPIHandler) invalidateMemberIndex() {
 	h.ensureStreamState().InvalidateMemberIndex()
 }
 
-// GetChannel: channelIds 파라미터로 여러 채널을 한 번에 조회합니다.
 func (h *StreamAPIHandler) GetChannel(c *gin.Context) {
 	h.sharedStreamHandler().GetChannel(c)
 }
 
-// SearchChannels: 이름으로 채널을 검색합니다.
 func (h *StreamAPIHandler) SearchChannels(c *gin.Context) {
 	h.sharedStreamHandler().SearchChannels(c)
 }
