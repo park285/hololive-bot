@@ -135,7 +135,6 @@ func decodeResponse(t *testing.T, body *bytes.Buffer) APIResponse {
 	return resp
 }
 
-// ---- AddAlarm ----
 
 func TestAddAlarm(t *testing.T) {
 	tests := []struct {
@@ -202,7 +201,6 @@ func TestAddAlarm(t *testing.T) {
 	}
 }
 
-// ---- RemoveAlarm ----
 
 func TestRemoveAlarm(t *testing.T) {
 	tests := []struct {
@@ -253,7 +251,6 @@ func TestRemoveAlarm(t *testing.T) {
 	}
 }
 
-// ---- GetRoomAlarmsWithTypes ----
 
 func TestGetRoomAlarmsWithTypes(t *testing.T) {
 	tests := []struct {
@@ -357,7 +354,6 @@ func TestGetRoomAlarmsView(t *testing.T) {
 	}
 }
 
-// ---- ClearRoomAlarms ----
 
 func TestClearRoomAlarms(t *testing.T) {
 	tests := []struct {
@@ -399,7 +395,6 @@ func TestClearRoomAlarms(t *testing.T) {
 	}
 }
 
-// ---- GetNextStreamInfo ----
 
 func TestGetNextStreamInfo(t *testing.T) {
 	sched := time.Now().Add(time.Hour)
@@ -465,7 +460,6 @@ func TestGetNextStreamInfo(t *testing.T) {
 	}
 }
 
-// ---- UpdateAlarmAdvanceMinutes ----
 
 func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	tests := []struct {
@@ -517,7 +511,6 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	}
 }
 
-// ---- GetAllAlarmKeys ----
 
 func TestGetAllAlarmKeys(t *testing.T) {
 	tests := []struct {
@@ -558,7 +551,6 @@ func TestGetAllAlarmKeys(t *testing.T) {
 	}
 }
 
-// ---- Health / Ready ----
 
 func TestHealthAndReady(t *testing.T) {
 	mock := &mockAlarmCRUD{}
