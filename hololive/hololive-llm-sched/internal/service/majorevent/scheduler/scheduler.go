@@ -38,7 +38,6 @@ import (
 // kst: 한국 표준시 (UTC+9)
 var kst = time.FixedZone("KST", 9*60*60)
 
-// GetWeekRange: 이번 주 월요일 00:00 KST ~ 일요일 23:59 KST 범위를 계산합니다.
 // 월요일 발송 기준: 발송 당일(월)부터 일요일까지의 이벤트를 대상으로 합니다.
 func GetWeekRange(now time.Time) (start, end time.Time) {
 	nowKST := now.In(kst)
@@ -65,7 +64,6 @@ type Formatter interface {
 	FormatMajorEventMonthlySummary(ctx context.Context, events []domain.MajorEvent, llmSummary string) string
 }
 
-// EventRepository: 스케줄러가 사용하는 Repository 메서드 인터페이스
 type EventRepository interface {
 	GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error)
 	GetEventsByDateRange(ctx context.Context, startDate, endDate time.Time, weekKey string) ([]*domain.MajorEvent, error)
@@ -106,7 +104,6 @@ func NewScheduler(
 	}
 }
 
-// SetClock: 테스트용 시간 주입.
 func (s *Scheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
@@ -165,7 +162,6 @@ func (s *Scheduler) SendWeeklyNotification(ctx context.Context) error {
 	weekKey := weekStart.Format("2006-01-02")
 	lockKey := fmt.Sprintf("majorevent:lock:weekly:%s", weekKey)
 
-	// 분산 락 획득
 	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)
