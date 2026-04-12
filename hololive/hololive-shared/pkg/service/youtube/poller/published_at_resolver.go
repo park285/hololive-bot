@@ -190,11 +190,11 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 				observePublishedAtResolverSkipped(candidate.Kind, "published_at_empty")
 				continue
 			}
-			_ = tracking.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID)
 			observePublishedAtResolutionSuccess(candidate.Kind)
 
 			result, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
 			if err != nil {
+				_ = tracking.MarkPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID, time.Now().Add(failureBackoffTTL))
 				r.logger.Warn("Pending published_at resolver failed to finalize candidate",
 					slog.String("kind", string(candidate.Kind)),
 					slog.String("post_id", candidate.PostID),
