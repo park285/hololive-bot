@@ -103,7 +103,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			return nil, fmt.Errorf("resolve community shorts operational channels: %w", err)
 		}
 
-		ytPollTargets, err = resolveYouTubePollTargets(ctx, infra.cacheService, infra.postgresService, operationalChannels)
+		ytPollTargets, err = resolveYouTubePollTargets(ctx, infra.cacheService, infra.postgresService, operationalChannels, logger)
 		if err != nil {
 			infra.cleanup()
 			return nil, err
@@ -134,11 +134,8 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		}
 	}
 
-	if warnErr := warmSubscriberCacheOnYouTubeStartup(ctx, spec.name, features.youtubeEnabled, func(ctx context.Context) error {
-		_, err := warmSubscriberCacheFromDBIfCacheCold(ctx, infra.cacheService, infra.postgresService, logger)
-		return err
-	}); warnErr != nil {
-		logger.Warn("Failed to warm subscriber cache from DB",
+	if warnErr := observeSubscriberCacheOnYouTubeStartup(ctx, spec.name, features.youtubeEnabled, infra.cacheService, logger); warnErr != nil {
+		logger.Warn("Failed to observe subscriber cache on startup",
 			slog.String("runtime", spec.name),
 			slog.Any("error", warnErr),
 		)
@@ -178,13 +175,12 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			infra.cleanup()
 			return nil, err
 		}
-		publishedAtResolver = buildPendingPublishedAtResolver(
-			infra.postgresService,
-			sharedScraperClient,
-			infra.cacheService,
-			routeDecider,
-			logger,
-		)
+			publishedAtResolver = buildPendingPublishedAtResolver(
+				infra.postgresService,
+				sharedScraperClient,
+				routeDecider,
+				logger,
+			)
 		pollTargetRefresher = newYouTubePollTargetRefresher(
 			infra.cacheService,
 			scraperScheduler,
@@ -273,23 +269,6 @@ func streamIngesterSpec(cfg *config.Config) ingestionRuntimeSpec {
 		requestedFeatures: requested,
 		features:          features,
 	}
-}
-
-func warmSubscriberCacheOnYouTubeStartup(
-	ctx context.Context,
-	runtimeName string,
-	youtubeEnabled bool,
-	warm func(context.Context) error,
-) error {
-	if !youtubeEnabled || warm == nil {
-		return nil
-	}
-
-	if err := warm(ctx); err != nil {
-		return fmt.Errorf("warm subscriber cache on youtube startup for %s: %w", runtimeName, err)
-	}
-
-	return nil
 }
 
 func youtubeScraperSpec(cfg *config.Config) ingestionRuntimeSpec {
