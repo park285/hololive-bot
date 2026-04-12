@@ -40,7 +40,6 @@ const (
 	UpdateTypeMemberNewsRunNow    = "membernews_weekly_run_now"
 )
 
-// ConfigUpdateV1: Pub/Sub로 전달되는 설정 변경 메시지.
 //
 // 현재 hololive-shared/pkg/service/configsub.ConfigUpdate 와 동일한 형태입니다.
 type ConfigUpdateV1 struct {
@@ -48,12 +47,10 @@ type ConfigUpdateV1 struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-// ScraperProxyPayloadV1: UpdateTypeScraperProxy 페이로드
 type ScraperProxyPayloadV1 struct {
 	Enabled bool `json:"enabled"`
 }
 
-// AlarmAdvanceMinutesPayloadV1: UpdateTypeAlarmAdvanceMinutes 페이로드
 type AlarmAdvanceMinutesPayloadV1 struct {
 	Minutes int `json:"minutes"`
 }
