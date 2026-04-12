@@ -8,13 +8,11 @@ import (
 	"strings"
 )
 
-// SanitizeHandler: 민감정보를 마스킹하는 slog.Handler 래퍼입니다.
 // 토큰, 패스워드, 시크릿 등을 자동으로 ***REDACTED***로 대체합니다.
 type SanitizeHandler struct {
 	inner slog.Handler
 }
 
-// NewSanitizeHandler: 민감정보 마스킹 핸들러를 생성합니다.
 func NewSanitizeHandler(inner slog.Handler) *SanitizeHandler {
 	return &SanitizeHandler{inner: inner}
 }
@@ -34,12 +32,10 @@ var sensitiveKeys = []string{
 // Bearer 토큰 패턴 (Bearer xxx 형식)
 var bearerTokenRegex = regexp.MustCompile(`Bearer\s+[A-Za-z0-9._-]+`)
 
-// Enabled: 로그 레벨 활성화 여부를 확인합니다.
 func (h *SanitizeHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.inner.Enabled(ctx, level)
 }
 
-// Handle: 로그 레코드의 민감정보를 마스킹하고 내부 핸들러로 전달합니다.
 func (h *SanitizeHandler) Handle(ctx context.Context, record slog.Record) error {
 	// 새로운 레코드 생성 (Attrs는 깊은 복사 필요)
 	newRecord := slog.NewRecord(record.Time, record.Level, record.Message, record.PC)
@@ -54,7 +50,6 @@ func (h *SanitizeHandler) Handle(ctx context.Context, record slog.Record) error 
 	return h.inner.Handle(ctx, newRecord)
 }
 
-// WithAttrs: 속성을 추가한 새로운 Handler를 반환합니다.
 func (h *SanitizeHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	// Attrs도 마스킹 적용
 	sanitized := make([]slog.Attr, 0, len(attrs))
@@ -64,7 +59,6 @@ func (h *SanitizeHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &SanitizeHandler{inner: h.inner.WithAttrs(sanitized)}
 }
 
-// WithGroup: 그룹을 추가한 새로운 Handler를 반환합니다.
 func (h *SanitizeHandler) WithGroup(name string) slog.Handler {
 	return &SanitizeHandler{inner: h.inner.WithGroup(name)}
 }
