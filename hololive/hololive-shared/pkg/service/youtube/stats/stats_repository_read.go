@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// GetLatestStats: 각 채널의 최신 통계 데이터를 조회합니다.
 func (r *StatsRepository) GetLatestStats(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
 	if r.isLatestTableAvailable() {
 		stats, err := r.getLatestStatsFromSnapshot(ctx, channelID)
@@ -50,7 +49,6 @@ func (r *StatsRepository) GetLatestStats(ctx context.Context, channelID string) 
 	return r.getLatestStatsFromHistory(ctx, channelID)
 }
 
-// GetLatestStatsForChannels: 여러 채널의 최신 통계를 한 번에 조회한다. (N+1 쿼리 방지)
 func (r *StatsRepository) GetLatestStatsForChannels(ctx context.Context, channelIDs []string) (map[string]*domain.TimestampedStats, error) {
 	if len(channelIDs) == 0 {
 		return make(map[string]*domain.TimestampedStats), nil
@@ -259,7 +257,6 @@ func isUndefinedTableError(err error) bool {
 	return false
 }
 
-// GetTopGainers: 특정 시점 이후 구독자 증가량이 가장 높은 채널 상위 목록을 조회합니다.
 func (r *StatsRepository) GetTopGainers(ctx context.Context, since time.Time, limit int) ([]domain.RankEntry, error) {
 	query := `
 		WITH latest AS (
