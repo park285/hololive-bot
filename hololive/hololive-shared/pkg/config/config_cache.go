@@ -20,7 +20,6 @@
 
 package config
 
-// ValkeyConfig: 데이터 캐싱 용도의 Redis(Valkey) 연결 설정
 type ValkeyConfig struct {
 	Host       string
 	Port       int
