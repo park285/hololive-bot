@@ -33,14 +33,12 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-// ServiceGoroutines: 개별 서비스의 goroutine 통계.
 type ServiceGoroutines struct {
 	Name       string `json:"name"`
 	Goroutines int    `json:"goroutines"`
 	Available  bool   `json:"available"`
 }
 
-// SystemStats: 시스템 리소스 통계 (통합 goroutine 포함).
 type SystemStats struct {
 	CPUUsage          float64             `json:"cpuUsage"`          // CPU 사용률 (%)
 	MemoryUsage       float64             `json:"memoryUsage"`       // 메모리 사용률 (%)
@@ -51,13 +49,11 @@ type SystemStats struct {
 	ServiceGoroutines []ServiceGoroutines `json:"serviceGoroutines"` // 서비스별 Go 루틴 통계
 }
 
-// ServiceEndpoint: 외부 서비스 health 엔드포인트 정보.
 type ServiceEndpoint struct {
 	Name string
 	URL  string
 }
 
-// Collector: 시스템 리소스 통계를 수집하는 서비스입니다.
 type Collector struct {
 	httpClient *http.Client
 	endpoints  []ServiceEndpoint
@@ -68,7 +64,6 @@ type Collector struct {
 	cached     *SystemStats
 }
 
-// NewCollector: 새 Collector를 생성합니다. Endpoints는 외부 서비스 health URL 목록입니다.
 func NewCollector(endpoints []ServiceEndpoint) *Collector {
 	return &Collector{
 		httpClient: httputil.NewInternalServiceClient(2 * time.Second),
@@ -77,7 +72,6 @@ func NewCollector(endpoints []ServiceEndpoint) *Collector {
 	}
 }
 
-// GetCurrentStats: 현재 시스템 리소스 상태를 반환합니다.
 func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
 	if stats := c.getCachedStats(); stats != nil {
 		return stats, nil
