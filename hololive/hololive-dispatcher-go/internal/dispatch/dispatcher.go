@@ -40,7 +40,6 @@ type messageSender interface {
 	SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error
 }
 
-// Dispatcher: 큐 소비 + 그룹 렌더링 + Iris 전송.
 type Dispatcher struct {
 	consumer    queueConsumer
 	sender      messageSender
@@ -50,7 +49,6 @@ type Dispatcher struct {
 	logger      *slog.Logger
 }
 
-// NewDispatcher: 디스패처 생성자.
 func NewDispatcher(
 	consumer queueConsumer,
 	sender messageSender,
@@ -88,7 +86,6 @@ func NewDispatcher(
 	}, nil
 }
 
-// RunOnce: 큐를 한 번 drain하여 그룹 단위 전송한다.
 func (d *Dispatcher) RunOnce(ctx context.Context) error {
 	envelopes, err := d.consumer.DrainBatch(ctx, d.maxBatch)
 	if err != nil {
