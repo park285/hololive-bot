@@ -388,8 +388,9 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	cacheSvc := cachemocks.NewLenientClient()
 	sharedRL := scraper.NewRateLimiter(time.Second)
 	cfg := config.ScraperConfig{
-		ProxyEnabled: true,
-		ProxyURL:     "socks5://proxy.internal:1080",
+		ProxyEnabled:        true,
+		ProxyURL:            "socks5://proxy.internal:1080",
+		PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		Poll: config.ScraperPoll{
 			Videos:    7 * time.Minute,
 			Shorts:    11 * time.Minute,
@@ -408,6 +409,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 		[]string{"UC_STATS_A"},
 	)
 	resolver := buildPendingPublishedAtResolver(
+		cfg,
 		&databasemocks.Client{},
 		sharedClient,
 		nil,
@@ -426,10 +428,12 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	require.Same(t, sharedRL, extractScraperRateLimiter(t, pollerClient))
 	require.Same(t, sharedRL, extractScraperRateLimiter(t, resolverClient))
 	require.Equal(t, extractScraperStateStorePointer(t, pollerClient), extractScraperStateStorePointer(t, resolverClient))
-	require.Equal(t, 10*time.Second, extractResolverDurationField(t, resolver, "interval"))
-	require.Equal(t, 20, extractResolverIntField(t, resolver, "batchSize"))
-	require.Equal(t, 2, extractResolverIntField(t, resolver, "maxResolvePerRun"))
-	require.Equal(t, 6*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
+	require.Equal(t, 15*time.Second, extractResolverDurationField(t, resolver, "interval"))
+	require.Equal(t, 10, extractResolverIntField(t, resolver, "batchSize"))
+	require.Equal(t, 1, extractResolverIntField(t, resolver, "maxResolvePerRun"))
+	require.Equal(t, 2*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
+	require.Equal(t, 30*time.Second, extractResolverDurationField(t, resolver, "minDetectedAge"))
+	require.Equal(t, 5*time.Minute, extractResolverDurationField(t, resolver, "failureBackoffTTL"))
 	require.True(t, sharedClient.ProxyEnabled())
 
 	require.True(t, sharedClient.SetProxyEnabled(false))
@@ -439,6 +443,71 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	value := reflect.ValueOf(resolver).Elem()
 	softLimiterField := value.FieldByName("softLimiter")
 	assert.False(t, softLimiterField.IsValid())
+}
+
+func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.ScraperConfig{
+		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
+			Enabled:           true,
+			Interval:          12 * time.Second,
+			BatchSize:         9,
+			MaxResolvePerRun:  3,
+			MaxRunDuration:    4 * time.Second,
+			MinDetectedAge:    45 * time.Second,
+			FailureBackoffTTL: 7 * time.Minute,
+		},
+	}
+
+	resolver := buildPendingPublishedAtResolver(
+		cfg,
+		&databasemocks.Client{},
+		scraper.NewClient(),
+		nil,
+		testLogger(),
+	)
+
+	require.NotNil(t, resolver)
+	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "interval"))
+	require.Equal(t, 9, extractResolverIntField(t, resolver, "batchSize"))
+	require.Equal(t, 3, extractResolverIntField(t, resolver, "maxResolvePerRun"))
+	require.Equal(t, 4*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
+	require.Equal(t, 45*time.Second, extractResolverDurationField(t, resolver, "minDetectedAge"))
+	require.Equal(t, 7*time.Minute, extractResolverDurationField(t, resolver, "failureBackoffTTL"))
+}
+
+func TestBuildPendingPublishedAtResolver_DisabledReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	resolver := buildPendingPublishedAtResolver(
+		config.ScraperConfig{
+			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
+				Enabled:  false,
+				Interval: 15 * time.Second,
+			},
+		},
+		&databasemocks.Client{},
+		scraper.NewClient(),
+		nil,
+		testLogger(),
+	)
+
+	require.Nil(t, resolver)
+}
+
+func TestBuildPendingPublishedAtResolver_ZeroValueConfigReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	resolver := buildPendingPublishedAtResolver(
+		config.ScraperConfig{},
+		&databasemocks.Client{},
+		scraper.NewClient(),
+		nil,
+		testLogger(),
+	)
+
+	require.Nil(t, resolver)
 }
 
 func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
