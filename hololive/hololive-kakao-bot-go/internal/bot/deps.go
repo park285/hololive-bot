@@ -42,7 +42,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-// Dependencies: 봇 실행에 필요한 모든 의존성을 담는 구조체 (Service Locator 패턴).
 type Dependencies struct {
 	BotSelfUser      string
 	IrisBaseURL      string
