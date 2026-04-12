@@ -40,13 +40,11 @@ import (
 const summaryCacheTTL = 24 * time.Hour
 const searchTimeout = 12 * time.Second
 
-// CacheStore: 요약 캐시 저장소 인터페이스
 type CacheStore interface {
 	Get(ctx context.Context, key string, dest any) error
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 }
 
-// EventSummarizer: LLM 기반 이벤트 요약 서비스
 type EventSummarizer struct {
 	llm      LLMClient // nil이면 비활성
 	cache    CacheStore
@@ -91,7 +89,6 @@ func normalizeConsensusConfig(cfg SummarizerConsensusConfig) SummarizerConsensus
 	return cfg
 }
 
-// NewEventSummarizer: 이벤트 요약 서비스를 생성합니다.
 // llm이 nil이면 Summarize()는 항상 빈 문자열을 반환합니다.
 func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.WebSearcher, logger *slog.Logger, opts ...SummarizerOption) *EventSummarizer {
 	s := &EventSummarizer{
@@ -112,13 +109,11 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.We
 	return s
 }
 
-// Summarize: 이벤트 목록을 LLM 구조화 출력으로 요약합니다.
 // LLM 비활성 또는 실패 시 빈 문자열을 반환합니다 (호출부에서 fallback 처리).
 func (s *EventSummarizer) Summarize(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
 	return s.SummarizeResult(ctx, events, summaryType, periodKey).Text
 }
 
-// SummarizeResult: 이벤트 목록을 요약하고 결과 출처(primary/fallback/empty)를 함께 반환합니다.
 func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.MajorEvent, summaryType SummaryType, periodKey string) SummaryResult {
 	if s.llm == nil || len(events) == 0 {
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
