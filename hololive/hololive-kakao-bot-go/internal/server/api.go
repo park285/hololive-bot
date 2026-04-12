@@ -42,7 +42,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/system"
 )
 
-// APIHandler: Hololive API 요청을 처리하는 핸들러입니다.
 // Admin Dashboard와 Tauri 앱 모두에서 사용됩니다.
 // 핸들러 메서드는 도메인별 파일로 분리됨:
 //   - api_member.go: 멤버 관리 + 프로필 조회
@@ -119,7 +118,6 @@ func (h *APIHandler) HasCommunityShortsOpsRepository() bool {
 	return h != nil && h.communityShortsOps != nil
 }
 
-// NewAPIHandler: 새로운 API 핸들러를 생성합니다.
 func NewAPIHandler(
 	repo *member.Repository,
 	memberCache *member.Cache,
