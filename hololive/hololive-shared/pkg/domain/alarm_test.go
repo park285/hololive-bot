@@ -62,7 +62,6 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 	}
 }
 
-// TestAlarmQueueEnvelope_RustCompatibility: Rust serde 생성 JSON과의 호환성 검증
 func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
 	t.Parallel()
 
@@ -102,7 +101,6 @@ func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
 	}
 }
 
-// TestAlarmQueueEnvelope_OmitsScheduleChangeMessage: schedule_change_message omitempty 검증
 func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 	t.Parallel()
 
