@@ -26,7 +26,6 @@ import (
 	"time"
 )
 
-// BackoffState: 듀얼 상태 지수 백오프 관리 (hard: 429/403, transient: 5xx)
 type BackoffState struct {
 	mu sync.Mutex
 
@@ -43,7 +42,6 @@ func NewBackoffState() *BackoffState {
 	return &BackoffState{}
 }
 
-// RecordError: hard 에러 기록 (429/403 전용, 장기 쿨다운)
 func (b *BackoffState) RecordError() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -70,7 +68,6 @@ func (b *BackoffState) RecordError() {
 		"cooldown", cooldown)
 }
 
-// RecordTransientError: transient 에러 기록 (5xx 전용, 경량 쿨다운)
 func (b *BackoffState) RecordTransientError() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -93,7 +90,6 @@ func (b *BackoffState) RecordTransientError() {
 		"cooldown", cooldown)
 }
 
-// RecordSuccess: 양쪽 상태 모두 리셋
 func (b *BackoffState) RecordSuccess() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -110,7 +106,6 @@ func (b *BackoffState) RecordSuccess() {
 	b.transientCooldown = time.Time{}
 }
 
-// HardCooldownRemaining: hard 쿨다운 잔여 시간 (fetchPageOnce 전용)
 func (b *BackoffState) HardCooldownRemaining() time.Duration {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -129,7 +124,6 @@ func (b *BackoffState) HardCooldownRemaining() time.Duration {
 	return remaining
 }
 
-// TransientCooldownRemaining: transient 쿨다운 잔여 시간 (fetchPage 진입 전용)
 func (b *BackoffState) TransientCooldownRemaining() time.Duration {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -148,7 +142,6 @@ func (b *BackoffState) TransientCooldownRemaining() time.Duration {
 	return remaining
 }
 
-// CooldownRemaining: max(hard, transient) 쿨다운 반환
 func (b *BackoffState) CooldownRemaining() time.Duration {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -179,7 +172,6 @@ func (b *BackoffState) CooldownRemaining() time.Duration {
 	return transient
 }
 
-// IsInCooldown: 쿨다운 중인지 확인
 func (b *BackoffState) IsInCooldown() bool {
 	return b.CooldownRemaining() > 0
 }

@@ -624,7 +624,6 @@ func (m *mockStatsRepository) GetTopGainers(ctx context.Context, since time.Time
 	return nil, nil
 }
 
-// TestSendMilestoneAlerts_Integration: 마일스톤 달성 시 메시지 발송 플로우 전체 테스트
 func TestSendMilestoneAlerts_Integration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
@@ -757,7 +756,6 @@ func TestSendMilestoneAlerts_Integration(t *testing.T) {
 	}
 }
 
-// TestMilestoneDetectionFlow: 구독자 증가 → 마일스톤 검출 → 메시지 생성 전체 플로우
 func TestMilestoneDetectionFlow(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}
