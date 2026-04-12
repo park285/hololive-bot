@@ -7,7 +7,7 @@
 | 항목 | 명시 내용 |
 | --- | --- |
 | 수행 기간 | 같은 `observation key` 로 고정한 `youtube_community_shorts_observation_windows` 1개 row의 `[observation_started_at, observation_ended_at)` 전체 24시간 구간을 대조 검증 대상으로 사용합니다. 관찰 창이 열려 있는 동안에는 같은 key로 누적 관찰치를 계속 수집하고, 창이 닫히면 finalized baseline 기준으로 동일한 24시간 구간 전체를 다시 대조합니다. |
-| 데이터 원천 | 기준 집합은 `youtube-community-shorts-target-baseline`, `youtube_community_shorts_observation_post_baselines`, `youtube-community-shorts-alarm-sent-history-dataset` 을 사용합니다. 게시물별 exact-once 및 누락 판정은 `youtube-community-shorts-send-counts`, `youtube-community-shorts-delivery-logs`, `youtube_content_alarm_tracking`, `youtube_notification_delivery_telemetry` 를 사용하고, SLA 대조는 `youtube-community-shorts-latency-period-summary`, `youtube-community-shorts-latency-cause-report` 를 함께 사용합니다. `/dashboard/youtube-ops`, `route-report`, `route-usage` 는 상호 검증용 보조 증적으로만 사용합니다. |
+| 데이터 원천 | 기준 집합은 `youtube-community-shorts-target-baseline`, `youtube_community_shorts_observation_post_baselines`, `youtube-community-shorts-alarm-sent-history-dataset` 을 사용합니다. 게시물별 exact-once 및 누락 판정은 `youtube-community-shorts-send-counts`, `youtube-community-shorts-delivery-logs`, `youtube_content_alarm_tracking`, `youtube_notification_delivery_telemetry` 를 사용하고, 운영 요약은 `youtube-community-shorts-continuous-observation-report`, `youtube-community-shorts-channel-summary` 로 확인합니다. SLA 대조는 `youtube-community-shorts-latency-period-summary`, `youtube-community-shorts-latency-cause-report` 를 함께 사용하고, `route-report`, `route-usage` 는 상호 검증용 보조 증적으로만 사용합니다. |
 | 비교 범위 | 비교 대상은 `COMMUNITY_POST`, `NEW_SHORT` 두 알람 유형뿐입니다. 같은 observation key 안에서 `alarm_enabled = true` 인 운영 채널의 `channel_id + alarm_type` route subset만 포함하고, 게시물 대조 단위는 canonical key `alarm_type + channel_id + post_id` 로 고정합니다. 다른 알람 유형, 비대상 route, UI 변경 여부는 이 대조 검증 범위에 포함하지 않습니다. |
 | 판정 기준 | SLA 시작점은 `actual_published_at` 이며 값이 없을 때만 `detected_at` 을 fallback 으로 사용합니다. exact-once 합격선은 각 canonical post key마다 final success 증적이 정확히 1회 존재하고 `duplicate_success_posts = 0`, `no_success = 0`, `outbox_missing = 0` 인 상태입니다. 내부 원인 기준 `actual_published_at -> alarm_sent_at` 지연이 2분을 넘기면 SLA 실패로 기록하되 알람은 늦더라도 정확히 1회 발송돼야 하며, 외부 수집 지연(`delay_source = external_collection`)은 기록 대상이지만 실패 판정에는 넣지 않습니다. |
 
@@ -22,8 +22,8 @@
 
 ## Verification Rhythm
 
-- 배포 직후 `0h-1h`: `/dashboard/youtube-ops` 는 60초 자동 갱신으로 계속 열어 두고, `youtube-community-shorts-continuous-observation-report -watch` 는 같은 observation key로 즉시 시작합니다. 수동 재판독이 필요할 때는 `send-counts` 와 `latency-period-summary` 를 `5분` 간격으로 다시 수집합니다.
-- 배포 후 `1h-24h`: 대시보드는 계속 60초 단위로 갱신하되 운영자 판독은 `15분` 간격으로 수행합니다.
+- 배포 직후 `0h-1h`: `youtube-community-shorts-continuous-observation-report -watch` 는 같은 observation key로 즉시 시작하고, 운영자는 `latest.md` 또는 `latest.json` 의 channel summary / send counts 섹션을 `5분` 간격으로 다시 확인합니다. 수동 재판독이 필요할 때는 `send-counts` 와 `latency-period-summary` 를 같은 observation key로 재수집합니다.
+- 배포 후 `1h-24h`: continuous observation snapshot은 계속 누적하되 운영자 판독은 `15분` 간격으로 수행합니다.
 - `route-report` 와 `route-usage` 확인은 배포 직후 즉시 1회 수행하고, 최근 게시물이 실제로 잡히기 전까지 `15분` 간격으로 다시 확인합니다.
 - `delivery-logs` 는 `detectedUnsent`, `pending`, `duplicate`, `over_2m_posts` 같은 이상 징후가 보일 때 즉시 조회합니다.
 
@@ -35,7 +35,7 @@
 
 1. 배포 완료 시각을 `CUTOVER_AT` 으로 기록합니다.
 2. 이후 `send-counts`, `delivery-logs`, `latency-cause-report` 등 observation query는 모두 같은 `-observation-runtime youtube-scraper -observation-cutover "$CUTOVER_AT"` 조합으로 실행합니다. 운영자는 가능하면 `youtube-community-shorts-continuous-observation-report -watch` 를 먼저 켜서 같은 observation key의 baseline, channel summary, send counts, delivery logs, latency report snapshot을 계속 파일로 남깁니다.
-3. `/dashboard/youtube-ops` 를 열고 `60초` 자동 갱신이 동작하는지 확인합니다.
+3. `youtube-community-shorts-continuous-observation-report -watch` 가 첫 snapshot을 썼는지 확인하고, `latest.md` 또는 `latest.json` 에 channel summary / send counts / latency report 섹션이 모두 보이는지 확인합니다.
 4. `route-report` 를 먼저 1회 실행해 `runtime final owner = youtube-scraper`, `big-bang enabled = true` 를 확인합니다.
 
 ### 2. 배포 직후 기준 스냅샷을 채집합니다
@@ -46,8 +46,8 @@
 
 | Evidence source | Immediate check | Missing judgment |
 | --- | --- | --- |
-| dashboard (`/dashboard/youtube-ops`) | 전체 카드와 채널 행이 보이고 새로고침 시각이 계속 움직입니다. | 카드가 비어 있거나, 운영자가 본 새로고침 시각이 `120초` 이상 멈췄거나, 합계/행이 렌더링되지 않으면 `metric evidence missing` 으로 둡니다. |
-| `send-counts` | 같은 observation key summary와 post row가 출력됩니다. | 대시보드에서 recent post가 보이는데 결과가 비어 있거나, `detectedPostCount` 와 post row 수 불일치가 즉시 재실행 후에도 남아 있으면 `metric evidence missing` 으로 둡니다. |
+| `continuous-observation-report` snapshot | 같은 observation key의 `latest.*` 또는 새 snapshot 파일에 channel summary, send counts, latency report 섹션이 모두 기록됩니다. | snapshot이 생성되지 않거나, 필요한 섹션이 비어 있거나, 새 수집 시각이 `15분` 이상 갱신되지 않으면 `metric evidence missing` 으로 둡니다. |
+| `send-counts` | 같은 observation key summary와 post row가 출력됩니다. | observation snapshot에 recent post/채널 변화가 보이는데 결과가 비어 있거나, summary row와 post row 수 불일치가 즉시 재실행 후에도 남아 있으면 `metric evidence missing` 으로 둡니다. |
 | `delivery-logs` | 같은 observation key row가 나오고 `truncated = true` 가 아닙니다. | `send-counts` 에 send activity가 있는데 같은 post의 `delivery audit` 로그가 없거나, 결과가 잘린 상태면 `log evidence missing` 으로 둡니다. |
 | `latency-period-summary` | `last_15m`, `last_1h`, `last_24h` period row가 모두 나옵니다. | 필요한 period row가 없거나 `exceededPostCount` 변화가 period summary와 맞지 않으면 `metric evidence missing` 으로 둡니다. |
 | `latency-cause-report` | 같은 observation key의 `observation_window` row와 `over_2m` detail table이 나옵니다. | `observation_window` row가 없거나 `over_2m_posts` 와 detail row/원인 집계가 맞지 않으면 `metric evidence missing` 으로 둡니다. |
@@ -57,7 +57,7 @@
 
 ### 3. 배포 후 첫 1시간은 5분 간격으로 반복 점검합니다
 
-1. 대시보드에서 `detectedPostCount`, `successPostCount`, `detectedUnsentPostCount`, `pendingPostCount`, `exceededPostCount` 를 먼저 읽습니다.
+1. continuous observation snapshot의 channel summary / send counts / latency sections에서 `detectedPostCount`, `successPostCount`, `detectedUnsentPostCount`, `pendingPostCount`, `exceededPostCount` 성격의 집계를 먼저 읽습니다.
 2. 아래 조건 중 하나라도 보이면 같은 observation key로 `send-counts` 를 즉시 다시 실행합니다.
    - `successPostCount < detectedPostCount`
    - `detectedUnsentPostCount > 0`
@@ -70,7 +70,7 @@
 
 ### 4. 배포 후 1시간부터 24시간까지는 15분 간격으로 같은 절차를 반복합니다
 
-1. 대시보드 `60초` 자동 갱신은 계속 유지합니다.
+1. continuous observation snapshot 누적 수집은 계속 유지합니다.
 2. 운영자 판독 주기만 `15분` 으로 낮추고, 3단계의 조회 순서와 판정 순서를 그대로 유지합니다.
 3. recent post가 충분히 쌓여 `actual = new_only_verified` 와 `delivery_path = youtube_outbox_dispatcher` 가 안정적으로 보일 때까지 route 증적 확인을 계속합니다.
 4. 어느 시점이든 증적 누락이 다시 발생하면 그 시점 판정은 닫지 말고, 동일한 observation key로 재수집 후 이어서 확인합니다.
@@ -85,7 +85,7 @@
 | `send-counts` 에 send activity가 있는데 `delivery audit` 로그가 없음 | `delivery-logs` | 로그 증적 누락입니다. | `-limit` 를 늘려 재조회하고, 그래도 없으면 `log evidence missing` 으로 기록한 채 판정을 보류합니다. |
 | `delay_source = external_collection` 이고 final success가 존재함 | `send-counts`, `delivery-logs` | 외부 수집 지연 기록입니다. 실패 판정은 아닙니다. | 지연만 기록하고 exact-once 검증은 success 1회 여부로 닫습니다. |
 | `delay_source = internal_delivery` 또는 `job_failure` 흔적이 있지만 final success가 정확히 1회 존재함 | `send-counts`, `delivery-logs` | 내부 원인 지연이지만 누락은 아닙니다. | `2분 초과 기록` 으로 남기고, duplicate가 없으면 exact-once 는 합격으로 닫습니다. |
-| dashboard/period summary/route evidence 가 비어 있어 상호 검증이 안 됨 | dashboard, `latency-period-summary`, route docs | 지표 증적 누락입니다. | 즉시 재수집하고, 다음 주기에도 비어 있으면 해당 시점 판정을 열어 둡니다. |
+| observation snapshot/period summary/route evidence 가 비어 있어 상호 검증이 안 됨 | `continuous-observation-report`, `latency-period-summary`, route docs | 지표 증적 누락입니다. | 즉시 재수집하고, 다음 주기에도 비어 있으면 해당 시점 판정을 열어 둡니다. |
 
 ### 6. 24시간 종료 시점에 최종 클로즈아웃을 수행합니다
 
@@ -100,11 +100,11 @@
 
 | Metric / Signal | Primary Source | Unit | Expected Collection Cadence | Omission Judgment |
 | --- | --- | --- | --- | --- |
-| `detectedPostCount`, `successPostCount`, `detectedUnsentPostCount` | `YOUTUBE_COMMUNITY_SHORTS_OPERATIONS_DASHBOARD.md` | posts | dashboard refresh `60s`, operator review `5m` for first hour then `15m` | `successPostCount < detectedPostCount` or `detectedUnsentPostCount > 0` 이면 누락 후보입니다. 즉시 `send-counts` 로 게시물 목록을 좁힙니다. |
-| `pendingPostCount` | `YOUTUBE_COMMUNITY_SHORTS_OPERATIONS_DASHBOARD.md` | posts | dashboard refresh `60s`, operator review `5m` for first hour then `15m` | `pendingPostCount > 0` 이면 아직 `alarm_sent_at` 가 닫히지 않은 게시물이 있다는 뜻입니다. 다음 수집 주기에도 같은 post가 남아 있으면 누락 후보를 계속 유지하고 success가 생길 때까지 닫지 않습니다. |
+| `detectedPostCount`, `successPostCount`, `detectedUnsentPostCount` | `YOUTUBE_COMMUNITY_SHORTS_CONTINUOUS_OBSERVATION_REPORT.md`, `YOUTUBE_COMMUNITY_SHORTS_CHANNEL_SUMMARY_LAST_24H.md` | posts | observation snapshot refresh `5m` for first hour then `15m`; channel summary on demand | `successPostCount < detectedPostCount` or `detectedUnsentPostCount > 0` 이면 누락 후보입니다. 즉시 `send-counts` 로 게시물 목록을 좁힙니다. |
+| `pendingPostCount` | `YOUTUBE_COMMUNITY_SHORTS_CONTINUOUS_OBSERVATION_REPORT.md`, `YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md` | posts | observation snapshot refresh `5m` for first hour then `15m`; send-counts on demand | `pendingPostCount > 0` 이면 아직 `alarm_sent_at` 가 닫히지 않은 게시물이 있다는 뜻입니다. 다음 수집 주기에도 같은 post가 남아 있으면 누락 후보를 계속 유지하고 success가 생길 때까지 닫지 않습니다. |
 | `duplicate alarm verdict`, `duplicate_posts`, `duplicate_success_posts` | `YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md` | verdict, posts | `5m` for first hour then `15m`, plus on demand when dashboard totals mismatch | 기대값은 `verdict = pass`, `duplicate_posts = 0`, `duplicate_success_posts = 0` 입니다. 중복은 누락과 별도 실패이지만, 같은 post가 `status != ok` 이면 발송 상태를 미해결로 유지합니다. |
 | per-post `status` (`ok`, `no_success`, `outbox_missing`, `failed_attempts`, `duplicate_success`) | `YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md` | post status | `5m` for first hour then `15m`, plus on demand on anomaly | `no_success` 또는 `outbox_missing` 은 즉시 누락 후보입니다. `failed_attempts` 는 최종 success가 있으면 회복된 시도로 보되, success가 없으면 누락 후보로 유지합니다. |
-| `exceededPostCount`, `averageLatencyMillis`, `maxLatencyMillis` | `YOUTUBE_COMMUNITY_SHORTS_OPERATIONS_DASHBOARD.md`, `YOUTUBE_COMMUNITY_SHORTS_LATENCY_PERIOD_SUMMARY.md` | posts, milliseconds | dashboard refresh `60s`; latency summary `5m` for first hour then `15m` | 2분 초과는 누락 자체가 아니라 지연 기록입니다. 다만 같은 post가 `exceeded` 이면서 success가 없으면 누락 후보로 계속 추적합니다. |
+| `exceededPostCount`, `averageLatencyMillis`, `maxLatencyMillis` | `YOUTUBE_COMMUNITY_SHORTS_CONTINUOUS_OBSERVATION_REPORT.md`, `YOUTUBE_COMMUNITY_SHORTS_LATENCY_PERIOD_SUMMARY.md` | posts, milliseconds | observation snapshot refresh `5m` for first hour then `15m`; latency summary `5m` for first hour then `15m` | 2분 초과는 누락 자체가 아니라 지연 기록입니다. 다만 같은 post가 `exceeded` 이면서 success가 없으면 누락 후보로 계속 추적합니다. |
 | `publish_to_detect_ms`, `publish_to_event_ms`, `delay_source`, `internal_delay_cause` | `YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`, `YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md` | milliseconds, enums | on demand whenever a post is pending, unsent, or over 2 minutes | `delay_source = external_collection` 단독이면 누락으로 보지 않습니다. `internal_delivery` 또는 `job_failure` 흔적과 함께 final success가 없으면 누락 후보를 유지합니다. |
 | `internal_system_cause_posts`, `excluded_external_delay_posts`, `queue_wait_cause_posts`, `retry_accumulation_cause_posts`, `job_failure_cause_posts`, over-2m detail rows | `YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md` | posts, milliseconds, enums | on demand whenever `exceededPostCount > 0` or final 24h closeout | `excluded_external_delay_posts` 는 외부 시스템 지연 참고 건수이며 실패 집계에는 넣지 않습니다. observation key의 `observation_window` row가 없거나, 초과 게시물 detail row와 집계 bucket이 맞지 않으면 2분 초과 판정을 닫지 않습니다. |
 | `actual`, `observed_paths`, `delivery_path` | `YOUTUBE_COMMUNITY_SHORTS_CHANNEL_ROUTE_VERIFICATION.md`, `YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md` | route state, path count | immediately after deploy, then `15m` until recent posts are observed on the new path | 경로 이상 자체가 누락 확정은 아닙니다. 다만 `new_only_verified` 가 아니거나 `youtube_outbox_dispatcher` 외 경로가 보이면 같은 post를 `send-counts` 와 묶어 누락 후보 여부를 다시 판정합니다. |
@@ -133,13 +133,13 @@
 
 | Metric / Decision | Metric source | Post correlation key | Event evidence to join | Mapping rule |
 | --- | --- | --- | --- | --- |
-| `detectedPostCount` | dashboard | `alarm_type + channel_id + post_id` | `send-counts` 의 post row 1건 | 같은 observation key에서 `detectedPostCount` 는 `send-counts` row 수와 1:1로 대응해야 합니다. 게시물 기준 시각은 `COALESCE(actual_published_at, detected_at)` 입니다. |
-| `alarmSentPostCount` | dashboard | same post key | `outbox_id` 존재 또는 delivery telemetry 활동 존재 | 게시물이 전송 파이프라인에 진입했는지 보는 지표입니다. `outbox_count > 0` 이거나 success/failure attempt 흔적이 있으면 send activity가 있다고 봅니다. |
-| `successPostCount` | dashboard | same post key | `delivery audit` success 또는 `last_success_at` | 이 값은 “최소 1회 성공이 있었는가”를 뜻합니다. 정확히 1회 보장은 이 지표만으로 닫지 말고 `duplicate alarm verdict` 를 반드시 같이 봅니다. |
+| `detectedPostCount` | continuous observation report, channel summary | `alarm_type + channel_id + post_id` | `send-counts` 의 post row 1건 | 같은 observation key에서 summary 집계는 `send-counts` row 수와 1:1로 대응해야 합니다. 게시물 기준 시각은 `COALESCE(actual_published_at, detected_at)` 입니다. |
+| `alarmSentPostCount` | continuous observation report, channel summary | same post key | `outbox_id` 존재 또는 delivery telemetry 활동 존재 | 게시물이 전송 파이프라인에 진입했는지 보는 지표입니다. `outbox_count > 0` 이거나 success/failure attempt 흔적이 있으면 send activity가 있다고 봅니다. |
+| `successPostCount` | continuous observation report, channel summary | same post key | `delivery audit` success 또는 `last_success_at` | 이 값은 “최소 1회 성공이 있었는가”를 뜻합니다. 정확히 1회 보장은 이 지표만으로 닫지 말고 `duplicate alarm verdict` 를 반드시 같이 봅니다. |
 | `duplicate alarm verdict`, `duplicate_success_posts` | `send-counts` | same post key + `room_id` | success audit rows grouped by `post_id + room_id` | exact-once 합격선입니다. 같은 게시물에서 `success_send_count > success_room_count` 이면 duplicate로 판정합니다. |
-| `detectedUnsentPostCount` | dashboard | same post key | `send-counts.status in (no_success, outbox_missing)` | final success 증적이 아직 없는 게시물 후보를 좁히는 첫 단계입니다. 이 값이 0이 아니면 반드시 post row 목록으로 내려갑니다. |
-| `pendingPostCount` | dashboard | same post key | tracking row `alarm_sent_at`, final result log | `pending` 은 tracking closeout 기준입니다. `send-counts` 에서 먼저 `last_success_at` 이 비어 있는 post를 보고, 값이 어긋나면 tracking row와 `outbox_final_result` 로그로 최종 닫힘 여부를 확인합니다. |
-| `exceededPostCount` | dashboard, latency summary | same post key | `latency_classification.status = exceeded`, `latency_classification.*` | 2분 초과 post를 좁히는 지표입니다. 원인 판정은 `delay_source`, `internal_delay_cause`, `publish_to_detect_ms`, `queue_wait_ms`, `retry_accumulation_ms`, `job_failure_detected` 로 이어서 읽습니다. |
+| `detectedUnsentPostCount` | continuous observation report, channel summary | same post key | `send-counts.status in (no_success, outbox_missing)` | final success 증적이 아직 없는 게시물 후보를 좁히는 첫 단계입니다. 이 값이 0이 아니면 반드시 post row 목록으로 내려갑니다. |
+| `pendingPostCount` | continuous observation report, send-counts | same post key | tracking row `alarm_sent_at`, final result log | `pending` 은 tracking closeout 기준입니다. `send-counts` 에서 먼저 `last_success_at` 이 비어 있는 post를 보고, 값이 어긋나면 tracking row와 `outbox_final_result` 로그로 최종 닫힘 여부를 확인합니다. |
+| `exceededPostCount` | continuous observation report, latency summary | same post key | `latency_classification.status = exceeded`, `latency_classification.*` | 2분 초과 post를 좁히는 지표입니다. 원인 판정은 `delay_source`, `internal_delay_cause`, `publish_to_detect_ms`, `queue_wait_ms`, `retry_accumulation_ms`, `job_failure_detected` 로 이어서 읽습니다. |
 | external vs internal delay 판정 | `send-counts`, `delivery-logs` | same post key | `telemetry_source = outbox_final_result` + `latency_classification.delay_source` | `external_collection` 단독이면 기록 대상이지 실패 판정은 아닙니다. `internal_delivery` 또는 `job_failure` 면 늦더라도 final success 1회 증적이 반드시 있어야 합니다. |
 
 ### 3. Operator Trace Order
@@ -155,7 +155,7 @@
 
 아래 조건을 모두 만족해야 “배포 직후 24시간 동안 누락 0건”으로 닫습니다.
 
-1. 대시보드 기준 `successPostCount == detectedPostCount`, `detectedUnsentPostCount == 0`, `pendingPostCount == 0`
+1. continuous observation snapshot 또는 channel summary 기준 `successPostCount == detectedPostCount`, `detectedUnsentPostCount == 0`, `pendingPostCount == 0`
 2. `send-counts` 기준 `duplicate alarm verdict = pass`, `duplicate_success_posts = 0`
 3. `send-counts` 결과에 `status = no_success` 또는 `status = outbox_missing` 인 post 가 없음
 4. 2분 초과 post 는 모두 `latency-cause-report` 또는 `delivery-logs`/`send-counts` 로 원인이 기록돼 있고, final success 증적이 존재함
@@ -192,7 +192,7 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-
   -period last_24h=24h
 ```
 
-운영 대시보드는 `/dashboard/youtube-ops` 를 사용합니다.
+운영 요약은 `youtube-community-shorts-continuous-observation-report` snapshot과 `youtube-community-shorts-channel-summary` 결과를 사용합니다.
 route usage 상세 SQL은 `YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md` 절차를 그대로 사용합니다.
 
 ## Audit Trail
@@ -207,7 +207,7 @@ route usage 상세 SQL은 `YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md` 절
 | 보관 루트 | 기본 경로는 `artifacts/youtube-community-shorts-continuous-observation/<runtime>-<cutover>/` 를 사용합니다. 수동 경로를 썼다면 실제 절대/상대 경로를 그대로 남깁니다. |
 | 쿼리 증적 위치 | 실행한 CLI, SQL, dashboard 재확인 시각, 재실행 이유를 `audit/queries.md` 또는 동등한 파일에 원문 그대로 저장합니다. 명령 옵션과 `-observation-runtime`, `-observation-cutover` 값이 빠지면 안 됩니다. |
 | 로그 증적 위치 | `delivery audit` 추출본, 필요한 서비스 로그, `rg`/`grep` 재조회 결과를 `audit/logs/` 아래 또는 동등 경로에 저장하고 사용한 파일명을 적습니다. |
-| 스크린샷 증적 위치 | `/dashboard/youtube-ops` 또는 route 화면을 판정 근거로 썼다면 `audit/screenshots/` 아래 캡처 파일 경로와 캡처 시각을 남깁니다. 사용하지 않았으면 `not used` 를 명시합니다. |
+| 화면/렌더 증적 위치 | route 화면 또는 rendered snapshot을 판정 근거로 썼다면 `audit/screenshots/` 아래 캡처 파일 경로와 캡처 시각을 남깁니다. 사용하지 않았으면 `not used` 를 명시합니다. |
 | snapshot 증적 위치 | 판정에 사용한 `latest.md`, `latest.json`, `snapshot-YYYYMMDD-HHMMSS.*` 파일명을 남깁니다. final closeout은 finalized snapshot 파일을 반드시 포함합니다. |
 | 최종 판정 요약 | `exact_once_verdict`, `internal_over_2m_verdict`, `external_collection_delay_posts`, `open_missing_candidates`, `open_evidence_gaps` 를 함께 적어 최종 closeout 당시 열린 항목이 있었는지 재현 가능하게 남깁니다. |
 
@@ -256,7 +256,7 @@ notes: <rerun reason, unresolved items, follow-up timestamp>
 ## Related Runbooks
 
 - `YOUTUBE_COMMUNITY_SHORTS_CONTINUOUS_OBSERVATION_REPORT.md`
-- `YOUTUBE_COMMUNITY_SHORTS_OPERATIONS_DASHBOARD.md`
+- `YOUTUBE_COMMUNITY_SHORTS_CHANNEL_SUMMARY_LAST_24H.md`
 - `YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`
 - `YOUTUBE_COMMUNITY_SHORTS_LATENCY_PERIOD_SUMMARY.md`
 - `YOUTUBE_COMMUNITY_SHORTS_LATENCY_CAUSE_REPORT.md`

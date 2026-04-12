@@ -8,7 +8,6 @@ admin-dashboard/backend/src/holo/types/milestones.rs:180
 admin-dashboard/backend/src/config.rs:260
 admin-dashboard/backend/src/config/security.rs:220
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
-admin-dashboard/frontend/src/features/youtube-ops/pages/YouTubeOpsPage.tsx:480
 scripts/logs/logs.sh:760
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
 hololive/hololive-kakao-bot-go/internal/service/chzzk/client.go:620
