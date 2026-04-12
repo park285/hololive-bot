@@ -26,7 +26,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ClientHints: 브라우저 Client Hints 정보를 담는 구조체입니다.
 // User-Agent 축소 정책에 따라 정확한 기기 정보를 얻으려면 Client Hints를 사용해야 합니다.
 //
 // 예시 (기존 UA vs Client Hints):
@@ -51,7 +50,6 @@ type ClientHints struct {
 	FullVersionList string `json:"fullVersionList,omitempty"`
 }
 
-// ParseClientHints: HTTP 요청 헤더에서 Client Hints를 파싱합니다.
 // 표준 Sec-CH-UA-* 헤더를 읽어 ClientHints 구조체로 반환합니다.
 //
 // 참고: 브라우저가 Client Hints를 지원하지 않거나 헤더가 없으면 빈 값이 반환됩니다.
@@ -78,12 +76,10 @@ func unquote(s string) string {
 	return s
 }
 
-// HasClientHints: Client Hints 정보가 있는지 확인합니다.
 func (ch ClientHints) HasClientHints() bool {
 	return ch.Platform != "" || ch.Model != "" || ch.PlatformVersion != ""
 }
 
-// Summary: Client Hints를 요약 문자열로 반환합니다.
 // 로그 표시용으로 사람이 읽기 쉬운 형태로 반환합니다.
 //
 // 예시:
@@ -203,7 +199,6 @@ func formatArchitecture(arch, bitness string) string {
 	return arch + bitness
 }
 
-// ToLogFields: 로그에 포함할 필드 맵을 반환합니다.
 // 값이 있는 필드만 포함됩니다.
 // Windows의 경우 내부 버전(13, 14, 15)을 사용자 친화적 버전(10, 11)으로 변환합니다.
 func (ch ClientHints) ToLogFields() map[string]any {
@@ -244,7 +239,6 @@ const clientHintsToRequest = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, "
 	"Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, " +
 	"Sec-CH-UA-Full-Version-List"
 
-// ClientHintsMiddleware: 모든 응답에 Accept-CH 헤더를 추가하여
 // 브라우저에게 Client Hints를 요청하는 미들웨어입니다.
 //
 // 브라우저는 이 헤더를 받은 후 다음 요청부터 Sec-CH-UA-* 헤더를 전송합니다.
