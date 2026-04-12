@@ -1,7 +1,10 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +16,7 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
-func TestResolveYouTubePollTargets_UsesCacheBeforeDB(t *testing.T) {
+func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceEvenWhenCacheSuperset(t *testing.T) {
 	original := loadAlarmChannelIDsFromRepository
 	t.Cleanup(func() {
 		loadAlarmChannelIDsFromRepository = original
@@ -23,106 +26,179 @@ func TestResolveYouTubePollTargets_UsesCacheBeforeDB(t *testing.T) {
 	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
 		assert.Equal(t, t.Context(), ctx)
 		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
-		return []string{"UCmiko", "UCunknown", "UCmiko"}, nil
-	}
-
-	dbCalls := 0
-	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
-		dbCalls++
-		assert.Equal(t, t.Context(), ctx)
-		return []string{"UCmiko"}, nil
-	}
-
-	targets, err := resolveYouTubePollTargets(
-		t.Context(),
-		cacheSvc,
-		&databasemocks.Client{},
-		[]communityShortsOperationalChannel{
-			{ownerLabel: "Pekora", channelID: "UCpekora", enabled: true},
-			{ownerLabel: "Miko", channelID: "UCmiko", enabled: true},
-			{ownerLabel: "Missing", channelID: "", enabled: false},
-		},
-	)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
-	assert.Equal(t, 1, targets.DroppedAlarmTargets)
-	assert.Equal(t, 1, dbCalls)
-}
-
-func TestResolveYouTubePollTargets_FallsBackToDBWhenCacheEmpty(t *testing.T) {
-	original := loadAlarmChannelIDsFromRepository
-	t.Cleanup(func() {
-		loadAlarmChannelIDsFromRepository = original
-	})
-
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
-		assert.Equal(t, t.Context(), ctx)
-		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
-		return nil, nil
-	}
-
-	dbCalls := 0
-	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
-		dbCalls++
-		assert.Equal(t, t.Context(), ctx)
-		return []string{"UCmiko"}, nil
-	}
-
-	targets, err := resolveYouTubePollTargets(
-		t.Context(),
-		cacheSvc,
-		&databasemocks.Client{},
-		[]communityShortsOperationalChannel{
-			{ownerLabel: "Pekora", channelID: "UCpekora", enabled: true},
-			{ownerLabel: "Miko", channelID: "UCmiko", enabled: true},
-		},
-	)
-	require.NoError(t, err)
-
-	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
-	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
-	assert.Equal(t, 0, targets.DroppedAlarmTargets)
-	assert.Equal(t, 1, dbCalls)
-}
-
-func TestResolveYouTubePollTargets_UsesDBWhenCacheCandidateShrinks(t *testing.T) {
-	original := loadAlarmChannelIDsFromRepository
-	t.Cleanup(func() {
-		loadAlarmChannelIDsFromRepository = original
-	})
-
-	cacheSvc := cachemocks.NewStrictClient()
-	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
-		assert.Equal(t, t.Context(), ctx)
-		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
-		return []string{"UCmiko"}, nil
-	}
-
-	dbCalls := 0
-	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
-		dbCalls++
-		assert.Equal(t, t.Context(), ctx)
 		return []string{"UCmiko", "UCpekora"}, nil
 	}
 
+	dbCalls := 0
+	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
+		dbCalls++
+		assert.Equal(t, t.Context(), ctx)
+		return []string{"UCmiko"}, nil
+	}
+
 	targets, err := resolveYouTubePollTargets(
 		t.Context(),
 		cacheSvc,
 		&databasemocks.Client{},
-		[]communityShortsOperationalChannel{
-			{ownerLabel: "Pekora", channelID: "UCpekora", enabled: true},
-			{ownerLabel: "Miko", channelID: "UCmiko", enabled: true},
-		},
+		testYouTubePollTargetsOperationalChannels(),
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"UCmiko", "UCpekora"}, targets.NotificationChannelIDs)
+	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
 	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
 	assert.Equal(t, 0, targets.DroppedAlarmTargets)
 	assert.Equal(t, 1, dbCalls)
+}
+
+func TestResolveYouTubePollTargets_UsesDBAsAuthoritativeSourceOnSameSizeMismatch(t *testing.T) {
+	original := loadAlarmChannelIDsFromRepository
+	t.Cleanup(func() {
+		loadAlarmChannelIDsFromRepository = original
+	})
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+		assert.Equal(t, t.Context(), ctx)
+		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		return []string{"UCpekora"}, nil
+	}
+
+	dbCalls := 0
+	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
+		dbCalls++
+		assert.Equal(t, t.Context(), ctx)
+		return []string{"UCmiko"}, nil
+	}
+
+	targets, err := resolveYouTubePollTargets(
+		t.Context(),
+		cacheSvc,
+		&databasemocks.Client{},
+		testYouTubePollTargetsOperationalChannels(),
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, 0, targets.DroppedAlarmTargets)
+	assert.Equal(t, 1, dbCalls)
+}
+
+func TestResolveYouTubePollTargets_LogsStartupSourceDivergence(t *testing.T) {
+	original := loadAlarmChannelIDsFromRepository
+	t.Cleanup(func() {
+		loadAlarmChannelIDsFromRepository = original
+	})
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+		assert.Equal(t, t.Context(), ctx)
+		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		return []string{"UCmiko", "UCpekora"}, nil
+	}
+
+	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
+		assert.Equal(t, t.Context(), ctx)
+		return []string{"UCmiko"}, nil
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	targets, err := resolveYouTubePollTargets(
+		t.Context(),
+		cacheSvc,
+		&databasemocks.Client{},
+		testYouTubePollTargetsOperationalChannels(),
+		logger,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, 0, targets.DroppedAlarmTargets)
+	assert.Contains(t, buf.String(), `"msg":"youtube_poll_targets_startup_source_diverged"`)
+	assert.Contains(t, buf.String(), `"db_notification_target_channels":1`)
+	assert.Contains(t, buf.String(), `"cache_notification_target_channels":2`)
+	assert.Contains(t, buf.String(), `"cache_only_notification_channels":1`)
+	assert.Contains(t, buf.String(), `"db_only_notification_channels":0`)
+}
+
+func TestResolveYouTubePollTargets_LogsStartupSourceAlignment(t *testing.T) {
+	original := loadAlarmChannelIDsFromRepository
+	t.Cleanup(func() {
+		loadAlarmChannelIDsFromRepository = original
+	})
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+		assert.Equal(t, t.Context(), ctx)
+		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		return []string{"UCmiko"}, nil
+	}
+
+	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
+		assert.Equal(t, t.Context(), ctx)
+		return []string{"UCmiko"}, nil
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	targets, err := resolveYouTubePollTargets(
+		t.Context(),
+		cacheSvc,
+		&databasemocks.Client{},
+		testYouTubePollTargetsOperationalChannels(),
+		logger,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, 0, targets.DroppedAlarmTargets)
+	assert.Contains(t, buf.String(), `"msg":"youtube_poll_targets_startup_source_aligned"`)
+	assert.Contains(t, buf.String(), `"notification_target_channels":1`)
+	assert.Contains(t, buf.String(), `"stats_target_channels":2`)
+}
+
+func TestResolveYouTubePollTargets_WarnsWhenCacheInspectionFails(t *testing.T) {
+	original := loadAlarmChannelIDsFromRepository
+	t.Cleanup(func() {
+		loadAlarmChannelIDsFromRepository = original
+	})
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+		assert.Equal(t, t.Context(), ctx)
+		assert.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		return nil, errors.New("cache read failed")
+	}
+
+	loadAlarmChannelIDsFromRepository = func(ctx context.Context, postgresService database.Client) ([]string, error) {
+		assert.Equal(t, t.Context(), ctx)
+		return []string{"UCmiko"}, nil
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	targets, err := resolveYouTubePollTargets(
+		t.Context(),
+		cacheSvc,
+		&databasemocks.Client{},
+		testYouTubePollTargetsOperationalChannels(),
+		logger,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
+	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
+	assert.Equal(t, 0, targets.DroppedAlarmTargets)
+	assert.Contains(t, buf.String(), `"msg":"Failed to inspect cache-backed YouTube poll targets at startup"`)
+	assert.Contains(t, buf.String(), `"error":"cache read failed"`)
 }
 
 func TestResolveYouTubePollTargetsFromAlarmChannelIDs(t *testing.T) {
@@ -140,4 +216,12 @@ func TestResolveYouTubePollTargetsFromAlarmChannelIDs(t *testing.T) {
 	assert.Equal(t, []string{"UCmiko"}, targets.NotificationChannelIDs)
 	assert.Equal(t, []string{"UCpekora", "UCmiko"}, targets.StatsChannelIDs)
 	assert.Equal(t, 1, targets.DroppedAlarmTargets)
+}
+
+func testYouTubePollTargetsOperationalChannels() []communityShortsOperationalChannel {
+	return []communityShortsOperationalChannel{
+		{ownerLabel: "Pekora", channelID: "UCpekora", enabled: true},
+		{ownerLabel: "Miko", channelID: "UCmiko", enabled: true},
+		{ownerLabel: "Missing", channelID: "", enabled: false},
+	}
 }
