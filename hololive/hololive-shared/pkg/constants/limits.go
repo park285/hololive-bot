@@ -22,14 +22,12 @@ package constants
 
 import "time"
 
-// AIInputLimits: 패키지 변수다.
 var AIInputLimits = struct {
 	MaxQueryLength int
 }{
 	MaxQueryLength: 500,
 }
 
-// RetryBudgetConfig: 전역 재시도 예산 설정입니다.
 var RetryBudgetConfig = struct {
 	MaxRetriesPerMinute int
 	Enabled             bool
@@ -38,7 +36,6 @@ var RetryBudgetConfig = struct {
 	Enabled:             true,
 }
 
-// RetryConfig: 패키지 변수다.
 var RetryConfig = struct {
 	MaxAttempts int
 	BaseDelay   time.Duration
@@ -49,7 +46,6 @@ var RetryConfig = struct {
 	Jitter:      250 * time.Millisecond,
 }
 
-// CircuitBreakerConfig: 패키지 변수다.
 var CircuitBreakerConfig = struct {
 	FailureThreshold    int
 	ResetTimeout        time.Duration
@@ -64,7 +60,6 @@ var CircuitBreakerConfig = struct {
 	HealthCheckTimeout:  10 * time.Second, // Health Check 타임아웃 (10초)
 }
 
-// RetrySchedulerConfig: Holodex 실패 요청 지연 재시도 설정입니다.
 var RetrySchedulerConfig = struct {
 	Delay   time.Duration
 	Timeout time.Duration
@@ -75,7 +70,6 @@ var RetrySchedulerConfig = struct {
 	MaxSize: 10, // 3 org × 2 method + 여유
 }
 
-// PaginationConfig: 패키지 변수다.
 var PaginationConfig = struct {
 	ItemsPerPage   int
 	Timeout        time.Duration
@@ -86,7 +80,6 @@ var PaginationConfig = struct {
 	MaxEmbedFields: 25,              // Discord Embed 필드 최대 개수
 }
 
-// StringLimits: 패키지 변수다.
 var StringLimits = struct {
 	EmbedTitle       int
 	EmbedDescription int
@@ -103,7 +96,6 @@ var StringLimits = struct {
 	NextStreamTitle:  40,
 }
 
-// MQConfig: 패키지 변수다.
 var MQConfig = struct {
 	ReplyStreamKey           string
 	ReplyStreamMaxLen        int64
@@ -136,7 +128,6 @@ var MQConfig = struct {
 	RetryDelay:               1 * time.Second,
 }
 
-// APIRateLimitConfig: /api/holo 엔드포인트에 적용되는 IP 기반 슬라이딩 윈도우 레이트 리밋 설정입니다.
 var APIRateLimitConfig = struct {
 	Enabled bool
 	Limit   int
@@ -147,7 +138,6 @@ var APIRateLimitConfig = struct {
 	Window:  time.Minute,
 }
 
-// MajorEventConfig: 대형 행사 알림 설정입니다.
 var MajorEventConfig = struct {
 	TrustedSourceDomains   []string
 	TrustedSocialAccounts  []string
