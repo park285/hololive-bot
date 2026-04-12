@@ -31,16 +31,13 @@ import (
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
 
-// DefaultChannel: 설정 변경 Pub/Sub 채널 기본 이름
 const DefaultChannel = contractssettings.PubSubChannelV1
 
-// ConfigUpdate: Pub/Sub로 전달되는 설정 변경 메시지
 type ConfigUpdate struct {
 	Type    string          `json:"type"`    // contracts/settings UpdateType* 상수 사용
 	Payload json.RawMessage `json:"payload"` // 타입별 페이로드 (JSON)
 }
 
-// Subscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하는 컴포넌트
 type Subscriber struct {
 	client  valkey.Client
 	applyFn func(ConfigUpdate)
@@ -48,7 +45,6 @@ type Subscriber struct {
 	channel string
 }
 
-// New: 새로운 ConfigSubscriber를 생성합니다.
 func New(client valkey.Client, applyFn func(ConfigUpdate), logger *slog.Logger) *Subscriber {
 	return &Subscriber{
 		client:  client,
@@ -58,7 +54,6 @@ func New(client valkey.Client, applyFn func(ConfigUpdate), logger *slog.Logger) 
 	}
 }
 
-// Run: 블로킹으로 Pub/Sub 메시지를 수신합니다. goroutine으로 실행해야 합니다.
 // ctx가 취소되면 종료합니다.
 func (s *Subscriber) Run(ctx context.Context) {
 	s.logger.Info("Config subscriber started", slog.String("channel", s.channel))
