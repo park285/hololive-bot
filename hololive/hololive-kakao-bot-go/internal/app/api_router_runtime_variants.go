@@ -32,7 +32,6 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
-// ProvideBotRouter: Bot 전용 라우터를 구성합니다. (webhook + internal trigger + health만)
 // Admin API 라우트(members, alarms, rooms, stats, settings 등)는 이 라우터에서 제외합니다.
 func ProvideBotRouter(
 	ctx context.Context,

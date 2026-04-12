@@ -32,7 +32,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
-// Container: 애플리케이션의 모든 서비스와 의존성(Config, Logger, Services)을 관리하는 DI 컨테이너.
 type Container struct {
 	Config *config.Config
 	Logger *slog.Logger
@@ -41,7 +40,6 @@ type Container struct {
 	lifecycle.Managed
 }
 
-// Build: 주어진 설정과 로거를 기반으로 애플리케이션 컨테이너를 구성하고 모든 의존성을 초기화합니다.
 func Build(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	if cfg == nil {
 		return nil, errors.New("config must not be nil")
