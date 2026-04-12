@@ -32,13 +32,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
-// BaseMiddlewareOptions: 공통 Gin 미들웨어 옵션입니다.
 type BaseMiddlewareOptions struct {
 	SkipLogPaths []string
 	MaxBodyBytes int64
 }
 
-// ApplyBaseMiddleware: 공통 HTTP 베이스라인 미들웨어를 적용합니다.
 func ApplyBaseMiddleware(router *gin.Engine, ctx context.Context, logger *slog.Logger, opts BaseMiddlewareOptions) {
 	if router == nil {
 		return
@@ -55,7 +53,6 @@ func ApplyBaseMiddleware(router *gin.Engine, ctx context.Context, logger *slog.L
 	router.Use(middleware.MaxBodySizeMiddleware(maxBodyBytes))
 }
 
-// RegisterHealthRoutes: 표준 liveness/readiness 엔드포인트를 등록합니다.
 func RegisterHealthRoutes(router gin.IRoutes) {
 	if router == nil {
 		return
