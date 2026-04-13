@@ -9,9 +9,8 @@ import (
 	"github.com/bytedance/sonic/decoder"
 )
 
-// 표준 라이브러리 타입 호환성
 type (
-	// Sonic returns specific error types. Aliasing them allows some compatibility.
+	// sonic은 전용 오류 타입을 반환하므로 별칭으로 노출해 표준 라이브러리 호환 지점을 유지한다.
 	SyntaxError        = decoder.SyntaxError
 	UnmarshalTypeError = decoder.MismatchTypeError
 
@@ -57,7 +56,6 @@ func (n Number) Int64() (int64, error) {
 	return strconv.ParseInt(string(n), 10, 64)
 }
 
-// ConfigDefault는 기본 설정을 사용하는 API 인스턴스입니다.
 var api = sonic.ConfigDefault
 
 func Marshal(v any) ([]byte, error) {
