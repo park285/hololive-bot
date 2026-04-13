@@ -189,6 +189,50 @@ func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefres
 	require.NotContains(t, jobKeys, "UC_NOTIFY:global_resolver")
 }
 
+func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRefresh(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		if key == "alarm:channel_registry" {
+			return []string{"UC_NOTIFY"}, nil
+		}
+		return nil, nil
+	}
+
+	registrations := []providers.ChannelPollerRegistration{
+		providers.NewChannelPollerRegistration(refreshTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
+			WithChannelIDs([]string{"UC_OLD"}).
+			WithTargetGroup(providers.ChannelTargetGroupNotification),
+		providers.NewGlobalPollerRegistration(
+			refreshTestPoller{name: poller.PendingPublishedAtResolverPollerName},
+			poller.PriorityLow,
+			3*time.Minute,
+		),
+	}
+
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+	)
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{{channelID: "UC_NOTIFY", enabled: true}},
+		func(context.Context) ([]string, error) { return nil, nil },
+		newYouTubePollTargetTestLogger(),
+	)
+
+	refresher.refresh(context.Background())
+
+	jobKeys := schedulerJobKeys(t, scheduler)
+	require.Contains(t, jobKeys, "UC_NOTIFY:videos")
+	require.Contains(t, jobKeys, providers.SyntheticGlobalPollerChannelID+":"+poller.PendingPublishedAtResolverPollerName)
+	require.NotContains(t, jobKeys, "UC_NOTIFY:"+poller.PendingPublishedAtResolverPollerName)
+}
+
 func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testing.T) {
 	t.Parallel()
 
