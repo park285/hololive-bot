@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func BuildSettingsService(targetMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) settings.ReadWriter {
@@ -16,7 +18,7 @@ func BuildSettingsService(targetMinutes []int, scraperProxyEnabled bool, logger 
 		logger.Info("Using settings file path", slog.String("path", settingsPath))
 	}
 
-	normalized := sharedchecker.NormalizeTargetMinutes(targetMinutes)
+	normalized := sharedchecker.ResolveConfiguredTargetMinutes(targetMinutes)
 	defaultMinute := 5
 	if len(normalized) > 0 && normalized[0] > 0 {
 		defaultMinute = normalized[0]
@@ -25,22 +27,43 @@ func BuildSettingsService(targetMinutes []int, scraperProxyEnabled bool, logger 
 	return settings.NewSettingsService(settingsPath, settings.Settings{
 		AlarmAdvanceMinutes: defaultMinute,
 		ScraperProxyEnabled: scraperProxyEnabled,
+		TargetMinutes:       normalized,
 	}, logger)
 }
 
 func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) []int {
+	_ = scraperProxyEnabled
+
 	settingsPath := resolveSettingsFilePath()
+	resolvedConfigured := sharedchecker.ResolveConfiguredTargetMinutes(targetMinutes)
 	if _, err := os.Stat(settingsPath); err != nil {
-		return sharedchecker.NormalizeTargetMinutes(targetMinutes)
+		logResolvedTargetMinutes(logger, "config-missing", resolvedConfigured)
+		return resolvedConfigured
 	}
 
-	svc := BuildSettingsService(targetMinutes, scraperProxyEnabled, logger)
-	current := svc.Get().AlarmAdvanceMinutes
-	if current <= 0 {
-		return sharedchecker.NormalizeTargetMinutes(targetMinutes)
+	persisted, err := readPersistedSettings(settingsPath)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("Failed to inspect persisted alarm advance minutes", slog.String("path", settingsPath), slog.String("error", err.Error()))
+		}
+		logResolvedTargetMinutes(logger, "invalid-persisted", resolvedConfigured)
+		return resolvedConfigured
 	}
 
-	return sharedchecker.BuildRuntimeTargetMinutes(current)
+	if hasPositiveTargetMinutes(persisted.TargetMinutes) {
+		resolved := sharedchecker.ResolveConfiguredTargetMinutes(persisted.TargetMinutes)
+		logResolvedTargetMinutes(logger, "persisted-settings", resolved)
+		return resolved
+	}
+
+	if persisted.AlarmAdvanceMinutes == nil || *persisted.AlarmAdvanceMinutes <= 0 {
+		logResolvedTargetMinutes(logger, "invalid-persisted", resolvedConfigured)
+		return resolvedConfigured
+	}
+
+	resolved := sharedchecker.BuildRuntimeTargetMinutes(*persisted.AlarmAdvanceMinutes)
+	logResolvedTargetMinutes(logger, "persisted-settings", resolved)
+	return resolved
 }
 
 func resolveSettingsFilePath() string {
@@ -49,4 +72,47 @@ func resolveSettingsFilePath() string {
 		dir = "data"
 	}
 	return filepath.Join(dir, "settings.json")
+}
+
+type persistedSettings struct {
+	AlarmAdvanceMinutes *int  `json:"alarmAdvanceMinutes"`
+	TargetMinutes       []int `json:"targetMinutes"`
+}
+
+func readPersistedSettings(settingsPath string) (persistedSettings, error) {
+	file, err := os.Open(settingsPath)
+	if err != nil {
+		return persistedSettings{}, fmt.Errorf("open settings file: %w", err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	var persisted persistedSettings
+	if err := json.NewDecoder(file).Decode(&persisted); err != nil {
+		return persistedSettings{}, fmt.Errorf("decode settings file: %w", err)
+	}
+
+	return persisted, nil
+}
+
+func logResolvedTargetMinutes(logger *slog.Logger, source string, resolved []int) {
+	if logger == nil {
+		return
+	}
+
+	logger.Info("Resolved target minutes",
+		slog.String("source", source),
+		slog.Any("resolved_target_minutes", resolved),
+	)
+}
+
+func hasPositiveTargetMinutes(targetMinutes []int) bool {
+	for _, minute := range targetMinutes {
+		if minute > 0 {
+			return true
+		}
+	}
+
+	return false
 }
