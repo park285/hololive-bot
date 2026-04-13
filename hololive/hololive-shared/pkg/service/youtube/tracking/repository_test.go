@@ -296,6 +296,85 @@ func TestListPendingPublishedAtResolutionsPage_IncludesRetryAfterExpired(t *test
 	require.Equal(t, "short:expired", candidates[0].PostID)
 }
 
+func TestListPendingPublishedAtResolutionsPage_IncludesAuthorizedAndSentRowsWithoutPublishedAt(t *testing.T) {
+	repo := NewRepository(newTrackingTestDB(t))
+	ctx := context.Background()
+	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+	authorizedAt := detectedAt.Add(15 * time.Second)
+	alarmSentAt := detectedAt.Add(30 * time.Second)
+
+	require.NoError(t, repo.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{
+		{
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:authorized",
+			ContentID:      "short:authorized",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt,
+			AuthorizedAt:   &authorizedAt,
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+		},
+		{
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:sent",
+			ContentID:      "short:sent",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt.Add(time.Second),
+			AlarmSentAt:    &alarmSentAt,
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusSent,
+		},
+	}))
+
+	candidates, _, err := repo.ListPendingPublishedAtResolutionsPage(ctx, detectedAt.Add(time.Minute), detectedAt.Add(2*time.Minute), nil, 10)
+	require.NoError(t, err)
+	require.Len(t, candidates, 2)
+	require.Equal(t, "short:authorized", candidates[0].PostID)
+	require.Equal(t, "short:sent", candidates[1].PostID)
+}
+
+func TestListPendingPublishedAtResolutionsPage_PrioritizesPendingRowsBeforeMetadataOnlyBackfill(t *testing.T) {
+	repo := NewRepository(newTrackingTestDB(t))
+	ctx := context.Background()
+	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+	authorizedAt := detectedAt.Add(10 * time.Second)
+
+	require.NoError(t, repo.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{
+		{
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:metadata-only",
+			ContentID:      "short:metadata-only",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt,
+			AuthorizedAt:   &authorizedAt,
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+		},
+		{
+			Kind:           domain.OutboxKindNewShort,
+			PostID:         "short:pending",
+			ContentID:      "short:pending",
+			ChannelID:      "UC_SHORT",
+			DetectedAt:     detectedAt.Add(time.Second),
+			DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
+		},
+	}))
+
+	firstPage, cursor, err := repo.ListPendingPublishedAtResolutionsPage(ctx, detectedAt.Add(time.Minute), detectedAt.Add(2*time.Minute), nil, 1)
+	require.NoError(t, err)
+	require.Len(t, firstPage, 1)
+	require.NotNil(t, cursor)
+	require.Equal(t, "short:pending", firstPage[0].PostID)
+	require.Equal(t, 0, cursor.PriorityBucket)
+
+	secondPage, nextCursor, err := repo.ListPendingPublishedAtResolutionsPage(ctx, detectedAt.Add(time.Minute), detectedAt.Add(2*time.Minute), cursor, 1)
+	require.NoError(t, err)
+	require.Len(t, secondPage, 1)
+	require.Equal(t, "short:metadata-only", secondPage[0].PostID)
+
+	thirdPage, finalCursor, err := repo.ListPendingPublishedAtResolutionsPage(ctx, detectedAt.Add(time.Minute), detectedAt.Add(2*time.Minute), nextCursor, 1)
+	require.NoError(t, err)
+	require.Nil(t, thirdPage)
+	require.Nil(t, finalCursor)
+}
+
 func TestMarkAndClearPublishedAtRetryAfter(t *testing.T) {
 	repo := NewRepository(newTrackingTestDB(t))
 	ctx := context.Background()

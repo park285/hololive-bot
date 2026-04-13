@@ -47,8 +47,9 @@ type PublishedAtResolutionCandidate struct {
 }
 
 type PublishedAtResolutionCursor struct {
-	DetectedAt time.Time
-	PostID     string
+	PriorityBucket int
+	DetectedAt     time.Time
+	PostID         string
 }
 
 type AlarmSentMark struct {

@@ -473,13 +473,17 @@ func NewShortsPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults int,
 	if maxResults <= 0 {
 		maxResults = 10
 	}
+	inlineFallbackEnabled := false
+	if len(inlinePublishedAtFallbackEnabled) > 0 {
+		inlineFallbackEnabled = inlinePublishedAtFallbackEnabled[0]
+	}
 	return &ShortsPoller{
 		client:                           scraperClient,
 		db:                               db,
 		repo:                             newBatchRepository(db),
 		maxResults:                       maxResults,
 		routeDecider:                     routeDecider,
-		inlinePublishedAtFallbackEnabled: len(inlinePublishedAtFallbackEnabled) > 0 && inlinePublishedAtFallbackEnabled[0],
+		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
 	}
 }
 
@@ -570,14 +574,14 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 			if dbVideo.PublishedAt != nil {
 				routePublishedAt = *dbVideo.PublishedAt
 			}
-			if routePublishedAt.IsZero() {
+			if p.routeDecider != nil && routePublishedAt.IsZero() {
 				if p.inlinePublishedAtFallbackEnabled {
 					keepExistingWatermark = true
 				}
 				continue
 			}
 
-			if shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
+			if p.routeDecider == nil || shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
 				notifications = append(notifications, &domain.YouTubeNotificationOutbox{
 					Kind:      domain.OutboxKindNewShort,
 					ChannelID: channelID,
@@ -653,6 +657,10 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 	if maxResults <= 0 {
 		maxResults = 10
 	}
+	inlineFallbackEnabled := false
+	if len(inlinePublishedAtFallbackEnabled) > 0 {
+		inlineFallbackEnabled = inlinePublishedAtFallbackEnabled[0]
+	}
 	return &CommunityPoller{
 		client:                           scraperClient,
 		db:                               db,
@@ -660,7 +668,7 @@ func NewCommunityPoller(scraperClient *scraper.Client, db *gorm.DB, maxResults i
 		maxResults:                       maxResults,
 		keywords:                         keywords,
 		routeDecider:                     routeDecider,
-		inlinePublishedAtFallbackEnabled: len(inlinePublishedAtFallbackEnabled) > 0 && inlinePublishedAtFallbackEnabled[0],
+		inlinePublishedAtFallbackEnabled: inlineFallbackEnabled,
 	}
 }
 
@@ -756,13 +764,13 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 			if dbPost.PublishedAt != nil {
 				routePublishedAt = *dbPost.PublishedAt
 			}
-			if routePublishedAt.IsZero() {
+			if p.routeDecider != nil && routePublishedAt.IsZero() {
 				if p.inlinePublishedAtFallbackEnabled {
 					keepExistingWatermark = true
 				}
 				continue
 			}
-			if shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
+			if p.routeDecider == nil || shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
 				notifications = append(notifications, &domain.YouTubeNotificationOutbox{
 					Kind:      domain.OutboxKindCommunityPost,
 					ChannelID: channelID,

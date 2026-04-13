@@ -61,7 +61,11 @@ func buildStreamIngesterYouTubeComponents(
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
 		return nil, nil, nil, err
 	}
-	logCombinedYouTubeScraperBudget(scraperCfg, pollerRegistrations, logger)
+	budgetSummary := summarizeYouTubeScraperBudget(scraperCfg, pollerRegistrations)
+	logYouTubeScraperBudgetSummary(budgetSummary, logger)
+	if err := validateYouTubeScraperPollerBudget(budgetSummary); err != nil {
+		return nil, nil, nil, err
+	}
 
 	scraperScheduler := providers.ProvideScraperScheduler(
 		nil,
@@ -180,15 +184,20 @@ func estimatedPublishedAtResolverMaxRPM(cfg config.ScraperPublishedAtResolverCon
 	return float64(cfg.MaxResolvePerRun) * 60 / cfg.Interval.Seconds()
 }
 
-func logCombinedYouTubeScraperBudget(
+type youtubeScraperBudgetSummary struct {
+	PollerRPM                 float64
+	PollerRetryAmplifiedRPM   float64
+	ResolverRPM               float64
+	ResolverRetryAmplifiedRPM float64
+	CombinedRPM               float64
+	CombinedRetryAmplifiedRPM float64
+	BudgetRPM                 float64
+}
+
+func summarizeYouTubeScraperBudget(
 	scraperCfg config.ScraperConfig,
 	registrations []providers.ChannelPollerRegistration,
-	logger *slog.Logger,
-) {
-	if logger == nil {
-		return
-	}
-
+) youtubeScraperBudgetSummary {
 	pollerRPM := estimateResolvedPollerRPM(registrations)
 	pollerRetryAmplifiedRPM := estimatedPollerWorstCaseRPM(registrations)
 	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
@@ -202,30 +211,57 @@ func logCombinedYouTubeScraperBudget(
 	combinedRetryAmplifiedRPM := pollerRetryAmplifiedRPM + resolverRetryAmplifiedRPM
 	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
 
-	logger.Info("youtube_scraper_combined_budget_summary",
-		slog.Float64("expected_poller_rpm", pollerRPM),
-		slog.Float64("expected_poller_retry_amplified_rpm_max", pollerRetryAmplifiedRPM),
-		slog.Float64("expected_resolver_rpm", resolverRPM),
-		slog.Float64("expected_resolver_retry_amplified_rpm_max", resolverRetryAmplifiedRPM),
-		slog.Float64("expected_combined_rpm", combinedRPM),
-		slog.Float64("expected_combined_retry_amplified_rpm_max", combinedRetryAmplifiedRPM),
-		slog.Float64("budget_rpm", budgetRPM),
+	return youtubeScraperBudgetSummary{
+		PollerRPM:                 pollerRPM,
+		PollerRetryAmplifiedRPM:   pollerRetryAmplifiedRPM,
+		ResolverRPM:               resolverRPM,
+		ResolverRetryAmplifiedRPM: resolverRetryAmplifiedRPM,
+		CombinedRPM:               combinedRPM,
+		CombinedRetryAmplifiedRPM: combinedRetryAmplifiedRPM,
+		BudgetRPM:                 budgetRPM,
+	}
+}
+
+func validateYouTubeScraperPollerBudget(summary youtubeScraperBudgetSummary) error {
+	if summary.PollerRPM <= summary.BudgetRPM {
+		return nil
+	}
+	return fmt.Errorf(
+		"stream-ingester poller RPM %.3f exceeds YouTube scraper budget %.3f; increase poll intervals or reduce target channels",
+		summary.PollerRPM,
+		summary.BudgetRPM,
 	)
-	if combinedRPM > budgetRPM {
+}
+
+func logYouTubeScraperBudgetSummary(summary youtubeScraperBudgetSummary, logger *slog.Logger) {
+	if logger == nil {
+		return
+	}
+
+	logger.Info("youtube_scraper_combined_budget_summary",
+		slog.Float64("expected_poller_rpm", summary.PollerRPM),
+		slog.Float64("expected_poller_retry_amplified_rpm_max", summary.PollerRetryAmplifiedRPM),
+		slog.Float64("expected_resolver_rpm", summary.ResolverRPM),
+		slog.Float64("expected_resolver_retry_amplified_rpm_max", summary.ResolverRetryAmplifiedRPM),
+		slog.Float64("expected_combined_rpm", summary.CombinedRPM),
+		slog.Float64("expected_combined_retry_amplified_rpm_max", summary.CombinedRetryAmplifiedRPM),
+		slog.Float64("budget_rpm", summary.BudgetRPM),
+	)
+	if summary.CombinedRPM > summary.BudgetRPM {
 		logger.Warn("youtube_scraper_combined_budget_exceeds_rate_limit",
-			slog.Float64("expected_poller_rpm", pollerRPM),
-			slog.Float64("expected_resolver_rpm", resolverRPM),
-			slog.Float64("expected_combined_rpm", combinedRPM),
-			slog.Float64("budget_rpm", budgetRPM),
+			slog.Float64("expected_poller_rpm", summary.PollerRPM),
+			slog.Float64("expected_resolver_rpm", summary.ResolverRPM),
+			slog.Float64("expected_combined_rpm", summary.CombinedRPM),
+			slog.Float64("budget_rpm", summary.BudgetRPM),
 		)
 	}
-	if combinedRetryAmplifiedRPM > budgetRPM {
+	if summary.CombinedRetryAmplifiedRPM > summary.BudgetRPM {
 		logger.Warn("youtube_scraper_retry_amplified_budget_exceeds_rate_limit",
-			slog.Float64("expected_poller_rpm", pollerRPM),
-			slog.Float64("expected_poller_retry_amplified_rpm_max", pollerRetryAmplifiedRPM),
-			slog.Float64("expected_resolver_retry_amplified_rpm_max", resolverRetryAmplifiedRPM),
-			slog.Float64("expected_combined_retry_amplified_rpm_max", combinedRetryAmplifiedRPM),
-			slog.Float64("budget_rpm", budgetRPM),
+			slog.Float64("expected_poller_rpm", summary.PollerRPM),
+			slog.Float64("expected_poller_retry_amplified_rpm_max", summary.PollerRetryAmplifiedRPM),
+			slog.Float64("expected_resolver_retry_amplified_rpm_max", summary.ResolverRetryAmplifiedRPM),
+			slog.Float64("expected_combined_retry_amplified_rpm_max", summary.CombinedRetryAmplifiedRPM),
+			slog.Float64("budget_rpm", summary.BudgetRPM),
 		)
 	}
 }
