@@ -21,8 +21,8 @@
 package command
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -127,7 +127,6 @@ func shouldSuppressSchedulePrompt(cmdCtx *domain.CommandContext, rawToken string
 		return false
 	}
 
-	// remove common command prefixes
 	message = strings.TrimLeft(message, "!/\\.")
 	message = stringutil.TrimSpace(message)
 
