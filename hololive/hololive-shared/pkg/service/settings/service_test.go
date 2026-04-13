@@ -23,6 +23,7 @@ package settings
 import (
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -87,5 +88,47 @@ func TestSettingsService_PreservesTargetMinutesOnReload(t *testing.T) {
 		if got.TargetMinutes[i] != want[i] {
 			t.Fatalf("expected target minutes %v, got %v", want, got.TargetMinutes)
 		}
+	}
+}
+
+func TestSettingsService_HealsLegacyStoredTargetMinutesOnReload(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	reloaded := NewSettingsService(filePath, Settings{}, logger)
+	got := reloaded.Get()
+	want := []int{5, 3, 1}
+	if len(got.TargetMinutes) != len(want) {
+		t.Fatalf("expected target minutes len %d, got %d (%v)", len(want), len(got.TargetMinutes), got.TargetMinutes)
+	}
+	for i := range want {
+		if got.TargetMinutes[i] != want[i] {
+			t.Fatalf("expected target minutes %v, got %v", want, got.TargetMinutes)
+		}
+	}
+}
+
+func TestSettingsService_RewritesHealedLegacyTargetMinutesOnReload(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	_ = NewSettingsService(filePath, Settings{}, logger)
+
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if string(raw) != "{\"alarmAdvanceMinutes\":5,\"scraperProxyEnabled\":false,\"targetMinutes\":[5,3,1]}\n" {
+		t.Fatalf("expected healed settings file, got %q", string(raw))
 	}
 }
