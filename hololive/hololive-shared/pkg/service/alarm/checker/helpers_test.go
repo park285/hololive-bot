@@ -263,6 +263,48 @@ func TestResolveConfiguredTargetMinutes(t *testing.T) {
 	}
 }
 
+func TestResolvePersistedTargetMinutes(t *testing.T) {
+	tests := []struct {
+		name                string
+		alarmAdvanceMinutes int
+		input               []int
+		expect              []int
+	}{
+		{
+			name:                "heals legacy five one pair",
+			alarmAdvanceMinutes: 5,
+			input:               []int{5, 1},
+			expect:              []int{5, 3, 1},
+		},
+		{
+			name:                "does not heal explicit multi target",
+			alarmAdvanceMinutes: 30,
+			input:               []int{30, 15, 5, 1},
+			expect:              []int{30, 15, 5, 1},
+		},
+		{
+			name:                "does not heal three one pair",
+			alarmAdvanceMinutes: 3,
+			input:               []int{3, 1},
+			expect:              []int{3, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolvePersistedTargetMinutes(tt.alarmAdvanceMinutes, tt.input)
+			if len(got) != len(tt.expect) {
+				t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.expect), got)
+			}
+			for i := range got {
+				if got[i] != tt.expect[i] {
+					t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, tt.expect)
+				}
+			}
+		})
+	}
+}
+
 func TestIsTargetMinute(t *testing.T) {
 	tests := []struct {
 		name          string
