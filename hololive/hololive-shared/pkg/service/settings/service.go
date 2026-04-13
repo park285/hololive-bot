@@ -25,8 +25,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
@@ -116,7 +118,16 @@ func (s *Service) load() {
 		s.cache.ScraperProxyEnabled = *disk.ScraperProxyEnabled
 	}
 	if len(disk.TargetMinutes) > 0 {
-		s.cache.TargetMinutes = cloneTargetMinutes(disk.TargetMinutes)
+		resolved := sharedchecker.ResolvePersistedTargetMinutes(s.cache.AlarmAdvanceMinutes, disk.TargetMinutes)
+		s.cache.TargetMinutes = cloneTargetMinutes(resolved)
+		if !slices.Equal(resolved, disk.TargetMinutes) && s.logger != nil {
+			s.logger.Info("Healing persisted target minutes", slog.Any("from", disk.TargetMinutes), slog.Any("to", resolved))
+		}
+		if !slices.Equal(resolved, disk.TargetMinutes) {
+			if err := s.persistCache(); err != nil && s.logger != nil {
+				s.logger.Warn("Failed to persist healed settings", slog.String("error", err.Error()))
+			}
+		}
 	}
 }
 
@@ -148,6 +159,10 @@ func (s *Service) Update(newSettings Settings) error {
 		TargetMinutes:       cloneTargetMinutes(newSettings.TargetMinutes),
 	}
 
+	return s.persistCache()
+}
+
+func (s *Service) persistCache() error {
 	f, err := os.Create(s.filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create settings file: %w", err)
