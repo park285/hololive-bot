@@ -254,6 +254,20 @@ func extractScraperClientFromPoller(t *testing.T, channelPoller poller.Poller) *
 	return client
 }
 
+func extractPollerBoolField(t *testing.T, channelPoller poller.Poller, fieldName string) bool {
+	t.Helper()
+
+	value := reflect.ValueOf(channelPoller)
+	require.True(t, value.IsValid())
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+	field := value.FieldByName(fieldName)
+	require.True(t, field.IsValid(), "%s field must exist", fieldName)
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	return field.Bool()
+}
+
 func extractResolverScraperClient(t *testing.T, resolver *poller.PendingPublishedAtResolver) *scraper.Client {
 	t.Helper()
 
@@ -442,6 +456,64 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	value := reflect.ValueOf(resolver).Elem()
 	softLimiterField := value.FieldByName("softLimiter")
 	assert.False(t, softLimiterField.IsValid())
+}
+
+func TestBuildStreamIngesterChannelPollerRegistrationsWithClient_NilRouteDeciderDisablesInlinePublishedAtFallback(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.ScraperConfig{
+		PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
+		Poll: config.ScraperPoll{
+			Videos:    7 * time.Minute,
+			Shorts:    11 * time.Minute,
+			Community: 13 * time.Minute,
+			Stats:     4 * time.Hour,
+			Live:      3 * time.Minute,
+		},
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+		&databasemocks.Client{},
+		cfg,
+		buildSharedYouTubeScraperClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
+		nil,
+		[]string{"UC_NOTIFY_A"},
+		[]string{"UC_STATS_A"},
+	)
+
+	require.Len(t, registrations, 5)
+	assert.False(t, extractPollerBoolField(t, registrations[1].Poller, "inlinePublishedAtFallbackEnabled"))
+	assert.False(t, extractPollerBoolField(t, registrations[2].Poller, "inlinePublishedAtFallbackEnabled"))
+}
+
+func TestBuildStreamIngesterChannelPollerRegistrationsWithClient_DisabledResolverEnablesInlinePublishedAtFallbackForRoutedPollers(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.ScraperConfig{
+		PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
+			Enabled: false,
+		},
+		Poll: config.ScraperPoll{
+			Videos:    7 * time.Minute,
+			Shorts:    11 * time.Minute,
+			Community: 13 * time.Minute,
+			Stats:     4 * time.Hour,
+			Live:      3 * time.Minute,
+		},
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+		&databasemocks.Client{},
+		cfg,
+		buildSharedYouTubeScraperClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
+		func(poller.NotificationRouteRequest) bool { return true },
+		[]string{"UC_NOTIFY_A"},
+		[]string{"UC_STATS_A"},
+	)
+
+	require.Len(t, registrations, 5)
+	assert.True(t, extractPollerBoolField(t, registrations[1].Poller, "inlinePublishedAtFallbackEnabled"))
+	assert.True(t, extractPollerBoolField(t, registrations[2].Poller, "inlinePublishedAtFallbackEnabled"))
 }
 
 func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {

@@ -2,12 +2,14 @@ package runtime
 
 import (
 	"bytes"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -29,24 +31,26 @@ func TestEstimateResolvedPollerRPM_UsesExplicitChannelCounts(t *testing.T) {
 	assert.Equal(t, 2.5, rpm)
 }
 
-func TestLogCombinedYouTubeScraperBudget_ReportsPollerAndResolverRPM(t *testing.T) {
+func TestLogYouTubeScraperBudgetSummary_ReportsPollerAndResolverRPM(t *testing.T) {
 	t.Parallel()
 
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	logCombinedYouTubeScraperBudget(
-		config.ScraperConfig{
-			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
-				Enabled:          true,
-				Interval:         15 * time.Second,
-				MaxResolvePerRun: 2,
+	logYouTubeScraperBudgetSummary(
+		summarizeYouTubeScraperBudget(
+			config.ScraperConfig{
+				PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
+					Enabled:          true,
+					Interval:         15 * time.Second,
+					MaxResolvePerRun: 2,
+				},
 			},
-		},
-		[]providers.ChannelPollerRegistration{
-			providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, time.Second).
-				WithChannelIDs([]string{"UC_A", "UC_B"}),
-		},
+			[]providers.ChannelPollerRegistration{
+				providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, time.Second).
+					WithChannelIDs([]string{"UC_A", "UC_B"}),
+			},
+		),
 		logger,
 	)
 
@@ -59,6 +63,61 @@ func TestLogCombinedYouTubeScraperBudget_ReportsPollerAndResolverRPM(t *testing.
 	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":384`)
 	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_combined_budget_exceeds_rate_limit"`)
 	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_retry_amplified_budget_exceeds_rate_limit"`)
+}
+
+func TestBuildStreamIngesterYouTubeComponents_FailsWhenPollerBudgetExceedsRateLimit(t *testing.T) {
+	t.Parallel()
+
+	_, _, _, err := buildStreamIngesterYouTubeComponents(
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    15 * time.Minute,
+				Shorts:    time.Minute,
+				Community: time.Minute,
+				Stats:     6 * time.Hour,
+				Live:      10 * time.Minute,
+			},
+		},
+		&databasemocks.Client{
+			GetGormDBFunc: func() *gorm.DB { return nil },
+		},
+		repeatChannelIDs("UC_NOTIFY_", 12),
+		repeatChannelIDs("UC_STATS_", 111),
+		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
+		nil,
+		nil,
+		nil,
+		nil,
+		testLogger(),
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "poller RPM")
+	assert.Contains(t, err.Error(), "increase poll intervals or reduce target channels")
+}
+
+func TestBuildStreamIngesterYouTubeComponents_AllowsBudgetSafeDefaultPollConfig(t *testing.T) {
+	t.Parallel()
+
+	scheduler, dispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
+		config.ScraperConfig{},
+		&databasemocks.Client{
+			GetGormDBFunc: func() *gorm.DB { return nil },
+		},
+		repeatChannelIDs("UC_NOTIFY_", 12),
+		repeatChannelIDs("UC_STATS_", 111),
+		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
+		nil,
+		nil,
+		nil,
+		nil,
+		testLogger(),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, scheduler)
+	require.NotNil(t, dispatcher)
+	require.Len(t, registrations, 5)
 }
 
 func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
@@ -89,4 +148,12 @@ func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
 	require.NotNil(t, resolver)
 	assert.Contains(t, logBuf.String(), `"msg":"published_at_resolver_configured"`)
 	assert.Contains(t, logBuf.String(), `"resolve_timeout":10000000000`)
+}
+
+func repeatChannelIDs(prefix string, count int) []string {
+	channelIDs := make([]string, 0, count)
+	for idx := 0; idx < count; idx++ {
+		channelIDs = append(channelIDs, fmt.Sprintf("%s%d", prefix, idx+1))
+	}
+	return channelIDs
 }

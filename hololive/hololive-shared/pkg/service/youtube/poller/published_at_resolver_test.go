@@ -69,7 +69,7 @@ func TestPendingPublishedAtResolver_EnqueuesOnceAfterResolution(t *testing.T) {
 	assert.Contains(t, outboxRows[0].Payload, `"published_at":"2026-04-10T01:11:12Z"`)
 }
 
-func TestPendingPublishedAtResolver_DoesNotDuplicateWhenAlarmStateAlreadyClaimed(t *testing.T) {
+func TestPendingPublishedAtResolver_BackfillsMetadataWithoutDuplicateWhenAlarmStateAlreadyClaimed(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -79,6 +79,7 @@ func TestPendingPublishedAtResolver_DoesNotDuplicateWhenAlarmStateAlreadyClaimed
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	authorizedAt := detectedAt.Add(10 * time.Second)
+	publishedAt := detectedAt.Add(-time.Minute)
 	seedPendingShortResolution(t, db, "channel-1", "short-claim", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-claim").
@@ -90,7 +91,7 @@ func TestPendingPublishedAtResolver_DoesNotDuplicateWhenAlarmStateAlreadyClaimed
 	resolveCalls := 0
 	resolver := &PendingPublishedAtResolver{
 		db:        db,
-		client:    newShortPublishedAtResolverTestClient(t, detectedAt.Add(-time.Minute), &resolveCalls),
+		client:    newShortPublishedAtResolverTestClient(t, publishedAt, &resolveCalls),
 		interval:  15 * time.Second,
 		batchSize: 50,
 		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -98,15 +99,17 @@ func TestPendingPublishedAtResolver_DoesNotDuplicateWhenAlarmStateAlreadyClaimed
 
 	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
 
-	assert.Zero(t, resolveCalls)
+	assert.Equal(t, 1, resolveCalls)
 
 	var outboxCount int64
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
 	assert.Zero(t, outboxCount)
 
-	var video domain.YouTubeVideo
-	require.NoError(t, db.First(&video, "video_id = ?", "short-claim").Error)
-	assert.Nil(t, video.PublishedAt)
+	assertShortMetadataBackfilledWithoutEnqueue(t, db, "short-claim", detectedAt, publishedAt, &authorizedAt, nil)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-claim").Error)
+	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, alarmState.DeliveryStatus)
 }
 
 func TestPendingPublishedAtResolver_UpdatesTrackingSourceStateAtomically(t *testing.T) {
@@ -242,7 +245,7 @@ func TestPendingPublishedAtResolver_FinalizeFailureDoesNotClearRetryAfter(t *tes
 	assert.True(t, alarmState.PublishedAtRetryAfter.After(time.Now().UTC()))
 }
 
-func TestPendingPublishedAtResolver_SkipsAlreadySentContent(t *testing.T) {
+func TestPendingPublishedAtResolver_BackfillsMetadataForAlreadySentContentWithoutDuplicateEnqueue(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -252,6 +255,7 @@ func TestPendingPublishedAtResolver_SkipsAlreadySentContent(t *testing.T) {
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
 	sentAt := detectedAt.Add(3 * time.Minute)
+	publishedAt := detectedAt.Add(-time.Minute)
 	seedPendingShortResolution(t, db, "channel-1", "short-sent", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeContentAlarmTracking{}).
 		Where("kind = ? AND content_id = ?", domain.OutboxKindNewShort, "short:short-sent").
@@ -269,7 +273,7 @@ func TestPendingPublishedAtResolver_SkipsAlreadySentContent(t *testing.T) {
 	resolveCalls := 0
 	resolver := &PendingPublishedAtResolver{
 		db:        db,
-		client:    newShortPublishedAtResolverTestClient(t, detectedAt.Add(-time.Minute), &resolveCalls),
+		client:    newShortPublishedAtResolverTestClient(t, publishedAt, &resolveCalls),
 		interval:  15 * time.Second,
 		batchSize: 50,
 		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -277,15 +281,177 @@ func TestPendingPublishedAtResolver_SkipsAlreadySentContent(t *testing.T) {
 
 	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
 
-	assert.Zero(t, resolveCalls)
+	assert.Equal(t, 1, resolveCalls)
 
 	var outboxCount int64
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
 	assert.Zero(t, outboxCount)
 
-	var video domain.YouTubeVideo
-	require.NoError(t, db.First(&video, "video_id = ?", "short-sent").Error)
-	assert.Nil(t, video.PublishedAt)
+	assertShortMetadataBackfilledWithoutEnqueue(t, db, "short-sent", detectedAt, publishedAt, nil, &sentAt)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-sent").Error)
+	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, alarmState.DeliveryStatus)
+}
+
+func TestPendingPublishedAtResolver_ClearsRetryAfterAfterMetadataOnlyBackfill(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	authorizedAt := detectedAt.Add(10 * time.Second)
+	publishedAt := detectedAt.Add(-time.Minute)
+	retryAfter := detectedAt.Add(5 * time.Minute)
+	seedPendingShortResolution(t, db, "channel-clear", "short-clear-metadata", detectedAt)
+	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-clear-metadata").
+		Updates(map[string]any{
+			"authorized_at":            authorizedAt,
+			"published_at_retry_after": retryAfter,
+			"delivery_status":          domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+		}).Error)
+
+	resolver := &PendingPublishedAtResolver{
+		db:        db,
+		client:    newShortPublishedAtResolverTestClient(t, publishedAt, nil),
+		interval:  15 * time.Second,
+		batchSize: 50,
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+
+	assertShortMetadataBackfilledWithoutEnqueue(t, db, "short-clear-metadata", detectedAt, publishedAt, &authorizedAt, nil)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-clear-metadata").Error)
+	assert.Nil(t, alarmState.PublishedAtRetryAfter)
+}
+
+func TestPendingPublishedAtResolver_BackfillsCommunityMetadataWithoutDuplicateWhenAlarmStateAlreadyClaimed(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	authorizedAt := detectedAt.Add(10 * time.Second)
+	publishedAt := detectedAt.Add(-time.Minute)
+	seedPendingCommunityResolution(t, db, "channel-community", "post-claim", detectedAt)
+	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-claim").
+		Updates(map[string]any{
+			"authorized_at":   authorizedAt,
+			"delivery_status": domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+		}).Error)
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:        db,
+		client:    newCommunityPublishedAtResolverTestClient(t, publishedAt, &resolveCalls),
+		interval:  15 * time.Second,
+		batchSize: 50,
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+
+	assert.Equal(t, 1, resolveCalls)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	assert.Zero(t, outboxCount)
+
+	assertCommunityMetadataBackfilledWithoutEnqueue(t, db, "post-claim", detectedAt, publishedAt, &authorizedAt, nil)
+}
+
+func TestPendingPublishedAtResolver_BackfillsCommunityMetadataForAlreadySentContentWithoutDuplicateEnqueue(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	sentAt := detectedAt.Add(3 * time.Minute)
+	publishedAt := detectedAt.Add(-time.Minute)
+	seedPendingCommunityResolution(t, db, "channel-community", "post-sent", detectedAt)
+	require.NoError(t, db.Model(&domain.YouTubeContentAlarmTracking{}).
+		Where("kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-sent").
+		Updates(map[string]any{
+			"alarm_sent_at":   sentAt,
+			"delivery_status": domain.YouTubeContentAlarmDeliveryStatusSent,
+		}).Error)
+	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-sent").
+		Updates(map[string]any{
+			"alarm_sent_at":   sentAt,
+			"delivery_status": domain.YouTubeCommunityShortsAlarmStateStatusSent,
+		}).Error)
+
+	resolveCalls := 0
+	resolver := &PendingPublishedAtResolver{
+		db:        db,
+		client:    newCommunityPublishedAtResolverTestClient(t, publishedAt, &resolveCalls),
+		interval:  15 * time.Second,
+		batchSize: 50,
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+
+	assert.Equal(t, 1, resolveCalls)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	assert.Zero(t, outboxCount)
+
+	assertCommunityMetadataBackfilledWithoutEnqueue(t, db, "post-sent", detectedAt, publishedAt, nil, &sentAt)
+}
+
+func TestPendingPublishedAtResolver_ClearsRetryAfterAfterCommunityMetadataOnlyBackfill(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	authorizedAt := detectedAt.Add(10 * time.Second)
+	publishedAt := detectedAt.Add(-time.Minute)
+	retryAfter := detectedAt.Add(5 * time.Minute)
+	seedPendingCommunityResolution(t, db, "channel-community", "post-clear", detectedAt)
+	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-clear").
+		Updates(map[string]any{
+			"authorized_at":            authorizedAt,
+			"published_at_retry_after": retryAfter,
+			"delivery_status":          domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+		}).Error)
+
+	resolver := &PendingPublishedAtResolver{
+		db:        db,
+		client:    newCommunityPublishedAtResolverTestClient(t, publishedAt, nil),
+		interval:  15 * time.Second,
+		batchSize: 50,
+		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+
+	assertCommunityMetadataBackfilledWithoutEnqueue(t, db, "post-clear", detectedAt, publishedAt, &authorizedAt, nil)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-clear").Error)
+	assert.Nil(t, alarmState.PublishedAtRetryAfter)
 }
 
 func TestPendingPublishedAtResolver_RecordsMetricsAndEnqueueLog(t *testing.T) {
@@ -603,7 +769,7 @@ func TestPendingPublishedAtResolver_SkipsFreshCandidatesBeforeMinDetectedAge(t *
 	assert.Nil(t, freshVideo.PublishedAt)
 }
 
-func TestPendingPublishedAtResolver_CancelDuringCandidateResolutionSetsRetryAfter(t *testing.T) {
+func TestPendingPublishedAtResolver_CancelDuringCandidateResolutionReturnsParentCancel(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -634,15 +800,16 @@ func TestPendingPublishedAtResolver_CancelDuringCandidateResolutionSetsRetryAfte
 	}()
 
 	skippedBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "resolve_timeout"))
-	require.NoError(t, resolver.runOnce(ctx, detectedAt.Add(time.Minute)))
+	err := resolver.runOnce(ctx, detectedAt.Add(time.Minute))
 	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "resolve_timeout"))
 
+	require.ErrorIs(t, err, context.Canceled)
 	assert.Zero(t, resolveCalls)
-	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
+	assert.Equal(t, float64(0), skippedAfter-skippedBefore)
 
 	var alarmState domain.YouTubeCommunityShortsAlarmState
 	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-cancel").Error)
-	require.NotNil(t, alarmState.PublishedAtRetryAfter)
+	assert.Nil(t, alarmState.PublishedAtRetryAfter)
 }
 
 func TestPendingPublishedAtResolver_SetsRetryAfterOnFailure(t *testing.T) {
@@ -706,6 +873,49 @@ func TestPendingPublishedAtResolver_SetsRetryAfterOnPublishedAtEmpty(t *testing.
 	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-empty").Error)
 	require.NotNil(t, alarmState.PublishedAtRetryAfter)
 	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
+}
+
+func TestPendingPublishedAtResolver_SurfacesRetryAfterWriteFailures(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
+	seedPendingShortResolution(t, db, "channel-write-fail", "short-write-fail", detectedAt)
+	require.NoError(t, db.Exec(`
+		CREATE TRIGGER fail_retry_after_update
+		BEFORE UPDATE OF published_at_retry_after ON youtube_community_shorts_alarm_states
+		BEGIN
+			SELECT RAISE(ABORT, 'retry_after blocked');
+		END;
+	`).Error)
+
+	var buf bytes.Buffer
+	resolver := &PendingPublishedAtResolver{
+		db:                db,
+		client:            newShortPublishedAtResolverHTTPClient(t, `<html><body>no date</body></html>`),
+		interval:          15 * time.Second,
+		batchSize:         10,
+		maxResolvePerRun:  10,
+		failureBackoffTTL: time.Minute,
+		logger:            slog.New(slog.NewJSONHandler(&buf, nil)),
+	}
+
+	skippedBefore := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "retry_after_write_failed"))
+	require.NoError(t, resolver.runOnce(context.Background(), detectedAt.Add(time.Minute)))
+	skippedAfter := testutil.ToFloat64(publishedAtResolverSkippedTotal.WithLabelValues(string(domain.OutboxKindNewShort), "retry_after_write_failed"))
+
+	assert.Equal(t, float64(1), skippedAfter-skippedBefore)
+	assert.Contains(t, buf.String(), `"msg":"Pending published_at resolver failed to write retry_after"`)
+	assert.Contains(t, buf.String(), `"post_id":"short:short-write-fail"`)
+	assert.Contains(t, buf.String(), `"reason":"published_at_empty"`)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-write-fail").Error)
+	assert.Nil(t, alarmState.PublishedAtRetryAfter)
 }
 
 func TestPendingPublishedAtResolver_ClearsRetryAfterOnSuccess(t *testing.T) {
@@ -820,11 +1030,170 @@ func seedPendingShortResolution(t *testing.T, db *gorm.DB, channelID, videoID st
 	}).Error)
 }
 
+func seedPendingCommunityResolution(t *testing.T, db *gorm.DB, channelID, postID string, detectedAt time.Time) {
+	t.Helper()
+
+	require.NoError(t, db.Create(&domain.YouTubeCommunityPost{
+		PostID:       "community:" + postID,
+		ChannelID:    channelID,
+		AuthorName:   "Author " + postID,
+		ContentText:  "Content " + postID,
+		LikeCount:    10,
+		CommentCount: 1,
+	}).Error)
+	require.NoError(t, db.Create(&domain.YouTubeContentAlarmTracking{
+		Kind:               domain.OutboxKindCommunityPost,
+		ContentID:          "community:" + postID,
+		CanonicalContentID: "community:" + postID,
+		ChannelID:          channelID,
+		DetectedAt:         detectedAt,
+		DeliveryStatus:     domain.YouTubeContentAlarmDeliveryStatusPending,
+	}).Error)
+	require.NoError(t, db.Create(&domain.YouTubeCommunityShortsSourcePost{
+		Kind:       domain.OutboxKindCommunityPost,
+		PostID:     "community:" + postID,
+		ChannelID:  channelID,
+		DetectedAt: detectedAt,
+	}).Error)
+	require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
+		Kind:           domain.OutboxKindCommunityPost,
+		PostID:         "community:" + postID,
+		ContentID:      "community:" + postID,
+		ChannelID:      channelID,
+		DetectedAt:     detectedAt,
+		DeliveryStatus: domain.YouTubeCommunityShortsAlarmStateStatusDetected,
+	}).Error)
+}
+
+func assertShortMetadataBackfilledWithoutEnqueue(
+	t *testing.T,
+	db *gorm.DB,
+	videoID string,
+	detectedAt time.Time,
+	publishedAt time.Time,
+	authorizedAt *time.Time,
+	alarmSentAt *time.Time,
+) {
+	t.Helper()
+
+	var video domain.YouTubeVideo
+	require.NoError(t, db.First(&video, "video_id = ?", videoID).Error)
+	require.NotNil(t, video.PublishedAt)
+	assert.Equal(t, publishedAt, video.PublishedAt.UTC())
+
+	var tracking domain.YouTubeContentAlarmTracking
+	require.NoError(t, db.First(&tracking, "kind = ? AND content_id = ?", domain.OutboxKindNewShort, "short:"+videoID).Error)
+	require.NotNil(t, tracking.ActualPublishedAt)
+	assert.Equal(t, publishedAt, tracking.ActualPublishedAt.UTC())
+	assert.Equal(t, detectedAt, tracking.DetectedAt.UTC())
+	if alarmSentAt == nil {
+		assert.Nil(t, tracking.AlarmSentAt)
+	} else {
+		require.NotNil(t, tracking.AlarmSentAt)
+		assert.Equal(t, *alarmSentAt, tracking.AlarmSentAt.UTC())
+	}
+
+	var sourcePost domain.YouTubeCommunityShortsSourcePost
+	require.NoError(t, db.First(&sourcePost, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:"+videoID).Error)
+	require.NotNil(t, sourcePost.ActualPublishedAt)
+	assert.Equal(t, publishedAt, sourcePost.ActualPublishedAt.UTC())
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:"+videoID).Error)
+	require.NotNil(t, alarmState.ActualPublishedAt)
+	assert.Equal(t, publishedAt, alarmState.ActualPublishedAt.UTC())
+	if authorizedAt == nil {
+		assert.Nil(t, alarmState.AuthorizedAt)
+	} else {
+		require.NotNil(t, alarmState.AuthorizedAt)
+		assert.Equal(t, *authorizedAt, alarmState.AuthorizedAt.UTC())
+	}
+	if alarmSentAt == nil {
+		assert.Nil(t, alarmState.AlarmSentAt)
+	} else {
+		require.NotNil(t, alarmState.AlarmSentAt)
+		assert.Equal(t, *alarmSentAt, alarmState.AlarmSentAt.UTC())
+	}
+}
+
+func assertCommunityMetadataBackfilledWithoutEnqueue(
+	t *testing.T,
+	db *gorm.DB,
+	postID string,
+	detectedAt time.Time,
+	publishedAt time.Time,
+	authorizedAt *time.Time,
+	alarmSentAt *time.Time,
+) {
+	t.Helper()
+
+	var post domain.YouTubeCommunityPost
+	require.NoError(t, db.First(&post, "post_id = ?", "community:"+postID).Error)
+	require.NotNil(t, post.PublishedAt)
+	assert.Equal(t, publishedAt.UTC(), post.PublishedAt.UTC())
+
+	var tracking domain.YouTubeContentAlarmTracking
+	require.NoError(t, db.First(&tracking, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:"+postID).Error)
+	require.NotNil(t, tracking.ActualPublishedAt)
+	assert.Equal(t, publishedAt.UTC(), tracking.ActualPublishedAt.UTC())
+	assert.Equal(t, detectedAt.UTC(), tracking.DetectedAt.UTC())
+	if alarmSentAt == nil {
+		assert.Nil(t, tracking.AlarmSentAt)
+	} else {
+		require.NotNil(t, tracking.AlarmSentAt)
+		assert.Equal(t, alarmSentAt.UTC(), tracking.AlarmSentAt.UTC())
+	}
+
+	var sourcePost domain.YouTubeCommunityShortsSourcePost
+	require.NoError(t, db.First(&sourcePost, "kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:"+postID).Error)
+	require.NotNil(t, sourcePost.ActualPublishedAt)
+	assert.Equal(t, publishedAt.UTC(), sourcePost.ActualPublishedAt.UTC())
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:"+postID).Error)
+	require.NotNil(t, alarmState.ActualPublishedAt)
+	assert.Equal(t, publishedAt.UTC(), alarmState.ActualPublishedAt.UTC())
+	if authorizedAt == nil {
+		assert.Nil(t, alarmState.AuthorizedAt)
+	} else {
+		require.NotNil(t, alarmState.AuthorizedAt)
+		assert.Equal(t, authorizedAt.UTC(), alarmState.AuthorizedAt.UTC())
+	}
+	if alarmSentAt == nil {
+		assert.Nil(t, alarmState.AlarmSentAt)
+	} else {
+		require.NotNil(t, alarmState.AlarmSentAt)
+		assert.Equal(t, alarmSentAt.UTC(), alarmState.AlarmSentAt.UTC())
+	}
+}
+
 func newShortPublishedAtResolverTestClient(t *testing.T, publishedAt time.Time, resolveCalls *int) *scraper.Client {
 	t.Helper()
 
 	watchHTML := `<html><head><meta itemprop="uploadDate" content="` + publishedAt.Format(time.RFC3339) + `"></head></html>`
 	return newShortPublishedAtResolverHTTPClient(t, watchHTML, resolveCalls)
+}
+
+func newCommunityPublishedAtResolverTestClient(t *testing.T, publishedAt time.Time, resolveCalls *int) *scraper.Client {
+	t.Helper()
+
+	postHTML := `<html><head><meta itemprop="datePublished" content="` + publishedAt.Format(time.RFC3339) + `"></head></html>`
+	return scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
+		scraper.WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if strings.HasPrefix(req.URL.Path, "/post/") {
+					if resolveCalls != nil {
+						*resolveCalls = *resolveCalls + 1
+					}
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postHTML)), Header: make(http.Header), Request: req}, nil
+				}
+				return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
+			}),
+		}),
+	)
 }
 
 func newShortPublishedAtResolverHTTPClient(t *testing.T, watchHTML string, resolveCalls ...*int) *scraper.Client {
