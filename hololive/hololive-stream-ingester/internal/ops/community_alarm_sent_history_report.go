@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -18,20 +17,8 @@ type CommunityAlarmSentHistoryCollectOptions struct {
 	ObservationBigBangCutoverAt *time.Time
 }
 
-type CommunityAlarmSentHistoryQuery struct {
-	ObservationRuntimeName      string     `json:"observation_runtime_name"`
-	ObservationBigBangCutoverAt *time.Time `json:"observation_bigbang_cutover_at,omitempty"`
-	WindowStart                 *time.Time `json:"window_start,omitempty"`
-	WindowEnd                   *time.Time `json:"window_end,omitempty"`
-}
-
-type CommunityAlarmSentHistorySummary struct {
-	CollectedRowCount   int        `json:"collected_row_count"`
-	DuplicateRowCount   int        `json:"duplicate_row_count"`
-	SentPostCount       int        `json:"sent_post_count"`
-	EarliestAlarmSentAt *time.Time `json:"earliest_alarm_sent_at,omitempty"`
-	LatestAlarmSentAt   *time.Time `json:"latest_alarm_sent_at,omitempty"`
-}
+type CommunityAlarmSentHistoryQuery = observationAlarmSentHistoryQuery
+type CommunityAlarmSentHistorySummary = observationAlarmSentHistorySummary
 
 type CommunityAlarmSentHistoryReport struct {
 	GeneratedAt time.Time                                    `json:"generated_at"`
@@ -63,7 +50,7 @@ func CollectCommunityAlarmSentHistoryReport(
 		now = time.Now().UTC()
 	}
 
-	query, err := normalizeCommunityAlarmSentHistoryCollectOptions(options)
+	query, err := normalizeObservationAlarmSentHistoryCollectQuery(options.ObservationRuntimeName, options.ObservationBigBangCutoverAt)
 	if err != nil {
 		return CommunityAlarmSentHistoryReport{}, fmt.Errorf("collect community alarm sent history report: %w", err)
 	}
@@ -132,23 +119,10 @@ func BuildCommunityAlarmSentHistoryReport(
 	if generatedAt.IsZero() {
 		generatedAt = time.Now().UTC()
 	}
-	query = normalizeCommunityAlarmSentHistoryQuery(query)
+	query = normalizeObservationAlarmSentHistoryQuery(query)
 
 	finalized := finalizeCommunityAlarmSentHistoryRows(rows)
-	summary := CommunityAlarmSentHistorySummary{
-		CollectedRowCount: finalized.CollectedRowCount,
-		DuplicateRowCount: finalized.DuplicateRowCount,
-	}
-	for i := range finalized.Rows {
-		row := finalized.Rows[i]
-		summary.SentPostCount++
-		if summary.EarliestAlarmSentAt == nil || row.AlarmSentAt.Before(summary.EarliestAlarmSentAt.UTC()) {
-			summary.EarliestAlarmSentAt = cloneCommunityShortsSendCountTime(&row.AlarmSentAt)
-		}
-		if summary.LatestAlarmSentAt == nil || row.AlarmSentAt.After(summary.LatestAlarmSentAt.UTC()) {
-			summary.LatestAlarmSentAt = cloneCommunityShortsSendCountTime(&row.AlarmSentAt)
-		}
-	}
+	summary := buildObservationAlarmSentHistorySummary(finalized)
 
 	return CommunityAlarmSentHistoryReport{
 		GeneratedAt: generatedAt,
@@ -160,81 +134,13 @@ func BuildCommunityAlarmSentHistoryReport(
 }
 
 func RenderCommunityAlarmSentHistoryMarkdown(report CommunityAlarmSentHistoryReport) string {
-	var builder strings.Builder
-
-	builder.WriteString("# YouTube Community Alarm Sent History\n\n")
-	builder.WriteString("- generated at: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.GeneratedAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- observation runtime: `")
-	builder.WriteString(fallbackCommunityShortsSendCountValue(report.Query.ObservationRuntimeName))
-	builder.WriteString("`, cutover: `")
-	builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.ObservationBigBangCutoverAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- window: `")
-	builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.WindowStart))
-	builder.WriteString("` -> `")
-	builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.WindowEnd))
-	builder.WriteString("`\n")
-	builder.WriteString("- summary: collected_rows=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.CollectedRowCount))
-	builder.WriteString("`, duplicates_removed=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.DuplicateRowCount))
-	builder.WriteString("`, sent_posts=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.SentPostCount))
-	builder.WriteString("`, earliest_alarm_sent_at=`")
-	builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Summary.EarliestAlarmSentAt))
-	builder.WriteString("`, latest_alarm_sent_at=`")
-	builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Summary.LatestAlarmSentAt))
-	builder.WriteString("`\n")
-	builder.WriteString(renderObservationPostComparisonSummaryMarkdown(report.Comparison))
-	builder.WriteString(renderObservationPostComparisonVerdictsMarkdown(report.Comparison))
-	builder.WriteString(renderObservationIdentifierMismatchCandidatesMarkdown(report.Comparison))
-
-	if len(report.Rows) == 0 {
-		builder.WriteString("\n관찰 구간에 해당하는 발송 완료 community 알람 이력이 없습니다.\n")
-		return builder.String()
-	}
-
-	builder.WriteString("\n| post_id | channel_id | content_id | actual_published_at | detected_at | alarm_sent_at |\n")
-	builder.WriteString("| --- | --- | --- | --- | --- | --- |\n")
-	for i := range report.Rows {
-		row := report.Rows[i]
-		builder.WriteString("| `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(row.PostID))
-		builder.WriteString("` | `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(row.ChannelID))
-		builder.WriteString("` | `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(row.ContentID))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(row.ActualPublishedAt))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsSendCountTime(row.DetectedAt))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsSendCountTime(row.AlarmSentAt))
-		builder.WriteString("` |\n")
-	}
-
-	return builder.String()
-}
-
-func normalizeCommunityAlarmSentHistoryCollectOptions(options CommunityAlarmSentHistoryCollectOptions) (CommunityAlarmSentHistoryQuery, error) {
-	runtimeName := strings.TrimSpace(options.ObservationRuntimeName)
-	cutoverAt := cloneCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt)
-	if runtimeName == "" || cutoverAt == nil || cutoverAt.IsZero() {
-		return CommunityAlarmSentHistoryQuery{}, fmt.Errorf("observation runtime name and big-bang cutover at are required")
-	}
-
-	return CommunityAlarmSentHistoryQuery{
-		ObservationRuntimeName:      runtimeName,
-		ObservationBigBangCutoverAt: cutoverAt,
-	}, nil
-}
-
-func normalizeCommunityAlarmSentHistoryQuery(query CommunityAlarmSentHistoryQuery) CommunityAlarmSentHistoryQuery {
-	query.ObservationRuntimeName = strings.TrimSpace(query.ObservationRuntimeName)
-	query.ObservationBigBangCutoverAt = cloneCommunityShortsSendCountTime(query.ObservationBigBangCutoverAt)
-	query.WindowStart = cloneCommunityShortsSendCountTime(query.WindowStart)
-	query.WindowEnd = cloneCommunityShortsSendCountTime(query.WindowEnd)
-	return query
+	return renderObservationAlarmSentHistoryMarkdown(
+		"YouTube Community Alarm Sent History",
+		report.GeneratedAt,
+		report.Query,
+		report.Summary,
+		report.Comparison,
+		report.Rows,
+		"관찰 구간에 해당하는 발송 완료 community 알람 이력이 없습니다.",
+	)
 }
