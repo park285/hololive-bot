@@ -36,7 +36,7 @@ const (
 )
 
 const (
-	NoUpcomingInterval        = 5 * time.Minute
+	NoUpcomingInterval        = 1 * time.Minute
 	FullRefreshInterval       = 5 * time.Minute
 	RecentlyNotifiedWindow    = 15 * time.Minute
 	LiveCatchupSuppressWindow = 15 * time.Minute

@@ -77,12 +77,12 @@ func TestMinutesUntilFloorZeroClamped(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-            got := minutesUntilFloorZeroClamped(tt.start, now)
-            if got != tt.want {
-                t.Fatalf("minutesUntilFloorZeroClamped() = %d, want %d", got, tt.want)
-            }
-        })
-    }
+			got := minutesUntilFloorZeroClamped(tt.start, now)
+			if got != tt.want {
+				t.Fatalf("minutesUntilFloorZeroClamped() = %d, want %d", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestFormatScheduleChangeMessage(t *testing.T) {
@@ -156,6 +156,107 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 			for i := range got {
 				if got[i] != tt.want[i] {
 					t.Fatalf("NormalizeTargetMinutes() = %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildRuntimeTargetMinutes(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  int
+		expect []int
+	}{
+		{
+			name:   "invalid uses defaults",
+			input:  0,
+			expect: []int{5, 3, 1},
+		},
+		{
+			name:   "five keeps three and one",
+			input:  5,
+			expect: []int{5, 3, 1},
+		},
+		{
+			name:   "three keeps one",
+			input:  3,
+			expect: []int{3, 1},
+		},
+		{
+			name:   "two keeps one",
+			input:  2,
+			expect: []int{2, 1},
+		},
+		{
+			name:   "one stays one",
+			input:  1,
+			expect: []int{1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildRuntimeTargetMinutes(tt.input)
+			if len(got) != len(tt.expect) {
+				t.Fatalf("BuildRuntimeTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.expect), got)
+			}
+			for i := range got {
+				if got[i] != tt.expect[i] {
+					t.Fatalf("BuildRuntimeTargetMinutes() = %v, want %v", got, tt.expect)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveConfiguredTargetMinutes(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  []int
+		expect []int
+	}{
+		{
+			name:   "nil uses defaults",
+			input:  nil,
+			expect: []int{5, 3, 1},
+		},
+		{
+			name:   "invalid uses defaults",
+			input:  []int{0, -1},
+			expect: []int{5, 3, 1},
+		},
+		{
+			name:   "single explicit value uses runtime policy",
+			input:  []int{5},
+			expect: []int{5, 3, 1},
+		},
+		{
+			name:   "single minute one stays one",
+			input:  []int{1},
+			expect: []int{1},
+		},
+		{
+			name:   "explicit multi target is preserved after explicit normalization",
+			input:  []int{15, 15, 5, 0},
+			expect: []int{15, 5},
+		},
+		{
+			name:   "multi target keeps explicit one",
+			input:  []int{30, 15, 5, 1},
+			expect: []int{30, 15, 5, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveConfiguredTargetMinutes(tt.input)
+			if len(got) != len(tt.expect) {
+				t.Fatalf("ResolveConfiguredTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.expect), got)
+			}
+			for i := range got {
+				if got[i] != tt.expect[i] {
+					t.Fatalf("ResolveConfiguredTargetMinutes() = %v, want %v", got, tt.expect)
 				}
 			}
 		})
@@ -315,6 +416,29 @@ func TestHighestCrossedTarget(t *testing.T) {
 			},
 			want:   3,
 			wantOK: true,
+		},
+		{
+			name:    "does not invent missing three minute target",
+			targets: []int{5, 1},
+			start:   base.Add(3*time.Minute + 20*time.Second),
+			window: EvaluationWindow{
+				Start: base.Add(-75 * time.Second),
+				End:   base,
+			},
+			want:   0,
+			wantOK: false,
+		},
+		{
+			name:    "does not synthesize one minute target for explicit multi target config",
+			targets: []int{15, 5},
+			start:   base.Add(50 * time.Second),
+			window: EvaluationWindow{
+				Start:  base.Add(-30 * time.Second),
+				End:    base,
+				Capped: false,
+			},
+			want:   0,
+			wantOK: false,
 		},
 		{
 			name:    "returns false for invalid window",
