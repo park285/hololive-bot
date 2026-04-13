@@ -1,18 +1,14 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
+	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/reportcli"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
 )
 
@@ -30,63 +26,41 @@ func main() {
 		}
 	})
 
-	if err := validateCommunityShortsSendCountCLIArgs(*window, windowExplicit, *observationRuntime, *observationCutover); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-
-	observationQuery, useObservationQuery, err := observationquery.ParseOptional(*observationRuntime, *observationCutover)
+	err := reportcli.RunOptionalObservationReport(
+		reportcli.OptionalObservationParams{
+			Runtime: *observationRuntime,
+			Cutover: *observationCutover,
+			Format:  *format,
+		},
+		reportcli.OptionalObservationCommand[
+			opsapp.CommunityShortsSendCountCollectOptions,
+			opsapp.CommunityShortsSendCountReport,
+		]{
+			BuildOptions: func(now time.Time, query reportcli.ObservationQuery, useObservationQuery bool) (opsapp.CommunityShortsSendCountCollectOptions, error) {
+				if err := validateCommunityShortsSendCountCLIArgs(*window, windowExplicit, *observationRuntime, *observationCutover); err != nil {
+					return opsapp.CommunityShortsSendCountCollectOptions{}, err
+				}
+				options := opsapp.CommunityShortsSendCountCollectOptions{
+					ObservationRuntimeName: query.Runtime,
+				}
+				if useObservationQuery {
+					options.ObservationBigBangCutoverAt = &query.CutoverAt
+					return options, nil
+				}
+				since := now.Add(-*window)
+				options.Since = &since
+				return options, nil
+			},
+			Collect:            opsapp.CollectCommunityShortsSendCountReportWithOptions,
+			RenderMarkdown:     opsapp.RenderCommunityShortsSendCountMarkdown,
+			LoadConfigError:    "Failed to load community/shorts send-count config",
+			CollectError:       "Failed to collect community/shorts send counts",
+			MarkdownWriteError: "Failed to write community/shorts send-count markdown",
+			JSONWriteError:     "Failed to write community/shorts send-count JSON",
+		},
+	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	var observationCutoverAt *time.Time
-	if useObservationQuery {
-		observationCutoverAt = &observationQuery.CutoverAt
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load community/shorts send-count config: %v\n", err)
-		os.Exit(1)
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	now := time.Now().UTC()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	options := opsapp.CommunityShortsSendCountCollectOptions{
-		ObservationRuntimeName:      observationQuery.Runtime,
-		ObservationBigBangCutoverAt: observationCutoverAt,
-	}
-	if !useObservationQuery {
-		since := now.Add(-*window)
-		options.Since = &since
-	}
-
-	report, err := opsapp.CollectCommunityShortsSendCountReportWithOptions(ctx, cfg, logger, now, options)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to collect community/shorts send counts: %v\n", err)
-		os.Exit(1)
-	}
-
-	switch strings.ToLower(strings.TrimSpace(*format)) {
-	case "markdown":
-		if _, err := fmt.Print(opsapp.RenderCommunityShortsSendCountMarkdown(report)); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write community/shorts send-count markdown: %v\n", err)
-			os.Exit(1)
-		}
-	case "json":
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetEscapeHTML(false)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(report); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write community/shorts send-count JSON: %v\n", err)
-			os.Exit(1)
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "unsupported format %q (want markdown or json)\n", *format)
 		os.Exit(1)
 	}
 }
