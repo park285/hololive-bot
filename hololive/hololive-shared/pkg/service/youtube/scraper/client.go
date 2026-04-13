@@ -41,6 +41,16 @@ import (
 
 const FetchPageMaxAttempts = 3
 
+type FetchPolicy struct {
+	MaxAttempts int
+}
+
+var (
+	DefaultFetchPolicy              = FetchPolicy{MaxAttempts: FetchPageMaxAttempts}
+	HighFrequencyChannelFetchPolicy = FetchPolicy{MaxAttempts: 1}
+	MetadataResolveFetchPolicy      = FetchPolicy{MaxAttempts: 1}
+)
+
 var ErrRateLimited = errors.New("rate limited by YouTube (429)")
 
 var ErrForbidden = errors.New("forbidden by YouTube (403)")
@@ -222,7 +232,7 @@ func (c *Client) ResolveCommunityPostPublishedAt(ctx context.Context, postID str
 		return nil, ErrCommunityPublishedAtNotFound
 	}
 
-	html, err := c.fetchPage(ctx, fmt.Sprintf("https://www.youtube.com/post/%s", trimmedPostID))
+	html, err := c.fetchPage(ctx, fmt.Sprintf("https://www.youtube.com/post/%s", trimmedPostID), MetadataResolveFetchPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("fetch community post page: %w", err)
 	}
@@ -241,7 +251,7 @@ func (c *Client) ResolveVideoPublishedAt(ctx context.Context, videoID string) (*
 		return nil, ErrPublishedAtNotFound
 	}
 
-	html, err := c.fetchPage(ctx, fmt.Sprintf("https://www.youtube.com/watch?v=%s", trimmedVideoID))
+	html, err := c.fetchPage(ctx, fmt.Sprintf("https://www.youtube.com/watch?v=%s", trimmedVideoID), MetadataResolveFetchPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("fetch video page: %w", err)
 	}
@@ -255,7 +265,7 @@ func (c *Client) ResolveVideoPublishedAt(ctx context.Context, videoID string) (*
 }
 
 // fetchPage: YouTube 페이지 HTML 가져오기 (5xx 에러 시 재시도 포함)
-func (c *Client) fetchPage(ctx context.Context, pageURL string) (string, error) {
+func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchPolicy) (string, error) {
 	// transient cooldown 대기 (호출 간 감속, 내부 재시도와 독립)
 	if wait := c.backoffState.TransientCooldownRemaining(); wait > 0 {
 		timer := time.NewTimer(wait)
@@ -267,10 +277,15 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string) (string, error) 
 		}
 	}
 
+	resolvedPolicy := DefaultFetchPolicy
+	if len(policy) > 0 && policy[0].MaxAttempts > 0 {
+		resolvedPolicy = policy[0]
+	}
+
 	var result string
 
 	err := retry.WithRetry(ctx, retry.RetryOptions{
-		MaxAttempts: FetchPageMaxAttempts,
+		MaxAttempts: resolvedPolicy.MaxAttempts,
 		BaseDelay:   2 * time.Second,
 		Jitter:      1500 * time.Millisecond,
 		ShouldRetry: func(err error) bool {
