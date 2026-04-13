@@ -31,8 +31,9 @@ import (
 )
 
 type Settings struct {
-	AlarmAdvanceMinutes int  `json:"alarmAdvanceMinutes"`
-	ScraperProxyEnabled bool `json:"scraperProxyEnabled"`
+	AlarmAdvanceMinutes int   `json:"alarmAdvanceMinutes"`
+	ScraperProxyEnabled bool  `json:"scraperProxyEnabled"`
+	TargetMinutes       []int `json:"targetMinutes,omitempty"`
 }
 
 type Service struct {
@@ -45,6 +46,15 @@ type Service struct {
 type settingsDisk struct {
 	AlarmAdvanceMinutes *int  `json:"alarmAdvanceMinutes,omitempty"`
 	ScraperProxyEnabled *bool `json:"scraperProxyEnabled,omitempty"`
+	TargetMinutes       []int `json:"targetMinutes,omitempty"`
+}
+
+func cloneTargetMinutes(targetMinutes []int) []int {
+	if len(targetMinutes) == 0 {
+		return nil
+	}
+
+	return append([]int(nil), targetMinutes...)
 }
 
 func ensureParentDir(filePath string) error {
@@ -67,7 +77,11 @@ func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger)
 	s := &Service{
 		filePath: filePath,
 		logger:   logger,
-		cache:    &defaults,
+		cache: &Settings{
+			AlarmAdvanceMinutes: defaults.AlarmAdvanceMinutes,
+			ScraperProxyEnabled: defaults.ScraperProxyEnabled,
+			TargetMinutes:       cloneTargetMinutes(defaults.TargetMinutes),
+		},
 	}
 
 	if err := ensureParentDir(filePath); err != nil && s.logger != nil {
@@ -101,12 +115,19 @@ func (s *Service) load() {
 	if disk.ScraperProxyEnabled != nil {
 		s.cache.ScraperProxyEnabled = *disk.ScraperProxyEnabled
 	}
+	if len(disk.TargetMinutes) > 0 {
+		s.cache.TargetMinutes = cloneTargetMinutes(disk.TargetMinutes)
+	}
 }
 
 func (s *Service) Get() Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return *s.cache
+	return Settings{
+		AlarmAdvanceMinutes: s.cache.AlarmAdvanceMinutes,
+		ScraperProxyEnabled: s.cache.ScraperProxyEnabled,
+		TargetMinutes:       cloneTargetMinutes(s.cache.TargetMinutes),
+	}
 }
 
 func (s *Service) Update(newSettings Settings) error {
@@ -121,7 +142,11 @@ func (s *Service) Update(newSettings Settings) error {
 		return err
 	}
 
-	s.cache = &newSettings
+	s.cache = &Settings{
+		AlarmAdvanceMinutes: newSettings.AlarmAdvanceMinutes,
+		ScraperProxyEnabled: newSettings.ScraperProxyEnabled,
+		TargetMinutes:       cloneTargetMinutes(newSettings.TargetMinutes),
+	}
 
 	f, err := os.Create(s.filePath)
 	if err != nil {

@@ -59,3 +59,33 @@ func TestSettingsService_LoadDefaultAndPersist(t *testing.T) {
 		t.Fatalf("expected persisted scraper proxy enabled false, got true")
 	}
 }
+
+func TestSettingsService_PreservesTargetMinutesOnReload(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "settings.json")
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	defaults := Settings{
+		AlarmAdvanceMinutes: 30,
+		ScraperProxyEnabled: false,
+		TargetMinutes:       []int{30, 15, 5, 1},
+	}
+	svc := NewSettingsService(filePath, defaults, logger)
+	current := svc.Get()
+	current.ScraperProxyEnabled = true
+	if err := svc.Update(current); err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+
+	reloaded := NewSettingsService(filePath, Settings{}, logger)
+	got := reloaded.Get()
+	want := []int{30, 15, 5, 1}
+	if len(got.TargetMinutes) != len(want) {
+		t.Fatalf("expected target minutes len %d, got %d (%v)", len(want), len(got.TargetMinutes), got.TargetMinutes)
+	}
+	for i := range want {
+		if got.TargetMinutes[i] != want[i] {
+			t.Fatalf("expected target minutes %v, got %v", want, got.TargetMinutes)
+		}
+	}
+}
