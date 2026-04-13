@@ -30,10 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -79,44 +75,10 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		return nil, err
 	}
 
-	var operationalChannels []communityShortsOperationalChannel
-	var ytPollTargets youtubePollTargets
-	if features.youtubeEnabled {
-		operationalChannels, err = resolveCommunityShortsOperationalChannelsFromRepository(ctx, infra.memberRepo)
-		if err != nil {
-			infra.cleanup()
-			return nil, fmt.Errorf("resolve community shorts operational channels: %w", err)
-		}
-
-		ytPollTargets, err = resolveYouTubePollTargets(ctx, infra.cacheService, infra.postgresService, operationalChannels, logger)
-		if err != nil {
-			infra.cleanup()
-			return nil, err
-		}
-
-		logger.Info("Resolved YouTube poll targets",
-			slog.Int("notification_target_channels", len(ytPollTargets.NotificationChannelIDs)),
-			slog.Int("stats_target_channels", len(ytPollTargets.StatsChannelIDs)),
-			slog.Int("dropped_alarm_targets", ytPollTargets.DroppedAlarmTargets),
-		)
-	}
-
-	var communityShortsPolicy communityShortsBigBangPolicy
-	if features.youtubeEnabled && features.communityShortsBigBangEnabled {
-		communityShortsPolicy, err = buildCommunityShortsBigBangPolicy(cfg.Ingestion, operationalChannels)
-		if err != nil {
-			infra.cleanup()
-			return nil, err
-		}
-		if communityShortsPolicy.Enabled() {
-			logger.Info("Community/shorts big-bang request switch configured",
-				slog.Time("community_shorts_bigbang_cutover_at", communityShortsPolicy.CutoverAt()),
-				slog.Int("community_shorts_bigbang_target_channels", communityShortsPolicy.TargetChannelCount()),
-			)
-		} else {
-			logger.Warn("Community/shorts big-bang request switch is missing cutover criteria",
-				slog.Int("community_shorts_bigbang_target_channels", communityShortsPolicy.TargetChannelCount()))
-		}
+	youtubeState, err := resolveIngestionRuntimeYouTubeState(ctx, cfg, logger, spec, features, infra)
+	if err != nil {
+		infra.cleanup()
+		return nil, err
 	}
 
 	if warnErr := observeSubscriberCacheOnYouTubeStartup(ctx, spec.name, features.youtubeEnabled, infra.cacheService, logger); warnErr != nil {
@@ -125,70 +87,22 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			slog.Any("error", warnErr),
 		)
 	}
-
-	var ingestionLeaseRef *providers.IngestionLease
 	if features.youtubeEnabled {
-		ingestionLeaseRef, err = providers.AcquireIngestionLease(ctx, infra.cacheService, spec.name, logger)
+		youtubeState.ingestionLease, err = providers.AcquireIngestionLease(ctx, infra.cacheService, spec.name, logger)
 		if err != nil {
 			infra.cleanup()
 			return nil, fmt.Errorf("acquire ingestion lease: %w", err)
 		}
 	}
 
-	var scraperScheduler *poller.Scheduler
-	var outboxDispatcher *outbox.Dispatcher
-	var publishedAtResolver *poller.PendingPublishedAtResolver
-	var pollerRegistrations []providers.ChannelPollerRegistration
-	var pollTargetRefresher *youTubePollTargetRefresher
-	var youtubeScheduler youtube.Scheduler
-	if features.youtubeEnabled {
-		routeDecider := buildCommunityShortsRouteDecider(communityShortsPolicy)
-		sharedScraperClient := buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL)
-		if err := validatePublishedAtResolverSchemaIfEnabled(ctx, cfg.Scraper, infra.postgresService, logger); err != nil {
-			infra.cleanup()
-			return nil, fmt.Errorf("validate published_at resolver schema: %w", err)
-		}
-		publishedAtResolver = buildPendingPublishedAtResolver(
-			cfg.Scraper,
-			infra.postgresService,
-			sharedScraperClient,
-			routeDecider,
-			logger,
-		)
-		scraperScheduler, outboxDispatcher, pollerRegistrations, err = buildStreamIngesterYouTubeComponents(
-			cfg.Scraper,
-			infra.postgresService,
-			ytPollTargets.NotificationChannelIDs,
-			ytPollTargets.StatsChannelIDs,
-			sharedScraperClient,
-			infra.cacheService,
-			infra.irisClient,
-			infra.templateRenderer,
-			routeDecider,
-			publishedAtResolver,
-			logger,
-		)
-		pollTargetRefresher = newYouTubePollTargetRefresher(
-			infra.cacheService,
-			scraperScheduler,
-			pollerRegistrations,
-			operationalChannels,
-			func(ctx context.Context) ([]string, error) {
-				return loadAlarmChannelIDs(ctx, infra.postgresService)
-			},
-			logger,
-		).withOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
-			return resolveCommunityShortsOperationalChannelsFromRepository(ctx, infra.memberRepo)
-		})
-		youtubeScheduler = infra.ytStack.Scheduler
+	youtubeDeps, err := buildIngestionRuntimeYouTubeDependencies(ctx, cfg, logger, infra, features.youtubeEnabled, youtubeState)
+	if err != nil {
+		infra.cleanup()
+		return nil, err
 	}
 
-	configSubscriber := buildRuntimeConfigSubscriber(features, infra, scraperScheduler, logger)
-
-	var observationWindowWriter communityShortsObservationWindowWriter
-	if spec.name == youtubeScraperRuntimeName && communityShortsPolicy.Enabled() {
-		observationWindowWriter = trackingrepo.NewRepository(infra.postgresService.GetGormDB())
-	}
+	configSubscriber := buildRuntimeConfigSubscriber(features, infra, youtubeDeps.scraperScheduler, logger)
+	observationWindowWriter := buildIngestionRuntimeObservationWindowWriter(spec.name, youtubeState.communityShortsPolicy, infra)
 
 	httpServer, err := buildStreamIngesterHTTPServer(ctx, cfg, logger, spec.name, readiness)
 	if err != nil {
@@ -204,19 +118,19 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		RuntimeName:                            spec.name,
 		Config:                                 cfg,
 		Logger:                                 logger,
-		Scheduler:                              youtubeScheduler,
-		ScraperScheduler:                       scraperScheduler,
-		PublishedAtResolver:                    publishedAtResolver,
+		Scheduler:                              youtubeDeps.youtubeScheduler,
+		ScraperScheduler:                       youtubeDeps.scraperScheduler,
+		PublishedAtResolver:                    youtubeDeps.publishedAtResolver,
 		PhotoSync:                              selectPhotoSyncService(features.photoSyncEnabled, infra.photoSync),
-		OutboxDispatcher:                       outboxDispatcher,
+		OutboxDispatcher:                       youtubeDeps.outboxDispatcher,
 		ConfigSubscriber:                       configSubscriber,
-		PollTargetRefresher:                    pollTargetRefresher,
+		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
 		ServerAddr:                             fmt.Sprintf(":%d", cfg.Server.Port),
 		HttpServer:                             httpServer,
 		Readiness:                              readiness,
-		CommunityShortsBigBangPolicy:           communityShortsPolicy,
+		CommunityShortsBigBangPolicy:           youtubeState.communityShortsPolicy,
 		communityShortsObservationWindowWriter: observationWindowWriter,
-		ingestionLease:                         ingestionLeaseRef,
+		ingestionLease:                         youtubeState.ingestionLease,
 		Managed:                                lifecycle.NewManaged(cleanup),
 	}, nil
 }
