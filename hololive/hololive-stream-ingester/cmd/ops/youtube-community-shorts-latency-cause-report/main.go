@@ -1,18 +1,15 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
+	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/reportcli"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
 )
 
@@ -39,62 +36,43 @@ func main() {
 	format := flag.String("format", "markdown", "output format: markdown or json")
 	flag.Parse()
 
-	if err := validateCommunityShortsLatencyCauseCLIArgs(periods, *observationRuntime, *observationCutover); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-
-	observationQuery, useObservationQuery, err := observationquery.ParseOptional(*observationRuntime, *observationCutover)
+	err := reportcli.RunOptionalObservationReport(
+		reportcli.OptionalObservationParams{
+			Runtime: *observationRuntime,
+			Cutover: *observationCutover,
+			Format:  *format,
+		},
+		reportcli.OptionalObservationCommand[
+			opsapp.CommunityShortsLatencyCauseCollectOptions,
+			opsapp.CommunityShortsLatencyCauseReport,
+		]{
+			BuildOptions: func(_ time.Time, query reportcli.ObservationQuery, useObservationQuery bool) (opsapp.CommunityShortsLatencyCauseCollectOptions, error) {
+				if err := validateCommunityShortsLatencyCauseCLIArgs(periods, *observationRuntime, *observationCutover); err != nil {
+					return opsapp.CommunityShortsLatencyCauseCollectOptions{}, err
+				}
+				options := opsapp.CommunityShortsLatencyCauseCollectOptions{}
+				if useObservationQuery {
+					options.ObservationRuntimeName = query.Runtime
+					options.ObservationBigBangCutoverAt = &query.CutoverAt
+					return options, nil
+				}
+				specs, err := parseLatencyCausePeriodSpecs(periods)
+				if err != nil {
+					return opsapp.CommunityShortsLatencyCauseCollectOptions{}, fmt.Errorf("invalid period flag: %w", err)
+				}
+				options.PeriodSpecs = specs
+				return options, nil
+			},
+			Collect:            opsapp.CollectCommunityShortsLatencyCauseReportWithOptions,
+			RenderMarkdown:     opsapp.RenderCommunityShortsLatencyCauseMarkdown,
+			LoadConfigError:    "Failed to load community/shorts latency-cause config",
+			CollectError:       "Failed to collect community/shorts latency cause report",
+			MarkdownWriteError: "Failed to write community/shorts latency-cause markdown",
+			JSONWriteError:     "Failed to write community/shorts latency-cause JSON",
+		},
+	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	options := opsapp.CommunityShortsLatencyCauseCollectOptions{}
-	if useObservationQuery {
-		options.ObservationRuntimeName = observationQuery.Runtime
-		options.ObservationBigBangCutoverAt = &observationQuery.CutoverAt
-	} else {
-		specs, err := parseLatencyCausePeriodSpecs(periods)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid period flag: %v\n", err)
-			os.Exit(1)
-		}
-		options.PeriodSpecs = specs
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load community/shorts latency-cause config: %v\n", err)
-		os.Exit(1)
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	now := time.Now().UTC()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	report, err := opsapp.CollectCommunityShortsLatencyCauseReportWithOptions(ctx, cfg, logger, now, options)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to collect community/shorts latency cause report: %v\n", err)
-		os.Exit(1)
-	}
-
-	switch strings.ToLower(strings.TrimSpace(*format)) {
-	case "markdown":
-		if _, err := fmt.Print(opsapp.RenderCommunityShortsLatencyCauseMarkdown(report)); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write community/shorts latency-cause markdown: %v\n", err)
-			os.Exit(1)
-		}
-	case "json":
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetEscapeHTML(false)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(report); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write community/shorts latency-cause JSON: %v\n", err)
-			os.Exit(1)
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "unsupported format %q (want markdown or json)\n", *format)
 		os.Exit(1)
 	}
 }
