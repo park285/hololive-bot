@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
 )
 
@@ -21,17 +21,11 @@ func main() {
 	format := flag.String("format", "markdown", "output format: markdown or json")
 	flag.Parse()
 
-	if err := validateShortsAlarmSentHistoryCLIArgs(*observationRuntime, *observationCutover); err != nil {
+	observationQuery, err := observationquery.ParseRequired(*observationRuntime, *observationCutover)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
-
-	parsedCutoverAt, err := time.Parse(time.RFC3339, strings.TrimSpace(*observationCutover))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid observation-cutover %q: %v\n", *observationCutover, err)
-		os.Exit(1)
-	}
-	parsedCutoverAt = parsedCutoverAt.UTC()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -45,8 +39,8 @@ func main() {
 	defer cancel()
 
 	report, err := opsapp.CollectShortsAlarmSentHistoryReport(ctx, cfg, logger, now, opsapp.ShortsAlarmSentHistoryCollectOptions{
-		ObservationRuntimeName:      strings.TrimSpace(*observationRuntime),
-		ObservationBigBangCutoverAt: &parsedCutoverAt,
+		ObservationRuntimeName:      observationQuery.Runtime,
+		ObservationBigBangCutoverAt: &observationQuery.CutoverAt,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to collect shorts alarm sent history: %v\n", err)
@@ -71,16 +65,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unsupported format %q (want markdown or json)\n", *format)
 		os.Exit(1)
 	}
-}
-
-func validateShortsAlarmSentHistoryCLIArgs(observationRuntime string, observationCutover string) error {
-	trimmedRuntime := strings.TrimSpace(observationRuntime)
-	trimmedCutover := strings.TrimSpace(observationCutover)
-	if trimmedRuntime == "" && trimmedCutover == "" {
-		return errors.New("observation-runtime and observation-cutover are required")
-	}
-	if trimmedRuntime == "" || trimmedCutover == "" {
-		return errors.New("observation-runtime and observation-cutover must be provided together")
-	}
-	return nil
 }
