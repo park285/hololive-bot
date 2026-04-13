@@ -110,3 +110,24 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 		}
 	}
 }
+
+func TestResolvePersistedTargetMinutes_HealsLegacyStoredTargetMinutes(t *testing.T) {
+	t.Setenv("SETTINGS_DIR", t.TempDir())
+
+	logger := slog.New(slog.DiscardHandler)
+	if err := os.WriteFile(resolveSettingsFilePath(), []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
+		t.Fatalf("write legacy settings file: %v", err)
+	}
+
+	got := ResolvePersistedTargetMinutes([]int{9, 5, 1}, false, logger)
+	want := []int{5, 3, 1}
+
+	if len(got) != len(want) {
+		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, want)
+		}
+	}
+}
