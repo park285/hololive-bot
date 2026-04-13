@@ -27,6 +27,34 @@ import (
 
 var defaultTargetMinutes = []int{5, 3, 1}
 
+func cloneDefaultTargetMinutes() []int {
+	return append([]int(nil), defaultTargetMinutes...)
+}
+
+func normalizeExplicitTargetMinutes(targetMinutes []int) []int {
+	seen := make(map[int]struct{}, len(targetMinutes))
+	normalized := make([]int, 0, len(targetMinutes))
+	for _, minute := range targetMinutes {
+		if minute <= 0 {
+			continue
+		}
+		if _, ok := seen[minute]; ok {
+			continue
+		}
+
+		seen[minute] = struct{}{}
+		normalized = append(normalized, minute)
+	}
+
+	if len(normalized) == 0 {
+		return nil
+	}
+
+	slices.SortFunc(normalized, func(a, b int) int { return b - a })
+
+	return normalized
+}
+
 // minutesUntilFloorZeroClamped는 start까지 남은 시간을 분 단위로 내림 계산한다.
 // 과거이거나 현재이면 0을 반환한다.
 func minutesUntilFloorZeroClamped(start, now time.Time) int {
@@ -51,31 +79,12 @@ func FormatScheduleChangeMessage(oldTime, newTime time.Time) string {
 
 // NormalizeTargetMinutes는 알림 target minute 정책을 단일 규칙으로 정규화한다.
 func NormalizeTargetMinutes(targetMinutes []int) []int {
-	if len(targetMinutes) == 0 {
-		return append([]int(nil), defaultTargetMinutes...)
-	}
-
-	seen := make(map[int]struct{}, len(targetMinutes))
-	normalized := make([]int, 0, len(targetMinutes))
-	for _, minute := range targetMinutes {
-		if minute <= 0 {
-			continue
-		}
-		if _, ok := seen[minute]; ok {
-			continue
-		}
-
-		seen[minute] = struct{}{}
-		normalized = append(normalized, minute)
-	}
-
+	normalized := normalizeExplicitTargetMinutes(targetMinutes)
 	if len(normalized) == 0 {
-		return append([]int(nil), defaultTargetMinutes...)
+		return cloneDefaultTargetMinutes()
 	}
 
-	slices.SortFunc(normalized, func(a, b int) int { return b - a })
-
-	if _, ok := seen[1]; !ok {
+	if !slices.Contains(normalized, 1) {
 		normalized = append(normalized, 1)
 	}
 
@@ -83,7 +92,33 @@ func NormalizeTargetMinutes(targetMinutes []int) []int {
 }
 
 func BuildRuntimeTargetMinutes(alarmAdvanceMinutes int) []int {
-	return NormalizeTargetMinutes([]int{alarmAdvanceMinutes, 3, 1})
+	normalized := normalizeExplicitTargetMinutes([]int{alarmAdvanceMinutes})
+	if len(normalized) == 0 {
+		return cloneDefaultTargetMinutes()
+	}
+
+	switch minute := normalized[0]; {
+	case minute <= 1:
+		return []int{1}
+	case minute == 2:
+		return []int{2, 1}
+	case minute == 3:
+		return []int{3, 1}
+	default:
+		return []int{minute, 3, 1}
+	}
+}
+
+func ResolveConfiguredTargetMinutes(targetMinutes []int) []int {
+	normalized := normalizeExplicitTargetMinutes(targetMinutes)
+	if len(normalized) == 0 {
+		return cloneDefaultTargetMinutes()
+	}
+	if len(normalized) == 1 {
+		return BuildRuntimeTargetMinutes(normalized[0])
+	}
+
+	return normalized
 }
 
 // IsTargetMinute는 minutesUntil 값이 targetMinutes에 포함되는지 확인한다.
@@ -140,8 +175,13 @@ func HighestCrossedTarget(targetMinutes []int, startScheduled time.Time, window 
 		return 0, false
 	}
 
+	resolvedTargets := normalizeExplicitTargetMinutes(targetMinutes)
+	if len(resolvedTargets) == 0 {
+		resolvedTargets = cloneDefaultTargetMinutes()
+	}
+
 	current := minutesUntilFloorZeroClamped(startScheduled, window.End)
-	if IsTargetMinute(targetMinutes, current) {
+	if slices.Contains(resolvedTargets, current) {
 		return current, true
 	}
 
@@ -154,7 +194,7 @@ func HighestCrossedTarget(targetMinutes []int, startScheduled time.Time, window 
 		return 0, false
 	}
 
-	for _, target := range NormalizeTargetMinutes(targetMinutes) {
+	for _, target := range resolvedTargets {
 		if current < target && target <= previous {
 			return target, true
 		}
