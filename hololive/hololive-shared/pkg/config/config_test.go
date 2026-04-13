@@ -39,6 +39,13 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 }
 
+func assertScraperPoll(t *testing.T, got, want ScraperPoll) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("Scraper.Poll = %+v, want %+v", got, want)
+	}
+}
+
 func TestResolveHolodexAPIKey(t *testing.T) {
 	t.Run("prefers HOLODEX_API_KEY", func(t *testing.T) {
 		t.Setenv("HOLODEX_API_KEY", " primary-key ")
@@ -79,12 +86,10 @@ func TestKakaoConfig_IsRoomAllowed(t *testing.T) {
 			ACLEnabled: true,
 		}
 
-		// chatID가 일치하면 허용
 		if !cfg.IsRoomAllowed("테스트방", "1234567890") {
 			t.Fatalf("expected room to be allowed by chat ID")
 		}
 
-		// roomName만 일치해도 chatID가 다르면 거부
 		if cfg.IsRoomAllowed("1234567890", "other-id") {
 			t.Fatalf("expected room to be denied - only chatID should be checked")
 		}
@@ -96,7 +101,6 @@ func TestKakaoConfig_IsRoomAllowed(t *testing.T) {
 			ACLEnabled: true,
 		}
 
-		// chatID가 비어있으면 거부
 		if cfg.IsRoomAllowed("테스트방", "") {
 			t.Fatalf("expected room to be denied when chatID is empty")
 		}
@@ -247,21 +251,13 @@ func TestLoad_ScraperPollDefaults(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.Poll.Videos != 15*time.Minute {
-		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 15*time.Minute)
-	}
-	if cfg.Scraper.Poll.Shorts != 90*time.Second {
-		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 90*time.Second)
-	}
-	if cfg.Scraper.Poll.Community != 90*time.Second {
-		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 90*time.Second)
-	}
-	if cfg.Scraper.Poll.Stats != 6*time.Hour {
-		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 6*time.Hour)
-	}
-	if cfg.Scraper.Poll.Live != 10*time.Minute {
-		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 10*time.Minute)
-	}
+	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
+		Videos:    15 * time.Minute,
+		Shorts:    2 * time.Minute,
+		Community: 2 * time.Minute,
+		Stats:     6 * time.Hour,
+		Live:      10 * time.Minute,
+	})
 }
 
 func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
@@ -277,21 +273,13 @@ func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.Poll.Videos != 7*time.Minute {
-		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 7*time.Minute)
-	}
-	if cfg.Scraper.Poll.Shorts != 11*time.Minute {
-		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 11*time.Minute)
-	}
-	if cfg.Scraper.Poll.Community != 13*time.Minute {
-		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 13*time.Minute)
-	}
-	if cfg.Scraper.Poll.Stats != 4*time.Hour {
-		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 4*time.Hour)
-	}
-	if cfg.Scraper.Poll.Live != 3*time.Minute {
-		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 3*time.Minute)
-	}
+	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
+		Videos:    7 * time.Minute,
+		Shorts:    11 * time.Minute,
+		Community: 13 * time.Minute,
+		Stats:     4 * time.Hour,
+		Live:      3 * time.Minute,
+	})
 }
 
 func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
@@ -307,21 +295,13 @@ func TestLoad_ScraperPollLegacyEnvFallback(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Scraper.Poll.Videos != 7*time.Minute {
-		t.Fatalf("Scraper.Poll.Videos = %s, want %s", cfg.Scraper.Poll.Videos, 7*time.Minute)
-	}
-	if cfg.Scraper.Poll.Shorts != 11*time.Minute {
-		t.Fatalf("Scraper.Poll.Shorts = %s, want %s", cfg.Scraper.Poll.Shorts, 11*time.Minute)
-	}
-	if cfg.Scraper.Poll.Community != 13*time.Minute {
-		t.Fatalf("Scraper.Poll.Community = %s, want %s", cfg.Scraper.Poll.Community, 13*time.Minute)
-	}
-	if cfg.Scraper.Poll.Stats != 4*time.Hour {
-		t.Fatalf("Scraper.Poll.Stats = %s, want %s", cfg.Scraper.Poll.Stats, 4*time.Hour)
-	}
-	if cfg.Scraper.Poll.Live != 3*time.Minute {
-		t.Fatalf("Scraper.Poll.Live = %s, want %s", cfg.Scraper.Poll.Live, 3*time.Minute)
-	}
+	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
+		Videos:    7 * time.Minute,
+		Shorts:    11 * time.Minute,
+		Community: 13 * time.Minute,
+		Stats:     4 * time.Hour,
+		Live:      3 * time.Minute,
+	})
 }
 
 func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
@@ -579,7 +559,6 @@ func TestLoad_DeprecatedQueryModeAliasRejected(t *testing.T) {
 }
 
 func TestLoad_LLMConfig(t *testing.T) {
-	// 공통 필수 env 설정
 	setup := func(t *testing.T) {
 		t.Helper()
 		setRequiredLoadEnv(t)
