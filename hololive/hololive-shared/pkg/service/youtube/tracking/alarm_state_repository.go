@@ -45,6 +45,7 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 	}
 
 	type pendingResolutionRow struct {
+		PriorityBucket        int               `gorm:"column:priority_bucket"`
 		Kind                  domain.OutboxKind `gorm:"column:kind"`
 		PostID                string            `gorm:"column:post_id"`
 		ContentID             string            `gorm:"column:content_id"`
@@ -61,20 +62,25 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 		Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
 		Where("actual_published_at IS NULL").
-		Where("alarm_sent_at IS NULL").
-		Where("authorized_at IS NULL").
 		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore)).
-		Select("kind, post_id, content_id, channel_id, detected_at, published_at_retry_after").
+		Select(`CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END AS priority_bucket,
+			kind, post_id, content_id, channel_id, detected_at, published_at_retry_after`).
 		Where("(published_at_retry_after IS NULL OR published_at_retry_after <= ?)", yttimestamp.Normalize(referenceNow))
 	if cursor != nil {
 		query = query.Where(
-			"(detected_at > ?) OR (detected_at = ? AND post_id > ?)",
+			`(CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END > ?)
+			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at > ?)
+			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at = ? AND post_id > ?)`,
+			cursor.PriorityBucket,
+			cursor.PriorityBucket,
 			yttimestamp.Normalize(cursor.DetectedAt),
+			cursor.PriorityBucket,
 			yttimestamp.Normalize(cursor.DetectedAt),
 			strings.TrimSpace(cursor.PostID),
 		)
 	}
 	if err := query.
+		Order("priority_bucket ASC").
 		Order("detected_at ASC").
 		Order("post_id ASC").
 		Limit(limit).
@@ -110,8 +116,9 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 
 	last := candidates[len(candidates)-1]
 	nextCursor := &PublishedAtResolutionCursor{
-		DetectedAt: last.DetectedAt,
-		PostID:     last.PostID,
+		PriorityBucket: rows[len(rows)-1].PriorityBucket,
+		DetectedAt:     last.DetectedAt,
+		PostID:         last.PostID,
 	}
 	if len(candidates) < limit {
 		nextCursor = nil
