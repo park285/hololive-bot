@@ -100,8 +100,8 @@ type ScraperConfig struct {
 func DefaultScraperPoll() ScraperPoll {
 	return ScraperPoll{
 		Videos:    15 * time.Minute,
-		Shorts:    2 * time.Minute,
-		Community: 2 * time.Minute,
+		Shorts:    6 * time.Minute,
+		Community: 6 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}
@@ -110,7 +110,7 @@ func DefaultScraperPoll() ScraperPoll {
 func DefaultScraperPublishedAtResolverConfig() ScraperPublishedAtResolverConfig {
 	return ScraperPublishedAtResolverConfig{
 		Enabled:           true,
-		Interval:          15 * time.Second,
+		Interval:          3 * time.Minute,
 		BatchSize:         10,
 		MaxResolvePerRun:  1,
 		MaxRunDuration:    12 * time.Second,
