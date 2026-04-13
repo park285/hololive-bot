@@ -51,7 +51,6 @@ func (c Config) SafeDSN() string {
 	return masked.DSN()
 }
 
-// SocketPath가 설정되면 UDS 우선 사용
 func (c Config) DSN() string {
 	sslmode := c.SSLMode
 	if sslmode == "" {
@@ -63,13 +62,11 @@ func (c Config) DSN() string {
 		queryExecModePart = " default_query_exec_mode=" + queryExecMode
 	}
 	if c.SocketPath != "" {
-		// UDS: host에 소켓 디렉터리 경로 지정
 		return fmt.Sprintf(
 			"host=%s user=%s password=%s dbname=%s sslmode=%s%s",
 			c.SocketPath, c.User, c.Password, c.Name, sslmode, queryExecModePart,
 		)
 	}
-	// TCP fallback
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s%s",
 		c.Host, c.Port, c.User, c.Password, c.Name, sslmode, queryExecModePart,
@@ -116,7 +113,6 @@ func DefaultPoolConfig() PoolConfig {
 	}
 }
 
-// clamp: 값을 minVal~maxVal 범위로 제한
 func clamp(value, minVal, maxVal int) int {
 	if value < minVal {
 		return minVal
