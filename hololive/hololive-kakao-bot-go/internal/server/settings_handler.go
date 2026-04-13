@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -135,6 +136,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	alarmAdvanceUpdated := false
 	if req.AlarmAdvanceMinutes != nil {
 		current.AlarmAdvanceMinutes = *req.AlarmAdvanceMinutes
+		current.TargetMinutes = sharedchecker.BuildRuntimeTargetMinutes(*req.AlarmAdvanceMinutes)
 		alarmAdvanceUpdated = true
 	}
 	if req.ScraperProxyEnabled != nil {
