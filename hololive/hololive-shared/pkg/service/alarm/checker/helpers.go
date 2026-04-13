@@ -121,6 +121,26 @@ func ResolveConfiguredTargetMinutes(targetMinutes []int) []int {
 	return normalized
 }
 
+func ResolvePersistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) []int {
+	resolved := ResolveConfiguredTargetMinutes(targetMinutes)
+	if !shouldHealLegacyPersistedTargetMinutes(alarmAdvanceMinutes, resolved) {
+		return resolved
+	}
+
+	return BuildRuntimeTargetMinutes(alarmAdvanceMinutes)
+}
+
+func shouldHealLegacyPersistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) bool {
+	if alarmAdvanceMinutes <= 3 {
+		return false
+	}
+	if len(targetMinutes) != 2 {
+		return false
+	}
+
+	return targetMinutes[0] == alarmAdvanceMinutes && targetMinutes[1] == 1
+}
+
 // IsTargetMinute는 minutesUntil 값이 targetMinutes에 포함되는지 확인한다.
 func IsTargetMinute(targetMinutes []int, minutesUntil int) bool {
 	return slices.Contains(targetMinutes, minutesUntil)
