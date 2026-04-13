@@ -336,7 +336,8 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 		publishConfigUpdate(t, publisher, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 12})
 
 		return assert.ObjectsAreEqual([]int{12, 3, 1}, alarmSvc.GetTargetMinutes()) &&
-			settingsSvc.Get().AlarmAdvanceMinutes == 12
+			settingsSvc.Get().AlarmAdvanceMinutes == 12 &&
+			assert.ObjectsAreEqual([]int{12, 3, 1}, settingsSvc.Get().TargetMinutes)
 	}, 2*time.Second, 50*time.Millisecond)
 
 	cancel()

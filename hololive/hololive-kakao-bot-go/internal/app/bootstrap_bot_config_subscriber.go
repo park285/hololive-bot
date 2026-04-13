@@ -26,6 +26,7 @@ import (
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
@@ -60,6 +61,7 @@ func buildBotConfigSubscriber(
 			current := deps.settings.Get()
 
 			current.AlarmAdvanceMinutes = payload.Minutes
+			current.TargetMinutes = persistedTargetMinutes(payload.Minutes, targets)
 			if err := deps.settings.Update(current); err != nil {
 				logger.Warn("Failed to persist alarm_advance_minutes setting", slog.Any("error", err))
 			}
@@ -67,4 +69,12 @@ func buildBotConfigSubscriber(
 	})
 
 	return configsub.New(deps.cache.GetClient(), applyFn, logger)
+}
+
+func persistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) []int {
+	if len(targetMinutes) > 0 {
+		return sharedchecker.ResolveConfiguredTargetMinutes(targetMinutes)
+	}
+
+	return sharedchecker.BuildRuntimeTargetMinutes(alarmAdvanceMinutes)
 }
