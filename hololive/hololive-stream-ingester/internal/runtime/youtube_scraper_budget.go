@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
@@ -21,17 +21,21 @@ type youtubeScraperBudgetSummary struct {
 	BudgetRPM                 float64
 }
 
-func summarizeYouTubeScraperBudget(
-	registrations []providers.ChannelPollerRegistration,
-	activeResolverCfg *config.ScraperPublishedAtResolverConfig,
-) youtubeScraperBudgetSummary {
-	pollerRPM := estimateResolvedPollerRPM(registrations)
-	pollerRetryAmplifiedRPM := estimatedPollerWorstCaseRPM(registrations)
+func summarizeYouTubeScraperBudget(registrations []providers.ChannelPollerRegistration) youtubeScraperBudgetSummary {
+	pollerRPM := 0.0
+	pollerRetryAmplifiedRPM := 0.0
 	resolverRPM := 0.0
 	resolverRetryAmplifiedRPM := 0.0
-	if activeResolverCfg != nil && activeResolverCfg.Enabled {
-		resolverRPM = estimatedPublishedAtResolverMaxRPM(*activeResolverCfg)
-		resolverRetryAmplifiedRPM = estimatedPublishedAtResolverWorstCaseRPM(*activeResolverCfg)
+	for _, registration := range registrations {
+		rpm := estimateRegistrationRPM(registration)
+		retryAmplifiedRPM := estimateRegistrationWorstCaseRPM(registration)
+		if isPublishedAtResolverRegistration(registration) {
+			resolverRPM += rpm
+			resolverRetryAmplifiedRPM += retryAmplifiedRPM
+			continue
+		}
+		pollerRPM += rpm
+		pollerRetryAmplifiedRPM += retryAmplifiedRPM
 	}
 	combinedRPM := pollerRPM + resolverRPM
 	combinedRetryAmplifiedRPM := pollerRetryAmplifiedRPM + resolverRetryAmplifiedRPM
@@ -94,23 +98,57 @@ func logYouTubeScraperBudgetSummary(summary youtubeScraperBudgetSummary, logger 
 	}
 }
 
-func estimatedPollerWorstCaseRPM(registrations []providers.ChannelPollerRegistration) float64 {
-	return estimateResolvedPollerRPM(registrations) * float64(scraper.FetchPageMaxAttempts)
-}
-
 func estimateResolvedPollerRPM(registrations []providers.ChannelPollerRegistration) float64 {
 	var rpm float64
 	for _, registration := range registrations {
-		if registration.Poller == nil || registration.Interval <= 0 {
-			continue
-		}
-		channelCount := len(mergeUniqueChannelIDs(registration.ChannelIDs))
-		if channelCount == 0 {
-			continue
-		}
-		rpm += float64(channelCount) * (60.0 / registration.Interval.Seconds())
+		rpm += estimateRegistrationRPM(registration)
 	}
 	return rpm
+}
+
+func estimateRegistrationRPM(registration providers.ChannelPollerRegistration) float64 {
+	if registration.Poller == nil || registration.Interval <= 0 {
+		return 0
+	}
+	channelCount := resolvedRegistrationChannelCount(registration)
+	if channelCount == 0 {
+		return 0
+	}
+	requestsPerRun := resolvedRegistrationRequestsPerRun(registration)
+	return float64(channelCount) * float64(requestsPerRun) * (60.0 / registration.Interval.Seconds())
+}
+
+func estimateRegistrationWorstCaseRPM(registration providers.ChannelPollerRegistration) float64 {
+	if registration.WorstCaseRequestUnitsPerRun > 0 {
+		if registration.Poller == nil || registration.Interval <= 0 {
+			return 0
+		}
+		channelCount := resolvedRegistrationChannelCount(registration)
+		if channelCount == 0 {
+			return 0
+		}
+		return float64(channelCount) * registration.WorstCaseRequestUnitsPerRun * (60.0 / registration.Interval.Seconds())
+	}
+	attempts := registration.WorstCaseAttempts
+	if attempts <= 0 {
+		attempts = scraper.FetchPageMaxAttempts
+	}
+	return estimateRegistrationRPM(registration) * float64(attempts)
+}
+
+func resolvedRegistrationChannelCount(registration providers.ChannelPollerRegistration) int {
+	return len(mergeUniqueChannelIDs(registration.ChannelIDs))
+}
+
+func resolvedRegistrationRequestsPerRun(registration providers.ChannelPollerRegistration) int {
+	if registration.RequestsPerRun <= 0 {
+		return 1
+	}
+	return registration.RequestsPerRun
+}
+
+func isPublishedAtResolverRegistration(registration providers.ChannelPollerRegistration) bool {
+	return registration.Poller != nil && registration.Poller.Name() == poller.PendingPublishedAtResolverPollerName
 }
 
 func validateExplicitPollerRegistrations(registrations []providers.ChannelPollerRegistration) error {
