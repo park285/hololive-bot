@@ -51,7 +51,7 @@ func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool
 	}
 
 	if hasPositiveTargetMinutes(persisted.TargetMinutes) {
-		resolved := sharedchecker.ResolveConfiguredTargetMinutes(persisted.TargetMinutes)
+		resolved := sharedchecker.ResolvePersistedTargetMinutes(valueOrDefault(persisted.AlarmAdvanceMinutes), persisted.TargetMinutes)
 		logResolvedTargetMinutes(logger, "persisted-settings", resolved)
 		return resolved
 	}
@@ -115,4 +115,12 @@ func hasPositiveTargetMinutes(targetMinutes []int) bool {
 	}
 
 	return false
+}
+
+func valueOrDefault(v *int) int {
+	if v == nil {
+		return 0
+	}
+
+	return *v
 }
