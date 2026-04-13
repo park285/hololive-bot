@@ -41,12 +41,13 @@ func TestLogYouTubeScraperBudgetSummary_ReportsPollerAndResolverRPM(t *testing.T
 		summarizeYouTubeScraperBudget(
 			[]providers.ChannelPollerRegistration{
 				providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, time.Second).
-					WithChannelIDs([]string{"UC_A", "UC_B"}),
-			},
-			&config.ScraperPublishedAtResolverConfig{
-				Enabled:          true,
-				Interval:         15 * time.Second,
-				MaxResolvePerRun: 2,
+					WithChannelIDs([]string{"UC_A", "UC_B"}).
+					WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+					WithWorstCaseRequestUnitsPerRun(6),
+				providers.NewGlobalPollerRegistration(fakeTestPoller{name: poller.PendingPublishedAtResolverPollerName}, poller.PriorityLow, 15*time.Second).
+					WithRequestsPerRun(2).
+					WithWorstCaseAttempts(1).
+					WithWorstCaseRequestUnitsPerRun(2),
 			},
 		),
 		logger,
@@ -54,13 +55,61 @@ func TestLogYouTubeScraperBudgetSummary_ReportsPollerAndResolverRPM(t *testing.T
 
 	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_combined_budget_summary"`)
 	assert.Contains(t, logBuf.String(), `"expected_poller_rpm":120`)
-	assert.Contains(t, logBuf.String(), `"expected_poller_retry_amplified_rpm_max":360`)
+	assert.Contains(t, logBuf.String(), `"expected_poller_retry_amplified_rpm_max":720`)
 	assert.Contains(t, logBuf.String(), `"expected_resolver_rpm":8`)
-	assert.Contains(t, logBuf.String(), `"expected_resolver_retry_amplified_rpm_max":24`)
+	assert.Contains(t, logBuf.String(), `"expected_resolver_retry_amplified_rpm_max":8`)
 	assert.Contains(t, logBuf.String(), `"expected_combined_rpm":128`)
-	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":384`)
+	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":728`)
 	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_combined_budget_exceeds_rate_limit"`)
 	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_fault_envelope_exceeds_rate_limit"`)
+}
+
+func TestSummarizeYouTubeScraperBudget_UsesRegistrationRequestsAndAttempts(t *testing.T) {
+	t.Parallel()
+
+	summary := summarizeYouTubeScraperBudget([]providers.ChannelPollerRegistration{
+		providers.NewChannelPollerRegistration(fakeTestPoller{name: "shorts"}, poller.PriorityLow, 2*time.Minute).
+			WithChannelIDs([]string{"UC_A", "UC_B"}).
+			WithWorstCaseAttempts(1).
+			WithWorstCaseRequestUnitsPerRun(4),
+		providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, 10*time.Minute).
+			WithChannelIDs([]string{"UC_A"}).
+			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+			WithWorstCaseRequestUnitsPerRun(9),
+		providers.NewGlobalPollerRegistration(fakeTestPoller{name: poller.PendingPublishedAtResolverPollerName}, poller.PriorityLow, 30*time.Second).
+			WithRequestsPerRun(2).
+			WithWorstCaseAttempts(1).
+			WithWorstCaseRequestUnitsPerRun(2),
+	})
+
+	assert.InDelta(t, 1.1, summary.PollerRPM, 0.0001)
+	assert.InDelta(t, 4.9, summary.PollerRetryAmplifiedRPM, 0.0001)
+	assert.InDelta(t, 4.0, summary.ResolverRPM, 0.0001)
+	assert.InDelta(t, 4.0, summary.ResolverRetryAmplifiedRPM, 0.0001)
+	assert.InDelta(t, 5.1, summary.CombinedRPM, 0.0001)
+	assert.InDelta(t, 8.9, summary.CombinedRetryAmplifiedRPM, 0.0001)
+}
+
+func TestLogYouTubeScraperBudgetSummary_FaultEnvelopeCanExceedSteadyBudgetViaRecoveryBranches(t *testing.T) {
+	t.Parallel()
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+	logYouTubeScraperBudgetSummary(
+		summarizeYouTubeScraperBudget([]providers.ChannelPollerRegistration{
+			providers.NewChannelPollerRegistration(fakeTestPoller{name: "shorts"}, poller.PriorityLow, 2*time.Minute).
+				WithChannelIDs(repeatChannelIDs("UC_NOTIFY_", 39)).
+				WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
+				WithWorstCaseRequestUnitsPerRun(4),
+		}),
+		logger,
+	)
+
+	assert.NotContains(t, logBuf.String(), `"msg":"youtube_scraper_combined_budget_exceeds_rate_limit"`)
+	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_fault_envelope_exceeds_rate_limit"`)
+	assert.Contains(t, logBuf.String(), `"expected_combined_rpm":19.5`)
+	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":78`)
 }
 
 func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRateLimit(t *testing.T) {
@@ -140,7 +189,7 @@ func TestBuildStreamIngesterYouTubeComponents_AllowsBudgetSafeDefaultPollConfig(
 	require.Len(t, registrations, 5)
 }
 
-func TestBuildStreamIngesterYouTubeComponents_DefaultConfigAvoidsFaultEnvelopeWarning(t *testing.T) {
+func TestBuildStreamIngesterYouTubeComponents_DefaultConfigWarnsWhenRecoveryEnvelopeExceedsBudget(t *testing.T) {
 	t.Parallel()
 
 	var logBuf bytes.Buffer
@@ -176,8 +225,8 @@ func TestBuildStreamIngesterYouTubeComponents_DefaultConfigAvoidsFaultEnvelopeWa
 	)
 
 	require.NoError(t, err)
-	assert.NotContains(t, logBuf.String(), `"msg":"youtube_scraper_fault_envelope_exceeds_rate_limit"`)
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_scraper_combined_budget_exceeds_rate_limit"`)
+	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_fault_envelope_exceeds_rate_limit"`)
 }
 
 func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
@@ -216,9 +265,9 @@ func TestSummarizeYouTubeScraperBudget_ExcludesInactiveResolver(t *testing.T) {
 	summary := summarizeYouTubeScraperBudget(
 		[]providers.ChannelPollerRegistration{
 			providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, 10*time.Minute).
-				WithChannelIDs([]string{"UC_A"}),
+				WithChannelIDs([]string{"UC_A"}).
+				WithWorstCaseAttempts(scraper.FetchPageMaxAttempts),
 		},
-		nil,
 	)
 
 	assert.Equal(t, 0.1, summary.PollerRPM)
