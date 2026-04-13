@@ -531,6 +531,9 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		}
 		newShorts = append(newShorts, short)
 	}
+	if isInitialized && len(newShorts) > 0 && (p.routeDecider != nil || p.inlinePublishedAtFallbackEnabled) && shortsNeedPublishedAtLookup(newShorts) {
+		p.client.EnrichShortsPublishedAtFromRSS(ctx, channelID, newShorts)
+	}
 
 	dbVideos := make([]*domain.YouTubeVideo, 0, len(newShorts))
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newShorts))
@@ -609,6 +612,15 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 	}
 
 	return nil
+}
+
+func shortsNeedPublishedAtLookup(shorts []*scraper.Short) bool {
+	for _, short := range shorts {
+		if short != nil && short.PublishedAt == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *ShortsPoller) resolveShortPublishedAtInline(ctx context.Context, videoID string) *time.Time {
