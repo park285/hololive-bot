@@ -101,7 +101,7 @@ func DefaultScraperPoll() ScraperPoll {
 	return ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
-		Community: 6 * time.Minute,
+		Community: 15 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}
