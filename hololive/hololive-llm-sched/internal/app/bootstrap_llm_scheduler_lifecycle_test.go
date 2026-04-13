@@ -100,7 +100,6 @@ func TestLLMSchedulerRuntimeRun_ReturnsOnServerError(t *testing.T) {
 
 	select {
 	case <-done:
-		// success
 	case <-time.After(3 * time.Second):
 		t.Fatal("Run() did not return on server error")
 	}
