@@ -50,12 +50,10 @@ type Client struct {
 	clientSecret string
 	logger       *slog.Logger
 
-	// Token 관리 (atomic + mutex)
 	token       atomic.Value // string
 	tokenExpiry atomic.Value // time.Time
 	tokenMu     sync.Mutex
 
-	// Circuit Breaker
 	circuitOpen     atomic.Bool
 	circuitOpenedAt atomic.Value // time.Time
 	failureCount    atomic.Int32
@@ -80,8 +78,6 @@ func (c *Client) IsConfigured() bool {
 	return c != nil && c.clientID != "" && c.clientSecret != ""
 }
 
-// 최대 100개까지 한 번에 조회 가능
-// user_login은 Twitch username (예: tokoyamitowa_holo).
 func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsResponse, error) {
 	if !c.IsConfigured() {
 		return nil, errors.New("twitch client not configured")
@@ -99,12 +95,10 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 		}
 	}
 
-	// 토큰 확인 및 갱신
 	if err := c.ensureValidToken(ctx); err != nil {
 		return nil, fmt.Errorf("ensure token: %w", err)
 	}
 
-	// 요청 구성 (user_login 사용 - username으로 조회)
 	params := url.Values{}
 
 	for _, login := range userLogins {
@@ -130,7 +124,6 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 
 	defer func() { _ = resp.Body.Close() }()
 
-	// 401: 토큰 갱신 후 재시도
 	if resp.StatusCode == http.StatusUnauthorized {
 		c.invalidateToken()
 
@@ -138,11 +131,9 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 			return nil, fmt.Errorf("refresh token after 401: %w", refreshErr)
 		}
 
-		// 재시도
 		return c.GetStreams(ctx, userLogins)
 	}
 
-	// 429: Rate Limit
 	if resp.StatusCode == http.StatusTooManyRequests {
 		c.recordFailure()
 
@@ -153,7 +144,6 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 		}
 	}
 
-	// 5xx: 서버 에러
 	if resp.StatusCode >= 500 {
 		c.recordFailure()
 
@@ -187,7 +177,6 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 	return &result, nil
 }
 
-// ensureValidToken: 유효한 토큰이 있는지 확인하고 필요시 갱신.
 func (c *Client) ensureValidToken(ctx context.Context) error {
 	expiry, _ := c.tokenExpiry.Load().(time.Time)
 	if time.Now().Before(expiry.Add(-constants.TwitchConfig.TokenRefreshSkew)) {
@@ -197,7 +186,6 @@ func (c *Client) ensureValidToken(ctx context.Context) error {
 	return c.refreshToken(ctx)
 }
 
-// refreshToken: App Access Token을 갱신합니다.
 func (c *Client) refreshToken(ctx context.Context) error {
 	c.tokenMu.Lock()
 	defer c.tokenMu.Unlock()
@@ -250,12 +238,10 @@ func (c *Client) refreshToken(ctx context.Context) error {
 	return nil
 }
 
-// invalidateToken: 토큰을 무효화합니다.
 func (c *Client) invalidateToken() {
 	c.tokenExpiry.Store(time.Time{})
 }
 
-// isCircuitOpen: Circuit Breaker 상태 확인 (내부용).
 func (c *Client) isCircuitOpen() bool {
 	if !c.circuitOpen.Load() {
 		return false
