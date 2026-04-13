@@ -253,8 +253,8 @@ func TestLoad_ScraperPollDefaults(t *testing.T) {
 
 	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
 		Videos:    15 * time.Minute,
-		Shorts:    2 * time.Minute,
-		Community: 2 * time.Minute,
+		Shorts:    6 * time.Minute,
+		Community: 6 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	})
@@ -343,8 +343,8 @@ func TestLoad_ScraperPublishedAtResolverDefaults(t *testing.T) {
 	if !cfg.Scraper.PublishedAtResolver.Enabled {
 		t.Fatal("Scraper.PublishedAtResolver.Enabled = false, want true")
 	}
-	if cfg.Scraper.PublishedAtResolver.Interval != 15*time.Second {
-		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", cfg.Scraper.PublishedAtResolver.Interval, 15*time.Second)
+	if cfg.Scraper.PublishedAtResolver.Interval != 3*time.Minute {
+		t.Fatalf("Scraper.PublishedAtResolver.Interval = %s, want %s", cfg.Scraper.PublishedAtResolver.Interval, 3*time.Minute)
 	}
 	if cfg.Scraper.PublishedAtResolver.BatchSize != 10 {
 		t.Fatalf("Scraper.PublishedAtResolver.BatchSize = %d, want %d", cfg.Scraper.PublishedAtResolver.BatchSize, 10)
