@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -153,7 +154,7 @@ func (cm *CacheManager) SetChannelsLiveStatus(ctx context.Context, status map[st
 }
 
 func (cm *CacheManager) GetChannelsLiveStatusStreams(ctx context.Context, channelIDs []string) ([]*domain.Stream, bool) {
-	cacheKey := fmt.Sprintf("channels_live_status_%s", strings.Join(channelIDs, ","))
+	cacheKey := fmt.Sprintf("channels_live_status_%s", canonicalizeChannelIDsForCache(channelIDs))
 	var cached []*domain.Stream
 	if err := cm.cache.Get(ctx, cacheKey, &cached); err == nil && cached != nil {
 		return cached, true
@@ -162,7 +163,7 @@ func (cm *CacheManager) GetChannelsLiveStatusStreams(ctx context.Context, channe
 }
 
 func (cm *CacheManager) SetChannelsLiveStatusStreams(ctx context.Context, channelIDs []string, streams []*domain.Stream, ttl time.Duration) {
-	cacheKey := fmt.Sprintf("channels_live_status_%s", strings.Join(channelIDs, ","))
+	cacheKey := fmt.Sprintf("channels_live_status_%s", canonicalizeChannelIDsForCache(channelIDs))
 	_ = cm.cache.Set(ctx, cacheKey, streams, ttl)
 }
 
@@ -200,4 +201,25 @@ func normalizeOrgForCache(org string) string {
 		return strings.ToLower(constants.HolodexAPIParams.OrgHololive)
 	}
 	return normalized
+}
+
+func canonicalizeChannelIDsForCache(channelIDs []string) string {
+	seen := make(map[string]struct{}, len(channelIDs))
+	canonical := make([]string, 0, len(channelIDs))
+
+	for _, channelID := range channelIDs {
+		trimmed := strings.TrimSpace(channelID)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		canonical = append(canonical, trimmed)
+	}
+
+	sort.Strings(canonical)
+
+	return strings.Join(canonical, ",")
 }
