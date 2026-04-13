@@ -300,6 +300,55 @@ func TestShortsPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) {
 	assert.Equal(t, "short:short-1", watermark.LastContentID)
 }
 
+func TestShortsPollerPollWithoutRoutingNeedSkipsRSSLookup(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+		&domain.YouTubeContentAlarmTracking{},
+	)
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     "UC_TEST",
+		WatermarkType: domain.WatermarkTypeShort,
+		Initialized:   true,
+		LastContentID: "old-short",
+	}).Error)
+
+	shortsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Shorts","content":{"richGridRenderer":{"contents":[{"richItemRenderer":{"content":{"shortsLockupViewModel":{"onTap":{"innertubeCommand":{"reelWatchEndpoint":{"videoId":"short-1"}}},"overlayMetadata":{"primaryText":{"content":"Short One"},"secondaryText":{"content":"1.2K views"}},"thumbnail":{"sources":[{"url":"https://img.test/1.jpg","width":120,"height":200}]}}}}}]}}}}]}}}`
+	shortsHTML := "<script>var ytInitialData = " + shortsJSON + ";</script>"
+	rssCalls := 0
+
+	client := scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
+		scraper.WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch {
+				case strings.HasSuffix(req.URL.Path, "/shorts"):
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(shortsHTML)), Header: make(http.Header), Request: req}, nil
+				case strings.HasSuffix(req.URL.Path, "/feeds/videos.xml"):
+					rssCalls++
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<?xml version="1.0" encoding="UTF-8"?><feed></feed>`)), Header: make(http.Header), Request: req}, nil
+				default:
+					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
+				}
+			}),
+		}),
+	)
+
+	poller := NewShortsPoller(client, db, 10, nil)
+	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+
+	assert.Zero(t, rssCalls)
+
+	var stored struct {
+		PublishedAt *time.Time
+	}
+	require.NoError(t, db.Model(&domain.YouTubeVideo{}).Select("published_at").Where("video_id = ?", "short-1").Take(&stored).Error)
+	assert.Nil(t, stored.PublishedAt)
+}
+
 func TestShortsPoller_InlineFallbackResolvesPublishedAtAndEnqueues(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
