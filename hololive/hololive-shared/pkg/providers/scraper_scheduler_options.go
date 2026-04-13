@@ -27,12 +27,15 @@ import (
 )
 
 type ChannelPollerRegistration struct {
-	Poller                poller.Poller
-	Priority              poller.Priority
-	Interval              time.Duration
-	ChannelIDs            []string
-	HasExplicitChannelIDs bool
-	TargetGroup           ChannelTargetGroup
+	Poller                      poller.Poller
+	Priority                    poller.Priority
+	Interval                    time.Duration
+	ChannelIDs                  []string
+	HasExplicitChannelIDs       bool
+	TargetGroup                 ChannelTargetGroup
+	RequestsPerRun              int
+	WorstCaseAttempts           int
+	WorstCaseRequestUnitsPerRun float64
 }
 
 type ChannelTargetGroup string
@@ -48,10 +51,11 @@ const (
 
 func NewChannelPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
 	return ChannelPollerRegistration{
-		Poller:      p,
-		Priority:    priority,
-		Interval:    interval,
-		TargetGroup: ChannelTargetGroupDefault,
+		Poller:         p,
+		Priority:       priority,
+		Interval:       interval,
+		TargetGroup:    ChannelTargetGroupDefault,
+		RequestsPerRun: 1,
 	}
 }
 
@@ -63,6 +67,27 @@ func (r ChannelPollerRegistration) WithChannelIDs(channelIDs []string) ChannelPo
 
 func (r ChannelPollerRegistration) WithTargetGroup(group ChannelTargetGroup) ChannelPollerRegistration {
 	r.TargetGroup = group
+	return r
+}
+
+func (r ChannelPollerRegistration) WithRequestsPerRun(requestsPerRun int) ChannelPollerRegistration {
+	if requestsPerRun > 0 {
+		r.RequestsPerRun = requestsPerRun
+	}
+	return r
+}
+
+func (r ChannelPollerRegistration) WithWorstCaseAttempts(attempts int) ChannelPollerRegistration {
+	if attempts > 0 {
+		r.WorstCaseAttempts = attempts
+	}
+	return r
+}
+
+func (r ChannelPollerRegistration) WithWorstCaseRequestUnitsPerRun(units float64) ChannelPollerRegistration {
+	if units > 0 {
+		r.WorstCaseRequestUnitsPerRun = units
+	}
 	return r
 }
 

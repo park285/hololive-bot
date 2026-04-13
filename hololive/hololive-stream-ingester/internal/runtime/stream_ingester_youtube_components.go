@@ -36,13 +36,13 @@ func buildStreamIngesterYouTubeComponents(
 		notificationChannelIDs,
 		statsChannelIDs,
 	)
+	if resolverRegistration := buildPublishedAtResolverRegistration(publishedAtResolver, scraperCfg, logger); resolverRegistration != nil {
+		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
+	}
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
 		return nil, nil, nil, err
 	}
-	budgetSummary := summarizeYouTubeScraperBudget(
-		pollerRegistrations,
-		activePublishedAtResolverBudgetConfig(scraperCfg, publishedAtResolver),
-	)
+	budgetSummary := summarizeYouTubeScraperBudget(pollerRegistrations)
 	logYouTubeScraperBudgetSummary(budgetSummary, logger)
 	if err := validateYouTubeScraperPollerBudget(budgetSummary); err != nil {
 		return nil, nil, nil, err
@@ -54,7 +54,6 @@ func buildStreamIngesterYouTubeComponents(
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
 		providers.WithSchedulerWorkerCount(scraperCfg.WorkerCountOrDefault()),
 	)
-	registerPublishedAtResolverPoller(scraperScheduler, publishedAtResolver, scraperCfg, logger)
 
 	outboxDispatcher := outbox.NewDispatcher(
 		postgresService.GetGormDB(),
