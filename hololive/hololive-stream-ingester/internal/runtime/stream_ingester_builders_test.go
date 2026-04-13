@@ -683,7 +683,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlob
 	)
 	require.NotNil(t, resolver)
 
-	scraperScheduler, _, _, err := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, _, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
@@ -706,7 +706,23 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlob
 		testLogger(),
 	)
 	require.NoError(t, err)
+	require.Len(t, registrations, 6)
 	require.Contains(t, schedulerJobKeys(t, scraperScheduler), providers.SyntheticGlobalPollerChannelID+":"+poller.PendingPublishedAtResolverPollerName)
+	assert.Equal(t, 6, schedulerJobCount(t, scraperScheduler))
+
+	var resolverRegistration *providers.ChannelPollerRegistration
+	for idx := range registrations {
+		registration := &registrations[idx]
+		if registration.Poller != nil && registration.Poller.Name() == poller.PendingPublishedAtResolverPollerName {
+			resolverRegistration = registration
+			break
+		}
+	}
+	require.NotNil(t, resolverRegistration)
+	assert.Equal(t, providers.ChannelTargetGroupGlobal, resolverRegistration.TargetGroup)
+	assert.Equal(t, []string{providers.SyntheticGlobalPollerChannelID}, resolverRegistration.ChannelIDs)
+	assert.Equal(t, 1, resolverRegistration.RequestsPerRun)
+	assert.Equal(t, scraper.MetadataResolveFetchPolicy.MaxAttempts, resolverRegistration.WorstCaseAttempts)
 }
 
 func TestBuildStreamIngesterConfigSubscriber_ApplyScraperProxyToggle(t *testing.T) {

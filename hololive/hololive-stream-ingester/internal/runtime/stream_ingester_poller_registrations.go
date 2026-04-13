@@ -29,6 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
+const defaultChannelPollerMaxResults = 10
+
 func buildStreamIngesterChannelPollerRegistrations(
 	postgres database.Client,
 	scraperCfg config.ScraperConfig,
@@ -61,28 +63,62 @@ func buildStreamIngesterChannelPollerRegistrationsWithClient(
 	inlineResolveMissingPublishedAt := routeDecider != nil && !resolverCfg.Enabled
 	communityKeywords := []string{}
 	db := postgres.GetGormDB()
+	maxResults := defaultChannelPollerMaxResults
 
-	videosPoller := poller.NewVideosPoller(scraperClient, db, 10)
-	shortsPoller := poller.NewShortsPoller(scraperClient, db, 10, routeDecider, inlineResolveMissingPublishedAt)
-	communityPoller := poller.NewCommunityPoller(scraperClient, db, 10, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
+	videosPoller := poller.NewVideosPoller(scraperClient, db, maxResults)
+	shortsPoller := poller.NewShortsPoller(scraperClient, db, maxResults, routeDecider, inlineResolveMissingPublishedAt)
+	communityPoller := poller.NewCommunityPoller(scraperClient, db, maxResults, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
 	statsPoller := poller.NewChannelStatsPoller(scraperClient, db)
 	livePoller := poller.NewLivePoller(scraperClient, db)
 
 	return []providers.ChannelPollerRegistration{
 		providers.NewChannelPollerRegistration(videosPoller, poller.PriorityNormal, poll.Videos).
 			WithChannelIDs(notificationChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupNotification),
+			WithTargetGroup(providers.ChannelTargetGroupNotification).
+			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+			WithWorstCaseRequestUnitsPerRun(videosWorstCaseRequestUnits()),
 		providers.NewChannelPollerRegistration(shortsPoller, poller.PriorityLow, poll.Shorts).
 			WithChannelIDs(notificationChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupNotification),
+			WithTargetGroup(providers.ChannelTargetGroupNotification).
+			WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
+			WithWorstCaseRequestUnitsPerRun(shortsWorstCaseRequestUnits(routeDecider != nil, inlineResolveMissingPublishedAt, maxResults)),
 		providers.NewChannelPollerRegistration(communityPoller, poller.PriorityLow, poll.Community).
 			WithChannelIDs(notificationChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupNotification),
+			WithTargetGroup(providers.ChannelTargetGroupNotification).
+			WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
+			WithWorstCaseRequestUnitsPerRun(communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)),
 		providers.NewChannelPollerRegistration(statsPoller, poller.PriorityLow, poll.Stats).
 			WithChannelIDs(statsChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupStats),
+			WithTargetGroup(providers.ChannelTargetGroupStats).
+			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
 		providers.NewChannelPollerRegistration(livePoller, poller.PriorityHigh, poll.Live).
 			WithChannelIDs(notificationChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupNotification),
+			WithTargetGroup(providers.ChannelTargetGroupNotification).
+			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
 	}
+}
+
+func videosWorstCaseRequestUnits() float64 {
+	return float64(scraper.FetchPageMaxAttempts * 3)
+}
+
+func shortsWorstCaseRequestUnits(routeDeciderEnabled, inlineResolveMissingPublishedAt bool, maxResults int) float64 {
+	units := 1.0
+	if routeDeciderEnabled {
+		units += float64(scraper.FetchPageMaxAttempts)
+	}
+	if inlineResolveMissingPublishedAt {
+		units += float64(maxResults)
+	}
+	return units
+}
+
+func communityWorstCaseRequestUnits(inlineResolveMissingPublishedAt bool, maxResults int) float64 {
+	units := 1.0
+	if inlineResolveMissingPublishedAt {
+		units += float64(maxResults)
+	}
+	return units
 }
