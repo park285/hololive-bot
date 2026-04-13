@@ -254,7 +254,7 @@ func TestLoad_ScraperPollDefaults(t *testing.T) {
 	assertScraperPoll(t, cfg.Scraper.Poll, ScraperPoll{
 		Videos:    15 * time.Minute,
 		Shorts:    6 * time.Minute,
-		Community: 6 * time.Minute,
+		Community: 15 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	})
