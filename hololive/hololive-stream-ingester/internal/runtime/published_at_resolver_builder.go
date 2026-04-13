@@ -59,45 +59,37 @@ func buildPendingPublishedAtResolver(
 	return resolver
 }
 
-func activePublishedAtResolverBudgetConfig(
-	scraperCfg config.ScraperConfig,
-	resolver *poller.PendingPublishedAtResolver,
-) *config.ScraperPublishedAtResolverConfig {
-	if resolver == nil {
-		return nil
-	}
-	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
-	return &resolverCfg
-}
-
-func registerPublishedAtResolverPoller(
-	scheduler *poller.Scheduler,
+func buildPublishedAtResolverRegistration(
 	resolver *poller.PendingPublishedAtResolver,
 	scraperCfg config.ScraperConfig,
 	logger *slog.Logger,
-) {
-	if scheduler == nil || resolver == nil {
-		return
+) *providers.ChannelPollerRegistration {
+	if resolver == nil {
+		return nil
 	}
 
 	resolverPoller := poller.NewPendingPublishedAtResolverPoller(resolver)
 	if resolverPoller == nil {
-		return
+		return nil
 	}
 
 	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
-	scheduler.Register(
-		providers.SyntheticGlobalPollerChannelID,
+	registration := providers.NewGlobalPollerRegistration(
 		resolverPoller,
 		poller.PriorityLow,
 		resolverCfg.Interval,
-	)
+	).WithRequestsPerRun(resolverCfg.MaxResolvePerRun).
+		WithWorstCaseAttempts(scraper.MetadataResolveFetchPolicy.MaxAttempts).
+		WithWorstCaseRequestUnitsPerRun(float64(resolverCfg.MaxResolvePerRun * scraper.MetadataResolveFetchPolicy.MaxAttempts))
 	if logger != nil {
 		logger.Info("published_at_resolver_registered_with_scraper_scheduler",
 			slog.Duration("interval", resolverCfg.Interval),
 			slog.String("target", providers.SyntheticGlobalPollerChannelID),
+			slog.Int("requests_per_run", resolverCfg.MaxResolvePerRun),
+			slog.Int("worst_case_attempts", scraper.MetadataResolveFetchPolicy.MaxAttempts),
 		)
 	}
+	return &registration
 }
 
 func effectivePublishedAtResolverConfig(scraperCfg config.ScraperConfig) config.ScraperPublishedAtResolverConfig {
@@ -136,8 +128,4 @@ func estimatedPublishedAtResolverMaxRPM(cfg config.ScraperPublishedAtResolverCon
 		return 0
 	}
 	return float64(cfg.MaxResolvePerRun) * 60 / cfg.Interval.Seconds()
-}
-
-func estimatedPublishedAtResolverWorstCaseRPM(cfg config.ScraperPublishedAtResolverConfig) float64 {
-	return estimatedPublishedAtResolverMaxRPM(cfg) * float64(scraper.FetchPageMaxAttempts)
 }
