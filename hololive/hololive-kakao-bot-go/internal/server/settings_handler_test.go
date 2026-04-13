@@ -109,6 +109,9 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 	if len(publisher.alarmCalls) != 1 || publisher.alarmCalls[0] != 7 {
 		t.Fatalf("alarm publish calls=%v", publisher.alarmCalls)
 	}
+	if got := settingsSvc.Get().TargetMinutes; len(got) != 3 || got[0] != 7 || got[1] != 3 || got[2] != 1 {
+		t.Fatalf("persisted target minutes=%v want=[7 3 1]", got)
+	}
 
 	payload := decodeSettingsResponse(t, rec)
 	runtime, ok := payload["runtime"].(map[string]any)
