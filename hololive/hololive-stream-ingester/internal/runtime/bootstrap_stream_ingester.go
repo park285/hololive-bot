@@ -30,9 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -46,18 +43,6 @@ const (
 )
 
 var initStreamIngesterInfrastructureFn = initStreamIngesterInfrastructure
-
-type ingestionRuntimeFeatures struct {
-	youtubeEnabled                bool
-	photoSyncEnabled              bool
-	communityShortsBigBangEnabled bool
-}
-
-type ingestionRuntimeSpec struct {
-	name              string
-	requestedFeatures ingestionRuntimeFeatures
-	features          ingestionRuntimeFeatures
-}
 
 func BuildStreamIngesterRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*StreamIngesterRuntime, error) {
 	return buildIngestionRuntime(ctx, cfg, logger, streamIngesterSpec(cfg))
@@ -163,6 +148,13 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			infra.cleanup()
 			return nil, fmt.Errorf("validate published_at resolver schema: %w", err)
 		}
+		publishedAtResolver = buildPendingPublishedAtResolver(
+			cfg.Scraper,
+			infra.postgresService,
+			sharedScraperClient,
+			routeDecider,
+			logger,
+		)
 		scraperScheduler, outboxDispatcher, pollerRegistrations, err = buildStreamIngesterYouTubeComponents(
 			cfg.Scraper,
 			infra.postgresService,
@@ -173,17 +165,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			infra.irisClient,
 			infra.templateRenderer,
 			routeDecider,
-			logger,
-		)
-		if err != nil {
-			infra.cleanup()
-			return nil, err
-		}
-		publishedAtResolver = buildPendingPublishedAtResolver(
-			cfg.Scraper,
-			infra.postgresService,
-			sharedScraperClient,
-			routeDecider,
+			publishedAtResolver,
 			logger,
 		)
 		pollTargetRefresher = newYouTubePollTargetRefresher(
@@ -261,102 +243,4 @@ func buildStreamIngesterHTTPServer(
 		router,
 		runtimeHTTPServerOperationName(runtimeName),
 	), nil
-}
-
-func streamIngesterSpec(cfg *config.Config) ingestionRuntimeSpec {
-	requested := requestedFeatures(cfg)
-	features := requested
-	if requested.communityShortsBigBangEnabled {
-		features.youtubeEnabled = false
-		features.communityShortsBigBangEnabled = false
-	}
-
-	return ingestionRuntimeSpec{
-		name:              streamIngesterRuntimeName,
-		requestedFeatures: requested,
-		features:          features,
-	}
-}
-
-func youtubeScraperSpec(cfg *config.Config) ingestionRuntimeSpec {
-	requested := requestedFeatures(cfg)
-
-	return ingestionRuntimeSpec{
-		name:              youtubeScraperRuntimeName,
-		requestedFeatures: requested,
-		features: ingestionRuntimeFeatures{
-			youtubeEnabled:                requested.communityShortsBigBangEnabled,
-			photoSyncEnabled:              false,
-			communityShortsBigBangEnabled: requested.communityShortsBigBangEnabled,
-		},
-	}
-}
-
-func requestedFeatures(cfg *config.Config) ingestionRuntimeFeatures {
-	if cfg == nil {
-		return ingestionRuntimeFeatures{}
-	}
-
-	return ingestionRuntimeFeatures{
-		youtubeEnabled:                cfg.Ingestion.YouTubeEnabled,
-		photoSyncEnabled:              cfg.Ingestion.PhotoSyncEnabled,
-		communityShortsBigBangEnabled: cfg.Ingestion.CommunityShortsBigBangEnabled,
-	}
-}
-
-func logFeatureOverride(logger *slog.Logger, spec ingestionRuntimeSpec) {
-	if logger == nil {
-		return
-	}
-	if spec.requestedFeatures == spec.features {
-		return
-	}
-
-	logger.Warn("YouTube scraper runtime overrides ingestion feature toggles",
-		slog.String("runtime", spec.name),
-		slog.Bool("requested_youtube_enabled", spec.requestedFeatures.youtubeEnabled),
-		slog.Bool("effective_youtube_enabled", spec.features.youtubeEnabled),
-		slog.Bool("requested_photo_sync_enabled", spec.requestedFeatures.photoSyncEnabled),
-		slog.Bool("effective_photo_sync_enabled", spec.features.photoSyncEnabled),
-		slog.Bool("requested_community_shorts_bigbang_enabled", spec.requestedFeatures.communityShortsBigBangEnabled),
-		slog.Bool("effective_community_shorts_bigbang_enabled", spec.features.communityShortsBigBangEnabled),
-	)
-}
-
-func selectPhotoSyncService(enabled bool, service *holodex.PhotoSyncService) *holodex.PhotoSyncService {
-	if !enabled {
-		return nil
-	}
-	return service
-}
-
-func buildRuntimeConfigSubscriber(
-	features ingestionRuntimeFeatures,
-	infra *streamIngesterInfrastructure,
-	scraperScheduler *poller.Scheduler,
-	logger *slog.Logger,
-) *configsub.Subscriber {
-	if !features.youtubeEnabled && !features.photoSyncEnabled {
-		return nil
-	}
-
-	configSubscriber := buildStreamIngesterConfigSubscriber(
-		infra.cacheService,
-		infra.settingsService,
-		infra.holodexService,
-		infra.ytStack,
-		scraperScheduler,
-		logger,
-	)
-
-	desiredProxyState := infra.settingsService.Get().ScraperProxyEnabled
-	sharedsettings.ApplyScraperProxyToggle(
-		desiredProxyState,
-		infra.ytStack.GetService(),
-		infra.holodexService,
-		scraperScheduler,
-		logger,
-	)
-
-	return configSubscriber
 }

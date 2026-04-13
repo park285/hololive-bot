@@ -312,6 +312,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				infra.irisClient,
 				infra.templateRenderer,
 				nil,
+				nil,
 				testLogger(),
 			)
 			require.NoError(t, err)
