@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -120,6 +121,7 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 	if len(dueChannels) == 0 {
 		return []*domain.AlarmNotification{}, nil
 	}
+	sort.Strings(dueChannels)
 
 	streams, err := c.holodexSvc.GetChannelsLiveStatus(ctx, dueChannels)
 	if err != nil {
