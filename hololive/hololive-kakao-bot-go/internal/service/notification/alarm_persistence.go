@@ -29,6 +29,8 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
+var rebuildSubscriberCacheFromRepository = sharedalarm.RebuildSubscriberCacheFromRepository
+
 func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
 	if as.persistExecutor == nil {
 		if as.logger != nil {
@@ -125,9 +127,9 @@ func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 		return nil
 	}
 
-	summary, err := sharedalarm.WarmSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepo)
+	summary, err := rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepo)
 	if err != nil {
-		return fmt.Errorf("warm subscriber cache from DB: %w", err)
+		return fmt.Errorf("rebuild subscriber cache from DB: %w", err)
 	}
 
 	if summary.AlarmCount == 0 {
@@ -135,7 +137,7 @@ func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 		return nil
 	}
 
-	as.logger.Info("Cache warmed from DB",
+	as.logger.Info("Cache rebuilt from DB",
 		slog.Int("alarms_loaded", summary.AlarmCount),
 		slog.Int("rooms_loaded", summary.RoomCount),
 		slog.Int("channels_loaded", summary.ChannelCount),

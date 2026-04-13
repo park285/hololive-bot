@@ -41,6 +41,9 @@ const (
 	ChannelTargetGroupDefault      ChannelTargetGroup = "default"
 	ChannelTargetGroupNotification ChannelTargetGroup = "notification"
 	ChannelTargetGroupStats        ChannelTargetGroup = "stats"
+	ChannelTargetGroupGlobal       ChannelTargetGroup = "global"
+
+	SyntheticGlobalPollerChannelID = "__global__"
 )
 
 func NewChannelPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
@@ -61,6 +64,12 @@ func (r ChannelPollerRegistration) WithChannelIDs(channelIDs []string) ChannelPo
 func (r ChannelPollerRegistration) WithTargetGroup(group ChannelTargetGroup) ChannelPollerRegistration {
 	r.TargetGroup = group
 	return r
+}
+
+func NewGlobalPollerRegistration(p poller.Poller, priority poller.Priority, interval time.Duration) ChannelPollerRegistration {
+	return NewChannelPollerRegistration(p, priority, interval).
+		WithChannelIDs([]string{SyntheticGlobalPollerChannelID}).
+		WithTargetGroup(ChannelTargetGroupGlobal)
 }
 
 func (r ChannelPollerRegistration) ToTargetSync() poller.PollerTargetSync {

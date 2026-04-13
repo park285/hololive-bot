@@ -25,6 +25,8 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -201,4 +203,24 @@ func TestAlarmService_SubmitPersistTaskAndWarmCache_NoRepository(t *testing.T) {
 	assert.False(t, called)
 
 	require.NoError(t, as.WarmCacheFromDB(t.Context()))
+}
+
+func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
+	as := newTestAlarmService(t)
+	as.alarmRepo = &sharedalarm.Repository{}
+
+	original := rebuildSubscriberCacheFromRepository
+	rebuildCalled := false
+	rebuildSubscriberCacheFromRepository = func(ctx context.Context, cacheSvc cache.Client, repo *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+		rebuildCalled = true
+		assert.Same(t, as.cache, cacheSvc)
+		assert.Same(t, as.alarmRepo, repo)
+		return sharedalarm.CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, nil
+	}
+	t.Cleanup(func() {
+		rebuildSubscriberCacheFromRepository = original
+	})
+
+	require.NoError(t, as.WarmCacheFromDB(t.Context()))
+	assert.True(t, rebuildCalled)
 }

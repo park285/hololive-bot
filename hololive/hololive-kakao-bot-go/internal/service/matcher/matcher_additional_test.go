@@ -124,6 +124,37 @@ func (p *trackingMemberProvider) FindMembersByAlias(string) []*domain.Member {
 	return nil
 }
 
+type errorAwareMemberProvider struct {
+	*stubMemberProvider
+
+	members   []*domain.Member
+	loadErr   error
+	failLoads int
+	loadCalls int
+}
+
+func newErrorAwareMemberProvider(members []*domain.Member, failLoads int, loadErr error) *errorAwareMemberProvider {
+	return &errorAwareMemberProvider{
+		stubMemberProvider: newStubMemberProvider(members),
+		members:            members,
+		loadErr:            loadErr,
+		failLoads:          failLoads,
+	}
+}
+
+func (p *errorAwareMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+	p.loadCalls++
+	if p.loadCalls <= p.failLoads {
+		return nil, p.loadErr
+	}
+
+	return p.members, nil
+}
+
+func (p *errorAwareMemberProvider) WithContext(context.Context) domain.MemberDataProvider {
+	return p
+}
+
 func TestGetAllMembers_DoesNotInjectBackgroundContext(t *testing.T) {
 	t.Parallel()
 
@@ -285,6 +316,30 @@ func TestFindBestMatch_UsesSnapshotAcrossDifferentQueries(t *testing.T) {
 	assert.Equal(t, "ch-marine", second.ID)
 
 	assert.Equal(t, 1, cacheCalls)
+}
+
+func TestFindBestMatch_ProviderLoadErrorIsNotCached(t *testing.T) {
+	t.Parallel()
+
+	provider := newErrorAwareMemberProvider([]*domain.Member{
+		{ChannelID: "ch-aqua", Name: "Aqua"},
+	}, 1, errors.New("member repo down"))
+	cacheSvc := &cachemocks.Client{
+		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
+			return map[string]string{}, nil
+		},
+	}
+	matcher := NewMemberMatcher(t.Context(), provider, cacheSvc, nil, nil, newMatcherTestLogger())
+
+	channel, err := matcher.FindBestMatch(t.Context(), "Aqua")
+	require.Error(t, err)
+	assert.Nil(t, channel)
+	assert.Contains(t, err.Error(), "get all members")
+
+	channel, err = matcher.FindBestMatch(t.Context(), "Aqua")
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, "ch-aqua", channel.ID)
 }
 
 func TestFindBestMatch_UsesSnapshotAliasIndex(t *testing.T) {

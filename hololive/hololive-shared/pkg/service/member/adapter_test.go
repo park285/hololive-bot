@@ -67,6 +67,23 @@ func TestServiceAdapter_WithContext_UsesProvidedContext(t *testing.T) {
 	}
 }
 
+func TestServiceAdapter_LoadAllMembers_ExplicitlyReturnsErrorWhileLegacyGetterStaysEmpty(t *testing.T) {
+	adapter := NewMemberServiceAdapter(context.Background(), &Cache{}, testAdapterLogger())
+
+	members := adapter.GetAllMembers()
+	if len(members) != 0 {
+		t.Fatalf("GetAllMembers() len = %d, want 0", len(members))
+	}
+
+	_, err := adapter.LoadAllMembers()
+	if err == nil {
+		t.Fatal("LoadAllMembers() error = nil, want non-nil")
+	}
+	if got := err.Error(); got != "member repository is nil" {
+		t.Fatalf("LoadAllMembers() error = %q, want %q", got, "member repository is nil")
+	}
+}
+
 func TestServiceAdapter_FindMembersByName_MatchesLocalizedNames(t *testing.T) {
 	cache := newAdapterTestCache(
 		&domain.Member{ChannelID: "suisei", Name: "Suisei", NameKo: "별빛"},

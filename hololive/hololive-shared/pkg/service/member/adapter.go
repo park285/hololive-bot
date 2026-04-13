@@ -22,6 +22,7 @@ package member
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -85,15 +86,31 @@ func (a *ServiceAdapter) GetChannelIDs() []string {
 }
 
 func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
-	if a == nil || a.cache == nil || a.cache.repo == nil {
-		return []*domain.Member{}
-	}
-	members, err := a.cache.repo.GetAllMembers(a.ctx)
+	members, err := a.LoadAllMembers()
 	if err != nil {
 		a.logger.Warn("repository lookup failed in GetAllMembers", "error", err)
 		return []*domain.Member{}
 	}
 	return members
+}
+
+func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
+	if a == nil {
+		return nil, fmt.Errorf("member adapter is nil")
+	}
+	if a.cache == nil {
+		return nil, fmt.Errorf("member cache is nil")
+	}
+	if a.cache.repo == nil {
+		return nil, fmt.Errorf("member repository is nil")
+	}
+
+	members, err := a.cache.repo.GetAllMembers(a.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load all members from repository: %w", err)
+	}
+
+	return members, nil
 }
 
 func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvider {
