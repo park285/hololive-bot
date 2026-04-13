@@ -208,6 +208,7 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		nil,
 		nil,
 		nil,
+		nil,
 		newPollerRegistrationTestLogger(),
 	)
 	require.NoError(t, err)
