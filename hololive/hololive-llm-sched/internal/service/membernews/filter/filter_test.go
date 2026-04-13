@@ -60,7 +60,6 @@ func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier
 }
 
 func (v *testSourceValidator) HasCorroboration(text string) bool {
-	// 테스트에서는 "공식/미디어 링크가 하나라도 포함되면 corroboration"으로 간주.
 	for _, needle := range []string{
 		"hololive.hololivepro.com",
 		"hololivepro.com",
@@ -80,7 +79,6 @@ func (v *testSourceValidator) HasCorroboration(text string) bool {
 	return false
 }
 
-// mockMemberDataForFilter: buildMemberProfiles/matchMembers 테스트용 mock
 type mockMemberDataForFilter struct {
 	byName  map[string]*domain.Member
 	byAlias map[string]*domain.Member
@@ -106,7 +104,6 @@ func (m *mockMemberDataForFilter) WithContext(_ context.Context) domain.MemberDa
 }
 func (m *mockMemberDataForFilter) FindMembersByName(_ string) []*domain.Member  { return nil }
 func (m *mockMemberDataForFilter) FindMembersByAlias(_ string) []*domain.Member { return nil }
-
 
 func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	validator := &testSourceValidator{}
@@ -151,7 +148,6 @@ func TestFilterCandidates_PeriodAndSorting(t *testing.T) {
 	}
 }
 
-
 func TestClassifyCategory(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -159,39 +155,32 @@ func TestClassifyCategory(t *testing.T) {
 		description string
 		want        model.Category
 	}{
-		// CategoryBirthdayLive
 		{"生誕 in title", "生誕ライブ開催", "", model.CategoryBirthdayLive},
 		{"생일 keyword", "사쿠라 미코 생일", "", model.CategoryBirthdayLive},
 		{"birthday in description", "special event", "birthday celebration", model.CategoryBirthdayLive},
 		{"birthday priority over live/event", "Birthday Live Concert event", "", model.CategoryBirthdayLive},
 
-		// CategorySoloLive
 		{"ソロライブ", "ソロライブ開催", "", model.CategorySoloLive},
 		{"solo live", "solo live announced", "", model.CategorySoloLive},
 		{"단독 라이브", "단독 라이브 개최", "", model.CategorySoloLive},
 		{"solo live priority over event keyword", "solo live concert event", "", model.CategorySoloLive},
 
-		// CategoryCollab
 		{"コラボ", "コラボイベント", "", model.CategoryCollab},
 		{"콜라보", "콜라보 카페", "", model.CategoryCollab},
 		{"collaboration in description", "event info", "collaboration details", model.CategoryCollab},
 
-		// CategoryGoods
 		{"グッズ", "新グッズ販売", "", model.CategoryGoods},
 		{"굿즈", "굿즈 판매", "", model.CategoryGoods},
 		{"merchandise", "new merchandise", "", model.CategoryGoods},
 
-		// CategoryEvent
 		{"fes keyword", "hololive fes 2026", "", model.CategoryEvent},
 		{"expo keyword", "SUPER EXPO 2026", "", model.CategoryEvent},
 		{"concert keyword", "holo concert", "", model.CategoryEvent},
 		{"event keyword", "special event announcement", "", model.CategoryEvent},
 		{"live keyword without qualifier", "big live show", "", model.CategoryEvent},
 
-		// CategoryOther (fallback)
 		{"no match → CategoryOther", "一般的なお知らせ", "追加情報なし", model.CategoryOther},
 
-		// title + description 합산 매칭
 		{"title+desc combined: solo in title, live in desc", "special solo", "live show details", model.CategorySoloLive},
 	}
 
@@ -205,7 +194,6 @@ func TestClassifyCategory(t *testing.T) {
 		})
 	}
 }
-
 
 func TestMatchMembers(t *testing.T) {
 	tests := []struct {
@@ -298,7 +286,6 @@ func TestMatchMembers(t *testing.T) {
 	}
 }
 
-
 func TestApplyPeriodFilter(t *testing.T) {
 	now := time.Date(2026, 2, 16, 10, 0, 0, 0, model.KST)
 
@@ -369,7 +356,6 @@ func TestApplyPeriodFilter(t *testing.T) {
 	})
 }
 
-
 func TestBuildMemberProfiles(t *testing.T) {
 	t.Run("nil membersData → display name token only", func(t *testing.T) {
 		profiles := buildMemberProfiles([]string{"사쿠라 미코"}, nil)
@@ -405,12 +391,10 @@ func TestBuildMemberProfiles(t *testing.T) {
 		if profiles[0].display != "사쿠라 미코" {
 			t.Fatalf("expected display %q, got %q", "사쿠라 미코", profiles[0].display)
 		}
-		// Name 필드에서 파생된 토큰이 포함되어야 함
 		if len(profiles[0].tokens) <= 1 {
 			t.Fatalf("expected more than 1 token (NameKo/NameJa/Aliases), got %d: %v",
 				len(profiles[0].tokens), profiles[0].tokens)
 		}
-		// "sakuramiko" 토큰 존재 확인 (Name "Sakura Miko" → NormalizeKey)
 		if !slices.Contains(profiles[0].tokens, "sakuramiko") {
 			t.Fatalf("expected token 'sakuramiko' from Name field, tokens: %v", profiles[0].tokens)
 		}
@@ -430,7 +414,6 @@ func TestBuildMemberProfiles(t *testing.T) {
 		if len(profiles) != 1 {
 			t.Fatalf("expected 1 profile, got %d", len(profiles))
 		}
-		// display가 NameKo로 오버라이드되어야 함
 		if profiles[0].display != "사쿠라 미코" {
 			t.Fatalf("expected display %q (from NameKo), got %q", "사쿠라 미코", profiles[0].display)
 		}
@@ -447,7 +430,6 @@ func TestBuildMemberProfiles(t *testing.T) {
 		}
 	})
 }
-
 
 func TestFilterCandidates_EmptySourceURL(t *testing.T) {
 	validator := &testSourceValidator{}
@@ -518,7 +500,6 @@ func TestFilterCandidates_SortStability(t *testing.T) {
 		t.Fatalf("expected 3, got %d", len(filtered))
 	}
 
-	// date -> sourceTier -> category -> title 순
 	if filtered[0].Candidate.Title != "M-title 사쿠라 미코 event" {
 		t.Errorf("[0] expected earliest date (M-title), got %q", filtered[0].Candidate.Title)
 	}
