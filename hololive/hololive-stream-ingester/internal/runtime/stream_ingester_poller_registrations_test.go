@@ -81,16 +81,18 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 	}
 
 	expected := []struct {
-		name     string
-		priority poller.Priority
-		interval time.Duration
-		group    providers.ChannelTargetGroup
+		name                  string
+		priority              poller.Priority
+		interval              time.Duration
+		group                 providers.ChannelTargetGroup
+		worstCaseAttempts     int
+		worstCaseRequestUnits float64
 	}{
-		{name: "videos", priority: poller.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification},
-		{name: "shorts", priority: poller.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification},
-		{name: "community", priority: poller.PriorityLow, interval: 13 * time.Minute, group: providers.ChannelTargetGroupNotification},
-		{name: "channel_stats", priority: poller.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupStats},
-		{name: "live", priority: poller.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification},
+		{name: "videos", priority: poller.PriorityNormal, interval: 7 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 9},
+		{name: "shorts", priority: poller.PriorityLow, interval: 11 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
+		{name: "community", priority: poller.PriorityLow, interval: 13 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.HighFrequencyChannelFetchPolicy.MaxAttempts, worstCaseRequestUnits: 1},
+		{name: "channel_stats", priority: poller.PriorityLow, interval: 4 * time.Hour, group: providers.ChannelTargetGroupStats, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
+		{name: "live", priority: poller.PriorityHigh, interval: 3 * time.Minute, group: providers.ChannelTargetGroupNotification, worstCaseAttempts: scraper.FetchPageMaxAttempts, worstCaseRequestUnits: 3},
 	}
 
 	for idx, reg := range registrations {
@@ -108,6 +110,15 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 		}
 		if reg.TargetGroup != expected[idx].group {
 			t.Fatalf("registrations[%d].TargetGroup = %q, want %q", idx, reg.TargetGroup, expected[idx].group)
+		}
+		if reg.RequestsPerRun != 1 {
+			t.Fatalf("registrations[%d].RequestsPerRun = %d, want 1", idx, reg.RequestsPerRun)
+		}
+		if reg.WorstCaseAttempts != expected[idx].worstCaseAttempts {
+			t.Fatalf("registrations[%d].WorstCaseAttempts = %d, want %d", idx, reg.WorstCaseAttempts, expected[idx].worstCaseAttempts)
+		}
+		if reg.WorstCaseRequestUnitsPerRun != expected[idx].worstCaseRequestUnits {
+			t.Fatalf("registrations[%d].WorstCaseRequestUnitsPerRun = %v, want %v", idx, reg.WorstCaseRequestUnitsPerRun, expected[idx].worstCaseRequestUnits)
 		}
 		switch reg.Poller.Name() {
 		case "channel_stats":
@@ -227,4 +238,46 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 	if applied != 5 {
 		t.Fatalf("scheduler.SetProxyEnabled(false) = %d, want 5", applied)
 	}
+}
+
+func TestBuildStreamIngesterChannelPollerRegistrations_RouteAwareWorstCaseRequestUnits(t *testing.T) {
+	t.Parallel()
+
+	postgres := &databasemocks.Client{
+		GetGormDBFunc: func() *gorm.DB {
+			return nil
+		},
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		postgres,
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    7 * time.Minute,
+				Shorts:    11 * time.Minute,
+				Community: 13 * time.Minute,
+				Stats:     4 * time.Hour,
+				Live:      3 * time.Minute,
+			},
+			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
+				Enabled: false,
+			},
+		},
+		scraper.NewRateLimiter(time.Second),
+		nil,
+		func(poller.NotificationRouteRequest) bool { return true },
+		[]string{"UC_NOTIFY_A"},
+		[]string{"UC_STATS_A"},
+	)
+
+	byName := make(map[string]providers.ChannelPollerRegistration, len(registrations))
+	for _, registration := range registrations {
+		if registration.Poller == nil {
+			continue
+		}
+		byName[registration.Poller.Name()] = registration
+	}
+
+	assert.Equal(t, 14.0, byName["shorts"].WorstCaseRequestUnitsPerRun)
+	assert.Equal(t, 11.0, byName["community"].WorstCaseRequestUnitsPerRun)
 }
