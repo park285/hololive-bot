@@ -22,10 +22,8 @@ package youtube
 
 import "context"
 
-//
-// NOTE:
-// - 외부 모듈은 구체 구현(serviceImpl)에 직접 의존하지 않고, 이 인터페이스를 통해 주입받는다.
-// - 필요한 메서드만 포함하여 이동/테스트/모킹 비용을 낮춘다.
+// 외부 모듈은 구체 구현(serviceImpl)에 직접 의존하지 않고 이 인터페이스를 통해 주입받는다.
+// 필요한 메서드만 남겨 이동·테스트·모킹 비용을 낮춘다.
 type Service interface {
 	SetScraperProxyEnabled(enabled bool) bool
 	ScraperProxyEnabled() bool

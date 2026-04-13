@@ -49,28 +49,22 @@ const (
 	MajorEventLinkStatusBlocked   MajorEventLinkStatus = "blocked"
 )
 
-// RSS Feed에서 파싱되어 DB에 저장됨
 type MajorEvent struct {
-	// Primary
 	ID         int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	ExternalID string `json:"external_id" gorm:"uniqueIndex;size:500;not null"` // RSS guid/link (중복 방지)
 
-	// Type
 	Type MajorEventType `json:"type" gorm:"size:20;default:'event';index"` // event 또는 news
 
-	// Content
 	Title       string   `json:"title" gorm:"size:500;not null"`
 	Link        string   `json:"link" gorm:"size:1000;not null"`
 	Description string   `json:"description" gorm:"type:text"`
 	Members     []string `json:"members" gorm:"type:text[];serializer:json"` // PostgreSQL text[] 또는 JSON
 
-	// Dates
 	PubDate        *time.Time  `json:"pub_date" gorm:"type:timestamptz"`        // RSS 발행일
 	EventStartDate *time.Time  `json:"event_start_date" gorm:"type:date;index"` // 행사 시작일
 	EventEndDate   *time.Time  `json:"event_end_date" gorm:"type:date"`         // 행사 종료일 (멀티데이)
 	EventDates     []time.Time `json:"-" gorm:"-"`                              // 파싱 시 임시 저장 (DB 미저장)
 
-	// State
 	Status        MajorEventStatus     `json:"status" gorm:"size:50;default:'active';index"`
 	LinkStatus    MajorEventLinkStatus `json:"link_status" gorm:"size:20;default:'unchecked';index"`
 	LinkCheckedAt *time.Time           `json:"link_checked_at" gorm:"type:timestamptz"`
@@ -78,7 +72,6 @@ type MajorEvent struct {
 	NotifiedWeek  string               `json:"notified_week" gorm:"size:10;index"`  // 알림 발송 주차 (YYYY-WW)
 	NotifiedMonth string               `json:"notified_month" gorm:"size:10;index"` // 월간 알림 발송 월 (YYYY-MM)
 
-	// Audit
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }

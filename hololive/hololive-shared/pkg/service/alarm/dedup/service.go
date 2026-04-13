@@ -120,10 +120,8 @@ func (s *Service) ReleaseClaims(ctx context.Context, claimKeys []string) error {
 	if len(claimKeys) == 0 {
 		return nil
 	}
-	// 로컬 폴백 해제
 	s.fallback.ReleaseClaims(claimKeys)
 
-	// Valkey DEL
 	_, err := s.cache.DelMany(ctx, claimKeys)
 	if err != nil {
 		return fmt.Errorf("release claims: del many keys: %w", err)
@@ -163,7 +161,6 @@ func (s *Service) MarkAsNotified(ctx context.Context, streamID string, startSche
 		return nil
 	}
 
-	// 원자적 필드 갱신
 	if err := s.cache.HSet(ctx, key, "start_scheduled", scheduledStr); err != nil {
 		return fmt.Errorf("mark as notified: set start_scheduled field: %w", err)
 	}
@@ -275,7 +272,6 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 	return time.Since(notifiedAt) <= window, nil
 }
 
-
 // tryClaimKey: SETNX 기반 키 선점 (Valkey 장애 시 로컬 폴백)
 func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) bool {
 	acquired, err := s.cache.SetNX(ctx, key, "1", ttl)
@@ -292,7 +288,6 @@ func (s *Service) targetMinutesSnapshot() []int {
 	return append([]int(nil), s.targetMinutes...)
 }
 
-// readNotifiedData: Valkey에서 NotifiedData 해시를 조회합니다.
 func (s *Service) readNotifiedData(ctx context.Context, key string) (*NotifiedData, error) {
 	data, source, err := s.loadNotifiedData(ctx, key)
 	if err != nil {
