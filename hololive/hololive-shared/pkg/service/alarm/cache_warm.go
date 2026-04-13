@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -23,12 +24,24 @@ var loadAllAlarmsFromRepository = func(ctx context.Context, repo *Repository) ([
 	return repo.LoadAll(ctx)
 }
 
+const cacheScanBatchSize int64 = 100
+
 func WarmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
 	if repo == nil {
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from repository: repository is nil")
 	}
 
 	return warmSubscriberCacheFromLoader(ctx, cacheSvc, func(ctx context.Context) ([]*domain.Alarm, error) {
+		return loadAllAlarmsFromRepository(ctx, repo)
+	})
+}
+
+func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
+	if repo == nil {
+		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
+	}
+
+	return rebuildSubscriberCacheFromLoader(ctx, cacheSvc, func(ctx context.Context) ([]*domain.Alarm, error) {
 		return loadAllAlarmsFromRepository(ctx, repo)
 	})
 }
@@ -40,6 +53,79 @@ func warmSubscriberCacheFromLoader(ctx context.Context, cacheSvc cache.Client, l
 	}
 
 	return WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
+}
+
+func rebuildSubscriberCacheFromLoader(ctx context.Context, cacheSvc cache.Client, load alarmLoader) (CacheWarmSummary, error) {
+	alarms, err := load(ctx)
+	if err != nil {
+		return CacheWarmSummary{}, fmt.Errorf("rebuild subscriber cache from repository: load alarms: %w", err)
+	}
+
+	if err := clearSubscriberCacheNamespace(ctx, cacheSvc); err != nil {
+		return CacheWarmSummary{}, err
+	}
+
+	return WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
+}
+
+func clearSubscriberCacheNamespace(ctx context.Context, cacheSvc cache.Client) error {
+	if cacheSvc == nil {
+		return errors.New("rebuild subscriber cache from alarms: cache service is nil")
+	}
+
+	keysToDelete := []string{
+		sharedalarmkeys.AlarmRegistryKey,
+		sharedalarmkeys.AlarmChannelRegistryKey,
+		sharedalarmkeys.MemberNameKey,
+		sharedalarmkeys.RoomNamesCacheKey,
+		sharedalarmkeys.UserNamesCacheKey,
+	}
+
+	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	if err != nil {
+		return fmt.Errorf("rebuild subscriber cache from alarms: read room registry: %w", err)
+	}
+	for _, roomID := range registryRooms {
+		roomID = strings.TrimSpace(roomID)
+		if roomID == "" {
+			continue
+		}
+		keysToDelete = append(keysToDelete, sharedalarmkeys.BuildRoomAlarmKey(roomID))
+	}
+
+	for _, pattern := range []string{
+		sharedalarmkeys.ChannelSubscribersKeyPrefix + "*",
+		sharedalarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
+	} {
+		keys, scanErr := cacheSvc.ScanKeys(ctx, pattern, cacheScanBatchSize)
+		if scanErr != nil {
+			return fmt.Errorf("rebuild subscriber cache from alarms: scan keys %q: %w", pattern, scanErr)
+		}
+		keysToDelete = append(keysToDelete, keys...)
+	}
+
+	keysToDelete = compactUniqueStrings(keysToDelete)
+	if len(keysToDelete) == 0 {
+		return nil
+	}
+
+	if _, err := cacheSvc.DelMany(ctx, keysToDelete); err != nil {
+		return fmt.Errorf("rebuild subscriber cache from alarms: delete existing keys: %w", err)
+	}
+
+	return nil
+}
+
+func compactUniqueStrings(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || slices.Contains(result, value) {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
 }
 
 func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, alarms []*domain.Alarm) (CacheWarmSummary, error) {

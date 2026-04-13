@@ -64,6 +64,11 @@ func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvi
 		return nil, fmt.Errorf("failed to load translated profiles dataset: %w", err)
 	}
 
+	members, err := domain.LoadAllMembers(membersData)
+	if err != nil {
+		return nil, fmt.Errorf("load members data: %w", err)
+	}
+
 	service := &ProfileService{
 		cache:         cacheSvc,
 		logger:        logger,
@@ -71,7 +76,7 @@ func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvi
 		profiles:      profiles,
 		translations:  preTranslated,
 		englishToSlug: make(map[string]string, len(profiles)),
-		channelToSlug: make(map[string]string, len(membersData.GetAllMembers())),
+		channelToSlug: make(map[string]string, len(members)),
 	}
 
 	for slug, profile := range profiles {
@@ -84,7 +89,7 @@ func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvi
 		}
 	}
 
-	for _, member := range membersData.GetAllMembers() {
+	for _, member := range members {
 		if member == nil {
 			continue
 		}

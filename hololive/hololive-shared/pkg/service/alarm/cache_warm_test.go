@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -166,9 +168,77 @@ func TestWarmSubscriberCacheFromRepository_LoadError(t *testing.T) {
 	assert.ErrorContains(t, err, "load failed")
 }
 
+func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing.T) {
+	ctx := t.Context()
+	cacheSvc := newMemoryCacheClient()
+	originalLoader := loadAllAlarmsFromRepository
+	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
+		return []*domain.Alarm{
+			{
+				RoomID:     "room-fresh",
+				UserID:     "user-fresh",
+				ChannelID:  "UC_FRESH",
+				MemberName: "Fresh Member",
+				RoomName:   "Fresh Room",
+				UserName:   "Fresh User",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
+			},
+		}, nil
+	}
+	t.Cleanup(func() {
+		loadAllAlarmsFromRepository = originalLoader
+	})
+
+	_, err := cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-stale"})
+	require.NoError(t, err)
+	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"), []string{"UC_STALE"})
+	require.NoError(t, err)
+	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_STALE"})
+	require.NoError(t, err)
+	_, err = cacheSvc.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive), []string{"room-stale"})
+	require.NoError(t, err)
+	require.NoError(t, cacheSvc.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE", "Stale Member"))
+	require.NoError(t, cacheSvc.HSet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-stale", "Stale Room"))
+	require.NoError(t, cacheSvc.HSet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-stale", "Stale User"))
+	require.NoError(t, cacheSvc.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive), "1", time.Minute))
+
+	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheSvc, &Repository{})
+	require.NoError(t, err)
+	assert.Equal(t, CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, summary)
+
+	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"room-fresh"}, registryRooms)
+
+	channelRegistry, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"UC_FRESH"}, channelRegistry)
+
+	staleRoomChannels, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"))
+	require.NoError(t, err)
+	assert.Empty(t, staleRoomChannels)
+
+	staleLiveSubscribers, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive))
+	require.NoError(t, err)
+	assert.Empty(t, staleLiveSubscribers)
+
+	staleEmptyKnown, err := cacheSvc.Exists(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive))
+	require.NoError(t, err)
+	assert.False(t, staleEmptyKnown)
+
+	staleMemberName, err := cacheSvc.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE")
+	require.NoError(t, err)
+	assert.Empty(t, staleMemberName)
+
+	freshCommunitySubscribers, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"room-fresh"}, freshCommunitySubscribers)
+}
+
 func newMemoryCacheClient() *cachemocks.Client {
 	sets := make(map[string]map[string]struct{})
 	hashes := make(map[string]map[string]string)
+	values := make(map[string]struct{})
 
 	client := cachemocks.NewStrictClient()
 	client.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
@@ -205,6 +275,57 @@ func newMemoryCacheClient() *cachemocks.Client {
 			return "", nil
 		}
 		return hashes[key][field], nil
+	}
+	client.SetFunc = func(_ context.Context, key string, _ any, _ time.Duration) error {
+		values[key] = struct{}{}
+		return nil
+	}
+	client.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+		_, exists := values[key]
+		return exists, nil
+	}
+	client.ScanKeysFunc = func(_ context.Context, pattern string, _ int64) ([]string, error) {
+		prefix := strings.TrimSuffix(pattern, "*")
+		keys := make([]string, 0)
+		seen := make(map[string]struct{})
+		for key := range sets {
+			if strings.HasPrefix(key, prefix) {
+				seen[key] = struct{}{}
+			}
+		}
+		for key := range hashes {
+			if strings.HasPrefix(key, prefix) {
+				seen[key] = struct{}{}
+			}
+		}
+		for key := range values {
+			if strings.HasPrefix(key, prefix) {
+				seen[key] = struct{}{}
+			}
+		}
+		for key := range seen {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		return keys, nil
+	}
+	client.DelManyFunc = func(_ context.Context, keys []string) (int64, error) {
+		var deleted int64
+		for _, key := range keys {
+			if _, exists := sets[key]; exists {
+				delete(sets, key)
+				deleted++
+			}
+			if _, exists := hashes[key]; exists {
+				delete(hashes, key)
+				deleted++
+			}
+			if _, exists := values[key]; exists {
+				delete(values, key)
+				deleted++
+			}
+		}
+		return deleted, nil
 	}
 
 	return client

@@ -21,8 +21,8 @@
 package matcher
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -79,9 +79,14 @@ func (mm *MemberMatcher) buildSnapshot(ctx context.Context) (*memberMatcherSnaps
 		return snapshot, nil
 	}
 
+	members, err := domain.LoadAllMembers(provider)
+	if err != nil {
+		return nil, fmt.Errorf("get all members: %w", err)
+	}
+
 	entriesByChannel := make(map[string]*snapshotEntry)
 
-	for _, member := range provider.GetAllMembers() {
+	for _, member := range members {
 		entry := mm.snapshotEntryFromMember(member)
 		if entry == nil {
 			continue

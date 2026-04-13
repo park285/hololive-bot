@@ -255,6 +255,9 @@ func (r *youTubePollTargetRefresher) applyResolvedTargets(targets youtubePollTar
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
+		if !registration.HasExplicitChannelIDs {
+			continue
+		}
 
 		updated := registration
 		switch registration.TargetGroup {
