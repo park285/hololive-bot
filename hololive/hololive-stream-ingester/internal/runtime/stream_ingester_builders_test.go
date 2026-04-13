@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
+	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -424,7 +425,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 		cfg,
 		&databasemocks.Client{},
 		sharedClient,
-		nil,
+		func(poller.NotificationRouteRequest) bool { return false },
 		testLogger(),
 	)
 
@@ -440,7 +441,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 	require.Same(t, sharedRL, extractScraperRateLimiter(t, pollerClient))
 	require.Same(t, sharedRL, extractScraperRateLimiter(t, resolverClient))
 	require.Equal(t, extractScraperStateStorePointer(t, pollerClient), extractScraperStateStorePointer(t, resolverClient))
-	require.Equal(t, 15*time.Second, extractResolverDurationField(t, resolver, "interval"))
+	require.Equal(t, 3*time.Minute, extractResolverDurationField(t, resolver, "interval"))
 	require.Equal(t, 10, extractResolverIntField(t, resolver, "batchSize"))
 	require.Equal(t, 1, extractResolverIntField(t, resolver, "maxResolvePerRun"))
 	require.Equal(t, 12*time.Second, extractResolverDurationField(t, resolver, "maxRunDuration"))
@@ -536,7 +537,7 @@ func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 		cfg,
 		&databasemocks.Client{},
 		scraper.NewClient(),
-		nil,
+		func(poller.NotificationRouteRequest) bool { return true },
 		testLogger(),
 	)
 
@@ -574,6 +575,22 @@ func TestBuildPendingPublishedAtResolver_ZeroValueConfigReturnsNil(t *testing.T)
 
 	resolver := buildPendingPublishedAtResolver(
 		config.ScraperConfig{},
+		&databasemocks.Client{},
+		scraper.NewClient(),
+		nil,
+		testLogger(),
+	)
+
+	require.Nil(t, resolver)
+}
+
+func TestBuildPendingPublishedAtResolver_NilRouteDeciderReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	resolver := buildPendingPublishedAtResolver(
+		config.ScraperConfig{
+			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
+		},
 		&databasemocks.Client{},
 		scraper.NewClient(),
 		nil,
@@ -630,6 +647,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		testLogger(),
 	)
 	require.NoError(t, err)
@@ -642,6 +660,53 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 	assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
 	assert.Equal(t, 7, scraperScheduler.WorkerCount())
 	assert.Equal(t, 5, scraperScheduler.SetProxyEnabled(false))
+}
+
+func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlobalJob(t *testing.T) {
+	t.Parallel()
+
+	resolver := buildPendingPublishedAtResolver(
+		config.ScraperConfig{
+			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
+			Poll: config.ScraperPoll{
+				Videos:    5 * time.Minute,
+				Shorts:    10 * time.Minute,
+				Community: 10 * time.Minute,
+				Stats:     6 * time.Hour,
+				Live:      5 * time.Minute,
+			},
+		},
+		&databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }},
+		scraper.NewClient(),
+		func(poller.NotificationRouteRequest) bool { return true },
+		testLogger(),
+	)
+	require.NotNil(t, resolver)
+
+	scraperScheduler, _, _, err := buildStreamIngesterYouTubeComponents(
+		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    5 * time.Minute,
+				Shorts:    10 * time.Minute,
+				Community: 10 * time.Minute,
+				Stats:     6 * time.Hour,
+				Live:      5 * time.Minute,
+			},
+			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
+		},
+		&databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }},
+		[]string{"UC_NOTIFY"},
+		[]string{"UC_STATS"},
+		scraper.NewClient(),
+		nil,
+		nil,
+		nil,
+		func(poller.NotificationRouteRequest) bool { return true },
+		resolver,
+		testLogger(),
+	)
+	require.NoError(t, err)
+	require.Contains(t, schedulerJobKeys(t, scraperScheduler), providers.SyntheticGlobalPollerChannelID+":"+poller.PendingPublishedAtResolverPollerName)
 }
 
 func TestBuildStreamIngesterConfigSubscriber_ApplyScraperProxyToggle(t *testing.T) {
