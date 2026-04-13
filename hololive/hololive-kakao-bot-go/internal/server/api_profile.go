@@ -29,7 +29,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// 원본 프로필과 번역된 프로필 정보를 함께 반환함.
 type ProfileResponse struct {
 	Status     string          `json:"status"`
 	Profile    *ProfileData    `json:"profile,omitempty"`
@@ -65,8 +64,6 @@ type TranslatedData struct {
 	Data        []DataEntry `json:"data"`
 }
 
-// Query params:
-//   - channelId: YouTube 채널 ID (필수)
 func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	channelID := c.Query("channelId")
 	if channelID == "" {
@@ -84,7 +81,6 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	// 채널 ID로 프로필 조회
 	profile, err := h.profiles.GetByChannel(channelID)
 	if err != nil {
 		h.logger.Warn("Profile not found",
@@ -96,7 +92,6 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	// 번역 정보 조회
 	_, translated, err := h.profiles.GetWithTranslation(ctx, profile.EnglishName)
 	if err != nil {
 		h.logger.Error("Failed to load translated profile",
@@ -108,7 +103,6 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	// 응답 구조체 변환
 	resp := ProfileResponse{
 		Status:  "ok",
 		Profile: convertToProfileData(profile),
@@ -127,8 +121,6 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	c.JSON(200, resp)
 }
 
-// Query params:
-//   - name: 영문 이름 (필수)
 func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 	name := c.Query("name")
 	if name == "" {
@@ -175,7 +167,6 @@ func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 	c.JSON(200, resp)
 }
 
-// convertToProfileData: domain.TalentProfile을 API 응답 구조체로 변환.
 func convertToProfileData(p *domain.TalentProfile) *ProfileData {
 	if p == nil {
 		return nil
@@ -203,7 +194,6 @@ func convertToProfileData(p *domain.TalentProfile) *ProfileData {
 	}
 }
 
-// convertTranslatedRows: domain.TranslatedProfileDataRow 슬라이스를 API 응답 형식으로 변환.
 func convertTranslatedRows(rows []domain.TranslatedProfileDataRow) []DataEntry {
 	result := make([]DataEntry, 0, len(rows))
 	for _, row := range rows {
