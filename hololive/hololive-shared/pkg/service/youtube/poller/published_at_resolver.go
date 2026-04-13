@@ -113,8 +113,7 @@ func (r *PendingPublishedAtResolver) Start(ctx context.Context) {
 	}
 
 	for {
-		detectedBefore := time.Now().Add(-r.resolverMinDetectedAge())
-		if err := r.runOnce(ctx, detectedBefore); err != nil && ctx.Err() == nil {
+		if err := r.RunOnce(ctx); err != nil && ctx.Err() == nil {
 			r.logger.Warn("Pending published_at resolver iteration failed",
 				slog.Any("error", err),
 			)
@@ -133,6 +132,15 @@ func (r *PendingPublishedAtResolver) Start(ctx context.Context) {
 		case <-timer.C:
 		}
 	}
+}
+
+func (r *PendingPublishedAtResolver) RunOnce(ctx context.Context) error {
+	if r == nil {
+		return fmt.Errorf("run pending published_at resolver: resolver is nil")
+	}
+
+	detectedBefore := time.Now().Add(-r.resolverMinDetectedAge())
+	return r.runOnce(ctx, detectedBefore)
 }
 
 func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore time.Time) error {

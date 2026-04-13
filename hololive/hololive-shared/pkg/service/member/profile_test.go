@@ -22,6 +22,7 @@ package member
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -103,6 +104,19 @@ func (p *stubMemberProvider) FindMembersByAlias(alias string) []*domain.Member {
 	return nil
 }
 
+type erroringMemberProvider struct {
+	*stubMemberProvider
+	err error
+}
+
+func (p *erroringMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+	return nil, p.err
+}
+
+func (p *erroringMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+	return p
+}
+
 func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -174,5 +188,34 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 	}
 	if translated.DisplayName == "" {
 		t.Fatalf("expected translated display name")
+	}
+}
+
+func TestNewProfileService_ReturnsMemberLoadError(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working dir: %v", err)
+	}
+	repoRoot := filepath.Clean(filepath.Join(wd, "..", "..", ".."))
+	if err := os.Chdir(repoRoot); err != nil {
+		t.Fatalf("failed to change dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(wd)
+	})
+
+	provider := &erroringMemberProvider{
+		stubMemberProvider: newStubMemberProvider(nil),
+		err:                errors.New("member repo down"),
+	}
+
+	_, err = NewProfileService(nil, provider, logger)
+	if err == nil {
+		t.Fatal("NewProfileService() error = nil, want non-nil")
+	}
+	if got := err.Error(); got != "load members data: load all members: member repo down" {
+		t.Fatalf("NewProfileService() error = %q, want %q", got, "load members data: load all members: member repo down")
 	}
 }

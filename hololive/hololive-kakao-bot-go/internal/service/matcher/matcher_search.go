@@ -72,12 +72,14 @@ func (mm *MemberMatcher) FindBestMatch(ctx context.Context, query string) (*doma
 
 	channel, err := mm.findBestMatchImpl(ctx, query)
 
-	mm.matchCacheMu.Lock()
-	mm.matchCache[cacheKey] = &MatchCacheEntry{
-		Channel:   channel,
-		Timestamp: time.Now(),
+	if err == nil {
+		mm.matchCacheMu.Lock()
+		mm.matchCache[cacheKey] = &MatchCacheEntry{
+			Channel:   channel,
+			Timestamp: time.Now(),
+		}
+		mm.matchCacheMu.Unlock()
 	}
-	mm.matchCacheMu.Unlock()
 
 	mm.maybeCleanupMatchCache()
 
