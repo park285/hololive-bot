@@ -44,7 +44,7 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 	}
 
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
-	html, err := c.fetchPage(ctx, url)
+	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
 	if err != nil {
 		if statusCode, ok := extractHTTPStatusCode(err); ok && statusCode == http.StatusNotFound {
 			c.markCommunityMissing(ctx, channelID)
