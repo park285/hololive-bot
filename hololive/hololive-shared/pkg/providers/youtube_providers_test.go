@@ -12,6 +12,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/stretchr/testify/assert"
 )
 
 type noopPoller struct{}
@@ -238,6 +239,39 @@ func TestProvideScraperScheduler_RespectsExplicitEmptyChannelIDs(t *testing.T) {
 
 	got := providerJobKeys(t, scheduler)
 	want := []string{"UC_A:stats"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
+	}
+}
+
+func TestNewGlobalPollerRegistration_UsesSyntheticGlobalTarget(t *testing.T) {
+	t.Parallel()
+
+	registration := NewGlobalPollerRegistration(namedNoopPoller{name: "resolver"}, poller.PriorityLow, 15*time.Second)
+
+	assert.Equal(t, poller.PriorityLow, registration.Priority)
+	assert.Equal(t, 15*time.Second, registration.Interval)
+	assert.Equal(t, ChannelTargetGroupGlobal, registration.TargetGroup)
+	assert.Equal(t, []string{SyntheticGlobalPollerChannelID}, registration.ChannelIDs)
+	assert.True(t, registration.HasExplicitChannelIDs)
+}
+
+func TestProvideScraperScheduler_RegistersSyntheticGlobalPollerWithoutDefaults(t *testing.T) {
+	t.Parallel()
+
+	scheduler := ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		WithChannelPollerRegistrations([]ChannelPollerRegistration{
+			NewGlobalPollerRegistration(namedNoopPoller{name: "resolver"}, poller.PriorityLow, 15*time.Second),
+		}),
+	)
+	if scheduler == nil {
+		t.Fatal("scheduler is nil")
+	}
+
+	got := providerJobKeys(t, scheduler)
+	want := []string{SyntheticGlobalPollerChannelID + ":resolver"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 	}
