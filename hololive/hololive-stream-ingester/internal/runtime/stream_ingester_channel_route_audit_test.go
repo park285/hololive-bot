@@ -46,6 +46,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersCommunityAndShortsForEver
 		nil,
 		nil,
 		nil,
+		nil,
 		testLogger(),
 	)
 	require.NoError(t, err)
