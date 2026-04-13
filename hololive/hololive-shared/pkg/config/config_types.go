@@ -61,9 +61,9 @@ type BotConfig struct {
 }
 
 type ServicesConfig struct {
-	LLMSchedulerHealthURL   string // llm-scheduler health URL
-	GameBotTwentyQHealthURL string // game-bot-go twentyq health URL
-	GameBotTurtleHealthURL  string // game-bot-go turtlesoup health URL
+	LLMSchedulerHealthURL   string
+	GameBotTwentyQHealthURL string
+	GameBotTurtleHealthURL  string
 }
 
 type ScraperPoll struct {
@@ -90,7 +90,7 @@ func DefaultScraperWorkerCount() int {
 }
 
 type ScraperConfig struct {
-	ProxyEnabled        bool   // 프록시 사용 여부
+	ProxyEnabled        bool
 	ProxyURL            string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
 	WorkerCount         int
 	Poll                ScraperPoll
@@ -100,8 +100,8 @@ type ScraperConfig struct {
 func DefaultScraperPoll() ScraperPoll {
 	return ScraperPoll{
 		Videos:    15 * time.Minute,
-		Shorts:    90 * time.Second,
-		Community: 90 * time.Second,
+		Shorts:    2 * time.Minute,
+		Community: 2 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}
