@@ -34,7 +34,7 @@ const shortsPublishedAtLookupWindow = 30
 
 func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*Short, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
-	html, err := c.fetchPage(ctx, url)
+	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +80,11 @@ func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int
 		}
 	}
 
-	c.enrichShortsPublishedAt(ctx, channelID, shorts)
-
 	return shorts, nil
+}
+
+func (c *Client) EnrichShortsPublishedAtFromRSS(ctx context.Context, channelID string, shorts []*Short) {
+	c.enrichShortsPublishedAt(ctx, channelID, shorts)
 }
 
 func (c *Client) enrichShortsPublishedAt(ctx context.Context, channelID string, shorts []*Short) {
