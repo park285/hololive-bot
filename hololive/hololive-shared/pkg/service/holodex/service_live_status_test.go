@@ -3,10 +3,14 @@ package holodex
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestGetChannelsLiveStatus_FillsIndieOrgWhenUsersLiveOmitsIt(t *testing.T) {
@@ -137,5 +141,33 @@ func TestGetChannelsLiveStatus_DoesNotHydrateNonIndieMissingOrg(t *testing.T) {
 	}
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
+	}
+}
+
+func TestCacheManager_GetChannelsLiveStatusStreams_OrderIndependentKeys(t *testing.T) {
+	t.Parallel()
+
+	cacheManager := NewCacheManager(
+		newInMemoryCacheClient(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	expected := []*domain.Stream{
+		{ID: "video-1"},
+	}
+
+	cacheManager.SetChannelsLiveStatusStreams(context.Background(), []string{"UC_B", "UC_A"}, expected, time.Minute)
+
+	got, found := cacheManager.GetChannelsLiveStatusStreams(context.Background(), []string{"UC_A", "UC_B"})
+	if !found {
+		t.Fatal("GetChannelsLiveStatusStreams() found = false, want true")
+	}
+	if len(got) != len(expected) {
+		t.Fatalf("len(got) = %d, want %d", len(got), len(expected))
+	}
+	if got[0] == nil {
+		t.Fatal("got[0] = nil, want stream")
+	}
+	if got[0].ID != expected[0].ID {
+		t.Fatalf("got[0].ID = %q, want %q", got[0].ID, expected[0].ID)
 	}
 }
