@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
 	"strconv"
 
@@ -41,7 +40,6 @@ func main() {
 	log.Println("=== PostgreSQL Member Data Integration Test ===")
 	log.Println()
 
-	// Initialize PostgreSQL
 	postgresCfg := config.PostgresConfig{
 		Host:     envOrDefault("POSTGRES_HOST", constants.DatabaseDefaults.Host),
 		Port:     envOrDefaultInt("POSTGRES_PORT", constants.DatabaseDefaults.Port),
@@ -63,12 +61,10 @@ func main() {
 
 	log.Println("PostgreSQL connected")
 
-	// Initialize Repository
 	repo := runtime.Repository
 
 	log.Println("Repository created")
 
-	// Test 1: Get all members
 	ctx := context.Background()
 
 	members, err := repo.GetAllMembers(ctx)
@@ -78,7 +74,6 @@ func main() {
 
 	log.Printf("Loaded %d members from PostgreSQL", len(members))
 
-	// Test 2: Find by channel ID
 	testChannelID := "UChAnqc_AY5_I3Px5dig3X1Q" // Korone
 
 	foundMember, err := repo.FindByChannelID(ctx, testChannelID)
@@ -94,7 +89,6 @@ func main() {
 	log.Printf("Find by channel ID: %s (aliases: ko=%d, ja=%d)",
 		foundMember.Name, len(foundMember.Aliases.Ko), len(foundMember.Aliases.Ja))
 
-	// Test 3: Find by alias
 	foundMember, err = repo.FindByAlias(ctx, "코로네")
 	if err != nil {
 		log.Fatalf("Failed to find by alias: %v", err)
@@ -107,12 +101,10 @@ func main() {
 
 	log.Printf("Find by alias '코로네': %s", foundMember.Name)
 
-	// Test 4: Initialize Cache (without Valkey)
 	memberCache := runtime.Cache
 
 	log.Println("Cache created with warm-up")
 
-	// Test 5: Cache queries
 	foundMember, err = memberCache.GetByChannelID(ctx, testChannelID)
 	if err != nil {
 		log.Fatalf("Cache GetByChannelID failed: %v", err)
@@ -125,7 +117,6 @@ func main() {
 
 	log.Printf("Cache hit: %s", foundMember.Name)
 
-	// Test 6: Adapter
 	adapter := runtime.MemberAdapter
 	adapterCtx := adapter.WithContext(ctx)
 
@@ -177,6 +168,3 @@ func envOrDefaultInt(key string, fallback int) int {
 
 	return parsed
 }
-
-// 린터 경고 억제: 사용된 인터페이스.
-var _ = slog.Default
