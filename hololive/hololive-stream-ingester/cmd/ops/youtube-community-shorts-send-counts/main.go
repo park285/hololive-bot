@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
 )
 
@@ -34,16 +35,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	useObservationQuery := strings.TrimSpace(*observationRuntime) != "" || strings.TrimSpace(*observationCutover) != ""
+	observationQuery, useObservationQuery, err := observationquery.ParseOptional(*observationRuntime, *observationCutover)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	var observationCutoverAt *time.Time
 	if useObservationQuery {
-		parsedCutoverAt, err := time.Parse(time.RFC3339, strings.TrimSpace(*observationCutover))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid observation-cutover %q: %v\n", *observationCutover, err)
-			os.Exit(1)
-		}
-		parsedCutoverAt = parsedCutoverAt.UTC()
-		observationCutoverAt = &parsedCutoverAt
+		observationCutoverAt = &observationQuery.CutoverAt
 	}
 
 	cfg, err := config.Load()
@@ -58,7 +57,7 @@ func main() {
 	defer cancel()
 
 	options := opsapp.CommunityShortsSendCountCollectOptions{
-		ObservationRuntimeName:      strings.TrimSpace(*observationRuntime),
+		ObservationRuntimeName:      observationQuery.Runtime,
 		ObservationBigBangCutoverAt: observationCutoverAt,
 	}
 	if !useObservationQuery {
@@ -98,9 +97,10 @@ func validateCommunityShortsSendCountCLIArgs(
 	observationRuntime string,
 	observationCutover string,
 ) error {
-	trimmedRuntime := strings.TrimSpace(observationRuntime)
-	trimmedCutover := strings.TrimSpace(observationCutover)
-	useObservationQuery := trimmedRuntime != "" || trimmedCutover != ""
+	_, useObservationQuery, err := observationquery.ParseOptional(observationRuntime, observationCutover)
+	if err != nil {
+		return err
+	}
 
 	if !useObservationQuery {
 		if window <= 0 {
@@ -110,9 +110,6 @@ func validateCommunityShortsSendCountCLIArgs(
 	}
 	if windowExplicit {
 		return errors.New("window and observation query flags are mutually exclusive")
-	}
-	if trimmedRuntime == "" || trimmedCutover == "" {
-		return errors.New("observation-runtime and observation-cutover must be provided together")
 	}
 	return nil
 }
