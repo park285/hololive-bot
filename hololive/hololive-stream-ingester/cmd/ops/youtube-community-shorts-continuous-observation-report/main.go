@@ -1,22 +1,16 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
 )
-
-const continuousObservationRetryInterval = 5 * time.Second
 
 func main() {
 	observationRuntime := flag.String("observation-runtime", "youtube-scraper", "runtime name for a specific observation window")
@@ -132,116 +126,4 @@ func main() {
 			os.Exit(1)
 		}
 	}
-}
-
-type continuousObservationOutputPaths struct {
-	latest   string
-	snapshot string
-}
-
-func collectContinuousObservationWithWait(
-	cfg *config.Config,
-	logger *slog.Logger,
-	options opsapp.CommunityShortsContinuousObservationCollectOptions,
-	waitTimeout time.Duration,
-) (opsapp.CommunityShortsContinuousObservationReport, error) {
-	deadline := time.Now().Add(waitTimeout)
-	for {
-		report, err := collectContinuousObservationOnce(cfg, logger, options)
-		if err == nil {
-			return report, nil
-		}
-		if time.Now().After(deadline) || !isObservationWindowNotFoundError(err) {
-			return opsapp.CommunityShortsContinuousObservationReport{}, err
-		}
-		time.Sleep(continuousObservationRetryInterval)
-	}
-}
-
-func collectContinuousObservationOnce(
-	cfg *config.Config,
-	logger *slog.Logger,
-	options opsapp.CommunityShortsContinuousObservationCollectOptions,
-) (opsapp.CommunityShortsContinuousObservationReport, error) {
-	now := time.Now().UTC()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	return opsapp.CollectCommunityShortsContinuousObservationReport(ctx, cfg, logger, now, options)
-}
-
-func renderContinuousObservationOutput(
-	report opsapp.CommunityShortsContinuousObservationReport,
-	format string,
-) ([]byte, string, error) {
-	switch format {
-	case "markdown":
-		return []byte(opsapp.RenderCommunityShortsContinuousObservationMarkdown(report)), ".md", nil
-	case "json":
-		payload, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			return nil, "", err
-		}
-		payload = append(payload, '\n')
-		return payload, ".json", nil
-	default:
-		return nil, "", fmt.Errorf("unsupported format %q", format)
-	}
-}
-
-func writeContinuousObservationSnapshot(
-	dir string,
-	ext string,
-	report opsapp.CommunityShortsContinuousObservationReport,
-	payload []byte,
-) (continuousObservationOutputPaths, error) {
-	timestamp := report.GeneratedAt.UTC().Format("20060102-150405")
-	snapshotPath := filepath.Join(dir, fmt.Sprintf("snapshot-%s%s", timestamp, ext))
-	latestPath := filepath.Join(dir, fmt.Sprintf("latest%s", ext))
-	if err := os.WriteFile(snapshotPath, payload, 0o644); err != nil {
-		return continuousObservationOutputPaths{}, err
-	}
-	if err := os.WriteFile(latestPath, payload, 0o644); err != nil {
-		return continuousObservationOutputPaths{}, err
-	}
-	return continuousObservationOutputPaths{latest: latestPath, snapshot: snapshotPath}, nil
-}
-
-func nextContinuousObservationInterval(report opsapp.CommunityShortsContinuousObservationReport) time.Duration {
-	interval := 15 * time.Minute
-	if report.Observation.ObservedUntil.Sub(report.Observation.ObservationStartedAt) < time.Hour {
-		interval = 5 * time.Minute
-	}
-	remaining := report.Observation.ObservationEndsAt.Sub(report.GeneratedAt.UTC())
-	if remaining > 0 && remaining < interval {
-		return remaining
-	}
-	if remaining <= 0 {
-		return continuousObservationRetryInterval
-	}
-	return interval
-}
-
-func defaultContinuousObservationOutputDir(runtimeName string, cutoverAt time.Time) string {
-	sanitizedRuntimeName := strings.TrimSpace(runtimeName)
-	if sanitizedRuntimeName == "" {
-		sanitizedRuntimeName = "youtube-scraper"
-	}
-	cutoverLabel := cutoverAt.UTC().Format("20060102T150405Z")
-	return filepath.Join("artifacts", "youtube-community-shorts-continuous-observation", sanitizedRuntimeName+"-"+cutoverLabel)
-}
-
-func parseContinuousObservationCutover(raw string) (time.Time, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return time.Time{}, errors.New("observation-cutover is required")
-	}
-	parsed, err := time.Parse(time.RFC3339, trimmed)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid observation-cutover %q: %v", raw, err)
-	}
-	return parsed.UTC(), nil
-}
-
-func isObservationWindowNotFoundError(err error) bool {
-	return err != nil && strings.Contains(strings.ToLower(err.Error()), "observation window not found")
 }
