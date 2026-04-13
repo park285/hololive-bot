@@ -38,10 +38,7 @@ import (
 )
 
 // llmSchedulerFormatter는 llm-scheduler가 사용하는 최소 메시지 포맷터 구현이다.
-//
-// NOTE:
-// P9-1(adapter 이동) 대비: llm-sched는 bot 전용 adapter 구현에 의존하지 않는다.
-// 대신, template.Renderer를 기반으로 majorevent/membernews scheduler가 요구하는 formatter 계약만 구현한다.
+// bot 전용 adapter에 의존하지 않고 template.Renderer만으로 필요한 formatter 계약만 맞춘다.
 type llmSchedulerFormatter struct {
 	prefix   string
 	renderer *template.Renderer
@@ -130,7 +127,6 @@ func splitTemplateInstruction(rendered string) (instruction string, body string)
 	return templateview.SplitTemplateInstruction(rendered)
 }
 
-
 type majorEventWeeklySummaryData struct {
 	Emoji      UIEmoji
 	Count      int
@@ -217,7 +213,6 @@ func buildMajorEventViews(events []domain.MajorEvent) []majorEventView {
 func formatMajorEventDatesFromDB(start, end *time.Time) string {
 	return templateview.FormatMajorEventDatesFromDB(start, end)
 }
-
 
 type memberNewsDigestTemplateData struct {
 	Emoji       UIEmoji
