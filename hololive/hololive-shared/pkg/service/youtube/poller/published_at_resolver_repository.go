@@ -48,6 +48,7 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 	result := publishedAtFinalizeResult{}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := trackingrepo.NewRepository(tx)
+		enqueueAllowed := true
 
 		stateRow, err := txRepo.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
 		if err != nil {
@@ -56,11 +57,10 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 		if stateRow != nil {
 			if stateRow.AlarmSentAt != nil && !stateRow.AlarmSentAt.IsZero() {
 				result.reason = "already_sent"
-				return nil
-			}
-			if stateRow.AuthorizedAt != nil && !stateRow.AuthorizedAt.IsZero() {
+				enqueueAllowed = false
+			} else if stateRow.AuthorizedAt != nil && !stateRow.AuthorizedAt.IsZero() {
 				result.reason = "already_claimed"
-				return nil
+				enqueueAllowed = false
 			}
 		}
 
@@ -70,14 +70,14 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 		}
 		if trackingRow != nil && trackingRow.AlarmSentAt != nil && !trackingRow.AlarmSentAt.IsZero() {
 			result.reason = "already_sent"
-			return nil
+			enqueueAllowed = false
 		}
 
-		notification, reason, err := r.finalizeCandidateState(ctx, tx, txRepo, candidate, normalizedPublishedAt, routeDecider)
+		notification, reason, err := r.finalizeCandidateState(ctx, tx, txRepo, candidate, normalizedPublishedAt, routeDecider, enqueueAllowed)
 		if err != nil {
 			return err
 		}
-		if reason != "" {
+		if reason != "" && result.reason == "" {
 			result.reason = reason
 		}
 		if notification == nil {
@@ -112,12 +112,13 @@ func (r *publishedAtResolverRepository) finalizeCandidateState(
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
+	enqueueAllowed bool,
 ) (*domain.YouTubeNotificationOutbox, string, error) {
 	switch candidate.Kind {
 	case domain.OutboxKindNewShort:
-		return r.finalizeShort(ctx, tx, txRepo, candidate, publishedAt, routeDecider)
+		return r.finalizeShort(ctx, tx, txRepo, candidate, publishedAt, routeDecider, enqueueAllowed)
 	case domain.OutboxKindCommunityPost:
-		return r.finalizeCommunity(ctx, tx, txRepo, candidate, publishedAt, routeDecider)
+		return r.finalizeCommunity(ctx, tx, txRepo, candidate, publishedAt, routeDecider, enqueueAllowed)
 	default:
 		return nil, "", fmt.Errorf("finalize published_at: unsupported kind %s", candidate.Kind)
 	}
@@ -130,6 +131,7 @@ func (r *publishedAtResolverRepository) finalizeShort(
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
+	enqueueAllowed bool,
 ) (*domain.YouTubeNotificationOutbox, string, error) {
 	videoID := normalizeShortVideoResourceID(candidate.PostID)
 	if videoID == "" {
@@ -184,6 +186,9 @@ func (r *publishedAtResolverRepository) finalizeShort(
 		return nil, "", fmt.Errorf("load short row for notification: %w", err)
 	}
 
+	if !enqueueAllowed {
+		return nil, "", nil
+	}
 	if !shouldEnqueueRoutedNotification(routeDecider, domain.AlarmTypeShorts, candidate.ChannelID, publishedAt) {
 		return nil, "route_decider_rejected", nil
 	}
@@ -221,6 +226,7 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 	candidate trackingrepo.PublishedAtResolutionCandidate,
 	publishedAt time.Time,
 	routeDecider NotificationRouteDecider,
+	enqueueAllowed bool,
 ) (*domain.YouTubeNotificationOutbox, string, error) {
 	postID := normalizeContentID(candidate.Kind, candidate.PostID)
 	if postID == "" {
@@ -275,6 +281,9 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 		return nil, "", fmt.Errorf("load community row for notification: %w", err)
 	}
 
+	if !enqueueAllowed {
+		return nil, "", nil
+	}
 	if !shouldEnqueueRoutedNotification(routeDecider, domain.AlarmTypeCommunity, candidate.ChannelID, publishedAt) {
 		return nil, "route_decider_rejected", nil
 	}

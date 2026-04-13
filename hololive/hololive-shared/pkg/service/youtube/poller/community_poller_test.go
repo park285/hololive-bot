@@ -328,7 +328,7 @@ func findLogEntryByMessage(t *testing.T, logBuffer *bytes.Buffer, message string
 	return nil
 }
 
-func TestCommunityPoller_MissingPublishedAtWithNilRouteDeciderDefersResolver(t *testing.T) {
+func TestCommunityPoller_MissingPublishedAtWithNilRouteDeciderEnqueuesImmediately(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
 		&domain.YouTubeNotificationOutbox{},
@@ -346,6 +346,7 @@ func TestCommunityPoller_MissingPublishedAtWithNilRouteDeciderDefersResolver(t *
 
 	postsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Posts","content":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"backstagePostThreadRenderer":{"post":{"backstagePostRenderer":{"postId":"post-1","authorEndpoint":{"browseEndpoint":{"browseId":"UC_TEST"}},"authorText":{"runs":[{"text":"Author"}]},"authorThumbnail":{"thumbnails":[{"url":"https://img.test/a.jpg","width":88,"height":88}]},"contentText":{"runs":[{"text":"hello world"}]},"voteCount":{"simpleText":"1.2K"},"actionButtons":{"commentActionButtonsRenderer":{"replyButton":{"buttonRenderer":{"text":{"simpleText":"7"}}}}}}}}}]}}}}}]}}}`
 	postsHTML := "<script>var ytInitialData = " + postsJSON + ";</script>"
+	postHTML := `<html><head><meta itemprop="datePublished" content="2026-04-10T10:11:12+09:00"></head></html>`
 
 	resolveCalls := 0
 	client := scraper.NewClient(
@@ -359,7 +360,7 @@ func TestCommunityPoller_MissingPublishedAtWithNilRouteDeciderDefersResolver(t *
 					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postsHTML)), Header: make(http.Header), Request: req}, nil
 				case req.URL.Path == "/post/post-1":
 					resolveCalls++
-					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("<html></html>")), Header: make(http.Header), Request: req}, nil
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(postHTML)), Header: make(http.Header), Request: req}, nil
 				default:
 					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
 				}
@@ -378,9 +379,11 @@ func TestCommunityPoller_MissingPublishedAtWithNilRouteDeciderDefersResolver(t *
 	require.NoError(t, db.Model(&domain.YouTubeCommunityPost{}).Select("published_at").Where("post_id = ?", "community:post-1").Take(&stored).Error)
 	assert.Nil(t, stored.PublishedAt)
 
-	var outboxCount int64
-	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
-	assert.Zero(t, outboxCount)
+	var outbox domain.YouTubeNotificationOutbox
+	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
+	assert.Contains(t, outbox.Payload, `"canonical_post_id":"community:post-1"`)
+	assert.Contains(t, outbox.Payload, `"post_id":"post-1"`)
+	assert.NotContains(t, outbox.Payload, `"published_at":`)
 
 	var tracking domain.YouTubeContentAlarmTracking
 	require.NoError(t, db.First(&tracking, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)

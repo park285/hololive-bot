@@ -58,7 +58,7 @@ func buildStreamIngesterChannelPollerRegistrationsWithClient(
 ) []providers.ChannelPollerRegistration {
 	poll := scraperCfg.PollOrDefault()
 	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
-	inlineResolveMissingPublishedAt := !resolverCfg.Enabled
+	inlineResolveMissingPublishedAt := routeDecider != nil && !resolverCfg.Enabled
 	communityKeywords := []string{}
 	db := postgres.GetGormDB()
 

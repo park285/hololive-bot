@@ -235,6 +235,7 @@ func TestShortsPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) {
 	rssBody := `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/">
 </feed>`
+	watchHTML := `<html><head><meta itemprop="uploadDate" content="2026-04-10T10:11:12+09:00"></head></html>`
 	resolveCalls := 0
 
 	client := scraper.NewClient(
@@ -250,7 +251,7 @@ func TestShortsPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) {
 					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(rssBody)), Header: make(http.Header), Request: req}, nil
 				case req.URL.Path == "/watch" && req.URL.Query().Get("v") == "short-1":
 					resolveCalls++
-					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("<html></html>")), Header: make(http.Header), Request: req}, nil
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(watchHTML)), Header: make(http.Header), Request: req}, nil
 				default:
 					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
 				}
@@ -539,7 +540,7 @@ func TestShortsPoller_InlineFallbackResolveErrorWarnsAndSkipsNotification(t *tes
 	assert.Equal(t, "old-short", watermark.LastContentID)
 }
 
-func TestShortsPoller_MissingPublishedAtWithNilRouteDeciderDefersResolver(t *testing.T) {
+func TestShortsPoller_MissingPublishedAtWithNilRouteDeciderEnqueuesImmediately(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
 		&domain.YouTubeNotificationOutbox{},
@@ -588,13 +589,31 @@ func TestShortsPoller_MissingPublishedAtWithNilRouteDeciderDefersResolver(t *tes
 
 	assert.Zero(t, resolveCalls)
 
-	var outboxCount int64
-	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
-	assert.Zero(t, outboxCount)
+	var stored struct {
+		PublishedAt *time.Time
+	}
+	require.NoError(t, db.Model(&domain.YouTubeVideo{}).Select("published_at").Where("video_id = ?", "short-1").Take(&stored).Error)
+	assert.Nil(t, stored.PublishedAt)
+
+	var outbox domain.YouTubeNotificationOutbox
+	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindNewShort, "short:short-1").Error)
+	assert.Contains(t, outbox.Payload, `"canonical_post_id":"short:short-1"`)
+	assert.Contains(t, outbox.Payload, `"video_id":"short-1"`)
+	assert.NotContains(t, outbox.Payload, `"published_at":`)
 
 	var tracking domain.YouTubeContentAlarmTracking
 	require.NoError(t, db.First(&tracking, "kind = ? AND content_id = ?", domain.OutboxKindNewShort, "short:short-1").Error)
 	assert.Nil(t, tracking.ActualPublishedAt)
+	assert.False(t, tracking.DetectedAt.IsZero())
+	assert.Nil(t, tracking.AlarmSentAt)
+	assert.Equal(t, domain.YouTubeContentAlarmDeliveryStatusPending, tracking.DeliveryStatus)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-1").Error)
+	assert.Nil(t, alarmState.ActualPublishedAt)
+	assert.Nil(t, alarmState.AuthorizedAt)
+	assert.Nil(t, alarmState.AlarmSentAt)
+	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, alarmState.DeliveryStatus)
 
 	var watermark domain.YouTubeContentWatermark
 	require.NoError(t, db.First(&watermark, "channel_id = ? AND watermark_type = ?", "UC_TEST", domain.WatermarkTypeShort).Error)
