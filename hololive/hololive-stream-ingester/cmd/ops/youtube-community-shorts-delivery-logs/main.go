@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
 )
 
@@ -22,7 +23,11 @@ func main() {
 	format := flag.String("format", "markdown", "output format: markdown or json")
 	flag.Parse()
 
-	useObservationQuery := strings.TrimSpace(*observationRuntime) != "" || strings.TrimSpace(*observationCutover) != ""
+	observationQuery, useObservationQuery, err := observationquery.ParseOptional(*observationRuntime, *observationCutover)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	if !useObservationQuery && *window <= 0 {
 		fmt.Fprintln(os.Stderr, "window must be greater than zero")
 		os.Exit(1)
@@ -34,17 +39,7 @@ func main() {
 
 	var observationCutoverAt *time.Time
 	if useObservationQuery {
-		if strings.TrimSpace(*observationRuntime) == "" || strings.TrimSpace(*observationCutover) == "" {
-			fmt.Fprintln(os.Stderr, "observation-runtime and observation-cutover must be provided together")
-			os.Exit(1)
-		}
-		parsedCutoverAt, err := time.Parse(time.RFC3339, strings.TrimSpace(*observationCutover))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid observation-cutover %q: %v\n", *observationCutover, err)
-			os.Exit(1)
-		}
-		parsedCutoverAt = parsedCutoverAt.UTC()
-		observationCutoverAt = &parsedCutoverAt
+		observationCutoverAt = &observationQuery.CutoverAt
 	}
 
 	cfg, err := config.Load()
@@ -59,7 +54,7 @@ func main() {
 	defer cancel()
 
 	options := opsapp.CommunityShortsDeliveryLogCollectOptions{
-		ObservationRuntimeName:      strings.TrimSpace(*observationRuntime),
+		ObservationRuntimeName:      observationQuery.Runtime,
 		ObservationBigBangCutoverAt: observationCutoverAt,
 		Limit:                       *limit,
 	}
