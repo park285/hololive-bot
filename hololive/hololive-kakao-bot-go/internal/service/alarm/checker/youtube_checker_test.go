@@ -41,8 +41,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
-// -- NewYouTubeChecker 생성자 검증 --
-
 func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -96,8 +94,6 @@ func TestNewYouTubeChecker_NilDependencies(t *testing.T) {
 		})
 	}
 }
-
-// -- YouTubeChecker.Check: 채널 레지스트리 비어 있는 경우 --
 
 func TestYouTubeCheckerCheck_EmptyChannelRegistry(t *testing.T) {
 	t.Parallel()
@@ -296,8 +292,6 @@ func TestYouTubeChecker_DoesNotBackfillLateFiveMinuteAlarm(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, notifications)
 }
-
-// -- common.go 보조 함수 --
 
 func TestUniqueStrings(t *testing.T) {
 	t.Parallel()
@@ -547,8 +541,6 @@ func TestResolveLiveStart(t *testing.T) {
 	}
 }
 
-// -- Chzzk 보조 함수 --
-
 func TestIsChzzkLive(t *testing.T) {
 	t.Parallel()
 
@@ -577,7 +569,6 @@ func TestBuildChzzkLiveDedupKey(t *testing.T) {
 	detectedAt := time.Date(2026, time.March, 2, 10, 35, 0, 0, time.UTC)
 	key := buildChzzkLiveDedupKey("chzzk123", detectedAt)
 
-	// 10분 bucket → 10:30
 	assert.Contains(t, key, notification.ChzzkLiveNotifiedKeyPrefix+"chzzk123:")
 	assert.Contains(t, key, "20260302T1030")
 }
@@ -611,11 +602,8 @@ func TestBuildChzzkLiveStream_EmptyTitle(t *testing.T) {
 	now := time.Now().UTC()
 	stream := buildChzzkLiveStream("UC_YT", "ch1", status, now)
 
-	// 빈 제목이면 기본값 사용
 	assert.Contains(t, stream.Title, "치지직 라이브")
 }
-
-// -- Twitch 보조 함수 --
 
 func TestBuildTwitchLiveDedupKey(t *testing.T) {
 	t.Parallel()
