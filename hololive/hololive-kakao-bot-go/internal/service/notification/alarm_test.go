@@ -45,6 +45,10 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 			input:    []int{10, 0, 10, -5, 3, 1},
 			expected: []int{10, 3, 1},
 		},
+		"singleExplicitFiveStillAddsRuntimeFallback": {
+			input:    []int{5},
+			expected: []int{5, 1},
+		},
 		"alreadyContainsFallback": {
 			input:    []int{15, 1, 5},
 			expected: []int{15, 5, 1},
@@ -72,15 +76,31 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 func TestBuildRuntimeTargetMinutes(t *testing.T) {
 	t.Parallel()
 
-	got := sharedchecker.BuildRuntimeTargetMinutes(10)
-	expected := []int{10, 3, 1}
-	if len(got) != len(expected) {
-		t.Fatalf("unexpected length: got=%v expected=%v", got, expected)
+	tests := map[string]struct {
+		input    int
+		expected []int
+	}{
+		"ten":   {input: 10, expected: []int{10, 3, 1}},
+		"five":  {input: 5, expected: []int{5, 3, 1}},
+		"three": {input: 3, expected: []int{3, 1}},
+		"two":   {input: 2, expected: []int{2, 1}},
+		"one":   {input: 1, expected: []int{1}},
 	}
 
-	for i := range got {
-		if got[i] != expected[i] {
-			t.Fatalf("unexpected targets: got=%v expected=%v", got, expected)
-		}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := sharedchecker.BuildRuntimeTargetMinutes(tc.input)
+			if len(got) != len(tc.expected) {
+				t.Fatalf("unexpected length: got=%v expected=%v", got, tc.expected)
+			}
+
+			for i := range got {
+				if got[i] != tc.expected[i] {
+					t.Fatalf("unexpected targets: got=%v expected=%v", got, tc.expected)
+				}
+			}
+		})
 	}
 }
