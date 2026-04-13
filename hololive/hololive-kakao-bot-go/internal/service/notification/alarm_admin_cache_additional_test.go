@@ -213,8 +213,8 @@ func TestTargetMinutesAndCloseHelpers(t *testing.T) {
 	assert.Equal(t, []int{10, 3, 1}, as.GetTargetMinutes())
 
 	updated = as.UpdateAlarmAdvanceMinutes(t.Context(), 1)
-	assert.Equal(t, []int{3, 1}, updated)
-	assert.Equal(t, []int{3, 1}, as.GetTargetMinutes())
+	assert.Equal(t, []int{1}, updated)
+	assert.Equal(t, []int{1}, as.GetTargetMinutes())
 
 	var nilService *AlarmService
 	require.NoError(t, nilService.Close(context.Background()))
