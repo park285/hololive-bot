@@ -1,17 +1,11 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
-	"strings"
-	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
+	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/reportcli"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
 )
 
@@ -21,48 +15,32 @@ func main() {
 	format := flag.String("format", "markdown", "output format: markdown or json")
 	flag.Parse()
 
-	observationQuery, err := observationquery.ParseRequired(*observationRuntime, *observationCutover)
+	err := reportcli.RunRequiredObservationReport(
+		reportcli.RequiredObservationParams{
+			Runtime: *observationRuntime,
+			Cutover: *observationCutover,
+			Format:  *format,
+		},
+		reportcli.RequiredObservationCommand[
+			opsapp.CommunityAlarmSentHistoryCollectOptions,
+			opsapp.CommunityAlarmSentHistoryReport,
+		]{
+			BuildOptions: func(query reportcli.ObservationQuery) opsapp.CommunityAlarmSentHistoryCollectOptions {
+				return opsapp.CommunityAlarmSentHistoryCollectOptions{
+					ObservationRuntimeName:      query.Runtime,
+					ObservationBigBangCutoverAt: &query.CutoverAt,
+				}
+			},
+			Collect:            opsapp.CollectCommunityAlarmSentHistoryReport,
+			RenderMarkdown:     opsapp.RenderCommunityAlarmSentHistoryMarkdown,
+			LoadConfigError:    "Failed to load community alarm sent-history config",
+			CollectError:       "Failed to collect community alarm sent history",
+			MarkdownWriteError: "Failed to write community alarm sent-history markdown",
+			JSONWriteError:     "Failed to write community alarm sent-history JSON",
+		},
+	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load community alarm sent-history config: %v\n", err)
-		os.Exit(1)
-	}
-
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	now := time.Now().UTC()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	report, err := opsapp.CollectCommunityAlarmSentHistoryReport(ctx, cfg, logger, now, opsapp.CommunityAlarmSentHistoryCollectOptions{
-		ObservationRuntimeName:      observationQuery.Runtime,
-		ObservationBigBangCutoverAt: &observationQuery.CutoverAt,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to collect community alarm sent history: %v\n", err)
-		os.Exit(1)
-	}
-
-	switch strings.ToLower(strings.TrimSpace(*format)) {
-	case "markdown":
-		if _, err := fmt.Print(opsapp.RenderCommunityAlarmSentHistoryMarkdown(report)); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write community alarm sent-history markdown: %v\n", err)
-			os.Exit(1)
-		}
-	case "json":
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetEscapeHTML(false)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(report); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write community alarm sent-history JSON: %v\n", err)
-			os.Exit(1)
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "unsupported format %q (want markdown or json)\n", *format)
 		os.Exit(1)
 	}
 }
