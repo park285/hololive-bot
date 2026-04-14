@@ -465,6 +465,41 @@ func TestConsumerMoveToDLQ_PreservesSerializedEnvelope(t *testing.T) {
 	assert.Equal(t, mustMarshalEnvelope(t, envelope), items[0])
 }
 
+func TestConsumerMoveToDLQ_PreservesOriginalLegacyRawPayload(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	legacyRaw := "{\n" +
+		"  \"notification\": {\n" +
+		"    \"room_id\": \"room-legacy\",\n" +
+		"    \"channel\": null,\n" +
+		"    \"stream\": null,\n" +
+		"    \"minutes_until\": 7,\n" +
+		"    \"users\": []\n" +
+		"  },\n" +
+		"  \"claim_keys\": [\"notified:claim:room-legacy\"],\n" +
+		"  \"enqueued_at\": \"2026-02-25T13:00:00Z\",\n" +
+		"  \"version\": 1\n" +
+		"}"
+
+	cmd := cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(legacyRaw).Build()
+	results := cacheClient.DoMulti(context.Background(), cmd)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 1)
+	require.Equal(t, domain.AlarmTypeLive, envelopes[0].Notification.AlarmType)
+
+	require.NoError(t, consumer.MoveToDLQ(context.Background(), envelopes))
+
+	items, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, legacyRaw, items[0])
+}
+
 func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	publisher := NewPublisher(cacheClient, newTestLogger())

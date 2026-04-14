@@ -219,6 +219,11 @@ func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueE
 
 	elements := make([]string, 0, len(envelopes))
 	for i := range envelopes {
+		if originalPayload := envelopes[i].OriginalPayload(); originalPayload != "" {
+			elements = append(elements, originalPayload)
+			continue
+		}
+
 		jsonBytes, err := json.Marshal(envelopes[i])
 		if err != nil {
 			return fmt.Errorf("move envelopes to dlq: marshal envelope: %w", err)

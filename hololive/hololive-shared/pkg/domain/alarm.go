@@ -194,6 +194,7 @@ type AlarmQueueEnvelope struct {
 	EnqueuedAt   string                   `json:"enqueued_at"`
 	Version      uint8                    `json:"version"`
 	Retry        *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+	rawPayload   string
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -239,6 +240,10 @@ func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (e AlarmQueueEnvelope) OriginalPayload() string {
+	return e.rawPayload
+}
+
 func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 	var wire alarmQueueEnvelopeWire
 	if err := json.Unmarshal(data, &wire); err != nil {
@@ -264,6 +269,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		EnqueuedAt: wire.EnqueuedAt,
 		Version:    wire.Version,
 		Retry:      wire.Retry,
+		rawPayload: string(data),
 	}
 
 	return nil
