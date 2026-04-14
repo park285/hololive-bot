@@ -13,7 +13,7 @@ import (
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 const (
@@ -22,12 +22,6 @@ const (
 	communityShortsRouteUsageNewOnlyVerified        = "new_only_verified"
 	communityShortsRouteUsageUnexpectedPathDetected = "unexpected_path_detected"
 	communityShortsRouteUsageMixedPathsDetected     = "mixed_paths_detected"
-	communityShortsLegacyDeliveryPath               = "legacy_alarm_queue"
-	communityShortsNewDeliveryPath                  = "youtube_outbox_dispatcher"
-	communityShortsDeliveryModeNew                  = "new_only"
-	communityShortsDeliveryModeOff                  = "disabled"
-	communityShortsDeliveryModePending              = "pending_cutover"
-	youtubeScraperRuntimeName                       = "youtube-scraper"
 )
 
 type CommunityShortsRouteVerificationReport struct {
@@ -145,8 +139,8 @@ func CollectCommunityShortsRouteVerificationReport(
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: load alarms: %w", err)
 	}
 
-	channels := runtimeapp.BuildCommunityShortsOperationalChannelsFromMembers(members)
-	baseline, err := runtimeapp.BuildCommunityShortsTargetBaseline(channels, alarms, cfg.Ingestion, now)
+	channels := communityshorts.BuildOperationalChannelsFromMembers(members)
+	baseline, err := communityshorts.BuildTargetBaseline(channels, alarms, cfg.Ingestion, now)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: build baseline: %w", err)
 	}
@@ -185,7 +179,7 @@ func classifyCommunityShortsPostPaths(rows []outbox.PostDeliveryPathUsage) commu
 	case 0:
 		return communityShortsPostPathClassification{State: communityShortsRouteUsageNoPathObserved, ObservedPaths: paths}
 	case 1:
-		if paths[0] == communityShortsNewDeliveryPath {
+		if paths[0] == communityshorts.NewDeliveryPath {
 			return communityShortsPostPathClassification{State: communityShortsRouteUsageNewOnlyVerified, ObservedPaths: paths}
 		}
 		return communityShortsPostPathClassification{State: communityShortsRouteUsageUnexpectedPathDetected, ObservedPaths: paths}

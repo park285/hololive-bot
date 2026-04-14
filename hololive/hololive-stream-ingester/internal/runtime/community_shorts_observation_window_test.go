@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 type observationWindowWriterStub struct {
@@ -34,19 +35,21 @@ func TestStreamIngesterRuntimeEnsureCommunityShortsObservationWindowWrites24Hour
 
 	cutoverAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
 	deploymentCompletedAt := time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
+	policy, err := communityshorts.BuildPolicy(config.IngestionConfig{
+		CommunityShortsBigBangEnabled:   true,
+		CommunityShortsBigBangCutoverAt: cutoverAt,
+	}, []communityshorts.OperationalChannel{
+		{OwnerLabel: "A", ChannelID: "UC_1", Enabled: true},
+		{OwnerLabel: "B", ChannelID: "UC_2", Enabled: true},
+	})
+	require.NoError(t, err)
 	writer := &observationWindowWriterStub{}
 	runtime := &StreamIngesterRuntime{
 		RuntimeName: youtubeScraperRuntimeName,
 		Config: &config.Config{
 			Version: "2.0.0",
 		},
-		CommunityShortsBigBangPolicy: communityShortsBigBangPolicy{
-			cutoverAt: cutoverAt,
-			targetChannelIDs: map[string]struct{}{
-				"UC_1": {},
-				"UC_2": {},
-			},
-		},
+		CommunityShortsBigBangPolicy:           policy,
 		communityShortsObservationWindowWriter: writer,
 		timeNow: func() time.Time {
 			return deploymentCompletedAt
@@ -84,23 +87,23 @@ func TestStreamIngesterRuntimeEnsureCommunityShortsObservationWindowReturnsWrite
 	t.Parallel()
 
 	writer := &observationWindowWriterStub{err: errors.New("write failed")}
+	policy, err := communityshorts.BuildPolicy(config.IngestionConfig{
+		CommunityShortsBigBangEnabled:   true,
+		CommunityShortsBigBangCutoverAt: time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC),
+	}, []communityshorts.OperationalChannel{{OwnerLabel: "A", ChannelID: "UC_1", Enabled: true}})
+	require.NoError(t, err)
 	runtime := &StreamIngesterRuntime{
 		RuntimeName: youtubeScraperRuntimeName,
 		Config: &config.Config{
 			Version: "2.0.0",
 		},
-		CommunityShortsBigBangPolicy: communityShortsBigBangPolicy{
-			cutoverAt: time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC),
-			targetChannelIDs: map[string]struct{}{
-				"UC_1": {},
-			},
-		},
+		CommunityShortsBigBangPolicy:           policy,
 		communityShortsObservationWindowWriter: writer,
 		timeNow: func() time.Time {
 			return time.Date(2026, 4, 10, 1, 15, 0, 0, time.UTC)
 		},
 	}
 
-	err := runtime.ensureCommunityShortsObservationWindow(context.Background())
+	err = runtime.ensureCommunityShortsObservationWindow(context.Background())
 	require.ErrorContains(t, err, "persist record")
 }

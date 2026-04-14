@@ -1,0 +1,100 @@
+package communityshorts
+
+import (
+	"context"
+	"fmt"
+	"reflect"
+	"strings"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+)
+
+type OperationalChannel struct {
+	OwnerLabel string
+	ChannelID  string
+	Enabled    bool
+}
+
+type MemberRepository interface {
+	GetAllMembers(context.Context) ([]*domain.Member, error)
+}
+
+func ResolveOperationalChannelsFromRepository(
+	ctx context.Context,
+	repo MemberRepository,
+) ([]OperationalChannel, error) {
+	if repo == nil {
+		return nil, fmt.Errorf("member repository is nil")
+	}
+	value := reflect.ValueOf(repo)
+	if value.Kind() == reflect.Ptr && value.IsNil() {
+		return nil, fmt.Errorf("member repository is nil")
+	}
+
+	members, err := repo.GetAllMembers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load members from repository: %w", err)
+	}
+	return BuildOperationalChannelsFromMembers(members), nil
+}
+
+func BuildOperationalChannelsFromMembers(members []*domain.Member) []OperationalChannel {
+	channels := make([]OperationalChannel, 0, len(members))
+	seenChannelIDs := make(map[string]struct{}, len(members))
+	for i := range members {
+		member := members[i]
+		if member == nil || member.IsGraduated {
+			continue
+		}
+		channelID := strings.TrimSpace(member.ChannelID)
+		if channelID != "" {
+			if _, exists := seenChannelIDs[channelID]; exists {
+				continue
+			}
+			seenChannelIDs[channelID] = struct{}{}
+		}
+		channels = append(channels, OperationalChannel{
+			OwnerLabel: targetOwnerLabel(member),
+			ChannelID:  channelID,
+			Enabled:    channelID != "",
+		})
+	}
+
+	return channels
+}
+
+func EnabledChannelIDs(channels []OperationalChannel) []string {
+	channelIDs := make([]string, 0, len(channels))
+	for i := range channels {
+		if !channels[i].Enabled {
+			continue
+		}
+		channelIDs = append(channelIDs, channels[i].ChannelID)
+	}
+	return channelIDs
+}
+
+func ValidateOperationalTargets(channels []OperationalChannel) error {
+	definitions := make([]sharedalarmkeys.ChannelContentAlarmTargetDefinition, 0, len(channels))
+	for i := range channels {
+		definitions = append(definitions, sharedalarmkeys.ChannelContentAlarmTargetDefinition{
+			OwnerLabel: channels[i].OwnerLabel,
+			ChannelID:  channels[i].ChannelID,
+		})
+	}
+	if err := sharedalarmkeys.ValidateChannelContentAlarmTargetDefinitions(definitions); err != nil {
+		return fmt.Errorf("validate community shorts operational targets: %w", err)
+	}
+	return nil
+}
+
+func targetOwnerLabel(member *domain.Member) string {
+	if member == nil {
+		return ""
+	}
+	if strings.TrimSpace(member.Name) != "" {
+		return member.GetDisplayName()
+	}
+	return strings.TrimSpace(member.ChannelID)
+}

@@ -1,7 +1,8 @@
-package runtime
+package communityshorts
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -10,47 +11,47 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 )
 
-type communityShortsRouteRequest struct {
+type RouteRequest struct {
 	AlarmType   domain.AlarmType
 	ChannelID   string
 	PublishedAt time.Time
 }
 
-type communityShortsBigBangPolicy struct {
+type Policy struct {
 	cutoverAt        time.Time
 	targetChannelIDs map[string]struct{}
 }
 
-func buildCommunityShortsBigBangPolicy(ingestionCfg config.IngestionConfig, channels []communityShortsOperationalChannel) (communityShortsBigBangPolicy, error) {
+func BuildPolicy(ingestionCfg config.IngestionConfig, channels []OperationalChannel) (Policy, error) {
 	if !ingestionCfg.CommunityShortsBigBangEnabled {
-		return communityShortsBigBangPolicy{}, nil
+		return Policy{}, nil
 	}
 
-	if err := validateCommunityShortsOperationalTargets(channels); err != nil {
-		return communityShortsBigBangPolicy{}, fmt.Errorf("build community shorts big-bang policy: %w", err)
+	if err := ValidateOperationalTargets(channels); err != nil {
+		return Policy{}, fmt.Errorf("build community shorts big-bang policy: %w", err)
 	}
 
 	targetChannelIDs := make(map[string]struct{}, len(channels))
 	for i := range channels {
-		if !channels[i].enabled {
+		if !channels[i].Enabled {
 			continue
 		}
-		targetChannelIDs[channels[i].channelID] = struct{}{}
+		targetChannelIDs[channels[i].ChannelID] = struct{}{}
 	}
 
-	return communityShortsBigBangPolicy{
+	return Policy{
 		cutoverAt:        ingestionCfg.CommunityShortsBigBangCutoverAt.UTC(),
 		targetChannelIDs: targetChannelIDs,
 	}, nil
 }
 
-func buildCommunityShortsRouteDecider(policy communityShortsBigBangPolicy) poller.NotificationRouteDecider {
+func BuildRouteDecider(policy Policy) poller.NotificationRouteDecider {
 	if !policy.Enabled() {
 		return nil
 	}
 
 	return func(req poller.NotificationRouteRequest) bool {
-		return policy.ShouldUseNewPath(communityShortsRouteRequest{
+		return policy.ShouldUseNewPath(RouteRequest{
 			AlarmType:   req.AlarmType,
 			ChannelID:   req.ChannelID,
 			PublishedAt: req.PublishedAt,
@@ -58,19 +59,28 @@ func buildCommunityShortsRouteDecider(policy communityShortsBigBangPolicy) polle
 	}
 }
 
-func (p communityShortsBigBangPolicy) Enabled() bool {
+func (p Policy) Enabled() bool {
 	return !p.cutoverAt.IsZero() && len(p.targetChannelIDs) > 0
 }
 
-func (p communityShortsBigBangPolicy) CutoverAt() time.Time {
+func (p Policy) CutoverAt() time.Time {
 	return p.cutoverAt
 }
 
-func (p communityShortsBigBangPolicy) TargetChannelCount() int {
+func (p Policy) TargetChannelCount() int {
 	return len(p.targetChannelIDs)
 }
 
-func (p communityShortsBigBangPolicy) ShouldUseNewPath(req communityShortsRouteRequest) bool {
+func (p Policy) TargetChannelIDs() []string {
+	channelIDs := make([]string, 0, len(p.targetChannelIDs))
+	for channelID := range p.targetChannelIDs {
+		channelIDs = append(channelIDs, channelID)
+	}
+	slices.Sort(channelIDs)
+	return channelIDs
+}
+
+func (p Policy) ShouldUseNewPath(req RouteRequest) bool {
 	if !p.Enabled() || req.PublishedAt.IsZero() {
 		return false
 	}

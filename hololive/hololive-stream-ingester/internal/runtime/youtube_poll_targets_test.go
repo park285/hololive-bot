@@ -207,9 +207,9 @@ func TestResolveYouTubePollTargetsFromAlarmChannelIDs(t *testing.T) {
 	targets := resolveYouTubePollTargetsFromAlarmChannelIDs(
 		[]string{"UCmiko", "UCunknown", "UCmiko"},
 		[]communityShortsOperationalChannel{
-			{ownerLabel: "Pekora", channelID: "UCpekora", enabled: true},
-			{ownerLabel: "Miko", channelID: "UCmiko", enabled: true},
-			{ownerLabel: "Missing", channelID: "", enabled: false},
+			{OwnerLabel: "Pekora", ChannelID: "UCpekora", Enabled: true},
+			{OwnerLabel: "Miko", ChannelID: "UCmiko", Enabled: true},
+			{OwnerLabel: "Missing", ChannelID: "", Enabled: false},
 		},
 	)
 
@@ -220,8 +220,8 @@ func TestResolveYouTubePollTargetsFromAlarmChannelIDs(t *testing.T) {
 
 func testYouTubePollTargetsOperationalChannels() []communityShortsOperationalChannel {
 	return []communityShortsOperationalChannel{
-		{ownerLabel: "Pekora", channelID: "UCpekora", enabled: true},
-		{ownerLabel: "Miko", channelID: "UCmiko", enabled: true},
-		{ownerLabel: "Missing", channelID: "", enabled: false},
+		{OwnerLabel: "Pekora", ChannelID: "UCpekora", Enabled: true},
+		{OwnerLabel: "Miko", ChannelID: "UCmiko", Enabled: true},
+		{OwnerLabel: "Missing", ChannelID: "", Enabled: false},
 	}
 }
