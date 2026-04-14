@@ -80,19 +80,13 @@ func TestDispatcherRunOnce_RenderFailureReleasesClaimKeys(t *testing.T) {
 	}
 }
 
-func TestDispatcherRunOnce_SendFailureParksEnvelopesUntilBackoffExpires(t *testing.T) {
+func TestDispatcherRunOnce_SendFailureSchedulesDurableRetryWithMetadata(t *testing.T) {
 	t.Parallel()
 
-	drainCalls := 0
 	fakeConsumer := &testQueueConsumer{
 		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
-			drainCalls++
-			if drainCalls > 1 {
-				return nil, nil
-			}
 			return []domain.AlarmQueueEnvelope{
 				testAlarmQueueEnvelope("room-1", "claim-1"),
-				testAlarmQueueEnvelope("room-1", "claim-2"),
 			}, nil
 		},
 	}
@@ -117,42 +111,151 @@ func TestDispatcherRunOnce_SendFailureParksEnvelopesUntilBackoffExpires(t *testi
 
 	now := time.Date(2026, 4, 14, 4, 0, 0, 0, time.UTC)
 	dispatcher.now = func() time.Time { return now }
-	dispatcher.retryBackoff = time.Minute
-	dispatcher.maxSendAttempts = 2
+	dispatcher.randFloat64 = func() float64 { return 1 }
+	if err := dispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   3,
+		BaseBackoff:   time.Minute,
+		MaxBackoff:    5 * time.Minute,
+		JitterPercent: 25,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() error = %v", err)
+	}
 
 	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
 		t.Fatalf("RunOnce() error = %v", runErr)
 	}
 
-	if len(fakeConsumer.requeuedEnvelopes) != 0 {
-		t.Fatalf("expected 0 requeued envelopes, got %d", len(fakeConsumer.requeuedEnvelopes))
+	if len(fakeConsumer.scheduledRetries) != 1 {
+		t.Fatalf("scheduled retries = %d, want 1", len(fakeConsumer.scheduledRetries))
 	}
 	if len(fakeConsumer.releasedClaimKeys) != 0 {
 		t.Fatalf("expected released claim keys = 0, got %d", len(fakeConsumer.releasedClaimKeys))
+	}
+	if len(fakeConsumer.dlqEnvelopes) != 0 {
+		t.Fatalf("expected 0 DLQ envelopes, got %d", len(fakeConsumer.dlqEnvelopes))
 	}
 	if fakeSender.sendCalls != 1 {
 		t.Fatalf("send calls = %d, want 1", fakeSender.sendCalls)
 	}
 
-	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
-		t.Fatalf("RunOnce() before backoff expiry error = %v", runErr)
+	retry := fakeConsumer.scheduledRetries[0].Retry
+	if retry == nil {
+		t.Fatal("scheduled retry metadata is nil")
 	}
-	if fakeSender.sendCalls != 1 {
-		t.Fatalf("send calls before backoff expiry = %d, want 1", fakeSender.sendCalls)
+	if retry.Attempt != 1 {
+		t.Fatalf("retry attempt = %d, want 1", retry.Attempt)
+	}
+	if retry.RetryAfterMS != int64(75*time.Second/time.Millisecond) {
+		t.Fatalf("retry_after_ms = %d, want %d", retry.RetryAfterMS, int64(75*time.Second/time.Millisecond))
+	}
+	if retry.NextVisibleAt != now.Add(75*time.Second).Format(time.RFC3339Nano) {
+		t.Fatalf("next_visible_at = %q, want %q", retry.NextVisibleAt, now.Add(75*time.Second).Format(time.RFC3339Nano))
+	}
+	if retry.LastError != "send failed" {
+		t.Fatalf("last_error = %q, want %q", retry.LastError, "send failed")
+	}
+	if fakeConsumer.scheduledRetries[0].ClaimKeys[0] != "claim-1" {
+		t.Fatalf("claim key = %q, want %q", fakeConsumer.scheduledRetries[0].ClaimKeys[0], "claim-1")
+	}
+}
+
+func TestDispatcherRunOnce_SendFailureMovesToDLQAfterRetryBudgetExhausted(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			envelope := testAlarmQueueEnvelope("room-1", "claim-1")
+			envelope.Retry = &domain.AlarmQueueRetryMetadata{
+				Attempt:       2,
+				RetryAfterMS:  int64((45 * time.Second) / time.Millisecond),
+				NextVisibleAt: time.Date(2026, 4, 14, 4, 0, 45, 0, time.UTC).Format(time.RFC3339Nano),
+				LastError:     "previous send failed",
+			}
+			return []domain.AlarmQueueEnvelope{envelope}, nil
+		},
 	}
 
-	now = now.Add(time.Minute)
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{
+			sendMessageFunc: func(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+				return errors.New("send failed")
+			},
+		},
+		NewSimpleRenderer(),
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	if err := dispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   3,
+		BaseBackoff:   time.Minute,
+		MaxBackoff:    5 * time.Minute,
+		JitterPercent: 0,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() error = %v", err)
+	}
+
 	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
-		t.Fatalf("RunOnce() after backoff expiry error = %v", runErr)
+		t.Fatalf("RunOnce() error = %v", runErr)
 	}
-	if fakeSender.sendCalls != 2 {
-		t.Fatalf("send calls after backoff expiry = %d, want 2", fakeSender.sendCalls)
+
+	if len(fakeConsumer.scheduledRetries) != 0 {
+		t.Fatalf("scheduled retries = %d, want 0", len(fakeConsumer.scheduledRetries))
 	}
-	if len(fakeConsumer.releasedClaimKeys) != 2 {
-		t.Fatalf("expected 2 released claim keys after max attempts, got %d", len(fakeConsumer.releasedClaimKeys))
+	if len(fakeConsumer.dlqEnvelopes) != 1 {
+		t.Fatalf("DLQ envelopes = %d, want 1", len(fakeConsumer.dlqEnvelopes))
 	}
-	if len(dispatcher.parked) != 0 {
-		t.Fatalf("expected parked envelopes cleared, got %d", len(dispatcher.parked))
+	if len(fakeConsumer.releasedClaimKeys) != 1 {
+		t.Fatalf("released claim keys = %d, want 1", len(fakeConsumer.releasedClaimKeys))
+	}
+
+	retry := fakeConsumer.dlqEnvelopes[0].Retry
+	if retry == nil {
+		t.Fatal("DLQ envelope retry metadata is nil")
+	}
+	if retry.Attempt != 3 {
+		t.Fatalf("retry attempt = %d, want 3", retry.Attempt)
+	}
+	if retry.LastError != "send failed" {
+		t.Fatalf("last_error = %q, want %q", retry.LastError, "send failed")
+	}
+}
+
+func TestDispatcherRetryPolicy_BackoffRampsAndCaps(t *testing.T) {
+	t.Parallel()
+
+	dispatcher, err := NewDispatcher(
+		&testQueueConsumer{},
+		&testMessageSender{},
+		NewSimpleRenderer(),
+		10,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	dispatcher.randFloat64 = func() float64 { return 1 }
+	if err := dispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   5,
+		BaseBackoff:   10 * time.Second,
+		MaxBackoff:    25 * time.Second,
+		JitterPercent: 50,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() error = %v", err)
+	}
+
+	if got := dispatcher.retryBackoffForAttempt(1); got != 15*time.Second {
+		t.Fatalf("retryBackoffForAttempt(1) = %v, want %v", got, 15*time.Second)
+	}
+	if got := dispatcher.retryBackoffForAttempt(3); got != 25*time.Second {
+		t.Fatalf("retryBackoffForAttempt(3) = %v, want %v", got, 25*time.Second)
 	}
 }
 
@@ -288,8 +391,12 @@ func testAlarmQueueEnvelope(roomID, claimKey string) domain.AlarmQueueEnvelope {
 type testQueueConsumer struct {
 	drainBatchFunc    func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	releaseClaimKeys  func(ctx context.Context, claimKeys []string) error
+	scheduleRetryFunc func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	moveToDLQFunc     func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	requeueFunc       func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	releasedClaimKeys []string
+	scheduledRetries  []domain.AlarmQueueEnvelope
+	dlqEnvelopes      []domain.AlarmQueueEnvelope
 	requeuedEnvelopes []domain.AlarmQueueEnvelope
 }
 
@@ -305,6 +412,22 @@ func (c *testQueueConsumer) ReleaseClaimKeys(ctx context.Context, claimKeys []st
 		return c.releaseClaimKeys(ctx, claimKeys)
 	}
 	c.releasedClaimKeys = append(c.releasedClaimKeys, claimKeys...)
+	return nil
+}
+
+func (c *testQueueConsumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if c.scheduleRetryFunc != nil {
+		return c.scheduleRetryFunc(ctx, envelopes)
+	}
+	c.scheduledRetries = append(c.scheduledRetries, envelopes...)
+	return nil
+}
+
+func (c *testQueueConsumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if c.moveToDLQFunc != nil {
+		return c.moveToDLQFunc(ctx, envelopes)
+	}
+	c.dlqEnvelopes = append(c.dlqEnvelopes, envelopes...)
 	return nil
 }
 

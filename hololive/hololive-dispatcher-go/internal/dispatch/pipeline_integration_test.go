@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -175,5 +176,137 @@ func TestAlarmQueueDispatchPipeline_EndToEnd(t *testing.T) {
 	}
 	if size != 0 {
 		t.Fatalf("queue size = %d, want 0", size)
+	}
+}
+
+func TestAlarmQueueDispatchPipeline_RetrySurvivesDispatcherRestart(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newPipelineTestCache(t)
+	logger := slog.New(slog.NewTextHandler(testWriter{t: t}, nil))
+
+	publisher := queue.NewPublisher(cacheSvc, logger)
+	consumer := queue.NewConsumer(cacheSvc, logger, queue.WithMaxBatch(10))
+
+	failingSender := &testMessageSender{
+		sendMessageFunc: func(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+			return context.DeadlineExceeded
+		},
+	}
+	firstDispatcher, err := NewDispatcher(
+		consumer,
+		failingSender,
+		NewSimpleRenderer(),
+		10,
+		1,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+	firstDispatcher.now = func() time.Time { return time.Now().UTC().Add(-1 * time.Second) }
+	if err := firstDispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   3,
+		BaseBackoff:   100 * time.Millisecond,
+		MaxBackoff:    5 * time.Second,
+		JitterPercent: 0,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() error = %v", err)
+	}
+
+	startAt := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Minute)
+	link := "https://youtube.com/watch?v=pipeline-retry-restart-stream"
+	notification := domain.NewAlarmNotification(
+		"room-retry",
+		&domain.Channel{ID: "channel-retry", Name: "재시도 멤버"},
+		&domain.Stream{
+			ID:             "pipeline-retry-restart-stream",
+			Title:          "재시도 재시작 통합 테스트 방송",
+			ChannelID:      "channel-retry",
+			ChannelName:    "재시도 멤버",
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &startAt,
+			Link:           &link,
+			Channel:        &domain.Channel{ID: "channel-retry", Name: "재시도 멤버"},
+		},
+		5,
+		[]string{"user-retry"},
+		"재시도 메시지",
+	)
+
+	if err := publisher.Publish(context.Background(), notification, []string{"notified:claim:retry"}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	if runErr := firstDispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() first dispatcher error = %v", runErr)
+	}
+
+	retrySizeResp := cacheSvc.GetClient().Do(
+		context.Background(),
+		cacheSvc.B().Zcard().Key(contractsalarm.DispatchRetryQueueKey).Build(),
+	)
+	retrySize, err := retrySizeResp.AsInt64()
+	if err != nil {
+		t.Fatalf("ZCARD retry queue: %v", err)
+	}
+	if retrySize != 1 {
+		t.Fatalf("retry queue size = %d, want 1", retrySize)
+	}
+
+	successSender := &pipelineTestSender{}
+	secondDispatcher, err := NewDispatcher(
+		consumer,
+		successSender,
+		NewSimpleRenderer(),
+		10,
+		1,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() second dispatcher error = %v", err)
+	}
+	if err := secondDispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   3,
+		BaseBackoff:   100 * time.Millisecond,
+		MaxBackoff:    5 * time.Second,
+		JitterPercent: 0,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() second dispatcher error = %v", err)
+	}
+
+	if runErr := secondDispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() second dispatcher error = %v", runErr)
+	}
+
+	if len(successSender.rooms) != 1 {
+		t.Fatalf("sent rooms = %d, want 1", len(successSender.rooms))
+	}
+	if successSender.rooms[0] != "room-retry" {
+		t.Fatalf("sent room = %q, want room-retry", successSender.rooms[0])
+	}
+
+	retrySizeResp = cacheSvc.GetClient().Do(
+		context.Background(),
+		cacheSvc.B().Zcard().Key(contractsalarm.DispatchRetryQueueKey).Build(),
+	)
+	retrySize, err = retrySizeResp.AsInt64()
+	if err != nil {
+		t.Fatalf("ZCARD retry queue after restart dispatch: %v", err)
+	}
+	if retrySize != 0 {
+		t.Fatalf("retry queue size after restart dispatch = %d, want 0", retrySize)
+	}
+
+	dlqSizeResp := cacheSvc.GetClient().Do(
+		context.Background(),
+		cacheSvc.B().Llen().Key(contractsalarm.DispatchDLQKey).Build(),
+	)
+	dlqSize, err := dlqSizeResp.AsInt64()
+	if err != nil {
+		t.Fatalf("LLEN DLQ: %v", err)
+	}
+	if dlqSize != 0 {
+		t.Fatalf("DLQ size = %d, want 0", dlqSize)
 	}
 }

@@ -64,6 +64,10 @@ func TestLoadConfig_AppliesDefaultWhenInvalidNumericValue(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_MAX_BATCH", "-1")
 	t.Setenv("ALARM_DISPATCH_PARALLELISM", "0")
 	t.Setenv("DISPATCHER_RECONNECT_BACKOFF_MS", "0")
+	t.Setenv("ALARM_DISPATCH_RETRY_MAX_ATTEMPTS", "0")
+	t.Setenv("ALARM_DISPATCH_RETRY_BASE_BACKOFF_MS", "0")
+	t.Setenv("ALARM_DISPATCH_RETRY_MAX_BACKOFF_MS", "-5")
+	t.Setenv("ALARM_DISPATCH_RETRY_JITTER_PERCENT", "-1")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -77,6 +81,18 @@ func TestLoadConfig_AppliesDefaultWhenInvalidNumericValue(t *testing.T) {
 	}
 	if cfg.Dispatch.ReconnectBackoff != time.Second {
 		t.Fatalf("Dispatch.ReconnectBackoff = %v, want %v", cfg.Dispatch.ReconnectBackoff, time.Second)
+	}
+	if cfg.Dispatch.RetryMaxAttempts != defaultRetryMaxAttempts {
+		t.Fatalf("Dispatch.RetryMaxAttempts = %d, want %d", cfg.Dispatch.RetryMaxAttempts, defaultRetryMaxAttempts)
+	}
+	if cfg.Dispatch.RetryBaseBackoff != defaultRetryBaseBackoff {
+		t.Fatalf("Dispatch.RetryBaseBackoff = %v, want %v", cfg.Dispatch.RetryBaseBackoff, defaultRetryBaseBackoff)
+	}
+	if cfg.Dispatch.RetryMaxBackoff != defaultRetryMaxBackoff {
+		t.Fatalf("Dispatch.RetryMaxBackoff = %v, want %v", cfg.Dispatch.RetryMaxBackoff, defaultRetryMaxBackoff)
+	}
+	if cfg.Dispatch.RetryJitterPercent != defaultRetryJitterPercent {
+		t.Fatalf("Dispatch.RetryJitterPercent = %v, want %v", cfg.Dispatch.RetryJitterPercent, defaultRetryJitterPercent)
 	}
 }
 
@@ -99,6 +115,31 @@ func TestLoadConfig_LegacyValkeyEnvFallback(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RetryPolicyOverrides(t *testing.T) {
+	setRequiredEnvForLoadConfig(t)
+	t.Setenv("ALARM_DISPATCH_RETRY_MAX_ATTEMPTS", "7")
+	t.Setenv("ALARM_DISPATCH_RETRY_BASE_BACKOFF_MS", "1500")
+	t.Setenv("ALARM_DISPATCH_RETRY_MAX_BACKOFF_MS", "30000")
+	t.Setenv("ALARM_DISPATCH_RETRY_JITTER_PERCENT", "12.5")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.Dispatch.RetryMaxAttempts != 7 {
+		t.Fatalf("Dispatch.RetryMaxAttempts = %d, want 7", cfg.Dispatch.RetryMaxAttempts)
+	}
+	if cfg.Dispatch.RetryBaseBackoff != 1500*time.Millisecond {
+		t.Fatalf("Dispatch.RetryBaseBackoff = %v, want %v", cfg.Dispatch.RetryBaseBackoff, 1500*time.Millisecond)
+	}
+	if cfg.Dispatch.RetryMaxBackoff != 30*time.Second {
+		t.Fatalf("Dispatch.RetryMaxBackoff = %v, want %v", cfg.Dispatch.RetryMaxBackoff, 30*time.Second)
+	}
+	if cfg.Dispatch.RetryJitterPercent != 12.5 {
+		t.Fatalf("Dispatch.RetryJitterPercent = %v, want 12.5", cfg.Dispatch.RetryJitterPercent)
+	}
+}
+
 func TestConfigValidate(t *testing.T) {
 	t.Parallel()
 
@@ -113,10 +154,14 @@ func TestConfigValidate(t *testing.T) {
 			Port: 6379,
 		},
 		Dispatch: DispatchConfig{
-			QueueKey:         "alarm:dispatch:queue",
-			MaxBatch:         50,
-			Parallelism:      4,
-			ReconnectBackoff: time.Second,
+			QueueKey:           "alarm:dispatch:queue",
+			MaxBatch:           50,
+			Parallelism:        4,
+			ReconnectBackoff:   time.Second,
+			RetryMaxAttempts:   3,
+			RetryBaseBackoff:   5 * time.Second,
+			RetryMaxBackoff:    30 * time.Second,
+			RetryJitterPercent: 20,
 		},
 	}
 
@@ -138,14 +183,48 @@ func TestConfigValidate_RequiresBotToken(t *testing.T) {
 			Port: 6379,
 		},
 		Dispatch: DispatchConfig{
-			QueueKey:         "alarm:dispatch:queue",
-			MaxBatch:         50,
-			Parallelism:      4,
-			ReconnectBackoff: time.Second,
+			QueueKey:           "alarm:dispatch:queue",
+			MaxBatch:           50,
+			Parallelism:        4,
+			ReconnectBackoff:   time.Second,
+			RetryMaxAttempts:   3,
+			RetryBaseBackoff:   5 * time.Second,
+			RetryMaxBackoff:    30 * time.Second,
+			RetryJitterPercent: 20,
 		},
 	}
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatalf("expected validation error, got nil")
+	}
+}
+
+func TestConfigValidate_RequiresValidRetryPolicy(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Server: ServerConfig{Port: 30020},
+		Iris: IrisConfig{
+			BaseURL:  "http://localhost:3000",
+			BotToken: "token",
+		},
+		Valkey: cache.Config{
+			Host: "localhost",
+			Port: 6379,
+		},
+		Dispatch: DispatchConfig{
+			QueueKey:           "alarm:dispatch:queue",
+			MaxBatch:           50,
+			Parallelism:        4,
+			ReconnectBackoff:   time.Second,
+			RetryMaxAttempts:   3,
+			RetryBaseBackoff:   5 * time.Second,
+			RetryMaxBackoff:    4 * time.Second,
+			RetryJitterPercent: 101,
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error, got nil")
 	}
 }

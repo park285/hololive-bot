@@ -112,6 +112,10 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		_ = cacheSvc.Close()
 		return nil, fmt.Errorf("build runtime: create dispatcher: %w", err)
 	}
+	if err := configureDispatcherRetryPolicy(dispatcher, cfg.Dispatch); err != nil {
+		_ = cacheSvc.Close()
+		return nil, fmt.Errorf("build runtime: configure dispatcher retry policy: %w", err)
+	}
 
 	runtime := &Runtime{
 		cfg:        cfg,
@@ -131,6 +135,18 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 
 	runtime.httpServer = buildHTTPServer(cfg.Server.Port, runtime.routes())
 	return runtime, nil
+}
+
+func configureDispatcherRetryPolicy(dispatcher *dispatch.Dispatcher, cfg DispatchConfig) error {
+	if dispatcher == nil {
+		return fmt.Errorf("configure dispatcher retry policy: dispatcher is nil")
+	}
+	return dispatcher.ConfigureRetryPolicy(dispatch.RetryPolicy{
+		MaxAttempts:   cfg.RetryMaxAttempts,
+		BaseBackoff:   cfg.RetryBaseBackoff,
+		MaxBackoff:    cfg.RetryMaxBackoff,
+		JitterPercent: cfg.RetryJitterPercent,
+	})
 }
 
 func (r *Runtime) Run() {
