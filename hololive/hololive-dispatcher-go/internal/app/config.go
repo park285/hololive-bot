@@ -38,6 +38,10 @@ const (
 	defaultMaxBatch            = 50
 	defaultDispatchParallelism = 4
 	defaultReconnectBackoffMS  = 1000
+	defaultRetryMaxAttempts    = 3
+	defaultRetryBaseBackoff    = 5 * time.Second
+	defaultRetryMaxBackoff     = 30 * time.Second
+	defaultRetryJitterPercent  = 0.0
 	defaultLoggingLevel        = "info"
 )
 
@@ -60,10 +64,14 @@ type IrisConfig struct {
 }
 
 type DispatchConfig struct {
-	QueueKey         string
-	MaxBatch         int
-	Parallelism      int
-	ReconnectBackoff time.Duration
+	QueueKey           string
+	MaxBatch           int
+	Parallelism        int
+	ReconnectBackoff   time.Duration
+	RetryMaxAttempts   int
+	RetryBaseBackoff   time.Duration
+	RetryMaxBackoff    time.Duration
+	RetryJitterPercent float64
 }
 
 func LoadConfig() (*Config, error) {
@@ -86,6 +94,22 @@ func LoadConfig() (*Config, error) {
 	if reconnectBackoffMS <= 0 {
 		reconnectBackoffMS = defaultReconnectBackoffMS
 	}
+	retryMaxAttempts := lookupInt("ALARM_DISPATCH_RETRY_MAX_ATTEMPTS", defaultRetryMaxAttempts)
+	if retryMaxAttempts <= 0 {
+		retryMaxAttempts = defaultRetryMaxAttempts
+	}
+	retryBaseBackoffMS := lookupInt("ALARM_DISPATCH_RETRY_BASE_BACKOFF_MS", int(defaultRetryBaseBackoff/time.Millisecond))
+	if retryBaseBackoffMS <= 0 {
+		retryBaseBackoffMS = int(defaultRetryBaseBackoff / time.Millisecond)
+	}
+	retryMaxBackoffMS := lookupInt("ALARM_DISPATCH_RETRY_MAX_BACKOFF_MS", int(defaultRetryMaxBackoff/time.Millisecond))
+	if retryMaxBackoffMS <= 0 {
+		retryMaxBackoffMS = int(defaultRetryMaxBackoff / time.Millisecond)
+	}
+	retryJitterPercent := lookupFloat("ALARM_DISPATCH_RETRY_JITTER_PERCENT", defaultRetryJitterPercent)
+	if retryJitterPercent < 0 {
+		retryJitterPercent = defaultRetryJitterPercent
+	}
 	cfg := &Config{
 		Server: ServerConfig{
 			Port: lookupInt("DISPATCHER_PORT", 30020),
@@ -102,10 +126,14 @@ func LoadConfig() (*Config, error) {
 			SocketPath: pickTrimmed(lookupOptional("CACHE_SOCKET_PATH"), lookupOptional("VALKEY_SOCKET_PATH"), ""),
 		},
 		Dispatch: DispatchConfig{
-			QueueKey:         lookupString("ALARM_DISPATCH_QUEUE_KEY", "alarm:dispatch:queue"),
-			MaxBatch:         maxBatch,
-			Parallelism:      parallelism,
-			ReconnectBackoff: time.Duration(reconnectBackoffMS) * time.Millisecond,
+			QueueKey:           lookupString("ALARM_DISPATCH_QUEUE_KEY", "alarm:dispatch:queue"),
+			MaxBatch:           maxBatch,
+			Parallelism:        parallelism,
+			ReconnectBackoff:   time.Duration(reconnectBackoffMS) * time.Millisecond,
+			RetryMaxAttempts:   retryMaxAttempts,
+			RetryBaseBackoff:   time.Duration(retryBaseBackoffMS) * time.Millisecond,
+			RetryMaxBackoff:    time.Duration(retryMaxBackoffMS) * time.Millisecond,
+			RetryJitterPercent: retryJitterPercent,
 		},
 		Logging: sharedlogging.Config{
 			Level:      lookupString("LOG_LEVEL", "info"),
@@ -152,6 +180,21 @@ func (c *Config) Validate() error {
 	if c.Dispatch.ReconnectBackoff <= 0 {
 		return fmt.Errorf("validate config: DISPATCHER_RECONNECT_BACKOFF_MS must be positive")
 	}
+	if c.Dispatch.RetryMaxAttempts <= 0 {
+		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_MAX_ATTEMPTS must be positive")
+	}
+	if c.Dispatch.RetryBaseBackoff <= 0 {
+		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_BASE_BACKOFF_MS must be positive")
+	}
+	if c.Dispatch.RetryMaxBackoff <= 0 {
+		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_MAX_BACKOFF_MS must be positive")
+	}
+	if c.Dispatch.RetryMaxBackoff < c.Dispatch.RetryBaseBackoff {
+		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_MAX_BACKOFF_MS must be greater than or equal to ALARM_DISPATCH_RETRY_BASE_BACKOFF_MS")
+	}
+	if c.Dispatch.RetryJitterPercent < 0 || c.Dispatch.RetryJitterPercent > 100 {
+		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_JITTER_PERCENT must be between 0 and 100")
+	}
 	if strings.TrimSpace(c.Valkey.SocketPath) == "" && strings.TrimSpace(c.Valkey.Host) == "" {
 		return fmt.Errorf("validate config: CACHE_HOST is required when CACHE_SOCKET_PATH is empty")
 	}
@@ -197,6 +240,18 @@ func lookupInt(key string, def int) int {
 		return def
 	}
 	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return def
+	}
+	return parsed
+}
+
+func lookupFloat(key string, def float64) float64 {
+	raw := lookupOptional(key)
+	if raw == "" {
+		return def
+	}
+	parsed, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return def
 	}
