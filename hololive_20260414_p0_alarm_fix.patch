@@ -1,0 +1,207 @@
+diff -ruN hololive-bot-review-bundle-full-20260414T014251Z/hololive/hololive-kakao-bot-go/internal/service/alarm/checker/checker_additional_test.go hololive-bot-review-bundle-full-20260414T014251Z_patched_p0/hololive/hololive-kakao-bot-go/internal/service/alarm/checker/checker_additional_test.go
+--- hololive-bot-review-bundle-full-20260414T014251Z/hololive/hololive-kakao-bot-go/internal/service/alarm/checker/checker_additional_test.go	2026-04-12 12:58:45.988726100 +0000
++++ hololive-bot-review-bundle-full-20260414T014251Z_patched_p0/hololive/hololive-kakao-bot-go/internal/service/alarm/checker/checker_additional_test.go	2026-04-14 02:04:32.532208542 +0000
+@@ -518,7 +518,30 @@
+ 		assert.Equal(t, 5, notifications[0].MinutesUntil)
+ 	})
+ 
+-	t.Run("build upcoming notifications does not backfill stale five minute target", func(t *testing.T) {
++	t.Run("build upcoming notifications backfills five minute target on initial capped observation", func(t *testing.T) {
++		start := now.Add(4*time.Minute + 20*time.Second)
++		stream := &domain.Stream{
++			ID:             "upcoming-initial-five",
++			ChannelID:      "ch1",
++			Status:         domain.StreamStatusUpcoming,
++			StartScheduled: &start,
++			Channel:        &domain.Channel{ID: "ch1", Name: "Channel 1"},
++		}
++
++		window := sharedchecker.EvaluationWindow{
++			Start:              now.Add(-75 * time.Second),
++			End:                now,
++			Capped:             true,
++			InitialObservation: true,
++		}
++
++		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
++		require.NoError(t, err)
++		require.Len(t, notifications, 1)
++		assert.Equal(t, 5, notifications[0].MinutesUntil)
++	})
++
++	t.Run("build upcoming notifications does not backfill stale five minute target after initial observation", func(t *testing.T) {
+ 		start := now.Add(4 * time.Minute)
+ 		stream := &domain.Stream{
+ 			ID:             "upcoming-stale-five",
+@@ -529,9 +552,10 @@
+ 		}
+ 
+ 		window := sharedchecker.EvaluationWindow{
+-			Start:  now.Add(-75 * time.Second),
+-			End:    now,
+-			Capped: true,
++			Start:              now.Add(-75 * time.Second),
++			End:                now,
++			Capped:             true,
++			InitialObservation: false,
+ 		}
+ 
+ 		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
+diff -ruN hololive-bot-review-bundle-full-20260414T014251Z/hololive/hololive-shared/pkg/service/alarm/checker/helpers.go hololive-bot-review-bundle-full-20260414T014251Z_patched_p0/hololive/hololive-shared/pkg/service/alarm/checker/helpers.go
+--- hololive-bot-review-bundle-full-20260414T014251Z/hololive/hololive-shared/pkg/service/alarm/checker/helpers.go	2026-04-13 06:35:43.563638000 +0000
++++ hololive-bot-review-bundle-full-20260414T014251Z_patched_p0/hololive/hololive-shared/pkg/service/alarm/checker/helpers.go	2026-04-14 02:04:32.529701929 +0000
+@@ -147,9 +147,10 @@
+ }
+ 
+ type EvaluationWindow struct {
+-	Start  time.Time
+-	End    time.Time
+-	Capped bool
++	Start              time.Time
++	End                time.Time
++	Capped             bool
++	InitialObservation bool
+ }
+ 
+ func ResolveEvaluationWindow(prevCheckedAt, now time.Time, maxLookback time.Duration) EvaluationWindow {
+@@ -165,9 +166,10 @@
+ 
+ 	windowStart := now.Add(-maxLookback)
+ 	window := EvaluationWindow{
+-		Start:  windowStart,
+-		End:    now,
+-		Capped: true,
++		Start:              windowStart,
++		End:                now,
++		Capped:             true,
++		InitialObservation: prevCheckedAt.IsZero(),
+ 	}
+ 
+ 	if !prevCheckedAt.IsZero() {
+@@ -205,12 +207,12 @@
+ 		return current, true
+ 	}
+ 
+-	if window.Capped {
++	previous := minutesUntilFloorZeroClamped(startScheduled, window.Start)
++	if previous <= current {
+ 		return 0, false
+ 	}
+ 
+-	previous := minutesUntilFloorZeroClamped(startScheduled, window.Start)
+-	if previous <= current {
++	if window.Capped && !window.InitialObservation {
+ 		return 0, false
+ 	}
+ 
+diff -ruN hololive-bot-review-bundle-full-20260414T014251Z/hololive/hololive-shared/pkg/service/alarm/checker/helpers_test.go hololive-bot-review-bundle-full-20260414T014251Z_patched_p0/hololive/hololive-shared/pkg/service/alarm/checker/helpers_test.go
+--- hololive-bot-review-bundle-full-20260414T014251Z/hololive/hololive-shared/pkg/service/alarm/checker/helpers_test.go	2026-04-13 06:35:53.304907800 +0000
++++ hololive-bot-review-bundle-full-20260414T014251Z_patched_p0/hololive/hololive-shared/pkg/service/alarm/checker/helpers_test.go	2026-04-14 02:04:32.531073859 +0000
+@@ -356,45 +356,50 @@
+ 		prev        time.Time
+ 		now         time.Time
+ 		maxLookback time.Duration
+-		wantStart   time.Time
+-		wantEnd     time.Time
+-		wantCapped  bool
++		wantStart              time.Time
++		wantEnd                time.Time
++		wantCapped             bool
++		wantInitialObservation bool
+ 	}{
+ 		{
+ 			name:        "uses recent previous check inside cap",
+ 			prev:        now.Add(-45 * time.Second),
+ 			now:         now,
+ 			maxLookback: 75 * time.Second,
+-			wantStart:   now.Add(-45 * time.Second),
+-			wantEnd:     now,
+-			wantCapped:  false,
++			wantStart:              now.Add(-45 * time.Second),
++			wantEnd:                now,
++			wantCapped:             false,
++			wantInitialObservation: false,
+ 		},
+ 		{
+ 			name:        "caps stale previous check at max lookback",
+ 			prev:        now.Add(-5 * time.Minute),
+ 			now:         now,
+ 			maxLookback: 75 * time.Second,
+-			wantStart:   now.Add(-75 * time.Second),
+-			wantEnd:     now,
+-			wantCapped:  true,
++			wantStart:              now.Add(-75 * time.Second),
++			wantEnd:                now,
++			wantCapped:             true,
++			wantInitialObservation: false,
+ 		},
+ 		{
+ 			name:        "keeps minimum non-empty window when prev is not before now",
+ 			prev:        now,
+ 			now:         now,
+ 			maxLookback: 75 * time.Second,
+-			wantStart:   now.Add(-1 * time.Second),
+-			wantEnd:     now,
+-			wantCapped:  true,
++			wantStart:              now.Add(-1 * time.Second),
++			wantEnd:                now,
++			wantCapped:             true,
++			wantInitialObservation: false,
+ 		},
+ 		{
+ 			name:        "falls back to one minute cap when max lookback is non-positive",
+ 			prev:        time.Time{},
+ 			now:         now,
+ 			maxLookback: 0,
+-			wantStart:   now.Add(-1 * time.Minute),
+-			wantEnd:     now,
+-			wantCapped:  true,
++			wantStart:              now.Add(-1 * time.Minute),
++			wantEnd:                now,
++			wantCapped:             true,
++			wantInitialObservation: true,
+ 		},
+ 	}
+ 
+@@ -410,6 +415,9 @@
+ 			if got.Capped != tt.wantCapped {
+ 				t.Fatalf("ResolveEvaluationWindow() capped = %t, want %t", got.Capped, tt.wantCapped)
+ 			}
++			if got.InitialObservation != tt.wantInitialObservation {
++				t.Fatalf("ResolveEvaluationWindow() initialObservation = %t, want %t", got.InitialObservation, tt.wantInitialObservation)
++			}
+ 		})
+ 	}
+ }
+@@ -437,13 +445,27 @@
+ 			wantOK: true,
+ 		},
+ 		{
+-			name:    "does not backfill stale five minute target outside cap",
++			name:    "backfills five minute target during initial capped observation",
++			targets: []int{5, 3, 1},
++			start:   base.Add(4*time.Minute + 20*time.Second),
++			window: EvaluationWindow{
++				Start:              base.Add(-75 * time.Second),
++				End:                base,
++				Capped:             true,
++				InitialObservation: true,
++			},
++			want:   5,
++			wantOK: true,
++		},
++		{
++			name:    "does not backfill stale five minute target outside cap after initial observation",
+ 			targets: []int{5, 3, 1},
+ 			start:   base.Add(4 * time.Minute),
+ 			window: EvaluationWindow{
+-				Start:  base.Add(-75 * time.Second),
+-				End:    base,
+-				Capped: true,
++				Start:              base.Add(-75 * time.Second),
++				End:                base,
++				Capped:             true,
++				InitialObservation: false,
+ 			},
+ 			want:   0,
+ 			wantOK: false,
