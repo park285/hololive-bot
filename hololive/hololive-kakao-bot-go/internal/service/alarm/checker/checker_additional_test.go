@@ -36,6 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
@@ -101,11 +102,11 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NotNil(t, checker)
-		assert.Equal(t, []int{10, 1}, checker.targetMinutes)
+		assert.Equal(t, []int{10, 1}, checker.targetMinutesSnapshot())
 		assert.Equal(t, 75*time.Second, checker.evaluationWindowCap)
 
 		checker.UpdateTargetMinutes([]int{15, 0, 15, 3})
-		assert.Equal(t, []int{15, 3, 1}, checker.targetMinutes)
+		assert.Equal(t, []int{15, 3, 1}, checker.targetMinutesSnapshot())
 	})
 
 	t.Run("new notifier nil deps", func(t *testing.T) {
@@ -234,6 +235,42 @@ func TestLoadSubscriberRoomsByChannel(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "smembers channel ch1")
 	})
+
+	t.Run("uses pipelined smembers lookup", func(t *testing.T) {
+		baseCache := newCheckerTestCacheClient(t)
+		countingCache := &countingCheckerCacheClient{Client: baseCache}
+		ctx := t.Context()
+
+		_, err := countingCache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch1", []string{"room1", "room2"})
+		require.NoError(t, err)
+
+		_, err = countingCache.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+"ch2", []string{"room3"})
+		require.NoError(t, err)
+
+		result, err := loadSubscriberRoomsByChannel(ctx, countingCache, []string{"ch1", "ch2", "ch1"})
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		assert.ElementsMatch(t, []string{"room1", "room2"}, result["ch1"])
+		assert.ElementsMatch(t, []string{"room3"}, result["ch2"])
+		assert.Equal(t, 1, countingCache.doMultiCalls)
+		assert.Zero(t, countingCache.sMembersCalls)
+	})
+}
+
+type countingCheckerCacheClient struct {
+	cache.Client
+	doMultiCalls  int
+	sMembersCalls int
+}
+
+func (c *countingCheckerCacheClient) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
+	c.doMultiCalls++
+	return c.Client.DoMulti(ctx, cmds...)
+}
+
+func (c *countingCheckerCacheClient) SMembers(ctx context.Context, key string) ([]string, error) {
+	c.sMembersCalls++
+	return c.Client.SMembers(ctx, key)
 }
 
 func TestChzzkHelperFunctions(t *testing.T) {
@@ -452,7 +489,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
 	checker := &YouTubeChecker{
 		dedupSvc:            dedupSvc,
-		targetMinutes:       []int{5, 3, 1},
+		targetPolicy:        sharedchecker.NewTargetMinutePolicy([]int{5, 3, 1}),
 		evaluationWindowCap: 75 * time.Second,
 		logger:              newCheckerTestLogger(),
 	}
@@ -518,7 +555,30 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 	})
 
-	t.Run("build upcoming notifications does not backfill stale five minute target", func(t *testing.T) {
+	t.Run("build upcoming notifications backfills five minute target on initial capped observation", func(t *testing.T) {
+		start := now.Add(4*time.Minute + 20*time.Second)
+		stream := &domain.Stream{
+			ID:             "upcoming-initial-five",
+			ChannelID:      "ch1",
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &start,
+			Channel:        &domain.Channel{ID: "ch1", Name: "Channel 1"},
+		}
+
+		window := sharedchecker.EvaluationWindow{
+			Start:              now.Add(-75 * time.Second),
+			End:                now,
+			Capped:             true,
+			InitialObservation: true,
+		}
+
+		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
+		require.NoError(t, err)
+		require.Len(t, notifications, 1)
+		assert.Equal(t, 5, notifications[0].MinutesUntil)
+	})
+
+	t.Run("build upcoming notifications does not backfill stale five minute target after initial observation", func(t *testing.T) {
 		start := now.Add(4 * time.Minute)
 		stream := &domain.Stream{
 			ID:             "upcoming-stale-five",
@@ -529,9 +589,10 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		}
 
 		window := sharedchecker.EvaluationWindow{
-			Start:  now.Add(-75 * time.Second),
-			End:    now,
-			Capped: true,
+			Start:              now.Add(-75 * time.Second),
+			End:                now,
+			Capped:             true,
+			InitialObservation: false,
 		}
 
 		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)

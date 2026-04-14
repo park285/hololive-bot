@@ -1,137 +1,105 @@
-# Hololive Kakao Bot – 알람/묶음 발송 구현 정리
+# Hololive Kakao Bot 알람 런타임 개요
 
-## 개요
-- 주기적 티커가 Holodex 스케줄을 조회하고, 타깃 분전(minute) 기준으로 예정 스트림을 필터링합니다.
-- 같은 방(room)·같은 시작시각(또는 분전 기준)으로 알림을 묶어 한 번에 발송하고, 재발송 방지를 위해 스트림 단위로 발송 기록을 남깁니다.
-- 핵심 컴포넌트: Valkey 기반 `AlarmService`, Bot 티커(트리거/그룹핑/발송), 포맷터(단건/묶음), 설정(advance minutes, interval).
+이 문서는 현재 운영 중인 YouTube/Chzzk/Twitch 알람 파이프라인의 실제 런타임 경로를 요약한다. 예전 bot ticker가 Holodex 일정 조회부터 발송까지 직접 처리하던 구조는 더 이상 현재 기준이 아니다.
 
----
+## 1. 구성 요소
 
-## 데이터 모델 (Valkey 키)
-- `alarm:<roomID>:<userID>`: 사용자별 구독 채널 집합  
-  internal/service/notification/alarm.go:92, 128, 167
-- `alarm:registry`: 모든 구독자 레지스트리(`"<roomID>:<userID>"`) 집합  
-  internal/service/notification/alarm.go:92
-- `alarm:channel_registry`: 구독된 채널 ID 집합(≥1 구독자 보유 채널)  
-  internal/service/notification/alarm.go:110
-- `alarm:channel_subscribers:<channelID>`: 채널별 구독자 집합(`"<roomID>:<userID>"`)  
-  internal/service/notification/alarm.go:106
-- `notified:<streamID>`: 발송 기록(스케줄/분전/시각), TTL=24h  
-  internal/service/notification/alarm.go:490
-- `alarm:next_stream:<channelID>`: 다음 방송 캐시(status/title/video_id/start_scheduled)  
-  internal/service/notification/alarm.go:509
+### 구독/설정 소유 seam
+- `hololive/hololive-kakao-bot-go/internal/service/notification/alarm_service.go`
+  - 방별 알람 CRUD
+  - target minute 설정 보관
+  - room/channel/member 캐시 갱신
+  - checker가 발행 후 호출하는 `MarkUpcomingEventNotified` 제공
 
-- 멤버명 해시: `member_names` (`channelID → memberName`)  
-  internal/service/notification/alarm.go:482
+### 런타임 스케줄러 seam
+- `hololive/hololive-kakao-bot-go/internal/service/alarm/scheduler/runtime_scheduler.go`
+  - 플랫폼별 루프 실행
+  - YouTube/Chzzk/Twitch checker 생성
+  - shared dedup 서비스와 queue publisher를 notifier에 연결
+  - runtime target minute 변경을 checker/dedup에 동기화
 
----
+### checker seam
+- YouTube: `hololive/hololive-kakao-bot-go/internal/service/alarm/checker/youtube_checker.go`
+- Chzzk: `hololive/hololive-kakao-bot-go/internal/service/alarm/checker/chzzk_checker.go`
+- Twitch: `hololive/hololive-kakao-bot-go/internal/service/alarm/checker/twitch_checker.go`
+- 공용 helper:
+  - `hololive/hololive-shared/pkg/service/alarm/checker/helpers.go`
+  - `hololive/hololive-shared/pkg/service/alarm/tier`
 
-## 설정/주입
-- 분전 타깃: `NOTIFICATION_ADVANCE_MINUTES` → 정제·중복 제거·내림차순 정렬, `1`분 fallback 보장  
-  internal/service/notification/alarm.go:46
-- 체크 주기: `CHECK_INTERVAL_SECONDS`(기본 60s) → 티커 주기  
-  internal/config/config.go:86, 167–168
-- Go checker 토글(기본 true):
-  - `GO_YOUTUBE_ALARM_CHECKER_ENABLED`
-  - `GO_CHZZK_ALARM_CHECKER_ENABLED`
-  - `GO_TWITCH_ALARM_CHECKER_ENABLED`
-- 서비스 생성: `NewAlarmService(cache, holodex, logger, advanceMinutes)`  
-  internal/app/builder.go:103
+### dedup / queue seam
+- dedup: `hololive/hololive-shared/pkg/service/alarm/dedup/service.go`
+- queue publish: `hololive/hololive-shared/pkg/service/alarm/queue/publisher.go`
+- queue consume/requeue: `hololive/hololive-shared/pkg/service/alarm/queue/consumer.go`
 
----
+### dispatcher seam
+- `hololive/hololive-dispatcher-go/internal/dispatch/dispatcher.go`
+  - 큐에서 envelope 배치 drain
+  - room 기준 그룹핑
+  - message render
+  - Iris 전송
+  - send 실패 시 requeue
+  - render 실패 시 claim key release
 
-## 알람 체크 티커
-- 시작/반복: 봇이 티커를 시작하고 주기적으로 검사 수행  
-  internal/bot/bot.go:404 (startAlarmChecker), 427 (performAlarmCheck)
-- 동시 실행 방지: 뮤텍스로 중복 실행 차단  
-  internal/bot/bot.go:436
-- 타임아웃: 각 사이클에 `2m` 타임아웃 컨텍스트  
-  internal/bot/bot.go:444
+## 2. 실제 알람 흐름
 
----
+1. 사용자가 `AlarmService`를 통해 room 단위 구독을 저장한다.
+2. `RuntimeScheduler`가 플랫폼별 주기로 checker를 실행한다.
+3. checker가 외부 상태를 읽고 `[]*domain.AlarmNotification` 후보를 만든다.
+   - YouTube는 Holodex live status, tier scheduler, evaluation window를 함께 사용한다.
+   - target minute 판정은 shared checker helper가 담당한다.
+4. `Notifier`가 후보를 순차 처리한다.
+   - `dedup.TryClaimNotification`
+   - `dedup.TryClaimLogicalEvent`
+   - `queue.Publisher.Publish`
+   - `dedup.MarkAsNotified`
+   - `AlarmService.MarkUpcomingEventNotified`
+5. `dispatcher-go`가 큐 envelope를 소비해 room별로 묶어 렌더링 후 Iris로 전송한다.
 
-## 스케줄 수집·필터링
-- 채널 수집: `alarm:channel_registry`에서 채널 목록, 각 채널의 구독자 조회  
-  internal/service/notification/alarm.go:218, 288
-- 스케줄 조회: Holodex 24h 창 조회  
-  internal/service/notification/alarm.go:306
-- 필터링 규칙:
-  - `IsUpcoming == true` AND `StartScheduled != nil`
-  - 남은 분(`MinutesUntilCeil`)이 타깃 분전 목록에 포함될 때만 선택  
-    internal/service/notification/alarm.go:321, internal/domain/stream.go:91
+즉, 현재 구조의 핵심 경계는 `runtime scheduler -> checker -> notifier -> queue -> dispatcher` 이다.
 
----
+## 3. YouTube 알람 의미론
 
-## 알림 생성·중복 방지
-- 유효 구독 재검사: 사용자 알람 키(SISMEMBER)로 구독 상태 검증  
-  internal/service/notification/alarm.go:378
-- 알림 객체 생성: 방 단위 사용자 리스트를 묶어 `AlarmNotification` 생성  
-  internal/service/notification/alarm.go:458, 469
-- 재발송 방지 및 스케줄 변경:
-  - `notified:<streamID>`에 이전 `start_scheduled`/발송 시각/분전 저장
-  - 동일 스케줄이면 스킵, 변경 시 분 차이를 계산해 안내 메시지 추가  
-    internal/service/notification/alarm.go:490, 400
-- 발송 후 마킹: 성공 건을 24h TTL로 저장  
-  internal/bot/bot.go:474, internal/service/notification/alarm.go:490
+YouTube upcoming 알람은 다음 입력으로 계산된다.
 
----
+- 구독 채널 집합: `AlarmChannelRegistryKey`
+- due channel 선정: `tier.TieredScheduler`
+- 현재 라이브/예정 상태: Holodex live status
+- target minute 정책: `sharedchecker.NormalizeTargetMinutes(...)`
+- 평가 창: `sharedchecker.ResolveEvaluationWindow(...)`
+- 중복 방지: `dedup.Service`
 
-## 묶음(다이제스트) 발송과 포맷팅
-- 그룹 키: 같은 방 + 같은 시작시각(분 단위 절삭). 시작시각이 없으면 분전 기준으로 그룹핑  
-  internal/bot/bot.go:526
-- 그룹핑: `groupAlarmNotifications`  
-  internal/bot/bot.go:490
-- 포맷터:
-  - 단건: `AlarmNotification`  
-    internal/adapter/formatter.go:409
-  - 다건: `AlarmNotificationGroup`  
-    internal/adapter/formatter.go:439
-- 발송/로깅/에러: 그룹 메시지 전송, 실패 시 로깅 후 다음 그룹 진행  
-  internal/bot/bot.go:454, 465
+`YouTubeChecker.buildUpcomingNotifications(...)` 는 다음 순서를 따른다.
 
----
+1. upcoming + `StartScheduled` 존재 여부 확인
+2. evaluation window 안에서 crossed target 계산
+3. `IsAlreadyNotifiedForSchedule(...)` 로 중복 차단
+4. room별 `AlarmNotification` 생성
 
-## 명령 처리 파이프라인(사용자면)
-- 토큰 정규화/파싱: `!알람 추가/제거/목록/초기화` 및 축약 토큰 지원  
-  internal/adapter/message.go:690–691, 298, 593
-- 커맨드 실행: `AlarmCommand` 분기 → `AlarmService` 호출  
-  internal/command/alarm.go:12, 19, 23, 31
-- 서비스 API:
-  - `AddAlarm` / `RemoveAlarm` / `GetUserAlarms` / `ClearUserAlarms`  
-    internal/service/notification/alarm.go:92, 128, 167, 177
+live catch-up 도 같은 checker 안에서 별도로 계산되지만, 발송 경로는 동일하게 notifier와 queue를 통과한다.
 
----
+## 4. 중복 방지와 큐 계약
 
-## 다음 방송 캐시(Next Stream Cache)
-- 상태 머신: `live` / `upcoming` / `no_upcoming` / `time_unknown`로 해시 저장, TTL 갱신  
-  internal/service/notification/alarm.go:631, 650, 667, 698
-- 보존 정책: 동일 영상이 여전히 upcoming이면 값 유지하고 TTL만 연장(깜빡임 방지)  
-  internal/service/notification/alarm.go:677
-- 갱신 트리거: 스케줄 조회 시 비동기 갱신  
-  internal/service/notification/alarm.go:348, 607
+- checker 단계에서는 dedup claim이 먼저 일어난다.
+- queue에는 `domain.AlarmQueueEnvelope` 가 적재된다.
+- envelope 안에는 notification payload와 claim key가 함께 들어간다.
+- dispatcher에서 render 실패 시 claim key를 해제한다.
+- dispatcher에서 send 실패 시 envelope를 requeue 한다.
 
----
+이 계약 덕분에 checker와 dispatcher는 다음 책임으로 분리된다.
 
-## 동시성/성능
-- 채널 병렬 처리: goroutine 풀(max 15)로 스케줄 조회 분산  
-  internal/service/notification/alarm.go:37, 241
-- 실행 중복 방지: 알람 체크 루프 뮤텍스 가드  
-  internal/bot/bot.go:436
+- checker/notifier: “보내도 되는가”
+- dispatcher: “어떻게 묶어서 실제로 보낼 것인가”
 
----
+## 5. 현재 문서를 읽을 때의 주의점
 
-## E2E 흐름 요약
-1. 사용자가 채널 알람 등록 → Valkey 구독/레지스트리 반영  
-   internal/service/notification/alarm.go:92
-2. 티커 트리거 → `CheckUpcomingStreams`가 채널·스케줄 조회 및 타깃 분전 필터  
-   internal/bot/bot.go:427, internal/service/notification/alarm.go:218, 321
-3. 방 단위 알림 구성 → `notified:<streamID>`로 중복 방지/스케줄 변경 처리  
-   internal/service/notification/alarm.go:378, 490, 400
-4. 그룹핑/포맷팅(단건/다건) → 발송 → 발송 기록 저장  
-   internal/bot/bot.go:490, 454, 474
+- 예전 bot ticker 중심 설명은 현재 구조와 맞지 않는다.
+- `AlarmService` 는 지금도 구독 저장과 일부 발송 상태 보조 마킹을 담당하지만, 플랫폼 알람 후보 계산의 주 루프는 `RuntimeScheduler` 와 각 checker가 소유한다.
+- 최종 발송은 bot 프로세스가 직접 하지 않고 queue + `dispatcher-go` 를 거친다.
 
----
+## 6. 빠른 코드 진입점
 
-## 참고(상수/TTL)
-- 캐시 TTL 묶음(예: ChannelSchedule 5m, NotificationSent 60m)  
-  internal/constants/constants.go:16, 20
+- 런타임 시작점: `internal/service/alarm/scheduler/runtime_scheduler.go`
+- YouTube 후보 계산: `internal/service/alarm/checker/youtube_checker.go`
+- 발행 경계: `internal/service/alarm/checker/notifier.go`
+- 큐 publish/consume: `hololive-shared/pkg/service/alarm/queue/`
+- 최종 발송: `hololive-dispatcher-go/internal/dispatch/dispatcher.go`

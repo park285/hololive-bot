@@ -24,7 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,7 +47,7 @@ type UpcomingEventNotifiedData struct {
 
 type Service struct {
 	cache           cache.Client
-	targetMinutes   []int
+	targetPolicy    sharedchecker.TargetMinutePolicy
 	targetMinutesMu sync.RWMutex
 	fallback        *LocalFallback
 	logger          *slog.Logger
@@ -68,10 +67,10 @@ func NewService(c cache.Client, targetMinutes []int, logger *slog.Logger) *Servi
 	}
 
 	return &Service{
-		cache:         c,
-		targetMinutes: sharedchecker.NormalizeTargetMinutes(targetMinutes),
-		fallback:      NewLocalFallback(logger),
-		logger:        logger,
+		cache:        c,
+		targetPolicy: sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
+		fallback:     NewLocalFallback(logger),
+		logger:       logger,
 	}
 }
 
@@ -80,7 +79,7 @@ func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
 	s.targetMinutesMu.Lock()
 	defer s.targetMinutesMu.Unlock()
 
-	s.targetMinutes = sharedchecker.NormalizeTargetMinutes(targetMinutes)
+	s.targetPolicy = sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes))
 }
 
 // startScheduled가 zero이면 ("", false, nil) 반환
@@ -195,10 +194,10 @@ func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID str
 		return data.SentAt[0], nil
 	}
 
-	targetMinutes := s.targetMinutesSnapshot()
+	targetPolicy := s.targetPolicySnapshot()
+	targetMinutes := targetPolicy.Clone()
 
-	// target 분: 어떤 target이라도 발송됐으면 차단 (1회 정책)
-	if slices.Contains(targetMinutes, minutesUntil) {
+	if targetPolicy.Contains(minutesUntil) {
 		for _, target := range targetMinutes {
 			if data.SentAt[target] {
 				return true, nil
@@ -282,10 +281,14 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 }
 
 func (s *Service) targetMinutesSnapshot() []int {
+	return s.targetPolicySnapshot().Clone()
+}
+
+func (s *Service) targetPolicySnapshot() sharedchecker.TargetMinutePolicy {
 	s.targetMinutesMu.RLock()
 	defer s.targetMinutesMu.RUnlock()
 
-	return append([]int(nil), s.targetMinutes...)
+	return s.targetPolicy
 }
 
 func (s *Service) readNotifiedData(ctx context.Context, key string) (*NotifiedData, error) {
