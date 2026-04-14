@@ -226,6 +226,91 @@ func TestDispatcherRunOnce_SendFailureMovesToDLQAfterRetryBudgetExhausted(t *tes
 	}
 }
 
+func TestDispatcherRunOnce_ScheduleRetryFailurePropagates(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			return []domain.AlarmQueueEnvelope{
+				testAlarmQueueEnvelope("room-1", "claim-1"),
+			}, nil
+		},
+		scheduleRetryFunc: func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+			return errors.New("retry queue unavailable")
+		},
+	}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{
+			sendMessageFunc: func(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+				return errors.New("send failed")
+			},
+		},
+		NewSimpleRenderer(),
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	if runErr := dispatcher.RunOnce(context.Background()); runErr == nil {
+		t.Fatal("expected RunOnce() error, got nil")
+	}
+	if len(fakeConsumer.releasedClaimKeys) != 0 {
+		t.Fatalf("released claim keys = %d, want 0", len(fakeConsumer.releasedClaimKeys))
+	}
+}
+
+func TestDispatcherRunOnce_MoveToDLQFailurePropagates(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			envelope := testAlarmQueueEnvelope("room-1", "claim-1")
+			envelope.Retry = &domain.AlarmQueueRetryMetadata{Attempt: 2}
+			return []domain.AlarmQueueEnvelope{envelope}, nil
+		},
+		moveToDLQFunc: func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+			return errors.New("dlq unavailable")
+		},
+	}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{
+			sendMessageFunc: func(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+				return errors.New("send failed")
+			},
+		},
+		NewSimpleRenderer(),
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	if err := dispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   3,
+		BaseBackoff:   time.Minute,
+		MaxBackoff:    5 * time.Minute,
+		JitterPercent: 0,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() error = %v", err)
+	}
+
+	if runErr := dispatcher.RunOnce(context.Background()); runErr == nil {
+		t.Fatal("expected RunOnce() error, got nil")
+	}
+	if len(fakeConsumer.releasedClaimKeys) != 0 {
+		t.Fatalf("released claim keys = %d, want 0", len(fakeConsumer.releasedClaimKeys))
+	}
+}
+
 func TestDispatcherRetryPolicy_BackoffRampsAndCaps(t *testing.T) {
 	t.Parallel()
 
