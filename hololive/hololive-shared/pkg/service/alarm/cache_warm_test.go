@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -279,6 +280,54 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 	freshCommunitySubscribers, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"room-fresh"}, freshCommunitySubscribers)
+}
+
+func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesDispatchQueue(t *testing.T) {
+	ctx := t.Context()
+	cacheSvc := newMemoryCacheClient(t)
+	originalLoader := loadAllAlarmsFromRepository
+	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
+		return []*domain.Alarm{
+			{
+				RoomID:     "room-fresh",
+				UserID:     "user-fresh",
+				ChannelID:  "UC_FRESH",
+				MemberName: "Fresh Member",
+				RoomName:   "Fresh Room",
+				UserName:   "Fresh User",
+				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+			},
+		}, nil
+	}
+	t.Cleanup(func() {
+		loadAllAlarmsFromRepository = originalLoader
+	})
+
+	_, err := cacheSvc.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"), []string{"UC_ORPHAN"})
+	require.NoError(t, err)
+	require.NoError(t, cacheSvc.Set(ctx, contractsalarm.DispatchQueueKey, "queue-marker", 0))
+	require.NoError(t, cacheSvc.Set(ctx, "alarm:chzzk_channels", "mapping-marker", 0))
+	require.NoError(t, cacheSvc.Set(ctx, "alarm:next_stream:UC_KEEP", "stream-marker", 0))
+
+	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheSvc, &Repository{})
+	require.NoError(t, err)
+	assert.Equal(t, CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, summary)
+
+	orphanRoomChannels, err := cacheSvc.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-orphan"))
+	require.NoError(t, err)
+	assert.Empty(t, orphanRoomChannels)
+
+	dispatchQueueExists, err := cacheSvc.Exists(ctx, contractsalarm.DispatchQueueKey)
+	require.NoError(t, err)
+	assert.True(t, dispatchQueueExists)
+
+	chzzkMapExists, err := cacheSvc.Exists(ctx, "alarm:chzzk_channels")
+	require.NoError(t, err)
+	assert.True(t, chzzkMapExists)
+
+	nextStreamExists, err := cacheSvc.Exists(ctx, "alarm:next_stream:UC_KEEP")
+	require.NoError(t, err)
+	assert.True(t, nextStreamExists)
 }
 
 type countingWarmCacheClient struct {

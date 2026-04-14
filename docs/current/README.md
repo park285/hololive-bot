@@ -16,3 +16,5 @@
 - `PROJECT_MAP.md` — 현재 모듈/런타임 인벤토리
 - `runbooks/README.md` — 현재 운영 runbook 인덱스
 - `architecture/README.md` — 현재 governance/architecture 인덱스
+- `ALARM_DISPATCH_REMEDIATION_20260414.md` — 2026-04-14 알람/디스패처 보강 기준
+- `APP_BOOTSTRAP_BOUNDARY_GUIDE.md` — `hololive-kakao-bot-go/internal/app` 구조 분리 기준

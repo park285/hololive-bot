@@ -113,13 +113,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		resultLabel = "error"
 		return nil, fmt.Errorf("drain queue batch: pop delayed retry payloads: %w", err)
 	}
-	for _, raw := range delayed {
-		if envelope, ok := parseEnvelope(raw, c.logger); ok {
-			if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "drain_delayed"); accepted {
-				envelopes = append(envelopes, normalized)
-			}
-		}
-	}
+	envelopes = c.appendAcceptedPayloads(ctx, "drain_delayed", delayed, envelopes)
 
 	remaining := limit - len(envelopes)
 	if remaining <= 0 {
@@ -132,13 +126,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 			resultLabel = "error"
 			return nil, fmt.Errorf("drain queue batch: pop active payloads after delayed retries: %w", err)
 		}
-		for _, raw := range drained {
-			if envelope, ok := parseEnvelope(raw, c.logger); ok {
-				if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "drain"); accepted {
-					envelopes = append(envelopes, normalized)
-				}
-			}
-		}
+		envelopes = c.appendAcceptedPayloads(ctx, "drain", drained, envelopes)
 		return envelopes, nil
 	}
 
@@ -152,11 +140,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		return envelopes, nil
 	}
 
-	if envelope, ok := parseEnvelope(firstRaw, c.logger); ok {
-		if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "drain"); accepted {
-			envelopes = append(envelopes, normalized)
-		}
-	}
+	envelopes = c.appendAcceptedPayloads(ctx, "drain", []string{firstRaw}, envelopes)
 
 	remaining = limit - len(envelopes)
 	if remaining <= 0 {
@@ -168,13 +152,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		resultLabel = "error"
 		return nil, fmt.Errorf("drain queue batch: pop drain payloads: %w", err)
 	}
-	for _, raw := range drained {
-		if envelope, ok := parseEnvelope(raw, c.logger); ok {
-			if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "drain"); accepted {
-				envelopes = append(envelopes, normalized)
-			}
-		}
-	}
+	envelopes = c.appendAcceptedPayloads(ctx, "drain", drained, envelopes)
 
 	return envelopes, nil
 }
@@ -315,6 +293,63 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 	return nil
 }
 
+func (c *Consumer) appendAcceptedPayloads(
+	ctx context.Context,
+	source string,
+	rawPayloads []string,
+	envelopes []domain.AlarmQueueEnvelope,
+) []domain.AlarmQueueEnvelope {
+	for _, raw := range rawPayloads {
+		envelope, ok := parseEnvelope(raw, c.logger)
+		if !ok {
+			c.moveRawPayloadsToDLQ(ctx, source+"_invalid_payload", []string{raw})
+			continue
+		}
+		if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, source); accepted {
+			envelopes = append(envelopes, normalized)
+		}
+	}
+	return envelopes
+}
+
+func (c *Consumer) moveRawPayloadsToDLQ(ctx context.Context, source string, payloads []string) {
+	filtered := make([]string, 0, len(payloads))
+	for _, payload := range payloads {
+		if payload == "" {
+			continue
+		}
+		filtered = append(filtered, payload)
+	}
+	if len(filtered) == 0 {
+		return
+	}
+
+	cmd := c.cache.B().Lpush().Key(c.dlqKey).Element(filtered...).Build()
+	results := c.cache.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		c.logger.Warn("failed to preserve raw alarm queue payloads to DLQ",
+			slog.String("source", source),
+			slog.Int("count", len(filtered)),
+			slog.Int("result_count", len(results)),
+		)
+		return
+	}
+	if err := results[0].Error(); err != nil {
+		c.logger.Warn("failed to preserve raw alarm queue payloads to DLQ",
+			slog.String("source", source),
+			slog.Int("count", len(filtered)),
+			slog.Any("error", err),
+		)
+		return
+	}
+
+	alarmQueueDLQMoved.Add(float64(len(filtered)))
+	c.logger.Warn("preserved raw alarm queue payloads to DLQ",
+		slog.String("source", source),
+		slog.Int("count", len(filtered)),
+	)
+}
+
 func (c *Consumer) acceptLegacyEnvelope(
 	ctx context.Context,
 	envelope domain.AlarmQueueEnvelope,
@@ -380,12 +415,21 @@ func (c *Consumer) drainDelayedRetries(ctx context.Context, count int, now time.
 		alarmQueueRetryDrained.Add(float64(len(values)))
 	}
 	payloads := make([]string, 0, len(values))
+	invalidMembers := make([]string, 0)
 	for _, value := range values {
 		payload, err := unwrapRetryMember(value)
 		if err != nil {
-			return nil, fmt.Errorf("drain delayed retry payloads: unwrap member: %w", err)
+			invalidMembers = append(invalidMembers, value)
+			c.logger.Warn("invalid delayed retry member wrapper; preserving raw member to DLQ",
+				slog.String("retry_queue", c.retryQueueKey),
+				slog.Any("error", err),
+			)
+			continue
 		}
 		payloads = append(payloads, payload)
+	}
+	if len(invalidMembers) > 0 {
+		c.moveRawPayloadsToDLQ(ctx, "drain_delayed_invalid_member", invalidMembers)
 	}
 	return payloads, nil
 }

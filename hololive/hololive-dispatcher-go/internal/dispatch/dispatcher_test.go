@@ -32,7 +32,7 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
-func TestDispatcherRunOnce_RenderFailureReleasesClaimKeys(t *testing.T) {
+func TestDispatcherRunOnce_RenderFailureSchedulesDurableRetryWithMetadata(t *testing.T) {
 	t.Parallel()
 
 	fakeConsumer := &testQueueConsumer{
@@ -68,15 +68,101 @@ func TestDispatcherRunOnce_RenderFailureReleasesClaimKeys(t *testing.T) {
 		t.Fatalf("NewDispatcher() error = %v", err)
 	}
 
+	now := time.Date(2026, 4, 14, 4, 0, 0, 0, time.UTC)
+	dispatcher.now = func() time.Time { return now }
+
 	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
 		t.Fatalf("RunOnce() error = %v", runErr)
 	}
 
-	if len(fakeConsumer.releasedClaimKeys) != 2 {
-		t.Fatalf("expected 2 released claim keys, got %d", len(fakeConsumer.releasedClaimKeys))
+	if len(fakeConsumer.scheduledRetries) != 1 {
+		t.Fatalf("scheduled retries = %d, want 1", len(fakeConsumer.scheduledRetries))
+	}
+	if len(fakeConsumer.releasedClaimKeys) != 0 {
+		t.Fatalf("expected 0 released claim keys, got %d", len(fakeConsumer.releasedClaimKeys))
 	}
 	if len(fakeConsumer.requeuedEnvelopes) != 0 {
 		t.Fatalf("expected 0 requeued envelopes, got %d", len(fakeConsumer.requeuedEnvelopes))
+	}
+	if len(fakeConsumer.dlqEnvelopes) != 0 {
+		t.Fatalf("expected 0 DLQ envelopes, got %d", len(fakeConsumer.dlqEnvelopes))
+	}
+
+	retry := fakeConsumer.scheduledRetries[0].Retry
+	if retry == nil {
+		t.Fatal("scheduled retry metadata is nil")
+	}
+	if retry.Attempt != 1 {
+		t.Fatalf("retry attempt = %d, want 1", retry.Attempt)
+	}
+	if retry.LastError != "render failed: render failed" {
+		t.Fatalf("last_error = %q, want %q", retry.LastError, "render failed: render failed")
+	}
+	if retry.NextVisibleAt == "" {
+		t.Fatal("next_visible_at must not be empty")
+	}
+}
+
+func TestDispatcherRunOnce_RenderFailureMovesToDLQAfterRetryBudgetExhausted(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			envelope := testAlarmQueueEnvelope("room-1", "claim-1")
+			envelope.Retry = &domain.AlarmQueueRetryMetadata{
+				Attempt:       2,
+				RetryAfterMS:  int64((45 * time.Second) / time.Millisecond),
+				NextVisibleAt: time.Date(2026, 4, 14, 4, 0, 45, 0, time.UTC).Format(time.RFC3339Nano),
+				LastError:     "previous render failed",
+			}
+			return []domain.AlarmQueueEnvelope{envelope}, nil
+		},
+	}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{},
+		&failingTestRenderer{err: errors.New("render failed")},
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	if err := dispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   3,
+		BaseBackoff:   time.Minute,
+		MaxBackoff:    5 * time.Minute,
+		JitterPercent: 0,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() error = %v", err)
+	}
+
+	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() error = %v", runErr)
+	}
+
+	if len(fakeConsumer.scheduledRetries) != 0 {
+		t.Fatalf("scheduled retries = %d, want 0", len(fakeConsumer.scheduledRetries))
+	}
+	if len(fakeConsumer.dlqEnvelopes) != 1 {
+		t.Fatalf("DLQ envelopes = %d, want 1", len(fakeConsumer.dlqEnvelopes))
+	}
+	if len(fakeConsumer.releasedClaimKeys) != 1 {
+		t.Fatalf("released claim keys = %d, want 1", len(fakeConsumer.releasedClaimKeys))
+	}
+
+	retry := fakeConsumer.dlqEnvelopes[0].Retry
+	if retry == nil {
+		t.Fatal("DLQ envelope retry metadata is nil")
+	}
+	if retry.Attempt != 3 {
+		t.Fatalf("retry attempt = %d, want 3", retry.Attempt)
+	}
+	if retry.LastError != "render failed: render failed" {
+		t.Fatalf("last_error = %q, want %q", retry.LastError, "render failed: render failed")
 	}
 }
 
@@ -151,8 +237,9 @@ func TestDispatcherRunOnce_SendFailureSchedulesDurableRetryWithMetadata(t *testi
 	if retry.NextVisibleAt != now.Add(75*time.Second).Format(time.RFC3339Nano) {
 		t.Fatalf("next_visible_at = %q, want %q", retry.NextVisibleAt, now.Add(75*time.Second).Format(time.RFC3339Nano))
 	}
-	if retry.LastError != "send failed" {
-		t.Fatalf("last_error = %q, want %q", retry.LastError, "send failed")
+	expectedLastError := formatDispatchFailure("send", errors.New("send failed"))
+	if retry.LastError != expectedLastError {
+		t.Fatalf("last_error = %q, want %q", retry.LastError, expectedLastError)
 	}
 	if fakeConsumer.scheduledRetries[0].ClaimKeys[0] != "claim-1" {
 		t.Fatalf("claim key = %q, want %q", fakeConsumer.scheduledRetries[0].ClaimKeys[0], "claim-1")
@@ -221,8 +308,9 @@ func TestDispatcherRunOnce_SendFailureMovesToDLQAfterRetryBudgetExhausted(t *tes
 	if retry.Attempt != 3 {
 		t.Fatalf("retry attempt = %d, want 3", retry.Attempt)
 	}
-	if retry.LastError != "send failed" {
-		t.Fatalf("last_error = %q, want %q", retry.LastError, "send failed")
+	expectedLastError := formatDispatchFailure("send", errors.New("send failed"))
+	if retry.LastError != expectedLastError {
+		t.Fatalf("last_error = %q, want %q", retry.LastError, expectedLastError)
 	}
 }
 

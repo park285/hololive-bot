@@ -14,14 +14,12 @@ Observed runtime evidence before this change:
 
 That mismatch meant the runtime was spending most of its YouTube HTML budget on non-alert channels, which directly increased publish-to-detect delay for the channels that actually mattered.
 
-## Reviewed patch input
+## Review provenance
 
-External review patches used for this work:
+This review consolidated externally proposed changes into repository-native code review and implementation work.
+Local patch artifact file names are intentionally omitted here because they are not part of repository SSOT and may not exist in every workspace.
 
-- `admin-dashboard/frontend/hololive_review_proposed.patch`
-- `hololive_review_followup.patch`
-
-The patch contained four classes of change:
+The reviewed change set contained four classes of change:
 
 1. Per-poller channel targeting for the scraper scheduler
 2. Outbox timing floor reduction
