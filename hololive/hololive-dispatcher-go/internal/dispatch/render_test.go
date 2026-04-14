@@ -97,10 +97,48 @@ func TestSimpleRenderer_RenderGroupMultiple_DetailedFormat(t *testing.T) {
 	}
 
 	expected := "⏰ 5분 내 방송 알림\n\n" +
-		"⏰ Member1 방송 5분 전\n📺 Title1\n🔗 https://youtube.com/watch?v=abc\n\n" +
-		"⏰ Member2 방송 5분 전\n📺 Title2\n🔗 https://youtube.com/watch?v=def"
+		"⏰ Member1 방송 예정\n📺 Title1\n🔗 https://youtube.com/watch?v=abc\n\n" +
+		"⏰ Member2 방송 예정\n📺 Title2\n🔗 https://youtube.com/watch?v=def"
 	if message != expected {
 		t.Errorf("unexpected message:\ngot:  %q\nwant: %q", message, expected)
+	}
+}
+
+func TestSimpleRenderer_RenderGroupMultiple_KeepsPerItemTimingWhenDifferentFromGroup(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewSimpleRenderer()
+	start := time.Date(2026, 3, 4, 10, 0, 0, 0, time.UTC)
+	link1 := "https://youtube.com/watch?v=abc"
+	link2 := "https://youtube.com/watch?v=def"
+
+	message, err := renderer.RenderGroup(context.Background(), NotificationGroup{
+		RoomID:       "room-1",
+		MinutesUntil: 3,
+		Notifications: []domain.AlarmNotification{
+			{
+				RoomID:       "room-1",
+				Channel:      &domain.Channel{ID: "c1", Name: "Member1"},
+				Stream:       &domain.Stream{ID: "abc", Title: "Title1", Link: &link1, StartScheduled: &start},
+				MinutesUntil: 3,
+			},
+			{
+				RoomID:       "room-1",
+				Channel:      &domain.Channel{ID: "c2", Name: "Member2"},
+				Stream:       &domain.Stream{ID: "def", Title: "Title2", Link: &link2, StartScheduled: &start},
+				MinutesUntil: 1,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RenderGroup() error = %v", err)
+	}
+
+	expected := "⏰ 3분 내 방송 알림\n\n" +
+		"⏰ Member1 방송 예정\n📺 Title1\n🔗 https://youtube.com/watch?v=abc\n\n" +
+		"⏰ Member2 방송 1분 전\n📺 Title2\n🔗 https://youtube.com/watch?v=def"
+	if message != expected {
+		t.Fatalf("unexpected message:\ngot:  %q\nwant: %q", message, expected)
 	}
 }
 
@@ -131,7 +169,7 @@ func TestSimpleRenderer_RenderGroupMultiple(t *testing.T) {
 	}
 
 	expected := "⏰ 3분 내 방송 알림\n\n" +
-		"⏰ 멤버1 방송 3분 전\n📺 방송1\n🔗 https://youtube.com/watch?v=s1\n\n" +
+		"⏰ 멤버1 방송 예정\n📺 방송1\n🔗 https://youtube.com/watch?v=s1\n\n" +
 		"⏰ 멤버2 방송 1분 전\n📺 방송2\n🔗 https://youtube.com/watch?v=s2"
 	if message != expected {
 		t.Fatalf("unexpected grouped message:\ngot:  %q\nwant: %q", message, expected)
