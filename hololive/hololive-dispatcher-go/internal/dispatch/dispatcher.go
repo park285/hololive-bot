@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -103,7 +104,7 @@ func NewDispatcher(
 			JitterPercent: 0,
 		},
 		now:         time.Now,
-		randFloat64: func() float64 { return 0.5 },
+		randFloat64: rand.Float64,
 	}, nil
 }
 
