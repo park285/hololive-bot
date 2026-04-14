@@ -82,7 +82,7 @@ func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger)
 		cache: &Settings{
 			AlarmAdvanceMinutes: defaults.AlarmAdvanceMinutes,
 			ScraperProxyEnabled: defaults.ScraperProxyEnabled,
-			TargetMinutes:       cloneTargetMinutes(defaults.TargetMinutes),
+			TargetMinutes:       sharedchecker.NewTargetMinutePolicyFromConfigured(defaults.TargetMinutes).Clone(),
 		},
 	}
 
@@ -118,7 +118,7 @@ func (s *Service) load() {
 		s.cache.ScraperProxyEnabled = *disk.ScraperProxyEnabled
 	}
 	if len(disk.TargetMinutes) > 0 {
-		resolved := sharedchecker.ResolvePersistedTargetMinutes(s.cache.AlarmAdvanceMinutes, disk.TargetMinutes)
+		resolved := sharedchecker.NewTargetMinutePolicyFromPersisted(s.cache.AlarmAdvanceMinutes, disk.TargetMinutes).Clone()
 		s.cache.TargetMinutes = cloneTargetMinutes(resolved)
 		if !slices.Equal(resolved, disk.TargetMinutes) && s.logger != nil {
 			s.logger.Info("Healing persisted target minutes", slog.Any("from", disk.TargetMinutes), slog.Any("to", resolved))
@@ -153,10 +153,11 @@ func (s *Service) Update(newSettings Settings) error {
 		return err
 	}
 
+	resolvedTargets := sharedchecker.NewTargetMinutePolicyFromConfigured(newSettings.TargetMinutes).Clone()
 	s.cache = &Settings{
 		AlarmAdvanceMinutes: newSettings.AlarmAdvanceMinutes,
 		ScraperProxyEnabled: newSettings.ScraperProxyEnabled,
-		TargetMinutes:       cloneTargetMinutes(newSettings.TargetMinutes),
+		TargetMinutes:       resolvedTargets,
 	}
 
 	return s.persistCache()

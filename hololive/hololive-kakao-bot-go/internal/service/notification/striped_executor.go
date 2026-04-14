@@ -27,16 +27,17 @@ import (
 	"hash/fnv"
 	"strings"
 	"sync"
-	"sync/atomic"
 )
 
 var errStripedExecutorClosed = errors.New("striped executor closed")
+var errStripedExecutorSaturated = errors.New("striped executor saturated")
 
 type stripedExecutor struct {
 	stripes   []chan func()
 	stopCh    chan struct{}
 	stopOnce  sync.Once
-	closed    atomic.Bool
+	stateMu   sync.Mutex
+	closed    bool
 	taskWG    sync.WaitGroup
 	workerWG  sync.WaitGroup
 	stripeCap int
@@ -95,20 +96,29 @@ func (e *stripedExecutor) Submit(key string, task func()) error {
 		return errStripedExecutorClosed
 	}
 
-	if e.closed.Load() {
-		return errStripedExecutorClosed
-	}
-
 	if task == nil {
 		return nil
 	}
 
 	index := e.stripeIndex(key)
+
+	e.stateMu.Lock()
+	defer e.stateMu.Unlock()
+
+	if e.closed {
+		return errStripedExecutorClosed
+	}
+
 	e.taskWG.Add(1)
 
-	e.stripes[index] <- task
+	select {
+	case e.stripes[index] <- task:
+		return nil
+	default:
+		e.taskWG.Done()
 
-	return nil
+		return errStripedExecutorSaturated
+	}
 }
 
 func (e *stripedExecutor) ShutdownWait(ctx context.Context) error {
@@ -116,7 +126,9 @@ func (e *stripedExecutor) ShutdownWait(ctx context.Context) error {
 		return nil
 	}
 
-	e.closed.Store(true)
+	e.stateMu.Lock()
+	e.closed = true
+	e.stateMu.Unlock()
 
 	done := make(chan struct{})
 

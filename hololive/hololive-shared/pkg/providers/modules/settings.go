@@ -18,16 +18,12 @@ func BuildSettingsService(targetMinutes []int, scraperProxyEnabled bool, logger 
 		logger.Info("Using settings file path", slog.String("path", settingsPath))
 	}
 
-	normalized := sharedchecker.ResolveConfiguredTargetMinutes(targetMinutes)
-	defaultMinute := 5
-	if len(normalized) > 0 && normalized[0] > 0 {
-		defaultMinute = normalized[0]
-	}
+	policy := sharedchecker.NewTargetMinutePolicyFromConfigured(targetMinutes)
 
 	return settings.NewSettingsService(settingsPath, settings.Settings{
-		AlarmAdvanceMinutes: defaultMinute,
+		AlarmAdvanceMinutes: policy.PrimaryAdvanceMinute(),
 		ScraperProxyEnabled: scraperProxyEnabled,
-		TargetMinutes:       normalized,
+		TargetMinutes:       policy.Clone(),
 	}, logger)
 }
 
@@ -35,7 +31,8 @@ func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool
 	_ = scraperProxyEnabled
 
 	settingsPath := resolveSettingsFilePath()
-	resolvedConfigured := sharedchecker.ResolveConfiguredTargetMinutes(targetMinutes)
+	configuredPolicy := sharedchecker.NewTargetMinutePolicyFromConfigured(targetMinutes)
+	resolvedConfigured := configuredPolicy.Clone()
 	if _, err := os.Stat(settingsPath); err != nil {
 		logResolvedTargetMinutes(logger, "config-missing", resolvedConfigured)
 		return resolvedConfigured
@@ -51,7 +48,7 @@ func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool
 	}
 
 	if hasPositiveTargetMinutes(persisted.TargetMinutes) {
-		resolved := sharedchecker.ResolvePersistedTargetMinutes(valueOrDefault(persisted.AlarmAdvanceMinutes), persisted.TargetMinutes)
+		resolved := sharedchecker.NewTargetMinutePolicyFromPersisted(valueOrDefault(persisted.AlarmAdvanceMinutes), persisted.TargetMinutes).Clone()
 		logResolvedTargetMinutes(logger, "persisted-settings", resolved)
 		return resolved
 	}
@@ -61,7 +58,7 @@ func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool
 		return resolvedConfigured
 	}
 
-	resolved := sharedchecker.BuildRuntimeTargetMinutes(*persisted.AlarmAdvanceMinutes)
+	resolved := sharedchecker.NewTargetMinutePolicyFromRuntimeAdvance(*persisted.AlarmAdvanceMinutes).Clone()
 	logResolvedTargetMinutes(logger, "persisted-settings", resolved)
 	return resolved
 }

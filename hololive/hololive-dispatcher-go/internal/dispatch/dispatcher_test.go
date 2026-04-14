@@ -80,11 +80,16 @@ func TestDispatcherRunOnce_RenderFailureReleasesClaimKeys(t *testing.T) {
 	}
 }
 
-func TestDispatcherRunOnce_SendFailureRequeuesEnvelopes(t *testing.T) {
+func TestDispatcherRunOnce_SendFailureParksEnvelopesUntilBackoffExpires(t *testing.T) {
 	t.Parallel()
 
+	drainCalls := 0
 	fakeConsumer := &testQueueConsumer{
 		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			drainCalls++
+			if drainCalls > 1 {
+				return nil, nil
+			}
 			return []domain.AlarmQueueEnvelope{
 				testAlarmQueueEnvelope("room-1", "claim-1"),
 				testAlarmQueueEnvelope("room-1", "claim-2"),
@@ -110,15 +115,44 @@ func TestDispatcherRunOnce_SendFailureRequeuesEnvelopes(t *testing.T) {
 		t.Fatalf("NewDispatcher() error = %v", err)
 	}
 
+	now := time.Date(2026, 4, 14, 4, 0, 0, 0, time.UTC)
+	dispatcher.now = func() time.Time { return now }
+	dispatcher.retryBackoff = time.Minute
+	dispatcher.maxSendAttempts = 2
+
 	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
 		t.Fatalf("RunOnce() error = %v", runErr)
 	}
 
-	if len(fakeConsumer.requeuedEnvelopes) != 2 {
-		t.Fatalf("expected 2 requeued envelopes, got %d", len(fakeConsumer.requeuedEnvelopes))
+	if len(fakeConsumer.requeuedEnvelopes) != 0 {
+		t.Fatalf("expected 0 requeued envelopes, got %d", len(fakeConsumer.requeuedEnvelopes))
 	}
 	if len(fakeConsumer.releasedClaimKeys) != 0 {
 		t.Fatalf("expected released claim keys = 0, got %d", len(fakeConsumer.releasedClaimKeys))
+	}
+	if fakeSender.sendCalls != 1 {
+		t.Fatalf("send calls = %d, want 1", fakeSender.sendCalls)
+	}
+
+	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() before backoff expiry error = %v", runErr)
+	}
+	if fakeSender.sendCalls != 1 {
+		t.Fatalf("send calls before backoff expiry = %d, want 1", fakeSender.sendCalls)
+	}
+
+	now = now.Add(time.Minute)
+	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() after backoff expiry error = %v", runErr)
+	}
+	if fakeSender.sendCalls != 2 {
+		t.Fatalf("send calls after backoff expiry = %d, want 2", fakeSender.sendCalls)
+	}
+	if len(fakeConsumer.releasedClaimKeys) != 2 {
+		t.Fatalf("expected 2 released claim keys after max attempts, got %d", len(fakeConsumer.releasedClaimKeys))
+	}
+	if len(dispatcher.parked) != 0 {
+		t.Fatalf("expected parked envelopes cleared, got %d", len(dispatcher.parked))
 	}
 }
 
@@ -284,9 +318,11 @@ func (c *testQueueConsumer) Requeue(ctx context.Context, envelopes []domain.Alar
 
 type testMessageSender struct {
 	sendMessageFunc func(ctx context.Context, room, message string, opts ...iris.SendOption) error
+	sendCalls       int
 }
 
 func (s *testMessageSender) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+	s.sendCalls++
 	if s.sendMessageFunc != nil {
 		return s.sendMessageFunc(ctx, room, message, opts...)
 	}

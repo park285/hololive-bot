@@ -29,6 +29,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/valkey-io/valkey-go"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
@@ -150,6 +151,58 @@ func loadSubscriberRoomsByChannel(
 		return map[string][]string{}, nil
 	}
 
+	if result, ok, err := tryLoadSubscriberRoomsByChannelBatched(ctx, cacheSvc, uniqueChannelIDs); ok {
+		return result, err
+	}
+
+	return loadSubscriberRoomsByChannelSequential(ctx, cacheSvc, uniqueChannelIDs)
+}
+
+func tryLoadSubscriberRoomsByChannelBatched(
+	ctx context.Context,
+	cacheSvc cache.Client,
+	uniqueChannelIDs []string,
+) (_ map[string][]string, ok bool, _ error) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+
+	client := cacheSvc.GetClient()
+	if client == nil {
+		return nil, false, nil
+	}
+
+	cmds := make([]valkey.Completed, 0, len(uniqueChannelIDs))
+	for _, channelID := range uniqueChannelIDs {
+		cmds = append(cmds, client.B().Smembers().Key(notification.ChannelSubscribersKeyPrefix+channelID).Build())
+	}
+
+	results := cacheSvc.DoMulti(ctx, cmds...)
+	if len(results) != len(uniqueChannelIDs) {
+		return nil, false, nil
+	}
+
+	result := make(map[string][]string, len(uniqueChannelIDs))
+	for i, channelID := range uniqueChannelIDs {
+		rooms, err := results[i].AsStrSlice()
+		if err != nil {
+			return nil, true, fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
+		}
+		if len(rooms) > 0 {
+			result[channelID] = rooms
+		}
+	}
+
+	return result, true, nil
+}
+
+func loadSubscriberRoomsByChannelSequential(
+	ctx context.Context,
+	cacheSvc cache.Client,
+	uniqueChannelIDs []string,
+) (map[string][]string, error) {
 	result := make(map[string][]string, len(uniqueChannelIDs))
 
 	var mu sync.Mutex
