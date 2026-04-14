@@ -19,6 +19,24 @@ type TransportProfile struct {
 	DisableHTTP2          bool
 }
 
+var externalAPITransportProfile = TransportProfile{
+	DialTimeout:           5 * time.Second,
+	TLSHandshakeTimeout:   5 * time.Second,
+	ResponseHeaderTimeout: 15 * time.Second,
+	IdleConnTimeout:       90 * time.Second,
+	MaxConnsPerHost:       32,
+	MaxIdleConnsPerHost:   16,
+}
+
+var internalServiceTransportProfile = TransportProfile{
+	DialTimeout:           3 * time.Second,
+	TLSHandshakeTimeout:   5 * time.Second,
+	ResponseHeaderTimeout: 10 * time.Second,
+	IdleConnTimeout:       90 * time.Second,
+	MaxConnsPerHost:       64,
+	MaxIdleConnsPerHost:   32,
+}
+
 func NewClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
@@ -69,27 +87,15 @@ func NewProfiledClient(profile TransportProfile) *http.Client {
 }
 
 func NewExternalAPIClient(timeout time.Duration) *http.Client {
-	return NewProfiledClient(TransportProfile{
-		Timeout:               timeout,
-		DialTimeout:           5 * time.Second,
-		TLSHandshakeTimeout:   5 * time.Second,
-		ResponseHeaderTimeout: 15 * time.Second,
-		IdleConnTimeout:       90 * time.Second,
-		MaxConnsPerHost:       32,
-		MaxIdleConnsPerHost:   16,
-	})
+	profile := externalAPITransportProfile
+	profile.Timeout = timeout
+	return NewProfiledClient(profile)
 }
 
 func NewInternalServiceClient(timeout time.Duration) *http.Client {
-	return NewProfiledClient(TransportProfile{
-		Timeout:               timeout,
-		DialTimeout:           3 * time.Second,
-		TLSHandshakeTimeout:   5 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-		IdleConnTimeout:       90 * time.Second,
-		MaxConnsPerHost:       64,
-		MaxIdleConnsPerHost:   32,
-	})
+	profile := internalServiceTransportProfile
+	profile.Timeout = timeout
+	return NewProfiledClient(profile)
 }
 
 func DefaultClient() *http.Client {
