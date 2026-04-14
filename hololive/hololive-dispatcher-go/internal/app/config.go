@@ -22,6 +22,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -107,7 +108,7 @@ func LoadConfig() (*Config, error) {
 		retryMaxBackoffMS = int(defaultRetryMaxBackoff / time.Millisecond)
 	}
 	retryJitterPercent := lookupFloat("ALARM_DISPATCH_RETRY_JITTER_PERCENT", defaultRetryJitterPercent)
-	if retryJitterPercent < 0 {
+	if isFiniteFloat(retryJitterPercent) && retryJitterPercent < 0 {
 		retryJitterPercent = defaultRetryJitterPercent
 	}
 	cfg := &Config{
@@ -192,6 +193,9 @@ func (c *Config) Validate() error {
 	if c.Dispatch.RetryMaxBackoff < c.Dispatch.RetryBaseBackoff {
 		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_MAX_BACKOFF_MS must be greater than or equal to ALARM_DISPATCH_RETRY_BASE_BACKOFF_MS")
 	}
+	if !isFiniteFloat(c.Dispatch.RetryJitterPercent) {
+		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_JITTER_PERCENT must be finite")
+	}
 	if c.Dispatch.RetryJitterPercent < 0 || c.Dispatch.RetryJitterPercent > 100 {
 		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_JITTER_PERCENT must be between 0 and 100")
 	}
@@ -256,6 +260,10 @@ func lookupFloat(key string, def float64) float64 {
 		return def
 	}
 	return parsed
+}
+
+func isFiniteFloat(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func lookupBool(key string, def bool) bool {
