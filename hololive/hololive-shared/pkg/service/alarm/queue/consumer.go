@@ -53,7 +53,11 @@ type Consumer struct {
 type ConsumerOption func(*Consumer)
 
 func WithQueueKey(key string) ConsumerOption {
-	return func(c *Consumer) { c.queueKey = key }
+	return func(c *Consumer) {
+		c.queueKey = key
+		c.retryQueueKey = deriveRetryQueueKey(key)
+		c.dlqKey = deriveDLQKey(key)
+	}
 }
 
 func WithMaxBatch(n int) ConsumerOption {
@@ -79,6 +83,8 @@ func NewConsumer(c cache.Client, logger *slog.Logger, opts ...ConsumerOption) *C
 	for _, opt := range opts {
 		opt(consumer)
 	}
+	consumer.retryQueueKey = deriveRetryQueueKey(consumer.queueKey)
+	consumer.dlqKey = deriveDLQKey(consumer.queueKey)
 	return consumer
 }
 
@@ -180,6 +186,7 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 		if !accepted {
 			continue
 		}
+		normalized.EnsureSourcePayloadFromRaw()
 
 		nextVisibleAt, err := resolveRetryVisibleAt(normalized, now)
 		if err != nil {
@@ -219,14 +226,14 @@ func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueE
 
 	elements := make([]string, 0, len(envelopes))
 	for i := range envelopes {
-		if originalPayload := envelopes[i].OriginalPayload(); originalPayload != "" {
-			elements = append(elements, originalPayload)
-			continue
-		}
-
 		jsonBytes, err := json.Marshal(envelopes[i])
 		if err != nil {
 			return fmt.Errorf("move envelopes to dlq: marshal envelope: %w", err)
+		}
+
+		if shouldPreferOriginalPayload(envelopes[i], string(jsonBytes)) {
+			elements = append(elements, envelopes[i].OriginalPayload())
+			continue
 		}
 		elements = append(elements, string(jsonBytes))
 	}
@@ -425,6 +432,36 @@ func resolveRetryVisibleAt(envelope domain.AlarmQueueEnvelope, now time.Time) (t
 		return time.Time{}, fmt.Errorf("retry_after_ms must be zero or greater")
 	}
 	return now.Add(time.Duration(envelope.Retry.RetryAfterMS) * time.Millisecond), nil
+}
+
+func deriveRetryQueueKey(queueKey string) string {
+	base := strings.TrimSpace(queueKey)
+	if base == "" {
+		base = contractsalarm.DispatchQueueKey
+	}
+	if strings.HasSuffix(base, ":queue") {
+		return strings.TrimSuffix(base, ":queue") + ":retry"
+	}
+	return base + ":retry"
+}
+
+func deriveDLQKey(queueKey string) string {
+	base := strings.TrimSpace(queueKey)
+	if base == "" {
+		base = contractsalarm.DispatchQueueKey
+	}
+	if strings.HasSuffix(base, ":queue") {
+		return strings.TrimSuffix(base, ":queue") + ":dlq"
+	}
+	return base + ":dlq"
+}
+
+func shouldPreferOriginalPayload(envelope domain.AlarmQueueEnvelope, currentPayload string) bool {
+	originalPayload := envelope.OriginalPayload()
+	if originalPayload == "" {
+		return false
+	}
+	return currentPayload == envelope.NormalizedPayload()
 }
 
 // parseEnvelope: JSON을 AlarmQueueEnvelope로 파싱 (v0/v1 지원)

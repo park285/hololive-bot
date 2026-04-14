@@ -189,13 +189,14 @@ func (n *AlarmNotification) ValidateLegacyRoute() error {
 }
 
 type AlarmQueueEnvelope struct {
-	Notification  AlarmNotification        `json:"notification"`
-	ClaimKeys     []string                 `json:"claim_keys"`
-	EnqueuedAt    string                   `json:"enqueued_at"`
-	Version       uint8                    `json:"version"`
-	Retry         *AlarmQueueRetryMetadata `json:"retry,omitempty"`
-	rawPayload    string
-	sourcePayload string
+	Notification      AlarmNotification        `json:"notification"`
+	ClaimKeys         []string                 `json:"claim_keys"`
+	EnqueuedAt        string                   `json:"enqueued_at"`
+	Version           uint8                    `json:"version"`
+	Retry             *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+	rawPayload        string
+	normalizedPayload string
+	sourcePayload     string
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -247,6 +248,23 @@ func (e AlarmQueueEnvelope) OriginalPayload() string {
 	return e.rawPayload
 }
 
+func (e AlarmQueueEnvelope) NormalizedPayload() string {
+	return e.normalizedPayload
+}
+
+func (e AlarmQueueEnvelope) SourcePayload() string {
+	return e.sourcePayload
+}
+
+func (e *AlarmQueueEnvelope) EnsureSourcePayloadFromRaw() {
+	if e == nil {
+		return
+	}
+	if e.sourcePayload == "" && e.rawPayload != "" {
+		e.sourcePayload = e.rawPayload
+	}
+}
+
 func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 	var wire alarmQueueEnvelopeWire
 	if err := json.Unmarshal(data, &wire); err != nil {
@@ -275,9 +293,12 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		rawPayload:    string(data),
 		sourcePayload: wire.SourcePayload,
 	}
-	if e.sourcePayload == "" {
-		e.sourcePayload = e.rawPayload
+
+	normalizedPayload, err := json.Marshal(*e)
+	if err != nil {
+		return err
 	}
+	e.normalizedPayload = string(normalizedPayload)
 
 	return nil
 }
