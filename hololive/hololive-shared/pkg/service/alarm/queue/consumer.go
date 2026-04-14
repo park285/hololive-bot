@@ -24,10 +24,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+	"github.com/valkey-io/valkey-go"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -38,12 +40,14 @@ import (
 const ClaimKeyPrefix = contractsalarm.NotifyClaimKeyPrefix
 
 type Consumer struct {
-	cache        cache.Client
-	queueKey     string
-	blockTimeout time.Duration
-	drainTimeout time.Duration
-	maxBatch     int
-	logger       *slog.Logger
+	cache         cache.Client
+	queueKey      string
+	retryQueueKey string
+	dlqKey        string
+	blockTimeout  time.Duration
+	drainTimeout  time.Duration
+	maxBatch      int
+	logger        *slog.Logger
 }
 
 type ConsumerOption func(*Consumer)
@@ -63,12 +67,14 @@ func NewConsumer(c cache.Client, logger *slog.Logger, opts ...ConsumerOption) *C
 	initQueueMetrics()
 
 	consumer := &Consumer{
-		cache:        c,
-		queueKey:     contractsalarm.DispatchQueueKey,
-		blockTimeout: 1 * time.Second,
-		drainTimeout: 50 * time.Millisecond,
-		maxBatch:     50,
-		logger:       logger,
+		cache:         c,
+		queueKey:      contractsalarm.DispatchQueueKey,
+		retryQueueKey: contractsalarm.DispatchRetryQueueKey,
+		dlqKey:        contractsalarm.DispatchDLQKey,
+		blockTimeout:  1 * time.Second,
+		drainTimeout:  50 * time.Millisecond,
+		maxBatch:      50,
+		logger:        logger,
 	}
 	for _, opt := range opts {
 		opt(consumer)
@@ -91,6 +97,40 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		alarmQueueDrainTotal.WithLabelValues(resultLabel).Inc()
 	}()
 
+	delayed, err := c.drainDelayedRetries(ctx, limit, time.Now().UTC())
+	if err != nil {
+		resultLabel = "error"
+		return nil, fmt.Errorf("drain queue batch: pop delayed retry payloads: %w", err)
+	}
+	for _, raw := range delayed {
+		if envelope, ok := parseEnvelope(raw, c.logger); ok {
+			if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "drain_delayed"); accepted {
+				envelopes = append(envelopes, normalized)
+			}
+		}
+	}
+
+	remaining := limit - len(envelopes)
+	if remaining <= 0 {
+		return envelopes, nil
+	}
+
+	if len(delayed) > 0 {
+		drained, err := c.rpopMany(ctx, remaining)
+		if err != nil {
+			resultLabel = "error"
+			return nil, fmt.Errorf("drain queue batch: pop active payloads after delayed retries: %w", err)
+		}
+		for _, raw := range drained {
+			if envelope, ok := parseEnvelope(raw, c.logger); ok {
+				if normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "drain"); accepted {
+					envelopes = append(envelopes, normalized)
+				}
+			}
+		}
+		return envelopes, nil
+	}
+
 	firstRaw, err := c.brpop(ctx, c.blockTimeout)
 	if err != nil {
 		resultLabel = "error"
@@ -107,7 +147,7 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		}
 	}
 
-	remaining := limit - len(envelopes)
+	remaining = limit - len(envelopes)
 	if remaining <= 0 {
 		return envelopes, nil
 	}
@@ -126,6 +166,77 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	}
 
 	return envelopes, nil
+}
+
+func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if len(envelopes) == 0 {
+		return nil
+	}
+
+	cmds := make([]valkey.Completed, 0, len(envelopes))
+	now := time.Now().UTC()
+	for i := range envelopes {
+		normalized, accepted := c.acceptLegacyEnvelope(ctx, envelopes[i], "schedule_retry")
+		if !accepted {
+			continue
+		}
+
+		nextVisibleAt, err := resolveRetryVisibleAt(normalized, now)
+		if err != nil {
+			return fmt.Errorf("schedule retry envelopes: resolve next visible at: %w", err)
+		}
+
+		jsonBytes, err := json.Marshal(normalized)
+		if err != nil {
+			return fmt.Errorf("schedule retry envelopes: marshal envelope: %w", err)
+		}
+
+		cmds = append(cmds, c.cache.B().Zadd().
+			Key(c.retryQueueKey).
+			ScoreMember().
+			ScoreMember(float64(nextVisibleAt.UnixMilli()), string(jsonBytes)).
+			Build())
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+
+	results := c.cache.DoMulti(ctx, cmds...)
+	for _, result := range results {
+		if err := result.Error(); err != nil {
+			return fmt.Errorf("schedule retry envelopes: zadd retry queue: %w", err)
+		}
+	}
+	alarmQueueRetryScheduled.Add(float64(len(results)))
+	return nil
+}
+
+func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if len(envelopes) == 0 {
+		return nil
+	}
+
+	elements := make([]string, 0, len(envelopes))
+	for i := range envelopes {
+		jsonBytes, err := json.Marshal(envelopes[i])
+		if err != nil {
+			return fmt.Errorf("move envelopes to dlq: marshal envelope: %w", err)
+		}
+		elements = append(elements, string(jsonBytes))
+	}
+
+	cmd := c.cache.B().Lpush().Key(c.dlqKey).Element(elements...).Build()
+	results := c.cache.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		return fmt.Errorf("move envelopes to dlq: lpush dlq: unexpected result count: %d", len(results))
+	}
+	if err := results[0].Error(); err != nil {
+		return fmt.Errorf("move envelopes to dlq: lpush dlq: %w", err)
+	}
+
+	alarmQueueDLQMoved.Add(float64(len(elements)))
+	return nil
 }
 
 func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -202,18 +313,54 @@ func (c *Consumer) acceptLegacyEnvelope(
 			slog.String("alarm_type", string(envelope.Notification.AlarmType)),
 			slog.Any("error", err),
 		)
-			if releaseErr := c.ReleaseClaimKeys(ctx, envelope.ClaimKeys); releaseErr != nil {
-				c.logger.Warn("failed to release claim keys for dropped alarm queue envelope",
+		if releaseErr := c.ReleaseClaimKeys(ctx, envelope.ClaimKeys); releaseErr != nil {
+			c.logger.Warn("failed to release claim keys for dropped alarm queue envelope",
 				slog.String("source", source),
 				slog.String("queue", c.queueKey),
 				slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
 				slog.Any("error", releaseErr),
 			)
-			}
-			return domain.AlarmQueueEnvelope{}, false
+		}
+		return domain.AlarmQueueEnvelope{}, false
 	}
 
 	return envelope, true
+}
+
+const drainDelayedRetriesScript = `
+local members = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
+if #members == 0 then
+  return members
+end
+redis.call('ZREM', KEYS[1], unpack(members))
+return members`
+
+func (c *Consumer) drainDelayedRetries(ctx context.Context, count int, now time.Time) ([]string, error) {
+	if count <= 0 {
+		return nil, nil
+	}
+
+	cmd := c.cache.B().Eval().
+		Script(drainDelayedRetriesScript).
+		Numkeys(1).
+		Key(c.retryQueueKey).
+		Arg(strconv.FormatInt(now.UnixMilli(), 10), strconv.Itoa(count)).
+		Build()
+	results := c.cache.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		return nil, fmt.Errorf("drain delayed retry payloads: unexpected result count: %d", len(results))
+	}
+	values, err := results[0].AsStrSlice()
+	if err != nil {
+		if util.IsValkeyNil(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("drain delayed retry payloads: execute script: %w", err)
+	}
+	if len(values) > 0 {
+		alarmQueueRetryDrained.Add(float64(len(values)))
+	}
+	return values, nil
 }
 
 // brpop: Valkey BRPOP 래퍼
@@ -256,6 +403,23 @@ func (c *Consumer) rpopMany(ctx context.Context, count int) ([]string, error) {
 		return nil, fmt.Errorf("rpop queue payloads: execute command: %w", err)
 	}
 	return values, nil
+}
+
+func resolveRetryVisibleAt(envelope domain.AlarmQueueEnvelope, now time.Time) (time.Time, error) {
+	if envelope.Retry == nil {
+		return time.Time{}, fmt.Errorf("retry metadata is required")
+	}
+	if trimmed := strings.TrimSpace(envelope.Retry.NextVisibleAt); trimmed != "" {
+		nextVisibleAt, err := time.Parse(time.RFC3339Nano, trimmed)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("parse retry next_visible_at: %w", err)
+		}
+		return nextVisibleAt.UTC(), nil
+	}
+	if envelope.Retry.RetryAfterMS < 0 {
+		return time.Time{}, fmt.Errorf("retry_after_ms must be zero or greater")
+	}
+	return now.Add(time.Duration(envelope.Retry.RetryAfterMS) * time.Millisecond), nil
 }
 
 // parseEnvelope: JSON을 AlarmQueueEnvelope로 파싱 (v0/v1 지원)

@@ -30,11 +30,14 @@ import (
 var (
 	queueMetricsInitOnce sync.Once
 
-	alarmQueueDrainDuration prometheus.Histogram
-	alarmQueueDrainBatch    prometheus.Histogram
-	alarmQueueDrainTotal    *prometheus.CounterVec
-	alarmQueueEnvelopeTotal *prometheus.CounterVec
-	alarmQueueClaimReleased prometheus.Counter
+	alarmQueueDrainDuration  prometheus.Histogram
+	alarmQueueDrainBatch     prometheus.Histogram
+	alarmQueueDrainTotal     *prometheus.CounterVec
+	alarmQueueEnvelopeTotal  *prometheus.CounterVec
+	alarmQueueClaimReleased  prometheus.Counter
+	alarmQueueRetryScheduled prometheus.Counter
+	alarmQueueRetryDrained   prometheus.Counter
+	alarmQueueDLQMoved       prometheus.Counter
 )
 
 func initQueueMetrics() {
@@ -75,6 +78,27 @@ func initQueueMetrics() {
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_dispatch_queue_claim_keys_released_total",
 				Help: "Total released alarm dispatch queue claim keys.",
+			},
+		)
+
+		alarmQueueRetryScheduled = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_dispatch_queue_retry_scheduled_total",
+				Help: "Total alarm dispatch queue envelopes scheduled into the delayed retry queue.",
+			},
+		)
+
+		alarmQueueRetryDrained = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_dispatch_queue_retry_drained_total",
+				Help: "Total delayed retry envelopes drained into active processing.",
+			},
+		)
+
+		alarmQueueDLQMoved = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_dispatch_queue_dlq_moved_total",
+				Help: "Total alarm dispatch queue envelopes moved to the dead-letter queue.",
 			},
 		)
 	})

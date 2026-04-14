@@ -33,9 +33,9 @@ import (
 type AlarmType string
 
 const (
-	AlarmTypeLive AlarmType = "LIVE"
+	AlarmTypeLive      AlarmType = "LIVE"
 	AlarmTypeCommunity AlarmType = "COMMUNITY"
-	AlarmTypeShorts AlarmType = "SHORTS"
+	AlarmTypeShorts    AlarmType = "SHORTS"
 )
 
 var AllAlarmTypes = []AlarmType{AlarmTypeLive, AlarmTypeCommunity, AlarmTypeShorts}
@@ -189,10 +189,18 @@ func (n *AlarmNotification) ValidateLegacyRoute() error {
 }
 
 type AlarmQueueEnvelope struct {
-	Notification AlarmNotification `json:"notification"`
-	ClaimKeys    []string          `json:"claim_keys"`
-	EnqueuedAt   string            `json:"enqueued_at"`
-	Version      uint8             `json:"version"`
+	Notification AlarmNotification        `json:"notification"`
+	ClaimKeys    []string                 `json:"claim_keys"`
+	EnqueuedAt   string                   `json:"enqueued_at"`
+	Version      uint8                    `json:"version"`
+	Retry        *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+}
+
+type AlarmQueueRetryMetadata struct {
+	Attempt       int    `json:"attempt,omitempty"`
+	RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
+	NextVisibleAt string `json:"next_visible_at,omitempty"`
+	LastError     string `json:"last_error,omitempty"`
 }
 
 type alarmQueueEnvelopeNotificationWire struct {
@@ -210,6 +218,7 @@ type alarmQueueEnvelopeWire struct {
 	ClaimKeys    []string                           `json:"claim_keys"`
 	EnqueuedAt   string                             `json:"enqueued_at"`
 	Version      uint8                              `json:"version"`
+	Retry        *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
 }
 
 func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
@@ -226,6 +235,7 @@ func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
 		ClaimKeys:  e.ClaimKeys,
 		EnqueuedAt: e.EnqueuedAt,
 		Version:    e.Version,
+		Retry:      e.Retry,
 	})
 }
 
@@ -253,6 +263,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		ClaimKeys:  wire.ClaimKeys,
 		EnqueuedAt: wire.EnqueuedAt,
 		Version:    wire.Version,
+		Retry:      wire.Retry,
 	}
 
 	return nil
