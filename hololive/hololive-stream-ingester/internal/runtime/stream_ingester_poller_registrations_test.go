@@ -33,6 +33,7 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -212,8 +213,8 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 			},
 		},
 		postgres,
-		communityShortsEnabledChannelIDs(operationalChannels),
-		communityShortsEnabledChannelIDs(operationalChannels),
+		communityshorts.EnabledChannelIDs(operationalChannels),
+		communityshorts.EnabledChannelIDs(operationalChannels),
 		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		nil,

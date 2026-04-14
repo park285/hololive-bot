@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
-
-const communityShortsObservationWindowDuration = 24 * time.Hour
 
 type communityShortsObservationWindowWriter interface {
 	EnsureCommunityShortsObservationWindow(ctx context.Context, window *domain.YouTubeCommunityShortsObservationWindow) error
@@ -21,8 +19,8 @@ func (r *StreamIngesterRuntime) ensureCommunityShortsObservationWindow(ctx conte
 		return nil
 	}
 
-	deploymentCompletedAt := communityShortsObservationNow(r.timeNow)
-	window, err := buildCommunityShortsObservationWindow(
+	deploymentCompletedAt := communityshorts.ObservationNow(r.timeNow)
+	window, err := communityshorts.BuildObservationWindow(
 		r.runtimeName(),
 		r.configVersion(),
 		r.CommunityShortsBigBangPolicy,
@@ -50,57 +48,6 @@ func (r *StreamIngesterRuntime) ensureCommunityShortsObservationWindow(ctx conte
 	)
 
 	return nil
-}
-
-func buildCommunityShortsObservationWindow(
-	runtimeName string,
-	appVersion string,
-	policy communityShortsBigBangPolicy,
-	deploymentCompletedAt time.Time,
-) (*domain.YouTubeCommunityShortsObservationWindow, error) {
-	if !policy.Enabled() {
-		return nil, fmt.Errorf("policy is not enabled")
-	}
-
-	normalizedRuntimeName := strings.TrimSpace(runtimeName)
-	if normalizedRuntimeName == "" {
-		return nil, fmt.Errorf("runtime name is empty")
-	}
-
-	normalizedAppVersion := strings.TrimSpace(appVersion)
-	if normalizedAppVersion == "" {
-		return nil, fmt.Errorf("app version is empty")
-	}
-
-	deploymentCompletedAt = deploymentCompletedAt.UTC()
-	if deploymentCompletedAt.IsZero() {
-		return nil, fmt.Errorf("deployment completed at is empty")
-	}
-
-	if policy.TargetChannelCount() <= 0 {
-		return nil, fmt.Errorf("target channel count must be greater than zero")
-	}
-
-	return &domain.YouTubeCommunityShortsObservationWindow{
-		RuntimeName:           normalizedRuntimeName,
-		BigBangCutoverAt:      policy.CutoverAt(),
-		AppVersion:            normalizedAppVersion,
-		TargetChannelCount:    policy.TargetChannelCount(),
-		DeploymentCompletedAt: deploymentCompletedAt,
-		ObservationStartedAt:  deploymentCompletedAt,
-		ObservationEndedAt:    deploymentCompletedAt.Add(communityShortsObservationWindowDuration),
-	}, nil
-}
-
-func communityShortsObservationNow(nowFn func() time.Time) time.Time {
-	if nowFn == nil {
-		return time.Now().UTC()
-	}
-	now := nowFn()
-	if now.IsZero() {
-		return time.Now().UTC()
-	}
-	return now.UTC()
 }
 
 func (r *StreamIngesterRuntime) configVersion() string {

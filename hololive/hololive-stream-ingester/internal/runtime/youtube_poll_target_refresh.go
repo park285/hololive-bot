@@ -9,6 +9,7 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 const youtubePollTargetRefreshInterval = 5 * time.Second
@@ -130,7 +131,7 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 			if hasYouTubePollTargets(r.lastResolvedTargets) {
 				if operational.changed {
 					targets := r.lastResolvedTargets
-					targets.StatsChannelIDs = communityShortsEnabledChannelIDs(operationalChannels)
+					targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operationalChannels)
 					if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
 						r.applyResolvedTargets(targets)
 					}

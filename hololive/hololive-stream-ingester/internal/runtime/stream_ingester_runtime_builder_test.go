@@ -42,6 +42,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -305,8 +306,8 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
 				cfg.Scraper,
 				infra.postgresService,
-				communityShortsEnabledChannelIDs(operationalChannels),
-				communityShortsEnabledChannelIDs(operationalChannels),
+				communityshorts.EnabledChannelIDs(operationalChannels),
+				communityshorts.EnabledChannelIDs(operationalChannels),
 				buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL),
 				infra.cacheService,
 				infra.irisClient,

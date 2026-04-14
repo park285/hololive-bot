@@ -11,6 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 type ingestionRuntimeYouTubeState struct {
@@ -42,7 +43,7 @@ func resolveIngestionRuntimeYouTubeState(
 		return state, nil
 	}
 
-	operationalChannels, err := resolveCommunityShortsOperationalChannelsFromRepository(ctx, infra.memberRepo)
+	operationalChannels, err := communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
 	if err != nil {
 		return state, fmt.Errorf("resolve community shorts operational channels: %w", err)
 	}
@@ -60,7 +61,7 @@ func resolveIngestionRuntimeYouTubeState(
 	state.operationalChannels = operationalChannels
 	state.pollTargets = pollTargets
 	if features.communityShortsBigBangEnabled {
-		state.communityShortsPolicy, err = buildCommunityShortsBigBangPolicy(cfg.Ingestion, operationalChannels)
+		state.communityShortsPolicy, err = communityshorts.BuildPolicy(cfg.Ingestion, operationalChannels)
 		if err != nil {
 			return state, err
 		}
@@ -91,7 +92,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		return deps, nil
 	}
 
-	routeDecider := buildCommunityShortsRouteDecider(state.communityShortsPolicy)
+	routeDecider := communityshorts.BuildRouteDecider(state.communityShortsPolicy)
 	sharedScraperClient := buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL)
 	if err := validatePublishedAtResolverSchemaIfEnabled(ctx, cfg.Scraper, infra.postgresService, logger); err != nil {
 		return deps, fmt.Errorf("validate published_at resolver schema: %w", err)
@@ -130,7 +131,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		},
 		logger,
 	).withOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
-		return resolveCommunityShortsOperationalChannelsFromRepository(ctx, infra.memberRepo)
+		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
 	})
 	deps.youtubeScheduler = infra.ytStack.Scheduler
 	return deps, nil

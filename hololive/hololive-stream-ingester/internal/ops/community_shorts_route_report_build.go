@@ -7,11 +7,11 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 func BuildCommunityShortsRouteVerificationReport(
-	baseline runtimeapp.CommunityShortsTargetBaseline,
+	baseline communityshorts.TargetBaseline,
 	pathUsageRows []outbox.PostDeliveryPathUsage,
 	sendCountRows []outbox.PostSendCount,
 	generatedAt time.Time,
@@ -65,7 +65,7 @@ func BuildCommunityShortsRouteVerificationReport(
 			FinalDeliveryOwner:              baseline.Runtime.FinalDeliveryOwner,
 			CommunityShortsBigBangEnabled:   baseline.Runtime.CommunityShortsBigBangEnabled,
 			CommunityShortsBigBangCutoverAt: cloneRouteReportTime(baseline.Runtime.CommunityShortsBigBangCutoverAt),
-			ExpectedTelemetryPath:           communityShortsNewDeliveryPath,
+			ExpectedTelemetryPath:           communityshorts.NewDeliveryPath,
 		},
 		Summary: CommunityShortsRouteVerificationSummary{
 			TargetChannelCount: len(baseline.Channels),
@@ -96,7 +96,7 @@ func BuildCommunityShortsRouteVerificationReport(
 }
 
 func buildCommunityShortsRouteVerificationRoute(
-	baseRoute runtimeapp.CommunityShortsTargetBaselineChannelRoute,
+	baseRoute communityshorts.TargetBaselineChannelRoute,
 	sendCounts []outbox.PostSendCount,
 	pathUsageIndex map[communityShortsRouteReportContentKey][]outbox.PostDeliveryPathUsage,
 ) CommunityShortsRouteVerificationRoute {
@@ -107,7 +107,7 @@ func buildCommunityShortsRouteVerificationRoute(
 		SubscriberRoomCount:   baseRoute.SubscriberRoomCount,
 		DeploymentTargetOwner: strings.TrimSpace(baseRoute.FinalDeliveryOwner),
 		DeploymentTargetPath:  strings.TrimSpace(baseRoute.FinalDeliveryPath),
-		ExpectedTelemetryPath: communityShortsNewDeliveryPath,
+		ExpectedTelemetryPath: communityshorts.NewDeliveryPath,
 		ObservedPaths:         make([]string, 0),
 	}
 
@@ -165,7 +165,7 @@ func applyCommunityShortsRouteVerificationSummary(
 	} else {
 		summary.DisabledRouteCount++
 	}
-	if route.ActivationState == communityShortsDeliveryModePending {
+	if route.ActivationState == communityshorts.DeliveryModePending {
 		summary.PendingCutoverRouteCount++
 	}
 	if !route.AlarmEnabled {
@@ -201,31 +201,31 @@ func RenderCommunityShortsRouteVerificationMarkdown(report CommunityShortsRouteV
 	builder.WriteString(fallbackRouteReportValue(report.Runtime.FinalDeliveryOwner, "(empty)"))
 	builder.WriteString("`\n")
 	builder.WriteString("- big-bang enabled: `")
-	builder.WriteString(fmt.Sprintf("%t", report.Runtime.CommunityShortsBigBangEnabled))
+	fmt.Fprintf(&builder, "%t", report.Runtime.CommunityShortsBigBangEnabled)
 	builder.WriteString("`\n")
 	builder.WriteString("- telemetry path expectation: `")
 	builder.WriteString(report.Runtime.ExpectedTelemetryPath)
 	builder.WriteString("`\n")
 	builder.WriteString("- summary: target_channels=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.TargetChannelCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.TargetChannelCount)
 	builder.WriteString("`, routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.RouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.RouteCount)
 	builder.WriteString("`, active_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.ActiveRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.ActiveRouteCount)
 	builder.WriteString("`, disabled_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.DisabledRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.DisabledRouteCount)
 	builder.WriteString("`, pending_cutover_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.PendingCutoverRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.PendingCutoverRouteCount)
 	builder.WriteString("`, new_only_usage_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.NewOnlyUsageRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.NewOnlyUsageRouteCount)
 	builder.WriteString("`, no_recent_post_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.NoRecentPostRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.NoRecentPostRouteCount)
 	builder.WriteString("`, no_path_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.NoPathObservedRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.NoPathObservedRouteCount)
 	builder.WriteString("`, unexpected_path_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.UnexpectedPathRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.UnexpectedPathRouteCount)
 	builder.WriteString("`, mixed_path_routes=`")
-	builder.WriteString(fmt.Sprintf("%d", report.Summary.MixedPathRouteCount))
+	fmt.Fprintf(&builder, "%d", report.Summary.MixedPathRouteCount)
 	builder.WriteString("`\n")
 
 	for i := range report.Channels {
@@ -255,19 +255,19 @@ func RenderCommunityShortsRouteVerificationMarkdown(report CommunityShortsRouteV
 			builder.WriteString("`, actual=`")
 			builder.WriteString(fallbackRouteReportValue(route.ActualUsageState, "(empty)"))
 			builder.WriteString("`, rooms=`")
-			builder.WriteString(fmt.Sprintf("%d", route.SubscriberRoomCount))
+			fmt.Fprintf(&builder, "%d", route.SubscriberRoomCount)
 			builder.WriteString("`, posts=`")
-			builder.WriteString(fmt.Sprintf("%d", route.ObservedPostCount))
+			fmt.Fprintf(&builder, "%d", route.ObservedPostCount)
 			builder.WriteString("`, success_posts=`")
-			builder.WriteString(fmt.Sprintf("%d", route.SuccessfulPostCount))
+			fmt.Fprintf(&builder, "%d", route.SuccessfulPostCount)
 			builder.WriteString("`, new_path_posts=`")
-			builder.WriteString(fmt.Sprintf("%d", route.NewPathOnlyPostCount))
+			fmt.Fprintf(&builder, "%d", route.NewPathOnlyPostCount)
 			builder.WriteString("`, mixed_path_posts=`")
-			builder.WriteString(fmt.Sprintf("%d", route.MixedPathPostCount))
+			fmt.Fprintf(&builder, "%d", route.MixedPathPostCount)
 			builder.WriteString("`, unexpected_path_posts=`")
-			builder.WriteString(fmt.Sprintf("%d", route.UnexpectedPathPostCount))
+			fmt.Fprintf(&builder, "%d", route.UnexpectedPathPostCount)
 			builder.WriteString("`, no_path_posts=`")
-			builder.WriteString(fmt.Sprintf("%d", route.NoPathPostCount))
+			fmt.Fprintf(&builder, "%d", route.NoPathPostCount)
 			builder.WriteString("`, observed_paths=")
 			builder.WriteString(formatRouteReportPaths(route.ObservedPaths))
 			builder.WriteString(", latest_published_at=`")

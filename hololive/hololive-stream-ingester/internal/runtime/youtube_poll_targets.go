@@ -9,6 +9,7 @@ import (
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 type youtubePollTargets struct {
@@ -63,7 +64,7 @@ func resolveYouTubePollTargetsFromAlarmChannelIDs(
 	alarmChannelIDs []string,
 	operationalChannels []communityShortsOperationalChannel,
 ) youtubePollTargets {
-	statsChannelIDs := communityShortsEnabledChannelIDs(operationalChannels)
+	statsChannelIDs := communityshorts.EnabledChannelIDs(operationalChannels)
 	allowed := make(map[string]struct{}, len(statsChannelIDs))
 	for _, channelID := range statsChannelIDs {
 		allowed[channelID] = struct{}{}
