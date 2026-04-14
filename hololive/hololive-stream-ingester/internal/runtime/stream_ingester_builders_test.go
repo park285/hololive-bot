@@ -49,6 +49,7 @@ import (
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 type fakeMemberDataProvider struct {
@@ -137,7 +138,7 @@ func mustResolveCommunityShortsOperationalChannels(t *testing.T, membersData dom
 	t.Helper()
 
 	require.NotNil(t, membersData)
-	return resolveCommunityShortsOperationalChannelsFromMembers(membersData.GetAllMembers())
+	return communityshorts.BuildOperationalChannelsFromMembers(membersData.GetAllMembers())
 }
 
 func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
@@ -146,7 +147,7 @@ func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
 	t.Run("accepts distinct active channel targets", func(t *testing.T) {
 		t.Parallel()
 
-		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+		err := communityshorts.ValidateOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
 			members: []*domain.Member{
 				{Name: "Pekora", Org: "Hololive", ChannelID: "UCpekora"},
 				{Name: "Miko", Org: "Hololive", ChannelID: "UCmiko"},
@@ -159,7 +160,7 @@ func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
 	t.Run("rejects active member without channel id", func(t *testing.T) {
 		t.Parallel()
 
-		err := validateCommunityShortsOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
+		err := communityshorts.ValidateOperationalTargets(mustResolveCommunityShortsOperationalChannels(t, &fakeMemberDataProvider{
 			members: []*domain.Member{
 				{Name: "Pekora", Org: "Hololive", ChannelID: ""},
 			},
@@ -179,16 +180,16 @@ func TestValidateCommunityShortsOperationalTargets(t *testing.T) {
 			},
 		})
 		require.Len(t, channels, 1)
-		assert.Equal(t, "Pekora (Hololive)", channels[0].ownerLabel)
-		assert.Equal(t, "UCdup", channels[0].channelID)
-		require.NoError(t, validateCommunityShortsOperationalTargets(channels))
+		assert.Equal(t, "Pekora (Hololive)", channels[0].OwnerLabel)
+		assert.Equal(t, "UCdup", channels[0].ChannelID)
+		require.NoError(t, communityshorts.ValidateOperationalTargets(channels))
 	})
 }
 
 func TestResolveCommunityShortsOperationalChannelsFromMembers(t *testing.T) {
 	t.Parallel()
 
-	channels := resolveCommunityShortsOperationalChannelsFromMembers((&fakeMemberDataProvider{
+	channels := communityshorts.BuildOperationalChannelsFromMembers((&fakeMemberDataProvider{
 		members: []*domain.Member{
 			{Name: "Pekora", Org: "Hololive", ChannelID: "  UCpekora  "},
 			{Name: "Miko", Org: "Hololive", ChannelID: "   "},
@@ -197,21 +198,21 @@ func TestResolveCommunityShortsOperationalChannelsFromMembers(t *testing.T) {
 		},
 	}).GetAllMembers())
 	require.Len(t, channels, 2)
-	assert.Equal(t, "Pekora (Hololive)", channels[0].ownerLabel)
-	assert.Equal(t, "UCpekora", channels[0].channelID)
-	assert.True(t, channels[0].enabled)
-	assert.Equal(t, "Miko (Hololive)", channels[1].ownerLabel)
-	assert.Equal(t, "", channels[1].channelID)
-	assert.False(t, channels[1].enabled)
-	assert.Equal(t, []string{"UCpekora"}, communityShortsEnabledChannelIDs(channels))
+	assert.Equal(t, "Pekora (Hololive)", channels[0].OwnerLabel)
+	assert.Equal(t, "UCpekora", channels[0].ChannelID)
+	assert.True(t, channels[0].Enabled)
+	assert.Equal(t, "Miko (Hololive)", channels[1].OwnerLabel)
+	assert.Equal(t, "", channels[1].ChannelID)
+	assert.False(t, channels[1].Enabled)
+	assert.Equal(t, []string{"UCpekora"}, communityshorts.EnabledChannelIDs(channels))
 }
 
 func TestCommunityShortsEnabledChannelIDs_UsesResolverEnablement(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, []string{"UCenabled"}, communityShortsEnabledChannelIDs([]communityShortsOperationalChannel{
-		{ownerLabel: "Enabled", channelID: "UCenabled", enabled: true},
-		{ownerLabel: "Disabled", channelID: "UCshadow", enabled: false},
+	assert.Equal(t, []string{"UCenabled"}, communityshorts.EnabledChannelIDs([]communityShortsOperationalChannel{
+		{OwnerLabel: "Enabled", ChannelID: "UCenabled", Enabled: true},
+		{OwnerLabel: "Disabled", ChannelID: "UCshadow", Enabled: false},
 	}))
 }
 
@@ -625,8 +626,8 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 			},
 		},
 		&databasemocks.Client{},
-		communityShortsEnabledChannelIDs(operationalChannels),
-		communityShortsEnabledChannelIDs(operationalChannels),
+		communityshorts.EnabledChannelIDs(operationalChannels),
+		communityshorts.EnabledChannelIDs(operationalChannels),
 		buildSharedYouTubeScraperClient(
 			config.ScraperConfig{
 				ProxyEnabled: true,
