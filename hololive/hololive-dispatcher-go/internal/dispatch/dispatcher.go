@@ -24,9 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -37,31 +34,31 @@ import (
 type queueConsumer interface {
 	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
-	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
 type messageSender interface {
 	SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error
 }
 
-type Dispatcher struct {
-	consumer        queueConsumer
-	sender          messageSender
-	renderer        Renderer
-	maxBatch        int
-	parallelism     int
-	logger          *slog.Logger
-	retryBackoff    time.Duration
-	maxSendAttempts int
-	now             func() time.Time
-	parkedMu        sync.Mutex
-	parked          map[string]parkedEnvelope
+type RetryPolicy struct {
+	MaxAttempts   int
+	BaseBackoff   time.Duration
+	MaxBackoff    time.Duration
+	JitterPercent float64
 }
 
-type parkedEnvelope struct {
-	envelope      domain.AlarmQueueEnvelope
-	attempts      int
-	nextAttemptAt time.Time
+type Dispatcher struct {
+	consumer    queueConsumer
+	sender      messageSender
+	renderer    Renderer
+	maxBatch    int
+	parallelism int
+	logger      *slog.Logger
+	retryPolicy RetryPolicy
+	now         func() time.Time
+	randFloat64 func() float64
 }
 
 func NewDispatcher(
@@ -90,18 +87,23 @@ func NewDispatcher(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	initDispatcherMetrics()
 
 	return &Dispatcher{
-		consumer:        consumer,
-		sender:          sender,
-		renderer:        renderer,
-		maxBatch:        maxBatch,
-		parallelism:     parallelism,
-		logger:          logger,
-		retryBackoff:    5 * time.Second,
-		maxSendAttempts: 3,
-		now:             time.Now,
-		parked:          make(map[string]parkedEnvelope),
+		consumer:    consumer,
+		sender:      sender,
+		renderer:    renderer,
+		maxBatch:    maxBatch,
+		parallelism: parallelism,
+		logger:      logger,
+		retryPolicy: RetryPolicy{
+			MaxAttempts:   3,
+			BaseBackoff:   5 * time.Second,
+			MaxBackoff:    30 * time.Second,
+			JitterPercent: 0,
+		},
+		now:         time.Now,
+		randFloat64: func() float64 { return 0.5 },
 	}, nil
 }
 
@@ -123,25 +125,7 @@ func (d *Dispatcher) RunOnce(ctx context.Context) error {
 }
 
 func (d *Dispatcher) nextBatch(ctx context.Context) ([]domain.AlarmQueueEnvelope, error) {
-	envelopes := d.readyParkedEnvelopes(d.maxBatch)
-	remaining := d.maxBatch - len(envelopes)
-	if remaining <= 0 {
-		return envelopes, nil
-	}
-
-	drained, err := d.consumer.DrainBatch(ctx, remaining)
-	if err != nil {
-		if len(envelopes) == 0 {
-			return nil, err
-		}
-		d.logger.Warn("Drain batch failed while parked retries were ready",
-			slog.Int("ready_parked", len(envelopes)),
-			slog.Any("error", err),
-		)
-		return envelopes, nil
-	}
-
-	return append(envelopes, drained...), nil
+	return d.consumer.DrainBatch(ctx, d.maxBatch)
 }
 
 func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGroup) error {
@@ -170,111 +154,123 @@ func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGr
 func (d *Dispatcher) dispatchGroup(ctx context.Context, group NotificationGroup) error {
 	message, err := d.renderer.RenderGroup(ctx, group)
 	if err != nil {
-		d.clearRetryState(group.Envelopes)
 		d.releaseClaimKeys(ctx, group.RoomID, group.ClaimKeys, "render failed")
 		return fmt.Errorf("dispatch group: render message: %w", err)
 	}
 
 	if err := d.sender.SendMessage(ctx, group.RoomID, message); err != nil {
-		d.handleSendFailure(ctx, group.RoomID, group.Envelopes)
+		d.handleSendFailure(ctx, group.RoomID, group.Envelopes, err)
 		return fmt.Errorf("dispatch group: send message: %w", err)
 	}
 
-	d.clearRetryState(group.Envelopes)
 	return nil
 }
 
-func (d *Dispatcher) handleSendFailure(ctx context.Context, roomID string, envelopes []domain.AlarmQueueEnvelope) {
+func (d *Dispatcher) ConfigureRetryPolicy(policy RetryPolicy) error {
+	if policy.MaxAttempts <= 0 {
+		return fmt.Errorf("configure retry policy: max attempts must be positive")
+	}
+	if policy.BaseBackoff <= 0 {
+		return fmt.Errorf("configure retry policy: base backoff must be positive")
+	}
+	if policy.MaxBackoff <= 0 {
+		return fmt.Errorf("configure retry policy: max backoff must be positive")
+	}
+	if policy.MaxBackoff < policy.BaseBackoff {
+		return fmt.Errorf("configure retry policy: max backoff must be greater than or equal to base backoff")
+	}
+	if policy.JitterPercent < 0 || policy.JitterPercent > 100 {
+		return fmt.Errorf("configure retry policy: jitter percent must be between 0 and 100")
+	}
+
+	d.retryPolicy = policy
+	return nil
+}
+
+func (d *Dispatcher) RetryPolicy() RetryPolicy {
+	return d.retryPolicy
+}
+
+func (d *Dispatcher) handleSendFailure(
+	ctx context.Context,
+	roomID string,
+	envelopes []domain.AlarmQueueEnvelope,
+	sendErr error,
+) {
 	if len(envelopes) == 0 {
 		return
 	}
 
-	now := d.now().UTC()
-	parkedCount := 0
-	exhaustedCount := 0
-	releaseClaimKeys := make([]string, 0, len(envelopes))
+	retryEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	dlqEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
+	retryBackoffs := make([]time.Duration, 0, len(envelopes))
 
-	d.parkedMu.Lock()
 	for _, envelope := range envelopes {
-		key := retryEnvelopeKey(envelope)
-		entry := d.parked[key]
-		entry.envelope = envelope
-		entry.attempts++
-		if entry.attempts >= d.maxSendAttempts {
-			delete(d.parked, key)
+		updated := envelope
+		retryMetadata := &domain.AlarmQueueRetryMetadata{}
+		if envelope.Retry != nil {
+			*retryMetadata = *envelope.Retry
+		}
+		retryMetadata.Attempt = nextRetryAttempt(envelope)
+		retryMetadata.LastError = sendErr.Error()
+		dispatcherRetryAttempt.Observe(float64(retryMetadata.Attempt))
+
+		if retryMetadata.Attempt >= d.retryPolicy.MaxAttempts {
+			retryMetadata.RetryAfterMS = 0
+			retryMetadata.NextVisibleAt = ""
+			updated.Retry = retryMetadata
+			dlqEnvelopes = append(dlqEnvelopes, updated)
+			continue
+		}
+
+		backoff := d.retryBackoffForAttempt(retryMetadata.Attempt)
+		retryMetadata.RetryAfterMS = backoff.Milliseconds()
+		retryMetadata.NextVisibleAt = d.now().UTC().Add(backoff).Format(time.RFC3339Nano)
+		updated.Retry = retryMetadata
+		retryEnvelopes = append(retryEnvelopes, updated)
+		retryBackoffs = append(retryBackoffs, backoff)
+	}
+
+	if len(retryEnvelopes) > 0 {
+		if err := d.consumer.ScheduleRetry(ctx, retryEnvelopes); err != nil {
+			d.logger.Warn("Dispatch send failed; schedule retry failed",
+				slog.String("room_id", roomID),
+				slog.Int("retry_envelopes", len(retryEnvelopes)),
+				slog.Any("error", err),
+			)
+		} else {
+			dispatcherRetryScheduled.Add(float64(len(retryEnvelopes)))
+			for _, backoff := range retryBackoffs {
+				dispatcherRetryBackoff.Observe(backoff.Seconds())
+			}
+			d.logger.Warn("Dispatch send failed; scheduled durable retries",
+				slog.String("room_id", roomID),
+				slog.Int("retry_envelopes", len(retryEnvelopes)),
+			)
+		}
+	}
+
+	if len(dlqEnvelopes) > 0 {
+		if err := d.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
+			d.logger.Warn("Dispatch send retries exhausted; move to DLQ failed",
+				slog.String("room_id", roomID),
+				slog.Int("dlq_envelopes", len(dlqEnvelopes)),
+				slog.Any("error", err),
+			)
+			return
+		}
+		dispatcherRetryDLQMoved.WithLabelValues("retry_budget_exhausted").Add(float64(len(dlqEnvelopes)))
+		dispatcherRetryBudgetExhausted.Add(float64(len(dlqEnvelopes)))
+
+		releaseClaimKeys := make([]string, 0, len(dlqEnvelopes))
+		for _, envelope := range dlqEnvelopes {
 			releaseClaimKeys = append(releaseClaimKeys, envelope.ClaimKeys...)
-			exhaustedCount++
-			continue
 		}
-		entry.nextAttemptAt = now.Add(d.retryBackoff)
-		d.parked[key] = entry
-		parkedCount++
-	}
-	remainingParked := len(d.parked)
-	d.parkedMu.Unlock()
-
-	if parkedCount > 0 {
-		d.logger.Warn("Dispatch send failed; parked envelopes for retry",
-			slog.String("room_id", roomID),
-			slog.Int("parked_envelopes", parkedCount),
-			slog.Duration("retry_backoff", d.retryBackoff),
-			slog.Int("remaining_parked", remainingParked),
-		)
-	}
-	if exhaustedCount > 0 {
 		d.releaseClaimKeys(ctx, roomID, releaseClaimKeys, "send retries exhausted")
-		d.logger.Warn("Dispatch send retries exhausted; released claim keys",
+		d.logger.Warn("Dispatch send retries exhausted; moved envelopes to DLQ",
 			slog.String("room_id", roomID),
-			slog.Int("exhausted_envelopes", exhaustedCount),
+			slog.Int("dlq_envelopes", len(dlqEnvelopes)),
 		)
-	}
-}
-
-func (d *Dispatcher) readyParkedEnvelopes(limit int) []domain.AlarmQueueEnvelope {
-	if limit <= 0 {
-		return nil
-	}
-
-	now := d.now().UTC()
-	d.parkedMu.Lock()
-	defer d.parkedMu.Unlock()
-
-	ready := make([]parkedEnvelope, 0, len(d.parked))
-	for _, entry := range d.parked {
-		if entry.nextAttemptAt.After(now) {
-			continue
-		}
-		ready = append(ready, entry)
-	}
-
-	sort.Slice(ready, func(i, j int) bool {
-		if ready[i].nextAttemptAt.Equal(ready[j].nextAttemptAt) {
-			return retryEnvelopeKey(ready[i].envelope) < retryEnvelopeKey(ready[j].envelope)
-		}
-		return ready[i].nextAttemptAt.Before(ready[j].nextAttemptAt)
-	})
-
-	if len(ready) > limit {
-		ready = ready[:limit]
-	}
-
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(ready))
-	for _, entry := range ready {
-		envelopes = append(envelopes, entry.envelope)
-	}
-	return envelopes
-}
-
-func (d *Dispatcher) clearRetryState(envelopes []domain.AlarmQueueEnvelope) {
-	if len(envelopes) == 0 {
-		return
-	}
-
-	d.parkedMu.Lock()
-	defer d.parkedMu.Unlock()
-
-	for _, envelope := range envelopes {
-		delete(d.parked, retryEnvelopeKey(envelope))
 	}
 }
 
@@ -291,32 +287,42 @@ func (d *Dispatcher) releaseClaimKeys(ctx context.Context, roomID string, claimK
 	}
 }
 
-func retryEnvelopeKey(envelope domain.AlarmQueueEnvelope) string {
-	claimKeys := make([]string, 0, len(envelope.ClaimKeys))
-	for _, claimKey := range envelope.ClaimKeys {
-		trimmed := strings.TrimSpace(claimKey)
-		if trimmed == "" {
-			continue
+func (d *Dispatcher) retryBackoffForAttempt(attempt int) time.Duration {
+	if attempt <= 0 {
+		attempt = 1
+	}
+
+	backoff := d.retryPolicy.BaseBackoff
+	for i := 1; i < attempt && backoff < d.retryPolicy.MaxBackoff; i++ {
+		if backoff > d.retryPolicy.MaxBackoff/2 {
+			backoff = d.retryPolicy.MaxBackoff
+			break
 		}
-		claimKeys = append(claimKeys, trimmed)
+		backoff *= 2
 	}
-	if len(claimKeys) > 0 {
-		sort.Strings(claimKeys)
-		return strings.Join(claimKeys, "\x1f")
-	}
-
-	streamID := ""
-	channelID := ""
-	if envelope.Notification.Stream != nil {
-		streamID = strings.TrimSpace(envelope.Notification.Stream.ID)
-		channelID = strings.TrimSpace(envelope.Notification.Stream.ChannelID)
+	if backoff > d.retryPolicy.MaxBackoff {
+		backoff = d.retryPolicy.MaxBackoff
 	}
 
-	return strings.Join([]string{
-		strings.TrimSpace(envelope.Notification.RoomID),
-		envelope.Notification.AlarmType.String(),
-		channelID,
-		streamID,
-		fmt.Sprintf("%d", envelope.Notification.MinutesUntil),
-	}, "\x1f")
+	if d.retryPolicy.JitterPercent <= 0 {
+		return backoff
+	}
+
+	jitterRange := d.retryPolicy.JitterPercent / 100
+	factor := 1 + ((d.randFloat64()*2)-1)*jitterRange
+	if factor < 0 {
+		factor = 0
+	}
+	jittered := time.Duration(float64(backoff) * factor)
+	if jittered > d.retryPolicy.MaxBackoff {
+		return d.retryPolicy.MaxBackoff
+	}
+	return jittered
+}
+
+func nextRetryAttempt(envelope domain.AlarmQueueEnvelope) int {
+	if envelope.Retry == nil || envelope.Retry.Attempt < 0 {
+		return 1
+	}
+	return envelope.Retry.Attempt + 1
 }
