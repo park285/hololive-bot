@@ -21,6 +21,7 @@
 package app
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -140,6 +141,26 @@ func TestLoadConfig_RetryPolicyOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RejectsNonFiniteRetryJitter(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "nan", value: "NaN"},
+		{name: "positive infinity", value: "+Inf"},
+		{name: "negative infinity", value: "-Inf"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setRequiredEnvForLoadConfig(t)
+			t.Setenv("ALARM_DISPATCH_RETRY_JITTER_PERCENT", tc.value)
+
+			if _, err := LoadConfig(); err == nil {
+				t.Fatalf("LoadConfig() with jitter %q expected error, got nil", tc.value)
+			}
+		})
+	}
+}
+
 func TestConfigValidate(t *testing.T) {
 	t.Parallel()
 
@@ -226,5 +247,46 @@ func TestConfigValidate_RequiresValidRetryPolicy(t *testing.T) {
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error, got nil")
+	}
+}
+
+func TestConfigValidate_RejectsNonFiniteRetryJitter(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		value float64
+	}{
+		{name: "nan", value: math.NaN()},
+		{name: "positive infinity", value: math.Inf(1)},
+		{name: "negative infinity", value: math.Inf(-1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{
+				Server: ServerConfig{Port: 30020},
+				Iris: IrisConfig{
+					BaseURL:  "http://localhost:3000",
+					BotToken: "token",
+				},
+				Valkey: cache.Config{
+					Host: "localhost",
+					Port: 6379,
+				},
+				Dispatch: DispatchConfig{
+					QueueKey:           "alarm:dispatch:queue",
+					MaxBatch:           50,
+					Parallelism:        4,
+					ReconnectBackoff:   time.Second,
+					RetryMaxAttempts:   3,
+					RetryBaseBackoff:   5 * time.Second,
+					RetryMaxBackoff:    30 * time.Second,
+					RetryJitterPercent: tc.value,
+				},
+			}
+
+			if err := cfg.Validate(); err == nil {
+				t.Fatalf("Validate() with jitter %v expected error, got nil", tc.value)
+			}
+		})
 	}
 }
