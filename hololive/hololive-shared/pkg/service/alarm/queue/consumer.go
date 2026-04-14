@@ -22,6 +22,7 @@ package queue
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -38,6 +39,8 @@ import (
 )
 
 const ClaimKeyPrefix = contractsalarm.NotifyClaimKeyPrefix
+
+const retryMemberPrefix = "retry-member:v1:"
 
 type Consumer struct {
 	cache         cache.Client
@@ -181,6 +184,7 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 
 	cmds := make([]valkey.Completed, 0, len(envelopes))
 	now := time.Now().UTC()
+	batchToken := strconv.FormatInt(now.UnixNano(), 36)
 	for i := range envelopes {
 		normalized, accepted := c.acceptLegacyEnvelope(ctx, envelopes[i], "schedule_retry")
 		if !accepted {
@@ -198,10 +202,11 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 			return fmt.Errorf("schedule retry envelopes: marshal envelope: %w", err)
 		}
 
+		member := buildRetryMember(nextVisibleAt.UnixMilli(), len(cmds), batchToken, string(jsonBytes))
 		cmds = append(cmds, c.cache.B().Zadd().
 			Key(c.retryQueueKey).
 			ScoreMember().
-			ScoreMember(float64(nextVisibleAt.UnixMilli()), string(jsonBytes)).
+			ScoreMember(float64(nextVisibleAt.UnixMilli()), member).
 			Build())
 	}
 
@@ -372,7 +377,15 @@ func (c *Consumer) drainDelayedRetries(ctx context.Context, count int, now time.
 	if len(values) > 0 {
 		alarmQueueRetryDrained.Add(float64(len(values)))
 	}
-	return values, nil
+	payloads := make([]string, 0, len(values))
+	for _, value := range values {
+		payload, err := unwrapRetryMember(value)
+		if err != nil {
+			return nil, fmt.Errorf("drain delayed retry payloads: unwrap member: %w", err)
+		}
+		payloads = append(payloads, payload)
+	}
+	return payloads, nil
 }
 
 // brpop: Valkey BRPOP 래퍼
@@ -462,6 +475,34 @@ func shouldPreferOriginalPayload(envelope domain.AlarmQueueEnvelope, currentPayl
 		return false
 	}
 	return currentPayload == envelope.NormalizedPayload()
+}
+
+func buildRetryMember(nextVisibleAtMillis int64, index int, batchToken, payload string) string {
+	return fmt.Sprintf(
+		"%s%013d:%06d:%s:%s",
+		retryMemberPrefix,
+		nextVisibleAtMillis,
+		index,
+		batchToken,
+		base64.RawStdEncoding.EncodeToString([]byte(payload)),
+	)
+}
+
+func unwrapRetryMember(member string) (string, error) {
+	if !strings.HasPrefix(member, retryMemberPrefix) {
+		return member, nil
+	}
+
+	parts := strings.SplitN(strings.TrimPrefix(member, retryMemberPrefix), ":", 4)
+	if len(parts) != 4 {
+		return "", fmt.Errorf("invalid retry member wrapper")
+	}
+
+	payload, err := base64.RawStdEncoding.DecodeString(parts[3])
+	if err != nil {
+		return "", fmt.Errorf("decode retry member payload: %w", err)
+	}
+	return string(payload), nil
 }
 
 // parseEnvelope: JSON을 AlarmQueueEnvelope로 파싱 (v0/v1 지원)
