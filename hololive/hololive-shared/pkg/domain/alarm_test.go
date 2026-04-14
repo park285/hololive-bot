@@ -39,6 +39,12 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 		ClaimKeys:  []string{"notified:claim:room1:vid:123:LIVE"},
 		EnqueuedAt: "2026-02-25T13:00:00Z",
 		Version:    1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       2,
+			RetryAfterMS:  1500,
+			NextVisibleAt: "2026-02-25T13:00:01.500Z",
+			LastError:     "temporary upstream timeout",
+		},
 	}
 
 	data, err := json.Marshal(envelope)
@@ -59,6 +65,21 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 	}
 	if len(decoded.ClaimKeys) != 1 {
 		t.Errorf("ClaimKeys len = %d, want 1", len(decoded.ClaimKeys))
+	}
+	if decoded.Retry == nil {
+		t.Fatal("Retry = nil, want metadata")
+	}
+	if decoded.Retry.Attempt != 2 {
+		t.Errorf("Retry.Attempt = %d, want 2", decoded.Retry.Attempt)
+	}
+	if decoded.Retry.RetryAfterMS != 1500 {
+		t.Errorf("Retry.RetryAfterMS = %d, want 1500", decoded.Retry.RetryAfterMS)
+	}
+	if decoded.Retry.NextVisibleAt != "2026-02-25T13:00:01.500Z" {
+		t.Errorf("Retry.NextVisibleAt = %q, want %q", decoded.Retry.NextVisibleAt, "2026-02-25T13:00:01.500Z")
+	}
+	if decoded.Retry.LastError != "temporary upstream timeout" {
+		t.Errorf("Retry.LastError = %q, want %q", decoded.Retry.LastError, "temporary upstream timeout")
 	}
 }
 
@@ -132,6 +153,9 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 	}
 	if _, exists := notif["schedule_change_message"]; exists {
 		t.Error("schedule_change_message는 빈 값일 때 직렬화에 포함되면 안 됨")
+	}
+	if _, exists := raw["retry"]; exists {
+		t.Error("retry는 nil일 때 직렬화에 포함되면 안 됨")
 	}
 }
 

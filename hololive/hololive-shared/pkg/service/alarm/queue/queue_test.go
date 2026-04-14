@@ -87,6 +87,14 @@ func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
 	return items
 }
 
+func mustMarshalEnvelope(t *testing.T, envelope domain.AlarmQueueEnvelope) string {
+	t.Helper()
+
+	raw, err := json.Marshal(envelope)
+	require.NoError(t, err)
+	return string(raw)
+}
+
 func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	publisher := NewPublisher(cacheClient, newTestLogger())
@@ -294,6 +302,167 @@ func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T
 	assert.Equal(t, "existing", envelopes[0].Notification.RoomID)
 	assert.Equal(t, "retry-a", envelopes[1].Notification.RoomID)
 	assert.Equal(t, "retry-b", envelopes[2].Notification.RoomID)
+}
+
+func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	nextVisibleAt := time.Now().UTC().Add(30 * time.Second).Truncate(time.Millisecond)
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-room",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-room"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       2,
+			RetryAfterMS:  30000,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary upstream error",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{envelope}))
+
+	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
+	require.NoError(t, err)
+	require.Len(t, retrySet, 1)
+
+	payload := mustMarshalEnvelope(t, envelope)
+	score, ok := retrySet[payload]
+	require.True(t, ok)
+	assert.Equal(t, float64(nextVisibleAt.UnixMilli()), score)
+	assert.Empty(t, queueItemsOrEmpty(t, mini))
+}
+
+func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	publisher := NewPublisher(cacheClient, newTestLogger())
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	dueAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
+	futureAt := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Millisecond)
+	due := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-due",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-due"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       2,
+			RetryAfterMS:  1000,
+			NextVisibleAt: dueAt.Format(time.RFC3339Nano),
+			LastError:     "transient error",
+		},
+	}
+	future := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-future",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-future"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       3,
+			RetryAfterMS:  120000,
+			NextVisibleAt: futureAt.Format(time.RFC3339Nano),
+			LastError:     "still backing off",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{due, future}))
+	require.NoError(t, publisher.Publish(
+		context.Background(),
+		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "active"},
+		[]string{"notified:claim:active"},
+	))
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 3)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 2)
+	assert.Equal(t, "retry-due", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "active", envelopes[1].Notification.RoomID)
+
+	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
+	require.NoError(t, err)
+	require.Len(t, retrySet, 1)
+	_, ok := retrySet[mustMarshalEnvelope(t, future)]
+	assert.True(t, ok)
+}
+
+func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	publisher := NewPublisher(cacheClient, newTestLogger())
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	futureAt := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Millisecond)
+	future := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-future",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-future"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       2,
+			RetryAfterMS:  120000,
+			NextVisibleAt: futureAt.Format(time.RFC3339Nano),
+			LastError:     "still backing off",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{future}))
+	require.NoError(t, publisher.Publish(
+		context.Background(),
+		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "active-only"},
+		[]string{"notified:claim:active-only"},
+	))
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 2)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 1)
+	assert.Equal(t, "active-only", envelopes[0].Notification.RoomID)
+
+	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
+	require.NoError(t, err)
+	require.Len(t, retrySet, 1)
+	_, ok := retrySet[mustMarshalEnvelope(t, future)]
+	assert.True(t, ok)
+}
+
+func TestConsumerMoveToDLQ_PreservesSerializedEnvelope(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "dlq-room",
+		},
+		ClaimKeys:  []string{"notified:claim:dlq-room"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       5,
+			RetryAfterMS:  5000,
+			NextVisibleAt: time.Now().UTC().Add(5 * time.Second).Format(time.RFC3339Nano),
+			LastError:     "permanent delivery failure",
+		},
+	}
+
+	require.NoError(t, consumer.MoveToDLQ(context.Background(), []domain.AlarmQueueEnvelope{envelope}))
+
+	items, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, mustMarshalEnvelope(t, envelope), items[0])
 }
 
 func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
