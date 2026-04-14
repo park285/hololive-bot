@@ -478,6 +478,68 @@ func TestConsumerDrainBatch_PreservesDeterministicSameTimestampRetryOrdering(t *
 	assert.Equal(t, "retry-a", envelopes[1].Notification.RoomID)
 }
 
+func TestConsumerDrainBatch_PreservesSameTimestampOrderingAcrossSeparateScheduleRetryCalls(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	nextVisibleAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
+	firstA := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-first-call-a",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-first-call-a"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+	firstB := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-first-call-b",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-first-call-b"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+	second := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-second-call",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-second-call"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{firstA, firstB}))
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{second}))
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 3)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 3)
+	assert.Equal(t, "retry-first-call-a", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "retry-first-call-b", envelopes[1].Notification.RoomID)
+	assert.Equal(t, "retry-second-call", envelopes[2].Notification.RoomID)
+}
+
 func TestConsumerScheduleRetry_PreservesDuplicateIdenticalEnvelopes(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
