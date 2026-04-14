@@ -56,13 +56,17 @@ func (r *SimpleRenderer) RenderGroup(_ context.Context, group NotificationGroup)
 
 	for _, notification := range group.Notifications {
 		builder.WriteString("\n\n")
-		builder.WriteString(renderNotification(notification))
+		builder.WriteString(renderNotificationInGroup(notification, group.MinutesUntil))
 	}
 
 	return builder.String(), nil
 }
 
 func renderNotification(notification domain.AlarmNotification) string {
+	return renderNotificationInGroup(notification, -1)
+}
+
+func renderNotificationInGroup(notification domain.AlarmNotification, groupMinutesUntil int) string {
 	memberName := resolveMemberName(notification)
 	title := resolveTitle(notification)
 	url := resolveStreamURL(notification)
@@ -70,6 +74,8 @@ func renderNotification(notification domain.AlarmNotification) string {
 	var builder strings.Builder
 	if notification.MinutesUntil <= 0 {
 		fmt.Fprintf(&builder, "🔔 %s 방송 시작!\n", memberName)
+	} else if groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil {
+		fmt.Fprintf(&builder, "⏰ %s 방송 예정\n", memberName)
 	} else {
 		fmt.Fprintf(&builder, "⏰ %s 방송 %d분 전\n", memberName, notification.MinutesUntil)
 	}
