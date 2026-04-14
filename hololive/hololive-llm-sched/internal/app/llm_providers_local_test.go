@@ -252,7 +252,7 @@ func TestProvideMemberNewsLLMClient_TemperatureZero_LogShowsNotApplied(t *testin
 
 func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 	sensitiveURL := "https://secret-proxy.internal.example.com/v1"
-	sensitiveKey := "sk-super-secret-api-key-12345"
+	sensitiveKey := "test-cliproxy-key-redacted"
 
 	t.Run("MajorEvent error path", func(t *testing.T) {
 		var buf bytes.Buffer
