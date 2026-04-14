@@ -77,7 +77,13 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
 	t.Helper()
 
-	items, err := mini.List(AlarmDispatchQueue)
+	return queueItemsByKeyOrEmpty(t, mini, AlarmDispatchQueue)
+}
+
+func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string) []string {
+	t.Helper()
+
+	items, err := mini.List(key)
 	if err != nil {
 		if strings.Contains(err.Error(), "no such key") {
 			return nil
@@ -304,6 +310,85 @@ func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T
 	assert.Equal(t, "retry-b", envelopes[2].Notification.RoomID)
 }
 
+func TestConsumerQueueKeyAlignmentUsesCustomNamespaceForRetryAndDLQ(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	customQueueKey := "alarm:test:queue"
+	customRetryKey := "alarm:test:retry"
+	customDLQKey := "alarm:test:dlq"
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithQueueKey(customQueueKey), WithMaxBatch(5))
+
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	retryB := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-b",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-b"},
+		EnqueuedAt: now.Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: now.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+	retryA := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-a",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-a"},
+		EnqueuedAt: now.Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: now.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{retryB, retryA}))
+	require.Empty(t, queueItemsByKeyOrEmpty(t, mini, customQueueKey))
+	_, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
+	require.Error(t, err)
+
+	activeRaw := mustMarshalEnvelope(t, domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "active-custom",
+		},
+		EnqueuedAt: now.Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+	})
+	cmd := cacheClient.B().Lpush().Key(customQueueKey).Element(activeRaw).Build()
+	results := cacheClient.DoMulti(context.Background(), cmd)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 3)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 3)
+	assert.Equal(t, "retry-a", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "retry-b", envelopes[1].Notification.RoomID)
+	assert.Equal(t, "active-custom", envelopes[2].Notification.RoomID)
+
+	require.NoError(t, consumer.MoveToDLQ(context.Background(), envelopes[:1]))
+	items, err := mini.List(customDLQKey)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Empty(t, queueItemsByKeyOrEmpty(t, mini, contractsalarm.DispatchDLQKey))
+	assert.Empty(t, queueItemsByKeyOrEmpty(t, mini, customQueueKey))
+
+	retryItems, err := mini.SortedSet(customRetryKey)
+	if err != nil {
+		require.Contains(t, err.Error(), "no such key")
+	} else {
+		assert.Empty(t, retryItems)
+	}
+}
+
 func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
@@ -336,6 +421,51 @@ func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, float64(nextVisibleAt.UnixMilli()), score)
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
+}
+
+func TestConsumerDrainBatch_PreservesDeterministicSameTimestampRetryOrdering(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	nextVisibleAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
+	retryB := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-b",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-b"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+	retryA := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-a",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-a"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{retryB, retryA}))
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 2)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 2)
+	assert.Equal(t, "retry-a", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "retry-b", envelopes[1].Notification.RoomID)
 }
 
 func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *testing.T) {
@@ -498,6 +628,54 @@ func TestConsumerMoveToDLQ_PreservesOriginalLegacyRawPayload(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	assert.Equal(t, legacyRaw, items[0])
+}
+
+func TestConsumerMoveToDLQ_UsesCurrentStateWhenDirectEnvelopeWasMutated(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	legacyRaw := "{\n" +
+		"  \"notification\": {\n" +
+		"    \"room_id\": \"room-direct-mutate\",\n" +
+		"    \"channel\": null,\n" +
+		"    \"stream\": null,\n" +
+		"    \"minutes_until\": 5,\n" +
+		"    \"users\": []\n" +
+		"  },\n" +
+		"  \"claim_keys\": [\"notified:claim:room-direct-mutate\"],\n" +
+		"  \"enqueued_at\": \"2026-02-25T13:00:00Z\",\n" +
+		"  \"version\": 1\n" +
+		"}"
+
+	cmd := cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(legacyRaw).Build()
+	results := cacheClient.DoMulti(context.Background(), cmd)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 1)
+
+	envelopes[0].Retry = &domain.AlarmQueueRetryMetadata{
+		Attempt:       2,
+		RetryAfterMS:  1000,
+		NextVisibleAt: time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano),
+		LastError:     "latest failure",
+	}
+
+	require.NoError(t, consumer.MoveToDLQ(context.Background(), envelopes))
+
+	items, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.NotEqual(t, legacyRaw, items[0])
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(items[0]), &raw))
+	_, hasSourcePayload := raw["source_payload"]
+	assert.False(t, hasSourcePayload)
+	_, hasRetry := raw["retry"]
+	assert.True(t, hasRetry)
 }
 
 func TestConsumerMoveToDLQ_PreservesLegacyRawPayloadAcrossRetryRoundTrip(t *testing.T) {
