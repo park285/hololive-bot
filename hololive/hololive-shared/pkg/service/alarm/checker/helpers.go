@@ -92,42 +92,15 @@ func NormalizeTargetMinutes(targetMinutes []int) []int {
 }
 
 func BuildRuntimeTargetMinutes(alarmAdvanceMinutes int) []int {
-	normalized := normalizeExplicitTargetMinutes([]int{alarmAdvanceMinutes})
-	if len(normalized) == 0 {
-		return cloneDefaultTargetMinutes()
-	}
-
-	switch minute := normalized[0]; {
-	case minute <= 1:
-		return []int{1}
-	case minute == 2:
-		return []int{2, 1}
-	case minute == 3:
-		return []int{3, 1}
-	default:
-		return []int{minute, 3, 1}
-	}
+	return NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes).Clone()
 }
 
 func ResolveConfiguredTargetMinutes(targetMinutes []int) []int {
-	normalized := normalizeExplicitTargetMinutes(targetMinutes)
-	if len(normalized) == 0 {
-		return cloneDefaultTargetMinutes()
-	}
-	if len(normalized) == 1 {
-		return BuildRuntimeTargetMinutes(normalized[0])
-	}
-
-	return normalized
+	return NewTargetMinutePolicyFromConfigured(targetMinutes).Clone()
 }
 
 func ResolvePersistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) []int {
-	resolved := ResolveConfiguredTargetMinutes(targetMinutes)
-	if !shouldHealLegacyPersistedTargetMinutes(alarmAdvanceMinutes, resolved) {
-		return resolved
-	}
-
-	return BuildRuntimeTargetMinutes(alarmAdvanceMinutes)
+	return NewTargetMinutePolicyFromPersisted(alarmAdvanceMinutes, targetMinutes).Clone()
 }
 
 func shouldHealLegacyPersistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) bool {
@@ -147,9 +120,10 @@ func IsTargetMinute(targetMinutes []int, minutesUntil int) bool {
 }
 
 type EvaluationWindow struct {
-	Start  time.Time
-	End    time.Time
-	Capped bool
+	Start              time.Time
+	End                time.Time
+	Capped             bool
+	InitialObservation bool
 }
 
 func ResolveEvaluationWindow(prevCheckedAt, now time.Time, maxLookback time.Duration) EvaluationWindow {
@@ -165,9 +139,10 @@ func ResolveEvaluationWindow(prevCheckedAt, now time.Time, maxLookback time.Dura
 
 	windowStart := now.Add(-maxLookback)
 	window := EvaluationWindow{
-		Start:  windowStart,
-		End:    now,
-		Capped: true,
+		Start:              windowStart,
+		End:                now,
+		Capped:             true,
+		InitialObservation: prevCheckedAt.IsZero(),
 	}
 
 	if !prevCheckedAt.IsZero() {
@@ -191,34 +166,10 @@ func ResolveEvaluationWindow(prevCheckedAt, now time.Time, maxLookback time.Dura
 }
 
 func HighestCrossedTarget(targetMinutes []int, startScheduled time.Time, window EvaluationWindow) (int, bool) {
-	if startScheduled.IsZero() || !window.Start.Before(window.End) {
-		return 0, false
-	}
-
 	resolvedTargets := normalizeExplicitTargetMinutes(targetMinutes)
 	if len(resolvedTargets) == 0 {
 		resolvedTargets = cloneDefaultTargetMinutes()
 	}
 
-	current := minutesUntilFloorZeroClamped(startScheduled, window.End)
-	if slices.Contains(resolvedTargets, current) {
-		return current, true
-	}
-
-	if window.Capped {
-		return 0, false
-	}
-
-	previous := minutesUntilFloorZeroClamped(startScheduled, window.Start)
-	if previous <= current {
-		return 0, false
-	}
-
-	for _, target := range resolvedTargets {
-		if current < target && target <= previous {
-			return target, true
-		}
-	}
-
-	return 0, false
+	return NewTargetMinutePolicy(resolvedTargets).HighestCrossed(startScheduled, window)
 }

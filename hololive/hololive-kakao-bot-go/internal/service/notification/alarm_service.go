@@ -71,7 +71,7 @@ func NewAlarmService(
 
 	initAlarmMetrics()
 
-	targetMinutes := sharedchecker.NormalizeTargetMinutes(advanceMinutes)
+	targetPolicy := sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(advanceMinutes))
 
 	var writer alarmWriter
 
@@ -88,7 +88,7 @@ func NewAlarmService(
 		alarmRepo:       alarmRepo,
 		alarmWriter:     writer,
 		logger:          logger,
-		targetMinutes:   targetMinutes,
+		targetPolicy:    targetPolicy,
 		persistExecutor: newStripedExecutor(alarmPersistStripeCount, alarmPersistStripeQueueCap),
 	}
 
@@ -101,14 +101,7 @@ func (as *AlarmService) getTargetMinutes() []int {
 	as.targetMinutesMu.RLock()
 	defer as.targetMinutesMu.RUnlock()
 
-	if len(as.targetMinutes) == 0 {
-		return []int{5, 3, 1}
-	}
-
-	targetMinutes := make([]int, len(as.targetMinutes))
-	copy(targetMinutes, as.targetMinutes)
-
-	return targetMinutes
+	return as.targetPolicy.Clone()
 }
 
 func (as *AlarmService) GetTargetMinutes() []int {
@@ -116,20 +109,20 @@ func (as *AlarmService) GetTargetMinutes() []int {
 }
 
 func (as *AlarmService) UpdateAlarmAdvanceMinutes(_ context.Context, alarmAdvanceMinutes int) []int {
-	normalized := sharedchecker.BuildRuntimeTargetMinutes(alarmAdvanceMinutes)
+	normalized := sharedchecker.NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes)
 
 	as.targetMinutesMu.Lock()
-	as.targetMinutes = normalized
+	as.targetPolicy = normalized
 	as.targetMinutesMu.Unlock()
 
 	if as.logger != nil {
 		as.logger.Info("Alarm advance minutes updated",
 			slog.Int("alarm_advance_minutes", alarmAdvanceMinutes),
-			slog.Any("target_minutes", normalized),
+			slog.Any("target_minutes", normalized.Clone()),
 		)
 	}
 
-	return normalized
+	return normalized.Clone()
 }
 
 // Close gracefully shuts down the AlarmService, releasing the persist executor.

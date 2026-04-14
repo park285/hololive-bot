@@ -51,7 +51,7 @@ type YouTubeChecker struct {
 	holodexSvc          *holodex.Service
 	tierScheduler       *tier.TieredScheduler
 	dedupSvc            *dedup.Service
-	targetMinutes       []int
+	targetPolicy        sharedchecker.TargetMinutePolicy
 	targetMinutesMu     sync.RWMutex
 	evaluationWindowCap time.Duration
 	logger              *slog.Logger
@@ -92,7 +92,7 @@ func NewYouTubeChecker(
 		holodexSvc:          holodexSvc,
 		tierScheduler:       tierScheduler,
 		dedupSvc:            dedupSvc,
-		targetMinutes:       sharedchecker.NormalizeTargetMinutes(targetMinutes),
+		targetPolicy:        sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,
 		logger:              safeLogger(logger),
 	}, nil
@@ -103,7 +103,7 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 	c.targetMinutesMu.Lock()
 	defer c.targetMinutesMu.Unlock()
 
-	c.targetMinutes = sharedchecker.NormalizeTargetMinutes(targetMinutes)
+	c.targetPolicy = sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes))
 }
 
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
@@ -238,7 +238,8 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 		return nil, nil
 	}
 
-	minutesUntil, ok := sharedchecker.HighestCrossedTarget(c.targetMinutesSnapshot(), *stream.StartScheduled, window)
+	targetPolicy := c.targetPolicySnapshot()
+	minutesUntil, ok := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
 	if !ok {
 		return nil, nil
 	}
@@ -258,10 +259,14 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 }
 
 func (c *YouTubeChecker) targetMinutesSnapshot() []int {
+	return c.targetPolicySnapshot().Clone()
+}
+
+func (c *YouTubeChecker) targetPolicySnapshot() sharedchecker.TargetMinutePolicy {
 	c.targetMinutesMu.RLock()
 	defer c.targetMinutesMu.RUnlock()
 
-	return append([]int(nil), c.targetMinutes...)
+	return c.targetPolicy
 }
 
 func (c *YouTubeChecker) buildLiveCatchupNotifications(
