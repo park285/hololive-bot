@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -50,6 +51,7 @@ type Consumer struct {
 	blockTimeout  time.Duration
 	drainTimeout  time.Duration
 	maxBatch      int
+	retryBatchSeq uint64
 	logger        *slog.Logger
 }
 
@@ -184,7 +186,7 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 
 	cmds := make([]valkey.Completed, 0, len(envelopes))
 	now := time.Now().UTC()
-	batchToken := strconv.FormatInt(now.UnixNano(), 36)
+	batchToken := atomic.AddUint64(&c.retryBatchSeq, 1)
 	for i := range envelopes {
 		normalized, accepted := c.acceptLegacyEnvelope(ctx, envelopes[i], "schedule_retry")
 		if !accepted {
@@ -202,7 +204,7 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 			return fmt.Errorf("schedule retry envelopes: marshal envelope: %w", err)
 		}
 
-		member := buildRetryMember(nextVisibleAt.UnixMilli(), len(cmds), batchToken, string(jsonBytes))
+		member := buildRetryMember(nextVisibleAt.UnixMilli(), batchToken, len(cmds), string(jsonBytes))
 		cmds = append(cmds, c.cache.B().Zadd().
 			Key(c.retryQueueKey).
 			ScoreMember().
@@ -477,13 +479,13 @@ func shouldPreferOriginalPayload(envelope domain.AlarmQueueEnvelope, currentPayl
 	return currentPayload == envelope.NormalizedPayload()
 }
 
-func buildRetryMember(nextVisibleAtMillis int64, index int, batchToken, payload string) string {
+func buildRetryMember(nextVisibleAtMillis int64, batchToken uint64, index int, payload string) string {
 	return fmt.Sprintf(
-		"%s%013d:%06d:%s:%s",
+		"%s%013d:%020d:%06d:%s",
 		retryMemberPrefix,
 		nextVisibleAtMillis,
-		index,
 		batchToken,
+		index,
 		base64.RawStdEncoding.EncodeToString([]byte(payload)),
 	)
 }
