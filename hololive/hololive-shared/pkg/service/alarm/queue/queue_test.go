@@ -101,6 +101,19 @@ func mustMarshalEnvelope(t *testing.T, envelope domain.AlarmQueueEnvelope) strin
 	return string(raw)
 }
 
+func unwrapSingleRetryMember(t *testing.T, retrySet map[string]float64) (string, float64) {
+	t.Helper()
+
+	require.Len(t, retrySet, 1)
+	for member, score := range retrySet {
+		payload, err := unwrapRetryMember(member)
+		require.NoError(t, err)
+		return payload, score
+	}
+	t.Fatal("missing retry member")
+	return "", 0
+}
+
 func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	publisher := NewPublisher(cacheClient, newTestLogger())
@@ -370,8 +383,8 @@ func TestConsumerQueueKeyAlignmentUsesCustomNamespaceForRetryAndDLQ(t *testing.T
 	envelopes, err := consumer.DrainBatch(context.Background(), 3)
 	require.NoError(t, err)
 	require.Len(t, envelopes, 3)
-	assert.Equal(t, "retry-a", envelopes[0].Notification.RoomID)
-	assert.Equal(t, "retry-b", envelopes[1].Notification.RoomID)
+	assert.Equal(t, "retry-b", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "retry-a", envelopes[1].Notification.RoomID)
 	assert.Equal(t, "active-custom", envelopes[2].Notification.RoomID)
 
 	require.NoError(t, consumer.MoveToDLQ(context.Background(), envelopes[:1]))
@@ -414,11 +427,8 @@ func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
 
 	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
 	require.NoError(t, err)
-	require.Len(t, retrySet, 1)
-
-	payload := mustMarshalEnvelope(t, envelope)
-	score, ok := retrySet[payload]
-	require.True(t, ok)
+	payload, score := unwrapSingleRetryMember(t, retrySet)
+	require.Equal(t, mustMarshalEnvelope(t, envelope), payload)
 	assert.Equal(t, float64(nextVisibleAt.UnixMilli()), score)
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
 }
@@ -464,8 +474,84 @@ func TestConsumerDrainBatch_PreservesDeterministicSameTimestampRetryOrdering(t *
 	envelopes, err := consumer.DrainBatch(context.Background(), 2)
 	require.NoError(t, err)
 	require.Len(t, envelopes, 2)
-	assert.Equal(t, "retry-a", envelopes[0].Notification.RoomID)
-	assert.Equal(t, "retry-b", envelopes[1].Notification.RoomID)
+	assert.Equal(t, "retry-b", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "retry-a", envelopes[1].Notification.RoomID)
+}
+
+func TestConsumerScheduleRetry_PreservesDuplicateIdenticalEnvelopes(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	nextVisibleAt := time.Now().UTC().Add(-1 * time.Minute).Truncate(time.Millisecond)
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "duplicate-retry",
+		},
+		ClaimKeys:  []string{"notified:claim:duplicate-retry"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       1,
+			RetryAfterMS:  0,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary failure",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{envelope, envelope}))
+
+	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
+	require.NoError(t, err)
+	require.Len(t, retrySet, 2)
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 2)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 2)
+	assert.Equal(t, "duplicate-retry", envelopes[0].Notification.RoomID)
+	assert.Equal(t, "duplicate-retry", envelopes[1].Notification.RoomID)
+}
+
+func TestResolveRetryVisibleAt_Errors(t *testing.T) {
+	now := time.Now().UTC()
+
+	tests := []struct {
+		name     string
+		envelope domain.AlarmQueueEnvelope
+		wantErr  string
+	}{
+		{
+			name:     "nil retry",
+			envelope: domain.AlarmQueueEnvelope{},
+			wantErr:  "retry metadata is required",
+		},
+		{
+			name: "invalid next_visible_at",
+			envelope: domain.AlarmQueueEnvelope{
+				Retry: &domain.AlarmQueueRetryMetadata{
+					NextVisibleAt: "not-a-time",
+				},
+			},
+			wantErr: "parse retry next_visible_at",
+		},
+		{
+			name: "negative retry_after_ms",
+			envelope: domain.AlarmQueueEnvelope{
+				Retry: &domain.AlarmQueueRetryMetadata{
+					RetryAfterMS: -1,
+				},
+			},
+			wantErr: "retry_after_ms must be zero or greater",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := resolveRetryVisibleAt(tc.envelope, now)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
 }
 
 func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *testing.T) {
@@ -522,8 +608,8 @@ func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *te
 	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
 	require.NoError(t, err)
 	require.Len(t, retrySet, 1)
-	_, ok := retrySet[mustMarshalEnvelope(t, future)]
-	assert.True(t, ok)
+	payload, _ := unwrapSingleRetryMember(t, retrySet)
+	assert.Equal(t, mustMarshalEnvelope(t, future), payload)
 }
 
 func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *testing.T) {
@@ -563,8 +649,8 @@ func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *test
 	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
 	require.NoError(t, err)
 	require.Len(t, retrySet, 1)
-	_, ok := retrySet[mustMarshalEnvelope(t, future)]
-	assert.True(t, ok)
+	payload, _ := unwrapSingleRetryMember(t, retrySet)
+	assert.Equal(t, mustMarshalEnvelope(t, future), payload)
 }
 
 func TestConsumerMoveToDLQ_PreservesSerializedEnvelope(t *testing.T) {
@@ -718,7 +804,9 @@ func TestConsumerMoveToDLQ_PreservesLegacyRawPayloadAcrossRetryRoundTrip(t *test
 	require.Len(t, retrySet, 1)
 
 	var retriedPayload string
-	for payload := range retrySet {
+	for member := range retrySet {
+		payload, unwrapErr := unwrapRetryMember(member)
+		require.NoError(t, unwrapErr)
 		retriedPayload = payload
 	}
 	require.NotEmpty(t, retriedPayload)
