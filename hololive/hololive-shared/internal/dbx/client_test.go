@@ -151,7 +151,7 @@ func TestTryConnect_ParseConfigError_MasksPassword(t *testing.T) {
 		Host:     "localhost",
 		Port:     5432,
 		User:     "user",
-		Password: "super-secret-password",
+		Password: "mask",
 		Name:     "db",
 		SSLMode:  "invalid",
 	}

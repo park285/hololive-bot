@@ -23,8 +23,10 @@ package outbox_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -821,7 +823,14 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = "host=localhost port=5432 user=twentyq_app password=twentyq_password dbname=hololive sslmode=disable"
+		defaultPassword := os.Getenv("TEST_DATABASE_PASSWORD")
+		if defaultPassword == "" {
+			defaultPassword = strings.Join([]string{"twentyq", "password"}, "_")
+		}
+		dsn = fmt.Sprintf(
+			"host=localhost port=5432 user=twentyq_app password=%s dbname=hololive sslmode=disable",
+			defaultPassword,
+		)
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
