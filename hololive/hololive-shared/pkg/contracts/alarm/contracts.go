@@ -23,7 +23,9 @@ package alarm
 import "github.com/kapu/hololive-shared/pkg/domain"
 
 const (
-	DispatchQueueKey = "alarm:dispatch:queue"
+	DispatchQueueKey      = "alarm:dispatch:queue"
+	DispatchRetryQueueKey = "alarm:dispatch:retry"
+	DispatchDLQKey        = "alarm:dispatch:dlq"
 
 	NotifyClaimKeyPrefix        = "notified:claim:"
 	NotifyLogicalClaimKeyPrefix = "notified:claim:event:"
@@ -36,4 +38,12 @@ type AlarmQueueEnvelope struct {
 	ClaimKeys    []string                 `json:"claim_keys"`
 	EnqueuedAt   string                   `json:"enqueued_at"`
 	Version      uint8                    `json:"version"`
+	Retry        *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+}
+
+type AlarmQueueRetryMetadata struct {
+	Attempt       int    `json:"attempt,omitempty"`
+	RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
+	NextVisibleAt string `json:"next_visible_at,omitempty"`
+	LastError     string `json:"last_error,omitempty"`
 }

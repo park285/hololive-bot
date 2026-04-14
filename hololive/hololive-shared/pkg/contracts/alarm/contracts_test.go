@@ -32,6 +32,12 @@ func TestAlarmQueueContractConstants(t *testing.T) {
 	if contractsalarm.DispatchQueueKey != "alarm:dispatch:queue" {
 		t.Fatalf("DispatchQueueKey = %q", contractsalarm.DispatchQueueKey)
 	}
+	if contractsalarm.DispatchRetryQueueKey != "alarm:dispatch:retry" {
+		t.Fatalf("DispatchRetryQueueKey = %q", contractsalarm.DispatchRetryQueueKey)
+	}
+	if contractsalarm.DispatchDLQKey != "alarm:dispatch:dlq" {
+		t.Fatalf("DispatchDLQKey = %q", contractsalarm.DispatchDLQKey)
+	}
 	if contractsalarm.NotifyClaimKeyPrefix != "notified:claim:" {
 		t.Fatalf("NotifyClaimKeyPrefix = %q", contractsalarm.NotifyClaimKeyPrefix)
 	}
@@ -48,8 +54,17 @@ func TestAlarmQueueEnvelopeContract(t *testing.T) {
 
 	env := contractsalarm.AlarmQueueEnvelope{
 		Version: contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &contractsalarm.AlarmQueueRetryMetadata{
+			Attempt:       3,
+			RetryAfterMS:  2500,
+			NextVisibleAt: "2026-02-25T13:00:02.500Z",
+			LastError:     "dispatcher unavailable",
+		},
 	}
 	if env.Version != 1 {
 		t.Fatalf("version = %d, want 1", env.Version)
+	}
+	if env.Retry == nil || env.Retry.Attempt != 3 {
+		t.Fatalf("retry metadata = %+v", env.Retry)
 	}
 }
