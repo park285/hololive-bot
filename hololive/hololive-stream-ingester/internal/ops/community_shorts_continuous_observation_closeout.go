@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 func buildCommunityShortsContinuousObservation24HCloseout(
 	observation CommunityShortsContinuousObservationWindow,
-	baseline runtimeapp.CommunityShortsTargetBaseline,
+	baseline communityshorts.TargetBaseline,
 	sendCounts CommunityShortsSendCountReport,
 	latencyCause CommunityShortsLatencyCauseReport,
 ) CommunityShortsContinuousObservation24HCloseout {
@@ -72,7 +72,7 @@ func buildCommunityShortsContinuousObservation24HCloseout(
 
 func buildCommunityShortsContinuousObservationMissingAlarmCloseout(
 	observation CommunityShortsContinuousObservationWindow,
-	baseline runtimeapp.CommunityShortsTargetBaseline,
+	baseline communityshorts.TargetBaseline,
 	dataset *CommunityShortsAlarmSentHistoryDatasetReport,
 	datasetErr error,
 ) CommunityShortsContinuousObservationMissingAlarmCloseout {
@@ -136,7 +136,7 @@ func buildCommunityShortsContinuousObservationMissingAlarmCloseout(
 
 func buildCommunityShortsContinuousObservationStateConsistencyCloseout(
 	observation CommunityShortsContinuousObservationWindow,
-	baseline runtimeapp.CommunityShortsTargetBaseline,
+	baseline communityshorts.TargetBaseline,
 	dataset *CommunityShortsAlarmSentHistoryDatasetReport,
 	datasetErr error,
 ) CommunityShortsContinuousObservationStateConsistencyCloseout {

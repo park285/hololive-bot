@@ -11,7 +11,7 @@ import (
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
-	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 type CommunityShortsContinuousObservationStatus string
@@ -103,7 +103,7 @@ type CommunityShortsContinuousObservationReport struct {
 	Closeout24H                 CommunityShortsContinuousObservation24HCloseout              `json:"closeout_24h"`
 	MissingAlarmCloseout24H     CommunityShortsContinuousObservationMissingAlarmCloseout     `json:"missing_alarm_closeout_24h"`
 	StateConsistencyCloseout24H CommunityShortsContinuousObservationStateConsistencyCloseout `json:"state_consistency_closeout_24h"`
-	TargetBaseline              runtimeapp.CommunityShortsTargetBaseline                     `json:"target_baseline"`
+	TargetBaseline              communityshorts.TargetBaseline                               `json:"target_baseline"`
 	ChannelSummary              CommunityShortsChannelSummaryReport                          `json:"channel_summary"`
 	SendCounts                  CommunityShortsSendCountReport                               `json:"send_counts"`
 	AlarmSentHistoryDataset     *CommunityShortsAlarmSentHistoryDatasetReport                `json:"alarm_sent_history_dataset,omitempty"`
@@ -151,7 +151,7 @@ func CollectCommunityShortsContinuousObservationReport(
 		return CommunityShortsContinuousObservationReport{}, err
 	}
 
-	targetBaseline, err := runtimeapp.CollectCommunityShortsTargetBaseline(ctx, cfg, logger)
+	targetBaseline, err := communityshorts.CollectTargetBaseline(ctx, cfg, logger)
 	if err != nil {
 		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: target baseline: %w", err)
 	}

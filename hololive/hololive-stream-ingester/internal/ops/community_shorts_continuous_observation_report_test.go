@@ -9,6 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 func TestRenderCommunityShortsContinuousObservationMarkdownIncludes24HCloseout(t *testing.T) {
@@ -32,17 +33,17 @@ func TestRenderCommunityShortsContinuousObservationMarkdownIncludes24HCloseout(t
 			ObservedUntil:         observationEnd,
 			Status:                CommunityShortsContinuousObservationStatusFinalized,
 		},
-		TargetBaseline: CommunityShortsTargetBaseline{
+		TargetBaseline: communityshorts.TargetBaseline{
 			GeneratedAt: generatedAt,
-			Runtime: CommunityShortsTargetBaselineRuntime{
+			Runtime: communityshorts.TargetBaselineRuntime{
 				FinalDeliveryOwner:            "youtube-scraper",
 				CommunityShortsBigBangEnabled: true,
 				TargetChannelCount:            2,
 			},
-			Channels: []CommunityShortsTargetBaselineChannel{{
+			Channels: []communityshorts.TargetBaselineChannel{{
 				OwnerLabel: "Member A",
 				ChannelID:  "UC_A",
-				Routes: []CommunityShortsTargetBaselineChannelRoute{
+				Routes: []communityshorts.TargetBaselineChannelRoute{
 					{AlarmType: domain.AlarmTypeCommunity, AlarmEnabled: true, SubscriberRoomCount: 3, EffectiveDeliveryMode: "new_only"},
 					{AlarmType: domain.AlarmTypeShorts, AlarmEnabled: true, SubscriberRoomCount: 2, EffectiveDeliveryMode: "new_only"},
 				},
@@ -144,7 +145,7 @@ func TestBuildCommunityShortsContinuousObservation24HCloseoutPendingUntilFinaliz
 			ObservedUntil:        observationStart.Add(30 * time.Minute),
 			Status:               CommunityShortsContinuousObservationStatusActive,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		CommunityShortsSendCountReport{Summary: CommunityShortsSendCountSummary{PostCount: 5}},
 		CommunityShortsLatencyCauseReport{Periods: []CommunityShortsLatencyCausePeriodView{{
 			Summary: outbox.PostLatencyPeriodSummary{Label: communityShortsLatencyCauseObservationPeriodLabel},
@@ -179,7 +180,7 @@ func TestBuildCommunityShortsContinuousObservation24HCloseoutFinalizedPassExclud
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		CommunityShortsSendCountReport{Summary: CommunityShortsSendCountSummary{PostCount: 4}},
 		CommunityShortsLatencyCauseReport{Periods: []CommunityShortsLatencyCausePeriodView{{
 			Summary: outbox.PostLatencyPeriodSummary{Label: communityShortsLatencyCauseObservationPeriodLabel},
@@ -210,7 +211,7 @@ func TestBuildCommunityShortsContinuousObservation24HCloseoutUsesInsufficientEvi
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		CommunityShortsSendCountReport{Summary: CommunityShortsSendCountSummary{PostCount: 1}},
 		CommunityShortsLatencyCauseReport{},
 	)
@@ -228,7 +229,7 @@ func TestBuildCommunityShortsContinuousObservationMissingAlarmCloseoutPendingUnt
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusActive,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		&CommunityShortsAlarmSentHistoryDatasetReport{Summary: CommunityShortsAlarmSentHistoryDatasetSummary{MissingAlarmPostCount: 1}},
 		nil,
 	)
@@ -249,7 +250,7 @@ func TestBuildCommunityShortsContinuousObservationMissingAlarmCloseoutFinalizedP
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		&CommunityShortsAlarmSentHistoryDatasetReport{Summary: CommunityShortsAlarmSentHistoryDatasetSummary{
 			ReferenceRowCount:  4,
 			SendStatePostCount: 4,
@@ -273,7 +274,7 @@ func TestBuildCommunityShortsContinuousObservationMissingAlarmCloseoutFinalizedF
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		&CommunityShortsAlarmSentHistoryDatasetReport{Summary: CommunityShortsAlarmSentHistoryDatasetSummary{
 			ReferenceRowCount:         5,
 			SendStatePostCount:        4,
@@ -299,7 +300,7 @@ func TestBuildCommunityShortsContinuousObservationMissingAlarmCloseoutUsesInsuff
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		nil,
 		fmt.Errorf("dataset unavailable"),
 	)
@@ -317,7 +318,7 @@ func TestBuildCommunityShortsContinuousObservationStateConsistencyCloseoutPendin
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusActive,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		&CommunityShortsAlarmSentHistoryDatasetReport{Summary: CommunityShortsAlarmSentHistoryDatasetSummary{
 			ReferenceRowCount:         3,
 			SendStatePostCount:        2,
@@ -348,7 +349,7 @@ func TestBuildCommunityShortsContinuousObservationStateConsistencyCloseoutFinali
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		&CommunityShortsAlarmSentHistoryDatasetReport{Summary: CommunityShortsAlarmSentHistoryDatasetSummary{
 			ReferenceRowCount:      4,
 			SendStatePostCount:     4,
@@ -376,7 +377,7 @@ func TestBuildCommunityShortsContinuousObservationStateConsistencyCloseoutFinali
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		&CommunityShortsAlarmSentHistoryDatasetReport{Summary: CommunityShortsAlarmSentHistoryDatasetSummary{
 			ReferenceRowCount:         5,
 			SendStatePostCount:        4,
@@ -407,7 +408,7 @@ func TestBuildCommunityShortsContinuousObservationStateConsistencyCloseoutUsesIn
 			TargetChannelCount: 2,
 			Status:             CommunityShortsContinuousObservationStatusFinalized,
 		},
-		CommunityShortsTargetBaseline{Runtime: CommunityShortsTargetBaselineRuntime{TargetChannelCount: 2}},
+		communityshorts.TargetBaseline{Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2}},
 		nil,
 		fmt.Errorf("dataset unavailable"),
 	)

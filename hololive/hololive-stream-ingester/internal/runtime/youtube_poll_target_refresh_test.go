@@ -132,8 +132,8 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NEW", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_NEW", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
@@ -177,7 +177,7 @@ func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefres
 		cacheSvc,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{channelID: "UC_NOTIFY", enabled: true}},
+		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
 	)
@@ -220,7 +220,7 @@ func TestYouTubePollTargetRefresher_PreservesExplicitGlobalRegistrationsDuringRe
 		cacheSvc,
 		scheduler,
 		registrations,
-		[]communityShortsOperationalChannel{{channelID: "UC_NOTIFY", enabled: true}},
+		[]communityShortsOperationalChannel{{ChannelID: "UC_NOTIFY", Enabled: true}},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
 	)
@@ -273,15 +273,15 @@ func TestYouTubePollTargetRefresher_RefreshesOperationalRosterAtRuntime(t *testi
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_A", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		newYouTubePollTargetTestLogger(),
 	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
 		return []communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_B", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_B", Enabled: true},
 		}, nil
 	})
 
@@ -335,8 +335,8 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_A", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		newYouTubePollTargetTestLogger(),
@@ -344,8 +344,8 @@ func TestYouTubePollTargetRefresher_FallsBackToLastOperationalRosterOnLoaderErro
 		loadCalls++
 		if loadCalls == 1 {
 			return []communityShortsOperationalChannel{
-				{channelID: "UC_NOTIFY", enabled: true},
-				{channelID: "UC_STATS_B", enabled: true},
+				{ChannelID: "UC_NOTIFY", Enabled: true},
+				{ChannelID: "UC_STATS_B", Enabled: true},
 			}, nil
 		}
 		return nil, assert.AnError
@@ -403,8 +403,8 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_A", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		logger,
@@ -412,8 +412,8 @@ func TestYouTubePollTargetRefresher_LogsOperationalFallbackOnce(t *testing.T) {
 		loadCalls++
 		if loadCalls == 1 {
 			return []communityShortsOperationalChannel{
-				{channelID: "UC_NOTIFY", enabled: true},
-				{channelID: "UC_STATS_B", enabled: true},
+				{ChannelID: "UC_NOTIFY", Enabled: true},
+				{ChannelID: "UC_STATS_B", Enabled: true},
 			}, nil
 		}
 		return nil, assert.AnError
@@ -468,8 +468,8 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenUnchanged(t 
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_A", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		logger,
@@ -525,8 +525,8 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_A", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_NOTIFY"}, nil },
 		logger,
@@ -534,13 +534,13 @@ func TestYouTubePollTargetRefresher_DoesNotLogOperationalRefreshWhenOnlyOrderCha
 		loadCalls++
 		if loadCalls == 1 {
 			return []communityShortsOperationalChannel{
-				{channelID: "UC_NOTIFY", enabled: true},
-				{channelID: "UC_STATS_A", enabled: true},
+				{ChannelID: "UC_NOTIFY", Enabled: true},
+				{ChannelID: "UC_STATS_A", Enabled: true},
 			}, nil
 		}
 		return []communityShortsOperationalChannel{
-			{channelID: "UC_STATS_A", enabled: true},
-			{channelID: "UC_NOTIFY", enabled: true},
+			{ChannelID: "UC_STATS_A", Enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
 		}, nil
 	})
 
@@ -591,8 +591,8 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsAreUnchanged(t *t
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_SAME", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_SAME", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
@@ -649,9 +649,9 @@ func TestYouTubePollTargetRefresherSkipsSyncWhenResolvedTargetsMatchInDifferentO
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY_A", enabled: true},
-			{channelID: "UC_NOTIFY_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_NOTIFY_A", Enabled: true},
+			{ChannelID: "UC_NOTIFY_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return nil, nil },
 		newYouTubePollTargetTestLogger(),
@@ -709,8 +709,8 @@ func TestYouTubePollTargetRefresherFallsBackToDBWhenCacheLookupFails(t *testing.
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_DB_ONLY", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_DB_ONLY", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) { return []string{"UC_DB_ONLY"}, nil },
 		newYouTubePollTargetTestLogger(),
@@ -764,8 +764,8 @@ func TestYouTubePollTargetRefresherRecentEmptyCacheKeepsPreviousResolvedTargetsD
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_OLD", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_OLD", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalled = true
@@ -829,8 +829,8 @@ func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t 
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_A", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_A", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalled = true
@@ -839,8 +839,8 @@ func TestYouTubePollTargetRefresher_EmptyCacheGraceStillRefreshesStatsTargets(t 
 		newYouTubePollTargetTestLogger(),
 	).withOperationalChannelLoader(func(context.Context) ([]communityShortsOperationalChannel, error) {
 		return []communityShortsOperationalChannel{
-			{channelID: "UC_NOTIFY", enabled: true},
-			{channelID: "UC_STATS_B", enabled: true},
+			{ChannelID: "UC_NOTIFY", Enabled: true},
+			{ChannelID: "UC_STATS_B", Enabled: true},
 		}, nil
 	})
 	refresher.lastNonEmptyCacheAt = time.Now()
@@ -896,7 +896,7 @@ func TestYouTubePollTargetRefresherPreservesExplicitEmptyNotificationTargets(t *
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalled = true
@@ -959,10 +959,10 @@ func TestYouTubePollTargetRefresher_PartialCacheShrinkUsesDBValidation(t *testin
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_C", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_C", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1025,10 +1025,10 @@ func TestYouTubePollTargetRefresher_ValidatesSameSizeSetMismatchAgainstDB(t *tes
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_C", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_C", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1088,9 +1088,9 @@ func TestYouTubePollTargetRefresher_AllowsCacheOnlyAdditionWithinGrace(t *testin
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			return []string{"UC_A"}, nil
@@ -1148,9 +1148,9 @@ func TestYouTubePollTargetRefresher_DropsCacheOnlyAdditionAfterGraceIfStillMissi
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			return []string{"UC_A"}, nil
@@ -1214,9 +1214,9 @@ func TestYouTubePollTargetRefresher_ExpiredCacheOnlyAdditionDoesNotForceDBValida
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1284,9 +1284,9 @@ func TestYouTubePollTargetRefresher_UnexpiredCacheOnlyAdditionStillForcesValidat
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1361,9 +1361,9 @@ func TestYouTubePollTargetRefresher_ClearsCacheOnlyStateWhenCandidateDisappears(
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1427,10 +1427,10 @@ func TestYouTubePollTargetRefresher_ValidatesRemovalAgainstDB(t *testing.T) {
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_C", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_C", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1490,10 +1490,10 @@ func TestYouTubePollTargetRefresher_DBValidationFailureKeepsPreviousTargets(t *t
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_C", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_C", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1556,10 +1556,10 @@ func TestYouTubePollTargetRefresher_DBFallbackShrinkDoesNotRevalidate(t *testing
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_C", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_C", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			dbCalls++
@@ -1617,10 +1617,10 @@ func TestYouTubePollTargetRefresher_DBValidationValidatedMetricAndLog(t *testing
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_C", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_C", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			return []string{"UC_A", "UC_B"}, nil
@@ -1677,9 +1677,9 @@ func TestYouTubePollTargetRefresher_DBValidationFailureMetric(t *testing.T) {
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			return nil, assert.AnError
@@ -1732,9 +1732,9 @@ func TestYouTubePollTargetRefresher_DBValidationSkippedMetric(t *testing.T) {
 		scheduler,
 		registrations,
 		[]communityShortsOperationalChannel{
-			{channelID: "UC_A", enabled: true},
-			{channelID: "UC_B", enabled: true},
-			{channelID: "UC_STATS", enabled: true},
+			{ChannelID: "UC_A", Enabled: true},
+			{ChannelID: "UC_B", Enabled: true},
+			{ChannelID: "UC_STATS", Enabled: true},
 		},
 		func(context.Context) ([]string, error) {
 			return nil, nil

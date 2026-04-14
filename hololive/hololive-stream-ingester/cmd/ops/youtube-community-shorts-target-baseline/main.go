@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	baseline, err := runtimeapp.CollectCommunityShortsTargetBaseline(ctx, cfg, logger)
+	baseline, err := communityshorts.CollectTargetBaseline(ctx, cfg, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to collect community/shorts target baseline: %v\n", err)
 		os.Exit(1)

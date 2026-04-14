@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
@@ -16,27 +17,27 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 	generatedAt := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	since := generatedAt.Add(-24 * time.Hour)
 
-	baseline := CommunityShortsTargetBaseline{
+	baseline := communityshorts.TargetBaseline{
 		GeneratedAt: generatedAt,
-		Runtime: CommunityShortsTargetBaselineRuntime{
-			FinalDeliveryOwner:            youtubeScraperRuntimeName,
+		Runtime: communityshorts.TargetBaselineRuntime{
+			FinalDeliveryOwner:            communityshorts.RuntimeOwnerYouTubeScraper,
 			CommunityShortsBigBangEnabled: true,
 			TargetChannelCount:            3,
 		},
-		Channels: []CommunityShortsTargetBaselineChannel{
+		Channels: []communityshorts.TargetBaselineChannel{
 			{
 				OwnerLabel: "A",
 				ChannelID:  "UC_A",
-				Routes: []CommunityShortsTargetBaselineChannelRoute{
+				Routes: []communityshorts.TargetBaselineChannelRoute{
 					{
 						AlarmType:             domain.AlarmTypeCommunity,
 						SubscriberKey:         "alarm:subscribers:channel:community:UC_A",
 						AlarmEnabled:          true,
 						SubscriberRoomCount:   2,
 						NewPathConfigured:     true,
-						EffectiveDeliveryMode: communityShortsDeliveryModeNew,
-						FinalDeliveryOwner:    youtubeScraperRuntimeName,
-						FinalDeliveryPath:     youtubeScraperRuntimeName + "." + communityShortsNewDeliveryPath,
+						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
 					},
 					{
 						AlarmType:             domain.AlarmTypeShorts,
@@ -44,24 +45,24 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						AlarmEnabled:          true,
 						SubscriberRoomCount:   1,
 						NewPathConfigured:     true,
-						EffectiveDeliveryMode: communityShortsDeliveryModeNew,
-						FinalDeliveryOwner:    youtubeScraperRuntimeName,
-						FinalDeliveryPath:     youtubeScraperRuntimeName + "." + communityShortsNewDeliveryPath,
+						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
 					},
 				},
 			},
 			{
 				OwnerLabel: "B",
 				ChannelID:  "UC_B",
-				Routes: []CommunityShortsTargetBaselineChannelRoute{
+				Routes: []communityshorts.TargetBaselineChannelRoute{
 					{
 						AlarmType:             domain.AlarmTypeCommunity,
 						SubscriberKey:         "alarm:subscribers:channel:community:UC_B",
 						AlarmEnabled:          false,
 						NewPathConfigured:     true,
-						EffectiveDeliveryMode: communityShortsDeliveryModeOff,
-						FinalDeliveryOwner:    youtubeScraperRuntimeName,
-						FinalDeliveryPath:     youtubeScraperRuntimeName + "." + communityShortsNewDeliveryPath,
+						EffectiveDeliveryMode: communityshorts.DeliveryModeOff,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
 					},
 					{
 						AlarmType:             domain.AlarmTypeShorts,
@@ -69,34 +70,34 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						AlarmEnabled:          true,
 						SubscriberRoomCount:   1,
 						NewPathConfigured:     true,
-						EffectiveDeliveryMode: communityShortsDeliveryModeNew,
-						FinalDeliveryOwner:    youtubeScraperRuntimeName,
-						FinalDeliveryPath:     youtubeScraperRuntimeName + "." + communityShortsNewDeliveryPath,
+						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
 					},
 				},
 			},
 			{
 				OwnerLabel: "C",
 				ChannelID:  "UC_C",
-				Routes: []CommunityShortsTargetBaselineChannelRoute{
+				Routes: []communityshorts.TargetBaselineChannelRoute{
 					{
 						AlarmType:             domain.AlarmTypeCommunity,
 						SubscriberKey:         "alarm:subscribers:channel:community:UC_C",
 						AlarmEnabled:          true,
 						SubscriberRoomCount:   1,
 						NewPathConfigured:     true,
-						EffectiveDeliveryMode: communityShortsDeliveryModeNew,
-						FinalDeliveryOwner:    youtubeScraperRuntimeName,
-						FinalDeliveryPath:     youtubeScraperRuntimeName + "." + communityShortsNewDeliveryPath,
+						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
 					},
 					{
 						AlarmType:             domain.AlarmTypeShorts,
 						SubscriberKey:         "alarm:subscribers:channel:shorts:UC_C",
 						AlarmEnabled:          false,
 						NewPathConfigured:     true,
-						EffectiveDeliveryMode: communityShortsDeliveryModeOff,
-						FinalDeliveryOwner:    youtubeScraperRuntimeName,
-						FinalDeliveryPath:     youtubeScraperRuntimeName + "." + communityShortsNewDeliveryPath,
+						EffectiveDeliveryMode: communityshorts.DeliveryModeOff,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
 					},
 				},
 			},
@@ -108,7 +109,7 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 			AlarmType:         domain.AlarmTypeCommunity,
 			ChannelID:         "UC_A",
 			ContentID:         "community-a-1",
-			DeliveryPath:      communityShortsNewDeliveryPath,
+			DeliveryPath:      communityshorts.NewDeliveryPath,
 			ActualPublishedAt: timePtr(generatedAt.Add(-2 * time.Hour)),
 			FirstSuccessAt:    timePtr(generatedAt.Add(-119 * time.Minute)),
 			SuccessSendCount:  2,
@@ -118,7 +119,7 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 			AlarmType:         domain.AlarmTypeShorts,
 			ChannelID:         "UC_A",
 			ContentID:         "short-a-1",
-			DeliveryPath:      communityShortsNewDeliveryPath,
+			DeliveryPath:      communityshorts.NewDeliveryPath,
 			ActualPublishedAt: timePtr(generatedAt.Add(-90 * time.Minute)),
 			FirstSuccessAt:    timePtr(generatedAt.Add(-80 * time.Minute)),
 			SuccessSendCount:  1,
@@ -128,7 +129,7 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 			AlarmType:          domain.AlarmTypeShorts,
 			ChannelID:          "UC_A",
 			ContentID:          "short-a-1",
-			DeliveryPath:       communityShortsLegacyDeliveryPath,
+			DeliveryPath:       communityshorts.LegacyDeliveryPath,
 			ActualPublishedAt:  timePtr(generatedAt.Add(-90 * time.Minute)),
 			FailedAttemptCount: 1,
 		},
@@ -171,16 +172,16 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 	require.Equal(t, 0, report.Summary.UnexpectedPathRouteCount)
 
 	aCommunity := reportRouteFor(t, report, "UC_A", domain.AlarmTypeCommunity)
-	require.Equal(t, communityShortsDeliveryModeNew, aCommunity.ActivationState)
+	require.Equal(t, communityshorts.DeliveryModeNew, aCommunity.ActivationState)
 	require.Equal(t, communityShortsRouteUsageNewOnlyVerified, aCommunity.ActualUsageState)
 	require.Equal(t, 1, aCommunity.ObservedPostCount)
 	require.Equal(t, 1, aCommunity.NewPathOnlyPostCount)
-	require.Equal(t, []string{communityShortsNewDeliveryPath}, aCommunity.ObservedPaths)
+	require.Equal(t, []string{communityshorts.NewDeliveryPath}, aCommunity.ObservedPaths)
 
 	aShorts := reportRouteFor(t, report, "UC_A", domain.AlarmTypeShorts)
 	require.Equal(t, communityShortsRouteUsageMixedPathsDetected, aShorts.ActualUsageState)
 	require.Equal(t, 1, aShorts.MixedPathPostCount)
-	require.Equal(t, []string{communityShortsLegacyDeliveryPath, communityShortsNewDeliveryPath}, aShorts.ObservedPaths)
+	require.Equal(t, []string{communityshorts.LegacyDeliveryPath, communityshorts.NewDeliveryPath}, aShorts.ObservedPaths)
 
 	bShorts := reportRouteFor(t, report, "UC_B", domain.AlarmTypeShorts)
 	require.Equal(t, communityShortsRouteUsageNoPathObserved, bShorts.ActualUsageState)
