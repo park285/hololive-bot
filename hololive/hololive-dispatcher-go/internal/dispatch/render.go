@@ -51,7 +51,7 @@ func (r *SimpleRenderer) RenderGroup(_ context.Context, group NotificationGroup)
 	if group.MinutesUntil <= 0 {
 		builder.WriteString("🔔 방송 시작 알림")
 	} else {
-		fmt.Fprintf(&builder, "⏰ %d분 내 방송 알림", group.MinutesUntil)
+		fmt.Fprintf(&builder, "⏰ 방송 %d분 전 알림", group.MinutesUntil)
 	}
 
 	for _, notification := range group.Notifications {

@@ -96,7 +96,7 @@ func TestSimpleRenderer_RenderGroupMultiple_DetailedFormat(t *testing.T) {
 		t.Fatalf("RenderGroup() error = %v", err)
 	}
 
-	expected := "⏰ 5분 내 방송 알림\n\n" +
+	expected := "⏰ 방송 5분 전 알림\n\n" +
 		"⏰ Member1 방송 예정\n📺 Title1\n🔗 https://youtube.com/watch?v=abc\n\n" +
 		"⏰ Member2 방송 예정\n📺 Title2\n🔗 https://youtube.com/watch?v=def"
 	if message != expected {
@@ -134,7 +134,7 @@ func TestSimpleRenderer_RenderGroupMultiple_KeepsPerItemTimingWhenDifferentFromG
 		t.Fatalf("RenderGroup() error = %v", err)
 	}
 
-	expected := "⏰ 3분 내 방송 알림\n\n" +
+	expected := "⏰ 방송 3분 전 알림\n\n" +
 		"⏰ Member1 방송 예정\n📺 Title1\n🔗 https://youtube.com/watch?v=abc\n\n" +
 		"⏰ Member2 방송 1분 전\n📺 Title2\n🔗 https://youtube.com/watch?v=def"
 	if message != expected {
@@ -168,7 +168,7 @@ func TestSimpleRenderer_RenderGroupMultiple(t *testing.T) {
 		t.Fatalf("RenderGroup() error = %v", err)
 	}
 
-	expected := "⏰ 3분 내 방송 알림\n\n" +
+	expected := "⏰ 방송 3분 전 알림\n\n" +
 		"⏰ 멤버1 방송 예정\n📺 방송1\n🔗 https://youtube.com/watch?v=s1\n\n" +
 		"⏰ 멤버2 방송 1분 전\n📺 방송2\n🔗 https://youtube.com/watch?v=s2"
 	if message != expected {
