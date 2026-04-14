@@ -34,11 +34,12 @@ const (
 )
 
 type AlarmQueueEnvelope struct {
-	Notification domain.AlarmNotification `json:"notification"`
-	ClaimKeys    []string                 `json:"claim_keys"`
-	EnqueuedAt   string                   `json:"enqueued_at"`
-	Version      uint8                    `json:"version"`
-	Retry        *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+	Notification  domain.AlarmNotification `json:"notification"`
+	ClaimKeys     []string                 `json:"claim_keys"`
+	EnqueuedAt    string                   `json:"enqueued_at"`
+	Version       uint8                    `json:"version"`
+	Retry         *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+	SourcePayload string                   `json:"source_payload,omitempty"`
 }
 
 type AlarmQueueRetryMetadata struct {

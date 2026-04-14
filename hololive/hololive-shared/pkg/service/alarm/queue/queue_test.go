@@ -500,6 +500,70 @@ func TestConsumerMoveToDLQ_PreservesOriginalLegacyRawPayload(t *testing.T) {
 	assert.Equal(t, legacyRaw, items[0])
 }
 
+func TestConsumerMoveToDLQ_PreservesLegacyRawPayloadAcrossRetryRoundTrip(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	legacyRaw := "{\n" +
+		"  \"notification\": {\n" +
+		"    \"room_id\": \"room-legacy-retry\",\n" +
+		"    \"channel\": null,\n" +
+		"    \"stream\": null,\n" +
+		"    \"minutes_until\": 3,\n" +
+		"    \"users\": []\n" +
+		"  },\n" +
+		"  \"claim_keys\": [\"notified:claim:room-legacy-retry\"],\n" +
+		"  \"enqueued_at\": \"2026-02-25T13:00:00Z\",\n" +
+		"  \"version\": 1\n" +
+		"}"
+
+	cmd := cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(legacyRaw).Build()
+	results := cacheClient.DoMulti(context.Background(), cmd)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
+
+	drained, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, drained, 1)
+
+	drained[0].Retry = &domain.AlarmQueueRetryMetadata{
+		Attempt:       2,
+		RetryAfterMS:  0,
+		NextVisibleAt: time.Now().UTC().Add(-1 * time.Second).Format(time.RFC3339Nano),
+		LastError:     "temporary failure",
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), drained))
+
+	retrySet, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
+	require.NoError(t, err)
+	require.Len(t, retrySet, 1)
+
+	var retriedPayload string
+	for payload := range retrySet {
+		retriedPayload = payload
+	}
+	require.NotEmpty(t, retriedPayload)
+	require.Contains(t, retriedPayload, "\"source_payload\":")
+
+	retried, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, retried, 1)
+
+	require.NoError(t, consumer.MoveToDLQ(context.Background(), retried))
+
+	items, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, retriedPayload, items[0])
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(items[0]), &raw))
+	sourcePayload, ok := raw["source_payload"].(string)
+	require.True(t, ok)
+	assert.Equal(t, legacyRaw, sourcePayload)
+}
+
 func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	publisher := NewPublisher(cacheClient, newTestLogger())

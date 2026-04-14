@@ -189,12 +189,13 @@ func (n *AlarmNotification) ValidateLegacyRoute() error {
 }
 
 type AlarmQueueEnvelope struct {
-	Notification AlarmNotification        `json:"notification"`
-	ClaimKeys    []string                 `json:"claim_keys"`
-	EnqueuedAt   string                   `json:"enqueued_at"`
-	Version      uint8                    `json:"version"`
-	Retry        *AlarmQueueRetryMetadata `json:"retry,omitempty"`
-	rawPayload   string
+	Notification  AlarmNotification        `json:"notification"`
+	ClaimKeys     []string                 `json:"claim_keys"`
+	EnqueuedAt    string                   `json:"enqueued_at"`
+	Version       uint8                    `json:"version"`
+	Retry         *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+	rawPayload    string
+	sourcePayload string
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -215,11 +216,12 @@ type alarmQueueEnvelopeNotificationWire struct {
 }
 
 type alarmQueueEnvelopeWire struct {
-	Notification alarmQueueEnvelopeNotificationWire `json:"notification"`
-	ClaimKeys    []string                           `json:"claim_keys"`
-	EnqueuedAt   string                             `json:"enqueued_at"`
-	Version      uint8                              `json:"version"`
-	Retry        *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
+	Notification  alarmQueueEnvelopeNotificationWire `json:"notification"`
+	ClaimKeys     []string                           `json:"claim_keys"`
+	EnqueuedAt    string                             `json:"enqueued_at"`
+	Version       uint8                              `json:"version"`
+	Retry         *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
+	SourcePayload string                             `json:"source_payload,omitempty"`
 }
 
 func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
@@ -233,10 +235,11 @@ func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
 			Users:                 e.Notification.Users,
 			ScheduleChangeMessage: e.Notification.ScheduleChangeMessage,
 		},
-		ClaimKeys:  e.ClaimKeys,
-		EnqueuedAt: e.EnqueuedAt,
-		Version:    e.Version,
-		Retry:      e.Retry,
+		ClaimKeys:     e.ClaimKeys,
+		EnqueuedAt:    e.EnqueuedAt,
+		Version:       e.Version,
+		Retry:         e.Retry,
+		SourcePayload: e.sourcePayload,
 	})
 }
 
@@ -265,11 +268,15 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 			Users:                 wire.Notification.Users,
 			ScheduleChangeMessage: wire.Notification.ScheduleChangeMessage,
 		},
-		ClaimKeys:  wire.ClaimKeys,
-		EnqueuedAt: wire.EnqueuedAt,
-		Version:    wire.Version,
-		Retry:      wire.Retry,
-		rawPayload: string(data),
+		ClaimKeys:     wire.ClaimKeys,
+		EnqueuedAt:    wire.EnqueuedAt,
+		Version:       wire.Version,
+		Retry:         wire.Retry,
+		rawPayload:    string(data),
+		sourcePayload: wire.SourcePayload,
+	}
+	if e.sourcePayload == "" {
+		e.sourcePayload = e.rawPayload
 	}
 
 	return nil

@@ -60,11 +60,15 @@ func TestAlarmQueueEnvelopeContract(t *testing.T) {
 			NextVisibleAt: "2026-02-25T13:00:02.500Z",
 			LastError:     "dispatcher unavailable",
 		},
+		SourcePayload: "{\"version\":1}",
 	}
 	if env.Version != 1 {
 		t.Fatalf("version = %d, want 1", env.Version)
 	}
 	if env.Retry == nil || env.Retry.Attempt != 3 {
 		t.Fatalf("retry metadata = %+v", env.Retry)
+	}
+	if env.SourcePayload == "" {
+		t.Fatal("source payload should be set")
 	}
 }
