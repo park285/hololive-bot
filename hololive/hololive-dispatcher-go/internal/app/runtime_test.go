@@ -42,6 +42,8 @@ import (
 type testQueueConsumer struct {
 	drainBatchFunc      func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
 	releaseClaimKeyFunc func(ctx context.Context, claimKeys []string) error
+	scheduleRetryFunc   func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	moveToDLQFunc       func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	requeueFunc         func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
@@ -55,6 +57,20 @@ func (c *testQueueConsumer) DrainBatch(ctx context.Context, maxItems int) ([]dom
 func (c *testQueueConsumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
 	if c.releaseClaimKeyFunc != nil {
 		return c.releaseClaimKeyFunc(ctx, claimKeys)
+	}
+	return nil
+}
+
+func (c *testQueueConsumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if c.scheduleRetryFunc != nil {
+		return c.scheduleRetryFunc(ctx, envelopes)
+	}
+	return nil
+}
+
+func (c *testQueueConsumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	if c.moveToDLQFunc != nil {
+		return c.moveToDLQFunc(ctx, envelopes)
 	}
 	return nil
 }
@@ -184,6 +200,51 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestConfigureDispatcherRetryPolicy_AppliesConfig(t *testing.T) {
+	t.Parallel()
+
+	dispatcher, err := dispatch.NewDispatcher(
+		&testQueueConsumer{},
+		&testMessageSender{},
+		dispatch.NewSimpleRenderer(),
+		1,
+		1,
+		testLogger(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	cfg := DispatchConfig{
+		QueueKey:           "alarm:dispatch:queue",
+		MaxBatch:           1,
+		Parallelism:        1,
+		ReconnectBackoff:   time.Second,
+		RetryMaxAttempts:   7,
+		RetryBaseBackoff:   1500 * time.Millisecond,
+		RetryMaxBackoff:    30 * time.Second,
+		RetryJitterPercent: 12.5,
+	}
+
+	if err := configureDispatcherRetryPolicy(dispatcher, cfg); err != nil {
+		t.Fatalf("configureDispatcherRetryPolicy() error = %v", err)
+	}
+
+	policy := dispatcher.RetryPolicy()
+	if policy.MaxAttempts != 7 {
+		t.Fatalf("RetryPolicy.MaxAttempts = %d, want 7", policy.MaxAttempts)
+	}
+	if policy.BaseBackoff != 1500*time.Millisecond {
+		t.Fatalf("RetryPolicy.BaseBackoff = %v, want %v", policy.BaseBackoff, 1500*time.Millisecond)
+	}
+	if policy.MaxBackoff != 30*time.Second {
+		t.Fatalf("RetryPolicy.MaxBackoff = %v, want %v", policy.MaxBackoff, 30*time.Second)
+	}
+	if policy.JitterPercent != 12.5 {
+		t.Fatalf("RetryPolicy.JitterPercent = %v, want 12.5", policy.JitterPercent)
+	}
 }
 
 func TestRuntimeRun_SignalWaitsForDispatchLoopShutdown(t *testing.T) {
