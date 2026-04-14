@@ -37,15 +37,10 @@ type ServiceAdapter struct {
 }
 
 func NewMemberServiceAdapter(ctx context.Context, cache *Cache, logger *slog.Logger) *ServiceAdapter {
-	if ctx == nil {
-		ctx = context.TODO()
-	} else {
-		ctx = context.WithoutCancel(ctx)
-	}
 	return &ServiceAdapter{
 		cache:  cache,
-		ctx:    ctx,
-		logger: logger,
+		ctx:    memberAdapterContext(ctx),
+		logger: memberAdapterLogger(logger),
 	}
 }
 
@@ -89,7 +84,7 @@ func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
 	members, err := a.LoadAllMembers()
 	if err != nil {
 		a.logger.Warn("repository lookup failed in GetAllMembers", "error", err)
-		return []*domain.Member{}
+		return nil
 	}
 	return members
 }
@@ -105,7 +100,7 @@ func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
 		return nil, fmt.Errorf("member repository is nil")
 	}
 
-	members, err := a.cache.repo.GetAllMembers(a.ctx)
+	members, err := a.cache.repo.GetAllMembers(memberAdapterContext(a.ctx))
 	if err != nil {
 		return nil, fmt.Errorf("load all members from repository: %w", err)
 	}
@@ -119,8 +114,8 @@ func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvi
 	}
 	return &ServiceAdapter{
 		cache:  a.cache,
-		ctx:    ctx,
-		logger: a.logger,
+		ctx:    memberAdapterContext(ctx),
+		logger: memberAdapterLogger(a.logger),
 	}
 }
 
@@ -239,4 +234,18 @@ func cloneMemberSlice(in []*domain.Member) []*domain.Member {
 	out := make([]*domain.Member, len(in))
 	copy(out, in)
 	return out
+}
+
+func memberAdapterContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func memberAdapterLogger(logger *slog.Logger) *slog.Logger {
+	if logger == nil {
+		return slog.Default()
+	}
+	return logger
 }

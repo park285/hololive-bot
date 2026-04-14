@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -88,7 +89,7 @@ type AlarmService struct {
 	alarmRepo       *alarm.Repository
 	alarmWriter     alarmWriter
 	logger          *slog.Logger
-	targetMinutes   []int
+	targetPolicy    sharedchecker.TargetMinutePolicy
 	targetMinutesMu sync.RWMutex
 	platformMapMu   sync.Mutex
 	persistExecutor *stripedExecutor

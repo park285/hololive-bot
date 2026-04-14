@@ -22,6 +22,8 @@ package notification
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,6 +34,13 @@ import (
 type blockingAlarmWriter struct {
 	started chan string
 	block   chan struct{}
+}
+
+type roomAwareBlockingAlarmWriter struct {
+	started     chan string
+	blockRoomID string
+	release     chan struct{}
+	callCount   atomic.Int32
 }
 
 func (w *blockingAlarmWriter) Add(context.Context, *domain.Alarm) error {
@@ -60,6 +69,29 @@ func (w *blockingAlarmWriter) ClearByRoom(context.Context, string) (int64, error
 	default:
 	}
 
+	return 0, nil
+}
+
+func (w *roomAwareBlockingAlarmWriter) Add(_ context.Context, alarm *domain.Alarm) error {
+	w.callCount.Add(1)
+
+	select {
+	case w.started <- alarm.RoomID:
+	default:
+	}
+
+	if alarm.RoomID == w.blockRoomID {
+		<-w.release
+	}
+
+	return nil
+}
+
+func (w *roomAwareBlockingAlarmWriter) Remove(context.Context, string, string) error {
+	return nil
+}
+
+func (w *roomAwareBlockingAlarmWriter) ClearByRoom(context.Context, string) (int64, error) {
 	return 0, nil
 }
 
@@ -105,6 +137,102 @@ func TestAlarmService_PersistWriteThrough_IsRoomKeyedSerialized(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("remove persist did not start in time")
 	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
+	defer cancel()
+
+	require.NoError(t, executor.ShutdownWait(ctx))
+}
+
+func TestStripedExecutor_SubmitReturnsSaturatedWithoutBlocking(t *testing.T) {
+	t.Parallel()
+
+	executor := newStripedExecutor(1, 1)
+
+	blockWorker := make(chan struct{})
+	workerStarted := make(chan struct{}, 1)
+	require.NoError(t, executor.Submit("room-1", func() {
+		select {
+		case workerStarted <- struct{}{}:
+		default:
+		}
+
+		<-blockWorker
+	}))
+
+	select {
+	case <-workerStarted:
+	case <-time.After(1 * time.Second):
+		t.Fatal("worker did not start in time")
+	}
+
+	require.NoError(t, executor.Submit("room-2", func() {}))
+
+	submitDone := make(chan error, 1)
+	go func() {
+		submitDone <- executor.Submit("room-3", func() {})
+	}()
+
+	select {
+	case err := <-submitDone:
+		require.Error(t, err)
+		require.True(t, errors.Is(err, errStripedExecutorSaturated))
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Submit blocked instead of failing fast on saturated stripe")
+	}
+
+	close(blockWorker)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
+	defer cancel()
+
+	require.NoError(t, executor.ShutdownWait(ctx))
+}
+
+func TestAlarmService_PersistWriteThrough_FallsBackInlineWhenExecutorSaturated(t *testing.T) {
+	t.Parallel()
+
+	writer := &roomAwareBlockingAlarmWriter{
+		started:     make(chan string, 3),
+		blockRoomID: "room-1",
+		release:     make(chan struct{}),
+	}
+	executor := newStripedExecutor(1, 1)
+	as := &AlarmService{
+		alarmWriter:     writer,
+		persistExecutor: executor,
+		logger:          newDiscardAlarmLogger(),
+	}
+
+	as.persistAlarmAsync(&domain.Alarm{RoomID: "room-1", ChannelID: "ch-1"})
+
+	select {
+	case got := <-writer.started:
+		require.Equal(t, "room-1", got)
+	case <-time.After(1 * time.Second):
+		t.Fatal("first persist did not start in time")
+	}
+
+	as.persistAlarmAsync(&domain.Alarm{RoomID: "room-2", ChannelID: "ch-2"})
+	as.persistAlarmAsync(&domain.Alarm{RoomID: "room-3", ChannelID: "ch-3"})
+
+	select {
+	case got := <-writer.started:
+		require.Equal(t, "room-3", got)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("inline fallback persist did not execute while executor was saturated")
+	}
+
+	close(writer.release)
+
+	select {
+	case got := <-writer.started:
+		require.Equal(t, "room-2", got)
+	case <-time.After(1 * time.Second):
+		t.Fatal("queued persist did not resume after release")
+	}
+
+	require.EqualValues(t, 3, writer.callCount.Load())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()

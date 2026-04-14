@@ -35,7 +35,7 @@ func testAdapterLogger() *slog.Logger {
 
 type adapterContextKey struct{}
 
-func TestNewMemberServiceAdapter_DetachesCancellation(t *testing.T) {
+func TestNewMemberServiceAdapter_PreservesCancellation(t *testing.T) {
 	parent := context.WithValue(context.Background(), adapterContextKey{}, "value")
 	ctx, cancel := context.WithCancel(parent)
 	cancel()
@@ -44,11 +44,27 @@ func TestNewMemberServiceAdapter_DetachesCancellation(t *testing.T) {
 	if adapter == nil {
 		t.Fatal("adapter is nil")
 	}
-	if err := adapter.ctx.Err(); err != nil {
-		t.Fatalf("adapter ctx should not inherit cancellation, got err=%v", err)
+	if err := adapter.ctx.Err(); err != context.Canceled {
+		t.Fatalf("adapter ctx should preserve cancellation, got err=%v", err)
 	}
 	if got := adapter.ctx.Value(adapterContextKey{}); got != "value" {
 		t.Fatalf("adapter ctx should preserve values, got=%v", got)
+	}
+}
+
+func TestNewMemberServiceAdapter_NilContextUsesBackground(t *testing.T) {
+	adapter := NewMemberServiceAdapter(nil, nil, nil)
+	if adapter == nil {
+		t.Fatal("adapter is nil")
+	}
+	if adapter.ctx == nil {
+		t.Fatal("adapter ctx is nil")
+	}
+	if err := adapter.ctx.Err(); err != nil {
+		t.Fatalf("adapter ctx err = %v, want nil", err)
+	}
+	if adapter.logger == nil {
+		t.Fatal("adapter logger is nil")
 	}
 }
 
@@ -67,12 +83,12 @@ func TestServiceAdapter_WithContext_UsesProvidedContext(t *testing.T) {
 	}
 }
 
-func TestServiceAdapter_LoadAllMembers_ExplicitlyReturnsErrorWhileLegacyGetterStaysEmpty(t *testing.T) {
+func TestServiceAdapter_LoadAllMembers_ExplicitlyReturnsErrorWhileLegacyGetterReturnsNil(t *testing.T) {
 	adapter := NewMemberServiceAdapter(context.Background(), &Cache{}, testAdapterLogger())
 
 	members := adapter.GetAllMembers()
-	if len(members) != 0 {
-		t.Fatalf("GetAllMembers() len = %d, want 0", len(members))
+	if members != nil {
+		t.Fatalf("GetAllMembers() = %+v, want nil", members)
 	}
 
 	_, err := adapter.LoadAllMembers()

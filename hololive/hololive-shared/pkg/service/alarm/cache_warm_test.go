@@ -3,23 +3,27 @@ package alarm
 import (
 	"context"
 	"errors"
-	"sort"
-	"strings"
+	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 )
 
 func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient()
+	cacheSvc := newMemoryCacheClient(t)
 
 	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheSvc, []*domain.Alarm{
 		{
@@ -101,9 +105,43 @@ func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testin
 	assert.Equal(t, "Default User", userName)
 }
 
+func TestWarmSubscriberCacheFromAlarms_UsesBatchedWrites(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	baseCache := newMemoryCacheClient(t)
+	countingCache := &countingWarmCacheClient{Client: baseCache}
+
+	alarms := make([]*domain.Alarm, 0, 48)
+	for i := range 48 {
+		roomID := "room-" + strconv.Itoa(i)
+		userID := "user-" + strconv.Itoa(i)
+
+		alarms = append(alarms, &domain.Alarm{
+			RoomID:     roomID,
+			UserID:     userID,
+			ChannelID:  "UC_BATCH",
+			MemberName: "Member " + strconv.Itoa(i),
+			RoomName:   "Room " + strconv.Itoa(i),
+			UserName:   "User " + strconv.Itoa(i),
+		})
+	}
+
+	summary, err := WarmSubscriberCacheFromAlarms(ctx, countingCache, alarms)
+	require.NoError(t, err)
+	assert.Equal(t, CacheWarmSummary{AlarmCount: 48, RoomCount: 48, ChannelCount: 1}, summary)
+	assert.Less(t, countingCache.sAddCalls, len(alarms)*(3+len(domain.DefaultAlarmTypes)))
+	assert.Zero(t, countingCache.hSetCalls)
+	assert.Equal(t, 3, countingCache.hmSetCalls)
+
+	liveSubscribers, err := countingCache.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_BATCH", domain.AlarmTypeLive))
+	require.NoError(t, err)
+	assert.Len(t, liveSubscribers, len(alarms))
+}
+
 func TestWarmSubscriberCacheFromRepository_RemainsAdditiveByContract(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient()
+	cacheSvc := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
@@ -162,15 +200,23 @@ func TestWarmSubscriberCacheFromRepository_LoadError(t *testing.T) {
 		loadAllAlarmsFromRepository = originalLoader
 	})
 
-	_, err := WarmSubscriberCacheFromRepository(ctx, newMemoryCacheClient(), &Repository{})
+	_, err := WarmSubscriberCacheFromRepository(ctx, newMemoryCacheClient(t), &Repository{})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "warm subscriber cache from repository: load alarms")
 	assert.ErrorContains(t, err, "load failed")
 }
 
+func TestCompactUniqueStrings_TrimsDedupesAndPreservesOrder(t *testing.T) {
+	t.Parallel()
+
+	values := []string{" room-1 ", "", "room-2", "room-1", " room-3 ", "room-2", "room-4"}
+
+	assert.Equal(t, []string{"room-1", "room-2", "room-3", "room-4"}, compactUniqueStrings(values))
+}
+
 func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newMemoryCacheClient()
+	cacheSvc := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
@@ -235,98 +281,171 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 	assert.Equal(t, []string{"room-fresh"}, freshCommunitySubscribers)
 }
 
-func newMemoryCacheClient() *cachemocks.Client {
-	sets := make(map[string]map[string]struct{})
-	hashes := make(map[string]map[string]string)
-	values := make(map[string]struct{})
+type countingWarmCacheClient struct {
+	cache.Client
+	sAddCalls  int
+	hSetCalls  int
+	hmSetCalls int
+}
+
+func (c *countingWarmCacheClient) SAdd(ctx context.Context, key string, members []string) (int64, error) {
+	c.sAddCalls++
+	return c.Client.SAdd(ctx, key, members)
+}
+
+func (c *countingWarmCacheClient) HSet(ctx context.Context, key, field, value string) error {
+	c.hSetCalls++
+	return c.Client.HSet(ctx, key, field, value)
+}
+
+func (c *countingWarmCacheClient) HMSet(ctx context.Context, key string, fields map[string]any) error {
+	c.hmSetCalls++
+	return c.Client.HMSet(ctx, key, fields)
+}
+
+func newMemoryCacheClient(t *testing.T) cache.Client {
+	t.Helper()
+
+	mini := miniredis.RunT(t)
+	rawClient, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:       []string{mini.Addr()},
+		DisableCache:      true,
+		ForceSingleClient: true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	if err := rawClient.Do(ctx, rawClient.B().Ping().Build()).Error(); err != nil {
+		rawClient.Close()
+		mini.Close()
+		t.Fatalf("Ping() error = %v", err)
+	}
 
 	client := cachemocks.NewStrictClient()
-	client.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
-		if sets[key] == nil {
-			sets[key] = make(map[string]struct{})
-		}
-		var added int64
-		for _, member := range members {
-			if _, exists := sets[key][member]; exists {
-				continue
-			}
-			sets[key][member] = struct{}{}
-			added++
-		}
-		return added, nil
-	}
-	client.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		members := make([]string, 0, len(sets[key]))
-		for member := range sets[key] {
-			members = append(members, member)
-		}
-		sort.Strings(members)
-		return members, nil
-	}
-	client.HSetFunc = func(_ context.Context, key, field, value string) error {
-		if hashes[key] == nil {
-			hashes[key] = make(map[string]string)
-		}
-		hashes[key][field] = value
+	client.CloseFunc = func() error {
+		rawClient.Close()
 		return nil
 	}
-	client.HGetFunc = func(_ context.Context, key, field string) (string, error) {
-		if hashes[key] == nil {
+	client.GetClientFunc = func() valkey.Client { return rawClient }
+	client.BFunc = rawClient.B
+	client.BuilderFunc = rawClient.B
+	client.DoMultiFunc = func(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
+		return rawClient.DoMulti(ctx, cmds...)
+	}
+	client.SAddFunc = func(ctx context.Context, key string, members []string) (int64, error) {
+		if len(members) == 0 {
+			return 0, nil
+		}
+
+		resp := rawClient.Do(ctx, rawClient.B().Sadd().Key(key).Member(members...).Build())
+		if resp.Error() != nil {
+			return 0, resp.Error()
+		}
+
+		return resp.AsInt64()
+	}
+	client.SMembersFunc = func(ctx context.Context, key string) ([]string, error) {
+		resp := rawClient.Do(ctx, rawClient.B().Smembers().Key(key).Build())
+		if resp.Error() != nil {
+			return nil, resp.Error()
+		}
+
+		return resp.AsStrSlice()
+	}
+	client.HSetFunc = func(ctx context.Context, key, field, value string) error {
+		return rawClient.Do(ctx, rawClient.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()).Error()
+	}
+	client.HMSetFunc = func(ctx context.Context, key string, fields map[string]any) error {
+		if len(fields) == 0 {
+			return nil
+		}
+
+		builder := rawClient.B().Hset().Key(key).FieldValue()
+		for field, value := range fields {
+			builder = builder.FieldValue(field, fmt.Sprintf("%v", value))
+		}
+
+		return rawClient.Do(ctx, builder.Build()).Error()
+	}
+	client.HGetFunc = func(ctx context.Context, key, field string) (string, error) {
+		resp := rawClient.Do(ctx, rawClient.B().Hget().Key(key).Field(field).Build())
+		if util.IsValkeyNil(resp.Error()) {
 			return "", nil
 		}
-		return hashes[key][field], nil
+		if resp.Error() != nil {
+			return "", resp.Error()
+		}
+
+		return resp.ToString()
 	}
-	client.SetFunc = func(_ context.Context, key string, _ any, _ time.Duration) error {
-		values[key] = struct{}{}
-		return nil
+	client.SetFunc = func(ctx context.Context, key string, value any, ttl time.Duration) error {
+		builder := rawClient.B().Set().Key(key).Value(fmt.Sprintf("%v", value))
+		if ttl > 0 {
+			return rawClient.Do(ctx, builder.ExSeconds(int64(ttl.Seconds())).Build()).Error()
+		}
+
+		return rawClient.Do(ctx, builder.Build()).Error()
 	}
-	client.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-		_, exists := values[key]
-		return exists, nil
+	client.ExistsFunc = func(ctx context.Context, key string) (bool, error) {
+		resp := rawClient.Do(ctx, rawClient.B().Exists().Key(key).Build())
+		if resp.Error() != nil {
+			return false, resp.Error()
+		}
+
+		count, err := resp.AsInt64()
+		if err != nil {
+			return false, err
+		}
+
+		return count > 0, nil
 	}
-	client.ScanKeysFunc = func(_ context.Context, pattern string, _ int64) ([]string, error) {
-		prefix := strings.TrimSuffix(pattern, "*")
-		keys := make([]string, 0)
-		seen := make(map[string]struct{})
-		for key := range sets {
-			if strings.HasPrefix(key, prefix) {
-				seen[key] = struct{}{}
+	client.ScanKeysFunc = func(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
+		if batchSize <= 0 {
+			batchSize = 100
+		}
+
+		var keys []string
+		cursor := uint64(0)
+
+		for {
+			resp := rawClient.Do(ctx, rawClient.B().Scan().Cursor(cursor).Match(pattern).Count(batchSize).Build())
+			if resp.Error() != nil {
+				return nil, resp.Error()
+			}
+
+			entry, err := resp.AsScanEntry()
+			if err != nil {
+				return nil, err
+			}
+
+			keys = append(keys, entry.Elements...)
+			cursor = entry.Cursor
+			if cursor == 0 {
+				return keys, nil
 			}
 		}
-		for key := range hashes {
-			if strings.HasPrefix(key, prefix) {
-				seen[key] = struct{}{}
-			}
-		}
-		for key := range values {
-			if strings.HasPrefix(key, prefix) {
-				seen[key] = struct{}{}
-			}
-		}
-		for key := range seen {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		return keys, nil
 	}
-	client.DelManyFunc = func(_ context.Context, keys []string) (int64, error) {
-		var deleted int64
-		for _, key := range keys {
-			if _, exists := sets[key]; exists {
-				delete(sets, key)
-				deleted++
-			}
-			if _, exists := hashes[key]; exists {
-				delete(hashes, key)
-				deleted++
-			}
-			if _, exists := values[key]; exists {
-				delete(values, key)
-				deleted++
-			}
+	client.DelManyFunc = func(ctx context.Context, keys []string) (int64, error) {
+		if len(keys) == 0 {
+			return 0, nil
 		}
-		return deleted, nil
+
+		resp := rawClient.Do(ctx, rawClient.B().Del().Key(keys...).Build())
+		if resp.Error() != nil {
+			return 0, resp.Error()
+		}
+
+		return resp.AsInt64()
 	}
+
+	t.Cleanup(func() {
+		_ = client.Close()
+		mini.Close()
+	})
 
 	return client
 }

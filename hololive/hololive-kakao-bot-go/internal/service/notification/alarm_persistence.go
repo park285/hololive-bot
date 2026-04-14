@@ -22,6 +22,7 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -44,6 +45,19 @@ func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
 	}
 
 	if err := as.persistExecutor.Submit(roomID, task); err != nil {
+		if errors.Is(err, errStripedExecutorSaturated) {
+			if as.logger != nil {
+				as.logger.Warn("Persist executor saturated, running task inline",
+					slog.String("action", action),
+					slog.String("room_id", roomID),
+				)
+			}
+
+			task()
+
+			return
+		}
+
 		if as.logger != nil {
 			as.logger.Warn("Failed to submit persist task to executor",
 				slog.String("action", action),
@@ -53,10 +67,6 @@ func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
 		}
 	}
 }
-
-// persistAlarmAsync: 알람을 DB에 비동기로 저장한다. (Write-Through)
-// 사용자 응답을 지연시키지 않기 위해 goroutine으로 실행한다.
-//
 
 func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
 	if as.alarmWriter == nil || alarm == nil {
@@ -77,9 +87,6 @@ func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
 	})
 }
 
-// removeAlarmAsync: 알람을 DB에서 비동기로 삭제한다. (Write-Through, 방 기반)
-//
-
 func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
 	if as.alarmWriter == nil {
 		return
@@ -98,9 +105,6 @@ func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
 		}
 	})
 }
-
-// clearRoomAlarmsAsync: 방의 모든 알람을 DB에서 비동기로 삭제한다. (Write-Through)
-//
 
 func (as *AlarmService) clearRoomAlarmsAsync(roomID string) {
 	if as.alarmWriter == nil {
