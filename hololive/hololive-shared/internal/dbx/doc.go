@@ -41,7 +41,7 @@
 //		Host:     "localhost",
 //		Port:     5432,
 //		User:     "myuser",
-//		Password: "mypassword",
+//		Password: "example",
 //		Name:     "mydb",
 //	}
 //
