@@ -259,6 +259,16 @@ func TestDispatcherRunOnce_ScheduleRetryFailurePropagates(t *testing.T) {
 	if runErr := dispatcher.RunOnce(context.Background()); runErr == nil {
 		t.Fatal("expected RunOnce() error, got nil")
 	}
+	if len(fakeConsumer.requeuedEnvelopes) != 1 {
+		t.Fatalf("requeued envelopes = %d, want 1", len(fakeConsumer.requeuedEnvelopes))
+	}
+	retry := fakeConsumer.requeuedEnvelopes[0].Retry
+	if retry == nil {
+		t.Fatal("requeued envelope retry metadata is nil")
+	}
+	if retry.Attempt != 1 {
+		t.Fatalf("requeued retry attempt = %d, want 1", retry.Attempt)
+	}
 	if len(fakeConsumer.releasedClaimKeys) != 0 {
 		t.Fatalf("released claim keys = %d, want 0", len(fakeConsumer.releasedClaimKeys))
 	}
@@ -305,6 +315,16 @@ func TestDispatcherRunOnce_MoveToDLQFailurePropagates(t *testing.T) {
 
 	if runErr := dispatcher.RunOnce(context.Background()); runErr == nil {
 		t.Fatal("expected RunOnce() error, got nil")
+	}
+	if len(fakeConsumer.requeuedEnvelopes) != 1 {
+		t.Fatalf("requeued envelopes = %d, want 1", len(fakeConsumer.requeuedEnvelopes))
+	}
+	retry := fakeConsumer.requeuedEnvelopes[0].Retry
+	if retry == nil {
+		t.Fatal("requeued envelope retry metadata is nil")
+	}
+	if retry.Attempt != 3 {
+		t.Fatalf("requeued retry attempt = %d, want 3", retry.Attempt)
 	}
 	if len(fakeConsumer.releasedClaimKeys) != 0 {
 		t.Fatalf("released claim keys = %d, want 0", len(fakeConsumer.releasedClaimKeys))
