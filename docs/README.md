@@ -7,6 +7,8 @@
 - `current/PROJECT_MAP.md` — 현재 모듈 인벤토리
 - `current/runbooks/README.md` — 현재 운영 runbook 인덱스
 - `current/architecture/README.md` — 현재 governance/architecture 인덱스
+- `current/ALARM_DISPATCH_REMEDIATION_20260414.md` — 알람/디스패처 보강 기준
+- `current/APP_BOOTSTRAP_BOUNDARY_GUIDE.md` — app bootstrap 구조 분리 기준
 
 ## History
 - `history/README.md` — historical 문서 규칙

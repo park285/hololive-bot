@@ -1,6 +1,6 @@
 package bot
 
-func cloneCommandBuilders(src []CommandBuilder) []CommandBuilder {
+func CloneCommandBuilders(src []CommandBuilder) []CommandBuilder {
 	if src == nil {
 		return nil
 	}
@@ -9,4 +9,8 @@ func cloneCommandBuilders(src []CommandBuilder) []CommandBuilder {
 	copy(dst, src)
 
 	return dst
+}
+
+func cloneCommandBuilders(src []CommandBuilder) []CommandBuilder {
+	return CloneCommandBuilders(src)
 }
