@@ -27,15 +27,36 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
 
+var compactAlarmCommandMapping = map[string]string{
+	"알람설정":  "설정",
+	"알림설정":  "설정",
+	"알람추가":  "추가",
+	"알림추가":  "추가",
+	"알람목록":  "목록",
+	"알림목록":  "목록",
+	"알람리스트": "목록",
+	"알림리스트": "목록",
+	"알람제거":  "제거",
+	"알림제거":  "제거",
+	"알람삭제":  "삭제",
+	"알림삭제":  "삭제",
+	"알람초기화": "초기화",
+	"알림초기화": "초기화",
+	"알람리셋":  "초기화",
+	"알림리셋":  "초기화",
+	"알람해제":  "제거",
+	"알림해제":  "제거",
+}
+
 func (ma *MessageAdapter) tryAlarmCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
-	if !ma.isAlarmCommand(command, args) {
+	if !ma.isAlarmCommand(command) {
 		return nil, false
 	}
 
 	return ma.parseAlarmCommand(command, args, raw), true
 }
 
-func (ma *MessageAdapter) isAlarmCommand(cmd string, _ []string) bool {
+func (ma *MessageAdapter) isAlarmCommand(cmd string) bool {
 	return stringutil.ContainsString([]string{"알람", "알림", "알림설정", "알람설정", "alarm"}, cmd)
 }
 
@@ -133,28 +154,7 @@ func (ma *MessageAdapter) extractMemberAndType(args []string) (member, alarmType
 
 // 알람 명령 정규화.
 func normalizeCompactAlarmTokens(command string, args []string) (string, []string, bool) {
-	mapping := map[string]string{
-		"알람설정":  "설정",
-		"알림설정":  "설정",
-		"알람추가":  "추가",
-		"알림추가":  "추가",
-		"알람목록":  "목록",
-		"알림목록":  "목록",
-		"알람리스트": "목록",
-		"알림리스트": "목록",
-		"알람제거":  "제거",
-		"알림제거":  "제거",
-		"알람삭제":  "삭제",
-		"알림삭제":  "삭제",
-		"알람초기화": "초기화",
-		"알림초기화": "초기화",
-		"알람리셋":  "초기화",
-		"알림리셋":  "초기화",
-		"알람해제":  "제거",
-		"알림해제":  "제거",
-	}
-
-	subCmd, ok := mapping[command]
+	subCmd, ok := compactAlarmCommandMapping[command]
 	if !ok {
 		return command, args, false
 	}

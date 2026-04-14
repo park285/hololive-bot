@@ -207,6 +207,19 @@ func shouldRunFinalOutputReview(resp *summaryResponse, assembled string) bool {
 	return len(resp.Highlights) > 1
 }
 
+func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query string, warnMessage string) ([]sharedmodel.SearchResult, bool) {
+	searchCtx, cancel := context.WithTimeout(ctx, searchTimeout)
+	defer cancel()
+
+	results, err := s.searcher.Search(searchCtx, query)
+	if err != nil {
+		s.logger.Warn(warnMessage, slog.String("error", err.Error()))
+		return nil, false
+	}
+
+	return results, true
+}
+
 // runDualSearch: 1차 범용 + 2차 KR 파트너 검색을 병렬 실행하고 병합된 결과를 포맷팅합니다.
 func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType SummaryType, periodKey string) string {
 	if s.searcher == nil {
@@ -220,33 +233,20 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 		wg        sync.WaitGroup
 	)
 
-	// 1차: 범용 Exa 검색
-	wg.Go(func() {
-		searchCtx, cancel := context.WithTimeout(ctx, searchTimeout)
-		defer cancel()
-		r, err := s.searcher.Search(searchCtx, buildSearchQuery(summaryType, periodKey))
-		if err != nil {
-			s.logger.Warn("Exa 1차 검색 실패 (graceful degradation)", slog.String("error", err.Error()))
-			return
-		}
-		mu.Lock()
-		results = r
-		mu.Unlock()
-	})
+	runSearch := func(query string, warnMessage string, dst *[]sharedmodel.SearchResult) {
+		wg.Go(func() {
+			found, ok := s.searchWithTimeout(ctx, query, warnMessage)
+			if !ok {
+				return
+			}
+			mu.Lock()
+			*dst = found
+			mu.Unlock()
+		})
+	}
 
-	// 2차: 한국 파트너 전용 검색
-	wg.Go(func() {
-		searchCtx, cancel := context.WithTimeout(ctx, searchTimeout)
-		defer cancel()
-		r, err := s.searcher.Search(searchCtx, buildKRPartnerSearchQuery(periodKey))
-		if err != nil {
-			s.logger.Warn("Exa KR 2차 검색 실패 (graceful degradation)", slog.String("error", err.Error()))
-			return
-		}
-		mu.Lock()
-		krResults = r
-		mu.Unlock()
-	})
+	runSearch(buildSearchQuery(summaryType, periodKey), "Exa 1차 검색 실패 (graceful degradation)", &results)
+	runSearch(buildKRPartnerSearchQuery(periodKey), "Exa KR 2차 검색 실패 (graceful degradation)", &krResults)
 
 	wg.Wait()
 
