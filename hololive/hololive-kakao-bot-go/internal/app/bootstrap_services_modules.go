@@ -96,7 +96,7 @@ func buildBotDependencyModules(
 		feature: botFeatureModule{
 			majorEventRepo:  majorEventRepo,
 			memberNewsSvc:   memberNewsService,
-			commandBuilders: cloneCommandBuilders(commandBuilders),
+			commandBuilders: bot.CloneCommandBuilders(commandBuilders),
 		},
 	}
 }

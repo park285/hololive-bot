@@ -224,6 +224,56 @@ func TestParseEnvelopeSkipsInvalidJSON(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestConsumerDrainBatch_InvalidPayloadMovesRawPayloadToDLQ(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	require.NoError(t, cacheClient.DoMulti(context.Background(),
+		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element("{invalid-json}").Build(),
+	)[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Empty(t, envelopes)
+
+	dlqItems, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, dlqItems, 1)
+	assert.Equal(t, "{invalid-json}", dlqItems[0])
+}
+
+func TestConsumerDrainBatch_InvalidDelayedRetryMemberMovesRawMemberToDLQ(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	invalidMember := retryMemberPrefix + "broken-wrapper"
+	results := cacheClient.DoMulti(context.Background(),
+		cacheClient.B().Zadd().
+			Key(contractsalarm.DispatchRetryQueueKey).
+			ScoreMember().
+			ScoreMember(float64(time.Now().UTC().UnixMilli()), invalidMember).
+			Build(),
+	)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Empty(t, envelopes)
+
+	retryItems, err := mini.SortedSet(contractsalarm.DispatchRetryQueueKey)
+	if err != nil {
+		require.Contains(t, err.Error(), "no such key")
+	} else {
+		assert.Empty(t, retryItems)
+	}
+
+	dlqItems, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, dlqItems, 1)
+	assert.Equal(t, invalidMember, dlqItems[0])
+}
+
 func TestReleaseClaimKeysFiltersByPrefix(t *testing.T) {
 	captured := make([]string, 0)
 	client := &cachemocks.Client{
@@ -898,7 +948,7 @@ func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 
 	claimKey := "notified:claim:blocked-community"
-	mini.Set(claimKey, "1")
+	require.NoError(t, mini.Set(claimKey, "1"))
 
 	blockedRaw, err := json.Marshal(domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -938,7 +988,7 @@ func TestConsumerRequeue_DropsContentAlarmTypesAndReleasesClaims(t *testing.T) {
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 
 	claimKey := "notified:claim:blocked-shorts"
-	mini.Set(claimKey, "1")
+	require.NoError(t, mini.Set(claimKey, "1"))
 
 	valid := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
