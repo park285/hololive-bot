@@ -140,6 +140,7 @@ func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGr
 					slog.Int("notifications", len(group.Notifications)),
 					slog.Any("error", err),
 				)
+				return err
 			}
 			return nil
 		})
@@ -155,12 +156,14 @@ func (d *Dispatcher) dispatchGroup(ctx context.Context, group NotificationGroup)
 	message, err := d.renderer.RenderGroup(ctx, group)
 	if err != nil {
 		d.releaseClaimKeys(ctx, group.RoomID, group.ClaimKeys, "render failed")
-		return fmt.Errorf("dispatch group: render message: %w", err)
+		return nil
 	}
 
 	if err := d.sender.SendMessage(ctx, group.RoomID, message); err != nil {
-		d.handleSendFailure(ctx, group.RoomID, group.Envelopes, err)
-		return fmt.Errorf("dispatch group: send message: %w", err)
+		if handleErr := d.handleSendFailure(ctx, group.RoomID, group.Envelopes, err); handleErr != nil {
+			return fmt.Errorf("dispatch group: persist send failure: %w", handleErr)
+		}
+		return nil
 	}
 
 	return nil
@@ -196,9 +199,9 @@ func (d *Dispatcher) handleSendFailure(
 	roomID string,
 	envelopes []domain.AlarmQueueEnvelope,
 	sendErr error,
-) {
+) error {
 	if len(envelopes) == 0 {
-		return
+		return nil
 	}
 
 	retryEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
@@ -238,6 +241,7 @@ func (d *Dispatcher) handleSendFailure(
 				slog.Int("retry_envelopes", len(retryEnvelopes)),
 				slog.Any("error", err),
 			)
+			return fmt.Errorf("schedule retry: %w", err)
 		} else {
 			dispatcherRetryScheduled.Add(float64(len(retryEnvelopes)))
 			for _, backoff := range retryBackoffs {
@@ -257,7 +261,7 @@ func (d *Dispatcher) handleSendFailure(
 				slog.Int("dlq_envelopes", len(dlqEnvelopes)),
 				slog.Any("error", err),
 			)
-			return
+			return fmt.Errorf("move to DLQ: %w", err)
 		}
 		dispatcherRetryDLQMoved.WithLabelValues("retry_budget_exhausted").Add(float64(len(dlqEnvelopes)))
 		dispatcherRetryBudgetExhausted.Add(float64(len(dlqEnvelopes)))
@@ -272,6 +276,7 @@ func (d *Dispatcher) handleSendFailure(
 			slog.Int("dlq_envelopes", len(dlqEnvelopes)),
 		)
 	}
+	return nil
 }
 
 func (d *Dispatcher) releaseClaimKeys(ctx context.Context, roomID string, claimKeys []string, reason string) {
