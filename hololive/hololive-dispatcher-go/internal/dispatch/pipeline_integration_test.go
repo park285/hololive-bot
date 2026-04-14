@@ -310,3 +310,100 @@ func TestAlarmQueueDispatchPipeline_RetrySurvivesDispatcherRestart(t *testing.T)
 		t.Fatalf("DLQ size = %d, want 0", dlqSize)
 	}
 }
+
+func TestAlarmQueueDispatchPipeline_FutureRetryStaysQueuedAcrossRestartUntilDue(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newPipelineTestCache(t)
+	logger := slog.New(slog.NewTextHandler(testWriter{t: t}, nil))
+
+	publisher := queue.NewPublisher(cacheSvc, logger)
+	consumer := queue.NewConsumer(cacheSvc, logger, queue.WithMaxBatch(10))
+
+	failingSender := &testMessageSender{
+		sendMessageFunc: func(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+			return context.DeadlineExceeded
+		},
+	}
+	firstDispatcher, err := NewDispatcher(
+		consumer,
+		failingSender,
+		NewSimpleRenderer(),
+		10,
+		1,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+	firstDispatcher.now = func() time.Time { return time.Now().UTC() }
+	if err := firstDispatcher.ConfigureRetryPolicy(RetryPolicy{
+		MaxAttempts:   3,
+		BaseBackoff:   5 * time.Minute,
+		MaxBackoff:    5 * time.Minute,
+		JitterPercent: 0,
+	}); err != nil {
+		t.Fatalf("ConfigureRetryPolicy() error = %v", err)
+	}
+
+	startAt := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Minute)
+	link := "https://youtube.com/watch?v=pipeline-future-retry-stream"
+	notification := domain.NewAlarmNotification(
+		"room-future-retry",
+		&domain.Channel{ID: "channel-future-retry", Name: "지연 재시도 멤버"},
+		&domain.Stream{
+			ID:             "pipeline-future-retry-stream",
+			Title:          "미래 재시도 통합 테스트 방송",
+			ChannelID:      "channel-future-retry",
+			ChannelName:    "지연 재시도 멤버",
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &startAt,
+			Link:           &link,
+			Channel:        &domain.Channel{ID: "channel-future-retry", Name: "지연 재시도 멤버"},
+		},
+		5,
+		[]string{"user-future-retry"},
+		"지연 재시도 메시지",
+	)
+
+	if err := publisher.Publish(context.Background(), notification, []string{"notified:claim:future-retry"}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	if runErr := firstDispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() first dispatcher error = %v", runErr)
+	}
+
+	successSender := &pipelineTestSender{}
+	secondDispatcher, err := NewDispatcher(
+		consumer,
+		successSender,
+		NewSimpleRenderer(),
+		10,
+		1,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() second dispatcher error = %v", err)
+	}
+
+	if runErr := secondDispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() second dispatcher error = %v", runErr)
+	}
+
+	if len(successSender.rooms) != 0 {
+		t.Fatalf("sent rooms = %d, want 0 before retry becomes due", len(successSender.rooms))
+	}
+
+	retrySizeResp := cacheSvc.GetClient().Do(
+		context.Background(),
+		cacheSvc.B().Zcard().Key(contractsalarm.DispatchRetryQueueKey).Build(),
+	)
+	retrySize, err := retrySizeResp.AsInt64()
+	if err != nil {
+		t.Fatalf("ZCARD retry queue after restart: %v", err)
+	}
+	if retrySize != 1 {
+		t.Fatalf("retry queue size after restart = %d, want 1", retrySize)
+	}
+}

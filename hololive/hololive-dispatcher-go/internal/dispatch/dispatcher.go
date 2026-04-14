@@ -37,6 +37,7 @@ type queueConsumer interface {
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
 	ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
 type messageSender interface {
@@ -242,7 +243,13 @@ func (d *Dispatcher) handleSendFailure(
 				slog.Int("retry_envelopes", len(retryEnvelopes)),
 				slog.Any("error", err),
 			)
-			return fmt.Errorf("schedule retry: %w", err)
+			return d.preserveEnvelopesAfterPersistenceFailure(
+				ctx,
+				roomID,
+				"schedule_retry_failed",
+				retryEnvelopes,
+				fmt.Errorf("schedule retry: %w", err),
+			)
 		} else {
 			dispatcherRetryScheduled.Add(float64(len(retryEnvelopes)))
 			for _, backoff := range retryBackoffs {
@@ -262,7 +269,13 @@ func (d *Dispatcher) handleSendFailure(
 				slog.Int("dlq_envelopes", len(dlqEnvelopes)),
 				slog.Any("error", err),
 			)
-			return fmt.Errorf("move to DLQ: %w", err)
+			return d.preserveEnvelopesAfterPersistenceFailure(
+				ctx,
+				roomID,
+				"move_to_dlq_failed",
+				dlqEnvelopes,
+				fmt.Errorf("move to DLQ: %w", err),
+			)
 		}
 		dispatcherRetryDLQMoved.WithLabelValues("retry_budget_exhausted").Add(float64(len(dlqEnvelopes)))
 		dispatcherRetryBudgetExhausted.Add(float64(len(dlqEnvelopes)))
@@ -278,6 +291,35 @@ func (d *Dispatcher) handleSendFailure(
 		)
 	}
 	return nil
+}
+
+func (d *Dispatcher) preserveEnvelopesAfterPersistenceFailure(
+	ctx context.Context,
+	roomID string,
+	reason string,
+	envelopes []domain.AlarmQueueEnvelope,
+	persistErr error,
+) error {
+	if len(envelopes) == 0 {
+		return persistErr
+	}
+
+	if err := d.consumer.Requeue(ctx, envelopes); err != nil {
+		d.logger.Warn("Dispatch persistence fallback requeue failed",
+			slog.String("room_id", roomID),
+			slog.String("reason", reason),
+			slog.Int("envelopes", len(envelopes)),
+			slog.Any("error", err),
+		)
+		return fmt.Errorf("%w: fallback requeue: %w", persistErr, err)
+	}
+
+	d.logger.Warn("Dispatch persistence fallback requeued envelopes",
+		slog.String("room_id", roomID),
+		slog.String("reason", reason),
+		slog.Int("envelopes", len(envelopes)),
+	)
+	return persistErr
 }
 
 func (d *Dispatcher) releaseClaimKeys(ctx context.Context, roomID string, claimKeys []string, reason string) {
