@@ -157,6 +157,9 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 	if _, exists := raw["retry"]; exists {
 		t.Error("retry는 nil일 때 직렬화에 포함되면 안 됨")
 	}
+	if _, exists := raw["source_payload"]; exists {
+		t.Error("source_payload는 기본 envelope 직렬화에 포함되면 안 됨")
+	}
 }
 
 func TestNewAlarmNotification_UsesExplicitLiveRoute(t *testing.T) {
