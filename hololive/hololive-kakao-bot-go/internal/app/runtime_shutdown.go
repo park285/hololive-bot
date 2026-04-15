@@ -23,6 +23,7 @@ package app
 import (
 	"context"
 
+	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
@@ -31,31 +32,22 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 		return
 	}
 
-	if r.clearAlarmSchedulerCancel() {
-		r.logInfo("Alarm runtime scheduler cancellation signaled")
-	}
-
-	if err := r.ShutdownHTTPServer(ctx); err != nil {
-		r.logError("HTTP server shutdown error", err)
-	}
-
-	if r.webhookHandlerCloser != nil {
-		if err := r.webhookHandlerCloser.Close(); err != nil {
-			r.logError("Iris webhook handler shutdown error", err)
-		} else {
-			r.logInfo("Iris webhook handler stopped")
-		}
-	}
-
-	if err := notification.CloseAllAlarmServices(ctx); err != nil {
-		r.logError("Alarm service shutdown error", err)
-	} else {
-		r.logInfo("Alarm services stopped")
-	}
-
-	if r.Bot != nil {
-		if err := r.Bot.Shutdown(ctx); err != nil {
-			r.logError("Error during shutdown", err)
-		}
-	}
+	appruntime.Shutdown(ctx, appruntime.ShutdownHooks{
+		Logger:              r.Logger,
+		ClearAlarmScheduler: r.clearAlarmSchedulerCancel,
+		ShutdownHTTPServer:  r.ShutdownHTTPServer,
+		WebhookHandlerClose: func() error {
+			if r.webhookHandlerCloser == nil {
+				return nil
+			}
+			return r.webhookHandlerCloser.Close()
+		},
+		ShutdownAlarmServices: notification.CloseAllAlarmServices,
+		ShutdownBot: func(ctx context.Context) error {
+			if r.Bot == nil {
+				return nil
+			}
+			return r.Bot.Shutdown(ctx)
+		},
+	})
 }

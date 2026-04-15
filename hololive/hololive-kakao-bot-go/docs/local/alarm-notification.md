@@ -34,11 +34,13 @@
 ### dispatcher seam
 - `hololive/hololive-dispatcher-go/internal/dispatch/dispatcher.go`
   - 큐에서 envelope 배치 drain
+  - delayed retry queue 우선 drain
   - room 기준 그룹핑
   - message render
   - Iris 전송
-  - send 실패 시 requeue
-  - render 실패 시 claim key release
+  - render/send 실패 시 durable retry 스케줄
+  - retry budget 소진 시 DLQ 이동 + claim key release
+  - retry/DLQ 저장 실패 시 active queue requeue fallback
 
 ## 2. 실제 알람 흐름
 
@@ -81,9 +83,14 @@ live catch-up 도 같은 checker 안에서 별도로 계산되지만, 발송 경
 
 - checker 단계에서는 dedup claim이 먼저 일어난다.
 - queue에는 `domain.AlarmQueueEnvelope` 가 적재된다.
-- envelope 안에는 notification payload와 claim key가 함께 들어간다.
-- dispatcher에서 render 실패 시 claim key를 해제한다.
-- dispatcher에서 send 실패 시 envelope를 requeue 한다.
+- envelope 안에는 notification payload, claim key, additive retry metadata가 함께 들어갈 수 있다.
+- consumer는 `alarm:dispatch:retry` delayed retry queue를 먼저 drain하고, 이후 active queue를 이어서 읽는다.
+- dispatcher에서 render/send 실패는 같은 durable retry 경로를 탄다.
+  - 실패 시 retry metadata(`attempt`, `retry_after_ms`, `next_visible_at`, `last_error`)를 갱신한다.
+  - retry budget 안이면 delayed retry queue에 schedule 한다.
+  - retry budget 소진 시 `alarm:dispatch:dlq` 로 이동하고 claim key를 해제한다.
+- retry/DLQ 저장 자체가 실패하면 dispatcher는 envelope를 active queue로 requeue 해서 무소음 유실을 피한다.
+- queue consumer는 invalid JSON payload나 손상된 delayed retry member를 raw payload 그대로 DLQ로 보존한다.
 
 이 계약 덕분에 checker와 dispatcher는 다음 책임으로 분리된다.
 
@@ -95,6 +102,7 @@ live catch-up 도 같은 checker 안에서 별도로 계산되지만, 발송 경
 - 예전 bot ticker 중심 설명은 현재 구조와 맞지 않는다.
 - `AlarmService` 는 지금도 구독 저장과 일부 발송 상태 보조 마킹을 담당하지만, 플랫폼 알람 후보 계산의 주 루프는 `RuntimeScheduler` 와 각 checker가 소유한다.
 - 최종 발송은 bot 프로세스가 직접 하지 않고 queue + `dispatcher-go` 를 거친다.
+- 더 오래된 단순 실패 처리 설명은 현재 기준이 아니다. 현재는 render/send 모두 durable retry/DLQ 경로를 공유한다.
 
 ## 6. 빠른 코드 진입점
 

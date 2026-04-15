@@ -21,49 +21,44 @@
 package app
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 
+	appwiring "github.com/kapu/hololive-kakao-bot-go/internal/app/wiring"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
 func (c *Container) NewBot() (*bot.Bot, error) {
-	if c.botDeps == nil {
-		return nil, errors.New("bot dependencies not initialized")
-	}
-
-	b, err := bot.NewBot(c.botDeps)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bot instance: %w", err)
-	}
-
-	return b, nil
+	return appwiring.NewBot(c.botDeps)
 }
 
-func (c *Container) GetYouTubeScheduler() youtube.Scheduler { return c.botDeps.Scheduler }
+func (c *Container) GetYouTubeScheduler() youtube.Scheduler {
+	return appwiring.YouTubeScheduler(c.botDeps)
+}
 
-func (c *Container) GetMemberRepo() *member.Repository { return c.botDeps.MemberRepo }
+func (c *Container) GetMemberRepo() *member.Repository { return appwiring.MemberRepo(c.botDeps) }
 
-func (c *Container) GetMemberCache() *member.Cache { return c.botDeps.MemberCache }
+func (c *Container) GetMemberCache() *member.Cache { return appwiring.MemberCache(c.botDeps) }
 
-func (c *Container) GetAlarmService() domain.AlarmCRUD { return c.botDeps.Alarm }
+func (c *Container) GetAlarmService() domain.AlarmCRUD { return appwiring.AlarmService(c.botDeps) }
 
-func (c *Container) GetCache() cache.Client { return c.botDeps.Cache }
+func (c *Container) GetCache() cache.Client { return appwiring.Cache(c.botDeps) }
 
-func (c *Container) GetHolodexService() domain.StreamProvider { return c.botDeps.Holodex }
+func (c *Container) GetHolodexService() domain.StreamProvider {
+	return appwiring.HolodexService(c.botDeps)
+}
 
-func (c *Container) GetYouTubeService() youtube.Service { return c.botDeps.Service }
+func (c *Container) GetYouTubeService() youtube.Service { return appwiring.YouTubeService(c.botDeps) }
 
-func (c *Container) GetActivityLogger() *activity.Logger { return c.botDeps.Activity }
+func (c *Container) GetActivityLogger() *activity.Logger { return appwiring.ActivityLogger(c.botDeps) }
 
-func (c *Container) GetSettingsService() settings.ReadWriter { return c.botDeps.Settings }
+func (c *Container) GetSettingsService() settings.ReadWriter {
+	return appwiring.SettingsService(c.botDeps)
+}
 
-func (c *Container) GetACLService() *acl.Service { return c.botDeps.ACL }
+func (c *Container) GetACLService() *acl.Service { return appwiring.ACLService(c.botDeps) }
