@@ -13,7 +13,11 @@ fn utc_now() -> DateTime<Utc> {
     Utc::now()
 }
 
-fn refreshed_session(session: &Session, now: DateTime<Utc>, ttl: Duration) -> anyhow::Result<Session> {
+fn refreshed_session(
+    session: &Session,
+    now: DateTime<Utc>,
+    ttl: Duration,
+) -> anyhow::Result<Session> {
     let ttl = chrono::Duration::from_std(ttl)?;
     let mut refreshed = session.clone();
     refreshed.expires_at = now + ttl;
