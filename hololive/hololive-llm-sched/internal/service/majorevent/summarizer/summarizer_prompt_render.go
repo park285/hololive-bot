@@ -41,18 +41,7 @@ type eventForPrompt struct {
 var weekdayKR = [...]string{"일", "월", "화", "수", "목", "금", "토"}
 
 func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, periodKey string, searchContext ...string) string {
-	promptEvents := make([]eventForPrompt, 0, len(events))
-	for i := range events {
-		e := &events[i]
-		promptEvents = append(promptEvents, eventForPrompt{
-			Title:     e.Title,
-			DateStr:   formatEventDateForPrompt(e.EventStartDate, e.EventEndDate),
-			Members:   joinMembers(e.Members),
-			EventType: string(e.Type),
-			Link:      e.Link,
-		})
-	}
-
+	promptEvents := projectPromptEvents(events)
 	eventsJSON, _ := json.Marshal(promptEvents)
 
 	now := time.Now().In(kst)
@@ -86,6 +75,21 @@ func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, period
 	}
 
 	return base
+}
+
+func projectPromptEvents(events []domain.MajorEvent) []eventForPrompt {
+	promptEvents := make([]eventForPrompt, 0, len(events))
+	for i := range events {
+		e := &events[i]
+		promptEvents = append(promptEvents, eventForPrompt{
+			Title:     e.Title,
+			DateStr:   formatEventDateForPrompt(e.EventStartDate, e.EventEndDate),
+			Members:   joinMembers(e.Members),
+			EventType: string(e.Type),
+			Link:      e.Link,
+		})
+	}
+	return promptEvents
 }
 
 func truncateNote(s string, maxRunes int) string {
