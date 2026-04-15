@@ -73,7 +73,7 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 }
 
 func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) {
-	lifecycle.Run(lifecycle.Options{
+	if err := lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start: func(ctx context.Context, errCh chan<- error) {
 			start(ctx, errCh)
@@ -100,7 +100,9 @@ func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdow
 			shutdown(ctx)
 			return nil
 		},
-	})
+	}); err != nil {
+		logError(logger, "Shutdown error", err)
+	}
 
 	if logger != nil {
 		logger.Info("Shutdown complete")
@@ -147,10 +149,14 @@ func startAlarmScheduler(ctx context.Context, hooks StartHooks) {
 		return
 	}
 
-	alarmCtx, alarmCancel := context.WithCancel(ctx)
-	if hooks.SetAlarmSchedulerCancel != nil {
-		hooks.SetAlarmSchedulerCancel(alarmCancel)
+	if hooks.SetAlarmSchedulerCancel == nil {
+		go hooks.StartAlarmScheduler(ctx)
+		logInfo(hooks.Logger, "Alarm runtime scheduler started")
+		return
 	}
+
+	alarmCtx, alarmCancel := context.WithCancel(ctx)
+	hooks.SetAlarmSchedulerCancel(alarmCancel)
 
 	go hooks.StartAlarmScheduler(alarmCtx)
 	logInfo(hooks.Logger, "Alarm runtime scheduler started")

@@ -348,10 +348,7 @@ func supportsWarmSetBatch(cacheSvc cache.Client) (ok bool) {
 	}()
 
 	builder := cacheSvc.Builder()
-	if builder == (valkey.Builder{}) {
-		return false
-	}
-	return true
+	return builder != (valkey.Builder{})
 }
 
 func writeWarmHash(ctx context.Context, cacheSvc cache.Client, key string, values map[string]string) (err error) {

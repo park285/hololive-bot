@@ -3,6 +3,7 @@ package tracking
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -71,17 +72,13 @@ func (r *GormRepository) loadObservationComparisonMetadata(
 	if err != nil {
 		return nil, err
 	}
-	for key, value := range communityMetadata {
-		metadataByKey[key] = value
-	}
+	maps.Copy(metadataByKey, communityMetadata)
 
 	shortMetadata, err := r.loadObservationShortMetadata(ctx, shortCanonicalIDs)
 	if err != nil {
 		return nil, err
 	}
-	for key, value := range shortMetadata {
-		metadataByKey[key] = value
-	}
+	maps.Copy(metadataByKey, shortMetadata)
 
 	return metadataByKey, nil
 }

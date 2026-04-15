@@ -168,17 +168,17 @@ func (s *Scheduler) UpdatePriority(channelID string, pollerName string, priority
 	s.notifyDispatcher()
 }
 
-func (s *Scheduler) SyncPollerTargets(sync PollerTargetSync) {
-	if sync.Poller == nil || sync.Interval <= 0 {
+func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
+	if targetSync.Poller == nil || targetSync.Interval <= 0 {
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	pollerName := sync.Poller.Name()
-	desired := make(map[string]struct{}, len(sync.ChannelIDs))
-	for _, channelID := range sync.ChannelIDs {
+	pollerName := targetSync.Poller.Name()
+	desired := make(map[string]struct{}, len(targetSync.ChannelIDs))
+	for _, channelID := range targetSync.ChannelIDs {
 		if channelID == "" {
 			continue
 		}
@@ -199,9 +199,9 @@ func (s *Scheduler) SyncPollerTargets(sync PollerTargetSync) {
 			continue
 		}
 
-		job.Poller = sync.Poller
-		job.Priority = sync.Priority
-		job.Interval = sync.Interval
+		job.Poller = targetSync.Poller
+		job.Priority = targetSync.Priority
+		job.Interval = targetSync.Interval
 		if job.index >= 0 {
 			heap.Fix(&s.jobs, job.index)
 		}
@@ -211,20 +211,20 @@ func (s *Scheduler) SyncPollerTargets(sync PollerTargetSync) {
 	now := time.Now()
 	for channelID := range desired {
 		key := channelID + ":" + pollerName
-		offset := calculateOffset(key, sync.Interval)
-		nextRunAt := nextPollAt(now, sync.Interval, offset)
-		if sync.ForceImmediateFirstRun {
+		offset := calculateOffset(key, targetSync.Interval)
+		nextRunAt := nextPollAt(now, targetSync.Interval, offset)
+		if targetSync.ForceImmediateFirstRun {
 			nextRunAt = now
 		}
 		job := &Job{
 			ChannelID:         channelID,
-			Poller:            sync.Poller,
-			Priority:          sync.Priority,
+			Poller:            targetSync.Poller,
+			Priority:          targetSync.Priority,
 			NextRunAt:         nextRunAt,
-			Interval:          sync.Interval,
+			Interval:          targetSync.Interval,
 			Offset:            offset,
 			key:               key,
-			immediateFirstRun: sync.ForceImmediateFirstRun,
+			immediateFirstRun: targetSync.ForceImmediateFirstRun,
 		}
 		heap.Push(&s.jobs, job)
 		s.jobMap[key] = job

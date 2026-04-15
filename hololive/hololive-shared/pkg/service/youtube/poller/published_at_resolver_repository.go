@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 type publishedAtResolverRepository struct {
@@ -22,6 +22,11 @@ type publishedAtResolverRepository struct {
 type publishedAtFinalizeResult struct {
 	enqueued bool
 	reason   string
+}
+
+type publishedAtFinalizeEligibility struct {
+	enqueuable bool
+	reason     string
 }
 
 func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
@@ -48,59 +53,29 @@ func (r *publishedAtResolverRepository) FinalizePublishedAtAndMaybeEnqueue(
 	result := publishedAtFinalizeResult{}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := trackingrepo.NewRepository(tx)
-		enqueueAllowed := true
-
-		stateRow, err := txRepo.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
-		if err != nil {
-			return fmt.Errorf("load alarm state row: %w", err)
-		}
-		if stateRow != nil {
-			if stateRow.AlarmSentAt != nil && !stateRow.AlarmSentAt.IsZero() {
-				result.reason = "already_sent"
-				enqueueAllowed = false
-			} else if stateRow.AuthorizedAt != nil && !stateRow.AuthorizedAt.IsZero() {
-				result.reason = "already_claimed"
-				enqueueAllowed = false
-			}
-		}
-
-		trackingRow, err := txRepo.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
-		if err != nil {
-			return fmt.Errorf("load tracking row: %w", err)
-		}
-		if trackingRow != nil && trackingRow.AlarmSentAt != nil && !trackingRow.AlarmSentAt.IsZero() {
-			result.reason = "already_sent"
-			enqueueAllowed = false
-		}
-
-		notification, reason, err := r.finalizeCandidateState(ctx, tx, txRepo, candidate, normalizedPublishedAt, routeDecider, enqueueAllowed)
+		eligibility, err := r.loadFinalizeEligibility(ctx, txRepo, candidate)
 		if err != nil {
 			return err
 		}
-		if reason != "" && result.reason == "" {
-			result.reason = reason
-		}
-		if notification == nil {
-			if err := txRepo.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID); err != nil {
-				return fmt.Errorf("clear published_at retry after: %w", err)
-			}
-			return nil
-		}
-		if err := r.batchRepo.batchInsertNotifications(ctx, tx, []*domain.YouTubeNotificationOutbox{notification}); err != nil {
-			return fmt.Errorf("insert pending notification: %w", err)
-		}
-		if err := txRepo.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID); err != nil {
-			return fmt.Errorf("clear published_at retry after: %w", err)
-		}
-		result.enqueued = true
-		if result.reason == "" {
-			result.reason = "resolved"
-		}
 
-		return nil
+		notification, reason, err := r.finalizeCandidateState(
+			ctx,
+			tx,
+			txRepo,
+			candidate,
+			normalizedPublishedAt,
+			routeDecider,
+			eligibility.enqueuable,
+		)
+		if err != nil {
+			return err
+		}
+		result.reason = selectPublishedAtFinalizeReason(eligibility.reason, reason)
+
+		return r.completeFinalizePublishedAt(ctx, tx, txRepo, candidate, notification, &result)
 	})
 	if err != nil {
-		return publishedAtFinalizeResult{}, err
+		return publishedAtFinalizeResult{}, fmt.Errorf("finalize published_at transaction: %w", err)
 	}
 	return result, nil
 }
@@ -124,6 +99,69 @@ func (r *publishedAtResolverRepository) finalizeCandidateState(
 	}
 }
 
+func (r *publishedAtResolverRepository) loadFinalizeEligibility(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+) (publishedAtFinalizeEligibility, error) {
+	eligibility := publishedAtFinalizeEligibility{enqueuable: true}
+
+	stateRow, err := txRepo.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
+	if err != nil {
+		return publishedAtFinalizeEligibility{}, fmt.Errorf("load alarm state row: %w", err)
+	}
+	if stateRow != nil {
+		if stateRow.AlarmSentAt != nil && !stateRow.AlarmSentAt.IsZero() {
+			return publishedAtFinalizeEligibility{reason: "already_sent"}, nil
+		}
+		if stateRow.AuthorizedAt != nil && !stateRow.AuthorizedAt.IsZero() {
+			return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
+		}
+	}
+
+	trackingRow, err := txRepo.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
+	if err != nil {
+		return publishedAtFinalizeEligibility{}, fmt.Errorf("load tracking row: %w", err)
+	}
+	if trackingRow != nil && trackingRow.AlarmSentAt != nil && !trackingRow.AlarmSentAt.IsZero() {
+		return publishedAtFinalizeEligibility{reason: "already_sent"}, nil
+	}
+
+	return eligibility, nil
+}
+
+func selectPublishedAtFinalizeReason(primary string, fallback string) string {
+	if primary != "" {
+		return primary
+	}
+	return fallback
+}
+
+func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
+	ctx context.Context,
+	tx *gorm.DB,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	notification *domain.YouTubeNotificationOutbox,
+	result *publishedAtFinalizeResult,
+) error {
+	if notification != nil {
+		if err := r.batchRepo.batchInsertNotifications(ctx, tx, []*domain.YouTubeNotificationOutbox{notification}); err != nil {
+			return fmt.Errorf("insert pending notification: %w", err)
+		}
+		result.enqueued = true
+		if result.reason == "" {
+			result.reason = "resolved"
+		}
+	}
+
+	if err := txRepo.ClearPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID); err != nil {
+		return fmt.Errorf("clear published_at retry after: %w", err)
+	}
+
+	return nil
+}
+
 func (r *publishedAtResolverRepository) finalizeShort(
 	ctx context.Context,
 	tx *gorm.DB,
@@ -133,90 +171,39 @@ func (r *publishedAtResolverRepository) finalizeShort(
 	routeDecider NotificationRouteDecider,
 	enqueueAllowed bool,
 ) (*domain.YouTubeNotificationOutbox, string, error) {
-	videoID := normalizeShortVideoResourceID(candidate.PostID)
-	if videoID == "" {
-		videoID = normalizeShortVideoResourceID(candidate.ContentID)
+	videoID, resolveErr := resolveShortFinalizeVideoID(candidate)
+	if resolveErr != nil {
+		return nil, "", resolveErr
 	}
-	if videoID == "" {
-		return nil, "", fmt.Errorf("finalize short published_at: empty video id")
+	if err := updateShortPublishedAt(ctx, tx, videoID, publishedAt); err != nil {
+		return nil, "", err
 	}
-
-	result := tx.WithContext(ctx).
-		Model(&domain.YouTubeVideo{}).
-		Where("video_id = ?", videoID).
-		Update("published_at", publishedAt)
-	if result.Error != nil {
-		return nil, "", fmt.Errorf("update short published_at: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return nil, "", fmt.Errorf("update short published_at: video %s not found", videoID)
-	}
-
-	if err := txRepo.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
-		Kind:              candidate.Kind,
-		ContentID:         candidate.ContentID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-	}}); err != nil {
-		return nil, "", fmt.Errorf("upsert short tracking: %w", err)
-	}
-	if err := txRepo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{{
-		Kind:              candidate.Kind,
-		PostID:            candidate.PostID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-	}}); err != nil {
-		return nil, "", fmt.Errorf("upsert short source post: %w", err)
-	}
-	if err := txRepo.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{{
-		Kind:              candidate.Kind,
-		PostID:            candidate.PostID,
-		ContentID:         candidate.ContentID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-	}}); err != nil {
-		return nil, "", fmt.Errorf("upsert short alarm state: %w", err)
+	if err := upsertResolvedPublishedAtState(ctx, txRepo, candidate, publishedAt, "short"); err != nil {
+		return nil, "", err
 	}
 
 	video, err := loadShortNotificationVideo(ctx, tx, videoID)
 	if err != nil {
 		return nil, "", fmt.Errorf("load short row for notification: %w", err)
 	}
-
-	if !enqueueAllowed {
-		return nil, "", nil
-	}
-	if !shouldEnqueueRoutedNotification(routeDecider, domain.AlarmTypeShorts, candidate.ChannelID, publishedAt) {
-		return nil, "route_decider_rejected", nil
-	}
-
-	authorizedAt := yttimestamp.Normalize(time.Now())
-	claimed, err := txRepo.TryClaimAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
-		Kind:              candidate.Kind,
-		PostID:            candidate.PostID,
-		ContentID:         candidate.ContentID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-		AuthorizedAt:      &authorizedAt,
-	})
+	proceed, reason, err := maybeAuthorizePublishedAtNotification(
+		ctx,
+		txRepo,
+		candidate,
+		publishedAt,
+		enqueueAllowed,
+		routeDecider,
+		domain.AlarmTypeShorts,
+		"short",
+	)
 	if err != nil {
-		return nil, "", fmt.Errorf("claim short alarm state: %w", err)
+		return nil, "", err
 	}
-	if !claimed {
-		return nil, "already_claimed", nil
+	if !proceed {
+		return nil, reason, nil
 	}
 
-	return &domain.YouTubeNotificationOutbox{
-		Kind:      candidate.Kind,
-		ChannelID: candidate.ChannelID,
-		ContentID: candidate.ContentID,
-		Payload:   buildShortNotificationPayload(video, candidate.PostID),
-		Status:    domain.OutboxStatusPending,
-	}, "", nil
+	return newShortPublishedAtNotification(candidate, video), "", nil
 }
 
 func (r *publishedAtResolverRepository) finalizeCommunity(
@@ -228,66 +215,170 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 	routeDecider NotificationRouteDecider,
 	enqueueAllowed bool,
 ) (*domain.YouTubeNotificationOutbox, string, error) {
-	postID := normalizeContentID(candidate.Kind, candidate.PostID)
-	if postID == "" {
-		postID = normalizeContentID(candidate.Kind, candidate.ContentID)
+	postID, resolveErr := resolveCommunityFinalizePostID(candidate)
+	if resolveErr != nil {
+		return nil, "", resolveErr
 	}
-	if postID == "" {
-		return nil, "", fmt.Errorf("finalize community published_at: empty post id")
+	if err := updateCommunityPublishedAt(ctx, tx, postID, publishedAt); err != nil {
+		return nil, "", err
 	}
-
-	result := tx.WithContext(ctx).
-		Model(&domain.YouTubeCommunityPost{}).
-		Where("post_id = ?", postID).
-		Update("published_at", publishedAt)
-	if result.Error != nil {
-		return nil, "", fmt.Errorf("update community published_at: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return nil, "", fmt.Errorf("update community published_at: post %s not found", postID)
-	}
-
-	if err := txRepo.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{{
-		Kind:              candidate.Kind,
-		ContentID:         candidate.ContentID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-	}}); err != nil {
-		return nil, "", fmt.Errorf("upsert community tracking: %w", err)
-	}
-	if err := txRepo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{{
-		Kind:              candidate.Kind,
-		PostID:            candidate.PostID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-	}}); err != nil {
-		return nil, "", fmt.Errorf("upsert community source post: %w", err)
-	}
-	if err := txRepo.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{{
-		Kind:              candidate.Kind,
-		PostID:            candidate.PostID,
-		ContentID:         candidate.ContentID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-	}}); err != nil {
-		return nil, "", fmt.Errorf("upsert community alarm state: %w", err)
+	if err := upsertResolvedPublishedAtState(ctx, txRepo, candidate, publishedAt, "community"); err != nil {
+		return nil, "", err
 	}
 
 	post, err := loadCommunityNotificationPost(ctx, tx, postID)
 	if err != nil {
 		return nil, "", fmt.Errorf("load community row for notification: %w", err)
 	}
+	proceed, reason, err := maybeAuthorizePublishedAtNotification(
+		ctx,
+		txRepo,
+		candidate,
+		publishedAt,
+		enqueueAllowed,
+		routeDecider,
+		domain.AlarmTypeCommunity,
+		"community",
+	)
+	if err != nil {
+		return nil, "", err
+	}
+	if !proceed {
+		return nil, reason, nil
+	}
 
+	return newCommunityPublishedAtNotification(candidate, post), "", nil
+}
+
+func resolveShortFinalizeVideoID(candidate trackingrepo.PublishedAtResolutionCandidate) (string, error) {
+	videoID := normalizeShortVideoResourceID(candidate.PostID)
+	if videoID == "" {
+		videoID = normalizeShortVideoResourceID(candidate.ContentID)
+	}
+	if videoID == "" {
+		return "", fmt.Errorf("finalize short published_at: empty video id")
+	}
+	return videoID, nil
+}
+
+func resolveCommunityFinalizePostID(candidate trackingrepo.PublishedAtResolutionCandidate) (string, error) {
+	postID := normalizeContentID(candidate.Kind, candidate.PostID)
+	if postID == "" {
+		postID = normalizeContentID(candidate.Kind, candidate.ContentID)
+	}
+	if postID == "" {
+		return "", fmt.Errorf("finalize community published_at: empty post id")
+	}
+	return postID, nil
+}
+
+func updateShortPublishedAt(ctx context.Context, tx *gorm.DB, videoID string, publishedAt time.Time) error {
+	result := tx.WithContext(ctx).
+		Model(&domain.YouTubeVideo{}).
+		Where("video_id = ?", videoID).
+		Update("published_at", publishedAt)
+	if result.Error != nil {
+		return fmt.Errorf("update short published_at: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update short published_at: video %s not found", videoID)
+	}
+	return nil
+}
+
+func updateCommunityPublishedAt(ctx context.Context, tx *gorm.DB, postID string, publishedAt time.Time) error {
+	result := tx.WithContext(ctx).
+		Model(&domain.YouTubeCommunityPost{}).
+		Where("post_id = ?", postID).
+		Update("published_at", publishedAt)
+	if result.Error != nil {
+		return fmt.Errorf("update community published_at: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update community published_at: post %s not found", postID)
+	}
+	return nil
+}
+
+func upsertResolvedPublishedAtState(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	publishedAt time.Time,
+	scope string,
+) error {
+	trackingRow := &domain.YouTubeContentAlarmTracking{
+		Kind:              candidate.Kind,
+		ContentID:         candidate.ContentID,
+		ChannelID:         candidate.ChannelID,
+		ActualPublishedAt: &publishedAt,
+		DetectedAt:        candidate.DetectedAt,
+	}
+	if err := txRepo.UpsertBatch(ctx, []*domain.YouTubeContentAlarmTracking{trackingRow}); err != nil {
+		return fmt.Errorf("upsert %s tracking: %w", scope, err)
+	}
+
+	sourcePost := &domain.YouTubeCommunityShortsSourcePost{
+		Kind:              candidate.Kind,
+		PostID:            candidate.PostID,
+		ChannelID:         candidate.ChannelID,
+		ActualPublishedAt: &publishedAt,
+		DetectedAt:        candidate.DetectedAt,
+	}
+	if err := txRepo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{sourcePost}); err != nil {
+		return fmt.Errorf("upsert %s source post: %w", scope, err)
+	}
+
+	alarmState := &domain.YouTubeCommunityShortsAlarmState{
+		Kind:              candidate.Kind,
+		PostID:            candidate.PostID,
+		ContentID:         candidate.ContentID,
+		ChannelID:         candidate.ChannelID,
+		ActualPublishedAt: &publishedAt,
+		DetectedAt:        candidate.DetectedAt,
+	}
+	if err := txRepo.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{alarmState}); err != nil {
+		return fmt.Errorf("upsert %s alarm state: %w", scope, err)
+	}
+
+	return nil
+}
+
+func maybeAuthorizePublishedAtNotification(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	publishedAt time.Time,
+	enqueueAllowed bool,
+	routeDecider NotificationRouteDecider,
+	alarmType domain.AlarmType,
+	scope string,
+) (bool, string, error) {
 	if !enqueueAllowed {
-		return nil, "", nil
+		return false, "", nil
 	}
-	if !shouldEnqueueRoutedNotification(routeDecider, domain.AlarmTypeCommunity, candidate.ChannelID, publishedAt) {
-		return nil, "route_decider_rejected", nil
+	if !shouldEnqueueRoutedNotification(routeDecider, alarmType, candidate.ChannelID, publishedAt) {
+		return false, "route_decider_rejected", nil
 	}
 
+	claimed, err := claimResolvedPublishedAtAlarmState(ctx, txRepo, candidate, publishedAt, scope)
+	if err != nil {
+		return false, "", err
+	}
+	if !claimed {
+		return false, "already_claimed", nil
+	}
+
+	return true, "", nil
+}
+
+func claimResolvedPublishedAtAlarmState(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	publishedAt time.Time,
+	scope string,
+) (bool, error) {
 	authorizedAt := yttimestamp.Normalize(time.Now())
 	claimed, err := txRepo.TryClaimAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
 		Kind:              candidate.Kind,
@@ -299,19 +390,35 @@ func (r *publishedAtResolverRepository) finalizeCommunity(
 		AuthorizedAt:      &authorizedAt,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("claim community alarm state: %w", err)
+		return false, fmt.Errorf("claim %s alarm state: %w", scope, err)
 	}
-	if !claimed {
-		return nil, "already_claimed", nil
-	}
+	return claimed, nil
+}
 
+func newShortPublishedAtNotification(
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	video *domain.YouTubeVideo,
+) *domain.YouTubeNotificationOutbox {
+	return &domain.YouTubeNotificationOutbox{
+		Kind:      candidate.Kind,
+		ChannelID: candidate.ChannelID,
+		ContentID: candidate.ContentID,
+		Payload:   buildShortNotificationPayload(video, candidate.PostID),
+		Status:    domain.OutboxStatusPending,
+	}
+}
+
+func newCommunityPublishedAtNotification(
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	post *domain.YouTubeCommunityPost,
+) *domain.YouTubeNotificationOutbox {
 	return &domain.YouTubeNotificationOutbox{
 		Kind:      candidate.Kind,
 		ChannelID: candidate.ChannelID,
 		ContentID: candidate.ContentID,
 		Payload:   buildCommunityNotificationPayload(post, candidate.PostID),
 		Status:    domain.OutboxStatusPending,
-	}, "", nil
+	}
 }
 
 type shortNotificationVideoRow struct {
@@ -418,7 +525,7 @@ func parseThumbnailsJSON(raw string) (domain.ThumbnailsJSON, error) {
 
 	var thumbnails domain.ThumbnailsJSON
 	if err := json.Unmarshal([]byte(raw), &thumbnails); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse thumbnails json: %w", err)
 	}
 	return thumbnails, nil
 }

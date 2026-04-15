@@ -83,7 +83,6 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 	var costMu sync.Mutex
 
 	for _, channelID := range channelIDs {
-		channelID := channelID
 		g.Go(func() error {
 			streams, err := ys.getChannelUpcomingStreams(gctx, channelID)
 			if err != nil {

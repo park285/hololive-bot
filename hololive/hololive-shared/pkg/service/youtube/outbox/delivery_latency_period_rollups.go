@@ -3,7 +3,7 @@ package outbox
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -177,17 +177,10 @@ func discretePercentileMillis(samples []int64, numerator int, denominator int) *
 	}
 
 	sorted := append([]int64(nil), samples...)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i] < sorted[j]
-	})
+	slices.Sort(sorted)
 
-	rank := (numerator*len(sorted) + denominator - 1) / denominator
-	if rank < 1 {
-		rank = 1
-	}
-	if rank > len(sorted) {
-		rank = len(sorted)
-	}
+	rank := max((numerator*len(sorted)+denominator-1)/denominator, 1)
+	rank = min(rank, len(sorted))
 	value := sorted[rank-1]
 	return &value
 }

@@ -201,6 +201,13 @@ func mergeCollectedCommunityPost(dst *scraper.CommunityPost, src *scraper.Commun
 	if dst == nil || src == nil {
 		return
 	}
+	mergeCommunityPostIdentityFields(dst, src)
+	mergeCommunityPostTextFields(dst, src)
+	mergeCommunityPostStatsFields(dst, src)
+	mergeCommunityPostAttachmentFields(dst, src)
+}
+
+func mergeCommunityPostIdentityFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
 	if dst.UpstreamPostID == "" {
 		dst.UpstreamPostID = src.UpstreamPostID
 	}
@@ -213,6 +220,9 @@ func mergeCollectedCommunityPost(dst *scraper.CommunityPost, src *scraper.Commun
 	if len(dst.AuthorPhoto) == 0 && len(src.AuthorPhoto) > 0 {
 		dst.AuthorPhoto = append([]scraper.Thumbnail(nil), src.AuthorPhoto...)
 	}
+}
+
+func mergeCommunityPostTextFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
 	if dst.ContentText == "" {
 		dst.ContentText = src.ContentText
 	}
@@ -223,12 +233,18 @@ func mergeCollectedCommunityPost(dst *scraper.CommunityPost, src *scraper.Commun
 		publishedAt := *src.PublishedAt
 		dst.PublishedAt = &publishedAt
 	}
+}
+
+func mergeCommunityPostStatsFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
 	if dst.LikeCount == 0 && src.LikeCount != 0 {
 		dst.LikeCount = src.LikeCount
 	}
 	if dst.CommentCount == 0 && src.CommentCount != 0 {
 		dst.CommentCount = src.CommentCount
 	}
+}
+
+func mergeCommunityPostAttachmentFields(dst *scraper.CommunityPost, src *scraper.CommunityPost) {
 	if len(dst.Images) == 0 && len(src.Images) > 0 {
 		dst.Images = append([]scraper.Thumbnail(nil), src.Images...)
 	}

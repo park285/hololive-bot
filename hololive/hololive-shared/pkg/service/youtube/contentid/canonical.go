@@ -52,26 +52,6 @@ func NormalizeCommunityPostID(raw string) (string, error) {
 	return normalizeForCommunity(raw)
 }
 
-func normalizePrefixed(prefix, label, raw string) (string, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return "", fmt.Errorf("canonical youtube content id: %s is empty", label)
-	}
-
-	switch {
-	case strings.HasPrefix(value, prefix):
-		suffix := strings.TrimSpace(strings.TrimPrefix(value, prefix))
-		if suffix == "" {
-			return "", fmt.Errorf("canonical youtube content id: %s is empty", label)
-		}
-		return prefix + suffix, nil
-	case hasKnownPrefix(value):
-		return "", fmt.Errorf("canonical youtube content id: %s prefix mismatch: %s", label, value)
-	default:
-		return prefix + value, nil
-	}
-}
-
 func normalizeForShort(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {

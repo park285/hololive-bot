@@ -26,7 +26,7 @@ func (r *GormRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSe
 		return fmt.Errorf("mark alarm sent batch: %w", err)
 	}
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := NewRepository(tx)
 		updatedAt := yttimestamp.Normalize(time.Now())
 		for i, mark := range normalized {
@@ -36,7 +36,11 @@ func (r *GormRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSe
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("mark alarm sent batch transaction: %w", err)
+	}
+
+	return nil
 }
 
 func (r *GormRepository) applyAlarmSentMark(ctx context.Context, mark AlarmSentMark, updatedAt time.Time) error {

@@ -54,7 +54,7 @@ func derivePostDeliveryTimelineMetrics(row *PostDeliveryTimeline) {
 	row.FirstAttemptToSuccessMillis = durationMillisBetween(row.FirstAttemptStartedAt, row.FirstSuccessAt)
 	row.InternalLatencyMillis = durationMillisBetween(row.DetectedAt, row.AlarmSentAt)
 	if row.InternalLatencyMillis != nil {
-		row.InternalLatencyExceeded = boolPtr(*row.InternalLatencyMillis > postLatencyExceededThresholdMillis)
+		row.InternalLatencyExceeded = new(*row.InternalLatencyMillis > postLatencyExceededThresholdMillis)
 	}
 	row.DelaySource = classifyDelaySource(row)
 	row.QueueWaitMillis = sumDurationMillis(row.DetectToQueueMillis, row.QueueToFirstAttemptMillis)
@@ -343,7 +343,7 @@ func buildPostLatencyClassificationEvidence(row *PostDeliveryTimeline) []PostLat
 		},
 		{
 			Key:      PostLatencyClassificationEvidenceKeyJobFailure,
-			Bool:     boolPtr(row.JobFailureDetected),
+			Bool:     new(row.JobFailureDetected),
 			Selected: row.InternalDelayCause == PostInternalDelayCauseJobFailure,
 		},
 	}
