@@ -52,7 +52,12 @@ func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (st
 }
 
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-	return sharedalarm.LookupChannelSubscribersByType(ctx, as.cache, channelID, alarmType)
+	subscribers, err := sharedalarm.LookupChannelSubscribersByType(ctx, as.cache, channelID, alarmType)
+	if err != nil {
+		return nil, fmt.Errorf("lookup channel subscribers by type: %w", err)
+	}
+
+	return subscribers, nil
 }
 
 func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string) error {

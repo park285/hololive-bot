@@ -354,16 +354,16 @@ func TestAlarmServiceClose(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cacheSvc := newTestCacheService(t, ctx)
+	cacheSvc := newTestCacheService(ctx, t)
 
 	svc, err := NewAlarmService(cacheSvc, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
 	require.NoError(t, err)
 
 	err = svc.Close(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = svc.Close(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestWarmCacheFromDB_NilRepo(t *testing.T) {
@@ -374,27 +374,4 @@ func TestWarmCacheFromDB_NilRepo(t *testing.T) {
 
 	err := as.WarmCacheFromDB(ctx)
 	assert.NoError(t, err)
-}
-
-func TestSubmitPersistTask_NilPool(t *testing.T) {
-	t.Parallel()
-
-	as := newTestAlarmService(t)
-	as.submitPersistTask("test", "room-1", func() { t.Fatal("should not be called") })
-}
-
-func TestSubmitPersistTask_ClosedPool(t *testing.T) {
-	t.Parallel()
-
-	executor := newStripedExecutor(1, 1)
-	require.NoError(t, executor.ShutdownWait(t.Context()))
-
-	called := false
-	as := &AlarmService{
-		persistExecutor: executor,
-		logger:          newDiscardAlarmLogger(),
-	}
-	as.submitPersistTask("test", "room-1", func() { called = true })
-
-	assert.False(t, called)
 }

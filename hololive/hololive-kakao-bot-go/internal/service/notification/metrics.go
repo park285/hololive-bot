@@ -32,6 +32,9 @@ var (
 	alarmMetricsInitOnce sync.Once
 
 	alarmServiceOperationDuration *prometheus.HistogramVec
+	alarmCacheRebuildTotal        *prometheus.CounterVec
+	alarmCacheRebuildDuration     *prometheus.HistogramVec
+	alarmCacheRebuildLoaded       *prometheus.GaugeVec
 )
 
 func initAlarmMetrics() {
@@ -43,6 +46,28 @@ func initAlarmMetrics() {
 				Buckets: prometheus.DefBuckets,
 			},
 			[]string{"operation", "result"},
+		)
+		alarmCacheRebuildTotal = promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_cache_rebuild_total",
+				Help: "Alarm cache rebuild attempts by operation and result.",
+			},
+			[]string{"operation", "result"},
+		)
+		alarmCacheRebuildDuration = promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "hololive_alarm_cache_rebuild_duration_seconds",
+				Help:    "Alarm cache rebuild duration in seconds by operation and result.",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"operation", "result"},
+		)
+		alarmCacheRebuildLoaded = promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "hololive_alarm_cache_rebuild_loaded",
+				Help: "Last successful alarm cache rebuild loaded counts by operation and resource.",
+			},
+			[]string{"operation", "resource"},
 		)
 	})
 }
@@ -58,4 +83,21 @@ func alarmOperationResult(err error) string {
 	}
 
 	return "ok"
+}
+
+func observeAlarmCacheRebuild(operation string, err error) {
+	initAlarmMetrics()
+	alarmCacheRebuildTotal.WithLabelValues(operation, alarmOperationResult(err)).Inc()
+}
+
+func observeAlarmCacheRebuildDuration(operation string, startedAt time.Time, err error) {
+	initAlarmMetrics()
+	alarmCacheRebuildDuration.WithLabelValues(operation, alarmOperationResult(err)).Observe(time.Since(startedAt).Seconds())
+}
+
+func observeAlarmCacheRebuildLoaded(operation string, alarmsLoaded, roomsLoaded, channelsLoaded int) {
+	initAlarmMetrics()
+	alarmCacheRebuildLoaded.WithLabelValues(operation, "alarms").Set(float64(alarmsLoaded))
+	alarmCacheRebuildLoaded.WithLabelValues(operation, "rooms").Set(float64(roomsLoaded))
+	alarmCacheRebuildLoaded.WithLabelValues(operation, "channels").Set(float64(channelsLoaded))
 }
