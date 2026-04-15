@@ -55,6 +55,30 @@ func TestSystemPrompt_MonthlySnapshotContainsCriticalSections(t *testing.T) {
 	assertPromptCriticalSections(t, prompt, monthlyPromptSnapshot())
 }
 
+func TestBuildPromptAssetVersion_ChangesWhenAssetsChange(t *testing.T) {
+	base := map[string][]byte{
+		"prompts/domain_context_part1.tmpl":  []byte("part1"),
+		"prompts/domain_context_part2.tmpl":  []byte("part2"),
+		"prompts/weekly_system_prompt.tmpl":  []byte("weekly"),
+		"prompts/monthly_system_prompt.tmpl": []byte("monthly"),
+		"graduated_members.json":             []byte(`{"graduated":{}}`),
+	}
+	changed := map[string][]byte{
+		"prompts/domain_context_part1.tmpl":  []byte("part1"),
+		"prompts/domain_context_part2.tmpl":  []byte("part2"),
+		"prompts/weekly_system_prompt.tmpl":  []byte("weekly changed"),
+		"prompts/monthly_system_prompt.tmpl": []byte("monthly"),
+		"graduated_members.json":             []byte(`{"graduated":{}}`),
+	}
+
+	baseVersion := buildPromptAssetVersion(base)
+	changedVersion := buildPromptAssetVersion(changed)
+
+	if baseVersion == changedVersion {
+		t.Fatalf("prompt asset version should change when embedded assets change: %q", baseVersion)
+	}
+}
+
 func weeklyPromptSnapshot() promptSnapshot {
 	return promptSnapshot{
 		orderedSnippets: []string{

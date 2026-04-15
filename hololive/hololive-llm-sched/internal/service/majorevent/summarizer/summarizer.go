@@ -119,7 +119,7 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
-	cacheKey := fmt.Sprintf("majorevent:summary:%s:%s:%s", promptVersion, summaryType, periodKey)
+	cacheKey := buildSummaryCacheKey(events, summaryType, periodKey)
 
 	// 캐시 조회
 	if s.cache != nil {
