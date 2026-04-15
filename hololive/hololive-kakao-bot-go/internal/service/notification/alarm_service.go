@@ -42,9 +42,6 @@ import (
 const (
 	alarmServiceCloseTimeout = 3 * time.Second
 	alarmPersistTaskTimeout  = alarmServiceCloseTimeout
-
-	alarmPersistStripeCount    = 16
-	alarmPersistStripeQueueCap = 256
 )
 
 // alarmServiceCloseOnce: 생성된 AlarmService 인스턴스 레지스트리 (CloseAllAlarmServices 용).
@@ -80,16 +77,15 @@ func NewAlarmService(
 	}
 
 	svc := &AlarmService{
-		cache:           cacheSvc,
-		holodex:         holodexSvc,
-		chzzk:           chzzkClient,
-		twitch:          twitchClient,
-		memberData:      memberData,
-		alarmRepo:       alarmRepo,
-		alarmWriter:     writer,
-		logger:          logger,
-		targetPolicy:    targetPolicy,
-		persistExecutor: newStripedExecutor(alarmPersistStripeCount, alarmPersistStripeQueueCap),
+		cache:        cacheSvc,
+		holodex:      holodexSvc,
+		chzzk:        chzzkClient,
+		twitch:       twitchClient,
+		memberData:   memberData,
+		alarmRepo:    alarmRepo,
+		alarmWriter:  writer,
+		logger:       logger,
+		targetPolicy: targetPolicy,
 	}
 
 	alarmServiceCloseOnce.Store(svc, struct{}{})
@@ -126,31 +122,12 @@ func (as *AlarmService) UpdateAlarmAdvanceMinutes(_ context.Context, alarmAdvanc
 }
 
 // Close gracefully shuts down the AlarmService, releasing the persist executor.
-func (as *AlarmService) Close(ctx context.Context) error {
+func (as *AlarmService) Close(_ context.Context) error {
 	if as == nil {
 		return nil
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	var closeErr error
-
-	as.closeOnce.Do(func() {
-		if as.persistExecutor == nil {
-			return
-		}
-
-		shutdownCtx, cancel := context.WithTimeout(ctx, alarmServiceCloseTimeout)
-		defer cancel()
-
-		if err := as.persistExecutor.ShutdownWait(shutdownCtx); err != nil {
-			closeErr = fmt.Errorf("shutdown alarm persist executor: %w", err)
-		}
-	})
-
-	return closeErr
+	return nil
 }
 
 // CloseAllAlarmServices closes all AlarmService instances created via NewAlarmService.
@@ -187,84 +164,42 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 
 	roomID := req.RoomID
 	channelID := req.ChannelID
-	memberName := req.MemberName
-	roomName := req.RoomName
-	userName := req.UserName
 
-	alarmTypes := req.AlarmTypes
-	if len(alarmTypes) == 0 {
-		alarmTypes = domain.DefaultAlarmTypes
-	}
+	alarmTypes := normalizedAlarmTypes(req.AlarmTypes)
 
 	alarmKey := as.getAlarmKey(roomID)
 
-	added, err := as.cache.SAdd(ctx, alarmKey, []string{channelID})
+	alreadyRegistered, err := as.cache.SIsMember(ctx, alarmKey, channelID)
 	if err != nil {
-		opErr = fmt.Errorf("add alarm: %w", err)
-		as.logger.Error("Failed to add alarm", slog.Any("error", err))
+		opErr = fmt.Errorf("check existing alarm: %w", err)
+		as.logger.Error("Failed to check existing alarm", slog.Any("error", err))
 
 		return false, opErr
 	}
 
-	registryKey := as.getRegistryKey(roomID)
-	if _, err := as.cache.SAdd(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
-		as.logger.Warn("Failed to add to registry", slog.Any("error", err))
+	if alreadyRegistered {
+		return false, nil
 	}
 
-	// Pipeline Redis writes for alarm type subscriptions
-	client := as.cache.GetClient()
+	record := buildAlarmRecord(req, alarmTypes)
 
-	saddCmds := make([]valkey.Completed, len(alarmTypes))
-	for i, alarmType := range alarmTypes {
-		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
+	persistErr := as.persistAlarm(ctx, record)
+	if persistErr != nil {
+		opErr = fmt.Errorf("persist alarm before cache write: %w", persistErr)
+		as.logger.Error("Failed to persist alarm before cache write", slog.Any("error", persistErr))
 
-		saddCmds[i] = client.B().Sadd().Key(subsKey).Member(registryKey).Build()
+		return false, opErr
 	}
 
-	results := as.cache.DoMulti(ctx, saddCmds...)
-	for i, result := range results {
-		if err := result.Error(); err != nil {
-			as.logger.Warn("Failed to add channel subscriber",
-				slog.String("type", string(alarmTypes[i])),
-				slog.Any("error", err))
-		}
+	added, err := as.cacheAlarm(ctx, record)
+	if err != nil {
+		opErr = as.rebuildAlarmCacheFromRepository(ctx, "add", fmt.Errorf("add alarm: %w", err))
+		as.logger.Error("Failed to add alarm", slog.Any("error", opErr))
+
+		return false, fmt.Errorf("rebuild add cache from repository: %w", opErr)
 	}
 
-	if _, err := as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{channelID}); err != nil {
-		as.logger.Warn("Failed to add to channel registry", slog.Any("error", err))
-	}
-
-	if err := as.CacheMemberName(ctx, channelID, memberName); err != nil {
-		as.logger.Warn("Failed to cache member name", slog.Any("error", err))
-	}
-
-	if roomName != "" {
-		_ = as.cache.HSet(ctx, RoomNamesCacheKey, roomID, roomName)
-	}
-
-	if userName != "" {
-		_ = as.cache.HSet(ctx, UserNamesCacheKey, req.UserID, userName)
-	}
-
-	as.persistAlarmAsync(&domain.Alarm{
-		RoomID:     roomID,
-		UserID:     req.UserID,
-		ChannelID:  channelID,
-		MemberName: memberName,
-		RoomName:   roomName,
-		UserName:   userName,
-		AlarmTypes: alarmTypes,
-	})
-
-	as.logger.Info("Alarm added",
-		slog.String("room_id", roomID),
-		slog.String("room_name", roomName),
-		slog.String("user_id", req.UserID),
-		slog.String("user_name", userName),
-		slog.String("channel_id", channelID),
-		slog.String("member_name", memberName),
-		slog.Any("alarm_types", alarmTypes),
-	)
+	as.logAlarmAdded(req, alarmTypes)
 
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil {
 		if as.logger != nil {
@@ -288,52 +223,33 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 		observeAlarmServiceOperation("remove", startedAt, opErr)
 	}()
 
-	if len(alarmTypes) == 0 {
-		alarmTypes = domain.AllAlarmTypes
+	exists, err := as.roomAlarmExists(ctx, roomID, channelID)
+	if err != nil {
+		opErr = err
+		return false, opErr
 	}
 
-	alarmKey := as.getAlarmKey(roomID)
+	if !exists {
+		return false, nil
+	}
 
-	removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
-	if err != nil {
-		opErr = fmt.Errorf("remove alarm: %w", err)
-		as.logger.Error("Failed to remove alarm", slog.Any("error", err))
+	alarmTypes = normalizedRemovalAlarmTypes(alarmTypes)
+
+	deleteErr := as.deleteAlarm(ctx, roomID, channelID)
+	if deleteErr != nil {
+		opErr = fmt.Errorf("delete alarm before cache removal: %w", deleteErr)
+		as.logger.Error("Failed to persist alarm removal before cache write", slog.Any("error", deleteErr))
 
 		return false, opErr
 	}
 
-	registryKey := as.getRegistryKey(roomID)
-	if err := as.removeChannelSubscribers(ctx, channelID, registryKey, alarmTypes); err != nil && as.logger != nil {
-		as.logger.Warn("Failed to remove channel subscribers during alarm removal",
-			slog.String("room_id", roomID),
-			slog.String("channel_id", channelID),
-			slog.Any("error", err),
-		)
+	removed, err := as.removeAlarmFromCache(ctx, roomID, channelID, alarmTypes)
+	if err != nil {
+		opErr = as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
+		as.logger.Error("Failed to remove alarm", slog.Any("error", opErr))
+
+		return false, fmt.Errorf("rebuild remove cache from repository: %w", opErr)
 	}
-
-	if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil && as.logger != nil {
-		as.logger.Warn("Failed to cleanup channel registry during alarm removal",
-			slog.String("room_id", roomID),
-			slog.String("channel_id", channelID),
-			slog.Any("error", err),
-		)
-	}
-
-	remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
-	if err == nil && len(remainingAlarms) == 0 {
-		_, _ = as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey})
-		as.logger.Info("Room removed from registry (no alarms left)",
-			slog.String("room_id", roomID),
-		)
-	}
-
-	as.removeAlarmAsync(roomID, channelID)
-
-	as.logger.Info("Alarm removed",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-		slog.Any("alarm_types", alarmTypes),
-	)
 
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil {
 		if as.logger != nil {
@@ -345,7 +261,214 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 		}
 	}
 
+	as.logger.Info("Alarm removed",
+		slog.String("room_id", roomID),
+		slog.String("channel_id", channelID),
+		slog.Any("alarm_types", alarmTypes),
+	)
+
+	if as.alarmRepo != nil {
+		return true, nil
+	}
+
+	return removed, nil
+}
+
+func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (int64, error) {
+	if record == nil {
+		return 0, stdErrors.New("alarm is nil")
+	}
+
+	alarmKey := as.getAlarmKey(record.RoomID)
+
+	added, err := as.cache.SAdd(ctx, alarmKey, []string{record.ChannelID})
+	if err != nil {
+		return 0, fmt.Errorf("add room alarm: %w", err)
+	}
+
+	registryKey := as.getRegistryKey(record.RoomID)
+	if _, err := as.cache.SAdd(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
+		return 0, fmt.Errorf("add room registry: %w", err)
+	}
+
+	builder := as.cache.Builder()
+
+	saddCmds := make([]valkey.Completed, len(record.AlarmTypes))
+	for i, alarmType := range record.AlarmTypes {
+		subsKey := as.channelSubscribersKeyByType(record.ChannelID, alarmType)
+
+		saddCmds[i] = builder.Sadd().Key(subsKey).Member(registryKey).Build()
+	}
+
+	results := as.cache.DoMulti(ctx, saddCmds...)
+	if len(results) != len(saddCmds) {
+		return 0, fmt.Errorf("add channel subscribers: unexpected result count: %d", len(results))
+	}
+
+	for i, result := range results {
+		if err := result.Error(); err != nil {
+			return 0, fmt.Errorf("add channel subscriber type %s: %w", record.AlarmTypes[i], err)
+		}
+	}
+
+	if _, err := as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
+		return 0, fmt.Errorf("add channel registry: %w", err)
+	}
+
+	if err := as.CacheMemberName(ctx, record.ChannelID, record.MemberName); err != nil {
+		return 0, fmt.Errorf("cache member name: %w", err)
+	}
+
+	if record.RoomName != "" {
+		if err := as.cache.HSet(ctx, RoomNamesCacheKey, record.RoomID, record.RoomName); err != nil {
+			return 0, fmt.Errorf("cache room name: %w", err)
+		}
+	}
+
+	if record.UserName != "" && record.UserID != "" {
+		if err := as.cache.HSet(ctx, UserNamesCacheKey, record.UserID, record.UserName); err != nil {
+			return 0, fmt.Errorf("cache user name: %w", err)
+		}
+	}
+
+	return added, nil
+}
+
+func (as *AlarmService) roomAlarmExists(ctx context.Context, roomID, channelID string) (bool, error) {
+	if as.alarmRepo != nil {
+		alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepo, roomID)
+		if err != nil {
+			return false, fmt.Errorf("find room alarms: %w", err)
+		}
+
+		for _, alarm := range alarms {
+			if alarm != nil && alarm.ChannelID == channelID {
+				return true, nil
+			}
+		}
+
+		return false, nil
+	}
+
+	exists, err := as.cache.SIsMember(ctx, as.getAlarmKey(roomID), channelID)
+	if err != nil {
+		return false, fmt.Errorf("check room alarm membership: %w", err)
+	}
+
+	return exists, nil
+}
+
+func (as *AlarmService) loadRoomAlarmsForMutation(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
+	if as.alarmRepo != nil {
+		alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepo, roomID)
+		if err != nil {
+			return nil, fmt.Errorf("find room alarms: %w", err)
+		}
+
+		return alarms, nil
+	}
+
+	channelIDs, err := as.GetRoomAlarms(ctx, roomID)
+	if err != nil {
+		return nil, fmt.Errorf("get room alarms: %w", err)
+	}
+
+	alarms := make([]*domain.Alarm, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		alarms = append(alarms, &domain.Alarm{RoomID: roomID, ChannelID: channelID})
+	}
+
+	return alarms, nil
+}
+
+func uniqueAlarmChannelIDs(alarms []*domain.Alarm) []string {
+	if len(alarms) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(alarms))
+
+	channelIDs := make([]string, 0, len(alarms))
+	for _, alarm := range alarms {
+		if alarm == nil || alarm.ChannelID == "" {
+			continue
+		}
+
+		if _, ok := seen[alarm.ChannelID]; ok {
+			continue
+		}
+
+		seen[alarm.ChannelID] = struct{}{}
+		channelIDs = append(channelIDs, alarm.ChannelID)
+	}
+
+	return channelIDs
+}
+
+func (as *AlarmService) removeAlarmFromCache(
+	ctx context.Context,
+	roomID, channelID string,
+	alarmTypes domain.AlarmTypes,
+) (bool, error) {
+	alarmKey := as.getAlarmKey(roomID)
+
+	removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
+	if err != nil {
+		return false, fmt.Errorf("remove room alarm: %w", err)
+	}
+
+	registryKey := as.getRegistryKey(roomID)
+
+	removeSubscribersErr := as.removeChannelSubscribers(ctx, channelID, registryKey, alarmTypes)
+	if removeSubscribersErr != nil {
+		return false, fmt.Errorf("remove channel subscribers: %w", removeSubscribersErr)
+	}
+
+	cleanupRegistryErr := as.cleanupChannelRegistryIfEmpty(ctx, channelID)
+	if cleanupRegistryErr != nil {
+		return false, fmt.Errorf("cleanup channel registry if empty: %w", cleanupRegistryErr)
+	}
+
+	remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
+	if err != nil {
+		return false, fmt.Errorf("read remaining room alarms: %w", err)
+	}
+
+	if len(remainingAlarms) == 0 {
+		if _, err := as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
+			return false, fmt.Errorf("remove room registry: %w", err)
+		}
+
+		as.logger.Info("Room removed from registry (no alarms left)",
+			slog.String("room_id", roomID),
+		)
+	}
+
 	return removed > 0, nil
+}
+
+func (as *AlarmService) clearRoomAlarmsFromCache(ctx context.Context, roomID string, channelIDs []string) (int, error) {
+	if len(channelIDs) == 0 {
+		return 0, nil
+	}
+
+	alarmKey := as.getAlarmKey(roomID)
+
+	removed, err := as.cache.SRem(ctx, alarmKey, channelIDs)
+	if err != nil {
+		return 0, fmt.Errorf("remove room alarms: %w", err)
+	}
+
+	registryKey := as.getRegistryKey(roomID)
+	if err := as.clearChannelSubscribersPipeline(ctx, channelIDs, registryKey); err != nil {
+		return 0, fmt.Errorf("clear channel subscribers pipeline: %w", err)
+	}
+
+	if _, err := as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
+		return 0, fmt.Errorf("remove room registry: %w", err)
+	}
+
+	return int(removed), nil
 }
 
 func (as *AlarmService) removeChannelSubscribers(
@@ -353,69 +476,26 @@ func (as *AlarmService) removeChannelSubscribers(
 	channelID, registryKey string,
 	alarmTypes domain.AlarmTypes,
 ) error {
-	builder := as.cache.Builder()
-
-	sremCmds := make([]valkey.Completed, 0, len(alarmTypes))
-	for _, alarmType := range alarmTypes {
-		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
-
-		sremCmds = append(sremCmds, builder.Srem().Key(subsKey).Member(registryKey).Build())
-	}
-
-	if len(sremCmds) > 0 {
-		results := as.cache.DoMulti(ctx, sremCmds...)
-		if len(results) != len(sremCmds) {
-			return fmt.Errorf("remove channel subscribers: unexpected SREM result count: %d", len(results))
-		}
-		for i, res := range results {
-			if sremErr := res.Error(); sremErr != nil {
-				return fmt.Errorf("remove channel subscribers: srem type %s: %w", alarmTypes[i], sremErr)
-			}
-		}
-	}
-
-	scardCmds := make([]valkey.Completed, 0, len(alarmTypes))
-	for _, alarmType := range alarmTypes {
-		subsKey := as.channelSubscribersKeyByType(channelID, alarmType)
-
-		scardCmds = append(scardCmds, builder.Scard().Key(subsKey).Build())
-	}
-
-	if len(scardCmds) == 0 {
+	if len(alarmTypes) == 0 {
 		return nil
 	}
 
-	scardResults := as.cache.DoMulti(ctx, scardCmds...)
-	if len(scardResults) != len(scardCmds) {
-		return fmt.Errorf("remove channel subscribers: unexpected SCARD result count: %d", len(scardResults))
+	builder := as.cache.Builder()
+	subscriberKeys := as.channelSubscriberKeys(channelID, alarmTypes)
+
+	if err := as.executeSubscriberTypeRemoval(ctx, builder, subscriberKeys, registryKey, alarmTypes); err != nil {
+		return fmt.Errorf("execute subscriber type removal: %w", err)
 	}
 
-	cleanupCmds := make([]valkey.Completed, 0, len(scardResults))
-	cleanupKeys := make([]string, 0, len(scardResults))
-	for i, res := range scardResults {
-		count, cardErr := res.AsInt64()
-		if cardErr != nil {
-			return fmt.Errorf("remove channel subscribers: scard type %s: %w", alarmTypes[i], cardErr)
-		}
-		if count == 0 {
-			subsKey := as.channelSubscribersKeyByType(channelID, alarmTypes[i])
-
-			cleanupCmds = append(cleanupCmds, builder.Del().Key(subsKey).Build())
-			cleanupKeys = append(cleanupKeys, subsKey)
-		}
+	cleanupKeys, err := as.collectEmptySubscriberKeys(ctx, builder, subscriberKeys, alarmTypes, "remove channel subscribers")
+	if err != nil {
+		return fmt.Errorf("collect empty subscriber keys: %w", err)
 	}
 
-	if len(cleanupCmds) > 0 {
-		cleanupResults := as.cache.DoMulti(ctx, cleanupCmds...)
-		if len(cleanupResults) != len(cleanupCmds) {
-			return fmt.Errorf("remove channel subscribers: unexpected DEL result count: %d", len(cleanupResults))
-		}
-		for i, res := range cleanupResults {
-			if err := res.Error(); err != nil {
-				return fmt.Errorf("remove channel subscribers: delete key %s: %w", cleanupKeys[i], err)
-			}
-		}
+	if err := as.deleteSubscriberKeys(ctx, builder, cleanupKeys, "remove channel subscribers"); err != nil {
+		return fmt.Errorf("delete subscriber keys: %w", err)
 	}
+
 	return nil
 }
 
@@ -453,36 +533,36 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 		observeAlarmServiceOperation("clear", startedAt, opErr)
 	}()
 
-	alarms, err := as.GetRoomAlarms(ctx, roomID)
+	alarmRecords, err := as.loadRoomAlarmsForMutation(ctx, roomID)
 	if err != nil {
 		opErr = err
-		return 0, err
+
+		return 0, fmt.Errorf("load room alarms for mutation: %w", err)
 	}
 
-	if len(alarms) == 0 {
+	if len(alarmRecords) == 0 {
 		return 0, nil
 	}
 
-	alarmKey := as.getAlarmKey(roomID)
-
-	removed, err := as.cache.SRem(ctx, alarmKey, alarms)
-	if err != nil {
-		opErr = fmt.Errorf("clear room alarms: %w", err)
-		as.logger.Error("Failed to clear room alarms", slog.Any("error", err))
+	deleteErr := as.deleteRoomAlarms(ctx, roomID)
+	if deleteErr != nil {
+		opErr = fmt.Errorf("delete room alarms before cache clear: %w", deleteErr)
+		as.logger.Error("Failed to persist room alarm clear before cache write", slog.Any("error", deleteErr))
 
 		return 0, opErr
 	}
 
-	registryKey := as.getRegistryKey(roomID)
+	channelIDs := uniqueAlarmChannelIDs(alarmRecords)
 
-	if err := as.clearChannelSubscribersPipeline(ctx, alarms, registryKey); err != nil && as.logger != nil {
-		as.logger.Warn("Failed to clear channel subscribers during room alarm clear",
-			slog.String("room_id", roomID),
-			slog.Any("error", err),
-		)
+	removed, err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs)
+	if err != nil {
+		opErr = as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
+		as.logger.Error("Failed to clear room alarms", slog.Any("error", opErr))
+
+		return 0, fmt.Errorf("rebuild clear cache from repository: %w", opErr)
 	}
 
-	for _, channelID := range alarms {
+	for _, channelID := range channelIDs {
 		if err := as.cleanupChannelRegistryIfEmpty(ctx, channelID); err != nil && as.logger != nil {
 			as.logger.Warn("Failed to cleanup channel registry during room alarm clear",
 				slog.String("room_id", roomID),
@@ -500,16 +580,16 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 		}
 	}
 
-	_, _ = as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey})
-
-	as.clearRoomAlarmsAsync(roomID)
-
 	as.logger.Info("All alarms cleared",
 		slog.String("room_id", roomID),
-		slog.Int("count", int(removed)),
+		slog.Int("count", len(channelIDs)),
 	)
 
-	return int(removed), nil
+	if as.alarmRepo != nil {
+		return len(channelIDs), nil
+	}
+
+	return removed, nil
 }
 
 func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, alarms []string, registryKey string) error {
@@ -518,63 +598,192 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 	}
 
 	builder := as.cache.Builder()
+	channelSubsKeys := as.roomChannelSubscriberKeys(alarms)
 
-	channelSubsKeys := make([]string, 0, len(alarms)*len(domain.AllAlarmTypes))
-
-	sremCmds := make([]valkey.Completed, 0, len(alarms)*len(domain.AllAlarmTypes))
-	for _, channelID := range alarms {
-		for _, alarmType := range domain.AllAlarmTypes {
-			key := as.channelSubscribersKeyByType(channelID, alarmType)
-
-			channelSubsKeys = append(channelSubsKeys, key)
-			sremCmds = append(sremCmds, builder.Srem().Key(key).Member(registryKey).Build())
-		}
+	if err := as.executeSubscriberKeyRemoval(ctx, builder, channelSubsKeys, registryKey, "clear channel subscribers"); err != nil {
+		return fmt.Errorf("execute subscriber key removal: %w", err)
 	}
 
-	sremResults := as.cache.DoMulti(ctx, sremCmds...)
-	if len(sremResults) != len(sremCmds) {
-		return fmt.Errorf("clear channel subscribers: unexpected SREM result count: %d", len(sremResults))
+	cleanupKeys, err := as.collectEmptySubscriberKeys(ctx, builder, channelSubsKeys, nil, "clear channel subscribers")
+	if err != nil {
+		return fmt.Errorf("collect empty subscriber keys: %w", err)
 	}
-	for i, result := range sremResults {
+
+	if err := as.deleteSubscriberKeys(ctx, builder, cleanupKeys, "clear channel subscribers"); err != nil {
+		return fmt.Errorf("delete subscriber keys: %w", err)
+	}
+
+	return nil
+}
+
+func normalizedAlarmTypes(alarmTypes domain.AlarmTypes) domain.AlarmTypes {
+	if len(alarmTypes) == 0 {
+		return domain.DefaultAlarmTypes
+	}
+
+	return alarmTypes
+}
+
+func normalizedRemovalAlarmTypes(alarmTypes domain.AlarmTypes) domain.AlarmTypes {
+	if len(alarmTypes) == 0 {
+		return domain.AllAlarmTypes
+	}
+
+	return alarmTypes
+}
+
+func buildAlarmRecord(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) *domain.Alarm {
+	return &domain.Alarm{
+		RoomID:     req.RoomID,
+		UserID:     req.UserID,
+		ChannelID:  req.ChannelID,
+		MemberName: req.MemberName,
+		RoomName:   req.RoomName,
+		UserName:   req.UserName,
+		AlarmTypes: alarmTypes,
+	}
+}
+
+func (as *AlarmService) logAlarmAdded(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) {
+	as.logger.Info("Alarm added",
+		slog.String("room_id", req.RoomID),
+		slog.String("room_name", req.RoomName),
+		slog.String("user_id", req.UserID),
+		slog.String("user_name", req.UserName),
+		slog.String("channel_id", req.ChannelID),
+		slog.String("member_name", req.MemberName),
+		slog.Any("alarm_types", alarmTypes),
+	)
+}
+
+func (as *AlarmService) channelSubscriberKeys(channelID string, alarmTypes domain.AlarmTypes) []string {
+	keys := make([]string, len(alarmTypes))
+	for i, alarmType := range alarmTypes {
+		keys[i] = as.channelSubscribersKeyByType(channelID, alarmType)
+	}
+
+	return keys
+}
+
+func (as *AlarmService) roomChannelSubscriberKeys(channelIDs []string) []string {
+	keys := make([]string, 0, len(channelIDs)*len(domain.AllAlarmTypes))
+	for _, channelID := range channelIDs {
+		keys = append(keys, as.channelSubscriberKeys(channelID, domain.AllAlarmTypes)...)
+	}
+
+	return keys
+}
+
+func (as *AlarmService) executeSubscriberTypeRemoval(
+	ctx context.Context,
+	builder valkey.Builder,
+	subscriberKeys []string,
+	registryKey string,
+	alarmTypes domain.AlarmTypes,
+) error {
+	results := as.cache.DoMulti(ctx, buildSubscriberSRemCommands(builder, subscriberKeys, registryKey)...)
+	if len(results) != len(subscriberKeys) {
+		return fmt.Errorf("remove channel subscribers: unexpected SREM result count: %d", len(results))
+	}
+
+	for i, result := range results {
 		if err := result.Error(); err != nil {
-			return fmt.Errorf("clear channel subscribers: srem key %s: %w", channelSubsKeys[i], err)
+			return fmt.Errorf("remove channel subscribers: srem type %s: %w", alarmTypes[i], err)
 		}
 	}
 
-	scardCmds := make([]valkey.Completed, len(channelSubsKeys))
-	for i, key := range channelSubsKeys {
-		scardCmds[i] = builder.Scard().Key(key).Build()
+	return nil
+}
+
+func (as *AlarmService) executeSubscriberKeyRemoval(
+	ctx context.Context,
+	builder valkey.Builder,
+	subscriberKeys []string,
+	registryKey string,
+	operation string,
+) error {
+	results := as.cache.DoMulti(ctx, buildSubscriberSRemCommands(builder, subscriberKeys, registryKey)...)
+	if len(results) != len(subscriberKeys) {
+		return fmt.Errorf("%s: unexpected SREM result count: %d", operation, len(results))
 	}
 
-	scardResults := as.cache.DoMulti(ctx, scardCmds...)
-	if len(scardResults) != len(scardCmds) {
-		return fmt.Errorf("clear channel subscribers: unexpected SCARD result count: %d", len(scardResults))
+	for i, result := range results {
+		if err := result.Error(); err != nil {
+			return fmt.Errorf("%s: srem key %s: %w", operation, subscriberKeys[i], err)
+		}
 	}
 
-	cleanupCmds := make([]valkey.Completed, 0, len(scardResults))
-	cleanupKeys := make([]string, 0, len(scardResults))
-	for i, result := range scardResults {
+	return nil
+}
+
+func buildSubscriberSRemCommands(builder valkey.Builder, subscriberKeys []string, registryKey string) []valkey.Completed {
+	commands := make([]valkey.Completed, len(subscriberKeys))
+	for i, key := range subscriberKeys {
+		commands[i] = builder.Srem().Key(key).Member(registryKey).Build()
+	}
+
+	return commands
+}
+
+func (as *AlarmService) collectEmptySubscriberKeys(
+	ctx context.Context,
+	builder valkey.Builder,
+	subscriberKeys []string,
+	alarmTypes domain.AlarmTypes,
+	operation string,
+) ([]string, error) {
+	scardCommands := make([]valkey.Completed, len(subscriberKeys))
+	for i, key := range subscriberKeys {
+		scardCommands[i] = builder.Scard().Key(key).Build()
+	}
+
+	results := as.cache.DoMulti(ctx, scardCommands...)
+	if len(results) != len(scardCommands) {
+		return nil, fmt.Errorf("%s: unexpected SCARD result count: %d", operation, len(results))
+	}
+
+	cleanupKeys := make([]string, 0, len(results))
+	for i, result := range results {
 		count, err := result.AsInt64()
 		if err != nil {
-			return fmt.Errorf("clear channel subscribers: scard key %s: %w", channelSubsKeys[i], err)
-		}
-		if count > 0 {
-			continue
+			if len(alarmTypes) > 0 {
+				return nil, fmt.Errorf("%s: scard type %s: %w", operation, alarmTypes[i], err)
+			}
+
+			return nil, fmt.Errorf("%s: scard key %s: %w", operation, subscriberKeys[i], err)
 		}
 
-		cleanupCmds = append(cleanupCmds, builder.Del().Key(channelSubsKeys[i]).Build())
-		cleanupKeys = append(cleanupKeys, channelSubsKeys[i])
+		if count == 0 {
+			cleanupKeys = append(cleanupKeys, subscriberKeys[i])
+		}
 	}
 
-	if len(cleanupCmds) > 0 {
-		cleanupResults := as.cache.DoMulti(ctx, cleanupCmds...)
-		if len(cleanupResults) != len(cleanupCmds) {
-			return fmt.Errorf("clear channel subscribers: unexpected DEL result count: %d", len(cleanupResults))
-		}
-		for i, result := range cleanupResults {
-			if err := result.Error(); err != nil {
-				return fmt.Errorf("clear channel subscribers: delete key %s: %w", cleanupKeys[i], err)
-			}
+	return cleanupKeys, nil
+}
+
+func (as *AlarmService) deleteSubscriberKeys(
+	ctx context.Context,
+	builder valkey.Builder,
+	cleanupKeys []string,
+	operation string,
+) error {
+	if len(cleanupKeys) == 0 {
+		return nil
+	}
+
+	cleanupCommands := make([]valkey.Completed, len(cleanupKeys))
+	for i, key := range cleanupKeys {
+		cleanupCommands[i] = builder.Del().Key(key).Build()
+	}
+
+	results := as.cache.DoMulti(ctx, cleanupCommands...)
+	if len(results) != len(cleanupCommands) {
+		return fmt.Errorf("%s: unexpected DEL result count: %d", operation, len(results))
+	}
+
+	for i, result := range results {
+		if err := result.Error(); err != nil {
+			return fmt.Errorf("%s: delete key %s: %w", operation, cleanupKeys[i], err)
 		}
 	}
 
@@ -598,11 +807,13 @@ func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, chann
 	if len(scardResults) != len(scardCmds) {
 		return fmt.Errorf("cleanup channel registry: unexpected SCARD result count: %d", len(scardResults))
 	}
+
 	for i, res := range scardResults {
 		count, err := res.AsInt64()
 		if err != nil {
 			return fmt.Errorf("cleanup channel registry: scard key %s: %w", allSubsKeys[i], err)
 		}
+
 		if count > 0 {
 			return nil
 		}
@@ -611,5 +822,6 @@ func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, chann
 	if _, err := as.cache.SRem(ctx, AlarmChannelRegistryKey, []string{channelID}); err != nil {
 		return fmt.Errorf("cleanup channel registry: remove channel registry entry: %w", err)
 	}
+
 	return nil
 }

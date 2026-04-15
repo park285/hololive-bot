@@ -92,6 +92,4 @@ type AlarmService struct {
 	targetPolicy    sharedchecker.TargetMinutePolicy
 	targetMinutesMu sync.RWMutex
 	platformMapMu   sync.Mutex
-	persistExecutor *stripedExecutor
-	closeOnce       sync.Once
 }

@@ -132,6 +132,7 @@ func TestBuildTitleFingerprint_FullWidthEquivalence(t *testing.T) {
 
 	fpA := buildTitleFingerprint("クリアする!そして", "s1")
 	fpB := buildTitleFingerprint("クリアする！そして", "s1")
+
 	if fpA != fpB {
 		t.Errorf("alarm_cache fingerprints differ for half/full-width: %q != %q", fpA, fpB)
 	}
@@ -252,63 +253,62 @@ func TestMarkUpcomingEventNotifiedAndWasRecently(t *testing.T) {
 	}
 }
 
+type nextStreamInfoCase struct {
+	name   string
+	seed   map[string]any
+	assert func(t *testing.T, got *domain.NextStreamInfo, err error)
+}
+
+func assertNoNextStreamInfo(t *testing.T, got *domain.NextStreamInfo, err error) {
+	t.Helper()
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got != nil {
+		t.Fatalf("expected nil info, got %#v", got)
+	}
+}
+
+func assertUpcomingNextStreamInfo(t *testing.T, got *domain.NextStreamInfo, err error) {
+	t.Helper()
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got == nil {
+		t.Fatal("expected info, got nil")
+	}
+
+	if got.Status != domain.NextStreamStatusUpcoming || got.VideoID != "v1" || got.Title != "테스트" {
+		t.Fatalf("unexpected info: %#v", got)
+	}
+
+	if got.StartScheduled == nil || got.StartScheduled.Format(time.RFC3339) != "2026-03-02T00:00:00Z" {
+		t.Fatalf("unexpected scheduled time: %#v", got.StartScheduled)
+	}
+}
+
 func TestGetNextStreamInfo(t *testing.T) {
 	t.Parallel()
 
-	as := newTestAlarmService(t)
-	ctx := t.Context()
-	channelID := "UC_test"
-	key := NextStreamKeyPrefix + channelID
-
-	tests := []struct {
-		name   string
-		seed   map[string]any
-		assert func(t *testing.T, got *domain.NextStreamInfo, err error)
-	}{
+	tests := []nextStreamInfoCase{
 		{
-			name: "missing cache returns nil",
-			seed: nil,
-			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
-				t.Helper()
-
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-
-				if got != nil {
-					t.Fatalf("expected nil info, got %#v", got)
-				}
-			},
+			name:   "missing cache returns nil",
+			seed:   nil,
+			assert: assertNoNextStreamInfo,
 		},
 		{
-			name: "invalid status ignored",
-			seed: map[string]any{"status": "broken", "video_id": "v1", "title": "t1"},
-			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
-				t.Helper()
-
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-
-				if got != nil {
-					t.Fatalf("expected nil info for invalid status, got %#v", got)
-				}
-			},
+			name:   "invalid status ignored",
+			seed:   map[string]any{"status": "broken", "video_id": "v1", "title": "t1"},
+			assert: assertNoNextStreamInfo,
 		},
 		{
-			name: "upcoming requires complete fields",
-			seed: map[string]any{"status": "upcoming", "video_id": "v1"},
-			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
-				t.Helper()
-
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-
-				if got != nil {
-					t.Fatalf("expected nil info for incomplete upcoming, got %#v", got)
-				}
-			},
+			name:   "upcoming requires complete fields",
+			seed:   map[string]any{"status": "upcoming", "video_id": "v1"},
+			assert: assertNoNextStreamInfo,
 		},
 		{
 			name: "upcoming complete fields",
@@ -318,30 +318,19 @@ func TestGetNextStreamInfo(t *testing.T) {
 				"title":           "테스트",
 				"start_scheduled": "2026-03-02T00:00:00Z",
 			},
-			assert: func(t *testing.T, got *domain.NextStreamInfo, err error) {
-				t.Helper()
-
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-
-				if got == nil {
-					t.Fatal("expected info, got nil")
-				}
-
-				if got.Status != domain.NextStreamStatusUpcoming || got.VideoID != "v1" || got.Title != "테스트" {
-					t.Fatalf("unexpected info: %#v", got)
-				}
-
-				if got.StartScheduled == nil || got.StartScheduled.Format(time.RFC3339) != "2026-03-02T00:00:00Z" {
-					t.Fatalf("unexpected scheduled time: %#v", got.StartScheduled)
-				}
-			},
+			assert: assertUpcomingNextStreamInfo,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			as := newTestAlarmService(t)
+			ctx := t.Context()
+			channelID := "UC_test"
+			key := NextStreamKeyPrefix + channelID
+
 			if err := as.cache.Del(ctx, key); err != nil {
 				t.Fatalf("cache delete failed: %v", err)
 			}

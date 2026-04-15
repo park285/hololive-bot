@@ -30,30 +30,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
-	t.Parallel()
+type alarmCacheScenario struct {
+	name   string
+	seed   func(t *testing.T, svc *AlarmService, ctx context.Context)
+	run    func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error)
+	assert func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool)
+}
 
-	type scenario struct {
-		name   string
-		seed   func(t *testing.T, svc *AlarmService, ctx context.Context)
-		run    func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error)
-		assert func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool)
-	}
+func alarmAddRemoveCacheScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+	return append(alarmAddScenarios(baseReq), alarmRemoveScenarios(baseReq)...)
+}
 
-	baseReq := domain.AddAlarmRequest{
-		RoomID:     "room-1",
-		UserID:     "user-1",
-		ChannelID:  "UC_TEST",
-		MemberName: "테스트 멤버",
-		RoomName:   "테스트 방",
-		UserName:   "테스트 사용자",
-	}
+func alarmAddScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+	return append(alarmAddRegistryScenarios(baseReq), alarmAddDuplicateScenarios(baseReq)...)
+}
 
-	scenarios := []scenario{
+func alarmAddRegistryScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+	return []alarmCacheScenario{
 		{
 			name: "add 신규 알람은 cache/registry를 갱신한다",
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
+
 				return svc.AddAlarm(ctx, baseReq)
 			},
 			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
@@ -101,6 +99,11 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 				assert.Empty(t, shortsSubs)
 			},
 		},
+	}
+}
+
+func alarmAddDuplicateScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+	return []alarmCacheScenario{
 		{
 			name: "duplicate add는 false를 반환하고 channel set 크기를 유지한다",
 			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
@@ -112,6 +115,7 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			},
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
+
 				return svc.AddAlarm(ctx, baseReq)
 			},
 			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
@@ -123,6 +127,15 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 				assert.Equal(t, []string{baseReq.ChannelID}, roomChannels)
 			},
 		},
+	}
+}
+
+func alarmRemoveScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+	return append(alarmRemovePartialScenarios(baseReq), alarmRemoveTerminalScenarios(baseReq)...)
+}
+
+func alarmRemovePartialScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+	return []alarmCacheScenario{
 		{
 			name: "다중 채널 구독에서 한 채널 제거 시 room registry와 나머지 채널 구독은 유지된다",
 			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
@@ -136,12 +149,14 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 
 				secondReq.ChannelID = "UC_TEST_2"
 				secondReq.MemberName = "두번째 멤버"
+
 				added, err = svc.AddAlarm(ctx, secondReq)
 				require.NoError(t, err)
 				require.True(t, added)
 			},
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
+
 				return svc.RemoveAlarm(ctx, baseReq.RoomID, baseReq.ChannelID, nil)
 			},
 			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
@@ -162,6 +177,11 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 				assert.Contains(t, channelRegistry, "UC_TEST_2")
 			},
 		},
+	}
+}
+
+func alarmRemoveTerminalScenarios(baseReq domain.AddAlarmRequest) []alarmCacheScenario {
+	return []alarmCacheScenario{
 		{
 			name: "remove existing alarm은 room 알람과 registry를 정리한다",
 			seed: func(t *testing.T, svc *AlarmService, ctx context.Context) {
@@ -173,6 +193,7 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			},
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
+
 				return svc.RemoveAlarm(ctx, baseReq.RoomID, baseReq.ChannelID, nil)
 			},
 			assert: func(t *testing.T, svc *AlarmService, ctx context.Context, changed bool) {
@@ -192,6 +213,7 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			name: "remove missing alarm은 false를 반환한다",
 			run: func(t *testing.T, svc *AlarmService, ctx context.Context) (bool, error) {
 				t.Helper()
+
 				return svc.RemoveAlarm(ctx, baseReq.RoomID, "UC_UNKNOWN", nil)
 			},
 			assert: func(t *testing.T, _ *AlarmService, _ context.Context, changed bool) {
@@ -200,8 +222,21 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, tc := range scenarios {
+func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
+	t.Parallel()
+
+	baseReq := domain.AddAlarmRequest{
+		RoomID:     "room-1",
+		UserID:     "user-1",
+		ChannelID:  "UC_TEST",
+		MemberName: "테스트 멤버",
+		RoomName:   "테스트 방",
+		UserName:   "테스트 사용자",
+	}
+
+	for _, tc := range alarmAddRemoveCacheScenarios(baseReq) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

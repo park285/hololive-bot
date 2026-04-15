@@ -18,12 +18,14 @@ func newAlarmCleanupCacheMock(
 ) *cachemocks.Client {
 	t.Helper()
 
-	cacheSvc := newTestCacheService(t, t.Context())
+	cacheSvc := newTestCacheService(t.Context(), t)
 	client := cachemocks.NewLenientClient()
+
 	client.BuilderFunc = cacheSvc.Builder
 	client.BFunc = cacheSvc.B
 	client.GetClientFunc = cacheSvc.GetClient
 	client.DoMultiFunc = doMulti
+
 	return client
 }
 
@@ -54,10 +56,13 @@ func TestClearChannelSubscribersPipeline_ReturnsErrorOnScardParseFailure(t *test
 	as := &AlarmService{
 		cache: newAlarmCleanupCacheMock(t, func(context.Context, ...valkey.Completed) []valkey.ValkeyResult {
 			call++
+
 			results := make([]valkey.ValkeyResult, len(domain.AllAlarmTypes))
+
 			if call == 1 {
 				return results
 			}
+
 			return results
 		}),
 		logger: newDiscardAlarmLogger(),
@@ -71,7 +76,7 @@ func TestClearChannelSubscribersPipeline_ReturnsErrorOnScardParseFailure(t *test
 func TestCleanupChannelRegistryIfEmpty_ReturnsErrorWhenRemovingRegistryEntryFails(t *testing.T) {
 	t.Parallel()
 
-	cacheSvc := newTestCacheService(t, t.Context())
+	cacheSvc := newTestCacheService(t.Context(), t)
 	as := &AlarmService{
 		cache: &cachemocks.Client{
 			BuilderFunc: cacheSvc.Builder,
