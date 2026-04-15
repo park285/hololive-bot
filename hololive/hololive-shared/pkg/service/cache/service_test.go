@@ -146,6 +146,27 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 	}
 }
 
+func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
+	svc, _ := newTestCacheService(t)
+	ctx := context.Background()
+
+	err := svc.MSet(ctx, map[string]any{
+		"good": testPayload{Name: "A"},
+		"bad":  make(chan int),
+	}, time.Minute)
+	if err == nil {
+		t.Fatalf("expected marshal error from mset")
+	}
+
+	exists, existsErr := svc.Exists(ctx, "good")
+	if existsErr != nil {
+		t.Fatalf("exists failed: %v", existsErr)
+	}
+	if exists {
+		t.Fatalf("expected mset to avoid partial writes on marshal failure")
+	}
+}
+
 func TestMemberCacheOperations(t *testing.T) {
 	svc, _ := newTestCacheService(t)
 	ctx := context.Background()

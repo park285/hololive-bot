@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
@@ -79,7 +80,7 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 		},
 	}
 
-	handler, err := buildBotWebhookHandler(cfg, stubWebhookMessageHandler{}, deps, nil)
+	handler, err := appbootstrap.BuildBotWebhookHandler(cfg, stubWebhookMessageHandler{}, deps, nil)
 	require.NoError(t, err)
 	require.NotNil(t, handler)
 	t.Cleanup(func() {
@@ -124,7 +125,7 @@ func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
 		AlarmService:   &notification.AlarmService{},
 	}
 
-	scheduler, err := buildAlarmRuntimeScheduler(cfg, infra, logger)
+	scheduler, err := appbootstrap.BuildAlarmRuntimeScheduler(cfg, infra, logger)
 	require.NoError(t, err)
 	assert.NotNil(t, scheduler)
 }
