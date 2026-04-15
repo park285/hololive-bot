@@ -26,7 +26,9 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-dispatcher-go/internal/app"
+	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 )
 
@@ -34,7 +36,11 @@ var Version = "dev"
 
 func main() {
 	os.Exit(bootstrap.Run(bootstrap.Options[*app.Config, *app.Runtime]{
-		Version:                Version,
+		Version: Version,
+		Initialize: func(version string) {
+			automaxprocs.Init(nil)
+			health.Init(version)
+		},
 		LoadConfig:             app.LoadConfig,
 		LoadConfigErrorMessage: "Failed to load dispatcher config",
 		LoggerConfig: func(cfg *app.Config) sharedlogging.Config {

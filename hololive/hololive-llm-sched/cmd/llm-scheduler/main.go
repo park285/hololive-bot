@@ -28,7 +28,9 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/app"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 )
 
@@ -36,7 +38,11 @@ var Version = "dev"
 
 func main() {
 	os.Exit(bootstrap.Run(bootstrap.Options[*config.LLMSchedulerConfig, *app.LLMSchedulerRuntime]{
-		Version:                Version,
+		Version: Version,
+		Initialize: func(version string) {
+			automaxprocs.Init(nil)
+			health.Init(version)
+		},
 		LoadConfig:             config.LoadLLMScheduler,
 		LoadConfigErrorMessage: "Failed to load llm scheduler config",
 		LoggerConfig: func(cfg *config.LLMSchedulerConfig) sharedlogging.Config {

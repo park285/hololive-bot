@@ -26,7 +26,9 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 
 	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
@@ -36,7 +38,11 @@ var Version = "dev"
 
 func main() {
 	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *runtimeapp.StreamIngesterRuntime]{
-		Version:                Version,
+		Version: Version,
+		Initialize: func(version string) {
+			automaxprocs.Init(nil)
+			health.Init(version)
+		},
 		LoadConfig:             config.Load,
 		LoadConfigErrorMessage: "Failed to load youtube scraper config",
 		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
