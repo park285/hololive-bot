@@ -23,7 +23,8 @@ package app
 import (
 	"context"
 	"errors"
-	"log/slog"
+
+	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
 )
 
 func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
@@ -31,46 +32,28 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	r.startSchedulers(ctx, errCh)
-	r.startBot(ctx)
-
-	r.StartHTTPServer(errCh)
-
-	if r.Logger != nil && r.ServerAddr != "" {
-		r.Logger.Info("Bot HTTP server started", slog.String("addr", r.ServerAddr))
-	}
-}
-
-func (r *BotRuntime) startSchedulers(ctx context.Context, errCh chan<- error) {
-	r.startAlarmScheduler(ctx)
-
-	if r.ConfigSubscriber != nil {
-		go r.ConfigSubscriber.Run(ctx)
-
-		r.logInfo("Config subscriber started")
-	}
-}
-
-func (r *BotRuntime) startAlarmScheduler(ctx context.Context) {
-	if r.AlarmScheduler == nil {
-		r.logInfo("Alarm runtime scheduler not configured")
-		return
-	}
-
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	alarmCtx, alarmCancel := context.WithCancel(ctx)
-	r.setAlarmSchedulerCancel(alarmCancel)
-
-	go r.AlarmScheduler.Start(alarmCtx)
-
-	r.logInfo("Alarm runtime scheduler started")
+	appruntime.Start(ctx, errCh, appruntime.StartHooks{
+		Logger:     r.Logger,
+		ServerAddr: r.ServerAddr,
+		StartAlarmScheduler: func(ctx context.Context) {
+			if r.AlarmScheduler != nil {
+				r.AlarmScheduler.Start(ctx)
+			}
+		},
+		RunConfigSubscriber: func(ctx context.Context) {
+			if r.ConfigSubscriber != nil {
+				r.ConfigSubscriber.Run(ctx)
+			}
+		},
+		StartBot: func(ctx context.Context) error {
+			if r.Bot == nil {
+				return nil
+			}
+			return r.Bot.Start(ctx)
+		},
+		StartHTTPServer:         r.StartHTTPServer,
+		SetAlarmSchedulerCancel: r.setAlarmSchedulerCancel,
+	})
 }
 
 func (r *BotRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) {
@@ -102,6 +85,38 @@ func (r *BotRuntime) clearAlarmSchedulerCancel() bool {
 	}
 
 	return false
+}
+
+func (r *BotRuntime) startSchedulers(ctx context.Context, errCh chan<- error) {
+	r.startAlarmScheduler(ctx)
+
+	if r.ConfigSubscriber != nil {
+		go r.ConfigSubscriber.Run(ctx)
+		r.logInfo("Config subscriber started")
+	}
+
+	if r.HttpServer != nil {
+		r.StartHTTPServer(errCh)
+	}
+}
+
+func (r *BotRuntime) startAlarmScheduler(ctx context.Context) {
+	if r.AlarmScheduler == nil {
+		r.logInfo("Alarm runtime scheduler not configured")
+		return
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	alarmCtx, alarmCancel := context.WithCancel(ctx)
+	r.setAlarmSchedulerCancel(alarmCancel)
+
+	go r.AlarmScheduler.Start(alarmCtx)
+	if r.Logger != nil {
+		r.Logger.Info("Alarm runtime scheduler started")
+	}
 }
 
 func (r *BotRuntime) startBot(ctx context.Context) {

@@ -26,10 +26,12 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/valkey-io/valkey-go"
 	"gorm.io/gorm"
 )
 
@@ -90,6 +92,8 @@ type Service struct {
 	db     *gorm.DB
 	cache  cache.Client
 	logger *slog.Logger
+
+	renameRoomsKeyFunc func(ctx context.Context, tempKey, key string, rooms []string) error
 
 	// 메모리 캐시 (빠른 조회용)
 	mu             sync.RWMutex
@@ -232,16 +236,27 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 
 	s.mu.Unlock()
 
-	s.syncSettingsToValkey(ctx)
-	s.syncModeToValkey(ctx)
-	s.syncRoomsToValkey(ctx, ACLModeWhitelist)
-	s.syncRoomsToValkey(ctx, ACLModeBlacklist)
+	if err := s.syncSettingsToValkey(ctx); err != nil {
+		s.logger.Warn("Failed to sync ACL settings to cache", slog.Any("error", err))
+	}
+
+	if err := s.syncModeToValkey(ctx); err != nil {
+		s.logger.Warn("Failed to sync ACL mode to cache", slog.Any("error", err))
+	}
+
+	if err := s.syncRoomsToValkey(ctx, ACLModeWhitelist); err != nil {
+		s.logger.Warn("Failed to sync ACL rooms to cache", slog.String("mode", string(ACLModeWhitelist)), slog.Any("error", err))
+	}
+
+	if err := s.syncRoomsToValkey(ctx, ACLModeBlacklist); err != nil {
+		s.logger.Warn("Failed to sync ACL rooms to cache", slog.String("mode", string(ACLModeBlacklist)), slog.Any("error", err))
+	}
 
 	return nil
 }
 
 // syncRoomsToValkey: 메모리 → Valkey SET 동기화 (전체 교체).
-func (s *Service) syncRoomsToValkey(ctx context.Context, mode ACLMode) {
+func (s *Service) syncRoomsToValkey(ctx context.Context, mode ACLMode) error {
 	s.mu.RLock()
 
 	var (
@@ -264,31 +279,35 @@ func (s *Service) syncRoomsToValkey(ctx context.Context, mode ACLMode) {
 
 	s.mu.RUnlock()
 
-	_ = s.cache.Del(ctx, key)
-
-	if len(rooms) > 0 {
-		_, _ = s.cache.SAdd(ctx, key, rooms)
-	}
+	return s.syncRoomsToValkeyAtomic(ctx, key, rooms)
 }
 
 // syncSettingsToValkey: ACL enabled 상태를 Valkey에 동기화합니다.
-func (s *Service) syncSettingsToValkey(ctx context.Context) {
+func (s *Service) syncSettingsToValkey(ctx context.Context) error {
 	s.mu.RLock()
 
 	enabled := s.enabled
 	s.mu.RUnlock()
 
-	_ = s.cache.Set(ctx, aclSettingsKey, fmt.Sprintf("%t", enabled), 0)
+	if err := s.cache.Set(ctx, aclSettingsKey, fmt.Sprintf("%t", enabled), 0); err != nil {
+		return fmt.Errorf("set %s: %w", aclSettingsKey, err)
+	}
+
+	return nil
 }
 
 // syncModeToValkey: ACL mode를 Valkey에 동기화합니다.
-func (s *Service) syncModeToValkey(ctx context.Context) {
+func (s *Service) syncModeToValkey(ctx context.Context) error {
 	s.mu.RLock()
 
 	mode := s.mode
 	s.mu.RUnlock()
 
-	_ = s.cache.Set(ctx, aclModeKey, string(mode), 0)
+	if err := s.cache.Set(ctx, aclModeKey, string(mode), 0); err != nil {
+		return fmt.Errorf("set %s: %w", aclModeKey, err)
+	}
+
+	return nil
 }
 
 // IsRoomAllowed 방 접근 허용 여부 확인 (빠른 메모리 조회).
@@ -356,7 +375,9 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 		return fmt.Errorf("failed to save ACL enabled setting: %w", result.Error)
 	}
 
-	s.syncSettingsToValkey(ctx)
+	if err := s.syncSettingsToValkey(ctx); err != nil {
+		return fmt.Errorf("sync acl settings to cache: %w", err)
+	}
 
 	s.logger.Info("ACL enabled status updated",
 		slog.Bool("enabled", enabled),
@@ -376,7 +397,9 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 		return fmt.Errorf("failed to save ACL mode setting: %w", result.Error)
 	}
 
-	s.syncModeToValkey(ctx)
+	if err := s.syncModeToValkey(ctx); err != nil {
+		return fmt.Errorf("sync acl mode to cache: %w", err)
+	}
 
 	s.logger.Info("ACL mode updated",
 		slog.String("mode", string(mode)),
@@ -415,7 +438,9 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 
 	valkeyKey := s.valkeyKeyForMode(s.currentMode())
 
-	_, _ = s.cache.SAdd(ctx, valkeyKey, []string{room})
+	if _, err := s.cache.SAdd(ctx, valkeyKey, []string{room}); err != nil {
+		return false, fmt.Errorf("sync acl room add to cache: %w", err)
+	}
 
 	s.logger.Info("Room added to ACL list",
 		slog.String("room", room),
@@ -456,7 +481,9 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 
 	valkeyKey := s.valkeyKeyForMode(s.currentMode())
 
-	_, _ = s.cache.SRem(ctx, valkeyKey, []string{room})
+	if _, err := s.cache.SRem(ctx, valkeyKey, []string{room}); err != nil {
+		return false, fmt.Errorf("sync acl room removal to cache: %w", err)
+	}
 
 	s.logger.Info("Room removed from ACL list",
 		slog.String("room", room),
