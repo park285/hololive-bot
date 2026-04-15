@@ -25,8 +25,6 @@ import appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstra
 type coreInfrastructure = appbootstrap.CoreInfrastructure
 type alarmModeComponents = appbootstrap.AlarmModeComponents
 type alarmDependencies = appbootstrap.AlarmDependencies
-type scraperHolodexProfileFoundation = appbootstrap.ScraperHolodexProfileFoundation
-type coreIntegrationServices = appbootstrap.CoreIntegrationServices
 
 type botCoreModule = appbootstrap.BotCoreModule
 type botIrisClient = appbootstrap.BotIrisClient

@@ -385,6 +385,24 @@ func TestGetACLStatus_ReturnsCopy(t *testing.T) {
 	}
 }
 
+func TestGetACLStatus_ReturnsSortedRooms(t *testing.T) {
+	t.Parallel()
+
+	svc := newTestService(true, ACLModeWhitelist, []string{"room-b", "room-a", "room-c"}, nil)
+
+	_, _, rooms := svc.GetACLStatus()
+	if len(rooms) != 3 {
+		t.Fatalf("expected 3 rooms, got %d", len(rooms))
+	}
+
+	want := []string{"room-a", "room-b", "room-c"}
+	for i := range want {
+		if rooms[i] != want[i] {
+			t.Fatalf("rooms[%d] = %q, want %q (full=%v)", i, rooms[i], want[i], rooms)
+		}
+	}
+}
+
 func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 	t.Parallel()
 

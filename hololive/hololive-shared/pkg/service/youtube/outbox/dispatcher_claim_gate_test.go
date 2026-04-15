@@ -464,3 +464,93 @@ func TestDispatchDeliveryRowsConcurrentExecutionsStartCommunityShortsDeliveryOnc
 		})
 	}
 }
+
+func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
+	sender := &claimGateTestSender{failRoom: map[string]bool{}}
+	dispatcher, _ := newClaimGateTestDispatcher(t, sender, Config{})
+	firstRow, firstOutbox, _ := newCommunityClaimGateFixture(now, "owned")
+	secondRow, secondOutbox, _ := newCommunityClaimGateFixture(now, "other")
+	duplicateRow, duplicateOutbox, _ := newCommunityClaimGateFixture(now, "owned")
+	secondRow.ID = firstRow.ID + 1
+	secondRow.OutboxID = firstOutbox.ID + 1
+	secondOutbox.ID = secondRow.OutboxID
+	secondRow.RoomID = "room-other"
+	duplicateRow.ID = secondRow.ID + 1
+	duplicateRow.OutboxID = secondRow.OutboxID + 1
+	duplicateOutbox.ID = duplicateRow.OutboxID
+	duplicateRow.RoomID = "room-duplicate"
+
+	selection := dispatcher.selectClaimedDeliveries(
+		context.Background(),
+		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
+		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
+		newDeliveryClaimReuseCache(3),
+	)
+
+	require.Len(t, selection.sendRows, 3)
+	require.Len(t, selection.claimTokens, 2)
+	require.Len(t, selection.rowClaimTokens, 3)
+	require.Len(t, selection.rowClaimTokens[0], 1)
+	require.Len(t, selection.rowClaimTokens[1], 1)
+	require.Empty(t, selection.rowClaimTokens[2])
+}
+
+func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 11, 1, 11, 12, 0, time.UTC)
+	sender := &claimGateTestSender{failRoom: map[string]bool{"room-duplicate": true}}
+	dispatcher, db := newClaimGateTestDispatcher(t, sender, Config{})
+	firstRow, firstOutbox, firstPostID := newCommunityClaimGateFixture(now, "owned")
+	secondRow, secondOutbox, secondPostID := newCommunityClaimGateFixture(now, "other")
+	duplicateRow, duplicateOutbox, _ := newCommunityClaimGateFixture(now, "owned")
+	secondRow.ID = firstRow.ID + 1
+	secondRow.OutboxID = firstOutbox.ID + 1
+	secondOutbox.ID = secondRow.OutboxID
+	secondRow.RoomID = "room-other"
+	duplicateRow.ID = secondRow.ID + 1
+	duplicateRow.OutboxID = secondRow.OutboxID + 1
+	duplicateOutbox.ID = duplicateRow.OutboxID
+	duplicateRow.RoomID = "room-duplicate"
+
+	selection := dispatcher.selectClaimedDeliveries(
+		context.Background(),
+		[]domain.YouTubeNotificationDelivery{firstRow, secondRow, duplicateRow},
+		[]domain.YouTubeNotificationOutbox{firstOutbox, secondOutbox, duplicateOutbox},
+		newDeliveryClaimReuseCache(3),
+	)
+
+	result := &deliveryDispatchResult{failureBuckets: make(map[string][]int64)}
+	var mu sync.Mutex
+	dispatcher.dispatchClaimedRowsIndividually(
+		context.Background(),
+		selection.sendRows,
+		selection.sendOutboxes,
+		map[int64]string{
+			firstOutbox.ID:     "message-1",
+			secondOutbox.ID:    "message-2",
+			duplicateOutbox.ID: "message-3",
+		},
+		map[int64]bool{},
+		selection.rowClaimTokens,
+		result,
+		&mu,
+	)
+
+	require.Equal(t, 2, sender.messageCount())
+	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.successDeliveryIDs)
+	require.Equal(t, []int64{duplicateRow.ID}, result.failureBuckets["send message"])
+
+	var firstState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&firstState, "kind = ? AND post_id = ?", firstOutbox.Kind, firstPostID).Error)
+	require.NotNil(t, firstState.AuthorizedAt)
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, firstState.DeliveryStatus)
+
+	var secondState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&secondState, "kind = ? AND post_id = ?", secondOutbox.Kind, secondPostID).Error)
+	require.NotNil(t, secondState.AuthorizedAt)
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, secondState.DeliveryStatus)
+}
