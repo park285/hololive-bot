@@ -7,6 +7,13 @@ import (
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
+const (
+	communityShortsContinuousObservationCloseoutScope        = "all_operational_channels"
+	communityShortsContinuousObservationCloseoutRule         = "observation status = finalized AND observation_window.internal_system_cause_posts == 0 (external_collection rows are excluded from pass/fail evaluation)"
+	communityShortsContinuousObservationMissingAlarmRule     = "observation status = finalized AND sent_history_dataset.missing_alarm_posts == 0"
+	communityShortsContinuousObservationStateConsistencyRule = "observation status = finalized AND sent_history_dataset.duplicate_sent_posts == 0 AND sent_history_dataset.missing_alarm_posts == 0"
+)
+
 func buildCommunityShortsContinuousObservation24HCloseout(
 	observation CommunityShortsContinuousObservationWindow,
 	baseline communityshorts.TargetBaseline,

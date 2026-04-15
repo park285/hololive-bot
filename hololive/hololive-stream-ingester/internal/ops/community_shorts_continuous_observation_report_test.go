@@ -1,12 +1,15 @@
 package ops
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
@@ -416,4 +419,197 @@ func TestBuildCommunityShortsContinuousObservationStateConsistencyCloseoutUsesIn
 	require.Equal(t, CommunityShortsContinuousObservationCloseoutStatusInsufficientEvidence, closeout.Status)
 	require.Contains(t, closeout.Statement, "sent-history dataset could not be collected")
 	require.Contains(t, closeout.Statement, "dataset unavailable")
+}
+
+func TestCollectCommunityShortsContinuousObservationArtifactsCollectsFinalizedDataset(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	cutoverAt := now.Add(-24 * time.Hour)
+	periods := []outbox.PostLatencyPeriod{{Label: "last_24h", StartAt: now.Add(-24 * time.Hour), EndAt: now}}
+	options := CommunityShortsContinuousObservationCollectOptions{
+		ObservationRuntimeName:      "youtube-scraper",
+		ObservationBigBangCutoverAt: cutoverAt,
+		DeliveryLogLimit:            25,
+		LatencyPeriodSpecs:          []CommunityShortsLatencyPeriodSpec{{Label: "last_24h", Window: 24 * time.Hour}},
+	}
+	expectedObservation := CommunityShortsContinuousObservationWindow{
+		RuntimeName:           options.ObservationRuntimeName,
+		BigBangCutoverAt:      cutoverAt,
+		ObservationStartedAt:  cutoverAt,
+		ObservationEndsAt:     now,
+		ObservedUntil:         now,
+		Status:                CommunityShortsContinuousObservationStatusFinalized,
+		TargetChannelCount:    2,
+		DeploymentCompletedAt: cutoverAt,
+	}
+	expectedBaseline := communityshorts.TargetBaseline{
+		Runtime: communityshorts.TargetBaselineRuntime{TargetChannelCount: 2},
+	}
+	expectedSendCounts := CommunityShortsSendCountReport{
+		Summary: CommunityShortsSendCountSummary{PostCount: 3},
+	}
+	expectedChannelSummary := CommunityShortsChannelSummaryReport{
+		GeneratedAt: now,
+	}
+	expectedDeliveryLogs := CommunityShortsDeliveryLogReport{
+		Summary: CommunityShortsDeliveryLogSummary{LogCount: 2},
+	}
+	expectedLatencyCause := CommunityShortsLatencyCauseReport{
+		Periods: []CommunityShortsLatencyCausePeriodView{{
+			Summary: outbox.PostLatencyPeriodSummary{Label: communityShortsLatencyCauseObservationPeriodLabel},
+		}},
+	}
+	expectedLatencyPeriods := CommunityShortsLatencyPeriodReport{
+		Periods: []outbox.PostLatencyPeriodSummary{{Label: "last_24h"}},
+	}
+	expectedDataset := CommunityShortsAlarmSentHistoryDatasetReport{
+		Summary: CommunityShortsAlarmSentHistoryDatasetSummary{ReferenceRowCount: 3},
+	}
+
+	callLog := make([]string, 0, 9)
+	artifacts, err := collectCommunityShortsContinuousObservationArtifacts(
+		context.Background(),
+		nil,
+		nil,
+		nil,
+		now,
+		options,
+		communityShortsContinuousObservationCollectorWiring{
+			collectObservation: func(ctx context.Context, session *communityShortsOpsSession, now time.Time, options CommunityShortsContinuousObservationCollectOptions) (CommunityShortsContinuousObservationWindow, error) {
+				callLog = append(callLog, "observation")
+				require.Equal(t, options.ObservationRuntimeName, expectedObservation.RuntimeName)
+				return expectedObservation, nil
+			},
+			collectTargetBaseline: func(ctx context.Context, session *communityShortsOpsSession, cfg *config.Config, logger *slog.Logger, now time.Time) (communityshorts.TargetBaseline, error) {
+				callLog = append(callLog, "baseline")
+				return expectedBaseline, nil
+			},
+			collectSendCounts: func(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery, now time.Time) (CommunityShortsSendCountReport, error) {
+				callLog = append(callLog, "send-counts")
+				require.Equal(t, options.ObservationRuntimeName, query.ObservationRuntimeName)
+				require.Equal(t, cutoverAt, *query.ObservationBigBangCutoverAt)
+				return expectedSendCounts, nil
+			},
+			buildChannelSummary: func(report CommunityShortsSendCountReport) (CommunityShortsChannelSummaryReport, error) {
+				callLog = append(callLog, "channel-summary")
+				require.Equal(t, expectedSendCounts, report)
+				return expectedChannelSummary, nil
+			},
+			collectDeliveryLogs: func(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsDeliveryLogQuery, now time.Time) (CommunityShortsDeliveryLogReport, error) {
+				callLog = append(callLog, "delivery-logs")
+				require.Equal(t, options.DeliveryLogLimit, query.Limit)
+				return expectedDeliveryLogs, nil
+			},
+			collectLatencyCause: func(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, now time.Time, periods []outbox.PostLatencyPeriod) (CommunityShortsLatencyCauseReport, error) {
+				callLog = append(callLog, "latency-cause")
+				require.Nil(t, periods)
+				return expectedLatencyCause, nil
+			},
+			buildLatencyPeriods: func(now time.Time, specs []CommunityShortsLatencyPeriodSpec) ([]outbox.PostLatencyPeriod, error) {
+				callLog = append(callLog, "build-periods")
+				require.Len(t, specs, 1)
+				return periods, nil
+			},
+			collectLatencyPeriods: func(ctx context.Context, session *communityShortsOpsSession, now time.Time, got []outbox.PostLatencyPeriod) (CommunityShortsLatencyPeriodReport, error) {
+				callLog = append(callLog, "latency-periods")
+				require.Equal(t, periods, got)
+				return expectedLatencyPeriods, nil
+			},
+			collectAlarmSentHistoryDataset: func(ctx context.Context, session *communityShortsOpsSession, now time.Time, query CommunityShortsAlarmSentHistoryDatasetQuery) (CommunityShortsAlarmSentHistoryDatasetReport, error) {
+				callLog = append(callLog, "dataset")
+				require.Equal(t, options.ObservationRuntimeName, query.ObservationRuntimeName)
+				require.Equal(t, cutoverAt, *query.ObservationBigBangCutoverAt)
+				return expectedDataset, nil
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"observation",
+		"baseline",
+		"send-counts",
+		"channel-summary",
+		"delivery-logs",
+		"latency-cause",
+		"build-periods",
+		"latency-periods",
+		"dataset",
+	}, callLog)
+	require.Equal(t, expectedObservation, artifacts.Observation)
+	require.Equal(t, expectedBaseline, artifacts.TargetBaseline)
+	require.Equal(t, expectedSendCounts, artifacts.SendCounts)
+	require.Equal(t, expectedChannelSummary, artifacts.ChannelSummary)
+	require.Equal(t, expectedDeliveryLogs, artifacts.DeliveryLogs)
+	require.Equal(t, expectedLatencyCause, artifacts.LatencyCause)
+	require.Equal(t, expectedLatencyPeriods, artifacts.LatencyPeriods)
+	require.NotNil(t, artifacts.AlarmSentHistoryDataset)
+	require.Equal(t, expectedDataset, *artifacts.AlarmSentHistoryDataset)
+	require.NoError(t, artifacts.AlarmSentHistoryDatasetErr)
+}
+
+func TestCollectCommunityShortsContinuousObservationArtifactsSkipsDatasetUntilFinalized(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	cutoverAt := now.Add(-2 * time.Hour)
+	options := CommunityShortsContinuousObservationCollectOptions{
+		ObservationRuntimeName:      "youtube-scraper",
+		ObservationBigBangCutoverAt: cutoverAt,
+		DeliveryLogLimit:            10,
+		LatencyPeriodSpecs:          []CommunityShortsLatencyPeriodSpec{{Label: "last_15m", Window: 15 * time.Minute}},
+	}
+
+	datasetCalled := false
+	artifacts, err := collectCommunityShortsContinuousObservationArtifacts(
+		context.Background(),
+		nil,
+		nil,
+		nil,
+		now,
+		options,
+		communityShortsContinuousObservationCollectorWiring{
+			collectObservation: func(ctx context.Context, session *communityShortsOpsSession, now time.Time, options CommunityShortsContinuousObservationCollectOptions) (CommunityShortsContinuousObservationWindow, error) {
+				return CommunityShortsContinuousObservationWindow{
+					RuntimeName:           options.ObservationRuntimeName,
+					BigBangCutoverAt:      options.ObservationBigBangCutoverAt,
+					ObservationStartedAt:  cutoverAt,
+					ObservationEndsAt:     now,
+					ObservedUntil:         now,
+					Status:                CommunityShortsContinuousObservationStatusActive,
+					TargetChannelCount:    1,
+					DeploymentCompletedAt: cutoverAt,
+				}, nil
+			},
+			collectTargetBaseline: func(ctx context.Context, session *communityShortsOpsSession, cfg *config.Config, logger *slog.Logger, now time.Time) (communityshorts.TargetBaseline, error) {
+				return communityshorts.TargetBaseline{}, nil
+			},
+			collectSendCounts: func(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery, now time.Time) (CommunityShortsSendCountReport, error) {
+				return CommunityShortsSendCountReport{}, nil
+			},
+			buildChannelSummary: func(report CommunityShortsSendCountReport) (CommunityShortsChannelSummaryReport, error) {
+				return CommunityShortsChannelSummaryReport{}, nil
+			},
+			collectDeliveryLogs: func(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsDeliveryLogQuery, now time.Time) (CommunityShortsDeliveryLogReport, error) {
+				return CommunityShortsDeliveryLogReport{}, nil
+			},
+			collectLatencyCause: func(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, now time.Time, periods []outbox.PostLatencyPeriod) (CommunityShortsLatencyCauseReport, error) {
+				return CommunityShortsLatencyCauseReport{}, nil
+			},
+			buildLatencyPeriods: func(now time.Time, specs []CommunityShortsLatencyPeriodSpec) ([]outbox.PostLatencyPeriod, error) {
+				return []outbox.PostLatencyPeriod{}, nil
+			},
+			collectLatencyPeriods: func(ctx context.Context, session *communityShortsOpsSession, now time.Time, periods []outbox.PostLatencyPeriod) (CommunityShortsLatencyPeriodReport, error) {
+				return CommunityShortsLatencyPeriodReport{}, nil
+			},
+			collectAlarmSentHistoryDataset: func(ctx context.Context, session *communityShortsOpsSession, now time.Time, query CommunityShortsAlarmSentHistoryDatasetQuery) (CommunityShortsAlarmSentHistoryDatasetReport, error) {
+				datasetCalled = true
+				return CommunityShortsAlarmSentHistoryDatasetReport{}, nil
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.False(t, datasetCalled)
+	require.Nil(t, artifacts.AlarmSentHistoryDataset)
+	require.NoError(t, artifacts.AlarmSentHistoryDatasetErr)
 }

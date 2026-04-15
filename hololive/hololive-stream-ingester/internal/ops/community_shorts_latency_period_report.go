@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 )
 
@@ -58,16 +57,28 @@ func CollectCommunityShortsLatencyPeriodReport(
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: %w", err)
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: provide database resources: %w", err)
+		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	telemetryRepo := outbox.NewDeliveryTelemetryRepository(databaseResources.Service.GetGormDB())
-	summaries, err := telemetryRepo.ListPostLatencyPeriodSummaries(ctx, periods)
+	return collectCommunityShortsLatencyPeriodReportWithSession(ctx, session, now, periods)
+}
+
+func collectCommunityShortsLatencyPeriodReportWithSession(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	now time.Time,
+	periods []outbox.PostLatencyPeriod,
+) (CommunityShortsLatencyPeriodReport, error) {
+	if session == nil {
+		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: session is nil")
+	}
+
+	summaries, err := session.telemetryRepo.ListPostLatencyPeriodSummaries(ctx, periods)
 	if err != nil {
 		return CommunityShortsLatencyPeriodReport{}, fmt.Errorf("collect community shorts latency period report: list period summaries: %w", err)
 	}

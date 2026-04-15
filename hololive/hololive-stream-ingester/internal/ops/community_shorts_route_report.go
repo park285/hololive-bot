@@ -119,21 +119,25 @@ func CollectCommunityShortsRouteVerificationReport(
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: since is after now")
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: provide database resources: %w", err)
+		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	memberRepository := sharedproviders.ProvideMemberRepository(databaseResources.Service, logger)
+	if session == nil || session.postgres == nil {
+		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: session is nil")
+	}
+
+	memberRepository := sharedproviders.ProvideMemberRepository(session.postgres, logger)
 	members, err := memberRepository.GetAllMembers(ctx)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: load members: %w", err)
 	}
 
-	alarmRepository := sharedalarm.NewRepository(databaseResources.Service, logger)
+	alarmRepository := sharedalarm.NewRepository(session.postgres, logger)
 	alarms, err := alarmRepository.LoadAll(ctx)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: load alarms: %w", err)
@@ -145,13 +149,12 @@ func CollectCommunityShortsRouteVerificationReport(
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: build baseline: %w", err)
 	}
 
-	telemetryRepo := outbox.NewDeliveryTelemetryRepository(databaseResources.Service.GetGormDB())
-	pathUsageRows, err := telemetryRepo.ListPostDeliveryPathUsageSince(ctx, since)
+	pathUsageRows, err := session.telemetryRepo.ListPostDeliveryPathUsageSince(ctx, since)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: list delivery path usage: %w", err)
 	}
 
-	sendCountRows, err := telemetryRepo.ListPostSendCountsSince(ctx, since)
+	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, since)
 	if err != nil {
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: list send counts: %w", err)
 	}

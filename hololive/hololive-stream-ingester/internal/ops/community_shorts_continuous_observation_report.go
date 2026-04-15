@@ -8,22 +8,15 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 type CommunityShortsContinuousObservationStatus string
 
 const (
-	CommunityShortsContinuousObservationStatusActive         CommunityShortsContinuousObservationStatus = "active"
-	CommunityShortsContinuousObservationStatusFinalized      CommunityShortsContinuousObservationStatus = "finalized"
-	communityShortsContinuousObservationDefaultLogLimit                                                 = 200
-	communityShortsContinuousObservationCloseoutScope                                                   = "all_operational_channels"
-	communityShortsContinuousObservationCloseoutRule                                                    = "observation status = finalized AND observation_window.internal_system_cause_posts == 0 (external_collection rows are excluded from pass/fail evaluation)"
-	communityShortsContinuousObservationMissingAlarmRule                                                = "observation status = finalized AND sent_history_dataset.missing_alarm_posts == 0"
-	communityShortsContinuousObservationStateConsistencyRule                                            = "observation status = finalized AND sent_history_dataset.duplicate_sent_posts == 0 AND sent_history_dataset.missing_alarm_posts == 0"
+	CommunityShortsContinuousObservationStatusActive    CommunityShortsContinuousObservationStatus = "active"
+	CommunityShortsContinuousObservationStatusFinalized CommunityShortsContinuousObservationStatus = "finalized"
+	communityShortsContinuousObservationDefaultLogLimit                                            = 200
 )
 
 type CommunityShortsContinuousObservationCollectOptions struct {
@@ -146,98 +139,48 @@ func CollectCommunityShortsContinuousObservationReport(
 		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: %w", err)
 	}
 
-	observation, err := collectCommunityShortsContinuousObservationWindow(ctx, cfg, logger, now, options)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsContinuousObservationReport{}, err
+		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: %w", err)
+	}
+	if cleanupDB != nil {
+		defer cleanupDB()
 	}
 
-	targetBaseline, err := communityshorts.CollectTargetBaseline(ctx, cfg, logger)
-	if err != nil {
-		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: target baseline: %w", err)
-	}
-
-	sendCountReport, err := CollectCommunityShortsSendCountReportWithOptions(ctx, cfg, logger, now, CommunityShortsSendCountCollectOptions{
-		ObservationRuntimeName:      options.ObservationRuntimeName,
-		ObservationBigBangCutoverAt: &options.ObservationBigBangCutoverAt,
-	})
-	if err != nil {
-		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: send counts: %w", err)
-	}
-
-	channelSummary, err := buildCommunityShortsContinuousObservationChannelSummary(sendCountReport)
-	if err != nil {
-		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: channel summary: %w", err)
-	}
-
-	deliveryLogReport, err := CollectCommunityShortsDeliveryLogReport(ctx, cfg, logger, now, CommunityShortsDeliveryLogCollectOptions{
-		ObservationRuntimeName:      options.ObservationRuntimeName,
-		ObservationBigBangCutoverAt: &options.ObservationBigBangCutoverAt,
-		Limit:                       options.DeliveryLogLimit,
-	})
-	if err != nil {
-		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: delivery logs: %w", err)
-	}
-
-	latencyCauseReport, err := CollectCommunityShortsLatencyCauseReportWithOptions(ctx, cfg, logger, now, CommunityShortsLatencyCauseCollectOptions{
-		ObservationRuntimeName:      options.ObservationRuntimeName,
-		ObservationBigBangCutoverAt: &options.ObservationBigBangCutoverAt,
-	})
-	if err != nil {
-		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: latency cause: %w", err)
-	}
-
-	latencyPeriodReport, err := CollectCommunityShortsLatencyPeriodReport(ctx, cfg, logger, now, options.LatencyPeriodSpecs)
-	if err != nil {
-		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: latency periods: %w", err)
-	}
-
-	var alarmSentHistoryDataset *CommunityShortsAlarmSentHistoryDatasetReport
-	var alarmSentHistoryDatasetErr error
-	if observation.Status == CommunityShortsContinuousObservationStatusFinalized {
-		dataset, datasetErr := CollectCommunityShortsAlarmSentHistoryDatasetReport(ctx, cfg, logger, now, CommunityShortsAlarmSentHistoryDatasetCollectOptions{
-			ObservationRuntimeName:      options.ObservationRuntimeName,
-			ObservationBigBangCutoverAt: &options.ObservationBigBangCutoverAt,
-		})
-		if datasetErr != nil {
-			alarmSentHistoryDatasetErr = datasetErr
-		} else {
-			alarmSentHistoryDataset = &dataset
-		}
-	}
-
-	closeout := buildCommunityShortsContinuousObservation24HCloseout(
-		observation,
-		targetBaseline,
-		sendCountReport,
-		latencyCauseReport,
+	artifacts, err := collectCommunityShortsContinuousObservationArtifacts(
+		ctx,
+		session,
+		cfg,
+		logger,
+		now,
+		options,
+		defaultCommunityShortsContinuousObservationCollectorWiring(),
 	)
-	missingAlarmCloseout := buildCommunityShortsContinuousObservationMissingAlarmCloseout(
-		observation,
-		targetBaseline,
-		alarmSentHistoryDataset,
-		alarmSentHistoryDatasetErr,
-	)
-	stateConsistencyCloseout := buildCommunityShortsContinuousObservationStateConsistencyCloseout(
-		observation,
-		targetBaseline,
-		alarmSentHistoryDataset,
-		alarmSentHistoryDatasetErr,
-	)
+	if err != nil {
+		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: %w", err)
+	}
 
+	return buildCommunityShortsContinuousObservationReport(now, artifacts), nil
+}
+
+func buildCommunityShortsContinuousObservationReport(
+	now time.Time,
+	artifacts communityShortsContinuousObservationArtifacts,
+) CommunityShortsContinuousObservationReport {
 	return CommunityShortsContinuousObservationReport{
 		GeneratedAt:                 now,
-		Observation:                 observation,
-		Closeout24H:                 closeout,
-		MissingAlarmCloseout24H:     missingAlarmCloseout,
-		StateConsistencyCloseout24H: stateConsistencyCloseout,
-		TargetBaseline:              targetBaseline,
-		ChannelSummary:              channelSummary,
-		SendCounts:                  sendCountReport,
-		AlarmSentHistoryDataset:     alarmSentHistoryDataset,
-		DeliveryLogs:                deliveryLogReport,
-		LatencyPeriods:              latencyPeriodReport,
-		LatencyCause:                latencyCauseReport,
-	}, nil
+		Observation:                 artifacts.Observation,
+		Closeout24H:                 buildCommunityShortsContinuousObservation24HCloseout(artifacts.Observation, artifacts.TargetBaseline, artifacts.SendCounts, artifacts.LatencyCause),
+		MissingAlarmCloseout24H:     buildCommunityShortsContinuousObservationMissingAlarmCloseout(artifacts.Observation, artifacts.TargetBaseline, artifacts.AlarmSentHistoryDataset, artifacts.AlarmSentHistoryDatasetErr),
+		StateConsistencyCloseout24H: buildCommunityShortsContinuousObservationStateConsistencyCloseout(artifacts.Observation, artifacts.TargetBaseline, artifacts.AlarmSentHistoryDataset, artifacts.AlarmSentHistoryDatasetErr),
+		TargetBaseline:              artifacts.TargetBaseline,
+		ChannelSummary:              artifacts.ChannelSummary,
+		SendCounts:                  artifacts.SendCounts,
+		AlarmSentHistoryDataset:     artifacts.AlarmSentHistoryDataset,
+		DeliveryLogs:                artifacts.DeliveryLogs,
+		LatencyPeriods:              artifacts.LatencyPeriods,
+		LatencyCause:                artifacts.LatencyCause,
+	}
 }
 
 func normalizeCommunityShortsContinuousObservationCollectOptions(
@@ -267,71 +210,4 @@ func validateCommunityShortsContinuousObservationCollectOptions(
 		return fmt.Errorf("delivery log limit must be greater than zero")
 	}
 	return nil
-}
-
-func collectCommunityShortsContinuousObservationWindow(
-	ctx context.Context,
-	cfg *config.Config,
-	logger *slog.Logger,
-	now time.Time,
-	options CommunityShortsContinuousObservationCollectOptions,
-) (CommunityShortsContinuousObservationWindow, error) {
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
-	if err != nil {
-		return CommunityShortsContinuousObservationWindow{}, fmt.Errorf("collect community shorts continuous observation report: provide database resources: %w", err)
-	}
-	if cleanupDB != nil {
-		defer cleanupDB()
-	}
-
-	state, err := resolveCommunityShortsObservationQueryState(
-		ctx,
-		trackingrepo.NewRepository(databaseResources.Service.GetGormDB()),
-		options.ObservationRuntimeName,
-		options.ObservationBigBangCutoverAt,
-		now,
-	)
-	if err != nil {
-		return CommunityShortsContinuousObservationWindow{}, fmt.Errorf("collect community shorts continuous observation report: find observation window: %w", err)
-	}
-	if state.Window == nil {
-		return CommunityShortsContinuousObservationWindow{}, fmt.Errorf(
-			"collect community shorts continuous observation report: observation window not found: runtime=%s cutover=%s",
-			options.ObservationRuntimeName,
-			formatCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt),
-		)
-	}
-
-	status := CommunityShortsContinuousObservationStatusActive
-	if state.Finalized {
-		status = CommunityShortsContinuousObservationStatusFinalized
-	}
-
-	return CommunityShortsContinuousObservationWindow{
-		RuntimeName:           state.Window.RuntimeName,
-		BigBangCutoverAt:      normalizeCommunityShortsSendCountTime(state.Window.BigBangCutoverAt),
-		AppVersion:            strings.TrimSpace(state.Window.AppVersion),
-		TargetChannelCount:    state.Window.TargetChannelCount,
-		DeploymentCompletedAt: normalizeCommunityShortsSendCountTime(state.Window.DeploymentCompletedAt),
-		ObservationStartedAt:  normalizeCommunityShortsSendCountTime(state.Window.ObservationStartedAt),
-		ObservationEndsAt:     normalizeCommunityShortsSendCountTime(state.Window.ObservationEndedAt),
-		ObservedUntil:         normalizeCommunityShortsSendCountTime(state.EffectiveWindowEnd),
-		Status:                status,
-	}, nil
-}
-
-func buildCommunityShortsContinuousObservationChannelSummary(
-	report CommunityShortsSendCountReport,
-) (CommunityShortsChannelSummaryReport, error) {
-	posts := make([]outbox.PostSendCount, 0, len(report.Rows))
-	for i := range report.Rows {
-		posts = append(posts, report.Rows[i].PostSendCount)
-	}
-
-	rows, err := outbox.BuildChannelPostDeliverySummaries(posts)
-	if err != nil {
-		return CommunityShortsChannelSummaryReport{}, err
-	}
-
-	return BuildCommunityShortsChannelSummaryReport(rows, report.WindowEnd, report.WindowStart), nil
 }

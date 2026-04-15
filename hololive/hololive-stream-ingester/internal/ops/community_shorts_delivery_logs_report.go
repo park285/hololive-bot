@@ -9,9 +9,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 type CommunityShortsDeliveryLogQueryMode string
@@ -87,23 +84,33 @@ func CollectCommunityShortsDeliveryLogReport(
 		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: %w", err)
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: provide database resources: %w", err)
+		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	db := databaseResources.Service.GetGormDB()
-	telemetryRepo := outbox.NewDeliveryTelemetryRepository(db)
+	return collectCommunityShortsDeliveryLogReportWithSession(ctx, session, query, now)
+}
 
+func collectCommunityShortsDeliveryLogReportWithSession(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsDeliveryLogQuery,
+	now time.Time,
+) (CommunityShortsDeliveryLogReport, error) {
+	if session == nil {
+		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: session is nil")
+	}
+
+	var err error
 	var rows []domain.YouTubeNotificationDeliveryTelemetry
 	if query.Mode == communityShortsDeliveryLogQueryModeObservation {
-		observationRepository := trackingrepo.NewRepository(db)
 		state, stateErr := resolveCommunityShortsObservationQueryState(
 			ctx,
-			observationRepository,
+			session.trackingRepository,
 			query.ObservationRuntimeName,
 			*query.ObservationBigBangCutoverAt,
 			now,
@@ -122,19 +129,19 @@ func CollectCommunityShortsDeliveryLogReport(
 		query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
 
 		if state.Finalized {
-			rows, err = telemetryRepo.ListByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+			rows, err = session.telemetryRepo.ListByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 			if err != nil {
 				return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: list finalized observation-window logs: %w", err)
 			}
 		} else {
-			rows, err = telemetryRepo.ListByObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+			rows, err = session.telemetryRepo.ListByObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 			if err != nil {
 				return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: list active observation-window logs: %w", err)
 			}
 		}
 	} else {
 		fetchLimit := query.Limit + 1
-		rows, err = telemetryRepo.ListCommunityShortsDeliveryLogsSince(ctx, *query.WindowStart, fetchLimit)
+		rows, err = session.telemetryRepo.ListCommunityShortsDeliveryLogsSince(ctx, *query.WindowStart, fetchLimit)
 		if err != nil {
 			return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: list recent logs: %w", err)
 		}
