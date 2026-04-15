@@ -8,8 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/health"
-
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 )
@@ -41,7 +39,6 @@ func Run[Config any, Runtime runtime](opts Options[Config, Runtime]) int {
 	if initialize == nil {
 		initialize = func(version string) {
 			automaxprocs.Init(nil)
-			health.Init(version)
 		}
 	}
 	initialize(opts.Version)
