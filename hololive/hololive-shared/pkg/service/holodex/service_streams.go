@@ -58,74 +58,28 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 		return nil, err
 	}
 
-	if cached, found := h.cacheManager.GetLiveStreamsByOrg(ctx, resolvedOrg); found {
-		return cached, nil
-	}
-
-	var allStreams []*domain.Stream
-	seen := make(map[string]bool)
-	var mu sync.Mutex
-
-	targetOrgs := streamTargetOrgs(resolvedOrg)
-	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
-		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusLive, 0)
-		if fetchErr != nil {
-			h.logger.Warn("Failed to get live streams for org",
-				slog.String("org", targetOrg), slog.Any("error", fetchErr))
-			return fetchErr
-		}
-
-		filtered := h.filter.FilterHololiveStreams(streams)
-		filtered = filterStreamsByRequestedOrg(filtered, resolvedOrg)
-		liveOnly := filterStreamsByStatus(filtered, domain.StreamStatusLive)
-
-		mu.Lock()
-		for _, s := range liveOnly {
-			if !seen[s.ID] {
-				seen[s.ID] = true
-				allStreams = append(allStreams, s)
-			}
-		}
-		mu.Unlock()
-		return nil
-	})
-	fallback.ObservePrimaryPhase("holodex", "live_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
-
-	if primary.HasFailures() {
-		h.scheduleRetryIfNeeded(ctx, fmt.Sprintf("live_streams_%s", strings.ToLower(resolvedOrg)), func(retryCtx context.Context) {
-			_, _ = h.GetLiveStreamsByOrg(retryCtx, resolvedOrg)
-		})
-	}
-
-	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
-	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
-		Service:   "holodex",
-		Operation: "live_streams",
-		Trigger:   scraperFallbackPolicy.Trigger,
-		ShouldRun: h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
-			scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed)),
-		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
-			h.logger.Warn("Primary org fetch returned no live streams, using scraper fallback",
-				slog.Int("failed_orgs", len(primary.Failed)))
-			scraperStreams, scraperErr := h.scraper.FetchAllStreams(runCtx)
-			if scraperErr != nil {
-				return fallback.SecondaryResult{}, scraperErr
-			}
-			liveStreams := filterStreamsByStatus(scraperStreams, domain.StreamStatusLive)
-			h.cacheManager.SetLiveStreamsByOrg(runCtx, resolvedOrg, liveStreams)
-			allStreams = liveStreams
-			return fallback.SecondaryResult{
-				Items:     len(liveStreams),
-				Successes: 1,
-			}, nil
+	return h.getStreamsByOrgWithFallback(ctx, streamFetchPlan{
+		resolvedOrg: resolvedOrg,
+		status:      constants.HolodexAPIParams.StatusLive,
+		operation:   "live_streams",
+		cacheGet: func(cacheCtx context.Context, org string, _ int) ([]*domain.Stream, bool) {
+			return h.cacheManager.GetLiveStreamsByOrg(cacheCtx, org)
 		},
+		cacheSet: func(cacheCtx context.Context, org string, _ int, streams []*domain.Stream) {
+			h.cacheManager.SetLiveStreamsByOrg(cacheCtx, org, streams)
+		},
+		primaryFilter: func(streams []*domain.Stream) []*domain.Stream {
+			return filterStreamsByStatus(streams, domain.StreamStatusLive)
+		},
+		scraperFilter: func(streams []*domain.Stream) []*domain.Stream {
+			return filterStreamsByStatus(streams, domain.StreamStatusLive)
+		},
+		retryKey: fmt.Sprintf("live_streams_%s", strings.ToLower(resolvedOrg)),
+		retry: func(retryCtx context.Context, org string, _ int) {
+			_, _ = h.GetLiveStreamsByOrg(retryCtx, org)
+		},
+		fallbackLogMessage: "Primary org fetch returned no live streams, using scraper fallback",
 	})
-	if err == nil && secondary.Outcome == "hit" {
-		return allStreams, nil
-	}
-
-	h.cacheManager.SetLiveStreamsByOrg(ctx, resolvedOrg, allStreams)
-	return allStreams, nil
 }
 
 func (h *Service) GetUpcomingStreams(ctx context.Context, hours int) ([]*domain.Stream, error) {
@@ -139,64 +93,116 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		return nil, err
 	}
 
-	if cached, found := h.cacheManager.GetUpcomingStreamsByOrg(ctx, resolvedOrg, hours); found {
-		return cached, nil
+	return h.getStreamsByOrgWithFallback(ctx, streamFetchPlan{
+		resolvedOrg: resolvedOrg,
+		status:      constants.HolodexAPIParams.StatusUpcoming,
+		hours:       hours,
+		operation:   "upcoming_streams",
+		cacheGet: func(cacheCtx context.Context, org string, hours int) ([]*domain.Stream, bool) {
+			return h.cacheManager.GetUpcomingStreamsByOrg(cacheCtx, org, hours)
+		},
+		cacheSet: func(cacheCtx context.Context, org string, hours int, streams []*domain.Stream) {
+			h.cacheManager.SetUpcomingStreamsByOrg(cacheCtx, org, hours, streams)
+		},
+		primaryFilter: func(streams []*domain.Stream) []*domain.Stream {
+			return h.filter.FilterUpcomingStreams(filterStreamsByStatus(streams, domain.StreamStatusUpcoming))
+		},
+		scraperFilter: func(streams []*domain.Stream) []*domain.Stream {
+			return h.filter.FilterUpcomingStreams(filterStreamsByStatus(streams, domain.StreamStatusUpcoming))
+		},
+		retryKey: fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours),
+		retry: func(retryCtx context.Context, org string, hours int) {
+			_, _ = h.GetUpcomingStreamsByOrg(retryCtx, hours, org)
+		},
+		fallbackLogMessage: "Primary org fetch returned no upcoming streams, using scraper fallback",
+	})
+}
+
+type streamFetchPlan struct {
+	resolvedOrg        string
+	status             string
+	hours              int
+	operation          string
+	retryKey           string
+	fallbackLogMessage string
+	cacheGet           func(ctx context.Context, org string, hours int) ([]*domain.Stream, bool)
+	cacheSet           func(ctx context.Context, org string, hours int, streams []*domain.Stream)
+	primaryFilter      func(streams []*domain.Stream) []*domain.Stream
+	scraperFilter      func(streams []*domain.Stream) []*domain.Stream
+	retry              func(ctx context.Context, org string, hours int)
+}
+
+func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan streamFetchPlan) ([]*domain.Stream, error) {
+	if plan.cacheGet != nil {
+		if cached, found := plan.cacheGet(ctx, plan.resolvedOrg, plan.hours); found {
+			return cached, nil
+		}
 	}
 
 	var allStreams []*domain.Stream
 	seen := make(map[string]bool)
 	var mu sync.Mutex
 
-	targetOrgs := streamTargetOrgs(resolvedOrg)
-	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
-		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, constants.HolodexAPIParams.StatusUpcoming, hours)
+	targetOrgs := streamTargetOrgs(plan.resolvedOrg)
+	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
+		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, plan.status, plan.hours)
 		if fetchErr != nil {
-			h.logger.Warn("Failed to get upcoming streams for org",
-				slog.String("org", targetOrg), slog.Any("error", fetchErr))
+			h.logger.Warn("Failed to get streams for org",
+				slog.String("org", targetOrg),
+				slog.String("status", plan.status),
+				slog.Any("error", fetchErr),
+			)
 			return fetchErr
 		}
 
 		filtered := h.filter.FilterHololiveStreams(streams)
-		filtered = filterStreamsByRequestedOrg(filtered, resolvedOrg)
-		upcoming := h.filter.FilterUpcomingStreams(filtered)
+		filtered = filterStreamsByRequestedOrg(filtered, plan.resolvedOrg)
+		if plan.primaryFilter != nil {
+			filtered = plan.primaryFilter(filtered)
+		}
 
 		mu.Lock()
-		for _, s := range upcoming {
-			if !seen[s.ID] {
-				seen[s.ID] = true
-				allStreams = append(allStreams, s)
+		for _, stream := range filtered {
+			if !seen[stream.ID] {
+				seen[stream.ID] = true
+				allStreams = append(allStreams, stream)
 			}
 		}
 		mu.Unlock()
 		return nil
 	})
-	fallback.ObservePrimaryPhase("holodex", "upcoming_streams", len(targetOrgs), primary.Succeeded, len(primary.Failed))
+	fallback.ObservePrimaryPhase("holodex", plan.operation, len(targetOrgs), primary.Succeeded, len(primary.Failed))
 
-	if primary.HasFailures() {
-		h.scheduleRetryIfNeeded(ctx, fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours), func(retryCtx context.Context) {
-			_, _ = h.GetUpcomingStreamsByOrg(retryCtx, hours, resolvedOrg)
+	if primary.HasFailures() && plan.retry != nil {
+		h.scheduleRetryIfNeeded(ctx, plan.retryKey, func(retryCtx context.Context) {
+			plan.retry(retryCtx, plan.resolvedOrg, plan.hours)
 		})
 	}
 
 	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
 	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
 		Service:   "holodex",
-		Operation: "upcoming_streams",
+		Operation: plan.operation,
 		Trigger:   scraperFallbackPolicy.Trigger,
-		ShouldRun: h.scraper != nil && supportsScraperFallback(resolvedOrg) &&
+		ShouldRun: h.scraper != nil && supportsScraperFallback(plan.resolvedOrg) &&
 			scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed)),
 		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
-			h.logger.Warn("Primary org fetch returned no upcoming streams, using scraper fallback",
-				slog.Int("failed_orgs", len(primary.Failed)))
+			h.logger.Warn(plan.fallbackLogMessage,
+				slog.Int("failed_orgs", len(primary.Failed)),
+			)
 			scraperStreams, scraperErr := h.scraper.FetchAllStreams(runCtx)
 			if scraperErr != nil {
 				return fallback.SecondaryResult{}, scraperErr
 			}
-			upcomingStreams := h.filter.FilterUpcomingStreams(scraperStreams)
-			h.cacheManager.SetUpcomingStreamsByOrg(runCtx, resolvedOrg, hours, upcomingStreams)
-			allStreams = upcomingStreams
+			if plan.scraperFilter != nil {
+				scraperStreams = plan.scraperFilter(scraperStreams)
+			}
+			if plan.cacheSet != nil {
+				plan.cacheSet(runCtx, plan.resolvedOrg, plan.hours, scraperStreams)
+			}
+			allStreams = scraperStreams
 			return fallback.SecondaryResult{
-				Items:     len(upcomingStreams),
+				Items:     len(scraperStreams),
 				Successes: 1,
 			}, nil
 		},
@@ -205,7 +211,10 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		return allStreams, nil
 	}
 
-	h.cacheManager.SetUpcomingStreamsByOrg(ctx, resolvedOrg, hours, allStreams)
+	if plan.cacheSet != nil {
+		plan.cacheSet(ctx, plan.resolvedOrg, plan.hours, allStreams)
+	}
+
 	return allStreams, nil
 }
 

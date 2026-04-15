@@ -86,7 +86,7 @@ func NewHolodexAPIClient(
 	distributed distributedRateLimiter,
 ) *APIClient {
 	if httpClient == nil {
-		httpClient = httputil.NewClient(constants.APIConfig.HolodexTimeout)
+		httpClient = httputil.NewExternalAPIClient(constants.APIConfig.HolodexTimeout)
 	}
 	return &APIClient{
 		httpClient:  httpClient,

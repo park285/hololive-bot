@@ -40,6 +40,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
@@ -186,7 +187,7 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
 		YouTubeService: youtubeSvc,
 	}
-	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
+	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -251,7 +252,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
 		AlarmCRUD: alarmSvc,
 	}
-	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
+	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -319,7 +320,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
 		AlarmCRUD: alarmSvc,
 	}
-	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
+	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -388,7 +389,7 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 		YouTubeService: youtubeSvc,
 		AlarmCRUD:      alarmSvc,
 	}
-	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
+	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
 
 	ctx, cancel := context.WithCancel(t.Context())

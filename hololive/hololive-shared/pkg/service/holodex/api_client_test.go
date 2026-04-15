@@ -32,11 +32,44 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"golang.org/x/time/rate"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
+
+func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing.T) {
+	t.Parallel()
+
+	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", "test-key", slog.Default(), nil)
+	if client == nil {
+		t.Fatal("NewHolodexAPIClient() returned nil")
+	}
+
+	expected := httputil.NewExternalAPIClient(constants.APIConfig.HolodexTimeout)
+	if client.httpClient.Timeout != expected.Timeout {
+		t.Fatalf("Timeout = %s, want %s", client.httpClient.Timeout, expected.Timeout)
+	}
+
+	gotTransport, ok := client.httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Transport type = %T, want *http.Transport", client.httpClient.Transport)
+	}
+	wantTransport, ok := expected.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected transport type = %T, want *http.Transport", expected.Transport)
+	}
+	if gotTransport.MaxConnsPerHost != wantTransport.MaxConnsPerHost {
+		t.Fatalf("MaxConnsPerHost = %d, want %d", gotTransport.MaxConnsPerHost, wantTransport.MaxConnsPerHost)
+	}
+	if gotTransport.MaxIdleConnsPerHost != wantTransport.MaxIdleConnsPerHost {
+		t.Fatalf("MaxIdleConnsPerHost = %d, want %d", gotTransport.MaxIdleConnsPerHost, wantTransport.MaxIdleConnsPerHost)
+	}
+	if gotTransport.ResponseHeaderTimeout != wantTransport.ResponseHeaderTimeout {
+		t.Fatalf("ResponseHeaderTimeout = %s, want %s", gotTransport.ResponseHeaderTimeout, wantTransport.ResponseHeaderTimeout)
+	}
+}
 
 func TestHolodexAPIClientSingleKey(t *testing.T) {
 	logger := slog.Default()
