@@ -4,10 +4,10 @@ toolchain go1.26.2
 
 use (
 	./
-	./shared-go
 	./hololive/hololive-dispatcher-go
 	./hololive/hololive-kakao-bot-go
 	./hololive/hololive-llm-sched
 	./hololive/hololive-shared
 	./hololive/hololive-stream-ingester
+	./shared-go
 )
