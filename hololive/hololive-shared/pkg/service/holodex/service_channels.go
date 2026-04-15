@@ -126,49 +126,23 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 }
 
 func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.Channel, error) {
+	query = stringutil.TrimSpace(query)
 	if cached, found := h.cacheManager.GetSearchChannels(ctx, query); found {
 		return cached, nil
 	}
 
-	query = stringutil.TrimSpace(query)
-	params := url.Values{}
-	params.Set("org", constants.HolodexAPIParams.OrgHololive)
-	params.Set("type", constants.HolodexAPIParams.TypeVtuber)
-	params.Set("limit", fmt.Sprintf("%d", constants.HolodexAPIParams.DefaultChannelLimit))
-
-	body, err := h.requester.DoRequest(ctx, "GET", "/channels", params)
+	channels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
 		h.logger.Error("Failed to search channels", slog.String("query", query), slog.Any("error", err))
 		return nil, fmt.Errorf("search channels: %w", err)
 	}
-
-	var rawChannels []ChannelRaw
-	if err := json.Unmarshal(body, &rawChannels); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal search channels: %w", err)
-	}
-
-	channels := h.mapper.MapChannelsResponse(rawChannels)
 
 	h.logger.Debug("Holodex API search results",
 		slog.String("query", query),
 		slog.Int("total_results", len(channels)),
 	)
 
-	filtered := make([]*domain.Channel, 0, len(channels))
-	normalizedQuery := strings.ToLower(query)
-	for _, ch := range channels {
-		if ch.Org != nil && *ch.Org == "Hololive" && !h.filter.IsHolostarsChannel(ch) {
-			if normalizedQuery == "" {
-				filtered = append(filtered, ch)
-				continue
-			}
-			nameMatch := strings.Contains(strings.ToLower(ch.Name), normalizedQuery)
-			englishMatch := ch.EnglishName != nil && strings.Contains(strings.ToLower(*ch.EnglishName), normalizedQuery)
-			if nameMatch || englishMatch {
-				filtered = append(filtered, ch)
-			}
-		}
-	}
+	filtered := filterChannelsByQuery(channels, query, h.filter)
 
 	h.logger.Debug("After HOLOSTARS filter", slog.Int("count", len(filtered)))
 
@@ -185,6 +159,37 @@ func buildSearchChannelsCacheKey(query string) string {
 
 	sum := sha256.Sum256([]byte(normalized))
 	return searchChannelsCacheKeyPrefix + hex.EncodeToString(sum[:])
+}
+
+func filterChannelsByQuery(channels []*domain.Channel, query string, filter *StreamFilter) []*domain.Channel {
+	filtered := make([]*domain.Channel, 0, len(channels))
+	normalizedQuery := strings.ToLower(stringutil.TrimSpace(query))
+
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+		if ch.Org == nil || *ch.Org != constants.HolodexAPIParams.OrgHololive || filter.IsHolostarsChannel(ch) {
+			continue
+		}
+		if normalizedQuery == "" {
+			filtered = append(filtered, ch)
+			continue
+		}
+		if strings.Contains(strings.ToLower(ch.Name), normalizedQuery) {
+			filtered = append(filtered, ch)
+			continue
+		}
+		if ch.EnglishName != nil && strings.Contains(strings.ToLower(*ch.EnglishName), normalizedQuery) {
+			filtered = append(filtered, ch)
+			continue
+		}
+		if strings.Contains(strings.ToLower(ch.ID), normalizedQuery) {
+			filtered = append(filtered, ch)
+		}
+	}
+
+	return filtered
 }
 
 // retryable Holodex 오류(5xx/timeout/circuit/key rotation)에서만 YouTube 스크래퍼로 폴백하고,

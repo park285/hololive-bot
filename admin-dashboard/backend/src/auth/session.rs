@@ -13,6 +13,17 @@ fn utc_now() -> DateTime<Utc> {
     Utc::now()
 }
 
+fn refreshed_session(
+    session: &Session,
+    now: DateTime<Utc>,
+    ttl: Duration,
+) -> anyhow::Result<Session> {
+    let ttl = chrono::Duration::from_std(ttl)?;
+    let mut refreshed = session.clone();
+    refreshed.expires_at = now + ttl;
+    Ok(refreshed)
+}
+
 pub fn session_key(session_id: &str) -> String {
     format!("{KEY_PREFIX}{session_id}")
 }
@@ -178,12 +189,14 @@ impl SessionProvider for ValkeySessionStore {
         }
 
         let ttl = if idle {
-            self.config.idle_session_ttl.as_secs() as i64
+            self.config.idle_session_ttl
         } else {
-            self.config.expiry_duration.as_secs() as i64
+            self.config.expiry_duration
         };
+        let refreshed = refreshed_session(&session, Utc::now(), ttl)?;
+        let refreshed_data = serde_json::to_string(&refreshed)?;
 
-        conn.set_ex::<_, _, ()>(session_key(session_id), &data, ttl as u64)
+        conn.set_ex::<_, _, ()>(session_key(session_id), &refreshed_data, ttl.as_secs())
             .await?;
 
         Ok((true, false))
@@ -349,5 +362,25 @@ mod tests {
         assert!(json.get("expires_at").is_some());
         assert!(json.get("absolute_expires_at").is_some());
         assert!(json.get("last_rotated_at").is_some());
+    }
+
+    #[test]
+    fn test_refreshed_session_updates_expires_at() {
+        let now = Utc::now();
+        let session = Session {
+            id: "refresh-check".to_string(),
+            created_at: now - chrono::Duration::minutes(5),
+            expires_at: now - chrono::Duration::minutes(1),
+            absolute_expires_at: now + chrono::Duration::hours(1),
+            last_rotated_at: now - chrono::Duration::minutes(5),
+        };
+
+        let refreshed = refreshed_session(&session, now, Duration::from_secs(90)).expect("refresh");
+
+        assert_eq!(refreshed.id, session.id);
+        assert_eq!(refreshed.created_at, session.created_at);
+        assert_eq!(refreshed.absolute_expires_at, session.absolute_expires_at);
+        assert_eq!(refreshed.last_rotated_at, session.last_rotated_at);
+        assert_eq!(refreshed.expires_at, now + chrono::Duration::seconds(90));
     }
 }

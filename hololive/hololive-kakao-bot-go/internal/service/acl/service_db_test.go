@@ -681,7 +681,7 @@ func assertNewACLServiceKeepsLoadedStateOnCacheSyncFailure(
 	}
 }
 
-func TestACLService_SetEnabledReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
+func TestACLService_SetEnabledRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
@@ -706,14 +706,14 @@ func TestACLService_SetEnabledReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
 	}
 
 	enabled, _, _ := svc.GetACLStatus()
-	if !enabled {
-		t.Fatal("expected in-memory enabled=true after DB commit")
+	if enabled {
+		t.Fatal("expected in-memory enabled=false after rollback")
 	}
 
-	assertACLSettingValue(t, db, dbKeyEnabled, "true")
+	assertACLSettingValue(t, db, dbKeyEnabled, "false")
 }
 
-func TestACLService_SetModeReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
+func TestACLService_SetModeRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
@@ -738,14 +738,14 @@ func TestACLService_SetModeReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
 	}
 
 	_, mode, _ := svc.GetACLStatus()
-	if mode != ACLModeBlacklist {
-		t.Fatalf("expected in-memory mode=blacklist, got %s", mode)
+	if mode != ACLModeWhitelist {
+		t.Fatalf("expected in-memory mode=whitelist after rollback, got %s", mode)
 	}
 
-	assertACLSettingValue(t, db, dbKeyMode, "blacklist")
+	assertACLSettingValue(t, db, dbKeyMode, "whitelist")
 }
 
-func TestACLService_AddRoomReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
+func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
@@ -774,14 +774,14 @@ func TestACLService_AddRoomReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
 	}
 
 	_, _, rooms := svc.GetACLStatus()
-	if len(rooms) != 1 || rooms[0] != "room-x" {
-		t.Fatalf("expected in-memory room to remain after DB commit, got %v", rooms)
+	if len(rooms) != 0 {
+		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	assertACLRoomCount(t, db, "room-x", listTypeWhitelist, 1)
+	assertACLRoomCount(t, db, "room-x", listTypeWhitelist, 0)
 }
 
-func TestACLService_RemoveRoomReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
+func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 	t.Parallel()
 
 	db, cacheMock, _ := newACLServiceWithSQLite(t)
@@ -811,11 +811,11 @@ func TestACLService_RemoveRoomReturnsCacheSyncErrorAfterDBCommit(t *testing.T) {
 	}
 
 	_, _, rooms := svc.GetACLStatus()
-	if len(rooms) != 0 {
-		t.Fatalf("expected in-memory room removal to remain after DB commit, got %v", rooms)
+	if len(rooms) != 1 || rooms[0] != "room-x" {
+		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	assertACLRoomCount(t, db, "room-x", listTypeWhitelist, 0)
+	assertACLRoomCount(t, db, "room-x", listTypeWhitelist, 1)
 }
 
 func TestACLService_SyncRoomsToValkeyAtomicSuccess(t *testing.T) {
