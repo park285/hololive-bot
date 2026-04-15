@@ -42,6 +42,13 @@ type approachingAlertWork struct {
 	message      string
 }
 
+type alertDispatchResult[T any] struct {
+	notification T
+	targetRooms  int
+	successCount atomic.Int32
+	failureCount atomic.Int32
+}
+
 func (ys *schedulerImpl) dispatchMilestoneAlerts(ctx context.Context) {
 	if ys.alarmService == nil || ys.irisClient == nil {
 		return
@@ -148,7 +155,14 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 		return nil
 	}
 
-	successByWork := make([]atomic.Bool, len(works))
+	results := make([]alertDispatchResult[ytstats.MilestoneNotification], len(works))
+	for i, work := range works {
+		results[i] = alertDispatchResult[ytstats.MilestoneNotification]{
+			notification: work.notification,
+			targetRooms:  len(rooms),
+		}
+	}
+
 	eg, _ := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
 
@@ -163,9 +177,10 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 						slog.String("room", room),
 						slog.String("member", work.notification.MemberName),
 						slog.Any("error", err))
+					results[i].failureCount.Add(1)
 					return nil
 				}
-				successByWork[i].Store(true)
+				results[i].successCount.Add(1)
 				return nil
 			})
 		}
@@ -173,9 +188,19 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 
 	_ = eg.Wait()
 	sentNotifications := make([]ytstats.MilestoneNotification, 0, len(works))
-	for i, work := range works {
-		if successByWork[i].Load() {
-			sentNotifications = append(sentNotifications, work.notification)
+	for i := range results {
+		successCount := int(results[i].successCount.Load())
+		failureCount := int(results[i].failureCount.Load())
+		if results[i].targetRooms > 0 && successCount == results[i].targetRooms && failureCount == 0 {
+			sentNotifications = append(sentNotifications, results[i].notification)
+			continue
+		}
+		if successCount > 0 {
+			ys.logger.Warn("Milestone notification partially sent; keeping unsent state for retry",
+				slog.String("member", results[i].notification.MemberName),
+				slog.Int("target_rooms", results[i].targetRooms),
+				slog.Int("success_count", successCount),
+				slog.Int("failure_count", failureCount))
 		}
 	}
 	return sentNotifications
@@ -217,7 +242,14 @@ func (ys *schedulerImpl) dispatchApproachingAlertWorks(
 		return nil
 	}
 
-	successByWork := make([]atomic.Bool, len(works))
+	results := make([]alertDispatchResult[ytstats.ApproachingNotification], len(works))
+	for i, work := range works {
+		results[i] = alertDispatchResult[ytstats.ApproachingNotification]{
+			notification: work.notification,
+			targetRooms:  len(rooms),
+		}
+	}
+
 	eg, _ := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
 
@@ -232,9 +264,10 @@ func (ys *schedulerImpl) dispatchApproachingAlertWorks(
 						slog.String("room", room),
 						slog.String("member", work.notification.MemberName),
 						slog.Any("error", err))
+					results[i].failureCount.Add(1)
 					return nil
 				}
-				successByWork[i].Store(true)
+				results[i].successCount.Add(1)
 				return nil
 			})
 		}
@@ -242,9 +275,19 @@ func (ys *schedulerImpl) dispatchApproachingAlertWorks(
 
 	_ = eg.Wait()
 	sentNotifications := make([]ytstats.ApproachingNotification, 0, len(works))
-	for i, work := range works {
-		if successByWork[i].Load() {
-			sentNotifications = append(sentNotifications, work.notification)
+	for i := range results {
+		successCount := int(results[i].successCount.Load())
+		failureCount := int(results[i].failureCount.Load())
+		if results[i].targetRooms > 0 && successCount == results[i].targetRooms && failureCount == 0 {
+			sentNotifications = append(sentNotifications, results[i].notification)
+			continue
+		}
+		if successCount > 0 {
+			ys.logger.Warn("Approaching notification partially sent; keeping unsent state for retry",
+				slog.String("member", results[i].notification.MemberName),
+				slog.Int("target_rooms", results[i].targetRooms),
+				slog.Int("success_count", successCount),
+				slog.Int("failure_count", failureCount))
 		}
 	}
 	return sentNotifications

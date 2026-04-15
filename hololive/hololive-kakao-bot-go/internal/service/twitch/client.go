@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 
@@ -40,6 +41,7 @@ import (
 )
 
 type ClientConfig struct {
+	HTTPClient   *http.Client
 	ClientID     string
 	ClientSecret string
 }
@@ -60,10 +62,17 @@ type Client struct {
 }
 
 func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		httpClient = httputil.NewExternalAPIClient(constants.TwitchConfig.Timeout)
+	}
+
 	c := &Client{
-		httpClient: &http.Client{
-			Timeout: constants.TwitchConfig.Timeout,
-		},
+		httpClient:   httpClient,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
 		logger:       logger,
@@ -79,6 +88,10 @@ func (c *Client) IsConfigured() bool {
 }
 
 func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsResponse, error) {
+	return c.getStreams(ctx, userLogins, true)
+}
+
+func (c *Client) getStreams(ctx context.Context, userLogins []string, allowRefreshRetry bool) (*StreamsResponse, error) {
 	if !c.IsConfigured() {
 		return nil, errors.New("twitch client not configured")
 	}
@@ -100,13 +113,11 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 	}
 
 	params := url.Values{}
-
 	for _, login := range userLogins {
 		params.Add("user_login", login)
 	}
 
 	reqURL := constants.TwitchConfig.BaseURL + "/streams?" + params.Encode()
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -121,22 +132,26 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 		c.recordFailure()
 		return nil, fmt.Errorf("do request: %w", err)
 	}
-
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
+		c.recordFailure()
 		c.invalidateToken()
-
+		if !allowRefreshRetry {
+			return nil, &apperrors.APIError{
+				Operation:  "twitch_get_streams",
+				StatusCode: http.StatusUnauthorized,
+				Err:        errors.New("unauthorized after token refresh"),
+			}
+		}
 		if refreshErr := c.refreshToken(ctx); refreshErr != nil {
 			return nil, fmt.Errorf("refresh token after 401: %w", refreshErr)
 		}
-
-		return c.GetStreams(ctx, userLogins)
+		return c.getStreams(ctx, userLogins, false)
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		c.recordFailure()
-
 		return nil, &apperrors.APIError{
 			Operation:  "twitch_get_streams",
 			StatusCode: 429,
@@ -146,7 +161,6 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 
 	if resp.StatusCode >= 500 {
 		c.recordFailure()
-
 		return nil, &apperrors.APIError{
 			Operation:  "twitch_get_streams",
 			StatusCode: resp.StatusCode,
@@ -173,7 +187,6 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 	}
 
 	c.recordSuccess()
-
 	return &result, nil
 }
 

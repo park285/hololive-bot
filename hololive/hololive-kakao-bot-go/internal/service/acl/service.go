@@ -168,6 +168,14 @@ func (s *Service) activeRoomsMap() map[string]struct{} {
 	return s.whitelistRooms
 }
 
+func (s *Service) roomsMapForMode(mode ACLMode) map[string]struct{} {
+	if mode == ACLModeBlacklist {
+		return s.blacklistRooms
+	}
+
+	return s.whitelistRooms
+}
+
 // loadFromDatabase PostgreSQL에서 ACL 설정 로드.
 func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, defaultMode ACLMode, defaultRooms []string) error {
 	// 1. ACL enabled 상태 로드
@@ -178,7 +186,9 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 
 	if isFirstInit {
 		s.enabled = defaultEnabled
-		s.db.Create(&Settings{Key: dbKeyEnabled, Value: fmt.Sprintf("%t", defaultEnabled)})
+		if err := s.db.Create(&Settings{Key: dbKeyEnabled, Value: fmt.Sprintf("%t", defaultEnabled)}).Error; err != nil {
+			return fmt.Errorf("failed to initialize ACL enabled setting: %w", err)
+		}
 	} else if result.Error != nil {
 		return fmt.Errorf("failed to load ACL enabled setting: %w", result.Error)
 	} else {
@@ -193,7 +203,9 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 
 	if modeFirstInit {
 		s.mode = defaultMode
-		s.db.Create(&Settings{Key: dbKeyMode, Value: string(defaultMode)})
+		if err := s.db.Create(&Settings{Key: dbKeyMode, Value: string(defaultMode)}).Error; err != nil {
+			return fmt.Errorf("failed to initialize ACL mode setting: %w", err)
+		}
 	} else if modeResult.Error != nil {
 		return fmt.Errorf("failed to load ACL mode setting: %w", modeResult.Error)
 	} else {
@@ -216,8 +228,12 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 		lt := string(s.mode)
 
 		for _, r := range defaultRooms {
+			if err := s.db.Create(&Room{RoomID: r, ListType: lt}).Error; err != nil {
+				s.mu.Unlock()
+				return fmt.Errorf("failed to initialize ACL room %q: %w", r, err)
+			}
+
 			targetRooms[r] = struct{}{}
-			s.db.Create(&Room{RoomID: r, ListType: lt})
 		}
 	} else {
 		// 기존 DB 상태 로드 (list_type별 분리)
@@ -364,14 +380,14 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 
 // SetEnabled ACL 활성화/비활성화.
 func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
-	s.mu.Lock()
-	s.enabled = enabled
-	s.mu.Unlock()
-
 	result := s.db.Where("key = ?", dbKeyEnabled).Assign(Settings{Value: fmt.Sprintf("%t", enabled)}).FirstOrCreate(&Settings{Key: dbKeyEnabled})
 	if result.Error != nil {
 		return fmt.Errorf("failed to save ACL enabled setting: %w", result.Error)
 	}
+
+	s.mu.Lock()
+	s.enabled = enabled
+	s.mu.Unlock()
 
 	if err := s.syncSettingsToValkey(ctx); err != nil {
 		return fmt.Errorf("sync acl settings to cache: %w", err)
@@ -386,14 +402,14 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 
 // SetMode ACL 모드 변경 (whitelist ↔ blacklist).
 func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
-	s.mu.Lock()
-	s.mode = mode
-	s.mu.Unlock()
-
 	result := s.db.Where("key = ?", dbKeyMode).Assign(Settings{Value: string(mode)}).FirstOrCreate(&Settings{Key: dbKeyMode})
 	if result.Error != nil {
 		return fmt.Errorf("failed to save ACL mode setting: %w", result.Error)
 	}
+
+	s.mu.Lock()
+	s.mode = mode
+	s.mu.Unlock()
 
 	if err := s.syncModeToValkey(ctx); err != nil {
 		return fmt.Errorf("sync acl mode to cache: %w", err)
@@ -414,8 +430,9 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	}
 
 	s.mu.Lock()
-	targetRooms := s.activeRoomsMap()
-	lt := string(s.mode)
+	mode := s.mode
+	targetRooms := s.roomsMapForMode(mode)
+	lt := string(mode)
 
 	if _, exists := targetRooms[room]; exists {
 		s.mu.Unlock()
@@ -428,13 +445,13 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	result := s.db.Create(&Room{RoomID: room, ListType: lt})
 	if result.Error != nil {
 		s.mu.Lock()
-		delete(s.activeRoomsMap(), room)
+		delete(s.roomsMapForMode(mode), room)
 		s.mu.Unlock()
 
 		return false, fmt.Errorf("failed to add room to database: %w", result.Error)
 	}
 
-	valkeyKey := s.valkeyKeyForMode(s.currentMode())
+	valkeyKey := s.valkeyKeyForMode(mode)
 
 	if _, err := s.cache.SAdd(ctx, valkeyKey, []string{room}); err != nil {
 		return false, fmt.Errorf("sync acl room add to cache: %w", err)
@@ -456,8 +473,9 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	}
 
 	s.mu.Lock()
-	targetRooms := s.activeRoomsMap()
-	lt := string(s.mode)
+	mode := s.mode
+	targetRooms := s.roomsMapForMode(mode)
+	lt := string(mode)
 
 	if _, exists := targetRooms[room]; !exists {
 		s.mu.Unlock()
@@ -471,13 +489,13 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	result := s.db.Where("room_id = ? AND list_type = ?", room, lt).Delete(&Room{})
 	if result.Error != nil {
 		s.mu.Lock()
-		s.activeRoomsMap()[room] = struct{}{}
+		s.roomsMapForMode(mode)[room] = struct{}{}
 		s.mu.Unlock()
 
 		return false, fmt.Errorf("failed to remove room from database: %w", result.Error)
 	}
 
-	valkeyKey := s.valkeyKeyForMode(s.currentMode())
+	valkeyKey := s.valkeyKeyForMode(mode)
 
 	if _, err := s.cache.SRem(ctx, valkeyKey, []string{room}); err != nil {
 		return false, fmt.Errorf("sync acl room removal to cache: %w", err)
@@ -489,14 +507,6 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	)
 
 	return true, nil
-}
-
-// currentMode: 현재 모드를 thread-safe하게 반환한다.
-func (s *Service) currentMode() ACLMode {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return s.mode
 }
 
 // valkeyKeyForMode: 모드에 대응하는 Valkey SET 키를 반환한다.
