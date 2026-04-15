@@ -21,8 +21,8 @@
 package notification
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -49,43 +49,7 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 		return fmt.Errorf("get channel registry: %w", err)
 	}
 
-	chzzkMappings := make(map[string]string, len(channelIDs))
-	twitchMappings := make(map[string]string, len(channelIDs))
-	twitchChannelMappings := make(map[string]string, len(channelIDs))
-
-	for _, channelID := range channelIDs {
-		member := as.memberData.FindMemberByChannelID(channelID)
-		if member == nil {
-			if as.logger != nil {
-				as.logger.Warn("Skip platform mapping sync for unknown channel",
-					slog.String("channel_id", channelID),
-				)
-			}
-
-			continue
-		}
-
-		if chzzkChannelID := stringutil.TrimSpace(member.ChzzkChannelID); chzzkChannelID != "" {
-			chzzkMappings[channelID] = chzzkChannelID
-		}
-
-		if twitchLogin := stringutil.Normalize(member.TwitchUserID); twitchLogin != "" {
-			if existingChannelID, exists := twitchMappings[twitchLogin]; exists && existingChannelID != channelID {
-				if as.logger != nil {
-					as.logger.Warn("Duplicate Twitch login detected while syncing platform mappings",
-						slog.String("twitch_login", twitchLogin),
-						slog.String("kept_channel_id", existingChannelID),
-						slog.String("ignored_channel_id", channelID),
-					)
-				}
-
-				continue
-			}
-
-			twitchMappings[twitchLogin] = channelID
-			twitchChannelMappings[channelID] = twitchLogin
-		}
-	}
+	chzzkMappings, twitchMappings, twitchChannelMappings := as.collectPlatformMappings(channelIDs)
 
 	if err := as.replaceHashMappings(ctx, ChzzkChannelMapKey, chzzkMappings); err != nil {
 		return fmt.Errorf("sync chzzk channel mappings: %w", err)
@@ -108,6 +72,63 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (as *AlarmService) collectPlatformMappings(channelIDs []string) (map[string]string, map[string]string, map[string]string) {
+	chzzkMappings := make(map[string]string, len(channelIDs))
+	twitchMappings := make(map[string]string, len(channelIDs))
+	twitchChannelMappings := make(map[string]string, len(channelIDs))
+
+	for _, channelID := range channelIDs {
+		member := as.memberData.FindMemberByChannelID(channelID)
+		if member == nil {
+			as.logUnknownPlatformMappingChannel(channelID)
+
+			continue
+		}
+
+		if chzzkChannelID := stringutil.TrimSpace(member.ChzzkChannelID); chzzkChannelID != "" {
+			chzzkMappings[channelID] = chzzkChannelID
+		}
+
+		twitchLogin := stringutil.Normalize(member.TwitchUserID)
+		if twitchLogin == "" {
+			continue
+		}
+
+		if existingChannelID, exists := twitchMappings[twitchLogin]; exists && existingChannelID != channelID {
+			as.logDuplicateTwitchMapping(twitchLogin, existingChannelID, channelID)
+
+			continue
+		}
+
+		twitchMappings[twitchLogin] = channelID
+		twitchChannelMappings[channelID] = twitchLogin
+	}
+
+	return chzzkMappings, twitchMappings, twitchChannelMappings
+}
+
+func (as *AlarmService) logUnknownPlatformMappingChannel(channelID string) {
+	if as.logger == nil {
+		return
+	}
+
+	as.logger.Warn("Skip platform mapping sync for unknown channel",
+		slog.String("channel_id", channelID),
+	)
+}
+
+func (as *AlarmService) logDuplicateTwitchMapping(twitchLogin, keptChannelID, ignoredChannelID string) {
+	if as.logger == nil {
+		return
+	}
+
+	as.logger.Warn("Duplicate Twitch login detected while syncing platform mappings",
+		slog.String("twitch_login", twitchLogin),
+		slog.String("kept_channel_id", keptChannelID),
+		slog.String("ignored_channel_id", ignoredChannelID),
+	)
 }
 
 func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, channelID string) error {
