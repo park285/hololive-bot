@@ -93,7 +93,7 @@ func (s *testSender) SendMessage(_ context.Context, roomID, message string) erro
 	return nil
 }
 
-func TestEnqueueDeliveries_SubscriberLookupFailureReleasesLockWithoutMarkingSent(t *testing.T) {
+func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -131,7 +131,10 @@ func TestEnqueueDeliveries_SubscriberLookupFailureReleasesLockWithoutMarkingSent
 	var updated domain.YouTubeNotificationOutbox
 	require.NoError(t, db.First(&updated, item.ID).Error)
 	assert.Equal(t, domain.OutboxStatusPending, updated.Status)
+	assert.Equal(t, 1, updated.AttemptCount)
 	assert.Nil(t, updated.LockedAt)
+	assert.WithinDuration(t, now.Add(time.Minute), updated.NextAttemptAt, time.Second)
+	assert.Equal(t, "subscriber lookup failed", updated.Error)
 }
 
 func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
