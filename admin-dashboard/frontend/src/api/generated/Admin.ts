@@ -46,6 +46,7 @@ import {
   UpdateChannelRequest,
   UpdateMemberNameRequest,
   UserNameUpdateRequest,
+  YouTubeCommunityShortsOpsResponse,
 } from "./data-contracts";
 import { ContentType, HttpClient, RequestParams } from "./http-client";
 
@@ -549,6 +550,20 @@ export class Admin<
   holoGetChannelStats = (params: RequestParams = {}) =>
     this.request<ChannelStatsResponse, ErrorResponse>({
       path: `/admin/api/holo/stats/channels`,
+      method: "GET",
+      format: "json",
+      ...params,
+    });
+  /**
+   * No description
+   *
+   * @tags holo
+   * @name HoloGetYouTubeCommunityShortsOps
+   * @request GET:/admin/api/holo/stats/youtube/community-shorts
+   */
+  holoGetYouTubeCommunityShortsOps = (params: RequestParams = {}) =>
+    this.request<YouTubeCommunityShortsOpsResponse, ErrorResponse>({
+      path: `/admin/api/holo/stats/youtube/community-shorts`,
       method: "GET",
       format: "json",
       ...params,
