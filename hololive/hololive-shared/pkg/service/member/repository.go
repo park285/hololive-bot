@@ -242,45 +242,7 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 	}
 	defer rows.Close()
 
-	var members []*domain.Member
-	for rows.Next() {
-		var (
-			id           int
-			slug         string
-			channelID    *string
-			englishName  string
-			japaneseName *string
-			koreanName   *string
-			status       string
-			isGraduated  bool
-			aliasesJSON  []byte
-			photo        *string
-			org          string
-			suborg       *string
-			syncSource   string
-			twitchUserID *string
-		)
-
-		if err := rows.Scan(&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
-			&status, &isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID); err != nil {
-			r.logger.Warn("Failed to scan member row", slog.Any("error", err))
-			continue
-		}
-
-		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
-		if err != nil {
-			r.logger.Warn("Failed to parse member", slog.String("name", englishName), slog.Any("error", err))
-			continue
-		}
-
-		members = append(members, member)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
-	}
-
-	return members, nil
+	return r.collectAllMembersFromRows(rows)
 }
 
 func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []string) (map[string]*domain.Member, error) {
@@ -301,7 +263,63 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 	}
 	defer rows.Close()
 
-	result := make(map[string]*domain.Member, len(channelIDs))
+	return r.collectMembersWithPhotoFromRows(rows)
+}
+
+func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
+	var (
+		members []*domain.Member
+		rowErrs []error
+	)
+
+	for rows.Next() {
+		var (
+			id           int
+			slug         string
+			channelID    *string
+			englishName  string
+			japaneseName *string
+			koreanName   *string
+			status       string
+			isGraduated  bool
+			aliasesJSON  []byte
+			photo        *string
+			org          string
+			suborg       *string
+			syncSource   string
+			twitchUserID *string
+		)
+
+		if err := rows.Scan(&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
+			&status, &isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID); err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
+			continue
+		}
+
+		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", englishName, err))
+			continue
+		}
+
+		members = append(members, member)
+	}
+
+	if err := rows.Err(); err != nil {
+		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
+	}
+
+	if len(rowErrs) > 0 {
+		return members, errors.Join(rowErrs...)
+	}
+
+	return members, nil
+}
+
+func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]*domain.Member, error) {
+	result := make(map[string]*domain.Member)
+	var rowErrs []error
+
 	for rows.Next() {
 		var (
 			id           int
@@ -320,13 +338,13 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 
 		if err := rows.Scan(&id, &channelID, &englishName, &japaneseName, &koreanName,
 			&isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID); err != nil {
-			r.logger.Warn("Failed to scan member row", slog.Any("error", err))
+			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
 			continue
 		}
 
 		member, err := r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
 		if err != nil {
-			r.logger.Warn("Failed to parse member", slog.String("name", englishName), slog.Any("error", err))
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", englishName, err))
 			continue
 		}
 
@@ -336,7 +354,11 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
+		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
+	}
+
+	if len(rowErrs) > 0 {
+		return result, errors.Join(rowErrs...)
 	}
 
 	return result, nil

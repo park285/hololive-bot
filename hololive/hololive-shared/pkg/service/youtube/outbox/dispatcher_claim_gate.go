@@ -39,6 +39,7 @@ type deliveryClaimSelection struct {
 	sendRows               []domain.YouTubeNotificationDelivery
 	sendOutboxes           []domain.YouTubeNotificationOutbox
 	claimTokens            []deliveryClaimToken
+	rowClaimTokens         [][]deliveryClaimToken
 	alreadySentDeliveryIDs []int64
 	alreadySentOutboxIDs   []int64
 	retryDeliveryIDs       []int64
@@ -61,9 +62,10 @@ func (d *Dispatcher) selectClaimedDeliveries(
 	reuseCache *deliveryClaimReuseCache,
 ) deliveryClaimSelection {
 	selection := deliveryClaimSelection{
-		sendRows:     make([]domain.YouTubeNotificationDelivery, 0, len(rows)),
-		sendOutboxes: make([]domain.YouTubeNotificationOutbox, 0, len(outboxes)),
-		claimTokens:  make([]deliveryClaimToken, 0, len(outboxes)),
+		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(rows)),
+		sendOutboxes:   make([]domain.YouTubeNotificationOutbox, 0, len(outboxes)),
+		claimTokens:    make([]deliveryClaimToken, 0, len(outboxes)),
+		rowClaimTokens: make([][]deliveryClaimToken, 0, len(rows)),
 	}
 	limit := min(len(outboxes), len(rows))
 
@@ -93,11 +95,15 @@ func (d *Dispatcher) selectClaimedDeliveries(
 
 		switch decision {
 		case deliveryClaimDecisionProceed:
+			rowClaimTokens := []deliveryClaimToken(nil)
+			if claimToken != nil && !reused {
+				token := *claimToken
+				selection.claimTokens = append(selection.claimTokens, token)
+				rowClaimTokens = []deliveryClaimToken{token}
+			}
 			selection.sendRows = append(selection.sendRows, rows[i])
 			selection.sendOutboxes = append(selection.sendOutboxes, outboxes[i])
-			if claimToken != nil && !reused {
-				selection.claimTokens = append(selection.claimTokens, *claimToken)
-			}
+			selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
 		case deliveryClaimDecisionAlreadySent:
 			d.logClaimIssue("Skipped community/shorts delivery because the post was already sent", rows[i], outboxes[i], slog.LevelInfo)
 			selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, rows[i].ID)
@@ -525,16 +531,6 @@ func resolveOutboxPublishedAt(outbox domain.YouTubeNotificationOutbox) *time.Tim
 		}
 	}
 	return nil
-}
-
-func claimTokensForIndex(claimTokens []deliveryClaimToken, idx int, total int) []deliveryClaimToken {
-	if len(claimTokens) == 0 {
-		return nil
-	}
-	if len(claimTokens) == total && idx >= 0 && idx < len(claimTokens) {
-		return []deliveryClaimToken{claimTokens[idx]}
-	}
-	return claimTokens
 }
 
 func (d *Dispatcher) releaseDeliveryClaims(ctx context.Context, claims []deliveryClaimToken) error {

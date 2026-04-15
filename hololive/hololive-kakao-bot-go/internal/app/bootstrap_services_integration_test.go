@@ -15,6 +15,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config"
 )
@@ -39,7 +40,7 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 		},
 	}
 
-	services, err := initCoreIntegrationServices(t.Context(), &config.Config{}, infra, logger)
+	services, err := appbootstrap.InitCoreIntegrationServices(t.Context(), &config.Config{}, infra, logger)
 	require.NoError(t, err)
 	require.NotNil(t, services)
 	require.NotNil(t, services.WorkerPool)
@@ -67,7 +68,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		},
 	}
 
-	integrationServices, err := initCoreIntegrationServices(t.Context(), &config.Config{}, infra, logger)
+	integrationServices, err := appbootstrap.InitCoreIntegrationServices(t.Context(), &config.Config{}, infra, logger)
 	require.NoError(t, err)
 
 	modules := buildBotDependencyModules(

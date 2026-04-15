@@ -551,6 +551,32 @@ func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 	}
 }
 
+func TestNewClientWithConfig_UsesDefaultLoggerWhenNil(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       nil,
+	})
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("expected nil logger to avoid panic, got %v", recovered)
+		}
+	}()
+
+	_, err := client.GetLiveStatus(t.Context(), "test-channel")
+	if err == nil {
+		t.Fatal("expected rate-limit error")
+	}
+}
+
 func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 	callCount := 0
 
@@ -748,6 +774,56 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 
 	if got := liveStatusCalls.Load(); got != 0 {
 		t.Fatalf("live status calls = %d, want 0", got)
+	}
+}
+
+func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing.T) {
+	channelIDs := make([]string, 0, constants.ChzzkConfig.BatchLookupThreshold+2)
+	channelIDs = append(channelIDs, "target-2", "target-1")
+	for i := 0; i < constants.ChzzkConfig.BatchLookupThreshold; i++ {
+		channelIDs = append(channelIDs, fmt.Sprintf("filler-%d", i))
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/open/v1/lives" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		response := OpenAPIResponse[LivesResponse]{
+			Code: http.StatusOK,
+			Content: LivesResponse{
+				Data: []LiveData{
+					{ChannelID: "target-2", LiveTitle: "target-live-2"},
+					{ChannelID: "target-1", LiveTitle: "target-live-1"},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig(ClientConfig{
+		HTTPClient:   http.DefaultClient,
+		BaseURL:      server.URL,
+		ClientID:     "id",
+		ClientSecret: "secret",
+		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	})
+	client.openAPIBaseURL = server.URL
+
+	lives, err := client.GetLivesByChannelIDs(t.Context(), channelIDs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(lives) != 2 {
+		t.Fatalf("expected 2 lives, got %d", len(lives))
+	}
+
+	if lives[0].ChannelID != "target-1" || lives[1].ChannelID != "target-2" {
+		t.Fatalf("unexpected deterministic order: %#v", lives)
 	}
 }
 

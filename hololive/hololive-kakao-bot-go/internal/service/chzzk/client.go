@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +75,7 @@ func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Cl
 		httpClient:     httpClient,
 		baseURL:        baseURL,
 		openAPIBaseURL: OpenAPIBaseURL,
-		logger:         logger,
+		logger:         defaultClientLogger(logger),
 	}
 }
 
@@ -90,8 +91,16 @@ func NewClientWithConfig(cfg ClientConfig) *Client {
 		openAPIBaseURL: OpenAPIBaseURL,
 		clientID:       cfg.ClientID,
 		clientSecret:   cfg.ClientSecret,
-		logger:         cfg.Logger,
+		logger:         defaultClientLogger(cfg.Logger),
 	}
+}
+
+func defaultClientLogger(logger *slog.Logger) *slog.Logger {
+	if logger == nil {
+		return slog.Default()
+	}
+
+	return logger
 }
 
 func (c *Client) HasOpenAPICredentials() bool {
@@ -473,6 +482,8 @@ func normalizeChannelTargets(channelIDs []string) []string {
 		targets = append(targets, channelID)
 	}
 
+	slices.Sort(targets)
+
 	return targets
 }
 
@@ -532,8 +543,7 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 		targets[channelID] = struct{}{}
 	}
 
-	result := make([]LiveData, 0, len(targets))
-	found := make(map[string]struct{}, len(targets))
+	found := make(map[string]LiveData, len(targets))
 	next := ""
 
 	for {
@@ -551,8 +561,7 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 				continue
 			}
 
-			found[resp.Data[i].ChannelID] = struct{}{}
-			result = append(result, resp.Data[i])
+			found[resp.Data[i].ChannelID] = resp.Data[i]
 		}
 
 		if len(found) == len(targets) || resp.Page.Next == "" {
@@ -560,6 +569,16 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 		}
 
 		next = resp.Page.Next
+	}
+
+	result := make([]LiveData, 0, len(found))
+	for _, channelID := range channelIDs {
+		live, ok := found[channelID]
+		if !ok {
+			continue
+		}
+
+		result = append(result, live)
 	}
 
 	return result, nil

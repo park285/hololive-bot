@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	botserver "github.com/kapu/hololive-kakao-bot-go/internal/server"
 )
 
@@ -82,7 +83,7 @@ func TestBuildBotServer_InternalAlarmRoutesRequireAPIKey(t *testing.T) {
 		},
 	}
 
-	server, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
+	server, err := appbootstrap.BuildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 	if err != nil {
 		t.Fatalf("buildBotServer() error = %v", err)
 	}
@@ -118,7 +119,7 @@ func TestBuildBotServer_InternalAlarmRoutesRequireConfiguredAPIKey(t *testing.T)
 		},
 	}
 
-	_, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
+	_, err := appbootstrap.BuildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 	if err == nil {
 		t.Fatal("buildBotServer() error = nil, want non-nil")
 	}
@@ -145,7 +146,7 @@ func TestBuildBotServer_AdminRoutesToggleByConfig(t *testing.T) {
 			},
 		}
 
-		server, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, testAdminDependencies(), logger)
+		server, err := appbootstrap.BuildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, testAdminDependencies(), logger)
 		if err != nil {
 			t.Fatalf("buildBotServer() error = %v", err)
 		}
@@ -170,7 +171,7 @@ func TestBuildBotServer_AdminRoutesToggleByConfig(t *testing.T) {
 			},
 		}
 
-		server, err := buildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
+		server, err := appbootstrap.BuildBotServer(t.Context(), cfg, nil, nil, testAlarmCRUD{}, nil, logger)
 		if err != nil {
 			t.Fatalf("buildBotServer() error = %v", err)
 		}
