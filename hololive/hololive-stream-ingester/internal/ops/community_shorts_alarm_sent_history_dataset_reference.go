@@ -201,7 +201,7 @@ func buildCommunityShortsObservationChannelPostKey(channelID string, postID stri
 	if trimmedChannelID == "" || trimmedPostID == "" {
 		return ""
 	}
-	return strings.Join([]string{trimmedChannelID, trimmedPostID}, "|")
+	return trimmedChannelID + "|" + trimmedPostID
 }
 
 func buildCommunityShortsAlarmSentHistoryDatasetVerificationRows(

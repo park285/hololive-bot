@@ -1,15 +1,33 @@
 package ops
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
 func RenderCommunityShortsContinuousObservationMarkdown(report CommunityShortsContinuousObservationReport) string {
 	var builder strings.Builder
+	closeout, missingAlarmCloseout, stateConsistencyCloseout := resolveCommunityShortsContinuousObservationCloseouts(report)
+
+	writeCommunityShortsMarkdownHeading(&builder, 1, "YouTube Community/Shorts Continuous Observation Report")
+	writeCommunityShortsContinuousObservationMetadata(&builder, report)
+	writeCommunityShortsContinuousObservationCloseoutSection(&builder, closeout, missingAlarmCloseout, stateConsistencyCloseout)
+	writeCommunityShortsContinuousObservationEmbeddedSections(&builder, report)
+
+	return builder.String()
+}
+
+func resolveCommunityShortsContinuousObservationCloseouts(
+	report CommunityShortsContinuousObservationReport,
+) (
+	CommunityShortsContinuousObservation24HCloseout,
+	CommunityShortsContinuousObservationMissingAlarmCloseout,
+	CommunityShortsContinuousObservationStateConsistencyCloseout,
+) {
 	closeout := report.Closeout24H
 	if closeout.Status == "" {
 		closeout = buildCommunityShortsContinuousObservation24HCloseout(
@@ -19,6 +37,7 @@ func RenderCommunityShortsContinuousObservationMarkdown(report CommunityShortsCo
 			report.LatencyCause,
 		)
 	}
+
 	missingAlarmCloseout := report.MissingAlarmCloseout24H
 	if missingAlarmCloseout.Status == "" {
 		missingAlarmCloseout = buildCommunityShortsContinuousObservationMissingAlarmCloseout(
@@ -39,121 +58,131 @@ func RenderCommunityShortsContinuousObservationMarkdown(report CommunityShortsCo
 		)
 	}
 
-	builder.WriteString("# YouTube Community/Shorts Continuous Observation Report\n\n")
-	builder.WriteString("- generated at: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.GeneratedAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- observation runtime: `")
-	builder.WriteString(strings.TrimSpace(report.Observation.RuntimeName))
-	builder.WriteString("`, cutover: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.Observation.BigBangCutoverAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- observation status: `")
-	builder.WriteString(string(report.Observation.Status))
-	builder.WriteString("`\n")
-	builder.WriteString("- observation window: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.Observation.ObservationStartedAt))
-	builder.WriteString("` -> `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.Observation.ObservationEndsAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- deployment completed at: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.Observation.DeploymentCompletedAt))
-	builder.WriteString("`, observed until: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.Observation.ObservedUntil))
-	builder.WriteString("`\n")
-	builder.WriteString("- target channels: `")
-	fmt.Fprintf(&builder, "%d", report.Observation.TargetChannelCount)
-	builder.WriteString("`, app version: `")
-	builder.WriteString(strings.TrimSpace(report.Observation.AppVersion))
-	builder.WriteString("`\n")
-	builder.WriteString("\n## 24h Closeout\n\n")
-	builder.WriteString("- scope: `")
-	builder.WriteString(fallbackCommunityShortsSendCountValue(closeout.AggregationScope))
-	builder.WriteString("`, target_channels=`")
-	fmt.Fprintf(&builder, "%d", closeout.TargetChannelCount)
-	builder.WriteString("`, observed_posts=`")
-	fmt.Fprintf(&builder, "%d", closeout.ObservedPostCount)
-	builder.WriteString("`, period_label=`")
-	builder.WriteString(fallbackCommunityShortsSendCountValue(closeout.ObservationPeriodLabel))
-	builder.WriteString("`\n")
-	builder.WriteString("- internal over-2m closeout: status=`")
-	builder.WriteString(string(closeout.Status))
-	builder.WriteString("`, internal_system_cause_posts=`")
-	fmt.Fprintf(&builder, "%d", closeout.InternalExceededPostCount)
-	builder.WriteString("`, over_2m_posts=`")
-	fmt.Fprintf(&builder, "%d", closeout.TotalExceededPostCount)
-	builder.WriteString("`, non_internal_system_cause_posts=`")
-	fmt.Fprintf(&builder, "%d", closeout.NonInternalExceededPostCount)
-	builder.WriteString("`, excluded_external_collection_posts=`")
-	fmt.Fprintf(&builder, "%d", closeout.ExcludedExternalExceededPostCount)
-	builder.WriteString("`, rule=`")
-	builder.WriteString(closeout.Rule)
-	builder.WriteString("`\n")
-	builder.WriteString("- closeout statement: ")
-	builder.WriteString(closeout.Statement)
-	builder.WriteString("\n")
-	builder.WriteString("- missing alarm closeout: status=`")
-	builder.WriteString(string(missingAlarmCloseout.Status))
-	builder.WriteString("`, reference_posts=`")
-	fmt.Fprintf(&builder, "%d", missingAlarmCloseout.ReferencePostCount)
-	builder.WriteString("`, send_state_posts=`")
-	fmt.Fprintf(&builder, "%d", missingAlarmCloseout.SendStatePostCount)
-	builder.WriteString("`, missing_alarm_posts=`")
-	fmt.Fprintf(&builder, "%d", missingAlarmCloseout.MissingAlarmPostCount)
-	builder.WriteString("`, missing_send_state_posts=`")
-	fmt.Fprintf(&builder, "%d", missingAlarmCloseout.MissingSendStatePostCount)
-	builder.WriteString("`, attempted_missing_posts=`")
-	fmt.Fprintf(&builder, "%d", missingAlarmCloseout.AttemptedMissingPostCount)
-	builder.WriteString("`, not_sent_missing_posts=`")
-	fmt.Fprintf(&builder, "%d", missingAlarmCloseout.NotSentMissingPostCount)
-	builder.WriteString("`, rule=`")
-	builder.WriteString(missingAlarmCloseout.Rule)
-	builder.WriteString("`\n")
-	builder.WriteString("- missing alarm statement: ")
-	builder.WriteString(missingAlarmCloseout.Statement)
-	builder.WriteString("\n")
-	builder.WriteString("- state consistency closeout: status=`")
-	builder.WriteString(string(stateConsistencyCloseout.Status))
-	builder.WriteString("`, reference_posts=`")
-	fmt.Fprintf(&builder, "%d", stateConsistencyCloseout.ReferencePostCount)
-	builder.WriteString("`, send_state_posts=`")
-	fmt.Fprintf(&builder, "%d", stateConsistencyCloseout.SendStatePostCount)
-	builder.WriteString("`, duplicate_sent_posts=`")
-	fmt.Fprintf(&builder, "%d", stateConsistencyCloseout.DuplicateSentPostCount)
-	builder.WriteString("`, missing_alarm_posts=`")
-	fmt.Fprintf(&builder, "%d", stateConsistencyCloseout.MissingAlarmPostCount)
-	builder.WriteString("`, missing_send_state_posts=`")
-	fmt.Fprintf(&builder, "%d", stateConsistencyCloseout.MissingSendStatePostCount)
-	builder.WriteString("`, attempted_missing_posts=`")
-	fmt.Fprintf(&builder, "%d", stateConsistencyCloseout.AttemptedMissingPostCount)
-	builder.WriteString("`, not_sent_missing_posts=`")
-	fmt.Fprintf(&builder, "%d", stateConsistencyCloseout.NotSentMissingPostCount)
-	builder.WriteString("`, rule=`")
-	builder.WriteString(stateConsistencyCloseout.Rule)
-	builder.WriteString("`\n")
-	builder.WriteString("- state consistency statement: ")
-	builder.WriteString(stateConsistencyCloseout.Statement)
-	builder.WriteString("\n")
+	return closeout, missingAlarmCloseout, stateConsistencyCloseout
+}
 
-	builder.WriteString("\n## Target Baseline\n\n")
+func writeCommunityShortsContinuousObservationMetadata(
+	builder *strings.Builder,
+	report CommunityShortsContinuousObservationReport,
+) {
+	writeCommunityShortsMarkdownKV(builder, "generated at", formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.GeneratedAt)))
+	writeCommunityShortsMarkdownKV(
+		builder,
+		"observation runtime",
+		formatCommunityShortsMarkdownCode(strings.TrimSpace(report.Observation.RuntimeName))+
+			", cutover: "+
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.Observation.BigBangCutoverAt)),
+	)
+	writeCommunityShortsMarkdownKV(builder, "observation status", formatCommunityShortsMarkdownCode(string(report.Observation.Status)))
+	writeCommunityShortsMarkdownKV(
+		builder,
+		"observation window",
+		formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.Observation.ObservationStartedAt))+
+			" -> "+
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.Observation.ObservationEndsAt)),
+	)
+	writeCommunityShortsMarkdownKV(
+		builder,
+		"deployment completed at",
+		formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.Observation.DeploymentCompletedAt))+
+			", observed until: "+
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.Observation.ObservedUntil)),
+	)
+	writeCommunityShortsMarkdownKV(
+		builder,
+		"target channels",
+		formatCommunityShortsMarkdownCode(strconv.Itoa(report.Observation.TargetChannelCount))+
+			", app version: "+
+			formatCommunityShortsMarkdownCode(strings.TrimSpace(report.Observation.AppVersion)),
+	)
+}
+
+func writeCommunityShortsContinuousObservationCloseoutSection(
+	builder *strings.Builder,
+	closeout CommunityShortsContinuousObservation24HCloseout,
+	missingAlarmCloseout CommunityShortsContinuousObservationMissingAlarmCloseout,
+	stateConsistencyCloseout CommunityShortsContinuousObservationStateConsistencyCloseout,
+) {
+	writeCommunityShortsMarkdownHeading(builder, 2, "24h Closeout")
+	writeCommunityShortsMarkdownKV(builder, "scope", buildCommunityShortsContinuousObservationCloseoutScopeMarkdown(closeout))
+	writeCommunityShortsMarkdownKV(builder, "internal over-2m closeout", buildCommunityShortsContinuousObservation24HCloseoutMarkdown(closeout))
+	writeCommunityShortsMarkdownKV(builder, "closeout statement", closeout.Statement)
+	writeCommunityShortsMarkdownKV(builder, "missing alarm closeout", buildCommunityShortsContinuousObservationMissingAlarmCloseoutMarkdown(missingAlarmCloseout))
+	writeCommunityShortsMarkdownKV(builder, "missing alarm statement", missingAlarmCloseout.Statement)
+	writeCommunityShortsMarkdownKV(builder, "state consistency closeout", buildCommunityShortsContinuousObservationStateConsistencyCloseoutMarkdown(stateConsistencyCloseout))
+	writeCommunityShortsMarkdownKV(builder, "state consistency statement", stateConsistencyCloseout.Statement)
+}
+
+func writeCommunityShortsContinuousObservationEmbeddedSections(
+	builder *strings.Builder,
+	report CommunityShortsContinuousObservationReport,
+) {
+	writeCommunityShortsMarkdownHeading(builder, 2, "Target Baseline")
 	builder.WriteString(renderCommunityShortsContinuousObservationTargetBaseline(report.TargetBaseline))
-	builder.WriteString("\n")
-	builder.WriteString(promoteCommunityShortsMarkdownHeadings(RenderCommunityShortsChannelSummaryMarkdown(report.ChannelSummary), 1))
-	builder.WriteString("\n")
-	builder.WriteString(promoteCommunityShortsMarkdownHeadings(RenderCommunityShortsSendCountMarkdown(report.SendCounts), 1))
-	builder.WriteString("\n")
+	appendCommunityShortsContinuousObservationSection(builder, RenderCommunityShortsChannelSummaryMarkdown(report.ChannelSummary))
+	appendCommunityShortsContinuousObservationSection(builder, RenderCommunityShortsSendCountMarkdown(report.SendCounts))
 	if report.AlarmSentHistoryDataset != nil {
-		builder.WriteString(promoteCommunityShortsMarkdownHeadings(RenderCommunityShortsAlarmSentHistoryDatasetMarkdown(*report.AlarmSentHistoryDataset), 1))
-		builder.WriteString("\n")
+		appendCommunityShortsContinuousObservationSection(builder, RenderCommunityShortsAlarmSentHistoryDatasetMarkdown(*report.AlarmSentHistoryDataset))
 	}
-	builder.WriteString(promoteCommunityShortsMarkdownHeadings(RenderCommunityShortsDeliveryLogMarkdown(report.DeliveryLogs), 1))
-	builder.WriteString("\n")
-	builder.WriteString(promoteCommunityShortsMarkdownHeadings(RenderCommunityShortsLatencyPeriodMarkdown(report.LatencyPeriods), 1))
-	builder.WriteString("\n")
-	builder.WriteString(promoteCommunityShortsMarkdownHeadings(RenderCommunityShortsLatencyCauseMarkdown(report.LatencyCause), 1))
-	builder.WriteString("\n")
+	appendCommunityShortsContinuousObservationSection(builder, RenderCommunityShortsDeliveryLogMarkdown(report.DeliveryLogs))
+	appendCommunityShortsContinuousObservationSection(builder, RenderCommunityShortsLatencyPeriodMarkdown(report.LatencyPeriods))
+	appendCommunityShortsContinuousObservationSection(builder, RenderCommunityShortsLatencyCauseMarkdown(report.LatencyCause))
+}
 
-	return builder.String()
+func appendCommunityShortsContinuousObservationSection(builder *strings.Builder, markdown string) {
+	if builder == nil || strings.TrimSpace(markdown) == "" {
+		return
+	}
+	builder.WriteString("\n")
+	builder.WriteString(promoteCommunityShortsMarkdownHeadings(markdown, 1))
+	builder.WriteString("\n")
+}
+
+func buildCommunityShortsContinuousObservationCloseoutScopeMarkdown(
+	closeout CommunityShortsContinuousObservation24HCloseout,
+) string {
+	return formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(closeout.AggregationScope)) +
+		", target_channels=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.TargetChannelCount)) +
+		", observed_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.ObservedPostCount)) +
+		", period_label=" + formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(closeout.ObservationPeriodLabel))
+}
+
+func buildCommunityShortsContinuousObservation24HCloseoutMarkdown(
+	closeout CommunityShortsContinuousObservation24HCloseout,
+) string {
+	return "status=" + formatCommunityShortsMarkdownCode(string(closeout.Status)) +
+		", internal_system_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(closeout.InternalExceededPostCount, 10)) +
+		", over_2m_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(closeout.TotalExceededPostCount, 10)) +
+		", non_internal_system_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(closeout.NonInternalExceededPostCount, 10)) +
+		", excluded_external_collection_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(closeout.ExcludedExternalExceededPostCount, 10)) +
+		", rule=" + formatCommunityShortsMarkdownCode(closeout.Rule)
+}
+
+func buildCommunityShortsContinuousObservationMissingAlarmCloseoutMarkdown(
+	closeout CommunityShortsContinuousObservationMissingAlarmCloseout,
+) string {
+	return "status=" + formatCommunityShortsMarkdownCode(string(closeout.Status)) +
+		", reference_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.ReferencePostCount)) +
+		", send_state_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.SendStatePostCount)) +
+		", missing_alarm_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.MissingAlarmPostCount)) +
+		", missing_send_state_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.MissingSendStatePostCount)) +
+		", attempted_missing_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.AttemptedMissingPostCount)) +
+		", not_sent_missing_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.NotSentMissingPostCount)) +
+		", rule=" + formatCommunityShortsMarkdownCode(closeout.Rule)
+}
+
+func buildCommunityShortsContinuousObservationStateConsistencyCloseoutMarkdown(
+	closeout CommunityShortsContinuousObservationStateConsistencyCloseout,
+) string {
+	return "status=" + formatCommunityShortsMarkdownCode(string(closeout.Status)) +
+		", reference_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.ReferencePostCount)) +
+		", send_state_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.SendStatePostCount)) +
+		", duplicate_sent_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.DuplicateSentPostCount)) +
+		", missing_alarm_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.MissingAlarmPostCount)) +
+		", missing_send_state_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.MissingSendStatePostCount)) +
+		", attempted_missing_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.AttemptedMissingPostCount)) +
+		", not_sent_missing_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(closeout.NotSentMissingPostCount)) +
+		", rule=" + formatCommunityShortsMarkdownCode(closeout.Rule)
 }
 
 func renderCommunityShortsContinuousObservationTargetBaseline(
@@ -161,75 +190,66 @@ func renderCommunityShortsContinuousObservationTargetBaseline(
 ) string {
 	var builder strings.Builder
 
-	builder.WriteString("- generated at: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(baseline.GeneratedAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- final delivery owner: `")
-	builder.WriteString(strings.TrimSpace(baseline.Runtime.FinalDeliveryOwner))
-	builder.WriteString("`, big-bang enabled: `")
-	builder.WriteString(formatCommunityShortsContinuousObservationBool(baseline.Runtime.CommunityShortsBigBangEnabled))
-	builder.WriteString("`\n")
-	builder.WriteString("- runtime target channels: `")
-	fmt.Fprintf(&builder, "%d", baseline.Runtime.TargetChannelCount)
-	builder.WriteString("`, channel rows: `")
-	fmt.Fprintf(&builder, "%d", len(baseline.Channels))
-	builder.WriteString("`\n")
+	writeCommunityShortsMarkdownKV(&builder, "generated at", formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(baseline.GeneratedAt)))
+	writeCommunityShortsMarkdownKV(
+		&builder,
+		"final delivery owner",
+		formatCommunityShortsMarkdownCode(strings.TrimSpace(baseline.Runtime.FinalDeliveryOwner))+
+			", big-bang enabled: "+
+			formatCommunityShortsMarkdownCode(formatCommunityShortsContinuousObservationBool(baseline.Runtime.CommunityShortsBigBangEnabled)),
+	)
+	writeCommunityShortsMarkdownKV(
+		&builder,
+		"runtime target channels",
+		formatCommunityShortsMarkdownCode(strconv.Itoa(baseline.Runtime.TargetChannelCount))+
+			", channel rows: "+
+			formatCommunityShortsMarkdownCode(strconv.Itoa(len(baseline.Channels))),
+	)
 
 	if len(baseline.Channels) == 0 {
 		builder.WriteString("\n활성 운영 채널 baseline이 없습니다.\n")
 		return builder.String()
 	}
 
-	builder.WriteString("\n| channel_id | owner | community_enabled | community_rooms | community_mode | shorts_enabled | shorts_rooms | shorts_mode |\n")
-	builder.WriteString("| --- | --- | --- | ---: | --- | --- | ---: | --- |\n")
-	for i := range baseline.Channels {
-		communityRoute, _ := communityshorts.RouteForType(baseline.Channels[i].Routes, domain.AlarmTypeCommunity)
-		shortsRoute, _ := communityshorts.RouteForType(baseline.Channels[i].Routes, domain.AlarmTypeShorts)
-		builder.WriteString("| `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(baseline.Channels[i].ChannelID))
-		builder.WriteString("` | `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(baseline.Channels[i].OwnerLabel))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsContinuousObservationBool(communityRoute.AlarmEnabled))
-		builder.WriteString("` | ")
-		fmt.Fprintf(&builder, "%d", communityRoute.SubscriberRoomCount)
-		builder.WriteString(" | `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(communityRoute.EffectiveDeliveryMode))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsContinuousObservationBool(shortsRoute.AlarmEnabled))
-		builder.WriteString("` | ")
-		fmt.Fprintf(&builder, "%d", shortsRoute.SubscriberRoomCount)
-		builder.WriteString(" | `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(shortsRoute.EffectiveDeliveryMode))
-		builder.WriteString("` |\n")
-	}
+	writeCommunityShortsMarkdownTable(
+		&builder,
+		communityShortsContinuousObservationTargetBaselineColumns,
+		buildCommunityShortsContinuousObservationTargetBaselineRows(baseline.Channels),
+	)
 
 	return builder.String()
 }
 
-func promoteCommunityShortsMarkdownHeadings(markdown string, depth int) string {
-	if depth <= 0 || strings.TrimSpace(markdown) == "" {
-		return markdown
+var communityShortsContinuousObservationTargetBaselineColumns = []communityShortsMarkdownColumn{
+	{Header: "channel_id"},
+	{Header: "owner"},
+	{Header: "community_enabled"},
+	{Header: "community_rooms", AlignRight: true},
+	{Header: "community_mode"},
+	{Header: "shorts_enabled"},
+	{Header: "shorts_rooms", AlignRight: true},
+	{Header: "shorts_mode"},
+}
+
+func buildCommunityShortsContinuousObservationTargetBaselineRows(
+	channels []communityshorts.TargetBaselineChannel,
+) [][]string {
+	rows := make([][]string, 0, len(channels))
+	for i := range channels {
+		communityRoute, _ := communityshorts.RouteForType(channels[i].Routes, domain.AlarmTypeCommunity)
+		shortsRoute, _ := communityshorts.RouteForType(channels[i].Routes, domain.AlarmTypeShorts)
+		rows = append(rows, []string{
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(channels[i].ChannelID)),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(channels[i].OwnerLabel)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsContinuousObservationBool(communityRoute.AlarmEnabled)),
+			strconv.Itoa(communityRoute.SubscriberRoomCount),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(communityRoute.EffectiveDeliveryMode)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsContinuousObservationBool(shortsRoute.AlarmEnabled)),
+			strconv.Itoa(shortsRoute.SubscriberRoomCount),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(shortsRoute.EffectiveDeliveryMode)),
+		})
 	}
-	lines := strings.Split(markdown, "\n")
-	prefix := strings.Repeat("#", depth)
-	for i := range lines {
-		trimmed := strings.TrimLeft(lines[i], " ")
-		if !strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		heading := trimmed
-		count := 0
-		for count < len(heading) && heading[count] == '#' {
-			count++
-		}
-		if count == 0 || count >= len(heading) || heading[count] != ' ' {
-			continue
-		}
-		indent := lines[i][:len(lines[i])-len(trimmed)]
-		lines[i] = indent + prefix + heading
-	}
-	return strings.Join(lines, "\n")
+	return rows
 }
 
 func formatCommunityShortsContinuousObservationBool(value bool) string {

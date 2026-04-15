@@ -24,59 +24,9 @@ func BuildCommunityShortsSendStateReport(
 	normalizedRows := make([]CommunityShortsSendStateRow, 0, len(sendStateRows))
 	summary := CommunityShortsSendStateSummary{}
 	for i := range sendStateRows {
-		normalized := normalizeCommunityShortsPostSendCount(sendStateRows[i])
-		alarmSentAt := resolveCommunityShortsSendStateAlarmSentAt(normalized)
-		postID := resolveCommunityShortsSendStatePostID(normalized)
-		row := CommunityShortsSendStateRow{
-			PostSendCount:           normalized,
-			SendState:               resolveCommunityShortsPerPostSendState(normalized),
-			PostKey:                 buildCommunityShortsObservationPostKey(normalized.AlarmType, normalized.ChannelID, postID),
-			ReportAlarmType:         normalized.AlarmType,
-			ReportChannelID:         normalized.ChannelID,
-			ReportPostID:            postID,
-			ReportActualPublishedAt: cloneCommunityShortsSendCountTime(normalized.ActualPublishedAt),
-			ReportDetectedAt:        cloneCommunityShortsSendCountTime(normalized.DetectedAt),
-			ReportAlarmSentAt:       alarmSentAt,
-		}
+		row := buildCommunityShortsSendStateRow(sendStateRows[i])
 		normalizedRows = append(normalizedRows, row)
-
-		summary.PostStateCount++
-		switch row.SendState {
-		case CommunityShortsPerPostSendStateSent:
-			summary.SentPostCount++
-		case CommunityShortsPerPostSendStateAttemptedWithoutSuccess:
-			summary.AttemptedWithoutSuccessPostCount++
-		default:
-			summary.NotSentPostCount++
-		}
-		if row.DuplicateSuccessCount > 0 {
-			summary.DuplicateSuccessPostCount++
-		}
-		if row.FailedAttemptCount > 0 {
-			summary.FailedAttemptPostCount++
-		}
-		switch row.ReportAlarmType {
-		case domain.AlarmTypeCommunity:
-			summary.CommunityPostCount++
-		case domain.AlarmTypeShorts:
-			summary.ShortsPostCount++
-		}
-		if observedAt := resolveCommunityShortsSendStateObservedAt(row); observedAt != nil {
-			if summary.EarliestObservedAt == nil || observedAt.Before(summary.EarliestObservedAt.UTC()) {
-				summary.EarliestObservedAt = cloneCommunityShortsSendCountTime(observedAt)
-			}
-			if summary.LatestObservedAt == nil || observedAt.After(summary.LatestObservedAt.UTC()) {
-				summary.LatestObservedAt = cloneCommunityShortsSendCountTime(observedAt)
-			}
-		}
-		if alarmSentAt != nil {
-			if summary.EarliestAlarmSentAt == nil || alarmSentAt.Before(summary.EarliestAlarmSentAt.UTC()) {
-				summary.EarliestAlarmSentAt = cloneCommunityShortsSendCountTime(alarmSentAt)
-			}
-			if summary.LatestAlarmSentAt == nil || alarmSentAt.After(summary.LatestAlarmSentAt.UTC()) {
-				summary.LatestAlarmSentAt = cloneCommunityShortsSendCountTime(alarmSentAt)
-			}
-		}
+		accumulateCommunityShortsSendStateSummary(&summary, row)
 	}
 
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
@@ -106,6 +56,94 @@ func BuildCommunityShortsSendStateReport(
 }
 
 func RenderCommunityShortsSendStateMarkdown(report CommunityShortsSendStateReport) string {
+	var builder strings.Builder
+
+	builder.WriteString(buildCommunityShortsSendStateMetadataMarkdown(report))
+
+	if len(report.Rows) == 0 {
+		builder.WriteString("\n조회된 community/shorts per-post send state row가 없습니다.\n")
+		return builder.String()
+	}
+
+	builder.WriteString(buildCommunityShortsSendStateTableMarkdown(report.Rows))
+	return builder.String()
+}
+
+func buildCommunityShortsSendStateRow(sendStateRow outbox.PostSendCount) CommunityShortsSendStateRow {
+	normalized := normalizeCommunityShortsPostSendCount(sendStateRow)
+	alarmSentAt := resolveCommunityShortsSendStateAlarmSentAt(normalized)
+	postID := resolveCommunityShortsSendStatePostID(normalized)
+	return CommunityShortsSendStateRow{
+		PostSendCount:           normalized,
+		SendState:               resolveCommunityShortsPerPostSendState(normalized),
+		PostKey:                 buildCommunityShortsObservationPostKey(normalized.AlarmType, normalized.ChannelID, postID),
+		ReportAlarmType:         normalized.AlarmType,
+		ReportChannelID:         normalized.ChannelID,
+		ReportPostID:            postID,
+		ReportActualPublishedAt: cloneCommunityShortsSendCountTime(normalized.ActualPublishedAt),
+		ReportDetectedAt:        cloneCommunityShortsSendCountTime(normalized.DetectedAt),
+		ReportAlarmSentAt:       alarmSentAt,
+	}
+}
+
+func accumulateCommunityShortsSendStateSummary(
+	summary *CommunityShortsSendStateSummary,
+	row CommunityShortsSendStateRow,
+) {
+	if summary == nil {
+		return
+	}
+	summary.PostStateCount++
+	switch row.SendState {
+	case CommunityShortsPerPostSendStateSent:
+		summary.SentPostCount++
+	case CommunityShortsPerPostSendStateAttemptedWithoutSuccess:
+		summary.AttemptedWithoutSuccessPostCount++
+	default:
+		summary.NotSentPostCount++
+	}
+	if row.DuplicateSuccessCount > 0 {
+		summary.DuplicateSuccessPostCount++
+	}
+	if row.FailedAttemptCount > 0 {
+		summary.FailedAttemptPostCount++
+	}
+	switch row.ReportAlarmType {
+	case domain.AlarmTypeCommunity:
+		summary.CommunityPostCount++
+	case domain.AlarmTypeShorts:
+		summary.ShortsPostCount++
+	}
+	updateCommunityShortsSendStateSummaryTimes(summary, resolveCommunityShortsSendStateObservedAt(row), row.ReportAlarmSentAt)
+}
+
+func updateCommunityShortsSendStateSummaryTimes(
+	summary *CommunityShortsSendStateSummary,
+	observedAt *time.Time,
+	alarmSentAt *time.Time,
+) {
+	if summary == nil {
+		return
+	}
+	if observedAt != nil {
+		if summary.EarliestObservedAt == nil || observedAt.Before(summary.EarliestObservedAt.UTC()) {
+			summary.EarliestObservedAt = cloneCommunityShortsSendCountTime(observedAt)
+		}
+		if summary.LatestObservedAt == nil || observedAt.After(summary.LatestObservedAt.UTC()) {
+			summary.LatestObservedAt = cloneCommunityShortsSendCountTime(observedAt)
+		}
+	}
+	if alarmSentAt != nil {
+		if summary.EarliestAlarmSentAt == nil || alarmSentAt.Before(summary.EarliestAlarmSentAt.UTC()) {
+			summary.EarliestAlarmSentAt = cloneCommunityShortsSendCountTime(alarmSentAt)
+		}
+		if summary.LatestAlarmSentAt == nil || alarmSentAt.After(summary.LatestAlarmSentAt.UTC()) {
+			summary.LatestAlarmSentAt = cloneCommunityShortsSendCountTime(alarmSentAt)
+		}
+	}
+}
+
+func buildCommunityShortsSendStateMetadataMarkdown(report CommunityShortsSendStateReport) string {
 	var builder strings.Builder
 
 	builder.WriteString("# YouTube Community/Shorts Send State Report\n\n")
@@ -151,15 +189,16 @@ func RenderCommunityShortsSendStateMarkdown(report CommunityShortsSendStateRepor
 	builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Summary.LatestAlarmSentAt))
 	builder.WriteString("`\n")
 
-	if len(report.Rows) == 0 {
-		builder.WriteString("\n조회된 community/shorts per-post send state row가 없습니다.\n")
-		return builder.String()
-	}
+	return builder.String()
+}
+
+func buildCommunityShortsSendStateTableMarkdown(rows []CommunityShortsSendStateRow) string {
+	var builder strings.Builder
 
 	builder.WriteString("\n| send_state | alarm_type | channel_id | post_key | post_id | content_id | actual_published_at | detected_at | alarm_sent_at | outbox_count | success_send_count | success_room_count | duplicate_success_count | failed_attempt_count | first_event_at | last_event_at |\n")
 	builder.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |\n")
-	for i := range report.Rows {
-		row := report.Rows[i]
+	for i := range rows {
+		row := rows[i]
 		builder.WriteString("| `")
 		builder.WriteString(string(row.SendState))
 		builder.WriteString("` | `")

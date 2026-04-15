@@ -29,82 +29,16 @@ func BuildCommunityShortsSendCountReportWithQuery(
 	query CommunityShortsSendCountQuery,
 	generatedAt time.Time,
 ) CommunityShortsSendCountReport {
-	generatedAt = normalizeCommunityShortsSendCountTime(generatedAt)
-	if generatedAt.IsZero() {
-		generatedAt = time.Now().UTC()
-	}
-	query = normalizeCommunityShortsSendCountQuery(query)
-	if query.Mode == "" {
-		query.Mode = communityShortsSendCountQueryModeRecent
-	}
-	if query.WindowEnd == nil {
-		query.WindowEnd = cloneCommunityShortsSendCountTime(&generatedAt)
-	}
+	generatedAt, query = resolveCommunityShortsSendCountReportInputs(generatedAt, query)
 
 	timelineIndex := buildCommunityShortsDeliveryTimelineIndex(timelineRows)
 
 	normalizedRows := make([]CommunityShortsSendCountRow, 0, len(sendCountRows))
 	summary := CommunityShortsSendCountSummary{}
 	for i := range sendCountRows {
-		row := CommunityShortsSendCountRow{PostSendCount: normalizeCommunityShortsPostSendCount(sendCountRows[i])}
-		row.ReportAlarmType = row.AlarmType
-		row.ReportChannelID = row.ChannelID
-		row.ReportPostID = resolveCommunityShortsSendCountPostID(row)
-		row.ReportActualPublishedAt = cloneCommunityShortsSendCountTime(row.ActualPublishedAt)
-		row.ReportAlarmSentAt = resolveCommunityShortsSendCountAlarmSentAt(row)
-		row.ReportDelaySeconds = buildCommunityShortsSendCountDelaySeconds(
-			row.AlarmLatencyMillis,
-			row.ReportActualPublishedAt,
-			row.ReportAlarmSentAt,
-		)
-		if timeline, ok := timelineIndex[buildCommunityShortsSendCountKey(row.ChannelID, row.AlarmType, row.ContentID)]; ok {
-			row.PublishToDetectMillis = cloneCommunityShortsSendCountInt64(timeline.PublishToDetectMillis)
-			row.DelaySource = timeline.DelaySource
-			row.QueueWaitMillis = cloneCommunityShortsSendCountInt64(timeline.QueueWaitMillis)
-			row.RetryAccumulationMillis = cloneCommunityShortsSendCountInt64(timeline.RetryAccumulationMillis)
-			row.JobFailureDetected = timeline.JobFailureDetected
-			row.InternalDelayCause = timeline.InternalDelayCause
-			row.LatencyClassification = cloneCommunityShortsLatencyClassification(timeline.LatencyClassification)
-		}
-		if row.DelaySource == "" {
-			row.DelaySource = outbox.PostDelaySourceNone
-		}
-		if row.InternalDelayCause == "" {
-			row.InternalDelayCause = outbox.PostInternalDelayCauseNone
-		}
-
+		row := buildCommunityShortsSendCountRow(sendCountRows[i], timelineIndex)
 		normalizedRows = append(normalizedRows, row)
-		summary.PostCount++
-		if row.SuccessSendCount > 0 {
-			summary.SuccessfulPostCount++
-		} else {
-			summary.ZeroSuccessPostCount++
-		}
-		if row.DuplicateSuccessCount > 0 {
-			summary.DuplicateSuccessPostCount++
-		}
-		if row.FailedAttemptCount > 0 {
-			summary.FailedAttemptPostCount++
-		}
-		if row.OutboxCount == 0 {
-			summary.OutboxMissingPostCount++
-		}
-		switch row.DelaySource {
-		case outbox.PostDelaySourceExternalCollection:
-			summary.ExternalCollectionSourcePostCount++
-		case outbox.PostDelaySourceInternalDelivery:
-			summary.InternalDeliverySourcePostCount++
-		case outbox.PostDelaySourceMixed:
-			summary.MixedDelaySourcePostCount++
-		}
-		switch row.InternalDelayCause {
-		case outbox.PostInternalDelayCauseQueueWait:
-			summary.QueueWaitCausePostCount++
-		case outbox.PostInternalDelayCauseRetryAccumulation:
-			summary.RetryAccumulationCausePostCount++
-		case outbox.PostInternalDelayCauseJobFailure:
-			summary.JobFailureCausePostCount++
-		}
+		accumulateCommunityShortsSendCountSummary(&summary, row)
 	}
 
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
@@ -135,6 +69,105 @@ func BuildCommunityShortsSendCountReportWithQuery(
 		Summary:      summary,
 		Verification: buildCommunityShortsSendCountVerification(summary),
 		Rows:         normalizedRows,
+	}
+}
+
+func resolveCommunityShortsSendCountReportInputs(
+	generatedAt time.Time,
+	query CommunityShortsSendCountQuery,
+) (time.Time, CommunityShortsSendCountQuery) {
+	generatedAt = normalizeCommunityShortsSendCountTime(generatedAt)
+	if generatedAt.IsZero() {
+		generatedAt = time.Now().UTC()
+	}
+	query = normalizeCommunityShortsSendCountQuery(query)
+	if query.Mode == "" {
+		query.Mode = communityShortsSendCountQueryModeRecent
+	}
+	if query.WindowEnd == nil {
+		query.WindowEnd = cloneCommunityShortsSendCountTime(&generatedAt)
+	}
+	return generatedAt, query
+}
+
+func buildCommunityShortsSendCountRow(
+	sendCountRow outbox.PostSendCount,
+	timelineIndex map[communityShortsSendCountKey]outbox.PostDeliveryTimeline,
+) CommunityShortsSendCountRow {
+	row := CommunityShortsSendCountRow{PostSendCount: normalizeCommunityShortsPostSendCount(sendCountRow)}
+	row.ReportAlarmType = row.AlarmType
+	row.ReportChannelID = row.ChannelID
+	row.ReportPostID = resolveCommunityShortsSendCountPostID(row)
+	row.ReportActualPublishedAt = cloneCommunityShortsSendCountTime(row.ActualPublishedAt)
+	row.ReportAlarmSentAt = resolveCommunityShortsSendCountAlarmSentAt(row)
+	row.ReportDelaySeconds = buildCommunityShortsSendCountDelaySeconds(
+		row.AlarmLatencyMillis,
+		row.ReportActualPublishedAt,
+		row.ReportAlarmSentAt,
+	)
+	applyCommunityShortsSendCountTimeline(&row, timelineIndex[buildCommunityShortsSendCountKey(row.ChannelID, row.AlarmType, row.ContentID)])
+	return row
+}
+
+func applyCommunityShortsSendCountTimeline(
+	row *CommunityShortsSendCountRow,
+	timeline outbox.PostDeliveryTimeline,
+) {
+	if row == nil {
+		return
+	}
+	row.PublishToDetectMillis = cloneCommunityShortsSendCountInt64(timeline.PublishToDetectMillis)
+	row.DelaySource = timeline.DelaySource
+	row.QueueWaitMillis = cloneCommunityShortsSendCountInt64(timeline.QueueWaitMillis)
+	row.RetryAccumulationMillis = cloneCommunityShortsSendCountInt64(timeline.RetryAccumulationMillis)
+	row.JobFailureDetected = timeline.JobFailureDetected
+	row.InternalDelayCause = timeline.InternalDelayCause
+	row.LatencyClassification = cloneCommunityShortsLatencyClassification(timeline.LatencyClassification)
+	if row.DelaySource == "" {
+		row.DelaySource = outbox.PostDelaySourceNone
+	}
+	if row.InternalDelayCause == "" {
+		row.InternalDelayCause = outbox.PostInternalDelayCauseNone
+	}
+}
+
+func accumulateCommunityShortsSendCountSummary(
+	summary *CommunityShortsSendCountSummary,
+	row CommunityShortsSendCountRow,
+) {
+	if summary == nil {
+		return
+	}
+	summary.PostCount++
+	if row.SuccessSendCount > 0 {
+		summary.SuccessfulPostCount++
+	} else {
+		summary.ZeroSuccessPostCount++
+	}
+	if row.DuplicateSuccessCount > 0 {
+		summary.DuplicateSuccessPostCount++
+	}
+	if row.FailedAttemptCount > 0 {
+		summary.FailedAttemptPostCount++
+	}
+	if row.OutboxCount == 0 {
+		summary.OutboxMissingPostCount++
+	}
+	switch row.DelaySource {
+	case outbox.PostDelaySourceExternalCollection:
+		summary.ExternalCollectionSourcePostCount++
+	case outbox.PostDelaySourceInternalDelivery:
+		summary.InternalDeliverySourcePostCount++
+	case outbox.PostDelaySourceMixed:
+		summary.MixedDelaySourcePostCount++
+	}
+	switch row.InternalDelayCause {
+	case outbox.PostInternalDelayCauseQueueWait:
+		summary.QueueWaitCausePostCount++
+	case outbox.PostInternalDelayCauseRetryAccumulation:
+		summary.RetryAccumulationCausePostCount++
+	case outbox.PostInternalDelayCauseJobFailure:
+		summary.JobFailureCausePostCount++
 	}
 }
 

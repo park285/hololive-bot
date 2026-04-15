@@ -130,6 +130,20 @@ func BuildCommunityShortsChannelSummaryReport(
 func RenderCommunityShortsChannelSummaryMarkdown(report CommunityShortsChannelSummaryReport) string {
 	var builder strings.Builder
 
+	builder.WriteString(buildCommunityShortsChannelSummaryMetadataMarkdown(report))
+
+	if len(report.Rows) == 0 {
+		builder.WriteString("\n최근 윈도우에 해당하는 community/shorts 감지 채널이 없습니다.\n")
+		return builder.String()
+	}
+
+	builder.WriteString(buildCommunityShortsChannelSummaryTableMarkdown(report.Rows))
+	return builder.String()
+}
+
+func buildCommunityShortsChannelSummaryMetadataMarkdown(report CommunityShortsChannelSummaryReport) string {
+	var builder strings.Builder
+
 	builder.WriteString("# YouTube Community/Shorts Channel Delivery Summary\n\n")
 	builder.WriteString("- generated at: `")
 	builder.WriteString(formatCommunityShortsSendCountTime(report.GeneratedAt))
@@ -157,15 +171,16 @@ func RenderCommunityShortsChannelSummaryMarkdown(report CommunityShortsChannelSu
 	fmt.Fprintf(&builder, "%d", report.Summary.ShortsDetectedPostCount)
 	builder.WriteString("`\n")
 
-	if len(report.Rows) == 0 {
-		builder.WriteString("\n최근 윈도우에 해당하는 community/shorts 감지 채널이 없습니다.\n")
-		return builder.String()
-	}
+	return builder.String()
+}
+
+func buildCommunityShortsChannelSummaryTableMarkdown(rows []outbox.ChannelPostDeliverySummary) string {
+	var builder strings.Builder
 
 	builder.WriteString("\n| status | channel_id | earliest_observed_at | latest_observed_at | detected_post_count | alarm_sent_post_count | success_post_count | failed_post_count | detected_unsent_post_count | community_detected_post_count | shorts_detected_post_count |\n")
 	builder.WriteString("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
-	for i := range report.Rows {
-		row := report.Rows[i]
+	for i := range rows {
+		row := rows[i]
 		builder.WriteString("| `")
 		builder.WriteString(resolveCommunityShortsChannelSummaryStatus(row))
 		builder.WriteString("` | `")

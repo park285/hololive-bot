@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -356,6 +357,122 @@ func TestBuildCommunityShortsLatencyCauseReport_UsesInsufficientEvidenceWhenTime
 	require.Equal(t, int64(1), report.Periods[0].CauseSummary.NonInternalSystemCausePostCount)
 	require.Equal(t, int64(0), report.Periods[0].CauseSummary.ExcludedExternalDelayPostCount)
 	require.Equal(t, int64(1), report.Periods[0].CauseSummary.InsufficientEvidencePostCount)
+}
+
+func TestRenderCommunityShortsLatencyCauseMarkdown_OutputStability(t *testing.T) {
+	t.Parallel()
+
+	generatedAt := time.Date(2026, 4, 15, 12, 34, 56, 0, time.UTC)
+	windowStart := generatedAt.Add(-2 * time.Hour)
+	windowEnd := generatedAt
+	periodStart := generatedAt.Add(-time.Hour)
+	periodEnd := generatedAt
+	observedAt := generatedAt.Add(-50 * time.Minute)
+	actualPublishedAt := observedAt
+	detectedAt := observedAt.Add(20 * time.Second)
+	alarmSentAt := observedAt.Add(3 * time.Minute)
+	alarmLatencyMillis := int64(3 * time.Minute / time.Millisecond)
+	publishToDetectMillis := int64(20 * time.Second / time.Millisecond)
+	internalLatencyMillis := int64(160 * time.Second / time.Millisecond)
+	queueWaitMillis := int64(80 * time.Second / time.Millisecond)
+
+	report := CommunityShortsLatencyCauseReport{
+		GeneratedAt:     generatedAt,
+		Query:           CommunityShortsLatencyCauseQuery{Mode: communityShortsLatencyCauseQueryModeRecent, WindowStart: &windowStart, WindowEnd: &windowEnd},
+		ObservedAtBasis: communityShortsLatencyCauseObservedAtBasis,
+		ThresholdMillis: int64(2 * time.Minute / time.Millisecond),
+		Verification: CommunityShortsLatencyCauseVerification{
+			InternalCauseRule:        communityShortsLatencyCauseInternalCauseRule,
+			NonInternalCauseRule:     communityShortsLatencyCauseNonInternalCauseRule,
+			ExcludedExternalRule:     communityShortsLatencyCauseExcludedExternalRule,
+			InsufficientEvidenceRule: communityShortsLatencyCauseInsufficientEvidence,
+			EvidenceFieldCatalog:     append([]string(nil), communityShortsLatencyCauseEvidenceFieldCatalog...),
+		},
+		Periods: []CommunityShortsLatencyCausePeriodView{{
+			Summary: outbox.PostLatencyPeriodSummary{
+				Label:                    "last_1h",
+				StartAt:                  periodStart,
+				EndAt:                    periodEnd,
+				TotalPostCount:           1,
+				AlarmSentPostCount:       1,
+				PendingPostCount:         0,
+				LatencyMeasuredPostCount: 1,
+				AverageLatencyMillis:     &alarmLatencyMillis,
+				P95LatencyMillis:         &alarmLatencyMillis,
+				MaxLatencyMillis:         &alarmLatencyMillis,
+				ExceededPostCount:        1,
+			},
+			CauseSummary: CommunityShortsLatencyCauseSummary{
+				ExceededPostCount:               1,
+				InternalSystemCausePostCount:    1,
+				NonInternalSystemCausePostCount: 0,
+				CommunityExceededPostCount:      1,
+				InternalDeliverySourcePostCount: 1,
+				InternalCauseCandidatePostCount: 1,
+				QueueWaitCausePostCount:         1,
+			},
+			Rows: []CommunityShortsLatencyCauseRow{{
+				AlarmType:             domain.AlarmTypeCommunity,
+				ChannelID:             "UC_TEST",
+				PostID:                "community-post",
+				ObservedAt:            &observedAt,
+				ActualPublishedAt:     &actualPublishedAt,
+				DetectedAt:            &detectedAt,
+				AlarmSentAt:           &alarmSentAt,
+				AlarmLatencyMillis:    &alarmLatencyMillis,
+				PublishToDetectMillis: &publishToDetectMillis,
+				InternalLatencyMillis: &internalLatencyMillis,
+				QueueWaitMillis:       &queueWaitMillis,
+				DelaySource:           outbox.PostDelaySourceInternalDelivery,
+				InternalDelayCause:    outbox.PostInternalDelayCauseQueueWait,
+				InternalCauseJudgment: CommunityShortsInternalCauseJudgmentInternalSystem,
+				InternalCauseBasis:    "delay_source=internal_delivery",
+				CauseEvidence: CommunityShortsLatencyCauseEvidence{
+					Fields: []string{
+						"delay_source",
+						"internal_delay_cause",
+						"internal_latency_millis",
+						"queue_wait_millis",
+					},
+				},
+				LatencyClassification: outbox.PostLatencyClassificationResult{
+					Status: outbox.PostLatencyClassificationStatusExceeded,
+					Evidence: []outbox.PostLatencyClassificationEvidence{{
+						Key:      outbox.PostLatencyClassificationEvidenceKeyQueueWait,
+						Millis:   &queueWaitMillis,
+						Selected: true,
+					}},
+				},
+			}},
+		}},
+	}
+
+	require.Equal(t, strings.Join([]string{
+		"# YouTube Community/Shorts Latency Cause Report",
+		"",
+		"- generated at: `2026-04-15T12:34:56Z`",
+		"- mode: `recent_window`",
+		"- window: `2026-04-15T10:34:56Z` -> `2026-04-15T12:34:56Z`",
+		"- observed at basis: `COALESCE(actual_published_at, detected_at)`",
+		"- threshold millis: `120000`",
+		"- internal cause rule: `internal_system if delay_source in {internal_delivery,mixed} OR (internal_delay_cause != none AND delay_source != external_collection)`",
+		"- non internal rule: `non_internal if delay_source = external_collection OR (delay_source = none AND internal_delay_cause = none)`",
+		"- excluded external rule: `delay_source = external_collection rows stay logged as reference-only excluded_external_delay_posts and do not contribute to failure-driving counts`",
+		"- insufficient evidence rule: `latency_classification.status = insufficient_evidence keeps the row in non_internal and increments insufficient_evidence_posts`",
+		"- cause evidence fields: `delay_source, internal_delay_cause, alarm_latency_millis, publish_to_detect_millis, internal_latency_millis, queue_wait_millis, retry_accumulation_millis, job_failure_detected, latency_classification.status, latency_classification.evidence`",
+		"- periods: `1`",
+		"",
+		"## `last_1h`",
+		"",
+		"- window: `2026-04-15T11:34:56Z` -> `2026-04-15T12:34:56Z`",
+		"- latency summary: total_posts=`1`, alarm_sent_posts=`1`, pending_posts=`0`, measured_posts=`1`, avg_latency_ms=`180000`, p95_latency_ms=`180000`, max_latency_ms=`180000`, over_2m_posts=`1`",
+		"- cause summary: exceeded_posts=`1`, internal_system_cause_posts=`1`, non_internal_system_cause_posts=`0`, excluded_external_delay_posts=`0`, community_exceeded_posts=`1`, shorts_exceeded_posts=`0`, external_collection_source_posts=`0`, internal_delivery_source_posts=`1`, mixed_delay_source_posts=`0`, no_dominant_source_posts=`0`, internal_cause_candidate_posts=`1`, queue_wait_cause_posts=`1`, retry_accumulation_cause_posts=`0`, job_failure_cause_posts=`0`, unclassified_internal_cause_posts=`0`, insufficient_evidence_posts=`0`",
+		"- excluded external reference: excluded_external_delay_posts=`0`, rule=`delay_source = external_collection rows stay logged as reference-only excluded_external_delay_posts and do not contribute to failure-driving counts`",
+		"",
+		"| alarm_type | channel_id | post_id | observed_at | actual_published_at | detected_at | alarm_sent_at | alarm_latency_ms | internal_cause_judgment | internal_cause_basis | cause_evidence_fields | delay_source | internal_delay_cause | publish_to_detect_ms | internal_latency_ms | queue_wait_ms | retry_accumulation_ms | job_failure_detected | cause_classification_status | cause_classification_evidence |",
+		"| --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
+		"| `COMMUNITY` | `UC_TEST` | `community-post` | `2026-04-15T11:44:56Z` | `2026-04-15T11:44:56Z` | `2026-04-15T11:45:16Z` | `2026-04-15T11:47:56Z` | 180000 | `internal_system` | `delay_source=internal_delivery` | `delay_source, internal_delay_cause, internal_latency_millis, queue_wait_millis` | `internal_delivery` | `queue_wait` | 20000 | 160000 | 80000 |  | `false` | `exceeded` | `queue_wait=80000[selected]` |",
+	}, "\n")+"\n", RenderCommunityShortsLatencyCauseMarkdown(report))
 }
 
 func TestBuildCommunityShortsLatencyCauseReport_ExternalCollectionOverridesInternalCauseForFailureAggregation(t *testing.T) {
