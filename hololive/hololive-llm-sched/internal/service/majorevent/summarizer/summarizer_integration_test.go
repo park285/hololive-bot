@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-
 func feb2026Events() []domain.MajorEvent {
 	date := func(y, m, d int) *time.Time {
 		t := time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
@@ -63,7 +62,6 @@ func feb2026Events() []domain.MajorEvent {
 		},
 	}
 }
-
 
 func mar2026Events() []domain.MajorEvent {
 	date := func(y, m, d int) *time.Time {

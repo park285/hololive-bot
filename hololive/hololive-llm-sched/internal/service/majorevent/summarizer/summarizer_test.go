@@ -33,7 +33,6 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-
 func TestAssembleSummaryText_WithHighlightsAndOngoing(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
@@ -109,7 +108,6 @@ func TestAssembleSummaryText_NoNote(t *testing.T) {
 	assertNotContains(t, result, "- ") // note 없으면 하이픈 없음
 }
 
-
 func TestSummaryResponseSchema_Structure(t *testing.T) {
 	schema := summaryResponseSchema()
 
@@ -171,7 +169,6 @@ func TestSummaryResponseSchema_Structure(t *testing.T) {
 	}
 }
 
-
 func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	original := summaryResponse{
 		Highlights: []eventHighlight{
@@ -214,7 +211,6 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	assertContains(t, text, "[기간 행사]")
 	assertContains(t, text, "https://example.com/cafe")
 }
-
 
 type mockSummarizer struct {
 	jsonResponse string
@@ -405,7 +401,6 @@ func TestEventSummarizer_Summarize_NoEvents_ReturnsEmpty(t *testing.T) {
 		t.Errorf("expected empty for nil events, got %q", result)
 	}
 }
-
 
 func TestAssembleSummaryText_HighlightWithLink(t *testing.T) {
 	resp := &summaryResponse{
@@ -606,7 +601,6 @@ func TestWriteDiscoveredEvents_HasSourcePrefix(t *testing.T) {
 	}
 }
 
-
 func assertContains(t *testing.T, s, substr string) {
 	t.Helper()
 	if !containsStr(s, substr) {
@@ -633,7 +627,6 @@ func searchStr(s, substr string) bool {
 	}
 	return false
 }
-
 
 // mockCache: 캐시 키 캡처용 mock (캐시 키 버전 포함 여부 검증)
 type mockCache struct {
@@ -1003,6 +996,31 @@ func TestGraduatedMembersLoad(t *testing.T) {
 	}
 	if total == 0 {
 		t.Error("expected at least one graduated member")
+	}
+}
+
+func TestSystemPrompt_IncludesGeneratedMemberFilter(t *testing.T) {
+	tests := []struct {
+		name       string
+		promptType SummaryType
+	}{
+		{"weekly", SummaryTypeWeekly},
+		{"monthly", SummaryTypeMonthly},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt, err := getSystemPrompt(tt.promptType)
+			if err != nil {
+				t.Fatalf("getSystemPrompt 실패: %v", err)
+			}
+			if !strings.Contains(prompt, "<member_filter>") {
+				t.Fatal("prompt should contain generated member_filter block")
+			}
+			if !strings.Contains(prompt, "Gawr Gura") {
+				t.Error("prompt should include generated graduated member data")
+			}
+		})
 	}
 }
 

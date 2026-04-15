@@ -25,23 +25,18 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 //go:embed graduated_members.json
 var graduatedMembersJSON []byte
 
-// graduatedMember: 졸업/은퇴 멤버 항목
 type graduatedMember struct {
 	Name string `json:"name"`
 	Date string `json:"date"`
 }
 
-// graduatedData: graduated_members.json 파싱 구조체
 type graduatedData struct {
 	Graduated         map[string][]graduatedMember `json:"graduated"`
 	AffiliateInactive []graduatedMember            `json:"affiliate_inactive"`
@@ -54,7 +49,6 @@ type graduatedData struct {
 
 var parsedGraduatedData graduatedData
 
-// promptVersion: 프롬프트 변경 시 bump하여 캐시 자동 무효화
 const promptVersion = "v3"
 
 type SummaryType string
@@ -64,51 +58,6 @@ const (
 	SummaryTypeMonthly SummaryType = "monthly"
 )
 
-
-// eventForPrompt: LLM 프롬프트에 전달할 이벤트 요약 구조체
-type eventForPrompt struct {
-	Title     string `json:"title"`
-	DateStr   string `json:"date"`
-	Members   string `json:"members,omitempty"`
-	EventType string `json:"type"`
-	Link      string `json:"link"`
-}
-
-
-// summaryResponse: LLM 구조화 응답
-type summaryResponse struct {
-	Highlights       []eventHighlight  `json:"highlights"`
-	OngoingEvents    []ongoingEvent    `json:"ongoing_events"`
-	DiscoveredEvents []discoveredEvent `json:"discovered_events"`
-}
-
-// eventHighlight: 행사 하이라이트
-type eventHighlight struct {
-	Name    string `json:"name"`
-	Date    string `json:"date"`
-	Members string `json:"members"`
-	Note    string `json:"note"`
-	Link    string `json:"link"`
-}
-
-// ongoingEvent: 기간 행사 (팝업/카페/굿즈)
-type ongoingEvent struct {
-	Name string `json:"name"`
-	Date string `json:"date"`
-	Note string `json:"note"`
-	Link string `json:"link"`
-}
-
-// discoveredEvent: Google Search grounding으로 발견한 누락 이벤트
-type discoveredEvent struct {
-	Name   string `json:"name"`
-	Date   string `json:"date"`
-	Note   string `json:"note"`
-	Source string `json:"source"`
-}
-
-
-// domainContextPart1: <domain> ~ </scope_fence> (member_filter 앞 부분)
 const domainContextPart1 = `<domain>
   <agency>hololive production by Cover Corp</agency>
   <branches>JP, EN, ID, DEV_IS — 80+ active talents</branches>
@@ -160,7 +109,6 @@ const domainContextPart1 = `<domain>
 
 `
 
-// domainContextPart2: <translation_guide> ~ </tone> (member_filter 뒤 부분)
 const domainContextPart2 = `
 <translation_guide>
   Output language: Korean (한국어)
@@ -198,14 +146,12 @@ const domainContextPart2 = `
   </ongoing_style>
 </tone>`
 
-// buildMemberFilterSection: graduated_members.json 데이터로 <member_filter> 블록 동적 생성
 func buildMemberFilterSection() string {
 	var sb strings.Builder
 	sb.WriteString(`<member_filter>
   Remove graduated or retired members from the "members" output field.
   Known graduated/retired members (reverse-chronological):
 `)
-	// 브랜치 순서 고정 (일관성)
 	branchOrder := []string{"JP", "EN", "DEV_IS", "HOLOSTARS_EN", "HOLOSTARS_JP"}
 	for _, branch := range branchOrder {
 		members := parsedGraduatedData.Graduated[branch]
@@ -260,19 +206,16 @@ func buildMemberFilterSection() string {
 	return sb.String()
 }
 
-// getDomainContext: 동적으로 생성된 domainContext 반환
 func getDomainContext() string {
 	return domainContextPart1 + buildMemberFilterSection() + "\n\n" + domainContextPart2
 }
 
-// promptsResult: 지연 초기화된 시스템 프롬프트 결과 (값 + 에러 포함)
 type promptsResult struct {
 	weekly  string
 	monthly string
 	err     error
 }
 
-// initPrompts: graduated_members.json 파싱 및 프롬프트 초기화 (lazy, 한 번만 실행)
 var initPrompts = sync.OnceValue(func() promptsResult {
 	var r promptsResult
 	if err := json.Unmarshal(graduatedMembersJSON, &parsedGraduatedData); err != nil {
@@ -363,8 +306,6 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 	return r
 })
 
-
-// getSystemPrompt: summaryType에 따른 system prompt 반환, 초기화 실패 시 error를 반환합니다.
 func getSystemPrompt(summaryType SummaryType) (string, error) {
 	r := initPrompts()
 	if r.err != nil {
@@ -376,328 +317,4 @@ func getSystemPrompt(summaryType SummaryType) (string, error) {
 	default:
 		return r.weekly, nil
 	}
-}
-
-// summaryResponseSchema: LLM 구조화 응답 JSON Schema
-func summaryResponseSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"highlights": map[string]any{
-				"type":        "array",
-				"description": "행사별 하이라이트 (날짜순 정렬)",
-				"items":       summaryHighlightItemSchema(),
-			},
-			"ongoing_events": map[string]any{
-				"type":        "array",
-				"description": "기간 행사(팝업/카페/굿즈) 목록",
-				"items":       summaryOngoingItemSchema(),
-			},
-			"discovered_events": map[string]any{
-				"type":        "array",
-				"description": "Google Search로 발견한 입력 목록에 없는 추가 이벤트 (최대 5건, 없으면 빈 배열)",
-				"items":       summaryDiscoveredItemSchema(),
-			},
-		},
-		"required": []string{"highlights", "ongoing_events", "discovered_events"},
-	}
-}
-
-func summaryHighlightItemSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명 — 일본어 원제 유지, 번역 금지",
-			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-			},
-			"members": map[string]any{
-				"type":        "string",
-				"description": "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
-			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
-				"maxLength":   30,
-			},
-			"link": map[string]any{
-				"type":        "string",
-				"description": "입력 행사 link 그대로 전달",
-			},
-		},
-		"required": []string{"name", "date", "members", "note", "link"},
-	}
-}
-
-func summaryOngoingItemSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명",
-			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일)~M/D(요일)",
-			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 설명 — 30자 이내 한국어",
-				"maxLength":   30,
-			},
-			"link": map[string]any{
-				"type":        "string",
-				"description": "입력 행사 link 그대로 전달",
-			},
-		},
-		"required": []string{"name", "date", "note", "link"},
-	}
-}
-
-func summaryDiscoveredItemSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명 — 공식 명칭 사용",
-			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 설명 — 30자 이내 한국어",
-				"maxLength":   30,
-			},
-			"source": map[string]any{
-				"type":        "string",
-				"description": "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
-			},
-		},
-		"required": []string{"name", "date", "note", "source"},
-	}
-}
-
-// weekdayKR: 요일 한국어 표기 (kst는 date_extractor.go에서 정의)
-var weekdayKR = [...]string{"일", "월", "화", "수", "목", "금", "토"}
-
-func buildUserPrompt(events []domain.MajorEvent, summaryType SummaryType, periodKey string, searchContext ...string) string {
-	promptEvents := make([]eventForPrompt, 0, len(events))
-	for i := range events {
-		e := &events[i]
-		promptEvents = append(promptEvents, eventForPrompt{
-			Title:     e.Title,
-			DateStr:   formatEventDateForPrompt(e.EventStartDate, e.EventEndDate),
-			Members:   joinMembers(e.Members),
-			EventType: string(e.Type),
-			Link:      e.Link,
-		})
-	}
-
-	eventsJSON, _ := json.Marshal(promptEvents)
-
-	// 환각 방지: 오늘 날짜를 명시하여 시간 기준점 제공
-	now := time.Now().In(kst)
-	todayStr := fmt.Sprintf("%d년 %d월 %d일 (%s요일)",
-		now.Year(), now.Month(), now.Day(), weekdayKR[now.Weekday()])
-
-	var periodDesc string
-	switch summaryType {
-	case SummaryTypeWeekly:
-		periodDesc = fmt.Sprintf("다음 주(%s~) 예정된 홀로라이브 행사", periodKey)
-	case SummaryTypeMonthly:
-		periodDesc = fmt.Sprintf("이번 달(%s) 예정된 홀로라이브 행사", periodKey)
-	}
-
-	base := fmt.Sprintf(`오늘 날짜: %s
-
-%s %d건을 요약해주세요.
-
-행사 목록:
-%s`, todayStr, periodDesc, len(events), string(eventsJSON))
-
-	// 외부 검색 결과가 있으면 참고 자료로 추가
-	if len(searchContext) > 0 && searchContext[0] != "" {
-		return fmt.Sprintf(`%s
-
-<web_search_context>
-아래는 외부 검색으로 수집된 참고 자료입니다. 입력 행사 목록에 없는 공식 이벤트가 있다면 discovered_events에 추가하세요.
-비공식 출처이거나 입력 행사와 중복되면 무시하세요.
-
-%s
-</web_search_context>`, base, searchContext[0])
-	}
-
-	return base
-}
-
-
-// truncateNote: rune 단위 maxRunes 초과 시 트렁케이션
-func truncateNote(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "…"
-}
-
-// normalizeNotes: 모든 note 필드를 30자(rune 기준)로 트렁케이션
-func normalizeNotes(resp *summaryResponse) {
-	for i := range resp.Highlights {
-		resp.Highlights[i].Note = truncateNote(resp.Highlights[i].Note, 30)
-	}
-	for i := range resp.OngoingEvents {
-		resp.OngoingEvents[i].Note = truncateNote(resp.OngoingEvents[i].Note, 30)
-	}
-	for i := range resp.DiscoveredEvents {
-		resp.DiscoveredEvents[i].Note = truncateNote(resp.DiscoveredEvents[i].Note, 30)
-	}
-}
-
-// assembleSummaryText: 구조화 응답을 카카오톡 텍스트로 변환
-func assembleSummaryText(resp *summaryResponse) string {
-	if resp == nil {
-		return ""
-	}
-	if len(resp.Highlights) == 0 && len(resp.OngoingEvents) == 0 && len(resp.DiscoveredEvents) == 0 {
-		return ""
-	}
-
-	normalizeNotes(resp)
-
-	var sb strings.Builder
-	writeHighlights(&sb, resp.Highlights)
-
-	if len(resp.OngoingEvents) > 0 {
-		appendSection(&sb, "[기간 행사]\n")
-		writeOngoingEvents(&sb, resp.OngoingEvents)
-	}
-
-	if len(resp.DiscoveredEvents) > 0 {
-		appendSection(&sb, "[추가 발견]\n")
-		writeDiscoveredEvents(&sb, resp.DiscoveredEvents)
-	}
-
-	return sb.String()
-}
-
-// appendSection: 기존 내용이 있으면 빈 줄 구분 후 헤더 추가
-func appendSection(sb *strings.Builder, header string) {
-	if sb.Len() > 0 {
-		sb.WriteString("\n\n")
-	}
-	sb.WriteString(header)
-}
-
-func writeHighlights(sb *strings.Builder, highlights []eventHighlight) {
-	for i, h := range highlights {
-		if i > 0 {
-			sb.WriteString("\n\n")
-		}
-		sb.WriteString(h.Date)
-		sb.WriteByte(' ')
-		sb.WriteString(h.Name)
-		if h.Members != "" {
-			sb.WriteString(" (")
-			sb.WriteString(h.Members)
-			sb.WriteByte(')')
-		}
-		if h.Note != "" {
-			sb.WriteString("\n- ")
-			sb.WriteString(h.Note)
-		}
-		if h.Link != "" {
-			sb.WriteByte('\n')
-			sb.WriteString(h.Link)
-		}
-	}
-}
-
-func writeOngoingEvents(sb *strings.Builder, events []ongoingEvent) {
-	for i, o := range events {
-		if i > 0 {
-			sb.WriteByte('\n')
-		}
-		if o.Date != "" {
-			sb.WriteString(o.Date)
-			sb.WriteByte(' ')
-		}
-		sb.WriteString(o.Name)
-		if o.Note != "" {
-			sb.WriteString("\n- ")
-			sb.WriteString(o.Note)
-		}
-		if o.Link != "" {
-			sb.WriteByte('\n')
-			sb.WriteString(o.Link)
-		}
-	}
-}
-
-func writeDiscoveredEvents(sb *strings.Builder, events []discoveredEvent) {
-	for i, d := range events {
-		if i > 0 {
-			sb.WriteByte('\n')
-		}
-		sb.WriteString(d.Date)
-		sb.WriteByte(' ')
-		sb.WriteString(d.Name)
-		if d.Note != "" {
-			sb.WriteString("\n- ")
-			sb.WriteString(d.Note)
-		}
-		if d.Source != "" {
-			sb.WriteString("\n출처: ")
-			sb.WriteString(d.Source)
-		}
-	}
-}
-
-
-func formatEventDateForPrompt(start, end *time.Time) string {
-	if start == nil {
-		return "TBA"
-	}
-	format := func(t time.Time) string {
-		return fmt.Sprintf("%d년 %d월 %d일", t.Year(), t.Month(), t.Day())
-	}
-	if end == nil || start.Equal(*end) {
-		return format(*start)
-	}
-	return fmt.Sprintf("%s ~ %s", format(*start), format(*end))
-}
-
-func joinMembers(members []string) string {
-	if len(members) == 0 {
-		return ""
-	}
-	if len(members) == 1 {
-		return members[0]
-	}
-
-	// 전체 길이 사전 계산
-	totalLen := 0
-	for _, m := range members {
-		totalLen += len(m)
-	}
-	totalLen += (len(members) - 1) * 2 // ", " separator
-
-	buf := make([]byte, 0, totalLen)
-	buf = append(buf, members[0]...)
-	for i := 1; i < len(members); i++ {
-		buf = append(buf, ',', ' ')
-		buf = append(buf, members[i]...)
-	}
-	return string(buf)
 }
