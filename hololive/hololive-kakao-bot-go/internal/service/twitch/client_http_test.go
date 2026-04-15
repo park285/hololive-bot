@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 
 	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
 )
@@ -264,6 +265,82 @@ func TestClient_GetStreams_401RefreshAndRetry(t *testing.T) {
 	}
 }
 
+func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
+	c := newTestClient("client-id", "secret")
+
+	var mu sync.Mutex
+
+	tokenCalls := 0
+	streamCalls := 0
+
+	c.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		switch {
+		case req.URL.String() == constants.TwitchConfig.AuthURL:
+			tokenCalls++
+			return httpResponse(http.StatusOK, `{"access_token":"tok-1","expires_in":3600,"token_type":"bearer"}`), nil
+		case strings.Contains(req.URL.String(), constants.TwitchConfig.BaseURL+"/streams"):
+			streamCalls++
+			return httpResponse(http.StatusUnauthorized, `{"error":"unauthorized"}`), nil
+		default:
+			return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
+		}
+	})
+
+	_, err := c.GetStreams(t.Context(), []string{"user-a"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var apiErr *appErrors.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status=%d want=%d", apiErr.StatusCode, http.StatusUnauthorized)
+	}
+	if tokenCalls != 2 {
+		t.Fatalf("tokenCalls=%d want=2", tokenCalls)
+	}
+	if streamCalls != 2 {
+		t.Fatalf("streamCalls=%d want=2", streamCalls)
+	}
+}
+
+func TestNewClient_UsesProvidedHTTPClient(t *testing.T) {
+	provided := &http.Client{Timeout: 2 * time.Second}
+	client := NewClient(ClientConfig{ClientID: "id", ClientSecret: "secret", HTTPClient: provided}, newTestLogger())
+	if client.httpClient != provided {
+		t.Fatalf("httpClient pointer mismatch")
+	}
+}
+
+func TestNewClient_UsesSharedHTTPClientWhenConfigOmitsOne(t *testing.T) {
+	client := NewClient(ClientConfig{ClientID: "id", ClientSecret: "secret"}, newTestLogger())
+	if client.httpClient == nil {
+		t.Fatal("httpClient is nil")
+	}
+	if client.httpClient.Timeout != constants.TwitchConfig.Timeout {
+		t.Fatalf("timeout=%s want=%s", client.httpClient.Timeout, constants.TwitchConfig.Timeout)
+	}
+	transport, ok := client.httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport type = %T, want *http.Transport", client.httpClient.Transport)
+	}
+	shared := httputil.NewExternalAPIClient(constants.TwitchConfig.Timeout)
+	sharedTransport, ok := shared.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("shared transport type = %T, want *http.Transport", shared.Transport)
+	}
+	if transport.MaxConnsPerHost != sharedTransport.MaxConnsPerHost {
+		t.Fatalf("MaxConnsPerHost=%d want=%d", transport.MaxConnsPerHost, sharedTransport.MaxConnsPerHost)
+	}
+	if transport.MaxIdleConnsPerHost != sharedTransport.MaxIdleConnsPerHost {
+		t.Fatalf("MaxIdleConnsPerHost=%d want=%d", transport.MaxIdleConnsPerHost, sharedTransport.MaxIdleConnsPerHost)
+	}
+}
 func TestClient_GetStreams_ErrorStatusBranches(t *testing.T) {
 	tests := []struct {
 		name       string
