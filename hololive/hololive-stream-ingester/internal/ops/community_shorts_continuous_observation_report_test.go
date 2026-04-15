@@ -134,6 +134,77 @@ func TestRenderCommunityShortsContinuousObservationMarkdownIncludes24HCloseout(t
 	require.Contains(t, markdown, "## YouTube Community/Shorts Alarm Sent History Dataset")
 }
 
+func TestRenderCommunityShortsContinuousObservationMarkdownPromotesEmbeddedDatasetSections(t *testing.T) {
+	t.Parallel()
+
+	cutoverAt := time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)
+	observationStart := cutoverAt.Add(2 * time.Minute)
+	observationEnd := observationStart.Add(24 * time.Hour)
+	generatedAt := observationEnd
+
+	markdown := RenderCommunityShortsContinuousObservationMarkdown(CommunityShortsContinuousObservationReport{
+		GeneratedAt: generatedAt,
+		Observation: CommunityShortsContinuousObservationWindow{
+			RuntimeName:           "youtube-scraper",
+			BigBangCutoverAt:      cutoverAt,
+			AppVersion:            "2.0.99",
+			TargetChannelCount:    1,
+			DeploymentCompletedAt: observationStart,
+			ObservationStartedAt:  observationStart,
+			ObservationEndsAt:     observationEnd,
+			ObservedUntil:         observationEnd,
+			Status:                CommunityShortsContinuousObservationStatusFinalized,
+		},
+		TargetBaseline: communityshorts.TargetBaseline{
+			GeneratedAt: generatedAt,
+			Runtime: communityshorts.TargetBaselineRuntime{
+				FinalDeliveryOwner:            "youtube-scraper",
+				CommunityShortsBigBangEnabled: true,
+				TargetChannelCount:            1,
+			},
+		},
+		ChannelSummary: CommunityShortsChannelSummaryReport{GeneratedAt: generatedAt},
+		SendCounts: CommunityShortsSendCountReport{
+			GeneratedAt: generatedAt,
+			Query: CommunityShortsSendCountQuery{
+				Mode:                        communityShortsSendCountQueryModeObservation,
+				WindowStart:                 &observationStart,
+				WindowEnd:                   &observationEnd,
+				ObservationRuntimeName:      "youtube-scraper",
+				ObservationBigBangCutoverAt: &cutoverAt,
+			},
+		},
+		AlarmSentHistoryDataset: &CommunityShortsAlarmSentHistoryDatasetReport{
+			GeneratedAt: generatedAt,
+			Query: CommunityShortsAlarmSentHistoryDatasetQuery{
+				ObservationRuntimeName:      "youtube-scraper",
+				ObservationBigBangCutoverAt: &cutoverAt,
+				WindowStart:                 &observationStart,
+				WindowEnd:                   &observationEnd,
+			},
+		},
+		DeliveryLogs:   CommunityShortsDeliveryLogReport{GeneratedAt: generatedAt},
+		LatencyPeriods: CommunityShortsLatencyPeriodReport{GeneratedAt: generatedAt},
+		LatencyCause: CommunityShortsLatencyCauseReport{
+			GeneratedAt: generatedAt,
+			Query: CommunityShortsLatencyCauseQuery{
+				Mode:                        communityShortsLatencyCauseQueryModeObservation,
+				WindowStart:                 &observationStart,
+				WindowEnd:                   &observationEnd,
+				ObservationRuntimeName:      "youtube-scraper",
+				ObservationBigBangCutoverAt: &cutoverAt,
+			},
+		},
+	})
+
+	require.Contains(t, markdown, "## YouTube Community/Shorts Alarm Sent History Dataset")
+	require.Contains(t, markdown, "### Results")
+	require.Contains(t, markdown, "### Missing Alarm Rows")
+	require.Contains(t, markdown, "### Verification Rows")
+	require.Contains(t, markdown, "### Normalized Verification Reference Rows")
+	require.Contains(t, markdown, "### Normalized Sent History Rows")
+}
+
 func TestBuildCommunityShortsContinuousObservation24HCloseoutPendingUntilFinalized(t *testing.T) {
 	t.Parallel()
 

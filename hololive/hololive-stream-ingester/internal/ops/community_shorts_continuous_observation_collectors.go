@@ -11,6 +11,7 @@ import (
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
@@ -168,7 +169,11 @@ func collectCommunityShortsTargetBaselineWithSession(
 	}
 
 	channels := communityshorts.BuildOperationalChannelsFromMembers(members)
-	return communityshorts.BuildTargetBaseline(channels, alarms, cfg.Ingestion, now)
+	baseline, err := communityshorts.BuildTargetBaseline(channels, alarms, cfg.Ingestion, now)
+	if err != nil {
+		return communityshorts.TargetBaseline{}, fmt.Errorf("build target baseline: %w", err)
+	}
+	return baseline, nil
 }
 
 func collectCommunityShortsContinuousObservationWindow(
@@ -227,7 +232,7 @@ func buildCommunityShortsContinuousObservationChannelSummary(
 
 	rows, err := outbox.BuildChannelPostDeliverySummaries(posts)
 	if err != nil {
-		return CommunityShortsChannelSummaryReport{}, err
+		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("build channel delivery summaries: %w", err)
 	}
 
 	return BuildCommunityShortsChannelSummaryReport(rows, report.WindowEnd, report.WindowStart), nil

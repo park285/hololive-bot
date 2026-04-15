@@ -74,6 +74,20 @@ func BuildCommunityShortsDeliveryLogReport(
 func RenderCommunityShortsDeliveryLogMarkdown(report CommunityShortsDeliveryLogReport) string {
 	var builder strings.Builder
 
+	builder.WriteString(buildCommunityShortsDeliveryLogMetadataMarkdown(report))
+
+	if len(report.Rows) == 0 {
+		builder.WriteString("\n조회된 community/shorts 발송 로그가 없습니다.\n")
+		return builder.String()
+	}
+
+	builder.WriteString(buildCommunityShortsDeliveryLogTableMarkdown(report.Rows))
+	return builder.String()
+}
+
+func buildCommunityShortsDeliveryLogMetadataMarkdown(report CommunityShortsDeliveryLogReport) string {
+	var builder strings.Builder
+
 	builder.WriteString("# YouTube Community/Shorts Delivery Logs Report\n\n")
 	builder.WriteString("- generated at: `")
 	builder.WriteString(formatCommunityShortsSendCountTime(report.GeneratedAt))
@@ -111,15 +125,16 @@ func RenderCommunityShortsDeliveryLogMarkdown(report CommunityShortsDeliveryLogR
 	fmt.Fprintf(&builder, "%t", report.Query.Truncated)
 	builder.WriteString("`\n")
 
-	if len(report.Rows) == 0 {
-		builder.WriteString("\n조회된 community/shorts 발송 로그가 없습니다.\n")
-		return builder.String()
-	}
+	return builder.String()
+}
+
+func buildCommunityShortsDeliveryLogTableMarkdown(rows []CommunityShortsDeliveryLogRow) string {
+	var builder strings.Builder
 
 	builder.WriteString("\n| alarm_type | channel_id | post_id | room_id | attempt | actual_published_at | detected_at | alarm_sent_at | alarm_latency_millis | event_at | publish_to_event_ms | send_result | delivery_path | observation_status | failure_reason |\n")
 	builder.WriteString("| --- | --- | --- | --- | ---: | --- | --- | --- | ---: | --- | ---: | --- | --- | --- | --- |\n")
-	for i := range report.Rows {
-		row := report.Rows[i]
+	for i := range rows {
+		row := rows[i]
 		builder.WriteString("| `")
 		builder.WriteString(string(row.AlarmType))
 		builder.WriteString("` | `")
