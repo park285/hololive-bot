@@ -199,8 +199,8 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 	for key, value := range pairs {
 		jsonData, err := json.Marshal(value)
 		if err != nil {
-			c.logger.Warn("Failed to marshal value for MSet", slog.String("key", key), slog.Any("error", err))
-			continue
+			c.logger.Error("Failed to marshal value for MSet", slog.String("key", key), slog.Any("error", err))
+			return NewCacheError("marshal failed", "mset", key, err)
 		}
 
 		var cmd valkey.Completed

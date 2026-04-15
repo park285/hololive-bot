@@ -205,6 +205,77 @@ func TestClient_GetStreams_SuccessAndHeaders(t *testing.T) {
 	}
 }
 
+func TestClient_GetStreams_ChunksLargeUserLoginSets(t *testing.T) {
+	c := newTestClient("client-id", "secret")
+	c.token.Store("valid-token")
+	c.tokenExpiry.Store(time.Now().Add(1 * time.Hour))
+
+	userLogins := make([]string, 0, 205)
+	for i := 0; i < 205; i++ {
+		userLogins = append(userLogins, fmt.Sprintf("user-%03d", i))
+	}
+
+	var (
+		mu               sync.Mutex
+		streamCalls      int
+		chunkSizes       []int
+		seenFirstLogins  []string
+	)
+
+	c.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.Contains(req.URL.String(), constants.TwitchConfig.BaseURL+"/streams") {
+			return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
+		}
+
+		logins := req.URL.Query()["user_login"]
+
+		mu.Lock()
+		streamCalls++
+		chunkSizes = append(chunkSizes, len(logins))
+		if len(logins) > 0 {
+			seenFirstLogins = append(seenFirstLogins, logins[0])
+		}
+		mu.Unlock()
+
+		body := fmt.Sprintf(`{"data":[{"id":"%s","user_login":"%s","type":"live","title":"Live now"}],"pagination":{}}`, logins[0], logins[0])
+		return httpResponse(http.StatusOK, body), nil
+	})
+
+	res, err := c.GetStreams(t.Context(), userLogins)
+	if err != nil {
+		t.Fatalf("GetStreams error: %v", err)
+	}
+
+	if streamCalls != 3 {
+		t.Fatalf("streamCalls=%d want=3", streamCalls)
+	}
+
+	wantChunkSizes := []int{100, 100, 5}
+	if len(chunkSizes) != len(wantChunkSizes) {
+		t.Fatalf("chunkSizes=%v want=%v", chunkSizes, wantChunkSizes)
+	}
+
+	for i := range wantChunkSizes {
+		if chunkSizes[i] != wantChunkSizes[i] {
+			t.Fatalf("chunkSizes[%d]=%d want=%d (all=%v)", i, chunkSizes[i], wantChunkSizes[i], chunkSizes)
+		}
+	}
+
+	if len(res.Data) != 3 {
+		t.Fatalf("response data len=%d want=3", len(res.Data))
+	}
+
+	wantFirstLogins := []string{"user-000", "user-100", "user-200"}
+	for i := range wantFirstLogins {
+		if seenFirstLogins[i] != wantFirstLogins[i] {
+			t.Fatalf("seenFirstLogins[%d]=%q want=%q (all=%v)", i, seenFirstLogins[i], wantFirstLogins[i], seenFirstLogins)
+		}
+		if res.Data[i].UserLogin != wantFirstLogins[i] {
+			t.Fatalf("res.Data[%d].UserLogin=%q want=%q", i, res.Data[i].UserLogin, wantFirstLogins[i])
+		}
+	}
+}
+
 func TestClient_GetStreams_401RefreshAndRetry(t *testing.T) {
 	c := newTestClient("client-id", "secret")
 

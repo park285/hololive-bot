@@ -181,23 +181,11 @@ func (c *Client) closeIdleConnections() {
 
 // createHTTPClient: 프록시 설정에 따라 HTTP 클라이언트 생성
 func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, error) {
-	baseTransport := &http.Transport{
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   10,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   constants.YouTubeConfig.ScraperDialTimeout,
-		ResponseHeaderTimeout: constants.YouTubeConfig.ScraperHeaderTimeout,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
+	baseTransport := newScraperTransport(true)
 
 	if !proxyCfg.Enabled || proxyCfg.URL == "" {
 		slog.Info("Scraper using direct connection (no proxy)")
-		dialer := &net.Dialer{
-			Timeout:   constants.YouTubeConfig.ScraperDialTimeout,
-			KeepAlive: 30 * time.Second,
-		}
-		baseTransport.DialContext = dialer.DialContext
+		baseTransport.DialContext = newDirectDialContext()
 		return &http.Client{
 			Transport: instrumentScraperTransport(baseTransport),
 			Timeout:   constants.YouTubeConfig.ScraperHTTPTimeout,
@@ -209,14 +197,7 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, erro
 		return nil, nil, fmt.Errorf("invalid proxy URL: %w", err)
 	}
 
-	var auth *proxy.Auth
-	if parsedURL.User != nil {
-		password, _ := parsedURL.User.Password()
-		auth = &proxy.Auth{
-			User:     parsedURL.User.Username(),
-			Password: password,
-		}
-	}
+	auth := newProxyAuth(parsedURL)
 
 	forwardDialer := &net.Dialer{
 		Timeout:   constants.YouTubeConfig.ScraperDialTimeout,
@@ -228,33 +209,8 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, erro
 		return nil, nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
 	}
 
-	transport := &http.Transport{
-		ForceAttemptHTTP2:     false,
-		MaxIdleConns:          baseTransport.MaxIdleConns,
-		MaxIdleConnsPerHost:   baseTransport.MaxIdleConnsPerHost,
-		IdleConnTimeout:       baseTransport.IdleConnTimeout,
-		TLSHandshakeTimeout:   baseTransport.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: baseTransport.ResponseHeaderTimeout,
-		ExpectContinueTimeout: baseTransport.ExpectContinueTimeout,
-	}
-
-	if contextDialer, ok := dialer.(proxy.ContextDialer); ok {
-		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			conn, err := contextDialer.DialContext(ctx, network, addr)
-			if err != nil {
-				return nil, fmt.Errorf("proxy dial failed: %w", err)
-			}
-			if ctx.Err() != nil {
-				_ = conn.Close()
-				return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
-			}
-			return conn, nil
-		}
-	} else {
-		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return dialSOCKS5WithContextFallback(ctx, dialer, network, addr)
-		}
-	}
+	transport := newScraperTransport(false)
+	transport.DialContext = newSOCKS5DialContext(dialer)
 
 	// #nosec G706 -- proxy host is loaded from trusted runtime configuration.
 	slog.Info("Scraper using SOCKS5 proxy",
@@ -265,6 +221,58 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, erro
 		Transport: instrumentScraperTransport(transport),
 		Timeout:   constants.YouTubeConfig.ScraperHTTPTimeout,
 	}, transport, nil
+}
+
+func newScraperTransport(forceHTTP2 bool) *http.Transport {
+	return &http.Transport{
+		ForceAttemptHTTP2:     forceHTTP2,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   constants.YouTubeConfig.ScraperDialTimeout,
+		ResponseHeaderTimeout: constants.YouTubeConfig.ScraperHeaderTimeout,
+		ExpectContinueTimeout: time.Second,
+	}
+}
+
+func newDirectDialContext() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialer := &net.Dialer{
+		Timeout:   constants.YouTubeConfig.ScraperDialTimeout,
+		KeepAlive: 30 * time.Second,
+	}
+	return dialer.DialContext
+}
+
+func newProxyAuth(parsedURL *url.URL) *proxy.Auth {
+	if parsedURL == nil || parsedURL.User == nil {
+		return nil
+	}
+
+	password, _ := parsedURL.User.Password()
+	return &proxy.Auth{
+		User:     parsedURL.User.Username(),
+		Password: password,
+	}
+}
+
+func newSOCKS5DialContext(dialer proxy.Dialer) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	if contextDialer, ok := dialer.(proxy.ContextDialer); ok {
+		return func(ctx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := contextDialer.DialContext(ctx, network, addr)
+			if err != nil {
+				return nil, fmt.Errorf("proxy dial failed: %w", err)
+			}
+			if ctx.Err() != nil {
+				_ = conn.Close()
+				return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
+			}
+			return conn, nil
+		}
+	}
+
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dialSOCKS5WithContextFallback(ctx, dialer, network, addr)
+	}
 }
 
 func instrumentScraperTransport(baseTransport *http.Transport) http.RoundTripper {
