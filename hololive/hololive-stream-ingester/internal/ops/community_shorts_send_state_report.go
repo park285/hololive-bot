@@ -9,9 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 type CommunityShortsPerPostSendState string
@@ -96,19 +94,21 @@ func CollectCommunityShortsSendStateReport(
 		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: %w", err)
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: provide database resources: %w", err)
+		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	db := databaseResources.Service.GetGormDB()
-	observationRepository := trackingrepo.NewRepository(db)
+	if session == nil {
+		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: session is nil")
+	}
+
 	state, err := resolveCommunityShortsObservationQueryState(
 		ctx,
-		observationRepository,
+		session.trackingRepository,
 		query.ObservationRuntimeName,
 		*query.ObservationBigBangCutoverAt,
 		now,
@@ -128,15 +128,14 @@ func CollectCommunityShortsSendStateReport(
 	query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
 	query.Finalized = state.Finalized
 
-	telemetryRepo := outbox.NewDeliveryTelemetryRepository(db)
 	var rows []outbox.PostSendCount
 	if state.Finalized {
-		rows, err = telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+		rows, err = session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 		if err != nil {
 			return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: list finalized observation-window send states: %w", err)
 		}
 	} else {
-		rows, err = telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+		rows, err = session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 		if err != nil {
 			return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: list active observation-window send states: %w", err)
 		}

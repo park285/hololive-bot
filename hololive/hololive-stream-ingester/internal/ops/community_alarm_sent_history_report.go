@@ -8,7 +8,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -55,17 +54,19 @@ func CollectCommunityAlarmSentHistoryReport(
 		return CommunityAlarmSentHistoryReport{}, fmt.Errorf("collect community alarm sent history report: %w", err)
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityAlarmSentHistoryReport{}, fmt.Errorf("collect community alarm sent history report: provide database resources: %w", err)
+		return CommunityAlarmSentHistoryReport{}, fmt.Errorf("collect community alarm sent history report: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	db := databaseResources.Service.GetGormDB()
-	trackingRepository := trackingrepo.NewRepository(db)
-	window, err := trackingRepository.FindClosedCommunityShortsObservationWindow(
+	if session == nil {
+		return CommunityAlarmSentHistoryReport{}, fmt.Errorf("collect community alarm sent history report: session is nil")
+	}
+
+	window, err := session.trackingRepository.FindClosedCommunityShortsObservationWindow(
 		ctx,
 		query.ObservationRuntimeName,
 		*query.ObservationBigBangCutoverAt,
@@ -84,7 +85,7 @@ func CollectCommunityAlarmSentHistoryReport(
 	query.WindowStart = cloneCommunityShortsSendCountTime(&window.ObservationStartedAt)
 	query.WindowEnd = cloneCommunityShortsSendCountTime(&window.ObservationEndedAt)
 
-	rows, err := trackingRepository.ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(
+	rows, err := session.trackingRepository.ListCommunityAlarmSentHistoriesByFinalizedObservationWindow(
 		ctx,
 		query.ObservationRuntimeName,
 		window.BigBangCutoverAt,
@@ -95,7 +96,7 @@ func CollectCommunityAlarmSentHistoryReport(
 
 	comparison, err := buildObservationAlarmSentHistoryComparison(
 		ctx,
-		trackingRepository,
+		session.trackingRepository,
 		query.ObservationRuntimeName,
 		window.BigBangCutoverAt,
 		window.ObservationStartedAt,
