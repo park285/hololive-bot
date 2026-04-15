@@ -161,7 +161,7 @@ func buildDeliverySendRequest(roomID, message string, outboxes []domain.YouTubeN
 	for i := range outboxes {
 		dedupeKey, err := outboxes[i].DedupeKey()
 		if err != nil {
-			return deliverySendRequest{}, fmt.Errorf("%w: build delivery send request: outbox[%d] dedupe key: %v", ErrDeliveryDedupeKeyRequired, i, err)
+			return deliverySendRequest{}, fmt.Errorf("%w: build delivery send request: outbox[%d] dedupe key: %w", ErrDeliveryDedupeKeyRequired, i, err)
 		}
 		dedupeKeys = append(dedupeKeys, dedupeKey)
 	}
@@ -246,33 +246,32 @@ func (d *Dispatcher) logCommunityShortsDeliveryAttemptStarted(
 	attemptStartedAt time.Time,
 	deliveryMode string,
 ) {
-	limit := len(rows)
-	if len(outboxes) < limit {
-		limit = len(outboxes)
-	}
+	limit := min(len(outboxes), len(rows))
 	if limit == 0 {
 		return
 	}
 
 	attemptStartedAt = attemptStartedAt.UTC()
 	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
+	limitedRows := rows[:limit]
+	limitedOutboxes := outboxes[:limit]
 
-	for i := 0; i < limit; i++ {
-		outbox := outboxes[i]
+	for i := range limitedOutboxes {
+		outbox := limitedOutboxes[i]
 		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
 			continue
 		}
 
 		d.logger.Info(deliveryAttemptStartedLogMessage,
-			slog.Int64(logschema.FieldDeliveryID, rows[i].ID),
+			slog.Int64(logschema.FieldDeliveryID, limitedRows[i].ID),
 			slog.Int64(logschema.FieldOutboxID, outbox.ID),
-			slog.String(logschema.FieldRoomID, rows[i].RoomID),
+			slog.String(logschema.FieldRoomID, limitedRows[i].RoomID),
 			slog.String(logschema.FieldChannelID, outbox.ChannelID),
 			slog.String(deliveryAuditPostIDLogField, resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload)),
 			slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 			slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 			slog.Time(deliveryAttemptStartedAtLogField, attemptStartedAt),
-			slog.Int(logschema.FieldAttemptOrdinal, deliveryAttemptOrdinal(rows[i])),
+			slog.Int(logschema.FieldAttemptOrdinal, deliveryAttemptOrdinal(limitedRows[i])),
 			slog.String(deliveryAuditPathLogField, deliveryPath),
 			slog.String(deliveryAuditModeLogField, deliveryMode),
 			slog.String(deliveryDedupeKeyLogField, dedupeKeyLogValue(outbox)),
@@ -292,63 +291,29 @@ func (d *Dispatcher) logCommunityShortsDeliveryResult(
 		return
 	}
 
-	limit := len(rows)
-	if len(outboxes) < limit {
-		limit = len(outboxes)
-	}
+	limit := min(len(outboxes), len(rows))
 	if limit == 0 {
 		return
 	}
 
 	sentAt = sentAt.UTC()
 	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
-	alarmCount := 0
-	channelID := ""
-	alarmType := domain.AlarmType("")
-	uniqueRooms := make(map[string]struct{}, limit)
-	for i := 0; i < limit; i++ {
-		outbox := outboxes[i]
-		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
-			continue
-		}
-		alarmCount++
-		if channelID == "" {
-			channelID = strings.TrimSpace(outbox.ChannelID)
-		}
-		if alarmType == "" {
-			alarmType = outbox.Kind.ToAlarmType()
-		}
-		roomID := strings.TrimSpace(rows[i].RoomID)
-		if roomID != "" {
-			uniqueRooms[roomID] = struct{}{}
-		}
-	}
-	if alarmCount == 0 {
+	summary := summarizeCommunityShortsDeliveryResult(rows[:limit], outboxes[:limit])
+	if summary.alarmCount == 0 {
 		return
 	}
 
-	roomCount := len(uniqueRooms)
-	successfulAlarmCount := 0
-	failedAlarmCount := 0
-	successfulRoomCount := 0
-	failedRoomCount := 0
-	switch strings.TrimSpace(sendResult) {
-	case "success":
-		successfulAlarmCount = alarmCount
-		successfulRoomCount = roomCount
-	case "failure":
-		failedAlarmCount = alarmCount
-		failedRoomCount = roomCount
-	}
+	roomCount := len(summary.uniqueRooms)
+	successfulAlarmCount, failedAlarmCount, successfulRoomCount, failedRoomCount := deliveryResultCounts(sendResult, summary.alarmCount, roomCount)
 
 	attrs := []any{
-		slog.String(logschema.FieldChannelID, channelID),
-		slog.String(deliveryAuditAlarmTypeLogField, string(alarmType)),
+		slog.String(logschema.FieldChannelID, summary.channelID),
+		slog.String(deliveryAuditAlarmTypeLogField, string(summary.alarmType)),
 		slog.Time(deliveryAuditSentAtLogField, sentAt),
 		slog.String(deliveryAuditSendResultLogField, sendResult),
 		slog.String(deliveryAuditPathLogField, deliveryPath),
 		slog.String(deliveryAuditModeLogField, deliveryMode),
-		slog.Int(logschema.FieldTargetAlarmCount, alarmCount),
+		slog.Int(logschema.FieldTargetAlarmCount, summary.alarmCount),
 		slog.Int(logschema.FieldSuccessfulAlarmCount, successfulAlarmCount),
 		slog.Int(logschema.FieldFailedAlarmCount, failedAlarmCount),
 		slog.Int(logschema.FieldTargetRoomCount, roomCount),
@@ -356,7 +321,7 @@ func (d *Dispatcher) logCommunityShortsDeliveryResult(
 		slog.Int(logschema.FieldFailedRoomCount, failedRoomCount),
 	}
 	if roomCount == 1 {
-		for roomID := range uniqueRooms {
+		for roomID := range summary.uniqueRooms {
 			attrs = append(attrs, slog.String(logschema.FieldRoomID, roomID))
 			break
 		}
@@ -366,6 +331,55 @@ func (d *Dispatcher) logCommunityShortsDeliveryResult(
 	}
 
 	d.logger.Info(deliveryResultLogMessage, attrs...)
+}
+
+type communityShortsDeliveryResultSummary struct {
+	alarmCount  int
+	channelID   string
+	alarmType   domain.AlarmType
+	uniqueRooms map[string]struct{}
+}
+
+func summarizeCommunityShortsDeliveryResult(
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+) communityShortsDeliveryResultSummary {
+	summary := communityShortsDeliveryResultSummary{
+		uniqueRooms: make(map[string]struct{}, len(rows)),
+	}
+
+	for i := range outboxes {
+		outbox := outboxes[i]
+		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
+			continue
+		}
+
+		summary.alarmCount++
+		if summary.channelID == "" {
+			summary.channelID = strings.TrimSpace(outbox.ChannelID)
+		}
+		if summary.alarmType == "" {
+			summary.alarmType = outbox.Kind.ToAlarmType()
+		}
+
+		roomID := strings.TrimSpace(rows[i].RoomID)
+		if roomID != "" {
+			summary.uniqueRooms[roomID] = struct{}{}
+		}
+	}
+
+	return summary
+}
+
+func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (int, int, int, int) {
+	switch strings.TrimSpace(sendResult) {
+	case "success":
+		return alarmCount, 0, roomCount, 0
+	case "failure":
+		return 0, alarmCount, 0, roomCount
+	default:
+		return 0, 0, 0, 0
+	}
 }
 
 func (d *Dispatcher) logCommunityShortsDeliveryAudit(
@@ -378,10 +392,7 @@ func (d *Dispatcher) logCommunityShortsDeliveryAudit(
 	failureReason string,
 	sendErr error,
 ) {
-	limit := len(rows)
-	if len(outboxes) < limit {
-		limit = len(outboxes)
-	}
+	limit := min(len(outboxes), len(rows))
 	if limit == 0 {
 		return
 	}
@@ -389,28 +400,30 @@ func (d *Dispatcher) logCommunityShortsDeliveryAudit(
 	sentAt = sentAt.UTC()
 	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
 	events := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, limit)
-	for i := 0; i < limit; i++ {
-		outbox := outboxes[i]
+	limitedRows := rows[:limit]
+	limitedOutboxes := outboxes[:limit]
+	for i := range limitedOutboxes {
+		outbox := limitedOutboxes[i]
 		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
 			continue
 		}
 
 		attemptFinishedAt := sentAt.UTC()
 		events = append(events, domain.YouTubeNotificationDeliveryTelemetry{
-			DeliveryID:        rows[i].ID,
-			AttemptOrdinal:    deliveryAttemptOrdinal(rows[i]),
+			DeliveryID:        limitedRows[i].ID,
+			AttemptOrdinal:    deliveryAttemptOrdinal(limitedRows[i]),
 			OutboxID:          outbox.ID,
 			ChannelID:         outbox.ChannelID,
 			ContentID:         strings.TrimSpace(outbox.ContentID),
 			PostID:            resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload),
-			RoomID:            rows[i].RoomID,
+			RoomID:            limitedRows[i].RoomID,
 			AlarmType:         outbox.Kind.ToAlarmType(),
 			DedupeKey:         dedupeKeyLogValue(outbox),
 			DeliveryPath:      deliveryPath,
 			DeliveryMode:      deliveryMode,
 			SendResult:        sendResult,
 			FailureReason:     truncateString(strings.TrimSpace(failureReason), 100),
-			AttemptStartedAt:  deliveryAttemptStartedAt(rows[i]),
+			AttemptStartedAt:  deliveryAttemptStartedAt(limitedRows[i]),
 			AttemptFinishedAt: &attemptFinishedAt,
 			EventAt:           attemptFinishedAt,
 			NextAttemptAt:     time.Now().UTC(),
@@ -545,30 +558,12 @@ func (d *Dispatcher) dispatchGroup(
 		return
 	}
 
-	// 복수건: payload 검증 -> 유효 항목만 그룹 포맷
-	var validOutboxes []domain.YouTubeNotificationOutbox
-	var validRows []domain.YouTubeNotificationDelivery
-	var invalidRows []domain.YouTubeNotificationDelivery
-
-	for i := range group.outboxes {
-		if validateOutboxPayload(group.outboxes[i]) {
-			validOutboxes = append(validOutboxes, group.outboxes[i])
-			validRows = append(validRows, group.rows[i])
-		} else {
-			invalidRows = append(invalidRows, group.rows[i])
-		}
-	}
-
-	// payload 검증 실패 항목 -> 개별 dispatch
-	for i := range invalidRows {
-		d.dispatchDeliveryRow(ctx, invalidRows[i], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
-	}
+	validRows, validOutboxes, invalidRows := partitionGroupedDeliveries(group)
+	d.dispatchRowsIndividually(ctx, invalidRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
 
 	// 검증 후 1건 이하 -> 개별 dispatch
 	if len(validRows) <= 1 {
-		for i := range validRows {
-			d.dispatchDeliveryRow(ctx, validRows[i], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
-		}
+		d.dispatchRowsIndividually(ctx, validRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
 		return
 	}
 
@@ -584,93 +579,13 @@ func (d *Dispatcher) dispatchGroup(
 		return
 	}
 
-	// 그룹 포맷 시도
-	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
-	if err != nil || memberName == "" {
-		memberName = "VTuber"
-	}
-
-	message, err := d.formatter.formatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
-	if err != nil {
-		d.logger.Warn("Grouped format failed, falling back to individual dispatch",
-			slog.String("room_id", group.roomID),
-			slog.String("channel_id", group.channelID),
-			slog.String("kind", string(group.kind)),
-			slog.Int("count", len(validRows)),
-			slog.Any("error", err))
-		for i := range validRows {
-			d.dispatchClaimedDeliveryRow(ctx, validRows[i], validOutboxes[i], formattedMessages, formatFailures, claimTokensForIndex(claimSelection.claimTokens, i, len(validRows)), result, mu)
-		}
+	message, formatted := d.formatGroupedMessage(ctx, group, validRows, validOutboxes)
+	if !formatted {
+		d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
 		return
 	}
 
-	// 그룹 메시지 전송
-	sendReq, err := buildDeliverySendRequest(group.roomID, message, validOutboxes)
-	if err != nil {
-		if releaseErr := d.releaseDeliveryClaims(ctx, claimSelection.claimTokens); releaseErr != nil && d.logger != nil {
-			d.logger.Warn("Failed to release grouped delivery claims after request build error",
-				slog.String("room_id", group.roomID),
-				slog.String("channel_id", group.channelID),
-				slog.Any("error", releaseErr))
-		}
-		failedAt := time.Now()
-		d.logger.Warn("Failed to build grouped delivery request",
-			slog.String("room_id", group.roomID),
-			slog.String("channel_id", group.channelID),
-			slog.String("kind", string(group.kind)),
-			slog.Int("count", len(validOutboxes)),
-			dedupeKeyLogAttrForOutboxes(validOutboxes),
-			slog.Any("error", err))
-		d.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key", err)
-		d.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key")
-		for i := range validRows {
-			d.recordDeliveryFailure(result, mu, "dedupe key", validRows[i].ID, validRows[i].OutboxID)
-		}
-		return
-	}
-
-	attemptStartedAt := time.Now().UTC()
-	d.logCommunityShortsDeliveryAttemptStarted(validRows, validOutboxes, attemptStartedAt, "grouped")
-	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
-		if releaseErr := d.releaseDeliveryClaims(ctx, claimSelection.claimTokens); releaseErr != nil && d.logger != nil {
-			d.logger.Warn("Failed to release grouped delivery claims after send failure",
-				slog.String("room_id", group.roomID),
-				slog.String("channel_id", group.channelID),
-				slog.Any("error", releaseErr))
-		}
-		failedAt := time.Now()
-		d.logger.Warn("Failed to send grouped delivery",
-			slog.String("room_id", group.roomID),
-			slog.String("kind", string(group.kind)),
-			slog.Int("count", len(validRows)),
-			dedupeKeyLogAttr(sendReq.dedupeKeys),
-			slog.Any("error", sendErr))
-		d.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", deliveryFailureReason(sendErr), sendErr)
-		d.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", deliveryFailureReason(sendErr))
-		for i := range validRows {
-			d.recordDeliveryFailure(result, mu, deliveryFailureReason(sendErr), validRows[i].ID, validRows[i].OutboxID)
-		}
-		return
-	}
-
-	sentAt := time.Now()
-	d.logger.Info("Sent grouped delivery",
-		slog.String("room_id", group.roomID),
-		slog.String("channel_id", group.channelID),
-		slog.String("kind", string(group.kind)),
-		slog.Int("count", len(validRows)),
-		dedupeKeyLogAttr(sendReq.dedupeKeys))
-	d.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, sentAt, "grouped", "success", "", nil)
-	d.logCommunityShortsDeliveryResult(validRows, validOutboxes, sentAt, "grouped", "success", "")
-
-	// 성공: 그룹 내 모든 delivery ID 성공 처리
-	mu.Lock()
-	for i := range validRows {
-		result.successDeliveryIDs = append(result.successDeliveryIDs, validRows[i].ID)
-		result.touchedOutboxIDs = append(result.touchedOutboxIDs, validRows[i].OutboxID)
-	}
-	result.successClaimTokens = append(result.successClaimTokens, claimSelection.claimTokens...)
-	mu.Unlock()
+	d.dispatchGroupedClaimedRows(ctx, group, validRows, validOutboxes, message, claimSelection.claimTokens, result, mu)
 }
 
 func (d *Dispatcher) dispatchDeliveryRow(
@@ -708,39 +623,35 @@ func (d *Dispatcher) dispatchClaimedDeliveryRow(
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
+	rows, outboxes := singleDeliveryBatch(row, outbox)
 	if formatFailures[row.OutboxID] {
-		if releaseErr := d.releaseDeliveryClaims(ctx, claimTokens); releaseErr != nil && d.logger != nil {
-			d.logger.Warn("Failed to release per-room delivery claims after format error",
-				slog.Int64("delivery_id", row.ID),
-				slog.Int64("outbox_id", row.OutboxID),
-				slog.Any("error", releaseErr))
-		}
+		d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after format error",
+			slog.Int64("delivery_id", row.ID),
+			slog.Int64("outbox_id", row.OutboxID),
+		)
 		failedAt := time.Now()
-		d.logCommunityShortsDeliveryAudit(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, failedAt, "per_room", "failure", "format message", nil)
-		d.logCommunityShortsDeliveryResult([]domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, failedAt, "per_room", "failure", "format message")
+		d.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", "format message", nil)
+		d.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "format message")
 		d.recordDeliveryFailure(result, mu, "format message", row.ID, row.OutboxID)
 		return
 	}
+
 	message, ok := formattedMessages[row.OutboxID]
 	if !ok {
-		if releaseErr := d.releaseDeliveryClaims(ctx, claimTokens); releaseErr != nil && d.logger != nil {
-			d.logger.Warn("Failed to release per-room delivery claims after missing preformatted message",
-				slog.Int64("delivery_id", row.ID),
-				slog.Int64("outbox_id", row.OutboxID),
-				slog.Any("error", releaseErr))
-		}
+		d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after missing preformatted message",
+			slog.Int64("delivery_id", row.ID),
+			slog.Int64("outbox_id", row.OutboxID),
+		)
 		d.recordDeliveryFailure(result, mu, "outbox row not found", row.ID, row.OutboxID)
 		return
 	}
 
 	sendReq, err := buildDeliverySendRequest(row.RoomID, message, []domain.YouTubeNotificationOutbox{outbox})
 	if err != nil {
-		if releaseErr := d.releaseDeliveryClaims(ctx, claimTokens); releaseErr != nil && d.logger != nil {
-			d.logger.Warn("Failed to release per-room delivery claims after request build error",
-				slog.Int64("delivery_id", row.ID),
-				slog.Int64("outbox_id", row.OutboxID),
-				slog.Any("error", releaseErr))
-		}
+		d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after request build error",
+			slog.Int64("delivery_id", row.ID),
+			slog.Int64("outbox_id", row.OutboxID),
+		)
 		failedAt := time.Now()
 		d.logger.Warn("Failed to build per-room delivery request",
 			slog.Int64("delivery_id", row.ID),
@@ -748,21 +659,19 @@ func (d *Dispatcher) dispatchClaimedDeliveryRow(
 			slog.String("room_id", row.RoomID),
 			dedupeKeyLogAttrForOutboxes([]domain.YouTubeNotificationOutbox{outbox}),
 			slog.Any("error", err))
-		d.logCommunityShortsDeliveryAudit(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, failedAt, "per_room", "failure", "dedupe key", err)
-		d.logCommunityShortsDeliveryResult([]domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, failedAt, "per_room", "failure", "dedupe key")
+		d.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", "dedupe key", err)
+		d.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "dedupe key")
 		d.recordDeliveryFailure(result, mu, "dedupe key", row.ID, row.OutboxID)
 		return
 	}
 
 	attemptStartedAt := time.Now().UTC()
-	d.logCommunityShortsDeliveryAttemptStarted([]domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, attemptStartedAt, "per_room")
+	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, "per_room")
 	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
-		if releaseErr := d.releaseDeliveryClaims(ctx, claimTokens); releaseErr != nil && d.logger != nil {
-			d.logger.Warn("Failed to release per-room delivery claims after send failure",
-				slog.Int64("delivery_id", row.ID),
-				slog.Int64("outbox_id", row.OutboxID),
-				slog.Any("error", releaseErr))
-		}
+		d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release per-room delivery claims after send failure",
+			slog.Int64("delivery_id", row.ID),
+			slog.Int64("outbox_id", row.OutboxID),
+		)
 		failedAt := time.Now()
 		d.logger.Warn("Failed to send per-room delivery",
 			slog.Int64("delivery_id", row.ID),
@@ -770,8 +679,8 @@ func (d *Dispatcher) dispatchClaimedDeliveryRow(
 			slog.String("room_id", row.RoomID),
 			dedupeKeyLogAttr(sendReq.dedupeKeys),
 			slog.Any("error", sendErr))
-		d.logCommunityShortsDeliveryAudit(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, failedAt, "per_room", "failure", deliveryFailureReason(sendErr), sendErr)
-		d.logCommunityShortsDeliveryResult([]domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, failedAt, "per_room", "failure", deliveryFailureReason(sendErr))
+		d.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", deliveryFailureReason(sendErr), sendErr)
+		d.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", deliveryFailureReason(sendErr))
 		d.recordDeliveryFailure(result, mu, deliveryFailureReason(sendErr), row.ID, row.OutboxID)
 		return
 	}
@@ -782,8 +691,8 @@ func (d *Dispatcher) dispatchClaimedDeliveryRow(
 		slog.Int64("outbox_id", row.OutboxID),
 		slog.String("room_id", row.RoomID),
 		dedupeKeyLogAttr(sendReq.dedupeKeys))
-	d.logCommunityShortsDeliveryAudit(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, sentAt, "per_room", "success", "", nil)
-	d.logCommunityShortsDeliveryResult([]domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, sentAt, "per_room", "success", "")
+	d.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, sentAt, "per_room", "success", "", nil)
+	d.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, "per_room", "success", "")
 
 	mu.Lock()
 	result.successDeliveryIDs = append(result.successDeliveryIDs, row.ID)
@@ -803,6 +712,172 @@ func (d *Dispatcher) recordDeliveryFailure(
 	result.failureBuckets[reason] = append(result.failureBuckets[reason], deliveryID)
 	result.touchedOutboxIDs = append(result.touchedOutboxIDs, outboxID)
 	mu.Unlock()
+}
+
+func partitionGroupedDeliveries(
+	group deliveryGroup,
+) ([]domain.YouTubeNotificationDelivery, []domain.YouTubeNotificationOutbox, []domain.YouTubeNotificationDelivery) {
+	var validRows []domain.YouTubeNotificationDelivery
+	var validOutboxes []domain.YouTubeNotificationOutbox
+	var invalidRows []domain.YouTubeNotificationDelivery
+
+	for i := range group.outboxes {
+		if validateOutboxPayload(group.outboxes[i]) {
+			validOutboxes = append(validOutboxes, group.outboxes[i])
+			validRows = append(validRows, group.rows[i])
+			continue
+		}
+
+		invalidRows = append(invalidRows, group.rows[i])
+	}
+
+	return validRows, validOutboxes, invalidRows
+}
+
+func (d *Dispatcher) dispatchRowsIndividually(
+	ctx context.Context,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxByID map[int64]domain.YouTubeNotificationOutbox,
+	formattedMessages map[int64]string,
+	formatFailures map[int64]bool,
+	reuseCache *deliveryClaimReuseCache,
+	result *deliveryDispatchResult,
+	mu *sync.Mutex,
+) {
+	for i := range rows {
+		d.dispatchDeliveryRow(ctx, rows[i], outboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+	}
+}
+
+func (d *Dispatcher) formatGroupedMessage(
+	ctx context.Context,
+	group deliveryGroup,
+	validRows []domain.YouTubeNotificationDelivery,
+	validOutboxes []domain.YouTubeNotificationOutbox,
+) (string, bool) {
+	memberName, err := d.formatter.getMemberName(ctx, group.channelID)
+	if err != nil || memberName == "" {
+		memberName = "VTuber"
+	}
+
+	message, err := d.formatter.formatGroupedMessage(ctx, memberName, group.channelID, group.kind, validOutboxes)
+	if err != nil {
+		d.logger.Warn("Grouped format failed, falling back to individual dispatch",
+			slog.String("room_id", group.roomID),
+			slog.String("channel_id", group.channelID),
+			slog.String("kind", string(group.kind)),
+			slog.Int("count", len(validRows)),
+			slog.Any("error", err))
+		return "", false
+	}
+
+	return message, true
+}
+
+func (d *Dispatcher) dispatchClaimedRowsIndividually(
+	ctx context.Context,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	formattedMessages map[int64]string,
+	formatFailures map[int64]bool,
+	claimTokens []deliveryClaimToken,
+	result *deliveryDispatchResult,
+	mu *sync.Mutex,
+) {
+	for i := range rows {
+		d.dispatchClaimedDeliveryRow(ctx, rows[i], outboxes[i], formattedMessages, formatFailures, claimTokensForIndex(claimTokens, i, len(rows)), result, mu)
+	}
+}
+
+func (d *Dispatcher) dispatchGroupedClaimedRows(
+	ctx context.Context,
+	group deliveryGroup,
+	validRows []domain.YouTubeNotificationDelivery,
+	validOutboxes []domain.YouTubeNotificationOutbox,
+	message string,
+	claimTokens []deliveryClaimToken,
+	result *deliveryDispatchResult,
+	mu *sync.Mutex,
+) {
+	sendReq, err := buildDeliverySendRequest(group.roomID, message, validOutboxes)
+	if err != nil {
+		d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after request build error",
+			slog.String("room_id", group.roomID),
+			slog.String("channel_id", group.channelID),
+		)
+		failedAt := time.Now()
+		d.logger.Warn("Failed to build grouped delivery request",
+			slog.String("room_id", group.roomID),
+			slog.String("channel_id", group.channelID),
+			slog.String("kind", string(group.kind)),
+			slog.Int("count", len(validOutboxes)),
+			dedupeKeyLogAttrForOutboxes(validOutboxes),
+			slog.Any("error", err))
+		d.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key", err)
+		d.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key")
+		for i := range validRows {
+			d.recordDeliveryFailure(result, mu, "dedupe key", validRows[i].ID, validRows[i].OutboxID)
+		}
+		return
+	}
+
+	attemptStartedAt := time.Now().UTC()
+	d.logCommunityShortsDeliveryAttemptStarted(validRows, validOutboxes, attemptStartedAt, "grouped")
+	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
+		d.releaseDeliveryClaimsWithWarning(ctx, claimTokens, "Failed to release grouped delivery claims after send failure",
+			slog.String("room_id", group.roomID),
+			slog.String("channel_id", group.channelID),
+		)
+		failedAt := time.Now()
+		d.logger.Warn("Failed to send grouped delivery",
+			slog.String("room_id", group.roomID),
+			slog.String("kind", string(group.kind)),
+			slog.Int("count", len(validRows)),
+			dedupeKeyLogAttr(sendReq.dedupeKeys),
+			slog.Any("error", sendErr))
+		d.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", deliveryFailureReason(sendErr), sendErr)
+		d.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", deliveryFailureReason(sendErr))
+		for i := range validRows {
+			d.recordDeliveryFailure(result, mu, deliveryFailureReason(sendErr), validRows[i].ID, validRows[i].OutboxID)
+		}
+		return
+	}
+
+	sentAt := time.Now()
+	d.logger.Info("Sent grouped delivery",
+		slog.String("room_id", group.roomID),
+		slog.String("channel_id", group.channelID),
+		slog.String("kind", string(group.kind)),
+		slog.Int("count", len(validRows)),
+		dedupeKeyLogAttr(sendReq.dedupeKeys))
+	d.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, sentAt, "grouped", "success", "", nil)
+	d.logCommunityShortsDeliveryResult(validRows, validOutboxes, sentAt, "grouped", "success", "")
+
+	mu.Lock()
+	for i := range validRows {
+		result.successDeliveryIDs = append(result.successDeliveryIDs, validRows[i].ID)
+		result.touchedOutboxIDs = append(result.touchedOutboxIDs, validRows[i].OutboxID)
+	}
+	result.successClaimTokens = append(result.successClaimTokens, claimTokens...)
+	mu.Unlock()
+}
+
+func singleDeliveryBatch(
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+) ([]domain.YouTubeNotificationDelivery, []domain.YouTubeNotificationOutbox) {
+	return []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}
+}
+
+func (d *Dispatcher) releaseDeliveryClaimsWithWarning(
+	ctx context.Context,
+	claims []deliveryClaimToken,
+	message string,
+	attrs ...any,
+) {
+	if releaseErr := d.releaseDeliveryClaims(ctx, claims); releaseErr != nil && d.logger != nil {
+		d.logger.Warn(message, append(attrs, slog.Any("error", releaseErr))...)
+	}
 }
 
 // preFormatMessages: outbox_id별로 메시지를 1회 포맷하여 캐싱
@@ -829,7 +904,11 @@ func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 		return err
 	}
 
-	return d.sender.SendMessage(ctx, req.roomID, req.message)
+	if err := d.sender.SendMessage(ctx, req.roomID, req.message); err != nil {
+		return fmt.Errorf("send delivery message: %w", err)
+	}
+
+	return nil
 }
 
 func (d *Dispatcher) deliveryParallelism() int {

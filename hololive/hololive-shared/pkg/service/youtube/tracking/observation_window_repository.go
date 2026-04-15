@@ -2,6 +2,7 @@ package tracking
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -36,7 +37,7 @@ func (r *GormRepository) FindCommunityShortsObservationWindow(
 	if err := r.db.WithContext(ctx).
 		Where("runtime_name = ? AND bigbang_cutover_at = ?", normalizedRuntimeName, yttimestamp.Normalize(bigBangCutoverAt)).
 		First(&record).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("find community shorts observation window: query row: %w", err)
@@ -69,8 +70,9 @@ func (r *GormRepository) FindClosedCommunityShortsObservationWindow(
 	}
 
 	if !normalizedNow.Before(window.ObservationEndedAt.UTC()) {
-		if err := r.closeCommunityShortsObservationWindow(ctx, window.RuntimeName, window.BigBangCutoverAt, window.ObservationEndedAt); err != nil {
-			return nil, fmt.Errorf("find closed community shorts observation window: close due window: %w", err)
+		closeErr := r.closeCommunityShortsObservationWindow(ctx, window.RuntimeName, window.BigBangCutoverAt, window.ObservationEndedAt)
+		if closeErr != nil {
+			return nil, fmt.Errorf("find closed community shorts observation window: close due window: %w", closeErr)
 		}
 		window, err = r.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
 		if err != nil {
@@ -87,8 +89,9 @@ func (r *GormRepository) FindClosedCommunityShortsObservationWindow(
 			window.ObservationEndedAt.UTC().Format(time.RFC3339),
 		)
 	}
-	if err := r.ensureCommunityShortsObservationPostBaselines(ctx, window); err != nil {
-		return nil, fmt.Errorf("find closed community shorts observation window: finalize observation post baseline: %w", err)
+	finalizeErr := r.ensureCommunityShortsObservationPostBaselines(ctx, window)
+	if finalizeErr != nil {
+		return nil, fmt.Errorf("find closed community shorts observation window: finalize observation post baseline: %w", finalizeErr)
 	}
 
 	window, err = r.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
@@ -204,68 +207,122 @@ func normalizeCommunityShortsObservationWindow(
 		return nil, fmt.Errorf("app version is empty")
 	}
 
-	bigBangCutoverAt := yttimestamp.Normalize(window.BigBangCutoverAt)
-	if bigBangCutoverAt.IsZero() {
-		return nil, fmt.Errorf("big-bang cutover at is empty")
+	times, normalizeErr := normalizeCommunityShortsObservationWindowTimes(window)
+	if normalizeErr != nil {
+		return nil, normalizeErr
 	}
-
-	deploymentCompletedAt := yttimestamp.Normalize(window.DeploymentCompletedAt)
-	if deploymentCompletedAt.IsZero() {
-		return nil, fmt.Errorf("deployment completed at is empty")
-	}
-
-	observationStartedAt := yttimestamp.Normalize(window.ObservationStartedAt)
-	if observationStartedAt.IsZero() {
-		return nil, fmt.Errorf("observation started at is empty")
-	}
-
-	observationEndedAt := yttimestamp.Normalize(window.ObservationEndedAt)
-	if observationEndedAt.IsZero() {
-		return nil, fmt.Errorf("observation ended at is empty")
-	}
-	if !observationEndedAt.After(observationStartedAt) {
-		return nil, fmt.Errorf("observation ended at must be after observation started at")
-	}
-	if observationEndedAt.Sub(observationStartedAt) != communityShortsObservationWindowDuration {
-		return nil, fmt.Errorf("observation window duration must be exactly 24h")
-	}
-	if !deploymentCompletedAt.Equal(observationStartedAt) {
-		return nil, fmt.Errorf("deployment completed at must match observation started at")
+	if err := validateCommunityShortsObservationWindowTiming(
+		times.deploymentCompletedAt,
+		times.observationStartedAt,
+		times.observationEndedAt,
+	); err != nil {
+		return nil, err
 	}
 	if window.TargetChannelCount <= 0 {
 		return nil, fmt.Errorf("target channel count must be greater than zero")
 	}
 
-	closedAt, err := normalizeCommunityShortsObservationWindowClosedAt(window.ClosedAt, observationEndedAt)
+	closedAt, err := normalizeCommunityShortsObservationWindowClosedAt(window.ClosedAt, times.observationEndedAt)
 	if err != nil {
 		return nil, err
 	}
-	finalizedPostBaselineAt, err := normalizeCommunityShortsObservationFinalizedAt(window.FinalizedPostBaselineAt, observationEndedAt)
+	finalizedPostBaselineAt, err := normalizeCommunityShortsObservationFinalizedAt(window.FinalizedPostBaselineAt, times.observationEndedAt)
 	if err != nil {
 		return nil, err
 	}
-	if window.FinalizedPostCount < 0 {
-		return nil, fmt.Errorf("finalized post count must not be negative")
-	}
-	if finalizedPostBaselineAt != nil && closedAt == nil {
-		return nil, fmt.Errorf("finalized post baseline at requires closed at")
-	}
-	if finalizedPostBaselineAt == nil && window.FinalizedPostCount != 0 {
-		return nil, fmt.Errorf("finalized post count requires finalized post baseline at")
+	if err := validateCommunityShortsObservationWindowFinalization(window, closedAt, finalizedPostBaselineAt); err != nil {
+		return nil, err
 	}
 
 	return &domain.YouTubeCommunityShortsObservationWindow{
 		RuntimeName:             runtimeName,
-		BigBangCutoverAt:        bigBangCutoverAt,
+		BigBangCutoverAt:        times.bigBangCutoverAt,
 		AppVersion:              appVersion,
 		TargetChannelCount:      window.TargetChannelCount,
-		DeploymentCompletedAt:   deploymentCompletedAt,
-		ObservationStartedAt:    observationStartedAt,
-		ObservationEndedAt:      observationEndedAt,
+		DeploymentCompletedAt:   times.deploymentCompletedAt,
+		ObservationStartedAt:    times.observationStartedAt,
+		ObservationEndedAt:      times.observationEndedAt,
 		ClosedAt:                closedAt,
 		FinalizedPostBaselineAt: finalizedPostBaselineAt,
 		FinalizedPostCount:      window.FinalizedPostCount,
 	}, nil
+}
+
+type normalizedObservationWindowTimes struct {
+	bigBangCutoverAt      time.Time
+	deploymentCompletedAt time.Time
+	observationStartedAt  time.Time
+	observationEndedAt    time.Time
+}
+
+func normalizeCommunityShortsObservationWindowTimes(
+	window *domain.YouTubeCommunityShortsObservationWindow,
+) (normalizedObservationWindowTimes, error) {
+	bigBangCutoverAt, err := normalizeRequiredObservationWindowTime(window.BigBangCutoverAt, "big-bang cutover at")
+	if err != nil {
+		return normalizedObservationWindowTimes{}, err
+	}
+	deploymentCompletedAt, err := normalizeRequiredObservationWindowTime(window.DeploymentCompletedAt, "deployment completed at")
+	if err != nil {
+		return normalizedObservationWindowTimes{}, err
+	}
+	observationStartedAt, err := normalizeRequiredObservationWindowTime(window.ObservationStartedAt, "observation started at")
+	if err != nil {
+		return normalizedObservationWindowTimes{}, err
+	}
+	observationEndedAt, err := normalizeRequiredObservationWindowTime(window.ObservationEndedAt, "observation ended at")
+	if err != nil {
+		return normalizedObservationWindowTimes{}, err
+	}
+
+	return normalizedObservationWindowTimes{
+		bigBangCutoverAt:      bigBangCutoverAt,
+		deploymentCompletedAt: deploymentCompletedAt,
+		observationStartedAt:  observationStartedAt,
+		observationEndedAt:    observationEndedAt,
+	}, nil
+}
+
+func normalizeRequiredObservationWindowTime(value time.Time, fieldName string) (time.Time, error) {
+	normalizedValue := yttimestamp.Normalize(value)
+	if normalizedValue.IsZero() {
+		return time.Time{}, fmt.Errorf("%s is empty", fieldName)
+	}
+	return normalizedValue, nil
+}
+
+func validateCommunityShortsObservationWindowTiming(
+	deploymentCompletedAt time.Time,
+	observationStartedAt time.Time,
+	observationEndedAt time.Time,
+) error {
+	if !observationEndedAt.After(observationStartedAt) {
+		return fmt.Errorf("observation ended at must be after observation started at")
+	}
+	if observationEndedAt.Sub(observationStartedAt) != communityShortsObservationWindowDuration {
+		return fmt.Errorf("observation window duration must be exactly 24h")
+	}
+	if !deploymentCompletedAt.Equal(observationStartedAt) {
+		return fmt.Errorf("deployment completed at must match observation started at")
+	}
+	return nil
+}
+
+func validateCommunityShortsObservationWindowFinalization(
+	window *domain.YouTubeCommunityShortsObservationWindow,
+	closedAt *time.Time,
+	finalizedPostBaselineAt *time.Time,
+) error {
+	if window.FinalizedPostCount < 0 {
+		return fmt.Errorf("finalized post count must not be negative")
+	}
+	if finalizedPostBaselineAt != nil && closedAt == nil {
+		return fmt.Errorf("finalized post baseline at requires closed at")
+	}
+	if finalizedPostBaselineAt == nil && window.FinalizedPostCount != 0 {
+		return fmt.Errorf("finalized post count requires finalized post baseline at")
+	}
+	return nil
 }
 
 func normalizeCommunityShortsObservationWindowClosedAt(

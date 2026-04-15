@@ -26,7 +26,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
@@ -42,12 +41,4 @@ func initCoreIntegrationServices(
 		return nil, err
 	}
 	return services, nil
-}
-
-func buildTemplateAdminService(
-	infra *sharedmodules.InfraModule,
-	templateRenderer *template.Renderer,
-	logger *slog.Logger,
-) *template.AdminService {
-	return appbootstrap.BuildTemplateAdminService(infra, templateRenderer, logger)
 }

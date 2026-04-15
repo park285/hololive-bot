@@ -32,7 +32,7 @@ const (
 	aclRoomsTempKeySeparator = ":tmp:"
 )
 
-var aclRoomsTempKeySeq uint64
+var aclRoomsTempKeySeq atomic.Uint64
 
 const renameRoomsKeyScript = `
 local source = ARGV[1]
@@ -56,7 +56,7 @@ func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms
 		return nil
 	}
 
-	tempKey := fmt.Sprintf("%s%s%d", key, aclRoomsTempKeySeparator, atomic.AddUint64(&aclRoomsTempKeySeq, 1))
+	tempKey := fmt.Sprintf("%s%s%d", key, aclRoomsTempKeySeparator, aclRoomsTempKeySeq.Add(1))
 
 	if err := s.cache.Del(ctx, tempKey); err != nil {
 		return fmt.Errorf("cleanup temp %s: %w", tempKey, err)
@@ -68,7 +68,7 @@ func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms
 
 	if err := s.renameRoomsKey(ctx, tempKey, key, rooms); err != nil {
 		if cleanupErr := s.cache.Del(context.WithoutCancel(ctx), tempKey); cleanupErr != nil {
-			return fmt.Errorf("swap %s from %s: %w (cleanup temp: %v)", key, tempKey, err, cleanupErr)
+			return fmt.Errorf("swap %s from %s: %w (cleanup temp: %w)", key, tempKey, err, cleanupErr)
 		}
 
 		return fmt.Errorf("swap %s from %s: %w", key, tempKey, err)
@@ -79,7 +79,11 @@ func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms
 
 func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms []string) error {
 	if s.renameRoomsKeyFunc != nil {
-		return s.renameRoomsKeyFunc(ctx, tempKey, key, rooms)
+		if err := s.renameRoomsKeyFunc(ctx, tempKey, key, rooms); err != nil {
+			return fmt.Errorf("custom rename %s from %s: %w", key, tempKey, err)
+		}
+
+		return nil
 	}
 
 	client, builder, ok := s.rawCacheEvalClient()
@@ -87,12 +91,15 @@ func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms
 		if err := s.cache.Del(ctx, key); err != nil {
 			return fmt.Errorf("fallback clear %s: %w", key, err)
 		}
+
 		if len(rooms) == 0 {
 			return nil
 		}
+
 		if _, err := s.cache.SAdd(ctx, key, rooms); err != nil {
 			return fmt.Errorf("fallback write %s: %w", key, err)
 		}
+
 		return nil
 	}
 
@@ -103,7 +110,7 @@ func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms
 		Build(),
 	)
 	if err := resp.Error(); err != nil {
-		return err
+		return fmt.Errorf("eval rename %s from %s: %w", key, tempKey, err)
 	}
 
 	return nil
@@ -118,6 +125,7 @@ func (s *Service) rawCacheEvalClient() (_ valkey.Client, _ valkey.Builder, ok bo
 
 	client := s.cache.GetClient()
 	builder := s.cache.B()
+
 	if client == nil {
 		return nil, valkey.Builder{}, false
 	}

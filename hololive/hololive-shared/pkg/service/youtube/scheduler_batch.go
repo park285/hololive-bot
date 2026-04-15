@@ -122,7 +122,6 @@ func (ys *schedulerImpl) fetchRecentVideosRotation(ctx context.Context, batchNum
 	eg.SetLimit(recentVideosFetchParallelism)
 
 	for _, channelID := range channels {
-		channelID := channelID
 		eg.Go(func() error {
 			videos, err := ys.youtube.GetRecentVideos(egCtx, channelID, 10)
 			if err != nil {

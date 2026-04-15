@@ -26,12 +26,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 type failedNotificationOutboxRow struct {
@@ -309,6 +309,31 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx *gorm.D
 		return nil
 	}
 
+	clauses, args := collectTrackingIdentityClauses(trackingRows)
+	if len(clauses) == 0 {
+		return nil
+	}
+
+	outboxRows, err := loadPersistedOutboxSentState(ctx, tx, clauses, args)
+	if err != nil {
+		return err
+	}
+	if len(outboxRows) == 0 {
+		return nil
+	}
+
+	sentAtByIdentity, identityByOutboxID, outboxIDs := buildPersistedSentStateMaps(outboxRows)
+	if err := mergePersistedDeliverySentState(ctx, tx, outboxIDs, identityByOutboxID, sentAtByIdentity); err != nil {
+		return err
+	}
+	if len(sentAtByIdentity) == 0 {
+		return nil
+	}
+	applyPersistedSentStateToTrackingRows(trackingRows, sentAtByIdentity)
+	return nil
+}
+
+func collectTrackingIdentityClauses(trackingRows []*domain.YouTubeContentAlarmTracking) ([]string, []any) {
 	clauses := make([]string, 0, len(trackingRows))
 	args := make([]any, 0, len(trackingRows)*2)
 	identitySeen := make(map[string]struct{}, len(trackingRows))
@@ -321,7 +346,7 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx *gorm.D
 		if contentID == "" {
 			continue
 		}
-		identityKey := fmt.Sprintf("%s::%s", row.Kind, contentID)
+		identityKey := notificationIdentityKey(row.Kind, contentID)
 		if _, ok := identitySeen[identityKey]; ok {
 			continue
 		}
@@ -329,64 +354,80 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx *gorm.D
 		clauses = append(clauses, "(kind = ? AND content_id = ?)")
 		args = append(args, row.Kind, contentID)
 	}
-	if len(clauses) == 0 {
-		return nil
-	}
+	return clauses, args
+}
 
+func loadPersistedOutboxSentState(
+	ctx context.Context,
+	tx *gorm.DB,
+	clauses []string,
+	args []any,
+) ([]persistedOutboxSentStateRow, error) {
 	var outboxRows []persistedOutboxSentStateRow
 	if err := tx.WithContext(ctx).
 		Model(&domain.YouTubeNotificationOutbox{}).
 		Select("id, kind, content_id, sent_at").
 		Where(strings.Join(clauses, " OR "), args...).
 		Find(&outboxRows).Error; err != nil {
-		return fmt.Errorf("query outbox rows: %w", err)
+		return nil, fmt.Errorf("query outbox rows: %w", err)
 	}
-	if len(outboxRows) == 0 {
-		return nil
-	}
+	return outboxRows, nil
+}
 
+func buildPersistedSentStateMaps(
+	outboxRows []persistedOutboxSentStateRow,
+) (map[string]time.Time, map[int64]string, []int64) {
 	sentAtByIdentity := make(map[string]time.Time, len(outboxRows))
-	outboxIDByIdentity := make(map[string]int64, len(outboxRows))
+	identityByOutboxID := make(map[int64]string, len(outboxRows))
 	outboxIDs := make([]int64, 0, len(outboxRows))
 	for i := range outboxRows {
 		contentID := strings.TrimSpace(outboxRows[i].ContentID)
 		if contentID == "" {
 			continue
 		}
-		identityKey := fmt.Sprintf("%s::%s", outboxRows[i].Kind, contentID)
-		outboxIDByIdentity[identityKey] = outboxRows[i].ID
+		identityKey := notificationIdentityKey(outboxRows[i].Kind, contentID)
+		identityByOutboxID[outboxRows[i].ID] = identityKey
 		outboxIDs = append(outboxIDs, outboxRows[i].ID)
 		if outboxRows[i].SentAt != nil && !outboxRows[i].SentAt.IsZero() {
 			updateIdentitySentAtMin(sentAtByIdentity, identityKey, yttimestamp.Normalize(*outboxRows[i].SentAt))
 		}
 	}
+	return sentAtByIdentity, identityByOutboxID, outboxIDs
+}
 
-	if len(outboxIDs) > 0 {
-		var deliveryRows []persistedDeliverySentStateRow
-		if err := tx.WithContext(ctx).
-			Model(&domain.YouTubeNotificationDelivery{}).
-			Select("outbox_id, sent_at").
-			Where("outbox_id IN ? AND status = ? AND sent_at IS NOT NULL", outboxIDs, domain.OutboxStatusSent).
-			Scan(&deliveryRows).Error; err != nil {
-			return fmt.Errorf("query sent delivery rows: %w", err)
-		}
-
-		identityByOutboxID := make(map[int64]string, len(outboxIDByIdentity))
-		for identityKey, outboxID := range outboxIDByIdentity {
-			identityByOutboxID[outboxID] = identityKey
-		}
-		for i := range deliveryRows {
-			identityKey, ok := identityByOutboxID[deliveryRows[i].OutboxID]
-			if !ok || deliveryRows[i].SentAt == nil || deliveryRows[i].SentAt.IsZero() {
-				continue
-			}
-			updateIdentitySentAtMin(sentAtByIdentity, identityKey, yttimestamp.Normalize(*deliveryRows[i].SentAt))
-		}
-	}
-
-	if len(sentAtByIdentity) == 0 {
+func mergePersistedDeliverySentState(
+	ctx context.Context,
+	tx *gorm.DB,
+	outboxIDs []int64,
+	identityByOutboxID map[int64]string,
+	sentAtByIdentity map[string]time.Time,
+) error {
+	if len(outboxIDs) == 0 {
 		return nil
 	}
+
+	var deliveryRows []persistedDeliverySentStateRow
+	if err := tx.WithContext(ctx).
+		Model(&domain.YouTubeNotificationDelivery{}).
+		Select("outbox_id, sent_at").
+		Where("outbox_id IN ? AND status = ? AND sent_at IS NOT NULL", outboxIDs, domain.OutboxStatusSent).
+		Scan(&deliveryRows).Error; err != nil {
+		return fmt.Errorf("query sent delivery rows: %w", err)
+	}
+	for i := range deliveryRows {
+		identityKey, ok := identityByOutboxID[deliveryRows[i].OutboxID]
+		if !ok || deliveryRows[i].SentAt == nil || deliveryRows[i].SentAt.IsZero() {
+			continue
+		}
+		updateIdentitySentAtMin(sentAtByIdentity, identityKey, yttimestamp.Normalize(*deliveryRows[i].SentAt))
+	}
+	return nil
+}
+
+func applyPersistedSentStateToTrackingRows(
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	sentAtByIdentity map[string]time.Time,
+) {
 	for i := range trackingRows {
 		row := trackingRows[i]
 		if row == nil || !isCommunityShortsOutboxKind(row.Kind) {
@@ -396,8 +437,7 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx *gorm.D
 		if contentID == "" {
 			continue
 		}
-		identityKey := fmt.Sprintf("%s::%s", row.Kind, contentID)
-		sentAt, ok := sentAtByIdentity[identityKey]
+		sentAt, ok := sentAtByIdentity[notificationIdentityKey(row.Kind, contentID)]
 		if !ok {
 			continue
 		}
@@ -410,8 +450,6 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx *gorm.D
 			row.AlarmSentAt = &sentAtCopy
 		}
 	}
-
-	return nil
 }
 
 func updateIdentitySentAtMin(sentAtByIdentity map[string]time.Time, identityKey string, candidate time.Time) {

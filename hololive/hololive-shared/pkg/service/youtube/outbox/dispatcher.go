@@ -200,14 +200,14 @@ func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
 		maxRounds = 1
 	}
 
-	for round := 0; round < maxRounds; round++ {
+	for round := range maxRounds {
 		outboxItems, err := d.claimOutboxBatch(ctx)
 		if err != nil {
 			d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
 			return
 		}
 
-		deliveryCount := 0
+		var deliveryCount int
 		if len(outboxItems) > 0 {
 			d.logger.Debug("Processing outbox batch",
 				slog.Int("count", len(outboxItems)),
@@ -373,7 +373,6 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(16)
 	for idx := range entries {
-		idx := idx
 		eg.Go(func() error {
 			e := entries[idx]
 			members, err := sharedalarm.ResolveChannelSubscribersByType(egCtx, d.cache, d.db, e.channelID, e.alarmType)

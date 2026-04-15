@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func BuildSettingsService(targetMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) settings.ReadWriter {
@@ -77,6 +78,7 @@ type persistedSettings struct {
 }
 
 func readPersistedSettings(settingsPath string) (persistedSettings, error) {
+	// #nosec G304 -- settingsPath는 resolveSettingsFilePath와 운영 설정 경로에서만 유도된다.
 	file, err := os.Open(settingsPath)
 	if err != nil {
 		return persistedSettings{}, fmt.Errorf("open settings file: %w", err)

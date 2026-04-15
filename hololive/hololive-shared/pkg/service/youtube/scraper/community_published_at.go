@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 

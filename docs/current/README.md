@@ -20,3 +20,4 @@
 - `APP_BOOTSTRAP_BOUNDARY_GUIDE.md` — `hololive-kakao-bot-go/internal/app` 경계 분리의 현재 상태와 종료 기준
 - `REMAINING_RISKS_EXECUTION_GUIDE_20260415.md` — 2026-04-15 repo-wide P1/P2 리스크 종료 기록과 검증 증거
 - `CRITICAL_REVIEW_RESIDUAL_ISSUES_20260415.md` — 2026-04-15 critical review 잔여 후속 이슈 종료 기록
+- `LEGACY_LINT_RESUME_20260415.md` — broader legacy lint debt 종료 기록과 검증 메모

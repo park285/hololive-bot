@@ -145,20 +145,26 @@ func (ys *schedulerImpl) formatMilestoneAchievedMessage(ctx context.Context, mem
 	return message, true
 }
 
-func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
+func dispatchAlertWorks[T any, W any](
+	logger *slog.Logger,
 	ctx context.Context,
 	sendMessage func(room, message string) error,
 	rooms []string,
-	works []milestoneAlertWork,
-) []ytstats.MilestoneNotification {
+	works []W,
+	notificationOf func(W) T,
+	messageOf func(W) string,
+	memberNameOf func(T) string,
+	sendFailureLog string,
+	partialWarnLog string,
+) []T {
 	if len(works) == 0 || len(rooms) == 0 {
 		return nil
 	}
 
-	results := make([]alertDispatchResult[ytstats.MilestoneNotification], len(works))
-	for i, work := range works {
-		results[i] = alertDispatchResult[ytstats.MilestoneNotification]{
-			notification: work.notification,
+	results := make([]alertDispatchResult[T], len(works))
+	for i := range works {
+		results[i] = alertDispatchResult[T]{
+			notification: notificationOf(works[i]),
 			targetRooms:  len(rooms),
 		}
 	}
@@ -166,28 +172,29 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 	eg, _ := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
 
-	for i, work := range works {
-		i := i
-		work := work
+	for i := range works {
+		work := works[i]
+		notification := notificationOf(work)
+		message := messageOf(work)
 		for _, room := range rooms {
-			room := room
+			result := &results[i]
 			eg.Go(func() error {
-				if err := sendMessage(room, work.message); err != nil {
-					ys.logger.Error("Failed to send milestone notification",
+				if err := sendMessage(room, message); err != nil {
+					logger.Error(sendFailureLog,
 						slog.String("room", room),
-						slog.String("member", work.notification.MemberName),
+						slog.String("member", memberNameOf(notification)),
 						slog.Any("error", err))
-					results[i].failureCount.Add(1)
+					result.failureCount.Add(1)
 					return nil
 				}
-				results[i].successCount.Add(1)
+				result.successCount.Add(1)
 				return nil
 			})
 		}
 	}
 
 	_ = eg.Wait()
-	sentNotifications := make([]ytstats.MilestoneNotification, 0, len(works))
+	sentNotifications := make([]T, 0, len(works))
 	for i := range results {
 		successCount := int(results[i].successCount.Load())
 		failureCount := int(results[i].failureCount.Load())
@@ -196,14 +203,35 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 			continue
 		}
 		if successCount > 0 {
-			ys.logger.Warn("Milestone notification partially sent; keeping unsent state for retry",
-				slog.String("member", results[i].notification.MemberName),
+			logger.Warn(partialWarnLog,
+				slog.String("member", memberNameOf(results[i].notification)),
 				slog.Int("target_rooms", results[i].targetRooms),
 				slog.Int("success_count", successCount),
 				slog.Int("failure_count", failureCount))
 		}
 	}
+
 	return sentNotifications
+}
+
+func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
+	ctx context.Context,
+	sendMessage func(room, message string) error,
+	rooms []string,
+	works []milestoneAlertWork,
+) []ytstats.MilestoneNotification {
+	return dispatchAlertWorks(
+		ys.logger,
+		ctx,
+		sendMessage,
+		rooms,
+		works,
+		func(work milestoneAlertWork) ytstats.MilestoneNotification { return work.notification },
+		func(work milestoneAlertWork) string { return work.message },
+		func(notification ytstats.MilestoneNotification) string { return notification.MemberName },
+		"Failed to send milestone notification",
+		"Milestone notification partially sent; keeping unsent state for retry",
+	)
 }
 
 func (ys *schedulerImpl) markMilestoneNotificationsSent(ctx context.Context, notifications []ytstats.MilestoneNotification) {
@@ -238,59 +266,18 @@ func (ys *schedulerImpl) dispatchApproachingAlertWorks(
 	rooms []string,
 	works []approachingAlertWork,
 ) []ytstats.ApproachingNotification {
-	if len(works) == 0 || len(rooms) == 0 {
-		return nil
-	}
-
-	results := make([]alertDispatchResult[ytstats.ApproachingNotification], len(works))
-	for i, work := range works {
-		results[i] = alertDispatchResult[ytstats.ApproachingNotification]{
-			notification: work.notification,
-			targetRooms:  len(rooms),
-		}
-	}
-
-	eg, _ := errgroup.WithContext(ctx)
-	eg.SetLimit(4)
-
-	for i, work := range works {
-		i := i
-		work := work
-		for _, room := range rooms {
-			room := room
-			eg.Go(func() error {
-				if err := sendMessage(room, work.message); err != nil {
-					ys.logger.Error("Failed to send approaching notification",
-						slog.String("room", room),
-						slog.String("member", work.notification.MemberName),
-						slog.Any("error", err))
-					results[i].failureCount.Add(1)
-					return nil
-				}
-				results[i].successCount.Add(1)
-				return nil
-			})
-		}
-	}
-
-	_ = eg.Wait()
-	sentNotifications := make([]ytstats.ApproachingNotification, 0, len(works))
-	for i := range results {
-		successCount := int(results[i].successCount.Load())
-		failureCount := int(results[i].failureCount.Load())
-		if results[i].targetRooms > 0 && successCount == results[i].targetRooms && failureCount == 0 {
-			sentNotifications = append(sentNotifications, results[i].notification)
-			continue
-		}
-		if successCount > 0 {
-			ys.logger.Warn("Approaching notification partially sent; keeping unsent state for retry",
-				slog.String("member", results[i].notification.MemberName),
-				slog.Int("target_rooms", results[i].targetRooms),
-				slog.Int("success_count", successCount),
-				slog.Int("failure_count", failureCount))
-		}
-	}
-	return sentNotifications
+	return dispatchAlertWorks(
+		ys.logger,
+		ctx,
+		sendMessage,
+		rooms,
+		works,
+		func(work approachingAlertWork) ytstats.ApproachingNotification { return work.notification },
+		func(work approachingAlertWork) string { return work.message },
+		func(notification ytstats.ApproachingNotification) string { return notification.MemberName },
+		"Failed to send approaching notification",
+		"Approaching notification partially sent; keeping unsent state for retry",
+	)
 }
 
 func (ys *schedulerImpl) markApproachingNotificationsSent(ctx context.Context, notifications []ytstats.ApproachingNotification) {
