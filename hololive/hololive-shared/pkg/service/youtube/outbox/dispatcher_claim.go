@@ -167,7 +167,7 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 		rooms, ok := roomsForItem(roomsByChannel, *item)
 		if !ok {
 			subscriberLookupFailures++
-			d.releaseOutboxLock(ctx, item.ID)
+			d.markFailed(ctx, item.ID, "subscriber lookup failed")
 			continue
 		}
 
