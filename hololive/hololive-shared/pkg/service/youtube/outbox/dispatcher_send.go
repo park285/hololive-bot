@@ -581,7 +581,7 @@ func (d *Dispatcher) dispatchGroup(
 
 	message, formatted := d.formatGroupedMessage(ctx, group, validRows, validOutboxes)
 	if !formatted {
-		d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
+		d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection.rowClaimTokens, result, mu)
 		return
 	}
 
@@ -780,12 +780,16 @@ func (d *Dispatcher) dispatchClaimedRowsIndividually(
 	outboxes []domain.YouTubeNotificationOutbox,
 	formattedMessages map[int64]string,
 	formatFailures map[int64]bool,
-	claimTokens []deliveryClaimToken,
+	rowClaimTokens [][]deliveryClaimToken,
 	result *deliveryDispatchResult,
 	mu *sync.Mutex,
 ) {
 	for i := range rows {
-		d.dispatchClaimedDeliveryRow(ctx, rows[i], outboxes[i], formattedMessages, formatFailures, claimTokensForIndex(claimTokens, i, len(rows)), result, mu)
+		var claims []deliveryClaimToken
+		if i < len(rowClaimTokens) {
+			claims = rowClaimTokens[i]
+		}
+		d.dispatchClaimedDeliveryRow(ctx, rows[i], outboxes[i], formattedMessages, formatFailures, claims, result, mu)
 	}
 }
 

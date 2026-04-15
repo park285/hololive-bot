@@ -43,6 +43,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -98,7 +99,7 @@ func TestInitializeBotRuntime_ContextCanceled(t *testing.T) {
 func TestInitInfraResources_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
-	resources, err := initInfraResources(canceledContext(), &config.Config{}, testBootstrapGuardLogger())
+	resources, err := appbootstrap.InitInfraResources(canceledContext(), &config.Config{}, testBootstrapGuardLogger())
 	require.Error(t, err)
 	assert.Nil(t, resources)
 	assert.Contains(t, err.Error(), "provide infra resources")
@@ -144,7 +145,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 		},
 	}
 
-	handler, err := buildBotWebhookHandler(
+	handler, err := appbootstrap.BuildBotWebhookHandler(
 		cfg,
 		stubWebhookMessageHandler{},
 		botWebhookRuntimeDependencies{Cache: &cache.Service{}},
@@ -197,11 +198,11 @@ func TestBuildBotAdminServerDependencies_GuardBranches(t *testing.T) {
 func TestResolveLLMSchedulerClients_Guards(t *testing.T) {
 	t.Parallel()
 
-	major, news := resolveLLMSchedulerClients(&config.Config{}, testBootstrapGuardLogger())
+	major, news := appbootstrap.ResolveLLMSchedulerClients(&config.Config{}, testBootstrapGuardLogger())
 	assert.Nil(t, major)
 	assert.Nil(t, news)
 
-	major, news = resolveLLMSchedulerClients(&config.Config{
+	major, news = appbootstrap.ResolveLLMSchedulerClients(&config.Config{
 		LLMSchedulerURL: "http://localhost:18080",
 		Server:          config.ServerConfig{APIKey: "test-api-key"},
 	}, testBootstrapGuardLogger())

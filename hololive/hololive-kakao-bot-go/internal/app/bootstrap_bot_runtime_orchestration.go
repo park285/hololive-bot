@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
@@ -39,18 +40,18 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 
-	webhookHandler, err := buildBotWebhookHandler(cfg, botBot, runtimeViews.webhook, logger)
+	webhookHandler, err := appbootstrap.BuildBotWebhookHandler(cfg, botBot, runtimeViews.webhook, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
 
-	alarmScheduler, err := buildAlarmRuntimeScheduler(cfg, infra, logger)
+	alarmScheduler, err := appbootstrap.BuildAlarmRuntimeScheduler(cfg, infra, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build bot runtime: alarm runtime scheduler: %w", err)
 	}
 
 	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
-	configSubscriber := buildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
+	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
 
 	var adminServerDeps *botAdminServerDependencies
 
@@ -61,7 +62,7 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		}
 	}
 
-	botServer, err := buildBotServer(ctx, cfg, webhookHandler, nil, runtimeViews.serverRuntime.alarmCRUD, adminServerDeps, logger)
+	botServer, err := appbootstrap.BuildBotServer(ctx, cfg, webhookHandler, nil, runtimeViews.serverRuntime.alarmCRUD, adminServerDeps, logger)
 	if err != nil {
 		return nil, err
 	}
