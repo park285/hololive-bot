@@ -22,6 +22,7 @@ package holodex
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -31,6 +32,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -38,6 +43,19 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	ytscraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
+
+type testMemberDataProvider struct {
+	members []*domain.Member
+}
+
+func (p testMemberDataProvider) GetAllMembers() []*domain.Member                       { return p.members }
+func (p testMemberDataProvider) FindMemberByChannelID(string) *domain.Member           { return nil }
+func (p testMemberDataProvider) FindMemberByName(string) *domain.Member                { return nil }
+func (p testMemberDataProvider) FindMemberByAlias(string) *domain.Member               { return nil }
+func (p testMemberDataProvider) GetChannelIDs() []string                               { return nil }
+func (p testMemberDataProvider) WithContext(context.Context) domain.MemberDataProvider { return p }
+func (p testMemberDataProvider) FindMembersByName(string) []*domain.Member             { return nil }
+func (p testMemberDataProvider) FindMembersByAlias(string) []*domain.Member            { return nil }
 
 func newTestScraper(t *testing.T, html string, memberMap map[string]string) *ScraperService {
 	t.Helper()
@@ -58,6 +76,112 @@ func newTestScraper(t *testing.T, html string, memberMap map[string]string) *Scr
 		logger:        logger,
 		baseURL:       server.URL,
 		memberNameMap: memberMap,
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type errorReadCloser struct {
+	err error
+}
+
+func (r errorReadCloser) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
+func (r errorReadCloser) Close() error {
+	return nil
+}
+
+func counterValueByLabels(t *testing.T, name string, labels map[string]string) float64 {
+	t.Helper()
+
+	families, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			if metricLabelsMatch(metric, labels) {
+				if metric.Counter == nil {
+					t.Fatalf("metric %s with labels %#v is not a counter", name, labels)
+				}
+				return metric.Counter.GetValue()
+			}
+		}
+	}
+
+	return 0
+}
+
+func metricLabelsMatch(metric *dto.Metric, labels map[string]string) bool {
+	if len(metric.GetLabel()) != len(labels) {
+		return false
+	}
+
+	for _, label := range metric.GetLabel() {
+		if labels[label.GetName()] != label.GetValue() {
+			return false
+		}
+	}
+
+	return true
+}
+
+func TestNewScraperService_UsesSharedHTTPClientPolicy(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	svc := NewScraperService(
+		nil,
+		testMemberDataProvider{members: []*domain.Member{{
+			Name:      "Member One",
+			NameJa:    "メンバー1",
+			ChannelID: "channel-1",
+			Aliases: &domain.Aliases{
+				Ko: []string{"멤버원"},
+				Ja: []string{"メンバー원"},
+			},
+		}}},
+		ytscraper.ProxyConfig{},
+		nil,
+		logger,
+	)
+	if svc.httpClient == nil {
+		t.Fatal("httpClient is nil")
+	}
+	if svc.httpClient.Timeout != constants.OfficialScheduleConfig.Timeout {
+		t.Fatalf("timeout=%s want=%s", svc.httpClient.Timeout, constants.OfficialScheduleConfig.Timeout)
+	}
+	transport, ok := svc.httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport type = %T, want *http.Transport", svc.httpClient.Transport)
+	}
+	shared := httputil.NewExternalAPIClient(constants.OfficialScheduleConfig.Timeout)
+	sharedTransport, ok := shared.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("shared transport type = %T, want *http.Transport", shared.Transport)
+	}
+	if transport.MaxConnsPerHost != sharedTransport.MaxConnsPerHost {
+		t.Fatalf("MaxConnsPerHost=%d want=%d", transport.MaxConnsPerHost, sharedTransport.MaxConnsPerHost)
+	}
+	if transport.MaxIdleConnsPerHost != sharedTransport.MaxIdleConnsPerHost {
+		t.Fatalf("MaxIdleConnsPerHost=%d want=%d", transport.MaxIdleConnsPerHost, sharedTransport.MaxIdleConnsPerHost)
+	}
+	if got := svc.memberNameMap[stringutil.Normalize("Member One")]; got != "channel-1" {
+		t.Fatalf("member mapping = %q, want channel-1", got)
+	}
+	if got := svc.memberNameMap[stringutil.Normalize("メンバー1")]; got != "channel-1" {
+		t.Fatalf("japanese mapping = %q, want channel-1", got)
+	}
+	if got := svc.memberNameMap[stringutil.Normalize("멤버원")]; got != "channel-1" {
+		t.Fatalf("alias mapping = %q, want channel-1", got)
 	}
 }
 
@@ -112,6 +236,102 @@ func TestScraperFetchAllStreamsStructureError(t *testing.T) {
 	}
 	if !IsStructureError(err) {
 		t.Fatalf("expected structure error, got %v", err)
+	}
+}
+
+func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonMatched(t *testing.T) {
+	html := `
+<div class="container">
+  <div class="col-12">
+    <div class="navbar-inverse">
+      <span class="holodule navbar-text">09/10 (Wed)</span>
+    </div>
+  </div>
+  <div class="col-12">
+    <a class="thumbnail" href="https://www.youtube.com/watch?v=video123">
+      <div class="datetime">12:34</div>
+      <div class="name">Member One</div>
+    </a>
+  </div>
+</div>`
+
+	svc := newTestScraper(t, html, map[string]string{
+		stringutil.Normalize("Member One"): "channel-1",
+	})
+
+	labels := map[string]string{
+		"operation": "official_schedule_page",
+		"outcome":   "hit",
+		"reason":    "matched",
+	}
+	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+
+	streams, err := svc.FetchAllStreams(context.Background())
+	if err != nil {
+		t.Fatalf("FetchAllStreams() error = %v", err)
+	}
+	if len(streams) != 1 {
+		t.Fatalf("len(streams) = %d, want 1", len(streams))
+	}
+
+	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	if after != before+1 {
+		t.Fatalf("fallback metric delta = %v, want 1", after-before)
+	}
+}
+
+func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonStructureDrift(t *testing.T) {
+	html := `<div class="container"><div class="col-12"></div></div>`
+	svc := newTestScraper(t, html, nil)
+
+	labels := map[string]string{
+		"operation": "official_schedule_page",
+		"outcome":   "error",
+		"reason":    "structure_drift",
+	}
+	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+
+	_, err := svc.FetchAllStreams(context.Background())
+	if err == nil {
+		t.Fatal("FetchAllStreams() error = nil, want non-nil")
+	}
+
+	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	if after != before+1 {
+		t.Fatalf("fallback metric delta = %v, want 1", after-before)
+	}
+}
+
+func TestScraperFetchAllStreams_RecordsOfficialSchedulePageReasonParseError(t *testing.T) {
+	svc := &ScraperService{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       errorReadCloser{err: errors.New("broken html stream")},
+					Header:     make(http.Header),
+				}, nil
+			}),
+		},
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		baseURL: "https://example.invalid",
+	}
+
+	labels := map[string]string{
+		"operation": "official_schedule_page",
+		"outcome":   "error",
+		"reason":    "parse",
+	}
+	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+
+	_, err := svc.FetchAllStreams(context.Background())
+	if err == nil {
+		t.Fatal("FetchAllStreams() error = nil, want non-nil")
+	}
+
+	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	if after != before+1 {
+		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
 }
 
@@ -269,6 +489,167 @@ func TestScraperFetchChannel_FallbacksToOfficialOnYouTubeError(t *testing.T) {
 	}
 	if got := officialRequests.Load(); got != 1 {
 		t.Fatalf("official schedule requests = %d, want 1", got)
+	}
+}
+
+func TestScraperFetchChannel_RecordsOfficialFallbackReasonStructureDrift(t *testing.T) {
+	html := `<div class="container"><div class="col-12"></div></div>`
+	svc := newTestScraper(t, html, nil)
+	svc.cache = &cachemocks.Client{
+		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) {
+			return nil, false
+		},
+		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
+	}
+	svc.fetchUpcoming = func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
+		return nil, context.DeadlineExceeded
+	}
+
+	labels := map[string]string{
+		"operation": "channel_schedule",
+		"outcome":   "error",
+		"reason":    "structure_drift",
+	}
+	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+
+	_, err := svc.FetchChannel(context.Background(), "channel-1")
+	if err == nil {
+		t.Fatal("FetchChannel() error = nil, want non-nil")
+	}
+
+	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	if after != before+1 {
+		t.Fatalf("fallback metric delta = %v, want 1", after-before)
+	}
+}
+
+func TestScraperFetchChannel_RecordsOfficialFallbackReasonParseError(t *testing.T) {
+	svc := &ScraperService{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       errorReadCloser{err: errors.New("broken html stream")},
+					Header:     make(http.Header),
+				}, nil
+			}),
+		},
+		cache: &cachemocks.Client{
+			GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) {
+				return nil, false
+			},
+			SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
+		},
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		baseURL: "https://example.invalid",
+		fetchUpcoming: func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
+			return nil, context.DeadlineExceeded
+		},
+	}
+
+	labels := map[string]string{
+		"operation": "channel_schedule",
+		"outcome":   "error",
+		"reason":    "parse",
+	}
+	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+
+	_, err := svc.FetchChannel(context.Background(), "channel-1")
+	if err == nil {
+		t.Fatal("FetchChannel() error = nil, want non-nil")
+	}
+
+	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	if after != before+1 {
+		t.Fatalf("fallback metric delta = %v, want 1", after-before)
+	}
+}
+
+func TestScraperFetchChannel_RecordsOfficialFallbackReasonNetworkError(t *testing.T) {
+	svc := &ScraperService{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return nil, context.DeadlineExceeded
+			}),
+		},
+		cache: &cachemocks.Client{
+			GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) {
+				return nil, false
+			},
+			SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
+		},
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		baseURL: "https://example.invalid",
+		fetchUpcoming: func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
+			return nil, context.DeadlineExceeded
+		},
+	}
+
+	labels := map[string]string{
+		"operation": "channel_schedule",
+		"outcome":   "error",
+		"reason":    "network",
+	}
+	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+
+	_, err := svc.FetchChannel(context.Background(), "channel-1")
+	if err == nil {
+		t.Fatal("FetchChannel() error = nil, want non-nil")
+	}
+
+	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	if after != before+1 {
+		t.Fatalf("fallback metric delta = %v, want 1", after-before)
+	}
+}
+
+func TestScraperFetchChannel_RecordsOfficialFallbackReasonEmptyMiss(t *testing.T) {
+	html := `
+<div class="container">
+  <div class="col-12">
+    <div class="navbar-inverse">
+      <span class="holodule navbar-text">09/10 (Wed)</span>
+    </div>
+  </div>
+  <div class="col-12">
+    <a class="thumbnail" href="https://www.youtube.com/watch?v=video123">
+      <div class="datetime">12:34</div>
+      <div class="name">Other Member</div>
+    </a>
+  </div>
+</div>`
+
+	svc := newTestScraper(t, html, map[string]string{
+		stringutil.Normalize("Other Member"): "other-channel",
+	})
+	svc.cache = &cachemocks.Client{
+		GetStreamsFunc: func(context.Context, string) ([]*domain.Stream, bool) {
+			return nil, false
+		},
+		SetStreamsFunc: func(context.Context, string, []*domain.Stream, time.Duration) {},
+	}
+	svc.fetchUpcoming = func(context.Context, string) ([]*ytscraper.UpcomingEvent, error) {
+		return nil, context.DeadlineExceeded
+	}
+
+	labels := map[string]string{
+		"operation": "channel_schedule",
+		"outcome":   "miss",
+		"reason":    "empty",
+	}
+	before := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+
+	streams, err := svc.FetchChannel(context.Background(), "channel-1")
+	if err != nil {
+		t.Fatalf("FetchChannel() error = %v", err)
+	}
+	if len(streams) != 0 {
+		t.Fatalf("len(streams) = %d, want 0", len(streams))
+	}
+
+	after := counterValueByLabels(t, "hololive_holodex_official_schedule_fallback_total", labels)
+	if after != before+1 {
+		t.Fatalf("fallback metric delta = %v, want 1", after-before)
 	}
 }
 
