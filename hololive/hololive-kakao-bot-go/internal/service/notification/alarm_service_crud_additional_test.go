@@ -22,6 +22,7 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -33,7 +34,7 @@ import (
 
 func TestNewAlarmServiceAndCloseAllAlarmServices(t *testing.T) {
 	ctx := t.Context()
-	cacheSvc := newTestCacheService(t, ctx)
+	cacheSvc := newTestCacheService(ctx, t)
 
 	svc, err := NewAlarmService(
 		cacheSvc,
@@ -78,7 +79,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, added)
-	assertPlatformMappings(t, as, ctx, "ch-1", "chzzk-1", "miko_live")
+	assertPlatformMappings(ctx, t, as, "ch-1", "chzzk-1", "miko_live")
 
 	// 중복 등록은 false여야 한다.
 	added, err = as.AddAlarm(ctx, domain.AddAlarmRequest{
@@ -110,7 +111,7 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	removed, err := as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
 	require.NoError(t, err)
 	assert.True(t, removed)
-	assertPlatformMappings(t, as, ctx, "ch-1", "", "")
+	assertPlatformMappings(ctx, t, as, "ch-1", "", "")
 
 	removed, err = as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
 	require.NoError(t, err)
@@ -156,8 +157,8 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	count, err = as.ClearRoomAlarms(ctx, "room-1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
-	assertPlatformMappings(t, as, ctx, "ch-1", "", "")
-	assertPlatformMappings(t, as, ctx, "ch-2", "", "")
+	assertPlatformMappings(ctx, t, as, "ch-1", "", "")
+	assertPlatformMappings(ctx, t, as, "ch-2", "", "")
 
 	alarms, err := as.GetRoomAlarms(ctx, "room-1")
 	require.NoError(t, err)
@@ -172,7 +173,7 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	assert.Empty(t, channelRegistry)
 }
 
-func assertPlatformMappings(t *testing.T, as *AlarmService, ctx context.Context, channelID, wantChzzk, wantTwitchLogin string) {
+func assertPlatformMappings(ctx context.Context, t *testing.T, as *AlarmService, channelID, wantChzzk, wantTwitchLogin string) {
 	t.Helper()
 
 	chzzkMap, err := as.cache.HGetAll(ctx, ChzzkChannelMapKey)
@@ -193,34 +194,98 @@ func assertPlatformMappings(t *testing.T, as *AlarmService, ctx context.Context,
 	assert.Equal(t, channelID, twitchMap[wantTwitchLogin])
 }
 
-func TestAlarmService_SubmitPersistTaskAndWarmCache_NoRepository(t *testing.T) {
-	called := false
-	as := &AlarmService{logger: newDiscardAlarmLogger()}
-
-	as.submitPersistTask("persist_alarm", "room-1", func() {
-		called = true
-	})
-	assert.False(t, called)
-
-	require.NoError(t, as.WarmCacheFromDB(t.Context()))
-}
-
 func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 	as := newTestAlarmService(t)
+
 	as.alarmRepo = &sharedalarm.Repository{}
 
 	original := rebuildSubscriberCacheFromRepository
 	rebuildCalled := false
-	rebuildSubscriberCacheFromRepository = func(ctx context.Context, cacheSvc cache.Client, repo *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, cacheSvc cache.Client, repo *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
 		rebuildCalled = true
+
 		assert.Same(t, as.cache, cacheSvc)
 		assert.Same(t, as.alarmRepo, repo)
+
 		return sharedalarm.CacheWarmSummary{AlarmCount: 1, RoomCount: 1, ChannelCount: 1}, nil
 	}
+
 	t.Cleanup(func() {
 		rebuildSubscriberCacheFromRepository = original
 	})
 
 	require.NoError(t, as.WarmCacheFromDB(t.Context()))
 	assert.True(t, rebuildCalled)
+}
+
+func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
+	as := newTestAlarmService(t)
+
+	as.alarmRepo = &sharedalarm.Repository{}
+
+	original := rebuildSubscriberCacheFromRepository
+
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+		return sharedalarm.CacheWarmSummary{}, errors.New("repo load failed")
+	}
+
+	t.Cleanup(func() {
+		rebuildSubscriberCacheFromRepository = original
+	})
+
+	before := counterValueForLabels(t, alarmCacheRebuildMetricName, map[string]string{
+		"operation": "warm",
+		"result":    "error",
+	})
+
+	err := as.WarmCacheFromDB(t.Context())
+	require.Error(t, err)
+	assert.InDelta(t, before+1, counterValueForLabels(t, alarmCacheRebuildMetricName, map[string]string{
+		"operation": "warm",
+		"result":    "error",
+	}), 0.000001)
+}
+
+func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
+	as := newTestAlarmService(t)
+
+	as.alarmRepo = &sharedalarm.Repository{}
+
+	original := rebuildSubscriberCacheFromRepository
+
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+		return sharedalarm.CacheWarmSummary{
+			AlarmCount:   5,
+			RoomCount:    3,
+			ChannelCount: 2,
+		}, nil
+	}
+
+	t.Cleanup(func() {
+		rebuildSubscriberCacheFromRepository = original
+	})
+
+	beforeDurationCount := histogramCountForLabels(t, alarmCacheRebuildDurationMetricName, map[string]string{
+		"operation": "warm",
+		"result":    "ok",
+	})
+
+	require.NoError(t, as.WarmCacheFromDB(t.Context()))
+	assert.Equal(t, beforeDurationCount+1, histogramCountForLabels(t, alarmCacheRebuildDurationMetricName, map[string]string{
+		"operation": "warm",
+		"result":    "ok",
+	}))
+	assert.InDelta(t, 5.0, gaugeValueForLabels(t, alarmCacheRebuildLoadedMetricName, map[string]string{
+		"operation": "warm",
+		"resource":  "alarms",
+	}), 0.000001)
+	assert.InDelta(t, 3.0, gaugeValueForLabels(t, alarmCacheRebuildLoadedMetricName, map[string]string{
+		"operation": "warm",
+		"resource":  "rooms",
+	}), 0.000001)
+	assert.InDelta(t, 2.0, gaugeValueForLabels(t, alarmCacheRebuildLoadedMetricName, map[string]string{
+		"operation": "warm",
+		"resource":  "channels",
+	}), 0.000001)
 }

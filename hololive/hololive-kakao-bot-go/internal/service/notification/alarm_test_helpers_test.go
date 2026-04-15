@@ -66,8 +66,9 @@ func (m *mockMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member {
 }
 
 // newTestCacheService: 테스트용 miniredis 기반 캐시 서비스 생성.
-func newTestCacheService(t *testing.T, ctx context.Context) *cache.Service {
+func newTestCacheService(ctx context.Context, t *testing.T) *cache.Service {
 	t.Helper()
+
 	return sharedtestutil.NewTestCacheService(t, ctx)
 }
 
@@ -76,7 +77,7 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	t.Helper()
 
 	ctx := t.Context()
-	cacheSvc := newTestCacheService(t, ctx)
+	cacheSvc := newTestCacheService(ctx, t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	return &AlarmService{

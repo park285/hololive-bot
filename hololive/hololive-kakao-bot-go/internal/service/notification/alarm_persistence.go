@@ -25,103 +25,113 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
-var rebuildSubscriberCacheFromRepository = sharedalarm.RebuildSubscriberCacheFromRepository
-
-func (as *AlarmService) submitPersistTask(action, roomID string, task func()) {
-	if as.persistExecutor == nil {
-		if as.logger != nil {
-			as.logger.Error("Persist executor is not initialized",
-				slog.String("action", action),
-				slog.String("room_id", roomID),
-			)
-		}
-
-		return
+var (
+	rebuildSubscriberCacheFromRepository = sharedalarm.RebuildSubscriberCacheFromRepository
+	findRoomAlarmsFromRepository         = func(ctx context.Context, repo *sharedalarm.Repository, roomID string) ([]*domain.Alarm, error) {
+		return repo.FindByRoom(ctx, roomID)
 	}
+)
 
-	if err := as.persistExecutor.Submit(roomID, task); err != nil {
-		if errors.Is(err, errStripedExecutorSaturated) {
-			if as.logger != nil {
-				as.logger.Warn("Persist executor saturated, running task inline",
-					slog.String("action", action),
-					slog.String("room_id", roomID),
-				)
-			}
-
-			task()
-
-			return
-		}
-
-		if as.logger != nil {
-			as.logger.Warn("Failed to submit persist task to executor",
-				slog.String("action", action),
-				slog.String("room_id", roomID),
-				slog.Any("error", err),
-			)
-		}
-	}
-}
-
-func (as *AlarmService) persistAlarmAsync(alarm *domain.Alarm) {
+func (as *AlarmService) persistAlarm(ctx context.Context, alarm *domain.Alarm) error {
 	if as.alarmWriter == nil || alarm == nil {
-		return
+		return nil
 	}
 
-	as.submitPersistTask("persist_alarm", alarm.RoomID, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
-		defer cancel()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-		if err := as.alarmWriter.Add(ctx, alarm); err != nil {
-			as.logger.Warn("Failed to persist alarm to DB (async)",
-				slog.String("room_id", alarm.RoomID),
-				slog.String("channel_id", alarm.ChannelID),
-				slog.Any("error", err),
-			)
-		}
-	})
+	persistCtx, cancel := context.WithTimeout(ctx, alarmPersistTaskTimeout)
+	defer cancel()
+
+	if err := as.alarmWriter.Add(persistCtx, alarm); err != nil {
+		return fmt.Errorf("persist alarm: %w", err)
+	}
+
+	return nil
 }
 
-func (as *AlarmService) removeAlarmAsync(roomID, channelID string) {
+func (as *AlarmService) deleteAlarm(ctx context.Context, roomID, channelID string) error {
 	if as.alarmWriter == nil {
-		return
+		return nil
 	}
 
-	as.submitPersistTask("remove_alarm", roomID, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
-		defer cancel()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-		if err := as.alarmWriter.Remove(ctx, roomID, channelID); err != nil {
-			as.logger.Warn("Failed to remove alarm from DB (async)",
-				slog.String("room_id", roomID),
-				slog.String("channel_id", channelID),
-				slog.Any("error", err),
-			)
-		}
-	})
+	persistCtx, cancel := context.WithTimeout(ctx, alarmPersistTaskTimeout)
+	defer cancel()
+
+	if err := as.alarmWriter.Remove(persistCtx, roomID, channelID); err != nil {
+		return fmt.Errorf("delete alarm: %w", err)
+	}
+
+	return nil
 }
 
-func (as *AlarmService) clearRoomAlarmsAsync(roomID string) {
+func (as *AlarmService) deleteRoomAlarms(ctx context.Context, roomID string) error {
 	if as.alarmWriter == nil {
-		return
+		return nil
 	}
 
-	as.submitPersistTask("clear_room_alarms", roomID, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
-		defer cancel()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-		if _, err := as.alarmWriter.ClearByRoom(ctx, roomID); err != nil {
-			as.logger.Warn("Failed to clear room alarms from DB (async)",
-				slog.String("room_id", roomID),
-				slog.Any("error", err),
-			)
+	persistCtx, cancel := context.WithTimeout(ctx, alarmPersistTaskTimeout)
+	defer cancel()
+
+	if _, err := as.alarmWriter.ClearByRoom(persistCtx, roomID); err != nil {
+		return fmt.Errorf("delete room alarms: %w", err)
+	}
+
+	return nil
+}
+
+func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, operation string, mutationErr error) error {
+	if mutationErr == nil {
+		return nil
+	}
+
+	startedAt := time.Now()
+
+	var (
+		rebuildErr error
+		summary    sharedalarm.CacheWarmSummary
+	)
+
+	defer func() {
+		observeAlarmCacheRebuild(operation, rebuildErr)
+		observeAlarmCacheRebuildDuration(operation, startedAt, rebuildErr)
+
+		if rebuildErr == nil {
+			observeAlarmCacheRebuildLoaded(operation, summary.AlarmCount, summary.RoomCount, summary.ChannelCount)
 		}
-	})
+	}()
+
+	if as.alarmRepo == nil {
+		rebuildErr = mutationErr
+		return mutationErr
+	}
+
+	var err error
+
+	summary, err = rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepo)
+	if err != nil {
+		rebuildErr = err
+		return errors.Join(mutationErr, fmt.Errorf("rebuild subscriber cache from DB: %w", err))
+	}
+
+	rebuildErr = nil
+
+	return mutationErr
 }
 
 // 이 메서드는 앱 시작 시 한 번만 호출되며, 이후 런타임 중에는 Valkey만 사용한다.
@@ -131,10 +141,17 @@ func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 		return nil
 	}
 
+	startedAt := time.Now()
+
 	summary, err := rebuildSubscriberCacheFromRepository(ctx, as.cache, as.alarmRepo)
+	observeAlarmCacheRebuild("warm", err)
+	observeAlarmCacheRebuildDuration("warm", startedAt, err)
+
 	if err != nil {
 		return fmt.Errorf("rebuild subscriber cache from DB: %w", err)
 	}
+
+	observeAlarmCacheRebuildLoaded("warm", summary.AlarmCount, summary.RoomCount, summary.ChannelCount)
 
 	if summary.AlarmCount == 0 {
 		as.logger.Info("No alarms found in DB, cache warming skipped")
