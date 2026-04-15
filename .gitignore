@@ -125,6 +125,7 @@ CLAUDE_MD_ARCHITECTURE.md
 *_files.txt
 *_tests.txt
 *_no_tests.txt
+/hololive*_review*.md
 
 # ============================================
 # Personal/Draft Files
