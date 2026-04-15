@@ -1071,7 +1071,7 @@ func TestSendMilestoneAlerts_DoesNotMarkWhenAllRoomSendsFail(t *testing.T) {
 	}
 }
 
-func TestSendMilestoneAlerts_MarksOnlyNotificationsWithSuccessfulRoomSend(t *testing.T) {
+func TestSendMilestoneAlerts_DoesNotMarkMilestoneWhenAnyRoomFails(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := &mockTrackAllSubscribersRepo{
 		unnotifiedMilestones: []ytstats.MilestoneNotification{
@@ -1102,11 +1102,44 @@ func TestSendMilestoneAlerts_MarksOnlyNotificationsWithSuccessfulRoomSend(t *tes
 		t.Fatalf("SendMilestoneAlerts() error = %v", err)
 	}
 
-	if len(repo.markedMilestones) != 1 {
-		t.Fatalf("marked milestones = %d, want 1", len(repo.markedMilestones))
+	if len(repo.markedMilestones) != 0 {
+		t.Fatalf("marked milestones = %d, want 0", len(repo.markedMilestones))
 	}
-	if got := repo.markedMilestones[0]; got.ChannelID != "UC1" || got.Value != 100000 {
-		t.Fatalf("marked milestone = %+v, want UC1/100000", got)
+	if len(repo.markedApproaching) != 0 {
+		t.Fatalf("marked approaching = %d, want 0", len(repo.markedApproaching))
+	}
+}
+
+func TestSendMilestoneAlerts_DoesNotMarkApproachingWhenAnyRoomFails(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	repo := &mockTrackAllSubscribersRepo{
+		unnotifiedApproaching: []ytstats.ApproachingNotification{
+			{ChannelID: "UC2", MemberName: "B", MilestoneValue: 1000000, CurrentSubs: 990000},
+		},
+	}
+
+	scheduler := &schedulerImpl{
+		statsRepo: repo,
+		formatter: mockMilestoneFormatter{},
+		logger:    logger,
+		stopCh:    make(chan struct{}),
+	}
+
+	sendMessage := func(room, message string) error {
+		switch {
+		case room == "room-2" && message == "APPROACHING:B:100만:1만":
+			return nil
+		default:
+			return errors.New("send failed")
+		}
+	}
+
+	if err := scheduler.SendMilestoneAlerts(context.Background(), sendMessage, []string{"room-1", "room-2"}); err != nil {
+		t.Fatalf("SendMilestoneAlerts() error = %v", err)
+	}
+
+	if len(repo.markedMilestones) != 0 {
+		t.Fatalf("marked milestones = %d, want 0", len(repo.markedMilestones))
 	}
 	if len(repo.markedApproaching) != 0 {
 		t.Fatalf("marked approaching = %d, want 0", len(repo.markedApproaching))

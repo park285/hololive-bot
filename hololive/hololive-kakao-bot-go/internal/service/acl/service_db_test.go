@@ -1015,3 +1015,294 @@ func TestACLService_SyncRoomsToValkeyKeepsExistingRoomsOnSwapFailure(t *testing.
 		t.Fatalf("expected no temp keys after swap failure, got %v", tempKeys)
 	}
 }
+
+func TestACLService_SetEnabled_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
+	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+
+	svc, err := NewACLService(
+		t.Context(),
+		dbClient,
+		cacheMock,
+		slog.New(slog.DiscardHandler),
+		false,
+		ACLModeWhitelist,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewACLService error: %v", err)
+	}
+
+	if err := db.Callback().Update().Before("gorm:update").Register("acl_fail_enabled_update", func(tx *gorm.DB) {
+		if tx.Statement.Table == (Settings{}).TableName() {
+			_ = tx.AddError(errors.New("forced update failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register update callback: %v", err)
+	}
+
+	err = svc.SetEnabled(t.Context(), true)
+	if err == nil {
+		t.Fatal("expected SetEnabled error")
+	}
+
+	if !strings.Contains(err.Error(), "failed to save ACL enabled setting") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	enabled, _, _ := svc.GetACLStatus()
+	if enabled {
+		t.Fatal("expected in-memory enabled=false after DB failure")
+	}
+
+	var setting Settings
+	if err := db.Where("key = ?", dbKeyEnabled).First(&setting).Error; err != nil {
+		t.Fatalf("query enabled setting: %v", err)
+	}
+
+	if setting.Value != "false" {
+		t.Fatalf("enabled setting value=%q want=false", setting.Value)
+	}
+}
+
+func TestACLService_SetMode_DoesNotMutateMemoryOnDBFailure(t *testing.T) {
+	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+
+	svc, err := NewACLService(
+		t.Context(),
+		dbClient,
+		cacheMock,
+		slog.New(slog.DiscardHandler),
+		true,
+		ACLModeWhitelist,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewACLService error: %v", err)
+	}
+
+	if err := db.Callback().Update().Before("gorm:update").Register("acl_fail_mode_update", func(tx *gorm.DB) {
+		if tx.Statement.Table == (Settings{}).TableName() {
+			_ = tx.AddError(errors.New("forced update failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register update callback: %v", err)
+	}
+
+	err = svc.SetMode(t.Context(), ACLModeBlacklist)
+	if err == nil {
+		t.Fatal("expected SetMode error")
+	}
+
+	if !strings.Contains(err.Error(), "failed to save ACL mode setting") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	_, mode, _ := svc.GetACLStatus()
+	if mode != ACLModeWhitelist {
+		t.Fatalf("expected in-memory mode=whitelist after DB failure, got %s", mode)
+	}
+
+	var setting Settings
+	if err := db.Where("key = ?", dbKeyMode).First(&setting).Error; err != nil {
+		t.Fatalf("query mode setting: %v", err)
+	}
+
+	if setting.Value != "whitelist" {
+		t.Fatalf("mode setting value=%q want=whitelist", setting.Value)
+	}
+}
+
+func TestACLService_AddRoom_UsesCapturedModeForValkeySync(t *testing.T) {
+	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+
+	svc, err := NewACLService(
+		t.Context(),
+		dbClient,
+		cacheMock,
+		slog.New(slog.DiscardHandler),
+		true,
+		ACLModeWhitelist,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewACLService error: %v", err)
+	}
+
+	origSAdd := cacheMock.SAddFunc
+	var gotKey string
+	cacheMock.SAddFunc = func(ctx context.Context, key string, members []string) (int64, error) {
+		gotKey = key
+		return origSAdd(ctx, key, members)
+	}
+
+	if err := db.Callback().Create().After("gorm:create").Register("acl_switch_mode_after_add_room", func(tx *gorm.DB) {
+		if tx.Statement.Table != (Room{}).TableName() {
+			return
+		}
+
+		svc.mu.Lock()
+		svc.mode = ACLModeBlacklist
+		svc.mu.Unlock()
+	}); err != nil {
+		t.Fatalf("register create callback: %v", err)
+	}
+
+	added, err := svc.AddRoom(t.Context(), "room-x")
+	if err != nil {
+		t.Fatalf("AddRoom error: %v", err)
+	}
+
+	if !added {
+		t.Fatal("expected room to be added")
+	}
+
+	if gotKey != aclWhitelistRoomsKey {
+		t.Fatalf("cache key=%q want=%q", gotKey, aclWhitelistRoomsKey)
+	}
+}
+
+func TestACLService_RemoveRoom_UsesCapturedModeForValkeySync(t *testing.T) {
+	db, cacheMock, _ := newACLServiceWithSQLite(t)
+	dbClient := &dbmocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+
+	svc, err := NewACLService(
+		t.Context(),
+		dbClient,
+		cacheMock,
+		slog.New(slog.DiscardHandler),
+		true,
+		ACLModeWhitelist,
+		[]string{"room-x"},
+	)
+	if err != nil {
+		t.Fatalf("NewACLService error: %v", err)
+	}
+
+	origSRem := cacheMock.SRemFunc
+	var gotKey string
+	cacheMock.SRemFunc = func(ctx context.Context, key string, members []string) (int64, error) {
+		gotKey = key
+		return origSRem(ctx, key, members)
+	}
+
+	if err := db.Callback().Delete().After("gorm:delete").Register("acl_switch_mode_after_remove_room", func(tx *gorm.DB) {
+		if tx.Statement.Table != (Room{}).TableName() {
+			return
+		}
+
+		svc.mu.Lock()
+		svc.mode = ACLModeBlacklist
+		svc.mu.Unlock()
+	}); err != nil {
+		t.Fatalf("register delete callback: %v", err)
+	}
+
+	removed, err := svc.RemoveRoom(t.Context(), "room-x")
+	if err != nil {
+		t.Fatalf("RemoveRoom error: %v", err)
+	}
+
+	if !removed {
+		t.Fatal("expected room to be removed")
+	}
+
+	if gotKey != aclWhitelistRoomsKey {
+		t.Fatalf("cache key=%q want=%q", gotKey, aclWhitelistRoomsKey)
+	}
+}
+
+func TestACLService_LoadFromDatabase_ReturnsInitCreateError(t *testing.T) {
+	tests := []struct {
+		name    string
+		setupDB func(t *testing.T, db *gorm.DB)
+		wantErr string
+	}{
+		{
+			name: "enabled setting create failure",
+			setupDB: func(t *testing.T, db *gorm.DB) {
+				t.Helper()
+				createCalls := 0
+				if err := db.Callback().Create().Before("gorm:create").Register("acl_fail_init_enabled_create", func(tx *gorm.DB) {
+					if tx.Statement.Table != (Settings{}).TableName() {
+						return
+					}
+
+					if createCalls == 0 {
+						_ = tx.AddError(errors.New("forced enabled create failure"))
+					}
+
+					createCalls++
+				}); err != nil {
+					t.Fatalf("register create callback: %v", err)
+				}
+			},
+			wantErr: "failed to initialize ACL enabled setting",
+		},
+		{
+			name: "mode setting create failure",
+			setupDB: func(t *testing.T, db *gorm.DB) {
+				t.Helper()
+				createCalls := 0
+				if err := db.Callback().Create().Before("gorm:create").Register("acl_fail_init_mode_create", func(tx *gorm.DB) {
+					if tx.Statement.Table != (Settings{}).TableName() {
+						return
+					}
+
+					if createCalls == 1 {
+						_ = tx.AddError(errors.New("forced mode create failure"))
+					}
+
+					createCalls++
+				}); err != nil {
+					t.Fatalf("register create callback: %v", err)
+				}
+			},
+			wantErr: "failed to initialize ACL mode setting",
+		},
+		{
+			name: "room create failure",
+			setupDB: func(t *testing.T, db *gorm.DB) {
+				t.Helper()
+				if err := db.Callback().Create().Before("gorm:create").Register("acl_fail_init_room_create", func(tx *gorm.DB) {
+					if tx.Statement.Table == (Room{}).TableName() {
+						_ = tx.AddError(errors.New("forced room create failure"))
+					}
+				}); err != nil {
+					t.Fatalf("register create callback: %v", err)
+				}
+			},
+			wantErr: "failed to initialize ACL room",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			db, _, _ := newACLServiceWithSQLite(t)
+			tc.setupDB(t, db)
+
+			svc := &Service{
+				db: db,
+				cache: &cachemocks.Client{
+					SetFunc:  func(context.Context, string, any, time.Duration) error { return nil },
+					DelFunc:  func(context.Context, string) error { return nil },
+					SAddFunc: func(context.Context, string, []string) (int64, error) { return 0, nil },
+				},
+				logger:         slog.New(slog.DiscardHandler),
+				whitelistRooms: make(map[string]struct{}),
+				blacklistRooms: make(map[string]struct{}),
+			}
+
+			err := svc.loadFromDatabase(t.Context(), true, ACLModeWhitelist, []string{"room-a"})
+			if err == nil {
+				t.Fatal("expected loadFromDatabase error")
+			}
+
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error to contain %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
