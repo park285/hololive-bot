@@ -31,7 +31,6 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/llm"
 )
 
-
 func skipIfNoCliproxy(t *testing.T) {
 	t.Helper()
 	if os.Getenv("INTEGRATION_TEST") != "true" {
@@ -104,7 +103,6 @@ func newTestClient(t *testing.T, model string) *llm.OpenAIClient {
 		llm.WithChatCompletions(),
 	)
 }
-
 
 func TestIntegration_Summarize_RawJSON_GPT(t *testing.T) {
 	skipIfNoCliproxy(t)
@@ -224,7 +222,6 @@ func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 		t.Error("월간 요약에 졸업 멤버 沙花叉クロヱ 포함")
 	}
 }
-
 
 func TestIntegration_Summarize_RawJSON_GPT_WebSearch(t *testing.T) {
 	skipIfNoCliproxy(t)
@@ -357,7 +354,6 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 		t.Log("WARN: web_search 활성화했지만 추가 발견 섹션 없음")
 	}
 }
-
 
 // exaSearchContext: Exa MCP 검색 결과를 시뮬레이션한 참고 자료
 // 실제 운영에서는 Exa MCP 또는 REST API를 통해 동적으로 수집
@@ -555,7 +551,6 @@ func TestIntegration_Summarize_Monthly_ExaPlusWebSearch(t *testing.T) {
 		t.Logf("OK: Exa+web_search 병행으로 추가 이벤트 발견")
 	}
 }
-
 
 // exaFeb2026WithANIPLUS: 기존 exaFeb2026Context + ANIPLUS 한국 파트너 이벤트 추가
 const exaFeb2026WithANIPLUS = exaFeb2026Context + `
