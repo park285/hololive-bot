@@ -1,0 +1,86 @@
+[
+  {
+    "path": "hololive/hololive-dispatcher-go/cmd/dispatcher/main.go",
+    "must_contain": ["bootstrap.Run("]
+  },
+  {
+    "path": "hololive/hololive-kakao-bot-go/cmd/bot/main.go",
+    "must_contain": ["bootstrap.Run("]
+  },
+  {
+    "path": "hololive/hololive-kakao-bot-go/cmd/test_db_integration/main.go",
+    "must_contain": ["app.BuildDBIntegrationRuntime("]
+  },
+  {
+    "path": "hololive/hololive-kakao-bot-go/cmd/tools/fetch_profiles/main.go",
+    "must_contain": ["app.BuildFetchProfilesRuntime("]
+  },
+  {
+    "path": "hololive/hololive-kakao-bot-go/cmd/tools/verifyhash/main.go",
+    "must_contain": ["bcrypt.CompareHashAndPassword("]
+  },
+  {
+    "path": "hololive/hololive-kakao-bot-go/cmd/tools/warm_member_cache/main.go",
+    "must_contain": ["app.InitializeWarmMemberCache("]
+  },
+  {
+    "path": "hololive/hololive-llm-sched/cmd/llm-scheduler/main.go",
+    "must_contain": ["bootstrap.Run("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-alarm-sent-history/main.go",
+    "must_contain": ["reportcli.RunRequiredObservationReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-alarm-sent-history-dataset/main.go",
+    "must_contain": ["reportcli.RunRequiredObservationReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-channel-summary/main.go",
+    "must_contain": ["reportcli.RunWindowReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-continuous-observation-report/main.go",
+    "must_contain": ["collectContinuousObservationWithWait(", "writeContinuousObservationSnapshot("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-delivery-logs/main.go",
+    "must_contain": ["reportcli.RunOptionalObservationReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-latency-cause-report/main.go",
+    "must_contain": ["reportcli.RunOptionalObservationReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-latency-period-summary/main.go",
+    "must_contain": ["opsapp.CollectCommunityShortsLatencyPeriodReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-route-report/main.go",
+    "must_contain": ["reportcli.RunWindowReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-send-counts/main.go",
+    "must_contain": ["reportcli.RunOptionalObservationReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-send-state/main.go",
+    "must_contain": ["reportcli.RunRequiredObservationReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-target-baseline/main.go",
+    "must_contain": ["communityshorts.CollectTargetBaseline("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/ops/youtube-shorts-alarm-sent-history/main.go",
+    "must_contain": ["reportcli.RunRequiredObservationReport("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/runtime/stream-ingester/main.go",
+    "must_contain": ["bootstrap.Run("]
+  },
+  {
+    "path": "hololive/hololive-stream-ingester/cmd/runtime/youtube-scraper/main.go",
+    "must_contain": ["bootstrap.Run("]
+  }
+]

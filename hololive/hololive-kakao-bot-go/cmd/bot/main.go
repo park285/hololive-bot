@@ -21,16 +21,12 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/app"
 )
@@ -38,64 +34,26 @@ import (
 var Version = "dev"
 
 func main() {
-	// automaxprocs: 컨테이너 환경에서 CPU 할당량에 맞춰 GOMAXPROCS 자동 설정
-	automaxprocs.Init(nil)
-
-	// health 패키지 초기화 (버전/uptime 추적)
-	health.Init(Version)
-
-	// Graceful Shutdown을 위해 os.Exit 대신 exitCode 변수 사용
-	var exitCode int
-
-	defer func() {
-		os.Exit(exitCode)
-	}()
-
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-
-		exitCode = 1
-
-		return
-	}
-
-	// slog 기반 로거 초기화 (stdout + file mirror when LOG_DIR is set)
-
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
-		Dir:        cfg.Logging.Dir,
-		MaxSizeMB:  cfg.Logging.MaxSizeMB,
-		MaxBackups: cfg.Logging.MaxBackups,
-		MaxAgeDays: cfg.Logging.MaxAgeDays,
-		Compress:   cfg.Logging.Compress,
-	}, "bot.log", cfg.Logging.Level)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-
-		exitCode = 1
-
-		return
-	}
-
-	logger.Info("Hololive KakaoTalk Bot starting...",
-		slog.String("version", Version),
-		slog.String("log_level", cfg.Logging.Level),
-	)
-
-	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
-	runtime, err := app.BuildRuntime(buildCtx, cfg, logger)
-
-	buildCancel()
-
-	if err != nil {
-		logger.Error("Failed to assemble application services", slog.Any("error", err))
-
-		exitCode = 1
-
-		return
-	}
-
-	defer runtime.Close()
-
-	runtime.Run()
+	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *app.BotRuntime]{
+		Version:                Version,
+		LoadConfig:             config.Load,
+		LoadConfigErrorMessage: "Failed to load config",
+		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
+			return sharedlogging.Config{
+				Dir:        cfg.Logging.Dir,
+				MaxSizeMB:  cfg.Logging.MaxSizeMB,
+				MaxBackups: cfg.Logging.MaxBackups,
+				MaxAgeDays: cfg.Logging.MaxAgeDays,
+				Compress:   cfg.Logging.Compress,
+			}
+		},
+		LoggerFileName: "bot.log",
+		LoggerLevel: func(cfg *config.Config) string {
+			return cfg.Logging.Level
+		},
+		StartupMessage:    "Hololive KakaoTalk Bot starting...",
+		BuildTimeout:      constants.AppTimeout.Build,
+		BuildRuntime:      app.BuildRuntime,
+		BuildErrorMessage: "Failed to assemble application services",
+	}))
 }
