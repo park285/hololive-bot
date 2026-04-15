@@ -5,6 +5,7 @@ json
 jsonutil
 logging
 runtime/automaxprocs
+runtime/bootstrap
 runtime/lifecycle
 stringutil
 telemetry

@@ -25,7 +25,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/app"
@@ -35,7 +37,11 @@ var Version = "dev"
 
 func main() {
 	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *app.BotRuntime]{
-		Version:                Version,
+		Version: Version,
+		Initialize: func(version string) {
+			automaxprocs.Init(nil)
+			health.Init(version)
+		},
 		LoadConfig:             config.Load,
 		LoadConfigErrorMessage: "Failed to load config",
 		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
