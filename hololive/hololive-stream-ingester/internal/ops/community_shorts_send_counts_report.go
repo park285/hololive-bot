@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 type CommunityShortsSendCountQueryMode string
@@ -138,25 +135,35 @@ func CollectCommunityShortsSendCountReportWithOptions(
 		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: %w", err)
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: provide database resources: %w", err)
+		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	db := databaseResources.Service.GetGormDB()
-	telemetryRepo := outbox.NewDeliveryTelemetryRepository(db)
+	return collectCommunityShortsSendCountReportWithSession(ctx, session, query, now)
+}
 
+func collectCommunityShortsSendCountReportWithSession(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsSendCountQuery,
+	now time.Time,
+) (CommunityShortsSendCountReport, error) {
+	if session == nil {
+		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: session is nil")
+	}
+
+	var err error
 	var sendCountRows []outbox.PostSendCount
 	var timelineRows []outbox.PostDeliveryTimeline
 	switch query.Mode {
 	case communityShortsSendCountQueryModeObservation:
-		observationRepository := trackingrepo.NewRepository(db)
 		state, stateErr := resolveCommunityShortsObservationQueryState(
 			ctx,
-			observationRepository,
+			session.trackingRepository,
 			query.ObservationRuntimeName,
 			*query.ObservationBigBangCutoverAt,
 			now,
@@ -175,11 +182,11 @@ func CollectCommunityShortsSendCountReportWithOptions(
 		query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
 
 		if state.Finalized {
-			sendCountRows, err = telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+			sendCountRows, err = session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 			if err != nil {
 				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window send counts: %w", err)
 			}
-			timelineRows, err = telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+			timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 			if err != nil {
 				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window delivery timelines: %w", err)
 			}
@@ -187,164 +194,27 @@ func CollectCommunityShortsSendCountReportWithOptions(
 		}
 
 		if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
-			sendCountRows, err = telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+			sendCountRows, err = session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 			if err != nil {
 				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list active observation-window send counts: %w", err)
 			}
-			timelineRows, err = telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+			timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
 			if err != nil {
 				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list active observation-window delivery timelines: %w", err)
 			}
 		}
 	default:
-		sendCountRows, err = telemetryRepo.ListPostSendCountsSince(ctx, *query.WindowStart)
+		sendCountRows, err = session.telemetryRepo.ListPostSendCountsSince(ctx, *query.WindowStart)
 		if err != nil {
 			return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list post send counts: %w", err)
 		}
-		timelineRows, err = telemetryRepo.ListPostDeliveryTimelinesSince(ctx, *query.WindowStart)
+		timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesSince(ctx, *query.WindowStart)
 		if err != nil {
 			return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list post delivery timelines: %w", err)
 		}
 	}
 
 	return BuildCommunityShortsSendCountReportWithQuery(sendCountRows, timelineRows, query, now), nil
-}
-
-func BuildCommunityShortsSendCountReport(
-	sendCountRows []outbox.PostSendCount,
-	timelineRows []outbox.PostDeliveryTimeline,
-	generatedAt time.Time,
-	since time.Time,
-) CommunityShortsSendCountReport {
-	query := CommunityShortsSendCountQuery{
-		Mode:        communityShortsSendCountQueryModeRecent,
-		WindowStart: cloneCommunityShortsSendCountTime(&since),
-		WindowEnd:   cloneCommunityShortsSendCountTime(&generatedAt),
-	}
-	return BuildCommunityShortsSendCountReportWithQuery(sendCountRows, timelineRows, query, generatedAt)
-}
-
-func BuildCommunityShortsSendCountReportWithQuery(
-	sendCountRows []outbox.PostSendCount,
-	timelineRows []outbox.PostDeliveryTimeline,
-	query CommunityShortsSendCountQuery,
-	generatedAt time.Time,
-) CommunityShortsSendCountReport {
-	generatedAt = normalizeCommunityShortsSendCountTime(generatedAt)
-	if generatedAt.IsZero() {
-		generatedAt = time.Now().UTC()
-	}
-	query = normalizeCommunityShortsSendCountQuery(query)
-	if query.Mode == "" {
-		query.Mode = communityShortsSendCountQueryModeRecent
-	}
-	if query.WindowEnd == nil {
-		query.WindowEnd = cloneCommunityShortsSendCountTime(&generatedAt)
-	}
-
-	timelineIndex := make(map[communityShortsSendCountKey]outbox.PostDeliveryTimeline, len(timelineRows))
-	for i := range timelineRows {
-		timeline := normalizeCommunityShortsDeliveryTimeline(timelineRows[i])
-		key := buildCommunityShortsSendCountKey(timeline.ChannelID, timeline.AlarmType, timeline.ContentID)
-		if key.contentID == "" {
-			continue
-		}
-		timelineIndex[key] = timeline
-	}
-
-	normalizedRows := make([]CommunityShortsSendCountRow, 0, len(sendCountRows))
-	summary := CommunityShortsSendCountSummary{}
-	for i := range sendCountRows {
-		row := CommunityShortsSendCountRow{PostSendCount: normalizeCommunityShortsPostSendCount(sendCountRows[i])}
-		row.ReportAlarmType = row.AlarmType
-		row.ReportChannelID = row.ChannelID
-		row.ReportPostID = resolveCommunityShortsSendCountPostID(row)
-		row.ReportActualPublishedAt = cloneCommunityShortsSendCountTime(row.ActualPublishedAt)
-		row.ReportAlarmSentAt = resolveCommunityShortsSendCountAlarmSentAt(row)
-		row.ReportDelaySeconds = buildCommunityShortsSendCountDelaySeconds(
-			row.AlarmLatencyMillis,
-			row.ReportActualPublishedAt,
-			row.ReportAlarmSentAt,
-		)
-		if timeline, ok := timelineIndex[buildCommunityShortsSendCountKey(row.ChannelID, row.AlarmType, row.ContentID)]; ok {
-			row.PublishToDetectMillis = cloneCommunityShortsSendCountInt64(timeline.PublishToDetectMillis)
-			row.DelaySource = timeline.DelaySource
-			row.QueueWaitMillis = cloneCommunityShortsSendCountInt64(timeline.QueueWaitMillis)
-			row.RetryAccumulationMillis = cloneCommunityShortsSendCountInt64(timeline.RetryAccumulationMillis)
-			row.JobFailureDetected = timeline.JobFailureDetected
-			row.InternalDelayCause = timeline.InternalDelayCause
-			row.LatencyClassification = cloneCommunityShortsLatencyClassification(timeline.LatencyClassification)
-		}
-		if row.DelaySource == "" {
-			row.DelaySource = outbox.PostDelaySourceNone
-		}
-		if row.InternalDelayCause == "" {
-			row.InternalDelayCause = outbox.PostInternalDelayCauseNone
-		}
-
-		normalizedRows = append(normalizedRows, row)
-		summary.PostCount++
-		if row.SuccessSendCount > 0 {
-			summary.SuccessfulPostCount++
-		} else {
-			summary.ZeroSuccessPostCount++
-		}
-		if row.DuplicateSuccessCount > 0 {
-			summary.DuplicateSuccessPostCount++
-		}
-		if row.FailedAttemptCount > 0 {
-			summary.FailedAttemptPostCount++
-		}
-		if row.OutboxCount == 0 {
-			summary.OutboxMissingPostCount++
-		}
-		switch row.DelaySource {
-		case outbox.PostDelaySourceExternalCollection:
-			summary.ExternalCollectionSourcePostCount++
-		case outbox.PostDelaySourceInternalDelivery:
-			summary.InternalDeliverySourcePostCount++
-		case outbox.PostDelaySourceMixed:
-			summary.MixedDelaySourcePostCount++
-		}
-		switch row.InternalDelayCause {
-		case outbox.PostInternalDelayCauseQueueWait:
-			summary.QueueWaitCausePostCount++
-		case outbox.PostInternalDelayCauseRetryAccumulation:
-			summary.RetryAccumulationCausePostCount++
-		case outbox.PostInternalDelayCauseJobFailure:
-			summary.JobFailureCausePostCount++
-		}
-	}
-
-	sort.SliceStable(normalizedRows, func(i, j int) bool {
-		left := communityShortsSendCountSortTime(normalizedRows[i])
-		right := communityShortsSendCountSortTime(normalizedRows[j])
-		if !left.Equal(right) {
-			return left.After(right)
-		}
-		if normalizedRows[i].AlarmType != normalizedRows[j].AlarmType {
-			return normalizedRows[i].AlarmType < normalizedRows[j].AlarmType
-		}
-		if normalizedRows[i].ChannelID != normalizedRows[j].ChannelID {
-			return normalizedRows[i].ChannelID < normalizedRows[j].ChannelID
-		}
-		if normalizedRows[i].PostID != normalizedRows[j].PostID {
-			return normalizedRows[i].PostID < normalizedRows[j].PostID
-		}
-		return normalizedRows[i].ContentID < normalizedRows[j].ContentID
-	})
-
-	windowStart := normalizeCommunityShortsSendCountTimePtrValue(query.WindowStart)
-	windowEnd := normalizeCommunityShortsSendCountTimePtrValue(query.WindowEnd)
-	return CommunityShortsSendCountReport{
-		GeneratedAt:  generatedAt,
-		Query:        query,
-		WindowStart:  windowStart,
-		WindowEnd:    windowEnd,
-		Summary:      summary,
-		Verification: buildCommunityShortsSendCountVerification(summary),
-		Rows:         normalizedRows,
-	}
 }
 
 func normalizeCommunityShortsSendCountCollectOptions(
@@ -386,93 +256,4 @@ func normalizeCommunityShortsSendCountCollectOptions(
 		WindowStart: cloneCommunityShortsSendCountTime(&since),
 		WindowEnd:   cloneCommunityShortsSendCountTime(&now),
 	}, nil
-}
-
-func buildCommunityShortsSendCountKey(channelID string, alarmType domain.AlarmType, contentID string) communityShortsSendCountKey {
-	return communityShortsSendCountKey{
-		channelID: strings.TrimSpace(channelID),
-		alarmType: alarmType,
-		contentID: strings.TrimSpace(contentID),
-	}
-}
-
-func normalizeCommunityShortsPostSendCount(row outbox.PostSendCount) outbox.PostSendCount {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.ActualPublishedAt = cloneCommunityShortsSendCountTime(row.ActualPublishedAt)
-	row.DetectedAt = cloneCommunityShortsSendCountTime(row.DetectedAt)
-	row.AlarmSentAt = cloneCommunityShortsSendCountTime(row.AlarmSentAt)
-	row.FirstEventAt = cloneCommunityShortsSendCountTime(row.FirstEventAt)
-	row.LastEventAt = cloneCommunityShortsSendCountTime(row.LastEventAt)
-	row.FirstSuccessAt = cloneCommunityShortsSendCountTime(row.FirstSuccessAt)
-	row.LastSuccessAt = cloneCommunityShortsSendCountTime(row.LastSuccessAt)
-	return row
-}
-
-func normalizeCommunityShortsDeliveryTimeline(row outbox.PostDeliveryTimeline) outbox.PostDeliveryTimeline {
-	row.ChannelID = strings.TrimSpace(row.ChannelID)
-	row.PostID = strings.TrimSpace(row.PostID)
-	row.ContentID = strings.TrimSpace(row.ContentID)
-	row.PublishToDetectMillis = cloneCommunityShortsSendCountInt64(row.PublishToDetectMillis)
-	if row.DelaySource == "" {
-		row.DelaySource = outbox.PostDelaySourceNone
-	}
-	row.QueueWaitMillis = cloneCommunityShortsSendCountInt64(row.QueueWaitMillis)
-	row.RetryAccumulationMillis = cloneCommunityShortsSendCountInt64(row.RetryAccumulationMillis)
-	if row.InternalDelayCause == "" {
-		row.InternalDelayCause = outbox.PostInternalDelayCauseNone
-	}
-	row.LatencyClassification = cloneCommunityShortsLatencyClassification(row.LatencyClassification)
-	return row
-}
-
-func normalizeCommunityShortsSendCountQuery(query CommunityShortsSendCountQuery) CommunityShortsSendCountQuery {
-	query.Mode = CommunityShortsSendCountQueryMode(strings.TrimSpace(string(query.Mode)))
-	query.WindowStart = cloneCommunityShortsSendCountTime(query.WindowStart)
-	query.WindowEnd = cloneCommunityShortsSendCountTime(query.WindowEnd)
-	query.ObservationRuntimeName = strings.TrimSpace(query.ObservationRuntimeName)
-	query.ObservationBigBangCutoverAt = cloneCommunityShortsSendCountTime(query.ObservationBigBangCutoverAt)
-	return query
-}
-
-func communityShortsSendCountSortTime(row CommunityShortsSendCountRow) time.Time {
-	for _, candidate := range []*time.Time{row.LastSuccessAt, row.LastEventAt, row.AlarmSentAt, row.ActualPublishedAt, row.DetectedAt} {
-		if candidate != nil {
-			return candidate.UTC()
-		}
-	}
-	return time.Time{}
-}
-
-func resolveCommunityShortsSendCountAlarmSentAt(row CommunityShortsSendCountRow) *time.Time {
-	for _, candidate := range []*time.Time{row.AlarmSentAt, row.FirstSuccessAt, row.LastSuccessAt} {
-		if candidate != nil {
-			return cloneCommunityShortsSendCountTime(candidate)
-		}
-	}
-	return nil
-}
-
-func resolveCommunityShortsSendCountPostID(row CommunityShortsSendCountRow) string {
-	if strings.TrimSpace(row.PostID) != "" {
-		return strings.TrimSpace(row.PostID)
-	}
-	return strings.TrimSpace(row.ContentID)
-}
-
-func buildCommunityShortsSendCountDelaySeconds(
-	latencyMillis *int64,
-	actualPublishedAt *time.Time,
-	alarmSentAt *time.Time,
-) *float64 {
-	if latencyMillis != nil {
-		seconds := float64(*latencyMillis) / float64(time.Second/time.Millisecond)
-		return &seconds
-	}
-	if actualPublishedAt == nil || alarmSentAt == nil {
-		return nil
-	}
-	seconds := alarmSentAt.UTC().Sub(actualPublishedAt.UTC()).Seconds()
-	return &seconds
 }
