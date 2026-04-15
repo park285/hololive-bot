@@ -21,34 +21,13 @@
 package app
 
 import (
-	"context"
-	"log/slog"
-	"os"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
 )
 
 func (r *BotRuntime) Run() {
-	_ = lifecycle.Run(lifecycle.Options{
-		ShutdownTimeout: constants.AppTimeout.Shutdown,
-		Start: func(ctx context.Context, errCh chan<- error) {
-			r.Start(ctx, errCh)
-			r.Logger.Info("Bot started, waiting for signals...")
-		},
-		OnSignal: func(sig os.Signal) {
-			r.Logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
-		},
-		OnError: func(err error) {
-			r.Logger.Error("Server error", slog.Any("error", err))
-		},
-		BeforeShutdown: func() {
-			r.Logger.Info("Shutting down gracefully...")
-		},
-		Shutdown: func(ctx context.Context) error {
-			r.Shutdown(ctx)
-			return nil
-		},
-	})
-	r.Logger.Info("Shutdown complete")
+	if r == nil {
+		return
+	}
+
+	appruntime.Run(r.Logger, r.Start, r.Shutdown)
 }

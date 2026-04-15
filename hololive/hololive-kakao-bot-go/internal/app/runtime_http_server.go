@@ -22,39 +22,22 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"log/slog"
-	"net/http"
+
+	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
 )
 
 func (r *BotRuntime) StartHTTPServer(errCh chan<- error) {
-	if r == nil || r.HttpServer == nil {
+	if r == nil {
 		return
 	}
 
-	go func() {
-		if err := r.HttpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			if errCh != nil {
-				errCh <- fmt.Errorf("HTTP server error: %w", err)
-				return
-			}
-
-			if r.Logger != nil {
-				r.Logger.Error("HTTP server error", slog.Any("error", err))
-			}
-		}
-	}()
+	appruntime.StartHTTPServer(r.HttpServer, r.Logger, errCh)
 }
 
 func (r *BotRuntime) ShutdownHTTPServer(ctx context.Context) error {
-	if r == nil || r.HttpServer == nil {
+	if r == nil {
 		return nil
 	}
 
-	if err := r.HttpServer.Shutdown(ctx); err != nil {
-		return fmt.Errorf("HTTP server shutdown failed: %w", err)
-	}
-
-	return nil
+	return appruntime.ShutdownHTTPServer(r.HttpServer, ctx)
 }

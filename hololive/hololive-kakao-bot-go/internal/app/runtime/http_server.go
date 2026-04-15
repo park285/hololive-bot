@@ -18,39 +18,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package app
+package runtime
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
-
-	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
-
-	appwiring "github.com/kapu/hololive-kakao-bot-go/internal/app/wiring"
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
+	"net/http"
 )
 
-type Container struct {
-	Config *config.Config
-	Logger *slog.Logger
-
-	botDeps *bot.Dependencies
-	lifecycle.Managed
-}
-
-func Build(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Container, error) {
-	built, err := appwiring.BuildContainer(ctx, cfg, logger, appwiring.BuildHooks{
-		InitializeBotDependencies: InitializeBotDependencies,
-	})
-	if err != nil {
-		return nil, err
+func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
+	if server == nil {
+		return
 	}
 
-	return &Container{
-		Config:  cfg,
-		Logger:  logger,
-		botDeps: built.BotDependencies,
-		Managed: lifecycle.NewManaged(built.Cleanup),
-	}, nil
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if errCh != nil {
+				errCh <- fmt.Errorf("HTTP server error: %w", err)
+				return
+			}
+
+			if logger != nil {
+				logger.Error("HTTP server error", slog.Any("error", err))
+			}
+		}
+	}()
+}
+
+func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
+	if server == nil {
+		return nil
+	}
+
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("HTTP server shutdown failed: %w", err)
+	}
+
+	return nil
 }
