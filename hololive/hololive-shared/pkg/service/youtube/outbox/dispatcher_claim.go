@@ -41,7 +41,7 @@ func (d *Dispatcher) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTu
 	if d == nil || d.db == nil {
 		return nil, nil
 	}
-	if d.db.Dialector != nil && d.db.Dialector.Name() == "sqlite" {
+	if d.db.Dialector != nil && d.db.Name() == "sqlite" {
 		return d.fetchAndLockForPerRoomSQLite(ctx)
 	}
 
@@ -288,7 +288,7 @@ func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Conte
 	}
 
 	sentAt := canonicalSentAtNow()
-	return d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		marks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
 		if err != nil {
 			return fmt.Errorf("load sent-state recovery marks: %w", err)
@@ -310,7 +310,11 @@ func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Conte
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)
+	}
+
+	return nil
 }
 
 func collectDeliveryOutboxIDs(rows []domain.YouTubeNotificationDelivery) []int64 {

@@ -236,5 +236,5 @@ func dialectName(db *gorm.DB) string {
 	if db == nil || db.Dialector == nil {
 		return ""
 	}
-	return db.Dialector.Name()
+	return db.Name()
 }

@@ -39,7 +39,12 @@ import (
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	resp, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("round trip: %w", err)
+	}
+
+	return resp, nil
 }
 
 func httpResponse(status int, body string) *http.Response {
@@ -298,12 +303,15 @@ func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
 	if !errors.As(err, &apiErr) {
 		t.Fatalf("expected APIError, got %T %v", err, err)
 	}
+
 	if apiErr.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status=%d want=%d", apiErr.StatusCode, http.StatusUnauthorized)
 	}
+
 	if tokenCalls != 2 {
 		t.Fatalf("tokenCalls=%d want=2", tokenCalls)
 	}
+
 	if streamCalls != 2 {
 		t.Fatalf("streamCalls=%d want=2", streamCalls)
 	}
@@ -311,9 +319,10 @@ func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
 
 func TestNewClient_UsesProvidedHTTPClient(t *testing.T) {
 	provided := &http.Client{Timeout: 2 * time.Second}
+
 	client := NewClient(ClientConfig{ClientID: "id", ClientSecret: "secret", HTTPClient: provided}, newTestLogger())
 	if client.httpClient != provided {
-		t.Fatalf("httpClient pointer mismatch")
+		t.Fatal("httpClient pointer mismatch")
 	}
 }
 
@@ -322,25 +331,32 @@ func TestNewClient_UsesSharedHTTPClientWhenConfigOmitsOne(t *testing.T) {
 	if client.httpClient == nil {
 		t.Fatal("httpClient is nil")
 	}
+
 	if client.httpClient.Timeout != constants.TwitchConfig.Timeout {
 		t.Fatalf("timeout=%s want=%s", client.httpClient.Timeout, constants.TwitchConfig.Timeout)
 	}
+
 	transport, ok := client.httpClient.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("transport type = %T, want *http.Transport", client.httpClient.Transport)
 	}
+
 	shared := httputil.NewExternalAPIClient(constants.TwitchConfig.Timeout)
+
 	sharedTransport, ok := shared.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("shared transport type = %T, want *http.Transport", shared.Transport)
 	}
+
 	if transport.MaxConnsPerHost != sharedTransport.MaxConnsPerHost {
 		t.Fatalf("MaxConnsPerHost=%d want=%d", transport.MaxConnsPerHost, sharedTransport.MaxConnsPerHost)
 	}
+
 	if transport.MaxIdleConnsPerHost != sharedTransport.MaxIdleConnsPerHost {
 		t.Fatalf("MaxIdleConnsPerHost=%d want=%d", transport.MaxIdleConnsPerHost, sharedTransport.MaxIdleConnsPerHost)
 	}
 }
+
 func TestClient_GetStreams_ErrorStatusBranches(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -3,7 +3,7 @@ package outbox
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -138,9 +138,7 @@ func (r *DeliveryTelemetryRepository) FetchAndLockPending(ctx context.Context, b
 	for i := range candidates {
 		candidateIDs = append(candidateIDs, candidates[i].ID)
 	}
-	sort.Slice(candidateIDs, func(i, j int) bool {
-		return candidateIDs[i] < candidateIDs[j]
-	})
+	slices.Sort(candidateIDs)
 
 	if err := r.db.WithContext(ctx).
 		Model(&domain.YouTubeNotificationDeliveryTelemetry{}).
@@ -270,6 +268,29 @@ func (r *DeliveryTelemetryRepository) BackfillFromDelivery(ctx context.Context, 
 		return 0, nil
 	}
 
+	candidates, err := r.loadBackfillCandidates(ctx, limit, since)
+	if err != nil {
+		return 0, err
+	}
+	events := buildBackfillEvents(candidates)
+	if len(events) == 0 {
+		return 0, nil
+	}
+	if err := r.Enqueue(ctx, events); err != nil {
+		return 0, err
+	}
+	if err := r.PersistPostLatencyClassificationsByOutboxIDs(ctx, collectTelemetryOutboxIDs(events)); err != nil {
+		return 0, fmt.Errorf("persist backfilled post latency classifications: %w", err)
+	}
+
+	return len(events), nil
+}
+
+func (r *DeliveryTelemetryRepository) loadBackfillCandidates(
+	ctx context.Context,
+	limit int,
+	since time.Time,
+) ([]deliveryTelemetryBackfillCandidate, error) {
 	var candidates []deliveryTelemetryBackfillCandidate
 	query := r.db.WithContext(ctx).
 		Table("youtube_notification_delivery AS d").
@@ -300,75 +321,82 @@ func (r *DeliveryTelemetryRepository) BackfillFromDelivery(ctx context.Context, 
 	query = query.Order("COALESCE(d.sent_at, d.locked_at, d.created_at) ASC").
 		Limit(limit)
 	if err := query.Scan(&candidates).Error; err != nil {
-		return 0, fmt.Errorf("backfill delivery telemetry candidates: %w", err)
-	}
-	if len(candidates) == 0 {
-		return 0, nil
+		return nil, fmt.Errorf("backfill delivery telemetry candidates: %w", err)
 	}
 
+	return candidates, nil
+}
+
+func buildBackfillEvents(candidates []deliveryTelemetryBackfillCandidate) []domain.YouTubeNotificationDeliveryTelemetry {
 	events := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(candidates))
 	for i := range candidates {
-		candidate := candidates[i]
-		attemptOrdinal := candidate.AttemptCount
-		sendResult := "failure"
-		failureReason := strings.TrimSpace(candidate.DeliveryError)
-		if candidate.Status == domain.OutboxStatusSent {
-			attemptOrdinal = candidate.AttemptCount + 1
-			sendResult = "success"
-			failureReason = ""
-		}
-		if attemptOrdinal <= 0 {
+		event, ok := buildBackfillEvent(candidates[i])
+		if !ok {
 			continue
 		}
-
-		eventAt := candidate.DeliveryCreatedAt.UTC()
-		if candidate.DeliverySentAt != nil {
-			eventAt = candidate.DeliverySentAt.UTC()
-		} else if candidate.DeliveryLockedAt != nil {
-			eventAt = candidate.DeliveryLockedAt.UTC()
-		}
-
-		dedupeKey, dedupeErr := domain.BuildYouTubeNotificationDedupeKey(candidate.Kind, candidate.ContentID)
-		if dedupeErr != nil {
-			dedupeKey = dedupeKeyLogValue(domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
-		}
-		postID := resolveTelemetryPostID(candidate.Kind, candidate.ContentID, candidate.Payload)
-
-		attemptStartedAt := cloneUTCTimePtr(candidate.DeliveryLockedAt)
-		attemptFinishedAt := eventAt
-
-		events = append(events, domain.YouTubeNotificationDeliveryTelemetry{
-			DeliveryID:        candidate.DeliveryID,
-			AttemptOrdinal:    attemptOrdinal,
-			OutboxID:          candidate.OutboxID,
-			ChannelID:         candidate.ChannelID,
-			ContentID:         candidate.ContentID,
-			PostID:            postID,
-			RoomID:            candidate.RoomID,
-			AlarmType:         candidate.Kind.ToAlarmType(),
-			DedupeKey:         dedupeKey,
-			DeliveryPath:      communityShortsDeliveryPath,
-			DeliveryMode:      "recovered",
-			SendResult:        sendResult,
-			FailureReason:     truncateString(failureReason, 100),
-			AttemptStartedAt:  attemptStartedAt,
-			AttemptFinishedAt: &attemptFinishedAt,
-			EventAt:           eventAt,
-			NextAttemptAt:     time.Now().UTC(),
-		})
+		events = append(events, *event)
 	}
 
-	if len(events) == 0 {
-		return 0, nil
-	}
-	if err := r.Enqueue(ctx, events); err != nil {
-		return 0, err
-	}
-	if err := r.PersistPostLatencyClassificationsByOutboxIDs(ctx, collectTelemetryOutboxIDs(events)); err != nil {
-		return 0, fmt.Errorf("persist backfilled post latency classifications: %w", err)
+	return events
+}
+
+func buildBackfillEvent(candidate deliveryTelemetryBackfillCandidate) (*domain.YouTubeNotificationDeliveryTelemetry, bool) {
+	attemptOrdinal, sendResult, failureReason := backfillAttemptMetadata(candidate)
+	if attemptOrdinal <= 0 {
+		return nil, false
 	}
 
-	return len(events), nil
+	eventAt := backfillCandidateEventAt(candidate)
+	dedupeKey, dedupeErr := domain.BuildYouTubeNotificationDedupeKey(candidate.Kind, candidate.ContentID)
+	if dedupeErr != nil {
+		dedupeKey = dedupeKeyLogValue(domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
+	}
+	attemptStartedAt := cloneUTCTimePtr(candidate.DeliveryLockedAt)
+	attemptFinishedAt := eventAt
+
+	return &domain.YouTubeNotificationDeliveryTelemetry{
+		DeliveryID:        candidate.DeliveryID,
+		AttemptOrdinal:    attemptOrdinal,
+		OutboxID:          candidate.OutboxID,
+		ChannelID:         candidate.ChannelID,
+		ContentID:         candidate.ContentID,
+		PostID:            resolveTelemetryPostID(candidate.Kind, candidate.ContentID, candidate.Payload),
+		RoomID:            candidate.RoomID,
+		AlarmType:         candidate.Kind.ToAlarmType(),
+		DedupeKey:         dedupeKey,
+		DeliveryPath:      communityShortsDeliveryPath,
+		DeliveryMode:      "recovered",
+		SendResult:        sendResult,
+		FailureReason:     truncateString(failureReason, 100),
+		AttemptStartedAt:  attemptStartedAt,
+		AttemptFinishedAt: &attemptFinishedAt,
+		EventAt:           eventAt,
+		NextAttemptAt:     time.Now().UTC(),
+	}, true
+}
+
+func backfillAttemptMetadata(candidate deliveryTelemetryBackfillCandidate) (int, string, string) {
+	attemptOrdinal := candidate.AttemptCount
+	sendResult := "failure"
+	failureReason := strings.TrimSpace(candidate.DeliveryError)
+	if candidate.Status == domain.OutboxStatusSent {
+		attemptOrdinal = candidate.AttemptCount + 1
+		sendResult = "success"
+		failureReason = ""
+	}
+
+	return attemptOrdinal, sendResult, failureReason
+}
+
+func backfillCandidateEventAt(candidate deliveryTelemetryBackfillCandidate) time.Time {
+	eventAt := candidate.DeliveryCreatedAt.UTC()
+	if candidate.DeliverySentAt != nil {
+		return candidate.DeliverySentAt.UTC()
+	}
+	if candidate.DeliveryLockedAt != nil {
+		return candidate.DeliveryLockedAt.UTC()
+	}
+	return eventAt
 }
 
 func (r *DeliveryTelemetryRepository) DeleteLoggedBefore(ctx context.Context, cutoff time.Time) (int64, error) {

@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -34,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 const pollerBatchMaxSize = 50
@@ -251,9 +251,29 @@ func validateShortNotificationPublishedAt(videos []*domain.YouTubeVideo, notific
 }
 
 func (r *gormBatchRepository) resolveShortPersistedContentIDs(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox, trackingRows []*domain.YouTubeContentAlarmTracking) error {
+	canonicalIDs, aliases := collectShortIdentityAliases(notifications, trackingRows)
+	if len(canonicalIDs) == 0 {
+		return nil
+	}
+
+	resolvedByCanonical, err := loadResolvedShortContentIDs(ctx, tx, aliases, canonicalIDs)
+	if err != nil {
+		return err
+	}
+	applyResolvedShortContentIDs(notifications, trackingRows, resolvedByCanonical)
+	return nil
+}
+
+type shortIdentityRow struct {
+	ContentID string `gorm:"column:content_id"`
+}
+
+func collectShortIdentityAliases(
+	notifications []*domain.YouTubeNotificationOutbox,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+) ([]string, []string) {
 	canonicalIDs := make([]string, 0, len(notifications)+len(trackingRows))
 	aliasSet := make(map[string]struct{}, (len(notifications)+len(trackingRows))*2)
-
 	collect := func(kind domain.OutboxKind, contentID string) {
 		if kind != domain.OutboxKindNewShort {
 			return
@@ -266,104 +286,111 @@ func (r *gormBatchRepository) resolveShortPersistedContentIDs(ctx context.Contex
 			canonicalIDs = append(canonicalIDs, canonicalID)
 		}
 		aliasSet[canonicalID] = struct{}{}
-		rawID := normalizeShortVideoResourceID(contentID)
-		if rawID != "" {
+		if rawID := normalizeShortVideoResourceID(contentID); rawID != "" {
 			aliasSet[rawID] = struct{}{}
 		}
 	}
-
 	for i := range notifications {
-		if notifications[i] == nil {
-			continue
+		if notifications[i] != nil {
+			collect(notifications[i].Kind, notifications[i].ContentID)
 		}
-		collect(notifications[i].Kind, notifications[i].ContentID)
 	}
 	for i := range trackingRows {
-		if trackingRows[i] == nil {
-			continue
+		if trackingRows[i] != nil {
+			collect(trackingRows[i].Kind, trackingRows[i].ContentID)
 		}
-		collect(trackingRows[i].Kind, trackingRows[i].ContentID)
-	}
-	if len(canonicalIDs) == 0 {
-		return nil
 	}
 
 	aliases := make([]string, 0, len(aliasSet))
 	for alias := range aliasSet {
 		aliases = append(aliases, alias)
 	}
+	return canonicalIDs, aliases
+}
 
-	type shortIdentityRow struct {
-		ContentID string `gorm:"column:content_id"`
-	}
-
+func loadResolvedShortContentIDs(
+	ctx context.Context,
+	tx *gorm.DB,
+	aliases []string,
+	canonicalIDs []string,
+) (map[string]string, error) {
 	resolvedByCanonical := make(map[string]string, len(canonicalIDs))
-	recordResolved := func(contentID string) {
-		canonicalID := normalizeContentID(domain.OutboxKindNewShort, contentID)
-		if canonicalID == "" {
-			return
-		}
-		if existing := resolvedByCanonical[canonicalID]; existing == canonicalID {
-			return
-		}
-		if contentID == canonicalID {
-			resolvedByCanonical[canonicalID] = canonicalID
-			return
-		}
-		if _, exists := resolvedByCanonical[canonicalID]; !exists {
-			resolvedByCanonical[canonicalID] = contentID
-		}
+	if err := mergeResolvedShortContentIDs(ctx, tx, &domain.YouTubeNotificationOutbox{}, aliases, resolvedByCanonical, "load existing short outbox identities"); err != nil {
+		return nil, err
 	}
+	if err := mergeResolvedShortContentIDs(ctx, tx, &domain.YouTubeContentAlarmTracking{}, aliases, resolvedByCanonical, "load existing short tracking identities"); err != nil {
+		return nil, err
+	}
+	return resolvedByCanonical, nil
+}
 
-	var outboxRows []shortIdentityRow
+func mergeResolvedShortContentIDs(
+	ctx context.Context,
+	tx *gorm.DB,
+	model any,
+	aliases []string,
+	resolvedByCanonical map[string]string,
+	action string,
+) error {
+	var rows []shortIdentityRow
 	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationOutbox{}).
+		Model(model).
 		Select("content_id").
 		Where("kind = ? AND content_id IN ?", domain.OutboxKindNewShort, aliases).
-		Find(&outboxRows).Error; err != nil {
-		return fmt.Errorf("load existing short outbox identities: %w", err)
+		Find(&rows).Error; err != nil {
+		return fmt.Errorf("%s: %w", action, err)
 	}
-	for i := range outboxRows {
-		recordResolved(strings.TrimSpace(outboxRows[i].ContentID))
+	for i := range rows {
+		recordResolvedShortContentID(resolvedByCanonical, strings.TrimSpace(rows[i].ContentID))
 	}
+	return nil
+}
 
-	var trackingIdentityRows []shortIdentityRow
-	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeContentAlarmTracking{}).
-		Select("content_id").
-		Where("kind = ? AND content_id IN ?", domain.OutboxKindNewShort, aliases).
-		Find(&trackingIdentityRows).Error; err != nil {
-		return fmt.Errorf("load existing short tracking identities: %w", err)
+func recordResolvedShortContentID(resolvedByCanonical map[string]string, contentID string) {
+	canonicalID := normalizeContentID(domain.OutboxKindNewShort, contentID)
+	if canonicalID == "" {
+		return
 	}
-	for i := range trackingIdentityRows {
-		recordResolved(strings.TrimSpace(trackingIdentityRows[i].ContentID))
+	if existing := resolvedByCanonical[canonicalID]; existing == canonicalID {
+		return
 	}
+	if contentID == canonicalID {
+		resolvedByCanonical[canonicalID] = canonicalID
+		return
+	}
+	if _, exists := resolvedByCanonical[canonicalID]; !exists {
+		resolvedByCanonical[canonicalID] = contentID
+	}
+}
 
-	resolve := func(contentID string) string {
-		canonicalID := normalizeContentID(domain.OutboxKindNewShort, contentID)
-		if canonicalID == "" {
-			return strings.TrimSpace(contentID)
-		}
-		if resolved := resolvedByCanonical[canonicalID]; resolved != "" {
-			return resolved
-		}
-		return canonicalID
-	}
-
+func applyResolvedShortContentIDs(
+	notifications []*domain.YouTubeNotificationOutbox,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	resolvedByCanonical map[string]string,
+) {
 	for i := range notifications {
 		if notifications[i] == nil || notifications[i].Kind != domain.OutboxKindNewShort {
 			continue
 		}
-		notifications[i].ContentID = resolve(notifications[i].ContentID)
+		notifications[i].ContentID = resolveShortPersistedContentID(notifications[i].ContentID, resolvedByCanonical)
 	}
 	for i := range trackingRows {
 		if trackingRows[i] == nil || trackingRows[i].Kind != domain.OutboxKindNewShort {
 			continue
 		}
-		trackingRows[i].ContentID = resolve(trackingRows[i].ContentID)
+		trackingRows[i].ContentID = resolveShortPersistedContentID(trackingRows[i].ContentID, resolvedByCanonical)
 	}
+}
 
-	return nil
+func resolveShortPersistedContentID(contentID string, resolvedByCanonical map[string]string) string {
+	canonicalID := normalizeContentID(domain.OutboxKindNewShort, contentID)
+	if canonicalID == "" {
+		return strings.TrimSpace(contentID)
+	}
+	if resolved := resolvedByCanonical[canonicalID]; resolved != "" {
+		return resolved
+	}
+	return canonicalID
 }
 
 func validateCommunityNotificationPublishedAt(posts []*domain.YouTubeCommunityPost, notifications []*domain.YouTubeNotificationOutbox) error {

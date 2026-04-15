@@ -26,8 +26,9 @@ import (
 	"log/slog"
 	"time"
 
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/tidwall/gjson"
+
+	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
 const shortsPublishedAtLookupWindow = 30

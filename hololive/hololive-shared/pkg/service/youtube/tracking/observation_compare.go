@@ -512,12 +512,8 @@ func resolveObservationIdentifierMismatchPublishedAt(
 	sentRows []ObservationPostComparisonRow,
 ) *time.Time {
 	var resolved *time.Time
-	for _, row := range append(baselineRows, sentRows...) {
-		if row.ActualPublishedAt == nil {
-			continue
-		}
-		resolved = earliestObservationPostComparisonTime(resolved, row.ActualPublishedAt)
-	}
+	resolved = resolveObservationIdentifierMismatchPublishedAtRows(resolved, baselineRows)
+	resolved = resolveObservationIdentifierMismatchPublishedAtRows(resolved, sentRows)
 	return resolved
 }
 
@@ -525,11 +521,36 @@ func resolveObservationIdentifierMismatchTitleHint(
 	baselineRows []ObservationPostComparisonRow,
 	sentRows []ObservationPostComparisonRow,
 ) string {
-	for _, row := range append(baselineRows, sentRows...) {
-		if normalized := observationComparisonNormalizeTitleHint(row.TitleHint); normalized != "" {
+	if normalized := resolveObservationIdentifierMismatchTitleHintRows(baselineRows); normalized != "" {
+		return normalized
+	}
+	if normalized := resolveObservationIdentifierMismatchTitleHintRows(sentRows); normalized != "" {
+		return normalized
+	}
+	return ""
+}
+
+func resolveObservationIdentifierMismatchPublishedAtRows(
+	resolved *time.Time,
+	rows []ObservationPostComparisonRow,
+) *time.Time {
+	for i := range rows {
+		if rows[i].ActualPublishedAt == nil {
+			continue
+		}
+		resolved = earliestObservationPostComparisonTime(resolved, rows[i].ActualPublishedAt)
+	}
+
+	return resolved
+}
+
+func resolveObservationIdentifierMismatchTitleHintRows(rows []ObservationPostComparisonRow) string {
+	for i := range rows {
+		if normalized := observationComparisonNormalizeTitleHint(rows[i].TitleHint); normalized != "" {
 			return normalized
 		}
 	}
+
 	return ""
 }
 

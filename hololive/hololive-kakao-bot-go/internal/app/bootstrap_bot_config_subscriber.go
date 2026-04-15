@@ -39,7 +39,3 @@ func buildBotConfigSubscriber(
 ) *configsub.Subscriber {
 	return appbootstrap.BuildBotConfigSubscriber(ctx, deps, runtimeDeps, scraperScheduler, logger)
 }
-
-func persistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) []int {
-	return appbootstrap.PersistedTargetMinutes(alarmAdvanceMinutes, targetMinutes)
-}
