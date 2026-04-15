@@ -38,8 +38,7 @@ func (e *APIError) Error() string {
 
 func (e *APIError) Unwrap() error { return e.Err }
 
-//
-// context 파라미터는 레거시 호환을 위해 유지합니다(현재는 operation만 읽음).
+// NewAPIError는 context 파라미터를 레거시 호환을 위해 유지합니다(현재는 operation만 읽음).
 func NewAPIError(message string, statusCode int, context map[string]any) *APIError {
 	op := message
 	if v, ok := context["operation"]; ok {
@@ -68,8 +67,7 @@ func (e *KeyRotationError) Error() string {
 
 func (e *KeyRotationError) Unwrap() error { return e.Err }
 
-//
-// context 파라미터는 레거시 호환을 위해 유지합니다(현재는 url만 operation으로 사용).
+// NewKeyRotationError는 context 파라미터를 레거시 호환을 위해 유지합니다(현재는 url만 operation으로 사용).
 func NewKeyRotationError(message string, statusCode int, context map[string]any) *KeyRotationError {
 	op := message
 	if v, ok := context["url"]; ok {
