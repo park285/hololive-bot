@@ -21,17 +21,13 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
-
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 
 	runtimeapp "github.com/kapu/hololive-stream-ingester/internal/runtime"
 )
@@ -39,49 +35,29 @@ import (
 var Version = "dev"
 
 func main() {
-	automaxprocs.Init(nil)
-	health.Init(Version)
-
-	var exitCode int
-	defer func() {
-		os.Exit(exitCode)
-	}()
-
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load youtube scraper config: %v\n", err)
-		exitCode = 1
-		return
-	}
-
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
-		Dir:        cfg.Logging.Dir,
-		MaxSizeMB:  cfg.Logging.MaxSizeMB,
-		MaxBackups: cfg.Logging.MaxBackups,
-		MaxAgeDays: cfg.Logging.MaxAgeDays,
-		Compress:   cfg.Logging.Compress,
-	}, "youtube-scraper.log", cfg.Logging.Level)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		exitCode = 1
-		return
-	}
-
-	logger.Info("YouTube Scraper starting...",
-		slog.String("version", Version),
-		slog.String("log_level", cfg.Logging.Level),
-		slog.Int("port", cfg.Server.Port),
-	)
-
-	buildCtx, buildCancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	runtime, err := runtimeapp.BuildYouTubeScraperRuntime(buildCtx, cfg, logger)
-	buildCancel()
-	if err != nil {
-		logger.Error("Failed to build youtube scraper runtime", slog.Any("error", err))
-		exitCode = 1
-		return
-	}
-	defer runtime.Close()
-
-	runtime.Run()
+	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *runtimeapp.StreamIngesterRuntime]{
+		Version:                Version,
+		LoadConfig:             config.Load,
+		LoadConfigErrorMessage: "Failed to load youtube scraper config",
+		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
+			return sharedlogging.Config{
+				Dir:        cfg.Logging.Dir,
+				MaxSizeMB:  cfg.Logging.MaxSizeMB,
+				MaxBackups: cfg.Logging.MaxBackups,
+				MaxAgeDays: cfg.Logging.MaxAgeDays,
+				Compress:   cfg.Logging.Compress,
+			}
+		},
+		LoggerFileName: "youtube-scraper.log",
+		LoggerLevel: func(cfg *config.Config) string {
+			return cfg.Logging.Level
+		},
+		StartupMessage: "YouTube Scraper starting...",
+		StartupFields: func(cfg *config.Config) []any {
+			return []any{slog.Int("port", cfg.Server.Port)}
+		},
+		BuildTimeout:      time.Minute,
+		BuildRuntime:      runtimeapp.BuildYouTubeScraperRuntime,
+		BuildErrorMessage: "Failed to build youtube scraper runtime",
+	}))
 }

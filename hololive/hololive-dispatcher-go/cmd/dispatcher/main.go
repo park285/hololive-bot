@@ -21,66 +21,38 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
-
 	"github.com/kapu/hololive-dispatcher-go/internal/app"
-	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 )
 
 var Version = "dev"
 
 func main() {
-	automaxprocs.Init(nil)
-	health.Init(Version)
-
-	var exitCode int
-	defer func() {
-		os.Exit(exitCode)
-	}()
-
-	cfg, err := app.LoadConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load dispatcher config: %v\n", err)
-		exitCode = 1
-		return
-	}
-
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
-		Dir:        cfg.Logging.Dir,
-		MaxSizeMB:  cfg.Logging.MaxSizeMB,
-		MaxBackups: cfg.Logging.MaxBackups,
-		MaxAgeDays: cfg.Logging.MaxAgeDays,
-		Compress:   cfg.Logging.Compress,
-	}, "dispatcher-go.log", cfg.Logging.Level)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		exitCode = 1
-		return
-	}
-
-	logger.Info("Dispatcher Go starting...",
-		slog.String("version", Version),
-		slog.String("log_level", cfg.Logging.Level),
-		slog.Int("port", cfg.Server.Port),
-		slog.String("queue_key", cfg.Dispatch.QueueKey),
-	)
-
-	buildCtx, buildCancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	runtime, err := app.BuildRuntime(buildCtx, cfg, logger)
-	buildCancel()
-	if err != nil {
-		logger.Error("Failed to build dispatcher runtime", slog.Any("error", err))
-		exitCode = 1
-		return
-	}
-	defer runtime.Close()
-
-	runtime.Run()
+	os.Exit(bootstrap.Run(bootstrap.Options[*app.Config, *app.Runtime]{
+		Version:                Version,
+		LoadConfig:             app.LoadConfig,
+		LoadConfigErrorMessage: "Failed to load dispatcher config",
+		LoggerConfig: func(cfg *app.Config) sharedlogging.Config {
+			return cfg.Logging
+		},
+		LoggerFileName: "dispatcher-go.log",
+		LoggerLevel: func(cfg *app.Config) string {
+			return cfg.Logging.Level
+		},
+		StartupMessage: "Dispatcher Go starting...",
+		StartupFields: func(cfg *app.Config) []any {
+			return []any{
+				slog.Int("port", cfg.Server.Port),
+				slog.String("queue_key", cfg.Dispatch.QueueKey),
+			}
+		},
+		BuildTimeout:      time.Minute,
+		BuildRuntime:      app.BuildRuntime,
+		BuildErrorMessage: "Failed to build dispatcher runtime",
+	}))
 }
