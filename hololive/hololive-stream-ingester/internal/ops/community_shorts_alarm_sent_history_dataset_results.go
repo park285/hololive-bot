@@ -30,50 +30,26 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 	alarmTypeAccumulators := make(map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator)
 	channelAccumulators := make(map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator)
 
-	ensureAlarmTypeAccumulator := func(alarmType domain.AlarmType) *communityShortsAlarmSentHistoryDatasetComparisonAccumulator {
-		if alarmType == "" {
-			return nil
-		}
-		if existing, ok := alarmTypeAccumulators[alarmType]; ok {
-			return existing
-		}
-		accumulator := &communityShortsAlarmSentHistoryDatasetComparisonAccumulator{}
-		alarmTypeAccumulators[alarmType] = accumulator
-		return accumulator
-	}
-	ensureChannelAccumulator := func(channelID string) *communityShortsAlarmSentHistoryDatasetComparisonAccumulator {
-		trimmed := strings.TrimSpace(channelID)
-		if trimmed == "" {
-			return nil
-		}
-		if existing, ok := channelAccumulators[trimmed]; ok {
-			return existing
-		}
-		accumulator := &communityShortsAlarmSentHistoryDatasetComparisonAccumulator{}
-		channelAccumulators[trimmed] = accumulator
-		return accumulator
-	}
-
 	for i := range rows {
 		row := rows[i]
-		if accumulator := ensureAlarmTypeAccumulator(row.AlarmType); accumulator != nil {
-			accumulator.SentPostCount++
-		}
-		if accumulator := ensureChannelAccumulator(row.ChannelID); accumulator != nil {
-			accumulator.SentPostCount++
-		}
+		incrementCommunityShortsAlarmSentHistoryDatasetSentPost(
+			ensureCommunityShortsAlarmSentHistoryDatasetAlarmTypeAccumulator(alarmTypeAccumulators, row.AlarmType),
+		)
+		incrementCommunityShortsAlarmSentHistoryDatasetSentPost(
+			ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(channelAccumulators, row.ChannelID),
+		)
 	}
 
 	for i := range referenceRows {
 		row := referenceRows[i]
-		if accumulator := ensureAlarmTypeAccumulator(row.AlarmType); accumulator != nil {
-			accumulator.BaselinePostCount++
-			applyCommunityShortsAlarmSentHistoryDatasetVerdict(accumulator, row.VerificationVerdict)
-		}
-		if accumulator := ensureChannelAccumulator(row.ChannelID); accumulator != nil {
-			accumulator.BaselinePostCount++
-			applyCommunityShortsAlarmSentHistoryDatasetVerdict(accumulator, row.VerificationVerdict)
-		}
+		accumulateCommunityShortsAlarmSentHistoryDatasetReference(
+			ensureCommunityShortsAlarmSentHistoryDatasetAlarmTypeAccumulator(alarmTypeAccumulators, row.AlarmType),
+			row.VerificationVerdict,
+		)
+		accumulateCommunityShortsAlarmSentHistoryDatasetReference(
+			ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(channelAccumulators, row.ChannelID),
+			row.VerificationVerdict,
+		)
 	}
 
 	for i := range verificationRows {
@@ -81,22 +57,22 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 		if row.Verdict != trackingrepo.ObservationPostComparisonVerdictUnexpectedSent {
 			continue
 		}
-		if accumulator := ensureAlarmTypeAccumulator(row.AlarmType); accumulator != nil {
-			accumulator.UnexpectedSentPostCount++
-		}
-		if accumulator := ensureChannelAccumulator(row.ChannelID); accumulator != nil {
-			accumulator.UnexpectedSentPostCount++
-		}
+		incrementCommunityShortsAlarmSentHistoryDatasetUnexpectedSent(
+			ensureCommunityShortsAlarmSentHistoryDatasetAlarmTypeAccumulator(alarmTypeAccumulators, row.AlarmType),
+		)
+		incrementCommunityShortsAlarmSentHistoryDatasetUnexpectedSent(
+			ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(channelAccumulators, row.ChannelID),
+		)
 	}
 
 	for i := range missingAlarmRows {
 		row := missingAlarmRows[i]
-		if accumulator := ensureAlarmTypeAccumulator(row.AlarmType); accumulator != nil {
-			accumulator.MissingAlarmPostCount++
-		}
-		if accumulator := ensureChannelAccumulator(row.ChannelID); accumulator != nil {
-			accumulator.MissingAlarmPostCount++
-		}
+		incrementCommunityShortsAlarmSentHistoryDatasetMissingAlarm(
+			ensureCommunityShortsAlarmSentHistoryDatasetAlarmTypeAccumulator(alarmTypeAccumulators, row.AlarmType),
+		)
+		incrementCommunityShortsAlarmSentHistoryDatasetMissingAlarm(
+			ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(channelAccumulators, row.ChannelID),
+		)
 	}
 
 	results := CommunityShortsAlarmSentHistoryDatasetResults{
@@ -108,57 +84,134 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 		MissingAlarmZero:          missingAlarmEvaluated && summary.MissingAlarmPostCount == 0,
 	}
 
-	if len(alarmTypeAccumulators) > 0 {
-		keys := make([]domain.AlarmType, 0, len(alarmTypeAccumulators))
-		for alarmType := range alarmTypeAccumulators {
-			keys = append(keys, alarmType)
-		}
-		sort.SliceStable(keys, func(i, j int) bool {
-			return keys[i] < keys[j]
-		})
-		results.AlarmTypeComparisons = make([]CommunityShortsAlarmSentHistoryDatasetAlarmTypeComparison, 0, len(keys))
-		for i := range keys {
-			alarmType := keys[i]
-			accumulator := alarmTypeAccumulators[alarmType]
-			results.AlarmTypeComparisons = append(results.AlarmTypeComparisons, CommunityShortsAlarmSentHistoryDatasetAlarmTypeComparison{
-				AlarmType:                        alarmType,
-				BaselinePostCount:                accumulator.BaselinePostCount,
-				SentPostCount:                    accumulator.SentPostCount,
-				MatchedPostCount:                 accumulator.MatchedPostCount,
-				UnsentPostCount:                  accumulator.UnsentPostCount,
-				DuplicateSentPostCount:           accumulator.DuplicateSentPostCount,
-				UnexpectedSentPostCount:          accumulator.UnexpectedSentPostCount,
-				IdentifierMismatchCandidateCount: accumulator.IdentifierMismatchCandidateCount,
-				MissingAlarmPostCount:            accumulator.MissingAlarmPostCount,
-			})
-		}
-	}
-
-	if len(channelAccumulators) > 0 {
-		keys := make([]string, 0, len(channelAccumulators))
-		for channelID := range channelAccumulators {
-			keys = append(keys, channelID)
-		}
-		sort.Strings(keys)
-		results.ChannelComparisons = make([]CommunityShortsAlarmSentHistoryDatasetChannelComparison, 0, len(keys))
-		for i := range keys {
-			channelID := keys[i]
-			accumulator := channelAccumulators[channelID]
-			results.ChannelComparisons = append(results.ChannelComparisons, CommunityShortsAlarmSentHistoryDatasetChannelComparison{
-				ChannelID:                        channelID,
-				BaselinePostCount:                accumulator.BaselinePostCount,
-				SentPostCount:                    accumulator.SentPostCount,
-				MatchedPostCount:                 accumulator.MatchedPostCount,
-				UnsentPostCount:                  accumulator.UnsentPostCount,
-				DuplicateSentPostCount:           accumulator.DuplicateSentPostCount,
-				UnexpectedSentPostCount:          accumulator.UnexpectedSentPostCount,
-				IdentifierMismatchCandidateCount: accumulator.IdentifierMismatchCandidateCount,
-				MissingAlarmPostCount:            accumulator.MissingAlarmPostCount,
-			})
-		}
-	}
+	results.AlarmTypeComparisons = buildCommunityShortsAlarmSentHistoryDatasetAlarmTypeComparisons(alarmTypeAccumulators)
+	results.ChannelComparisons = buildCommunityShortsAlarmSentHistoryDatasetChannelComparisons(channelAccumulators)
 
 	return results
+}
+
+func ensureCommunityShortsAlarmSentHistoryDatasetAlarmTypeAccumulator(
+	accumulators map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	alarmType domain.AlarmType,
+) *communityShortsAlarmSentHistoryDatasetComparisonAccumulator {
+	if alarmType == "" {
+		return nil
+	}
+	if existing, ok := accumulators[alarmType]; ok {
+		return existing
+	}
+	accumulator := &communityShortsAlarmSentHistoryDatasetComparisonAccumulator{}
+	accumulators[alarmType] = accumulator
+	return accumulator
+}
+
+func ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(
+	accumulators map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	channelID string,
+) *communityShortsAlarmSentHistoryDatasetComparisonAccumulator {
+	trimmed := strings.TrimSpace(channelID)
+	if trimmed == "" {
+		return nil
+	}
+	if existing, ok := accumulators[trimmed]; ok {
+		return existing
+	}
+	accumulator := &communityShortsAlarmSentHistoryDatasetComparisonAccumulator{}
+	accumulators[trimmed] = accumulator
+	return accumulator
+}
+
+func incrementCommunityShortsAlarmSentHistoryDatasetSentPost(
+	accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+) {
+	if accumulator != nil {
+		accumulator.SentPostCount++
+	}
+}
+
+func accumulateCommunityShortsAlarmSentHistoryDatasetReference(
+	accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	verdict trackingrepo.ObservationPostComparisonVerdict,
+) {
+	if accumulator == nil {
+		return
+	}
+	accumulator.BaselinePostCount++
+	applyCommunityShortsAlarmSentHistoryDatasetVerdict(accumulator, verdict)
+}
+
+func incrementCommunityShortsAlarmSentHistoryDatasetUnexpectedSent(
+	accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+) {
+	if accumulator != nil {
+		accumulator.UnexpectedSentPostCount++
+	}
+}
+
+func incrementCommunityShortsAlarmSentHistoryDatasetMissingAlarm(
+	accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+) {
+	if accumulator != nil {
+		accumulator.MissingAlarmPostCount++
+	}
+}
+
+func buildCommunityShortsAlarmSentHistoryDatasetAlarmTypeComparisons(
+	accumulators map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+) []CommunityShortsAlarmSentHistoryDatasetAlarmTypeComparison {
+	if len(accumulators) == 0 {
+		return nil
+	}
+	keys := make([]domain.AlarmType, 0, len(accumulators))
+	for alarmType := range accumulators {
+		keys = append(keys, alarmType)
+	}
+	sort.SliceStable(keys, func(i, j int) bool {
+		return keys[i] < keys[j]
+	})
+	comparisons := make([]CommunityShortsAlarmSentHistoryDatasetAlarmTypeComparison, 0, len(keys))
+	for i := range keys {
+		comparisons = append(comparisons, CommunityShortsAlarmSentHistoryDatasetAlarmTypeComparison{
+			AlarmType:                        keys[i],
+			BaselinePostCount:                accumulators[keys[i]].BaselinePostCount,
+			SentPostCount:                    accumulators[keys[i]].SentPostCount,
+			MatchedPostCount:                 accumulators[keys[i]].MatchedPostCount,
+			UnsentPostCount:                  accumulators[keys[i]].UnsentPostCount,
+			DuplicateSentPostCount:           accumulators[keys[i]].DuplicateSentPostCount,
+			UnexpectedSentPostCount:          accumulators[keys[i]].UnexpectedSentPostCount,
+			IdentifierMismatchCandidateCount: accumulators[keys[i]].IdentifierMismatchCandidateCount,
+			MissingAlarmPostCount:            accumulators[keys[i]].MissingAlarmPostCount,
+		})
+	}
+	return comparisons
+}
+
+func buildCommunityShortsAlarmSentHistoryDatasetChannelComparisons(
+	accumulators map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+) []CommunityShortsAlarmSentHistoryDatasetChannelComparison {
+	if len(accumulators) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(accumulators))
+	for channelID := range accumulators {
+		keys = append(keys, channelID)
+	}
+	sort.Strings(keys)
+	comparisons := make([]CommunityShortsAlarmSentHistoryDatasetChannelComparison, 0, len(keys))
+	for i := range keys {
+		comparisons = append(comparisons, CommunityShortsAlarmSentHistoryDatasetChannelComparison{
+			ChannelID:                        keys[i],
+			BaselinePostCount:                accumulators[keys[i]].BaselinePostCount,
+			SentPostCount:                    accumulators[keys[i]].SentPostCount,
+			MatchedPostCount:                 accumulators[keys[i]].MatchedPostCount,
+			UnsentPostCount:                  accumulators[keys[i]].UnsentPostCount,
+			DuplicateSentPostCount:           accumulators[keys[i]].DuplicateSentPostCount,
+			UnexpectedSentPostCount:          accumulators[keys[i]].UnexpectedSentPostCount,
+			IdentifierMismatchCandidateCount: accumulators[keys[i]].IdentifierMismatchCandidateCount,
+			MissingAlarmPostCount:            accumulators[keys[i]].MissingAlarmPostCount,
+		})
+	}
+	return comparisons
 }
 
 func applyCommunityShortsAlarmSentHistoryDatasetVerdict(

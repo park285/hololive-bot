@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 

@@ -1,122 +1,126 @@
 package ops
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 )
 
 func RenderCommunityShortsSendCountMarkdown(report CommunityShortsSendCountReport) string {
 	var builder strings.Builder
 
-	builder.WriteString("# YouTube Community/Shorts Post Send Counts Report\n\n")
-	builder.WriteString("- generated at: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.GeneratedAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- mode: `")
-	builder.WriteString(string(report.Query.Mode))
-	builder.WriteString("`\n")
+	writeCommunityShortsMarkdownHeading(&builder, 1, "YouTube Community/Shorts Post Send Counts Report")
+	writeCommunityShortsMarkdownKV(&builder, "generated at", formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.GeneratedAt)))
+	writeCommunityShortsMarkdownKV(&builder, "mode", formatCommunityShortsMarkdownCode(string(report.Query.Mode)))
 	if report.Query.WindowStart != nil || report.Query.WindowEnd != nil {
-		builder.WriteString("- window: `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.WindowStart))
-		builder.WriteString("` -> `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.WindowEnd))
-		builder.WriteString("`\n")
+		writeCommunityShortsMarkdownKV(
+			&builder,
+			"window",
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.WindowStart))+
+				" -> "+
+				formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.WindowEnd)),
+		)
 	}
 	if report.Query.Mode == communityShortsSendCountQueryModeObservation {
-		builder.WriteString("- observation runtime: `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(report.Query.ObservationRuntimeName))
-		builder.WriteString("`, cutover: `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.ObservationBigBangCutoverAt))
-		builder.WriteString("`\n")
+		writeCommunityShortsMarkdownKV(
+			&builder,
+			"observation runtime",
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(report.Query.ObservationRuntimeName))+
+				", cutover: "+
+				formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.ObservationBigBangCutoverAt)),
+		)
 	}
-	builder.WriteString("- summary: posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.PostCount)
-	builder.WriteString("`, successful_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.SuccessfulPostCount)
-	builder.WriteString("`, zero_success_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.ZeroSuccessPostCount)
-	builder.WriteString("`, duplicate_success_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.DuplicateSuccessPostCount)
-	builder.WriteString("`, failed_attempt_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.FailedAttemptPostCount)
-	builder.WriteString("`, outbox_missing_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.OutboxMissingPostCount)
-	builder.WriteString("`, external_collection_source_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.ExternalCollectionSourcePostCount)
-	builder.WriteString("`, internal_delivery_source_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.InternalDeliverySourcePostCount)
-	builder.WriteString("`, mixed_delay_source_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.MixedDelaySourcePostCount)
-	builder.WriteString("`, queue_wait_cause_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.QueueWaitCausePostCount)
-	builder.WriteString("`, retry_accumulation_cause_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.RetryAccumulationCausePostCount)
-	builder.WriteString("`, job_failure_cause_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Summary.JobFailureCausePostCount)
-	builder.WriteString("`\n")
-	builder.WriteString("- duplicate alarm verdict: status=`")
-	builder.WriteString(string(report.Verification.DuplicateAlarmStatus))
-	builder.WriteString("`, duplicate_posts=`")
-	fmt.Fprintf(&builder, "%d", report.Verification.DuplicateAlarmPostCount)
-	builder.WriteString("`, rule=`")
-	builder.WriteString(report.Verification.DuplicateAlarmRule)
-	builder.WriteString("`\n")
+	writeCommunityShortsMarkdownKV(&builder, "summary", buildCommunityShortsSendCountSummaryMarkdown(report.Summary))
+	writeCommunityShortsMarkdownKV(&builder, "duplicate alarm verdict", buildCommunityShortsSendCountVerificationMarkdown(report.Verification))
 
 	if len(report.Rows) == 0 {
 		builder.WriteString("\n조회된 community/shorts 게시물이 없습니다.\n")
 		return builder.String()
 	}
 
-	builder.WriteString("\n| status | alarm_type | channel_id | post_id | actual_published_at | detected_at | alarm_sent_at | delay_seconds | delay_source | publish_to_detect_ms | internal_delay_cause | queue_wait_ms | retry_accumulation_ms | job_failure_detected | latency_classification_status | latency_classification_evidence | outbox_count | success_send_count | success_room_count | duplicate_success_count | failed_attempt_count |\n")
-	builder.WriteString("| --- | --- | --- | --- | --- | --- | --- | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |\n")
-	for i := range report.Rows {
-		row := report.Rows[i]
-		builder.WriteString("| `")
-		builder.WriteString(resolveCommunityShortsSendCountStatus(row))
-		builder.WriteString("` | `")
-		builder.WriteString(string(row.AlarmType))
-		builder.WriteString("` | `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(row.ChannelID))
-		builder.WriteString("` | `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(resolveCommunityShortsSendCountPostID(row)))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(row.ReportActualPublishedAt))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(row.DetectedAt))
-		builder.WriteString("` | `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(row.ReportAlarmSentAt))
-		builder.WriteString("` | ")
-		builder.WriteString(formatCommunityShortsSendCountFloat64Ptr(row.ReportDelaySeconds))
-		builder.WriteString(" | `")
-		builder.WriteString(string(row.DelaySource))
-		builder.WriteString("` | ")
-		builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.PublishToDetectMillis))
-		builder.WriteString(" | `")
-		builder.WriteString(string(row.InternalDelayCause))
-		builder.WriteString("` | ")
-		builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.QueueWaitMillis))
-		builder.WriteString(" | ")
-		builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.RetryAccumulationMillis))
-		builder.WriteString(" | `")
-		builder.WriteString(formatCommunityShortsSendCountBool(row.JobFailureDetected))
-		builder.WriteString("` | `")
-		builder.WriteString(string(row.LatencyClassification.Status))
-		builder.WriteString("` | `")
-		builder.WriteString(renderCommunityShortsLatencyClassificationEvidence(row.LatencyClassification))
-		builder.WriteString("` | ")
-		fmt.Fprintf(&builder, "%d", row.OutboxCount)
-		builder.WriteString(" | ")
-		fmt.Fprintf(&builder, "%d", row.SuccessSendCount)
-		builder.WriteString(" | ")
-		fmt.Fprintf(&builder, "%d", row.SuccessRoomCount)
-		builder.WriteString(" | ")
-		fmt.Fprintf(&builder, "%d", row.DuplicateSuccessCount)
-		builder.WriteString(" | ")
-		fmt.Fprintf(&builder, "%d", row.FailedAttemptCount)
-		builder.WriteString(" |\n")
-	}
+	writeCommunityShortsMarkdownTable(&builder, communityShortsSendCountMarkdownColumns, buildCommunityShortsSendCountMarkdownRows(report.Rows))
 
 	return builder.String()
+}
+
+var communityShortsSendCountMarkdownColumns = []communityShortsMarkdownColumn{
+	{Header: "status"},
+	{Header: "alarm_type"},
+	{Header: "channel_id"},
+	{Header: "post_id"},
+	{Header: "actual_published_at"},
+	{Header: "detected_at"},
+	{Header: "alarm_sent_at"},
+	{Header: "delay_seconds", AlignRight: true},
+	{Header: "delay_source"},
+	{Header: "publish_to_detect_ms", AlignRight: true},
+	{Header: "internal_delay_cause"},
+	{Header: "queue_wait_ms", AlignRight: true},
+	{Header: "retry_accumulation_ms", AlignRight: true},
+	{Header: "job_failure_detected"},
+	{Header: "latency_classification_status"},
+	{Header: "latency_classification_evidence"},
+	{Header: "outbox_count", AlignRight: true},
+	{Header: "success_send_count", AlignRight: true},
+	{Header: "success_room_count", AlignRight: true},
+	{Header: "duplicate_success_count", AlignRight: true},
+	{Header: "failed_attempt_count", AlignRight: true},
+}
+
+func buildCommunityShortsSendCountSummaryMarkdown(summary CommunityShortsSendCountSummary) string {
+	parts := []string{
+		"posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.PostCount)),
+		"successful_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.SuccessfulPostCount)),
+		"zero_success_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.ZeroSuccessPostCount)),
+		"duplicate_success_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.DuplicateSuccessPostCount)),
+		"failed_attempt_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.FailedAttemptPostCount)),
+		"outbox_missing_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.OutboxMissingPostCount)),
+		"external_collection_source_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.ExternalCollectionSourcePostCount)),
+		"internal_delivery_source_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.InternalDeliverySourcePostCount)),
+		"mixed_delay_source_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.MixedDelaySourcePostCount)),
+		"queue_wait_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.QueueWaitCausePostCount)),
+		"retry_accumulation_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.RetryAccumulationCausePostCount)),
+		"job_failure_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(summary.JobFailureCausePostCount)),
+	}
+	return strings.Join(parts, ", ")
+}
+
+func buildCommunityShortsSendCountVerificationMarkdown(verification CommunityShortsSendCountVerification) string {
+	return strings.Join([]string{
+		"status=" + formatCommunityShortsMarkdownCode(string(verification.DuplicateAlarmStatus)),
+		"duplicate_posts=" + formatCommunityShortsMarkdownCode(strconv.Itoa(verification.DuplicateAlarmPostCount)),
+		"rule=" + formatCommunityShortsMarkdownCode(verification.DuplicateAlarmRule),
+	}, ", ")
+}
+
+func buildCommunityShortsSendCountMarkdownRows(rows []CommunityShortsSendCountRow) [][]string {
+	markdownRows := make([][]string, 0, len(rows))
+	for i := range rows {
+		row := rows[i]
+		markdownRows = append(markdownRows, []string{
+			formatCommunityShortsMarkdownCode(resolveCommunityShortsSendCountStatus(row)),
+			formatCommunityShortsMarkdownCode(string(row.AlarmType)),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(row.ChannelID)),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(resolveCommunityShortsSendCountPostID(row))),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(row.ReportActualPublishedAt)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(row.DetectedAt)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(row.ReportAlarmSentAt)),
+			formatCommunityShortsSendCountFloat64Ptr(row.ReportDelaySeconds),
+			formatCommunityShortsMarkdownCode(string(row.DelaySource)),
+			formatCommunityShortsSendCountInt64Ptr(row.PublishToDetectMillis),
+			formatCommunityShortsMarkdownCode(string(row.InternalDelayCause)),
+			formatCommunityShortsSendCountInt64Ptr(row.QueueWaitMillis),
+			formatCommunityShortsSendCountInt64Ptr(row.RetryAccumulationMillis),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountBool(row.JobFailureDetected)),
+			formatCommunityShortsMarkdownCode(string(row.LatencyClassification.Status)),
+			formatCommunityShortsMarkdownCode(renderCommunityShortsLatencyClassificationEvidence(row.LatencyClassification)),
+			strconv.FormatInt(row.OutboxCount, 10),
+			strconv.FormatInt(row.SuccessSendCount, 10),
+			strconv.FormatInt(row.SuccessRoomCount, 10),
+			strconv.FormatInt(row.DuplicateSuccessCount, 10),
+			strconv.FormatInt(row.FailedAttemptCount, 10),
+		})
+	}
+	return markdownRows
 }
 
 func buildCommunityShortsSendCountVerification(summary CommunityShortsSendCountSummary) CommunityShortsSendCountVerification {

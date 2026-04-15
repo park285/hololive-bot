@@ -1,7 +1,7 @@
 package ops
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -9,54 +9,40 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 )
 
+const communityShortsLatencyCauseNone = "(none)"
+
 func RenderCommunityShortsLatencyCauseMarkdown(report CommunityShortsLatencyCauseReport) string {
 	var builder strings.Builder
 
-	builder.WriteString("# YouTube Community/Shorts Latency Cause Report\n\n")
-	builder.WriteString("- generated at: `")
-	builder.WriteString(formatCommunityShortsSendCountTime(report.GeneratedAt))
-	builder.WriteString("`\n")
-	builder.WriteString("- mode: `")
-	builder.WriteString(string(report.Query.Mode))
-	builder.WriteString("`\n")
+	writeCommunityShortsMarkdownHeading(&builder, 1, "YouTube Community/Shorts Latency Cause Report")
+	writeCommunityShortsMarkdownKV(&builder, "generated at", formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.GeneratedAt)))
+	writeCommunityShortsMarkdownKV(&builder, "mode", formatCommunityShortsMarkdownCode(string(report.Query.Mode)))
 	if report.Query.WindowStart != nil || report.Query.WindowEnd != nil {
-		builder.WriteString("- window: `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.WindowStart))
-		builder.WriteString("` -> `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.WindowEnd))
-		builder.WriteString("`\n")
+		writeCommunityShortsMarkdownKV(
+			&builder,
+			"window",
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.WindowStart))+
+				" -> "+
+				formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.WindowEnd)),
+		)
 	}
 	if report.Query.Mode == communityShortsLatencyCauseQueryModeObservation {
-		builder.WriteString("- observation runtime: `")
-		builder.WriteString(fallbackCommunityShortsSendCountValue(report.Query.ObservationRuntimeName))
-		builder.WriteString("`, cutover: `")
-		builder.WriteString(formatCommunityShortsSendCountTimePtr(report.Query.ObservationBigBangCutoverAt))
-		builder.WriteString("`\n")
+		writeCommunityShortsMarkdownKV(
+			&builder,
+			"observation runtime",
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(report.Query.ObservationRuntimeName))+
+				", cutover: "+
+				formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.ObservationBigBangCutoverAt)),
+		)
 	}
-	builder.WriteString("- observed at basis: `")
-	builder.WriteString(fallbackCommunityShortsSendCountValue(report.ObservedAtBasis))
-	builder.WriteString("`\n")
-	builder.WriteString("- threshold millis: `")
-	fmt.Fprintf(&builder, "%d", report.ThresholdMillis)
-	builder.WriteString("`\n")
-	builder.WriteString("- internal cause rule: `")
-	builder.WriteString(report.Verification.InternalCauseRule)
-	builder.WriteString("`\n")
-	builder.WriteString("- non internal rule: `")
-	builder.WriteString(report.Verification.NonInternalCauseRule)
-	builder.WriteString("`\n")
-	builder.WriteString("- excluded external rule: `")
-	builder.WriteString(report.Verification.ExcludedExternalRule)
-	builder.WriteString("`\n")
-	builder.WriteString("- insufficient evidence rule: `")
-	builder.WriteString(report.Verification.InsufficientEvidenceRule)
-	builder.WriteString("`\n")
-	builder.WriteString("- cause evidence fields: `")
-	builder.WriteString(strings.Join(report.Verification.EvidenceFieldCatalog, ", "))
-	builder.WriteString("`\n")
-	builder.WriteString("- periods: `")
-	fmt.Fprintf(&builder, "%d", len(report.Periods))
-	builder.WriteString("`\n")
+	writeCommunityShortsMarkdownKV(&builder, "observed at basis", formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(report.ObservedAtBasis)))
+	writeCommunityShortsMarkdownKV(&builder, "threshold millis", formatCommunityShortsMarkdownCode(strconv.FormatInt(report.ThresholdMillis, 10)))
+	writeCommunityShortsMarkdownKV(&builder, "internal cause rule", formatCommunityShortsMarkdownCode(report.Verification.InternalCauseRule))
+	writeCommunityShortsMarkdownKV(&builder, "non internal rule", formatCommunityShortsMarkdownCode(report.Verification.NonInternalCauseRule))
+	writeCommunityShortsMarkdownKV(&builder, "excluded external rule", formatCommunityShortsMarkdownCode(report.Verification.ExcludedExternalRule))
+	writeCommunityShortsMarkdownKV(&builder, "insufficient evidence rule", formatCommunityShortsMarkdownCode(report.Verification.InsufficientEvidenceRule))
+	writeCommunityShortsMarkdownKV(&builder, "cause evidence fields", formatCommunityShortsMarkdownCode(strings.Join(report.Verification.EvidenceFieldCatalog, ", ")))
+	writeCommunityShortsMarkdownKV(&builder, "periods", formatCommunityShortsMarkdownCode(strconv.Itoa(len(report.Periods))))
 
 	if len(report.Periods) == 0 {
 		builder.WriteString("\n조회된 community/shorts 지연 원인 리포트가 없습니다.\n")
@@ -65,124 +51,120 @@ func RenderCommunityShortsLatencyCauseMarkdown(report CommunityShortsLatencyCaus
 
 	for i := range report.Periods {
 		period := report.Periods[i]
-		builder.WriteString("\n## `")
-		builder.WriteString(strings.TrimSpace(period.Summary.Label))
-		builder.WriteString("`\n\n")
-		builder.WriteString("- window: `")
-		builder.WriteString(formatCommunityShortsSendCountTime(period.Summary.StartAt))
-		builder.WriteString("` -> `")
-		builder.WriteString(formatCommunityShortsSendCountTime(period.Summary.EndAt))
-		builder.WriteString("`\n")
-		builder.WriteString("- latency summary: total_posts=`")
-		fmt.Fprintf(&builder, "%d", period.Summary.TotalPostCount)
-		builder.WriteString("`, alarm_sent_posts=`")
-		fmt.Fprintf(&builder, "%d", period.Summary.AlarmSentPostCount)
-		builder.WriteString("`, pending_posts=`")
-		fmt.Fprintf(&builder, "%d", period.Summary.PendingPostCount)
-		builder.WriteString("`, measured_posts=`")
-		fmt.Fprintf(&builder, "%d", period.Summary.LatencyMeasuredPostCount)
-		builder.WriteString("`, avg_latency_ms=`")
-		builder.WriteString(formatCommunityShortsSendCountInt64Ptr(period.Summary.AverageLatencyMillis))
-		builder.WriteString("`, p95_latency_ms=`")
-		builder.WriteString(formatCommunityShortsSendCountInt64Ptr(period.Summary.P95LatencyMillis))
-		builder.WriteString("`, max_latency_ms=`")
-		builder.WriteString(formatCommunityShortsSendCountInt64Ptr(period.Summary.MaxLatencyMillis))
-		builder.WriteString("`, over_2m_posts=`")
-		fmt.Fprintf(&builder, "%d", period.Summary.ExceededPostCount)
-		builder.WriteString("`\n")
-		builder.WriteString("- cause summary: exceeded_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.ExceededPostCount)
-		builder.WriteString("`, internal_system_cause_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.InternalSystemCausePostCount)
-		builder.WriteString("`, non_internal_system_cause_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.NonInternalSystemCausePostCount)
-		builder.WriteString("`, excluded_external_delay_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.ExcludedExternalDelayPostCount)
-		builder.WriteString("`, community_exceeded_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.CommunityExceededPostCount)
-		builder.WriteString("`, shorts_exceeded_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.ShortsExceededPostCount)
-		builder.WriteString("`, external_collection_source_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.ExternalCollectionSourcePostCount)
-		builder.WriteString("`, internal_delivery_source_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.InternalDeliverySourcePostCount)
-		builder.WriteString("`, mixed_delay_source_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.MixedDelaySourcePostCount)
-		builder.WriteString("`, no_dominant_source_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.NoDominantSourcePostCount)
-		builder.WriteString("`, internal_cause_candidate_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.InternalCauseCandidatePostCount)
-		builder.WriteString("`, queue_wait_cause_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.QueueWaitCausePostCount)
-		builder.WriteString("`, retry_accumulation_cause_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.RetryAccumulationCausePostCount)
-		builder.WriteString("`, job_failure_cause_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.JobFailureCausePostCount)
-		builder.WriteString("`, unclassified_internal_cause_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.UnclassifiedInternalCausePostCount)
-		builder.WriteString("`, insufficient_evidence_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.InsufficientEvidencePostCount)
-		builder.WriteString("`\n")
-		builder.WriteString("- excluded external reference: excluded_external_delay_posts=`")
-		fmt.Fprintf(&builder, "%d", period.CauseSummary.ExcludedExternalDelayPostCount)
-		builder.WriteString("`, rule=`")
-		builder.WriteString(report.Verification.ExcludedExternalRule)
-		builder.WriteString("`\n")
+		builder.WriteString("\n")
+		writeCommunityShortsMarkdownHeading(&builder, 2, formatCommunityShortsMarkdownCode(strings.TrimSpace(period.Summary.Label)))
+		writeCommunityShortsMarkdownKV(
+			&builder,
+			"window",
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(period.Summary.StartAt))+
+				" -> "+
+				formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(period.Summary.EndAt)),
+		)
+		writeCommunityShortsMarkdownKV(&builder, "latency summary", buildCommunityShortsLatencyPeriodSummaryMarkdown(period.Summary))
+		writeCommunityShortsMarkdownKV(&builder, "cause summary", buildCommunityShortsLatencyCauseSummaryMarkdown(period.CauseSummary))
+		writeCommunityShortsMarkdownKV(
+			&builder,
+			"excluded external reference",
+			"excluded_external_delay_posts="+formatCommunityShortsMarkdownCode(strconv.FormatInt(period.CauseSummary.ExcludedExternalDelayPostCount, 10))+
+				", rule="+formatCommunityShortsMarkdownCode(report.Verification.ExcludedExternalRule),
+		)
 
 		if len(period.Rows) == 0 {
 			builder.WriteString("\n2분 초과 community/shorts 게시물이 없습니다.\n")
 			continue
 		}
 
-		builder.WriteString("\n| alarm_type | channel_id | post_id | observed_at | actual_published_at | detected_at | alarm_sent_at | alarm_latency_ms | internal_cause_judgment | internal_cause_basis | cause_evidence_fields | delay_source | internal_delay_cause | publish_to_detect_ms | internal_latency_ms | queue_wait_ms | retry_accumulation_ms | job_failure_detected | cause_classification_status | cause_classification_evidence |\n")
-		builder.WriteString("| --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |\n")
-		for rowIndex := range period.Rows {
-			row := period.Rows[rowIndex]
-			builder.WriteString("| `")
-			builder.WriteString(string(row.AlarmType))
-			builder.WriteString("` | `")
-			builder.WriteString(fallbackCommunityShortsSendCountValue(row.ChannelID))
-			builder.WriteString("` | `")
-			builder.WriteString(fallbackCommunityShortsSendCountValue(row.PostID))
-			builder.WriteString("` | `")
-			builder.WriteString(formatCommunityShortsSendCountTimePtr(row.ObservedAt))
-			builder.WriteString("` | `")
-			builder.WriteString(formatCommunityShortsSendCountTimePtr(row.ActualPublishedAt))
-			builder.WriteString("` | `")
-			builder.WriteString(formatCommunityShortsSendCountTimePtr(row.DetectedAt))
-			builder.WriteString("` | `")
-			builder.WriteString(formatCommunityShortsSendCountTimePtr(row.AlarmSentAt))
-			builder.WriteString("` | ")
-			builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.AlarmLatencyMillis))
-			builder.WriteString(" | `")
-			builder.WriteString(string(row.InternalCauseJudgment))
-			builder.WriteString("` | `")
-			builder.WriteString(fallbackCommunityShortsSendCountValue(row.InternalCauseBasis))
-			builder.WriteString("` | `")
-			builder.WriteString(renderCommunityShortsLatencyCauseEvidenceFields(row.CauseEvidence))
-			builder.WriteString("` | `")
-			builder.WriteString(string(row.DelaySource))
-			builder.WriteString("` | `")
-			builder.WriteString(string(row.InternalDelayCause))
-			builder.WriteString("` | ")
-			builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.PublishToDetectMillis))
-			builder.WriteString(" | ")
-			builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.InternalLatencyMillis))
-			builder.WriteString(" | ")
-			builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.QueueWaitMillis))
-			builder.WriteString(" | ")
-			builder.WriteString(formatCommunityShortsSendCountInt64Ptr(row.RetryAccumulationMillis))
-			builder.WriteString(" | `")
-			builder.WriteString(formatCommunityShortsSendCountBool(row.JobFailureDetected))
-			builder.WriteString("` | `")
-			builder.WriteString(string(row.LatencyClassification.Status))
-			builder.WriteString("` | `")
-			builder.WriteString(renderCommunityShortsLatencyClassificationEvidence(row.LatencyClassification))
-			builder.WriteString("` |\n")
-		}
+		writeCommunityShortsMarkdownTable(&builder, communityShortsLatencyCauseMarkdownColumns, buildCommunityShortsLatencyCauseMarkdownRows(period.Rows))
 	}
 
 	return builder.String()
+}
+
+var communityShortsLatencyCauseMarkdownColumns = []communityShortsMarkdownColumn{
+	{Header: "alarm_type"},
+	{Header: "channel_id"},
+	{Header: "post_id"},
+	{Header: "observed_at"},
+	{Header: "actual_published_at"},
+	{Header: "detected_at"},
+	{Header: "alarm_sent_at"},
+	{Header: "alarm_latency_ms", AlignRight: true},
+	{Header: "internal_cause_judgment"},
+	{Header: "internal_cause_basis"},
+	{Header: "cause_evidence_fields"},
+	{Header: "delay_source"},
+	{Header: "internal_delay_cause"},
+	{Header: "publish_to_detect_ms", AlignRight: true},
+	{Header: "internal_latency_ms", AlignRight: true},
+	{Header: "queue_wait_ms", AlignRight: true},
+	{Header: "retry_accumulation_ms", AlignRight: true},
+	{Header: "job_failure_detected"},
+	{Header: "cause_classification_status"},
+	{Header: "cause_classification_evidence"},
+}
+
+func buildCommunityShortsLatencyPeriodSummaryMarkdown(summary outbox.PostLatencyPeriodSummary) string {
+	return strings.Join([]string{
+		"total_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.TotalPostCount, 10)),
+		"alarm_sent_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.AlarmSentPostCount, 10)),
+		"pending_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.PendingPostCount, 10)),
+		"measured_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.LatencyMeasuredPostCount, 10)),
+		"avg_latency_ms=" + formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountInt64Ptr(summary.AverageLatencyMillis)),
+		"p95_latency_ms=" + formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountInt64Ptr(summary.P95LatencyMillis)),
+		"max_latency_ms=" + formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountInt64Ptr(summary.MaxLatencyMillis)),
+		"over_2m_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.ExceededPostCount, 10)),
+	}, ", ")
+}
+
+func buildCommunityShortsLatencyCauseSummaryMarkdown(summary CommunityShortsLatencyCauseSummary) string {
+	return strings.Join([]string{
+		"exceeded_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.ExceededPostCount, 10)),
+		"internal_system_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.InternalSystemCausePostCount, 10)),
+		"non_internal_system_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.NonInternalSystemCausePostCount, 10)),
+		"excluded_external_delay_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.ExcludedExternalDelayPostCount, 10)),
+		"community_exceeded_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.CommunityExceededPostCount, 10)),
+		"shorts_exceeded_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.ShortsExceededPostCount, 10)),
+		"external_collection_source_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.ExternalCollectionSourcePostCount, 10)),
+		"internal_delivery_source_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.InternalDeliverySourcePostCount, 10)),
+		"mixed_delay_source_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.MixedDelaySourcePostCount, 10)),
+		"no_dominant_source_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.NoDominantSourcePostCount, 10)),
+		"internal_cause_candidate_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.InternalCauseCandidatePostCount, 10)),
+		"queue_wait_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.QueueWaitCausePostCount, 10)),
+		"retry_accumulation_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.RetryAccumulationCausePostCount, 10)),
+		"job_failure_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.JobFailureCausePostCount, 10)),
+		"unclassified_internal_cause_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.UnclassifiedInternalCausePostCount, 10)),
+		"insufficient_evidence_posts=" + formatCommunityShortsMarkdownCode(strconv.FormatInt(summary.InsufficientEvidencePostCount, 10)),
+	}, ", ")
+}
+
+func buildCommunityShortsLatencyCauseMarkdownRows(rows []CommunityShortsLatencyCauseRow) [][]string {
+	markdownRows := make([][]string, 0, len(rows))
+	for i := range rows {
+		row := rows[i]
+		markdownRows = append(markdownRows, []string{
+			formatCommunityShortsMarkdownCode(string(row.AlarmType)),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(row.ChannelID)),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(row.PostID)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(row.ObservedAt)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(row.ActualPublishedAt)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(row.DetectedAt)),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(row.AlarmSentAt)),
+			formatCommunityShortsSendCountInt64Ptr(row.AlarmLatencyMillis),
+			formatCommunityShortsMarkdownCode(string(row.InternalCauseJudgment)),
+			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(row.InternalCauseBasis)),
+			formatCommunityShortsMarkdownCode(renderCommunityShortsLatencyCauseEvidenceFields(row.CauseEvidence)),
+			formatCommunityShortsMarkdownCode(string(row.DelaySource)),
+			formatCommunityShortsMarkdownCode(string(row.InternalDelayCause)),
+			formatCommunityShortsSendCountInt64Ptr(row.PublishToDetectMillis),
+			formatCommunityShortsSendCountInt64Ptr(row.InternalLatencyMillis),
+			formatCommunityShortsSendCountInt64Ptr(row.QueueWaitMillis),
+			formatCommunityShortsSendCountInt64Ptr(row.RetryAccumulationMillis),
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountBool(row.JobFailureDetected)),
+			formatCommunityShortsMarkdownCode(string(row.LatencyClassification.Status)),
+			formatCommunityShortsMarkdownCode(renderCommunityShortsLatencyClassificationEvidence(row.LatencyClassification)),
+		})
+	}
+	return markdownRows
 }
 
 func buildCommunityShortsLatencyCauseSummary(rows []CommunityShortsLatencyCauseRow) CommunityShortsLatencyCauseSummary {
@@ -234,7 +216,7 @@ func buildCommunityShortsLatencyCauseVerification() CommunityShortsLatencyCauseV
 
 func renderCommunityShortsLatencyCauseEvidenceFields(evidence CommunityShortsLatencyCauseEvidence) string {
 	if len(evidence.Fields) == 0 {
-		return "(none)"
+		return communityShortsLatencyCauseNone
 	}
 	return strings.Join(evidence.Fields, ", ")
 }

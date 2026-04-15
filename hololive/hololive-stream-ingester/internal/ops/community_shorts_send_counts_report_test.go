@@ -2,6 +2,7 @@ package ops
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -228,4 +229,89 @@ func TestBuildCommunityShortsSendCountReportWithQuery_ObservationWindow(t *testi
 	require.Contains(t, markdown, "observation runtime: `youtube-scraper`, cutover: `2026-04-10T00:00:00Z`")
 	require.Contains(t, markdown, "duplicate alarm verdict: status=`pass`, duplicate_posts=`0`, rule=`duplicate_success_posts == 0`")
 	require.Contains(t, markdown, "조회된 community/shorts 게시물이 없습니다.")
+}
+
+func TestRenderCommunityShortsSendCountMarkdown_OutputStability(t *testing.T) {
+	t.Parallel()
+
+	generatedAt := time.Date(2026, 4, 15, 12, 34, 56, 0, time.UTC)
+	windowStart := generatedAt.Add(-2 * time.Hour)
+	windowEnd := generatedAt
+	actualPublishedAt := generatedAt.Add(-95 * time.Minute)
+	detectedAt := actualPublishedAt.Add(25 * time.Second)
+	alarmSentAt := actualPublishedAt.Add(3 * time.Minute)
+	delaySeconds := 180.0
+	publishToDetectMillis := int64(25 * time.Second / time.Millisecond)
+	queueWaitMillis := int64(90 * time.Second / time.Millisecond)
+
+	report := CommunityShortsSendCountReport{
+		GeneratedAt: generatedAt,
+		Query: CommunityShortsSendCountQuery{
+			Mode:        communityShortsSendCountQueryModeRecent,
+			WindowStart: &windowStart,
+			WindowEnd:   &windowEnd,
+		},
+		WindowStart: windowStart,
+		WindowEnd:   windowEnd,
+		Summary: CommunityShortsSendCountSummary{
+			PostCount:                       1,
+			SuccessfulPostCount:             1,
+			ZeroSuccessPostCount:            0,
+			DuplicateSuccessPostCount:       0,
+			FailedAttemptPostCount:          0,
+			OutboxMissingPostCount:          0,
+			InternalDeliverySourcePostCount: 1,
+			QueueWaitCausePostCount:         1,
+		},
+		Verification: CommunityShortsSendCountVerification{
+			DuplicateAlarmStatus:    communityShortsSendCountDuplicateAlarmPass,
+			DuplicateAlarmPostCount: 0,
+			DuplicateAlarmRule:      communityShortsSendCountDuplicateAlarmRule,
+		},
+		Rows: []CommunityShortsSendCountRow{{
+			PostSendCount: outbox.PostSendCount{
+				AlarmType:          domain.AlarmTypeCommunity,
+				ChannelID:          "UC_TEST",
+				PostID:             "community-post",
+				ContentID:          "community-post",
+				DetectedAt:         &detectedAt,
+				OutboxCount:        1,
+				SuccessSendCount:   1,
+				SuccessRoomCount:   1,
+				FailedAttemptCount: 0,
+			},
+			ReportAlarmType:         domain.AlarmTypeCommunity,
+			ReportChannelID:         "UC_TEST",
+			ReportPostID:            "community-post",
+			ReportActualPublishedAt: &actualPublishedAt,
+			ReportAlarmSentAt:       &alarmSentAt,
+			ReportDelaySeconds:      &delaySeconds,
+			DelaySource:             outbox.PostDelaySourceInternalDelivery,
+			PublishToDetectMillis:   &publishToDetectMillis,
+			InternalDelayCause:      outbox.PostInternalDelayCauseQueueWait,
+			QueueWaitMillis:         &queueWaitMillis,
+			LatencyClassification: outbox.PostLatencyClassificationResult{
+				Status: outbox.PostLatencyClassificationStatusExceeded,
+				Evidence: []outbox.PostLatencyClassificationEvidence{{
+					Key:      outbox.PostLatencyClassificationEvidenceKeyQueueWait,
+					Millis:   &queueWaitMillis,
+					Selected: true,
+				}},
+			},
+		}},
+	}
+
+	require.Equal(t, strings.Join([]string{
+		"# YouTube Community/Shorts Post Send Counts Report",
+		"",
+		"- generated at: `2026-04-15T12:34:56Z`",
+		"- mode: `recent_window`",
+		"- window: `2026-04-15T10:34:56Z` -> `2026-04-15T12:34:56Z`",
+		"- summary: posts=`1`, successful_posts=`1`, zero_success_posts=`0`, duplicate_success_posts=`0`, failed_attempt_posts=`0`, outbox_missing_posts=`0`, external_collection_source_posts=`0`, internal_delivery_source_posts=`1`, mixed_delay_source_posts=`0`, queue_wait_cause_posts=`1`, retry_accumulation_cause_posts=`0`, job_failure_cause_posts=`0`",
+		"- duplicate alarm verdict: status=`pass`, duplicate_posts=`0`, rule=`duplicate_success_posts == 0`",
+		"",
+		"| status | alarm_type | channel_id | post_id | actual_published_at | detected_at | alarm_sent_at | delay_seconds | delay_source | publish_to_detect_ms | internal_delay_cause | queue_wait_ms | retry_accumulation_ms | job_failure_detected | latency_classification_status | latency_classification_evidence | outbox_count | success_send_count | success_room_count | duplicate_success_count | failed_attempt_count |",
+		"| --- | --- | --- | --- | --- | --- | --- | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+		"| `ok` | `COMMUNITY` | `UC_TEST` | `community-post` | `2026-04-15T10:59:56Z` | `2026-04-15T11:00:21Z` | `2026-04-15T11:02:56Z` | 180.000 | `internal_delivery` | 25000 | `queue_wait` | 90000 |  | `false` | `exceeded` | `queue_wait=90000[selected]` | 1 | 1 | 1 | 0 | 0 |",
+	}, "\n")+"\n", RenderCommunityShortsSendCountMarkdown(report))
 }

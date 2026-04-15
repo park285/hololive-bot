@@ -7,6 +7,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 
@@ -188,6 +189,18 @@ func applyCommunityShortsRouteVerificationSummary(
 func RenderCommunityShortsRouteVerificationMarkdown(report CommunityShortsRouteVerificationReport) string {
 	var builder strings.Builder
 
+	builder.WriteString(buildCommunityShortsRouteVerificationMetadataMarkdown(report))
+
+	for i := range report.Channels {
+		builder.WriteString(buildCommunityShortsRouteVerificationChannelMarkdown(report.Channels[i]))
+	}
+
+	return builder.String()
+}
+
+func buildCommunityShortsRouteVerificationMetadataMarkdown(report CommunityShortsRouteVerificationReport) string {
+	var builder strings.Builder
+
 	builder.WriteString("# YouTube Community/Shorts Channel Route Verification Report\n\n")
 	builder.WriteString("- generated at: `")
 	builder.WriteString(formatRouteReportTime(report.GeneratedAt))
@@ -228,55 +241,65 @@ func RenderCommunityShortsRouteVerificationMarkdown(report CommunityShortsRouteV
 	fmt.Fprintf(&builder, "%d", report.Summary.MixedPathRouteCount)
 	builder.WriteString("`\n")
 
-	for i := range report.Channels {
-		channel := report.Channels[i]
-		builder.WriteString("\n## ")
-		if channel.OwnerLabel != "" {
-			builder.WriteString(channel.OwnerLabel)
-			builder.WriteString(" (`")
-			builder.WriteString(channel.ChannelID)
-			builder.WriteString("`)")
-		} else {
-			builder.WriteString("`")
-			builder.WriteString(channel.ChannelID)
-			builder.WriteString("`")
-		}
-		builder.WriteString("\n\n")
-		for j := range channel.Routes {
-			route := channel.Routes[j]
-			builder.WriteString("- ")
-			builder.WriteString(string(route.AlarmType))
-			builder.WriteString(": activation=`")
-			builder.WriteString(fallbackRouteReportValue(route.ActivationState, "(empty)"))
-			builder.WriteString("`, deployment=`")
-			builder.WriteString(fallbackRouteReportValue(route.DeploymentTargetPath, "(empty)"))
-			builder.WriteString("`, telemetry_target=`")
-			builder.WriteString(fallbackRouteReportValue(route.ExpectedTelemetryPath, "(empty)"))
-			builder.WriteString("`, actual=`")
-			builder.WriteString(fallbackRouteReportValue(route.ActualUsageState, "(empty)"))
-			builder.WriteString("`, rooms=`")
-			fmt.Fprintf(&builder, "%d", route.SubscriberRoomCount)
-			builder.WriteString("`, posts=`")
-			fmt.Fprintf(&builder, "%d", route.ObservedPostCount)
-			builder.WriteString("`, success_posts=`")
-			fmt.Fprintf(&builder, "%d", route.SuccessfulPostCount)
-			builder.WriteString("`, new_path_posts=`")
-			fmt.Fprintf(&builder, "%d", route.NewPathOnlyPostCount)
-			builder.WriteString("`, mixed_path_posts=`")
-			fmt.Fprintf(&builder, "%d", route.MixedPathPostCount)
-			builder.WriteString("`, unexpected_path_posts=`")
-			fmt.Fprintf(&builder, "%d", route.UnexpectedPathPostCount)
-			builder.WriteString("`, no_path_posts=`")
-			fmt.Fprintf(&builder, "%d", route.NoPathPostCount)
-			builder.WriteString("`, observed_paths=")
-			builder.WriteString(formatRouteReportPaths(route.ObservedPaths))
-			builder.WriteString(", latest_published_at=`")
-			builder.WriteString(formatRouteReportTimePtr(route.LatestPublishedAt))
-			builder.WriteString("`, latest_success_at=`")
-			builder.WriteString(formatRouteReportTimePtr(route.LatestSuccessAt))
-			builder.WriteString("`\n")
-		}
+	return builder.String()
+}
+
+func buildCommunityShortsRouteVerificationChannelMarkdown(channel CommunityShortsRouteVerificationChannel) string {
+	var builder strings.Builder
+
+	builder.WriteString("\n## ")
+	if channel.OwnerLabel != "" {
+		builder.WriteString(channel.OwnerLabel)
+		builder.WriteString(" (`")
+		builder.WriteString(channel.ChannelID)
+		builder.WriteString("`)")
+	} else {
+		builder.WriteString("`")
+		builder.WriteString(channel.ChannelID)
+		builder.WriteString("`")
 	}
+	builder.WriteString("\n\n")
+	for i := range channel.Routes {
+		builder.WriteString(buildCommunityShortsRouteVerificationRouteMarkdown(channel.Routes[i]))
+	}
+
+	return builder.String()
+}
+
+func buildCommunityShortsRouteVerificationRouteMarkdown(route CommunityShortsRouteVerificationRoute) string {
+	var builder strings.Builder
+
+	builder.WriteString("- ")
+	builder.WriteString(string(route.AlarmType))
+	builder.WriteString(": activation=`")
+	builder.WriteString(fallbackRouteReportValue(route.ActivationState, "(empty)"))
+	builder.WriteString("`, deployment=`")
+	builder.WriteString(fallbackRouteReportValue(route.DeploymentTargetPath, "(empty)"))
+	builder.WriteString("`, telemetry_target=`")
+	builder.WriteString(fallbackRouteReportValue(route.ExpectedTelemetryPath, "(empty)"))
+	builder.WriteString("`, actual=`")
+	builder.WriteString(fallbackRouteReportValue(route.ActualUsageState, "(empty)"))
+	builder.WriteString("`, rooms=`")
+	fmt.Fprintf(&builder, "%d", route.SubscriberRoomCount)
+	builder.WriteString("`, posts=`")
+	fmt.Fprintf(&builder, "%d", route.ObservedPostCount)
+	builder.WriteString("`, success_posts=`")
+	fmt.Fprintf(&builder, "%d", route.SuccessfulPostCount)
+	builder.WriteString("`, new_path_posts=`")
+	fmt.Fprintf(&builder, "%d", route.NewPathOnlyPostCount)
+	builder.WriteString("`, mixed_path_posts=`")
+	fmt.Fprintf(&builder, "%d", route.MixedPathPostCount)
+	builder.WriteString("`, unexpected_path_posts=`")
+	fmt.Fprintf(&builder, "%d", route.UnexpectedPathPostCount)
+	builder.WriteString("`, no_path_posts=`")
+	fmt.Fprintf(&builder, "%d", route.NoPathPostCount)
+	builder.WriteString("`, observed_paths=")
+	builder.WriteString(formatRouteReportPaths(route.ObservedPaths))
+	builder.WriteString(", latest_published_at=`")
+	builder.WriteString(formatRouteReportTimePtr(route.LatestPublishedAt))
+	builder.WriteString("`, latest_success_at=`")
+	builder.WriteString(formatRouteReportTimePtr(route.LatestSuccessAt))
+	builder.WriteString("`\n")
 
 	return builder.String()
 }
