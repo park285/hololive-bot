@@ -38,7 +38,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-//
 // 인터페이스를 통해 의존한다.
 type MilestoneMessageFormatter interface {
 	FormatMilestoneAchieved(ctx context.Context, memberName, milestone string) (string, error)
@@ -815,26 +814,36 @@ func (ys *schedulerImpl) dispatchMilestoneAlertWorks(
 		return nil
 	}
 
-	sentNotifications := make([]ytstats.MilestoneNotification, 0, len(works))
+	successByWork := make([]atomic.Bool, len(works))
 	eg, _ := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
 
-	for _, work := range works {
-		sentNotifications = append(sentNotifications, work.notification)
+	for i, work := range works {
+		i := i
+		work := work
 		for _, room := range rooms {
+			room := room
 			eg.Go(func() error {
 				if err := sendMessage(room, work.message); err != nil {
 					ys.logger.Error("Failed to send milestone notification",
 						slog.String("room", room),
 						slog.String("member", work.notification.MemberName),
 						slog.Any("error", err))
+					return nil
 				}
+				successByWork[i].Store(true)
 				return nil
 			})
 		}
 	}
 
 	_ = eg.Wait()
+	sentNotifications := make([]ytstats.MilestoneNotification, 0, len(works))
+	for i, work := range works {
+		if successByWork[i].Load() {
+			sentNotifications = append(sentNotifications, work.notification)
+		}
+	}
 	return sentNotifications
 }
 
@@ -874,26 +883,36 @@ func (ys *schedulerImpl) dispatchApproachingAlertWorks(
 		return nil
 	}
 
-	sentNotifications := make([]ytstats.ApproachingNotification, 0, len(works))
+	successByWork := make([]atomic.Bool, len(works))
 	eg, _ := errgroup.WithContext(ctx)
 	eg.SetLimit(4)
 
-	for _, work := range works {
-		sentNotifications = append(sentNotifications, work.notification)
+	for i, work := range works {
+		i := i
+		work := work
 		for _, room := range rooms {
+			room := room
 			eg.Go(func() error {
 				if err := sendMessage(room, work.message); err != nil {
 					ys.logger.Error("Failed to send approaching notification",
 						slog.String("room", room),
 						slog.String("member", work.notification.MemberName),
 						slog.Any("error", err))
+					return nil
 				}
+				successByWork[i].Store(true)
 				return nil
 			})
 		}
 	}
 
 	_ = eg.Wait()
+	sentNotifications := make([]ytstats.ApproachingNotification, 0, len(works))
+	for i, work := range works {
+		if successByWork[i].Load() {
+			sentNotifications = append(sentNotifications, work.notification)
+		}
+	}
 	return sentNotifications
 }
 
