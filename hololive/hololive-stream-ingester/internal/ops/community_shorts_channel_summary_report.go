@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 )
 
@@ -61,16 +60,19 @@ func CollectCommunityShortsChannelSummaryReport(
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: since is after now")
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: provide database resources: %w", err)
+		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	telemetryRepo := outbox.NewDeliveryTelemetryRepository(databaseResources.Service.GetGormDB())
-	rows, err := telemetryRepo.ListChannelPostDeliverySummariesSince(ctx, since)
+	if session == nil {
+		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: session is nil")
+	}
+
+	rows, err := session.telemetryRepo.ListChannelPostDeliverySummariesSince(ctx, since)
 	if err != nil {
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: list channel summaries: %w", err)
 	}

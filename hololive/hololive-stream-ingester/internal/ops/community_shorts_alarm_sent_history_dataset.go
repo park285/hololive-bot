@@ -10,8 +10,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -42,18 +40,28 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: %w", err)
 	}
 
-	databaseResources, cleanupDB, err := sharedproviders.ProvideDatabaseResources(ctx, cfg.Postgres, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: provide database resources: %w", err)
+		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: %w", err)
 	}
 	if cleanupDB != nil {
 		defer cleanupDB()
 	}
 
-	db := databaseResources.Service.GetGormDB()
-	trackingRepository := trackingrepo.NewRepository(db)
-	telemetryRepo := outbox.NewDeliveryTelemetryRepository(db)
-	window, err := trackingRepository.FindClosedCommunityShortsObservationWindow(
+	return collectCommunityShortsAlarmSentHistoryDatasetReportWithSession(ctx, session, now, query)
+}
+
+func collectCommunityShortsAlarmSentHistoryDatasetReportWithSession(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	now time.Time,
+	query CommunityShortsAlarmSentHistoryDatasetQuery,
+) (CommunityShortsAlarmSentHistoryDatasetReport, error) {
+	if session == nil {
+		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: session is nil")
+	}
+
+	window, err := session.trackingRepository.FindClosedCommunityShortsObservationWindow(
 		ctx,
 		query.ObservationRuntimeName,
 		*query.ObservationBigBangCutoverAt,
@@ -72,7 +80,7 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 	query.WindowStart = cloneCommunityShortsSendCountTime(&window.ObservationStartedAt)
 	query.WindowEnd = cloneCommunityShortsSendCountTime(&window.ObservationEndedAt)
 
-	baselines, err := trackingRepository.ListCommunityShortsObservationPostBaselines(
+	baselines, err := session.trackingRepository.ListCommunityShortsObservationPostBaselines(
 		ctx,
 		query.ObservationRuntimeName,
 		window.BigBangCutoverAt,
@@ -81,7 +89,7 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: list observation baselines: %w", err)
 	}
 
-	communityRows, err := trackingRepository.ListCommunityAlarmSentHistoriesWithinObservationWindow(
+	communityRows, err := session.trackingRepository.ListCommunityAlarmSentHistoriesWithinObservationWindow(
 		ctx,
 		window.ObservationStartedAt,
 		window.ObservationEndedAt,
@@ -91,7 +99,7 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: list community sent histories: %w", err)
 	}
 
-	shortsRows, err := trackingRepository.ListShortsAlarmSentHistoriesWithinObservationWindow(
+	shortsRows, err := session.trackingRepository.ListShortsAlarmSentHistoriesWithinObservationWindow(
 		ctx,
 		window.ObservationStartedAt,
 		window.ObservationEndedAt,
@@ -101,7 +109,7 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: list shorts sent histories: %w", err)
 	}
 
-	sendStateRows, err := telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(
+	sendStateRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(
 		ctx,
 		query.ObservationRuntimeName,
 		window.BigBangCutoverAt,
@@ -112,7 +120,7 @@ func CollectCommunityShortsAlarmSentHistoryDatasetReport(
 
 	comparison, err := buildCommunityShortsAlarmSentHistoryDatasetComparison(
 		ctx,
-		trackingRepository,
+		session.trackingRepository,
 		baselines,
 		communityRows,
 		shortsRows,
