@@ -106,6 +106,16 @@ pub struct ApiDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+
+    fn required_fields(json: &serde_json::Value, schema: &str) -> BTreeSet<String> {
+        json["components"]["schemas"][schema]["required"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|value| value.as_str().map(str::to_string))
+            .collect()
+    }
 
     #[test]
     fn test_openapi_includes_holo_paths() {
@@ -177,6 +187,58 @@ mod tests {
             remove_room_responses["502"]["content"]["application/json"]["schema"]["$ref"]
                 .as_str()
                 .is_some_and(|value| value.ends_with("/ErrorResponse"))
+        );
+    }
+
+    #[test]
+    fn test_openapi_holo_response_schemas_keep_required_fields() {
+        let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
+        assert_eq!(
+            required_fields(&json, "Alarm"),
+            BTreeSet::from([
+                "channelId".to_string(),
+                "memberName".to_string(),
+                "roomId".to_string(),
+                "roomName".to_string(),
+                "userId".to_string(),
+                "userName".to_string(),
+            ])
+        );
+        assert_eq!(
+            required_fields(&json, "AlarmsResponse"),
+            BTreeSet::from(["alarms".to_string(), "status".to_string()])
+        );
+        assert_eq!(
+            required_fields(&json, "Member"),
+            BTreeSet::from([
+                "aliases".to_string(),
+                "channelId".to_string(),
+                "id".to_string(),
+                "isGraduated".to_string(),
+                "name".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_openapi_holo_command_schemas_keep_required_fields() {
+        let json = serde_json::to_value(ApiDoc::openapi()).expect("openapi to json");
+        assert_eq!(
+            required_fields(&json, "UserNameUpdateRequest"),
+            BTreeSet::from(["userId".to_string(), "userName".to_string()])
+        );
+        assert_eq!(
+            required_fields(&json, "AddMemberRequest"),
+            BTreeSet::from([
+                "aliases".to_string(),
+                "channelId".to_string(),
+                "isGraduated".to_string(),
+                "name".to_string(),
+            ])
+        );
+        assert_eq!(
+            required_fields(&json, "SetGraduationRequest"),
+            BTreeSet::from(["isGraduated".to_string()])
         );
     }
 }

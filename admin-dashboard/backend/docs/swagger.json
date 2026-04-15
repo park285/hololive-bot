@@ -1612,6 +1612,56 @@
         }
       }
     },
+    "/admin/api/holo/stats/youtube/community-shorts": {
+      "get": {
+        "tags": [
+          "holo"
+        ],
+        "operationId": "holoGetYouTubeCommunityShortsOps",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeCommunityShortsOpsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/api/holo/streams/live": {
       "get": {
         "tags": [
@@ -2785,6 +2835,243 @@
             "type": "string"
           },
           "userName": {
+            "type": "string"
+          }
+        }
+      },
+      "YouTubeCommunityShortsOpsChannel": {
+        "type": "object",
+        "required": [
+          "channelId",
+          "detectedPostCount",
+          "alarmSentPostCount",
+          "successPostCount",
+          "failedPostCount",
+          "detectedUnsentPostCount",
+          "pendingPostCount",
+          "latencyMeasuredPostCount",
+          "withinTargetPostCount",
+          "exceededPostCount",
+          "communityPostCount",
+          "shortsPostCount"
+        ],
+        "properties": {
+          "alarmSentPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averageLatencyMillis": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "channelId": {
+            "type": "string"
+          },
+          "communityPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "detectedPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "detectedUnsentPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "earliestObservedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exceededPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failedPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "latencyMeasuredPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "latestObservedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "maxLatencyMillis": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "memberName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pendingPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "shortsPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "successPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "withinTargetPostCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "YouTubeCommunityShortsOpsOverview": {
+        "type": "object",
+        "required": [
+          "channelCount",
+          "detectedPostCount",
+          "alarmSentPostCount",
+          "successPostCount",
+          "failedPostCount",
+          "detectedUnsentPostCount",
+          "pendingPostCount",
+          "latencyMeasuredPostCount",
+          "withinTargetPostCount",
+          "exceededPostCount",
+          "communityDetectedPostCount",
+          "shortsDetectedPostCount",
+          "communityExceededPostCount",
+          "shortsExceededPostCount"
+        ],
+        "properties": {
+          "alarmSentPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "averageLatencyMillis": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "channelCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "communityDetectedPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "communityExceededPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "detectedPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "detectedUnsentPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "exceededPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failedPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "latencyMeasuredPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxLatencyMillis": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "pendingPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "shortsDetectedPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "shortsExceededPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "successPostCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "withinTargetPostCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "YouTubeCommunityShortsOpsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "generatedAt",
+          "windowStart",
+          "windowEnd",
+          "windowHours",
+          "observedAtBasis",
+          "slaThresholdMillis",
+          "overview",
+          "channels"
+        ],
+        "properties": {
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/YouTubeCommunityShortsOpsChannel"
+            }
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "observedAtBasis": {
+            "type": "string"
+          },
+          "overview": {
+            "$ref": "#/components/schemas/YouTubeCommunityShortsOpsOverview"
+          },
+          "slaThresholdMillis": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "windowEnd": {
+            "type": "string"
+          },
+          "windowHours": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "windowStart": {
             "type": "string"
           }
         }
