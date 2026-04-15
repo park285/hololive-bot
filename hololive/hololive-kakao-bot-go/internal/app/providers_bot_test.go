@@ -126,43 +126,43 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 	})
 
 	deps := ProvideBotDependencies(botDependencyModules{
-		core: botCoreModule{
-			botSelfUser:  "bot-self",
-			irisBaseURL:  "https://iris.internal",
-			notification: config.NotificationConfig{},
-			logger:       logger,
+		Core: botCoreModule{
+			BotSelfUser:  "bot-self",
+			IrisBaseURL:  "https://iris.internal",
+			Notification: config.NotificationConfig{},
+			Logger:       logger,
 		},
-		messaging: botMessagingModule{
-			client:         nil,
-			messageAdapter: messageAdapter,
-			formatter:      formatter,
+		Messaging: botMessagingModule{
+			Client:         nil,
+			MessageAdapter: messageAdapter,
+			Formatter:      formatter,
 		},
-		data: botDataModule{
-			cacheSvc:    cacheSvc,
-			postgres:    postgres,
-			memberRepo:  memberRepo,
-			memberCache: memberCache,
-			profiles:    profiles,
-			membersData: nil,
+		Data: botDataModule{
+			CacheSvc:    cacheSvc,
+			Postgres:    postgres,
+			MemberRepo:  memberRepo,
+			MemberCache: memberCache,
+			Profiles:    profiles,
+			MembersData: nil,
 		},
-		stream: botStreamModule{
-			holodexSvc:   holodexSvc,
-			chzzkClient:  chzzkClient,
-			twitchClient: twitchClient,
-			alarmSvc:     nil,
-			memberMatch:  memberMatcher,
-			ytStack:      ytStack,
+		Stream: botStreamModule{
+			HolodexSvc:   holodexSvc,
+			ChzzkClient:  chzzkClient,
+			TwitchClient: twitchClient,
+			AlarmSvc:     nil,
+			MemberMatch:  memberMatcher,
+			YTStack:      ytStack,
 		},
-		support: botSupportModule{
-			activityLogger: activityLogger,
-			settingsSvc:    settingsSvc,
-			aclSvc:         aclSvc,
-			workerPool:     workerPool,
+		Support: botSupportModule{
+			ActivityLogger: activityLogger,
+			SettingsSvc:    settingsSvc,
+			ACLSvc:         aclSvc,
+			WorkerPool:     workerPool,
 		},
-		feature: botFeatureModule{
-			majorEventRepo:  majorEventRepo,
-			memberNewsSvc:   memberNewsSvc,
-			commandBuilders: []bot.CommandBuilder{commandBuilder},
+		Feature: botFeatureModule{
+			MajorEventRepo:  majorEventRepo,
+			MemberNewsSvc:   memberNewsSvc,
+			CommandBuilders: []bot.CommandBuilder{commandBuilder},
 		},
 	})
 
@@ -219,8 +219,8 @@ func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
 	t.Parallel()
 
 	deps := ProvideBotDependencies(botDependencyModules{
-		stream: botStreamModule{
-			ytStack: nil,
+		Stream: botStreamModule{
+			YTStack: nil,
 		},
 	})
 	if deps == nil {

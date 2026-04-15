@@ -121,16 +121,14 @@ cd admin-dashboard/frontend && npm run lint && npm run build
 
 ## 4A. 비차단 후속 cleanup 후보
 
-아래는 “더 정리는 가능한가?”에 대한 현재 기준의 명시적 답변이다.
-가능하지만, 이제부터는 **필수 리스크 제거 단계**가 아니라 **장기 cleanup / 유지보수 비용 절감 단계**다.
+2026-04-15 후속 라운드에서 C1 / C2 / C3 / C4 는 모두 마감됐다.
+현재 이 섹션은 “무엇이 더 남았는가?”보다 “어떤 축이 어떻게 닫혔는가?”를 기록하는 종료 메모다.
 
 ### C1. `hololive-shared/pkg/service/youtube/scheduler.go`
 
-현재 상태:
-- `scheduler.go` 는 alert / watcher helper 분리 이후에도 orchestration 책임이 남아 있다.
-- 현재 파일은 batch loop / subscriber tracking / milestone persistence 를 함께 가진다.
+닫힘.
 
-후속 후보:
+- `scheduler.go` 는 생성자 / 상태 / 상수 중심으로 축소됐다.
 - `scheduler_batch.go`
   - `Start`, `Stop`, `runBatch`
   - batch rotation / recent video batch orchestration
@@ -139,89 +137,46 @@ cd admin-dashboard/frontend && npm run lint && npm run build
   - `prepareWorkItems`
   - `processAndRecordChanges`
   - `processMilestones`
-
-권장 조건:
-- scheduler 관련 테스트를 behavior lock 으로 먼저 재실행한다.
-- 새 public abstraction 은 만들지 않고 file-level seam 분리만 한다.
-
-기대 효과:
-- batch orchestration 수정과 subscriber-tracking 수정이 같은 파일에서 충돌하지 않는다.
-- `scheduler.go` 는 최종적으로 composition root 수준까지 더 줄일 수 있다.
+- `scheduler_milestones.go`
+  - milestone calculation / formatting / persistence helper
+- `Stop()` 은 idempotent 하게 정리돼 lifecycle guard 가 더 단단해졌다.
 
 ### C2. `hololive-shared/pkg/service/youtube/service_upcoming.go`
 
-현재 상태:
-- `service.go` 는 축소됐지만 `service_upcoming.go` 가 새 최대 hotspot 후보가 됐다.
-- 이 파일은 scraper phase / API fallback / cache path / event conversion 을 함께 가진다.
+닫힘.
 
-후속 후보:
+- `service_upcoming.go` 는 orchestrator / cache gate 위주로 축소됐다.
 - `service_upcoming_scrape.go`
   - scrape phase
   - scraped event conversion
 - `service_upcoming_fallback.go`
   - API fallback
   - cache/store decision
-- 또는 최소한 conversion helper 를 별도 파일로 이동
-
-권장 조건:
-- `service_test.go` 와 `service_policy_test.go` 외에 upcoming-specific proof 를 더 추가할지 먼저 판단한다.
-- public method shape 는 그대로 둔다.
-
-기대 효과:
-- scraper 정책 수정과 fallback 정책 수정이 분리된다.
-- `service_upcoming.go` LOC drift 를 threshold 아래에서 더 안정적으로 유지할 수 있다.
+- upcoming 전용 회귀 테스트가 추가돼 cache hit / quota-blocked fallback / scraped conversion edge 가 고정됐다.
 
 ### C3. `hololive-kakao-bot-go/internal/app/bootstrap_*`
 
-현재 상태:
-- `http / runtime / wiring` seam 은 정리됐다.
-- 하지만 bootstrap orchestration 파일들은 아직 루트 `internal/app` 에 남아 있다.
+닫힘.
 
-후속 후보:
 - `internal/app/bootstrap/` 전용 디렉터리 도입
-- 이동 1차 후보:
-  - `bootstrap_bot*.go`
-  - `bootstrap_core*.go`
-  - `bootstrap_services*.go`
-  - `providers_alarm_consumers.go`
-  - `providers_single_consumer.go`
-
-권장 조건:
-- façade 유지 원칙을 지켜 import churn 을 만들지 않는다.
-- bootstrap 전용 이동은 http/runtime/wiring 만큼의 직접 효익이 있는지 먼저 확인한다.
-
-기대 효과:
-- startup/wiring와 provider bootstrap churn 이 루트 패키지에 다시 쌓이지 않는다.
-- `APP_BOOTSTRAP_BOUNDARY_GUIDE.md` 의 마지막 장기 과제를 실제 코드 구조로 수렴시킬 수 있다.
+- provider / core / service / bot helper implementation 은 `internal/app/bootstrap/` 로 이동했다.
+- 루트 `internal/app` 의 `bootstrap_*.go` / `providers_*.go` 는 thin wrapper / orchestration / local shape adapter 성격으로 축소됐다.
+- public import path 와 테스트 진입점은 유지됐다.
 
 ### C4. stream-ingester continuous observation end-to-end proof
 
-현재 상태:
-- collector / closeout seam-level proof 는 존재한다.
-- DB-backed end-to-end 전용 proof 는 아직 없다.
+닫힘.
 
-후속 후보:
-- `CollectCommunityShortsContinuousObservationReport(...)` 경로를 위한 DB-backed integration-style test 추가
-- 최소한 다음 경로를 고정:
+- `collectCommunityShortsContinuousObservationReportWithSession(...)` seam 을 추가해 session-backed 통합 proof 를 고정했다.
+- DB-backed integration-style test 로 아래 경로를 실제 sqlite-backed session 에서 검증한다.
   - active observation
   - finalized observation
   - dataset unavailable fallback
-
-기대 효과:
-- seam split 이후에도 report assembly 전체 경로가 보존되는지 더 강하게 보장한다.
+- report assembly 전체 경로가 collector split 이후에도 유지됨을 fresh proof 로 확인했다.
 
 ## 4B. 권장 실행 순서
 
-후속 cleanup 을 실제로 다시 잡는다면 아래 순서가 효율적이다.
-
-1. `service_upcoming.go`
-   - 현재 hotspot 집중 완화
-2. `scheduler.go` orchestration 재분리
-   - batch / tracking seam 정리
-3. `internal/app/bootstrap/`
-   - import churn 을 최소화하는 장기 구조 정리
-4. stream-ingester DB-backed e2e proof 보강
-   - 유지보수 안정성 강화
+현재 기준으로 남은 후속 순서는 없다.
 
 ## 4C. 종료 기준
 
@@ -240,7 +195,7 @@ cd admin-dashboard/frontend && npm run lint && npm run build
 그 마감은 이번 라운드에서 완료됐다.
 
 - 변경은 축별 커밋으로 분리됐다.
-- atomicity / large-file seam / orchestration 분리가 끝났고, `youtube/service.go` / `youtube/scheduler.go` P2 seam 분리까지 마감됐다.
+- atomicity / large-file seam / orchestration 분리가 끝났고, `youtube/service_upcoming.go` / `youtube/scheduler.go` / `internal/app/bootstrap/` / stream-ingester continuous observation proof 보강까지 마감됐다.
 - 테스트와 current docs 는 새 경계에 맞게 갱신됐다.
 
 따라서 이 문서는 더 이상 실행 대기 가이드가 아니라 **종료 기록**이다.

@@ -24,15 +24,12 @@ import (
 	"context"
 	"log/slog"
 
-	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
 
-// buildBotConfigSubscriber: Bot용 ConfigSubscriber를 생성합니다.
-// Scraper_proxy / alarm_advance_minutes 두 가지 설정 변경을 수신하여 적용합니다.
 func buildBotConfigSubscriber(
 	ctx context.Context,
 	deps botConfigSubscriberDependencies,
@@ -40,41 +37,9 @@ func buildBotConfigSubscriber(
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
-	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
-		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
-			sharedsettings.ApplyScraperProxyToggle(payload.Enabled, runtimeDeps.youtubeService, runtimeDeps.holodexService, scraperScheduler, logger)
-			// 설정 파일에도 반영
-			current := deps.settings.Get()
-
-			current.ScraperProxyEnabled = payload.Enabled
-			if err := deps.settings.Update(current); err != nil {
-				logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
-			}
-		},
-		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
-			targets := runtimeDeps.alarmCRUD.UpdateAlarmAdvanceMinutes(ctx, payload.Minutes)
-			logger.Info("Applied alarm advance minutes via pub/sub",
-				slog.Int("minutes", payload.Minutes),
-				slog.Any("targets", targets),
-			)
-			// 설정 파일에도 반영
-			current := deps.settings.Get()
-
-			current.AlarmAdvanceMinutes = payload.Minutes
-			current.TargetMinutes = persistedTargetMinutes(payload.Minutes, targets)
-			if err := deps.settings.Update(current); err != nil {
-				logger.Warn("Failed to persist alarm_advance_minutes setting", slog.Any("error", err))
-			}
-		},
-	})
-
-	return configsub.New(deps.cache.GetClient(), applyFn, logger)
+	return appbootstrap.BuildBotConfigSubscriber(ctx, deps, runtimeDeps, scraperScheduler, logger)
 }
 
 func persistedTargetMinutes(alarmAdvanceMinutes int, targetMinutes []int) []int {
-	if len(targetMinutes) > 0 {
-		return sharedchecker.ResolveConfiguredTargetMinutes(targetMinutes)
-	}
-
-	return sharedchecker.BuildRuntimeTargetMinutes(alarmAdvanceMinutes)
+	return appbootstrap.PersistedTargetMinutes(alarmAdvanceMinutes, targetMinutes)
 }

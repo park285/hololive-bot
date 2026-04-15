@@ -180,11 +180,11 @@ func TestBuildBotConfigSubscriber_ScraperProxyUpdate(t *testing.T) {
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
 	deps := botConfigSubscriberDependencies{
-		cache:    cacheSvc,
-		settings: settingsSvc,
+		Cache:    cacheSvc,
+		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		youtubeService: youtubeSvc,
+		YouTubeService: youtubeSvc,
 	}
 	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)
@@ -245,11 +245,11 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate(t *testing.T) {
 	alarmSvc := &trackingAlarmAdvanceCRUD{targets: []int{15, 30}}
 
 	deps := botConfigSubscriberDependencies{
-		cache:    cacheSvc,
-		settings: settingsSvc,
+		Cache:    cacheSvc,
+		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		alarmCRUD: alarmSvc,
+		AlarmCRUD: alarmSvc,
 	}
 	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
@@ -313,11 +313,11 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	require.NoError(t, err)
 
 	deps := botConfigSubscriberDependencies{
-		cache:    cacheSvc,
-		settings: settingsSvc,
+		Cache:    cacheSvc,
+		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		alarmCRUD: alarmSvc,
+		AlarmCRUD: alarmSvc,
 	}
 	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, nil, logger)
 	require.NotNil(t, subscriber)
@@ -381,12 +381,12 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
 	deps := botConfigSubscriberDependencies{
-		cache:    cacheSvc,
-		settings: settingsSvc,
+		Cache:    cacheSvc,
+		Settings: settingsSvc,
 	}
 	runtimeDeps := botConfigSubscriberRuntimeDependencies{
-		youtubeService: youtubeSvc,
-		alarmCRUD:      alarmSvc,
+		YouTubeService: youtubeSvc,
+		AlarmCRUD:      alarmSvc,
 	}
 	subscriber := buildBotConfigSubscriber(t.Context(), deps, runtimeDeps, scheduler, logger)
 	require.NotNil(t, subscriber)

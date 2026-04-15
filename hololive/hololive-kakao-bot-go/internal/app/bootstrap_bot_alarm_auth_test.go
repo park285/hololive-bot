@@ -68,8 +68,8 @@ func testAdminDependencies() *botAdminServerDependencies {
 	apiHandler := &botserver.APIHandler{}
 
 	return &botAdminServerDependencies{
-		domainHandlers: apiHandler.DomainHandlers(),
-		authHandler:    &botserver.AuthHandler{},
+		DomainHandlers: apiHandler.DomainHandlers(),
+		AuthHandler:    &botserver.AuthHandler{},
 	}
 }
 

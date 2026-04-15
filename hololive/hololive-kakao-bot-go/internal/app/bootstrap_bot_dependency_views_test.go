@@ -123,7 +123,7 @@ func TestProvideIrisClient_UsesLoggerOption(t *testing.T) {
 func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {
 	t.Run("nil dependencies", func(t *testing.T) {
 		view := buildBotWebhookRuntimeDependencies(nil)
-		if view.cache != nil {
+		if view.Cache != nil {
 			t.Fatal("nil deps must yield zero-value webhook dependency view")
 		}
 	})
@@ -135,7 +135,7 @@ func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {
 		}
 
 		view := buildBotWebhookRuntimeDependencies(deps)
-		if view.cache != cacheSvc {
+		if view.Cache != cacheSvc {
 			t.Fatal("cache mapping mismatch")
 		}
 	})
@@ -144,7 +144,7 @@ func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {
 func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 	t.Run("nil dependencies", func(t *testing.T) {
 		view := buildBotConfigSubscriberDependencies(nil)
-		if view.cache != nil || view.settings != nil {
+		if view.Cache != nil || view.Settings != nil {
 			t.Fatal("nil deps must yield zero-value config subscriber view")
 		}
 	})
@@ -158,11 +158,11 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 		}
 
 		view := buildBotConfigSubscriberDependencies(deps)
-		if view.cache != cacheSvc {
+		if view.Cache != cacheSvc {
 			t.Fatal("cache mapping mismatch")
 		}
 
-		if view.settings != settingsSvc {
+		if view.Settings != settingsSvc {
 			t.Fatal("settings mapping mismatch")
 		}
 	})
@@ -171,7 +171,7 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 	t.Run("nil infra", func(t *testing.T) {
 		view := buildBotConfigSubscriberRuntimeDependencies(nil)
-		if view.youtubeService != nil || view.holodexService != nil || view.alarmCRUD != nil {
+		if view.YouTubeService != nil || view.HolodexService != nil || view.AlarmCRUD != nil {
 			t.Fatal("nil infra must yield zero-value config subscriber runtime dependency view")
 		}
 	})
@@ -183,23 +183,23 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
 		infra := &coreInfrastructure{
-			deps: &bot.Dependencies{
+			Deps: &bot.Dependencies{
 				Service: youtubeSvc,
 			},
-			holodexService: holodexSvc,
-			alarmCRUD:      alarmCRUD,
+			HolodexService: holodexSvc,
+			AlarmCRUD:      alarmCRUD,
 		}
 
 		view := buildBotConfigSubscriberRuntimeDependencies(infra)
-		if view.youtubeService != youtubeSvc {
+		if view.YouTubeService != youtubeSvc {
 			t.Fatal("youtube service mapping mismatch")
 		}
 
-		if view.holodexService != holodexSvc {
+		if view.HolodexService != holodexSvc {
 			t.Fatal("holodex service mapping mismatch")
 		}
 
-		if view.alarmCRUD != alarmCRUD {
+		if view.AlarmCRUD != alarmCRUD {
 			t.Fatal("alarm CRUD mapping mismatch")
 		}
 	})
@@ -232,7 +232,7 @@ func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
 		infra := &coreInfrastructure{
-			deps: &bot.Dependencies{
+			Deps: &bot.Dependencies{
 				Cache:       cacheSvc,
 				Postgres:    postgresSvc,
 				MemberRepo:  memberRepo,
@@ -243,10 +243,10 @@ func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 				Settings:    settingsSvc,
 				ACL:         aclSvc,
 			},
-			alarmCRUD:        alarmCRUD,
-			holodexService:   holodexSvc,
-			ytStack:          &providers.YouTubeStack{StatsRepo: statsRepo},
-			templateAdminSvc: templateAdminSvc,
+			AlarmCRUD:        alarmCRUD,
+			HolodexService:   holodexSvc,
+			YTStack:          &providers.YouTubeStack{StatsRepo: statsRepo},
+			TemplateAdminSvc: templateAdminSvc,
 		}
 
 		view := buildBotAdminRuntimeDependencies(infra)
@@ -316,7 +316,7 @@ func TestBuildBotServerRuntimeDependencies(t *testing.T) {
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
 		infra := &coreInfrastructure{
-			alarmCRUD: alarmCRUD,
+			AlarmCRUD: alarmCRUD,
 		}
 
 		view := buildBotServerRuntimeDependencies(infra)
@@ -333,8 +333,8 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 			t.Fatal("nil infra must yield nil bot deps")
 		}
 
-		if views.webhook.cache != nil || views.configSubscriber.cache != nil ||
-			views.configSubscriberRuntime.alarmCRUD != nil || views.adminRuntime.cache != nil ||
+		if views.webhook.Cache != nil || views.configSubscriber.Cache != nil ||
+			views.configSubscriberRuntime.AlarmCRUD != nil || views.adminRuntime.cache != nil ||
 			views.serverRuntime.alarmCRUD != nil {
 			t.Fatal("nil infra must yield zero-value runtime dependency views")
 		}
@@ -356,10 +356,10 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		}
 
 		infra := &coreInfrastructure{
-			deps:             deps,
-			alarmCRUD:        alarmCRUD,
-			holodexService:   holodexSvc,
-			templateAdminSvc: templateAdminSvc,
+			Deps:             deps,
+			AlarmCRUD:        alarmCRUD,
+			HolodexService:   holodexSvc,
+			TemplateAdminSvc: templateAdminSvc,
 		}
 
 		views := buildBotRuntimeDependencyViews(infra)
@@ -367,15 +367,15 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 			t.Fatal("bot deps mapping mismatch")
 		}
 
-		if views.webhook.cache != cacheSvc {
+		if views.webhook.Cache != cacheSvc {
 			t.Fatal("webhook view mapping mismatch")
 		}
 
-		if views.configSubscriber.cache != cacheSvc || views.configSubscriber.settings != settingsSvc {
+		if views.configSubscriber.Cache != cacheSvc || views.configSubscriber.Settings != settingsSvc {
 			t.Fatal("config subscriber view mapping mismatch")
 		}
 
-		if views.configSubscriberRuntime.alarmCRUD != alarmCRUD || views.configSubscriberRuntime.holodexService != holodexSvc {
+		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD || views.configSubscriberRuntime.HolodexService != holodexSvc {
 			t.Fatal("config subscriber runtime view mapping mismatch")
 		}
 
