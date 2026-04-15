@@ -22,23 +22,13 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-)
 
-type scraperHolodexProfileFoundation struct {
-	holodexService       *holodex.Service
-	memberServiceAdapter member.DataProvider
-	profileService       *member.ProfileService
-	sharedRL             *scraper.RateLimiter
-}
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
+)
 
 func initScraperHolodexProfileFoundation(
 	ctx context.Context,
@@ -46,47 +36,9 @@ func initScraperHolodexProfileFoundation(
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*scraperHolodexProfileFoundation, error) {
-	holodexAPIKey := cfg.Holodex.APIKey
-	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-
-	scraperProxyConfig := scraper.ProxyConfig{
-		Enabled: cfg.Scraper.ProxyEnabled,
-		URL:     cfg.Scraper.ProxyURL,
-	}
-
-	sharedRL, err := providers.ProvideYouTubeScraperRateLimiter(infra.Cache, logger)
+	foundation, err := appbootstrap.InitScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
 	if err != nil {
-		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
+		return nil, err
 	}
-
-	scraperService := providers.ProvideScraperService(
-		infra.Cache,
-		memberServiceAdapter,
-		scraperProxyConfig,
-		sharedRL,
-		logger,
-	)
-
-	holodexService, err := providers.ProvideHolodexService(
-		cfg.Holodex.BaseURL,
-		holodexAPIKey,
-		infra.Cache,
-		scraperService,
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("provide holodex service: %w", err)
-	}
-
-	profileService, err := providers.ProvideProfileService(ctx, infra.Cache, memberServiceAdapter, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide profile service: %w", err)
-	}
-
-	return &scraperHolodexProfileFoundation{
-		holodexService:       holodexService,
-		memberServiceAdapter: memberServiceAdapter,
-		profileService:       profileService,
-		sharedRL:             sharedRL,
-	}, nil
+	return foundation, nil
 }

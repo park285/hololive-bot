@@ -37,10 +37,10 @@ func InitializeBotDependencies(ctx context.Context, cfg *config.Config, logger *
 	}
 
 	cleanup := func() {
-		infra.cleanup()
+		infra.Cleanup()
 	}
 
-	return infra.deps, cleanup, nil
+	return infra.Deps, cleanup, nil
 }
 
 // InitializeBotRuntime - cmd/bot 런타임 (Bot + MQ + Admin API 구성요소).
@@ -52,13 +52,13 @@ func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 
 	runtime, err := buildBotRuntime(ctx, cfg, logger, infra)
 	if err != nil {
-		infra.cleanup()
+		infra.Cleanup()
 
 		return nil, nil, err
 	}
 
 	cleanup := func() {
-		infra.cleanup()
+		infra.Cleanup()
 	}
 
 	return runtime, cleanup, nil

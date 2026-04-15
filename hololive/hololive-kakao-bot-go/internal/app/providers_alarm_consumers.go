@@ -22,7 +22,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -32,13 +31,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-// ProvideAlarmService - 알림 서비스 생성.
 func ProvideAlarmService(
 	advanceMinutes []int,
 	cacheSvc cache.Client,
@@ -49,47 +48,17 @@ func ProvideAlarmService(
 	alarmRepo *alarm.Repository,
 	logger *slog.Logger,
 ) (*notification.AlarmService, error) {
-	svc, err := notification.NewAlarmService(
-		cacheSvc,
-		holodexSvc,
-		chzzkClient,
-		twitchClient,
-		memberData,
-		alarmRepo,
-		logger,
-		advanceMinutes,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create alarm service: %w", err)
-	}
-
-	return svc, nil
+	return appbootstrap.ProvideAlarmService(advanceMinutes, cacheSvc, holodexSvc, chzzkClient, twitchClient, memberData, alarmRepo, logger)
 }
 
-// ProvideAlarmRepository - 알람 저장소 생성 (DB 영속화).
-func ProvideAlarmRepository(
-	postgres database.Client,
-	logger *slog.Logger,
-) *alarm.Repository {
-	return alarm.NewRepository(postgres, logger)
+func ProvideAlarmRepository(postgres database.Client, logger *slog.Logger) *alarm.Repository {
+	return appbootstrap.ProvideAlarmRepository(postgres, logger)
 }
 
-// ProvideAlarmWorkerPool - 알림 처리용 워커풀 생성.
 func ProvideAlarmWorkerPool() (*workerpool.Pool, error) {
-	cfg := workerpool.DefaultConfig()
-
-	const alarmWorkerPoolSize = 10
-	cfg.Size = alarmWorkerPoolSize
-
-	pool, err := workerpool.New(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create alarm worker pool: %w", err)
-	}
-
-	return pool, nil
+	return appbootstrap.ProvideAlarmWorkerPool()
 }
 
-// ProvideMemberMatcher - 멤버 매칭 서비스 생성.
 func ProvideMemberMatcher(
 	ctx context.Context,
 	membersData domain.MemberDataProvider,
@@ -97,6 +66,5 @@ func ProvideMemberMatcher(
 	holodexSvc *holodex.Service,
 	logger *slog.Logger,
 ) *matcher.MemberMatcher {
-	// selector는 nil (Gemini AI 채널 선택 미사용)
-	return matcher.NewMemberMatcher(ctx, membersData, cacheSvc, holodexSvc, nil, logger)
+	return appbootstrap.ProvideMemberMatcher(ctx, membersData, cacheSvc, holodexSvc, logger)
 }

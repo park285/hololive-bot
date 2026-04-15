@@ -122,6 +122,23 @@ func TestNewScheduler(t *testing.T) {
 	}
 }
 
+func TestScheduler_Stop_IsIdempotent(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mockMembers := &mockMemberDataProvider{members: testMembers()}
+
+	scheduler := requireSchedulerImpl(t, NewScheduler(nil, nil, nil, nil, mockMembers, nil, nil, nil, logger))
+
+	scheduler.Stop()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Stop() panicked on second call: %v", r)
+		}
+	}()
+
+	scheduler.Stop()
+}
+
 func TestScheduler_CheckMilestones(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mockMembers := &mockMemberDataProvider{members: testMembers()}

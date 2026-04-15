@@ -26,12 +26,10 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
-	"github.com/valkey-io/valkey-go"
 	"gorm.io/gorm"
 )
 
