@@ -760,6 +760,74 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 	})
 }
 
+func TestBuildSummaryCacheKey_ChangesWhenEventsChange(t *testing.T) {
+	start := time.Date(2026, 3, 1, 0, 0, 0, 0, kst)
+	changedStart := time.Date(2026, 3, 8, 0, 0, 0, 0, kst)
+
+	baseEvents := []domain.MajorEvent{
+		{
+			ID:             1,
+			Title:          "Event A",
+			Link:           "https://example.com/a",
+			Type:           domain.MajorEventTypeEvent,
+			Members:        []string{"Member A"},
+			EventStartDate: &start,
+		},
+	}
+	changedEvents := []domain.MajorEvent{
+		{
+			ID:             1,
+			Title:          "Event A",
+			Link:           "https://example.com/a",
+			Type:           domain.MajorEventTypeEvent,
+			Members:        []string{"Member A"},
+			EventStartDate: &changedStart,
+		},
+	}
+
+	baseKey := buildSummaryCacheKey(baseEvents, SummaryTypeWeekly, "2026-03-01")
+	changedKey := buildSummaryCacheKey(changedEvents, SummaryTypeWeekly, "2026-03-01")
+
+	if baseKey == changedKey {
+		t.Fatalf("cache key should change when input events change: %q", baseKey)
+	}
+}
+
+func TestBuildSummaryCacheKey_IsOrderInsensitive(t *testing.T) {
+	firstStart := time.Date(2026, 3, 1, 0, 0, 0, 0, kst)
+	secondStart := time.Date(2026, 3, 8, 0, 0, 0, 0, kst)
+
+	firstOrder := []domain.MajorEvent{
+		{
+			ID:             1,
+			Title:          "Event A",
+			Link:           "https://example.com/a",
+			Type:           domain.MajorEventTypeEvent,
+			Members:        []string{"Member A"},
+			EventStartDate: &firstStart,
+		},
+		{
+			ID:             2,
+			Title:          "Event B",
+			Link:           "https://example.com/b",
+			Type:           domain.MajorEventTypeNews,
+			Members:        []string{"Member B"},
+			EventStartDate: &secondStart,
+		},
+	}
+	secondOrder := []domain.MajorEvent{
+		firstOrder[1],
+		firstOrder[0],
+	}
+
+	firstKey := buildSummaryCacheKey(firstOrder, SummaryTypeWeekly, "2026-03-01")
+	secondKey := buildSummaryCacheKey(secondOrder, SummaryTypeWeekly, "2026-03-01")
+
+	if firstKey != secondKey {
+		t.Fatalf("cache key should be order-insensitive: %q != %q", firstKey, secondKey)
+	}
+}
+
 // mockSearcher: 검색 결과 mock (병렬 호출 안전 — 쿼리 문자열로 1차/2차 분기)
 type mockSearcher struct {
 	results   []sharedmodel.SearchResult
