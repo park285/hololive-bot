@@ -13,6 +13,7 @@ import (
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
+
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
 

@@ -43,14 +43,14 @@ func cloneCommunityShortsSendCountInt64(value *int64) *int64 {
 
 func formatCommunityShortsSendCountTime(value time.Time) string {
 	if value.IsZero() {
-		return "(none)"
+		return communityShortsLatencyCauseNone
 	}
 	return value.UTC().Format(time.RFC3339)
 }
 
 func formatCommunityShortsSendCountTimePtr(value *time.Time) string {
 	if value == nil {
-		return "(none)"
+		return communityShortsLatencyCauseNone
 	}
 	return formatCommunityShortsSendCountTime(*value)
 }
@@ -104,7 +104,7 @@ func cloneCommunityShortsLatencyClassification(result outbox.PostLatencyClassifi
 
 func renderCommunityShortsLatencyClassificationEvidence(result outbox.PostLatencyClassificationResult) string {
 	if len(result.Evidence) == 0 {
-		return "(none)"
+		return communityShortsLatencyCauseNone
 	}
 
 	parts := make([]string, 0, len(result.Evidence))
@@ -115,7 +115,7 @@ func renderCommunityShortsLatencyClassificationEvidence(result outbox.PostLatenc
 }
 
 func formatCommunityShortsLatencyClassificationEvidenceItem(item outbox.PostLatencyClassificationEvidence) string {
-	value := "(none)"
+	value := communityShortsLatencyCauseNone
 	if item.Millis != nil {
 		value = fmt.Sprintf("%d", *item.Millis)
 	} else if item.Bool != nil {
@@ -130,7 +130,7 @@ func formatCommunityShortsLatencyClassificationEvidenceItem(item outbox.PostLate
 func fallbackCommunityShortsSendCountValue(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
-		return "(none)"
+		return communityShortsLatencyCauseNone
 	}
 	return trimmed
 }

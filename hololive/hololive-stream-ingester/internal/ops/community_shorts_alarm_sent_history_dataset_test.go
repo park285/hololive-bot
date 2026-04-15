@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -617,4 +618,44 @@ func TestRenderCommunityShortsAlarmSentHistoryDatasetMarkdownIncludesMissingZero
 	require.Contains(t, markdown, "누락 0건입니다.")
 	require.Contains(t, markdown, "| `COMMUNITY` | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 |")
 	require.Contains(t, markdown, "| `UC_COMMUNITY` | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 |")
+}
+
+func TestRenderCommunityShortsAlarmSentHistoryDatasetMarkdownKeepsEmptySectionScaffold(t *testing.T) {
+	t.Parallel()
+
+	generatedAt := time.Date(2026, 4, 15, 1, 0, 0, 0, time.UTC)
+	cutoverAt := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
+	windowStart := cutoverAt
+	windowEnd := cutoverAt.Add(24 * time.Hour)
+
+	markdown := RenderCommunityShortsAlarmSentHistoryDatasetMarkdown(CommunityShortsAlarmSentHistoryDatasetReport{
+		GeneratedAt: generatedAt,
+		Query: CommunityShortsAlarmSentHistoryDatasetQuery{
+			ObservationRuntimeName:      "youtube-scraper",
+			ObservationBigBangCutoverAt: &cutoverAt,
+			WindowStart:                 &windowStart,
+			WindowEnd:                   &windowEnd,
+		},
+	})
+
+	sections := []string{
+		"## Results",
+		"## Missing Alarm Rows",
+		"## Verification Rows",
+		"## Normalized Verification Reference Rows",
+		"## Normalized Sent History Rows",
+	}
+	lastIndex := -1
+	for _, section := range sections {
+		index := strings.Index(markdown, section)
+		require.NotEqualf(t, -1, index, "missing section %q in markdown:\n%s", section, markdown)
+		require.Greater(t, index, lastIndex, "section %q should keep report order", section)
+		lastIndex = index
+	}
+
+	require.Contains(t, markdown, "finalized send-state comparison pending")
+	require.Contains(t, markdown, "누락 알람 게시물이 없습니다.")
+	require.Contains(t, markdown, "검증 verdict row가 없습니다.")
+	require.Contains(t, markdown, "정규화된 검증 기준 row가 없습니다.")
+	require.Contains(t, markdown, "정규화된 community/shorts sent history row가 없습니다.")
 }

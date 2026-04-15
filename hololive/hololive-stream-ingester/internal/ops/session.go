@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 
+	"gorm.io/gorm"
+
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
-	"gorm.io/gorm"
 )
 
 type communityShortsOpsSession struct {
