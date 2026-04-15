@@ -18,64 +18,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package app
+package apphttp
 
 import (
-	"net/http"
+	"context"
+	"errors"
+	"log/slog"
 	"strings"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/park285/iris-client-go/iris"
 )
 
-func newAPICORSConfig(cfg *config.Config) cors.Config {
-	corsConfig := cors.DefaultConfig()
-
-	if len(cfg.CORS.AllowedOrigins) == 0 {
-		corsConfig.AllowOriginFunc = func(string) bool { return false }
-	} else {
-		corsConfig.AllowOrigins = cfg.CORS.AllowedOrigins
-	}
-
-	corsConfig.AllowCredentials = true
-	corsConfig.AllowMethods = constants.CORSConfig.AllowMethods
-	corsConfig.AllowHeaders = constants.CORSConfig.AllowHeaders
-
-	return corsConfig
-}
-
-func corsOriginGuard(allowedOrigins []string) gin.HandlerFunc {
-	allowAll := false
-
-	allowed := make(map[string]struct{}, len(allowedOrigins))
-	for _, origin := range allowedOrigins {
-		trimmed := strings.TrimSpace(origin)
-		if trimmed == "" {
-			continue
-		}
-
-		if trimmed == "*" {
-			allowAll = true
-			continue
-		}
-
-		allowed[trimmed] = struct{}{}
-	}
-
-	return func(c *gin.Context) {
-		origin := strings.TrimSpace(c.GetHeader("Origin"))
-		if origin == "" || allowAll {
-			c.Next()
-			return
-		}
-
-		if _, ok := allowed[origin]; !ok {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
-		c.Next()
-	}
+// Admin API 라우트(members, alarms, rooms, stats, settings 등)는 이 라우터에서 제외합니다.
+func ProvideBotRouter(
+	ctx context.Context,
+	cfg *config.Config,
+	logger *slog.Logger,
+	webhookHandler *iris.WebhookHandler,
+	triggerHandler *sharedserver.TriggerHandler,
+) (*gin.Engine, error) {
+	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
+		APIKey: cfg.Server.APIKey,
+		RegisterRoutes: func(router *gin.Engine) error {
+			if webhookHandler != nil {
+				router.POST("/webhook/iris", gin.WrapH(webhookHandler))
+			}
+			if triggerHandler != nil {
+				if strings.TrimSpace(cfg.Server.APIKey) == "" {
+					return errors.New("API_SECRET_KEY required")
+				}
+				triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
+			}
+			return nil
+		},
+	})
 }
