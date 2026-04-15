@@ -21,67 +21,43 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/automaxprocs"
-
 	"github.com/kapu/hololive-llm-sched/internal/app"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/health"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/bootstrap"
 )
 
 var Version = "dev"
 
 func main() {
-	automaxprocs.Init(nil)
-	health.Init(Version)
-
-	var exitCode int
-	defer func() {
-		os.Exit(exitCode)
-	}()
-
-	cfg, err := config.LoadLLMScheduler()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load llm scheduler config: %v\n", err)
-		exitCode = 1
-		return
-	}
-
-	logger, err := sharedlogging.EnableFileLoggingWithLevel(sharedlogging.Config{
-		Dir:        cfg.Logging.Dir,
-		MaxSizeMB:  cfg.Logging.MaxSizeMB,
-		MaxBackups: cfg.Logging.MaxBackups,
-		MaxAgeDays: cfg.Logging.MaxAgeDays,
-		Compress:   cfg.Logging.Compress,
-	}, "llm-scheduler.log", cfg.Logging.Level)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		exitCode = 1
-		return
-	}
-
-	logger.Info("LLM Scheduler starting...",
-		slog.String("version", Version),
-		slog.String("log_level", cfg.Logging.Level),
-		slog.Int("port", cfg.Server.Port),
-	)
-
-	buildCtx, buildCancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	runtime, err := app.BuildLLMSchedulerRuntime(buildCtx, cfg, logger)
-	buildCancel()
-	if err != nil {
-		logger.Error("Failed to build llm scheduler runtime", slog.Any("error", err))
-		exitCode = 1
-		return
-	}
-	defer runtime.Close()
-
-	runtime.Run()
+	os.Exit(bootstrap.Run(bootstrap.Options[*config.LLMSchedulerConfig, *app.LLMSchedulerRuntime]{
+		Version:                Version,
+		LoadConfig:             config.LoadLLMScheduler,
+		LoadConfigErrorMessage: "Failed to load llm scheduler config",
+		LoggerConfig: func(cfg *config.LLMSchedulerConfig) sharedlogging.Config {
+			return sharedlogging.Config{
+				Dir:        cfg.Logging.Dir,
+				MaxSizeMB:  cfg.Logging.MaxSizeMB,
+				MaxBackups: cfg.Logging.MaxBackups,
+				MaxAgeDays: cfg.Logging.MaxAgeDays,
+				Compress:   cfg.Logging.Compress,
+			}
+		},
+		LoggerFileName: "llm-scheduler.log",
+		LoggerLevel: func(cfg *config.LLMSchedulerConfig) string {
+			return cfg.Logging.Level
+		},
+		StartupMessage: "LLM Scheduler starting...",
+		StartupFields: func(cfg *config.LLMSchedulerConfig) []any {
+			return []any{slog.Int("port", cfg.Server.Port)}
+		},
+		BuildTimeout:      time.Minute,
+		BuildRuntime:      app.BuildLLMSchedulerRuntime,
+		BuildErrorMessage: "Failed to build llm scheduler runtime",
+	}))
 }
