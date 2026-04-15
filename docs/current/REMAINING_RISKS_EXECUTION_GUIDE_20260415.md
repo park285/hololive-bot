@@ -119,6 +119,119 @@ cd admin-dashboard/frontend && npm run lint && npm run build
 
 이 항목들은 현 머지 차단 사유가 아니다.
 
+## 4A. 비차단 후속 cleanup 후보
+
+아래는 “더 정리는 가능한가?”에 대한 현재 기준의 명시적 답변이다.
+가능하지만, 이제부터는 **필수 리스크 제거 단계**가 아니라 **장기 cleanup / 유지보수 비용 절감 단계**다.
+
+### C1. `hololive-shared/pkg/service/youtube/scheduler.go`
+
+현재 상태:
+- `scheduler.go` 는 alert / watcher helper 분리 이후에도 orchestration 책임이 남아 있다.
+- 현재 파일은 batch loop / subscriber tracking / milestone persistence 를 함께 가진다.
+
+후속 후보:
+- `scheduler_batch.go`
+  - `Start`, `Stop`, `runBatch`
+  - batch rotation / recent video batch orchestration
+- `scheduler_tracking.go`
+  - `trackAllSubscribers`
+  - `prepareWorkItems`
+  - `processAndRecordChanges`
+  - `processMilestones`
+
+권장 조건:
+- scheduler 관련 테스트를 behavior lock 으로 먼저 재실행한다.
+- 새 public abstraction 은 만들지 않고 file-level seam 분리만 한다.
+
+기대 효과:
+- batch orchestration 수정과 subscriber-tracking 수정이 같은 파일에서 충돌하지 않는다.
+- `scheduler.go` 는 최종적으로 composition root 수준까지 더 줄일 수 있다.
+
+### C2. `hololive-shared/pkg/service/youtube/service_upcoming.go`
+
+현재 상태:
+- `service.go` 는 축소됐지만 `service_upcoming.go` 가 새 최대 hotspot 후보가 됐다.
+- 이 파일은 scraper phase / API fallback / cache path / event conversion 을 함께 가진다.
+
+후속 후보:
+- `service_upcoming_scrape.go`
+  - scrape phase
+  - scraped event conversion
+- `service_upcoming_fallback.go`
+  - API fallback
+  - cache/store decision
+- 또는 최소한 conversion helper 를 별도 파일로 이동
+
+권장 조건:
+- `service_test.go` 와 `service_policy_test.go` 외에 upcoming-specific proof 를 더 추가할지 먼저 판단한다.
+- public method shape 는 그대로 둔다.
+
+기대 효과:
+- scraper 정책 수정과 fallback 정책 수정이 분리된다.
+- `service_upcoming.go` LOC drift 를 threshold 아래에서 더 안정적으로 유지할 수 있다.
+
+### C3. `hololive-kakao-bot-go/internal/app/bootstrap_*`
+
+현재 상태:
+- `http / runtime / wiring` seam 은 정리됐다.
+- 하지만 bootstrap orchestration 파일들은 아직 루트 `internal/app` 에 남아 있다.
+
+후속 후보:
+- `internal/app/bootstrap/` 전용 디렉터리 도입
+- 이동 1차 후보:
+  - `bootstrap_bot*.go`
+  - `bootstrap_core*.go`
+  - `bootstrap_services*.go`
+  - `providers_alarm_consumers.go`
+  - `providers_single_consumer.go`
+
+권장 조건:
+- façade 유지 원칙을 지켜 import churn 을 만들지 않는다.
+- bootstrap 전용 이동은 http/runtime/wiring 만큼의 직접 효익이 있는지 먼저 확인한다.
+
+기대 효과:
+- startup/wiring와 provider bootstrap churn 이 루트 패키지에 다시 쌓이지 않는다.
+- `APP_BOOTSTRAP_BOUNDARY_GUIDE.md` 의 마지막 장기 과제를 실제 코드 구조로 수렴시킬 수 있다.
+
+### C4. stream-ingester continuous observation end-to-end proof
+
+현재 상태:
+- collector / closeout seam-level proof 는 존재한다.
+- DB-backed end-to-end 전용 proof 는 아직 없다.
+
+후속 후보:
+- `CollectCommunityShortsContinuousObservationReport(...)` 경로를 위한 DB-backed integration-style test 추가
+- 최소한 다음 경로를 고정:
+  - active observation
+  - finalized observation
+  - dataset unavailable fallback
+
+기대 효과:
+- seam split 이후에도 report assembly 전체 경로가 보존되는지 더 강하게 보장한다.
+
+## 4B. 권장 실행 순서
+
+후속 cleanup 을 실제로 다시 잡는다면 아래 순서가 효율적이다.
+
+1. `service_upcoming.go`
+   - 현재 hotspot 집중 완화
+2. `scheduler.go` orchestration 재분리
+   - batch / tracking seam 정리
+3. `internal/app/bootstrap/`
+   - import churn 을 최소화하는 장기 구조 정리
+4. stream-ingester DB-backed e2e proof 보강
+   - 유지보수 안정성 강화
+
+## 4C. 종료 기준
+
+후속 cleanup 라운드를 “완료”로 부르려면 최소한 아래를 만족한다.
+
+- 각 대상 파일이 책임 기준으로 더 작은 seam 으로 나뉜다.
+- 기존 public import path / behavior 는 유지된다.
+- 관련 패키지 테스트가 fresh run 으로 통과한다.
+- architecture LOC threshold 가 새 구조에 맞게 다시 tightened 된다.
+
 ---
 
 ## 5. 최종 요약
