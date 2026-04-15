@@ -77,6 +77,19 @@
 
 ---
 
+### R2-1. `hololive-shared/pkg/service/youtube/service.go` / `scheduler.go`
+닫힘.
+
+- `scheduler.go` 는 alert / watcher helper seam 으로 분리됐다.
+- `service.go` 는 upcoming / channel-statistics / read / retry / policy seam 으로 분리됐다.
+- 두 파일 모두 composition-root 성격만 남기고 read-side / dispatch-side helper 가 전용 파일로 이동했다.
+
+### R2-2. current docs SSOT sync
+닫힘.
+
+- `docs/current/APP_BOOTSTRAP_BOUNDARY_GUIDE.md` 는 현재 경계 상태를 반영한다.
+- `docs/current/README.md` 는 종료 기록 문서를 현재 SSOT 목록으로 유지한다.
+
 ## 3. 검증 증거
 
 아래 검증이 모두 통과했다.
@@ -114,7 +127,7 @@ cd admin-dashboard/frontend && npm run lint && npm run build
 그 마감은 이번 라운드에서 완료됐다.
 
 - 변경은 축별 커밋으로 분리됐다.
-- atomicity / large-file seam / orchestration 분리가 끝났다.
+- atomicity / large-file seam / orchestration 분리가 끝났고, `youtube/service.go` / `youtube/scheduler.go` P2 seam 분리까지 마감됐다.
 - 테스트와 current docs 는 새 경계에 맞게 갱신됐다.
 
 따라서 이 문서는 더 이상 실행 대기 가이드가 아니라 **종료 기록**이다.
