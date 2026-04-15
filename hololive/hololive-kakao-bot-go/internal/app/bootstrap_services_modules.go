@@ -32,6 +32,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -59,44 +60,24 @@ func buildBotDependencyModules(
 	workerPool *workerpool.Pool,
 	logger *slog.Logger,
 ) botDependencyModules {
-	return botDependencyModules{
-		core: botCoreModule{
-			botSelfUser:  cfg.Bot.SelfUser,
-			irisBaseURL:  cfg.Iris.BaseURL,
-			notification: cfg.Notification,
-			logger:       logger,
-		},
-		messaging: botMessagingModule{
-			client:         irisClient,
-			messageAdapter: messageAdapter,
-			formatter:      formatter,
-		},
-		data: botDataModule{
-			cacheSvc:    infra.Cache,
-			postgres:    infra.Postgres,
-			memberRepo:  infra.MemberRepo,
-			memberCache: infra.MemberCache,
-			profiles:    profileService,
-			membersData: alarmMode.memberDataSource,
-		},
-		stream: botStreamModule{
-			holodexSvc:   holodexService,
-			chzzkClient:  alarmMode.chzzkClient,
-			twitchClient: alarmMode.twitchClient,
-			alarmSvc:     alarmMode.alarmCRUD,
-			memberMatch:  memberMatcher,
-			ytStack:      youTubeStack,
-		},
-		support: botSupportModule{
-			activityLogger: activityLogger,
-			settingsSvc:    settingsService,
-			aclSvc:         aclService,
-			workerPool:     workerPool,
-		},
-		feature: botFeatureModule{
-			majorEventRepo:  majorEventRepo,
-			memberNewsSvc:   memberNewsService,
-			commandBuilders: bot.CloneCommandBuilders(commandBuilders),
-		},
-	}
+	return appbootstrap.BuildBotDependencyModules(
+		cfg,
+		infra,
+		alarmMode,
+		holodexService,
+		messageAdapter,
+		formatter,
+		irisClient,
+		profileService,
+		memberMatcher,
+		youTubeStack,
+		activityLogger,
+		settingsService,
+		aclService,
+		majorEventRepo,
+		memberNewsService,
+		commandBuilders,
+		workerPool,
+		logger,
+	)
 }

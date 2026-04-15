@@ -20,118 +20,19 @@
 
 package app
 
-import (
-	"context"
-	"log/slog"
+import appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 
-	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/park285/iris-client-go/iris"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
+type coreInfrastructure = appbootstrap.CoreInfrastructure
+type alarmModeComponents = appbootstrap.AlarmModeComponents
+type alarmDependencies = appbootstrap.AlarmDependencies
+type scraperHolodexProfileFoundation = appbootstrap.ScraperHolodexProfileFoundation
+type coreIntegrationServices = appbootstrap.CoreIntegrationServices
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/command"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
-)
-
-// coreInfrastructure 는 Bot 런타임 구성에 필요한 의존성/서비스 묶음을 담는다.
-type coreInfrastructure struct {
-	deps             *bot.Dependencies
-	alarmService     *notification.AlarmService
-	alarmCRUD        domain.AlarmCRUD
-	holodexService   *holodex.Service // 구체 타입 참조 (concrete 필요 시 사용)
-	ytStack          *providers.YouTubeStack
-	photoSync        *holodex.PhotoSyncService
-	templateRenderer *template.Renderer
-	templateAdminSvc *template.AdminService
-	sharedRL         *scraper.RateLimiter // YouTube 전역 RateLimiter
-	cleanup          func()
-}
-
-type alarmModeComponents struct {
-	alarmCRUD        domain.AlarmCRUD
-	alarmService     *notification.AlarmService
-	chzzkClient      *chzzk.Client
-	twitchClient     *twitch.Client
-	memberDataSource member.DataProvider
-}
-
-type alarmDependencies struct {
-	alarmService       *notification.AlarmService
-	memberDataProvider member.DataProvider
-	chzzkClient        *chzzk.Client
-	twitchClient       *twitch.Client
-}
-
-type botCoreModule struct {
-	botSelfUser  string
-	irisBaseURL  string
-	notification config.NotificationConfig
-	logger       *slog.Logger
-}
-
-type botIrisClient interface {
-	iris.Sender
-	Ping(ctx context.Context) bool
-	GetConfig(ctx context.Context) (*iris.ConfigResponse, error)
-}
-
-type botMessagingModule struct {
-	client         botIrisClient
-	messageAdapter *adapter.MessageAdapter
-	formatter      *adapter.ResponseFormatter
-}
-
-type botDataModule struct {
-	cacheSvc    cache.Client
-	postgres    database.Client
-	memberRepo  *member.Repository
-	memberCache *member.Cache
-	profiles    *member.ProfileService
-	membersData member.DataProvider
-}
-
-type botStreamModule struct {
-	holodexSvc   *holodex.Service
-	chzzkClient  *chzzk.Client
-	twitchClient *twitch.Client
-	alarmSvc     domain.AlarmCRUD
-	memberMatch  *matcher.MemberMatcher
-	ytStack      *providers.YouTubeStack
-}
-
-type botSupportModule struct {
-	activityLogger *activity.Logger
-	settingsSvc    settings.ReadWriter
-	aclSvc         *acl.Service
-	workerPool     *workerpool.Pool
-}
-
-type botFeatureModule struct {
-	majorEventRepo  command.MajorEventRepository
-	memberNewsSvc   command.MemberNewsService
-	commandBuilders []bot.CommandBuilder
-}
-
-type botDependencyModules struct {
-	core      botCoreModule
-	messaging botMessagingModule
-	data      botDataModule
-	stream    botStreamModule
-	support   botSupportModule
-	feature   botFeatureModule
-}
+type botCoreModule = appbootstrap.BotCoreModule
+type botIrisClient = appbootstrap.BotIrisClient
+type botMessagingModule = appbootstrap.BotMessagingModule
+type botDataModule = appbootstrap.BotDataModule
+type botStreamModule = appbootstrap.BotStreamModule
+type botSupportModule = appbootstrap.BotSupportModule
+type botFeatureModule = appbootstrap.BotFeatureModule
+type botDependencyModules = appbootstrap.BotDependencyModules

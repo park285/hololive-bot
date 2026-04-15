@@ -147,7 +147,7 @@ func CollectCommunityShortsContinuousObservationReport(
 		defer cleanupDB()
 	}
 
-	artifacts, err := collectCommunityShortsContinuousObservationArtifacts(
+	return collectCommunityShortsContinuousObservationReportWithSession(
 		ctx,
 		session,
 		cfg,
@@ -155,6 +155,26 @@ func CollectCommunityShortsContinuousObservationReport(
 		now,
 		options,
 		defaultCommunityShortsContinuousObservationCollectorWiring(),
+	)
+}
+
+func collectCommunityShortsContinuousObservationReportWithSession(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	cfg *config.Config,
+	logger *slog.Logger,
+	now time.Time,
+	options CommunityShortsContinuousObservationCollectOptions,
+	wiring communityShortsContinuousObservationCollectorWiring,
+) (CommunityShortsContinuousObservationReport, error) {
+	artifacts, err := collectCommunityShortsContinuousObservationArtifacts(
+		ctx,
+		session,
+		cfg,
+		logger,
+		now,
+		options,
+		wiring,
 	)
 	if err != nil {
 		return CommunityShortsContinuousObservationReport{}, fmt.Errorf("collect community shorts continuous observation report: %w", err)

@@ -147,7 +147,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 	handler, err := buildBotWebhookHandler(
 		cfg,
 		stubWebhookMessageHandler{},
-		botWebhookRuntimeDependencies{cache: &cache.Service{}},
+		botWebhookRuntimeDependencies{Cache: &cache.Service{}},
 		testBootstrapGuardLogger(),
 	)
 	require.NoError(t, err)
@@ -235,7 +235,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
 		&sharedmodules.InfraModule{Cache: cacheSvc, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
-		&alarmModeComponents{alarmCRUD: testAlarmCRUD{}, chzzkClient: chzzkClient, twitchClient: twitchClient, memberDataSource: memberData},
+		&alarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
 		&adapter.ResponseFormatter{},
@@ -253,23 +253,23 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 		logger,
 	)
 
-	assert.Equal(t, "self-user", modules.core.botSelfUser)
-	assert.Equal(t, "https://iris.example", modules.core.irisBaseURL)
-	assert.Same(t, cacheSvc, modules.data.cacheSvc)
-	assert.Same(t, postgresSvc, modules.data.postgres)
-	assert.Same(t, memberRepo, modules.data.memberRepo)
-	assert.Same(t, memberCache, modules.data.memberCache)
-	assert.Same(t, memberData, modules.data.membersData)
-	assert.Same(t, chzzkClient, modules.stream.chzzkClient)
-	assert.Same(t, twitchClient, modules.stream.twitchClient)
-	assert.Same(t, matcherSvc, modules.stream.memberMatch)
-	assert.Same(t, ytStack, modules.stream.ytStack)
-	assert.Same(t, activityLogger, modules.support.activityLogger)
-	assert.Same(t, settingsSvc, modules.support.settingsSvc)
-	assert.Same(t, aclSvc, modules.support.aclSvc)
-	require.Len(t, modules.feature.commandBuilders, 1)
-	assert.NotNil(t, modules.feature.commandBuilders[0])
-	assert.Same(t, workerPool, modules.support.workerPool)
+	assert.Equal(t, "self-user", modules.Core.BotSelfUser)
+	assert.Equal(t, "https://iris.example", modules.Core.IrisBaseURL)
+	assert.Same(t, cacheSvc, modules.Data.CacheSvc)
+	assert.Same(t, postgresSvc, modules.Data.Postgres)
+	assert.Same(t, memberRepo, modules.Data.MemberRepo)
+	assert.Same(t, memberCache, modules.Data.MemberCache)
+	assert.Same(t, memberData, modules.Data.MembersData)
+	assert.Same(t, chzzkClient, modules.Stream.ChzzkClient)
+	assert.Same(t, twitchClient, modules.Stream.TwitchClient)
+	assert.Same(t, matcherSvc, modules.Stream.MemberMatch)
+	assert.Same(t, ytStack, modules.Stream.YTStack)
+	assert.Same(t, activityLogger, modules.Support.ActivityLogger)
+	assert.Same(t, settingsSvc, modules.Support.SettingsSvc)
+	assert.Same(t, aclSvc, modules.Support.ACLSvc)
+	require.Len(t, modules.Feature.CommandBuilders, 1)
+	assert.NotNil(t, modules.Feature.CommandBuilders[0])
+	assert.Same(t, workerPool, modules.Support.WorkerPool)
 }
 
 func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
@@ -290,10 +290,10 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, deps)
-	assert.Same(t, memberData, deps.memberDataProvider)
-	assert.NotNil(t, deps.chzzkClient)
-	assert.NotNil(t, deps.twitchClient)
-	assert.NotNil(t, deps.alarmService)
+	assert.Same(t, memberData, deps.MemberDataProvider)
+	assert.NotNil(t, deps.ChzzkClient)
+	assert.NotNil(t, deps.TwitchClient)
+	assert.NotNil(t, deps.AlarmService)
 }
 
 func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
@@ -315,8 +315,8 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, components)
-	assert.Same(t, memberData, components.memberDataSource)
-	assert.NotNil(t, components.alarmService)
-	assert.NotNil(t, components.chzzkClient)
-	assert.NotNil(t, components.twitchClient)
+	assert.Same(t, memberData, components.MemberDataSource)
+	assert.NotNil(t, components.AlarmService)
+	assert.NotNil(t, components.ChzzkClient)
+	assert.NotNil(t, components.TwitchClient)
 }

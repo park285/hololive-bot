@@ -22,18 +22,14 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
 
-// initInfraResources 는 캐시/DB 리소스를 초기화한다.
 func initInfraResources(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*sharedmodules.InfraModule, error) {
-	module, err := sharedmodules.BuildInfraModule(ctx, cfg, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide infra resources: %w", err)
-	}
-	return module, nil
+	return appbootstrap.InitInfraResources(ctx, cfg, logger)
 }

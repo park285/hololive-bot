@@ -42,9 +42,9 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 	services, err := initCoreIntegrationServices(t.Context(), &config.Config{}, infra, logger)
 	require.NoError(t, err)
 	require.NotNil(t, services)
-	require.NotNil(t, services.workerPool)
-	assert.NotNil(t, services.commandBuilders)
-	assert.Len(t, services.commandBuilders, 0)
+	require.NotNil(t, services.WorkerPool)
+	assert.NotNil(t, services.CommandBuilders)
+	assert.Len(t, services.CommandBuilders, 0)
 }
 
 func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
@@ -83,11 +83,11 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		integrationServices.aclService,
-		integrationServices.majorEventRepo,
-		integrationServices.memberNewsService,
-		integrationServices.commandBuilders,
-		integrationServices.workerPool,
+		integrationServices.ACLService,
+		integrationServices.MajorEventRepo,
+		integrationServices.MemberNewsService,
+		integrationServices.CommandBuilders,
+		integrationServices.WorkerPool,
 		logger,
 	)
 	deps := ProvideBotDependencies(modules)
