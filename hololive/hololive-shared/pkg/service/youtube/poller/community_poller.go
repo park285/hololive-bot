@@ -94,13 +94,135 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		return nil
 	}
 
-	var watermark domain.YouTubeContentWatermark
-	err = p.db.WithContext(ctx).Where(
-		"channel_id = ? AND watermark_type = ?",
-		channelID, domain.WatermarkTypeCommunityPost,
-	).First(&watermark).Error
+	watermark, isInitialized, err := loadContentWatermark(ctx, p.db, channelID, domain.WatermarkTypeCommunityPost)
+	if err != nil {
+		return err
+	}
+	newPosts := collectNewCommunityPosts(posts, watermark, isInitialized)
+	detectedAt := yttimestamp.Normalize(time.Now())
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt)
+	batch := p.buildCommunityBatch(ctx, channelID, newPosts, isInitialized, detectedAt)
 
-	isInitialized := err == nil && watermark.Initialized
+	if err := p.repo.PersistCommunityPosts(ctx, batch.dbPosts, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: selectLastWatermarkContentID(domain.OutboxKindCommunityPost, posts[0].PostID, watermark.LastContentID, batch.keepExistingWatermark),
+	}); err != nil {
+		return fmt.Errorf("persist community batch: %w", err)
+	}
+
+	return nil
+}
+
+type communityPollBatch struct {
+	dbPosts               []*domain.YouTubeCommunityPost
+	notifications         []*domain.YouTubeNotificationOutbox
+	trackingRows          []*domain.YouTubeContentAlarmTracking
+	keepExistingWatermark bool
+}
+
+func (p *CommunityPoller) buildCommunityBatch(
+	ctx context.Context,
+	channelID string,
+	posts []*scraper.CommunityPost,
+	isInitialized bool,
+	detectedAt time.Time,
+) communityPollBatch {
+	batch := communityPollBatch{
+		dbPosts:       make([]*domain.YouTubeCommunityPost, 0, len(posts)),
+		notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(posts)),
+		trackingRows:  make([]*domain.YouTubeContentAlarmTracking, 0, len(posts)),
+	}
+	for i := range posts {
+		dbPost, trackingRow, notification, keepExistingWatermark := p.buildCommunityPostArtifacts(ctx, channelID, posts[i], isInitialized, detectedAt)
+		if dbPost != nil {
+			batch.dbPosts = append(batch.dbPosts, dbPost)
+		}
+		if trackingRow != nil {
+			batch.trackingRows = append(batch.trackingRows, trackingRow)
+		}
+		if notification != nil {
+			batch.notifications = append(batch.notifications, notification)
+		}
+		batch.keepExistingWatermark = batch.keepExistingWatermark || keepExistingWatermark
+	}
+	return batch
+}
+
+func (p *CommunityPoller) buildCommunityPostArtifacts(
+	ctx context.Context,
+	channelID string,
+	post *scraper.CommunityPost,
+	isInitialized bool,
+	detectedAt time.Time,
+) (*domain.YouTubeCommunityPost, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox, bool) {
+	if post == nil {
+		return nil, nil, nil, false
+	}
+
+	canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
+	publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
+	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
+		publishedAt = p.resolveCommunityPublishedAtInline(ctx, normalizeCommunityResourceID(post.PostID))
+	}
+	logCommunityPostDetected(ctx, channelID, canonicalPostID, publishedAt, detectedAt)
+
+	dbPost := &domain.YouTubeCommunityPost{
+		PostID:        canonicalPostID,
+		ChannelID:     channelID,
+		AuthorName:    post.AuthorName,
+		AuthorPhoto:   convertThumbnails(post.AuthorPhoto),
+		ContentText:   post.ContentText,
+		PublishedText: post.PublishedText,
+		PublishedAt:   publishedAt,
+		LikeCount:     post.LikeCount,
+		CommentCount:  post.CommentCount,
+		Images:        convertThumbnails(post.Images),
+		AttachedVideo: post.VideoID,
+	}
+	if !isInitialized || !p.matchesKeywords(post.ContentText) {
+		return dbPost, nil, nil, false
+	}
+
+	trackingRow := &domain.YouTubeContentAlarmTracking{
+		Kind:              domain.OutboxKindCommunityPost,
+		ContentID:         canonicalPostID,
+		ChannelID:         channelID,
+		ActualPublishedAt: dbPost.PublishedAt,
+		DetectedAt:        detectedAt,
+	}
+	notification, keepExistingWatermark := p.buildCommunityNotification(channelID, canonicalPostID, dbPost)
+	return dbPost, trackingRow, notification, keepExistingWatermark
+}
+
+func (p *CommunityPoller) buildCommunityNotification(
+	channelID string,
+	canonicalPostID string,
+	dbPost *domain.YouTubeCommunityPost,
+) (*domain.YouTubeNotificationOutbox, bool) {
+	routePublishedAt := derefTime(dbPost.PublishedAt)
+	if p.routeDecider != nil && routePublishedAt.IsZero() {
+		return nil, p.inlinePublishedAtFallbackEnabled
+	}
+	if p.routeDecider != nil && !shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
+		return nil, false
+	}
+
+	return &domain.YouTubeNotificationOutbox{
+		Kind:      domain.OutboxKindCommunityPost,
+		ChannelID: channelID,
+		ContentID: canonicalPostID,
+		Payload:   buildCommunityNotificationPayload(dbPost, canonicalPostID),
+		Status:    domain.OutboxStatusPending,
+	}, false
+}
+
+func collectNewCommunityPosts(
+	posts []*scraper.CommunityPost,
+	watermark domain.YouTubeContentWatermark,
+	isInitialized bool,
+) []*scraper.CommunityPost {
 	newPosts := make([]*scraper.CommunityPost, 0, len(posts))
 	for _, post := range posts {
 		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
@@ -109,86 +231,7 @@ func (p *CommunityPoller) Poll(ctx context.Context, channelID string) error {
 		}
 		newPosts = append(newPosts, post)
 	}
-
-	dbPosts := make([]*domain.YouTubeCommunityPost, 0, len(newPosts))
-	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newPosts))
-	trackingRows := make([]*domain.YouTubeContentAlarmTracking, 0, len(newPosts))
-	detectedAt := yttimestamp.Normalize(time.Now())
-	keepExistingWatermark := false
-	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeCommunity, len(newPosts), detectedAt)
-	for _, post := range newPosts {
-		canonicalPostID := normalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
-		resourcePostID := normalizeCommunityResourceID(post.PostID)
-		authorPhoto := convertThumbnails(post.AuthorPhoto)
-		images := convertThumbnails(post.Images)
-		matchesKeywords := p.matchesKeywords(post.ContentText)
-		publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
-		if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
-			publishedAt = p.resolveCommunityPublishedAtInline(ctx, resourcePostID)
-		}
-		logCommunityPostDetected(ctx, channelID, canonicalPostID, publishedAt, detectedAt)
-
-		dbPost := &domain.YouTubeCommunityPost{
-			PostID:        canonicalPostID,
-			ChannelID:     channelID,
-			AuthorName:    post.AuthorName,
-			AuthorPhoto:   authorPhoto,
-			ContentText:   post.ContentText,
-			PublishedText: post.PublishedText,
-			PublishedAt:   publishedAt,
-			LikeCount:     post.LikeCount,
-			CommentCount:  post.CommentCount,
-			Images:        images,
-			AttachedVideo: post.VideoID,
-		}
-
-		dbPosts = append(dbPosts, dbPost)
-
-		if isInitialized && matchesKeywords {
-			trackingRows = append(trackingRows, &domain.YouTubeContentAlarmTracking{
-				Kind:              domain.OutboxKindCommunityPost,
-				ContentID:         canonicalPostID,
-				ChannelID:         channelID,
-				ActualPublishedAt: dbPost.PublishedAt,
-				DetectedAt:        detectedAt,
-			})
-
-			var routePublishedAt time.Time
-			if dbPost.PublishedAt != nil {
-				routePublishedAt = *dbPost.PublishedAt
-			}
-			if p.routeDecider != nil && routePublishedAt.IsZero() {
-				if p.inlinePublishedAtFallbackEnabled {
-					keepExistingWatermark = true
-				}
-				continue
-			}
-			if p.routeDecider == nil || shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeCommunity, channelID, routePublishedAt) {
-				notifications = append(notifications, &domain.YouTubeNotificationOutbox{
-					Kind:      domain.OutboxKindCommunityPost,
-					ChannelID: channelID,
-					ContentID: canonicalPostID,
-					Payload:   buildCommunityNotificationPayload(dbPost, canonicalPostID),
-					Status:    domain.OutboxStatusPending,
-				})
-			}
-		}
-	}
-	lastContentID := normalizeContentID(domain.OutboxKindCommunityPost, posts[0].PostID)
-	if keepExistingWatermark && strings.TrimSpace(watermark.LastContentID) != "" {
-		lastContentID = watermark.LastContentID
-	}
-
-	if err := p.repo.PersistCommunityPosts(ctx, dbPosts, notifications, trackingRows, &domain.YouTubeContentWatermark{
-		ChannelID:     channelID,
-		WatermarkType: domain.WatermarkTypeCommunityPost,
-		Initialized:   true,
-		LastContentID: lastContentID,
-	}); err != nil {
-		return fmt.Errorf("persist community batch: %w", err)
-	}
-
-	return nil
+	return newPosts
 }
 
 func (p *CommunityPoller) resolveCommunityPublishedAtInline(ctx context.Context, postID string) *time.Time {
@@ -228,6 +271,37 @@ func optionalTimestampAttr(key string, value *time.Time) slog.Attr {
 		return slog.Any(key, nil)
 	}
 	return slog.String(key, yttimestamp.Format(*value))
+}
+
+func loadContentWatermark(
+	ctx context.Context,
+	db *gorm.DB,
+	channelID string,
+	watermarkType domain.WatermarkType,
+) (domain.YouTubeContentWatermark, bool, error) {
+	var watermark domain.YouTubeContentWatermark
+	err := db.WithContext(ctx).Where(
+		"channel_id = ? AND watermark_type = ?",
+		channelID, watermarkType,
+	).First(&watermark).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.YouTubeContentWatermark{}, false, fmt.Errorf("load %s watermark: %w", watermarkType, err)
+	}
+	return watermark, err == nil && watermark.Initialized, nil
+}
+
+func selectLastWatermarkContentID(kind domain.OutboxKind, latestID, existingID string, keepExisting bool) string {
+	if keepExisting && strings.TrimSpace(existingID) != "" {
+		return existingID
+	}
+	return normalizeContentID(kind, latestID)
+}
+
+func derefTime(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return *value
 }
 
 // matchesKeywords: 텍스트가 키워드 조건에 맞는지 확인

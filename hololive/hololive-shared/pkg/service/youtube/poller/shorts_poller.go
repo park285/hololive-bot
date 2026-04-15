@@ -92,13 +92,135 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		return nil
 	}
 
-	var watermark domain.YouTubeContentWatermark
-	err = p.db.WithContext(ctx).Where(
-		"channel_id = ? AND watermark_type = ?",
-		channelID, domain.WatermarkTypeShort,
-	).First(&watermark).Error
+	watermark, isInitialized, err := loadContentWatermark(ctx, p.db, channelID, domain.WatermarkTypeShort)
+	if err != nil {
+		return err
+	}
+	newShorts := collectNewShorts(shorts, watermark, isInitialized)
+	if isInitialized && len(newShorts) > 0 && (p.routeDecider != nil || p.inlinePublishedAtFallbackEnabled) && shortsNeedPublishedAtLookup(newShorts) {
+		p.client.EnrichShortsPublishedAtFromRSS(ctx, channelID, newShorts)
+	}
 
-	isInitialized := err == nil && watermark.Initialized
+	detectedAt := yttimestamp.Normalize(time.Now())
+	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt)
+	batch := p.buildShortBatch(ctx, channelID, newShorts, isInitialized, detectedAt)
+
+	if err := p.repo.PersistVideos(ctx, batch.dbVideos, batch.notifications, batch.trackingRows, &domain.YouTubeContentWatermark{
+		ChannelID:     channelID,
+		WatermarkType: domain.WatermarkTypeShort,
+		Initialized:   true,
+		LastContentID: selectLastWatermarkContentID(domain.OutboxKindNewShort, shorts[0].VideoID, watermark.LastContentID, batch.keepExistingWatermark),
+	}); err != nil {
+		return fmt.Errorf("persist short batch: %w", err)
+	}
+
+	return nil
+}
+
+type shortsPollBatch struct {
+	dbVideos              []*domain.YouTubeVideo
+	notifications         []*domain.YouTubeNotificationOutbox
+	trackingRows          []*domain.YouTubeContentAlarmTracking
+	keepExistingWatermark bool
+}
+
+func (p *ShortsPoller) buildShortBatch(
+	ctx context.Context,
+	channelID string,
+	shorts []*scraper.Short,
+	isInitialized bool,
+	detectedAt time.Time,
+) shortsPollBatch {
+	batch := shortsPollBatch{
+		dbVideos:      make([]*domain.YouTubeVideo, 0, len(shorts)),
+		notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(shorts)),
+		trackingRows:  make([]*domain.YouTubeContentAlarmTracking, 0, len(shorts)),
+	}
+	for i := range shorts {
+		dbVideo, trackingRow, notification, keepExistingWatermark := p.buildShortArtifacts(ctx, channelID, shorts[i], isInitialized, detectedAt)
+		if dbVideo != nil {
+			batch.dbVideos = append(batch.dbVideos, dbVideo)
+		}
+		if trackingRow != nil {
+			batch.trackingRows = append(batch.trackingRows, trackingRow)
+		}
+		if notification != nil {
+			batch.notifications = append(batch.notifications, notification)
+		}
+		batch.keepExistingWatermark = batch.keepExistingWatermark || keepExistingWatermark
+	}
+	return batch
+}
+
+func (p *ShortsPoller) buildShortArtifacts(
+	ctx context.Context,
+	channelID string,
+	short *scraper.Short,
+	isInitialized bool,
+	detectedAt time.Time,
+) (*domain.YouTubeVideo, *domain.YouTubeContentAlarmTracking, *domain.YouTubeNotificationOutbox, bool) {
+	if short == nil {
+		return nil, nil, nil, false
+	}
+
+	canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
+	resourceVideoID := normalizeShortVideoResourceID(short.VideoID)
+	publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
+	if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
+		publishedAt = p.resolveShortPublishedAtInline(ctx, resourceVideoID)
+	}
+	dbVideo := &domain.YouTubeVideo{
+		VideoID:     resourceVideoID,
+		ChannelID:   channelID,
+		Title:       short.Title,
+		Thumbnail:   convertThumbnails(short.Thumbnail),
+		PublishedAt: publishedAt,
+		IsShort:     true,
+		ViewCount:   short.ViewCount,
+	}
+	logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
+	if !isInitialized {
+		return dbVideo, nil, nil, false
+	}
+
+	trackingRow := &domain.YouTubeContentAlarmTracking{
+		Kind:              domain.OutboxKindNewShort,
+		ContentID:         canonicalPostID,
+		ChannelID:         channelID,
+		ActualPublishedAt: dbVideo.PublishedAt,
+		DetectedAt:        detectedAt,
+	}
+	notification, keepExistingWatermark := p.buildShortNotification(channelID, canonicalPostID, dbVideo)
+	return dbVideo, trackingRow, notification, keepExistingWatermark
+}
+
+func (p *ShortsPoller) buildShortNotification(
+	channelID string,
+	canonicalPostID string,
+	dbVideo *domain.YouTubeVideo,
+) (*domain.YouTubeNotificationOutbox, bool) {
+	routePublishedAt := derefTime(dbVideo.PublishedAt)
+	if p.routeDecider != nil && routePublishedAt.IsZero() {
+		return nil, p.inlinePublishedAtFallbackEnabled
+	}
+	if p.routeDecider != nil && !shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
+		return nil, false
+	}
+
+	return &domain.YouTubeNotificationOutbox{
+		Kind:      domain.OutboxKindNewShort,
+		ChannelID: channelID,
+		ContentID: canonicalPostID,
+		Payload:   buildShortNotificationPayload(dbVideo, canonicalPostID),
+		Status:    domain.OutboxStatusPending,
+	}, false
+}
+
+func collectNewShorts(
+	shorts []*scraper.Short,
+	watermark domain.YouTubeContentWatermark,
+	isInitialized bool,
+) []*scraper.Short {
 	newShorts := make([]*scraper.Short, 0, len(shorts))
 	for _, short := range shorts {
 		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
@@ -107,87 +229,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		}
 		newShorts = append(newShorts, short)
 	}
-	if isInitialized && len(newShorts) > 0 && (p.routeDecider != nil || p.inlinePublishedAtFallbackEnabled) && shortsNeedPublishedAtLookup(newShorts) {
-		p.client.EnrichShortsPublishedAtFromRSS(ctx, channelID, newShorts)
-	}
-
-	dbVideos := make([]*domain.YouTubeVideo, 0, len(newShorts))
-	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newShorts))
-	trackingRows := make([]*domain.YouTubeContentAlarmTracking, 0, len(newShorts))
-	detectedAt := yttimestamp.Normalize(time.Now())
-	keepExistingWatermark := false
-	observeCommunityShortsDetectionBatch(ctx, channelID, domain.AlarmTypeShorts, len(newShorts), detectedAt)
-	for _, short := range newShorts {
-		canonicalPostID := normalizeContentID(domain.OutboxKindNewShort, short.VideoID)
-		resourceVideoID := normalizeShortVideoResourceID(short.VideoID)
-		publishedAt := yttimestamp.NormalizePtr(short.PublishedAt)
-		if isInitialized && publishedAt == nil && p.inlinePublishedAtFallbackEnabled {
-			publishedAt = p.resolveShortPublishedAtInline(ctx, resourceVideoID)
-		}
-		thumbnails := convertThumbnails(short.Thumbnail)
-
-		dbVideo := &domain.YouTubeVideo{
-			VideoID:     resourceVideoID,
-			ChannelID:   channelID,
-			Title:       short.Title,
-			Thumbnail:   thumbnails,
-			PublishedAt: publishedAt,
-			IsShort:     true,
-			ViewCount:   short.ViewCount,
-		}
-
-		dbVideos = append(dbVideos, dbVideo)
-
-		if isInitialized {
-			logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
-
-			trackingRows = append(trackingRows, &domain.YouTubeContentAlarmTracking{
-				Kind:              domain.OutboxKindNewShort,
-				ContentID:         canonicalPostID,
-				ChannelID:         channelID,
-				ActualPublishedAt: dbVideo.PublishedAt,
-				DetectedAt:        detectedAt,
-			})
-
-			var routePublishedAt time.Time
-			if dbVideo.PublishedAt != nil {
-				routePublishedAt = *dbVideo.PublishedAt
-			}
-			if p.routeDecider != nil && routePublishedAt.IsZero() {
-				if p.inlinePublishedAtFallbackEnabled {
-					keepExistingWatermark = true
-				}
-				continue
-			}
-
-			if p.routeDecider == nil || shouldEnqueueRoutedNotification(p.routeDecider, domain.AlarmTypeShorts, channelID, routePublishedAt) {
-				notifications = append(notifications, &domain.YouTubeNotificationOutbox{
-					Kind:      domain.OutboxKindNewShort,
-					ChannelID: channelID,
-					ContentID: canonicalPostID,
-					Payload:   buildShortNotificationPayload(dbVideo, canonicalPostID),
-					Status:    domain.OutboxStatusPending,
-				})
-			}
-		} else {
-			logShortDetected(ctx, channelID, canonicalPostID, dbVideo.PublishedAt, detectedAt)
-		}
-	}
-	lastContentID := normalizeContentID(domain.OutboxKindNewShort, shorts[0].VideoID)
-	if keepExistingWatermark && strings.TrimSpace(watermark.LastContentID) != "" {
-		lastContentID = watermark.LastContentID
-	}
-
-	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, trackingRows, &domain.YouTubeContentWatermark{
-		ChannelID:     channelID,
-		WatermarkType: domain.WatermarkTypeShort,
-		Initialized:   true,
-		LastContentID: lastContentID,
-	}); err != nil {
-		return fmt.Errorf("persist short batch: %w", err)
-	}
-
-	return nil
+	return newShorts
 }
 
 func shortsNeedPublishedAtLookup(shorts []*scraper.Short) bool {

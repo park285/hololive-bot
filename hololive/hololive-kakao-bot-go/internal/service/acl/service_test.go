@@ -326,42 +326,45 @@ func TestGetACLStatus(t *testing.T) {
 			t.Parallel()
 
 			svc := newTestService(tc.enabled, tc.mode, tc.wlRooms, tc.blRooms)
-			gotEnabled, gotMode, gotRooms := svc.GetACLStatus()
-
-			if gotEnabled != tc.wantEnabled {
-				t.Errorf("GetACLStatus().enabled = %v, want %v", gotEnabled, tc.wantEnabled)
-			}
-
-			if gotMode != tc.wantMode {
-				t.Errorf("GetACLStatus().mode = %v, want %v", gotMode, tc.wantMode)
-			}
-
-			if len(gotRooms) != tc.wantRoomsCnt {
-				t.Errorf("GetACLStatus().rooms len = %d, want %d", len(gotRooms), tc.wantRoomsCnt)
-			}
-
-			// 반환된 방 목록이 해당 모드의 목록과 일치하는지 검증
-			var expectedRooms []string
-
-			if tc.mode == ACLModeBlacklist {
-				expectedRooms = tc.blRooms
-			} else {
-				expectedRooms = tc.wlRooms
-			}
-
-			sort.Strings(gotRooms)
-
-			inputCopy := make([]string, len(expectedRooms))
-			copy(inputCopy, expectedRooms)
-			sort.Strings(inputCopy)
-
-			for i, r := range inputCopy {
-				if gotRooms[i] != r {
-					t.Errorf("rooms[%d] = %q, want %q", i, gotRooms[i], r)
-				}
-			}
+			assertACLStatus(t, svc, tc.wantEnabled, tc.wantMode, tc.wantRoomsCnt, expectedACLRooms(tc.mode, tc.wlRooms, tc.blRooms))
 		})
 	}
+}
+
+func assertACLStatus(t *testing.T, svc *Service, wantEnabled bool, wantMode ACLMode, wantRoomsCnt int, expectedRooms []string) {
+	t.Helper()
+
+	gotEnabled, gotMode, gotRooms := svc.GetACLStatus()
+	if gotEnabled != wantEnabled {
+		t.Errorf("GetACLStatus().enabled = %v, want %v", gotEnabled, wantEnabled)
+	}
+
+	if gotMode != wantMode {
+		t.Errorf("GetACLStatus().mode = %v, want %v", gotMode, wantMode)
+	}
+
+	if len(gotRooms) != wantRoomsCnt {
+		t.Errorf("GetACLStatus().rooms len = %d, want %d", len(gotRooms), wantRoomsCnt)
+	}
+
+	wantRooms := append([]string(nil), expectedRooms...)
+
+	sort.Strings(gotRooms)
+	sort.Strings(wantRooms)
+
+	for i, room := range wantRooms {
+		if gotRooms[i] != room {
+			t.Errorf("rooms[%d] = %q, want %q", i, gotRooms[i], room)
+		}
+	}
+}
+
+func expectedACLRooms(mode ACLMode, whitelistRooms, blacklistRooms []string) []string {
+	if mode == ACLModeBlacklist {
+		return blacklistRooms
+	}
+
+	return whitelistRooms
 }
 
 func TestGetACLStatus_ReturnsCopy(t *testing.T) {

@@ -65,12 +65,39 @@ func (r *GormRepository) UpsertBatch(ctx context.Context, records []*domain.YouT
 		return fmt.Errorf("upsert tracking batch: db is nil")
 	}
 
+	normalized, err := normalizeTrackingBatchRecords(records)
+	if err != nil {
+		return err
+	}
+	now := timestamp.Normalize(time.Now())
+	finalActualPublishedExpr := `CASE
+		        WHEN EXCLUDED.actual_published_at IS NULL THEN youtube_content_alarm_tracking.actual_published_at
+		        ELSE EXCLUDED.actual_published_at
+		    END`
+	finalAlarmSentExpr := `CASE
+		        WHEN youtube_content_alarm_tracking.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
+		        WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_content_alarm_tracking.alarm_sent_at
+		        WHEN EXCLUDED.alarm_sent_at < youtube_content_alarm_tracking.alarm_sent_at THEN EXCLUDED.alarm_sent_at
+		        ELSE youtube_content_alarm_tracking.alarm_sent_at
+		    END`
+	latencyMillisExpr := buildLatencyMillisExpr(r.db, finalActualPublishedExpr, finalAlarmSentExpr)
+	latencyExceededExpr := buildLatencyExceededExpr(latencyMillisExpr)
+	deliveryStatusExpr := buildDeliveryStatusExpr(finalAlarmSentExpr)
+	query, args := buildTrackingUpsertQuery(normalized, now, latencyMillisExpr, latencyExceededExpr, deliveryStatusExpr)
+	if err := r.db.WithContext(ctx).Exec(query, args...).Error; err != nil {
+		return fmt.Errorf("upsert tracking batch: exec query: %w", err)
+	}
+
+	return nil
+}
+
+func normalizeTrackingBatchRecords(records []*domain.YouTubeContentAlarmTracking) ([]*domain.YouTubeContentAlarmTracking, error) {
 	normalizedByIdentity := make(map[string]*domain.YouTubeContentAlarmTracking, len(records))
 	normalizedOrder := make([]string, 0, len(records))
 	for i, record := range records {
 		normalizedRecord, err := normalizeRecord(record)
 		if err != nil {
-			return fmt.Errorf("upsert tracking batch: normalize record at index %d: %w", i, err)
+			return nil, fmt.Errorf("upsert tracking batch: normalize record at index %d: %w", i, err)
 		}
 
 		identityKey := trackingCanonicalKey(normalizedRecord.Kind, normalizedRecord.CanonicalContentID)
@@ -88,7 +115,16 @@ func (r *GormRepository) UpsertBatch(ctx context.Context, records []*domain.YouT
 		normalized = append(normalized, normalizedByIdentity[identityKey])
 	}
 
-	now := timestamp.Normalize(time.Now())
+	return normalized, nil
+}
+
+func buildTrackingUpsertQuery(
+	normalized []*domain.YouTubeContentAlarmTracking,
+	now time.Time,
+	latencyMillisExpr string,
+	latencyExceededExpr string,
+	deliveryStatusExpr string,
+) (string, []any) {
 	args := make([]any, 0, len(normalized)*12)
 	var sb strings.Builder
 	sb.WriteString(`
@@ -96,14 +132,12 @@ func (r *GormRepository) UpsertBatch(ctx context.Context, records []*domain.YouT
 			(kind, content_id, canonical_content_id, channel_id, actual_published_at, detected_at, alarm_sent_at, alarm_latency_millis, alarm_latency_exceeded, delivery_status, created_at, updated_at)
 		VALUES
 	`)
-
 	for i, record := range normalized {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-		args = append(
-			args,
+		args = append(args,
 			record.Kind,
 			record.ContentID,
 			record.CanonicalContentID,
@@ -118,21 +152,6 @@ func (r *GormRepository) UpsertBatch(ctx context.Context, records []*domain.YouT
 			now,
 		)
 	}
-
-	finalActualPublishedExpr := `CASE
-		        WHEN EXCLUDED.actual_published_at IS NULL THEN youtube_content_alarm_tracking.actual_published_at
-		        ELSE EXCLUDED.actual_published_at
-		    END`
-	finalAlarmSentExpr := `CASE
-		        WHEN youtube_content_alarm_tracking.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_content_alarm_tracking.alarm_sent_at
-		        WHEN EXCLUDED.alarm_sent_at < youtube_content_alarm_tracking.alarm_sent_at THEN EXCLUDED.alarm_sent_at
-		        ELSE youtube_content_alarm_tracking.alarm_sent_at
-		    END`
-	latencyMillisExpr := buildLatencyMillisExpr(r.db, finalActualPublishedExpr, finalAlarmSentExpr)
-	latencyExceededExpr := buildLatencyExceededExpr(latencyMillisExpr)
-	deliveryStatusExpr := buildDeliveryStatusExpr(finalAlarmSentExpr)
-
 	sb.WriteString(`
 		ON CONFLICT (kind, canonical_content_id) DO UPDATE
 		SET channel_id = EXCLUDED.channel_id,
@@ -161,10 +180,5 @@ func (r *GormRepository) UpsertBatch(ctx context.Context, records []*domain.YouT
 	sb.WriteString(`,
 		    updated_at = EXCLUDED.updated_at
 	`)
-
-	if err := r.db.WithContext(ctx).Exec(sb.String(), args...).Error; err != nil {
-		return fmt.Errorf("upsert tracking batch: exec query: %w", err)
-	}
-
-	return nil
+	return sb.String(), args
 }

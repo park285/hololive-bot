@@ -77,50 +77,101 @@ func ProvideScraperScheduler(
 	opts ...ScraperSchedulerOption,
 ) *poller.Scheduler {
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
-
-	schedulerCfg := poller.DefaultSchedulerConfig()
-	schedulerCfg.RequestInterval = 0
-	if resolvedOpts.workerCount > 0 {
-		schedulerCfg.WorkerCount = resolvedOpts.workerCount
-	}
-	scheduler := poller.NewScheduler(schedulerCfg)
-
+	scheduler := newScraperScheduler(resolvedOpts)
 	channelPollerRegistrations := resolvedOpts.channelPollerRegistrations
 	if len(channelPollerRegistrations) == 0 {
 		logger.Warn("Scraper scheduler initialized without poller registrations")
 		return scheduler
 	}
 
-	defaultChannelIDs := uniqueChannelIDs(resolvedOpts.channelIDs)
-	defaultTargetChannels := len(defaultChannelIDs)
 	allExplicit := allRegistrationsExplicit(channelPollerRegistrations)
+	defaultChannelIDs, defaultTargetChannels := resolveDefaultScraperSchedulerChannels(membersData, logger, resolvedOpts, allExplicit)
 	if hasExplicitAndImplicitRegistrations(channelPollerRegistrations) {
 		logger.Warn("scraper scheduler has mixed explicit and default-backed registrations",
 			slog.Int("poller_templates", len(channelPollerRegistrations)),
 			slog.Int("default_target_channels", defaultTargetChannels))
 	}
-	if !allExplicit && len(defaultChannelIDs) == 0 {
-		if membersData == nil {
-			logger.Warn("Scraper scheduler initialized without members data")
-		} else {
-			members := membersData.GetAllMembers()
-			defaultTargetChannels = len(members)
-			defaultChannelIDs = make([]string, 0, len(members))
-			for _, m := range members {
-				if m == nil || m.IsGraduated {
-					continue
-				}
-				defaultChannelIDs = append(defaultChannelIDs, m.ChannelID)
-			}
-			defaultChannelIDs = uniqueChannelIDs(defaultChannelIDs)
-		}
-	}
 
 	distinctTargets := make(map[string]struct{}, len(defaultChannelIDs))
+	totalJobs, totalRPM := registerScraperSchedulerPollers(
+		scheduler,
+		logger,
+		channelPollerRegistrations,
+		defaultChannelIDs,
+		distinctTargets,
+	)
+
+	distinctTargetChannels := len(distinctTargets)
+	logger.Info("Scraper scheduler initialized",
+		slog.Int("default_target_channels", defaultTargetChannels),
+		slog.Int("distinct_target_channels", distinctTargetChannels),
+		slog.Int("poller_templates", len(channelPollerRegistrations)),
+		slog.Int("total_jobs", totalJobs),
+		slog.Float64("expected_total_rpm", totalRPM))
+
+	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
+	if totalRPM > budgetRPM {
+		logger.Warn("scraper_poll_budget_exceeds_rate_limit",
+			slog.Float64("expected_total_rpm", totalRPM),
+			slog.Float64("budget_rpm", budgetRPM),
+			slog.Int("distinct_target_channels", distinctTargetChannels),
+			slog.Int("total_jobs", totalJobs),
+		)
+	}
+
+	return scheduler
+}
+
+func newScraperScheduler(opts scraperSchedulerOptions) *poller.Scheduler {
+	schedulerCfg := poller.DefaultSchedulerConfig()
+	schedulerCfg.RequestInterval = 0
+	if opts.workerCount > 0 {
+		schedulerCfg.WorkerCount = opts.workerCount
+	}
+	return poller.NewScheduler(schedulerCfg)
+}
+
+func resolveDefaultScraperSchedulerChannels(
+	membersData domain.MemberDataProvider,
+	logger *slog.Logger,
+	opts scraperSchedulerOptions,
+	allExplicit bool,
+) ([]string, int) {
+	defaultChannelIDs := uniqueChannelIDs(opts.channelIDs)
+	defaultTargetChannels := len(defaultChannelIDs)
+	if allExplicit || len(defaultChannelIDs) > 0 {
+		return defaultChannelIDs, defaultTargetChannels
+	}
+
+	if membersData == nil {
+		logger.Warn("Scraper scheduler initialized without members data")
+		return defaultChannelIDs, defaultTargetChannels
+	}
+
+	members := membersData.GetAllMembers()
+	defaultTargetChannels = len(members)
+	defaultChannelIDs = make([]string, 0, len(members))
+	for _, member := range members {
+		if member == nil || member.IsGraduated {
+			continue
+		}
+		defaultChannelIDs = append(defaultChannelIDs, member.ChannelID)
+	}
+
+	return uniqueChannelIDs(defaultChannelIDs), defaultTargetChannels
+}
+
+func registerScraperSchedulerPollers(
+	scheduler *poller.Scheduler,
+	logger *slog.Logger,
+	registrations []ChannelPollerRegistration,
+	defaultChannelIDs []string,
+	distinctTargets map[string]struct{},
+) (int, float64) {
 	totalJobs := 0
 	var totalRPM float64
 
-	for _, registration := range channelPollerRegistrations {
+	for _, registration := range registrations {
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
@@ -148,25 +199,7 @@ func ProvideScraperScheduler(
 			slog.Float64("expected_rpm", pollerRPM))
 	}
 
-	distinctTargetChannels := len(distinctTargets)
-	logger.Info("Scraper scheduler initialized",
-		slog.Int("default_target_channels", defaultTargetChannels),
-		slog.Int("distinct_target_channels", distinctTargetChannels),
-		slog.Int("poller_templates", len(channelPollerRegistrations)),
-		slog.Int("total_jobs", totalJobs),
-		slog.Float64("expected_total_rpm", totalRPM))
-
-	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
-	if totalRPM > budgetRPM {
-		logger.Warn("scraper_poll_budget_exceeds_rate_limit",
-			slog.Float64("expected_total_rpm", totalRPM),
-			slog.Float64("budget_rpm", budgetRPM),
-			slog.Int("distinct_target_channels", distinctTargetChannels),
-			slog.Int("total_jobs", totalJobs),
-		)
-	}
-
-	return scheduler
+	return totalJobs, totalRPM
 }
 
 func allRegistrationsExplicit(registrations []ChannelPollerRegistration) bool {

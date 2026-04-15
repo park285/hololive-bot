@@ -32,17 +32,17 @@ import (
 var (
 	pollerMetricsOnce sync.Once
 
-	schedulerRegisteredJobs              prometheus.Gauge
-	schedulerDispatchDefer               *prometheus.CounterVec
-	schedulerPollDuration                *prometheus.HistogramVec
-	communityShortsDetectedPostsTotal    *prometheus.CounterVec
-	publishedAtResolutionAttemptTotal    *prometheus.CounterVec
-	publishedAtResolutionSuccessTotal    *prometheus.CounterVec
-	publishedAtResolutionFailureTotal    *prometheus.CounterVec
-	publishedAtResolverSkippedTotal      *prometheus.CounterVec
-	publishedAtResolverEnqueuedTotal     *prometheus.CounterVec
-	publishedAtResolverPageCandidates    prometheus.Gauge
-	publishedAtResolverScannedTotal      *prometheus.CounterVec
+	schedulerRegisteredJobs           prometheus.Gauge
+	schedulerDispatchDefer            *prometheus.CounterVec
+	schedulerPollDuration             *prometheus.HistogramVec
+	communityShortsDetectedPostsTotal *prometheus.CounterVec
+	publishedAtResolutionAttemptTotal *prometheus.CounterVec
+	publishedAtResolutionSuccessTotal *prometheus.CounterVec
+	publishedAtResolutionFailureTotal *prometheus.CounterVec
+	publishedAtResolverSkippedTotal   *prometheus.CounterVec
+	publishedAtResolverEnqueuedTotal  *prometheus.CounterVec
+	publishedAtResolverPageCandidates prometheus.Gauge
+	publishedAtResolverScannedTotal   *prometheus.CounterVec
 )
 
 func ensureMetrics() {

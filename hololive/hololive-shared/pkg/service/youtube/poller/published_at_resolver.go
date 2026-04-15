@@ -31,6 +31,11 @@ type PendingPublishedAtResolver struct {
 
 var errResolverParentCanceled = errors.New("pending published_at resolver parent context canceled")
 
+type publishedAtResolverCandidateResult struct {
+	processed int
+	stop      bool
+}
+
 func NewPendingPublishedAtResolver(
 	db *gorm.DB,
 	client *scraper.Client,
@@ -179,105 +184,21 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 		if len(candidates) == 0 {
 			return nil
 		}
-
-		for i := range candidates {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-
-			candidate := candidates[i]
-			observePublishedAtResolverScanned(candidate.Kind)
-			if time.Now().After(runDeadline) {
-				return nil
-			}
-			if time.Until(runDeadline) < resolveTimeout {
-				observePublishedAtResolverSkipped(candidate.Kind, "run_budget_exhausted")
-				return nil
-			}
-
-			processed++
-			observePublishedAtResolutionAttempt(candidate.Kind)
-			publishedAt, err := r.resolveCandidateWithTimeout(ctx, candidate, resolveTimeout)
-			if err != nil {
-				if errors.Is(err, errResolverParentCanceled) {
-					return ctx.Err()
-				}
-
-				observePublishedAtResolutionFailure(candidate.Kind)
-				isResolveTimeout := errors.Is(err, context.DeadlineExceeded)
-				r.markPublishedAtRetryAfterWithReporting(
-					tracking,
-					ctx,
-					candidate,
-					time.Now().Add(failureBackoffTTL),
-					isResolveTimeout,
-					"resolve_failed",
-				)
-				if isResolveTimeout {
-					observePublishedAtResolverSkipped(candidate.Kind, "resolve_timeout")
-				}
-				r.logger.Warn("Pending published_at resolver failed to resolve candidate",
-					slog.String("kind", string(candidate.Kind)),
-					slog.String("post_id", candidate.PostID),
-					slog.String("content_id", candidate.ContentID),
-					slog.Duration("resolve_timeout", resolveTimeout),
-					slog.Any("error", err),
-				)
-				continue
-			}
-			if publishedAt == nil || publishedAt.IsZero() {
-				r.markPublishedAtRetryAfterWithReporting(
-					tracking,
-					ctx,
-					candidate,
-					time.Now().Add(failureBackoffTTL),
-					false,
-					"published_at_empty",
-				)
-				observePublishedAtResolverSkipped(candidate.Kind, "published_at_empty")
-				continue
-			}
-			observePublishedAtResolutionSuccess(candidate.Kind)
-
-			result, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
-			if err != nil {
-				r.markPublishedAtRetryAfterWithReporting(
-					tracking,
-					ctx,
-					candidate,
-					time.Now().Add(failureBackoffTTL),
-					false,
-					"finalize_failed",
-				)
-				r.logger.Warn("Pending published_at resolver failed to finalize candidate",
-					slog.String("kind", string(candidate.Kind)),
-					slog.String("post_id", candidate.PostID),
-					slog.String("content_id", candidate.ContentID),
-					slog.Any("error", err),
-				)
-				continue
-			}
-			if result.enqueued {
-				observePublishedAtResolverEnqueued(candidate.Kind)
-				r.logger.Info("published_at_resolver_enqueued",
-					slog.String("kind", string(candidate.Kind)),
-					slog.String("post_id", candidate.PostID),
-					slog.String("channel_id", candidate.ChannelID),
-					slog.String("published_at", yttimestamp.Format(*publishedAt)),
-					slog.String("reason", result.reason),
-				)
-				continue
-			}
-			observePublishedAtResolverSkipped(candidate.Kind, result.reason)
-			r.logger.Info("published_at_resolver_enqueue_skipped",
-				slog.String("kind", string(candidate.Kind)),
-				slog.String("post_id", candidate.PostID),
-				slog.String("channel_id", candidate.ChannelID),
-				slog.String("published_at", yttimestamp.Format(*publishedAt)),
-				slog.String("reason", result.reason),
-			)
+		pageProcessed, stop, err := r.processPendingPublishedAtCandidates(
+			ctx,
+			repo,
+			tracking,
+			candidates,
+			runDeadline,
+			resolveTimeout,
+			failureBackoffTTL,
+		)
+		if err != nil {
+			return err
+		}
+		processed += pageProcessed
+		if stop {
+			return nil
 		}
 
 		if nextCursor == nil {
@@ -287,6 +208,156 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 	}
 
 	return nil
+}
+
+func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidates(
+	ctx context.Context,
+	repo *publishedAtResolverRepository,
+	tracking *trackingrepo.GormRepository,
+	candidates []trackingrepo.PublishedAtResolutionCandidate,
+	runDeadline time.Time,
+	resolveTimeout time.Duration,
+	failureBackoffTTL time.Duration,
+) (int, bool, error) {
+	processed := 0
+	for i := range candidates {
+		result, err := r.processPendingPublishedAtCandidate(
+			ctx,
+			repo,
+			tracking,
+			candidates[i],
+			runDeadline,
+			resolveTimeout,
+			failureBackoffTTL,
+		)
+		if err != nil {
+			return processed, false, err
+		}
+		processed += result.processed
+		if result.stop {
+			return processed, true, nil
+		}
+	}
+
+	return processed, false, nil
+}
+
+func (r *PendingPublishedAtResolver) processPendingPublishedAtCandidate(
+	ctx context.Context,
+	repo *publishedAtResolverRepository,
+	tracking *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	runDeadline time.Time,
+	resolveTimeout time.Duration,
+	failureBackoffTTL time.Duration,
+) (publishedAtResolverCandidateResult, error) {
+	select {
+	case <-ctx.Done():
+		return publishedAtResolverCandidateResult{}, fmt.Errorf("run pending published_at resolver: parent context canceled: %w", ctx.Err())
+	default:
+	}
+
+	observePublishedAtResolverScanned(candidate.Kind)
+	if time.Now().After(runDeadline) {
+		return publishedAtResolverCandidateResult{stop: true}, nil
+	}
+	if time.Until(runDeadline) < resolveTimeout {
+		observePublishedAtResolverSkipped(candidate.Kind, "run_budget_exhausted")
+		return publishedAtResolverCandidateResult{stop: true}, nil
+	}
+
+	result := publishedAtResolverCandidateResult{processed: 1}
+	observePublishedAtResolutionAttempt(candidate.Kind)
+	publishedAt, err := r.resolveCandidateWithTimeout(ctx, candidate, resolveTimeout)
+	if err != nil {
+		if errors.Is(err, errResolverParentCanceled) {
+			return publishedAtResolverCandidateResult{}, fmt.Errorf("run pending published_at resolver: parent context canceled: %w", ctx.Err())
+		}
+
+		observePublishedAtResolutionFailure(candidate.Kind)
+		isResolveTimeout := errors.Is(err, context.DeadlineExceeded)
+		r.markPublishedAtRetryAfterWithReporting(
+			tracking,
+			ctx,
+			candidate,
+			time.Now().Add(failureBackoffTTL),
+			isResolveTimeout,
+			"resolve_failed",
+		)
+		if isResolveTimeout {
+			observePublishedAtResolverSkipped(candidate.Kind, "resolve_timeout")
+		}
+		r.logger.Warn("Pending published_at resolver failed to resolve candidate",
+			slog.String("kind", string(candidate.Kind)),
+			slog.String("post_id", candidate.PostID),
+			slog.String("content_id", candidate.ContentID),
+			slog.Duration("resolve_timeout", resolveTimeout),
+			slog.Any("error", err),
+		)
+		return result, nil
+	}
+	if publishedAt == nil || publishedAt.IsZero() {
+		r.markPublishedAtRetryAfterWithReporting(
+			tracking,
+			ctx,
+			candidate,
+			time.Now().Add(failureBackoffTTL),
+			false,
+			"published_at_empty",
+		)
+		observePublishedAtResolverSkipped(candidate.Kind, "published_at_empty")
+		return result, nil
+	}
+	observePublishedAtResolutionSuccess(candidate.Kind)
+
+	finalizeResult, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, *publishedAt, r.routeDecider)
+	if err != nil {
+		r.markPublishedAtRetryAfterWithReporting(
+			tracking,
+			ctx,
+			candidate,
+			time.Now().Add(failureBackoffTTL),
+			false,
+			"finalize_failed",
+		)
+		r.logger.Warn("Pending published_at resolver failed to finalize candidate",
+			slog.String("kind", string(candidate.Kind)),
+			slog.String("post_id", candidate.PostID),
+			slog.String("content_id", candidate.ContentID),
+			slog.Any("error", err),
+		)
+		return result, nil
+	}
+
+	r.reportPendingPublishedAtCandidateResult(candidate, publishedAt, finalizeResult)
+	return result, nil
+}
+
+func (r *PendingPublishedAtResolver) reportPendingPublishedAtCandidateResult(
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	publishedAt *time.Time,
+	result publishedAtFinalizeResult,
+) {
+	if result.enqueued {
+		observePublishedAtResolverEnqueued(candidate.Kind)
+		r.logger.Info("published_at_resolver_enqueued",
+			slog.String("kind", string(candidate.Kind)),
+			slog.String("post_id", candidate.PostID),
+			slog.String("channel_id", candidate.ChannelID),
+			slog.String("published_at", yttimestamp.Format(*publishedAt)),
+			slog.String("reason", result.reason),
+		)
+		return
+	}
+
+	observePublishedAtResolverSkipped(candidate.Kind, result.reason)
+	r.logger.Info("published_at_resolver_enqueue_skipped",
+		slog.String("kind", string(candidate.Kind)),
+		slog.String("post_id", candidate.PostID),
+		slog.String("channel_id", candidate.ChannelID),
+		slog.String("published_at", yttimestamp.Format(*publishedAt)),
+		slog.String("reason", result.reason),
+	)
 }
 
 func (r *PendingPublishedAtResolver) resolveCandidateWithTimeout(
@@ -307,10 +378,6 @@ func (r *PendingPublishedAtResolver) resolveCandidateWithTimeout(
 	}
 
 	return publishedAt, err
-}
-
-func pendingPublishedAtCandidateKey(candidate trackingrepo.PublishedAtResolutionCandidate) string {
-	return string(candidate.Kind) + "\x00" + candidate.PostID
 }
 
 func minInt(left, right int) int {
@@ -384,7 +451,10 @@ func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
 		return fmt.Errorf("mark published_at retry after: tracking repository is nil")
 	}
 	if !forceLive {
-		return tracking.MarkPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID, retryAfter)
+		if err := tracking.MarkPublishedAtRetryAfter(ctx, candidate.Kind, candidate.PostID, retryAfter); err != nil {
+			return fmt.Errorf("mark published_at retry after: %w", err)
+		}
+		return nil
 	}
 
 	retryTTL := r.resolverFailureBackoffTTL()
@@ -394,7 +464,11 @@ func (r *PendingPublishedAtResolver) markPublishedAtRetryAfter(
 	retryCtx, cancel := context.WithTimeout(context.Background(), retryTTL)
 	defer cancel()
 
-	return tracking.MarkPublishedAtRetryAfter(retryCtx, candidate.Kind, candidate.PostID, retryAfter)
+	if err := tracking.MarkPublishedAtRetryAfter(retryCtx, candidate.Kind, candidate.PostID, retryAfter); err != nil {
+		return fmt.Errorf("mark published_at retry after: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PendingPublishedAtResolver) markPublishedAtRetryAfterWithReporting(

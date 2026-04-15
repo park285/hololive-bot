@@ -119,16 +119,16 @@ func (s *scannableBool) Scan(value any) error {
 		s.value = nil
 		return nil
 	case bool:
-		s.value = boolPtr(v)
+		s.value = new(v)
 		return nil
 	case int64:
-		s.value = boolPtr(v != 0)
+		s.value = new(v != 0)
 		return nil
 	case int32:
-		s.value = boolPtr(v != 0)
+		s.value = new(v != 0)
 		return nil
 	case int:
-		s.value = boolPtr(v != 0)
+		s.value = new(v != 0)
 		return nil
 	case []byte:
 		return s.scanString(string(v))
@@ -162,16 +162,16 @@ func (s *scannableBool) scanString(raw string) error {
 	}
 
 	if parsed, err := strconv.ParseBool(cleaned); err == nil {
-		s.value = boolPtr(parsed)
+		s.value = new(parsed)
 		return nil
 	}
 
 	switch cleaned {
 	case "0":
-		s.value = boolPtr(false)
+		s.value = new(false)
 		return nil
 	case "1":
-		s.value = boolPtr(true)
+		s.value = new(true)
 		return nil
 	default:
 		return fmt.Errorf("scan bool: unsupported value %q", cleaned)
@@ -446,6 +446,7 @@ func buildPostSendCountsFromScanRows(scanned []postSendCountScanRow) []PostSendC
 	return rows
 }
 
+//go:fix inline
 func boolPtr(value bool) *bool {
-	return &value
+	return new(value)
 }

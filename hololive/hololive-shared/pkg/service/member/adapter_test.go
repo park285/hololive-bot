@@ -53,7 +53,9 @@ func TestNewMemberServiceAdapter_PreservesCancellation(t *testing.T) {
 }
 
 func TestNewMemberServiceAdapter_NilContextUsesBackground(t *testing.T) {
-	adapter := NewMemberServiceAdapter(nil, nil, nil)
+	var nilCtx context.Context
+
+	adapter := NewMemberServiceAdapter(nilCtx, nil, nil)
 	if adapter == nil {
 		t.Fatal("adapter is nil")
 	}

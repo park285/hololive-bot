@@ -91,7 +91,7 @@ func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lo
 	if r == nil || r.db == nil || batchSize <= 0 {
 		return nil, nil
 	}
-	if r.db.Dialector != nil && r.db.Dialector.Name() == "sqlite" {
+	if r.db.Dialector != nil && r.db.Name() == "sqlite" {
 		return r.fetchAndLockSQLite(ctx, batchSize, lockTimeout)
 	}
 
@@ -167,7 +167,7 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 	}
 
 	sentAt := canonicalSentAtNow()
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		trackingMarks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, claimTokens)
 		if err != nil {
 			return fmt.Errorf("load tracking marks: %w", err)
@@ -199,7 +199,11 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("mark delivery rows sent transaction: %w", err)
+	}
+
+	return nil
 }
 
 func (r *DeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error {

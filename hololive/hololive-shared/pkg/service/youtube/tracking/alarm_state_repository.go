@@ -12,6 +12,16 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
+type pendingResolutionRow struct {
+	PriorityBucket        int               `gorm:"column:priority_bucket"`
+	Kind                  domain.OutboxKind `gorm:"column:kind"`
+	PostID                string            `gorm:"column:post_id"`
+	ContentID             string            `gorm:"column:content_id"`
+	ChannelID             string            `gorm:"column:channel_id"`
+	DetectedAt            time.Time         `gorm:"column:detected_at"`
+	PublishedAtRetryAfter *time.Time        `gorm:"column:published_at_retry_after"`
+}
+
 func (r *GormRepository) ListPendingPublishedAtResolutions(
 	ctx context.Context,
 	detectedBefore time.Time,
@@ -31,100 +41,22 @@ func (r *GormRepository) ListPendingPublishedAtResolutionsPage(
 	cursor *PublishedAtResolutionCursor,
 	limit int,
 ) ([]PublishedAtResolutionCandidate, *PublishedAtResolutionCursor, error) {
-	if r == nil || r.db == nil {
-		return nil, nil, fmt.Errorf("list pending published_at resolutions page: db is nil")
-	}
-	if detectedBefore.IsZero() {
-		return nil, nil, fmt.Errorf("list pending published_at resolutions page: detected before is empty")
-	}
-	if referenceNow.IsZero() {
-		return nil, nil, fmt.Errorf("list pending published_at resolutions page: reference now is empty")
-	}
-	if limit <= 0 {
-		return nil, nil, fmt.Errorf("list pending published_at resolutions page: limit must be positive")
-	}
-
-	type pendingResolutionRow struct {
-		PriorityBucket        int               `gorm:"column:priority_bucket"`
-		Kind                  domain.OutboxKind `gorm:"column:kind"`
-		PostID                string            `gorm:"column:post_id"`
-		ContentID             string            `gorm:"column:content_id"`
-		ChannelID             string            `gorm:"column:channel_id"`
-		DetectedAt            time.Time         `gorm:"column:detected_at"`
-		PublishedAtRetryAfter *time.Time        `gorm:"column:published_at_retry_after"`
-	}
-
-	var rows []pendingResolutionRow
-	if err := r.requirePublishedAtRetryAfterColumn("list pending published_at resolutions page"); err != nil {
+	if err := validatePendingPublishedAtResolutionPageRequest(r, detectedBefore, referenceNow, limit); err != nil {
 		return nil, nil, err
 	}
-	query := r.db.WithContext(ctx).
-		Model(&domain.YouTubeCommunityShortsAlarmState{}).
-		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
-		Where("actual_published_at IS NULL").
-		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore)).
-		Select(`CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END AS priority_bucket,
-			kind, post_id, content_id, channel_id, detected_at, published_at_retry_after`).
-		Where("(published_at_retry_after IS NULL OR published_at_retry_after <= ?)", yttimestamp.Normalize(referenceNow))
-	if cursor != nil {
-		query = query.Where(
-			`(CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END > ?)
-			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at > ?)
-			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at = ? AND post_id > ?)`,
-			cursor.PriorityBucket,
-			cursor.PriorityBucket,
-			yttimestamp.Normalize(cursor.DetectedAt),
-			cursor.PriorityBucket,
-			yttimestamp.Normalize(cursor.DetectedAt),
-			strings.TrimSpace(cursor.PostID),
-		)
+	rows, err := r.loadPendingPublishedAtResolutionRows(ctx, referenceNow, detectedBefore, cursor, limit)
+	if err != nil {
+		return nil, nil, err
 	}
-	if err := query.
-		Order("priority_bucket ASC").
-		Order("detected_at ASC").
-		Order("post_id ASC").
-		Limit(limit).
-		Find(&rows).Error; err != nil {
-		return nil, nil, fmt.Errorf("list pending published_at resolutions page: query rows: %w", err)
+	candidates, err := buildPublishedAtResolutionCandidates(rows)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	candidates := make([]PublishedAtResolutionCandidate, 0, len(rows))
-	for i := range rows {
-		normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(rows[i].Kind, rows[i].PostID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("list pending published_at resolutions page: normalize post id at index %d: %w", i, err)
-		}
-		normalizedContentKind, normalizedContentID, err := normalizeIdentity(rows[i].Kind, rows[i].ContentID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("list pending published_at resolutions page: normalize content id at index %d: %w", i, err)
-		}
-		if normalizedKind != normalizedContentKind {
-			return nil, nil, fmt.Errorf("list pending published_at resolutions page: kind mismatch at index %d", i)
-		}
-		candidates = append(candidates, PublishedAtResolutionCandidate{
-			Kind:       normalizedKind,
-			PostID:     normalizedPostID,
-			ContentID:  canonicalTrackingIdentity(normalizedKind, normalizedContentID),
-			ChannelID:  strings.TrimSpace(rows[i].ChannelID),
-			DetectedAt: yttimestamp.Normalize(rows[i].DetectedAt),
-		})
-	}
-
 	if len(candidates) == 0 {
 		return nil, nil, nil
 	}
 
-	last := candidates[len(candidates)-1]
-	nextCursor := &PublishedAtResolutionCursor{
-		PriorityBucket: rows[len(rows)-1].PriorityBucket,
-		DetectedAt:     last.DetectedAt,
-		PostID:         last.PostID,
-	}
-	if len(candidates) < limit {
-		nextCursor = nil
-	}
-
-	return candidates, nextCursor, nil
+	return candidates, buildPendingPublishedAtResolutionCursor(rows, candidates, limit), nil
 }
 
 func (r *GormRepository) MarkPublishedAtRetryAfter(
@@ -340,12 +272,150 @@ func (r *GormRepository) UpsertAlarmStateBatch(ctx context.Context, records []*d
 		return fmt.Errorf("upsert alarm state batch: db is nil")
 	}
 
+	normalized, err := normalizeAlarmStateBatchRecords(records)
+	if err != nil {
+		return err
+	}
+	now := yttimestamp.Normalize(time.Now())
+	finalAuthorizedExpr := `CASE
+                WHEN youtube_community_shorts_alarm_states.authorized_at IS NULL THEN EXCLUDED.authorized_at
+                WHEN EXCLUDED.authorized_at IS NULL THEN youtube_community_shorts_alarm_states.authorized_at
+                WHEN EXCLUDED.authorized_at < youtube_community_shorts_alarm_states.authorized_at THEN EXCLUDED.authorized_at
+                ELSE youtube_community_shorts_alarm_states.authorized_at
+            END`
+	finalAlarmSentExpr := `CASE
+                WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
+                WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_community_shorts_alarm_states.alarm_sent_at
+                WHEN EXCLUDED.alarm_sent_at < youtube_community_shorts_alarm_states.alarm_sent_at THEN EXCLUDED.alarm_sent_at
+                ELSE youtube_community_shorts_alarm_states.alarm_sent_at
+            END`
+	deliveryStatusExpr := buildAlarmStateDeliveryStatusExpr(finalAuthorizedExpr, finalAlarmSentExpr)
+	query, args := buildAlarmStateUpsertQuery(normalized, now, finalAuthorizedExpr, finalAlarmSentExpr, deliveryStatusExpr)
+	if err := r.db.WithContext(ctx).Exec(query, args...).Error; err != nil {
+		return fmt.Errorf("upsert alarm state batch: exec query: %w", err)
+	}
+
+	return nil
+}
+
+func validatePendingPublishedAtResolutionPageRequest(r *GormRepository, detectedBefore, referenceNow time.Time, limit int) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("list pending published_at resolutions page: db is nil")
+	}
+	if detectedBefore.IsZero() {
+		return fmt.Errorf("list pending published_at resolutions page: detected before is empty")
+	}
+	if referenceNow.IsZero() {
+		return fmt.Errorf("list pending published_at resolutions page: reference now is empty")
+	}
+	if limit <= 0 {
+		return fmt.Errorf("list pending published_at resolutions page: limit must be positive")
+	}
+	return nil
+}
+
+func (r *GormRepository) loadPendingPublishedAtResolutionRows(
+	ctx context.Context,
+	referenceNow time.Time,
+	detectedBefore time.Time,
+	cursor *PublishedAtResolutionCursor,
+	limit int,
+) ([]pendingResolutionRow, error) {
+	if err := r.requirePublishedAtRetryAfterColumn("list pending published_at resolutions page"); err != nil {
+		return nil, err
+	}
+
+	var rows []pendingResolutionRow
+	query := r.db.WithContext(ctx).
+		Model(&domain.YouTubeCommunityShortsAlarmState{}).
+		Where("kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
+		Where("actual_published_at IS NULL").
+		Where("detected_at < ?", yttimestamp.Normalize(detectedBefore)).
+		Select(`CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END AS priority_bucket,
+			kind, post_id, content_id, channel_id, detected_at, published_at_retry_after`).
+		Where("(published_at_retry_after IS NULL OR published_at_retry_after <= ?)", yttimestamp.Normalize(referenceNow))
+	if cursor != nil {
+		query = query.Where(
+			`(CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END > ?)
+			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at > ?)
+			OR (CASE WHEN authorized_at IS NULL AND alarm_sent_at IS NULL THEN 0 ELSE 1 END = ? AND detected_at = ? AND post_id > ?)`,
+			cursor.PriorityBucket,
+			cursor.PriorityBucket,
+			yttimestamp.Normalize(cursor.DetectedAt),
+			cursor.PriorityBucket,
+			yttimestamp.Normalize(cursor.DetectedAt),
+			strings.TrimSpace(cursor.PostID),
+		)
+	}
+	if err := query.
+		Order("priority_bucket ASC").
+		Order("detected_at ASC").
+		Order("post_id ASC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list pending published_at resolutions page: query rows: %w", err)
+	}
+
+	return rows, nil
+}
+
+func buildPublishedAtResolutionCandidates(rows []pendingResolutionRow) ([]PublishedAtResolutionCandidate, error) {
+	candidates := make([]PublishedAtResolutionCandidate, 0, len(rows))
+	for i := range rows {
+		candidate, err := buildPublishedAtResolutionCandidate(rows[i])
+		if err != nil {
+			return nil, fmt.Errorf("list pending published_at resolutions page: row %d: %w", i, err)
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates, nil
+}
+
+func buildPublishedAtResolutionCandidate(row pendingResolutionRow) (PublishedAtResolutionCandidate, error) {
+	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(row.Kind, row.PostID)
+	if err != nil {
+		return PublishedAtResolutionCandidate{}, fmt.Errorf("normalize post id: %w", err)
+	}
+	normalizedContentKind, normalizedContentID, err := normalizeIdentity(row.Kind, row.ContentID)
+	if err != nil {
+		return PublishedAtResolutionCandidate{}, fmt.Errorf("normalize content id: %w", err)
+	}
+	if normalizedKind != normalizedContentKind {
+		return PublishedAtResolutionCandidate{}, fmt.Errorf("kind mismatch")
+	}
+
+	return PublishedAtResolutionCandidate{
+		Kind:       normalizedKind,
+		PostID:     normalizedPostID,
+		ContentID:  canonicalTrackingIdentity(normalizedKind, normalizedContentID),
+		ChannelID:  strings.TrimSpace(row.ChannelID),
+		DetectedAt: yttimestamp.Normalize(row.DetectedAt),
+	}, nil
+}
+
+func buildPendingPublishedAtResolutionCursor(
+	rows []pendingResolutionRow,
+	candidates []PublishedAtResolutionCandidate,
+	limit int,
+) *PublishedAtResolutionCursor {
+	if len(candidates) == 0 || len(candidates) < limit {
+		return nil
+	}
+	last := candidates[len(candidates)-1]
+	return &PublishedAtResolutionCursor{
+		PriorityBucket: rows[len(rows)-1].PriorityBucket,
+		DetectedAt:     last.DetectedAt,
+		PostID:         last.PostID,
+	}
+}
+
+func normalizeAlarmStateBatchRecords(records []*domain.YouTubeCommunityShortsAlarmState) ([]*domain.YouTubeCommunityShortsAlarmState, error) {
 	normalizedByIdentity := make(map[string]*domain.YouTubeCommunityShortsAlarmState, len(records))
 	normalizedOrder := make([]string, 0, len(records))
 	for i, record := range records {
 		normalizedRecord, err := normalizeAlarmState(record)
 		if err != nil {
-			return fmt.Errorf("upsert alarm state batch: normalize record at index %d: %w", i, err)
+			return nil, fmt.Errorf("upsert alarm state batch: normalize record at index %d: %w", i, err)
 		}
 
 		identityKey := alarmStateCanonicalKey(normalizedRecord.Kind, normalizedRecord.PostID)
@@ -363,7 +433,16 @@ func (r *GormRepository) UpsertAlarmStateBatch(ctx context.Context, records []*d
 		normalized = append(normalized, normalizedByIdentity[identityKey])
 	}
 
-	now := yttimestamp.Normalize(time.Now())
+	return normalized, nil
+}
+
+func buildAlarmStateUpsertQuery(
+	normalized []*domain.YouTubeCommunityShortsAlarmState,
+	now time.Time,
+	finalAuthorizedExpr string,
+	finalAlarmSentExpr string,
+	deliveryStatusExpr string,
+) (string, []any) {
 	args := make([]any, 0, len(normalized)*11)
 	var sb strings.Builder
 	sb.WriteString(`
@@ -371,14 +450,12 @@ func (r *GormRepository) UpsertAlarmStateBatch(ctx context.Context, records []*d
             (kind, post_id, content_id, channel_id, actual_published_at, detected_at, authorized_at, alarm_sent_at, delivery_status, created_at, updated_at)
         VALUES
     `)
-
 	for i, record := range normalized {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-		args = append(
-			args,
+		args = append(args,
 			record.Kind,
 			record.PostID,
 			record.ContentID,
@@ -392,21 +469,6 @@ func (r *GormRepository) UpsertAlarmStateBatch(ctx context.Context, records []*d
 			now,
 		)
 	}
-
-	finalAuthorizedExpr := `CASE
-                WHEN youtube_community_shorts_alarm_states.authorized_at IS NULL THEN EXCLUDED.authorized_at
-                WHEN EXCLUDED.authorized_at IS NULL THEN youtube_community_shorts_alarm_states.authorized_at
-                WHEN EXCLUDED.authorized_at < youtube_community_shorts_alarm_states.authorized_at THEN EXCLUDED.authorized_at
-                ELSE youtube_community_shorts_alarm_states.authorized_at
-            END`
-	finalAlarmSentExpr := `CASE
-                WHEN youtube_community_shorts_alarm_states.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
-                WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_community_shorts_alarm_states.alarm_sent_at
-                WHEN EXCLUDED.alarm_sent_at < youtube_community_shorts_alarm_states.alarm_sent_at THEN EXCLUDED.alarm_sent_at
-                ELSE youtube_community_shorts_alarm_states.alarm_sent_at
-            END`
-	deliveryStatusExpr := buildAlarmStateDeliveryStatusExpr(finalAuthorizedExpr, finalAlarmSentExpr)
-
 	sb.WriteString(`
         ON CONFLICT (kind, post_id) DO UPDATE
         SET content_id = EXCLUDED.content_id,
@@ -430,12 +492,7 @@ func (r *GormRepository) UpsertAlarmStateBatch(ctx context.Context, records []*d
 	sb.WriteString(`,
             updated_at = EXCLUDED.updated_at
     `)
-
-	if err := r.db.WithContext(ctx).Exec(sb.String(), args...).Error; err != nil {
-		return fmt.Errorf("upsert alarm state batch: exec query: %w", err)
-	}
-
-	return nil
+	return sb.String(), args
 }
 
 func normalizeAlarmStateClaim(record *domain.YouTubeCommunityShortsAlarmState) (*domain.YouTubeCommunityShortsAlarmState, error) {
