@@ -31,26 +31,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	appwiring "github.com/kapu/hololive-kakao-bot-go/internal/app/wiring"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
-type botWebhookRuntimeDependencies struct {
-	cache cache.Client
-}
-
-type botConfigSubscriberDependencies struct {
-	cache    cache.Client
-	settings settings.ReadWriter
-}
-
-type botConfigSubscriberRuntimeDependencies struct {
-	youtubeService youtube.Service
-	holodexService *holodex.Service
-	alarmCRUD      domain.AlarmCRUD
-}
+type botWebhookRuntimeDependencies = appbootstrap.BotWebhookRuntimeDependencies
+type botConfigSubscriberDependencies = appbootstrap.BotConfigSubscriberDependencies
+type botConfigSubscriberRuntimeDependencies = appbootstrap.BotConfigSubscriberRuntimeDependencies
 
 type botAdminRuntimeDependencies struct {
 	cache            cache.Client
@@ -82,14 +72,14 @@ type botRuntimeDependencyViews struct {
 }
 
 func buildBotWebhookRuntimeDependencies(deps *bot.Dependencies) botWebhookRuntimeDependencies {
-	return botWebhookRuntimeDependencies{cache: appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{BotDependencies: deps}).Webhook.Cache}
+	return botWebhookRuntimeDependencies{Cache: appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{BotDependencies: deps}).Webhook.Cache}
 }
 
 func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubscriberDependencies {
 	views := appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{BotDependencies: deps})
 	return botConfigSubscriberDependencies{
-		cache:    views.ConfigSubscriber.Cache,
-		settings: views.ConfigSubscriber.Settings,
+		Cache:    views.ConfigSubscriber.Cache,
+		Settings: views.ConfigSubscriber.Settings,
 	}
 }
 
@@ -99,14 +89,14 @@ func buildBotConfigSubscriberRuntimeDependencies(infra *coreInfrastructure) botC
 	}
 
 	views := appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{
-		BotDependencies: infra.deps,
-		AlarmCRUD:       infra.alarmCRUD,
-		HolodexService:  infra.holodexService,
+		BotDependencies: infra.Deps,
+		AlarmCRUD:       infra.AlarmCRUD,
+		HolodexService:  infra.HolodexService,
 	})
 	return botConfigSubscriberRuntimeDependencies{
-		youtubeService: views.ConfigSubscriberRuntime.YouTubeService,
-		holodexService: views.ConfigSubscriberRuntime.HolodexService,
-		alarmCRUD:      views.ConfigSubscriberRuntime.AlarmCRUD,
+		YouTubeService: views.ConfigSubscriberRuntime.YouTubeService,
+		HolodexService: views.ConfigSubscriberRuntime.HolodexService,
+		AlarmCRUD:      views.ConfigSubscriberRuntime.AlarmCRUD,
 	}
 }
 
@@ -116,11 +106,11 @@ func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntime
 	}
 
 	views := appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{
-		BotDependencies:      infra.deps,
-		AlarmCRUD:            infra.alarmCRUD,
-		HolodexService:       infra.holodexService,
-		YouTubeStack:         infra.ytStack,
-		TemplateAdminService: infra.templateAdminSvc,
+		BotDependencies:      infra.Deps,
+		AlarmCRUD:            infra.AlarmCRUD,
+		HolodexService:       infra.HolodexService,
+		YouTubeStack:         infra.YTStack,
+		TemplateAdminService: infra.TemplateAdminSvc,
 	})
 	return botAdminRuntimeDependencies{
 		cache:            views.AdminRuntime.Cache,
@@ -144,7 +134,7 @@ func buildBotServerRuntimeDependencies(infra *coreInfrastructure) botServerRunti
 		return botServerRuntimeDependencies{}
 	}
 
-	return botServerRuntimeDependencies{alarmCRUD: infra.alarmCRUD}
+	return botServerRuntimeDependencies{alarmCRUD: infra.AlarmCRUD}
 }
 
 func buildBotRuntimeDependencyViews(infra *coreInfrastructure) botRuntimeDependencyViews {
@@ -153,9 +143,9 @@ func buildBotRuntimeDependencyViews(infra *coreInfrastructure) botRuntimeDepende
 	}
 
 	return botRuntimeDependencyViews{
-		botDeps:                 infra.deps,
-		webhook:                 buildBotWebhookRuntimeDependencies(infra.deps),
-		configSubscriber:        buildBotConfigSubscriberDependencies(infra.deps),
+		botDeps:                 infra.Deps,
+		webhook:                 buildBotWebhookRuntimeDependencies(infra.Deps),
+		configSubscriber:        buildBotConfigSubscriberDependencies(infra.Deps),
 		configSubscriberRuntime: buildBotConfigSubscriberRuntimeDependencies(infra),
 		adminRuntime:            buildBotAdminRuntimeDependencies(infra),
 		serverRuntime:           buildBotServerRuntimeDependencies(infra),

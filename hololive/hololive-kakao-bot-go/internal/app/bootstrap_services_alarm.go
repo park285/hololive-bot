@@ -22,9 +22,7 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -32,7 +30,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
 
 func initAlarmDependencies(
@@ -46,24 +45,11 @@ func initAlarmDependencies(
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*alarmDependencies, error) {
-	httpClient := httputil.NewExternalAPIClient(10 * time.Second)
-	chzzkClient := ProvideChzzkClient(httpClient, chzzkCfg, logger)
-	twitchClient := ProvideTwitchClient(twitchCfg, logger)
-	memberDataProvider := memberServiceAdapter
-
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(advanceMinutes, scraperProxyEnabled, logger)
-
-	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, chzzkClient, twitchClient, memberDataProvider, alarmRepository, logger)
+	deps, err := appbootstrap.InitAlarmDependencies(chzzkCfg, twitchCfg, advanceMinutes, scraperProxyEnabled, cacheService, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
-		return nil, fmt.Errorf("provide alarm service: %w", err)
+		return nil, err
 	}
-
-	return &alarmDependencies{
-		alarmService:       alarmService,
-		memberDataProvider: memberDataProvider,
-		chzzkClient:        chzzkClient,
-		twitchClient:       twitchClient,
-	}, nil
+	return deps, nil
 }
 
 func initAlarmModeComponents(
@@ -75,30 +61,9 @@ func initAlarmModeComponents(
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*alarmModeComponents, error) {
-	alarmDeps, alarmErr := initAlarmDependencies(
-		cfg.Chzzk,
-		cfg.Twitch,
-		cfg.Notification.AdvanceMinutes,
-		cfg.Scraper.ProxyEnabled,
-		infra.Cache,
-		holodexService,
-		memberServiceAdapter,
-		alarmRepository,
-		logger,
-	)
-	if alarmErr != nil {
-		return nil, alarmErr
+	components, err := appbootstrap.InitAlarmModeComponents(ctx, cfg, infra, holodexService, memberServiceAdapter, alarmRepository, logger)
+	if err != nil {
+		return nil, err
 	}
-
-	if warnErr := alarmDeps.alarmService.WarmCacheFromDB(ctx); warnErr != nil {
-		logger.Warn("Failed to warm alarm cache from DB", "error", warnErr)
-	}
-
-	return &alarmModeComponents{
-		alarmCRUD:        alarmDeps.alarmService,
-		alarmService:     alarmDeps.alarmService,
-		chzzkClient:      alarmDeps.chzzkClient,
-		twitchClient:     alarmDeps.twitchClient,
-		memberDataSource: alarmDeps.memberDataProvider,
-	}, nil
+	return components, nil
 }

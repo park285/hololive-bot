@@ -25,15 +25,15 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
+	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 )
 
 type alarmYouTubeStackComponents struct {
@@ -53,52 +53,15 @@ func initAlarmYouTubeStack(
 	formatter *adapter.ResponseFormatter,
 	logger *slog.Logger,
 ) (*alarmYouTubeStackComponents, error) {
-	alarmRepository := ProvideAlarmRepository(infra.Postgres, logger)
-
-	alarmMode, err := initAlarmModeComponents(
-		ctx,
-		cfg,
-		infra,
-		foundation.holodexService,
-		foundation.memberServiceAdapter,
-		alarmRepository,
-		logger,
-	)
+	components, err := appbootstrap.InitAlarmYouTubeStack(ctx, cfg, infra, foundation, irisClient, formatter, logger)
 	if err != nil {
 		return nil, err
 	}
-
-	memberMatcher := ProvideMemberMatcher(
-		ctx,
-		alarmMode.memberDataSource,
-		infra.Cache,
-		foundation.holodexService,
-		logger,
-	)
-	youTubeStatsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
-	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, sharedmodules.YouTubeStackParams{
-		YouTubeConfig:   cfg.YouTube,
-		ScraperConfig:   cfg.Scraper,
-		CacheService:    infra.Cache,
-		HolodexService:  foundation.holodexService,
-		Members:         foundation.memberServiceAdapter,
-		StatsRepo:       youTubeStatsRepository,
-		AlarmState:      alarmMode.alarmService,
-		IrisClient:      irisClient,
-		Formatter:       formatter,
-		SharedRateLimit: foundation.sharedRL,
-		Logger:          logger,
-	})
-
 	return &alarmYouTubeStackComponents{
-		alarmMode:      alarmMode,
-		memberMatcher:  memberMatcher,
-		youTubeStack:   youTubeStack,
-		activityLogger: ProvideActivityLogger(logger),
-		settingsService: sharedmodules.BuildSettingsService(
-			cfg.Notification.AdvanceMinutes,
-			cfg.Scraper.ProxyEnabled,
-			logger,
-		),
+		alarmMode:       components.AlarmMode,
+		memberMatcher:   components.MemberMatcher,
+		youTubeStack:    components.YouTubeStack,
+		activityLogger:  components.ActivityLogger,
+		settingsService: components.SettingsService,
 	}, nil
 }

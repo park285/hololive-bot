@@ -22,27 +22,14 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/repository"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/command"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
-
-type coreIntegrationServices struct {
-	aclService        *acl.Service
-	majorEventRepo    command.MajorEventRepository
-	memberNewsService command.MemberNewsService
-	commandBuilders   []bot.CommandBuilder
-	workerPool        *workerpool.Pool
-}
 
 func initCoreIntegrationServices(
 	ctx context.Context,
@@ -50,33 +37,11 @@ func initCoreIntegrationServices(
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) (*coreIntegrationServices, error) {
-	aclService, err := ProvideACLService(
-		ctx,
-		cfg.Kakao.ACLEnabled,
-		acl.ParseACLMode(cfg.Kakao.ACLMode),
-		cfg.Kakao.Rooms,
-		infra.Postgres,
-		infra.Cache,
-		logger,
-	)
+	services, err := appbootstrap.InitCoreIntegrationServices(ctx, cfg, infra, logger)
 	if err != nil {
 		return nil, err
 	}
-
-	majorEventRepo, memberNewsService := resolveLLMSchedulerClients(cfg, logger)
-
-	workerPool, err := ProvideAlarmWorkerPool()
-	if err != nil {
-		return nil, fmt.Errorf("provide alarm worker pool: %w", err)
-	}
-
-	return &coreIntegrationServices{
-		aclService:        aclService,
-		majorEventRepo:    majorEventRepo,
-		memberNewsService: memberNewsService,
-		commandBuilders:   []bot.CommandBuilder{},
-		workerPool:        workerPool,
-	}, nil
+	return services, nil
 }
 
 func buildTemplateAdminService(
@@ -84,9 +49,5 @@ func buildTemplateAdminService(
 	templateRenderer *template.Renderer,
 	logger *slog.Logger,
 ) *template.AdminService {
-	return template.NewAdminService(
-		repository.NewTemplateRepository(infra.Postgres.GetGormDB(), logger),
-		templateRenderer,
-		logger,
-	)
+	return appbootstrap.BuildTemplateAdminService(infra, templateRenderer, logger)
 }

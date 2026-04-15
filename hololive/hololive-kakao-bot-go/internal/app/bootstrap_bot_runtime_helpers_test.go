@@ -74,7 +74,7 @@ func TestBuildBotWebhookHandler_ConstructsAndHandlesMethodGuard(t *testing.T) {
 		},
 	}
 	deps := botWebhookRuntimeDependencies{
-		cache: &cachemocks.Client{
+		Cache: &cachemocks.Client{
 			GetClientFunc: func() valkey.Client { return nil },
 		},
 	}
@@ -115,13 +115,13 @@ func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
 		},
 	}
 	infra := &coreInfrastructure{
-		deps: &bot.Dependencies{
+		Deps: &bot.Dependencies{
 			Cache:  cachemocks.NewStrictClient(),
 			Chzzk:  &chzzk.Client{},
 			Twitch: &twitch.Client{},
 		},
-		holodexService: &holodex.Service{},
-		alarmService:   &notification.AlarmService{},
+		HolodexService: &holodex.Service{},
+		AlarmService:   &notification.AlarmService{},
 	}
 
 	scheduler, err := buildAlarmRuntimeScheduler(cfg, infra, logger)

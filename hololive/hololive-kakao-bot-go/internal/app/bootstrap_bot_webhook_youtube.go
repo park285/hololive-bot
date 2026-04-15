@@ -25,6 +25,8 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/park285/iris-client-go/iris"
+
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
 
 func buildBotWebhookHandler(
@@ -33,13 +35,5 @@ func buildBotWebhookHandler(
 	deps botWebhookRuntimeDependencies,
 	logger *slog.Logger,
 ) (*iris.WebhookHandler, error) {
-	return iris.NewWebhookHandler(messageHandler,
-		iris.WithWebhookLogger(logger),
-		iris.WithValkeyDedup(deps.cache.GetClient()),
-		iris.WithWorkerCount(cfg.Webhook.WorkerCount),
-		iris.WithQueueSize(cfg.Webhook.QueueSize),
-		iris.WithEnqueueTimeout(cfg.Webhook.EnqueueTimeout),
-		iris.WithHandlerTimeout(cfg.Webhook.HandlerTimeout),
-		iris.WithRequireHTTP2(cfg.Webhook.RequireHTTP2),
-	)
+	return appbootstrap.BuildBotWebhookHandler(cfg, messageHandler, deps, logger)
 }
