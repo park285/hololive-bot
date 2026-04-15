@@ -7,8 +7,10 @@ pub struct Alarm {
     pub room_id: String,
     pub room_name: String,
     #[serde(default)]
+    #[schema(required = true)]
     pub user_id: String,
     #[serde(default)]
+    #[schema(required = true)]
     pub user_name: String,
     pub channel_id: String,
     pub member_name: String,
@@ -17,6 +19,7 @@ pub struct Alarm {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AlarmsResponse {
     #[serde(default = "default_ok_status")]
+    #[schema(required = true)]
     pub status: String,
     pub alarms: Vec<Alarm>,
 }
@@ -45,7 +48,9 @@ pub struct RoomNameUpdateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct UserNameUpdateRequest {
     #[serde(default)]
+    #[schema(required = true)]
     pub user_id: String,
     #[serde(default)]
+    #[schema(required = true)]
     pub user_name: String,
 }

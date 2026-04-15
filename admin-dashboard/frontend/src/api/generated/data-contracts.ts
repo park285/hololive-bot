@@ -337,3 +337,85 @@ export interface UserNameUpdateRequest {
   userId: string;
   userName: string;
 }
+
+export interface YouTubeCommunityShortsOpsChannel {
+  /** @format int64 */
+  alarmSentPostCount: number;
+  /** @format int64 */
+  averageLatencyMillis?: number | null;
+  channelId: string;
+  /** @format int64 */
+  communityPostCount: number;
+  /** @format int64 */
+  detectedPostCount: number;
+  /** @format int64 */
+  detectedUnsentPostCount: number;
+  earliestObservedAt?: string | null;
+  /** @format int64 */
+  exceededPostCount: number;
+  /** @format int64 */
+  failedPostCount: number;
+  /** @format int64 */
+  latencyMeasuredPostCount: number;
+  latestObservedAt?: string | null;
+  /** @format int64 */
+  maxLatencyMillis?: number | null;
+  memberName?: string | null;
+  /** @format int64 */
+  pendingPostCount: number;
+  /** @format int64 */
+  shortsPostCount: number;
+  /** @format int64 */
+  successPostCount: number;
+  /** @format int64 */
+  withinTargetPostCount: number;
+}
+
+export interface YouTubeCommunityShortsOpsOverview {
+  /** @format int64 */
+  alarmSentPostCount: number;
+  /** @format int64 */
+  averageLatencyMillis?: number | null;
+  /** @format int64 */
+  channelCount: number;
+  /** @format int64 */
+  communityDetectedPostCount: number;
+  /** @format int64 */
+  communityExceededPostCount: number;
+  /** @format int64 */
+  detectedPostCount: number;
+  /** @format int64 */
+  detectedUnsentPostCount: number;
+  /** @format int64 */
+  exceededPostCount: number;
+  /** @format int64 */
+  failedPostCount: number;
+  /** @format int64 */
+  latencyMeasuredPostCount: number;
+  /** @format int64 */
+  maxLatencyMillis?: number | null;
+  /** @format int64 */
+  pendingPostCount: number;
+  /** @format int64 */
+  shortsDetectedPostCount: number;
+  /** @format int64 */
+  shortsExceededPostCount: number;
+  /** @format int64 */
+  successPostCount: number;
+  /** @format int64 */
+  withinTargetPostCount: number;
+}
+
+export interface YouTubeCommunityShortsOpsResponse {
+  channels: YouTubeCommunityShortsOpsChannel[];
+  generatedAt: string;
+  observedAtBasis: string;
+  overview: YouTubeCommunityShortsOpsOverview;
+  /** @format int64 */
+  slaThresholdMillis: number;
+  status: string;
+  windowEnd: string;
+  /** @format int64 */
+  windowHours: number;
+  windowStart: string;
+}
