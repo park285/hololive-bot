@@ -20,6 +20,10 @@ while IFS= read -r path; do
     .gemini/*|\
     BUNDLE_MANIFEST.txt|\
     *.tar.gz|\
+    *.patch|\
+    *.diff|\
+    *.orig|\
+    *.rej|\
     .idea/*|\
     .vscode/*|\
     .omc/*|\

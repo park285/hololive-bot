@@ -17,4 +17,5 @@
 - `runbooks/README.md` — 현재 운영 runbook 인덱스
 - `architecture/README.md` — 현재 governance/architecture 인덱스
 - `ALARM_DISPATCH_REMEDIATION_20260414.md` — 2026-04-14 알람/디스패처 보강 기준
-- `APP_BOOTSTRAP_BOUNDARY_GUIDE.md` — `hololive-kakao-bot-go/internal/app` 구조 분리 기준
+- `APP_BOOTSTRAP_BOUNDARY_GUIDE.md` — `hololive-kakao-bot-go/internal/app` 경계 분리의 현재 상태와 종료 기준
+- `REMAINING_RISKS_EXECUTION_GUIDE_20260415.md` — 2026-04-15 repo-wide 리스크 종료 기록과 검증 증거
