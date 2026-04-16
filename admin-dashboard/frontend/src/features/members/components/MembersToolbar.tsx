@@ -10,6 +10,7 @@ interface MembersToolbarProps {
 	onToggleHideGraduated: () => void;
 	filteredCount: number;
 	totalCount: number;
+	onAddModalIntent: () => void;
 	onOpenAddModal: () => void;
 	searchTerm: string;
 	onSearchTermChange: (value: string) => void;
@@ -20,6 +21,7 @@ export const MembersToolbar = ({
 	onToggleHideGraduated,
 	filteredCount,
 	totalCount,
+	onAddModalIntent,
 	onOpenAddModal,
 	searchTerm,
 	onSearchTermChange,
@@ -49,6 +51,8 @@ export const MembersToolbar = ({
 
 		<div className="flex flex-col md:flex-row gap-4 items-center justify-between">
 			<Button
+				onMouseEnter={onAddModalIntent}
+				onFocus={onAddModalIntent}
 				onClick={onOpenAddModal}
 				className="gap-2 shrink-0 bg-sky-500 hover:bg-sky-600 text-white text-sm font-bold shadow-sm shadow-sky-200 focus-visible:ring-2 focus-visible:ring-sky-200"
 				aria-label="새로운 멤버 추가"

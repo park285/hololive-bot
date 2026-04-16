@@ -71,6 +71,10 @@ impl SystemStatsCollector {
                 tokio::select! {
                     () = cancel.cancelled() => break,
                     _ = ticker.tick() => {
+                        if !should_collect_system_stats(tx.receiver_count()) {
+                            continue;
+                        }
+
                         sys.refresh_cpu_all();
                         sys.refresh_memory();
                         if let Some(pid) = current_pid {
@@ -215,6 +219,10 @@ fn extract_goroutines(health: &HealthResponse) -> usize {
         .map_or(0, |value| value as usize)
 }
 
+const fn should_collect_system_stats(receiver_count: usize) -> bool {
+    receiver_count > 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +289,12 @@ mod tests {
         assert_eq!(value["serviceRuntime"][0]["metricKind"], json!("thread"));
         assert!(value.get("cpu_usage").is_none());
         assert!(value.get("memory_usage_percent").is_none());
+    }
+
+    #[test]
+    fn test_should_collect_system_stats_requires_active_receivers() {
+        assert!(!should_collect_system_stats(0));
+        assert!(should_collect_system_stats(1));
     }
 
     #[tokio::test]

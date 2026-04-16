@@ -1,4 +1,4 @@
-import { Trophy } from "lucide-react";
+import Trophy from "lucide-react/dist/esm/icons/trophy";
 import { Badge } from "@/components/ui/Badge";
 import type { MilestonesResponse } from "@/features/milestones/types";
 

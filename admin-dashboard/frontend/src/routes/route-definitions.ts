@@ -73,19 +73,25 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
 	},
 ];
 
-const lazyCache: Record<string, LazyExoticComponent<ComponentType>> = {};
+const routeDefinitionsById = new Map(
+	ROUTE_DEFINITIONS.map((route) => [route.id, route] as const),
+);
+const lazyCache = new Map<string, LazyExoticComponent<ComponentType>>();
 
 export const getLazyComponent = (id: string) => {
-	if (!lazyCache[id]) {
-		const route = ROUTE_DEFINITIONS.find((item) => item.id === id);
-		if (!route) {
-			throw new Error(`Route ${id} not found in route definitions`);
-		}
-
-		lazyCache[id] = lazy(route.load);
+	const cachedComponent = lazyCache.get(id);
+	if (cachedComponent) {
+		return cachedComponent;
 	}
 
-	return lazyCache[id];
+	const route = routeDefinitionsById.get(id);
+	if (!route) {
+		throw new Error(`Route ${id} not found in route definitions`);
+	}
+
+	const lazyComponent = lazy(route.load);
+	lazyCache.set(id, lazyComponent);
+	return lazyComponent;
 };
 
 const prefetchedSet = new Set<string>();
@@ -93,7 +99,7 @@ const prefetchedSet = new Set<string>();
 export const prefetchRoute = (id: string) => {
 	if (prefetchedSet.has(id)) return;
 
-	const route = ROUTE_DEFINITIONS.find((item) => item.id === id);
+	const route = routeDefinitionsById.get(id);
 	if (!route) return;
 
 	prefetchedSet.add(id);

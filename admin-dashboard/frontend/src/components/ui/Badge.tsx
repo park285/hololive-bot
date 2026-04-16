@@ -1,5 +1,5 @@
 import type { VariantProps } from "class-variance-authority";
-import { X } from "lucide-react";
+import X from "lucide-react/dist/esm/icons/x";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -42,7 +42,7 @@ function Badge({
 					onClick={onRemove}
 					className="ml-1 group rounded-full p-0.5 hover:bg-black/5 transition-colors"
 					type="button"
-					aria-label="Remove"
+					aria-label="삭제"
 				>
 					<X
 						size={12}

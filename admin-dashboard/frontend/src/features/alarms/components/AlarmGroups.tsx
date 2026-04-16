@@ -7,6 +7,7 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import User from "lucide-react/dist/esm/icons/user";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { VirtualList } from "@/components/ui/VirtualList";
 import type { Alarm } from "@/features/alarms/types";
 
 const numberFormatter = new Intl.NumberFormat("ko-KR");
@@ -45,22 +46,27 @@ export const AlarmGroups = ({
 
 	return (
 		<>
-			<div className="space-y-4" role="list">
-				{groups.length === 0 ? (
-					<div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-						<Bell
-							className="mx-auto h-12 w-12 text-slate-300 mb-3"
-							aria-hidden="true"
-						/>
-						<h3 className="text-lg font-medium text-slate-900">
-							알람이 없습니다
-						</h3>
-						<p className="text-slate-500">
-							새로운 알람을 등록하거나 검색어를 변경해보세요.
-						</p>
-					</div>
-				) : (
-					visibleGroups.map((group) => {
+			{groups.length === 0 ? (
+				<div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+					<Bell
+						className="mx-auto h-12 w-12 text-slate-300 mb-3"
+						aria-hidden="true"
+					/>
+					<h3 className="text-lg font-medium text-slate-900">
+						알람이 없습니다
+					</h3>
+					<p className="text-slate-500">
+						새로운 알람을 등록하거나 검색어를 변경해보세요.
+					</p>
+				</div>
+			) : (
+				<VirtualList
+					items={visibleGroups}
+					estimateSize={() => 220}
+					recomputeKey={`${String(visibleGroupCount)}:${String(expandedGroups.size)}`}
+					className="max-h-[42rem] pr-1"
+					itemClassName="pb-4"
+					renderItem={(group) => {
 						const groupKey = `${group.roomId}:${group.userId}`;
 						const isExpanded = expandedGroups.has(groupKey);
 						const displayAlarms = isExpanded
@@ -216,9 +222,9 @@ export const AlarmGroups = ({
 								)}
 							</div>
 						);
-					})
-				)}
-			</div>
+					}}
+				/>
+			)}
 
 			{visibleGroupCount < groups.length && (
 				<div className="flex justify-center">

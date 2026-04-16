@@ -547,10 +547,17 @@ export class Admin<
    * @name HoloGetChannelStats
    * @request GET:/admin/api/holo/stats/channels
    */
-  holoGetChannelStats = (params: RequestParams = {}) =>
+  holoGetChannelStats = (
+    query?: {
+      /** @min 0 */
+      limit?: number | null;
+    },
+    params: RequestParams = {},
+  ) =>
     this.request<ChannelStatsResponse, ErrorResponse>({
       path: `/admin/api/holo/stats/channels`,
       method: "GET",
+      query: query,
       format: "json",
       ...params,
     });

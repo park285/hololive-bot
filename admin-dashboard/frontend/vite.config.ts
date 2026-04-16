@@ -71,6 +71,7 @@ export default defineConfig({
       '/admin/api': {
         target: adminApiProxyTarget,
         changeOrigin: true,
+        ws: true,
       },
     },
   },

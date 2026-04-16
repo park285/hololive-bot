@@ -48,9 +48,11 @@ pub async fn handle_system_stats_stream(
         app_state.config.security.ws_origin_mode,
     )?;
 
-    let Some(mut rx) = subscribe_system_stats_stream(&app_state.stats_tx) else {
-        return Ok(too_many_active_system_stats_streams_response());
-    };
+    let mut rx = subscribe_system_stats_stream(&app_state.stats_tx).ok_or(
+        crate::error::ApiError::TooManyActiveSystemStatsStreams {
+            limit: MAX_CONCURRENT_SYSTEM_STATS_STREAMS,
+        },
+    )?;
 
     Ok(ws.on_upgrade(move |mut socket: WebSocket| async move {
         loop {
@@ -76,17 +78,6 @@ fn subscribe_system_stats_stream(
     }
 
     Some(tx.subscribe())
-}
-
-fn too_many_active_system_stats_streams_response() -> axum::response::Response {
-    (
-        axum::http::StatusCode::TOO_MANY_REQUESTS,
-        Json(serde_json::json!({
-            "error": "Too many active system stats streams",
-            "limit": MAX_CONCURRENT_SYSTEM_STATS_STREAMS,
-        })),
-    )
-        .into_response()
 }
 
 pub fn verify_ws_origin<S>(

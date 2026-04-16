@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { ROUTE_DEFINITIONS, prefetchRoute } from "./route-definitions";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(path.join(dirname, "route-definitions.ts"), "utf8");
@@ -53,5 +54,27 @@ test("dashboard routes lazy-load feature pages directly", () => {
 test("trivial tab wrapper files are removed", () => {
 	for (const relativePath of deletedWrappers) {
 		assert.equal(existsSync(path.join(dirname, relativePath)), false, relativePath);
+	}
+});
+
+test("route prefetch deduplicates repeated hover intent for the same route", async () => {
+	const membersRoute = ROUTE_DEFINITIONS.find((route) => route.id === "members");
+	assert.ok(membersRoute);
+
+	const originalLoad = membersRoute.load;
+	let loadCount = 0;
+	membersRoute.load = async () => {
+		loadCount += 1;
+		return { default: (() => null) as never };
+	};
+
+	try {
+		prefetchRoute("members");
+		prefetchRoute("members");
+		await Promise.resolve();
+
+		assert.equal(loadCount, 1);
+	} finally {
+		membersRoute.load = originalLoad;
 	}
 });

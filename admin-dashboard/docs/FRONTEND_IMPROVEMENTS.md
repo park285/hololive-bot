@@ -52,6 +52,9 @@ children: [
 ### 하트비트 및 활동 감지 최적화
 세션 유지를 위한 하트비트 로직을 `useHeartbeat` 커스텀 훅으로 분리하고 안정성을 강화했습니다.
 - **경쟁 상태(Race Condition) 방지**: `AbortController`를 사용하여 새로운 요청 시 이전 요청을 즉시 취소합니다.
+- **Idle 전환 즉시 반영**: `isIdle=true`가 되면 다음 정기 주기를 기다리지 않고 즉시 heartbeat를 전송합니다.
+- **서버 idle 거부 즉시 이탈**: `idle_rejected` 응답 수신 시 즉시 로그아웃하여 서버 측 10초 TTL 단축과 프론트 상태를 맞춥니다.
+- **후속 pre-warning 분리 지원**: backend가 `/auth/session`에 `absolute_expires_at`와 `session_policy`를 제공하므로, UI 레이어는 별도 작업으로 pre-warning 모달만 구현하면 됩니다.
 - **효과**: 불필요한 네트워크 부하를 줄이고, `visibilitychange` 이벤트를 통해 브라우저 탭 활성 상태에 따른 지능적인 요청 관리가 가능해졌습니다.
 
 ```typescript
@@ -64,7 +67,7 @@ const sendHeartbeat = useCallback(async (idle: boolean) => {
     abortControllerRef.current = new AbortController()
     
     try {
-        const response = await authApi.heartbeat(idle)
+        const response = await authApi.heartbeat(idle, controller.signal)
         // ... 생략
     } catch (e: any) {
         if (e.name === 'AbortError') return

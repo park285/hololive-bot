@@ -1568,6 +1568,20 @@
           "holo"
         ],
         "operationId": "holoGetChannelStats",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -2174,6 +2188,13 @@
           "status"
         ],
         "properties": {
+          "absolute_expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
           "csrf_token": {
             "type": [
               "string",
@@ -2581,16 +2602,62 @@
           }
         }
       },
+      "SessionPolicyResponse": {
+        "type": "object",
+        "required": [
+          "heartbeat_interval_ms",
+          "idle_timeout_ms",
+          "idle_warning_timeout_ms",
+          "idle_session_ttl_ms",
+          "absolute_warning_window_ms"
+        ],
+        "properties": {
+          "absolute_warning_window_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "heartbeat_interval_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "idle_session_ttl_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "idle_timeout_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "idle_warning_timeout_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "SessionStatusResponse": {
         "type": "object",
         "required": [
           "status",
           "authenticated",
-          "username"
+          "username",
+          "absolute_expires_at",
+          "session_policy"
         ],
         "properties": {
+          "absolute_expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
           "authenticated": {
             "type": "boolean"
+          },
+          "session_policy": {
+            "$ref": "#/components/schemas/SessionPolicyResponse"
           },
           "status": {
             "type": "string"

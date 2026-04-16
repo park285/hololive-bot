@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useSessionWarningStore } from "./sessionWarningStore";
 
 interface AuthState {
 	isAuthenticated: boolean;
@@ -19,5 +20,6 @@ export const useAuthStore = create<AuthState>()((set) => ({
 	},
 	logout: () => {
 		set({ isAuthenticated: false, isAuthResolved: true });
+		useSessionWarningStore.getState().resetSessionWarnings();
 	},
 }));
