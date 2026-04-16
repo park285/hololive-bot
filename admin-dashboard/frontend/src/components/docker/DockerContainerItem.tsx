@@ -1,14 +1,13 @@
 import clsx from "clsx";
-import {
-	AlertCircle,
-	Play,
-	Power,
-	RefreshCw,
-	Square,
-	StopCircle,
-} from "lucide-react";
+import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
+import Play from "lucide-react/dist/esm/icons/play";
+import Power from "lucide-react/dist/esm/icons/power";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Square from "lucide-react/dist/esm/icons/square";
+import StopCircle from "lucide-react/dist/esm/icons/stop-circle";
 import type { DockerContainer } from "@/api/core";
-import { Badge, Button } from "@/components/ui";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 
 interface DockerContainerItemProps {
 	container: DockerContainer;

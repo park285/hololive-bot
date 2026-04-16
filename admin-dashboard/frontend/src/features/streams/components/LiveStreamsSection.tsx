@@ -2,12 +2,23 @@ import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import PlayCircle from "lucide-react/dist/esm/icons/play-circle";
 import type { SyntheticEvent } from "react";
+import { VirtualList } from "@/components/ui/VirtualList";
 import {
 	getStreamKey,
 	getStreamLinkMeta,
 	getThumbnailSource,
 } from "@/features/streams/lib/media";
 import type { Stream, StreamOrg } from "@/features/streams/types";
+
+const LIVE_STREAM_ROW_SIZE = 3;
+
+const chunkLiveStreams = (streams: Stream[]) => {
+	const rows: Stream[][] = [];
+	for (let index = 0; index < streams.length; index += LIVE_STREAM_ROW_SIZE) {
+		rows.push(streams.slice(index, index + LIVE_STREAM_ROW_SIZE));
+	}
+	return rows;
+};
 
 interface OrgOption {
 	value: StreamOrg;
@@ -67,66 +78,74 @@ export const LiveStreamsSection = ({
 			<div className="h-40 flex items-center justify-center text-slate-400 text-sm">
 				Loading…
 			</div>
+		) : liveStreams.length === 0 ? (
+			<p className="col-span-full text-center text-slate-400 text-sm py-10">
+				No live streams currently.
+			</p>
 		) : (
-			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-				{liveStreams.map((stream, index) => {
-					const thumbnail = getThumbnailSource(
-						stream.thumbnail ?? undefined,
-						"max",
-					);
-					const linkMeta = getStreamLinkMeta(stream);
+			<VirtualList
+				items={chunkLiveStreams(liveStreams)}
+				estimateSize={() => 300}
+				className="max-h-[42rem] pr-1"
+				itemClassName="pb-4"
+				renderItem={(row, rowIndex) => (
+					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+						{row.map((stream, columnIndex) => {
+							const thumbnail = getThumbnailSource(
+								stream.thumbnail ?? undefined,
+								"max",
+							);
+							const linkMeta = getStreamLinkMeta(stream);
+							const streamIndex = rowIndex * LIVE_STREAM_ROW_SIZE + columnIndex;
 
-					return (
-						<a
-							key={getStreamKey(stream, index)}
-							href={linkMeta.href}
-							target="_blank"
-							rel="noreferrer"
-							className="group relative block rounded-xl overflow-hidden border border-slate-200 hover:shadow-md transition-shadow [content-visibility:auto] contain-intrinsic-size-[300px]"
-						>
-							{thumbnail ? (
-								<div className="aspect-video relative overflow-hidden bg-slate-100">
-									<img
-										src={thumbnail.src}
-										srcSet={thumbnail.srcSet}
-										sizes={thumbnail.sizes}
-										data-fallback-chain={thumbnail.fallbackChain.join("|")}
-										alt={stream.title}
-										loading={index === 0 ? "eager" : "lazy"}
-										decoding="async"
-										fetchPriority={index === 0 ? "high" : "auto"}
-										className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-										onError={onThumbnailError}
-									/>
-									<div className="absolute top-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shadow-sm">
-										LIVE
+							return (
+								<a
+									key={getStreamKey(stream, streamIndex)}
+									href={linkMeta.href}
+									target="_blank"
+									rel="noreferrer"
+									className="group relative block rounded-xl overflow-hidden border border-slate-200 hover:shadow-md transition-shadow [content-visibility:auto] contain-intrinsic-size-[300px]"
+								>
+									{thumbnail ? (
+										<div className="aspect-video relative overflow-hidden bg-slate-100">
+											<img
+												src={thumbnail.src}
+												srcSet={thumbnail.srcSet}
+												sizes={thumbnail.sizes}
+												data-fallback-chain={thumbnail.fallbackChain.join("|")}
+												alt={stream.title}
+												loading={streamIndex === 0 ? "eager" : "lazy"}
+												decoding="async"
+												fetchPriority={streamIndex === 0 ? "high" : "auto"}
+												className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+												onError={onThumbnailError}
+											/>
+											<div className="absolute top-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shadow-sm">
+												LIVE
+											</div>
+										</div>
+									) : (
+										<div className="aspect-video bg-slate-100 flex items-center justify-center text-slate-300">
+											<PlayCircle size={32} />
+										</div>
+									)}
+									<div className="p-4">
+										<h4 className="font-bold text-sm line-clamp-2 mb-1 text-slate-800">
+											{stream.title}
+										</h4>
+										<p className="text-xs text-slate-500 mb-3">
+											{stream.channel_name}
+										</p>
+										<span className="inline-flex items-center text-xs font-medium text-red-600 group-hover:text-red-700 group-hover:underline">
+											<ExternalLink size={12} className="mr-1" /> {linkMeta.label}
+										</span>
 									</div>
-								</div>
-							) : (
-								<div className="aspect-video bg-slate-100 flex items-center justify-center text-slate-300">
-									<PlayCircle size={32} />
-								</div>
-							)}
-							<div className="p-4">
-								<h4 className="font-bold text-sm line-clamp-2 mb-1 text-slate-800">
-									{stream.title}
-								</h4>
-								<p className="text-xs text-slate-500 mb-3">
-									{stream.channel_name}
-								</p>
-								<span className="inline-flex items-center text-xs font-medium text-red-600 group-hover:text-red-700 group-hover:underline">
-									<ExternalLink size={12} className="mr-1" /> {linkMeta.label}
-								</span>
-							</div>
-						</a>
-					);
-				})}
-				{liveStreams.length === 0 && (
-					<p className="col-span-full text-center text-slate-400 text-sm py-10">
-						No live streams currently.
-					</p>
+								</a>
+							);
+						})}
+					</div>
 				)}
-			</div>
+			/>
 		)}
 	</div>
 );

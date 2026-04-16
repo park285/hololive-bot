@@ -7,3 +7,4 @@ export * from "./Label";
 export * from "./Progress";
 export * from "./Skeleton";
 export * from "./StatCard";
+export * from "./VirtualList";

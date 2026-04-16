@@ -16,8 +16,20 @@ cd admin-dashboard/frontend
 npm ci
 npm run generate:api
 npm run lint
+npm run typecheck
 npm run build
 ```
+
+## 현재 툴체인 메모
+
+- TypeScript는 `6.0.2` 기준으로 맞춰져 있습니다.
+- `tsconfig.app.json`은 `baseUrl` 없이 `paths`만 사용하도록 정리되어, TS 6/7 deprecation 경고를 피합니다.
+- ESLint는 `9.x` 안정판 조합을 사용합니다.
+- `eslint-plugin-react-hooks`는 안정판 `7.0.1`을 사용합니다.
+- `follow-redirects`는 axios transitive advisory 대응을 위해 `overrides`로 상향 고정되어 있습니다.
+- `@tanstack/react-query-devtools`는 개발 환경에서만 lazy-load 됩니다.
+- `msw`는 opt-in 개발 mocking 용도로 셋업되어 있으며, `VITE_ENABLE_MSW=true`일 때만 worker가 시작됩니다.
+- 긴 리스트는 `@tanstack/react-virtual` 기반 `VirtualList`로 점진적으로 가상화됩니다.
 
 ## 개발 서버
 
@@ -26,6 +38,11 @@ npm run build
 ```bash
 cd admin-dashboard/frontend
 ADMIN_DASHBOARD_PROXY_TARGET=http://localhost:30190 npm run dev
+```
+
+```bash
+cd admin-dashboard/frontend
+VITE_ENABLE_MSW=true npm run dev
 ```
 
 ## 주요 디렉터리

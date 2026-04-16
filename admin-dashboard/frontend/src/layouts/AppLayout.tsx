@@ -7,7 +7,8 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "@/api/core";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
-import { getNavGroups, prefetchRoute, ROUTE_MANIFEST } from "@/routes/manifest";
+import { NAV_GROUPS, prefetchRoute, ROUTE_MANIFEST } from "@/routes/manifest";
+import { queryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/stores/authStore";
 
 export const AppLayout = () => {
@@ -29,7 +30,7 @@ export const AppLayout = () => {
 		})();
 	};
 
-	const navGroups = getNavGroups();
+	const navGroups = NAV_GROUPS;
 
 	const activeRoute = ROUTE_MANIFEST.find((r) => {
 		const routePath = r.absolutePath;
@@ -62,7 +63,7 @@ export const AppLayout = () => {
 								<Play className="w-4 h-4 text-white fill-white ml-0.5" />
 							</div>
 							<span className="text-lg font-display font-bold text-slate-800 tracking-tight">
-								Bot Admin
+								관리자 콘솔
 							</span>
 						</div>
 					) : (
@@ -97,17 +98,17 @@ export const AppLayout = () => {
 					</div>
 				)}
 
-				<nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-hide animate-fade-in">
-					{navGroups.map((group, groupIndex) => (
-						<div
-							key={group.title || groupIndex}
-							className="mb-6 last:mb-0 animate-slide-in-left"
-							style={{ animationDelay: `${String(groupIndex * 80)}ms` }}
-						>
-							{isSidebarOpen && group.title && (
-								<div className="px-3 mb-2">
-									<h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-										{group.title}
+					<nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-hide animate-fade-in">
+						{navGroups.map((group, groupIndex) => (
+							<div
+								key={group.title}
+								className="mb-6 last:mb-0 animate-slide-in-left"
+								style={{ animationDelay: `${String(groupIndex * 80)}ms` }}
+							>
+								{isSidebarOpen && (
+									<div className="px-3 mb-2">
+										<h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+											{group.title}
 									</h3>
 								</div>
 							)}
@@ -186,7 +187,7 @@ export const AppLayout = () => {
 							{activeRoute?.label || "대시보드"}
 						</h2>
 						<p className="text-xs text-slate-400 font-medium mt-0.5 tracking-wide">
-							Unified Bot Management System
+							통합 봇 관리 시스템
 						</p>
 					</div>
 
@@ -195,12 +196,9 @@ export const AppLayout = () => {
 							<div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-400 to-cyan-400 flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white">
 								A
 							</div>
-							<div className="flex flex-col">
+							<div className="flex flex-col justify-center">
 								<span className="text-sm font-display font-bold text-slate-700 leading-none">
-									Administrator
-								</span>
-								<span className="text-[10px] text-sky-500 font-medium leading-none mt-1">
-									Super User
+									관리자
 								</span>
 							</div>
 						</div>
@@ -218,5 +216,3 @@ export const AppLayout = () => {
 		</div>
 	);
 };
-
-import { queryClient } from "@/lib/queryClient";

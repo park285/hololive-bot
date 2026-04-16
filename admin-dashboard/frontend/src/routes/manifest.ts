@@ -8,7 +8,7 @@ import Trophy from "lucide-react/dist/esm/icons/trophy";
 import Users from "lucide-react/dist/esm/icons/users";
 import { prefetchRoute, ROUTE_DEFINITIONS } from "@/routes/route-definitions";
 
-export type RouteGroup = "Overview" | "Hololive Bot" | "Infrastructure";
+export type RouteGroup = "개요" | "홀로라이브 봇" | "인프라";
 
 export interface RouteManifestItem {
 	id: string;
@@ -27,43 +27,43 @@ const ROUTE_METADATA: Record<
 		id: "stats",
 		label: "통합 대시보드",
 		icon: LayoutDashboard,
-		group: "Overview",
+		group: "개요",
 	},
 	streams: {
 		id: "streams",
 		label: "방송 현황",
 		icon: Radio,
-		group: "Hololive Bot",
+		group: "홀로라이브 봇",
 	},
 	members: {
 		id: "members",
 		label: "멤버 관리",
 		icon: Users,
-		group: "Hololive Bot",
+		group: "홀로라이브 봇",
 	},
 	milestones: {
 		id: "milestones",
 		label: "마일스톤",
 		icon: Trophy,
-		group: "Hololive Bot",
+		group: "홀로라이브 봇",
 	},
 	alarms: {
 		id: "alarms",
 		label: "알람 관리",
 		icon: Bell,
-		group: "Hololive Bot",
+		group: "홀로라이브 봇",
 	},
 	rooms: {
 		id: "rooms",
 		label: "방 관리",
 		icon: MessageSquare,
-		group: "Hololive Bot",
+		group: "홀로라이브 봇",
 	},
 	settings: {
 		id: "settings",
 		label: "설정",
 		icon: Settings,
-		group: "Infrastructure",
+		group: "인프라",
 	},
 };
 
@@ -84,16 +84,11 @@ export const ROUTE_MANIFEST: RouteManifestItem[] = ROUTE_DEFINITIONS.map(
 
 export { prefetchRoute };
 
-export const getNavGroups = () => {
-	const groups: { title: string; items: RouteManifestItem[] }[] = [];
-	const order: RouteGroup[] = ["Overview", "Hololive Bot", "Infrastructure"];
+const NAV_GROUP_ORDER: RouteGroup[] = ["개요", "홀로라이브 봇", "인프라"];
 
-	order.forEach((groupName) => {
-		const items = ROUTE_MANIFEST.filter((route) => route.group === groupName);
-		if (items.length > 0) {
-			groups.push({ title: groupName, items });
-		}
-	});
+export const NAV_GROUPS = NAV_GROUP_ORDER.flatMap((groupName) => {
+	const items = ROUTE_MANIFEST.filter((route) => route.group === groupName);
+	return items.length > 0 ? [{ title: groupName, items }] : [];
+});
 
-	return groups;
-};
+export const getNavGroups = () => NAV_GROUPS;

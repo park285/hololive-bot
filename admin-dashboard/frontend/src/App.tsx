@@ -6,11 +6,14 @@ import {
 	Navigate,
 	RouterProvider,
 } from "react-router-dom";
+import { SessionAbsoluteWarningModal } from "@/components/auth/SessionAbsoluteWarningModal";
+import { SessionIdleWarningModal } from "@/components/auth/SessionIdleWarningModal";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
 import { CONFIG } from "@/config";
 import { useActivityDetection } from "@/hooks/useActivityDetection";
 import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
+import { useSessionWarnings } from "@/hooks/useSessionWarnings";
 import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/lib/toast";
 import {
@@ -26,6 +29,13 @@ const AppLayout = lazy(() =>
 	})),
 );
 const ErrorPage = lazy(() => import("@/components/ErrorPage"));
+const ReactQueryDevtools = import.meta.env.DEV
+	? lazy(() =>
+			import("@tanstack/react-query-devtools").then((module) => ({
+				default: module.ReactQueryDevtools,
+			})),
+		)
+	: null;
 
 const TabLoader = () => (
 	<div className="flex h-64 items-center justify-center text-slate-400">
@@ -51,6 +61,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 	const isIdle = useActivityDetection(CONFIG.heartbeat.idleTimeoutMs);
 
 	useHeartbeat(isIdle);
+	useSessionWarnings(isIdle);
 
 	if (!isAuthResolved) {
 		return <FullPageLoader />;
@@ -60,7 +71,13 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 		return <Navigate to="/login" replace />;
 	}
 
-	return <>{children}</>;
+	return (
+		<>
+			{children}
+			<SessionIdleWarningModal />
+			<SessionAbsoluteWarningModal />
+		</>
+	);
 };
 
 const AuthBootstrap = () => {
@@ -163,6 +180,11 @@ const App = () => (
 		<QueryErrorBoundary>
 			<RouterProvider router={router} />
 		</QueryErrorBoundary>
+		{ReactQueryDevtools && (
+			<Suspense fallback={null}>
+				<ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+			</Suspense>
+		)}
 	</QueryClientProvider>
 );
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
 const CHANNEL_NAME = "admin_session";
 const THROTTLE_MS = 1000; // Local throttle: 1s
@@ -15,9 +16,11 @@ export function useActivityDetection(idleTimeoutMs: number) {
 	const channelRef = useRef<BroadcastChannel | null>(null);
 	const lastActivityRef = useRef<number>(0);
 	const lastBroadcastRef = useRef<number>(0);
+	const markSessionActivity = useSessionWarningStore((state) => state.markSessionActivity);
 
 	const resetTimerInternal = useCallback(() => {
 		setIsIdle(false);
+		markSessionActivity(Date.now());
 
 		if (timeoutRef.current) {
 			window.clearTimeout(timeoutRef.current);
@@ -26,7 +29,7 @@ export function useActivityDetection(idleTimeoutMs: number) {
 		timeoutRef.current = window.setTimeout(() => {
 			setIsIdle(true);
 		}, idleTimeoutMs);
-	}, [idleTimeoutMs]);
+	}, [idleTimeoutMs, markSessionActivity]);
 
 	const resetTimer = useCallback(() => {
 		const now = Date.now();

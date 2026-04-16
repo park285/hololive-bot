@@ -20,7 +20,6 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-    "ignoreDeprecations": "5.0",
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -40,42 +39,40 @@
     "noPropertyAccessFromIndexSignature": true,
     "allowUnusedLabels": false,
     "allowUnreachableCode": false,
-    "ignoreDeprecations": "5.0",
     /* Path Mapping */
-    "baseUrl": ".",
     "paths": {
       "@/*": [
-        "src/*"
+        "./src/*"
       ],
       "@/components/*": [
-        "src/components/*"
+        "./src/components/*"
       ],
       "@/pages/*": [
-        "src/pages/*"
+        "./src/pages/*"
       ],
       "@/api/*": [
-        "src/api/*"
+        "./src/api/*"
       ],
       "@/stores/*": [
-        "src/stores/*"
+        "./src/stores/*"
       ],
       "@/types/*": [
-        "src/types/*"
+        "./src/types/*"
       ],
       "@/lib/*": [
-        "src/lib/*"
+        "./src/lib/*"
       ],
       "@/hooks/*": [
-        "src/hooks/*"
+        "./src/hooks/*"
       ],
       "@/config/*": [
-        "src/config/*"
+        "./src/config/*"
       ],
       "@/layouts/*": [
-        "src/layouts/*"
+        "./src/layouts/*"
       ],
       "@/utils/*": [
-        "src/utils/*"
+        "./src/utils/*"
       ]
     }
   },

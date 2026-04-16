@@ -2,12 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/api/queryKeys";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { statsApi } from "@/features/stats/api";
+import { selectTopChannelStats } from "@/features/stats/selectors";
 
 const numberFormatter = new Intl.NumberFormat("ko-KR");
 
 export const ChannelStatsTable = () => {
 	const {
-		data: response,
+		data: topStats,
 		isLoading,
 		isError,
 		error,
@@ -15,6 +16,7 @@ export const ChannelStatsTable = () => {
 		queryKey: queryKeys.stats.channels,
 		queryFn: statsApi.getChannels,
 		refetchInterval: 60000,
+		select: selectTopChannelStats,
 	});
 
 	if (isLoading) {
@@ -56,13 +58,7 @@ export const ChannelStatsTable = () => {
 		);
 	}
 
-	const stats = response?.stats ?? {};
-	const sortedStats = Object.values(stats)
-		.filter((stat): stat is NonNullable<typeof stat> => stat != null)
-		.sort((a, b) => b.SubscriberCount - a.SubscriberCount)
-		.slice(0, 10);
-
-	if (sortedStats.length === 0) {
+	if (!topStats || topStats.length === 0) {
 		return (
 			<div className="text-center text-slate-400 py-12 bg-white rounded-lg border border-slate-100">
 				표시할 채널 통계가 없습니다
@@ -99,7 +95,7 @@ export const ChannelStatsTable = () => {
 					</tr>
 				</thead>
 				<tbody className="divide-y divide-slate-100">
-					{sortedStats.map((stat, idx) => (
+					{topStats.map((stat, idx) => (
 						<tr
 							key={stat.ChannelID}
 							className="bg-white hover:bg-sky-50/30 transition-colors group"

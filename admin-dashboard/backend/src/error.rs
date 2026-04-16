@@ -10,6 +10,8 @@ pub enum AppError {
     #[error(transparent)]
     Auth(#[from] AuthError),
     #[error(transparent)]
+    Api(#[from] ApiError),
+    #[error(transparent)]
     Docker(#[from] DockerError),
     #[error(transparent)]
     Proxy(#[from] ProxyError),
@@ -32,6 +34,14 @@ pub enum AuthError {
     CsrfViolation,
     #[error("session store unavailable")]
     StoreUnavailable,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ApiError {
+    #[error("not found")]
+    NotFound,
+    #[error("too many active system stats streams")]
+    TooManyActiveSystemStatsStreams { limit: usize },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -138,6 +148,16 @@ impl IntoResponse for AppError {
                     json!({"error": "Session store unavailable"}),
                 ),
             },
+            Self::Api(e) => match e {
+                ApiError::NotFound => (StatusCode::NOT_FOUND, json!({"error": "Not found"})),
+                ApiError::TooManyActiveSystemStatsStreams { limit } => (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    json!({
+                        "error": "Too many active system stats streams",
+                        "limit": limit,
+                    }),
+                ),
+            },
             Self::Docker(e) => match e {
                 DockerError::Unavailable => (
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -222,6 +242,20 @@ mod tests {
         let err = AppError::Auth(AuthError::StoreUnavailable);
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[test]
+    fn test_not_found_status() {
+        let err = AppError::Api(ApiError::NotFound);
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn test_too_many_active_system_stats_streams_status() {
+        let err = AppError::Api(ApiError::TooManyActiveSystemStatsStreams { limit: 16 });
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[test]

@@ -1,8 +1,8 @@
 import { isAxiosError } from "axios";
-import { adminClient } from "@/api/adminClient";
 import type {
 	AggregatedStatus as GeneratedAggregatedStatus,
 	Container as GeneratedContainer,
+	DockerContainerListResponse as GeneratedDockerContainerListResponse,
 } from "@/api/generated/data-contracts";
 import apiClient from "./client";
 
@@ -19,6 +19,14 @@ export interface SessionStatusResponse {
 	status: string;
 	authenticated: boolean;
 	username: string;
+	absolute_expires_at: number;
+	session_policy: {
+		heartbeat_interval_ms: number;
+		idle_timeout_ms: number;
+		idle_warning_timeout_ms: number;
+		idle_session_ttl_ms: number;
+		absolute_warning_window_ms: number;
+	};
 }
 
 export interface DockerContainer {
@@ -71,7 +79,7 @@ export const authApi = {
 			password,
 		});
 		if (response.data.status !== "ok") {
-			throw new Error(response.data.message || "Authentication failed");
+			throw new Error(response.data.message || "인증에 실패했습니다.");
 		}
 	},
 
@@ -84,12 +92,8 @@ export const authApi = {
 	},
 
 	getSession: async (): Promise<SessionStatusResponse> => {
-		const { data } = await adminClient.handleSessionStatus();
-		return {
-			status: data.status,
-			authenticated: data.authenticated,
-			username: data.username,
-		};
+		const { data } = await apiClient.get<SessionStatusResponse>("/auth/session");
+		return data;
 	},
 
 	heartbeat: async (
@@ -112,17 +116,26 @@ export const authApi = {
 	},
 };
 
+const postDockerAction = async (
+	name: string,
+	action: "restart" | "stop" | "start",
+): Promise<StatusOnlyResponse> => {
+	const { data } = await apiClient.post<StatusOnlyResponse>(
+		`/docker/containers/${encodeURIComponent(name)}/${action}`,
+	);
+	return data;
+};
+
 export const dockerApi = {
 	checkHealth: async (): Promise<DockerHealthResponse> => {
-		const { data } = await adminClient.handleDockerHealth();
-		return {
-			status: data.status,
-			available: data.available,
-		};
+		const { data } = await apiClient.get<DockerHealthResponse>("/docker/health");
+		return data;
 	},
 
 	getContainers: async (): Promise<DockerContainersResponse> => {
-		const { data } = await adminClient.handleDockerContainers();
+		const { data } = await apiClient.get<GeneratedDockerContainerListResponse>(
+			"/docker/containers",
+		);
 		const containers: DockerContainer[] = data.containers.map(
 			(c: GeneratedContainer) => ({
 				id: c.id,
@@ -140,20 +153,11 @@ export const dockerApi = {
 		return { status: data.status, containers };
 	},
 
-	restartContainer: async (name: string): Promise<StatusOnlyResponse> => {
-		const { data } = await adminClient.handleDockerRestart(name);
-		return { status: data.status, message: data.message };
-	},
+	restartContainer: (name: string) => postDockerAction(name, "restart"),
 
-	stopContainer: async (name: string): Promise<StatusOnlyResponse> => {
-		const { data } = await adminClient.handleDockerStop(name);
-		return { status: data.status, message: data.message };
-	},
+	stopContainer: (name: string) => postDockerAction(name, "stop"),
 
-	startContainer: async (name: string): Promise<StatusOnlyResponse> => {
-		const { data } = await adminClient.handleDockerStart(name);
-		return { status: data.status, message: data.message };
-	},
+	startContainer: (name: string) => postDockerAction(name, "start"),
 };
 
 export interface ServiceStatus {
@@ -167,7 +171,7 @@ export type AggregatedStatus = GeneratedAggregatedStatus;
 
 export const statusApi = {
 	get: async (): Promise<AggregatedStatus> => {
-		const { data } = await adminClient.handleAggregatedStatus();
+		const { data } = await apiClient.get<AggregatedStatus>("/status");
 		return data;
 	},
 };

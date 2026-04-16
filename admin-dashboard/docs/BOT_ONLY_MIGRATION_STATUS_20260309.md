@@ -171,11 +171,17 @@ Docker 관리 대상 필터에서 제거:
 
 현재 반영:
 
-- `idle_rejected` 수신 시 즉시 로그아웃하지 않고 경고성 처리로 완화
+- `isIdle=true` 전환 시 다음 interval을 기다리지 않고 즉시 heartbeat 전송
+- `idle_rejected` 수신 시 즉시 로그아웃
+- backend도 `idle: true` heartbeat에서 `status: "idle", idle_rejected: true`를 반환하고 세션 회전을 막도록 정렬됨
+- backend가 `GET /admin/api/auth/session`에 `absolute_expires_at` + `session_policy`를 함께 내려 pre-warning UI를 별도 프론트 작업으로 분리할 수 있게 됨
 
 관련 파일:
 
 - `frontend/src/hooks/useHeartbeat.ts`
+- `backend/src/handlers/auth.rs`
+- `backend/src/auth/session.rs`
+- `docs/SESSION_PREWARNING_BACKEND_CONTRACT.md`
 
 ### 3-4. heartbeat 중복 호출/abort
 
@@ -183,6 +189,7 @@ Docker 관리 대상 필터에서 제거:
 
 - `isIdle` 추적을 `ref` 중심으로 단순화
 - heartbeat 요청에 `AbortController.signal` 연결
+- idle 전환 즉시 heartbeat와 interval heartbeat가 겹치면 이전 요청 abort
 
 관련 파일:
 
@@ -223,9 +230,13 @@ Docker 관리 대상 필터에서 제거:
 
 확인/검증된 항목:
 
-- `go test ./...` (`admin-dashboard/backend`) 통과
-- `go build ./cmd/admin` (`admin-dashboard/backend`) 통과
-- `shared-go/pkg/envutil`, `shared-go/pkg/logging`, `shared-go/pkg/telemetry` 테스트 통과
+- `cargo test test_idle_heartbeat_ -- --nocapture` (`admin-dashboard/backend`) 통과
+- `cargo test test_rotated_heartbeat_includes_absolute_expiry_in_response -- --nocapture` (`admin-dashboard/backend`) 통과
+- `cargo test test_absolute_expired_heartbeat_returns_json_and_clears_cookies -- --nocapture` (`admin-dashboard/backend`) 통과
+- `cargo fmt --check && cargo test && cargo clippy -- -D warnings` (`admin-dashboard/backend`) 통과
+- `npm test` (`admin-dashboard/frontend`) 통과
+- `npm run build` (`admin-dashboard/frontend`) 통과
+- `npm run lint` (`admin-dashboard/frontend`) 통과
 
 주의:
 

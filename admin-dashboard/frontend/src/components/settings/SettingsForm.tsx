@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/Label";
 import { settingsApi } from "@/features/settings/api";
 import type { SettingsResponse } from "@/features/settings/types";
 import toast from "@/lib/toast-api";
+import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
 interface SettingsFormProps {
 	initialData?: SettingsResponse;
@@ -62,7 +63,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 			toast.success("설정이 성공적으로 저장되었습니다.");
 		},
 		onError: (err: Error) => {
-			toast.error(`설정 저장 실패: ${err.message}`);
+			toast.error(`설정 저장 실패: ${getErrorMessageFromUnknown(err)}`);
 		},
 	});
 

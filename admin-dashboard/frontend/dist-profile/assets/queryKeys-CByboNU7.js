@@ -1,0 +1,2 @@
+var e={members:{all:[`members`],detail:e=>[`members`,e]},alarms:{all:[`alarms`]},rooms:{all:[`rooms`]},stats:{summary:[`stats`],channels:[`stats`,`channels`]},streams:{live:e=>[`streams`,`live`,e],upcoming:e=>[`streams`,`upcoming`,e]},settings:{all:[`settings`]},docker:{health:[`docker-health`],containers:[`docker-containers`]},milestones:{all:[`milestones`],near:[`milestones`,`near`],stats:[`milestones`,`stats`]},status:{all:[`status`],aggregated:[`status`,`aggregated`]}};export{e as t};
+//# sourceMappingURL=queryKeys-CByboNU7.js.map
