@@ -37,6 +37,8 @@ COPY hololive/hololive-kakao-bot-go ./hololive/hololive-kakao-bot-go
 COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-stream-ingester ./hololive/hololive-stream-ingester
+COPY hololive/hololive-admin-api ./hololive/hololive-admin-api
+COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-stream-ingester
 
