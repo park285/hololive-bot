@@ -38,6 +38,10 @@ const (
 	AlarmKeyPrefix                    = "alarm:"
 	AlarmRegistryKey                  = "alarm:registry"
 	AlarmChannelRegistryKey           = "alarm:channel_registry"
+	ChzzkChannelMapKey                = "alarm:chzzk_channels"
+	TwitchLoginMapKey                 = "alarm:twitch_logins"
+	TwitchChannelLoginMapKey          = "alarm:twitch_channel_logins"
+	NextStreamKeyPrefix               = "alarm:next_stream:"
 	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
 	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
 	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
@@ -50,6 +54,8 @@ const (
 	NotifyLogicalClaimKeyPrefix       = "notified:claim:event:"
 	UpcomingEventKeyPrefix            = "notified:upcoming:event:"
 	ScheduleTransitionKeyPrefix       = "notified:schedule:transition:"
+	ChzzkLiveNotifiedKeyPrefix        = "notified:chzzk:live:"
+	IntegratedNotifiedKeyPrefix       = "notified:integrated:"
 )
 
 func BuildRoomAlarmKey(roomID string) string {
@@ -100,9 +106,9 @@ func NotifiedKey(streamID string) string {
 	return NotifiedKeyPrefix + streamID
 }
 
-//   - minutesUntil == 0 -> "live"
-//   - targetMinutes에 포함 -> "target"
-//   - 그 외 -> minutesUntil 문자열
+// - minutesUntil == 0 -> "live"
+// - targetMinutes에 포함 -> "target"
+// - 그 외 -> minutesUntil 문자열
 func NotificationCategory(targetMinutes []int, minutesUntil int) string {
 	if minutesUntil == 0 {
 		return "live"

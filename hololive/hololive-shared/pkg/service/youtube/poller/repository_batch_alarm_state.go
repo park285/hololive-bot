@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -57,8 +58,15 @@ func buildCommunityShortsAlarmStates(trackingRows []*domain.YouTubeContentAlarmT
 		rowsByKey[key] = state
 	}
 
-	rows := make([]*domain.YouTubeCommunityShortsAlarmState, 0, len(rowsByKey))
-	for _, row := range rowsByKey {
+	keys := make([]string, 0, len(rowsByKey))
+	for key := range rowsByKey {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	rows := make([]*domain.YouTubeCommunityShortsAlarmState, 0, len(keys))
+	for _, key := range keys {
+		row := rowsByKey[key]
 		if row == nil {
 			continue
 		}

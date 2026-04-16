@@ -65,9 +65,10 @@ func newPipelineTestCache(t *testing.T) cache.Client {
 	svc, err := cache.NewCacheService(
 		context.Background(),
 		cache.Config{
-			Host:         host,
-			Port:         port,
-			DisableCache: true,
+			Host:              host,
+			Port:              port,
+			DisableCache:      true,
+			ForceSingleClient: true,
 		},
 		slog.New(slog.NewTextHandler(testWriter{t: t}, nil)),
 	)

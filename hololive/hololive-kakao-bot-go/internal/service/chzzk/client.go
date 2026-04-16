@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 	"golang.org/x/sync/errgroup"
@@ -48,6 +49,8 @@ const (
 	chzzkGetScheduledLivesOp = "chzzk_get_scheduled_lives"
 	chzzkGetLivesOp          = "chzzk_get_lives"
 	chzzkGetChannelsOp       = "chzzk_get_channels"
+
+	defaultHTTPClientTimeout = 10 * time.Second
 )
 
 type Client struct {
@@ -72,22 +75,17 @@ type ClientConfig struct {
 
 func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Client {
 	return &Client{
-		httpClient:     httpClient,
-		baseURL:        baseURL,
+		httpClient:     defaultHTTPClient(httpClient),
+		baseURL:        defaultBaseURL(baseURL),
 		openAPIBaseURL: OpenAPIBaseURL,
 		logger:         defaultClientLogger(logger),
 	}
 }
 
 func NewClientWithConfig(cfg ClientConfig) *Client {
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = DefaultBaseURL
-	}
-
 	return &Client{
-		httpClient:     cfg.HTTPClient,
-		baseURL:        baseURL,
+		httpClient:     defaultHTTPClient(cfg.HTTPClient),
+		baseURL:        defaultBaseURL(cfg.BaseURL),
 		openAPIBaseURL: OpenAPIBaseURL,
 		clientID:       cfg.ClientID,
 		clientSecret:   cfg.ClientSecret,
@@ -101,6 +99,22 @@ func defaultClientLogger(logger *slog.Logger) *slog.Logger {
 	}
 
 	return logger
+}
+
+func defaultHTTPClient(httpClient *http.Client) *http.Client {
+	if httpClient != nil {
+		return httpClient
+	}
+
+	return httputil.NewExternalAPIClient(defaultHTTPClientTimeout)
+}
+
+func defaultBaseURL(baseURL string) string {
+	if strings.TrimSpace(baseURL) == "" {
+		return DefaultBaseURL
+	}
+
+	return baseURL
 }
 
 func (c *Client) HasOpenAPICredentials() bool {
@@ -120,39 +134,16 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		c.handleRequestFailure()
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetLiveStatusOp,
-			StatusCode: 0,
-			Err:        err,
-		}
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		c.handleStatusCodeError(resp.StatusCode)
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetLiveStatusOp,
-			StatusCode: resp.StatusCode,
-		}
-	}
-
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
 	var liveStatusResp LiveStatusResponse
-	if err := json.Unmarshal(body, &liveStatusResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
+	if err := c.executeRequest(chzzkGetLiveStatusOp, req, "failed to read response body", func(body []byte) error {
+		if err := json.Unmarshal(body, &liveStatusResp); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %w", err)
+		}
 
-	c.resetCircuit()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
 	return liveStatusResp.Content, nil
 }
@@ -170,39 +161,16 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		c.handleRequestFailure()
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetScheduledLivesOp,
-			StatusCode: 0,
-			Err:        err,
-		}
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		c.handleStatusCodeError(resp.StatusCode)
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetScheduledLivesOp,
-			StatusCode: resp.StatusCode,
-		}
-	}
-
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
 	var scheduledResp ScheduledLivesResponse
-	if err := json.Unmarshal(body, &scheduledResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
+	if err := c.executeRequest(chzzkGetScheduledLivesOp, req, "failed to read response body", func(body []byte) error {
+		if err := json.Unmarshal(body, &scheduledResp); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %w", err)
+		}
 
-	c.resetCircuit()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
 	if scheduledResp.Content == nil {
 		return []ScheduledLive{}, nil
@@ -236,6 +204,57 @@ func (c *Client) newRequest(ctx context.Context, method, targetURL string) (*htt
 	req.Header.Set("User-Agent", "api.capu.blog/hololive-bot (Chzzk API client)")
 
 	return req, nil
+}
+
+func (c *Client) executeRequest(
+	op string,
+	req *http.Request,
+	readErrorPrefix string,
+	handleBody func([]byte) error,
+) error {
+	body, err := c.doRequest(op, req, readErrorPrefix)
+	if err != nil {
+		return err
+	}
+
+	if err := handleBody(body); err != nil {
+		return err
+	}
+
+	c.resetCircuit()
+
+	return nil
+}
+
+func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string) ([]byte, error) {
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.handleRequestFailure()
+
+		return nil, &apperrors.APIError{
+			Operation:  op,
+			StatusCode: 0,
+			Err:        err,
+		}
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		c.handleStatusCodeError(resp.StatusCode)
+
+		return nil, &apperrors.APIError{
+			Operation:  op,
+			StatusCode: resp.StatusCode,
+		}
+	}
+
+	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", readErrorPrefix, err)
+	}
+
+	return body, nil
 }
 
 func (c *Client) rejectIfCircuitOpen() error {
@@ -340,43 +359,20 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		c.handleRequestFailure()
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetLivesOp,
-			StatusCode: 0,
-			Err:        err,
-		}
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		c.handleStatusCodeError(resp.StatusCode)
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetLivesOp,
-			StatusCode: resp.StatusCode,
-		}
-	}
-
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
 	var apiResp OpenAPIResponse[LivesResponse]
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
+	if err := c.executeRequest(chzzkGetLivesOp, req, "read response body", func(body []byte) error {
+		if err := json.Unmarshal(body, &apiResp); err != nil {
+			return fmt.Errorf("unmarshal response: %w", err)
+		}
 
-	if apiResp.Code != http.StatusOK {
-		return nil, fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
-	}
+		if apiResp.Code != http.StatusOK {
+			return fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
+		}
 
-	c.resetCircuit()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
 	return &apiResp.Content, nil
 }
@@ -408,43 +404,20 @@ func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*Channel
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		c.handleRequestFailure()
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetChannelsOp,
-			StatusCode: 0,
-			Err:        err,
-		}
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		c.handleStatusCodeError(resp.StatusCode)
-
-		return nil, &apperrors.APIError{
-			Operation:  chzzkGetChannelsOp,
-			StatusCode: resp.StatusCode,
-		}
-	}
-
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
 	var apiResp OpenAPIResponse[ChannelsResponse]
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
-	}
+	if err := c.executeRequest(chzzkGetChannelsOp, req, "read response body", func(body []byte) error {
+		if err := json.Unmarshal(body, &apiResp); err != nil {
+			return fmt.Errorf("unmarshal response: %w", err)
+		}
 
-	if apiResp.Code != http.StatusOK {
-		return nil, fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
-	}
+		if apiResp.Code != http.StatusOK {
+			return fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
+		}
 
-	c.resetCircuit()
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
 	return &apiResp.Content, nil
 }

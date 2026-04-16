@@ -20,6 +20,11 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
+type alarmLoadResult struct {
+	alarms []*domain.Alarm
+	err    error
+}
+
 func TestLookupChannelSubscribersByTypeUsesTypedKey(t *testing.T) {
 	t.Parallel()
 
@@ -299,7 +304,57 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	}
 }
 
-func TestLoadChannelSubscriberAlarms_SingleflightAllowsPerCallerCancellation(t *testing.T) {
+func TestLoadChannelSubscriberAlarms_QueryContextPreservesParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	db := newAlarmTargetLookupTestDB(t)
+	deadline := time.Now().Add(200 * time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+
+	deadlines := make(chan time.Time, 1)
+	hasDeadline := make(chan bool, 1)
+	registerAlarmQueryTxHook(t, db, func(tx *gorm.DB) {
+		capturedDeadline, ok := tx.Statement.Context.Deadline()
+		hasDeadline <- ok
+		if ok {
+			deadlines <- capturedDeadline
+		}
+	})
+
+	alarms, err := loadChannelSubscriberAlarms(ctx, db, "UC_deadline_preserved")
+	require.NoError(t, err)
+	require.Nil(t, alarms)
+	require.True(t, <-hasDeadline)
+	require.WithinDuration(t, deadline, <-deadlines, 5*time.Millisecond)
+}
+
+func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	db := newAlarmTargetLookupTestDB(t)
+
+	deadlines := make(chan time.Time, 1)
+	hasDeadline := make(chan bool, 1)
+	registerAlarmQueryTxHook(t, db, func(tx *gorm.DB) {
+		capturedDeadline, ok := tx.Statement.Context.Deadline()
+		hasDeadline <- ok
+		if ok {
+			deadlines <- capturedDeadline
+		}
+	})
+
+	alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_fallback_timeout")
+	require.NoError(t, err)
+	require.Nil(t, alarms)
+	require.True(t, <-hasDeadline)
+
+	remaining := time.Until(<-deadlines)
+	require.Greater(t, remaining, 4*time.Second)
+	require.Less(t, remaining, 6*time.Second)
+}
+
+func TestLoadChannelSubscriberAlarms_SingleflightSharesDeadlineBoundQuery(t *testing.T) {
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
@@ -312,53 +367,44 @@ func TestLoadChannelSubscriberAlarms_SingleflightAllowsPerCallerCancellation(t *
 	var queryCount atomic.Int32
 	queryStarted := make(chan struct{})
 	releaseQuery := make(chan struct{})
-	registerAlarmQueryHook(t, db, func() {
+	registerAlarmQueryTxHook(t, db, func(tx *gorm.DB) {
 		queryCount.Add(1)
 		select {
 		case <-queryStarted:
 		default:
 			close(queryStarted)
 		}
-		<-releaseQuery
+
+		select {
+		case <-tx.Statement.Context.Done():
+		case <-releaseQuery:
+		}
 	})
 
-	shortCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	shortCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	type loadResult struct {
-		alarms []*domain.Alarm
-		err    error
-	}
-
-	firstDone := make(chan loadResult, 1)
+	firstDone := make(chan alarmLoadResult, 1)
 	go func() {
 		alarms, err := loadChannelSubscriberAlarms(shortCtx, db, "UC_mixed_context")
-		firstDone <- loadResult{alarms: alarms, err: err}
+		firstDone <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
 	<-queryStarted
 
-	secondDone := make(chan loadResult, 1)
+	secondDone := make(chan alarmLoadResult, 1)
 	go func() {
-		alarms, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_mixed_context")
-		secondDone <- loadResult{alarms: alarms, err: err}
+		alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_mixed_context")
+		secondDone <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
-	time.Sleep(40 * time.Millisecond)
-	close(releaseQuery)
+	first := waitAlarmLoadResult(t, firstDone, 250*time.Millisecond, releaseQuery, "first")
+	require.Error(t, first.err)
+	assert.ErrorContains(t, first.err, context.DeadlineExceeded.Error())
 
-	first := <-firstDone
-	if !errors.Is(first.err, context.DeadlineExceeded) {
-		t.Fatalf("first error = %v, want deadline exceeded", first.err)
-	}
-
-	second := <-secondDone
-	if second.err != nil {
-		t.Fatalf("second error = %v", second.err)
-	}
-	if len(second.alarms) != 1 || second.alarms[0].RoomID != "room-mixed" {
-		t.Fatalf("second alarms = %#v", second.alarms)
-	}
+	second := waitAlarmLoadResult(t, secondDone, 250*time.Millisecond, releaseQuery, "second")
+	require.Error(t, second.err)
+	assert.ErrorContains(t, second.err, context.DeadlineExceeded.Error())
 
 	if got := queryCount.Load(); got != 1 {
 		t.Fatalf("db query count = %d, want 1", got)
@@ -457,9 +503,17 @@ func requireAlarmRecord(t *testing.T, db *gorm.DB, alarmRecord domain.Alarm) {
 func registerAlarmQueryHook(t *testing.T, db *gorm.DB, onQuery func()) {
 	t.Helper()
 
+	registerAlarmQueryTxHook(t, db, func(_ *gorm.DB) {
+		onQuery()
+	})
+}
+
+func registerAlarmQueryTxHook(t *testing.T, db *gorm.DB, onQuery func(tx *gorm.DB)) {
+	t.Helper()
+
 	callbackName := fmt.Sprintf("test:alarm-query-hook:%s", t.Name())
 	if err := db.Callback().Query().Before("gorm:query").Register(callbackName, func(tx *gorm.DB) {
-		onQuery()
+		onQuery(tx)
 	}); err != nil {
 		t.Fatalf("register query hook: %v", err)
 	}
@@ -469,4 +523,27 @@ func registerAlarmQueryHook(t *testing.T, db *gorm.DB, onQuery func()) {
 			t.Fatalf("remove query hook: %v", err)
 		}
 	})
+}
+
+func waitAlarmLoadResult(
+	t *testing.T,
+	results <-chan alarmLoadResult,
+	timeout time.Duration,
+	releaseQuery chan struct{},
+	label string,
+) alarmLoadResult {
+	t.Helper()
+
+	select {
+	case result := <-results:
+		return result
+	case <-time.After(timeout):
+		select {
+		case <-releaseQuery:
+		default:
+			close(releaseQuery)
+		}
+		t.Fatalf("%s loadChannelSubscriberAlarms() did not return within %s", label, timeout)
+		return alarmLoadResult{}
+	}
 }

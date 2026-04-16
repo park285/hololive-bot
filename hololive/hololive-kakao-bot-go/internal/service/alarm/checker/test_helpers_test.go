@@ -28,8 +28,6 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 func newCheckerTestLogger() *slog.Logger {
@@ -54,9 +52,10 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	cacheSvc, err := cache.NewCacheService(
 		t.Context(),
 		cache.Config{
-			Host:         host,
-			Port:         port,
-			DisableCache: true,
+			Host:              host,
+			Port:              port,
+			DisableCache:      true,
+			ForceSingleClient: true,
 		},
 		newCheckerTestLogger(),
 	)
@@ -70,28 +69,4 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	})
 
 	return cacheSvc
-}
-
-func newCheckerTestAlarmService(t *testing.T, cacheSvc cache.Client) *notification.AlarmService {
-	t.Helper()
-
-	alarmSvc, err := notification.NewAlarmService(
-		cacheSvc,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		newCheckerTestLogger(),
-		[]int{5, 3, 1},
-	)
-	if err != nil {
-		t.Fatalf("NewAlarmService() error = %v", err)
-	}
-
-	t.Cleanup(func() {
-		_ = alarmSvc.Close(t.Context())
-	})
-
-	return alarmSvc
 }

@@ -150,6 +150,63 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	}
 }
 
+func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
+	repo := newTestMemberRepository()
+	rows := &fakeMemberRows{rows: []fakeMemberRow{
+		{scan: func(dest ...any) error {
+			*dest[0].(*int) = 1
+			*dest[1].(*string) = "suisei"
+			channelID := "UC1"
+			*dest[2].(**string) = &channelID
+			*dest[3].(*string) = "Suisei"
+			*dest[4].(**string) = nil
+			*dest[5].(**string) = nil
+			*dest[6].(*string) = "active"
+			*dest[7].(*bool) = false
+			*dest[8].(*[]byte) = []byte(`{"ko":["스이세이"]}`)
+			*dest[9].(*string) = "hololive"
+			*dest[10].(**string) = nil
+			*dest[11].(*string) = "holodex"
+			*dest[12].(**string) = nil
+			return nil
+		}},
+		{scan: func(dest ...any) error {
+			*dest[0].(*int) = 2
+			*dest[1].(*string) = "miko"
+			channelID := "UC2"
+			*dest[2].(**string) = &channelID
+			*dest[3].(*string) = "Miko"
+			*dest[4].(**string) = nil
+			*dest[5].(**string) = nil
+			*dest[6].(*string) = "active"
+			*dest[7].(*bool) = false
+			*dest[8].(*[]byte) = []byte("not-json")
+			*dest[9].(*string) = "hololive"
+			*dest[10].(**string) = nil
+			*dest[11].(*string) = "holodex"
+			*dest[12].(**string) = nil
+			return nil
+		}},
+	}}
+
+	members, err := repo.collectMembersByNameFromRows(rows)
+	if err == nil {
+		t.Fatal("collectMembersByNameFromRows error = nil, want non-nil")
+	}
+	if len(members) != 1 || members[0] == nil || members[0].ChannelID != "UC1" {
+		t.Fatalf("members = %#v, want one valid member for UC1", members)
+	}
+	if got := err.Error(); got == "" || !containsAll(got, []string{"failed to parse member row", "Miko", "failed to unmarshal aliases"}) {
+		t.Fatalf("error = %q, want joined parse error context", got)
+	}
+}
+
+func TestUpgradePhotoResolution_ReplacesKnownSizeWithSingleStandardSuffix(t *testing.T) {
+	if got := UpgradePhotoResolution("https://example.com/avatar=s88=s240"); got != "https://example.com/avatar=s1024=s240" {
+		t.Fatalf("UpgradePhotoResolution() = %q", got)
+	}
+}
+
 func containsAll(got string, wants []string) bool {
 	for _, want := range wants {
 		if !strings.Contains(got, want) {

@@ -34,7 +34,8 @@ cargo run --bin export-openapi > docs/swagger.json
 | `PORT` | HTTP 포트 | `30190` |
 | `VALKEY_URL` | 세션 저장소 주소 | `valkey-cache:6379` |
 | `DOCKER_HOST` | Docker API 주소 | `tcp://docker-proxy:2375` |
-| `HOLO_BOT_URL` | 업스트림 hololive bot API | `http://hololive-kakao-bot-go:30001` |
+| `HOLO_ADMIN_API_URL` | 업스트림 hololive admin API | `http://hololive-admin-api:30006` |
+| `HOLO_BOT_URL` | legacy fallback alias for upstream admin API | `http://hololive-admin-api:30006` |
 | `HOLO_BOT_API_KEY` | 업스트림 내부 인증 헤더 값 (`API_SECRET_KEY` fallback 지원) | 빈 값 |
 | `ENABLE_OPENAPI` | 인증 뒤 OpenAPI JSON 노출 여부 | production에서는 기본 `false` |
 | `ENABLE_SWAGGER_UI` | 인증 뒤 Swagger UI 노출 여부 | production에서는 기본 `false` |

@@ -54,6 +54,8 @@ usage() {
     echo
     echo "Supported services:"
     echo "  hololive-bot | bot"
+    echo "  hololive-admin-api | admin-api"
+    echo "  hololive-alarm-worker | alarm-worker"
     echo "  dispatcher-go | dispatcher"
     echo "  llm-scheduler | llm"
     echo "  stream-ingester | ingester"
@@ -104,6 +106,8 @@ fi
 SERVICE="$1"
 case "$SERVICE" in
     hololive-bot|bot) TARGET="hololive-bot" ;;
+    hololive-admin-api|admin-api) TARGET="hololive-admin-api" ;;
+    hololive-alarm-worker|alarm-worker) TARGET="hololive-alarm-worker" ;;
     dispatcher-go|dispatcher) TARGET="dispatcher-go" ;;
     llm-scheduler|llm) TARGET="llm-scheduler" ;;
     stream-ingester|ingester) TARGET="stream-ingester" ;;

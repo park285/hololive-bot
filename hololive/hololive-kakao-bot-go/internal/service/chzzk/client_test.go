@@ -52,6 +52,47 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
+func TestClientConstructors_DefaultHTTPClientAndBaseURLWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		build func() *Client
+	}{
+		{
+			name: "NewClient",
+			build: func() *Client {
+				return NewClient(nil, "", nil)
+			},
+		},
+		{
+			name: "NewClientWithConfig",
+			build: func() *Client {
+				return NewClientWithConfig(ClientConfig{})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := tt.build()
+			if client.httpClient == nil {
+				t.Fatal("expected constructor to supply default http client")
+			}
+
+			if client.baseURL != DefaultBaseURL {
+				t.Fatalf("baseURL = %q, want %q", client.baseURL, DefaultBaseURL)
+			}
+
+			if client.openAPIBaseURL != OpenAPIBaseURL {
+				t.Fatalf("openAPIBaseURL = %q, want %q", client.openAPIBaseURL, OpenAPIBaseURL)
+			}
+		})
+	}
+}
+
 func TestGetLiveStatus_Success_Open(t *testing.T) {
 	// OPEN 상태 테스트 데이터
 	response := LiveStatusResponse{

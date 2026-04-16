@@ -18,7 +18,7 @@ pub struct Config {
     pub session_secret: String,
     pub valkey_url: String,
     pub docker_host: String,
-    pub holo_bot_url: String,
+    pub holo_admin_api_url: String,
     pub holo_bot_api_key: String,
     pub enable_openapi: bool,
     pub enable_swagger_ui: bool,
@@ -49,7 +49,8 @@ impl Config {
             session_secret: required_alias(&["SESSION_SECRET", "ADMIN_SECRET_KEY"])?,
             valkey_url: env_string("VALKEY_URL", "valkey-cache:6379"),
             docker_host: env_string("DOCKER_HOST", "tcp://docker-proxy:2375"),
-            holo_bot_url: env_string("HOLO_BOT_URL", "http://hololive-kakao-bot-go:30001"),
+            holo_admin_api_url: optional_alias(&["HOLO_ADMIN_API_URL", "HOLO_BOT_URL"])
+                .unwrap_or_else(|| "http://hololive-admin-api:30006".to_string()),
             holo_bot_api_key: optional_alias(&["HOLO_BOT_API_KEY", "API_SECRET_KEY"])
                 .unwrap_or_default(),
             enable_openapi,
@@ -225,6 +226,42 @@ mod tests {
             || {
                 let cfg = Config::load().expect("config load");
                 assert_eq!(cfg.holo_bot_api_key, "shared-secret");
+            },
+        );
+    }
+
+    #[test]
+    fn test_holo_admin_api_url_prefers_new_alias_and_falls_back_to_legacy() {
+        with_env_vars(
+            &[
+                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+                (
+                    "HOLO_ADMIN_API_URL",
+                    Some("http://hololive-admin-api:30006"),
+                ),
+                ("HOLO_BOT_URL", Some("http://hololive-kakao-bot-go:30001")),
+            ],
+            || {
+                let cfg = Config::load().expect("config load");
+                assert_eq!(cfg.holo_admin_api_url, "http://hololive-admin-api:30006");
+            },
+        );
+
+        with_env_vars(
+            &[
+                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+                ("HOLO_ADMIN_API_URL", Some("   ")),
+                ("HOLO_BOT_URL", Some("http://legacy-bot:30001")),
+            ],
+            || {
+                let cfg = Config::load().expect("config load");
+                assert_eq!(cfg.holo_admin_api_url, "http://legacy-bot:30001");
             },
         );
     }

@@ -21,8 +21,8 @@
 package checker
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -31,11 +31,11 @@ import (
 
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 const (
@@ -68,7 +68,7 @@ func NewChzzkChecker(cacheSvc cache.Client, chzzkClient *chzzk.Client, logger *s
 
 // Check는 alarm:chzzk_channels 매핑 기반으로 라이브 알림 후보를 생성한다.
 func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
-	channelMappings, err := c.cacheSvc.HGetAll(ctx, notification.ChzzkChannelMapKey)
+	channelMappings, err := c.cacheSvc.HGetAll(ctx, sharedalarmkeys.ChzzkChannelMapKey)
 	if err != nil {
 		return nil, fmt.Errorf("check chzzk streams: read channel mappings: %w", err)
 	}
@@ -119,7 +119,7 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 
 			dedupKey := buildChzzkLiveDedupKey(chzzkChannelID, now)
 
-			claimed, claimErr := c.cacheSvc.SetNX(egCtx, dedupKey, "1", sharedconstants.CacheTTL.NotificationSent)
+			claimed, claimErr := c.cacheSvc.SetNX(egCtx, dedupKey, "true", sharedconstants.CacheTTL.NotificationSent)
 			if claimErr != nil {
 				return fmt.Errorf("check chzzk streams: claim dedup key %s: %w", dedupKey, claimErr)
 			}
@@ -161,7 +161,7 @@ func isChzzkLive(status *chzzk.LiveStatusContent) bool {
 
 func buildChzzkLiveDedupKey(chzzkChannelID string, detectedAt time.Time) string {
 	bucket := detectedAt.UTC().Truncate(chzzkTimeBucket)
-	return fmt.Sprintf("%s%s:%s", notification.ChzzkLiveNotifiedKeyPrefix, chzzkChannelID, bucket.Format("20060102T1504"))
+	return fmt.Sprintf("%s%s:%s", sharedalarmkeys.ChzzkLiveNotifiedKeyPrefix, chzzkChannelID, bucket.Format("20060102T1504"))
 }
 
 func buildChzzkLiveStream(

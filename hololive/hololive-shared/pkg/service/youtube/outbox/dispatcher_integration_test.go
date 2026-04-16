@@ -868,9 +868,10 @@ func setupCacheService(t *testing.T) *cache.Service {
 	}
 
 	cfg := cache.Config{
-		Host:         valkeyHost,
-		Port:         6379,
-		DisableCache: true,
+		Host:              valkeyHost,
+		Port:              6379,
+		DisableCache:      true,
+		ForceSingleClient: true,
 	}
 
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))

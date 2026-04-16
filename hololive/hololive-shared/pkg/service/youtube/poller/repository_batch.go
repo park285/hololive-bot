@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -300,11 +301,13 @@ func collectShortIdentityAliases(
 			collect(trackingRows[i].Kind, trackingRows[i].ContentID)
 		}
 	}
+	sort.Strings(canonicalIDs)
 
 	aliases := make([]string, 0, len(aliasSet))
 	for alias := range aliasSet {
 		aliases = append(aliases, alias)
 	}
+	sort.Strings(aliases)
 	return canonicalIDs, aliases
 }
 

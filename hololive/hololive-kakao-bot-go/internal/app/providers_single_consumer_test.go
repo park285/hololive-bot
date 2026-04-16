@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
@@ -41,13 +42,13 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("stream clients", func(t *testing.T) {
-		chzzkClient := ProvideChzzkClient(http.DefaultClient, config.ChzzkConfig{
+		chzzkClient := appbootstrap.ProvideChzzkClient(http.DefaultClient, config.ChzzkConfig{
 			ClientID:     "cid",
 			ClientSecret: "sec",
 		}, logger)
 		require.NotNil(t, chzzkClient)
 
-		twitchClient := ProvideTwitchClient(config.TwitchConfig{
+		twitchClient := appbootstrap.ProvideTwitchClient(config.TwitchConfig{
 			ClientID:     "tid",
 			ClientSecret: "tsec",
 		}, logger)
@@ -55,10 +56,10 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	})
 
 	t.Run("alarm repository and worker pool", func(t *testing.T) {
-		repo := ProvideAlarmRepository(&dbmocks.Client{}, logger)
+		repo := appbootstrap.ProvideAlarmRepository(&dbmocks.Client{}, logger)
 		require.NotNil(t, repo)
 
-		pool, err := ProvideAlarmWorkerPool()
+		pool, err := appbootstrap.ProvideAlarmWorkerPool()
 		require.NoError(t, err)
 		require.NotNil(t, pool)
 
@@ -73,7 +74,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 			_ = notification.CloseAllAlarmServices(t.Context())
 		})
 
-		svc, err := ProvideAlarmService(
+		svc, err := appbootstrap.ProvideAlarmService(
 			[]int{10, 3},
 			cachemocks.NewStrictClient(),
 			nil,
@@ -89,7 +90,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	})
 
 	t.Run("member matcher", func(t *testing.T) {
-		matcher := ProvideMemberMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
+		matcher := appbootstrap.ProvideMemberMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
 		require.NotNil(t, matcher)
 	})
 

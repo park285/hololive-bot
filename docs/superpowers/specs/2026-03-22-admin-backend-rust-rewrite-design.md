@@ -217,7 +217,7 @@ Request flow for `GET /` and SPA fallback (NoRoute):
 1. Check `admin_session` cookie → validate HMAC → validate session in Valkey
 2. If **not authenticated**: serve cached HTML as-is (no SSR data injection)
 3. If **authenticated**: call `ssr_injector.inject_for_path(path, session_cookie)`
-   - `/dashboard/members` → fetch `GET <HOLO_BOT_URL>/api/holo/members` (with session cookie forwarded)
+   - `/dashboard/members` → fetch `GET <HOLO_ADMIN_API_URL>/api/holo/members` (with session cookie forwarded)
    - `/dashboard/settings` → fetch settings from holo-bot + Docker health/containers from local
    - Other paths → no SSR data
 4. Inject `<script>window.__SSR_DATA__=<json>;</script>` before `</head>`
@@ -300,7 +300,7 @@ HTTP 401: {"error": "Session expired"}
 Endpoints polled:
 | Service | Health URL | Stats URL | Timeout |
 |---------|-----------|-----------|---------|
-| hololive-bot | `<HOLO_BOT_URL>/health` | `<HOLO_BOT_URL>/api/holo/stats` | 3 seconds |
+| hololive-admin-api | `<HOLO_ADMIN_API_URL>/health` | `<HOLO_ADMIN_API_URL>/api/holo/stats` | 3 seconds |
 
 Partial degradation: if a service health check fails, it is reported as `available: false` with zero values. Other services are unaffected.
 
@@ -448,7 +448,8 @@ docker:   docker build ...
 | `SESSION_TOKEN_ROTATION` | `true` | Enable heartbeat session rotation |
 | `VALKEY_URL` | `valkey-cache:6379` | Valkey connection address |
 | `DOCKER_HOST` | `tcp://docker-proxy:2375` | Docker daemon TCP endpoint |
-| `HOLO_BOT_URL` | `http://hololive-kakao-bot-go:30001` | Upstream bot URL |
+| `HOLO_ADMIN_API_URL` | `http://hololive-admin-api:30006` | Upstream admin API URL |
+| `HOLO_BOT_URL` | `http://hololive-admin-api:30006` | Legacy fallback alias for upstream admin API URL |
 | `HOLO_BOT_API_KEY` | (empty) | X-API-Key for bot proxy |
 | `ALLOWED_ORIGINS` | fallback list | Comma-separated allowed origins |
 | `ALLOW_LOCALHOST_IN_PROD` | `false` | Allow localhost origins in production |

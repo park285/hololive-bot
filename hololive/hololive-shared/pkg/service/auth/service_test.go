@@ -40,6 +40,54 @@ import (
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
+type failingCacheClient struct {
+	cache.Client
+
+	failSAddKey   string
+	failSAddErr   error
+	failExpireKey string
+	failExpireErr error
+	failDelKeys   map[string]error
+	failDelMany   error
+	failSRemKey   string
+	failSRemErr   error
+}
+
+func (c *failingCacheClient) SAdd(ctx context.Context, key string, members []string) (int64, error) {
+	if c.failSAddErr != nil && key == c.failSAddKey {
+		return 0, c.failSAddErr
+	}
+	return c.Client.SAdd(ctx, key, members)
+}
+
+func (c *failingCacheClient) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	if c.failExpireErr != nil && key == c.failExpireKey {
+		return c.failExpireErr
+	}
+	return c.Client.Expire(ctx, key, ttl)
+}
+
+func (c *failingCacheClient) Del(ctx context.Context, key string) error {
+	if err, ok := c.failDelKeys[key]; ok {
+		return err
+	}
+	return c.Client.Del(ctx, key)
+}
+
+func (c *failingCacheClient) DelMany(ctx context.Context, keys []string) (int64, error) {
+	if c.failDelMany != nil {
+		return 0, c.failDelMany
+	}
+	return c.Client.DelMany(ctx, keys)
+}
+
+func (c *failingCacheClient) SRem(ctx context.Context, key string, members []string) (int64, error) {
+	if c.failSRemErr != nil && key == c.failSRemKey {
+		return 0, c.failSRemErr
+	}
+	return c.Client.SRem(ctx, key, members)
+}
+
 func newTestLogger() *slog.Logger {
 	return sharedlogging.NewTestLogger()
 }
@@ -66,7 +114,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func newTestCache(t *testing.T) (*cache.Service, func()) {
+func newTestCacheWithMini(t *testing.T) (*cache.Service, *miniredis.Miniredis, func()) {
 	t.Helper()
 
 	mr, err := miniredis.Run()
@@ -86,9 +134,10 @@ func newTestCache(t *testing.T) (*cache.Service, func()) {
 	}
 
 	cacheSvc, err := cache.NewCacheService(context.Background(), cache.Config{
-		Host:         host,
-		Port:         port,
-		DisableCache: true,
+		Host:              host,
+		Port:              port,
+		DisableCache:      true,
+		ForceSingleClient: true,
 	}, newTestLogger())
 	if err != nil {
 		mr.Close()
@@ -100,6 +149,13 @@ func newTestCache(t *testing.T) (*cache.Service, func()) {
 		mr.Close()
 	}
 
+	return cacheSvc, mr, cleanup
+}
+
+func newTestCache(t *testing.T) (*cache.Service, func()) {
+	t.Helper()
+
+	cacheSvc, _, cleanup := newTestCacheWithMini(t)
 	return cacheSvc, cleanup
 }
 
@@ -359,4 +415,255 @@ func TestPasswordResetRequest_RateLimited(t *testing.T) {
 		t.Fatalf("expected rate limited error")
 	}
 	assertAuthCode(t, err, CodeRateLimited)
+}
+
+func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
+	db := newTestDB(t)
+	baseCache, cleanup := newTestCache(t)
+	defer cleanup()
+
+	userID := "user-1"
+	cacheSvc := &failingCacheClient{
+		Client:      baseCache,
+		failSAddKey: userSessionsKeyPrefix + userID,
+		failSAddErr: stdErrors.New("sadd failed"),
+		failDelKeys: map[string]error{},
+	}
+
+	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), DefaultConfig())
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	_, err = svc.createSession(context.Background(), userID)
+	if err == nil {
+		t.Fatalf("expected createSession error")
+	}
+	assertAuthCode(t, err, CodeInternal)
+
+	sessionKeys, err := baseCache.ScanKeys(context.Background(), sessionKeyPrefix+"*", 10)
+	if err != nil {
+		t.Fatalf("scan session keys: %v", err)
+	}
+	if len(sessionKeys) != 0 {
+		t.Fatalf("expected no session keys after rollback, got=%v", sessionKeys)
+	}
+}
+
+func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
+	db := newTestDB(t)
+	baseCache, cleanup := newTestCache(t)
+	defer cleanup()
+
+	userID := "user-1"
+	cacheSvc := &failingCacheClient{
+		Client:        baseCache,
+		failExpireKey: userSessionsKeyPrefix + userID,
+		failExpireErr: stdErrors.New("expire failed"),
+		failDelKeys:   map[string]error{},
+	}
+
+	svc, err := NewService(context.Background(), db, cacheSvc, newTestLogger(), DefaultConfig())
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	_, err = svc.createSession(context.Background(), userID)
+	if err == nil {
+		t.Fatalf("expected createSession error")
+	}
+	assertAuthCode(t, err, CodeInternal)
+
+	sessionKeys, err := baseCache.ScanKeys(context.Background(), sessionKeyPrefix+"*", 10)
+	if err != nil {
+		t.Fatalf("scan session keys: %v", err)
+	}
+	if len(sessionKeys) != 0 {
+		t.Fatalf("expected no session keys after rollback, got=%v", sessionKeys)
+	}
+}
+
+func TestRefresh_RollsBackNewSessionWhenOldInvalidationFails(t *testing.T) {
+	db := newTestDB(t)
+	baseCache, cleanup := newTestCache(t)
+	defer cleanup()
+
+	svc, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	session, user, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+
+	oldKey := sessionKeyPrefix + sha256Hex(session.Token)
+	svc.cacheSvc = &failingCacheClient{
+		Client:      baseCache,
+		failDelKeys: map[string]error{oldKey: stdErrors.New("delete old session failed")},
+	}
+
+	_, err = svc.Refresh(context.Background(), session.Token)
+	if err == nil {
+		t.Fatalf("expected refresh error")
+	}
+	assertAuthCode(t, err, CodeInternal)
+
+	sessionKeys, err := baseCache.ScanKeys(context.Background(), sessionKeyPrefix+"*", 10)
+	if err != nil {
+		t.Fatalf("scan session keys: %v", err)
+	}
+	if len(sessionKeys) != 1 || sessionKeys[0] != oldKey {
+		t.Fatalf("expected only old session key to remain, got=%v", sessionKeys)
+	}
+
+	members, err := baseCache.SMembers(context.Background(), userSessionsKeyPrefix+user.ID)
+	if err != nil {
+		t.Fatalf("read user sessions index: %v", err)
+	}
+	if len(members) != 0 {
+		t.Fatalf("expected no indexed sessions after rollback, got=%v", members)
+	}
+}
+
+func TestRefresh_KeepsNewSessionWhenOldIndexRemovalFails(t *testing.T) {
+	db := newTestDB(t)
+	baseCache, cleanup := newTestCache(t)
+	defer cleanup()
+
+	svc, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	session, user, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+
+	oldHash := sha256Hex(session.Token)
+	oldKey := sessionKeyPrefix + oldHash
+	svc.cacheSvc = &failingCacheClient{
+		Client:      baseCache,
+		failSRemKey: userSessionsKeyPrefix + user.ID,
+		failSRemErr: stdErrors.New("remove old session index failed"),
+	}
+
+	newSession, err := svc.Refresh(context.Background(), session.Token)
+	if err != nil {
+		t.Fatalf("refresh should succeed when old session key is removed: %v", err)
+	}
+
+	if newSession == nil || newSession.Token == "" {
+		t.Fatalf("expected new session")
+	}
+
+	exists, err := baseCache.Exists(context.Background(), oldKey)
+	if err != nil {
+		t.Fatalf("check old session key: %v", err)
+	}
+	if exists {
+		t.Fatalf("expected old session key to be deleted")
+	}
+
+	newKey := sessionKeyPrefix + sha256Hex(newSession.Token)
+	exists, err = baseCache.Exists(context.Background(), newKey)
+	if err != nil {
+		t.Fatalf("check new session key: %v", err)
+	}
+	if !exists {
+		t.Fatalf("expected new session key to remain")
+	}
+
+	if _, err := svc.Me(context.Background(), newSession.Token); err != nil {
+		t.Fatalf("expected new session token to be valid: %v", err)
+	}
+}
+
+func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) {
+	db := newTestDB(t)
+	baseCache, cleanup := newTestCache(t)
+	defer cleanup()
+
+	svc, err := NewService(context.Background(), db, baseCache, newTestLogger(), DefaultConfig())
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	_, err = svc.Register(context.Background(), "user@example.com", "Password1", "User")
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	session, _, err := svc.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+
+	resetToken, err := svc.RequestPasswordReset(context.Background(), "user@example.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("request password reset failed: %v", err)
+	}
+
+	svc.cacheSvc = &failingCacheClient{
+		Client:      baseCache,
+		failDelMany: stdErrors.New("delete sessions failed"),
+	}
+
+	err = svc.ResetPassword(context.Background(), resetToken, "NewPassw0rd1")
+	if err != nil {
+		t.Fatalf("reset password should succeed after password commit: %v", err)
+	}
+
+	if _, err := svc.Me(context.Background(), session.Token); err != nil {
+		t.Fatalf("expected existing session to remain when revocation fails: %v", err)
+	}
+
+	if _, _, err := svc.Login(context.Background(), "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
+		t.Fatalf("expected login with new password to succeed: %v", err)
+	}
+}
+
+func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
+	cacheSvc, mini, cleanup := newTestCacheWithMini(t)
+	defer cleanup()
+
+	key := "auth:test:counter"
+
+	count, err := incrWithTTL(context.Background(), cacheSvc, key, 500*time.Millisecond)
+	if err != nil {
+		t.Fatalf("first incr failed: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("unexpected first count: got=%d want=1", count)
+	}
+
+	firstTTL := mini.TTL(key)
+	if firstTTL != time.Second {
+		t.Fatalf("expected first ttl to ceil to 1s, got=%v", firstTTL)
+	}
+
+	count, err = incrWithTTL(context.Background(), cacheSvc, key, 2*time.Second)
+	if err != nil {
+		t.Fatalf("second incr failed: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("unexpected second count: got=%d want=2", count)
+	}
+
+	secondTTL := mini.TTL(key)
+	if secondTTL != firstTTL {
+		t.Fatalf("expected ttl to stay unchanged after second incr, got=%v want=%v", secondTTL, firstTTL)
+	}
 }
