@@ -35,12 +35,15 @@ jobs:
         working-directory: ${{ matrix.module }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.4.0
         with:
           go-version-file: go.work
+          cache-dependency-path: |
+            go.work.sum
+            ${{ matrix.module }}/go.sum
 
       - name: Normalize go.mod replace directives
         working-directory: ${{ github.workspace }}
@@ -65,7 +68,7 @@ jobs:
 
       - name: Upload Reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6.3.0
         with:
           name: dependency-hygiene-${{ matrix.slug }}
           path: |
