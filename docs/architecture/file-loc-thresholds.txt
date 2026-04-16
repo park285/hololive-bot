@@ -7,6 +7,7 @@ admin-dashboard/backend/src/holo/types/members.rs:160
 admin-dashboard/backend/src/holo/types/milestones.rs:180
 admin-dashboard/backend/src/config.rs:280
 admin-dashboard/backend/src/config/security.rs:220
+admin-dashboard/backend/src/auth/session.rs:540
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/logs.sh:760
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
@@ -31,5 +32,6 @@ hololive/hololive-shared/pkg/service/youtube/scraper/client.go:450
 hololive/hololive-shared/pkg/service/youtube/tracking/alarm_state_repository.go:620
 hololive/hololive-shared/pkg/service/youtube/tracking/observation_compare.go:740
 hololive/hololive-shared/pkg/service/youtube/tracking/repository.go:850
+hololive/hololive-llm-sched/internal/service/majorevent/scraper/link_checker.go:440
 hololive/hololive-stream-ingester/internal/ops/community_shorts_alarm_sent_history_dataset_render.go:420
 shared-go/pkg/logging/logging.go:520
