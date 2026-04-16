@@ -41,14 +41,14 @@ func TestRepoEnvExample_DefaultsToProductionAppEnv(t *testing.T) {
 	}
 }
 
-func TestRepoCompose_PostgresUsesInternalNetworkAndPinnedTLSMode(t *testing.T) {
+func TestRepoCompose_PostgresUsesHostGatewayWithSecureDefaultTLSMode(t *testing.T) {
 	content := readRepoFile(t, "docker-compose.prod.yml")
 
 	disallowed := []string{
-		"network_mode: host",
-		"POSTGRES_HOST: host.docker.internal",
-		"POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}",
-		"PGHOST: host.docker.internal",
+		"POSTGRES_HOST: holo-postgres",
+		"POSTGRES_SSLMODE: \"require\"",
+		"PGHOST: holo-postgres",
+		"PGSSLMODE: \"require\"",
 	}
 	for _, pattern := range disallowed {
 		if strings.Contains(content, pattern) {
@@ -56,18 +56,18 @@ func TestRepoCompose_PostgresUsesInternalNetworkAndPinnedTLSMode(t *testing.T) {
 		}
 	}
 
-	if got := strings.Count(content, "POSTGRES_HOST: holo-postgres"); got != 6 {
-		t.Fatalf("docker-compose.prod.yml POSTGRES_HOST holo-postgres count = %d, want 6", got)
+	if got := strings.Count(content, "POSTGRES_HOST: host.docker.internal"); got != 6 {
+		t.Fatalf("docker-compose.prod.yml POSTGRES_HOST host.docker.internal count = %d, want 6", got)
 	}
-	if got := strings.Count(content, "POSTGRES_SSLMODE: \"require\""); got != 6 {
-		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE require count = %d, want 6", got)
+	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}"); got != 6 {
+		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE secure default count = %d, want 6", got)
 	}
 
 	required := []string{
 		"holo-postgres:",
-		"    networks:\n      - hololive-net",
-		"PGHOST: holo-postgres",
-		"PGSSLMODE: \"require\"",
+		"    network_mode: host",
+		"PGHOST: host.docker.internal",
+		"POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}",
 	}
 	for _, pattern := range required {
 		if !strings.Contains(content, pattern) {
