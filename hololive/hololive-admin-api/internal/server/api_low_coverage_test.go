@@ -170,9 +170,7 @@ func TestAlarmAPIHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/alarms", nil)
 		handler.GetAlarms(ctx)
 
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
-		}
+		assertErrorResponse(t, rec, http.StatusInternalServerError, "Failed to get alarms")
 	})
 
 	t.Run("delete alarm bad json", func(t *testing.T) {
@@ -248,9 +246,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 		handler.TriggerMajorEventNotification(ctx)
 
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
+		assertErrorResponse(t, rec, http.StatusServiceUnavailable, "major event scheduler not initialized")
 	})
 
 	t.Run("weekly conflict in progress", func(t *testing.T) {
@@ -261,9 +257,7 @@ func TestMajorEventAPIHandler_TriggerEndpoints(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
 		handler.TriggerMajorEventNotification(ctx)
 
-		if rec.Code != http.StatusConflict {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusConflict, rec.Body.String())
-		}
+		assertErrorResponse(t, rec, http.StatusConflict, "notification already in progress")
 	})
 
 	t.Run("weekly internal error", func(t *testing.T) {
@@ -337,9 +331,7 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile", nil)
 		handler.GetProfile(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
+		assertErrorResponse(t, rec, http.StatusBadRequest, "channelId is required")
 	})
 
 	t.Run("get profile service unavailable", func(t *testing.T) {
@@ -435,9 +427,7 @@ func TestRoomAPIHandler_NilAndBadRequestBranches(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/rooms", []byte("{"))
 		handler.AddRoom(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
+		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 	})
 
 	t.Run("remove room bad json", func(t *testing.T) {

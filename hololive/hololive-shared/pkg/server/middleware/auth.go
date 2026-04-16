@@ -34,6 +34,22 @@ const (
 	APIKeyHeader = common.APIKeyHeader //nolint:gosec // G101: 헤더 이름일 뿐 실제 credentials가 아님
 )
 
+func errorPayload(code, message string) gin.H {
+	payload := gin.H{"error": code}
+	if message != "" {
+		payload["message"] = message
+	}
+	return payload
+}
+
+func abortWithError(c *gin.Context, status int, code, message string) {
+	c.AbortWithStatusJSON(status, errorPayload(code, message))
+}
+
+func respondError(c *gin.Context, status int, code, message string) {
+	c.JSON(status, errorPayload(code, message))
+}
+
 // apiKey가 빈 문자열이면 인증을 건너뜁니다 (개발 환경용).
 func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -44,18 +60,12 @@ func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
 
 		providedKey := c.GetHeader(APIKeyHeader)
 		if providedKey == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "API key required",
-			})
+			abortWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
 			return
 		}
 
 		if subtle.ConstantTimeCompare([]byte(providedKey), []byte(apiKey)) != 1 {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error":   "forbidden",
-				"message": "invalid API key",
-			})
+			abortWithError(c, http.StatusForbidden, "forbidden", "invalid API key")
 			return
 		}
 
@@ -69,35 +79,23 @@ func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// API Key가 설정되지 않은 경우 기본 404 반환 (개발 모드)
 		if apiKey == "" {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error":   "not_found",
-				"message": "endpoint not found",
-			})
+			respondError(c, http.StatusNotFound, "not_found", "endpoint not found")
 			return
 		}
 
 		providedKey := c.GetHeader(APIKeyHeader)
 		if providedKey == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error":   "unauthorized",
-				"message": "API key required",
-			})
+			respondError(c, http.StatusUnauthorized, "unauthorized", "API key required")
 			return
 		}
 
 		// 타이밍 공격 방지를 위해 constant-time 비교 사용
 		if subtle.ConstantTimeCompare([]byte(providedKey), []byte(apiKey)) != 1 {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":   "forbidden",
-				"message": "invalid API key",
-			})
+			respondError(c, http.StatusForbidden, "forbidden", "invalid API key")
 			return
 		}
 
 		// 인증 성공해도 경로가 없으므로 404 반환
-		c.JSON(http.StatusNotFound, gin.H{
-			"error":   "not_found",
-			"message": "endpoint not found",
-		})
+		respondError(c, http.StatusNotFound, "not_found", "endpoint not found")
 	}
 }

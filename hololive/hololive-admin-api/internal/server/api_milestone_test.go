@@ -120,9 +120,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones", nil)
 		h.GetMilestones(ctx)
 
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d", rec.Code, http.StatusServiceUnavailable)
-		}
+		assertErrorResponse(t, rec, http.StatusServiceUnavailable, "Stats repository not available")
 	})
 
 	t.Run("invalid limit", func(t *testing.T) {
@@ -133,9 +131,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones?limit=999", nil)
 		h.GetMilestones(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d", rec.Code, http.StatusBadRequest)
-		}
+		assertErrorResponse(t, rec, http.StatusBadRequest, "limit must be an integer between 1 and 100")
 	})
 
 	t.Run("invalid offset", func(t *testing.T) {
@@ -163,9 +159,7 @@ func TestMilestoneAPIHandler_GetMilestones(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/milestones", nil)
 		h.GetMilestones(ctx)
 
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status=%d want=%d", rec.Code, http.StatusInternalServerError)
-		}
+		assertErrorResponse(t, rec, http.StatusInternalServerError, "Failed to get milestones")
 	})
 
 	t.Run("success", func(t *testing.T) {

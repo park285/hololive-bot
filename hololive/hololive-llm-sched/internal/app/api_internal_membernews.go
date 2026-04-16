@@ -31,6 +31,7 @@ import (
 
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
@@ -50,13 +51,13 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 	rg.GET(membernewscontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "room_id_required"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
 		}
 
 		subscribed, err := svc.IsRoomSubscribed(c.Request.Context(), roomID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "subscription_check_failed"})
+			sharedserver.RespondError(c, http.StatusInternalServerError, "subscription_check_failed", nil)
 			return
 		}
 
@@ -66,18 +67,18 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 	rg.POST(membernewscontracts.SubscriptionsRoute, func(c *gin.Context) {
 		var req subscription.SubscribeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
 			return
 		}
 		req.RoomID = strings.TrimSpace(req.RoomID)
 		req.RoomName = strings.TrimSpace(req.RoomName)
 		if req.RoomID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "room_id_required"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
 		}
 
 		if err := svc.SubscribeRoom(c.Request.Context(), req.RoomID, req.RoomName); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "subscribe_failed"})
+			sharedserver.RespondError(c, http.StatusInternalServerError, "subscribe_failed", nil)
 			return
 		}
 
@@ -87,12 +88,12 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 	rg.DELETE(membernewscontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "room_id_required"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
 		}
 
 		if err := svc.UnsubscribeRoom(c.Request.Context(), roomID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "unsubscribe_failed"})
+			sharedserver.RespondError(c, http.StatusInternalServerError, "unsubscribe_failed", nil)
 			return
 		}
 
@@ -102,13 +103,13 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 	rg.POST(membernewscontracts.DigestRoute, func(c *gin.Context) {
 		var req memberNewsDigestRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
 			return
 		}
 
 		req.RoomID = strings.TrimSpace(req.RoomID)
 		if req.RoomID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "room_id_required"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
 		}
 
@@ -117,10 +118,10 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 		digest, err := svc.GenerateRoomDigest(c.Request.Context(), req.RoomID, membernewssvc.Period(period))
 		if err != nil {
 			if errors.Is(err, membernewssvc.ErrNoSubscribedMembers) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "no_subscribed_members"})
+				sharedserver.RespondError(c, http.StatusNotFound, "no_subscribed_members", nil)
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "digest_generation_failed"})
+			sharedserver.RespondError(c, http.StatusInternalServerError, "digest_generation_failed", nil)
 			return
 		}
 

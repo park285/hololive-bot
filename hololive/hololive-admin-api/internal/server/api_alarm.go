@@ -23,6 +23,7 @@ package server
 import (
 	"context"
 	"fmt"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -37,7 +38,7 @@ func (h *AlarmAPIHandler) GetAlarms(c *gin.Context) {
 	alarmKeys, err := h.alarm.GetAllAlarmKeys(ctx)
 	if err != nil {
 		h.logger.Error("Failed to get alarm keys", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get alarms"})
+		sharedserver.RespondError(c, 500, "Failed to get alarms", nil)
 
 		return
 	}
@@ -56,7 +57,7 @@ func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
@@ -67,7 +68,7 @@ func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 	removed, err := h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, nil)
 	if err != nil {
 		h.logger.Error("Failed to delete alarm", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to delete alarm"})
+		sharedserver.RespondError(c, 500, "Failed to delete alarm", nil)
 
 		return
 	}

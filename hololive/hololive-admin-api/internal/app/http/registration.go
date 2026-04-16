@@ -28,6 +28,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
@@ -40,6 +41,11 @@ type apiRateLimitHandler struct {
 	limit   int
 	window  time.Duration
 	logger  *slog.Logger
+}
+
+func abortWithRateLimitError(c *gin.Context) {
+	sharedserver.RespondError(c, http.StatusTooManyRequests, "too many requests", nil)
+	c.Abort()
 }
 
 func registerAPIRoutes(
@@ -120,7 +126,7 @@ func apiRateLimitMiddleware(cacheSvc cache.Client, logger *slog.Logger) gin.Hand
 func (h apiRateLimitHandler) Handle(c *gin.Context) {
 	ip := c.ClientIP()
 	if ip == "" {
-		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+		abortWithRateLimitError(c)
 		return
 	}
 
@@ -140,7 +146,7 @@ func (h apiRateLimitHandler) Handle(c *gin.Context) {
 			c.Header("Retry-After", strconv.Itoa(int(decision.RetryAfter.Seconds())))
 		}
 
-		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
+		abortWithRateLimitError(c)
 
 		return
 	}

@@ -22,6 +22,7 @@ package server
 
 import (
 	"context"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -67,13 +68,13 @@ type TranslatedData struct {
 func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 	channelID := c.Query("channelId")
 	if channelID == "" {
-		c.JSON(400, gin.H{"error": "channelId is required"})
+		sharedserver.RespondError(c, 400, "channelId is required", nil)
 		return
 	}
 
 	if h.profiles == nil {
 		h.logger.Error("ProfileService is not initialized")
-		c.JSON(500, gin.H{"error": "Profile service unavailable"})
+		sharedserver.RespondError(c, 500, "Profile service unavailable", nil)
 
 		return
 	}
@@ -87,7 +88,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 			slog.String("channel_id", channelID),
 			slog.Any("error", err),
 		)
-		c.JSON(404, gin.H{"error": "Profile not found for channel"})
+		sharedserver.RespondError(c, 404, "Profile not found for channel", nil)
 
 		return
 	}
@@ -98,7 +99,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 			slog.String("english_name", profile.EnglishName),
 			slog.Any("error", err),
 		)
-		c.JSON(500, gin.H{"error": "Failed to load translated profile"})
+		sharedserver.RespondError(c, 500, "Failed to load translated profile", nil)
 
 		return
 	}
@@ -124,13 +125,13 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 	name := c.Query("name")
 	if name == "" {
-		c.JSON(400, gin.H{"error": "name is required"})
+		sharedserver.RespondError(c, 400, "name is required", nil)
 		return
 	}
 
 	if h.profiles == nil {
 		h.logger.Error("ProfileService is not initialized")
-		c.JSON(500, gin.H{"error": "Profile service unavailable"})
+		sharedserver.RespondError(c, 500, "Profile service unavailable", nil)
 
 		return
 	}
@@ -144,7 +145,7 @@ func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 			slog.String("name", name),
 			slog.Any("error", err),
 		)
-		c.JSON(404, gin.H{"error": "Profile not found"})
+		sharedserver.RespondError(c, 404, "Profile not found", nil)
 
 		return
 	}

@@ -30,6 +30,7 @@ import (
 
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
 
@@ -44,13 +45,13 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 	rg.GET(majoreventcontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "room_id_required"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
 		}
 
 		subscribed, err := repo.IsSubscribed(c.Request.Context(), roomID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "subscription_check_failed"})
+			sharedserver.RespondError(c, http.StatusInternalServerError, "subscription_check_failed", nil)
 			return
 		}
 
@@ -60,18 +61,18 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 	rg.POST(majoreventcontracts.SubscriptionsRoute, func(c *gin.Context) {
 		var req subscription.SubscribeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
 			return
 		}
 		req.RoomID = strings.TrimSpace(req.RoomID)
 		req.RoomName = strings.TrimSpace(req.RoomName)
 		if req.RoomID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "room_id_required"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
 		}
 
 		if err := repo.Subscribe(c.Request.Context(), req.RoomID, req.RoomName); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "subscribe_failed"})
+			sharedserver.RespondError(c, http.StatusInternalServerError, "subscribe_failed", nil)
 			return
 		}
 
@@ -81,12 +82,12 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 	rg.DELETE(majoreventcontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "room_id_required"})
+			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
 		}
 
 		if err := repo.Unsubscribe(c.Request.Context(), roomID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "unsubscribe_failed"})
+			sharedserver.RespondError(c, http.StatusInternalServerError, "unsubscribe_failed", nil)
 			return
 		}
 
