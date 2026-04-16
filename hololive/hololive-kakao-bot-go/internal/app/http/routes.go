@@ -81,7 +81,7 @@ func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsAPI
 	holoAPI.GET("/channels/search", streamHandler.SearchChannels)
 }
 
-func registerPublicStreamRoutes(holoAPI *gin.RouterGroup, handler *server.StreamAPIHandler) {
+func registerStreamRoutes(holoAPI *gin.RouterGroup, handler *server.StreamAPIHandler) {
 	holoAPI.GET("/streams/live", handler.GetLiveStreams)
 	holoAPI.GET("/streams/upcoming", handler.GetUpcomingStreams)
 }

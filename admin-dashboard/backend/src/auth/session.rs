@@ -40,6 +40,31 @@ pub struct Session {
     pub absolute_expires_at: DateTime<Utc>,
     #[serde(default = "utc_now")]
     pub last_rotated_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotated_to: Option<String>,
+}
+
+const fn is_refreshable(session: &Session) -> bool {
+    session.rotated_to.is_none()
+}
+
+fn rotated_session_marker(
+    session: &Session,
+    new_session_id: &str,
+    now: DateTime<Utc>,
+    grace_ttl: Duration,
+) -> anyhow::Result<Session> {
+    let grace_ttl = chrono::Duration::from_std(grace_ttl)?;
+    let grace_expires_at = std::cmp::min(now + grace_ttl, session.absolute_expires_at);
+
+    Ok(Session {
+        id: session.id.clone(),
+        created_at: session.created_at,
+        expires_at: grace_expires_at,
+        absolute_expires_at: session.absolute_expires_at,
+        last_rotated_at: now,
+        rotated_to: Some(new_session_id.to_string()),
+    })
 }
 
 #[async_trait::async_trait]
@@ -74,11 +99,29 @@ impl ValkeySessionStore {
             expires_at: now + self.config.expiry_duration,
             absolute_expires_at: now + self.config.absolute_timeout,
             last_rotated_at: now,
+            rotated_to: None,
         }
     }
 }
 
-const ROTATE_LUA: &str = include_str!("rotate_session.lua");
+const ROTATE_LUA: &str = r"
+local old_key = KEYS[1]
+local new_key = KEYS[2]
+local new_data = ARGV[1]
+local old_marker_data = ARGV[2]
+local new_ttl = tonumber(ARGV[3])
+local grace_ttl = tonumber(ARGV[4])
+
+local old_data = redis.call('GET', old_key)
+if not old_data then
+  return nil
+end
+
+redis.call('SET', new_key, new_data, 'EX', new_ttl)
+redis.call('SET', old_key, old_marker_data, 'EX', grace_ttl)
+
+return old_data
+";
 
 #[async_trait::async_trait]
 impl SessionProvider for ValkeySessionStore {
@@ -188,6 +231,14 @@ impl SessionProvider for ValkeySessionStore {
             return Ok((false, true));
         }
 
+        if !is_refreshable(&session) {
+            debug!(
+                session_id = %super::truncate_session_id(session_id),
+                "session refresh rejected after rotation"
+            );
+            return Ok((false, false));
+        }
+
         let ttl = if idle {
             self.config.idle_session_ttl
         } else {
@@ -217,6 +268,14 @@ impl SessionProvider for ValkeySessionStore {
             return Ok(None);
         }
 
+        if !is_refreshable(&old_session) {
+            debug!(
+                session_id = %super::truncate_session_id(old_session_id),
+                "rotation skipped for already rotated session"
+            );
+            return Ok(None);
+        }
+
         let elapsed = Utc::now()
             .signed_duration_since(old_session.last_rotated_at)
             .to_std()
@@ -239,8 +298,12 @@ impl SessionProvider for ValkeySessionStore {
             expires_at: now + self.config.expiry_duration,
             absolute_expires_at: old_session.absolute_expires_at,
             last_rotated_at: now,
+            rotated_to: None,
         };
+        let old_marker =
+            rotated_session_marker(&old_session, &new_id, now, self.config.grace_period)?;
         let new_data = serde_json::to_string(&new_session)?;
+        let old_marker_data = serde_json::to_string(&old_marker)?;
         let ttl_secs = self.config.expiry_duration.as_secs() as i64;
         let grace_secs = self.config.grace_period.as_secs() as i64;
 
@@ -248,6 +311,7 @@ impl SessionProvider for ValkeySessionStore {
             .key(session_key(old_session_id))
             .key(session_key(&new_id))
             .arg(&new_data)
+            .arg(&old_marker_data)
             .arg(ttl_secs)
             .arg(grace_secs)
             .invoke_async(&mut conn)
@@ -290,6 +354,7 @@ mod tests {
             expires_at: now + Duration::from_secs(1800),
             absolute_expires_at: now + Duration::from_secs(28800),
             last_rotated_at: now,
+            rotated_to: None,
         };
 
         let json = serde_json::to_string(&session).expect("serialize");
@@ -303,6 +368,7 @@ mod tests {
             session.absolute_expires_at
         );
         assert_eq!(deserialized.last_rotated_at, session.last_rotated_at);
+        assert_eq!(deserialized.rotated_to, session.rotated_to);
     }
 
     #[test]
@@ -317,6 +383,7 @@ mod tests {
         let session: Session = serde_json::from_str(json).expect("deserialize");
         assert_eq!(session.id, "session-no-rotated");
         assert!(session.last_rotated_at <= Utc::now());
+        assert_eq!(session.rotated_to, None);
     }
 
     #[test]
@@ -328,6 +395,7 @@ mod tests {
             expires_at: now + Duration::from_secs(1800),
             absolute_expires_at: now + Duration::from_secs(28800),
             last_rotated_at: now,
+            rotated_to: None,
         };
         assert!(!is_absolutely_expired(&session));
     }
@@ -341,6 +409,7 @@ mod tests {
             expires_at: now - chrono::Duration::hours(1),
             absolute_expires_at: now - chrono::Duration::seconds(1),
             last_rotated_at: now - chrono::Duration::hours(1),
+            rotated_to: None,
         };
         assert!(is_absolutely_expired(&session));
     }
@@ -354,6 +423,7 @@ mod tests {
             expires_at: now + Duration::from_secs(1800),
             absolute_expires_at: now + Duration::from_secs(28800),
             last_rotated_at: now,
+            rotated_to: None,
         };
 
         let json: serde_json::Value = serde_json::to_value(&session).expect("to_value");
@@ -362,6 +432,7 @@ mod tests {
         assert!(json.get("expires_at").is_some());
         assert!(json.get("absolute_expires_at").is_some());
         assert!(json.get("last_rotated_at").is_some());
+        assert!(json.get("rotated_to").is_none());
     }
 
     #[test]
@@ -373,6 +444,7 @@ mod tests {
             expires_at: now - chrono::Duration::minutes(1),
             absolute_expires_at: now + chrono::Duration::hours(1),
             last_rotated_at: now - chrono::Duration::minutes(5),
+            rotated_to: None,
         };
 
         let refreshed = refreshed_session(&session, now, Duration::from_secs(90)).expect("refresh");
@@ -381,6 +453,52 @@ mod tests {
         assert_eq!(refreshed.created_at, session.created_at);
         assert_eq!(refreshed.absolute_expires_at, session.absolute_expires_at);
         assert_eq!(refreshed.last_rotated_at, session.last_rotated_at);
+        assert_eq!(refreshed.rotated_to, session.rotated_to);
         assert_eq!(refreshed.expires_at, now + chrono::Duration::seconds(90));
+    }
+
+    #[test]
+    fn test_rotated_session_marker_sets_refresh_blocker() {
+        let now = Utc::now();
+        let session = Session {
+            id: "rotating-session".to_string(),
+            created_at: now - chrono::Duration::minutes(10),
+            expires_at: now + chrono::Duration::minutes(20),
+            absolute_expires_at: now + chrono::Duration::hours(1),
+            last_rotated_at: now - chrono::Duration::minutes(10),
+            rotated_to: None,
+        };
+
+        let marker =
+            rotated_session_marker(&session, "new-session-id", now, Duration::from_secs(30))
+                .expect("marker");
+
+        assert_eq!(marker.id, session.id);
+        assert_eq!(marker.rotated_to.as_deref(), Some("new-session-id"));
+        assert_eq!(marker.last_rotated_at, now);
+        assert_eq!(marker.expires_at, now + chrono::Duration::seconds(30));
+    }
+
+    #[test]
+    fn test_is_refreshable_rejects_rotated_session() {
+        let now = Utc::now();
+        let session = Session {
+            id: "stale-session".to_string(),
+            created_at: now - chrono::Duration::minutes(10),
+            expires_at: now + chrono::Duration::seconds(30),
+            absolute_expires_at: now + chrono::Duration::hours(1),
+            last_rotated_at: now,
+            rotated_to: Some("replacement-session".to_string()),
+        };
+
+        assert!(!is_refreshable(&session));
+    }
+
+    #[test]
+    fn test_rotate_lua_rewrites_old_session_with_marker() {
+        assert!(ROTATE_LUA.contains("local old_marker_data = ARGV[2]"));
+        assert!(
+            ROTATE_LUA.contains("redis.call('SET', old_key, old_marker_data, 'EX', grace_ttl)")
+        );
     }
 }

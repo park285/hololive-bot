@@ -670,14 +670,18 @@ func TestLoad_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	}
 }
 
-func TestLoad_ProductionAllowsInsecurePostgresSSLMode_WithOverride(t *testing.T) {
+func TestLoad_ProductionRejectsInsecurePostgresSSLMode_EvenWithOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
-	if _, err := Load(); err != nil {
-		t.Fatalf("Load() error = %v", err)
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected production sslmode validation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=disable is not allowed in production") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

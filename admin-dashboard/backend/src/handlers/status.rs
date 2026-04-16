@@ -8,6 +8,8 @@ use axum::response::IntoResponse;
 
 use crate::config::SecurityMode;
 
+const MAX_CONCURRENT_SYSTEM_STATS_STREAMS: usize = 16;
+
 #[utoipa::path(
     get,
     path = "/admin/api/status",
@@ -46,7 +48,9 @@ pub async fn handle_system_stats_stream(
         app_state.config.security.ws_origin_mode,
     )?;
 
-    let mut rx = app_state.stats_tx.subscribe();
+    let Some(mut rx) = subscribe_system_stats_stream(&app_state.stats_tx) else {
+        return Ok(too_many_active_system_stats_streams_response());
+    };
 
     Ok(ws.on_upgrade(move |mut socket: WebSocket| async move {
         loop {
@@ -62,6 +66,27 @@ pub async fn handle_system_stats_stream(
             }
         }
     }))
+}
+
+fn subscribe_system_stats_stream(
+    tx: &tokio::sync::broadcast::Sender<crate::status::SystemStats>,
+) -> Option<tokio::sync::broadcast::Receiver<crate::status::SystemStats>> {
+    if tx.receiver_count() >= MAX_CONCURRENT_SYSTEM_STATS_STREAMS {
+        return None;
+    }
+
+    Some(tx.subscribe())
+}
+
+fn too_many_active_system_stats_streams_response() -> axum::response::Response {
+    (
+        axum::http::StatusCode::TOO_MANY_REQUESTS,
+        Json(serde_json::json!({
+            "error": "Too many active system stats streams",
+            "limit": MAX_CONCURRENT_SYSTEM_STATS_STREAMS,
+        })),
+    )
+        .into_response()
 }
 
 pub fn verify_ws_origin<S>(
@@ -103,6 +128,7 @@ mod tests {
     use super::*;
     use crate::config::SecurityMode;
     use std::collections::HashSet;
+    use tokio::sync::broadcast;
 
     fn allowed_origins() -> HashSet<String> {
         let mut s = HashSet::new();
@@ -161,5 +187,21 @@ mod tests {
     fn test_ws_origin_off_missing_ok() {
         let result = verify_ws_origin(None, &allowed_origins(), SecurityMode::Off);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_subscribe_system_stats_stream_rejects_limit_exceeded() {
+        let (tx, rx) = broadcast::channel(16);
+        drop(rx);
+
+        let mut receivers = Vec::with_capacity(MAX_CONCURRENT_SYSTEM_STATS_STREAMS);
+        for _ in 0..MAX_CONCURRENT_SYSTEM_STATS_STREAMS {
+            receivers.push(subscribe_system_stats_stream(&tx).expect("subscriber within limit"));
+        }
+        let overflow = subscribe_system_stats_stream(&tx);
+
+        assert!(overflow.is_none());
+        assert_eq!(tx.receiver_count(), MAX_CONCURRENT_SYSTEM_STATS_STREAMS);
+        assert_eq!(MAX_CONCURRENT_SYSTEM_STATS_STREAMS, 16);
     }
 }

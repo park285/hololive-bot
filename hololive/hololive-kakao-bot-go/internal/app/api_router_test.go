@@ -194,7 +194,7 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 	}
 }
 
-func TestAPIRouter_PublicStreamRoutesBypassAPIKeyAuth(t *testing.T) {
+func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
@@ -215,20 +215,34 @@ func TestAPIRouter_PublicStreamRoutesBypassAPIKeyAuth(t *testing.T) {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
 
-	tests := []string{
-		"/api/holo/streams/live?org=",
-		"/api/holo/streams/upcoming?org=",
+	tests := []struct {
+		name       string
+		path       string
+		headerVal  string
+		wantStatus int
+	}{
+		{name: "live missing api key", path: "/api/holo/streams/live?org=", wantStatus: http.StatusUnauthorized},
+		{name: "live invalid api key", path: "/api/holo/streams/live?org=", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
+		{name: "live valid api key", path: "/api/holo/streams/live?org=", headerVal: "test-key", wantStatus: http.StatusBadRequest},
+		{name: "upcoming missing api key", path: "/api/holo/streams/upcoming?org=", wantStatus: http.StatusUnauthorized},
+		{name: "upcoming invalid api key", path: "/api/holo/streams/upcoming?org=", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
+		{name: "upcoming valid api key", path: "/api/holo/streams/upcoming?org=", headerVal: "test-key", wantStatus: http.StatusBadRequest},
 	}
 
-	for _, path := range tests {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)
-		rec := httptest.NewRecorder()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, http.NoBody)
+			if tt.headerVal != "" {
+				req.Header.Set(middleware.APIKeyHeader, tt.headerVal)
+			}
 
-		router.ServeHTTP(rec, req)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("path=%s status=%d want=%d body=%s", path, rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("path=%s status=%d want=%d body=%s", tt.path, rec.Code, tt.wantStatus, rec.Body.String())
+			}
+		})
 	}
 }
 

@@ -1,8 +1,9 @@
 local old_key = KEYS[1]
 local new_key = KEYS[2]
 local new_data = ARGV[1]
-local new_ttl = tonumber(ARGV[2])
-local grace_ttl = tonumber(ARGV[3])
+local old_marker_data = ARGV[2]
+local new_ttl = tonumber(ARGV[3])
+local grace_ttl = tonumber(ARGV[4])
 
 local old_data = redis.call('GET', old_key)
 if not old_data then
@@ -10,6 +11,6 @@ if not old_data then
 end
 
 redis.call('SET', new_key, new_data, 'EX', new_ttl)
-redis.call('EXPIRE', old_key, grace_ttl)
+redis.call('SET', old_key, old_marker_data, 'EX', grace_ttl)
 
 return old_data
