@@ -8,7 +8,7 @@ hololive/hololive-shared/pkg/service/holodex/scraper.go:750
 hololive/hololive-shared/pkg/service/youtube/poller/repository_batch_delivery_state.go:480
 hololive/hololive-llm-sched/internal/service/majorevent/repository.go:650
 hololive/hololive-shared/pkg/service/holodex/service_channels.go:620
-hololive/hololive-shared/pkg/service/auth/service.go:620
+hololive/hololive-shared/pkg/service/auth/service.go:700
 hololive/hololive-kakao-bot-go/internal/adapter/formatter_alarm.go:580
 hololive/hololive-shared/pkg/server/stream_handler.go:560
 hololive/hololive-shared/pkg/service/youtube/poller/scheduler.go:650
