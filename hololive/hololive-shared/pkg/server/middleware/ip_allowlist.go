@@ -67,8 +67,7 @@ func AdminIPAllowMiddleware(allowed []*net.IPNet, logger *slog.Logger) gin.Handl
 		clientIP := net.ParseIP(c.ClientIP())
 		if clientIP == nil {
 			logger.Warn("Invalid client IP")
-			c.JSON(403, gin.H{"error": "forbidden"})
-			c.Abort()
+			abortWithError(c, 403, "forbidden", "")
 			return
 		}
 		for _, cidr := range allowed {
@@ -78,7 +77,6 @@ func AdminIPAllowMiddleware(allowed []*net.IPNet, logger *slog.Logger) gin.Handl
 			}
 		}
 		logger.Warn("Admin IP blocked", slog.String("ip", clientIP.String()))
-		c.JSON(403, gin.H{"error": "forbidden"})
-		c.Abort()
+		abortWithError(c, 403, "forbidden", "")
 	}
 }

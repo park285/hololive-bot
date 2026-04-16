@@ -177,9 +177,7 @@ func TestStatsAPIHandler_GetYouTubeCommunityShortsOps_RepositoryUnavailable(t *t
 	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/youtube/community-shorts", nil)
 	handler.GetYouTubeCommunityShortsOps(ctx)
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-	}
+	assertErrorResponse(t, rec, http.StatusServiceUnavailable, "YouTube community/shorts ops repository not available")
 }
 
 func TestStatsAPIHandler_GetYouTubeCommunityShortsOps_RepositoryError(t *testing.T) {
@@ -197,7 +195,5 @@ func TestStatsAPIHandler_GetYouTubeCommunityShortsOps_RepositoryError(t *testing
 	ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/stats/youtube/community-shorts", nil)
 	handler.GetYouTubeCommunityShortsOps(ctx)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
-	}
+	assertErrorResponse(t, rec, http.StatusInternalServerError, "Failed to load YouTube community/shorts ops posts")
 }

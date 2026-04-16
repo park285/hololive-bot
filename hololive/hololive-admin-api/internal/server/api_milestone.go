@@ -22,6 +22,7 @@ package server
 
 import (
 	"fmt"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -36,7 +37,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if h.statsRepo == nil {
-		c.JSON(503, gin.H{"error": "Stats repository not available"})
+		sharedserver.RespondError(c, 503, "Stats repository not available", nil)
 		return
 	}
 
@@ -47,7 +48,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	if l := c.Query("limit"); l != "" {
 		parsed, err := parseInt(l)
 		if err != nil || parsed <= 0 || parsed > 100 {
-			c.JSON(400, gin.H{"error": "limit must be an integer between 1 and 100"})
+			sharedserver.RespondError(c, 400, "limit must be an integer between 1 and 100", nil)
 			return
 		}
 
@@ -57,7 +58,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	if o := c.Query("offset"); o != "" {
 		parsed, err := parseInt(o)
 		if err != nil || parsed < 0 {
-			c.JSON(400, gin.H{"error": "offset must be an integer greater than or equal to 0"})
+			sharedserver.RespondError(c, 400, "offset must be an integer greater than or equal to 0", nil)
 			return
 		}
 
@@ -74,7 +75,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	result, err := h.statsRepo.GetAllMilestones(ctx, filter)
 	if err != nil {
 		h.logger.Error("Failed to get milestones", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get milestones"})
+		sharedserver.RespondError(c, 500, "Failed to get milestones", nil)
 
 		return
 	}
@@ -94,7 +95,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if h.statsRepo == nil {
-		c.JSON(503, gin.H{"error": "Stats repository not available"})
+		sharedserver.RespondError(c, 503, "Stats repository not available", nil)
 		return
 	}
 
@@ -104,7 +105,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	if t := c.Query("threshold"); t != "" {
 		parsed, err := parseFloat(t)
 		if err != nil || parsed <= 0 || parsed >= 1 {
-			c.JSON(400, gin.H{"error": "threshold must be a number between 0 and 1"})
+			sharedserver.RespondError(c, 400, "threshold must be a number between 0 and 1", nil)
 			return
 		}
 
@@ -117,7 +118,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	members, err := h.statsRepo.GetNearMilestoneMembers(ctx, threshold, youtube.SubscriberMilestones, limit)
 	if err != nil {
 		h.logger.Error("Failed to get near milestone members", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get near milestone members"})
+		sharedserver.RespondError(c, 500, "Failed to get near milestone members", nil)
 
 		return
 	}
@@ -140,14 +141,14 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if h.statsRepo == nil {
-		c.JSON(503, gin.H{"error": "Stats repository not available"})
+		sharedserver.RespondError(c, 503, "Stats repository not available", nil)
 		return
 	}
 
 	summary, err := h.statsRepo.GetMilestoneStats(ctx)
 	if err != nil {
 		h.logger.Error("Failed to get milestone stats", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get milestone stats"})
+		sharedserver.RespondError(c, 500, "Failed to get milestone stats", nil)
 
 		return
 	}
@@ -156,7 +157,7 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	nearCount, err := h.statsRepo.CountNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones)
 	if err != nil {
 		h.logger.Error("Failed to get near milestone summary", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get near milestone summary"})
+		sharedserver.RespondError(c, 500, "Failed to get near milestone summary", nil)
 
 		return
 	}

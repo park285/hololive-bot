@@ -159,30 +159,22 @@ func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/settings/room-name", []byte("{"))
 		handler.SetRoomName(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("SetRoomName status=%d want=%d", rec.Code, http.StatusBadRequest)
-		}
+		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 
 		ctx, rec = newAPITestContext(http.MethodPost, "/api/holo/settings/user-name", []byte("{"))
 		handler.SetUserName(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("SetUserName status=%d want=%d", rec.Code, http.StatusBadRequest)
-		}
+		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 
 		ctx, rec = newAPITestContext(http.MethodPatch, "/api/holo/settings", []byte("{"))
 		handler.UpdateSettings(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("UpdateSettings status=%d want=%d", rec.Code, http.StatusBadRequest)
-		}
+		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 
 		ctx, rec = newAPITestContext(http.MethodPatch, "/api/holo/settings/llm", []byte("{"))
 		handler.UpdateLLMSettings(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("UpdateLLMSettings status=%d want=%d", rec.Code, http.StatusBadRequest)
-		}
+		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 	})
 
 	t.Run("get logs/settings and update success", func(t *testing.T) {

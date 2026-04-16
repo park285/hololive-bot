@@ -21,6 +21,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -88,6 +89,37 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 	}
 }
 
+func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.Use(APIKeyAuthMiddleware("test-key"))
+	router.GET("/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if got := payload["error"]; got != "unauthorized" {
+		t.Fatalf("error = %v, want %q", got, "unauthorized")
+	}
+	if got := payload["message"]; got != "API key required" {
+		t.Fatalf("message = %v, want %q", got, "API key required")
+	}
+}
+
 func TestNoRouteAuthHandler(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -143,5 +175,34 @@ func TestNoRouteAuthHandler(t *testing.T) {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
 		})
+	}
+}
+
+func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.NoRoute(NoRouteAuthHandler("test-key"))
+
+	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
+	req.Header.Set(APIKeyHeader, "wrong-key")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if got := payload["error"]; got != "forbidden" {
+		t.Fatalf("error = %v, want %q", got, "forbidden")
+	}
+	if got := payload["message"]; got != "invalid API key" {
+		t.Fatalf("message = %v, want %q", got, "invalid API key")
 	}
 }

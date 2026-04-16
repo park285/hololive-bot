@@ -33,6 +33,7 @@ import (
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 func TestRegisterMajorEventInternalRoutes_NoOp(t *testing.T) {
@@ -78,6 +79,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "room_id_required")
 	})
 
 	t.Run("get subscription repository error", func(t *testing.T) {
@@ -85,6 +87,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assertErrorResponse(t, rr, "subscription_check_failed")
 	})
 
 	t.Run("post subscribe invalid body", func(t *testing.T) {
@@ -93,6 +96,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "invalid_request")
 	})
 
 	t.Run("post subscribe room_id required", func(t *testing.T) {
@@ -101,6 +105,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "room_id_required")
 	})
 
 	t.Run("post subscribe repository error", func(t *testing.T) {
@@ -109,6 +114,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assertErrorResponse(t, rr, "subscribe_failed")
 	})
 
 	t.Run("delete unsubscribe room_id required", func(t *testing.T) {
@@ -116,6 +122,7 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "room_id_required")
 	})
 
 	t.Run("delete unsubscribe repository error", func(t *testing.T) {
@@ -123,7 +130,17 @@ func TestRegisterMajorEventInternalRoutes_Handlers(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assertErrorResponse(t, rr, "unsubscribe_failed")
 	})
+}
+
+func assertErrorResponse(t *testing.T, rr *httptest.ResponseRecorder, want string) {
+	t.Helper()
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &payload))
+	assert.Equal(t, want, payload["error"])
+	assert.Len(t, payload, 1)
 }
 
 func newMajorEventRouter(t *testing.T, apiKey string, repo *majorevent.Repository) *http.ServeMux {

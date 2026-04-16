@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"strings"
 	"time"
@@ -95,7 +96,7 @@ func (h *StatsAPIHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	defer cancel()
 
 	if h.communityShortsOps == nil {
-		c.JSON(503, gin.H{"error": "YouTube community/shorts ops repository not available"})
+		sharedserver.RespondError(c, 503, "YouTube community/shorts ops repository not available", nil)
 		return
 	}
 
@@ -105,14 +106,14 @@ func (h *StatsAPIHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	posts, err := h.communityShortsOps.ListPostSendCountsSince(ctx, windowStart)
 	if err != nil {
 		h.logger.Error("Failed to load YouTube community/shorts ops posts", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to load YouTube community/shorts ops posts"})
+		sharedserver.RespondError(c, 500, "Failed to load YouTube community/shorts ops posts", nil)
 		return
 	}
 
 	channelSummaries, err := outbox.BuildChannelPostDeliverySummaries(posts)
 	if err != nil {
 		h.logger.Error("Failed to build YouTube community/shorts channel summaries", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to build YouTube community/shorts channel summaries"})
+		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts channel summaries", nil)
 		return
 	}
 
@@ -123,14 +124,14 @@ func (h *StatsAPIHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	}})
 	if err != nil {
 		h.logger.Error("Failed to build YouTube community/shorts latency summaries", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to build YouTube community/shorts latency summaries"})
+		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts latency summaries", nil)
 		return
 	}
 
 	channelLatencySummaries, err := buildYouTubeCommunityShortsChannelLatencySummaries(posts)
 	if err != nil {
 		h.logger.Error("Failed to build YouTube community/shorts channel latency summaries", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to build YouTube community/shorts channel latency summaries"})
+		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts channel latency summaries", nil)
 		return
 	}
 
