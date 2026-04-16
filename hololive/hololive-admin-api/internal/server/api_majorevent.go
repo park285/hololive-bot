@@ -40,13 +40,13 @@ type MajorEventMonthlyScheduler interface {
 
 func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
 	if h.majorEventScheduler == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "major event scheduler not initialized"})
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event scheduler not initialized", nil)
 		return
 	}
 
 	if err := h.majorEventScheduler.SendWeeklyNotification(c.Request.Context()); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
-			c.JSON(http.StatusConflict, gin.H{"error": "notification already in progress"})
+			sharedserver.RespondError(c, http.StatusConflict, "notification already in progress", nil)
 			return
 		}
 
@@ -60,13 +60,13 @@ func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
 
 func (h *MajorEventAPIHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
 	if h.majorEventMonthlyScheduler == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "major event monthly scheduler not initialized"})
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event monthly scheduler not initialized", nil)
 		return
 	}
 
 	if err := h.majorEventMonthlyScheduler.SendMonthlyNotification(c.Request.Context()); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
-			c.JSON(http.StatusConflict, gin.H{"error": "notification already in progress"})
+			sharedserver.RespondError(c, http.StatusConflict, "notification already in progress", nil)
 			return
 		}
 

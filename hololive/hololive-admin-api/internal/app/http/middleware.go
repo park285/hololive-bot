@@ -28,6 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 func newAPICORSConfig(cfg *config.Config) cors.Config {
@@ -72,7 +73,8 @@ func corsOriginGuard(allowedOrigins []string) gin.HandlerFunc {
 		}
 
 		if _, ok := allowed[origin]; !ok {
-			c.AbortWithStatus(http.StatusForbidden)
+			sharedserver.RespondError(c, http.StatusForbidden, "forbidden", nil)
+			c.Abort()
 			return
 		}
 

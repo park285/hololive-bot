@@ -23,6 +23,7 @@ package server
 import (
 	"context"
 	"fmt"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -54,14 +55,14 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "Invalid member ID"})
+		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
 
 		return
 	}
 
 	if memberID <= 0 {
 		h.logger.Warn("Member ID must be positive", slog.Int("id", memberID))
-		c.JSON(400, gin.H{"error": "Member ID must be positive"})
+		sharedserver.RespondError(c, 400, "Member ID must be positive", nil)
 
 		return
 	}
@@ -69,7 +70,7 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	var req aliasRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
@@ -77,14 +78,14 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	req.Alias = normalizeAliasInput(req.Alias)
 	if req.Alias == "" {
 		h.logger.Warn("Alias must not be empty after normalization")
-		c.JSON(400, gin.H{"error": "Alias must not be empty"})
+		sharedserver.RespondError(c, 400, "Alias must not be empty", nil)
 
 		return
 	}
 
 	if utf8.RuneCountInString(req.Alias) > aliasMaxLength {
 		h.logger.Warn("Alias exceeds max length", slog.Int("max", aliasMaxLength))
-		c.JSON(400, gin.H{"error": fmt.Sprintf("Alias must be at most %d characters", aliasMaxLength)})
+		sharedserver.RespondError(c, 400, fmt.Sprintf("Alias must be at most %d characters", aliasMaxLength), nil)
 
 		return
 	}
@@ -99,14 +100,14 @@ func (h *MemberAPIHandler) handleAliasOperation(
 			slog.String("alias", req.Alias),
 			slog.Any("error", err),
 		)
-		c.JSON(500, gin.H{"error": "Failed to " + operationName + " alias"})
+		sharedserver.RespondError(c, 500, "Failed to "+operationName+" alias", nil)
 
 		return
 	}
 
 	if err := h.memberCache.InvalidateAliasCache(ctx, req.Alias); err != nil {
 		h.logger.Error("Failed to invalidate alias cache", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
@@ -143,7 +144,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "Invalid member ID"})
+		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
 
 		return
 	}
@@ -153,7 +154,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
@@ -167,7 +168,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 			slog.Bool("is_graduated", req.IsGraduated),
 			slog.Any("error", err),
 		)
-		c.JSON(500, gin.H{"error": "Failed to set graduation status"})
+		sharedserver.RespondError(c, 500, "Failed to set graduation status", nil)
 
 		return
 	}
@@ -175,7 +176,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
 		h.logger.Error("Failed to refresh cache after graduation update", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
@@ -210,7 +211,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "Invalid member ID"})
+		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
 
 		return
 	}
@@ -220,7 +221,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
@@ -234,7 +235,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 			slog.String("channel_id", req.ChannelID),
 			slog.Any("error", err),
 		)
-		c.JSON(500, gin.H{"error": "Failed to update channel ID"})
+		sharedserver.RespondError(c, 500, "Failed to update channel ID", nil)
 
 		return
 	}
@@ -242,7 +243,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
 		h.logger.Error("Failed to refresh cache after channel ID update", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
@@ -271,7 +272,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 	memberID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "Invalid member ID"})
+		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
 
 		return
 	}
@@ -281,7 +282,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
@@ -295,7 +296,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 			slog.String("name", req.Name),
 			slog.Any("error", err),
 		)
-		c.JSON(500, gin.H{"error": "Failed to update member name"})
+		sharedserver.RespondError(c, 500, "Failed to update member name", nil)
 
 		return
 	}
@@ -303,7 +304,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
 		h.logger.Error("Failed to refresh cache after member name update", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
@@ -333,7 +334,7 @@ func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 	members, err := h.repo.GetAllMembers(ctx)
 	if err != nil {
 		h.logger.Error("Failed to get members", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get members"})
+		sharedserver.RespondError(c, 500, "Failed to get members", nil)
 
 		return
 	}
@@ -348,7 +349,7 @@ func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	var req domain.Member
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
@@ -356,7 +357,7 @@ func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	ctx := c.Request.Context()
 	if err := h.repo.CreateMember(ctx, &req); err != nil {
 		h.logger.Error("Failed to add member", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to add member"})
+		sharedserver.RespondError(c, 500, "Failed to add member", nil)
 
 		return
 	}
@@ -364,7 +365,7 @@ func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
 		h.logger.Error("Failed to refresh member cache", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to synchronize member cache"})
+		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}

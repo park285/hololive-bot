@@ -67,7 +67,7 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 		h.logger.Error("failed to collect stats",
 			slog.Any("member_error", memberErr),
 			slog.Any("alarm_error", alarmErr))
-		c.JSON(500, gin.H{"error": "failed to collect stats"})
+		sharedserver.RespondError(c, 500, "failed to collect stats", nil)
 
 		return
 	}
@@ -94,10 +94,7 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 // 5초마다 CPU/메모리 통계를 전송합니다.
 func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	if h.systemStats == nil {
-		c.JSON(400, gin.H{
-			"status":  "error",
-			"message": "System stats collector not available",
-		})
+		sharedserver.RespondError(c, 400, "System stats collector not available", nil)
 
 		return
 	}
@@ -106,7 +103,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	conn, err := sharedserver.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.logger.Warn("failed to upgrade websocket", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "failed to upgrade websocket connection"})
+		sharedserver.RespondError(c, 400, "failed to upgrade websocket connection", nil)
 
 		return
 	}

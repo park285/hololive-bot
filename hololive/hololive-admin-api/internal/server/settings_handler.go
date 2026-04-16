@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"maps"
 
@@ -44,7 +45,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.Logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return
 	}
 
@@ -53,7 +54,7 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 
 	if err := h.Alarm.SetRoomName(ctx, req.RoomID, req.RoomName); err != nil {
 		h.Logger.Error("Failed to set room name", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to set room name"})
+		sharedserver.RespondError(c, 500, "Failed to set room name", nil)
 		return
 	}
 
@@ -81,7 +82,7 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.Logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return
 	}
 
@@ -90,7 +91,7 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 
 	if err := h.Alarm.SetUserName(ctx, req.UserID, req.UserName); err != nil {
 		h.Logger.Error("Failed to set user name", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to set user name"})
+		sharedserver.RespondError(c, 500, "Failed to set user name", nil)
 		return
 	}
 
@@ -109,7 +110,7 @@ func (h *SettingsHandler) GetLogs(c *gin.Context) {
 	logs, err := h.ReadRecentLogs(100)
 	if err != nil {
 		h.Logger.Error("Failed to get logs", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to get logs"})
+		sharedserver.RespondError(c, 500, "Failed to get logs", nil)
 		return
 	}
 	c.JSON(200, gin.H{"status": "ok", "logs": logs})
@@ -128,7 +129,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.Logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return
 	}
 
@@ -145,7 +146,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 
 	if err := h.Settings.Update(current); err != nil {
 		h.Logger.Error("Failed to update settings", slog.Any("error", err))
-		c.JSON(500, gin.H{"error": "Failed to update settings"})
+		sharedserver.RespondError(c, 500, "Failed to update settings", nil)
 		return
 	}
 
@@ -198,20 +199,20 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.Logger.Warn("Invalid request body", slog.Any("error", err))
-		c.JSON(400, gin.H{"error": "invalid request body"})
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return
 	}
 
 	if req.MajorEventScrapeHourKST != nil || req.MajorEventScrapeRunNow != nil {
-		c.JSON(410, gin.H{"error": "majorEventScrape* controls are no longer supported; major event scraping is owned by llm-scheduler"})
+		sharedserver.RespondError(c, 410, "majorEventScrape* controls are no longer supported; major event scraping is owned by llm-scheduler", nil)
 		return
 	}
 	if req.MemberNewsWeeklyRunNow == nil {
-		c.JSON(400, gin.H{"error": "at least one llm setting field is required"})
+		sharedserver.RespondError(c, 400, "at least one llm setting field is required", nil)
 		return
 	}
 	if req.MemberNewsWeeklyRunNow != nil && !*req.MemberNewsWeeklyRunNow {
-		c.JSON(400, gin.H{"error": "memberNewsWeeklyRunNow must be true when provided"})
+		sharedserver.RespondError(c, 400, "memberNewsWeeklyRunNow must be true when provided", nil)
 		return
 	}
 

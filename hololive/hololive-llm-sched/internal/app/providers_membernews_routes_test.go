@@ -155,12 +155,14 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "room_id_required")
 
 		// GET subscription - service error
 		req = httptest.NewRequest(http.MethodGet, membernewscontracts.SubscriptionsPath+"/room-1", nil)
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assertErrorResponse(t, rr, "subscription_check_failed")
 
 		// POST subscribe - invalid body
 		req = httptest.NewRequest(http.MethodPost, membernewscontracts.SubscriptionsPath, bytes.NewBufferString("not-json"))
@@ -168,6 +170,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "invalid_request")
 
 		// POST subscribe - room_id required
 		req = httptest.NewRequest(http.MethodPost, membernewscontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"  ","room_name":"room"}`))
@@ -175,6 +178,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "room_id_required")
 
 		// POST subscribe - service error
 		req = httptest.NewRequest(http.MethodPost, membernewscontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"room-1","room_name":"room"}`))
@@ -182,18 +186,21 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assertErrorResponse(t, rr, "subscribe_failed")
 
 		// DELETE subscribe - room_id required
 		req = httptest.NewRequest(http.MethodDelete, membernewscontracts.SubscriptionsPath+"/%20", nil)
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "room_id_required")
 
 		// DELETE subscribe - service error
 		req = httptest.NewRequest(http.MethodDelete, membernewscontracts.SubscriptionsPath+"/room-1", nil)
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assertErrorResponse(t, rr, "unsubscribe_failed")
 
 		// POST digest - invalid body
 		req = httptest.NewRequest(http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString("not-json"))
@@ -201,6 +208,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "invalid_request")
 
 		// POST digest - room_id required
 		req = httptest.NewRequest(http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":" ","period":"weekly"}`))
@@ -208,6 +216,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
+		assertErrorResponse(t, rr, "room_id_required")
 
 		// POST digest - service error
 		req = httptest.NewRequest(http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"room-1","period":"weekly"}`))
@@ -215,6 +224,7 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assertErrorResponse(t, rr, "digest_generation_failed")
 	})
 }
 
