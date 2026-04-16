@@ -41,13 +41,12 @@ func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 		return nil, err
 	}
 
-	infra, err := appbootstrap.InitCoreInfrastructure(ctx, cfg, logger)
+	infra, err := appbootstrap.InitAdminAPIInfrastructure(ctx, cfg, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build admin api runtime: init core infrastructure: %w", err)
+		return nil, fmt.Errorf("build admin api runtime: init admin api infrastructure: %w", err)
 	}
 
-	runtimeViews := buildBotRuntimeDependencyViews(infra)
-	adminDeps, err := buildBotAdminServerDependencies(ctx, cfg, runtimeViews.adminRuntime, nil, logger)
+	adminDeps, err := buildAdminServerDependencies(ctx, cfg, infra, nil, logger)
 	if err != nil {
 		infra.Cleanup()
 		return nil, fmt.Errorf("build admin api runtime: admin dependencies: %w", err)
@@ -68,8 +67,8 @@ func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 		return nil, fmt.Errorf("build admin api runtime: provide api router: %w", err)
 	}
 
-	if runtimeViews.serverRuntime.alarmCRUD != nil {
-		alarmAPI := alarmsvc.NewAPIHandler(runtimeViews.serverRuntime.alarmCRUD, logger)
+	if infra.AlarmCRUD != nil {
+		alarmAPI := alarmsvc.NewAPIHandler(infra.AlarmCRUD, logger)
 		internalAlarm := router.Group("")
 		internalAlarm.Use(middleware.APIKeyAuthMiddleware(cfg.Server.APIKey))
 		alarmAPI.RegisterInternalRoutes(internalAlarm)

@@ -150,7 +150,6 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Bot: BotConfig{
 			Prefix:        sharedenv.String("BOT_PREFIX", "!"),
 			SelfUser:      sharedenv.String("BOT_SELF_USER", "iris"),
-			AdminEnabled:  sharedenv.Bool("BOT_ADMIN_ENABLED", true),
 			MentionPrefix: sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		},
 		Services: ServicesConfig{

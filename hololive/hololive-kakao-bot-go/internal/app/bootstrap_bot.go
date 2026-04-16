@@ -30,9 +30,8 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
-// InitializeBotDependencies - 봇 의존성을 초기화합니다.
 func InitializeBotDependencies(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*bot.Dependencies, func(), error) {
-	infra, err := appbootstrap.InitCoreInfrastructure(ctx, cfg, logger)
+	infra, err := appbootstrap.InitBotInfrastructure(ctx, cfg, logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -44,9 +43,8 @@ func InitializeBotDependencies(ctx context.Context, cfg *config.Config, logger *
 	return infra.Deps, cleanup, nil
 }
 
-// InitializeBotRuntime - cmd/bot 런타임 (Bot + MQ + Admin API 구성요소).
 func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*BotRuntime, func(), error) {
-	infra, err := appbootstrap.InitCoreInfrastructure(ctx, cfg, logger)
+	infra, err := appbootstrap.InitBotInfrastructure(ctx, cfg, logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -54,7 +52,6 @@ func InitializeBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 	runtime, err := buildBotRuntime(ctx, cfg, logger, infra)
 	if err != nil {
 		infra.Cleanup()
-
 		return nil, nil, err
 	}
 

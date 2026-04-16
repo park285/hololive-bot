@@ -1,0 +1,47 @@
+package modules
+
+import (
+	"context"
+	"log/slog"
+
+	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+)
+
+type YouTubeAPIStackParams struct {
+	YouTubeConfig   config.YouTubeConfig
+	ScraperConfig   config.ScraperConfig
+	CacheService    cache.Client
+	StatsRepo       *ytstats.StatsRepository
+	SharedRateLimit *scraper.RateLimiter
+	Logger          *slog.Logger
+}
+
+func BuildYouTubeAPIStack(ctx context.Context, params YouTubeAPIStackParams) *providers.YouTubeStack {
+	if !params.YouTubeConfig.EnableQuotaBuilding || params.YouTubeConfig.APIKey == "" {
+		if params.Logger != nil {
+			params.Logger.Info("YouTube quota building disabled; stats repository only")
+		}
+		return &providers.YouTubeStack{StatsRepo: params.StatsRepo}
+	}
+
+	svc, err := youtube.NewYouTubeService(ctx, params.YouTubeConfig.APIKey, params.CacheService, scraper.ProxyConfig{
+		Enabled: params.ScraperConfig.ProxyEnabled,
+		URL:     params.ScraperConfig.ProxyURL,
+	}, params.SharedRateLimit, params.Logger)
+	if err != nil {
+		if params.Logger != nil {
+			params.Logger.Warn("YouTube service init failed (optional feature)", slog.Any("error", err))
+		}
+		return &providers.YouTubeStack{StatsRepo: params.StatsRepo}
+	}
+
+	return &providers.YouTubeStack{
+		Service:   svc,
+		StatsRepo: params.StatsRepo,
+	}
+}

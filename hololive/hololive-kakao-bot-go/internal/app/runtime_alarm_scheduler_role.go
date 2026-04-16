@@ -53,10 +53,10 @@ func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
 	}
 }
 
-func buildRuntimeAlarmScheduler(
+func buildAlarmWorkerRuntimeScheduler(
 	runtimeRole string,
 	cfg *config.Config,
-	infra *appbootstrap.CoreInfrastructure,
+	infra *appbootstrap.AlarmWorkerInfrastructure,
 	logger *slog.Logger,
 	configuredRole string,
 ) (runtimeAlarmScheduler, error) {
@@ -71,9 +71,17 @@ func buildRuntimeAlarmScheduler(
 		return nil, nil
 	}
 
-	scheduler, err := appbootstrap.BuildAlarmRuntimeScheduler(cfg, infra, logger)
+	scheduler, err := appbootstrap.NewAlarmWorkerRuntimeScheduler(
+		cfg,
+		infra.Cache,
+		infra.HolodexService,
+		infra.ChzzkClient,
+		infra.TwitchClient,
+		infra.AlarmCRUD,
+		logger,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("build runtime alarm scheduler: %w", err)
+		return nil, fmt.Errorf("build alarm worker runtime scheduler: %w", err)
 	}
 
 	return scheduler, nil

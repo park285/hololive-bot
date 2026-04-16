@@ -49,10 +49,7 @@ func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
 		youTubeStatsRepo = statsRepo
 	}
 
-	var (
-		youTubeService   = modules.Stream.YTStack.GetService()
-		youTubeScheduler = modules.Stream.YTStack.GetScheduler()
-	)
+	var youTubeService = modules.Stream.YTStack.GetService()
 
 	return &bot.Dependencies{
 		BotSelfUser:      modules.Core.BotSelfUser,
@@ -74,7 +71,6 @@ func ProvideBotDependencies(modules BotDependencyModules) *bot.Dependencies {
 		Matcher:          modules.Stream.MemberMatch,
 		MembersData:      modules.Data.MembersData,
 		Service:          youTubeService,
-		Scheduler:        youTubeScheduler,
 		YouTubeStatsRepo: youTubeStatsRepo,
 		Activity:         modules.Support.ActivityLogger,
 		Settings:         modules.Support.SettingsSvc,

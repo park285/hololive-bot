@@ -55,17 +55,12 @@ func InitAlarmYouTubeStack(
 		foundation.HolodexService,
 		logger,
 	)
-	youTubeStatsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
-	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, sharedmodules.YouTubeStackParams{
+	statsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
+	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   cfg.YouTube,
 		ScraperConfig:   cfg.Scraper,
 		CacheService:    infra.Cache,
-		HolodexService:  foundation.HolodexService,
-		Members:         foundation.MemberServiceAdapter,
-		StatsRepo:       youTubeStatsRepository,
-		AlarmState:      alarmMode.AlarmService,
-		IrisClient:      irisClient,
-		Formatter:       formatter,
+		StatsRepo:       statsRepository,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})
@@ -73,7 +68,7 @@ func InitAlarmYouTubeStack(
 	return &AlarmYouTubeStackComponents{
 		AlarmMode:      alarmMode,
 		MemberMatcher:  memberMatcher,
-		YouTubeStack:   youTubeStack,
+		YouTubeStack:   apiStack,
 		ActivityLogger: ProvideActivityLogger(logger),
 		SettingsService: sharedmodules.BuildSettingsService(
 			cfg.Notification.AdvanceMinutes,

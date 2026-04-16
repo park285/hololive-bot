@@ -32,6 +32,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
 
 type nilGormPostgres struct{}
@@ -54,28 +56,26 @@ func (p *gormOnlyPostgres) Ping(context.Context) error {
 }
 func (p *gormOnlyPostgres) Close() error { return nil }
 
-func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
+func TestBuildAdminServerDependencies_FailFastBranches(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("nil config", func(t *testing.T) {
-		deps := botAdminRuntimeDependencies{}
-		got, err := buildBotAdminServerDependencies(t.Context(), nil, deps, nil, logger)
+		infra := &appbootstrap.AdminAPIInfrastructure{}
+		got, err := buildAdminServerDependencies(t.Context(), nil, infra, nil, logger)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.Contains(t, err.Error(), "config is nil")
 	})
 
-	t.Run("incomplete admin dependency view", func(t *testing.T) {
+	t.Run("incomplete admin infrastructure", func(t *testing.T) {
 		cfg := &config.Config{}
-		deps := botAdminRuntimeDependencies{
-			cache: nil,
-		}
-		got, err := buildBotAdminServerDependencies(t.Context(), cfg, deps, nil, logger)
+		infra := &appbootstrap.AdminAPIInfrastructure{}
+		got, err := buildAdminServerDependencies(t.Context(), cfg, infra, nil, logger)
 		require.Error(t, err)
 		assert.Nil(t, got)
-		assert.Contains(t, err.Error(), "admin dependency view is incomplete")
+		assert.Contains(t, err.Error(), "admin infrastructure is incomplete")
 	})
 
 	t.Run("auth service creation error wraps", func(t *testing.T) {
@@ -84,12 +84,12 @@ func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 				AutoPrepareSchema: false,
 			},
 		}
-		deps := botAdminRuntimeDependencies{
-			cache:    cachemocks.NewStrictClient(),
-			postgres: &nilGormPostgres{},
+		infra := &appbootstrap.AdminAPIInfrastructure{
+			Cache:    cachemocks.NewStrictClient(),
+			Postgres: &nilGormPostgres{},
 		}
 
-		got, err := buildBotAdminServerDependencies(t.Context(), cfg, deps, nil, logger)
+		got, err := buildAdminServerDependencies(t.Context(), cfg, infra, nil, logger)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.Contains(t, err.Error(), "create auth service")
@@ -97,11 +97,11 @@ func TestBuildBotAdminServerDependencies_FailFastBranches(t *testing.T) {
 	})
 }
 
-func TestBuildBotAdminAPIHandlers_WiresCommunityShortsOpsRepository(t *testing.T) {
+func TestBuildAdminAPIHandlers_WiresCommunityShortsOpsRepository(t *testing.T) {
 	t.Parallel()
 
-	handlers := buildBotAdminAPIHandlers(
-		botAdminRuntimeDependencies{postgres: &gormOnlyPostgres{db: &gorm.DB{}}},
+	handlers := buildAdminAPIHandlers(
+		&appbootstrap.AdminAPIInfrastructure{Postgres: &gormOnlyPostgres{db: &gorm.DB{}}},
 		nil,
 		nil,
 		nil,
@@ -113,11 +113,11 @@ func TestBuildBotAdminAPIHandlers_WiresCommunityShortsOpsRepository(t *testing.T
 	assert.True(t, handlers.Stats.HasCommunityShortsOpsRepository())
 }
 
-func TestBuildBotAdminAPIHandlers_LeavesCommunityShortsOpsRepositoryNilWithoutGorm(t *testing.T) {
+func TestBuildAdminAPIHandlers_LeavesCommunityShortsOpsRepositoryNilWithoutGorm(t *testing.T) {
 	t.Parallel()
 
-	handlers := buildBotAdminAPIHandlers(
-		botAdminRuntimeDependencies{postgres: &nilGormPostgres{}},
+	handlers := buildAdminAPIHandlers(
+		&appbootstrap.AdminAPIInfrastructure{Postgres: &nilGormPostgres{}},
 		nil,
 		nil,
 		nil,
