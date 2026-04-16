@@ -69,11 +69,22 @@ jobs:
         run: |
           govulncheck ./... | tee govulncheck.txt
 
-      - name: Upload Reports
+      - name: Summarize dependency reports
         if: always()
-        uses: actions/upload-artifact@v5.0.0
-        with:
-          name: dependency-hygiene-${{ matrix.slug }}
-          path: |
-            ${{ matrix.module }}/dependency-updates.txt
-            ${{ matrix.module }}/govulncheck.txt
+        run: |
+          {
+            echo "## Dependency hygiene: ${{ matrix.slug }}"
+            echo ''
+            if [ -f dependency-updates.txt ]; then
+              echo '### dependency-updates.txt'
+              echo '```text'
+              sed -n '1,40p' dependency-updates.txt
+              echo '```'
+            fi
+            if [ -f govulncheck.txt ]; then
+              echo '### govulncheck.txt'
+              echo '```text'
+              sed -n '1,80p' govulncheck.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
