@@ -58,9 +58,10 @@ func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	svc, err := cache.NewCacheService(
 		context.Background(),
 		cache.Config{
-			Host:         host,
-			Port:         port,
-			DisableCache: true,
+			Host:              host,
+			Port:              port,
+			DisableCache:      true,
+			ForceSingleClient: true,
 		},
 		newTestLogger(),
 	)

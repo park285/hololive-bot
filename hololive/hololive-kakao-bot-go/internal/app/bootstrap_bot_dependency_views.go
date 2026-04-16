@@ -83,7 +83,7 @@ func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubsc
 	}
 }
 
-func buildBotConfigSubscriberRuntimeDependencies(infra *coreInfrastructure) botConfigSubscriberRuntimeDependencies {
+func buildBotConfigSubscriberRuntimeDependencies(infra *appbootstrap.CoreInfrastructure) botConfigSubscriberRuntimeDependencies {
 	if infra == nil {
 		return botConfigSubscriberRuntimeDependencies{}
 	}
@@ -100,7 +100,7 @@ func buildBotConfigSubscriberRuntimeDependencies(infra *coreInfrastructure) botC
 	}
 }
 
-func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntimeDependencies {
+func buildBotAdminRuntimeDependencies(infra *appbootstrap.CoreInfrastructure) botAdminRuntimeDependencies {
 	if infra == nil {
 		return botAdminRuntimeDependencies{}
 	}
@@ -129,7 +129,7 @@ func buildBotAdminRuntimeDependencies(infra *coreInfrastructure) botAdminRuntime
 	}
 }
 
-func buildBotServerRuntimeDependencies(infra *coreInfrastructure) botServerRuntimeDependencies {
+func buildBotServerRuntimeDependencies(infra *appbootstrap.CoreInfrastructure) botServerRuntimeDependencies {
 	if infra == nil {
 		return botServerRuntimeDependencies{}
 	}
@@ -137,7 +137,7 @@ func buildBotServerRuntimeDependencies(infra *coreInfrastructure) botServerRunti
 	return botServerRuntimeDependencies{alarmCRUD: infra.AlarmCRUD}
 }
 
-func buildBotRuntimeDependencyViews(infra *coreInfrastructure) botRuntimeDependencyViews {
+func buildBotRuntimeDependencyViews(infra *appbootstrap.CoreInfrastructure) botRuntimeDependencyViews {
 	if infra == nil {
 		return botRuntimeDependencyViews{}
 	}

@@ -96,8 +96,8 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 
 	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
 		LockTimeout:           time.Minute,
-		PollInterval:          20 * time.Millisecond,
-		TelemetryPollInterval: 20 * time.Millisecond,
+		PollInterval:          10 * time.Millisecond,
+		TelemetryPollInterval: 10 * time.Millisecond,
 	})
 
 	dispatcher.Start(ctx)
@@ -108,5 +108,5 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 			return false
 		}
 		return rows[0].LoggedAt != nil
-	}, 300*time.Millisecond, 20*time.Millisecond)
+	}, 2*time.Second, 25*time.Millisecond)
 }

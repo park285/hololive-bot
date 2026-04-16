@@ -167,6 +167,83 @@ func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
 	}
 }
 
+func TestCacheServiceSetCeilsSubSecondTTL(t *testing.T) {
+	svc, mini := newTestCacheService(t)
+	ctx := context.Background()
+
+	requireNoError(t, svc.Set(ctx, "ttl:set", testPayload{Name: "value"}, 500*time.Millisecond))
+
+	exists, err := svc.Exists(ctx, "ttl:set")
+	requireNoError(t, err)
+	if !exists {
+		t.Fatalf("expected key to exist immediately after set")
+	}
+
+	mini.FastForward(900 * time.Millisecond)
+	exists, err = svc.Exists(ctx, "ttl:set")
+	requireNoError(t, err)
+	if !exists {
+		t.Fatalf("key expired too early; expected ceil-rounded ttl")
+	}
+
+	mini.FastForward(200 * time.Millisecond)
+	exists, err = svc.Exists(ctx, "ttl:set")
+	requireNoError(t, err)
+	if exists {
+		t.Fatalf("expected key to expire after rounded ttl elapsed")
+	}
+}
+
+func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
+	svc, mini := newTestCacheService(t)
+	ctx := context.Background()
+
+	requireNoError(t, svc.MSet(ctx, map[string]any{
+		"ttl:mset:a": testPayload{Name: "A"},
+		"ttl:mset:b": testPayload{Name: "B"},
+	}, 500*time.Millisecond))
+
+	mini.FastForward(900 * time.Millisecond)
+	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
+		exists, err := svc.Exists(ctx, key)
+		requireNoError(t, err)
+		if !exists {
+			t.Fatalf("%s expired too early; expected ceil-rounded ttl", key)
+		}
+	}
+
+	mini.FastForward(200 * time.Millisecond)
+	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
+		exists, err := svc.Exists(ctx, key)
+		requireNoError(t, err)
+		if exists {
+			t.Fatalf("expected %s to expire after rounded ttl elapsed", key)
+		}
+	}
+}
+
+func TestCacheServiceExpireCeilsSubSecondTTL(t *testing.T) {
+	svc, mini := newTestCacheService(t)
+	ctx := context.Background()
+
+	requireNoError(t, svc.Set(ctx, "ttl:expire", testPayload{Name: "value"}, 0))
+	requireNoError(t, svc.Expire(ctx, "ttl:expire", 500*time.Millisecond))
+
+	mini.FastForward(900 * time.Millisecond)
+	exists, err := svc.Exists(ctx, "ttl:expire")
+	requireNoError(t, err)
+	if !exists {
+		t.Fatalf("key expired too early; expected ceil-rounded ttl")
+	}
+
+	mini.FastForward(200 * time.Millisecond)
+	exists, err = svc.Exists(ctx, "ttl:expire")
+	requireNoError(t, err)
+	if exists {
+		t.Fatalf("expected key to expire after rounded ttl elapsed")
+	}
+}
+
 func TestMemberCacheOperations(t *testing.T) {
 	svc, _ := newTestCacheService(t)
 	ctx := context.Background()
@@ -312,6 +389,38 @@ func TestSetNXWithTTLExpiry(t *testing.T) {
 	}
 	if !acquired {
 		t.Fatal("expected to acquire lock after expiry")
+	}
+}
+
+func TestSetNXCeilsSubSecondTTL(t *testing.T) {
+	svc, mini := newTestCacheService(t)
+	ctx := context.Background()
+
+	acquired, err := svc.SetNX(ctx, "lock:ceil", "1", 500*time.Millisecond)
+	requireNoError(t, err)
+	if !acquired {
+		t.Fatal("expected initial lock acquisition to succeed")
+	}
+
+	mini.FastForward(900 * time.Millisecond)
+	acquired, err = svc.SetNX(ctx, "lock:ceil", "2", 500*time.Millisecond)
+	requireNoError(t, err)
+	if acquired {
+		t.Fatal("lock should still be held before rounded ttl elapses")
+	}
+
+	mini.FastForward(200 * time.Millisecond)
+	acquired, err = svc.SetNX(ctx, "lock:ceil", "3", 500*time.Millisecond)
+	requireNoError(t, err)
+	if !acquired {
+		t.Fatal("expected lock acquisition after rounded ttl elapsed")
+	}
+}
+
+func requireNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -43,11 +43,11 @@ import (
 func buildBotDependencyModules(
 	cfg *config.Config,
 	infra *sharedmodules.InfraModule,
-	alarmMode *alarmModeComponents,
+	alarmMode *appbootstrap.AlarmModeComponents,
 	holodexService *holodex.Service,
 	messageAdapter *adapter.MessageAdapter,
 	formatter *adapter.ResponseFormatter,
-	irisClient botIrisClient,
+	irisClient appbootstrap.BotIrisClient,
 	profileService *member.ProfileService,
 	memberMatcher *matcher.MemberMatcher,
 	youTubeStack *providers.YouTubeStack,
@@ -59,7 +59,7 @@ func buildBotDependencyModules(
 	commandBuilders []bot.CommandBuilder,
 	workerPool *workerpool.Pool,
 	logger *slog.Logger,
-) botDependencyModules {
+) appbootstrap.BotDependencyModules {
 	return appbootstrap.BuildBotDependencyModules(
 		cfg,
 		infra,

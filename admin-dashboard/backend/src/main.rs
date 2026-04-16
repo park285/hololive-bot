@@ -39,7 +39,7 @@ async fn run() -> anyhow::Result<()> {
         .map(Arc::new);
     let holo_api = Arc::new(
         holo::client::HoloApiClient::new(
-            &cfg.holo_bot_url,
+            &cfg.holo_admin_api_url,
             if cfg.holo_bot_api_key.is_empty() {
                 None
             } else {
@@ -50,12 +50,13 @@ async fn run() -> anyhow::Result<()> {
     );
 
     let endpoints = vec![status::ServiceEndpoint {
-        name: "hololive-bot".to_string(),
-        url: cfg.holo_bot_url.clone(),
+        name: "hololive-admin-api".to_string(),
+        url: cfg.holo_admin_api_url.clone(),
         health_path: "/health".to_string(),
     }];
     let status_collector =
-        status::StatusCollector::new(endpoints.clone(), env!("CARGO_PKG_VERSION"));
+        status::StatusCollector::new(endpoints.clone(), env!("CARGO_PKG_VERSION"))
+            .context("status collector init failed")?;
     let (stats_tx, _) = tokio::sync::broadcast::channel(16);
     let cancel_token = CancellationToken::new();
     status::SystemStatsCollector::start(stats_tx.clone(), endpoints, cancel_token.clone());

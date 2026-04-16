@@ -52,7 +52,8 @@ type Config struct {
 	DB         int
 	SocketPath string // UDS 경로 (비어있으면 TCP 사용)
 	// DisableCache: valkey-go client-side caching 비활성화 (miniredis/RESP2 호환)
-	DisableCache bool
+	DisableCache      bool
+	ForceSingleClient bool
 }
 
 // SocketPath가 설정되면 UDS로 연결하고, 비어있으면 TCP로 연결합니다.
@@ -75,6 +76,7 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 		BlockingPoolSize:  constants.ValkeyConfig.BlockingPoolSize,
 		PipelineMultiplex: constants.ValkeyConfig.PipelineMultiplex,
 		DisableCache:      cfg.DisableCache,
+		ForceSingleClient: cfg.ForceSingleClient,
 	}
 
 	if cfg.SocketPath != "" {
@@ -167,6 +169,22 @@ func (c *Service) MGet(ctx context.Context, keys []string) (map[string]string, e
 	return result, nil
 }
 
+func ttlSecondsCeil(ttl time.Duration) (int64, error) {
+	if ttl < 0 {
+		return 0, fmt.Errorf("ttl must not be negative")
+	}
+	if ttl == 0 {
+		return 0, nil
+	}
+
+	seconds := int64(math.Ceil(ttl.Seconds()))
+	if seconds <= 0 {
+		seconds = 1
+	}
+
+	return seconds, nil
+}
+
 func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	jsonData, err := json.Marshal(value)
 	if err != nil {
@@ -175,7 +193,11 @@ func (c *Service) Set(ctx context.Context, key string, value any, ttl time.Durat
 
 	var cmd valkey.Completed
 	if ttl > 0 {
-		cmd = c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(int64(ttl.Seconds())).Build()
+		ttlSeconds, err := ttlSecondsCeil(ttl)
+		if err != nil {
+			return NewCacheError("invalid ttl", "set", key, err)
+		}
+		cmd = c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(ttlSeconds).Build()
 	} else {
 		cmd = c.client.B().Set().Key(key).Value(string(jsonData)).Build()
 	}
@@ -205,7 +227,11 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 
 		var cmd valkey.Completed
 		if ttl > 0 {
-			cmd = c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(int64(ttl.Seconds())).Build()
+			ttlSeconds, err := ttlSecondsCeil(ttl)
+			if err != nil {
+				return NewCacheError("invalid ttl", "mset", key, err)
+			}
+			cmd = c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(ttlSeconds).Build()
 		} else {
 			cmd = c.client.B().Set().Key(key).Value(string(jsonData)).Build()
 		}
@@ -423,7 +449,11 @@ func (c *Service) HGetAll(ctx context.Context, key string) (map[string]string, e
 }
 
 func (c *Service) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	if err := c.client.Do(ctx, c.client.B().Expire().Key(key).Seconds(int64(ttl.Seconds())).Build()).Error(); err != nil {
+	ttlSeconds, err := ttlSecondsCeil(ttl)
+	if err != nil {
+		return NewCacheError("invalid ttl", "expire", key, err)
+	}
+	if err := c.client.Do(ctx, c.client.B().Expire().Key(key).Seconds(ttlSeconds).Build()).Error(); err != nil {
 		c.logger.Error("Cache expire failed", slog.String("key", key), slog.Any("error", err))
 		return NewCacheError("expire failed", "expire", key, err)
 	}
@@ -491,7 +521,11 @@ func (c *Service) GetClient() valkey.Client {
 func (c *Service) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
 	var cmd valkey.Completed
 	if ttl > 0 {
-		cmd = c.client.B().Set().Key(key).Value(value).Nx().ExSeconds(int64(ttl.Seconds())).Build()
+		ttlSeconds, err := ttlSecondsCeil(ttl)
+		if err != nil {
+			return false, NewCacheError("invalid ttl", "setnx", key, err)
+		}
+		cmd = c.client.B().Set().Key(key).Value(value).Nx().ExSeconds(ttlSeconds).Build()
 	} else {
 		cmd = c.client.B().Set().Key(key).Value(value).Nx().Build()
 	}

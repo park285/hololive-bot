@@ -74,7 +74,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 	modules := buildBotDependencyModules(
 		&config.Config{},
 		&sharedmodules.InfraModule{},
-		&alarmModeComponents{},
+		&appbootstrap.AlarmModeComponents{},
 		nil,
 		nil,
 		nil,
@@ -91,7 +91,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 		integrationServices.WorkerPool,
 		logger,
 	)
-	deps := ProvideBotDependencies(modules)
+	deps := appbootstrap.ProvideBotDependencies(modules)
 
 	require.NotNil(t, deps)
 	assert.NotNil(t, deps.CommandBuilders)

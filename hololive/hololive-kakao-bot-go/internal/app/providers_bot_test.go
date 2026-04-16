@@ -38,6 +38,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
@@ -125,19 +126,19 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 		return nil
 	})
 
-	deps := ProvideBotDependencies(botDependencyModules{
-		Core: botCoreModule{
+	deps := appbootstrap.ProvideBotDependencies(appbootstrap.BotDependencyModules{
+		Core: appbootstrap.BotCoreModule{
 			BotSelfUser:  "bot-self",
 			IrisBaseURL:  "https://iris.internal",
 			Notification: config.NotificationConfig{},
 			Logger:       logger,
 		},
-		Messaging: botMessagingModule{
+		Messaging: appbootstrap.BotMessagingModule{
 			Client:         nil,
 			MessageAdapter: messageAdapter,
 			Formatter:      formatter,
 		},
-		Data: botDataModule{
+		Data: appbootstrap.BotDataModule{
 			CacheSvc:    cacheSvc,
 			Postgres:    postgres,
 			MemberRepo:  memberRepo,
@@ -145,7 +146,7 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			Profiles:    profiles,
 			MembersData: nil,
 		},
-		Stream: botStreamModule{
+		Stream: appbootstrap.BotStreamModule{
 			HolodexSvc:   holodexSvc,
 			ChzzkClient:  chzzkClient,
 			TwitchClient: twitchClient,
@@ -153,13 +154,13 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 			MemberMatch:  memberMatcher,
 			YTStack:      ytStack,
 		},
-		Support: botSupportModule{
+		Support: appbootstrap.BotSupportModule{
 			ActivityLogger: activityLogger,
 			SettingsSvc:    settingsSvc,
 			ACLSvc:         aclSvc,
 			WorkerPool:     workerPool,
 		},
-		Feature: botFeatureModule{
+		Feature: appbootstrap.BotFeatureModule{
 			MajorEventRepo:  majorEventRepo,
 			MemberNewsSvc:   memberNewsSvc,
 			CommandBuilders: []bot.CommandBuilder{commandBuilder},
@@ -218,8 +219,8 @@ func TestProvideBotDependencies_WiringSmoke(t *testing.T) {
 func TestProvideBotDependencies_NilYouTubeStackIsSafe(t *testing.T) {
 	t.Parallel()
 
-	deps := ProvideBotDependencies(botDependencyModules{
-		Stream: botStreamModule{
+	deps := appbootstrap.ProvideBotDependencies(appbootstrap.BotDependencyModules{
+		Stream: appbootstrap.BotStreamModule{
 			YTStack: nil,
 		},
 	})

@@ -113,19 +113,14 @@ func TestCheckerConstructorsValidation(t *testing.T) {
 		cacheSvc := newCheckerTestCacheClient(t)
 		dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
 		queuePublisher := queue.NewPublisher(cacheSvc, newCheckerTestLogger())
-		alarmSvc := newCheckerTestAlarmService(t, cacheSvc)
 
-		_, err := NewNotifier(nil, queuePublisher, alarmSvc, nil, newCheckerTestLogger())
+		_, err := NewNotifier(nil, queuePublisher, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "dedup service is nil")
 
-		_, err = NewNotifier(dedupSvc, nil, alarmSvc, nil, newCheckerTestLogger())
+		_, err = NewNotifier(dedupSvc, nil, nil, newCheckerTestLogger())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "queue publisher is nil")
-
-		_, err = NewNotifier(dedupSvc, queuePublisher, nil, nil, newCheckerTestLogger())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "alarm service is nil")
 	})
 }
 

@@ -8,7 +8,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| Base URL | `http://localhost:30001` (또는 배포 환경 도메인) |
+| Base URL | `http://localhost:30006` (admin-api, 또는 배포 환경 도메인) |
 | Prefix | `/api/holo` |
 | 인증 | 기본적으로 `X-API-Key` 헤더 필요. 단, `GET /api/holo/streams/live`, `GET /api/holo/streams/upcoming` 는 인증 불필요 |
 | 프로토콜 | HTTP/2 Cleartext (H2C) |
@@ -688,13 +688,13 @@ GET /metrics
 ### curl
 
 ```bash
-curl "http://localhost:30001/api/holo/streams/live"
+curl "http://localhost:30006/api/holo/streams/live"
 ```
 
 ### TypeScript (Tauri 앱)
 
 ```typescript
-const response = await fetch('http://localhost:30001/api/holo/streams/live', {
+const response = await fetch('http://localhost:30006/api/holo/streams/live', {
 });
 const data = await response.json();
 ```
@@ -702,7 +702,7 @@ const data = await response.json();
 ### Go
 
 ```go
-req, _ := http.NewRequest("GET", "http://localhost:30001/api/holo/streams/live", nil)
+req, _ := http.NewRequest("GET", "http://localhost:30006/api/holo/streams/live", nil)
 resp, _ := http.DefaultClient.Do(req)
 ```
 

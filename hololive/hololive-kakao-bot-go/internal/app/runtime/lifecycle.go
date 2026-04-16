@@ -68,7 +68,7 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	}
 
 	if hooks.Logger != nil && hooks.ServerAddr != "" {
-		hooks.Logger.Info("Bot HTTP server started", slog.String("addr", hooks.ServerAddr))
+		hooks.Logger.Info("HTTP server started", slog.String("addr", hooks.ServerAddr))
 	}
 }
 
@@ -78,7 +78,7 @@ func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdow
 		Start: func(ctx context.Context, errCh chan<- error) {
 			start(ctx, errCh)
 			if logger != nil {
-				logger.Info("Bot started, waiting for signals...")
+				logger.Info("Runtime started, waiting for signals...")
 			}
 		},
 		OnSignal: func(sig os.Signal) {
@@ -170,9 +170,9 @@ func startBot(ctx context.Context, logger *slog.Logger, startBot func(ctx contex
 	go func() {
 		if err := startBot(ctx); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				logInfo(logger, "Bot alarm checker stopped (context done)")
+				logInfo(logger, "Background runtime task stopped (context done)")
 			} else {
-				logError(logger, "Bot alarm checker error", err)
+				logError(logger, "Background runtime task error", err)
 			}
 		}
 	}()

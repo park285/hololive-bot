@@ -30,6 +30,8 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
 
 // InitializeWarmMemberCache - cmd/tools/warm_member_cache 전용.
@@ -76,7 +78,7 @@ func InitializeDBIntegrationRuntime(ctx context.Context, pgCfg config.PostgresCo
 	postgresService := databaseResources.Service
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
 
-	memberCache, err := ProvideMemberCacheWithoutValkey(ctx, memberRepository, logger)
+	memberCache, err := appbootstrap.ProvideMemberCacheWithoutValkey(ctx, memberRepository, logger)
 	if err != nil {
 		cleanupDB()
 		return nil, nil, fmt.Errorf("provide member cache without valkey: %w", err)

@@ -28,6 +28,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const asyncCommandBackpressureMessage = "요청이 많아 잠시 후 다시 시도해주세요."
+
 func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
 	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)
 }
@@ -69,20 +71,40 @@ func (b *Bot) executeCommandAsync(
 		}
 	}
 
-	if b.workerPool != nil {
-		submitErr := b.workerPool.Submit(task)
-		if submitErr == nil {
-			return
-		}
-
+	if b.workerPool == nil {
 		if b.logger != nil {
 			b.logger.Warn(
-				"Failed to submit async command task to worker pool; falling back to goroutine",
+				"Async command worker pool missing; running synchronously",
 				slog.String("command", commandType),
-				slog.Any("error", submitErr),
 			)
 		}
+
+		task()
+		return
 	}
 
-	go task()
+	submitErr := b.workerPool.Submit(task)
+	if submitErr == nil {
+		return
+	}
+
+	if b.logger != nil {
+		b.logger.Warn(
+			"Async command rejected by worker pool",
+			slog.String("command", commandType),
+			slog.Any("error", submitErr),
+		)
+	}
+
+	cancel()
+
+	if chatID == "" {
+		return
+	}
+	notifyCtx, notifyCancel := context.WithTimeout(context.Background(), constants.RequestTimeout.WebhookProcessing)
+	defer notifyCancel()
+
+	if err := b.sendError(notifyCtx, chatID, asyncCommandBackpressureMessage); err != nil && b.logger != nil {
+		b.logger.Error("Failed to send async backpressure message", slog.Any("error", err), slog.String("chat_id", chatID))
+	}
 }

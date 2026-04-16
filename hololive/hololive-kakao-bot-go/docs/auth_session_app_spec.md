@@ -12,7 +12,7 @@
 
 | 항목 | 값 |
 |---|---|
-| Base URL (dev) | `http://localhost:30001` |
+| Base URL (dev) | `http://localhost:30006` |
 | Base URL (prod) | `https://api.capu.blog` (환경에 맞게 변경) |
 | 인증 방식 | `Authorization: Bearer <token>` |
 | 토큰 저장 | 클라이언트 보안 저장소(권장) |
@@ -360,12 +360,12 @@ Authorization: Bearer sess_xxx
 
 ### 5.1 Android 에뮬레이터 환경
 
-명세서의 Base URL이 `localhost:30001`로 되어 있으나, Android 에뮬레이터에서 `localhost`는 **에뮬레이터 자신**을 가리킵니다.
+명세서의 Base URL이 `localhost:30006`으로 되어 있으나, Android 에뮬레이터에서 `localhost`는 **에뮬레이터 자신**을 가리킵니다.
 
 **해결 방법:**
-- 표준 Android 에뮬레이터: `10.0.2.2:30001` 사용 (호스트 머신의 loopback)
-- Genymotion: `10.0.3.2:30001`
-- 실기기/로컬 네트워크: `192.168.x.x:30001` (개발 머신의 LAN IP)
+- 표준 Android 에뮬레이터: `10.0.2.2:30006` 사용 (호스트 머신의 loopback)
+- Genymotion: `10.0.3.2:30006`
+- 실기기/로컬 네트워크: `192.168.x.x:30006` (개발 머신의 LAN IP)
 
 ```typescript
 // 예시: 플랫폼별 Base URL 분기
@@ -373,9 +373,9 @@ const getBaseUrl = () => {
   if (import.meta.env.DEV) {
     // Android 에뮬레이터 감지 시
     if (window.__TAURI__ && navigator.userAgent.includes('Android')) {
-      return 'http://10.0.2.2:30001'\;
+      return 'http://10.0.2.2:30006'\;
     }
-    return 'http://localhost:30001'\;
+    return 'http://localhost:30006'\;
   }
   return 'https://api.capu.blog'\;
 };

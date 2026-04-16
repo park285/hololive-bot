@@ -25,6 +25,8 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +49,14 @@ const (
 	loginFailKeyPrefix      = "auth:login_fail:"
 	accountLockKeyPrefix    = "auth:lock:"
 )
+
+const incrWithTTLScript = `
+local current = redis.call('INCR', KEYS[1])
+if current == 1 and tonumber(ARGV[1]) > 0 then
+  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+return current
+`
 
 type Session struct {
 	Token     string
@@ -252,9 +262,23 @@ func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
 		return nil, err
 	}
 
-	// 기존 세션 무효화
-	_ = s.cacheSvc.Del(ctx, oldKey)
-	_, _ = s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+data.UserID, []string{sessionHash})
+	invalidation := s.deleteSessionByHash(ctx, data.UserID, sessionHash)
+	if invalidation.keyErr != nil {
+		rollbackErr := s.deleteSessionByHash(context.Background(), data.UserID, sha256Hex(newSession.Token))
+		if rollbackErr.Err() != nil {
+			err = stdErrors.Join(invalidation.keyErr, fmt.Errorf("rollback new session: %w", rollbackErr.Err()))
+		} else {
+			err = invalidation.keyErr
+		}
+		return nil, newError(CodeInternal, "failed to invalidate previous session during refresh", err)
+	}
+	if invalidation.indexErr != nil && s.logger != nil {
+		s.logger.Warn(
+			"Failed to remove previous session from user index during refresh",
+			slog.String("user_id", data.UserID),
+			slog.Any("error", invalidation.indexErr),
+		)
+	}
 
 	return newSession, nil
 }
@@ -372,8 +396,15 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		return newError(CodeInternal, "failed to commit transaction", err)
 	}
 
-	// 보안: 비밀번호 변경 시 기존 세션 전부 폐기
-	_ = s.revokeAllSessions(ctx, reset.UserID)
+	if err := s.revokeAllSessions(ctx, reset.UserID); err != nil {
+		if s.logger != nil {
+			s.logger.Warn(
+				"Failed to revoke existing sessions after password reset",
+				slog.String("user_id", reset.UserID),
+				slog.Any("error", err),
+			)
+		}
+	}
 
 	return nil
 }
@@ -406,6 +437,34 @@ func (s *Service) validateSession(ctx context.Context, token string) (string, er
 		return "", newError(CodeUnauthorized, "invalid session", nil)
 	}
 	return data.UserID, nil
+}
+
+type sessionInvalidationResult struct {
+	keyErr   error
+	indexErr error
+}
+
+func (r sessionInvalidationResult) Err() error {
+	return stdErrors.Join(r.keyErr, r.indexErr)
+}
+
+func (s *Service) deleteSessionByHash(ctx context.Context, userID, sessionHash string) sessionInvalidationResult {
+	if s.cacheSvc == nil {
+		return sessionInvalidationResult{
+			keyErr: newError(CodeInternal, "cache service not configured", nil),
+		}
+	}
+
+	key := sessionKeyPrefix + sessionHash
+	result := sessionInvalidationResult{}
+	if err := s.cacheSvc.Del(ctx, key); err != nil {
+		result.keyErr = fmt.Errorf("delete session key: %w", err)
+	}
+	if _, err := s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash}); err != nil {
+		result.indexErr = fmt.Errorf("remove session index: %w", err)
+	}
+
+	return result
 }
 
 func (s *Service) createSession(ctx context.Context, userID string) (*Session, error) {
@@ -455,8 +514,15 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 
 	// 유저별 세션 인덱스 유지 (비밀번호 변경 시 전체 폐기 용도)
 	userSessionsKey := userSessionsKeyPrefix + userID
-	_, _ = s.cacheSvc.SAdd(ctx, userSessionsKey, []string{sessionHash})
-	_ = s.cacheSvc.Expire(ctx, userSessionsKey, s.cfg.UserSessionsTTL)
+	if _, err := s.cacheSvc.SAdd(ctx, userSessionsKey, []string{sessionHash}); err != nil {
+		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
+		return nil, newError(CodeInternal, "failed to update session index", err)
+	}
+	if err := s.cacheSvc.Expire(ctx, userSessionsKey, s.cfg.UserSessionsTTL); err != nil {
+		_, _ = s.cacheSvc.SRem(ctx, userSessionsKey, []string{sessionHash})
+		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
+		return nil, newError(CodeInternal, "failed to expire session index", err)
+	}
 
 	return &Session{
 		Token:     token,
@@ -475,7 +541,9 @@ func (s *Service) revokeAllSessions(ctx context.Context, userID string) error {
 		return fmt.Errorf("cache smembers failed: %w", err)
 	}
 	if len(hashes) == 0 {
-		_ = s.cacheSvc.Del(ctx, userSessionsKey)
+		if err := s.cacheSvc.Del(ctx, userSessionsKey); err != nil {
+			return fmt.Errorf("delete user session index: %w", err)
+		}
 		return nil
 	}
 
@@ -487,10 +555,15 @@ func (s *Service) revokeAllSessions(ctx context.Context, userID string) error {
 		keys = append(keys, sessionKeyPrefix+h)
 	}
 
-	_, _ = s.cacheSvc.DelMany(ctx, keys)
-	_ = s.cacheSvc.Del(ctx, userSessionsKey)
+	var errs []error
+	if _, err := s.cacheSvc.DelMany(ctx, keys); err != nil {
+		errs = append(errs, fmt.Errorf("delete session keys: %w", err))
+	}
+	if err := s.cacheSvc.Del(ctx, userSessionsKey); err != nil {
+		errs = append(errs, fmt.Errorf("delete user session index: %w", err))
+	}
 
-	return nil
+	return stdErrors.Join(errs...)
 }
 
 func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool, error) {
@@ -561,7 +634,22 @@ func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
 }
 
 func incrWithTTL(ctx context.Context, cacheSvc cache.Client, key string, ttl time.Duration) (int64, error) {
-	results := cacheSvc.DoMulti(ctx, cacheSvc.B().Incr().Key(key).Build())
+	ttlSeconds := int64(0)
+	if ttl > 0 {
+		ttlSeconds = int64(math.Ceil(ttl.Seconds()))
+		if ttlSeconds <= 0 {
+			ttlSeconds = 1
+		}
+	}
+
+	cmd := cacheSvc.B().
+		Eval().
+		Script(incrWithTTLScript).
+		Numkeys(1).
+		Key(key).
+		Arg(strconv.FormatInt(ttlSeconds, 10)).
+		Build()
+	results := cacheSvc.DoMulti(ctx, cmd)
 	if len(results) != 1 {
 		return 0, fmt.Errorf("increment with ttl: unexpected result count: %d", len(results))
 	}
@@ -571,10 +659,6 @@ func incrWithTTL(ctx context.Context, cacheSvc cache.Client, key string, ttl tim
 	count, err := results[0].AsInt64()
 	if err != nil {
 		return 0, err
-	}
-	// 최초 생성 시에만 TTL 부여
-	if count == 1 && ttl > 0 {
-		_ = cacheSvc.Expire(ctx, key, ttl)
 	}
 	return count, nil
 }

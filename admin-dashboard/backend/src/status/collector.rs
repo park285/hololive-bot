@@ -1,3 +1,4 @@
+use anyhow::Context;
 use reqwest::Client;
 use serde::Serialize;
 use std::time::{Duration, Instant};
@@ -34,18 +35,18 @@ pub struct StatusCollector {
 }
 
 impl StatusCollector {
-    pub fn new(endpoints: Vec<ServiceEndpoint>, version: &str) -> Self {
+    pub fn new(endpoints: Vec<ServiceEndpoint>, version: &str) -> anyhow::Result<Self> {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(3))
             .build()
-            .expect("http client");
+            .context("build status collector http client")?;
 
-        Self {
+        Ok(Self {
             http_client,
             endpoints,
             start_time: Instant::now(),
             version: version.to_string(),
-        }
+        })
     }
 
     pub async fn collect(&self) -> AggregatedStatus {
@@ -138,7 +139,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_collect_no_endpoints_has_self() {
-        let collector = StatusCollector::new(vec![], "1.0.0");
+        let collector = StatusCollector::new(vec![], "1.0.0").expect("status collector init");
         let status = collector.collect().await;
 
         assert_eq!(status.services.len(), 1);
@@ -154,7 +155,7 @@ mod tests {
             url: "http://localhost:1".to_string(),
             health_path: "/health".to_string(),
         }];
-        let collector = StatusCollector::new(endpoints, "1.0.0");
+        let collector = StatusCollector::new(endpoints, "1.0.0").expect("status collector init");
         let status = collector.collect().await;
 
         assert_eq!(status.services.len(), 2);

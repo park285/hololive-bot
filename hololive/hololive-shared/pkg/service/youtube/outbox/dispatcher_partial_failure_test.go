@@ -327,9 +327,10 @@ func newDispatcherTestCache(t *testing.T) (*cache.Service, *miniredis.Miniredis)
 	require.NoError(t, err)
 
 	svc, err := cache.NewCacheService(context.Background(), cache.Config{
-		Host:         host,
-		Port:         port,
-		DisableCache: true,
+		Host:              host,
+		Port:              port,
+		DisableCache:      true,
+		ForceSingleClient: true,
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
 
