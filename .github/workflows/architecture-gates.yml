@@ -55,9 +55,22 @@ jobs:
       - name: Run architecture boundary gates (M0 + M1 + M4 + M6)
         run: ./scripts/architecture/ci-boundary-gate.sh
 
-      - name: Upload Go import graph artifact
+      - name: Summarize Go import graph output
         if: always()
-        uses: actions/upload-artifact@v5.0.0
-        with:
-          name: go-workspace-import-graph
-          path: artifacts/architecture/go-workspace-import-graph.txt
+        run: |
+          {
+            echo '## Go import graph artifact'
+            if [ -f artifacts/architecture/go-workspace-import-graph.txt ]; then
+              echo ''
+              echo 'Generated locally inside the workflow workspace:'
+              echo '- `artifacts/architecture/go-workspace-import-graph.txt`'
+              echo ''
+              echo 'Preview:'
+              echo '```text'
+              head -n 40 artifacts/architecture/go-workspace-import-graph.txt
+              echo '```'
+            else
+              echo ''
+              echo 'Import graph file was not generated.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
