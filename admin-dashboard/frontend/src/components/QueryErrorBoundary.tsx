@@ -1,7 +1,7 @@
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/Button";
 
 interface ErrorBoundaryProps {
 	children: ReactNode;

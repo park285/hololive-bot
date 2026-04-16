@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use axum::http::StatusCode;
 use axum::{
     Json, Router, middleware,
     routing::{any, get, post},
@@ -211,7 +210,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 
     let api_fallback = Router::new().route(
         "/admin/api/{*path}",
-        any(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found" }))) }),
+        any(|| async { crate::error::AppError::Api(crate::error::ApiError::NotFound) }),
     );
 
     let spa = Router::new()

@@ -7,7 +7,9 @@ import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Link2Off from "lucide-react/dist/esm/icons/link-2-off";
 import Power from "lucide-react/dist/esm/icons/power";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import { Badge, Button, Card } from "@/components/ui";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 type AssistantUser = {
 	id: string;

@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/Label";
 import { queryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/stores/authStore";
 
+import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
+
 const LoginPage = () => {
 	const navigate = useNavigate();
 	const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
@@ -44,7 +46,7 @@ const LoginPage = () => {
 					return;
 				}
 			}
-			setError(err instanceof Error ? err.message : "로그인에 실패했습니다");
+			setError(getErrorMessageFromUnknown(err));
 		},
 	});
 
@@ -92,7 +94,7 @@ const LoginPage = () => {
 						</div>
 
 						<h1 className="text-2xl font-display font-bold text-slate-800 tracking-tight">
-							Hololive Bot <span className="text-sky-500">Console</span>
+							Hololive Bot <span className="text-sky-500">콘솔</span>
 						</h1>
 					</div>
 
@@ -103,7 +105,7 @@ const LoginPage = () => {
 						<div className="space-y-4">
 							<div className="group relative">
 								<Label htmlFor="username" className="sr-only">
-									Username
+									아이디
 								</Label>
 								<div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-sky-500 transition-colors z-10">
 									<User size={18} aria-hidden="true" />
@@ -118,13 +120,13 @@ const LoginPage = () => {
 										setUsername(e.target.value);
 									}}
 									className="pl-11 pr-4 py-6 bg-white border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus-visible:border-sky-400 focus-visible:ring-4 focus-visible:ring-sky-100 transition-colors shadow-sm font-medium"
-									placeholder="Username"
+									placeholder="아이디"
 								/>
 							</div>
 
 							<div className="group relative">
 								<Label htmlFor="password" className="sr-only">
-									Password
+									비밀번호
 								</Label>
 								<div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-sky-500 transition-colors z-10">
 									<Lock size={18} aria-hidden="true" />
@@ -139,7 +141,7 @@ const LoginPage = () => {
 										setPassword(e.target.value);
 									}}
 									className="pl-11 pr-4 py-6 bg-white border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus-visible:border-sky-400 focus-visible:ring-4 focus-visible:ring-sky-100 transition-colors shadow-sm font-medium"
-									placeholder="Password"
+									placeholder="비밀번호"
 								/>
 							</div>
 						</div>
@@ -166,11 +168,11 @@ const LoginPage = () => {
 										<div className="animate-spin mr-2">
 											<Loader2 className="h-5 w-5" aria-hidden="true" />
 										</div>
-										Connecting…
+										연결 중…
 									</>
 								) : (
 									<>
-										Sign In
+										로그인
 										<span className="inline-flex ml-2">
 											<ArrowRight
 												className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
@@ -190,7 +192,7 @@ const LoginPage = () => {
 							<div className="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
 						</div>
 						<p className="text-xs text-slate-400 font-medium tracking-wide">
-							AUTHORIZED PERSONNEL ONLY
+							인가된 사용자만 접근 가능합니다
 						</p>
 					</div>
 				</div>

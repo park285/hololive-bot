@@ -7,6 +7,7 @@
 - `README.md`: 문서 인덱스
 - `BOT_ONLY_MIGRATION_STATUS_20260309.md`: 과거 상태 기록
 - `FRONTEND_IMPROVEMENTS.md`: 프런트 개선 메모
+- `SESSION_PREWARNING_BACKEND_CONTRACT.md`: pre-warning UX 분리를 위한 백엔드 계약 / 프론트 handoff
 - `openapi-pipeline.md`: OpenAPI / generated client 흐름
 
 ## 현재 기준

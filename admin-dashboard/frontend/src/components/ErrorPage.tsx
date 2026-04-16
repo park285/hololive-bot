@@ -1,10 +1,8 @@
-import {
-	AlertTriangle,
-	Home,
-	RefreshCw,
-	ShieldAlert,
-	Terminal,
-} from "lucide-react";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import Home from "lucide-react/dist/esm/icons/home";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { isRouteErrorResponse, useRouteError } from "react-router-dom";
 import { extractErrorMessage } from "@/lib/typeUtils";
 

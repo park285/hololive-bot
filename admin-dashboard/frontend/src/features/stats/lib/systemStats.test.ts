@@ -61,11 +61,12 @@ test("parseSystemStats still accepts legacy goroutine payload", () => {
 	assert.equal(parsed?.serviceRuntime[0]?.count, 7);
 });
 
-test("shouldConnectSystemStatsStream only depends on resolved auth state", () => {
+test("shouldConnectSystemStatsStream requires resolved auth state and a visible tab", () => {
 	assert.equal(
 		mod.shouldConnectSystemStatsStream({
 			isAuthenticated: true,
 			isAuthResolved: true,
+			isVisible: true,
 		}),
 		true,
 	);
@@ -73,6 +74,7 @@ test("shouldConnectSystemStatsStream only depends on resolved auth state", () =>
 		mod.shouldConnectSystemStatsStream({
 			isAuthenticated: true,
 			isAuthResolved: false,
+			isVisible: true,
 		}),
 		false,
 	);
@@ -80,6 +82,15 @@ test("shouldConnectSystemStatsStream only depends on resolved auth state", () =>
 		mod.shouldConnectSystemStatsStream({
 			isAuthenticated: false,
 			isAuthResolved: true,
+			isVisible: true,
+		}),
+		false,
+	);
+	assert.equal(
+		mod.shouldConnectSystemStatsStream({
+			isAuthenticated: true,
+			isAuthResolved: true,
+			isVisible: false,
 		}),
 		false,
 	);

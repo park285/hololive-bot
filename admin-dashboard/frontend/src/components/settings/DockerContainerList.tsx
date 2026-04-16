@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { AlertCircle, AlertTriangle, RefreshCw, Server } from "lucide-react";
+import AlertCircle from "lucide-react/dist/esm/icons/alert-circle";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Server from "lucide-react/dist/esm/icons/server";
 import { useState } from "react";
 import {
 	type DockerContainer,
@@ -13,6 +16,7 @@ import { DockerContainerItem } from "@/components/docker/DockerContainerItem";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { VirtualList } from "@/components/ui/VirtualList";
 import toast from "@/lib/toast-api";
 
 interface DockerContainerListProps {
@@ -257,16 +261,21 @@ export const DockerContainerList = ({
 							관리 대상 컨테이너가 없습니다.
 						</div>
 					) : (
-						<div className="grid gap-3">
-							{containers.map((container: DockerContainer) => (
+						<VirtualList
+							items={containers}
+							estimateSize={() => 108}
+							recomputeKey={actionInProgress}
+							className="max-h-[34rem] pr-1"
+							itemClassName="pb-3"
+							renderItem={(container: DockerContainer) => (
 								<DockerContainerItem
 									key={container.id}
 									container={container}
 									actionInProgress={actionInProgress}
 									onAction={openConfirmModal}
 								/>
-							))}
-						</div>
+							)}
+						/>
 					)}
 				</Card.Body>
 			</Card>

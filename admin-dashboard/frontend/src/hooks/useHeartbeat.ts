@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef } from "react";
 import { authApi } from "@/api/core";
 import { CONFIG } from "@/config";
+import { queryClient } from "@/lib/queryClient";
 import toast from "@/lib/toast-api";
 import { useAuthStore } from "@/stores/authStore";
+import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
 export const useHeartbeat = (isIdle: boolean) => {
 	const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 	const logout = useAuthStore((state) => state.logout);
+	const setAbsoluteExpiresAt = useSessionWarningStore((state) => state.setAbsoluteExpiresAt);
+	
 	const intervalRef = useRef<number | null>(null);
 	const failCountRef = useRef(0);
 	const abortControllerRef = useRef<AbortController | null>(null);
@@ -30,6 +34,9 @@ export const useHeartbeat = (isIdle: boolean) => {
 
 				if (response.idle_rejected) {
 					console.warn("Session idle warning (grace period)");
+					void authApi.logout().catch(() => undefined);
+					logout();
+					queryClient.clear();
 					return;
 				}
 
@@ -39,7 +46,12 @@ export const useHeartbeat = (isIdle: boolean) => {
 						"보안을 위해 세션이 만료되었습니다. 다시 로그인해주세요.",
 					);
 					logout();
+					queryClient.clear();
 					return;
+				}
+
+				if (response.absolute_expires_at) {
+					setAbsoluteExpiresAt(response.absolute_expires_at);
 				}
 
 				if (response.error) {
@@ -48,6 +60,7 @@ export const useHeartbeat = (isIdle: boolean) => {
 						response.error === "Unauthorized"
 					) {
 						logout();
+						queryClient.clear();
 						return;
 					}
 					throw new Error(response.error);
@@ -64,6 +77,7 @@ export const useHeartbeat = (isIdle: boolean) => {
 
 				if (failCountRef.current >= CONFIG.heartbeat.maxFailures) {
 					logout();
+					queryClient.clear();
 				}
 			} finally {
 				if (abortControllerRef.current === controller) {
@@ -71,7 +85,7 @@ export const useHeartbeat = (isIdle: boolean) => {
 				}
 			}
 		},
-		[logout],
+		[logout, setAbsoluteExpiresAt],
 	);
 
 	useEffect(() => {
@@ -88,6 +102,14 @@ export const useHeartbeat = (isIdle: boolean) => {
 			document.removeEventListener("visibilitychange", handleVisibilityChange);
 		};
 	}, [isAuthenticated, sendHeartbeat]);
+
+	useEffect(() => {
+		if (!isAuthenticated) return;
+
+		if (isIdle) {
+			void sendHeartbeat(true);
+		}
+	}, [isAuthenticated, isIdle, sendHeartbeat]);
 
 	useEffect(() => {
 		if (!isAuthenticated) return;

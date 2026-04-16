@@ -17,6 +17,7 @@ export const GOROUTINE_CHART_HEIGHT = 160;
 export interface SystemStatsStreamAuthState {
 	isAuthenticated: boolean;
 	isAuthResolved: boolean;
+	isVisible: boolean;
 }
 
 const SERVICE_FALLBACK_COLORS = [
@@ -41,7 +42,9 @@ const asNumber = (value: unknown): number | null => {
 export const shouldConnectSystemStatsStream = ({
 	isAuthenticated,
 	isAuthResolved,
-}: SystemStatsStreamAuthState) => isAuthenticated && isAuthResolved;
+	isVisible,
+}: SystemStatsStreamAuthState) =>
+	isAuthenticated && isAuthResolved && isVisible;
 
 export const parseSystemStats = (value: unknown): SystemStats | null => {
 	const record = asRecord(value);

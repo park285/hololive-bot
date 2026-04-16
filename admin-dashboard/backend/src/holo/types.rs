@@ -24,7 +24,7 @@ pub use self::rooms::{
     AddRoomRequest, RemoveRoomRequest, RoomsResponse, SetAclRequest, SetAclResponse,
 };
 pub use self::settings::{Settings, SettingsResponse};
-pub use self::stats::{ChannelStat, ChannelStatsResponse, StatsResponse};
+pub use self::stats::{ChannelStat, ChannelStatsQuery, ChannelStatsResponse, StatsResponse};
 pub use self::streams::{Stream, StreamsQuery, StreamsResponse};
 pub use self::youtube_ops::{
     YouTubeCommunityShortsOpsChannel, YouTubeCommunityShortsOpsOverview,

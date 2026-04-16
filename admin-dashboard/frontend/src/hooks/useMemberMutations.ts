@@ -7,6 +7,7 @@ import type {
 	RemoveAliasRequest,
 } from "@/features/members/types";
 import toast from "@/lib/toast-api";
+import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
 const useInvalidateMembers = () => {
 	const queryClient = useQueryClient();
@@ -101,7 +102,7 @@ export const useAddMemberMutation = () => {
 		onSuccess: invalidate,
 		onError: (err: Error) => {
 			invalidate();
-			toast.error(`멤버 추가 실패: ${err.message}`);
+			toast.error(`멤버 추가 실패: ${getErrorMessageFromUnknown(err)}`);
 		},
 	});
 };

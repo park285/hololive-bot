@@ -1,5 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Award, BellOff, Loader2, TrendingUp, Trophy } from "lucide-react";
+import Award from "lucide-react/dist/esm/icons/award";
+import BellOff from "lucide-react/dist/esm/icons/bell-off";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import TrendingUp from "lucide-react/dist/esm/icons/trending-up";
+import Trophy from "lucide-react/dist/esm/icons/trophy";
 import { queryKeys } from "@/api/queryKeys";
 import { milestonesApi } from "@/features/milestones/api";
 import { AchievedMilestonesSection } from "@/features/milestones/components/AchievedMilestonesSection";

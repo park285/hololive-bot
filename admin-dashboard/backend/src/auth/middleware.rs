@@ -1,5 +1,4 @@
 use axum::extract::{Request, State};
-use axum::http::StatusCode;
 use axum::http::header::{HeaderMap, HeaderValue, SET_COOKIE};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -29,14 +28,10 @@ pub async fn auth_middleware(
     match state.sessions.validate_session(&session_id).await {
         Ok(true) => {}
         Ok(false) => {
-            let mut response = StatusCode::UNAUTHORIZED.into_response();
-            set_clear_cookie(
-                response.headers_mut(),
-                "admin_session",
+            return Ok(auth_error_response_with_cookie_clear(
+                AuthError::Unauthorized,
                 should_set_secure_cookie(req.headers(), state.config.security.force_https),
-            );
-            set_clear_cookie(response.headers_mut(), "csrf_token", false);
-            return Ok(response);
+            ));
         }
         Err(_) => return Err(AuthError::StoreUnavailable.into()),
     }
@@ -67,10 +62,18 @@ pub const fn should_set_secure_cookie(_headers: &HeaderMap, force_https: bool) -
     force_https
 }
 
-/// 세션 쿠키 설정 (HttpOnly, SameSite=Strict, Max-Age=1800)
-pub fn set_session_cookie(headers: &mut HeaderMap, name: &str, value: &str, force_https: bool) {
+/// 세션 쿠키 설정 (HttpOnly, SameSite=Strict, Max-Age 동기화)
+pub fn set_session_cookie(
+    headers: &mut HeaderMap,
+    name: &str,
+    value: &str,
+    max_age_secs: u64,
+    force_https: bool,
+) {
     let secure = if force_https { "; Secure" } else { "" };
-    let cookie = format!("{name}={value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=1800{secure}");
+    let cookie = format!(
+        "{name}={value}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age_secs}{secure}"
+    );
     if let Ok(val) = HeaderValue::from_str(&cookie) {
         headers.append(SET_COOKIE, val);
     }
@@ -91,6 +94,13 @@ pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool) 
     if let Ok(val) = HeaderValue::from_str(&cookie) {
         headers.append(SET_COOKIE, val);
     }
+}
+
+pub fn auth_error_response_with_cookie_clear(error: AuthError, force_https: bool) -> Response {
+    let mut response = AppError::Auth(error).into_response();
+    set_clear_cookie(response.headers_mut(), "admin_session", force_https);
+    set_clear_cookie(response.headers_mut(), "csrf_token", false);
+    response
 }
 
 const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
@@ -139,7 +149,7 @@ pub async fn apply_security_headers_with_hsts(response: Response) -> Response {
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{Request as HttpRequest, header};
+    use axum::http::{Request as HttpRequest, StatusCode, header};
 
     fn make_request_with_cookie(cookie_header: &str) -> Request {
         HttpRequest::builder()
@@ -204,7 +214,7 @@ mod tests {
     #[test]
     fn test_set_session_cookie_https() {
         let mut headers = HeaderMap::new();
-        set_session_cookie(&mut headers, "admin_session", "val123", true);
+        set_session_cookie(&mut headers, "admin_session", "val123", 1800, true);
         let cookie = headers.get(SET_COOKIE).unwrap().to_str().unwrap();
         assert!(cookie.contains("admin_session=val123"));
         assert!(cookie.contains("HttpOnly"));
@@ -217,10 +227,18 @@ mod tests {
     #[test]
     fn test_set_session_cookie_no_https() {
         let mut headers = HeaderMap::new();
-        set_session_cookie(&mut headers, "admin_session", "val123", false);
+        set_session_cookie(&mut headers, "admin_session", "val123", 1800, false);
         let cookie = headers.get(SET_COOKIE).unwrap().to_str().unwrap();
         assert!(!cookie.contains("Secure"));
         assert!(cookie.contains("HttpOnly"));
+    }
+
+    #[test]
+    fn test_set_session_cookie_uses_provided_max_age() {
+        let mut headers = HeaderMap::new();
+        set_session_cookie(&mut headers, "admin_session", "val123", 2700, false);
+        let cookie = headers.get(SET_COOKIE).unwrap().to_str().unwrap();
+        assert!(cookie.contains("Max-Age=2700"));
     }
 
     #[test]
@@ -255,6 +273,19 @@ mod tests {
         assert!(cookie.contains("SameSite=Strict"));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("Secure"));
+    }
+
+    #[tokio::test]
+    async fn test_auth_error_response_with_cookie_clear_keeps_json_contract() {
+        let response = auth_error_response_with_cookie_clear(AuthError::Unauthorized, true);
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+        assert!(response.headers().get_all(SET_COOKIE).iter().count() >= 2);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(parsed["error"], "Unauthorized");
     }
 
     #[test]

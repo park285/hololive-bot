@@ -14,7 +14,7 @@ use deadpool_redis::Runtime;
 use tokio::net::TcpListener;
 
 use super::handlers::*;
-use super::types::{MilestonesQuery, NearMilestonesQuery, StreamsQuery};
+use super::types::{ChannelStatsQuery, MilestonesQuery, NearMilestonesQuery, StreamsQuery};
 
 fn test_state(base_url: String) -> Arc<AppState> {
     let config = Config {
@@ -82,7 +82,14 @@ async fn spawn_holo_server() -> String {
             "/api/holo/rooms" => Json(json!({ "status": "ok", "rooms": ["room-1"], "aclEnabled": true, "aclMode": "blacklist" })).into_response(),
             "/api/holo/settings" => Json(json!({ "status": "ok", "settings": { "alarmAdvanceMinutes": 5 } })).into_response(),
             "/api/holo/stats" => Json(json!({ "status": "ok", "members": 1, "alarms": 2, "rooms": 3, "version": "v1", "uptime": "1h" })).into_response(),
-            "/api/holo/stats/channels" => Json(json!({ "status": "ok", "stats": { "ch-1": { "ChannelID": "ch-1", "ChannelTitle": "Mio", "SubscriberCount": 100, "VideoCount": 10, "ViewCount": 1000 } } })).into_response(),
+            "/api/holo/stats/channels" => Json(json!({
+                "status": "ok",
+                "stats": {
+                    "ch-1": { "ChannelID": "ch-1", "ChannelTitle": "Mio", "SubscriberCount": 100, "VideoCount": 10, "ViewCount": 1000 },
+                    "ch-2": { "ChannelID": "ch-2", "ChannelTitle": "Suisei", "SubscriberCount": 300, "VideoCount": 30, "ViewCount": 3000 },
+                    "ch-3": { "ChannelID": "ch-3", "ChannelTitle": "Korone", "SubscriberCount": 200, "VideoCount": 20, "ViewCount": 2000 }
+                }
+            })).into_response(),
             "/api/holo/stats/youtube/community-shorts" => Json(json!({
                 "status": "ok",
                 "generatedAt": "2026-04-10T00:00:00Z",
@@ -205,6 +212,14 @@ async fn test_holo_handlers_return_typed_bodies() {
     let (_, Json(stats)) = get_stats(State(Arc::clone(&state))).await.unwrap();
     assert_eq!(stats.version, "v1");
 
+    let (_, Json(channel_stats)) = get_channel_stats(
+        State(Arc::clone(&state)),
+        Query(ChannelStatsQuery { limit: None }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(channel_stats.stats.len(), 3);
+
     let (_, Json(youtube_ops)) = get_youtube_community_shorts_ops(State(Arc::clone(&state)))
         .await
         .unwrap();
@@ -245,6 +260,22 @@ async fn test_holo_handlers_return_typed_bodies() {
 
     let (_, Json(milestone_stats)) = get_milestone_stats(State(state)).await.unwrap();
     assert_eq!(milestone_stats.stats.total_achieved, 1);
+}
+
+#[tokio::test]
+async fn test_channel_stats_limit_keeps_top_subscribers_only() {
+    let base_url = spawn_holo_server().await;
+    let state = test_state(base_url);
+
+    let (_, Json(channel_stats)) =
+        get_channel_stats(State(state), Query(ChannelStatsQuery { limit: Some(2) }))
+            .await
+            .unwrap();
+
+    assert_eq!(channel_stats.stats.len(), 2);
+    assert!(channel_stats.stats.contains_key("ch-2"));
+    assert!(channel_stats.stats.contains_key("ch-3"));
+    assert!(!channel_stats.stats.contains_key("ch-1"));
 }
 
 #[tokio::test]

@@ -1,0 +1,2 @@
+function e(e){if(typeof e==`object`&&e&&`message`in e){let{message:t}=e;return typeof t==`string`?t:String(t)}}function t(t){return t instanceof Error?t.message:typeof t==`string`?t:e(t)||`알 수 없는 오류가 발생했습니다.`}export{t as n,e as t};
+//# sourceMappingURL=typeUtils-BEU2XeJJ.js.map

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::IntoParams;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -30,4 +31,9 @@ pub struct ChannelStat {
 pub struct ChannelStatsResponse {
     pub status: String,
     pub stats: HashMap<String, ChannelStat>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct ChannelStatsQuery {
+    pub limit: Option<usize>,
 }

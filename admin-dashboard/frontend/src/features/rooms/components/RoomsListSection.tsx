@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { VirtualList } from "@/components/ui/VirtualList";
 
 const numberFormatter = new Intl.NumberFormat("ko-KR");
 
@@ -54,7 +55,6 @@ export const RoomsListSection = ({
 
 			<div
 				className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden"
-				role="list"
 			>
 				{rooms.length === 0 ? (
 					<div className="text-slate-400 text-center py-12 flex flex-col items-center gap-2">
@@ -62,35 +62,42 @@ export const RoomsListSection = ({
 						<p>{emptyText}</p>
 					</div>
 				) : (
-					rooms.map((room) => (
-						<div
-							key={room}
-							role="listitem"
-							className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors group focus-within:bg-slate-50"
-						>
-							<div className="flex items-center gap-3">
-								<div
-									className={clsx("w-2 h-2 rounded-full", indicatorClassName)}
-									aria-hidden="true"
-								/>
-								<span className="font-mono text-slate-700 font-medium select-all">
-									{room}
-								</span>
-							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => {
-									onDeleteRoom(room);
-								}}
-								disabled={removePending}
-								className="text-slate-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all focus-visible:ring-2 focus-visible:ring-red-200"
-								aria-label={`${room} 방 삭제`}
+					<VirtualList
+						items={rooms}
+						estimateSize={() => 68}
+						recomputeKey={removePending}
+						className="max-h-[32rem]"
+						itemClassName="border-b border-slate-100"
+						renderItem={(room) => (
+							<div
+								key={room}
+								role="listitem"
+								className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors group focus-within:bg-slate-50 bg-white"
 							>
-								<Trash2 size={16} aria-hidden="true" />
-							</Button>
-						</div>
-					))
+								<div className="flex items-center gap-3">
+									<div
+										className={clsx("w-2 h-2 rounded-full", indicatorClassName)}
+										aria-hidden="true"
+									/>
+									<span className="font-mono text-slate-700 font-medium select-all">
+										{room}
+									</span>
+								</div>
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => {
+										onDeleteRoom(room);
+									}}
+									disabled={removePending}
+									className="text-slate-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all focus-visible:ring-2 focus-visible:ring-red-200"
+									aria-label={`${room} 방 삭제`}
+								>
+									<Trash2 size={16} aria-hidden="true" />
+								</Button>
+							</div>
+						)}
+					/>
 				)}
 			</div>
 		</div>

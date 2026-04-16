@@ -48,6 +48,15 @@ const fn is_refreshable(session: &Session) -> bool {
     session.rotated_to.is_none()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionRefreshResult {
+    Refreshed,
+    IdleShortened,
+    Missing,
+    NotRefreshable,
+    AbsoluteExpired,
+}
+
 fn rotated_session_marker(
     session: &Session,
     new_session_id: &str,
@@ -77,7 +86,7 @@ pub trait SessionProvider: Send + Sync {
         &self,
         session_id: &str,
         idle: bool,
-    ) -> Result<(bool, bool), anyhow::Error>;
+    ) -> Result<SessionRefreshResult, anyhow::Error>;
     async fn rotate_session(&self, old_session_id: &str) -> Result<Option<Session>, anyhow::Error>;
 }
 
@@ -212,12 +221,12 @@ impl SessionProvider for ValkeySessionStore {
         &self,
         session_id: &str,
         idle: bool,
-    ) -> Result<(bool, bool), anyhow::Error> {
+    ) -> Result<SessionRefreshResult, anyhow::Error> {
         let mut conn = self.pool.get().await?;
         let data: Option<String> = conn.get(session_key(session_id)).await?;
 
         let Some(data) = data else {
-            return Ok((false, false));
+            return Ok(SessionRefreshResult::Missing);
         };
 
         let session: Session = serde_json::from_str(&data)?;
@@ -228,7 +237,7 @@ impl SessionProvider for ValkeySessionStore {
                 "session absolute timeout on refresh, deleting"
             );
             conn.del::<_, ()>(session_key(session_id)).await?;
-            return Ok((false, true));
+            return Ok(SessionRefreshResult::AbsoluteExpired);
         }
 
         if !is_refreshable(&session) {
@@ -236,7 +245,7 @@ impl SessionProvider for ValkeySessionStore {
                 session_id = %super::truncate_session_id(session_id),
                 "session refresh rejected after rotation"
             );
-            return Ok((false, false));
+            return Ok(SessionRefreshResult::NotRefreshable);
         }
 
         let ttl = if idle {
@@ -250,7 +259,11 @@ impl SessionProvider for ValkeySessionStore {
         conn.set_ex::<_, _, ()>(session_key(session_id), &refreshed_data, ttl.as_secs())
             .await?;
 
-        Ok((true, false))
+        if idle {
+            return Ok(SessionRefreshResult::IdleShortened);
+        }
+
+        Ok(SessionRefreshResult::Refreshed)
     }
 
     async fn rotate_session(&self, old_session_id: &str) -> Result<Option<Session>, anyhow::Error> {

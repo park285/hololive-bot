@@ -120,6 +120,8 @@ export interface HeartbeatRequest {
 }
 
 export interface HeartbeatResponse {
+  /** @format int64 */
+  absolute_expires_at?: number | null;
   csrf_token?: string | null;
   idle_rejected?: boolean | null;
   rotated?: boolean | null;
@@ -259,8 +261,39 @@ export interface ServiceStatus {
   response_time_ms?: number | null;
 }
 
+export interface SessionPolicyResponse {
+  /**
+   * @format int64
+   * @min 0
+   */
+  absolute_warning_window_ms: number;
+  /**
+   * @format int64
+   * @min 0
+   */
+  heartbeat_interval_ms: number;
+  /**
+   * @format int64
+   * @min 0
+   */
+  idle_session_ttl_ms: number;
+  /**
+   * @format int64
+   * @min 0
+   */
+  idle_timeout_ms: number;
+  /**
+   * @format int64
+   * @min 0
+   */
+  idle_warning_timeout_ms: number;
+}
+
 export interface SessionStatusResponse {
+  /** @format int64 */
+  absolute_expires_at: number;
   authenticated: boolean;
+  session_policy: SessionPolicyResponse;
   status: string;
   username: string;
 }

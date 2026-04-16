@@ -3,6 +3,15 @@
 어드민 대시보드의 세션 관리 및 하트비트 메커니즘에 대한 보안 설계 문서입니다.
 
 > 현재 구현 기준: **admin-dashboard**가 인증/세션을 담당합니다. (`hololive-bot-go`는 `/api/holo/*` 도메인 API만 제공)
+>
+> **2026-04-16 구현 상태 업데이트**
+> - `idle: true` heartbeat는 실제로 세션 TTL을 10초로 단축하고 `200 { status: "idle", idle_rejected: true }`를 반환합니다.
+> - `idle: true` heartbeat는 더 이상 세션 회전을 트리거하지 않습니다.
+> - 세션 회전 성공 응답은 `csrf_token`과 `absolute_expires_at`을 함께 반환합니다.
+> - 절대 만료 heartbeat는 `401 { error: "Session expired", absolute_expired: true }` JSON과 쿠키 정리를 함께 반환합니다.
+> - 다만 **9분 pre-warning 모달**과 **절대 만료 5분 전 경고 UX**는 아직 구현되지 않았습니다.
+> - 세션 쿠키 `Max-Age`는 현재 기본값 `1800`초로 고정되어 있으며, `expiry_duration` 설정과 자동 동기화되지는 않습니다.
+> - 아래의 일부 Go 코드/경로 예시는 초기 설계 기록이며, 현재 authoritative 구현 경로는 `admin-dashboard/backend/src/handlers/auth.rs`, `admin-dashboard/backend/src/auth/session.rs`, `admin-dashboard/frontend/src/hooks/useHeartbeat.ts`, `admin-dashboard/frontend/src/hooks/useActivityDetection.ts` 입니다.
 
 ---
 
@@ -12,6 +21,7 @@
 - [보안 설계 원칙](#보안-설계-원칙)
 - [세션 아키텍처](#세션-아키텍처)
 - [하트비트 API](#하트비트-api)
+- [세션 상태 API](#세션-상태-api)
 - [환경변수](#환경변수)
 - [프론트엔드 통합 가이드](#프론트엔드-통합-가이드)
 - [OWASP 준수 사항](#owasp-준수-사항)
@@ -211,7 +221,8 @@ type heartbeatResponse struct {
 {
   "status": "ok",
   "rotated": true,
-  "absolute_expires_at": 1735568988
+  "absolute_expires_at": 1735568988,
+  "csrf_token": "<rotated-session-csrf>"
 }
 ```
 
@@ -220,6 +231,7 @@ type heartbeatResponse struct {
 | `status` | `string` | 상태 ("ok") |
 | `rotated` | `boolean` | 세션 ID가 갱신되었는지 여부 |
 | `absolute_expires_at` | `number` | 절대 만료 시간 (Unix timestamp), rotated=true 시에만 포함 |
+| `csrf_token` | `string` | 회전된 새 세션에 바인딩된 CSRF 토큰 |
 
 #### Response (유휴 상태 - 세션 TTL 단축됨)
 
@@ -262,21 +274,54 @@ type heartbeatResponse struct {
 
 ---
 
+## 세션 상태 API
+
+현재 구현은 `GET /admin/api/auth/session` 응답에 pre-warning 계산용 정책 값을 함께 제공합니다.
+
+```json
+{
+  "status": "ok",
+  "authenticated": true,
+  "username": "admin",
+  "absolute_expires_at": 1735568988,
+  "session_policy": {
+    "heartbeat_interval_ms": 300000,
+    "idle_timeout_ms": 600000,
+    "idle_warning_timeout_ms": 540000,
+    "idle_session_ttl_ms": 10000,
+    "absolute_warning_window_ms": 300000
+  }
+}
+```
+
+- `absolute_expires_at`: 절대 만료 시각 (Unix timestamp)
+- `session_policy`: 프론트가 pre-warning UI를 별도 구현할 때 사용할 서버 기준 정책 값
+
+프론트 handoff는 `admin-dashboard/docs/SESSION_PREWARNING_BACKEND_CONTRACT.md`를 우선 참고합니다.
+
+---
+
 ## 환경변수
 
 | 변수명 | 기본값 | 설명 |
 |--------|--------|------|
 | `SESSION_TOKEN_ROTATION` | `true` | 하트비트 시 세션 ID 갱신 활성화 여부 |
+| `SESSION_HEARTBEAT_INTERVAL_MS` | `300000` | 프론트 heartbeat 권장 간격(ms) |
+| `SESSION_IDLE_TIMEOUT_MS` | `600000` | idle 확정 시간(ms) |
+| `SESSION_IDLE_WARNING_TIMEOUT_MS` | `540000` | idle pre-warning 시작 시간(ms) |
+| `SESSION_ABSOLUTE_WARNING_WINDOW_MS` | `300000` | 절대 만료 pre-warning 창(ms) |
 
-> **참고**: 세션 타임아웃 값들은 `admin-dashboard/backend/internal/config/config.go`의 `SessionConfig`에서 관리됩니다.
+> **참고**: 세션 타임아웃 값들은 현재 `admin-dashboard/backend/src/config/session.rs`의 `SessionConfig`에서 관리됩니다.
 
 ---
 
 ## 프론트엔드 통합 가이드 (UX 강화)
 
-### 1. Pre-warning (사전 경고) 전략
+### 1. Pre-warning (사전 경고) 전략 — 현재 미구현 설계안
 
 `idle: true` 전송은 **"확정적 로그아웃"**을 의미하므로, 전송 전에 사용자에게 경고해야 합니다.
+
+> 현재 `admin-dashboard` 구현은 이 pre-warning 모달을 아직 제공하지 않습니다. 대신 10분 무활동 시 `isIdle=true` 전환과 함께 즉시 heartbeat를 보내고, `idle_rejected` 응답을 받으면 곧바로 로그아웃합니다.
 
 ```
 [9분 경과] (클라이언트 로컬)
@@ -336,9 +381,8 @@ const sendHeartbeat = async (idle: boolean) => {
   }
 
   if (data.idle_rejected) {
-    // 이미 Pre-warning 단계를 지났으므로 즉시 로그아웃 처리
-    // 서버 TTL이 10초 남았으므로 빠르게 이탈해야 함
-    window.location.href = '/login'
+    // 현재 구현은 store logout + route guard 전환을 사용
+    logout()
     return false
   }
 
@@ -375,7 +419,7 @@ useEffect(() => {
 7. 10초 후: 서버에서 세션 자동 만료
 ```
 
-### 7. 절대 만료 처리
+### 7. 절대 만료 처리 (현재 API 응답은 제공, 경고 UX는 미구현)
 
 ```typescript
 // 응답에서 absolute_expires_at 추적
@@ -389,6 +433,7 @@ interface HeartbeatResponse {
 // 절대 만료까지 남은 시간 계산
 const remainingSeconds = absoluteExpiresAt - Math.floor(Date.now() / 1000)
 if (remainingSeconds < 300) {
+  // 향후 UX 확장 시 사용 가능
   showReloginWarningModal("세션이 5분 후 만료됩니다. 작업을 저장하세요.")
 }
 ```
@@ -696,9 +741,12 @@ if (response.absolute_expires_at) {
 
 | 파일 | 설명 |
 |------|------|
-| `admin-dashboard/backend/internal/config/config.go` | `SessionConfig`, `SESSION_TOKEN_ROTATION` 로드 |
-| `admin-dashboard/backend/internal/auth/auth.go` | `Session`, `SessionProvider`, `ValkeySessionStore`, 서명/쿠키 유틸 |
-| `admin-dashboard/backend/internal/server/server.go` | `handleLogin`, `handleLogout`, `handleHeartbeat` |
+| `admin-dashboard/backend/src/config/session.rs` | `SessionConfig`, `SESSION_TOKEN_ROTATION` 로드 |
+| `admin-dashboard/backend/src/auth/session.rs` | `Session`, `SessionProvider`, `ValkeySessionStore`, rotation / absolute timeout |
+| `admin-dashboard/backend/src/auth/middleware.rs` | 세션 쿠키 / CSRF 쿠키 / 보안 헤더 유틸 |
+| `admin-dashboard/backend/src/handlers/auth.rs` | `handleLogin`, `handleLogout`, `handleHeartbeat` |
+| `admin-dashboard/frontend/src/hooks/useActivityDetection.ts` | idle 감지 / 탭 간 활동 브로드캐스트 |
+| `admin-dashboard/frontend/src/hooks/useHeartbeat.ts` | 즉시 idle heartbeat, idle_rejected 즉시 logout |
 | `admin-dashboard/frontend/src/hooks/useActivityDetection.ts` | 멀티 탭 활동 감지/동기화 |
 | `admin-dashboard/frontend/src/lib/utils.ts` | Unix time 변환 유틸 |
 
