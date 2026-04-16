@@ -41,7 +41,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
 type trackingSettingsReadWriter struct {

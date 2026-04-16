@@ -24,7 +24,7 @@ import (
 	"context"
 
 	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
 func (r *BotRuntime) Shutdown(ctx context.Context) {

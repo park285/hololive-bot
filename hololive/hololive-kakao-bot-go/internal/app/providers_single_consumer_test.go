@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
 func TestSingleConsumerProviders_Smoke(t *testing.T) {

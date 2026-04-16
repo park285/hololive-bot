@@ -12,55 +12,26 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
-	"github.com/kapu/hololive-kakao-bot-go/internal/server"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 type BotInfrastructure struct {
 	Deps           *bot.Dependencies
 	AlarmCRUD      domain.AlarmCRUD
 	HolodexService *holodex.Service
-	Cleanup        func()
-}
-
-type AdminAPIInfrastructure struct {
-	Cache            cache.Client
-	Postgres         database.Client
-	MemberRepo       *member.Repository
-	MemberCache      *member.Cache
-	Profiles         *member.ProfileService
-	AlarmCRUD        domain.AlarmCRUD
-	HolodexService   *holodex.Service
-	YouTubeService   youtube.Service
-	StatsRepo        ytstats.StatsDashboardRepository
-	ActivityLogger   *activity.Logger
-	SettingsService  settings.ReadWriter
-	ACLService       *acl.Service
-	TemplateAdminSvc *template.AdminService
-	Cleanup          func()
-}
-
-type AlarmWorkerInfrastructure struct {
-	Cache          cache.Client
-	HolodexService *holodex.Service
-	ChzzkClient    *chzzk.Client
-	TwitchClient   *twitch.Client
-	AlarmCRUD      domain.AlarmCRUD
 	Cleanup        func()
 }
 
@@ -172,10 +143,4 @@ type BotConfigSubscriberRuntimeDependencies struct {
 	YouTubeService youtube.Service
 	HolodexService *holodex.Service
 	AlarmCRUD      domain.AlarmCRUD
-}
-
-type AdminServerDependencies struct {
-	DomainHandlers *server.DomainAPIHandlers
-	AuthHandler    *server.AuthHandler
-	Cache          cache.Client
 }

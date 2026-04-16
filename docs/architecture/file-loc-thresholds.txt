@@ -11,8 +11,8 @@ admin-dashboard/backend/src/auth/session.rs:540
 admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
 scripts/logs/logs.sh:760
 hololive/hololive-kakao-bot-go/scripts/bot.sh:560
-hololive/hololive-kakao-bot-go/internal/service/chzzk/client.go:620
-hololive/hololive-kakao-bot-go/internal/service/notification/alarm_service.go:840
+hololive/hololive-shared/pkg/service/chzzk/client.go:620
+hololive/hololive-shared/pkg/service/notification/alarm_service.go:840
 hololive/hololive-shared/pkg/service/alarm/queue/consumer.go:600
 hololive/hololive-shared/pkg/service/cache/service.go:650
 hololive/hololive-shared/pkg/domain/youtube_content.go:480

@@ -1,5 +1,12 @@
 # hololive 구조 분리 + 잔여 리스크 종결 실행 플랜 (2026-04-15)
 
+상태: **HISTORICAL PLAN (superseded on 2026-04-16)**
+
+이 문서는 runtime split 이전/이행 중 시점의 master plan 이다.
+현재 source of truth 는 `docs/current/PROJECT_MAP.md`, `docs/current/RUNTIME_SPLIT_HANDOFF_20260416.md`, `docs/current/RUNTIME_SPLIT_PR07_BLOCKERS_20260416.md` 이며,
+본문의 pre-extraction 경로/patch 예시는 historical reference 로만 읽어야 한다.
+
+
 이 문서는 다음 두 입력을 합쳐 만든 **실행 문서**다.
 
 1. 정적 재리뷰 결과에서 남은 리스크

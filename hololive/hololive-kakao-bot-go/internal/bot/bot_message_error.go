@@ -28,7 +28,7 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
+	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
 func (b *Bot) sendMessage(ctx context.Context, room, message string) error {

@@ -33,7 +33,7 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/notification"
 )
 
 type alarmListViewerStub struct {
