@@ -365,6 +365,10 @@ func validatePostgresSSLMode(environment, sslMode string) error {
 	}
 
 	if strings.EqualFold(strings.TrimSpace(environment), "production") {
+		if sharedenv.Bool("POSTGRES_SSLMODE_ALLOW_INSECURE", false) {
+			return nil
+		}
+
 		switch mode {
 		case "disable", "allow", "prefer":
 			return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use require, verify-ca, or verify-full", sslMode)
