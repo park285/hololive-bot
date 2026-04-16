@@ -38,6 +38,8 @@ COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-stream-ingester ./hololive/hololive-stream-ingester
 COPY hololive/hololive-shared ./hololive/hololive-shared
 COPY hololive/hololive-dispatcher-go ./hololive/hololive-dispatcher-go
+COPY hololive/hololive-admin-api ./hololive/hololive-admin-api
+COPY hololive/hololive-alarm-worker ./hololive/hololive-alarm-worker
 
 WORKDIR /workspace/hololive-bot/hololive/hololive-dispatcher-go
 
