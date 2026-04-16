@@ -68,7 +68,7 @@ jobs:
 
       - name: Upload Reports
         if: always()
-        uses: actions/upload-artifact@v6.3.0
+        uses: actions/upload-artifact@v5.0.0
         with:
           name: dependency-hygiene-${{ matrix.slug }}
           path: |
