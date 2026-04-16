@@ -32,15 +32,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 // Notifier는 dedup claim + 큐 발행 + 발송 마킹을 담당한다.
 type Notifier struct {
 	dedupSvc       *dedup.Service
 	queuePublisher *queue.Publisher
-	alarmSvc       *notification.AlarmService
 	tierScheduler  *tier.TieredScheduler
 	logger         *slog.Logger
 }
@@ -49,7 +46,6 @@ type Notifier struct {
 func NewNotifier(
 	dedupSvc *dedup.Service,
 	queuePublisher *queue.Publisher,
-	alarmSvc *notification.AlarmService,
 	tierScheduler *tier.TieredScheduler,
 	logger *slog.Logger,
 ) (*Notifier, error) {
@@ -61,14 +57,9 @@ func NewNotifier(
 		return nil, errors.New("new notifier: queue publisher is nil")
 	}
 
-	if alarmSvc == nil {
-		return nil, errors.New("new notifier: alarm service is nil")
-	}
-
 	return &Notifier{
 		dedupSvc:       dedupSvc,
 		queuePublisher: queuePublisher,
-		alarmSvc:       alarmSvc,
 		tierScheduler:  tierScheduler,
 		logger:         safeLogger(logger),
 	}, nil
@@ -287,7 +278,7 @@ func (n *Notifier) publishAndMark(ctx context.Context, payload *sendInput, claim
 		)
 	}
 
-	if err := n.alarmSvc.MarkUpcomingEventNotified(
+	if err := n.dedupSvc.MarkUpcomingEventNotified(
 		ctx,
 		payload.notification.RoomID,
 		payload.channelID,

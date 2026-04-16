@@ -44,7 +44,7 @@ func initAlarmDependencies(
 	memberServiceAdapter member.DataProvider,
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
-) (*alarmDependencies, error) {
+) (*appbootstrap.AlarmDependencies, error) {
 	deps, err := appbootstrap.InitAlarmDependencies(chzzkCfg, twitchCfg, advanceMinutes, scraperProxyEnabled, cacheService, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func initAlarmModeComponents(
 	memberServiceAdapter member.DataProvider,
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
-) (*alarmModeComponents, error) {
+) (*appbootstrap.AlarmModeComponents, error) {
 	components, err := appbootstrap.InitAlarmModeComponents(ctx, cfg, infra, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return nil, err

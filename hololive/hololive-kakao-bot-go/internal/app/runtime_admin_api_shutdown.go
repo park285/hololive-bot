@@ -20,17 +20,29 @@
 
 package app
 
-import appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
+import (
+	"context"
 
-type coreInfrastructure = appbootstrap.CoreInfrastructure
-type alarmModeComponents = appbootstrap.AlarmModeComponents
-type alarmDependencies = appbootstrap.AlarmDependencies
+	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
+)
 
-type botCoreModule = appbootstrap.BotCoreModule
-type botIrisClient = appbootstrap.BotIrisClient
-type botMessagingModule = appbootstrap.BotMessagingModule
-type botDataModule = appbootstrap.BotDataModule
-type botStreamModule = appbootstrap.BotStreamModule
-type botSupportModule = appbootstrap.BotSupportModule
-type botFeatureModule = appbootstrap.BotFeatureModule
-type botDependencyModules = appbootstrap.BotDependencyModules
+func (r *AdminAPIRuntime) Shutdown(ctx context.Context) {
+	if r == nil {
+		return
+	}
+
+	appruntime.Shutdown(ctx, appruntime.ShutdownHooks{
+		Logger:                r.Logger,
+		ShutdownHTTPServer:    r.ShutdownHTTPServer,
+		ShutdownAlarmServices: notification.CloseAllAlarmServices,
+	})
+}
+
+func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+
+	return appruntime.ShutdownHTTPServer(r.HttpServer, ctx)
+}

@@ -82,9 +82,10 @@ func newACLServiceWithSQLite(t *testing.T) (*gorm.DB, *cachemocks.Client, *aclCa
 	}
 
 	cacheSvc, err := sharedcache.NewCacheService(t.Context(), sharedcache.Config{
-		Host:         mini.Host(),
-		Port:         port,
-		DisableCache: true,
+		Host:              mini.Host(),
+		Port:              port,
+		DisableCache:      true,
+		ForceSingleClient: true,
 	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("new cache service: %v", err)

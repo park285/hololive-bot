@@ -22,7 +22,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -58,16 +57,9 @@ type BotRuntime struct {
 }
 
 func BuildRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*BotRuntime, error) {
-	if cfg == nil {
-		return nil, errors.New("config must not be nil")
-	}
-
-	if logger == nil {
-		return nil, errors.New("logger must not be nil")
-	}
-
-	if ctx == nil {
-		ctx = context.Background()
+	ctx, err := normalizeRuntimeBuildInputs(ctx, cfg, logger)
+	if err != nil {
+		return nil, err
 	}
 
 	runtime, cleanup, err := InitializeBotRuntime(ctx, cfg, logger)

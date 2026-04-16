@@ -173,7 +173,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := buildBotRuntime(t.Context(), &config.Config{}, testBootstrapGuardLogger(), &coreInfrastructure{})
+	runtime, err := buildBotRuntime(t.Context(), &config.Config{}, testBootstrapGuardLogger(), &appbootstrap.CoreInfrastructure{})
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to create bot")
@@ -236,7 +236,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Notification: config.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
 		&sharedmodules.InfraModule{Cache: cacheSvc, Postgres: postgresSvc, MemberRepo: memberRepo, MemberCache: memberCache},
-		&alarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
+		&appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
 		&holodex.Service{},
 		&adapter.MessageAdapter{},
 		&adapter.ResponseFormatter{},

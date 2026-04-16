@@ -50,13 +50,13 @@
 
 ## 📂 프로젝트 구조
 
-멀티모듈 분리(Phase 3) 이후, `hololive-kakao-bot-go`는 **bot 전용 모듈**입니다.
-서비스별 엔트리포인트는 별도 모듈로 분리되었습니다.
+현재 `hololive-kakao-bot-go`는 **같은 Go module 안에서 3개 런타임**을 제공합니다.
+runtime split 1차 컷 기준으로 ingress / control plane / alarm worker를 분리합니다.
 
 ```
 hololive/
-├── hololive-kakao-bot-go/       # bot 전용
-│   ├── cmd/bot
+├── hololive-kakao-bot-go/       # bot + admin-api + alarm-worker
+│   ├── cmd/{bot,admin-api,alarm-worker}
 │   ├── cmd/tools
 │   └── internal/{app,bot,command,server,service/{acl,activity,auth,system}}
 ├── hololive-dispatcher-go/      # dispatcher-go
@@ -66,9 +66,11 @@ hololive/
 └── shared-go/                   # 공통 유틸리티
 ```
 
-### 마이그레이션 이력 (Phase 3~6)
+### 런타임 분리 상태
 
-- `cmd/admin-api` → bot 런타임(30001)으로 통합 (Phase 5)
+- `cmd/bot` → webhook ingress + command routing
+- `cmd/admin-api` → `/api/holo/*`, `/api/auth/*`, `/oauth/callback`, `/internal/alarm/*`
+- `cmd/alarm-worker` → alarm scheduler / checker / queue publisher
 - `cmd/llm-scheduler` → `hololive-llm-sched/cmd/llm-scheduler`
 - `cmd/stream-ingester` → `hololive-stream-ingester/cmd/stream-ingester`
 - `cmd/alarm-dispatcher` → `hololive-dispatcher-go/cmd/dispatcher`로 전환 (Phase 6)
@@ -144,9 +146,19 @@ hololive-kakao-bot-go/
 ```bash
 ./build-all.sh --no-bump
 ./scripts/deploy/compose-redeploy-service.sh hololive-bot
+./scripts/deploy/compose-redeploy-service.sh hololive-admin-api
+./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
 ```
 
 전체 스택/상세 절차는 `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`를 참고하세요.
+
+runtime split 이후 운영 책임은 다음과 같습니다.
+
+- `hololive-bot` → `/webhook/iris`, command routing, ingress
+- `hololive-admin-api` → `/api/holo/*`, `/api/auth/*`, `/oauth/callback`, `/internal/alarm/*`
+- `hololive-alarm-worker` → alarm scheduler / checker / queue publisher
+
+롤백 시에도 동일하게 각 runtime을 개별 재기동해야 하며, admin/control plane 문제는 `hololive-bot`이 아니라 `hololive-admin-api`를 기준으로 되돌립니다.
 
 로컬 단일 프로세스 보조 스크립트는 `scripts/README.md`를 참고하세요.
 
@@ -169,7 +181,7 @@ hololive-kakao-bot-go/
 | **MQ** | `MQ_HOST`, `_PORT` | ValkeyMQ 서버 정보 | `localhost`, `1833` |
 | **Logging** | `LOG_LEVEL` | 로그 레벨 (`debug`, `info`, `warn`, `error`) | `info` |
 
-> 참고: 관리자 콘솔(Auth/Docker/Logs/Traces)은 `admin-dashboard`로 분리되었고, `hololive-bot`은 `/api/holo/*`, `/api/auth/*` 운영 API를 제공합니다.
+> 참고: 관리자 콘솔(Auth/Docker/Logs/Traces)은 `admin-dashboard`로 분리되었고, 운영 API는 `hololive-bot`이 아니라 `hololive-admin-api`가 제공합니다.
 
 ## 🌐 지원 그룹
 

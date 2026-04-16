@@ -53,13 +53,17 @@ impl SystemStatsCollector {
         endpoints: Vec<ServiceEndpoint>,
         cancel: CancellationToken,
     ) {
+        let http_client = match Client::builder().timeout(Duration::from_secs(2)).build() {
+            Ok(client) => client,
+            Err(err) => {
+                tracing::error!(error = %err, "failed to build system stats http client");
+                return;
+            }
+        };
+
         tokio::spawn(async move {
             let mut sys = System::new();
             let current_pid = get_current_pid().ok();
-            let http_client = Client::builder()
-                .timeout(Duration::from_secs(2))
-                .build()
-                .expect("system stats http client");
             let mut ticker = tokio::time::interval(Duration::from_secs(2));
             ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 

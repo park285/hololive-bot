@@ -17,7 +17,7 @@
   - `container.go`, `container_accessors.go`, `bootstrap_bot_dependency_views.go` 는 façade / local shape adapter 역할만 남긴다.
 - `internal/app/bootstrap/`
   - provider / core / service / bot helper 구현이 전용 디렉터리로 이동했다.
-  - 루트 `bootstrap_*.go`, `providers_*.go` 파일은 thin wrapper / orchestration / local shape adapter 역할만 남긴다.
+  - 루트 `bootstrap_*.go` 파일은 orchestration / local shape adapter 역할만 남기고, 중복 provider/type wrapper 파일은 제거됐다.
 - `*_additional_test.go`
   - `internal/app` 하위의 임시 파일명은 모두 제거됐다.
   - 테스트 파일명은 행위/책임 중심 이름으로 재배치됐다.
@@ -65,13 +65,12 @@
 HTTP router 관련 구현은 `internal/app/http/` 아래로 이동했고 루트에는 thin entrypoint 만 남았다.
 
 ### 4. bootstrap 구현이 루트에 남아 있던 문제
-bootstrap helper 구현은 `internal/app/bootstrap/` 아래로 이동했고 루트에는 orchestration / wrapper / local shape helper 만 남았다.
+bootstrap helper 구현은 `internal/app/bootstrap/` 아래로 이동했고 루트에는 orchestration / local shape helper 만 남았다.
 
 ## 남아 있는 장기 과제
 
 아래는 현재 기준으로 “즉시 blocker” 가 아니라 다음 구조 패치에서 다뤄도 되는 장기 과제다.
 
-- `bootstrap_services_types.go` 의 역할별 bundle 추가 세분화
 - bootstrap orchestration 파일의 추가 축소
 
 이 장기 과제는 신규 churn 이 다시 루트에 쌓일 때만 진행하면 된다.

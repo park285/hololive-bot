@@ -28,11 +28,10 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/valkey-io/valkey-go"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 const (
@@ -176,7 +175,7 @@ func tryLoadSubscriberRoomsByChannelBatched(
 
 	cmds := make([]valkey.Completed, 0, len(uniqueChannelIDs))
 	for _, channelID := range uniqueChannelIDs {
-		cmds = append(cmds, client.B().Smembers().Key(notification.ChannelSubscribersKeyPrefix+channelID).Build())
+		cmds = append(cmds, client.B().Smembers().Key(sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID).Build())
 	}
 
 	results := cacheSvc.DoMulti(ctx, cmds...)
@@ -212,7 +211,7 @@ func loadSubscriberRoomsByChannelSequential(
 
 	for _, channelID := range uniqueChannelIDs {
 		eg.Go(func() error {
-			rooms, err := cacheSvc.SMembers(egCtx, notification.ChannelSubscribersKeyPrefix+channelID)
+			rooms, err := cacheSvc.SMembers(egCtx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID)
 			if err != nil {
 				return fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
 			}

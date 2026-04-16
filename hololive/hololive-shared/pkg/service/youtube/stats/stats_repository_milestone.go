@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -221,14 +222,7 @@ type NearMilestoneEntry struct {
 	ProgressPct   float64 `json:"progressPct"`
 }
 
-func (r *StatsRepository) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]NearMilestoneEntry, error) {
-	if len(milestones) == 0 {
-		return nil, nil
-	}
-
-	// CTE를 사용한 효율적인 쿼리
-	// pgx는 슬라이스를 직접 전달하고 SQL에서 캐스팅
-	query := `
+const latestActiveStatsMilestoneCTE = `
 		WITH latest_stats AS (
 			SELECT DISTINCT ON (h.channel_id)
 				h.channel_id, h.member_name, h.subscribers
@@ -239,7 +233,16 @@ func (r *StatsRepository) GetNearMilestoneMembers(ctx context.Context, threshold
 		),
 		milestones AS (
 			SELECT unnest($1::bigint[]) as milestone
-		),
+		)
+`
+
+func (r *StatsRepository) GetNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64, limit int) ([]NearMilestoneEntry, error) {
+	if len(milestones) == 0 {
+		return nil, nil
+	}
+
+	query := latestActiveStatsMilestoneCTE + `
+		,
 		achieved AS (
 			SELECT channel_id, value
 			FROM youtube_milestones
@@ -269,21 +272,7 @@ func (r *StatsRepository) GetNearMilestoneMembers(ctx context.Context, threshold
 	}
 	defer rows.Close()
 
-	var entries []NearMilestoneEntry
-	for rows.Next() {
-		var e NearMilestoneEntry
-		if err := rows.Scan(&e.ChannelID, &e.MemberName, &e.CurrentSubs, &e.NextMilestone, &e.Remaining, &e.ProgressPct); err != nil {
-			r.logger.Warn("Failed to scan near milestone entry", slog.Any("error", err))
-			continue
-		}
-		entries = append(entries, e)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
-	}
-
-	return entries, nil
+	return scanNearMilestoneEntries(rows, r.logger, "Failed to scan near milestone entry")
 }
 
 func (r *StatsRepository) CountNearMilestoneMembers(ctx context.Context, thresholdPct float64, milestones []uint64) (int, error) {
@@ -332,18 +321,8 @@ func (r *StatsRepository) GetClosestMilestoneMembers(ctx context.Context, limit 
 		return nil, nil
 	}
 
-	query := `
-		WITH latest_stats AS (
-			SELECT DISTINCT ON (h.channel_id)
-				h.channel_id, h.member_name, h.subscribers
-			FROM youtube_stats_history h
-			JOIN members m ON h.channel_id = m.channel_id
-			WHERE m.is_graduated = false
-			ORDER BY h.channel_id, h.time DESC
-		),
-		milestones AS (
-			SELECT unnest($1::bigint[]) as milestone
-		),
+	query := latestActiveStatsMilestoneCTE + `
+		,
 		next_milestones AS (
             SELECT 
                 ls.channel_id,
@@ -375,11 +354,17 @@ func (r *StatsRepository) GetClosestMilestoneMembers(ctx context.Context, limit 
 	}
 	defer rows.Close()
 
+	return scanNearMilestoneEntries(rows, r.logger, "Failed to scan closest milestone entry")
+}
+
+func scanNearMilestoneEntries(rows pgx.Rows, logger *slog.Logger, warnMessage string) ([]NearMilestoneEntry, error) {
 	var entries []NearMilestoneEntry
 	for rows.Next() {
 		var e NearMilestoneEntry
 		if err := rows.Scan(&e.ChannelID, &e.MemberName, &e.CurrentSubs, &e.NextMilestone, &e.Remaining, &e.ProgressPct); err != nil {
-			r.logger.Warn("Failed to scan closest milestone entry", slog.Any("error", err))
+			if logger != nil {
+				logger.Warn(warnMessage, slog.Any("error", err))
+			}
 			continue
 		}
 		entries = append(entries, e)

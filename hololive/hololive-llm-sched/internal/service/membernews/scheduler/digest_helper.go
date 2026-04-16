@@ -23,14 +23,27 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/membernews/internal/model"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
+
+type digestDispatchConfig struct {
+	lockKey           string
+	periodKey         string
+	periodFieldName   string
+	lockHeldMessage   string
+	emptyRoomsMessage string
+	resultMessage     string
+	allFailedMessage  string
+	processRoom       func(context.Context, string, string) delivery.SendResult
+}
 
 // processDigestForRoom: 단일 room의 다이제스트 생성 + outbox enqueue (weekly/monthly 공용).
 func processDigestForRoom(
@@ -81,6 +94,70 @@ func processDigestForRoom(
 
 	result.Sent = 1
 	return result
+}
+
+func runDigestDispatch(
+	ctx context.Context,
+	service model.DigestService,
+	locker delivery.NotificationLocker,
+	logger *slog.Logger,
+	cfg digestDispatchConfig,
+) error {
+	token, acquired, err := locker.TryAcquire(ctx, cfg.lockKey, delivery.DefaultExecutionLockTTL)
+	if err != nil {
+		return fmt.Errorf("acquire digest execution lock: %w", err)
+	}
+	if !acquired {
+		logger.Info(cfg.lockHeldMessage, slog.String(cfg.periodFieldName, cfg.periodKey))
+		return nil
+	}
+	defer func() { _ = locker.Release(ctx, cfg.lockKey, token) }()
+
+	rooms, err := service.ListSubscribedRooms(ctx)
+	if err != nil {
+		return fmt.Errorf("list subscribed rooms: %w", err)
+	}
+	if len(rooms) == 0 {
+		logger.Info(cfg.emptyRoomsMessage)
+		return nil
+	}
+
+	var (
+		mu     sync.Mutex
+		wg     sync.WaitGroup
+		result delivery.SendResult
+		sem    = make(chan struct{}, maxConcurrentDigests)
+	)
+
+	for i := range rooms {
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(roomID string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			roomResult := cfg.processRoom(ctx, cfg.periodKey, roomID)
+			mu.Lock()
+			result.Merge(roomResult)
+			mu.Unlock()
+		}(rooms[i].RoomID)
+	}
+	wg.Wait()
+
+	logger.Info(cfg.resultMessage,
+		slog.String(cfg.periodFieldName, cfg.periodKey),
+		slog.Int("attempted", result.Attempted),
+		slog.Int("sent", result.Sent),
+		slog.Int("skipped", result.Skipped),
+		slog.Int("failed", result.Failed),
+		slog.Any("failed_rooms", result.FailedRooms),
+	)
+
+	if result.Sent == 0 && result.Failed > 0 {
+		return fmt.Errorf(cfg.allFailedMessage, result.Failed)
+	}
+
+	return nil
 }
 
 // renderDigestMessage: 다이제스트 메시지 포맷팅 (weekly/monthly 공용).

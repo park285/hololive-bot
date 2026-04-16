@@ -32,7 +32,7 @@ fn test_config() -> Config {
         session_secret: "test-secret-key-minimum-length".to_string(),
         valkey_url: "127.0.0.1:1".to_string(),
         docker_host: "tcp://127.0.0.1:2375".to_string(),
-        holo_bot_url: "http://127.0.0.1:30001".to_string(),
+        holo_admin_api_url: "http://127.0.0.1:30006".to_string(),
         holo_bot_api_key: String::new(),
         enable_openapi: true,
         enable_swagger_ui: true,
@@ -59,16 +59,17 @@ fn build_test_app() -> axum::Router {
 
     let sessions = ValkeySessionStore::new(pool, config.session.clone());
     let rate_limiter = Arc::new(LoginRateLimiter::new());
-    let status_collector = StatusCollector::new(vec![], env!("CARGO_PKG_VERSION"));
+    let status_collector =
+        StatusCollector::new(vec![], env!("CARGO_PKG_VERSION")).expect("status collector init");
     let (stats_tx, _) = tokio::sync::broadcast::channel::<SystemStats>(16);
+    let holo_api = Arc::new(
+        HoloApiClient::new(&config.holo_admin_api_url, None).expect("holo api client init failed"),
+    );
     let state = Arc::new(AppState {
         config,
         sessions,
         rate_limiter,
-        holo_api: Arc::new(
-            HoloApiClient::new("http://127.0.0.1:30001", None)
-                .expect("holo api client init failed"),
-        ),
+        holo_api,
         docker_svc: None,
         status_collector,
         stats_tx,

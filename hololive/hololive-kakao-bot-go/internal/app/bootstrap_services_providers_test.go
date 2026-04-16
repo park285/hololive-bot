@@ -34,6 +34,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 )
 
@@ -57,7 +58,7 @@ func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {
 		},
 	}
 
-	svc, err := ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cacheSvc, logger)
+	svc, err := appbootstrap.ProvideACLService(t.Context(), true, acl.ACLModeWhitelist, []string{"room-a", "room-b"}, dbClient, cacheSvc, logger)
 	require.NoError(t, err)
 	require.NotNil(t, svc)
 	assert.True(t, svc.IsReady())
@@ -71,7 +72,7 @@ func TestProvideActivityLogger_StdoutOnlyMode(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	activityLogger := ProvideActivityLogger(logger)
+	activityLogger := appbootstrap.ProvideActivityLogger(logger)
 	require.NotNil(t, activityLogger)
 
 	activityLogger.Log("test", "summary", map[string]any{"k": "v"})

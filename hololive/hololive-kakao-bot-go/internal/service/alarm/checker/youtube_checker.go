@@ -33,12 +33,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 const (
@@ -108,7 +107,7 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
 func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
-	channelIDs, err := c.cacheSvc.SMembers(ctx, notification.AlarmChannelRegistryKey)
+	channelIDs, err := c.cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	if err != nil {
 		return nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
 	}

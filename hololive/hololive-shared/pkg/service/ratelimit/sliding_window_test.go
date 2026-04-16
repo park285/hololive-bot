@@ -51,10 +51,11 @@ func newTestLimiter(t *testing.T) *SlidingWindowLimiter {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cacheSvc, err := cache.NewCacheService(context.Background(), cache.Config{
-		Host:         host,
-		Port:         port,
-		DB:           0,
-		DisableCache: true,
+		Host:              host,
+		Port:              port,
+		DB:                0,
+		DisableCache:      true,
+		ForceSingleClient: true,
 	}, logger)
 	if err != nil {
 		t.Fatalf("new cache service: %v", err)

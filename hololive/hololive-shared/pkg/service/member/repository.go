@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -65,12 +66,153 @@ type Repository struct {
 	logger *slog.Logger
 }
 
+type memberRow struct {
+	id           int
+	slug         string
+	channelID    *string
+	englishName  string
+	japaneseName *string
+	koreanName   *string
+	status       string
+	isGraduated  bool
+	aliasesJSON  []byte
+	photo        *string
+	org          string
+	suborg       *string
+	syncSource   string
+	twitchUserID *string
+}
+
+type memberRowScanner interface {
+	Scan(dest ...any) error
+}
+
 func NewMemberRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	return &Repository{
 		pool:   postgres.GetPool(),
 		gormDB: postgres.GetGormDB(),
 		logger: logger,
 	}
+}
+
+func scanMemberQueryRow(scanner memberRowScanner) (memberRow, error) {
+	var row memberRow
+	err := scanner.Scan(
+		&row.id,
+		&row.slug,
+		&row.channelID,
+		&row.englishName,
+		&row.japaneseName,
+		&row.koreanName,
+		&row.status,
+		&row.isGraduated,
+		&row.aliasesJSON,
+		&row.org,
+		&row.suborg,
+		&row.syncSource,
+		&row.twitchUserID,
+	)
+	return row, err
+}
+
+func scanMemberFullRow(scanner memberRowScanner) (memberRow, error) {
+	var row memberRow
+	err := scanner.Scan(
+		&row.id,
+		&row.slug,
+		&row.channelID,
+		&row.englishName,
+		&row.japaneseName,
+		&row.koreanName,
+		&row.status,
+		&row.isGraduated,
+		&row.aliasesJSON,
+		&row.photo,
+		&row.org,
+		&row.suborg,
+		&row.syncSource,
+		&row.twitchUserID,
+	)
+	return row, err
+}
+
+func scanMemberPhotoQueryRow(scanner memberRowScanner) (memberRow, error) {
+	var row memberRow
+	err := scanner.Scan(
+		&row.id,
+		&row.channelID,
+		&row.englishName,
+		&row.japaneseName,
+		&row.koreanName,
+		&row.isGraduated,
+		&row.aliasesJSON,
+		&row.photo,
+		&row.org,
+		&row.suborg,
+		&row.syncSource,
+		&row.twitchUserID,
+	)
+	return row, err
+}
+
+func (r *Repository) parseMemberRow(row memberRow) (*domain.Member, error) {
+	return r.scanMember(
+		row.id,
+		row.slug,
+		row.channelID,
+		row.englishName,
+		row.japaneseName,
+		row.koreanName,
+		row.status,
+		row.isGraduated,
+		row.aliasesJSON,
+		row.photo,
+		row.org,
+		row.suborg,
+		row.syncSource,
+		row.twitchUserID,
+	)
+}
+
+func (r *Repository) parseMemberPhotoRow(row memberRow) (*domain.Member, error) {
+	return r.scanMemberWithPhoto(
+		row.id,
+		row.channelID,
+		row.englishName,
+		row.japaneseName,
+		row.koreanName,
+		row.isGraduated,
+		row.aliasesJSON,
+		row.photo,
+		row.org,
+		row.suborg,
+		row.syncSource,
+		row.twitchUserID,
+	)
+}
+
+func (r *Repository) querySingleMember(ctx context.Context, query string, args ...any) (*domain.Member, error) {
+	row, err := scanMemberQueryRow(r.pool.QueryRow(ctx, query, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return r.parseMemberRow(row)
+}
+
+func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query string, args ...any) (*domain.Member, error) {
+	row, err := scanMemberPhotoQueryRow(r.pool.QueryRow(ctx, query, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return r.parseMemberPhotoRow(row)
 }
 
 func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
@@ -82,35 +224,11 @@ func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*do
 		LIMIT 1
 	`
 
-	var (
-		id           int
-		slug         string
-		channelIDVal *string
-		englishName  string
-		japaneseName *string
-		koreanName   *string
-		status       string
-		isGraduated  bool
-		aliasesJSON  []byte
-		org          string
-		suborg       *string
-		syncSource   string
-		twitchUserID *string
-	)
-
-	err := r.pool.QueryRow(ctx, query, channelID).Scan(
-		&id, &slug, &channelIDVal, &englishName, &japaneseName, &koreanName,
-		&status, &isGraduated, &aliasesJSON, &org, &suborg, &syncSource, &twitchUserID,
-	)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+	member, err := r.querySingleMember(ctx, query, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by channel_id: %w", err)
 	}
-
-	return r.scanMember(id, slug, channelIDVal, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
+	return member, nil
 }
 
 func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Member, error) {
@@ -122,35 +240,11 @@ func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Membe
 		LIMIT 1
 	`
 
-	var (
-		id           int
-		slug         string
-		channelID    *string
-		englishName  string
-		japaneseName *string
-		koreanName   *string
-		status       string
-		isGraduated  bool
-		aliasesJSON  []byte
-		org          string
-		suborg       *string
-		syncSource   string
-		twitchUserID *string
-	)
-
-	err := r.pool.QueryRow(ctx, query, name).Scan(
-		&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
-		&status, &isGraduated, &aliasesJSON, &org, &suborg, &syncSource, &twitchUserID,
-	)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+	member, err := r.querySingleMember(ctx, query, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by name: %w", err)
 	}
-
-	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
+	return member, nil
 }
 
 func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
@@ -166,35 +260,11 @@ func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Mem
 		LIMIT 1
 	`
 
-	var (
-		id           int
-		slug         string
-		channelID    *string
-		englishName  string
-		japaneseName *string
-		koreanName   *string
-		status       string
-		isGraduated  bool
-		aliasesJSON  []byte
-		org          string
-		suborg       *string
-		syncSource   string
-		twitchUserID *string
-	)
-
-	err := r.pool.QueryRow(ctx, query, alias).Scan(
-		&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
-		&status, &isGraduated, &aliasesJSON, &org, &suborg, &syncSource, &twitchUserID,
-	)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+	member, err := r.querySingleMember(ctx, query, alias)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by alias: %w", err)
 	}
-
-	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
+	return member, nil
 }
 
 func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
@@ -273,32 +343,15 @@ func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member,
 	)
 
 	for rows.Next() {
-		var (
-			id           int
-			slug         string
-			channelID    *string
-			englishName  string
-			japaneseName *string
-			koreanName   *string
-			status       string
-			isGraduated  bool
-			aliasesJSON  []byte
-			photo        *string
-			org          string
-			suborg       *string
-			syncSource   string
-			twitchUserID *string
-		)
-
-		if err := rows.Scan(&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
-			&status, &isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID); err != nil {
+		row, err := scanMemberFullRow(rows)
+		if err != nil {
 			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
 			continue
 		}
 
-		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
+		member, err := r.parseMemberRow(row)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", englishName, err))
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
 			continue
 		}
 
@@ -321,35 +374,20 @@ func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]
 	var rowErrs []error
 
 	for rows.Next() {
-		var (
-			id           int
-			channelID    *string
-			englishName  string
-			japaneseName *string
-			koreanName   *string
-			isGraduated  bool
-			aliasesJSON  []byte
-			photo        *string
-			org          string
-			suborg       *string
-			syncSource   string
-			twitchUserID *string
-		)
-
-		if err := rows.Scan(&id, &channelID, &englishName, &japaneseName, &koreanName,
-			&isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID); err != nil {
+		row, err := scanMemberPhotoQueryRow(rows)
+		if err != nil {
 			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
 			continue
 		}
 
-		member, err := r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
+		member, err := r.parseMemberPhotoRow(row)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", englishName, err))
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
 			continue
 		}
 
-		if channelID != nil {
-			result[*channelID] = member
+		if row.channelID != nil {
+			result[*row.channelID] = member
 		}
 	}
 
@@ -373,34 +411,11 @@ func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelI
 		LIMIT 1
 	`
 
-	var (
-		id           int
-		chID         *string
-		englishName  string
-		japaneseName *string
-		koreanName   *string
-		isGraduated  bool
-		aliasesJSON  []byte
-		photo        *string
-		org          string
-		suborg       *string
-		syncSource   string
-		twitchUserID *string
-	)
-
-	err := r.pool.QueryRow(ctx, query, channelID).Scan(
-		&id, &chID, &englishName, &japaneseName, &koreanName,
-		&isGraduated, &aliasesJSON, &photo, &org, &suborg, &syncSource, &twitchUserID,
-	)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+	member, err := r.querySingleMemberWithPhoto(ctx, query, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by channel_id: %w", err)
 	}
-
-	return r.scanMemberWithPhoto(id, chID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
+	return member, nil
 }
 
 // scanMember: DB 조회 결과를 domain.Member로 변환함
@@ -695,33 +710,12 @@ func UpgradePhotoResolution(photoURL string) string {
 	}
 
 	for _, size := range []string{"=s88", "=s240", "=s800", "=s176", "=s68"} {
-		if contains(photoURL, size) {
-			return replaceFirst(photoURL, size, "=s1024")
+		if strings.Contains(photoURL, size) {
+			return strings.Replace(photoURL, size, "=s1024", 1)
 		}
 	}
 
 	return photoURL
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && findSubstring(s, substr) >= 0)
-}
-
-func findSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
-func replaceFirst(s, old, replacement string) string {
-	idx := findSubstring(s, old)
-	if idx < 0 {
-		return s
-	}
-	return s[:idx] + replacement + s[idx+len(old):]
 }
 
 // 검색 대상: english_name, korean_name, aliases->>'ko', aliases->>'ja'
@@ -742,44 +736,7 @@ func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.
 	}
 	defer rows.Close()
 
-	var members []*domain.Member
-	for rows.Next() {
-		var (
-			id           int
-			slug         string
-			channelID    *string
-			englishName  string
-			japaneseName *string
-			koreanName   *string
-			status       string
-			isGraduated  bool
-			aliasesJSON  []byte
-			org          string
-			suborg       *string
-			syncSource   string
-			twitchUserID *string
-		)
-
-		if err := rows.Scan(&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
-			&status, &isGraduated, &aliasesJSON, &org, &suborg, &syncSource, &twitchUserID); err != nil {
-			r.logger.Warn("Failed to scan member row", slog.Any("error", err))
-			continue
-		}
-
-		member, err := r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, org, suborg, syncSource, twitchUserID)
-		if err != nil {
-			r.logger.Warn("Failed to parse member", slog.String("name", englishName), slog.Any("error", err))
-			continue
-		}
-
-		members = append(members, member)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
-	}
-
-	return members, nil
+	return r.collectMembersByNameFromRows(rows)
 }
 
 func (r *Repository) FindByNameAndOrg(ctx context.Context, name, org string) (*domain.Member, error) {
@@ -795,33 +752,42 @@ func (r *Repository) FindByNameAndOrg(ctx context.Context, name, org string) (*d
 		LIMIT 1
 	`
 
-	var (
-		id           int
-		slug         string
-		channelID    *string
-		englishName  string
-		japaneseName *string
-		koreanName   *string
-		status       string
-		isGraduated  bool
-		aliasesJSON  []byte
-		orgVal       string
-		suborg       *string
-		syncSource   string
-		twitchUserID *string
-	)
-
-	err := r.pool.QueryRow(ctx, query, name, org).Scan(
-		&id, &slug, &channelID, &englishName, &japaneseName, &koreanName,
-		&status, &isGraduated, &aliasesJSON, &orgVal, &suborg, &syncSource, &twitchUserID,
-	)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+	member, err := r.querySingleMember(ctx, query, name, org)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by name and org: %w", err)
 	}
+	return member, nil
+}
 
-	return r.scanMember(id, slug, channelID, englishName, japaneseName, koreanName, status, isGraduated, aliasesJSON, nil, orgVal, suborg, syncSource, twitchUserID)
+func (r *Repository) collectMembersByNameFromRows(rows pgx.Rows) ([]*domain.Member, error) {
+	var (
+		members []*domain.Member
+		rowErrs []error
+	)
+
+	for rows.Next() {
+		row, err := scanMemberQueryRow(rows)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
+			continue
+		}
+
+		member, err := r.parseMemberRow(row)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
+			continue
+		}
+
+		members = append(members, member)
+	}
+
+	if err := rows.Err(); err != nil {
+		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
+	}
+
+	if len(rowErrs) > 0 {
+		return members, errors.Join(rowErrs...)
+	}
+
+	return members, nil
 }

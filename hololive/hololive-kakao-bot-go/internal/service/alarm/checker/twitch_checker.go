@@ -21,18 +21,18 @@
 package checker
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
@@ -64,7 +64,7 @@ func NewTwitchChecker(cacheSvc cache.Client, twitchClient *twitch.Client, logger
 
 // Check는 alarm:twitch_logins 매핑 기반으로 Twitch 라이브 알림 후보를 생성한다.
 func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
-	loginMappingsRaw, err := c.cacheSvc.HGetAll(ctx, notification.TwitchLoginMapKey)
+	loginMappingsRaw, err := c.cacheSvc.HGetAll(ctx, sharedalarmkeys.TwitchLoginMapKey)
 	if err != nil {
 		return nil, fmt.Errorf("check twitch streams: read login mappings: %w", err)
 	}
@@ -165,7 +165,7 @@ func (c *TwitchChecker) buildLiveNotifications(
 
 		dedupKey := buildTwitchLiveDedupKey(streamData.UserID, streamData.ID)
 
-		claimed, claimErr := c.cacheSvc.SetNX(ctx, dedupKey, "1", sharedconstants.CacheTTL.TwitchNotification)
+		claimed, claimErr := c.cacheSvc.SetNX(ctx, dedupKey, "true", sharedconstants.CacheTTL.TwitchNotification)
 		if claimErr != nil {
 			return nil, fmt.Errorf("check twitch streams: claim dedup key %s: %w", dedupKey, claimErr)
 		}

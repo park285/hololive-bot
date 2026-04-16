@@ -16,8 +16,22 @@ import (
 )
 
 const emptyChannelSubscriberCacheTTL = 30 * time.Second
+const channelSubscriberLoadTimeout = 5 * time.Second
 
 var channelSubscriberLoadGroup singleflight.Group
+
+func withoutCancelPreserveDeadline(ctx context.Context, fallback time.Duration) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		return context.WithTimeout(context.Background(), fallback)
+	}
+
+	base := context.WithoutCancel(ctx)
+	if deadline, ok := ctx.Deadline(); ok {
+		return context.WithDeadline(base, deadline)
+	}
+
+	return context.WithTimeout(base, fallback)
+}
 
 func LookupChannelSubscribersByType(
 	ctx context.Context,
@@ -115,10 +129,8 @@ func loadChannelSubscriberAlarms(ctx context.Context, db *gorm.DB, channelID str
 	}
 
 	resultCh := channelSubscriberLoadGroup.DoChan(normalizedChannelID, func() (any, error) {
-		queryCtx := context.Background()
-		if ctx != nil {
-			queryCtx = context.WithoutCancel(ctx)
-		}
+		queryCtx, cancel := withoutCancelPreserveDeadline(ctx, channelSubscriberLoadTimeout)
+		defer cancel()
 
 		var records []domain.Alarm
 		if err := db.WithContext(queryCtx).

@@ -120,34 +120,7 @@ func (r *StatsRepository) getLatestStatsForChannelsFromHistory(ctx context.Conte
 	}
 	defer rows.Close()
 
-	result := make(map[string]*domain.TimestampedStats, len(channelIDs))
-	for rows.Next() {
-		var stats domain.TimestampedStats
-		var memberName *string
-
-		if err := rows.Scan(
-			&stats.Timestamp,
-			&stats.ChannelID,
-			&memberName,
-			&stats.SubscriberCount,
-			&stats.VideoCount,
-			&stats.ViewCount,
-		); err != nil {
-			r.logger.Warn("Failed to scan batch stats row", slog.Any("error", err))
-			continue
-		}
-
-		if memberName != nil {
-			stats.MemberName = *memberName
-		}
-		result[stats.ChannelID] = &stats
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
-	}
-
-	return result, nil
+	return scanTimestampedStatsRows(rows, r.logger, len(channelIDs))
 }
 
 func (r *StatsRepository) getLatestStatsFromSnapshot(ctx context.Context, channelID string) (*domain.TimestampedStats, error) {
@@ -195,7 +168,12 @@ func (r *StatsRepository) getLatestStatsForChannelsFromSnapshot(ctx context.Cont
 	}
 	defer rows.Close()
 
-	result := make(map[string]*domain.TimestampedStats, len(channelIDs))
+	return scanTimestampedStatsRows(rows, r.logger, len(channelIDs))
+}
+
+func scanTimestampedStatsRows(rows pgx.Rows, logger *slog.Logger, capacity int) (map[string]*domain.TimestampedStats, error) {
+	result := make(map[string]*domain.TimestampedStats, capacity)
+
 	for rows.Next() {
 		var stats domain.TimestampedStats
 		var memberName *string
@@ -208,7 +186,9 @@ func (r *StatsRepository) getLatestStatsForChannelsFromSnapshot(ctx context.Cont
 			&stats.VideoCount,
 			&stats.ViewCount,
 		); err != nil {
-			r.logger.Warn("Failed to scan batch stats row", slog.Any("error", err))
+			if logger != nil {
+				logger.Warn("Failed to scan batch stats row", slog.Any("error", err))
+			}
 			continue
 		}
 

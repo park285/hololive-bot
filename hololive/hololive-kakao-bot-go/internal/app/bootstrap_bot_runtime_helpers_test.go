@@ -115,7 +115,7 @@ func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
 			AdvanceMinutes: []int{5, 3, 1},
 		},
 	}
-	infra := &coreInfrastructure{
+	infra := &appbootstrap.CoreInfrastructure{
 		Deps: &bot.Dependencies{
 			Cache:  cachemocks.NewStrictClient(),
 			Chzzk:  &chzzk.Client{},

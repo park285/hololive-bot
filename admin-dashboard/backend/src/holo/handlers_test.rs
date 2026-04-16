@@ -26,7 +26,7 @@ fn test_state(base_url: String) -> Arc<AppState> {
         session_secret: "test-secret-key-minimum-length".to_string(),
         valkey_url: "127.0.0.1:1".to_string(),
         docker_host: "tcp://127.0.0.1:2375".to_string(),
-        holo_bot_url: base_url.clone(),
+        holo_admin_api_url: base_url.clone(),
         holo_bot_api_key: String::new(),
         enable_openapi: true,
         enable_swagger_ui: true,
@@ -49,7 +49,8 @@ fn test_state(base_url: String) -> Arc<AppState> {
         .expect("valkey pool creation failed");
     let sessions = ValkeySessionStore::new(pool, config.session.clone());
     let rate_limiter = Arc::new(LoginRateLimiter::new());
-    let status_collector = StatusCollector::new(vec![], env!("CARGO_PKG_VERSION"));
+    let status_collector =
+        StatusCollector::new(vec![], env!("CARGO_PKG_VERSION")).expect("status collector init");
     let (stats_tx, _) = tokio::sync::broadcast::channel::<SystemStats>(16);
 
     Arc::new(AppState {

@@ -34,22 +34,17 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 )
 
 func TestNotifierSend_DedupSkip(t *testing.T) {
 	t.Parallel()
 
 	cacheSvc := newCheckerTestCacheClient(t)
-	alarmSvc := newCheckerTestAlarmService(t, cacheSvc)
-
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
 		dedupSvc,
 		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
-		alarmSvc,
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -92,14 +87,11 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	t.Parallel()
 
 	cacheSvc := newCheckerTestCacheClient(t)
-	alarmSvc := newCheckerTestAlarmService(t, cacheSvc)
-
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
 
 	notifier, err := NewNotifier(
 		dedupSvc,
 		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
-		alarmSvc,
 		tier.NewTieredScheduler(newCheckerTestLogger()),
 		newCheckerTestLogger(),
 	)
@@ -163,7 +155,6 @@ func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 	notifier, err := NewNotifier(
 		dedupSvc,
 		queue.NewPublisher(cacheSvc, logger),
-		&notification.AlarmService{},
 		nil,
 		logger,
 	)
@@ -201,14 +192,12 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 	t.Parallel()
 
 	cacheSvc := newCheckerTestCacheClient(t)
-	alarmSvc := newCheckerTestAlarmService(t, cacheSvc)
 	logger := newCheckerTestLogger()
 	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
 
 	notifier, err := NewNotifier(
 		dedupSvc,
 		queue.NewPublisher(cacheSvc, logger),
-		alarmSvc,
 		tier.NewTieredScheduler(logger),
 		logger,
 	)

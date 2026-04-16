@@ -22,33 +22,34 @@ package app
 
 import (
 	"context"
-	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-
-	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
+	appruntime "github.com/kapu/hololive-kakao-bot-go/internal/app/runtime"
 )
 
-func ProvideACLService(
-	ctx context.Context,
-	kakaoACLEnabled bool,
-	kakaoACLMode acl.ACLMode,
-	kakaoRooms []string,
-	postgres database.Client,
-	cacheSvc cache.Client,
-	logger *slog.Logger,
-) (*acl.Service, error) {
-	return appbootstrap.ProvideACLService(ctx, kakaoACLEnabled, kakaoACLMode, kakaoRooms, postgres, cacheSvc, logger)
+func (r *AdminAPIRuntime) Run() {
+	if r == nil {
+		return
+	}
+
+	appruntime.Run(r.Logger, r.Start, r.Shutdown)
 }
 
-func ProvideActivityLogger(logger *slog.Logger) *activity.Logger {
-	return appbootstrap.ProvideActivityLogger(logger)
+func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
+	if r == nil {
+		return
+	}
+
+	appruntime.Start(ctx, errCh, appruntime.StartHooks{
+		Logger:          r.Logger,
+		ServerAddr:      r.ServerAddr,
+		StartHTTPServer: r.StartHTTPServer,
+	})
 }
 
-func ProvideBotDependencies(modules botDependencyModules) *bot.Dependencies {
-	return appbootstrap.ProvideBotDependencies(modules)
+func (r *AdminAPIRuntime) StartHTTPServer(errCh chan<- error) {
+	if r == nil {
+		return
+	}
+
+	appruntime.StartHTTPServer(r.HttpServer, r.Logger, errCh)
 }

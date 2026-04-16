@@ -42,9 +42,9 @@ const (
 	AlarmRegistryKey            = sharedalarmkeys.AlarmRegistryKey
 	AlarmChannelRegistryKey     = sharedalarmkeys.AlarmChannelRegistryKey
 	ChannelSubscribersKeyPrefix = sharedalarmkeys.ChannelSubscribersKeyPrefix
-	ChzzkChannelMapKey          = "alarm:chzzk_channels"
-	TwitchLoginMapKey           = "alarm:twitch_logins"
-	TwitchChannelLoginMapKey    = "alarm:twitch_channel_logins"
+	ChzzkChannelMapKey          = sharedalarmkeys.ChzzkChannelMapKey
+	TwitchLoginMapKey           = sharedalarmkeys.TwitchLoginMapKey
+	TwitchChannelLoginMapKey    = sharedalarmkeys.TwitchChannelLoginMapKey
 	MemberNameKey               = sharedalarmkeys.MemberNameKey
 	RoomNamesCacheKey           = sharedalarmkeys.RoomNamesCacheKey
 	UserNamesCacheKey           = sharedalarmkeys.UserNamesCacheKey
@@ -53,15 +53,15 @@ const (
 	NotifyLogicalClaimKeyPrefix = "notified:claim:event:"
 	UpcomingEventKeyPrefix      = "notified:upcoming:event:"
 	ScheduleTransitionKeyPrefix = "notified:schedule:transition:"
-	NextStreamKeyPrefix         = "alarm:next_stream:"
+	NextStreamKeyPrefix         = sharedalarmkeys.NextStreamKeyPrefix
 
 	// 타입별 구독자 키 접두사 (COMMUNITY, SHORTS용).
 	ChannelSubscribersCommunityPrefix = sharedalarmkeys.ChannelSubscribersCommunityPrefix
 	ChannelSubscribersShortsPrefix    = sharedalarmkeys.ChannelSubscribersShortsPrefix
 
 	// Chzzk 알림 키 접두사.
-	ChzzkLiveNotifiedKeyPrefix  = "notified:chzzk:live:"
-	IntegratedNotifiedKeyPrefix = "notified:integrated:"
+	ChzzkLiveNotifiedKeyPrefix  = sharedalarmkeys.ChzzkLiveNotifiedKeyPrefix
+	IntegratedNotifiedKeyPrefix = sharedalarmkeys.IntegratedNotifiedKeyPrefix
 )
 
 // 스케줄 변경 시 StartScheduled 불일치 → SentAt 맵 리셋.

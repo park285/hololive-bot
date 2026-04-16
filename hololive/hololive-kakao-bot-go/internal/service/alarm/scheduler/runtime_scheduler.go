@@ -150,7 +150,7 @@ func NewRuntimeScheduler(
 		return nil, fmt.Errorf("new runtime scheduler: create twitch checker: %w", err)
 	}
 
-	notifierSvc, err := checker.NewNotifier(dedupSvc, queuePublisher, alarmSvc, tierScheduler, logger)
+	notifierSvc, err := checker.NewNotifier(dedupSvc, queuePublisher, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}

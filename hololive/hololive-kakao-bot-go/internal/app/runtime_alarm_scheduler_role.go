@@ -21,30 +21,60 @@
 package app
 
 import (
-	"context"
+	"fmt"
 	"log/slog"
-	"net/http"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-func ProvideChzzkClient(httpClient *http.Client, cfg config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
-	return appbootstrap.ProvideChzzkClient(httpClient, cfg, logger)
+const (
+	notificationSchedulerRoleEnv = "NOTIFICATION_SCHEDULER_ROLE"
+	runtimeRoleBot               = "bot"
+	runtimeRoleWorker            = "worker"
+	schedulerRoleOff             = "off"
+)
+
+func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
+	role := strings.ToLower(strings.TrimSpace(configuredRole))
+	if role == "" {
+		role = strings.ToLower(strings.TrimSpace(runtimeRole))
+	}
+
+	switch role {
+	case schedulerRoleOff:
+		return false
+	case runtimeRoleBot, runtimeRoleWorker:
+		return strings.ToLower(strings.TrimSpace(runtimeRole)) == role
+	default:
+		return false
+	}
 }
 
-func ProvideTwitchClient(cfg config.TwitchConfig, logger *slog.Logger) *twitch.Client {
-	return appbootstrap.ProvideTwitchClient(cfg, logger)
-}
-
-func ProvideMemberCacheWithoutValkey(
-	ctx context.Context,
-	repo *member.Repository,
+func buildRuntimeAlarmScheduler(
+	runtimeRole string,
+	cfg *config.Config,
+	infra *appbootstrap.CoreInfrastructure,
 	logger *slog.Logger,
-) (*member.Cache, error) {
-	return appbootstrap.ProvideMemberCacheWithoutValkey(ctx, repo, logger)
+	configuredRole string,
+) (runtimeAlarmScheduler, error) {
+	if !runtimeAllowsAlarmScheduler(runtimeRole, configuredRole) {
+		if logger != nil {
+			logger.Info(
+				"Alarm runtime scheduler disabled for this runtime",
+				slog.String("runtime_role", runtimeRole),
+				slog.String("configured_role", strings.TrimSpace(configuredRole)),
+			)
+		}
+		return nil, nil
+	}
+
+	scheduler, err := appbootstrap.BuildAlarmRuntimeScheduler(cfg, infra, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build runtime alarm scheduler: %w", err)
+	}
+
+	return scheduler, nil
 }

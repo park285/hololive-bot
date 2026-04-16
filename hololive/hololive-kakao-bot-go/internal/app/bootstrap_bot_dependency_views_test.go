@@ -40,6 +40,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
@@ -182,7 +183,7 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
-		infra := &coreInfrastructure{
+		infra := &appbootstrap.CoreInfrastructure{
 			Deps: &bot.Dependencies{
 				Service: youtubeSvc,
 			},
@@ -231,7 +232,7 @@ func TestBuildBotAdminRuntimeDependencies(t *testing.T) {
 
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
-		infra := &coreInfrastructure{
+		infra := &appbootstrap.CoreInfrastructure{
 			Deps: &bot.Dependencies{
 				Cache:       cacheSvc,
 				Postgres:    postgresSvc,
@@ -315,7 +316,7 @@ func TestBuildBotServerRuntimeDependencies(t *testing.T) {
 	t.Run("maps alarm CRUD", func(t *testing.T) {
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
 
-		infra := &coreInfrastructure{
+		infra := &appbootstrap.CoreInfrastructure{
 			AlarmCRUD: alarmCRUD,
 		}
 
@@ -355,7 +356,7 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 			Service:  youtubeSvc,
 		}
 
-		infra := &coreInfrastructure{
+		infra := &appbootstrap.CoreInfrastructure{
 			Deps:             deps,
 			AlarmCRUD:        alarmCRUD,
 			HolodexService:   holodexSvc,
