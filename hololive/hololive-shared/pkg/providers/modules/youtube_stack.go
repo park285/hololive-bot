@@ -32,26 +32,20 @@ type YouTubeStackParams struct {
 }
 
 func BuildYouTubeStack(ctx context.Context, params YouTubeStackParams) *providers.YouTubeStack {
-	if !params.YouTubeConfig.EnableQuotaBuilding || params.YouTubeConfig.APIKey == "" {
-		if params.Logger != nil {
-			params.Logger.Info("YouTube quota building disabled; stats repository only")
-		}
-		return &providers.YouTubeStack{StatsRepo: params.StatsRepo}
-	}
-
-	svc, err := youtube.NewYouTubeService(ctx, params.YouTubeConfig.APIKey, params.CacheService, scraper.ProxyConfig{
-		Enabled: params.ScraperConfig.ProxyEnabled,
-		URL:     params.ScraperConfig.ProxyURL,
-	}, params.SharedRateLimit, params.Logger)
-	if err != nil {
-		if params.Logger != nil {
-			params.Logger.Warn("YouTube service init failed (optional feature)", slog.Any("error", err))
-		}
-		return &providers.YouTubeStack{StatsRepo: params.StatsRepo}
+	stack := BuildYouTubeAPIStack(ctx, YouTubeAPIStackParams{
+		YouTubeConfig:   params.YouTubeConfig,
+		ScraperConfig:   params.ScraperConfig,
+		CacheService:    params.CacheService,
+		StatsRepo:       params.StatsRepo,
+		SharedRateLimit: params.SharedRateLimit,
+		Logger:          params.Logger,
+	})
+	if stack.Service == nil {
+		return stack
 	}
 
 	scheduler := youtube.NewScheduler(
-		svc,
+		stack.Service,
 		params.HolodexService,
 		params.CacheService,
 		params.StatsRepo,
@@ -66,9 +60,6 @@ func BuildYouTubeStack(ctx context.Context, params YouTubeStackParams) *provider
 		params.Logger.Info("YouTube quota building enabled", slog.String("mode", "API Key"), slog.Int("daily_target", 9192))
 	}
 
-	return &providers.YouTubeStack{
-		Service:   svc,
-		Scheduler: scheduler,
-		StatsRepo: params.StatsRepo,
-	}
+	stack.Scheduler = scheduler
+	return stack
 }

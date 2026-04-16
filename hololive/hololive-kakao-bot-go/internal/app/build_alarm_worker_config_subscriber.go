@@ -25,23 +25,24 @@ import (
 	"log/slog"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-
-	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 )
 
 func BuildAlarmWorkerConfigSubscriber(
 	ctx context.Context,
-	infra *appbootstrap.CoreInfrastructure,
+	cacheSvc cache.Client,
+	alarmCRUD domain.AlarmCRUD,
 	logger *slog.Logger,
 ) *configsub.Subscriber {
-	if infra == nil || infra.Deps == nil || infra.Deps.Cache == nil || infra.AlarmCRUD == nil {
+	if cacheSvc == nil || alarmCRUD == nil {
 		return nil
 	}
 
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
-			targets := infra.AlarmCRUD.UpdateAlarmAdvanceMinutes(ctx, payload.Minutes)
+			targets := alarmCRUD.UpdateAlarmAdvanceMinutes(ctx, payload.Minutes)
 			if logger != nil {
 				logger.Info(
 					"Alarm worker applied alarm advance minutes via pub/sub",
@@ -52,5 +53,5 @@ func BuildAlarmWorkerConfigSubscriber(
 		},
 	})
 
-	return configsub.New(infra.Deps.Cache.GetClient(), applyFn, logger)
+	return configsub.New(cacheSvc.GetClient(), applyFn, logger)
 }

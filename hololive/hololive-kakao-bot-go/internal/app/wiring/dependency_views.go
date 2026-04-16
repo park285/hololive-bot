@@ -22,19 +22,12 @@ package wiring
 
 import (
 	"github.com/kapu/hololive-shared/pkg/domain"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
 type BotWebhookRuntimeDependencies struct {
@@ -52,32 +45,10 @@ type BotConfigSubscriberRuntimeDependencies struct {
 	AlarmCRUD      domain.AlarmCRUD
 }
 
-type BotAdminRuntimeDependencies struct {
-	Cache                cache.Client
-	Postgres             database.Client
-	MemberRepo           *member.Repository
-	MemberCache          *member.Cache
-	Profiles             *member.ProfileService
-	AlarmCRUD            domain.AlarmCRUD
-	HolodexService       *holodex.Service
-	YouTubeService       youtube.Service
-	StatsRepo            stats.StatsDashboardRepository
-	ActivityLogger       *activity.Logger
-	Settings             settings.ReadWriter
-	ACL                  *acl.Service
-	TemplateAdminService *template.AdminService
-}
-
-type BotServerRuntimeDependencies struct {
-	AlarmCRUD domain.AlarmCRUD
-}
-
 type BotRuntimeDependencyViewInputs struct {
-	BotDependencies      *bot.Dependencies
-	AlarmCRUD            domain.AlarmCRUD
-	HolodexService       *holodex.Service
-	YouTubeStack         *providers.YouTubeStack
-	TemplateAdminService *template.AdminService
+	BotDependencies *bot.Dependencies
+	AlarmCRUD       domain.AlarmCRUD
+	HolodexService  *holodex.Service
 }
 
 type BotRuntimeDependencyViews struct {
@@ -85,18 +56,11 @@ type BotRuntimeDependencyViews struct {
 	Webhook                 BotWebhookRuntimeDependencies
 	ConfigSubscriber        BotConfigSubscriberDependencies
 	ConfigSubscriberRuntime BotConfigSubscriberRuntimeDependencies
-	AdminRuntime            BotAdminRuntimeDependencies
-	ServerRuntime           BotServerRuntimeDependencies
 }
 
 func BuildBotRuntimeDependencyViews(inputs BotRuntimeDependencyViewInputs) BotRuntimeDependencyViews {
 	if inputs.BotDependencies == nil {
 		return BotRuntimeDependencyViews{}
-	}
-
-	var statsRepo stats.StatsDashboardRepository
-	if inputs.YouTubeStack != nil {
-		statsRepo = inputs.YouTubeStack.StatsRepo
 	}
 
 	return BotRuntimeDependencyViews{
@@ -112,24 +76,6 @@ func BuildBotRuntimeDependencyViews(inputs BotRuntimeDependencyViewInputs) BotRu
 			YouTubeService: inputs.BotDependencies.Service,
 			HolodexService: inputs.HolodexService,
 			AlarmCRUD:      inputs.AlarmCRUD,
-		},
-		AdminRuntime: BotAdminRuntimeDependencies{
-			Cache:                inputs.BotDependencies.Cache,
-			Postgres:             inputs.BotDependencies.Postgres,
-			MemberRepo:           inputs.BotDependencies.MemberRepo,
-			MemberCache:          inputs.BotDependencies.MemberCache,
-			Profiles:             inputs.BotDependencies.Profiles,
-			AlarmCRUD:            inputs.AlarmCRUD,
-			HolodexService:       inputs.HolodexService,
-			YouTubeService:       inputs.BotDependencies.Service,
-			StatsRepo:            statsRepo,
-			ActivityLogger:       inputs.BotDependencies.Activity,
-			Settings:             inputs.BotDependencies.Settings,
-			ACL:                  inputs.BotDependencies.ACL,
-			TemplateAdminService: inputs.TemplateAdminService,
-		},
-		ServerRuntime: BotServerRuntimeDependencies{
-			AlarmCRUD: inputs.AlarmCRUD,
 		},
 	}
 }

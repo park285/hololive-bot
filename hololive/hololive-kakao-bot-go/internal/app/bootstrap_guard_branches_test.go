@@ -173,7 +173,7 @@ func TestBuildBotWebhookHandler_ReturnsClosableHandler(t *testing.T) {
 func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := buildBotRuntime(t.Context(), &config.Config{}, testBootstrapGuardLogger(), &appbootstrap.CoreInfrastructure{})
+	runtime, err := buildBotRuntime(t.Context(), &config.Config{}, testBootstrapGuardLogger(), &appbootstrap.BotInfrastructure{})
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to create bot")
@@ -184,15 +184,15 @@ func TestBuildBotAdminServerDependencies_GuardBranches(t *testing.T) {
 
 	logger := testBootstrapGuardLogger()
 
-	deps, err := buildBotAdminServerDependencies(t.Context(), nil, botAdminRuntimeDependencies{}, nil, logger)
+	deps, err := buildAdminServerDependencies(t.Context(), nil, &appbootstrap.AdminAPIInfrastructure{}, nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, deps)
 	assert.Contains(t, err.Error(), "config is nil")
 
-	deps, err = buildBotAdminServerDependencies(t.Context(), &config.Config{}, botAdminRuntimeDependencies{}, nil, logger)
+	deps, err = buildAdminServerDependencies(t.Context(), &config.Config{}, &appbootstrap.AdminAPIInfrastructure{}, nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, deps)
-	assert.Contains(t, err.Error(), "admin dependency view is incomplete")
+	assert.Contains(t, err.Error(), "admin infrastructure is incomplete")
 }
 
 func TestResolveLLMSchedulerClients_Guards(t *testing.T) {

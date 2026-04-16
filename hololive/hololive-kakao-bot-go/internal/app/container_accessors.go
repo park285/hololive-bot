@@ -37,10 +37,6 @@ func (c *Container) NewBot() (*bot.Bot, error) {
 	return appwiring.NewBot(c.botDeps)
 }
 
-func (c *Container) GetYouTubeScheduler() youtube.Scheduler {
-	return appwiring.YouTubeScheduler(c.botDeps)
-}
-
 func (c *Container) GetMemberRepo() *member.Repository { return appwiring.MemberRepo(c.botDeps) }
 
 func (c *Container) GetMemberCache() *member.Cache { return appwiring.MemberCache(c.botDeps) }

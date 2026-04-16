@@ -29,6 +29,8 @@ import (
 	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
+// Deprecated: current admin-api runtime uses config.Load() with SERVER_PORT=30006.
+// This compatibility config remains only for legacy callers until cleanup lands.
 type AdminAPIConfig struct {
 	Server          ServerConfig
 	Valkey          ValkeyConfig
@@ -42,6 +44,7 @@ type AdminAPIConfig struct {
 	Version         string
 }
 
+// Deprecated: current admin-api runtime uses config.Load() instead of LoadAdminAPI.
 func LoadAdminAPI() (*AdminAPIConfig, error) {
 	_ = godotenv.Load()
 
@@ -63,7 +66,7 @@ func buildAdminAPIConfig() *AdminAPIConfig {
 
 	return &AdminAPIConfig{
 		Server: ServerConfig{
-			Port:   sharedenv.Int("ADMIN_API_PORT", 30002),
+			Port:   sharedenv.Int("ADMIN_API_PORT", 30006),
 			APIKey: sharedenv.String("API_SECRET_KEY", ""),
 		},
 		Valkey:   loadValkeyConfig(),

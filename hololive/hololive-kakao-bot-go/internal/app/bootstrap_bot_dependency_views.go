@@ -21,54 +21,20 @@
 package app
 
 import (
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	appwiring "github.com/kapu/hololive-kakao-bot-go/internal/app/wiring"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 )
 
 type botWebhookRuntimeDependencies = appbootstrap.BotWebhookRuntimeDependencies
 type botConfigSubscriberDependencies = appbootstrap.BotConfigSubscriberDependencies
 type botConfigSubscriberRuntimeDependencies = appbootstrap.BotConfigSubscriberRuntimeDependencies
 
-type botAdminRuntimeDependencies struct {
-	cache            cache.Client
-	postgres         database.Client
-	memberRepo       *member.Repository
-	memberCache      *member.Cache
-	profiles         *member.ProfileService
-	alarmCRUD        domain.AlarmCRUD
-	holodexService   *holodex.Service
-	youtubeService   youtube.Service
-	statsRepo        stats.StatsDashboardRepository
-	activityLogger   *activity.Logger
-	settings         settings.ReadWriter
-	acl              *acl.Service
-	templateAdminSvc *template.AdminService
-}
-
-type botServerRuntimeDependencies struct {
-	alarmCRUD domain.AlarmCRUD
-}
-
 type botRuntimeDependencyViews struct {
 	botDeps                 *bot.Dependencies
 	webhook                 botWebhookRuntimeDependencies
 	configSubscriber        botConfigSubscriberDependencies
 	configSubscriberRuntime botConfigSubscriberRuntimeDependencies
-	adminRuntime            botAdminRuntimeDependencies
-	serverRuntime           botServerRuntimeDependencies
 }
 
 func buildBotWebhookRuntimeDependencies(deps *bot.Dependencies) botWebhookRuntimeDependencies {
@@ -83,7 +49,7 @@ func buildBotConfigSubscriberDependencies(deps *bot.Dependencies) botConfigSubsc
 	}
 }
 
-func buildBotConfigSubscriberRuntimeDependencies(infra *appbootstrap.CoreInfrastructure) botConfigSubscriberRuntimeDependencies {
+func buildBotConfigSubscriberRuntimeDependencies(infra *appbootstrap.BotInfrastructure) botConfigSubscriberRuntimeDependencies {
 	if infra == nil {
 		return botConfigSubscriberRuntimeDependencies{}
 	}
@@ -100,44 +66,7 @@ func buildBotConfigSubscriberRuntimeDependencies(infra *appbootstrap.CoreInfrast
 	}
 }
 
-func buildBotAdminRuntimeDependencies(infra *appbootstrap.CoreInfrastructure) botAdminRuntimeDependencies {
-	if infra == nil {
-		return botAdminRuntimeDependencies{}
-	}
-
-	views := appwiring.BuildBotRuntimeDependencyViews(appwiring.BotRuntimeDependencyViewInputs{
-		BotDependencies:      infra.Deps,
-		AlarmCRUD:            infra.AlarmCRUD,
-		HolodexService:       infra.HolodexService,
-		YouTubeStack:         infra.YTStack,
-		TemplateAdminService: infra.TemplateAdminSvc,
-	})
-	return botAdminRuntimeDependencies{
-		cache:            views.AdminRuntime.Cache,
-		postgres:         views.AdminRuntime.Postgres,
-		memberRepo:       views.AdminRuntime.MemberRepo,
-		memberCache:      views.AdminRuntime.MemberCache,
-		profiles:         views.AdminRuntime.Profiles,
-		alarmCRUD:        views.AdminRuntime.AlarmCRUD,
-		holodexService:   views.AdminRuntime.HolodexService,
-		youtubeService:   views.AdminRuntime.YouTubeService,
-		statsRepo:        views.AdminRuntime.StatsRepo,
-		activityLogger:   views.AdminRuntime.ActivityLogger,
-		settings:         views.AdminRuntime.Settings,
-		acl:              views.AdminRuntime.ACL,
-		templateAdminSvc: views.AdminRuntime.TemplateAdminService,
-	}
-}
-
-func buildBotServerRuntimeDependencies(infra *appbootstrap.CoreInfrastructure) botServerRuntimeDependencies {
-	if infra == nil {
-		return botServerRuntimeDependencies{}
-	}
-
-	return botServerRuntimeDependencies{alarmCRUD: infra.AlarmCRUD}
-}
-
-func buildBotRuntimeDependencyViews(infra *appbootstrap.CoreInfrastructure) botRuntimeDependencyViews {
+func buildBotRuntimeDependencyViews(infra *appbootstrap.BotInfrastructure) botRuntimeDependencyViews {
 	if infra == nil {
 		return botRuntimeDependencyViews{}
 	}
@@ -147,7 +76,5 @@ func buildBotRuntimeDependencyViews(infra *appbootstrap.CoreInfrastructure) botR
 		webhook:                 buildBotWebhookRuntimeDependencies(infra.Deps),
 		configSubscriber:        buildBotConfigSubscriberDependencies(infra.Deps),
 		configSubscriberRuntime: buildBotConfigSubscriberRuntimeDependencies(infra),
-		adminRuntime:            buildBotAdminRuntimeDependencies(infra),
-		serverRuntime:           buildBotServerRuntimeDependencies(infra),
 	}
 }

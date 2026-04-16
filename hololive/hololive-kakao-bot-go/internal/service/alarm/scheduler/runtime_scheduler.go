@@ -39,7 +39,6 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/alarm/checker"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
@@ -88,7 +87,7 @@ func NewRuntimeScheduler(
 	holodexSvc *holodex.Service,
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
-	alarmSvc *notification.AlarmService,
+	alarmCRUD domain.AlarmCRUD,
 	notifCfg config.NotificationConfig,
 	logger *slog.Logger,
 ) (*RuntimeScheduler, error) {
@@ -108,15 +107,15 @@ func NewRuntimeScheduler(
 		return nil, errors.New("new runtime scheduler: twitch client is nil")
 	}
 
-	if alarmSvc == nil {
-		return nil, errors.New("new runtime scheduler: alarm service is nil")
+	if alarmCRUD == nil {
+		return nil, errors.New("new runtime scheduler: alarm CRUD is nil")
 	}
 
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	targetMinutes := sharedchecker.NormalizeTargetMinutes(alarmSvc.GetTargetMinutes())
+	targetMinutes := sharedchecker.NormalizeTargetMinutes(alarmCRUD.GetTargetMinutes())
 	youtubeInterval := notifCfg.CheckInterval
 	youtubeEvaluationWindowCap := youtubeEvaluationWindowCap(youtubeInterval)
 	if youtubeInterval <= 0 {
@@ -163,7 +162,7 @@ func NewRuntimeScheduler(
 
 		youtubeTargetUpdater: youtubeChecker,
 		dedupTargetUpdater:   dedupSvc,
-		targetMinutesSource:  alarmSvc,
+		targetMinutesSource:  alarmCRUD,
 
 		youtubeInterval: youtubeInterval,
 		chzzkInterval:   defaultLiveInterval,

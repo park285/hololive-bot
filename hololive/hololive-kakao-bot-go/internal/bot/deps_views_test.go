@@ -21,7 +21,6 @@
 package bot
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 
@@ -29,17 +28,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
 )
-
-type stubYouTubeScheduler struct{}
-
-func (s *stubYouTubeScheduler) Start(context.Context) {}
-func (s *stubYouTubeScheduler) Stop()                 {}
 
 func TestDependenciesViews_NilSafety(t *testing.T) {
 	var deps *Dependencies
@@ -47,23 +40,18 @@ func TestDependenciesViews_NilSafety(t *testing.T) {
 	if got := deps.coreDeps(); got.logger != nil || got.botSelfUser != "" || got.irisBaseURL != "" {
 		t.Fatal("coreDeps nil-safety failed")
 	}
-
 	if got := deps.messagingDeps(); got.client != nil || got.messageAdapter != nil || got.formatter != nil {
 		t.Fatal("messagingDeps nil-safety failed")
 	}
-
 	if got := deps.dataDeps(); got.cache != nil || got.postgres != nil || got.memberRepo != nil || got.memberCache != nil {
 		t.Fatal("dataDeps nil-safety failed")
 	}
-
-	if got := deps.streamDeps(); got.holodex != nil || got.scheduler != nil || got.youTubeStatsRepo != nil {
+	if got := deps.streamDeps(); got.holodex != nil || got.youTubeStatsRepo != nil {
 		t.Fatal("streamDeps nil-safety failed")
 	}
-
 	if got := deps.supportDeps(); got.acl != nil || got.workerPool != nil {
 		t.Fatal("supportDeps nil-safety failed")
 	}
-
 	if got := deps.featureDeps(); len(got.commandBuilders) != 0 || got.majorEventRepo != nil || got.memberNews != nil {
 		t.Fatal("featureDeps nil-safety failed")
 	}
@@ -77,7 +65,6 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	postgresSvc := &database.PostgresService{}
 	memberRepo := &member.Repository{}
 	memberCache := &member.Cache{}
-	scheduler := &stubYouTubeScheduler{}
 	workerPool := &workerpool.Pool{}
 	externalBuilder := CommandBuilder(func(_ *command.Dependencies) command.Command {
 		return command.NewHelpCommand(nil)
@@ -95,7 +82,6 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 		Postgres:        postgresSvc,
 		MemberRepo:      memberRepo,
 		MemberCache:     memberCache,
-		Scheduler:       scheduler,
 		CommandBuilders: []CommandBuilder{externalBuilder},
 		WorkerPool:      workerPool,
 	}
@@ -116,8 +102,8 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 	}
 
 	stream := deps.streamDeps()
-	if stream.scheduler != scheduler {
-		t.Fatal("streamDeps scheduler mapping mismatch")
+	if stream.service != nil {
+		t.Fatal("streamDeps service mapping mismatch")
 	}
 
 	support := deps.supportDeps()
@@ -130,12 +116,8 @@ func TestDependenciesViews_FieldMapping(t *testing.T) {
 		t.Fatal("featureDeps commandBuilders mapping mismatch")
 	}
 
-	// defensive copy 보장
 	deps.CommandBuilders[0] = nil
-
 	if feature.commandBuilders[0] == nil {
 		t.Fatal("featureDeps commandBuilders must be copied defensively")
 	}
 }
-
-var _ youtube.Scheduler = (*stubYouTubeScheduler)(nil)

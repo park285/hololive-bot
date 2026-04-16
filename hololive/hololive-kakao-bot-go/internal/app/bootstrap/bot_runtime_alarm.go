@@ -7,55 +7,58 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
 
 	alarmscheduler "github.com/kapu/hololive-kakao-bot-go/internal/service/alarm/scheduler"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
 type RuntimeAlarmScheduler interface {
 	Start(ctx context.Context)
 }
 
-func BuildAlarmRuntimeScheduler(
+func NewAlarmWorkerRuntimeScheduler(
 	cfg *config.Config,
-	infra *CoreInfrastructure,
+	cacheSvc cache.Client,
+	holodexSvc *holodex.Service,
+	chzzkClient *chzzk.Client,
+	twitchClient *twitch.Client,
+	alarmCRUD domain.AlarmCRUD,
 	logger *slog.Logger,
 ) (RuntimeAlarmScheduler, error) {
 	if cfg == nil {
-		return nil, errors.New("build alarm runtime scheduler: config is nil")
+		return nil, errors.New("new alarm worker runtime scheduler: config is nil")
 	}
-	if infra == nil {
-		return nil, errors.New("build alarm runtime scheduler: infrastructure is nil")
+	if cacheSvc == nil {
+		return nil, errors.New("new alarm worker runtime scheduler: cache is nil")
 	}
-	if infra.Deps == nil {
-		return nil, errors.New("build alarm runtime scheduler: bot dependencies are nil")
+	if holodexSvc == nil {
+		return nil, errors.New("new alarm worker runtime scheduler: holodex service is nil")
 	}
-	if infra.Deps.Cache == nil {
-		return nil, errors.New("build alarm runtime scheduler: cache dependency is nil")
+	if chzzkClient == nil {
+		return nil, errors.New("new alarm worker runtime scheduler: chzzk client is nil")
 	}
-	if infra.HolodexService == nil {
-		return nil, errors.New("build alarm runtime scheduler: holodex service is nil")
+	if twitchClient == nil {
+		return nil, errors.New("new alarm worker runtime scheduler: twitch client is nil")
 	}
-	if infra.Deps.Chzzk == nil {
-		return nil, errors.New("build alarm runtime scheduler: chzzk client is nil")
-	}
-	if infra.Deps.Twitch == nil {
-		return nil, errors.New("build alarm runtime scheduler: twitch client is nil")
-	}
-	if infra.AlarmService == nil {
-		return nil, errors.New("build alarm runtime scheduler: alarm service is nil")
+	if alarmCRUD == nil {
+		return nil, errors.New("new alarm worker runtime scheduler: alarm CRUD is nil")
 	}
 
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(
-		infra.Deps.Cache,
-		infra.HolodexService,
-		infra.Deps.Chzzk,
-		infra.Deps.Twitch,
-		infra.AlarmService,
+		cacheSvc,
+		holodexSvc,
+		chzzkClient,
+		twitchClient,
+		alarmCRUD,
 		cfg.Notification,
 		logger,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("build alarm runtime scheduler: %w", err)
+		return nil, fmt.Errorf("new alarm worker runtime scheduler: %w", err)
 	}
 
 	return scheduler, nil

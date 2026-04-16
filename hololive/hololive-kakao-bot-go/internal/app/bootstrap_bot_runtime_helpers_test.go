@@ -38,9 +38,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
-	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
@@ -106,7 +104,7 @@ func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to create bot")
 }
 
-func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
+func TestNewAlarmWorkerRuntimeScheduler_ConstructsScheduler(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
@@ -115,17 +113,15 @@ func TestBuildAlarmRuntimeScheduler_ConstructsScheduler(t *testing.T) {
 			AdvanceMinutes: []int{5, 3, 1},
 		},
 	}
-	infra := &appbootstrap.CoreInfrastructure{
-		Deps: &bot.Dependencies{
-			Cache:  cachemocks.NewStrictClient(),
-			Chzzk:  &chzzk.Client{},
-			Twitch: &twitch.Client{},
-		},
-		HolodexService: &holodex.Service{},
-		AlarmService:   &notification.AlarmService{},
-	}
-
-	scheduler, err := appbootstrap.BuildAlarmRuntimeScheduler(cfg, infra, logger)
+	scheduler, err := appbootstrap.NewAlarmWorkerRuntimeScheduler(
+		cfg,
+		cachemocks.NewStrictClient(),
+		&holodex.Service{},
+		&chzzk.Client{},
+		&twitch.Client{},
+		testAlarmCRUD{},
+		logger,
+	)
 	require.NoError(t, err)
 	assert.NotNil(t, scheduler)
 }
