@@ -46,12 +46,12 @@ import (
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 type stubWebhookMessageHandler struct{}
@@ -177,22 +177,6 @@ func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to create bot")
-}
-
-func TestBuildBotAdminServerDependencies_GuardBranches(t *testing.T) {
-	t.Parallel()
-
-	logger := testBootstrapGuardLogger()
-
-	deps, err := buildAdminServerDependencies(t.Context(), nil, &appbootstrap.AdminAPIInfrastructure{}, nil, logger)
-	require.Error(t, err)
-	assert.Nil(t, deps)
-	assert.Contains(t, err.Error(), "config is nil")
-
-	deps, err = buildAdminServerDependencies(t.Context(), &config.Config{}, &appbootstrap.AdminAPIInfrastructure{}, nil, logger)
-	require.Error(t, err)
-	assert.Nil(t, deps)
-	assert.Contains(t, err.Error(), "admin infrastructure is incomplete")
 }
 
 func TestResolveLLMSchedulerClients_Guards(t *testing.T) {

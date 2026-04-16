@@ -15,9 +15,9 @@ hololive/hololive-shared/pkg/service/youtube/poller/scheduler.go:650
 hololive/hololive-shared/pkg/service/youtube/stats/stats_repository_milestone.go:460
 hololive/hololive-shared/pkg/service/alarm/dedup/service.go:440
 hololive/hololive-shared/pkg/domain/template_sample_data.go:520
-hololive/hololive-kakao-bot-go/internal/service/acl/service.go:570
+hololive/hololive-shared/pkg/service/acl/service.go:570
 hololive/hololive-kakao-bot-go/internal/service/matcher/matcher_snapshot.go:440
-hololive/hololive-kakao-bot-go/internal/service/notification/alarm_cache.go:460
+hololive/hololive-shared/pkg/service/notification/alarm_cache.go:460
 hololive/hololive-llm-sched/internal/app/bootstrap_llm_scheduler.go:460
 hololive/hololive-llm-sched/internal/service/membernews/summarizer/summarizer.go:500
 hololive/hololive-llm-sched/internal/service/majorevent/summarizer/summarizer.go:460

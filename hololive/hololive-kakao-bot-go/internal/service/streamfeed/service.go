@@ -13,8 +13,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/streamcommon"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 type orgStreamSource interface {

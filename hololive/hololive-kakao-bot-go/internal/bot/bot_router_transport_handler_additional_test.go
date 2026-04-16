@@ -35,7 +35,7 @@ import (
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
-	appErrors "github.com/kapu/hololive-kakao-bot-go/internal/errors"
+	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
 type testCommand struct {

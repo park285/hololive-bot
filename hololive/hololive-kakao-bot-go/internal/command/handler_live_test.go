@@ -29,8 +29,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 type liveStreamProviderStub struct {

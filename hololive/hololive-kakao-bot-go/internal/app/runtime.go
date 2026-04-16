@@ -33,10 +33,6 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
-type runtimeAlarmScheduler interface {
-	Start(ctx context.Context)
-}
-
 type BotRuntime struct {
 	Config *config.Config
 	Logger *slog.Logger

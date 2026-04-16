@@ -12,10 +12,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/notification"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/notification"
+	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 func ProvideAlarmService(

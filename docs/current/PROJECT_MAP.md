@@ -5,8 +5,8 @@ Module inventory for the `hololive-bot` workspace.
 | Module | Language | Path | Role | Port |
 |--------|----------|------|------|------|
 | `hololive-kakao-bot-go` | Go 1.26.2 | `hololive/hololive-kakao-bot-go/` | Main bot ingress (webhook + command routing) | 30001 |
-| `hololive-admin-api` | Go 1.26.2 | `hololive/hololive-kakao-bot-go/` | Admin HTTP control plane | 30006 |
-| `hololive-alarm-worker` | Go 1.26.2 | `hololive/hololive-kakao-bot-go/` | Alarm checker / queue publisher worker | 30007 |
+| `hololive-admin-api` | Go 1.26.2 | `hololive/hololive-admin-api/` | Admin HTTP control plane | 30006 |
+| `hololive-alarm-worker` | Go 1.26.2 | `hololive/hololive-alarm-worker/` | Alarm checker / queue publisher worker | 30007 |
 | `hololive-dispatcher-go` | Go 1.26.2 | `hololive/hololive-dispatcher-go/` | Alarm dispatch queue consumer (BRPOP → Iris) | 30020 |
 | `hololive-llm-sched` | Go 1.26.2 | `hololive/hololive-llm-sched/` | LLM scheduler (major event + member news + delivery) | 30003 |
 | `hololive-stream-ingester` | Go 1.26.2 | `hololive/hololive-stream-ingester/` | Photo sync + ingestion-adjacent runtime | 30004 |
@@ -20,8 +20,8 @@ Module inventory for the `hololive-bot` workspace.
 | Binary | Module | Port |
 |---|---|---|
 | `bot` | `hololive-kakao-bot-go` | 30001 |
-| `admin-api` | `hololive-kakao-bot-go` | 30006 |
-| `alarm-worker` | `hololive-kakao-bot-go` | 30007 |
+| `admin-api` | `hololive-admin-api` | 30006 |
+| `alarm-worker` | `hololive-alarm-worker` | 30007 |
 | `dispatcher-go` | `hololive-dispatcher-go` | 30020 |
 | `llm-scheduler` | `hololive-llm-sched` | 30003 |
 | `stream-ingester` | `hololive-stream-ingester` | 30004 |

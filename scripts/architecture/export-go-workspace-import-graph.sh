@@ -24,6 +24,8 @@ MODULE_DIRS=(
   "${SHARED_GO_DIR}"
   "${ROOT_DIR}/hololive/hololive-shared"
   "${ROOT_DIR}/hololive/hololive-kakao-bot-go"
+  "${ROOT_DIR}/hololive/hololive-admin-api"
+  "${ROOT_DIR}/hololive/hololive-alarm-worker"
   "${ROOT_DIR}/hololive/hololive-dispatcher-go"
   "${ROOT_DIR}/hololive/hololive-llm-sched"
   "${ROOT_DIR}/hololive/hololive-stream-ingester"

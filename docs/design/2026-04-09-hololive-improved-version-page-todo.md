@@ -1,5 +1,12 @@
 # Hololive Improved Version Page TODO
 
+상태: **HISTORICAL TODO (superseded on 2026-04-16)**
+
+이 문서는 runtime split 전/중간 단계의 page-based TODO 보드다.
+현재는 `hololive-admin-api`, `hololive-alarm-worker`, `hololive-shared/pkg/service/notification` ownership 으로 수렴했으므로,
+아래 owning seam/path 표기는 historical planning reference 로만 사용한다.
+
+
 Source review: `hololive_improved_version_review.md`
 
 이 문서는 리뷰 결과를 우선순위가 아니라 실행 표면(page/surface) 기준으로 재정리한 후속 TODO다.

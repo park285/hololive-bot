@@ -10,8 +10,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 func ProvideChzzkClient(httpClient *http.Client, cfg config.ChzzkConfig, logger *slog.Logger) *chzzk.Client {

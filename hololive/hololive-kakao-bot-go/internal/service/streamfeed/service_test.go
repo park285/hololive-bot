@@ -9,7 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 type stubOrgStreamSource struct {
@@ -28,8 +28,8 @@ func (s *stubOrgStreamSource) GetUpcomingStreamsByOrg(context.Context, int, stri
 }
 
 type stubMemberProvider struct {
-	members      []*domain.Member
-	getAllCalls  atomic.Int32
+	members     []*domain.Member
+	getAllCalls atomic.Int32
 }
 
 func (s *stubMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
@@ -41,9 +41,9 @@ func (s *stubMemberProvider) FindMemberByChannelID(channelID string) *domain.Mem
 	return nil
 }
 
-func (s *stubMemberProvider) FindMemberByName(string) *domain.Member                { return nil }
-func (s *stubMemberProvider) FindMemberByAlias(string) *domain.Member               { return nil }
-func (s *stubMemberProvider) GetChannelIDs() []string                               { return nil }
+func (s *stubMemberProvider) FindMemberByName(string) *domain.Member  { return nil }
+func (s *stubMemberProvider) FindMemberByAlias(string) *domain.Member { return nil }
+func (s *stubMemberProvider) GetChannelIDs() []string                 { return nil }
 func (s *stubMemberProvider) GetAllMembers() []*domain.Member {
 	s.getAllCalls.Add(1)
 	return s.members

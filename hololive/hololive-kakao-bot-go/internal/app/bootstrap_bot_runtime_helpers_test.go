@@ -32,14 +32,11 @@ import (
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
 func TestProvideTriggerHandler_ReturnsUsableHandler(t *testing.T) {
@@ -102,26 +99,4 @@ func TestBuildBotRuntime_FailsFastWhenBotProvisionFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to create bot")
-}
-
-func TestNewAlarmWorkerRuntimeScheduler_ConstructsScheduler(t *testing.T) {
-	t.Parallel()
-
-	logger := slog.New(slog.DiscardHandler)
-	cfg := &config.Config{
-		Notification: config.NotificationConfig{
-			AdvanceMinutes: []int{5, 3, 1},
-		},
-	}
-	scheduler, err := appbootstrap.NewAlarmWorkerRuntimeScheduler(
-		cfg,
-		cachemocks.NewStrictClient(),
-		&holodex.Service{},
-		&chzzk.Client{},
-		&twitch.Client{},
-		testAlarmCRUD{},
-		logger,
-	)
-	require.NoError(t, err)
-	assert.NotNil(t, scheduler)
 }

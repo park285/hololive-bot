@@ -31,8 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/chzzk"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 func newCommandTestLogger() *slog.Logger {

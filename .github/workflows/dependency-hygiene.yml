@@ -27,6 +27,10 @@ jobs:
             slug: hololive-shared
           - module: hololive/hololive-kakao-bot-go
             slug: hololive-kakao-bot-go
+          - module: hololive/hololive-admin-api
+            slug: hololive-admin-api
+          - module: hololive/hololive-alarm-worker
+            slug: hololive-alarm-worker
           - module: hololive/hololive-llm-sched
             slug: hololive-llm-sched
           - module: hololive/hololive-stream-ingester
