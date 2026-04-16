@@ -6,13 +6,12 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
 
-func InitCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *CoreInfrastructure, retErr error) {
+func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
 	infra, err := InitInfraResources(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
@@ -34,12 +33,12 @@ func InitCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	messageAdapter := adapter.NewMessageAdapter(cfg.Bot.Prefix, cfg.Bot.MentionPrefix)
 	formatter := adapter.NewResponseFormatter(cfg.Bot.Prefix, templateRenderer)
 
-	streamFoundation, err := InitScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
+	foundation, err := InitScraperHolodexProfileFoundation(ctx, cfg, infra, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	alarmYouTubeStack, err := InitAlarmYouTubeStack(ctx, cfg, infra, streamFoundation, irisClient, formatter, logger)
+	alarmYouTubeStack, err := InitAlarmYouTubeStack(ctx, cfg, infra, foundation, irisClient, formatter, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -53,11 +52,11 @@ func InitCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 		cfg,
 		infra,
 		alarmYouTubeStack.AlarmMode,
-		streamFoundation.HolodexService,
+		foundation.HolodexService,
 		messageAdapter,
 		formatter,
 		irisClient,
-		streamFoundation.ProfileService,
+		foundation.ProfileService,
 		alarmYouTubeStack.MemberMatcher,
 		alarmYouTubeStack.YouTubeStack,
 		alarmYouTubeStack.ActivityLogger,
@@ -71,16 +70,10 @@ func InitCoreInfrastructure(ctx context.Context, cfg *config.Config, logger *slo
 	)
 	deps := ProvideBotDependencies(modules)
 
-	return &CoreInfrastructure{
-		Deps:             deps,
-		AlarmService:     alarmYouTubeStack.AlarmMode.AlarmService,
-		AlarmCRUD:        alarmYouTubeStack.AlarmMode.AlarmCRUD,
-		HolodexService:   streamFoundation.HolodexService,
-		YTStack:          alarmYouTubeStack.YouTubeStack,
-		PhotoSync:        holodex.NewPhotoSyncService(streamFoundation.HolodexService, infra.MemberRepo, logger),
-		TemplateRenderer: templateRenderer,
-		TemplateAdminSvc: BuildTemplateAdminService(infra, templateRenderer, logger),
-		SharedRL:         streamFoundation.SharedRL,
-		Cleanup:          infra.Cleanup,
+	return &BotInfrastructure{
+		Deps:           deps,
+		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
+		HolodexService: foundation.HolodexService,
+		Cleanup:        infra.Cleanup,
 	}, nil
 }

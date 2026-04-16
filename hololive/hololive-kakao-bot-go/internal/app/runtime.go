@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
@@ -42,17 +41,14 @@ type BotRuntime struct {
 	Config *config.Config
 	Logger *slog.Logger
 
-	Bot            *bot.Bot
-	AlarmScheduler runtimeAlarmScheduler // Alarm runtime scheduler
+	Bot *bot.Bot
 
-	ConfigSubscriber *configsub.Subscriber // Valkey Pub/Sub 설정 구독자
+	ConfigSubscriber *configsub.Subscriber
 
 	ServerAddr string
 	HttpServer *http.Server
 
 	webhookHandlerCloser interface{ Close() error }
-	alarmSchedulerMu     sync.Mutex
-	alarmSchedulerCancel context.CancelFunc
 	lifecycle.Managed
 }
 

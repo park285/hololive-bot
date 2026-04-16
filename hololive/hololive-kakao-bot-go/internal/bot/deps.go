@@ -62,7 +62,6 @@ type Dependencies struct {
 	Matcher          *matcher.MemberMatcher
 	MembersData      member.DataProvider
 	Service          youtube.Service
-	Scheduler        youtube.Scheduler
 	YouTubeStatsRepo stats.StatsCommandRepository
 	Activity         *activity.Logger
 	Settings         settings.ReadWriter
@@ -102,7 +101,6 @@ type streamDependencies struct {
 	matcher          *matcher.MemberMatcher
 	membersData      member.DataProvider
 	service          youtube.Service
-	scheduler        youtube.Scheduler
 	youTubeStatsRepo stats.StatsCommandRepository
 }
 
@@ -171,7 +169,6 @@ func (d *Dependencies) streamDeps() streamDependencies {
 		matcher:          d.Matcher,
 		membersData:      d.MembersData,
 		service:          d.Service,
-		scheduler:        d.Scheduler,
 		youTubeStatsRepo: d.YouTubeStatsRepo,
 	}
 }

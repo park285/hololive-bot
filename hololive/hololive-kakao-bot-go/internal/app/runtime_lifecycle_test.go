@@ -88,7 +88,6 @@ func TestBotRuntimeStartAndHelpers_NoPanicOnNilComponents(t *testing.T) {
 	}
 
 	runtime.Start(t.Context(), nil)
-	runtime.startBot(t.Context())
 	runtime.logError("expected test error", errors.New("boom"))
 
 	if logBuf.Len() == 0 {

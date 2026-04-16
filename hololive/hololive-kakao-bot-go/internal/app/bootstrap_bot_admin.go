@@ -39,32 +39,30 @@ import (
 	triggerclient "github.com/kapu/hololive-kakao-bot-go/internal/service/trigger"
 )
 
-type botAdminServerDependencies = appbootstrap.AdminServerDependencies
-
-func buildBotAdminServerDependencies(
+func buildAdminServerDependencies(
 	ctx context.Context,
 	cfg *config.Config,
-	deps botAdminRuntimeDependencies,
+	infra *appbootstrap.AdminAPIInfrastructure,
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
-) (*botAdminServerDependencies, error) {
+) (*appbootstrap.AdminServerDependencies, error) {
 	if cfg == nil {
-		return nil, errors.New("build bot admin server dependencies: config is nil")
+		return nil, errors.New("build admin server dependencies: config is nil")
 	}
 
-	if deps.cache == nil || deps.postgres == nil {
-		return nil, errors.New("build bot admin server dependencies: admin dependency view is incomplete")
+	if infra == nil || infra.Cache == nil || infra.Postgres == nil {
+		return nil, errors.New("build admin server dependencies: admin infrastructure is incomplete")
 	}
 
-	authService, err := buildBotAdminAuthService(ctx, cfg, deps, logger)
+	authService, err := buildAdminAuthService(ctx, cfg, infra, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build bot admin server dependencies: %w", err)
+		return nil, fmt.Errorf("build admin server dependencies: %w", err)
 	}
 
-	settingsComponents := buildBotAdminSettingsComponents(cfg, deps, scraperScheduler, logger)
-	systemCollector := buildBotAdminSystemCollector(cfg)
-	domainHandlers := buildBotAdminAPIHandlers(
-		deps,
+	settingsComponents := buildAdminSettingsComponents(cfg, infra, scraperScheduler, logger)
+	systemCollector := buildAdminSystemCollector(cfg)
+	domainHandlers := buildAdminAPIHandlers(
+		infra,
 		scraperScheduler,
 		settingsComponents.settingsApplier,
 		settingsComponents.majorEventTriggerClient,
@@ -72,32 +70,31 @@ func buildBotAdminServerDependencies(
 		logger,
 	)
 
-	return &botAdminServerDependencies{
+	return &appbootstrap.AdminServerDependencies{
 		DomainHandlers: domainHandlers,
 		AuthHandler:    server.NewAuthHandler(authService, logger),
-		Cache:          deps.cache,
+		Cache:          infra.Cache,
 	}, nil
 }
 
-type botAdminSettingsComponents struct {
+type adminSettingsComponents struct {
 	settingsApplier         sharedsettings.SettingsApplier
 	majorEventTriggerClient *triggerclient.Client
 }
 
-func buildBotAdminAuthService(
+func buildAdminAuthService(
 	ctx context.Context,
 	cfg *config.Config,
-	deps botAdminRuntimeDependencies,
+	infra *appbootstrap.AdminAPIInfrastructure,
 	logger *slog.Logger,
 ) (*authsvc.Service, error) {
 	authCfg := authsvc.DefaultConfig()
-
 	authCfg.AutoPrepareSchema = cfg.Postgres.AutoPrepareSchema
 
 	authService, err := authsvc.NewService(
 		ctx,
-		deps.postgres.GetGormDB(),
-		deps.cache,
+		infra.Postgres.GetGormDB(),
+		infra.Cache,
 		logger,
 		authCfg,
 	)
@@ -108,17 +105,17 @@ func buildBotAdminAuthService(
 	return authService, nil
 }
 
-func buildBotAdminSettingsComponents(
+func buildAdminSettingsComponents(
 	cfg *config.Config,
-	deps botAdminRuntimeDependencies,
+	infra *appbootstrap.AdminAPIInfrastructure,
 	scraperScheduler *poller.Scheduler,
 	logger *slog.Logger,
-) botAdminSettingsComponents {
+) adminSettingsComponents {
 	localSettingsApplier := sharedsettings.NewLocalSettingsApplier(
-		deps.youtubeService,
-		deps.holodexService,
+		infra.YouTubeService,
+		infra.HolodexService,
 		scraperScheduler,
-		deps.alarmCRUD,
+		infra.AlarmCRUD,
 	)
 	settingsApplier := newBotSettingsApplier(localSettingsApplier, nil, logger)
 
@@ -133,13 +130,13 @@ func buildBotAdminSettingsComponents(
 		)
 	}
 
-	return botAdminSettingsComponents{
+	return adminSettingsComponents{
 		settingsApplier:         settingsApplier,
 		majorEventTriggerClient: majorEventTriggerClient,
 	}
 }
 
-func buildBotAdminSystemCollector(cfg *config.Config) *system.Collector {
+func buildAdminSystemCollector(cfg *config.Config) *system.Collector {
 	return system.NewCollector(
 		[]system.ServiceEndpoint{
 			{Name: "llm-scheduler", URL: cfg.Services.LLMSchedulerHealthURL},
@@ -149,8 +146,8 @@ func buildBotAdminSystemCollector(cfg *config.Config) *system.Collector {
 	)
 }
 
-func buildBotAdminAPIHandlers(
-	deps botAdminRuntimeDependencies,
+func buildAdminAPIHandlers(
+	infra *appbootstrap.AdminAPIInfrastructure,
 	scraperScheduler *poller.Scheduler,
 	settingsApplier sharedsettings.SettingsApplier,
 	majorEventTriggerClient *triggerclient.Client,
@@ -158,27 +155,27 @@ func buildBotAdminAPIHandlers(
 	logger *slog.Logger,
 ) *server.DomainAPIHandlers {
 	var communityShortsOpsRepo server.YouTubeCommunityShortsOpsRepository
-	if deps.postgres != nil && deps.postgres.GetGormDB() != nil {
-		communityShortsOpsRepo = outbox.NewDeliveryTelemetryRepository(deps.postgres.GetGormDB())
+	if infra.Postgres != nil && infra.Postgres.GetGormDB() != nil {
+		communityShortsOpsRepo = outbox.NewDeliveryTelemetryRepository(infra.Postgres.GetGormDB())
 	}
 
 	return server.NewAPIHandler(
-		deps.memberRepo,
-		deps.memberCache,
-		deps.cache,
-		deps.profiles,
-		deps.alarmCRUD,
-		deps.holodexService,
-		deps.youtubeService,
+		infra.MemberRepo,
+		infra.MemberCache,
+		infra.Cache,
+		infra.Profiles,
+		infra.AlarmCRUD,
+		infra.HolodexService,
+		infra.YouTubeService,
 		scraperScheduler,
-		deps.statsRepo,
+		infra.StatsRepo,
 		communityShortsOpsRepo,
-		deps.activityLogger,
-		deps.settings,
+		infra.ActivityLogger,
+		infra.SettingsService,
 		settingsApplier,
-		deps.acl,
+		infra.ACLService,
 		systemCollector,
-		deps.templateAdminSvc,
+		infra.TemplateAdminSvc,
 		majorEventTriggerClient,
 		majorEventTriggerClient,
 		logger,

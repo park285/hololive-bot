@@ -85,13 +85,6 @@ func NewBot(deps *bot.Dependencies) (*bot.Bot, error) {
 	return instance, nil
 }
 
-func YouTubeScheduler(deps *bot.Dependencies) youtube.Scheduler {
-	if deps == nil {
-		return nil
-	}
-	return deps.Scheduler
-}
-
 func MemberRepo(deps *bot.Dependencies) *member.Repository {
 	if deps == nil {
 		return nil

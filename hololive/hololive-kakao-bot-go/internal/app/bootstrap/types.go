@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/workerpool"
 
@@ -30,17 +31,37 @@ import (
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/twitch"
 )
 
-type CoreInfrastructure struct {
-	Deps             *bot.Dependencies
-	AlarmService     *notification.AlarmService
+type BotInfrastructure struct {
+	Deps           *bot.Dependencies
+	AlarmCRUD      domain.AlarmCRUD
+	HolodexService *holodex.Service
+	Cleanup        func()
+}
+
+type AdminAPIInfrastructure struct {
+	Cache            cache.Client
+	Postgres         database.Client
+	MemberRepo       *member.Repository
+	MemberCache      *member.Cache
+	Profiles         *member.ProfileService
 	AlarmCRUD        domain.AlarmCRUD
 	HolodexService   *holodex.Service
-	YTStack          *providers.YouTubeStack
-	PhotoSync        *holodex.PhotoSyncService
-	TemplateRenderer *template.Renderer
+	YouTubeService   youtube.Service
+	StatsRepo        ytstats.StatsDashboardRepository
+	ActivityLogger   *activity.Logger
+	SettingsService  settings.ReadWriter
+	ACLService       *acl.Service
 	TemplateAdminSvc *template.AdminService
-	SharedRL         *scraper.RateLimiter
 	Cleanup          func()
+}
+
+type AlarmWorkerInfrastructure struct {
+	Cache          cache.Client
+	HolodexService *holodex.Service
+	ChzzkClient    *chzzk.Client
+	TwitchClient   *twitch.Client
+	AlarmCRUD      domain.AlarmCRUD
+	Cleanup        func()
 }
 
 type AlarmModeComponents struct {
@@ -56,6 +77,12 @@ type AlarmDependencies struct {
 	MemberDataProvider member.DataProvider
 	ChzzkClient        *chzzk.Client
 	TwitchClient       *twitch.Client
+}
+
+type ScraperHolodexFoundation struct {
+	HolodexService       *holodex.Service
+	MemberServiceAdapter member.DataProvider
+	SharedRL             *scraper.RateLimiter
 }
 
 type ScraperHolodexProfileFoundation struct {

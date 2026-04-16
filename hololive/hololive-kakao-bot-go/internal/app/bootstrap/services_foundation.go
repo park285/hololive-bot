@@ -11,12 +11,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
-func InitScraperHolodexProfileFoundation(
+func InitScraperHolodexFoundation(
 	ctx context.Context,
 	cfg *config.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
-) (*ScraperHolodexProfileFoundation, error) {
+) (*ScraperHolodexFoundation, error) {
 	holodexAPIKey := cfg.Holodex.APIKey
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 
@@ -46,16 +46,34 @@ func InitScraperHolodexProfileFoundation(
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	profileService, err := providers.ProvideProfileService(ctx, infra.Cache, memberServiceAdapter, logger)
+	return &ScraperHolodexFoundation{
+		HolodexService:       holodexService,
+		MemberServiceAdapter: memberServiceAdapter,
+		SharedRL:             sharedRL,
+	}, nil
+}
+
+func InitScraperHolodexProfileFoundation(
+	ctx context.Context,
+	cfg *config.Config,
+	infra *sharedmodules.InfraModule,
+	logger *slog.Logger,
+) (*ScraperHolodexProfileFoundation, error) {
+	foundation, err := InitScraperHolodexFoundation(ctx, cfg, infra, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	profileService, err := providers.ProvideProfileService(ctx, infra.Cache, foundation.MemberServiceAdapter, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide profile service: %w", err)
 	}
 
 	return &ScraperHolodexProfileFoundation{
-		HolodexService:       holodexService,
-		MemberServiceAdapter: memberServiceAdapter,
+		HolodexService:       foundation.HolodexService,
+		MemberServiceAdapter: foundation.MemberServiceAdapter,
 		ProfileService:       profileService,
-		SharedRL:             sharedRL,
+		SharedRL:             foundation.SharedRL,
 	}, nil
 }
 

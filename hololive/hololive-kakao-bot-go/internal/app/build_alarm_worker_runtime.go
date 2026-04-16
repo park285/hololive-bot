@@ -39,12 +39,12 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 		return nil, err
 	}
 
-	infra, err := appbootstrap.InitCoreInfrastructure(ctx, cfg, logger)
+	infra, err := appbootstrap.InitAlarmWorkerInfrastructure(ctx, cfg, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build alarm worker runtime: init core infrastructure: %w", err)
+		return nil, fmt.Errorf("build alarm worker runtime: init alarm worker infrastructure: %w", err)
 	}
 
-	scheduler, err := buildRuntimeAlarmScheduler(runtimeRoleWorker, cfg, infra, logger, os.Getenv(notificationSchedulerRoleEnv))
+	scheduler, err := buildAlarmWorkerRuntimeScheduler(runtimeRoleWorker, cfg, infra, logger, os.Getenv(notificationSchedulerRoleEnv))
 	if err != nil {
 		infra.Cleanup()
 		return nil, fmt.Errorf("build alarm worker runtime: scheduler: %w", err)
@@ -64,7 +64,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 		Config:           cfg,
 		Logger:           logger,
 		Scheduler:        scheduler,
-		ConfigSubscriber: BuildAlarmWorkerConfigSubscriber(ctx, infra, logger),
+		ConfigSubscriber: BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, infra.AlarmCRUD, logger),
 		ServerAddr:       addr,
 		HttpServer:       sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
 		Managed:          lifecycle.NewManaged(infra.Cleanup),

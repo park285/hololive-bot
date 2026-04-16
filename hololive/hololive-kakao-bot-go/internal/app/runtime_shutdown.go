@@ -33,9 +33,8 @@ func (r *BotRuntime) Shutdown(ctx context.Context) {
 	}
 
 	appruntime.Shutdown(ctx, appruntime.ShutdownHooks{
-		Logger:              r.Logger,
-		ClearAlarmScheduler: r.clearAlarmSchedulerCancel,
-		ShutdownHTTPServer:  r.ShutdownHTTPServer,
+		Logger:             r.Logger,
+		ShutdownHTTPServer: r.ShutdownHTTPServer,
 		WebhookHandlerClose: func() error {
 			if r.webhookHandlerCloser == nil {
 				return nil

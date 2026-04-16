@@ -30,7 +30,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,7 +86,6 @@ func TestContainerGetterMappings(t *testing.T) {
 	alarmSvc := testAlarmCRUD{}
 	streamSvc := &stubStreamProvider{}
 	youtubeSvc := &trackingYouTubeSvc{}
-	scheduler := &stubYouTubeScheduler{}
 	activityLogger := &activity.Logger{}
 	settingsSvc := &stubSettingsReadWriter{}
 	aclSvc := &acl.Service{}
@@ -100,14 +98,12 @@ func TestContainerGetterMappings(t *testing.T) {
 			Alarm:       alarmSvc,
 			Holodex:     streamSvc,
 			Service:     youtubeSvc,
-			Scheduler:   scheduler,
 			Activity:    activityLogger,
 			Settings:    settingsSvc,
 			ACL:         aclSvc,
 		},
 	}
 
-	assert.Same(t, scheduler, container.GetYouTubeScheduler())
 	assert.Same(t, memberRepo, container.GetMemberRepo())
 	assert.Same(t, memberCache, container.GetMemberCache())
 	assert.Same(t, cacheSvc, container.GetCache())
@@ -136,7 +132,6 @@ func TestBuild_FailFastOnNilInputs(t *testing.T) {
 }
 
 var (
-	_ youtube.Scheduler     = (*stubYouTubeScheduler)(nil)
 	_ domain.StreamProvider = (*stubStreamProvider)(nil)
 	_ settings.ReadWriter   = (*stubSettingsReadWriter)(nil)
 )

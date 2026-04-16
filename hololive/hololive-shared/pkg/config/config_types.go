@@ -56,7 +56,6 @@ type LoggingConfig struct {
 type BotConfig struct {
 	Prefix        string
 	SelfUser      string
-	AdminEnabled  bool
 	MentionPrefix string // 멘션 기반 명령어 접두사 (예: @카푸봇)
 }
 

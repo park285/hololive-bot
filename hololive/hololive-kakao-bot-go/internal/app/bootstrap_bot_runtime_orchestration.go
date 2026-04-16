@@ -24,17 +24,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	"github.com/kapu/hololive-shared/pkg/domain"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
-// buildBotRuntime 는 런타임 구성요소를 조립한다.
-func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *appbootstrap.CoreInfrastructure) (*BotRuntime, error) {
+func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (*BotRuntime, error) {
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
 
 	botBot, err := bot.NewBot(runtimeViews.botDeps)
@@ -47,29 +44,9 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		return nil, fmt.Errorf("build bot runtime: webhook handler: %w", err)
 	}
 
-	alarmScheduler, err := buildRuntimeAlarmScheduler(runtimeRoleBot, cfg, infra, logger, os.Getenv(notificationSchedulerRoleEnv))
-	if err != nil {
-		return nil, fmt.Errorf("build bot runtime: alarm runtime scheduler: %w", err)
-	}
-
-	// ConfigSubscriber: Valkey Pub/Sub를 통해 설정 변경을 수신하여 적용
 	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
 
-	var adminServerDeps *botAdminServerDependencies
-
-	if cfg.Bot.AdminEnabled {
-		adminServerDeps, err = buildBotAdminServerDependencies(ctx, cfg, runtimeViews.adminRuntime, nil, logger)
-		if err != nil {
-			return nil, fmt.Errorf("build bot runtime: admin server dependencies: %w", err)
-		}
-	}
-
-	var internalAlarmCRUD domain.AlarmCRUD
-	if cfg.Bot.AdminEnabled {
-		internalAlarmCRUD = runtimeViews.serverRuntime.alarmCRUD
-	}
-
-	botServer, err := appbootstrap.BuildBotServer(ctx, cfg, webhookHandler, nil, internalAlarmCRUD, adminServerDeps, logger)
+	botServer, err := appbootstrap.BuildBotServer(ctx, cfg, webhookHandler, nil, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +55,6 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		Config:               cfg,
 		Logger:               logger,
 		Bot:                  botBot,
-		AlarmScheduler:       alarmScheduler,
 		ConfigSubscriber:     configSubscriber,
 		ServerAddr:           fmt.Sprintf(":%d", cfg.Server.Port),
 		HttpServer:           botServer,
