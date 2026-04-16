@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	logFilePerm         os.FileMode = 0o644
-	logDirPerm          os.FileMode = 0o755
+	logFilePerm         os.FileMode = 0o640
+	logDirPerm          os.FileMode = 0o750
 	compressSuffix                  = ".gz"
 	backupTimeFormat                = "2006-01-02T15-04-05.000"
 	archiveDirName                  = "archive"
@@ -124,8 +124,8 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 		return nil, fmt.Errorf("invalid log config: size=%d backups=%d age_days=%d", cfg.MaxSizeMB, cfg.MaxBackups, cfg.MaxAgeDays)
 	}
 
-	if err := os.MkdirAll(logDir, logDirPerm); err != nil {
-		return nil, fmt.Errorf("create log dir failed: %w", err)
+	if err := ensureLogDirPerm(logDir); err != nil {
+		return nil, fmt.Errorf("prepare log dir failed: %w", err)
 	}
 
 	logPath := filepath.Join(logDir, fileName)
@@ -238,8 +238,8 @@ type archivedLogFile struct {
 func archiveCompressedLogFiles(logPath string, maxBackups, maxAgeDays int) error {
 	logDir := filepath.Dir(logPath)
 	archiveDir := filepath.Join(logDir, archiveDirName)
-	if err := os.MkdirAll(archiveDir, logDirPerm); err != nil {
-		return fmt.Errorf("create archive dir: %w", err)
+	if err := ensureLogDirPerm(archiveDir); err != nil {
+		return fmt.Errorf("prepare archive dir: %w", err)
 	}
 
 	names, err := matchingCompressedBackupNames(logDir, filepath.Base(logPath))
@@ -408,6 +408,28 @@ func ensureLogFilePerm(path string) error {
 
 	if chmodErr := os.Chmod(path, logFilePerm); chmodErr != nil {
 		return fmt.Errorf("chmod log file failed: %w", chmodErr)
+	}
+	return nil
+}
+
+func ensureLogDirPerm(path string) error {
+	if err := os.MkdirAll(path, logDirPerm); err != nil {
+		return fmt.Errorf("create log dir failed: %w", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat log dir failed: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("log dir path is not directory: %s", path)
+	}
+	if info.Mode().Perm() == logDirPerm {
+		return nil
+	}
+
+	if chmodErr := os.Chmod(path, logDirPerm); chmodErr != nil {
+		return fmt.Errorf("chmod log dir failed: %w", chmodErr)
 	}
 	return nil
 }

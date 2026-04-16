@@ -2,8 +2,7 @@
 -- ACL 서비스에 블랙리스트/화이트리스트 토글 기능 추가
 -- 1. acl_rooms에 list_type 컬럼 추가 (기존 데이터는 whitelist로 유지)
 -- 2. composite unique index로 변경 (같은 room_id가 whitelist/blacklist 각각 존재 가능)
--- 3. 블랙리스트 모드 설정 시드
--- 4. 블랙리스트 룸 시드
+-- 기존 ACL 설정/룸 데이터는 그대로 유지
 
 -- ============================================================================
 -- 1. list_type 컬럼 추가 (없으면)
@@ -30,22 +29,3 @@ DROP INDEX IF EXISTS idx_room_list;
 
 -- 새 composite unique index 생성
 CREATE UNIQUE INDEX IF NOT EXISTS idx_room_list ON acl_rooms (room_id, list_type);
-
--- ============================================================================
--- 3. 블랙리스트 모드 설정 시드
--- ============================================================================
-INSERT INTO acl_settings (key, value)
-VALUES ('mode', 'blacklist')
-ON CONFLICT (key) DO UPDATE SET value = 'blacklist';
-
--- ACL 활성화 (블랙리스트 모드가 동작하려면 enabled=true 필수)
-INSERT INTO acl_settings (key, value)
-VALUES ('enabled', 'true')
-ON CONFLICT (key) DO UPDATE SET value = 'true';
-
--- ============================================================================
--- 4. 블랙리스트 룸 시드
--- ============================================================================
-INSERT INTO acl_rooms (room_id, list_type)
-VALUES ('18219201472247343', 'blacklist')
-ON CONFLICT (room_id, list_type) DO NOTHING;

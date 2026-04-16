@@ -23,10 +23,14 @@ package scraper
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -98,6 +102,35 @@ func (r staticResolver) LookupIP(_ context.Context, _ string, host string) ([]ne
 		return nil, errors.New("host not found")
 	}
 	return ips, nil
+}
+
+type sequentialResolver struct {
+	mu        sync.Mutex
+	responses [][]net.IP
+	calls     int
+}
+
+func (r *sequentialResolver) LookupIP(_ context.Context, _ string, host string) ([]net.IP, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if host == "" {
+		return nil, errors.New("host not found")
+	}
+	if len(r.responses) == 0 {
+		return nil, errors.New("host not found")
+	}
+	index := r.calls
+	if index >= len(r.responses) {
+		index = len(r.responses) - 1
+	}
+	r.calls++
+	ips := r.responses[index]
+	if len(ips) == 0 {
+		return nil, errors.New("host not found")
+	}
+	copied := make([]net.IP, len(ips))
+	copy(copied, ips)
+	return copied, nil
 }
 
 func TestLinkCheckerCheckLink_BlockedScheme(t *testing.T) {
@@ -189,6 +222,7 @@ func TestLinkCheckerCheckLink_BlockedRedirectToInternalTarget(t *testing.T) {
 		"internal.test": {net.ParseIP("127.0.0.1")},
 	}
 	checker.client = withBlockedRedirectPolicy(checker.client, checker.resolver, checker.config.Timeout)
+	checker.client = withValidatedDialPolicy(checker.client, checker.resolver, checker.config.Timeout)
 
 	status, err := checker.CheckLink(context.Background(), "https://example.com")
 	if err == nil {
@@ -196,5 +230,59 @@ func TestLinkCheckerCheckLink_BlockedRedirectToInternalTarget(t *testing.T) {
 	}
 	if status != domain.MajorEventLinkStatusBlocked {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
+	}
+}
+
+func TestLinkCheckerCheckLink_BlockedDNSRebindingBetweenValidationAndDial(t *testing.T) {
+	t.Parallel()
+
+	var internalHits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		internalHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	serverAddr, err := net.ResolveTCPAddr("tcp", strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatalf("ResolveTCPAddr() error = %v", err)
+	}
+
+	resolver := &sequentialResolver{responses: [][]net.IP{
+		{net.ParseIP("93.184.216.34")},
+		{net.ParseIP("127.0.0.1")},
+	}}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		ips, err := resolver.LookupIP(ctx, "ip", host)
+		if err != nil {
+			return nil, err
+		}
+		if len(ips) == 0 {
+			return nil, errors.New("host not found")
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
+	}
+	client := &http.Client{Transport: transport}
+
+	checker := NewLinkChecker(client, DefaultLinkCheckerConfig(), nil)
+	checker.resolver = resolver
+	checker.client = withBlockedRedirectPolicy(checker.client, checker.resolver, checker.config.Timeout)
+	checker.client = withValidatedDialPolicy(checker.client, checker.resolver, checker.config.Timeout)
+
+	status, err := checker.CheckLink(context.Background(), fmt.Sprintf("http://example.com:%d/secret", serverAddr.Port))
+	if err == nil {
+		t.Fatal("CheckLink() error = nil, want error")
+	}
+	if status != domain.MajorEventLinkStatusBlocked {
+		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
+	}
+	if got := internalHits.Load(); got != 0 {
+		t.Fatalf("internal server hits = %d, want 0", got)
 	}
 }

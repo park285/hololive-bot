@@ -1,6 +1,6 @@
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
-use axum::http::header::{FORWARDED, HOST, HeaderMap, HeaderValue, SET_COOKIE};
+use axum::http::header::{HeaderMap, HeaderValue, SET_COOKIE};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use std::sync::Arc;
@@ -63,52 +63,8 @@ pub fn extract_cookie(req: &Request, name: &str) -> Option<String> {
     None
 }
 
-pub fn should_set_secure_cookie(headers: &HeaderMap, force_https: bool) -> bool {
-    if !force_https {
-        return false;
-    }
-
-    if forwarded_proto_is_https(headers) {
-        return true;
-    }
-
-    !host_is_loopback(headers)
-}
-
-fn forwarded_proto_is_https(headers: &HeaderMap) -> bool {
-    if let Some(proto) = headers
-        .get("x-forwarded-proto")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        return proto.eq_ignore_ascii_case("https");
-    }
-
-    headers
-        .get(FORWARDED)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_ascii_lowercase)
-        .is_some_and(|value| value.contains("proto=https"))
-}
-
-fn host_is_loopback(headers: &HeaderMap) -> bool {
-    let Some(host) = headers.get(HOST).and_then(|value| value.to_str().ok()) else {
-        return false;
-    };
-
-    let authority = host.trim().trim_start_matches('[');
-    let host_only = authority
-        .split(']')
-        .next()
-        .unwrap_or(authority)
-        .split(':')
-        .next()
-        .unwrap_or(authority)
-        .trim()
-        .to_ascii_lowercase();
-
-    host_only == "localhost" || host_only == "127.0.0.1" || host_only == "::1"
+pub const fn should_set_secure_cookie(_headers: &HeaderMap, force_https: bool) -> bool {
+    force_https
 }
 
 /// 세션 쿠키 설정 (HttpOnly, SameSite=Strict, Max-Age=1800)
@@ -217,22 +173,32 @@ mod tests {
     }
 
     #[test]
-    fn test_should_set_secure_cookie_false_for_loopback_host() {
+    fn test_should_set_secure_cookie_true_when_force_https_even_for_loopback_host() {
         let req = HttpRequest::builder()
-            .header(HOST, "127.0.0.1:30190")
+            .header(header::HOST, "127.0.0.1:30190")
             .body(Body::empty())
             .unwrap();
-        assert!(!should_set_secure_cookie(req.headers(), true));
+        assert!(should_set_secure_cookie(req.headers(), true));
     }
 
     #[test]
     fn test_should_set_secure_cookie_true_for_forwarded_https() {
         let req = HttpRequest::builder()
-            .header(HOST, "admin.capu.blog")
+            .header(header::HOST, "admin.capu.blog")
             .header("x-forwarded-proto", "https")
             .body(Body::empty())
             .unwrap();
         assert!(should_set_secure_cookie(req.headers(), true));
+    }
+
+    #[test]
+    fn test_should_set_secure_cookie_false_when_force_https_disabled() {
+        let req = HttpRequest::builder()
+            .header(header::HOST, "admin.capu.blog")
+            .header("x-forwarded-proto", "https")
+            .body(Body::empty())
+            .unwrap();
+        assert!(!should_set_secure_cookie(req.headers(), false));
     }
 
     #[test]

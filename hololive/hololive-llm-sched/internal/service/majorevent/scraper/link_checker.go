@@ -73,6 +73,7 @@ func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Log
 
 	resolver := net.DefaultResolver
 	client = withBlockedRedirectPolicy(client, resolver, normalized.Timeout)
+	client = withValidatedDialPolicy(client, resolver, normalized.Timeout)
 
 	return &LinkChecker{
 		client:   client,
@@ -239,6 +240,21 @@ func validateResolvedHost(ctx context.Context, resolver hostResolver, timeout ti
 		return nil
 	}
 
+	ips, err := lookupResolvedIPs(ctx, resolver, timeout, parsed.Hostname())
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(ips, isPrivateOrInternalIP) {
+		return fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
+	}
+	return nil
+}
+
+func lookupResolvedIPs(ctx context.Context, resolver hostResolver, timeout time.Duration, host string) ([]net.IP, error) {
+	if resolver == nil {
+		return nil, nil
+	}
+
 	lookupCtx := ctx
 	cancel := func() {}
 	if timeout > 0 {
@@ -246,17 +262,14 @@ func validateResolvedHost(ctx context.Context, resolver hostResolver, timeout ti
 	}
 	defer cancel()
 
-	ips, err := resolver.LookupIP(lookupCtx, "ip", parsed.Hostname())
+	ips, err := resolver.LookupIP(lookupCtx, "ip", host)
 	if err != nil {
-		return fmt.Errorf("resolve link host: %w", err)
+		return nil, fmt.Errorf("resolve link host: %w", err)
 	}
 	if len(ips) == 0 {
-		return fmt.Errorf("resolve link host: no addresses for %q", parsed.Hostname())
+		return nil, fmt.Errorf("resolve link host: no addresses for %q", host)
 	}
-	if slices.ContainsFunc(ips, isPrivateOrInternalIP) {
-		return fmt.Errorf("%w %q", errBlockedLink, parsed.Host)
-	}
-	return nil
+	return ips, nil
 }
 
 func isBlockedLinkError(err error) bool {
@@ -267,6 +280,75 @@ func isBlockedLinkError(err error) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "unsupported scheme")
+}
+
+func withValidatedDialPolicy(client *http.Client, resolver hostResolver, timeout time.Duration) *http.Client {
+	if client == nil {
+		return nil
+	}
+
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+
+	baseTransport, ok := transport.(*http.Transport)
+	if !ok {
+		return client
+	}
+
+	clonedClient := *client
+	clonedTransport := baseTransport.Clone()
+	baseDialContext := clonedTransport.DialContext
+	if baseDialContext == nil {
+		dialer := &net.Dialer{}
+		baseDialContext = dialer.DialContext
+	}
+	clonedTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		resolvedAddr, err := resolveDialAddress(ctx, resolver, timeout, addr)
+		if err != nil {
+			return nil, err
+		}
+		return baseDialContext(ctx, network, resolvedAddr)
+	}
+	if clonedTransport.DialTLSContext != nil {
+		baseDialTLSContext := clonedTransport.DialTLSContext
+		clonedTransport.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			resolvedAddr, err := resolveDialAddress(ctx, resolver, timeout, addr)
+			if err != nil {
+				return nil, err
+			}
+			return baseDialTLSContext(ctx, network, resolvedAddr)
+		}
+	}
+	clonedClient.Transport = clonedTransport
+	return &clonedClient
+}
+
+func resolveDialAddress(ctx context.Context, resolver hostResolver, timeout time.Duration, addr string) (string, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", fmt.Errorf("resolve dial target: split host/port: %w", err)
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		if isPrivateOrInternalIP(ip) {
+			return "", fmt.Errorf("%w %q", errBlockedLink, addr)
+		}
+		return addr, nil
+	}
+	if resolver == nil {
+		return addr, nil
+	}
+
+	ips, err := lookupResolvedIPs(ctx, resolver, timeout, host)
+	if err != nil {
+		return "", err
+	}
+	if slices.ContainsFunc(ips, isPrivateOrInternalIP) {
+		return "", fmt.Errorf("%w %q", errBlockedLink, addr)
+	}
+	return net.JoinHostPort(ips[0].String(), port), nil
 }
 
 func withBlockedRedirectPolicy(client *http.Client, resolver hostResolver, timeout time.Duration) *http.Client {

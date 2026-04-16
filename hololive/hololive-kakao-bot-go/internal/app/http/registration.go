@@ -56,10 +56,6 @@ func registerAPIRoutes(
 	// 모바일 앱에서 localhost 리디렉션이 불가능하므로 서버가 프록시 역할
 	router.GET("/oauth/callback", domains.OAuth.OAuthCallbackHandler)
 
-	// 공개 스트림 조회 API
-	publicHoloAPI := router.Group("/api/holo")
-	registerPublicStreamRoutes(publicHoloAPI, domains.Stream)
-
 	// Session 기반 인증 API
 	authAPI := router.Group("/api/auth")
 	authAPI.POST("/register", authHandler.Register)
@@ -84,6 +80,7 @@ func registerAPIRoutes(
 	registerAlarmRoutes(holoAPI, domains.Alarm)
 	registerRoomRoutes(holoAPI, domains.Room)
 	registerStatsRoutes(holoAPI, domains.Stats, domains.Stream)
+	registerStreamRoutes(holoAPI, domains.Stream)
 	registerSettingsRoutes(holoAPI, domains.Settings)
 	registerTemplateRoutes(holoAPI, domains.Template)
 	registerMilestoneRoutes(holoAPI, domains.Milestone)
