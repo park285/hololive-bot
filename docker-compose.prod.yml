@@ -74,9 +74,10 @@ services:
       resources:
         limits:
           memory: 512m
-    network_mode: host
     logging: *default-logging
     <<: *db-security
+    networks:
+      - hololive-net
 
   valkey-cache:
     image: valkey/valkey:9.0.2-alpine3.23
@@ -112,8 +113,9 @@ services:
     container_name: hololive-db-migrate
     restart: "no"
     environment:
-      PGHOST: host.docker.internal
+      PGHOST: holo-postgres
       PGPORT: "5433"
+      PGSSLMODE: "require"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
       PGPASSWORD: ${DB_PASSWORD}
@@ -162,13 +164,13 @@ services:
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
-      POSTGRES_HOST: host.docker.internal
+      POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5433"
       POSTGRES_SOCKET_PATH: ""
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+      POSTGRES_SSLMODE: "require"
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"
@@ -246,13 +248,13 @@ services:
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
-      POSTGRES_HOST: host.docker.internal
+      POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5433"
       POSTGRES_SOCKET_PATH: ""
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+      POSTGRES_SSLMODE: "require"
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       SERVER_PORT: 30006
@@ -314,13 +316,13 @@ services:
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
-      POSTGRES_HOST: host.docker.internal
+      POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5433"
       POSTGRES_SOCKET_PATH: ""
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+      POSTGRES_SSLMODE: "require"
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       NOTIFICATION_SCHEDULER_ROLE: "worker"
@@ -443,13 +445,13 @@ services:
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
-      POSTGRES_HOST: host.docker.internal
+      POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5433"
       POSTGRES_SOCKET_PATH: ""
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+      POSTGRES_SSLMODE: "require"
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       SCRAPER_SCHEDULER_WORKER_COUNT: "${SCRAPER_SCHEDULER_WORKER_COUNT:-0}"
@@ -533,13 +535,13 @@ services:
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
-      POSTGRES_HOST: host.docker.internal
+      POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5433"
       POSTGRES_SOCKET_PATH: ""
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+      POSTGRES_SSLMODE: "require"
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       SCRAPER_SCHEDULER_WORKER_COUNT: "${SCRAPER_SCHEDULER_WORKER_COUNT:-0}"
@@ -620,13 +622,13 @@ services:
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
-      POSTGRES_HOST: host.docker.internal
+      POSTGRES_HOST: holo-postgres
       POSTGRES_PORT: "5433"
       POSTGRES_SOCKET_PATH: ""
       POSTGRES_DB: hololive
       POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
+      POSTGRES_SSLMODE: "require"
       POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
       POSTGRES_AUTO_PREPARE_SCHEMA: "false"
       MAJOREVENT_SCRAPER_ENABLED: "${MAJOREVENT_SCRAPER_ENABLED:-false}"

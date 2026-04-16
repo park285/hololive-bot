@@ -151,7 +151,7 @@ func TestConfig_Validation(t *testing.T) {
 	}
 }
 
-func TestEnableFileLogging_EnsuresReadableFilePerms(t *testing.T) {
+func TestEnableFileLogging_UsesRestrictedFileAndDirectoryPerms(t *testing.T) {
 	logDir := t.TempDir()
 	serviceLogPath := filepath.Join(logDir, "service.log")
 	if err := os.WriteFile(serviceLogPath, []byte("preexisting\n"), 0o600); err != nil {
@@ -170,18 +170,20 @@ func TestEnableFileLogging_EnsuresReadableFilePerms(t *testing.T) {
 		t.Fatalf("EnableFileLogging failed: %v", err)
 	}
 
-	tests := []string{
-		serviceLogPath,
+	fileInfo, err := os.Stat(serviceLogPath)
+	if err != nil {
+		t.Fatalf("stat %s failed: %v", serviceLogPath, err)
+	}
+	if got := fileInfo.Mode().Perm(); got != 0o640 {
+		t.Fatalf("unexpected perm for %s: got %o want %o", serviceLogPath, got, 0o640)
 	}
 
-	for _, path := range tests {
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("stat %s failed: %v", path, err)
-		}
-		if got := info.Mode().Perm(); got != 0o644 {
-			t.Fatalf("unexpected perm for %s: got %o want %o", path, got, 0o644)
-		}
+	dirInfo, err := os.Stat(logDir)
+	if err != nil {
+		t.Fatalf("stat %s failed: %v", logDir, err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0o750 {
+		t.Fatalf("unexpected perm for %s: got %o want %o", logDir, got, 0o750)
 	}
 }
 

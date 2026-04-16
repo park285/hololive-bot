@@ -1,6 +1,6 @@
 # Hololive Bot API 스펙
 
-> 마지막 업데이트: 2026-03-08
+> 마지막 업데이트: 2026-04-16
 
 클라이언트(Tauri 앱, Admin Dashboard)가 호출하는 bot 통합 API 기준 명세입니다.
 
@@ -10,7 +10,7 @@
 |------|-----|
 | Base URL | `http://localhost:30006` (admin-api, 또는 배포 환경 도메인) |
 | Prefix | `/api/holo` |
-| 인증 | 기본적으로 `X-API-Key` 헤더 필요. 단, `GET /api/holo/streams/live`, `GET /api/holo/streams/upcoming` 는 인증 불필요 |
+| 인증 | 모든 `/api/holo/*` 요청에 `X-API-Key` 헤더 필요 |
 | 프로토콜 | HTTP/2 Cleartext (H2C) |
 
 ---
@@ -88,7 +88,7 @@
 
 현재 진행 중인 Hololive 생방송 목록을 반환합니다.
 
-> 인증 불필요
+> `X-API-Key` 헤더 필요
 
 ```
 GET /api/holo/streams/live?org={ORG}
@@ -134,7 +134,7 @@ GET /api/holo/streams/live?org={ORG}
 
 향후 24시간 내 예정된 방송 목록을 반환합니다.
 
-> 인증 불필요
+> `X-API-Key` 헤더 필요
 
 ```
 GET /api/holo/streams/upcoming?org={ORG}
@@ -659,7 +659,7 @@ Content-Type: application/json
 GET /health
 ```
 
-> **참고**: 인증 불필요
+> **참고**: `X-API-Key` 헤더 필요
 
 **응답:**
 ```json
@@ -679,7 +679,7 @@ GET /health
 GET /metrics
 ```
 
-> **참고**: 인증 불필요
+> **참고**: `X-API-Key` 헤더 필요
 
 ---
 
@@ -688,13 +688,17 @@ GET /metrics
 ### curl
 
 ```bash
-curl "http://localhost:30006/api/holo/streams/live"
+curl "http://localhost:30006/api/holo/streams/live" \
+  -H "X-API-Key: ${API_KEY}"
 ```
 
 ### TypeScript (Tauri 앱)
 
 ```typescript
 const response = await fetch('http://localhost:30006/api/holo/streams/live', {
+  headers: {
+    'X-API-Key': apiKey,
+  },
 });
 const data = await response.json();
 ```
@@ -703,6 +707,7 @@ const data = await response.json();
 
 ```go
 req, _ := http.NewRequest("GET", "http://localhost:30006/api/holo/streams/live", nil)
+req.Header.Set("X-API-Key", apiKey)
 resp, _ := http.DefaultClient.Do(req)
 ```
 
@@ -716,7 +721,7 @@ resp, _ := http.DefaultClient.Do(req)
 | 2026-01-04 | `/users/live` Holodex 내부 메서드 추가 (`GetChannelsLiveStatus`) |
 | 2026-02-28 | `POST /api/holo/settings/llm` 추가 (LLM scheduler 제어) |
 | 2026-03-01 | channel 단일 `channelId` 조회 제거(410), fail-fast 응답 정책 반영 |
-| 2026-03-08 | `GET /api/holo/streams/live`, `GET /api/holo/streams/upcoming` 공개 조회로 전환 |
+| 2026-04-16 | `GET /api/holo/streams/live`, `GET /api/holo/streams/upcoming` 를 포함해 `/api/holo/*` 전체에 API Key 인증 적용 |
 
 ---
 
