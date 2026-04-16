@@ -20,12 +20,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.4.0
         with:
           go-version-file: go.work
+          cache-dependency-path: |
+            go.work.sum
+            shared-go/go.sum
+            hololive/hololive-shared/go.sum
+            hololive/hololive-kakao-bot-go/go.sum
+            hololive/hololive-llm-sched/go.sum
+            hololive/hololive-stream-ingester/go.sum
+            hololive/hololive-dispatcher-go/go.sum
 
       - name: Normalize go.mod replace directives
         run: |
@@ -46,7 +54,7 @@ jobs:
 
       - name: Upload Go import graph artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6.3.0
         with:
           name: go-workspace-import-graph
           path: artifacts/architecture/go-workspace-import-graph.txt
