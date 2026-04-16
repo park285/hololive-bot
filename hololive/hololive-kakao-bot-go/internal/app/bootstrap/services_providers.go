@@ -10,8 +10,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
 )
 
 func ProvideACLService(

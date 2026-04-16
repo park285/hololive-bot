@@ -1,5 +1,12 @@
 # Alarm / Dispatch Remediation Guide (2026-04-14)
 
+상태: **CLOSED / HISTORICAL (ownership moved on 2026-04-16)**
+
+이 문서의 remediation 내용은 유효하지만, 여기서 언급하는 `hololive-kakao-bot-go/internal/service/notification/*` 구현은
+이후 `hololive-shared/pkg/service/notification/*` 으로 이동했다.
+현재 코드를 읽을 때는 새 shared ownership 경로를 기준으로 봐야 한다.
+
+
 이 문서는 2026-04-14 기준 알람/디스패처 경로의 통합 보강 내용을 설명하는 현재 문서다.
 
 ## 범위

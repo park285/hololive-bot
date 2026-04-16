@@ -63,6 +63,8 @@ fi
 # 버전 관리 대상 디렉토리
 VERSION_DIRS=(
     "hololive/hololive-kakao-bot-go"
+    "hololive/hololive-admin-api"
+    "hololive/hololive-alarm-worker"
 )
 
 # 인자 파싱
@@ -146,8 +148,12 @@ echo "  SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
 
 # VERSION 파일에서 환경변수 설정 (docker-compose build args로 전달)
 export HOLO_BOT_VERSION=$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo "dev")
+export HOLO_ADMIN_API_VERSION=$(cat hololive/hololive-admin-api/VERSION 2>/dev/null | xargs || echo "$HOLO_BOT_VERSION")
+export HOLO_ALARM_WORKER_VERSION=$(cat hololive/hololive-alarm-worker/VERSION 2>/dev/null | xargs || echo "$HOLO_BOT_VERSION")
 
 echo "  HOLO_BOT_VERSION=$HOLO_BOT_VERSION"
+echo "  HOLO_ADMIN_API_VERSION=$HOLO_ADMIN_API_VERSION"
+echo "  HOLO_ALARM_WORKER_VERSION=$HOLO_ALARM_WORKER_VERSION"
 if [ "$REMOTE_CACHE" = true ]; then
     echo "  REMOTE_CACHE_PREFIX=$REMOTE_CACHE_PREFIX"
 fi

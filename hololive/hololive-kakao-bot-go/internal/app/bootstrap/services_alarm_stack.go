@@ -12,8 +12,8 @@ import (
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
 	"github.com/kapu/hololive-kakao-bot-go/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
 )
 
 type AlarmYouTubeStackComponents struct {

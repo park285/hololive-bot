@@ -229,11 +229,11 @@ services:
     image: hololive-admin-api:prod
     build:
       context: .
-      dockerfile: hololive/hololive-kakao-bot-go/Dockerfile.admin-api
+      dockerfile: hololive/hololive-admin-api/Dockerfile
       additional_contexts:
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
       args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+        VERSION: ${HOLO_ADMIN_API_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
     container_name: hololive-admin-api
     restart: always
     labels:
@@ -297,11 +297,11 @@ services:
     image: hololive-alarm-worker:prod
     build:
       context: .
-      dockerfile: hololive/hololive-kakao-bot-go/Dockerfile.alarm-worker
+      dockerfile: hololive/hololive-alarm-worker/Dockerfile
       additional_contexts:
         shared_go_workspace: ${SHARED_GO_WORKSPACE_PATH:-./shared-go}
       args:
-        VERSION: ${HOLO_BOT_VERSION:-2.0.0}
+        VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
     container_name: hololive-alarm-worker
     restart: always
     labels:

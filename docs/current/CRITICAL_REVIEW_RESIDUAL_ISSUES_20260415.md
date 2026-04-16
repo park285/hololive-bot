@@ -1,5 +1,12 @@
 # Critical Review Residual Issues (2026-04-15)
 
+상태: **CLOSED / HISTORICAL (paths moved on 2026-04-16)**
+
+이 문서는 2026-04-15 기준 잔여 이슈 종료 기록이며,
+본문의 `hololive-kakao-bot-go/internal/service/notification/*` 경로는 이후 `hololive-shared/pkg/service/notification/*` 으로 이동했다.
+현재는 historical completion log 로 취급한다.
+
+
 상태: **CLOSED (2026-04-15)**
 
 이 문서는 2026-04-15 기준 non-blocking residual follow-up 메모였고,

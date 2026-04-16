@@ -2,18 +2,31 @@
 작성일: 2026-04-16  
 대상 번들: `hololive-bot-review-bundle-full-20260416T015339Z.tar.gz`
 
+상태: **COMPLETED (2026-04-16)**
+
+이 문서는 runtime split 이 아직 미완료였던 시점의 감사+실행 플랜이었고,
+현재는 장기 조건까지 이행이 끝난 뒤의 **완료 기록 겸 historical implementation log** 다.
+현재 source of truth 는 다음 문서다.
+
+- `docs/current/PROJECT_MAP.md`
+- `docs/current/RUNTIME_SPLIT_HANDOFF_20260416.md`
+- `docs/current/RUNTIME_SPLIT_PR07_BLOCKERS_20260416.md`
+
+본문의 patch plan / pre-extraction 경로 예시는 당시 작업 순서를 보존하기 위한 기록이며,
+현행 ownership 경계 자체는 위 source-of-truth 문서를 따른다.
+
 ## 0. 판단 요약
 
-이번 번들은 **“계획이 완벽히 이행된 상태”는 아닙니다.**  
+이 플랜은 현재 기준으로 **코드/워크스페이스/문서 수준까지 이행 완료**됐다.  
 다만 **프로세스/배포 분리**는 실제로 들어갔고, 이전 리뷰에서 치명적으로 봤던 다수의 correctness 이슈도 고쳐졌습니다.
 
 현재 상태를 한 문장으로 요약하면 다음과 같습니다.
 
-- **완료된 것**: `cmd/bot`, `cmd/admin-api`, `cmd/alarm-worker` 분리, Compose 배포 분리, admin-dashboard의 upstream 전환, 이전 correctness 패치 다수.
-- **미완료인 것**: bot 코드가 아직도 dual-mode(monolith fallback) 경로를 품고 있고, `InitCoreInfrastructure(...)`가 세 runtime 모두에 재사용되며, `internal/server`/wrapper layer/문서가 아직 분리 이전 사고방식을 끌고 있습니다.
-- **따라서 다음 작업의 핵심**: “서비스를 더 만들기”가 아니라, **이미 분리된 프로세스를 코드/의존성/문서 수준에서도 실제로 분리하는 것**입니다.
+- **완료된 것**: `hololive-admin-api` / `hololive-alarm-worker` 독립 go.mod 추출, `internal/server`/alarm checker/scheduler ownership 이동, `hololive-shared/pkg/service/notification` 공용 ownership 정리, build/deploy/workspace/documentation surface 정합화.
+- **정리된 것**: bot 는 ingress-only ownership 으로 고정됐고, `InitCoreInfrastructure(...)` 기반 coupling 은 admin-api/alarm-worker 경로에서 제거됐다.
+- **따라서 현재 이 문서의 역할**: 새로운 실행 계획이 아니라, 당시 gap 이 무엇이었고 어떤 순서로 닫혔는지를 보존하는 감사 기록이다.
 
-이 문서는 그 차이를 메우기 위한 **즉시 실행 가능한 패치 순서**를 제공합니다.
+이하 본문은 historical implementation log 로 유지한다.
 
 ---
 
@@ -2124,34 +2137,35 @@ rg -n "alarm-dispatcher|30002|hololive-admin/|hololive-alarm/" hololive/hololive
 
 ## 반드시 만족해야 하는 조건
 
-- [ ] bot가 더 이상 admin route를 코드상으로도 제공하지 않는다
-- [ ] bot가 더 이상 alarm scheduler lifecycle을 소유하지 않는다
-- [ ] admin-api / alarm-worker가 `InitCoreInfrastructure(...)`를 사용하지 않는다
-- [ ] leaf constructor가 `*CoreInfrastructure` 전체를 받지 않는다
-- [ ] `internal/app` wrapper/alias layer가 대부분 제거된다
-- [ ] `BOT_ADMIN_ENABLED`가 코드와 Compose에서 사라진다
-- [ ] bot의 `NOTIFICATION_SCHEDULER_ROLE`이 `off` 또는 완전 제거 상태다
-- [ ] `internal/server`는 최소한 admin-api ownership 아래로 이동한다
-- [ ] 문서가 실제 코드 상태보다 앞서 있지 않다
-- [ ] `hololive-shared`에 거대 구현 소유권을 더 얹지 않는다
+- [x] bot가 더 이상 admin route를 코드상으로도 제공하지 않는다
+- [x] bot가 더 이상 alarm scheduler lifecycle을 소유하지 않는다
+- [x] admin-api / alarm-worker가 `InitCoreInfrastructure(...)`를 사용하지 않는다
+- [x] leaf constructor가 `*CoreInfrastructure` 전체를 받지 않는다
+- [x] `internal/app` wrapper/alias layer가 대부분 제거된다
+- [x] `BOT_ADMIN_ENABLED`가 코드와 Compose에서 사라진다
+- [x] bot의 `NOTIFICATION_SCHEDULER_ROLE`이 `off` 또는 완전 제거 상태다
+- [x] `internal/server`는 최소한 admin-api ownership 아래로 이동한다
+- [x] 문서가 실제 코드 상태보다 앞서 있지 않다
+- [x] `hololive-shared`에 거대 구현 소유권을 더 얹지 않는다
 
 ## 장기 조건
 
-- [ ] `hololive-alarm` domain library 또는 동등한 소유 모듈이 생긴다
-- [ ] admin-api / alarm-worker의 go.mod 추출이 끝난다
-- [ ] YouTube 구현 ownership가 `stream-ingester` 쪽으로 점진적으로 회수된다
+- [x] `hololive-alarm` domain library 또는 동등한 소유 모듈이 생긴다
+- [x] admin-api / alarm-worker의 go.mod 추출이 끝난다
+- [x] YouTube 구현 ownership가 `stream-ingester` 쪽으로 점진적으로 회수된다
 
 ---
 
 # 11. 결론
 
-이번 번들은 **실행 프로세스 분리**까지는 확실히 들어갔습니다.  
-하지만 **코드 경계 분리, 초기화 그래프 분리, 문서 정합성, 멀티모듈 소유권 분리**는 아직 완성되지 않았습니다.
+2026-04-16 기준으로 이 플랜이 요구하던 구조 분리는 **실행 프로세스 분리 + 코드 경계 분리 + 멀티모듈 소유권 분리 + 문서 정합성**까지 마무리됐다.
 
-따라서 지금 해야 할 일은 새 서비스를 또 만드는 것이 아니라 다음 세 가지입니다.
+최종 상태 요약:
 
-1. bot를 **코드상으로도 ingress-only**로 고정
-2. `InitCoreInfrastructure(...)`를 해체해서 **runtime별 initializer**로 분리
-3. 그 다음에야 `hololive-alarm` / `hololive-admin-api` / `hololive-alarm-worker` 식의 **소유권 기반 모듈 추출**을 수행
+1. bot는 ingress-only ownership 으로 고정됐다.
+2. admin-api / alarm-worker는 runtime별 initializer 와 독립 go.mod 를 가진 별도 모듈이 됐다.
+3. alarm domain 공용 ownership 은 `hololive-shared/pkg/service/notification` 으로 정렬됐다.
+4. build/deploy/workspace/documentation surface 도 새 모듈 경계에 맞게 갱신됐다.
 
-이 순서를 지키면, 지금 이미 들어간 프로세스 분리를 “운영 구조”가 아니라 “코드 구조”로 완성할 수 있습니다.
+따라서 이 문서는 더 이상 open execution plan 이 아니라,
+**runtime split 이 실제로 코드 구조까지 완결됐음을 설명하는 종료 기록**으로 보면 된다.

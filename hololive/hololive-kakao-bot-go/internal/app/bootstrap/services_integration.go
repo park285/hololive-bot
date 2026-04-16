@@ -11,7 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
 )
 
 func InitCoreIntegrationServices(

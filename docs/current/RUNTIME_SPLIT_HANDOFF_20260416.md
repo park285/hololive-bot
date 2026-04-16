@@ -1,6 +1,7 @@
 # Runtime Split Handoff 2026-04-16
 
-이 문서는 `hololive_execution_audit_and_reimprovement_plan_20260416.md` 기준 실행 상태를 다음 컨텍스트에서 바로 이어받기 위한 handoff 문서다.
+이 문서는 `hololive_execution_audit_and_reimprovement_plan_20260416.md` 기준
+runtime split 작업의 **완료 상태**를 기록한다.
 
 ## 기준 문서
 
@@ -8,107 +9,78 @@
 - 보조 참고: `hololive_runtime_split_master_plan_20260415.md`
 - 보조 참고: `hololive_bot_static_rereview_20260415.md`
 
-## 이번 라운드에서 닫힌 항목
+## 이번 라운드에서 최종 반영된 항목
 
-다음은 코드/설정/문서 기준으로 이미 반영됐다.
+다음 장기 조건까지 코드/워크스페이스/문서 기준으로 반영됐다.
 
-- bot가 더 이상 admin route를 코드상으로 제공하지 않음
-- bot가 더 이상 alarm scheduler lifecycle을 소유하지 않음
-- `BOT_ADMIN_ENABLED`가 코드와 Compose에서 제거됨
-- bot의 `NOTIFICATION_SCHEDULER_ROLE`이 `off`로 정렬됨
-- `BuildAdminAPIRuntime` / `BuildAlarmWorkerRuntime`가 더 이상 `InitCoreInfrastructure(...)`를 사용하지 않음
-- runtime scheduler constructor가 `*notification.AlarmService` 대신 `domain.AlarmCRUD` 경계로 축소됨
-- alarm-worker config subscriber가 giant infra 대신 `cache + AlarmCRUD`만 받도록 축소됨
-- bot-side YouTube scheduler field/accessor coupling이 제거됨
-- stale 문서 3종에 historical/deprecated 배너가 추가됨
-- focused test / broader test / lint / compose validation이 모두 통과함
+- bot가 더 이상 admin route를 코드상으로 소유하지 않음
+- bot가 더 이상 alarm-worker runtime/checker/scheduler를 소유하지 않음
+- `internal/server` ownership이 `hololive/hololive-admin-api/internal/server` 로 이동됨
+- `cmd/admin-api` 가 `hololive/hololive-admin-api/cmd/admin-api` 로 이동됨
+- `cmd/alarm-worker` 가 `hololive/hololive-alarm-worker/cmd/alarm-worker` 로 이동됨
+- `internal/service/alarm/checker` 가 `hololive/hololive-alarm-worker/internal/service/alarm/checker` 로 이동됨
+- `internal/service/alarm/scheduler` 가 `hololive/hololive-alarm-worker/internal/service/alarm/scheduler` 로 이동됨
+- `internal/service/system` / `internal/service/trigger` 가 admin-api ownership으로 이동됨
+- `internal/service/notification` 이 `hololive-shared/pkg/service/notification` 으로 이동되어
+  `hololive-alarm` 별도 모듈 대신 alarm domain의 공용 ownership seam 역할을 수행함
+- `internal/service/acl` / `internal/service/activity` 가 `hololive-shared/pkg/service/*` 로 이동됨
+- `internal/errors` 가 `hololive-shared/pkg/apperrors` 로 승격됨
+- `internal/service/chzzk` / `internal/service/twitch` 가 `hololive-shared/pkg/service/*` 로 이동됨
+- `hololive-admin-api/go.mod` / `hololive-alarm-worker/go.mod` 가 생성되고 `go.work` 가 갱신됨
+- `docs/current/PROJECT_MAP.md`, entrypoint contract, build/deploy/workflow 표면이 새 모듈 경계에 맞게 갱신됨
+- bot module 기준 legacy runtime split import 가 0건으로 고정됨
 
-## 아직 완전히 닫히지 않은 항목
+## 장기 조건 상태
 
-문서 전체 기준으로는 아직 완료가 아니다. 아래 항목이 남아 있다.
+이전 handoff 에 남아 있던 장기 조건은 현재 기준으로 모두 닫혔다.
 
-### 1. `internal/server` ownership 이동 미완료
+- [x] `internal/server`는 admin-api ownership 아래로 이동
+- [x] `hololive-admin-api` go.mod 추출 완료
+- [x] `hololive-alarm-worker` go.mod 추출 완료
+- [x] `hololive-alarm` domain library 또는 동등한 소유 모듈 생성
+  - 현재 구현: `hololive-shared/pkg/service/notification`
+- [x] YouTube ownership의 추가 회수
+  - bot는 더 이상 admin/alarm-worker 전용 scheduler/runtime builder를 소유하지 않음
 
-현재 상태:
-
-```bash
-find hololive/hololive-kakao-bot-go/internal -maxdepth 2 -type d -name server
-# hololive/hololive-kakao-bot-go/internal/server
-```
-
-즉, 체크리스트의
-
-- `internal/server`는 최소한 admin-api ownership 아래로 이동한다
-
-는 아직 미완료다.
-
-### 2. PR-07 멀티모듈 추출 미착수
-
-아직 없는 경로:
+## 현재 기대 디렉터리 상태
 
 ```bash
-find hololive -maxdepth 2 -type d \( -name 'hololive-admin-api' -o -name 'hololive-alarm-worker' -o -name 'hololive-alarm' \)
-# no output
+find hololive -maxdepth 2 -type d \( -name 'hololive-admin-api' -o -name 'hololive-alarm-worker' \)
+# hololive/hololive-admin-api
+# hololive/hololive-alarm-worker
 ```
 
-따라서 아래는 아직 안 됐다.
+## 현재 확인 grep
 
-- `hololive-admin-api/` 모듈 추출
-- `hololive-alarm-worker/` 모듈 추출
-- `hololive-alarm/` domain library 도입
-- `go.work` 갱신
-
-### 3. 장기 조건 미완료
-
-아직 남아 있는 장기 조건:
-
-- `hololive-alarm` domain library 또는 동등한 소유 모듈 생성
-- admin-api / alarm-worker go.mod 추출 완료
-- YouTube ownership의 추가 회수
-
-## 다음 컨텍스트에서 바로 할 일
-
-순서는 authoritative plan의 의도를 유지한다.
-
-1. `internal/server`를 admin-api ownership으로 이동할 최소 모듈 경계 설계 확정
-2. `hololive/hololive-admin-api/` 모듈 생성
-3. `cmd/admin-api` + admin runtime 관련 코드 + `internal/server` 이동
-4. `hololive/hololive-alarm-worker/` 모듈 생성
-5. `cmd/alarm-worker` + alarm checker/scheduler/runtime builder 이동
-6. 필요 시 `hololive-alarm/` domain library 분리
-7. 마지막에 `go.work` 갱신
-
-## 다음 컨텍스트 시작 전 확인 grep
-
-다음 grep는 현재 0건이어야 정상이다.
+다음 grep 는 현재 0건이어야 정상이다.
 
 ```bash
 rg -n "BOT_ADMIN_ENABLED|cfg\.Bot\.AdminEnabled|AdminEnabled" hololive/hololive-kakao-bot-go hololive/hololive-shared docker-compose.prod.yml
 rg -n "InitCoreInfrastructure\(" hololive/hololive-kakao-bot-go
 rg -n "GetYouTubeScheduler|deps\.Scheduler|Scheduler\s+youtube\.Scheduler" hololive/hololive-kakao-bot-go/internal/app hololive/hololive-kakao-bot-go/internal/bot -g '!**/*_test.go'
+rg -n 'github.com/kapu/hololive-kakao-bot-go/internal/service/(acl|activity|chzzk|twitch|notification)' -g '*.go'
+rg -n 'github.com/kapu/hololive-kakao-bot-go/internal/errors' -g '*.go'
+rg -n 'github.com/kapu/hololive-kakao-bot-go/internal/(server|service/system|service/trigger|service/alarm/(checker|scheduler))' -g '*.go'
 ```
-
-주의:
-
-- historical 문서에는 `alarm-dispatcher`, `30002`, `hololive-admin/`, `hololive-alarm/` 문자열이 남아 있을 수 있다.
-- 이건 PR-06에서 배너로 처리한 historical state이며, 현재 source of truth는 아니다.
 
 ## 이번 라운드 검증 기록
 
 실행했고 통과한 명령:
 
 ```bash
+go test . -run TestRuntimeSplitStandaloneModulesContract
 make -C hololive/hololive-kakao-bot-go fmt lint
 make -C hololive/hololive-kakao-bot-go test
-go test ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-shared/...
+go test ./...                    # hololive/hololive-admin-api
+go test ./...                    # hololive/hololive-alarm-worker
+go test ./...                    # hololive/hololive-kakao-bot-go
+go test ./...                    # hololive/hololive-shared
+./scripts/architecture/ci-boundary-gate.sh
 docker compose -f docker-compose.prod.yml config --no-interpolate
-git diff --check
+./build-all.sh --no-bump --build-only hololive-admin-api hololive-alarm-worker
 ```
 
-## 커밋 이후 기대 상태
+## 다음 컨텍스트에서 할 일
 
-이 handoff 문서가 포함된 커밋은 다음 의미를 가진다.
-
-- PR-01~PR-06 성격의 선행 정리 작업은 반영 완료
-- 문서 전체 기준의 최종 종료는 아님
-- 다음 작업자는 PR-07 멀티모듈 추출과 ownership 이동만 집중하면 됨
+runtime split 자체는 완료 상태다.
+다음 작업은 새 모듈을 실제로 배포/재기동하거나 운영 smoke 를 실행하는 경우에만 진행하면 된다.

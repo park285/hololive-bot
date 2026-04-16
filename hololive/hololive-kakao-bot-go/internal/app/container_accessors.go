@@ -29,8 +29,8 @@ import (
 
 	appwiring "github.com/kapu/hololive-kakao-bot-go/internal/app/wiring"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
 )
 
 func (c *Container) NewBot() (*bot.Bot, error) {

@@ -16,8 +16,8 @@ import (
 	"gorm.io/gorm"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
-	"github.com/kapu/hololive-kakao-bot-go/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
 )
 
 func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
