@@ -7,6 +7,7 @@ use axum::extract::{ConnectInfo, Request, State};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 use utoipa::ToSchema;
 
 use crate::auth::SessionId;
@@ -64,9 +65,19 @@ pub async fn handle_login(
     Json(req): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let ip = addr.ip().to_string();
+    let forwarded_for = headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("-");
 
     let (allowed, remaining) = state.rate_limiter.is_allowed(&ip);
     if !allowed {
+        warn!(
+            ip = %ip,
+            forwarded_for,
+            retry_after_secs = remaining.as_secs(),
+            "admin login rate limited"
+        );
         return Err(AuthError::RateLimited {
             retry_after_secs: remaining.as_secs(),
         }
@@ -76,6 +87,12 @@ pub async fn handle_login(
     if req.username != state.config.admin_user {
         let count = state.rate_limiter.record_failure(&ip);
         let delay = std::cmp::min(count as u64 * 500, 3000);
+        warn!(
+            ip = %ip,
+            forwarded_for,
+            delay_ms = delay,
+            "admin login failed: invalid username"
+        );
         tokio::time::sleep(Duration::from_millis(delay)).await;
         return Err(AuthError::Unauthorized.into());
     }
@@ -84,6 +101,13 @@ pub async fn handle_login(
     if !valid {
         let count = state.rate_limiter.record_failure(&ip);
         let delay = std::cmp::min(count as u64 * 500, 3000);
+        warn!(
+            ip = %ip,
+            forwarded_for,
+            username = %state.config.admin_user,
+            delay_ms = delay,
+            "admin login failed: invalid password"
+        );
         tokio::time::sleep(Duration::from_millis(delay)).await;
         return Err(AuthError::Unauthorized.into());
     }
@@ -98,6 +122,12 @@ pub async fn handle_login(
     let signed = crate::auth::sign_session_id(&session.id, &state.config.session_secret);
     let csrf_token =
         crate::middleware::csrf::new_csrf_token(&session.id, &state.config.session_secret);
+    info!(
+        ip = %ip,
+        forwarded_for,
+        username = %state.config.admin_user,
+        "admin login succeeded"
+    );
 
     let mut response = Json(LoginResponse {
         status: "ok".to_string(),
