@@ -36,6 +36,9 @@ impl Config {
             "ENABLE_OPENAPI",
             enable_swagger_ui || environment != "production",
         );
+        let admin_pass_hash =
+            normalize_admin_pass_hash(required_alias(&["ADMIN_PASS_HASH", "ADMIN_PASS_BCRYPT"])?);
+        validate_admin_pass_hash(&admin_pass_hash)?;
 
         Ok(Self {
             port: {
@@ -45,7 +48,7 @@ impl Config {
             env: environment.clone(),
             log_level: env_string("LOG_LEVEL", "info"),
             admin_user: env_string("ADMIN_USER", "admin"),
-            admin_pass_hash: required_alias(&["ADMIN_PASS_HASH", "ADMIN_PASS_BCRYPT"])?,
+            admin_pass_hash,
             session_secret: required_alias(&["SESSION_SECRET", "ADMIN_SECRET_KEY"])?,
             valkey_url: env_string("VALKEY_URL", "valkey-cache:6379"),
             docker_host: env_string("DOCKER_HOST", "tcp://docker-proxy:2375"),
@@ -62,36 +65,63 @@ impl Config {
     }
 }
 
+fn normalize_admin_pass_hash(hash: String) -> String {
+    if hash.starts_with("$$2a$$") || hash.starts_with("$$2b$$") || hash.starts_with("$$2y$$") {
+        hash.replace("$$", "$")
+    } else {
+        hash
+    }
+}
+
+fn validate_admin_pass_hash(hash: &str) -> Result<()> {
+    bcrypt::verify("", hash)
+        .map(|_| ())
+        .map_err(|err| anyhow!("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash: {err}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::env::test_support::with_env_vars;
     use super::*;
+    use std::sync::OnceLock;
+
+    fn primary_hash() -> &'static str {
+        static HASH: OnceLock<String> = OnceLock::new();
+        HASH.get_or_init(|| bcrypt::hash("primary-password", bcrypt::DEFAULT_COST).expect("hash"))
+            .as_str()
+    }
+
+    fn alias_hash() -> &'static str {
+        static HASH: OnceLock<String> = OnceLock::new();
+        HASH.get_or_init(|| bcrypt::hash("alias-password", bcrypt::DEFAULT_COST).expect("hash"))
+            .as_str()
+    }
 
     #[test]
     fn test_admin_pass_hash_alias_first_non_empty_wins() {
         with_env_vars(
             &[
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
-                ("ADMIN_PASS_BCRYPT", Some("hash-alias")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
+                ("ADMIN_PASS_BCRYPT", Some(alias_hash())),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
                 let cfg = Config::load().expect("config load");
-                assert_eq!(cfg.admin_pass_hash, "hash-primary");
+                assert_eq!(cfg.admin_pass_hash, primary_hash());
             },
         );
 
         with_env_vars(
             &[
                 ("ADMIN_PASS_HASH", Some("   ")),
-                ("ADMIN_PASS_BCRYPT", Some("hash-alias")),
+                ("ADMIN_PASS_BCRYPT", Some(alias_hash())),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
             ],
             || {
                 let cfg = Config::load().expect("config load");
-                assert_eq!(cfg.admin_pass_hash, "hash-alias");
+                assert_eq!(cfg.admin_pass_hash, alias_hash());
             },
         );
 
@@ -112,10 +142,48 @@ mod tests {
     }
 
     #[test]
+    fn test_admin_pass_hash_normalizes_escaped_bcrypt_hash() {
+        let bcrypt_hash = bcrypt::hash("test-password", bcrypt::DEFAULT_COST).expect("bcrypt hash");
+        let escaped_hash = bcrypt_hash.replace('$', "$$");
+
+        with_env_vars(
+            &[
+                ("ADMIN_PASS_HASH", Some(&escaped_hash)),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+            ],
+            || {
+                let cfg = Config::load().expect("config load");
+                assert_eq!(cfg.admin_pass_hash, bcrypt_hash);
+            },
+        );
+    }
+
+    #[test]
+    fn test_invalid_admin_pass_hash_returns_error() {
+        with_env_vars(
+            &[
+                ("ADMIN_PASS_HASH", Some("not-a-valid-bcrypt-hash")),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+            ],
+            || {
+                let err = Config::load().expect_err("invalid bcrypt hash should fail");
+                assert!(
+                    err.to_string()
+                        .contains("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash")
+                );
+            },
+        );
+    }
+
+    #[test]
     fn test_session_secret_alias_first_non_empty_wins() {
         with_env_vars(
             &[
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("secret-primary")),
                 ("ADMIN_SECRET_KEY", Some("secret-alias")),
@@ -128,7 +196,7 @@ mod tests {
 
         with_env_vars(
             &[
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("   ")),
                 ("ADMIN_SECRET_KEY", Some("secret-alias")),
@@ -141,7 +209,7 @@ mod tests {
 
         with_env_vars(
             &[
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", None),
                 ("ADMIN_SECRET_KEY", None),
@@ -160,7 +228,7 @@ mod tests {
         with_env_vars(
             &[
                 ("PORT", Some("70000")),
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
@@ -177,7 +245,7 @@ mod tests {
         with_env_vars(
             &[
                 ("ENV", Some("production")),
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
@@ -197,7 +265,7 @@ mod tests {
         with_env_vars(
             &[
                 ("ENV", Some("production")),
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
@@ -216,7 +284,7 @@ mod tests {
     fn test_holo_bot_api_key_falls_back_to_api_secret_key() {
         with_env_vars(
             &[
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
@@ -234,7 +302,7 @@ mod tests {
     fn test_holo_admin_api_url_prefers_new_alias_and_falls_back_to_legacy() {
         with_env_vars(
             &[
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
@@ -252,7 +320,7 @@ mod tests {
 
         with_env_vars(
             &[
-                ("ADMIN_PASS_HASH", Some("hash-primary")),
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
                 ("ADMIN_PASS_BCRYPT", None),
                 ("SESSION_SECRET", Some("session-secret")),
                 ("ADMIN_SECRET_KEY", None),
