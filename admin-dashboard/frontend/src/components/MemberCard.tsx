@@ -59,7 +59,7 @@ const MemberCard = memo(
 		};
 
 		return (
-			<Card className="relative group overflow-hidden border-slate-200 [content-visibility:auto] contain-intrinsic-size-[350px] focus-within:ring-2 focus-within:ring-sky-100 transition-shadow">
+			<Card className="relative group flex flex-col h-full overflow-hidden border-slate-200 [content-visibility:auto] contain-intrinsic-size-[350px] focus-within:ring-2 focus-within:ring-sky-100 transition-shadow">
 				<Card.Header className="pb-3 border-b border-slate-50">
 					<div className="flex items-start justify-between">
 						<div>
@@ -148,7 +148,7 @@ const MemberCard = memo(
 					</div>
 				</Card.Header>
 
-				<Card.Body className="space-y-4 pt-2">
+				<Card.Body className="space-y-4 pt-2 flex-1 flex flex-col">
 					<section aria-labelledby={`ko-aliases-${String(member.id)}`}>
 						<div
 							id={`ko-aliases-${String(member.id)}`}
@@ -208,7 +208,9 @@ const MemberCard = memo(
 						</div>
 					</section>
 
-					<section aria-labelledby={`ja-aliases-${String(member.id)}`}>
+					<section aria-labelledby={`ja-aliases-${String(member.id)}`}
+						className="flex-1"
+					>
 						<div
 							id={`ja-aliases-${String(member.id)}`}
 							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-400"

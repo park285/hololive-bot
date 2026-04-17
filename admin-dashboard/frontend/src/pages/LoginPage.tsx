@@ -191,9 +191,6 @@ const LoginPage = () => {
 							<div className="w-1.5 h-1.5 rounded-full bg-cyan-400"></div>
 							<div className="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
 						</div>
-						<p className="text-xs text-slate-400 font-medium tracking-wide">
-							인가된 사용자만 접근 가능합니다
-						</p>
 					</div>
 				</div>
 			</div>
