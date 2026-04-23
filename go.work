@@ -3,6 +3,7 @@ go 1.26.2
 toolchain go1.26.2
 
 use (
+	../iris-client-go
 	./
 	./hololive/hololive-dispatcher-go
 	./hololive/hololive-kakao-bot-go
