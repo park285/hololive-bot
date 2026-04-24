@@ -7,6 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 )
@@ -17,7 +18,11 @@ func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog
 		return nil, err
 	}
 
-	irisClient, err := providers.ProvideIrisClient(logger)
+	irisClient, err := providers.ProvideIrisClient(
+		logger,
+		iris.WithBaseURL(cfg.Iris.BaseURL),
+		iris.WithBotToken(cfg.Iris.BotToken),
+	)
 	if err != nil {
 		infra.Cleanup()
 		return nil, err

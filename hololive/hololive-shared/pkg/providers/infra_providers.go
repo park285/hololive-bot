@@ -24,12 +24,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type CacheResources struct {
@@ -92,15 +95,32 @@ func ProvideDatabaseResources(ctx context.Context, cfg config.PostgresConfig, lo
 	return resources, resources.Close, nil
 }
 
-// ProvideIrisClient - Iris h2c(HTTP/2 Cleartext) 클라이언트 생성
-func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*iris.H2CClient, error) {
-	defaultOpts := make([]iris.ClientOption, 0, 1+len(opts))
-	defaultOpts = append(defaultOpts, iris.WithLogger(logger))
-	defaultOpts = append(defaultOpts, opts...)
+const irisBaseURLFileEnv = "IRIS_BASE_URL_FILE"
 
-	client, err := iris.NewClient(defaultOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("provide iris client: %w", err)
+// ProvideIrisClient - Iris 발송 클라이언트 생성
+func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (iris.Client, error) {
+	cfg := iris.ResolveClientSDKConfig(opts)
+	fallbackBaseURL := strings.TrimSpace(cfg.BaseURL)
+	if fallbackBaseURL == "" {
+		fallbackBaseURL = strings.TrimSpace(os.Getenv(iris.EnvBaseURL))
 	}
-	return client, nil
+	if fallbackBaseURL == "" {
+		return nil, fmt.Errorf("provide iris client: base URL is required")
+	}
+
+	botToken := strings.TrimSpace(cfg.BotToken)
+	if botToken == "" {
+		botToken = strings.TrimSpace(os.Getenv(iris.EnvBotToken))
+	}
+	if botToken == "" {
+		return nil, fmt.Errorf("provide iris client: bot token is required")
+	}
+
+	return delivery.NewRuntimeIrisClient(
+		fallbackBaseURL,
+		botToken,
+		strings.TrimSpace(os.Getenv(irisBaseURLFileEnv)),
+		logger,
+		opts...,
+	), nil
 }

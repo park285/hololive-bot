@@ -29,10 +29,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/responses"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
@@ -227,27 +229,28 @@ func TestShouldFallbackToChat_OpenAIStatusAndCode(t *testing.T) {
 	}
 }
 
-func TestShouldFallbackToChat_ContextCanceledOrDeadline_NoFallback(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-	}{
-		{
-			name: "context_canceled",
-			err:  fmt.Errorf("openai responses API: %w", context.Canceled),
-		},
-		{
-			name: "context_deadline",
-			err:  fmt.Errorf("openai responses API: %w", context.DeadlineExceeded),
-		},
+func TestShouldFallbackToChat_ContextCanceled_NoFallback(t *testing.T) {
+	err := fmt.Errorf("openai responses API: %w", context.Canceled)
+	if shouldFallbackToChat(err) {
+		t.Fatal("context canceled should not fallback")
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if shouldFallbackToChat(tt.err) {
-				t.Fatalf("%s should not fallback", tt.name)
-			}
-		})
+func TestShouldFallbackToChat_HTTPClientDeadlineExceeded_Fallback(t *testing.T) {
+	err := fmt.Errorf("openai responses API: %w", &url.Error{
+		Op:  "POST",
+		URL: "https://example.com/v1/responses",
+		Err: context.DeadlineExceeded,
+	})
+	if !shouldFallbackToChat(err) {
+		t.Fatal("http client deadline exceeded should fallback")
+	}
+}
+
+func TestShouldFallbackToChat_EmptyResponsesOutput(t *testing.T) {
+	err := fmt.Errorf("openai responses API: %w", errOpenAIEmptyOutput)
+	if !shouldFallbackToChat(err) {
+		t.Fatal("empty responses output should fallback")
 	}
 }
 
@@ -277,6 +280,64 @@ func TestShouldFallbackToChat_NetworkErrors(t *testing.T) {
 	})
 	if shouldFallbackToChat(nonRetryableNetErr) {
 		t.Fatal("non-timeout/non-conn-refused network error should not fallback")
+	}
+}
+
+func TestExtractResponsesOutputText_ReturnsOutputText(t *testing.T) {
+	resp := responses.Response{
+		Status: responses.ResponseStatusCompleted,
+		Output: []responses.ResponseOutputItemUnion{
+			{
+				Type:   "message",
+				Status: string(responses.ResponseOutputMessageStatusCompleted),
+				Content: []responses.ResponseOutputMessageContentUnion{
+					{
+						Type: "output_text",
+						Text: `{"summary":"ok"}`,
+					},
+				},
+			},
+		},
+	}
+
+	got, err := extractResponsesOutputText(&resp)
+	if err != nil {
+		t.Fatalf("extractResponsesOutputText() error = %v", err)
+	}
+	if got != `{"summary":"ok"}` {
+		t.Fatalf("extractResponsesOutputText() = %q, want %q", got, `{"summary":"ok"}`)
+	}
+}
+
+func TestExtractResponsesOutputText_EmptyOutputIncludesDiagnostic(t *testing.T) {
+	resp := responses.Response{
+		Status: responses.ResponseStatusCompleted,
+		Output: []responses.ResponseOutputItemUnion{
+			{
+				Type:   "message",
+				Status: string(responses.ResponseOutputMessageStatusCompleted),
+				Content: []responses.ResponseOutputMessageContentUnion{
+					{
+						Type:    "refusal",
+						Refusal: "safety refusal",
+					},
+				},
+			},
+		},
+	}
+
+	_, err := extractResponsesOutputText(&resp)
+	if err == nil {
+		t.Fatal("extractResponsesOutputText() error = nil, want error")
+	}
+	if !errors.Is(err, errOpenAIEmptyOutput) {
+		t.Fatalf("extractResponsesOutputText() error = %v, want errOpenAIEmptyOutput", err)
+	}
+	if !strings.Contains(err.Error(), "status=completed") {
+		t.Fatalf("error = %q, want status diagnostic", err.Error())
+	}
+	if !strings.Contains(err.Error(), "refusal=safety refusal") {
+		t.Fatalf("error = %q, want refusal diagnostic", err.Error())
 	}
 }
 

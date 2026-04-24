@@ -67,7 +67,11 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		}
 	}()
 
-	irisClient, err := sharedproviders.ProvideIrisClient(logger)
+	irisClient, err := sharedproviders.ProvideIrisClient(
+		logger,
+		iris.WithBaseURL(cfg.Iris.BaseURL),
+		iris.WithBotToken(cfg.Iris.BotToken),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("provide iris client: %w", err)
 	}

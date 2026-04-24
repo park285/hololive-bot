@@ -157,6 +157,7 @@ services:
       <<: *app-file-log-env
       GOGC: "60"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
+      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -197,6 +198,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -378,6 +380,7 @@ services:
       <<: *app-file-log-env
       DISPATCHER_PORT: "30020"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
+      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
@@ -391,6 +394,7 @@ services:
       - "127.0.0.1:30020:30020"
     volumes:
       - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -437,6 +441,7 @@ services:
       PHOTO_SYNC_ENABLED: "true"
       YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED: "false"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
+      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -479,6 +484,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -527,6 +533,7 @@ services:
       PHOTO_SYNC_ENABLED: "false"
       YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED: "true"
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
+      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -569,6 +576,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -614,6 +622,7 @@ services:
       <<: *app-file-log-env
       LLM_SCHEDULER_PORT: 30003
       IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
+      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -644,6 +653,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"

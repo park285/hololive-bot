@@ -95,12 +95,30 @@ func (s *testMessageSender) SendMessage(ctx context.Context, room, message strin
 
 var testLogger = sharedlogging.NewLogger
 
+type readinessTestIrisClient struct {
+	pingFunc func(ctx context.Context) bool
+}
+
+func (c *readinessTestIrisClient) Ping(ctx context.Context) bool {
+	if c.pingFunc != nil {
+		return c.pingFunc(ctx)
+	}
+	return true
+}
+
 func newTestRuntimeForReadiness(connected bool) *Runtime {
+	return newTestRuntimeForReadinessWithIris(connected, true)
+}
+
+func newTestRuntimeForReadinessWithIris(connected bool, irisReady bool) *Runtime {
 	return &Runtime{
 		logger: testLogger(),
 		cacheSvc: &cachemocks.Client{
 			IsConnectedFunc: func(context.Context) bool { return connected },
 			CloseFunc:       func() error { return nil },
+		},
+		irisClient: &readinessTestIrisClient{
+			pingFunc: func(context.Context) bool { return irisReady },
 		},
 		readyState: newReadinessState(),
 	}
@@ -179,6 +197,30 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			}
 			if got := payload["status"]; got != "ready" {
 				t.Fatalf("status field = %v, want ready", got)
+			}
+			if got := payload["iris_connected"]; got != true {
+				t.Fatalf("iris_connected = %v, want true", got)
+			}
+		})
+
+		t.Run("not ready when iris is unreachable", func(t *testing.T) {
+			rt := newTestRuntimeForReadinessWithIris(true, false)
+			rt.readyState.dispatchLoopRunning.Store(true)
+			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+			rec := httptest.NewRecorder()
+
+			rt.routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+			}
+
+			var payload map[string]any
+			if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode ready response: %v", err)
+			}
+			if got := payload["iris_connected"]; got != false {
+				t.Fatalf("iris_connected = %v, want false", got)
 			}
 		})
 

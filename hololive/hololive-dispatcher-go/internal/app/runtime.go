@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
+	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -48,6 +49,9 @@ type Runtime struct {
 	cfg        *Config
 	logger     *slog.Logger
 	cacheSvc   cache.Client
+	irisClient interface {
+		Ping(ctx context.Context) bool
+	}
 	dispatcher *dispatch.Dispatcher
 	httpServer *http.Server
 	readyState *readinessState
@@ -98,7 +102,15 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		queue.WithMaxBatch(cfg.Dispatch.MaxBatch),
 	)
 	renderer := dispatch.NewSimpleRenderer()
-	irisClient := iris.NewH2CClient(cfg.Iris.BaseURL, cfg.Iris.BotToken, iris.WithLogger(logger))
+	irisClient, err := sharedproviders.ProvideIrisClient(
+		logger,
+		iris.WithBaseURL(cfg.Iris.BaseURL),
+		iris.WithBotToken(cfg.Iris.BotToken),
+	)
+	if err != nil {
+		_ = cacheSvc.Close()
+		return nil, fmt.Errorf("build runtime: create iris client: %w", err)
+	}
 
 	dispatcher, err := dispatch.NewDispatcher(
 		consumer,
@@ -121,6 +133,7 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		cfg:        cfg,
 		logger:     logger,
 		cacheSvc:   cacheSvc,
+		irisClient: irisClient,
 		dispatcher: dispatcher,
 		readyState: newReadinessState(),
 	}
@@ -246,8 +259,9 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	checkCtx, cancel := context.WithTimeout(req.Context(), readyCheckTimeout)
 	defer cancel()
 	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
+	irisConnected := r.irisClient != nil && r.irisClient.Ping(checkCtx)
 
-	ready := dispatchLoopRunning && valkeyConnected
+	ready := dispatchLoopRunning && valkeyConnected && irisConnected
 	statusCode := http.StatusOK
 	status := "ready"
 	if !ready {
@@ -259,6 +273,7 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 		"status":                status,
 		"dispatch_loop_running": dispatchLoopRunning,
 		"valkey_connected":      valkeyConnected,
+		"iris_connected":        irisConnected,
 	}
 
 	writeJSON(req.Context(), w, statusCode, response)
