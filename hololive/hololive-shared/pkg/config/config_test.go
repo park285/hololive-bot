@@ -1009,3 +1009,58 @@ func TestLoad_WebhookRequireHTTP2(t *testing.T) {
 		t.Fatal("Webhook.RequireHTTP2 = false, want true")
 	}
 }
+
+func TestLoad_ScraperSchedulerDefaults(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.Scheduler.PollTimeout != 45*time.Second {
+		t.Fatalf("Scraper.Scheduler.PollTimeout = %s, want %s", cfg.Scraper.Scheduler.PollTimeout, 45*time.Second)
+	}
+	if cfg.Scraper.Scheduler.ErrorBackoffMin != 30*time.Second {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMin = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMin, 30*time.Second)
+	}
+	if cfg.Scraper.Scheduler.ErrorBackoffMax != 5*time.Minute {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMax = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMax, 5*time.Minute)
+	}
+}
+
+func TestLoad_ScraperSchedulerEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS", "22")
+	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", "7")
+	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", "99")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.Scheduler.PollTimeout != 22*time.Second {
+		t.Fatalf("Scraper.Scheduler.PollTimeout = %s, want %s", cfg.Scraper.Scheduler.PollTimeout, 22*time.Second)
+	}
+	if cfg.Scraper.Scheduler.ErrorBackoffMin != 7*time.Second {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMin = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMin, 7*time.Second)
+	}
+	if cfg.Scraper.Scheduler.ErrorBackoffMax != 99*time.Second {
+		t.Fatalf("Scraper.Scheduler.ErrorBackoffMax = %s, want %s", cfg.Scraper.Scheduler.ErrorBackoffMax, 99*time.Second)
+	}
+}
+
+func TestLoad_ScraperSchedulerBackoffValidation(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", "60")
+	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", "30")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want validation error")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be >= SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS") {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
