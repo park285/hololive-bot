@@ -1011,3 +1011,99 @@ func TestFetchPageOnce_ClientHintsHeaders(t *testing.T) {
 	assert.Equal(t, "?0", receivedHeaders.Get("Sec-CH-UA-Mobile"))
 	assert.Equal(t, snap.SecChUAPlatform, receivedHeaders.Get("Sec-CH-UA-Platform"))
 }
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Date(2026, time.April, 21, 12, 0, 0, 0, time.UTC)
+
+	assert.Equal(t, 3*time.Second, parseRetryAfter("3", now))
+	assert.Equal(t, time.Duration(0), parseRetryAfter("0", now))
+	assert.Equal(t, time.Duration(0), parseRetryAfter("-1", now))
+
+	httpDate := now.Add(90 * time.Second).Format(http.TimeFormat)
+	assert.Equal(t, 90*time.Second, parseRetryAfter(httpDate, now))
+
+	assert.Equal(t, time.Duration(0), parseRetryAfter("not-a-date", now))
+}
+
+func TestIsRetryableStatusCodeIncludesThrottleLikeTransientStatuses(t *testing.T) {
+	assert.True(t, isRetryableStatusCode(http.StatusRequestTimeout))
+	assert.True(t, isRetryableStatusCode(http.StatusTooEarly))
+	assert.True(t, isRetryableStatusCode(http.StatusBadGateway))
+	assert.False(t, isRetryableStatusCode(http.StatusNotImplemented))
+	assert.False(t, isRetryableStatusCode(http.StatusTooManyRequests))
+}
+
+func TestFetchPage_RateLimitUsesRetryAfterCooldown(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "4000")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithHTTPClient(server.Client()),
+		WithRateLimiter(NewRateLimiter(0)),
+		WithUAProvider(ua.NewStaticProvider("test-agent")),
+	)
+
+	_, err := client.fetchPage(context.Background(), server.URL)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRateLimited)
+
+	cooldown := client.backoffState.HardCooldownRemaining()
+	assert.Greater(t, cooldown, 65*time.Minute)
+	assert.Less(t, cooldown, 67*time.Minute)
+}
+
+func TestBackoffState_HardRetryAfterDoesNotUndercutStagedCooldown(t *testing.T) {
+	state := NewBackoffState()
+
+	state.RecordErrorWithSuggestedCooldown(5 * time.Second)
+	first := state.HardCooldownRemaining()
+	assert.Greater(t, first, 29*time.Minute)
+
+	state.RecordErrorWithSuggestedCooldown(5 * time.Second)
+	second := state.HardCooldownRemaining()
+	assert.Greater(t, second, 59*time.Minute)
+}
+
+func TestBackoffState_TransientRetryAfterDoesNotUndercutStagedCooldown(t *testing.T) {
+	state := NewBackoffState()
+
+	state.RecordTransientErrorWithSuggestedCooldown(1 * time.Second)
+	first := state.TransientCooldownRemaining()
+	assert.Greater(t, first, 29*time.Second)
+
+	state.RecordTransientErrorWithSuggestedCooldown(1 * time.Second)
+	second := state.TransientCooldownRemaining()
+	assert.Greater(t, second, 179*time.Second)
+}
+
+func TestBackoffState_HardCooldownDoesNotShrinkExistingLongerDeadline(t *testing.T) {
+	state := NewBackoffState()
+
+	state.RecordErrorWithSuggestedCooldown(4 * time.Hour)
+	before := state.HardCooldownRemaining()
+	require.Greater(t, before, 3*time.Hour+50*time.Minute)
+
+	time.Sleep(10 * time.Millisecond)
+
+	state.RecordErrorWithSuggestedCooldown(5 * time.Second)
+	after := state.HardCooldownRemaining()
+	assert.GreaterOrEqual(t, after, before-2*time.Second)
+}
+
+func TestBackoffState_TransientCooldownDoesNotShrinkExistingLongerDeadline(t *testing.T) {
+	state := NewBackoffState()
+
+	state.RecordTransientErrorWithSuggestedCooldown(8 * time.Minute)
+	before := state.TransientCooldownRemaining()
+	require.Greater(t, before, 7*time.Minute+50*time.Second)
+
+	time.Sleep(10 * time.Millisecond)
+
+	state.RecordTransientErrorWithSuggestedCooldown(1 * time.Second)
+	after := state.TransientCooldownRemaining()
+	assert.GreaterOrEqual(t, after, before-2*time.Second)
+}
