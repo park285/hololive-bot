@@ -96,6 +96,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		"SERVICES_LLM_SERVER_HEALTH_URL",
 	)
 	publishedAtResolverDefaults := DefaultScraperPublishedAtResolverConfig()
+	scraperSchedulerDefaults := DefaultScraperSchedulerConfig()
 	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
 	if err != nil {
 		return nil, err
@@ -165,6 +166,11 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 				"SCRAPER_SCHEDULER_WORKER_COUNT",
 				"SCRAPER_WORKER_COUNT",
 			}, DefaultScraperWorkerCount()),
+			Scheduler: ScraperSchedulerConfig{
+				PollTimeout:     time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS", int(scraperSchedulerDefaults.PollTimeout/time.Second))) * time.Second,
+				ErrorBackoffMin: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMin/time.Second))) * time.Second,
+				ErrorBackoffMax: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMax/time.Second))) * time.Second,
+			},
 			Poll: loadScraperPoll(),
 			PublishedAtResolver: ScraperPublishedAtResolverConfig{
 				Enabled:           sharedenv.Bool("SCRAPER_PUBLISHED_AT_RESOLVER_ENABLED", publishedAtResolverDefaults.Enabled),
@@ -233,12 +239,34 @@ func (c *Config) Validate() error {
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err
 	}
+	if err := validateScraperSchedulerConfig(c.Scraper.Scheduler); err != nil {
+		return err
+	}
 	if err := validateScraperPublishedAtResolverConfig(c.Scraper.PublishedAtResolver); err != nil {
 		return err
 	}
 	isProduction := strings.EqualFold(strings.TrimSpace(c.Environment), "production")
 	if isProduction && c.CORS.Enforce && len(c.CORS.AllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
+	}
+	return nil
+}
+
+func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {
+	if cfg.PollTimeout == 0 && cfg.ErrorBackoffMin == 0 && cfg.ErrorBackoffMax == 0 {
+		return nil
+	}
+	if cfg.PollTimeout <= 0 {
+		return fmt.Errorf("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS must be positive")
+	}
+	if cfg.ErrorBackoffMin <= 0 {
+		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS must be positive")
+	}
+	if cfg.ErrorBackoffMax <= 0 {
+		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be positive")
+	}
+	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
+		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be >= SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS")
 	}
 	return nil
 }

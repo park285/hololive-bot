@@ -26,6 +26,13 @@ import (
 	"time"
 )
 
+const (
+	minSuggestedHardCooldown      = 30 * time.Second
+	maxSuggestedHardCooldown      = 6 * time.Hour
+	minSuggestedTransientCooldown = 5 * time.Second
+	maxSuggestedTransientCooldown = 10 * time.Minute
+)
+
 type BackoffState struct {
 	mu sync.Mutex
 
@@ -43,51 +50,109 @@ func NewBackoffState() *BackoffState {
 }
 
 func (b *BackoffState) RecordError() {
+	b.RecordErrorWithSuggestedCooldown(0)
+}
+
+func (b *BackoffState) RecordErrorWithSuggestedCooldown(suggested time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.hardErrors++
 
-	var cooldown time.Duration
-	switch {
-	case b.hardErrors >= 5:
-		cooldown = 6 * time.Hour
-	case b.hardErrors >= 4:
-		cooldown = 4 * time.Hour
-	case b.hardErrors >= 3:
-		cooldown = 2 * time.Hour
-	case b.hardErrors >= 2:
-		cooldown = 1 * time.Hour
-	default:
-		cooldown = 30 * time.Minute
-	}
-
-	b.hardCooldown = time.Now().Add(cooldown)
+	now := time.Now()
+	cooldown := resolveCooldown(
+		hardCooldownForErrorCount(b.hardErrors),
+		suggested,
+		minSuggestedHardCooldown,
+		maxSuggestedHardCooldown,
+	)
+	b.hardCooldown = laterDeadline(b.hardCooldown, now.Add(cooldown))
 	slog.Warn("Hard backoff activated",
 		"consecutive_errors", b.hardErrors,
-		"cooldown", cooldown)
+		"cooldown", cooldown,
+		"suggested_cooldown", suggested)
 }
 
 func (b *BackoffState) RecordTransientError() {
+	b.RecordTransientErrorWithSuggestedCooldown(0)
+}
+
+func (b *BackoffState) RecordTransientErrorWithSuggestedCooldown(suggested time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.transientErrors++
 
-	var cooldown time.Duration
-	switch {
-	case b.transientErrors >= 3:
-		cooldown = 10 * time.Minute
-	case b.transientErrors >= 2:
-		cooldown = 3 * time.Minute
-	default:
-		cooldown = 30 * time.Second
-	}
-
-	b.transientCooldown = time.Now().Add(cooldown)
+	now := time.Now()
+	cooldown := resolveCooldown(
+		transientCooldownForErrorCount(b.transientErrors),
+		suggested,
+		minSuggestedTransientCooldown,
+		maxSuggestedTransientCooldown,
+	)
+	b.transientCooldown = laterDeadline(b.transientCooldown, now.Add(cooldown))
 	slog.Warn("Transient backoff activated",
 		"consecutive_transient_errors", b.transientErrors,
-		"cooldown", cooldown)
+		"cooldown", cooldown,
+		"suggested_cooldown", suggested)
+}
+
+func hardCooldownForErrorCount(errors int) time.Duration {
+	switch {
+	case errors >= 5:
+		return 6 * time.Hour
+	case errors >= 4:
+		return 4 * time.Hour
+	case errors >= 3:
+		return 2 * time.Hour
+	case errors >= 2:
+		return 1 * time.Hour
+	default:
+		return 30 * time.Minute
+	}
+}
+
+func transientCooldownForErrorCount(errors int) time.Duration {
+	switch {
+	case errors >= 3:
+		return 10 * time.Minute
+	case errors >= 2:
+		return 3 * time.Minute
+	default:
+		return 30 * time.Second
+	}
+}
+
+func clampCooldown(value, minValue, maxValue time.Duration) time.Duration {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
+}
+
+func resolveCooldown(base, suggested, minValue, maxValue time.Duration) time.Duration {
+	if suggested <= 0 {
+		return base
+	}
+
+	return maxDuration(base, clampCooldown(suggested, minValue, maxValue))
+}
+
+func laterDeadline(current, candidate time.Time) time.Time {
+	if current.After(candidate) {
+		return current
+	}
+	return candidate
+}
+
+func maxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (b *BackoffState) RecordSuccess() {

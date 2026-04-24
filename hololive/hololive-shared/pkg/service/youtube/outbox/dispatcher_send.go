@@ -68,6 +68,7 @@ const (
 )
 
 var ErrDeliveryDedupeKeyRequired = errors.New("delivery dedupe key is required")
+var errDeliverySendTimeout = errors.New("delivery send timeout exceeded")
 
 // deliveryGroup: dispatch 시점 동일 room+channel+kind delivery row 그룹
 type deliveryGroup struct {
@@ -908,7 +909,17 @@ func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 		return err
 	}
 
-	if err := d.sender.SendMessage(ctx, req.roomID, req.message); err != nil {
+	sendCtx := ctx
+	cancel := func() {}
+	if d.cfg.DeliverySendTimeout > 0 {
+		sendCtx, cancel = context.WithTimeoutCause(ctx, d.cfg.DeliverySendTimeout, errDeliverySendTimeout)
+	}
+	defer cancel()
+
+	if err := d.sender.SendMessage(sendCtx, req.roomID, req.message); err != nil {
+		if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
+			return fmt.Errorf("send delivery message timed out after %s: %w", d.cfg.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
+		}
 		return fmt.Errorf("send delivery message: %w", err)
 	}
 

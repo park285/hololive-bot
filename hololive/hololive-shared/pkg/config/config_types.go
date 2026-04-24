@@ -92,8 +92,15 @@ type ScraperConfig struct {
 	ProxyEnabled        bool
 	ProxyURL            string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
 	WorkerCount         int
+	Scheduler           ScraperSchedulerConfig
 	Poll                ScraperPoll
 	PublishedAtResolver ScraperPublishedAtResolverConfig
+}
+
+type ScraperSchedulerConfig struct {
+	PollTimeout     time.Duration
+	ErrorBackoffMin time.Duration
+	ErrorBackoffMax time.Duration
 }
 
 func DefaultScraperPoll() ScraperPoll {
@@ -103,6 +110,14 @@ func DefaultScraperPoll() ScraperPoll {
 		Community: 15 * time.Minute,
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
+	}
+}
+
+func DefaultScraperSchedulerConfig() ScraperSchedulerConfig {
+	return ScraperSchedulerConfig{
+		PollTimeout:     45 * time.Second,
+		ErrorBackoffMin: 30 * time.Second,
+		ErrorBackoffMax: 5 * time.Minute,
 	}
 }
 
@@ -159,6 +174,26 @@ func (c ScraperConfig) PollOrDefault() ScraperPoll {
 	}
 
 	return poll
+}
+
+func (c ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
+	defaults := DefaultScraperSchedulerConfig()
+	cfg := c.Scheduler
+
+	if cfg.PollTimeout <= 0 {
+		cfg.PollTimeout = defaults.PollTimeout
+	}
+	if cfg.ErrorBackoffMin <= 0 {
+		cfg.ErrorBackoffMin = defaults.ErrorBackoffMin
+	}
+	if cfg.ErrorBackoffMax <= 0 {
+		cfg.ErrorBackoffMax = defaults.ErrorBackoffMax
+	}
+	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
+		cfg.ErrorBackoffMax = cfg.ErrorBackoffMin
+	}
+
+	return cfg
 }
 
 func (c ScraperConfig) WorkerCountOrDefault() int {
