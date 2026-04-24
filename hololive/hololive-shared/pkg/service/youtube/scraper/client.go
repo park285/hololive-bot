@@ -24,10 +24,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -61,11 +63,20 @@ var ErrChannelUnavailable = errors.New("channel is unavailable")
 
 // httpStatusError: HTTP 상태 코드 기반 에러 (재시도 판단용)
 type httpStatusError struct {
-	code int
+	code       int
+	retryAfter time.Duration
+	cause      error
 }
 
 func (e *httpStatusError) Error() string {
+	if e.retryAfter > 0 {
+		return fmt.Sprintf("unexpected status code: %d (retry-after: %s)", e.code, e.retryAfter.Round(time.Second))
+	}
 	return fmt.Sprintf("unexpected status code: %d", e.code)
+}
+
+func (e *httpStatusError) Unwrap() error {
+	return e.cause
 }
 
 func extractHTTPStatusCode(err error) (int, bool) {
@@ -79,13 +90,33 @@ func extractHTTPStatusCode(err error) (int, bool) {
 	return statusErr.code, true
 }
 
+func extractHTTPRetryAfter(err error) time.Duration {
+	if err == nil {
+		return 0
+	}
+	var statusErr *httpStatusError
+	if !errors.As(err, &statusErr) {
+		return 0
+	}
+	return statusErr.retryAfter
+}
+
 func isRetryableStatusError(err error) bool {
 	statusCode, ok := extractHTTPStatusCode(err)
-	return ok && isRetryable5xx(statusCode)
+	return ok && isRetryableStatusCode(statusCode)
 }
 
 func isRetryableVideoPageError(err error) bool {
 	return isRetryableStatusError(err) || isRetryableTransportError(err)
+}
+
+func isRetryableStatusCode(code int) bool {
+	switch code {
+	case http.StatusRequestTimeout, http.StatusTooEarly:
+		return true
+	default:
+		return isRetryable5xx(code)
+	}
 }
 
 // isRetryable5xx: 5xx 서버 에러인지 확인 (재시도 대상)
@@ -294,7 +325,7 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 			}
 			var statusErr *httpStatusError
 			if errors.As(err, &statusErr) {
-				return isRetryable5xx(statusErr.code)
+				return isRetryableStatusCode(statusErr.code)
 			}
 			return isRetryableTransportError(err)
 		},
@@ -317,8 +348,8 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 	if err != nil {
 		// context 취소/타임아웃 시 transient 에러 기록 스킵 (셧다운 시 불필요한 cooldown 방지)
 		// retry 모두 소진된 경우에만 transient 에러 기록 (내부 retry 교차 오염 방지)
-		if statusCode, ok := extractHTTPStatusCode(err); ctx.Err() == nil && ok && isRetryable5xx(statusCode) {
-			c.backoffState.RecordTransientError()
+		if statusCode, ok := extractHTTPStatusCode(err); ctx.Err() == nil && ok && isRetryableStatusCode(statusCode) {
+			c.backoffState.RecordTransientErrorWithSuggestedCooldown(extractHTTPRetryAfter(err))
 		}
 		return "", fmt.Errorf("fetchPage failed after retries: %w", err)
 	}
@@ -352,25 +383,33 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+
 	switch resp.StatusCode {
 	case http.StatusTooManyRequests:
-		c.backoffState.RecordError()
+		drainResponseBody(resp)
+		c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
 		cooldown := c.backoffState.HardCooldownRemaining()
 		slog.Warn("YouTube rate limit hit, entering cooldown",
 			"url", pageURL,
-			"cooldown", cooldown.Round(time.Second))
+			"cooldown", cooldown.Round(time.Second),
+			"retry_after", retryAfter.Round(time.Second))
 		return "", fmt.Errorf("status %d: %w", resp.StatusCode, ErrRateLimited)
 
 	case http.StatusForbidden:
-		c.backoffState.RecordError()
-		slog.Warn("YouTube access forbidden", "url", pageURL)
+		drainResponseBody(resp)
+		c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
+		slog.Warn("YouTube access forbidden",
+			"url", pageURL,
+			"retry_after", retryAfter.Round(time.Second))
 		return "", fmt.Errorf("status %d: %w", resp.StatusCode, ErrForbidden)
 
 	case http.StatusOK:
 		// body 읽기 성공 후에 RecordSuccess 호출
 
 	default:
-		return "", &httpStatusError{code: resp.StatusCode}
+		drainResponseBody(resp)
+		return "", &httpStatusError{code: resp.StatusCode, retryAfter: retryAfter}
 	}
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, constants.YouTubeConfig.MaxPageBodyBytes)
@@ -380,6 +419,39 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 
 	c.backoffState.RecordSuccess()
 	return string(body), nil
+}
+
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds) * time.Second
+	}
+
+	retryAt, err := http.ParseTime(value)
+	if err != nil {
+		return 0
+	}
+
+	delay := retryAt.Sub(now)
+	if delay <= 0 {
+		return 0
+	}
+	return delay
+}
+
+func drainResponseBody(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+
+	_, _ = io.CopyN(io.Discard, resp.Body, 4*1024)
 }
 
 func applyScraperHeaders(req *http.Request, snap ua.HeaderSnapshot) {
