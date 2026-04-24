@@ -45,16 +45,17 @@ type proxyTogglePoller interface {
 }
 
 type Job struct {
-	ChannelID         string
-	Poller            Poller
-	Priority          Priority
-	NextRunAt         time.Time
-	Interval          time.Duration
-	Offset            time.Duration
-	key               string
-	retired           bool
-	immediateFirstRun bool
-	index             int // heap 인덱스
+	ChannelID           string
+	Poller              Poller
+	Priority            Priority
+	NextRunAt           time.Time
+	Interval            time.Duration
+	Offset              time.Duration
+	key                 string
+	retired             bool
+	immediateFirstRun   bool
+	consecutiveFailures int
+	index               int // heap 인덱스
 }
 
 type Priority int
@@ -67,15 +68,18 @@ const (
 )
 
 type Scheduler struct {
-	mu          sync.Mutex
-	jobs        jobHeap
-	jobMap      map[string]*Job // key: channelID:pollerName
-	rateLimiter *RateLimiter
-	workerCount int
-	stopCh      chan struct{}
-	wakeCh      chan struct{}
-	wg          sync.WaitGroup
-	running     bool
+	mu              sync.Mutex
+	jobs            jobHeap
+	jobMap          map[string]*Job // key: channelID:pollerName
+	rateLimiter     *RateLimiter
+	workerCount     int
+	pollTimeout     time.Duration
+	errorBackoffMin time.Duration
+	errorBackoffMax time.Duration
+	stopCh          chan struct{}
+	wakeCh          chan struct{}
+	wg              sync.WaitGroup
+	running         bool
 }
 
 type PollerTargetSync struct {
@@ -89,12 +93,18 @@ type PollerTargetSync struct {
 type SchedulerConfig struct {
 	WorkerCount     int           // 동시 워커 수 (기본: 4)
 	RequestInterval time.Duration // 요청 간 최소 간격 (기본: 4초)
+	PollTimeout     time.Duration // 폴러 1회 실행 최대 시간 (기본: 45초)
+	ErrorBackoffMin time.Duration // 실패 후 최소 재시도 지연 (기본: 30초)
+	ErrorBackoffMax time.Duration // 실패 후 최대 재시도 지연 (기본: 5분)
 }
 
 func DefaultSchedulerConfig() SchedulerConfig {
 	return SchedulerConfig{
 		WorkerCount:     4,
 		RequestInterval: 4 * time.Second,
+		PollTimeout:     45 * time.Second,
+		ErrorBackoffMin: 30 * time.Second,
+		ErrorBackoffMax: 5 * time.Minute,
 	}
 }
 
@@ -107,20 +117,36 @@ func (s *Scheduler) WorkerCount() int {
 }
 
 func NewScheduler(cfg SchedulerConfig) *Scheduler {
+	defaults := DefaultSchedulerConfig()
 	if cfg.WorkerCount <= 0 {
-		cfg.WorkerCount = DefaultSchedulerConfig().WorkerCount
+		cfg.WorkerCount = defaults.WorkerCount
+	}
+	if cfg.PollTimeout <= 0 {
+		cfg.PollTimeout = defaults.PollTimeout
+	}
+	if cfg.ErrorBackoffMin <= 0 {
+		cfg.ErrorBackoffMin = defaults.ErrorBackoffMin
+	}
+	if cfg.ErrorBackoffMax <= 0 {
+		cfg.ErrorBackoffMax = defaults.ErrorBackoffMax
+	}
+	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
+		cfg.ErrorBackoffMax = cfg.ErrorBackoffMin
 	}
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.
 	// 외부 RateLimiter에 rate limiting을 위임하는 경우에 사용.
 	ensureMetrics()
 
 	return &Scheduler{
-		jobs:        make(jobHeap, 0),
-		jobMap:      make(map[string]*Job),
-		rateLimiter: NewRateLimiter(cfg.RequestInterval),
-		workerCount: cfg.WorkerCount,
-		stopCh:      make(chan struct{}),
-		wakeCh:      make(chan struct{}, 1),
+		jobs:            make(jobHeap, 0),
+		jobMap:          make(map[string]*Job),
+		rateLimiter:     NewRateLimiter(cfg.RequestInterval),
+		workerCount:     cfg.WorkerCount,
+		pollTimeout:     cfg.PollTimeout,
+		errorBackoffMin: cfg.ErrorBackoffMin,
+		errorBackoffMax: cfg.ErrorBackoffMax,
+		stopCh:          make(chan struct{}),
+		wakeCh:          make(chan struct{}, 1),
 	}
 }
 
@@ -161,6 +187,9 @@ func (s *Scheduler) UpdatePriority(channelID string, pollerName string, priority
 	}
 
 	job.Priority = priority
+	if job.Interval != interval && interval > 0 {
+		s.resetJobScheduleForIntervalChange(job, interval)
+	}
 	job.Interval = interval
 	if job.index >= 0 {
 		heap.Fix(&s.jobs, job.index)
@@ -201,6 +230,9 @@ func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
 
 		job.Poller = targetSync.Poller
 		job.Priority = targetSync.Priority
+		if job.Interval != targetSync.Interval {
+			s.resetJobScheduleForIntervalChange(job, targetSync.Interval)
+		}
 		job.Interval = targetSync.Interval
 		if job.index >= 0 {
 			heap.Fix(&s.jobs, job.index)
@@ -232,6 +264,17 @@ func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
 
 	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 	s.notifyDispatcher()
+}
+
+func (s *Scheduler) resetJobScheduleForIntervalChange(job *Job, interval time.Duration) {
+	if job == nil || interval <= 0 {
+		return
+	}
+
+	job.consecutiveFailures = 0
+	job.Offset = calculateOffset(job.key, interval)
+	job.NextRunAt = nextPollAt(time.Now(), interval, job.Offset)
+	job.immediateFirstRun = false
 }
 
 // 반환값은 토글 적용을 시도한 폴러 수입니다.
@@ -293,7 +336,10 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 	slog.Info("Scheduler starting",
 		"worker_count", s.workerCount,
-		"job_count", len(s.jobs))
+		"job_count", len(s.jobs),
+		"poll_timeout", s.pollTimeout,
+		"error_backoff_min", s.errorBackoffMin,
+		"error_backoff_max", s.errorBackoffMax)
 
 	// 작업 채널
 	jobCh := make(chan *Job, s.workerCount*2)
@@ -429,12 +475,19 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 		} else {
 			slog.Warn("Rate limiter wait failed", "error", err)
 		}
-		s.rescheduleJob(job)
+		s.rescheduleJobAfterPoll(job, err)
 		return
 	}
 
+	pollCtx := ctx
+	cancel := func() {}
+	if s.pollTimeout > 0 {
+		pollCtx, cancel = context.WithTimeout(ctx, s.pollTimeout)
+	}
+	defer cancel()
+
 	start := time.Now()
-	err := job.Poller.Poll(ctx, job.ChannelID)
+	err := job.Poller.Poll(pollCtx, job.ChannelID)
 	elapsed := time.Since(start)
 	status := "success"
 
@@ -445,11 +498,22 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 			slog.Debug("Poll canceled",
 				"poller", job.Poller.Name(),
 				"channel_id", job.ChannelID,
+				"worker_id", workerID,
 				"elapsed", elapsed)
+		} else if errors.Is(err, context.DeadlineExceeded) || errors.Is(pollCtx.Err(), context.DeadlineExceeded) {
+			status = "timeout"
+			slog.Warn("Poll timed out",
+				"poller", job.Poller.Name(),
+				"channel_id", job.ChannelID,
+				"worker_id", workerID,
+				"timeout", s.pollTimeout,
+				"elapsed", elapsed,
+				"error", err)
 		} else {
 			slog.Warn("Poll failed",
 				"poller", job.Poller.Name(),
 				"channel_id", job.ChannelID,
+				"worker_id", workerID,
 				"error", err,
 				"elapsed", elapsed)
 		}
@@ -457,15 +521,20 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 		slog.Debug("Poll succeeded",
 			"poller", job.Poller.Name(),
 			"channel_id", job.ChannelID,
+			"worker_id", workerID,
 			"elapsed", elapsed)
 	}
 	schedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
 
-	s.rescheduleJob(job)
+	s.rescheduleJobAfterPoll(job, err)
 }
 
 // rescheduleJob: 작업 재스케줄
 func (s *Scheduler) rescheduleJob(job *Job) {
+	s.rescheduleJobAfterPoll(job, nil)
+}
+
+func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -478,11 +547,24 @@ func (s *Scheduler) rescheduleJob(job *Job) {
 	}
 
 	now := time.Now()
-	if job.immediateFirstRun {
-		job.NextRunAt = nextPollAt(now, job.Interval, job.Offset)
-		job.immediateFirstRun = false
+	if pollErr != nil && !errors.Is(pollErr, context.Canceled) {
+		job.consecutiveFailures++
+		job.NextRunAt = nextErrorRetryAt(now, job.Interval, job.consecutiveFailures, s.errorBackoffMin, s.errorBackoffMax)
+		slog.Debug("Poll job rescheduled after failure",
+			"poller", job.Poller.Name(),
+			"channel_id", job.ChannelID,
+			"consecutive_failures", job.consecutiveFailures,
+			"next_run_at", job.NextRunAt)
 	} else {
-		job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, now)
+		hadFailures := job.consecutiveFailures > 0
+		job.consecutiveFailures = 0
+
+		if job.immediateFirstRun || hadFailures {
+			job.NextRunAt = nextPollAt(now, job.Interval, job.Offset)
+			job.immediateFirstRun = false
+		} else {
+			job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, now)
+		}
 	}
 	if job.index >= 0 {
 		heap.Fix(&s.jobs, job.index)
@@ -490,6 +572,47 @@ func (s *Scheduler) rescheduleJob(job *Job) {
 		heap.Push(&s.jobs, job)
 	}
 	s.notifyDispatcher()
+}
+
+func nextErrorRetryAt(now time.Time, interval time.Duration, consecutiveFailures int, minBackoff, maxBackoff time.Duration) time.Time {
+	delay := errorRetryDelay(interval, consecutiveFailures, minBackoff, maxBackoff)
+	return now.Add(delay)
+}
+
+func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff, maxBackoff time.Duration) time.Duration {
+	if minBackoff <= 0 {
+		minBackoff = 30 * time.Second
+	}
+	if maxBackoff <= 0 {
+		maxBackoff = 5 * time.Minute
+	}
+	if maxBackoff < minBackoff {
+		maxBackoff = minBackoff
+	}
+
+	if consecutiveFailures <= 1 {
+		if interval > 0 && interval < minBackoff {
+			return interval
+		}
+		return minBackoff
+	}
+
+	delay := minBackoff
+	for i := 1; i < consecutiveFailures; i++ {
+		if delay >= maxBackoff/2 {
+			delay = maxBackoff
+			break
+		}
+		delay *= 2
+	}
+
+	if interval > 0 && interval < delay {
+		delay = interval
+	}
+	if delay > maxBackoff {
+		delay = maxBackoff
+	}
+	return delay
 }
 
 func (s *Scheduler) notifyDispatcher() {
