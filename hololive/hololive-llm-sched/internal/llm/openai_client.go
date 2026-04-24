@@ -42,6 +42,7 @@ import (
 )
 
 var _ Client = (*OpenAIClient)(nil)
+var errOpenAIEmptyOutput = errors.New("openai: 응답에 텍스트 출력 없음")
 
 type OpenAIClient struct {
 	client          openai.Client
@@ -204,12 +205,68 @@ func (c *OpenAIClient) generateJSONResponses(ctx context.Context, systemPrompt, 
 		return "", fmt.Errorf("openai responses API: %w", err)
 	}
 
-	text := resp.OutputText()
-	if text == "" {
-		return "", fmt.Errorf("openai: 응답에 텍스트 출력 없음")
+	return extractResponsesOutputText(resp)
+}
+
+func extractResponsesOutputText(resp *responses.Response) (string, error) {
+	if resp == nil {
+		return "", errOpenAIEmptyOutput
 	}
 
-	return text, nil
+	text := strings.TrimSpace(resp.OutputText())
+	if text != "" {
+		return text, nil
+	}
+
+	diagnostic := describeResponsesOutput(resp)
+	if diagnostic == "" {
+		return "", errOpenAIEmptyOutput
+	}
+
+	return "", fmt.Errorf("%w: %s", errOpenAIEmptyOutput, diagnostic)
+}
+
+func describeResponsesOutput(resp *responses.Response) string {
+	if resp == nil {
+		return ""
+	}
+
+	parts := make([]string, 0, 4)
+	if resp.Status != "" {
+		parts = append(parts, fmt.Sprintf("status=%s", resp.Status))
+	}
+	if resp.IncompleteDetails.Reason != "" {
+		parts = append(parts, fmt.Sprintf("incomplete_reason=%s", resp.IncompleteDetails.Reason))
+	}
+
+	outputTypes := make([]string, 0, len(resp.Output))
+	for _, item := range resp.Output {
+		itemType := strings.TrimSpace(item.Type)
+		if itemType == "" {
+			itemType = "unknown"
+		}
+		if item.Status != "" {
+			outputTypes = append(outputTypes, fmt.Sprintf("%s/%s", itemType, item.Status))
+		} else {
+			outputTypes = append(outputTypes, itemType)
+		}
+
+		if item.Type != "message" {
+			continue
+		}
+		for _, content := range item.Content {
+			if content.Type == "refusal" && strings.TrimSpace(content.Refusal) != "" {
+				parts = append(parts, fmt.Sprintf("refusal=%s", strings.TrimSpace(content.Refusal)))
+				break
+			}
+		}
+	}
+
+	if len(outputTypes) > 0 {
+		parts = append(parts, fmt.Sprintf("output=%s", strings.Join(outputTypes, ",")))
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // generateJSONChatCompletions: Chat Completions API로 구조화 JSON 출력을 생성합니다.
@@ -265,9 +322,8 @@ func shouldFallbackToChat(err error) bool {
 	if err == nil {
 		return false
 	}
-
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
+	if errors.Is(err, errOpenAIEmptyOutput) {
+		return true
 	}
 
 	var apiErr *openai.Error

@@ -29,6 +29,8 @@ type publishedAtFinalizeEligibility struct {
 	reason     string
 }
 
+const publishedAtClaimFreshWindow = 30 * time.Second
+
 func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
 	return &publishedAtResolverRepository{
 		db:        db,
@@ -115,7 +117,25 @@ func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 			return publishedAtFinalizeEligibility{reason: "already_sent"}, nil
 		}
 		if stateRow.AuthorizedAt != nil && !stateRow.AuthorizedAt.IsZero() {
-			return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
+			if isPublishedAtClaimFresh(*stateRow.AuthorizedAt) {
+				return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
+			}
+
+			exists, err := r.outboxExistsForCandidate(ctx, txRepo, candidate)
+			if err != nil {
+				return publishedAtFinalizeEligibility{}, err
+			}
+			if exists {
+				return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
+			}
+
+			released, err := txRepo.ReleaseAlarmStateClaim(ctx, candidate.Kind, candidate.PostID, *stateRow.AuthorizedAt)
+			if err != nil {
+				return publishedAtFinalizeEligibility{}, fmt.Errorf("release stale alarm state claim: %w", err)
+			}
+			if !released {
+				return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
+			}
 		}
 	}
 
@@ -128,6 +148,38 @@ func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 	}
 
 	return eligibility, nil
+}
+
+func isPublishedAtClaimFresh(authorizedAt time.Time) bool {
+	if authorizedAt.IsZero() {
+		return false
+	}
+
+	return time.Since(authorizedAt.UTC()) < publishedAtClaimFreshWindow
+}
+
+func (r *publishedAtResolverRepository) outboxExistsForCandidate(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+) (bool, error) {
+	trackingRow, err := txRepo.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
+	if err != nil {
+		return false, fmt.Errorf("load tracking row: %w", err)
+	}
+	if trackingRow != nil && trackingRow.AlarmSentAt != nil && !trackingRow.AlarmSentAt.IsZero() {
+		return true, nil
+	}
+
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&domain.YouTubeNotificationOutbox{}).
+		Where("kind = ? AND content_id = ?", candidate.Kind, candidate.ContentID).
+		Count(&count).Error; err != nil {
+		return false, fmt.Errorf("load outbox row: %w", err)
+	}
+
+	return count > 0, nil
 }
 
 func selectPublishedAtFinalizeReason(primary string, fallback string) string {
