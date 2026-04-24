@@ -111,6 +111,9 @@ type ScraperSchedulerOption func(*scraperSchedulerOptions)
 type scraperSchedulerOptions struct {
 	channelPollerRegistrations []ChannelPollerRegistration
 	workerCount                int
+	pollTimeout                time.Duration
+	errorBackoffMin            time.Duration
+	errorBackoffMax            time.Duration
 	channelIDs                 []string
 }
 
@@ -126,6 +129,19 @@ func WithChannelPollerRegistrations(registrations []ChannelPollerRegistration) S
 func WithSchedulerWorkerCount(workerCount int) ScraperSchedulerOption {
 	return func(options *scraperSchedulerOptions) {
 		options.workerCount = workerCount
+	}
+}
+
+func WithSchedulerPollTimeout(timeout time.Duration) ScraperSchedulerOption {
+	return func(options *scraperSchedulerOptions) {
+		options.pollTimeout = timeout
+	}
+}
+
+func WithSchedulerErrorBackoff(minBackoff, maxBackoff time.Duration) ScraperSchedulerOption {
+	return func(options *scraperSchedulerOptions) {
+		options.errorBackoffMin = minBackoff
+		options.errorBackoffMax = maxBackoff
 	}
 }
 

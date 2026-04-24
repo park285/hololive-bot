@@ -39,38 +39,42 @@ import (
 const defaultTelemetryRetention = 24 * time.Hour
 
 type Config struct {
-	BatchSize              int           // 한 번에 처리할 알림 수
-	LockTimeout            time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
-	PollInterval           time.Duration // 폴링 간격
-	MaxRetries             int           // 최대 재시도 횟수
-	RetryBackoff           time.Duration // 재시도 간격
-	CleanupAfter           time.Duration // 완료된 알림 정리 기간
-	CleanupEnabled         bool          // 정리 활성화 여부
-	DeliveryParallelism    int           // room/delivery send 제한 병렬성
-	AggregateSyncInterval  time.Duration // aggregate sync maintenance interval
-	TelemetryPollInterval  time.Duration // telemetry loop polling interval
-	TelemetryBackfillBatch int           // delivery 상태에서 telemetry 버퍼로 역보강할 최대 건수
-	TelemetryFlushBatch    int           // telemetry 버퍼 플러시 최대 건수
-	TelemetryRetryBackoff  time.Duration // telemetry 플러시 실패 재시도 간격
-	TelemetryRetention     time.Duration // telemetry 버퍼 최소 보존 기간
+	BatchSize                   int           // 한 번에 처리할 알림 수
+	LockTimeout                 time.Duration // 락 타임아웃 (처리 중 상태 유지 시간)
+	PollInterval                time.Duration // 폴링 간격
+	MaxRetries                  int           // 최대 재시도 횟수
+	RetryBackoff                time.Duration // 재시도 간격
+	CleanupAfter                time.Duration // 완료된 알림 정리 기간
+	CleanupEnabled              bool          // 정리 활성화 여부
+	DeliveryParallelism         int           // room/delivery send 제한 병렬성
+	DeliverySendTimeout         time.Duration // room 단위 메시지 발송 1회 최대 시간
+	SubscriberLookupParallelism int           // 채널별 구독자 조회 제한 병렬성
+	AggregateSyncInterval       time.Duration // aggregate sync maintenance interval
+	TelemetryPollInterval       time.Duration // telemetry loop polling interval
+	TelemetryBackfillBatch      int           // delivery 상태에서 telemetry 버퍼로 역보강할 최대 건수
+	TelemetryFlushBatch         int           // telemetry 버퍼 플러시 최대 건수
+	TelemetryRetryBackoff       time.Duration // telemetry 플러시 실패 재시도 간격
+	TelemetryRetention          time.Duration // telemetry 버퍼 최소 보존 기간
 }
 
 func DefaultConfig() Config {
 	return Config{
-		BatchSize:              50,
-		LockTimeout:            5 * time.Minute,
-		PollInterval:           2 * time.Second,
-		MaxRetries:             3,
-		RetryBackoff:           1 * time.Minute,
-		CleanupAfter:           7 * 24 * time.Hour, // 7일
-		CleanupEnabled:         true,
-		DeliveryParallelism:    4,
-		AggregateSyncInterval:  30 * time.Second,
-		TelemetryPollInterval:  30 * time.Second,
-		TelemetryBackfillBatch: 200,
-		TelemetryFlushBatch:    200,
-		TelemetryRetryBackoff:  30 * time.Second,
-		TelemetryRetention:     defaultTelemetryRetention,
+		BatchSize:                   50,
+		LockTimeout:                 5 * time.Minute,
+		PollInterval:                2 * time.Second,
+		MaxRetries:                  3,
+		RetryBackoff:                1 * time.Minute,
+		CleanupAfter:                7 * 24 * time.Hour, // 7일
+		CleanupEnabled:              true,
+		DeliveryParallelism:         4,
+		DeliverySendTimeout:         10 * time.Second,
+		SubscriberLookupParallelism: 16,
+		AggregateSyncInterval:       30 * time.Second,
+		TelemetryPollInterval:       30 * time.Second,
+		TelemetryBackfillBatch:      200,
+		TelemetryFlushBatch:         200,
+		TelemetryRetryBackoff:       30 * time.Second,
+		TelemetryRetention:          defaultTelemetryRetention,
 	}
 }
 
@@ -97,6 +101,15 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 	}
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = DefaultConfig().PollInterval
+	}
+	if cfg.DeliveryParallelism <= 0 {
+		cfg.DeliveryParallelism = DefaultConfig().DeliveryParallelism
+	}
+	if cfg.DeliverySendTimeout <= 0 {
+		cfg.DeliverySendTimeout = DefaultConfig().DeliverySendTimeout
+	}
+	if cfg.SubscriberLookupParallelism <= 0 {
+		cfg.SubscriberLookupParallelism = DefaultConfig().SubscriberLookupParallelism
 	}
 	if cfg.TelemetryBackfillBatch <= 0 {
 		cfg.TelemetryBackfillBatch = DefaultConfig().TelemetryBackfillBatch
@@ -175,7 +188,10 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 	d.logger.Info("Outbox dispatcher started",
 		slog.Duration("poll_interval", d.cfg.PollInterval),
-		slog.Int("batch_size", d.cfg.BatchSize))
+		slog.Int("batch_size", d.cfg.BatchSize),
+		slog.Duration("delivery_send_timeout", d.cfg.DeliverySendTimeout),
+		slog.Int("delivery_parallelism", d.cfg.DeliveryParallelism),
+		slog.Int("subscriber_lookup_parallelism", d.subscriberLookupParallelism()))
 
 	d.processOnce(ctx)
 
@@ -371,7 +387,7 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 
 	results := make([]lookupResult, len(entries))
 	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(16)
+	eg.SetLimit(d.subscriberLookupParallelism())
 	for idx := range entries {
 		eg.Go(func() error {
 			e := entries[idx]
@@ -413,6 +429,13 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 	}
 
 	return result
+}
+
+func (d *Dispatcher) subscriberLookupParallelism() int {
+	if d.cfg.SubscriberLookupParallelism <= 0 {
+		return DefaultConfig().SubscriberLookupParallelism
+	}
+	return d.cfg.SubscriberLookupParallelism
 }
 
 func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {

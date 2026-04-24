@@ -128,6 +128,15 @@ func newScraperScheduler(opts scraperSchedulerOptions) *poller.Scheduler {
 	if opts.workerCount > 0 {
 		schedulerCfg.WorkerCount = opts.workerCount
 	}
+	if opts.pollTimeout > 0 {
+		schedulerCfg.PollTimeout = opts.pollTimeout
+	}
+	if opts.errorBackoffMin > 0 {
+		schedulerCfg.ErrorBackoffMin = opts.errorBackoffMin
+	}
+	if opts.errorBackoffMax > 0 {
+		schedulerCfg.ErrorBackoffMax = opts.errorBackoffMax
+	}
 	return poller.NewScheduler(schedulerCfg)
 }
 

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,6 +77,83 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 		sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeCommunity),
 	}) {
 		t.Fatalf("lookedUpKeys = %#v", recordedKeys)
+	}
+
+	targets, ok := roomsByChannel["UCtarget"]
+	if !ok {
+		t.Fatalf("roomsByChannel missing UCtarget")
+	}
+	if len(targets[domain.AlarmTypeShorts]) != 1 || !targets[domain.AlarmTypeShorts]["room-shorts"] {
+		t.Fatalf("shorts rooms = %#v", targets[domain.AlarmTypeShorts])
+	}
+	if len(targets[domain.AlarmTypeCommunity]) != 1 || !targets[domain.AlarmTypeCommunity]["room-community"] {
+		t.Fatalf("community rooms = %#v", targets[domain.AlarmTypeCommunity])
+	}
+}
+
+func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) {
+	t.Parallel()
+
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	secondStarted := make(chan struct{}, 1)
+	var callCount int32
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		callNumber := atomic.AddInt32(&callCount, 1)
+		if callNumber == 1 {
+			close(firstStarted)
+			<-releaseFirst
+		} else {
+			secondStarted <- struct{}{}
+		}
+
+		switch key {
+		case sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeShorts):
+			return []string{"room-shorts"}, nil
+		case sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeCommunity):
+			return []string{"room-community"}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	dispatcher := NewDispatcher(nil, cacheSvc, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		SubscriberLookupParallelism: 1,
+	})
+
+	done := make(chan map[string]channelAlarmRoomTargets, 1)
+	go func() {
+		done <- dispatcher.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
+			{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
+			{ChannelID: "UCtarget", Kind: domain.OutboxKindCommunityPost},
+		})
+	}()
+
+	select {
+	case <-firstStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first subscriber lookup did not start")
+	}
+
+	select {
+	case <-secondStarted:
+		t.Fatal("second subscriber lookup started before first finished")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(releaseFirst)
+
+	var roomsByChannel map[string]channelAlarmRoomTargets
+	select {
+	case roomsByChannel = <-done:
+	case <-time.After(time.Second):
+		t.Fatal("collectRoomsByChannel() did not complete")
+	}
+
+	if atomic.LoadInt32(&callCount) != 2 {
+		t.Fatalf("lookup count = %d, want 2", atomic.LoadInt32(&callCount))
 	}
 
 	targets, ok := roomsByChannel["UCtarget"]
@@ -1119,5 +1198,135 @@ func assertLogDedupeKeys(t *testing.T, entry map[string]any, want []string) {
 
 	if !sameStrings(got, want) {
 		t.Fatalf("dedupe_key = %#v, want %#v", got, want)
+	}
+}
+
+type blockingSender struct{}
+
+func (s *blockingSender) SendMessage(ctx context.Context, _, _ string) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type delayedReturnSender struct {
+	delay time.Duration
+}
+
+func (s *delayedReturnSender) SendMessage(ctx context.Context, _, _ string) error {
+	<-ctx.Done()
+	time.Sleep(s.delay)
+	return ctx.Err()
+}
+
+func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := NewDispatcher(nil,
+		cachemocks.NewLenientClient(),
+		&blockingSender{},
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config{DeliverySendTimeout: 5 * time.Millisecond},
+	)
+
+	err := dispatcher.sendDeliveryMessage(context.Background(), deliverySendRequest{
+		roomID:     "room-timeout",
+		message:    "hello",
+		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-timeout"},
+	})
+
+	if err == nil {
+		t.Fatal("sendDeliveryMessage() error = nil, want timeout")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
+	}
+	if !strings.Contains(err.Error(), "timed out after 5ms") {
+		t.Fatalf("sendDeliveryMessage() error = %q, want configured-timeout-specific message", err)
+	}
+}
+
+func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := NewDispatcher(nil,
+		cachemocks.NewLenientClient(),
+		&blockingSender{},
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config{DeliverySendTimeout: 100 * time.Millisecond},
+	)
+
+	parentCtx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+
+	err := dispatcher.sendDeliveryMessage(parentCtx, deliverySendRequest{
+		roomID:     "room-parent-timeout",
+		message:    "hello",
+		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-parent-timeout"},
+	})
+
+	if err == nil {
+		t.Fatal("sendDeliveryMessage() error = nil, want parent deadline error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
+	}
+	if strings.Contains(err.Error(), "timed out after 100ms") {
+		t.Fatalf("sendDeliveryMessage() error = %q, want parent deadline path without child timeout message", err)
+	}
+}
+
+func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := NewDispatcher(nil,
+		cachemocks.NewLenientClient(),
+		&delayedReturnSender{delay: 30 * time.Millisecond},
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config{DeliverySendTimeout: 5 * time.Millisecond},
+	)
+
+	parentCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	err := dispatcher.sendDeliveryMessage(parentCtx, deliverySendRequest{
+		roomID:     "room-child-timeout-first",
+		message:    "hello",
+		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-child-timeout-first"},
+	})
+
+	if err == nil {
+		t.Fatal("sendDeliveryMessage() error = nil, want configured timeout")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
+	}
+	if !strings.Contains(err.Error(), "timed out after 5ms") {
+		t.Fatalf("sendDeliveryMessage() error = %q, want configured-timeout-specific message", err)
+	}
+}
+
+func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := NewDispatcher(nil,
+		cachemocks.NewLenientClient(),
+		&testSender{failRoom: map[string]bool{}},
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config{},
+	)
+
+	defaults := DefaultConfig()
+	if dispatcher.cfg.DeliveryParallelism != defaults.DeliveryParallelism {
+		t.Fatalf("DeliveryParallelism = %d, want %d", dispatcher.cfg.DeliveryParallelism, defaults.DeliveryParallelism)
+	}
+	if dispatcher.cfg.DeliverySendTimeout != defaults.DeliverySendTimeout {
+		t.Fatalf("DeliverySendTimeout = %s, want %s", dispatcher.cfg.DeliverySendTimeout, defaults.DeliverySendTimeout)
+	}
+	if dispatcher.cfg.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
+		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.cfg.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
 	}
 }

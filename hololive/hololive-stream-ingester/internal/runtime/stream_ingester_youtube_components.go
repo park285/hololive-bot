@@ -48,11 +48,14 @@ func buildStreamIngesterYouTubeComponents(
 		return nil, nil, nil, err
 	}
 
+	schedulerCfg := scraperCfg.SchedulerOrDefault()
 	scraperScheduler := providers.ProvideScraperScheduler(
 		nil,
 		logger,
 		providers.WithChannelPollerRegistrations(pollerRegistrations),
 		providers.WithSchedulerWorkerCount(scraperCfg.WorkerCountOrDefault()),
+		providers.WithSchedulerPollTimeout(schedulerCfg.PollTimeout),
+		providers.WithSchedulerErrorBackoff(schedulerCfg.ErrorBackoffMin, schedulerCfg.ErrorBackoffMax),
 	)
 
 	outboxDispatcher := outbox.NewDispatcher(
