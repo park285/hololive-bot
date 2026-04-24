@@ -100,6 +100,8 @@ BUNDLE_MANIFEST.txt
 # ============================================
 # AI Tooling Artifacts (Local Only)
 # ============================================
+.ai-lessons/
+/ai-guard.config.json
 .playwright-cli/
 .serena/
 .claude/
@@ -120,12 +122,16 @@ CLAUDE_MD_ARCHITECTURE.md
 .omx/
 .omc/
 .omx-memory/
+/dist/
+/scripts/ai-guard-hook.mjs
 
 # Temporary analysis files (LLM workflow)
 *_files.txt
 *_tests.txt
 *_no_tests.txt
 /hololive*_review*.md
+/gen_image.py
+/README.txt
 
 # ============================================
 # Personal/Draft Files
@@ -146,6 +152,8 @@ coverage/
 coverage.out
 cover.out
 coverage.html
+admin-dashboard/frontend/test-results/
+admin-dashboard/frontend/full-page.png
 
 # ============================================
 # Database
@@ -177,6 +185,7 @@ hololive/hololive-rs/docs/reports/**/*.tsv
 # ============================================
 /config/
 /data/
+/runtime-config/
 
 # ============================================
 # VPN Config

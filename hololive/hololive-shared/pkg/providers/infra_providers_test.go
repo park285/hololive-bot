@@ -1,0 +1,137 @@
+package providers
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+
+	"github.com/park285/iris-client-go/iris"
+)
+
+func TestProvideIrisClient_UsesRuntimeBaseURLFile(t *testing.T) {
+	ctx := context.Background()
+	botToken := "bot-token"
+	var primaryMu sync.Mutex
+	primaryCalls := 0
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != iris.PathReply {
+			t.Fatalf("primary server path = %q", r.URL.Path)
+		}
+		primaryMu.Lock()
+		primaryCalls++
+		primaryMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer primary.Close()
+
+	var fallbackMu sync.Mutex
+	fallbackCalls := 0
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != iris.PathReply {
+			t.Fatalf("fallback server path = %q", r.URL.Path)
+		}
+		fallbackMu.Lock()
+		fallbackCalls++
+		fallbackMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer fallback.Close()
+
+	dir := t.TempDir()
+	baseURLFilePath := filepath.Join(dir, "iris_base_url")
+	if err := os.WriteFile(baseURLFilePath, []byte(primary.URL), 0o600); err != nil {
+		t.Fatalf("write base url file: %v", err)
+	}
+
+	t.Setenv("IRIS_BASE_URL", fallback.URL)
+	t.Setenv("IRIS_BOT_TOKEN", botToken)
+	t.Setenv("IRIS_BASE_URL_FILE", baseURLFilePath)
+
+	client, err := ProvideIrisClient(nil, iris.WithHTTPClient(&http.Client{}))
+	if err != nil {
+		t.Fatalf("provide iris client: %v", err)
+	}
+
+	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
+		t.Fatalf("send message: %v", err)
+	}
+
+	primaryMu.Lock()
+	if primaryCalls != 1 {
+		t.Fatalf("primary calls = %d, want 1", primaryCalls)
+	}
+	primaryMu.Unlock()
+
+	fallbackMu.Lock()
+	if fallbackCalls != 0 {
+		t.Fatalf("fallback calls = %d, want 0", fallbackCalls)
+	}
+	fallbackMu.Unlock()
+}
+
+func TestProvideIrisClient_UsesExplicitOptionsOverEnvironment(t *testing.T) {
+	ctx := context.Background()
+	var explicitMu sync.Mutex
+	explicitCalls := 0
+	explicit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != iris.PathReply {
+			t.Fatalf("explicit server path = %q", r.URL.Path)
+		}
+		explicitMu.Lock()
+		explicitCalls++
+		explicitMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer explicit.Close()
+
+	var envMu sync.Mutex
+	envCalls := 0
+	envServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != iris.PathReply {
+			t.Fatalf("env server path = %q", r.URL.Path)
+		}
+		envMu.Lock()
+		envCalls++
+		envMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer envServer.Close()
+
+	t.Setenv("IRIS_BASE_URL", envServer.URL)
+	t.Setenv("IRIS_BOT_TOKEN", "env-bot-token")
+	t.Setenv("IRIS_BASE_URL_FILE", "")
+
+	client, err := ProvideIrisClient(
+		nil,
+		iris.WithBaseURL(explicit.URL),
+		iris.WithBotToken("explicit-bot-token"),
+		iris.WithHTTPClient(&http.Client{}),
+	)
+	if err != nil {
+		t.Fatalf("provide iris client: %v", err)
+	}
+
+	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
+		t.Fatalf("send message: %v", err)
+	}
+
+	explicitMu.Lock()
+	if explicitCalls != 1 {
+		t.Fatalf("explicit calls = %d, want 1", explicitCalls)
+	}
+	explicitMu.Unlock()
+
+	envMu.Lock()
+	if envCalls != 0 {
+		t.Fatalf("env calls = %d, want 0", envCalls)
+	}
+	envMu.Unlock()
+}
