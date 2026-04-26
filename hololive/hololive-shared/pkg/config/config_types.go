@@ -20,7 +20,10 @@
 
 package config
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type ServerConfig struct {
 	Port   int
@@ -88,9 +91,27 @@ func DefaultScraperWorkerCount() int {
 	return 4
 }
 
+const (
+	ScraperFetcherEngineNetHTTP  = "nethttp"
+	ScraperFetcherEngineGoScrapy = "goscrapy"
+)
+
+func DefaultScraperFetcherEngine() string {
+	return ScraperFetcherEngineNetHTTP
+}
+
+func NormalizeScraperFetcherEngine(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return DefaultScraperFetcherEngine()
+	}
+	return normalized
+}
+
 type ScraperConfig struct {
 	ProxyEnabled        bool
 	ProxyURL            string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
+	FetcherEngine       string
 	WorkerCount         int
 	Scheduler           ScraperSchedulerConfig
 	Poll                ScraperPoll
