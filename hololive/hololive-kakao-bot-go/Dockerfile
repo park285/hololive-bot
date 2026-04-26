@@ -35,6 +35,7 @@ WORKDIR /workspace/hololive-bot
 
 COPY go.mod go.work go.work.sum ./
 COPY --from=shared_go_workspace . ./shared-go
+COPY --from=iris_client_go_workspace . /workspace/iris-client-go
 COPY hololive/hololive-dispatcher-go ./hololive/hololive-dispatcher-go
 COPY hololive/hololive-llm-sched ./hololive/hololive-llm-sched
 COPY hololive/hololive-stream-ingester ./hololive/hololive-stream-ingester
