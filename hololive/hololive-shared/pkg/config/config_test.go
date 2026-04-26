@@ -332,6 +332,46 @@ func TestLoad_ScraperWorkerCountLegacyEnvFallback(t *testing.T) {
 	}
 }
 
+func TestLoad_ScraperFetcherEngineDefault(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.FetcherEngine != ScraperFetcherEngineNetHTTP {
+		t.Fatalf("Scraper.FetcherEngine = %q, want %q", cfg.Scraper.FetcherEngine, ScraperFetcherEngineNetHTTP)
+	}
+}
+
+func TestLoad_ScraperFetcherEngineEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_FETCHER_ENGINE", "goscrapy")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.FetcherEngine != ScraperFetcherEngineGoScrapy {
+		t.Fatalf("Scraper.FetcherEngine = %q, want %q", cfg.Scraper.FetcherEngine, ScraperFetcherEngineGoScrapy)
+	}
+}
+
+func TestLoad_ScraperFetcherEngineValidation(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_FETCHER_ENGINE", "bad-engine")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want scraper fetcher engine validation error")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy") {
+		t.Fatalf("Load() error = %v, want scraper fetcher engine validation error", err)
+	}
+}
+
 func TestLoad_ScraperPublishedAtResolverDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
