@@ -146,13 +146,14 @@ func NewAlarm(roomID, userID, channelID, memberName string) *Alarm {
 }
 
 type AlarmNotification struct {
-	AlarmType             AlarmType `json:"alarm_type,omitempty"`
-	RoomID                string    `json:"room_id"`
-	Channel               *Channel  `json:"channel"`
-	Stream                *Stream   `json:"stream"`
-	MinutesUntil          int       `json:"minutes_until"`
-	Users                 []string  `json:"users"`
-	ScheduleChangeMessage string    `json:"schedule_change_message,omitempty"`
+	AlarmType                   AlarmType `json:"alarm_type,omitempty"`
+	RoomID                      string    `json:"room_id"`
+	Channel                     *Channel  `json:"channel"`
+	Stream                      *Stream   `json:"stream"`
+	MinutesUntil                int       `json:"minutes_until"`
+	Users                       []string  `json:"users"`
+	ScheduleChangeMessage       string    `json:"schedule_change_message,omitempty"`
+	ScheduleChangePreviousStart string    `json:"schedule_change_previous_start,omitempty"`
 }
 
 func NewAlarmNotification(roomID string, channel *Channel, stream *Stream, minutesUntil int, users []string, scheduleMessage string) *AlarmNotification {
@@ -207,13 +208,14 @@ type AlarmQueueRetryMetadata struct {
 }
 
 type alarmQueueEnvelopeNotificationWire struct {
-	AlarmType             AlarmType `json:"alarm_type,omitempty"`
-	RoomID                string    `json:"room_id"`
-	Channel               *Channel  `json:"channel"`
-	Stream                *Stream   `json:"stream"`
-	MinutesUntil          int       `json:"minutes_until"`
-	Users                 []string  `json:"users"`
-	ScheduleChangeMessage string    `json:"schedule_change_message,omitempty"`
+	AlarmType                   AlarmType `json:"alarm_type,omitempty"`
+	RoomID                      string    `json:"room_id"`
+	Channel                     *Channel  `json:"channel"`
+	Stream                      *Stream   `json:"stream"`
+	MinutesUntil                int       `json:"minutes_until"`
+	Users                       []string  `json:"users"`
+	ScheduleChangeMessage       string    `json:"schedule_change_message,omitempty"`
+	ScheduleChangePreviousStart string    `json:"schedule_change_previous_start,omitempty"`
 }
 
 type alarmQueueEnvelopeWire struct {
@@ -228,13 +230,14 @@ type alarmQueueEnvelopeWire struct {
 func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alarmQueueEnvelopeWire{
 		Notification: alarmQueueEnvelopeNotificationWire{
-			AlarmType:             e.Notification.AlarmType,
-			RoomID:                e.Notification.RoomID,
-			Channel:               e.Notification.Channel,
-			Stream:                e.Notification.Stream,
-			MinutesUntil:          e.Notification.MinutesUntil,
-			Users:                 e.Notification.Users,
-			ScheduleChangeMessage: e.Notification.ScheduleChangeMessage,
+			AlarmType:                   e.Notification.AlarmType,
+			RoomID:                      e.Notification.RoomID,
+			Channel:                     e.Notification.Channel,
+			Stream:                      e.Notification.Stream,
+			MinutesUntil:                e.Notification.MinutesUntil,
+			Users:                       e.Notification.Users,
+			ScheduleChangeMessage:       e.Notification.ScheduleChangeMessage,
+			ScheduleChangePreviousStart: e.Notification.ScheduleChangePreviousStart,
 		},
 		ClaimKeys:     e.ClaimKeys,
 		EnqueuedAt:    e.EnqueuedAt,
@@ -278,13 +281,14 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 
 	*e = AlarmQueueEnvelope{
 		Notification: AlarmNotification{
-			AlarmType:             alarmType,
-			RoomID:                wire.Notification.RoomID,
-			Channel:               wire.Notification.Channel,
-			Stream:                wire.Notification.Stream,
-			MinutesUntil:          wire.Notification.MinutesUntil,
-			Users:                 wire.Notification.Users,
-			ScheduleChangeMessage: wire.Notification.ScheduleChangeMessage,
+			AlarmType:                   alarmType,
+			RoomID:                      wire.Notification.RoomID,
+			Channel:                     wire.Notification.Channel,
+			Stream:                      wire.Notification.Stream,
+			MinutesUntil:                wire.Notification.MinutesUntil,
+			Users:                       wire.Notification.Users,
+			ScheduleChangeMessage:       wire.Notification.ScheduleChangeMessage,
+			ScheduleChangePreviousStart: wire.Notification.ScheduleChangePreviousStart,
 		},
 		ClaimKeys:     wire.ClaimKeys,
 		EnqueuedAt:    wire.EnqueuedAt,

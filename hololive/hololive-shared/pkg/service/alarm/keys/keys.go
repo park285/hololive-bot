@@ -35,27 +35,30 @@ import (
 
 // Valkey 키 접두사 (Go alarm_types.go, Rust keys.rs 1:1 대응)
 const (
-	AlarmKeyPrefix                    = "alarm:"
-	AlarmRegistryKey                  = "alarm:registry"
-	AlarmChannelRegistryKey           = "alarm:channel_registry"
-	ChzzkChannelMapKey                = "alarm:chzzk_channels"
-	TwitchLoginMapKey                 = "alarm:twitch_logins"
-	TwitchChannelLoginMapKey          = "alarm:twitch_channel_logins"
-	NextStreamKeyPrefix               = "alarm:next_stream:"
-	ChannelSubscribersKeyPrefix       = "alarm:channel_subscribers:"
-	ChannelSubscribersCommunityPrefix = "alarm:channel_subscribers:COMMUNITY:"
-	ChannelSubscribersShortsPrefix    = "alarm:channel_subscribers:SHORTS:"
-	ChannelSubscribersEmptyKeyPrefix  = "alarm:channel_subscribers_empty:"
-	MemberNameKey                     = "alarm:member_names"
-	RoomNamesCacheKey                 = "alarm:room_names"
-	UserNamesCacheKey                 = "alarm:user_names"
-	NotifiedKeyPrefix                 = "notified:"
-	NotifyClaimKeyPrefix              = "notified:claim:"
-	NotifyLogicalClaimKeyPrefix       = "notified:claim:event:"
-	UpcomingEventKeyPrefix            = "notified:upcoming:event:"
-	ScheduleTransitionKeyPrefix       = "notified:schedule:transition:"
-	ChzzkLiveNotifiedKeyPrefix        = "notified:chzzk:live:"
-	IntegratedNotifiedKeyPrefix       = "notified:integrated:"
+	AlarmKeyPrefix                     = "alarm:"
+	AlarmRegistryKey                   = "alarm:registry"
+	AlarmChannelRegistryKey            = "alarm:channel_registry"
+	ChzzkChannelMapKey                 = "alarm:chzzk_channels"
+	TwitchLoginMapKey                  = "alarm:twitch_logins"
+	TwitchChannelLoginMapKey           = "alarm:twitch_channel_logins"
+	NextStreamKeyPrefix                = "alarm:next_stream:"
+	ChannelSubscribersKeyPrefix        = "alarm:channel_subscribers:"
+	ChannelSubscribersCommunityPrefix  = "alarm:channel_subscribers:COMMUNITY:"
+	ChannelSubscribersShortsPrefix     = "alarm:channel_subscribers:SHORTS:"
+	ChannelSubscribersEmptyKeyPrefix   = "alarm:channel_subscribers_empty:"
+	MemberNameKey                      = "alarm:member_names"
+	RoomNamesCacheKey                  = "alarm:room_names"
+	UserNamesCacheKey                  = "alarm:user_names"
+	NotifiedKeyPrefix                  = "notified:"
+	NotifyClaimKeyPrefix               = "notified:claim:"
+	NotifyLogicalClaimKeyPrefix        = "notified:claim:event:"
+	UpcomingEventKeyPrefix             = "notified:upcoming:event:"
+	ScheduleTransitionKeyPrefix        = "notified:schedule:transition:"
+	RoomScheduleTransitionKeyPrefix    = "notified:schedule:transition:room:"
+	LogicalScheduleIndexKeyPrefix      = "notified:schedule:index:"
+	LogicalScheduleTransitionKeyPrefix = "notified:schedule:transition:event:"
+	ChzzkLiveNotifiedKeyPrefix         = "notified:chzzk:live:"
+	IntegratedNotifiedKeyPrefix        = "notified:integrated:"
 )
 
 func BuildRoomAlarmKey(roomID string) string {
@@ -185,6 +188,27 @@ func BuildScheduleTransitionKey(streamID string, oldScheduled, newScheduled time
 	oldUnix := NormalizeScheduledMinute(oldScheduled).Unix()
 	newUnix := NormalizeScheduledMinute(newScheduled).Unix()
 	return fmt.Sprintf("%s%s:%d:%d", ScheduleTransitionKeyPrefix, streamID, oldUnix, newUnix)
+}
+
+// "notified:schedule:transition:room:{roomID}:{streamID}:{oldUnix}:{newUnix}"
+func BuildRoomScheduleTransitionKey(roomID, streamID string, oldScheduled, newScheduled time.Time) string {
+	oldUnix := NormalizeScheduledMinute(oldScheduled).Unix()
+	newUnix := NormalizeScheduledMinute(newScheduled).Unix()
+	return fmt.Sprintf("%s%s:%s:%d:%d", RoomScheduleTransitionKeyPrefix, roomID, streamID, oldUnix, newUnix)
+}
+
+// "notified:schedule:index:{roomID}:{channelID}:{titleFP}"
+func BuildLogicalScheduleIndexKey(roomID, channelID, streamID, title string) string {
+	titleFP := BuildTitleFingerprint(title, streamID)
+	return fmt.Sprintf("%s%s:%s:%s", LogicalScheduleIndexKeyPrefix, roomID, channelID, titleFP)
+}
+
+// "notified:schedule:transition:event:{roomID}:{channelID}:{titleFP}:{oldUnix}:{newUnix}"
+func BuildLogicalScheduleTransitionKey(roomID, channelID, streamID, title string, oldScheduled, newScheduled time.Time) string {
+	oldUnix := NormalizeScheduledMinute(oldScheduled).Unix()
+	newUnix := NormalizeScheduledMinute(newScheduled).Unix()
+	titleFP := BuildTitleFingerprint(title, streamID)
+	return fmt.Sprintf("%s%s:%s:%s:%d:%d", LogicalScheduleTransitionKeyPrefix, roomID, channelID, titleFP, oldUnix, newUnix)
 }
 
 func FormatScheduled(t time.Time) string {
