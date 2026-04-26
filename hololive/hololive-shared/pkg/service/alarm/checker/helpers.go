@@ -55,14 +55,18 @@ func normalizeExplicitTargetMinutes(targetMinutes []int) []int {
 	return normalized
 }
 
-// minutesUntilFloorZeroClamped는 start까지 남은 시간을 분 단위로 내림 계산한다.
+// MinutesUntilFloorZeroClamped는 start까지 남은 시간을 분 단위로 내림 계산한다.
 // 과거이거나 현재이면 0을 반환한다.
-func minutesUntilFloorZeroClamped(start, now time.Time) int {
+func MinutesUntilFloorZeroClamped(start, now time.Time) int {
 	secs := start.Sub(now) / time.Second
 	if secs <= 0 {
 		return 0
 	}
 	return int(secs / 60)
+}
+
+func minutesUntilFloorZeroClamped(start, now time.Time) int {
+	return MinutesUntilFloorZeroClamped(start, now)
 }
 
 // FormatScheduleChangeMessage는 일정 변경 안내 문구를 반환한다.
