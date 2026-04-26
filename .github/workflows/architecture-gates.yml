@@ -54,6 +54,11 @@ jobs:
           toolchain: nightly-2026-02-23
           components: rustfmt, clippy
 
+      - name: Install architecture gate tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
       - name: Run architecture boundary gates (M0 + M1 + M4 + M6)
         run: ./scripts/architecture/ci-boundary-gate.sh
 
