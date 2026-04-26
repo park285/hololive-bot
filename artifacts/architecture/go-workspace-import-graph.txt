@@ -125,6 +125,7 @@ github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/contracts/alarm
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/health
+github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/server
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/service/alarm/queue
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/service/cache
@@ -393,6 +394,7 @@ github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/ratelimit
