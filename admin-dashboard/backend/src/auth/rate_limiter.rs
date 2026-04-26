@@ -30,8 +30,8 @@ impl LoginRateLimiter {
         Self {
             attempts: Mutex::new(HashMap::new()),
             max_attempts: 5,
-            window: Duration::from_secs(5 * 60),
-            lockout: Duration::from_secs(15 * 60),
+            window: Duration::from_mins(5),
+            lockout: Duration::from_mins(15),
             cancel: CancellationToken::new(),
         }
     }
@@ -94,7 +94,7 @@ impl LoginRateLimiter {
             loop {
                 tokio::select! {
                     () = cancel.cancelled() => break,
-                    () = tokio::time::sleep(Duration::from_secs(60)) => {
+                    () = tokio::time::sleep(Duration::from_mins(1)) => {
                         let mut attempts = limiter.attempts.lock().unwrap();
                         let now = Instant::now();
                         attempts.retain(|_, info| {
