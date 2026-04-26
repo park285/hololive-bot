@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path"
 	"sync"
 	"testing"
 	"time"
@@ -109,6 +110,22 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 		delete(state.hashes, key)
 		delete(state.strings, key)
 		return nil
+	}
+	client.ScanKeysFunc = func(_ context.Context, pattern string, _ int64) ([]string, error) {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+
+		matches := make([]string, 0)
+		for key := range state.strings {
+			ok, err := path.Match(pattern, key)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				matches = append(matches, key)
+			}
+		}
+		return matches, nil
 	}
 	client.HGetFunc = func(_ context.Context, key, field string) (string, error) {
 		state.mu.Lock()
@@ -231,7 +248,6 @@ func fallbackKeyCount(fb *LocalFallback) int {
 	return count
 }
 
-
 func TestLocalFallback_TryClaimReleaseAndExpiry(t *testing.T) {
 	current := time.Date(2026, 3, 4, 8, 0, 0, 0, time.UTC)
 	fb := NewLocalFallback(newTestLogger())
@@ -281,7 +297,6 @@ func TestNormalizeFallbackTTL(t *testing.T) {
 		})
 	}
 }
-
 
 func TestService_TryClaimNotification_ClaimKeyCategoryAndSchedulePolicy(t *testing.T) {
 	cacheMock, _ := newMockDedupCache(t)
@@ -346,6 +361,90 @@ func TestService_TryClaimLogicalEventAndScheduleTransition(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, acquired)
 	assert.Equal(t, transitionKey, transitionKeyAgain)
+}
+
+func TestService_DetectScheduleChange(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	streamID := "stream-schedule-change"
+	start := time.Date(2026, 3, 4, 9, 30, 45, 0, time.UTC)
+	delayed := time.Date(2026, 3, 4, 9, 45, 12, 0, time.UTC)
+	early := time.Date(2026, 3, 4, 9, 15, 33, 0, time.UTC)
+
+	require.NoError(t, svc.MarkAsNotified(t.Context(), streamID, start, 5))
+
+	message, err := svc.DetectScheduleChange(t.Context(), streamID, delayed)
+	require.NoError(t, err)
+	assert.Equal(t, "일정이 늦춰졌습니다.", message)
+
+	message, err = svc.DetectScheduleChange(t.Context(), streamID, delayed)
+	require.NoError(t, err)
+	assert.Equal(t, "일정이 늦춰졌습니다.", message, "감지는 claim 없이 반복 가능해야 발행 실패 후 재시도할 수 있음")
+
+	message, err = svc.DetectScheduleChange(t.Context(), streamID, early)
+	require.NoError(t, err)
+	assert.Equal(t, "일정이 앞당겨졌습니다.", message)
+
+	message, err = svc.DetectScheduleChange(t.Context(), streamID, start.Add(10*time.Second))
+	require.NoError(t, err)
+	assert.Empty(t, message, "분 단위가 같으면 변경으로 보지 않음")
+}
+
+func TestService_DetectNotificationScheduleChange_LogicalWaitingRoomReplacement(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	previousScheduled := time.Date(2026, 3, 4, 9, 30, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, 3, 4, 9, 45, 0, 0, time.UTC)
+	previousStream := &domain.Stream{
+		ID:             "old-waiting-room",
+		Title:          "same title",
+		StartScheduled: &previousScheduled,
+	}
+	currentStream := &domain.Stream{
+		ID:             "new-waiting-room",
+		Title:          "same title",
+		StartScheduled: &currentScheduled,
+	}
+
+	require.NoError(t, svc.MarkUpcomingEventNotified(t.Context(), "room-1", "UC_TEST", previousStream))
+
+	change, err := svc.DetectNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", currentStream)
+	require.NoError(t, err)
+	require.NotNil(t, change)
+	assert.Equal(t, "일정이 늦춰졌습니다.", change.Message)
+	assert.Equal(t, keys.FormatScheduled(previousScheduled), change.PreviousScheduledString())
+
+	change, err = svc.DetectNotificationScheduleChange(t.Context(), "room-2", "UC_TEST", currentStream)
+	require.NoError(t, err)
+	assert.Nil(t, change, "이전 알림을 받지 않은 방에는 교체 지연을 만들지 않음")
+}
+
+func TestService_TryClaimNotificationScheduleChange_PerRoomDedup(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	start := time.Date(2026, 3, 4, 9, 30, 0, 0, time.UTC)
+	delayed := time.Date(2026, 3, 4, 9, 45, 0, 0, time.UTC)
+	stream := &domain.Stream{
+		ID:             "new-waiting-room",
+		Title:          "same title",
+		StartScheduled: &delayed,
+	}
+
+	claimKeys, claimed, err := svc.TryClaimNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", stream, keys.FormatScheduled(start))
+	require.NoError(t, err)
+	assert.True(t, claimed)
+	assert.Len(t, claimKeys, 2)
+
+	_, claimed, err = svc.TryClaimNotificationScheduleChange(t.Context(), "room-1", "UC_TEST", stream, keys.FormatScheduled(start))
+	require.NoError(t, err)
+	assert.False(t, claimed)
+
+	_, claimed, err = svc.TryClaimNotificationScheduleChange(t.Context(), "room-2", "UC_TEST", stream, keys.FormatScheduled(start))
+	require.NoError(t, err)
+	assert.True(t, claimed, "다른 방에는 같은 지연 전환을 독립적으로 보낼 수 있어야 함")
 }
 
 func TestService_MarkAsNotified_TargetMinutePolicyAndScheduleReset(t *testing.T) {
