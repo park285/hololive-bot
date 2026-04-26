@@ -34,10 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
-
 	"github.com/kapu/hololive-shared/internal/retry"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
@@ -207,6 +204,7 @@ type Client struct {
 	backoffState     *BackoffState
 	proxyConfig      ProxyConfig
 	stateStore       stateStore
+	fetcherEngine    FetcherEngine
 
 	communityMissing *cacheState
 	videoRSSBackoff  *cacheState
@@ -238,11 +236,18 @@ func WithStateStore(store stateStore) ClientOption {
 	}
 }
 
+func WithFetcherEngine(engine FetcherEngine) ClientOption {
+	return func(c *Client) {
+		c.fetcherEngine = normalizeFetcherEngine(engine)
+	}
+}
+
 func NewClient(opts ...ClientOption) *Client {
 	c := &Client{
-		uaProvider:   ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
-		rateLimiter:  NewRateLimiter(3 * time.Second),
-		backoffState: NewBackoffState(),
+		uaProvider:    ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
+		rateLimiter:   NewRateLimiter(3 * time.Second),
+		backoffState:  NewBackoffState(),
+		fetcherEngine: FetcherEngineNetHTTP,
 	}
 
 	// 옵션 적용 (프록시 설정 포함)
@@ -356,6 +361,10 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 	return result, nil
 }
 
+func (c *Client) currentPageFetcher() pageFetcher {
+	return netHTTPPageFetcher{client: c}
+}
+
 // fetchPageOnce: 단일 HTTP 요청 수행 (재시도 없음)
 func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, error) {
 	// 불변식: hard cooldown만 차단 (transient는 재시도 허용)
@@ -376,18 +385,15 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 	snap := c.uaProvider.Headers(ctx)
 	applyScraperHeaders(req, snap)
 
-	httpClient := c.currentHTTPClient()
-	resp, err := httpClient.Do(req)
+	resp, err := c.currentPageFetcher().FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch page: %w", err)
+		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 
 	switch resp.StatusCode {
 	case http.StatusTooManyRequests:
-		drainResponseBody(resp)
 		c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
 		cooldown := c.backoffState.HardCooldownRemaining()
 		slog.Warn("YouTube rate limit hit, entering cooldown",
@@ -397,7 +403,6 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 		return "", fmt.Errorf("status %d: %w", resp.StatusCode, ErrRateLimited)
 
 	case http.StatusForbidden:
-		drainResponseBody(resp)
 		c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
 		slog.Warn("YouTube access forbidden",
 			"url", pageURL,
@@ -408,17 +413,11 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 		// body 읽기 성공 후에 RecordSuccess 호출
 
 	default:
-		drainResponseBody(resp)
 		return "", &httpStatusError{code: resp.StatusCode, retryAfter: retryAfter}
 	}
 
-	body, err := jsonutil.ReadAllLimit(resp.Body, constants.YouTubeConfig.MaxPageBodyBytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
 	c.backoffState.RecordSuccess()
-	return string(body), nil
+	return string(resp.Body), nil
 }
 
 func parseRetryAfter(value string, now time.Time) time.Duration {
