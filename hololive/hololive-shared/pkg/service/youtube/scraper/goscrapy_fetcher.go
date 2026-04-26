@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
@@ -45,7 +46,7 @@ func (f goscrapyPageFetcher) FetchPage(ctx context.Context, req pageFetchRequest
 	if err != nil && !gotResponse && f.fallback != nil {
 		slog.Warn("goscrapy fetch failed before response, falling back to nethttp",
 			"url", safeFetchURL(req.URL),
-			"error", err.Error())
+			"error", safeFetchError(err, req.URL))
 		return f.fallback.FetchPage(ctx, req)
 	}
 	return resp, err
@@ -115,6 +116,7 @@ func readGoScrapyResponse(resp core.IResponseReader) (pageFetchResponse, error) 
 	if body == nil {
 		return out, nil
 	}
+	defer func() { _ = body.Close() }()
 
 	if out.StatusCode != http.StatusOK {
 		_, _ = jsonutil.ReadAllLimit(body, 4*1024)
@@ -142,4 +144,44 @@ func safeFetchURL(raw string) string {
 		return "invalid-url"
 	}
 	return parsed.Scheme + "://" + parsed.Host + parsed.Path
+}
+
+func safeFetchError(err error, requestURL string) string {
+	if err == nil {
+		return ""
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		safeURL := safeFetchURL(urlErr.URL)
+		if safeURL == "invalid-url" {
+			safeURL = safeFetchURL(requestURL)
+		}
+		op := strings.TrimSpace(urlErr.Op)
+		if op == "" {
+			op = "url error"
+		}
+		if urlErr.Err == nil {
+			return fmt.Sprintf("%s %s", op, safeURL)
+		}
+		return fmt.Sprintf("%s %s: %s", op, safeURL, sanitizeFetchErrorDetail(urlErr.Err.Error(), urlErr.URL, safeURL))
+	}
+
+	return sanitizeFetchErrorDetail(err.Error(), requestURL, safeFetchURL(requestURL))
+}
+
+func sanitizeFetchErrorDetail(message string, rawURL string, safeURL string) string {
+	if message == "" {
+		return ""
+	}
+	if rawURL == "" {
+		return message
+	}
+
+	message = strings.ReplaceAll(message, rawURL, safeURL)
+	if parsed, err := url.Parse(rawURL); err == nil && parsed.RawQuery != "" {
+		message = strings.ReplaceAll(message, "?"+parsed.RawQuery, "")
+		message = strings.ReplaceAll(message, parsed.RawQuery, "redacted")
+	}
+	return message
 }
