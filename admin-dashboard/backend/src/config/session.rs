@@ -18,15 +18,15 @@ impl Default for SessionConfig {
     fn default() -> Self {
         Self {
             token_rotation_enabled: true,
-            heartbeat_interval: Duration::from_secs(5 * 60),
-            expiry_duration: Duration::from_secs(30 * 60),
-            absolute_timeout: Duration::from_secs(8 * 3600),
-            absolute_warning_window: Duration::from_secs(5 * 60),
-            idle_timeout: Duration::from_secs(10 * 60),
-            idle_warning_timeout: Duration::from_secs(9 * 60),
+            heartbeat_interval: Duration::from_mins(5),
+            expiry_duration: Duration::from_mins(30),
+            absolute_timeout: Duration::from_hours(8),
+            absolute_warning_window: Duration::from_mins(5),
+            idle_timeout: Duration::from_mins(10),
+            idle_warning_timeout: Duration::from_mins(9),
             idle_session_ttl: Duration::from_secs(10),
             grace_period: Duration::from_secs(30),
-            rotation_interval: Duration::from_secs(15 * 60),
+            rotation_interval: Duration::from_mins(15),
         }
     }
 }
@@ -73,15 +73,15 @@ mod tests {
     #[test]
     fn test_session_config_defaults() {
         let cfg = SessionConfig::default();
-        assert_eq!(cfg.heartbeat_interval, Duration::from_secs(5 * 60));
-        assert_eq!(cfg.expiry_duration, Duration::from_secs(30 * 60));
-        assert_eq!(cfg.absolute_timeout, Duration::from_secs(8 * 3600));
-        assert_eq!(cfg.absolute_warning_window, Duration::from_secs(5 * 60));
-        assert_eq!(cfg.idle_timeout, Duration::from_secs(10 * 60));
-        assert_eq!(cfg.idle_warning_timeout, Duration::from_secs(9 * 60));
+        assert_eq!(cfg.heartbeat_interval, Duration::from_mins(5));
+        assert_eq!(cfg.expiry_duration, Duration::from_mins(30));
+        assert_eq!(cfg.absolute_timeout, Duration::from_hours(8));
+        assert_eq!(cfg.absolute_warning_window, Duration::from_mins(5));
+        assert_eq!(cfg.idle_timeout, Duration::from_mins(10));
+        assert_eq!(cfg.idle_warning_timeout, Duration::from_mins(9));
         assert_eq!(cfg.idle_session_ttl, Duration::from_secs(10));
         assert_eq!(cfg.grace_period, Duration::from_secs(30));
-        assert_eq!(cfg.rotation_interval, Duration::from_secs(15 * 60));
+        assert_eq!(cfg.rotation_interval, Duration::from_mins(15));
     }
 
     #[test]
