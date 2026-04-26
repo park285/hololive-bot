@@ -97,6 +97,51 @@ func TestGoScrapyPageFetcher_FallsBackOnlyBeforeResponse(t *testing.T) {
 	assert.Equal(t, "fallback body", string(resp.Body))
 }
 
+func TestGoScrapyPageFetcher_FallsBackOnExecutorErrorBeforeResponse(t *testing.T) {
+	var attempts atomic.Int32
+	rt := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		attempt := attempts.Add(1)
+		if attempt == 1 {
+			return nil, fmt.Errorf("wrapped transport error: %w", &url.Error{
+				Op:  "Get",
+				URL: req.URL.String(),
+				Err: errors.New("connection refused"),
+			})
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("fallback body")),
+			Request:    req,
+		}, nil
+	})
+
+	client := NewClient(
+		WithHTTPClient(&http.Client{Transport: rt}),
+		WithRateLimiter(NewRateLimiter(0)),
+		WithFetcherEngine(FetcherEngineGoScrapy),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	started := time.Now()
+	resp, err := goscrapyPageFetcher{
+		client:   client,
+		fallback: netHTTPPageFetcher{client: client},
+	}.FetchPage(ctx, pageFetchRequest{
+		URL:    "http://example.test/watch?v=secret",
+		Header: http.Header{},
+	})
+	elapsed := time.Since(started)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "fallback body", string(resp.Body))
+	assert.Equal(t, int32(2), attempts.Load())
+	assert.Less(t, elapsed, 250*time.Millisecond)
+}
+
 func TestGoScrapyPageFetcher_HonorsContextCancellation(t *testing.T) {
 	client := NewClient(WithRateLimiter(NewRateLimiter(0)), WithFetcherEngine(FetcherEngineGoScrapy))
 	ctx, cancel := context.WithCancel(context.Background())
