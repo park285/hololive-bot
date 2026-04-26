@@ -354,6 +354,86 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DoesNotInventThreeMinuteTarge
 	assert.Empty(t, notifications)
 }
 
+func TestYouTubeChecker_BuildUpcomingNotifications_SendsScheduleDelayOnNonTargetMinute(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
+	require.NoError(t, err)
+
+	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
+	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "delayed-stream", previousScheduled, 5))
+
+	window := sharedchecker.EvaluationWindow{
+		Start: time.Date(2026, 4, 9, 11, 52, 50, 0, time.UTC),
+		End:   time.Date(2026, 4, 9, 11, 53, 10, 0, time.UTC),
+	}
+
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+		ID:             "delayed-stream",
+		ChannelID:      "ch-1",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &currentScheduled,
+		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
+	}, []string{"room-1"}, window)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 8, notifications[0].MinutesUntil)
+	assert.Equal(t, "일정이 늦춰졌습니다.", notifications[0].ScheduleChangeMessage)
+}
+
+func TestYouTubeChecker_BuildUpcomingNotifications_DetectsReplacedWaitingRoomScheduleDelay(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
+	require.NoError(t, err)
+
+	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
+	previousStream := &domain.Stream{
+		ID:             "old-waiting-room",
+		Title:          "same broadcast title",
+		ChannelID:      "ch-1",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &previousScheduled,
+		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
+	}
+	require.NoError(t, dedupSvc.MarkUpcomingEventNotified(t.Context(), "room-1", "ch-1", previousStream))
+
+	window := sharedchecker.EvaluationWindow{
+		Start: time.Date(2026, 4, 9, 11, 52, 50, 0, time.UTC),
+		End:   time.Date(2026, 4, 9, 11, 53, 10, 0, time.UTC),
+	}
+
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+		ID:             "new-waiting-room",
+		Title:          "same broadcast title",
+		ChannelID:      "ch-1",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &currentScheduled,
+		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
+	}, []string{"room-1", "room-2"}, window)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, "room-1", notifications[0].RoomID)
+	assert.Equal(t, 8, notifications[0].MinutesUntil)
+	assert.Equal(t, "일정이 늦춰졌습니다.", notifications[0].ScheduleChangeMessage)
+}
+
 func TestUniqueStrings(t *testing.T) {
 	t.Parallel()
 
