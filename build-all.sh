@@ -25,7 +25,18 @@ resolve_shared_go_workspace_path() {
     printf '%s\n' "$candidate"
 }
 
+resolve_iris_client_go_workspace_path() {
+    local candidate="${IRIS_CLIENT_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/../iris-client-go}"
+    if [ ! -d "$candidate" ]; then
+        echo "[ERROR] Active iris-client-go workspace not found: $candidate"
+        exit 1
+    fi
+
+    printf '%s\n' "$candidate"
+}
+
 export SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
+export IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_iris_client_go_workspace_path)"
 
 # 컨테이너 런타임 CLI (docker / podman)
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
@@ -145,6 +156,7 @@ echo "  CONTAINER_CLI=$CONTAINER_CLI"
 echo "  COMPOSE_MODE=$COMPOSE_MODE"
 echo "  REMOTE_CACHE=$REMOTE_CACHE"
 echo "  SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
+echo "  IRIS_CLIENT_GO_WORKSPACE_PATH=$IRIS_CLIENT_GO_WORKSPACE_PATH"
 
 # VERSION 파일에서 환경변수 설정 (docker-compose build args로 전달)
 export HOLO_BOT_VERSION=$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo "dev")
