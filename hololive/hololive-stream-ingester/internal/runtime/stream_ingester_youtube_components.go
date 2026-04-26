@@ -84,5 +84,6 @@ func buildSharedYouTubeScraperClient(
 		scraper.WithProxy(proxyConfig),
 		scraper.WithRateLimiter(sharedRL),
 		scraper.WithStateStore(cacheService),
+		scraper.WithFetcherEngine(scraper.FetcherEngine(scraperCfg.FetcherEngine)),
 	)
 }
