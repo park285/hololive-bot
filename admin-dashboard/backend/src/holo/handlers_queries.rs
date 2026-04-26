@@ -137,8 +137,7 @@ fn trim_channel_stats(response: &mut ChannelStatsResponse, limit: usize) {
     }
 
     let mut sorted_stats = response.stats.drain().collect::<Vec<_>>();
-    sorted_stats
-        .sort_by(|(_, left), (_, right)| right.subscriber_count.cmp(&left.subscriber_count));
+    sorted_stats.sort_by_key(|(_, stat)| std::cmp::Reverse(stat.subscriber_count));
     response.stats = sorted_stats.into_iter().take(limit).collect();
 }
 
