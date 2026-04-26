@@ -276,7 +276,7 @@ func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {
 }
 
 func validateScraperFetcherEngine(engine string) error {
-	switch engine {
+	switch NormalizeScraperFetcherEngine(engine) {
 	case ScraperFetcherEngineNetHTTP, ScraperFetcherEngineGoScrapy:
 		return nil
 	default:
