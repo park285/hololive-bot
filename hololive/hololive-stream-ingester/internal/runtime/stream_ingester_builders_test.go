@@ -316,6 +316,18 @@ func extractScraperRateLimiter(t *testing.T, client *scraper.Client) *scraper.Ra
 	return limiter
 }
 
+func extractScraperFetcherEngine(t *testing.T, client *scraper.Client) scraper.FetcherEngine {
+	t.Helper()
+
+	value := reflect.ValueOf(client).Elem()
+	field := value.FieldByName("fetcherEngine")
+	require.True(t, field.IsValid(), "fetcherEngine field must exist")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	engine, ok := field.Interface().(scraper.FetcherEngine)
+	require.True(t, ok, "fetcherEngine field must be scraper.FetcherEngine")
+	return engine
+}
+
 func extractScraperStateStorePointer(t *testing.T, client *scraper.Client) uintptr {
 	t.Helper()
 
@@ -349,6 +361,17 @@ func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
 	})
 
 	return client, addr
+}
+
+func TestBuildSharedYouTubeScraperClient_UsesConfiguredFetcherEngine(t *testing.T) {
+	t.Parallel()
+
+	client := buildSharedYouTubeScraperClient(config.ScraperConfig{
+		FetcherEngine: config.ScraperFetcherEngineGoScrapy,
+	}, nil, scraper.NewRateLimiter(time.Second))
+
+	require.NotNil(t, client)
+	assert.Equal(t, scraper.FetcherEngineGoScrapy, extractScraperFetcherEngine(t, client))
 }
 
 func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
