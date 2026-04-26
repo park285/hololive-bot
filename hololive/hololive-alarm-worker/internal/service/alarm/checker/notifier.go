@@ -239,7 +239,43 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string
 		return nil, false, nil
 	}
 
-	return compactClaimKeys(notifyClaimKey, logicalClaimKey), true, nil
+	claimKeys := compactClaimKeys(notifyClaimKey, logicalClaimKey)
+	scheduleClaimKeys, scheduleClaimed, err := n.claimScheduleChangeDedup(ctx, payload)
+	if err != nil {
+		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change claim error")
+		return nil, false, fmt.Errorf("claim schedule change: %w", err)
+	}
+	if !scheduleClaimed {
+		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change dedup skip")
+		return nil, false, nil
+	}
+
+	return append(claimKeys, scheduleClaimKeys...), true, nil
+}
+
+func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendInput) ([]string, bool, error) {
+	if payload == nil || payload.notification == nil {
+		return nil, true, nil
+	}
+	if strings.TrimSpace(payload.notification.ScheduleChangeMessage) == "" {
+		return nil, true, nil
+	}
+
+	claimKeys, claimed, err := n.dedupSvc.TryClaimNotificationScheduleChange(
+		ctx,
+		payload.notification.RoomID,
+		payload.channelID,
+		payload.notification.Stream,
+		payload.notification.ScheduleChangePreviousStart,
+	)
+	if err != nil {
+		return claimKeys, false, fmt.Errorf("claim notification schedule change: %w", err)
+	}
+	if !claimed {
+		return claimKeys, false, nil
+	}
+
+	return claimKeys, true, nil
 }
 
 func compactClaimKeys(keys ...string) []string {
