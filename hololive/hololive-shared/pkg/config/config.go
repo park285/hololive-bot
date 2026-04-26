@@ -160,8 +160,9 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		},
 		Environment: loadAppEnvironment(),
 		Scraper: ScraperConfig{
-			ProxyEnabled: sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
-			ProxyURL:     sharedenv.String("SCRAPER_PROXY_URL", ""),
+			ProxyEnabled:  sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
+			ProxyURL:      sharedenv.String("SCRAPER_PROXY_URL", ""),
+			FetcherEngine: NormalizeScraperFetcherEngine(sharedenv.String("SCRAPER_FETCHER_ENGINE", DefaultScraperFetcherEngine())),
 			WorkerCount: intAliasEnv([]string{
 				"SCRAPER_SCHEDULER_WORKER_COUNT",
 				"SCRAPER_WORKER_COUNT",
@@ -242,6 +243,9 @@ func (c *Config) Validate() error {
 	if err := validateScraperSchedulerConfig(c.Scraper.Scheduler); err != nil {
 		return err
 	}
+	if err := validateScraperFetcherEngine(c.Scraper.FetcherEngine); err != nil {
+		return err
+	}
 	if err := validateScraperPublishedAtResolverConfig(c.Scraper.PublishedAtResolver); err != nil {
 		return err
 	}
@@ -269,6 +273,15 @@ func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {
 		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be >= SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS")
 	}
 	return nil
+}
+
+func validateScraperFetcherEngine(engine string) error {
+	switch engine {
+	case ScraperFetcherEngineNetHTTP, ScraperFetcherEngineGoScrapy:
+		return nil
+	default:
+		return fmt.Errorf("SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy")
+	}
 }
 
 func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConfig) error {
