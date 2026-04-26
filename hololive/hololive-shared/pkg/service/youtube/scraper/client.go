@@ -362,7 +362,11 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 }
 
 func (c *Client) currentPageFetcher() pageFetcher {
-	return netHTTPPageFetcher{client: c}
+	netHTTPFetcher := netHTTPPageFetcher{client: c}
+	if normalizeFetcherEngine(c.fetcherEngine) == FetcherEngineGoScrapy {
+		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}
+	}
+	return netHTTPFetcher
 }
 
 // fetchPageOnce: 단일 HTTP 요청 수행 (재시도 없음)
