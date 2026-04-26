@@ -3,8 +3,11 @@ package scraper
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tech-engine/goscrapy/pkg/core"
+	"golang.org/x/net/html"
 )
 
 type failingPageFetcher struct {
@@ -130,4 +135,73 @@ func TestGoScrapyPageFetcher_TimeoutBeforeResponse(t *testing.T) {
 
 	_, err := goscrapyPageFetcher{client: client}.FetchPage(ctx, pageFetchRequest{URL: server.URL, Header: http.Header{}})
 	require.Error(t, err)
+}
+
+type closeTrackingReadCloser struct {
+	reader io.Reader
+	closed bool
+}
+
+func (r *closeTrackingReadCloser) Read(p []byte) (int, error) {
+	return r.reader.Read(p)
+}
+
+func (r *closeTrackingReadCloser) Close() error {
+	r.closed = true
+	return nil
+}
+
+type fakeGoScrapyResponse struct {
+	statusCode int
+	header     http.Header
+	body       io.ReadCloser
+}
+
+func (r fakeGoScrapyResponse) Header() http.Header { return r.header }
+func (r fakeGoScrapyResponse) Body() io.ReadCloser { return r.body }
+func (r fakeGoScrapyResponse) Bytes() []byte       { return nil }
+func (r fakeGoScrapyResponse) StatusCode() int     { return r.statusCode }
+func (r fakeGoScrapyResponse) Cookies() []*http.Cookie {
+	return nil
+}
+func (r fakeGoScrapyResponse) Request() *http.Request { return nil }
+func (r fakeGoScrapyResponse) Meta(string) (any, bool) {
+	return nil, false
+}
+func (r fakeGoScrapyResponse) Detach() core.IResponseReader { return r }
+func (r fakeGoScrapyResponse) Css(string) core.ISelector    { return r }
+func (r fakeGoScrapyResponse) Xpath(string) core.ISelector  { return r }
+func (r fakeGoScrapyResponse) Get() *html.Node              { return nil }
+func (r fakeGoScrapyResponse) GetAll() []*html.Node         { return nil }
+func (r fakeGoScrapyResponse) Text(...string) []string      { return nil }
+func (r fakeGoScrapyResponse) Attr(string) []string         { return nil }
+
+func TestReadGoScrapyResponse_ClosesBodyAfterBoundedNonOKRead(t *testing.T) {
+	body := &closeTrackingReadCloser{reader: strings.NewReader(strings.Repeat("x", 8192))}
+
+	resp, err := readGoScrapyResponse(fakeGoScrapyResponse{
+		statusCode: http.StatusTooManyRequests,
+		header:     http.Header{"Retry-After": []string{"1"}},
+		body:       body,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	assert.Empty(t, resp.Body)
+	assert.True(t, body.closed)
+}
+
+func TestSafeFetchError_RedactsURLQueryFromWrappedURLError(t *testing.T) {
+	rawURL := "http://example.test/path?token=secret"
+	err := fmt.Errorf("goscrapy fetch page: %w", &url.Error{
+		Op:  "Get",
+		URL: rawURL,
+		Err: errors.New("connection refused"),
+	})
+
+	safe := safeFetchError(err, rawURL)
+
+	assert.Contains(t, safe, "http://example.test/path")
+	assert.NotContains(t, safe, "token=secret")
+	assert.NotContains(t, safe, rawURL)
 }
