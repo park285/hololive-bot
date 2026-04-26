@@ -14,8 +14,16 @@ import (
 	"github.com/tech-engine/goscrapy/pkg/core"
 	"github.com/tech-engine/goscrapy/pkg/gos"
 	goslogger "github.com/tech-engine/goscrapy/pkg/logger"
+	"github.com/tech-engine/goscrapy/pkg/scheduler"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
+)
+
+const (
+	goscrapyRunnerWorkers       uint16        = 1
+	goscrapyRunnerReqResPool    uint64        = 2
+	goscrapyRunnerWorkQueueSize uint64        = 1
+	goscrapyRunnerPollInterval  time.Duration = 10 * time.Millisecond
 )
 
 type goscrapyRunner interface {
@@ -60,9 +68,21 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 	appCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	app := gos.New[struct{}](gos.WithClient(client.currentHTTPClient())).WithLogger(goslogger.NewNoopLogger())
+	app := gos.New[struct{}](gos.WithClient(client.currentHTTPClient()))
+	limitedScheduler := scheduler.New(
+		app.Executor,
+		scheduler.WithWorkers(goscrapyRunnerWorkers),
+		scheduler.WithReqResPoolSize(goscrapyRunnerReqResPool),
+		scheduler.WithWorkQueueSize(goscrapyRunnerWorkQueueSize),
+	)
+	app.Scheduler = limitedScheduler
+	app.Engine.WithScheduler(limitedScheduler)
+	app.WithLogger(goslogger.NewNoopLogger())
+
 	resultCh := make(chan goscrapyFetchResult, 1)
 	errCh := make(chan error, 1)
+	poll := time.NewTicker(goscrapyRunnerPollInterval)
+	defer poll.Stop()
 
 	appReq := app.Request(appCtx)
 	appReq.Url(req.URL).Method(http.MethodGet).Header(req.Header.Clone())
@@ -79,31 +99,47 @@ func (defaultGoscrapyRunner) Run(ctx context.Context, client *Client, req pageFe
 		errCh <- app.Start(appCtx)
 	}()
 
-	select {
-	case result := <-resultCh:
-		cancel()
-		waitGoScrapyEngine(errCh)
-		return result.response, result.gotResponse, result.err
-	case err := <-errCh:
+	for {
 		select {
 		case result := <-resultCh:
-			return result.response, result.gotResponse, result.err
-		default:
-		}
-		if err == nil {
-			err = errors.New("goscrapy stopped before response")
-		}
-		return pageFetchResponse{}, false, fmt.Errorf("goscrapy fetch page: %w", err)
-	case <-ctx.Done():
-		cancel()
-		select {
-		case result := <-resultCh:
+			cancel()
 			waitGoScrapyEngine(errCh)
 			return result.response, result.gotResponse, result.err
-		default:
+		case <-poll.C:
+			if app.Engine.ActiveCount() != 0 {
+				continue
+			}
+			select {
+			case result := <-resultCh:
+				cancel()
+				waitGoScrapyEngine(errCh)
+				return result.response, result.gotResponse, result.err
+			default:
+			}
+			cancel()
+			waitGoScrapyEngine(errCh)
+			return pageFetchResponse{}, false, errors.New("goscrapy stopped before response")
+		case err := <-errCh:
+			select {
+			case result := <-resultCh:
+				return result.response, result.gotResponse, result.err
+			default:
+			}
+			if err == nil {
+				err = errors.New("goscrapy stopped before response")
+			}
+			return pageFetchResponse{}, false, fmt.Errorf("goscrapy fetch page: %w", err)
+		case <-ctx.Done():
+			cancel()
+			select {
+			case result := <-resultCh:
+				waitGoScrapyEngine(errCh)
+				return result.response, result.gotResponse, result.err
+			default:
+			}
+			waitGoScrapyEngine(errCh)
+			return pageFetchResponse{}, false, fmt.Errorf("goscrapy fetch canceled: %w", ctx.Err())
 		}
-		waitGoScrapyEngine(errCh)
-		return pageFetchResponse{}, false, fmt.Errorf("goscrapy fetch canceled: %w", ctx.Err())
 	}
 }
 
