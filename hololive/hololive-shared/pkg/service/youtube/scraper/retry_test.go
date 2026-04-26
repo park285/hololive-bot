@@ -190,6 +190,30 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 	}
 }
 
+func TestNetHTTPPageFetcher_StatusBodyAndHeaders(t *testing.T) {
+	var receivedHeaders http.Header
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHeaders = r.Header.Clone()
+		w.Header().Set("X-Test-Header", "ok")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<html>ytInitialData = {};</html>"))
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithHTTPClient(server.Client()),
+		WithRateLimiter(NewRateLimiter(0)),
+		WithUAProvider(ua.NewStaticProvider("test-agent")),
+	)
+
+	body, err := client.fetchPageOnce(context.Background(), server.URL)
+	require.NoError(t, err)
+	assert.Contains(t, body, "ytInitialData")
+	assert.Equal(t, "test-agent", receivedHeaders.Get("User-Agent"))
+	assert.Equal(t, "SOCS=CAI", receivedHeaders.Get("Cookie"))
+}
+
 func TestFetchPage_NoRetryOn429(t *testing.T) {
 	var attempts atomic.Int32
 
