@@ -22,19 +22,31 @@ package checker
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 )
+
+type failingPublishCacheClient struct {
+	cache.Client
+}
+
+func (c *failingPublishCacheClient) DoMulti(context.Context, ...valkey.Completed) []valkey.ValkeyResult {
+	return nil
+}
 
 func TestNotifierSend_DedupSkip(t *testing.T) {
 	t.Parallel()
@@ -142,6 +154,58 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	if minuteSent != "1" {
 		t.Fatalf("expected minute field to be 1, got %q", minuteSent)
 	}
+}
+
+func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	failingCache := &failingPublishCacheClient{Client: cacheSvc}
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(failingCache, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", failingCache, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(failingCache, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
+	require.NoError(t, err)
+	notifier, err := NewNotifier(
+		dedupSvc,
+		queue.NewPublisher(failingCache, logger),
+		tierSched,
+		logger,
+	)
+	require.NoError(t, err)
+
+	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
+	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "delayed-publish-fail", previousScheduled, 5))
+
+	window := sharedchecker.EvaluationWindow{
+		Start: time.Date(2026, 4, 9, 11, 52, 50, 0, time.UTC),
+		End:   time.Date(2026, 4, 9, 11, 53, 10, 0, time.UTC),
+	}
+	stream := &domain.Stream{
+		ID:             "delayed-publish-fail",
+		Title:          "publish fail retry",
+		ChannelID:      "ch-1",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &currentScheduled,
+		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
+	}
+
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), stream, []string{"room-1"}, window)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, "일정이 늦춰졌습니다.", notifications[0].ScheduleChangeMessage)
+
+	_, sendErr := notifier.Send(t.Context(), notifications)
+	require.Error(t, sendErr)
+
+	retryNotifications, err := checker.buildUpcomingNotifications(t.Context(), stream, []string{"room-1"}, window)
+	require.NoError(t, err)
+	require.Len(t, retryNotifications, 1)
+	assert.Equal(t, "일정이 늦춰졌습니다.", retryNotifications[0].ScheduleChangeMessage)
 }
 
 func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {

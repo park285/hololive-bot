@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/valkey-io/valkey-go"
@@ -135,6 +136,44 @@ func roomNotifications(
 			notifications,
 			domain.NewAlarmNotification(roomID, channel, stream, minutesUntil, []string{}, scheduleMessage),
 		)
+	}
+
+	return notifications
+}
+
+func roomNotificationsWithScheduleChanges(
+	roomIDs []string,
+	channel *domain.Channel,
+	stream *domain.Stream,
+	minutesUntil int,
+	scheduleChanges map[string]*dedup.ScheduleChange,
+	scheduleChangeOnly bool,
+) []*domain.AlarmNotification {
+	if len(roomIDs) == 0 || stream == nil {
+		return nil
+	}
+
+	notifications := make([]*domain.AlarmNotification, 0, len(roomIDs))
+	for _, roomID := range roomIDs {
+		if roomID == "" {
+			continue
+		}
+
+		change := scheduleChanges[roomID]
+		if scheduleChangeOnly && change == nil {
+			continue
+		}
+
+		scheduleMessage := ""
+		previousScheduled := ""
+		if change != nil {
+			scheduleMessage = change.Message
+			previousScheduled = change.PreviousScheduledString()
+		}
+
+		notification := domain.NewAlarmNotification(roomID, channel, stream, minutesUntil, []string{}, scheduleMessage)
+		notification.ScheduleChangePreviousStart = previousScheduled
+		notifications = append(notifications, notification)
 	}
 
 	return notifications

@@ -239,8 +239,16 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 
 	targetPolicy := c.targetPolicySnapshot()
 	minutesUntil, ok := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
+	scheduleChanges, err := c.detectRoomScheduleChanges(ctx, stream, subscriberRooms)
+	if err != nil {
+		return nil, fmt.Errorf("build upcoming notifications: detect schedule change: %w", err)
+	}
+
 	if !ok {
-		return nil, nil
+		if len(scheduleChanges) == 0 {
+			return nil, nil
+		}
+		minutesUntil = sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
 	}
 
 	alreadyNotified, err := c.dedupSvc.IsAlreadyNotifiedForSchedule(ctx, stream.ID, *stream.StartScheduled, minutesUntil)
@@ -254,7 +262,36 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 
 	resolvedStream := ensureScheduledTime(stream, *stream.StartScheduled)
 
-	return roomNotifications(subscriberRooms, resolvedStream.Channel, resolvedStream, minutesUntil, ""), nil
+	return roomNotificationsWithScheduleChanges(subscriberRooms, resolvedStream.Channel, resolvedStream, minutesUntil, scheduleChanges, !ok), nil
+}
+
+func (c *YouTubeChecker) detectRoomScheduleChanges(
+	ctx context.Context,
+	stream *domain.Stream,
+	subscriberRooms []string,
+) (map[string]*dedup.ScheduleChange, error) {
+	if stream == nil {
+		return nil, nil
+	}
+
+	channelID := stream.ChannelID
+	if channelID == "" && stream.Channel != nil {
+		channelID = stream.Channel.ID
+	}
+
+	changes := make(map[string]*dedup.ScheduleChange)
+	for _, roomID := range uniqueStrings(subscriberRooms) {
+		change, err := c.dedupSvc.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
+		if err != nil {
+			return nil, fmt.Errorf("detect room schedule changes: room %s: %w", roomID, err)
+		}
+		if change == nil {
+			continue
+		}
+		changes[roomID] = change
+	}
+
+	return changes, nil
 }
 
 func (c *YouTubeChecker) targetMinutesSnapshot() []int {
