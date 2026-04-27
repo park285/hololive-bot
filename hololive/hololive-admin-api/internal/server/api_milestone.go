@@ -36,8 +36,7 @@ import (
 func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if h.statsRepo == nil {
-		sharedserver.RespondError(c, 503, "Stats repository not available", nil)
+	if !h.requireStatsRepo(c) {
 		return
 	}
 
@@ -74,7 +73,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 
 	result, err := h.statsRepo.GetAllMilestones(ctx, filter)
 	if err != nil {
-		h.logger.Error("Failed to get milestones", slog.Any("error", err))
+		h.safeLogger().Error("Failed to get milestones", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get milestones", nil)
 
 		return
@@ -94,8 +93,7 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if h.statsRepo == nil {
-		sharedserver.RespondError(c, 503, "Stats repository not available", nil)
+	if !h.requireStatsRepo(c) {
 		return
 	}
 
@@ -117,7 +115,7 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 
 	members, err := h.statsRepo.GetNearMilestoneMembers(ctx, threshold, youtube.SubscriberMilestones, limit)
 	if err != nil {
-		h.logger.Error("Failed to get near milestone members", slog.Any("error", err))
+		h.safeLogger().Error("Failed to get near milestone members", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get near milestone members", nil)
 
 		return
@@ -140,14 +138,13 @@ func (h *MilestoneAPIHandler) GetNearMilestoneMembers(c *gin.Context) {
 func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if h.statsRepo == nil {
-		sharedserver.RespondError(c, 503, "Stats repository not available", nil)
+	if !h.requireStatsRepo(c) {
 		return
 	}
 
 	summary, err := h.statsRepo.GetMilestoneStats(ctx)
 	if err != nil {
-		h.logger.Error("Failed to get milestone stats", slog.Any("error", err))
+		h.safeLogger().Error("Failed to get milestone stats", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get milestone stats", nil)
 
 		return
@@ -156,7 +153,7 @@ func (h *MilestoneAPIHandler) GetMilestoneStats(c *gin.Context) {
 	// 직전 멤버 수 조회 (95% 이상)
 	nearCount, err := h.statsRepo.CountNearMilestoneMembers(ctx, youtube.MilestoneThresholdRatio, youtube.SubscriberMilestones)
 	if err != nil {
-		h.logger.Error("Failed to get near milestone summary", slog.Any("error", err))
+		h.safeLogger().Error("Failed to get near milestone summary", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get near milestone summary", nil)
 
 		return

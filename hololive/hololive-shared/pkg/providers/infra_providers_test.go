@@ -75,6 +75,36 @@ func TestProvideIrisClient_UsesRuntimeBaseURLFile(t *testing.T) {
 	fallbackMu.Unlock()
 }
 
+func TestProvideIrisClient_AllowsBaseURLFileWithoutFallbackURL(t *testing.T) {
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != iris.PathReply {
+			t.Fatalf("server path = %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	baseURLFilePath := filepath.Join(t.TempDir(), "iris_base_url")
+	if err := os.WriteFile(baseURLFilePath, []byte(server.URL), 0o600); err != nil {
+		t.Fatalf("write base url file: %v", err)
+	}
+
+	t.Setenv("IRIS_BASE_URL", "")
+	t.Setenv("IRIS_BOT_TOKEN", "bot-token")
+	t.Setenv("IRIS_BASE_URL_FILE", baseURLFilePath)
+
+	client, err := ProvideIrisClient(nil, iris.WithHTTPClient(&http.Client{}))
+	if err != nil {
+		t.Fatalf("provide iris client: %v", err)
+	}
+
+	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
+		t.Fatalf("send message: %v", err)
+	}
+}
+
 func TestProvideIrisClient_UsesExplicitOptionsOverEnvironment(t *testing.T) {
 	ctx := context.Background()
 	var explicitMu sync.Mutex

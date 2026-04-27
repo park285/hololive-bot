@@ -118,44 +118,6 @@ func (as *AlarmService) buildUpcomingEventKey(roomID, channelID, streamID, title
 	)
 }
 
-// read-modify-write: 기존 데이터 조회 → 스케줄 변경 시 맵 리셋 → 플래그 추가 → 저장.
-//
-// 병렬 안전성: workerPool에서 동일 streamID에 대해 여러 room이 동시 호출할 수 있으나,
-// 같은 체크 주기에서 동일 streamID는 동일 minutesUntil을 가지므로 write 내용이 동일하여
-// 데이터 손실 없음 (benign race).
-func (as *AlarmService) MarkAsNotified(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) error {
-	notifiedKey := NotifiedKeyPrefix + streamID
-	scheduledStr := normalizeScheduledMinute(startScheduled).Format(time.RFC3339)
-
-	// 기존 데이터 조회
-	var existing NotifiedData
-	if err := as.cache.Get(ctx, notifiedKey, &existing); err != nil || existing.StartScheduled == "" {
-		existing = NotifiedData{StartScheduled: scheduledStr, SentAt: make(map[int]bool)}
-	}
-
-	// 스케줄 변경 시 맵 리셋
-	if existing.StartScheduled != scheduledStr {
-		existing = NotifiedData{StartScheduled: scheduledStr, SentAt: make(map[int]bool)}
-	}
-
-	if existing.SentAt == nil {
-		existing.SentAt = make(map[int]bool)
-	}
-
-	existing.SentAt[minutesUntil] = true
-
-	if err := as.cache.Set(ctx, notifiedKey, existing, constants.CacheTTL.NotificationSent); err != nil {
-		as.logger.Warn("Failed to mark as notified",
-			slog.String("stream_id", streamID),
-			slog.Any("error", err),
-		)
-
-		return fmt.Errorf("mark as notified: %w", err)
-	}
-
-	return nil
-}
-
 func (as *AlarmService) MarkUpcomingEventNotified(
 	ctx context.Context,
 	roomID, channelID string,

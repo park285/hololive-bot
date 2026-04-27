@@ -16,7 +16,7 @@ use tokio::net::TcpListener;
 use super::handlers::*;
 use super::types::{ChannelStatsQuery, MilestonesQuery, NearMilestonesQuery, StreamsQuery};
 
-fn test_state(base_url: String) -> Arc<AppState> {
+fn test_state(base_url: &str) -> Arc<AppState> {
     let config = Config {
         port: 30190,
         env: "test".to_string(),
@@ -26,7 +26,7 @@ fn test_state(base_url: String) -> Arc<AppState> {
         session_secret: "test-secret-key-minimum-length".to_string(),
         valkey_url: "127.0.0.1:1".to_string(),
         docker_host: "tcp://127.0.0.1:2375".to_string(),
-        holo_admin_api_url: base_url.clone(),
+        holo_admin_api_url: base_url.to_string(),
         holo_bot_api_key: String::new(),
         enable_openapi: true,
         enable_swagger_ui: true,
@@ -58,7 +58,7 @@ fn test_state(base_url: String) -> Arc<AppState> {
         sessions,
         rate_limiter,
         holo_api: Arc::new(
-            HoloApiClient::new(&base_url, None).expect("holo api client init failed"),
+            HoloApiClient::new(base_url, None).expect("holo api client init failed"),
         ),
         docker_svc: None,
         status_collector,
@@ -66,6 +66,7 @@ fn test_state(base_url: String) -> Arc<AppState> {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn spawn_holo_server() -> String {
     use axum::extract::Request;
     use axum::http::StatusCode;
@@ -97,7 +98,7 @@ async fn spawn_holo_server() -> String {
                 "windowEnd": "2026-04-10T00:00:00Z",
                 "windowHours": 24,
                 "observedAtBasis": "COALESCE(actual_published_at, detected_at)",
-                "slaThresholdMillis": 120000,
+                "slaThresholdMillis": 120_000,
                 "overview": {
                     "channelCount": 1,
                     "detectedPostCount": 2,
@@ -113,8 +114,8 @@ async fn spawn_holo_server() -> String {
                     "shortsDetectedPostCount": 1,
                     "communityExceededPostCount": 0,
                     "shortsExceededPostCount": 1,
-                    "averageLatencyMillis": 90000,
-                    "maxLatencyMillis": 180000
+                    "averageLatencyMillis": 90_000,
+                    "maxLatencyMillis": 180_000
                 },
                 "channels": [{
                     "channelId": "ch-1",
@@ -132,14 +133,14 @@ async fn spawn_holo_server() -> String {
                     "exceededPostCount": 1,
                     "communityPostCount": 1,
                     "shortsPostCount": 1,
-                    "averageLatencyMillis": 90000,
-                    "maxLatencyMillis": 180000
+                    "averageLatencyMillis": 90_000,
+                    "maxLatencyMillis": 180_000
                 }]
             })).into_response(),
             "/api/holo/streams/live" => Json(json!({ "status": "ok", "org": if query.contains("org=") { "hololive" } else { "" }, "streams": [{ "id": "s1", "title": "Live", "status": "live", "channel_name": "Mio", "channel_id": "ch-1", "thumbnail": null, "link": null, "start_scheduled": null, "start_actual": null }] })).into_response(),
             "/api/holo/streams/upcoming" => Json(json!({ "status": "ok", "org": "hololive", "streams": [] })).into_response(),
-            "/api/holo/milestones" => Json(json!({ "status": "ok", "milestones": [{ "channelId": "ch-1", "memberName": "Mio", "type": "subs", "value": 100000, "achievedAt": "2026-01-01T00:00:00Z", "notified": true }], "total": 1, "limit": 50, "offset": 0 })).into_response(),
-            "/api/holo/milestones/near" => Json(json!({ "status": "ok", "members": [{ "channelId": "ch-1", "memberName": "Mio", "currentSubs": 99000, "nextMilestone": 100000, "remaining": 1000, "progressPct": 0.99 }], "count": 1, "threshold": 0.9 })).into_response(),
+            "/api/holo/milestones" => Json(json!({ "status": "ok", "milestones": [{ "channelId": "ch-1", "memberName": "Mio", "type": "subs", "value": 100_000, "achievedAt": "2026-01-01T00:00:00Z", "notified": true }], "total": 1, "limit": 50, "offset": 0 })).into_response(),
+            "/api/holo/milestones/near" => Json(json!({ "status": "ok", "members": [{ "channelId": "ch-1", "memberName": "Mio", "currentSubs": 99_000, "nextMilestone": 100_000, "remaining": 1000, "progressPct": 0.99 }], "count": 1, "threshold": 0.9 })).into_response(),
             "/api/holo/milestones/stats" => Json(json!({ "status": "ok", "stats": { "totalAchieved": 1, "totalNearMilestone": 2, "recentAchievements": 3, "notNotifiedCount": 4 } })).into_response(),
             _ => (StatusCode::OK, Json(json!({ "status": "ok" }))).into_response(),
         }
@@ -195,7 +196,7 @@ async fn spawn_holo_server() -> String {
 #[tokio::test]
 async fn test_holo_handlers_return_typed_bodies() {
     let base_url = spawn_holo_server().await;
-    let state = test_state(base_url);
+    let state = test_state(&base_url);
 
     let (_, Json(alarms)) = get_alarms(State(Arc::clone(&state))).await.unwrap();
     assert_eq!(alarms.alarms[0].room_id, "room-1");
@@ -209,8 +210,8 @@ async fn test_holo_handlers_return_typed_bodies() {
     let (_, Json(settings)) = get_settings(State(Arc::clone(&state))).await.unwrap();
     assert_eq!(settings.settings.alarm_advance_minutes, 5);
 
-    let (_, Json(stats)) = get_stats(State(Arc::clone(&state))).await.unwrap();
-    assert_eq!(stats.version, "v1");
+    let (_, Json(summary)) = get_stats(State(Arc::clone(&state))).await.unwrap();
+    assert_eq!(summary.version, "v1");
 
     let (_, Json(channel_stats)) = get_channel_stats(
         State(Arc::clone(&state)),
@@ -265,7 +266,7 @@ async fn test_holo_handlers_return_typed_bodies() {
 #[tokio::test]
 async fn test_channel_stats_limit_keeps_top_subscribers_only() {
     let base_url = spawn_holo_server().await;
-    let state = test_state(base_url);
+    let state = test_state(&base_url);
 
     let (_, Json(channel_stats)) =
         get_channel_stats(State(state), Query(ChannelStatsQuery { limit: Some(2) }))
@@ -276,6 +277,21 @@ async fn test_channel_stats_limit_keeps_top_subscribers_only() {
     assert!(channel_stats.stats.contains_key("ch-2"));
     assert!(channel_stats.stats.contains_key("ch-3"));
     assert!(!channel_stats.stats.contains_key("ch-1"));
+}
+
+#[tokio::test]
+async fn test_channel_stats_limit_rejects_too_large_value() {
+    let base_url = spawn_holo_server().await;
+    let state = test_state(&base_url);
+
+    let error = get_channel_stats(State(state), Query(ChannelStatsQuery { limit: Some(501) }))
+        .await
+        .expect_err("too large limit should fail");
+
+    assert_eq!(
+        error.into_response().status(),
+        axum::http::StatusCode::BAD_REQUEST
+    );
 }
 
 #[tokio::test]
@@ -290,7 +306,7 @@ async fn test_holo_handler_invalid_json_returns_502() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let state = test_state(format!("http://{addr}"));
+    let state = test_state(&format!("http://{addr}"));
     let error = get_members(State(state))
         .await
         .expect_err("expected proxy error");
@@ -312,7 +328,7 @@ async fn test_holo_handler_upstream_5xx_returns_502() {
         axum::serve(listener, app).await.unwrap();
     });
 
-    let state = test_state(format!("http://{addr}"));
+    let state = test_state(&format!("http://{addr}"));
     let error = get_alarms(State(state))
         .await
         .expect_err("expected proxy error");

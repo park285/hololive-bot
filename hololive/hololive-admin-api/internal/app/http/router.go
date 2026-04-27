@@ -48,17 +48,28 @@ func ProvideAPIRouter(
 	triggerHandler *sharedserver.TriggerHandler,
 	cacheSvc cache.Client,
 ) (*gin.Engine, error) {
-	router, err := newAPIRouter(ctx, cfg, logger)
-	if err != nil {
-		return nil, err
+	if cfg == nil {
+		return nil, errors.New("config must not be nil")
 	}
-
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if strings.TrimSpace(cfg.Server.APIKey) == "" {
+		return nil, errors.New("API_SECRET_KEY required")
+	}
 	if domainHandlers == nil {
 		return nil, errors.New("domain handlers must not be nil")
 	}
-
+	if err := validateDomainHandlers(domainHandlers); err != nil {
+		return nil, err
+	}
 	if authHandler == nil {
 		return nil, errors.New("auth handler must not be nil")
+	}
+
+	router, err := newAPIRouter(ctx, cfg, logger)
+	if err != nil {
+		return nil, err
 	}
 
 	if webhookHandler != nil {
@@ -71,23 +82,61 @@ func ProvideAPIRouter(
 
 	registerAPIRoutes(router, cfg.Server.APIKey, cacheSvc, logger, domainHandlers, authHandler)
 
-	if cfg.Server.APIKey != "" {
-		logger.Info("api_key_auth_enabled")
-	} else {
-		return nil, errors.New("API_SECRET_KEY required")
-	}
+	logger.Info("api_key_auth_enabled")
 
 	return router, nil
 }
 
+func validateDomainHandlers(h *server.DomainAPIHandlers) error {
+	switch {
+	case h.Member == nil:
+		return errors.New("member handler must not be nil")
+	case h.Alarm == nil:
+		return errors.New("alarm handler must not be nil")
+	case h.Room == nil:
+		return errors.New("room handler must not be nil")
+	case h.Stream == nil:
+		return errors.New("stream handler must not be nil")
+	case h.Stats == nil:
+		return errors.New("stats handler must not be nil")
+	case h.Settings == nil:
+		return errors.New("settings handler must not be nil")
+	case h.Template == nil:
+		return errors.New("template handler must not be nil")
+	case h.Milestone == nil:
+		return errors.New("milestone handler must not be nil")
+	case h.Profile == nil:
+		return errors.New("profile handler must not be nil")
+	case h.MajorEvent == nil:
+		return errors.New("major event handler must not be nil")
+	case h.OAuth == nil:
+		return errors.New("oauth handler must not be nil")
+	default:
+		return nil
+	}
+}
+
 func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*gin.Engine, error) {
+	if cfg == nil {
+		return nil, errors.New("config must not be nil")
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Environment), "production")
+	origins := normalizedOrigins(cfg.CORS.AllowedOrigins)
+	if isProduction && cfg.CORS.Enforce && (len(origins) == 0 || containsWildcard(origins)) {
+		return nil, errors.New("explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true")
+	}
+
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
 		APIKey:       cfg.Server.APIKey,
 		EnableGzip:   true,
 		SkipLogPaths: []string{"/metrics"},
 		PreRouteUse: []gin.HandlerFunc{
-			corsOriginGuard(cfg.CORS.AllowedOrigins),
-			cors.New(newAPICORSConfig(cfg)),
+			corsOriginGuard(cfg.CORS.AllowedOrigins, cfg.CORS.Enforce, logger),
+			cors.New(newAPICORSConfig(cfg, cfg.CORS.Enforce)),
 			middleware.ClientHintsMiddleware(),
 		},
 	})
@@ -95,7 +144,6 @@ func newAPIRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 		return nil, err
 	}
 
-	isProduction := strings.EqualFold(strings.TrimSpace(cfg.Environment), "production")
 	if isProduction && cfg.CORS.MissingInProduction {
 		logger.Warn(
 			"cors_allowed_origins_missing_in_production_monitor_mode",

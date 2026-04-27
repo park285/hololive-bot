@@ -7,6 +7,11 @@ interface NearMilestonesSectionProps {
 	nearData?: NearMilestonesResponse;
 }
 
+const normalizePercent = (value: number) => {
+	const percent = value <= 1 ? value * 100 : value;
+	return Math.min(100, Math.max(0, percent));
+};
+
 export const NearMilestonesSection = ({
 	nearData,
 }: NearMilestonesSectionProps) => (
@@ -19,7 +24,7 @@ export const NearMilestonesSection = ({
 					: "달성 근접 멤버"}
 				{nearData?.threshold && nearData.threshold > 0 && (
 					<span className="ml-2 text-xs py-1 px-2 bg-amber-50 text-amber-600 rounded-full font-medium">
-						진행률 {(nearData.threshold * 100).toFixed(0)}% 이상
+						진행률 {normalizePercent(nearData.threshold).toFixed(0)}% 이상
 					</span>
 				)}
 			</h3>
@@ -35,42 +40,46 @@ export const NearMilestonesSection = ({
 				</div>
 			) : (
 				<div className="divide-y divide-slate-100">
-					{nearData?.members.map((member, idx) => (
-						<div
-							key={member.channelId}
-							className="p-4 hover:bg-slate-50 transition-colors"
-						>
-							<div className="flex items-center gap-4 mb-3">
-								<div className="w-10 h-10 shrink-0 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-									#{idx + 1}
-								</div>
-								<div className="flex-1 min-w-0">
-									<div className="flex justify-between items-start">
-										<div>
-											<h4 className="font-bold text-slate-800 text-lg truncate">
-												{member.memberName}
-											</h4>
-											<div className="text-sm text-slate-500 flex items-center gap-1">
-												<Video size={14} />
-												Next: {member.nextMilestone.toLocaleString()}
+					{nearData?.members.map((member, idx) => {
+						const progressPercent = normalizePercent(member.progressPct);
+
+						return (
+							<div
+								key={member.channelId}
+								className="p-4 hover:bg-slate-50 transition-colors"
+							>
+								<div className="flex items-center gap-4 mb-3">
+									<div className="w-10 h-10 shrink-0 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+										#{idx + 1}
+									</div>
+									<div className="flex-1 min-w-0">
+										<div className="flex justify-between items-start">
+											<div>
+												<h4 className="font-bold text-slate-800 text-lg truncate">
+													{member.memberName}
+												</h4>
+												<div className="text-sm text-slate-500 flex items-center gap-1">
+													<Video size={14} />
+													Next: {member.nextMilestone.toLocaleString()}
+												</div>
 											</div>
-										</div>
-										<div className="text-right ml-4 shrink-0">
-											<div className="font-mono font-bold text-amber-600 text-lg tabular-nums">
-												{member.progressPct.toFixed(1)}%
-											</div>
-											<div className="text-xs text-slate-400 tabular-nums">
-												{member.remaining.toLocaleString()}명 남음
+											<div className="text-right ml-4 shrink-0">
+												<div className="font-mono font-bold text-amber-600 text-lg tabular-nums">
+													{progressPercent.toFixed(1)}%
+												</div>
+												<div className="text-xs text-slate-400 tabular-nums">
+													{member.remaining.toLocaleString()}명 남음
+												</div>
 											</div>
 										</div>
 									</div>
 								</div>
+								<div className="pl-14">
+									<Progress value={progressPercent} className="h-2" />
+								</div>
 							</div>
-							<div className="pl-14">
-								<Progress value={member.progressPct} className="h-2" />
-							</div>
-						</div>
-					))}
+						);
+					})}
 				</div>
 			)}
 		</div>

@@ -24,6 +24,7 @@ import "time"
 
 type IrisConfig struct {
 	BaseURL                   string
+	BaseURLFile               string
 	WebhookToken              string // env: IRIS_WEBHOOK_TOKEN
 	BotToken                  string // env: IRIS_BOT_TOKEN
 	HTTPTimeout               time.Duration

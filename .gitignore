@@ -91,7 +91,10 @@ Desktop.ini
 tmp/
 backup/
 backups/
-artifacts/
+artifacts/*
+!artifacts/architecture/
+artifacts/architecture/*
+!artifacts/architecture/go-workspace-import-graph.txt
 
 # Compressed archives
 *.tar.gz
@@ -185,7 +188,10 @@ hololive/hololive-rs/docs/reports/**/*.tsv
 # ============================================
 /config/
 /data/
-/runtime-config/
+/runtime-config/*
+!/runtime-config/.gitkeep
+!/runtime-config/README.md
+!/runtime-config/*.example
 
 # ============================================
 # VPN Config

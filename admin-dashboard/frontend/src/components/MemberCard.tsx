@@ -192,7 +192,10 @@ const MemberCard = memo(
 								placeholder="별명 추가…"
 								className="h-8 flex-1 border-slate-200 bg-slate-50 text-xs focus-visible:ring-2 focus-visible:ring-sky-200"
 								onKeyDown={(event) => {
-									if (event.key === "Enter") handleAddKoAlias();
+									if (event.key === "Enter") {
+										event.preventDefault();
+										handleAddKoAlias();
+									}
 								}}
 								aria-label={`${member.name} 한국어 별명 입력`}
 							/>
@@ -253,7 +256,10 @@ const MemberCard = memo(
 								placeholder="일본어 별명 추가…"
 								className="h-8 flex-1 border-slate-200 bg-slate-50 text-xs focus-visible:ring-2 focus-visible:ring-rose-200"
 								onKeyDown={(event) => {
-									if (event.key === "Enter") handleAddJaAlias();
+									if (event.key === "Enter") {
+										event.preventDefault();
+										handleAddJaAlias();
+									}
 								}}
 								aria-label={`${member.name} 일본어 별명 입력`}
 							/>

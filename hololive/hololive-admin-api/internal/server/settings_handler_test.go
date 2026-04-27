@@ -166,3 +166,35 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 		t.Fatalf("config_publish_alarm_advance_minutes=%v want=false", got)
 	}
 }
+
+func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	settingsSvc := settingssvc.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settingssvc.Settings{
+		AlarmAdvanceMinutes: 5,
+		ScraperProxyEnabled: false,
+	}, newDiscardLogger())
+	publisher := &recordingConfigPublisher{}
+
+	handler := &SettingsHandler{
+		Logger:          newDiscardLogger(),
+		Activity:        testActivityLogger{},
+		Settings:        settingsSvc,
+		ConfigPublisher: publisher,
+		SettingsApplier: testSettingsApplier{},
+	}
+
+	ctx, rec := newSettingsTestContext(t, []byte(`{"alarmAdvanceMinutes":-1}`))
+	handler.UpdateSettings(ctx)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if len(publisher.alarmCalls) != 0 || len(publisher.scraperCalls) != 0 {
+		t.Fatalf("invalid settings must not publish config updates: alarm=%v scraper=%v", publisher.alarmCalls, publisher.scraperCalls)
+	}
+	if got := settingsSvc.Get().AlarmAdvanceMinutes; got != 5 {
+		t.Fatalf("AlarmAdvanceMinutes=%d want unchanged 5", got)
+	}
+}

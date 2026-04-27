@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/park285/iris-client-go/iris"
 )
@@ -22,6 +23,11 @@ type RuntimeIrisClient struct {
 	mu              sync.Mutex
 	cachedBaseURL   string
 	cachedH2CClient *iris.H2CClient
+
+	baseURLFileCachedValid   bool
+	baseURLFileCachedModTime time.Time
+	baseURLFileCachedSize    int64
+	baseURLFileCachedValue   string
 }
 
 func NewRuntimeIrisClient(
@@ -31,6 +37,10 @@ func NewRuntimeIrisClient(
 	logger *slog.Logger,
 	opts ...iris.ClientOption,
 ) *RuntimeIrisClient {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	clientOpts := make([]iris.ClientOption, 0, len(opts)+1)
 	clientOpts = append(clientOpts, iris.WithLogger(logger))
 	clientOpts = append(clientOpts, opts...)
@@ -124,13 +134,13 @@ func (c *RuntimeIrisClient) currentClient() (*iris.H2CClient, error) {
 		return nil, fmt.Errorf("runtime iris client: bot token is empty")
 	}
 
-	baseURL, err := c.resolveBaseURL()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	baseURL, err := c.resolveBaseURLLocked()
 	if err != nil {
 		return nil, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if c.cachedH2CClient != nil && c.cachedBaseURL == baseURL {
 		return c.cachedH2CClient, nil
@@ -141,37 +151,81 @@ func (c *RuntimeIrisClient) currentClient() (*iris.H2CClient, error) {
 	return c.cachedH2CClient, nil
 }
 
-func (c *RuntimeIrisClient) resolveBaseURL() (string, error) {
+func (c *RuntimeIrisClient) resolveBaseURLLocked() (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("runtime iris client: client is nil")
 	}
 
 	if c.baseURLFilePath != "" {
-		raw, err := os.ReadFile(c.baseURLFilePath)
-		switch {
-		case err == nil:
-			baseURL := strings.TrimSpace(string(raw))
-			if baseURL == "" {
-				c.logBaseURLFileFallback("base URL file is empty")
-				break
-			}
-			if _, parseErr := url.ParseRequestURI(baseURL); parseErr != nil {
-				c.logBaseURLFileFallback(fmt.Sprintf("parse base URL file: %v", parseErr))
-				break
-			}
-			return strings.TrimRight(baseURL, "/"), nil
-		case !os.IsNotExist(err):
-			c.logBaseURLFileFallback(fmt.Sprintf("read base URL file: %v", err))
+		fileBaseURL, err := c.resolveBaseURLFromFileLocked()
+		if err == nil && fileBaseURL != "" {
+			return fileBaseURL, nil
+		}
+		if err != nil {
+			c.logBaseURLFileFallback(err.Error())
 		}
 	}
 
-	if c.fallbackBaseURL == "" {
-		return "", fmt.Errorf("runtime iris client: fallback base URL is empty")
+	return validateHTTPBaseURL(c.fallbackBaseURL)
+}
+
+func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
+	stat, err := os.Stat(c.baseURLFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+
+		c.baseURLFileCachedValid = false
+		return "", fmt.Errorf("stat base URL file: %w", err)
 	}
-	if _, err := url.ParseRequestURI(c.fallbackBaseURL); err != nil {
-		return "", fmt.Errorf("runtime iris client: parse fallback base URL: %w", err)
+
+	if c.baseURLFileCachedValid &&
+		stat.ModTime().Equal(c.baseURLFileCachedModTime) &&
+		stat.Size() == c.baseURLFileCachedSize {
+		return c.baseURLFileCachedValue, nil
 	}
-	return strings.TrimRight(c.fallbackBaseURL, "/"), nil
+
+	raw, err := os.ReadFile(c.baseURLFilePath)
+	if err != nil {
+		c.baseURLFileCachedValid = false
+		return "", fmt.Errorf("read base URL file: %w", err)
+	}
+
+	baseURL, err := validateHTTPBaseURL(string(raw))
+	if err != nil {
+		c.baseURLFileCachedValid = false
+		return "", fmt.Errorf("parse base URL file: %w", err)
+	}
+
+	c.baseURLFileCachedValid = true
+	c.baseURLFileCachedModTime = stat.ModTime()
+	c.baseURLFileCachedSize = stat.Size()
+	c.baseURLFileCachedValue = baseURL
+
+	return baseURL, nil
+}
+
+func validateHTTPBaseURL(raw string) (string, error) {
+	baseURL := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if baseURL == "" {
+		return "", fmt.Errorf("base URL is empty")
+	}
+
+	parsed, err := url.ParseRequestURI(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("unsupported URL scheme: %q", parsed.Scheme)
+	}
+
+	if parsed.Host == "" {
+		return "", fmt.Errorf("base URL host is empty")
+	}
+
+	return baseURL, nil
 }
 
 func (c *RuntimeIrisClient) logBaseURLFileFallback(reason string) {

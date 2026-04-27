@@ -36,6 +36,7 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
+	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 }
 
@@ -452,7 +453,7 @@ func TestConfigValidate_ScraperPublishedAtResolverRejectsMaxRunDurationBelowReso
 	cfg := &Config{
 		Server:   ServerConfig{Port: 30001},
 		Kakao:    KakaoConfig{Rooms: []string{"test-room"}},
-		Iris:     IrisConfig{WebhookToken: "test-webhook-token", BotToken: "test-bot-token"},
+		Iris:     IrisConfig{WebhookToken: "test-webhook-token", BotToken: "test-bot-token", BaseURLFile: "/tmp/iris_base_url"},
 		Holodex:  HolodexConfig{APIKey: "test-key"},
 		YouTube:  YouTubeConfig{APIKey: "test-youtube-key"},
 		Postgres: PostgresConfig{SSLMode: "disable"},
@@ -753,6 +754,7 @@ func TestLoadAdminAPI_ProductionRequiresAPISecretKey(t *testing.T) {
 func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
+	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("POSTGRES_SSLMODE", "disable")
@@ -945,6 +947,7 @@ func TestLoadAdminAPI_CORSLooseBoolParsing(t *testing.T) {
 func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
+	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("LLM_SCHEDULER_PORT", "39003")
 	t.Setenv("BOT_PREFIX", "#")

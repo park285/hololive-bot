@@ -55,10 +55,13 @@ func NewIPAllowList(allowed []string) ([]*net.IPNet, error) {
 
 // allowlist가 비어있으면 모든 IP를 허용합니다 (개발/테스트용).
 func AdminIPAllowMiddleware(allowed []*net.IPNet, logger *slog.Logger) gin.HandlerFunc {
+	log := logger
+	if log == nil {
+		log = slog.Default()
+	}
+
 	if len(allowed) == 0 {
-		if logger != nil {
-			logger.Warn("Admin IP allowlist is empty; allowing all admin requests (configure ADMIN_ALLOWED_IPS for production)")
-		}
+		log.Warn("Admin IP allowlist is empty; allowing all admin requests (configure ADMIN_ALLOWED_IPS for production)")
 		return func(c *gin.Context) {
 			c.Next()
 		}
@@ -66,17 +69,17 @@ func AdminIPAllowMiddleware(allowed []*net.IPNet, logger *slog.Logger) gin.Handl
 	return func(c *gin.Context) {
 		clientIP := net.ParseIP(c.ClientIP())
 		if clientIP == nil {
-			logger.Warn("Invalid client IP")
+			log.Warn("Invalid client IP", slog.String("ip", c.ClientIP()))
 			abortWithError(c, 403, "forbidden", "")
 			return
 		}
 		for _, cidr := range allowed {
-			if cidr.Contains(clientIP) {
+			if cidr != nil && cidr.Contains(clientIP) {
 				c.Next()
 				return
 			}
 		}
-		logger.Warn("Admin IP blocked", slog.String("ip", clientIP.String()))
+		log.Warn("Admin IP blocked", slog.String("ip", clientIP.String()))
 		abortWithError(c, 403, "forbidden", "")
 	}
 }

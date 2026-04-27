@@ -26,10 +26,20 @@ import (
 )
 
 func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
-	var publisher ConfigPublisher
+	if h == nil || h.APIHandler == nil {
+		return &SettingsHandler{}
+	}
 
+	var publisher ConfigPublisher
 	if h.valkeyCache != nil {
 		publisher = configsub.NewPublisher(h.valkeyCache.GetClient())
+	}
+
+	var readRecentLogs SettingsReadRecentLogsFunc
+	if h.activity != nil {
+		readRecentLogs = func(limit int) (any, error) {
+			return h.activity.GetRecentLogs(limit)
+		}
 	}
 
 	return &SettingsHandler{
@@ -37,9 +47,7 @@ func (h *SettingsAPIHandler) settingsHandler() *SettingsHandler {
 		Alarm:           h.alarm,
 		Activity:        h.activity,
 		ConfigPublisher: publisher,
-		ReadRecentLogs: func(limit int) (any, error) {
-			return h.activity.GetRecentLogs(limit)
-		},
+		ReadRecentLogs:  readRecentLogs,
 		Settings:        h.settings,
 		SettingsApplier: h.settingsApplier,
 	}

@@ -25,6 +25,7 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -40,49 +41,88 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req domain.AddAlarmRequest
 		observeAlarmServiceOperation("add", startedAt, opErr)
 	}()
 
-	roomID := req.RoomID
-	channelID := req.ChannelID
+	req.RoomID = strings.TrimSpace(req.RoomID)
+	req.UserID = strings.TrimSpace(req.UserID)
+	req.ChannelID = strings.TrimSpace(req.ChannelID)
+	req.MemberName = strings.TrimSpace(req.MemberName)
+	req.RoomName = strings.TrimSpace(req.RoomName)
+	req.UserName = strings.TrimSpace(req.UserName)
 
-	alarmTypes := normalizedAlarmTypes(req.AlarmTypes)
-	alarmKey := as.getAlarmKey(roomID)
-
-	alreadyRegistered, err := as.cache.SIsMember(ctx, alarmKey, channelID)
-	if err != nil {
-		opErr = fmt.Errorf("check existing alarm: %w", err)
-		as.logger.Error("Failed to check existing alarm", slog.Any("error", err))
+	if req.RoomID == "" || req.ChannelID == "" {
+		opErr = fmt.Errorf("room_id and channel_id are required")
 		return false, opErr
 	}
 
-	if alreadyRegistered {
-		return false, nil
+	requestedTypes, err := normalizeAlarmTypesStrict(req.AlarmTypes, domain.DefaultAlarmTypes)
+	if err != nil {
+		opErr = err
+		return false, err
 	}
 
-	record := buildAlarmRecord(req, alarmTypes)
-	persistErr := as.persistAlarm(ctx, record)
+	existing, err := as.findAlarmRecordForMutation(ctx, req.RoomID, req.ChannelID)
+	if err != nil {
+		opErr = err
+		return false, err
+	}
+
+	mergedTypes := requestedTypes
+	newlyAddedTypes := requestedTypes
+
+	if existing != nil {
+		existingTypes, err := normalizeAlarmTypesStrict(existing.AlarmTypes, domain.DefaultAlarmTypes)
+		if err != nil {
+			opErr = err
+			return false, err
+		}
+
+		mergedTypes = mergeAlarmTypes(existingTypes, requestedTypes)
+		newlyAddedTypes = subtractAlarmTypes(mergedTypes, existingTypes)
+		if len(newlyAddedTypes) == 0 {
+			return false, nil
+		}
+	}
+
+	record := buildAlarmRecord(req, mergedTypes)
+
+	var persistErr error
+	if existing != nil {
+		persistErr = as.updateAlarmTypes(ctx, record)
+	} else {
+		persistErr = as.persistAlarm(ctx, record)
+	}
 	if persistErr != nil {
 		opErr = fmt.Errorf("persist alarm before cache write: %w", persistErr)
-		as.logger.Error("Failed to persist alarm before cache write", slog.Any("error", persistErr))
+		if as.logger != nil {
+			as.logger.Error("Failed to persist alarm before cache write", slog.Any("error", persistErr))
+		}
 		return false, opErr
 	}
 
-	added, err := as.cacheAlarm(ctx, record)
+	cacheRecord := *record
+	if existing != nil {
+		cacheRecord.AlarmTypes = newlyAddedTypes
+	}
+
+	added, err := as.cacheAlarm(ctx, &cacheRecord)
 	if err != nil {
 		opErr = as.rebuildAlarmCacheFromRepository(ctx, "add", fmt.Errorf("add alarm: %w", err))
-		as.logger.Error("Failed to add alarm", slog.Any("error", opErr))
+		if as.logger != nil {
+			as.logger.Error("Failed to add alarm", slog.Any("error", opErr))
+		}
 		return false, fmt.Errorf("rebuild add cache from repository: %w", opErr)
 	}
 
-	as.logAlarmAdded(req, alarmTypes)
+	as.logAlarmAdded(req, newlyAddedTypes)
 
-	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
+	if syncErr := as.syncPlatformMappingForChannel(ctx, req.ChannelID); syncErr != nil && as.logger != nil {
 		as.logger.Warn("Failed to sync platform alarm mapping after add",
 			slog.Any("error", syncErr),
-			slog.String("channel_id", channelID),
-			slog.String("room_id", roomID),
+			slog.String("channel_id", req.ChannelID),
+			slog.String("room_id", req.RoomID),
 		)
 	}
 
-	return added > 0, nil
+	return added > 0 || existing != nil, nil
 }
 
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
@@ -94,29 +134,70 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 		observeAlarmServiceOperation("remove", startedAt, opErr)
 	}()
 
-	exists, err := as.roomAlarmExists(ctx, roomID, channelID)
+	roomID = strings.TrimSpace(roomID)
+	channelID = strings.TrimSpace(channelID)
+	if roomID == "" || channelID == "" {
+		opErr = fmt.Errorf("room_id and channel_id are required")
+		return false, opErr
+	}
+
+	requestedRemovalTypes, err := normalizeAlarmTypesStrict(alarmTypes, domain.AllAlarmTypes)
+	if err != nil {
+		opErr = err
+		return false, err
+	}
+
+	existing, err := as.findAlarmRecordForMutation(ctx, roomID, channelID)
 	if err != nil {
 		opErr = err
 		return false, opErr
 	}
-
-	if !exists {
+	if existing == nil {
 		return false, nil
 	}
 
-	alarmTypes = normalizedRemovalAlarmTypes(alarmTypes)
-
-	deleteErr := as.deleteAlarm(ctx, roomID, channelID)
-	if deleteErr != nil {
-		opErr = fmt.Errorf("delete alarm before cache removal: %w", deleteErr)
-		as.logger.Error("Failed to persist alarm removal before cache write", slog.Any("error", deleteErr))
-		return false, opErr
+	existingTypes, err := normalizeAlarmTypesStrict(existing.AlarmTypes, domain.DefaultAlarmTypes)
+	if err != nil {
+		opErr = err
+		return false, err
 	}
 
-	removed, err := as.removeAlarmFromCache(ctx, roomID, channelID, alarmTypes)
+	effectiveRemovalTypes := intersectAlarmTypes(existingTypes, requestedRemovalTypes)
+	if len(effectiveRemovalTypes) == 0 {
+		return false, nil
+	}
+
+	remainingTypes := subtractAlarmTypes(existingTypes, effectiveRemovalTypes)
+	removeRoomChannel := len(remainingTypes) == 0
+
+	if removeRoomChannel {
+		deleteErr := as.deleteAlarm(ctx, roomID, channelID)
+		if deleteErr != nil {
+			opErr = fmt.Errorf("delete alarm before cache removal: %w", deleteErr)
+			if as.logger != nil {
+				as.logger.Error("Failed to persist alarm removal before cache write", slog.Any("error", deleteErr))
+			}
+			return false, opErr
+		}
+	} else {
+		updated := *existing
+		updated.AlarmTypes = remainingTypes
+		persistErr := as.updateAlarmTypes(ctx, &updated)
+		if persistErr != nil {
+			opErr = fmt.Errorf("persist alarm type update before cache removal: %w", persistErr)
+			if as.logger != nil {
+				as.logger.Error("Failed to persist alarm type update before cache write", slog.Any("error", persistErr))
+			}
+			return false, opErr
+		}
+	}
+
+	removed, err := as.removeAlarmFromCache(ctx, roomID, channelID, effectiveRemovalTypes, removeRoomChannel)
 	if err != nil {
 		opErr = as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
-		as.logger.Error("Failed to remove alarm", slog.Any("error", opErr))
+		if as.logger != nil {
+			as.logger.Error("Failed to remove alarm", slog.Any("error", opErr))
+		}
 		return false, fmt.Errorf("rebuild remove cache from repository: %w", opErr)
 	}
 
@@ -128,11 +209,14 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 		)
 	}
 
-	as.logger.Info("Alarm removed",
-		slog.String("room_id", roomID),
-		slog.String("channel_id", channelID),
-		slog.Any("alarm_types", alarmTypes),
-	)
+	if as.logger != nil {
+		as.logger.Info("Alarm removed",
+			slog.String("room_id", roomID),
+			slog.String("channel_id", channelID),
+			slog.Any("alarm_types", effectiveRemovalTypes),
+			slog.Any("remaining_alarm_types", remainingTypes),
+		)
+	}
 
 	if as.alarmRepo != nil {
 		return true, nil
@@ -141,11 +225,113 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 	return removed, nil
 }
 
+const cacheAlarmAtomicScript = `
+local roomAlarmKey = ARGV[1]
+local alarmRegistryKey = ARGV[2]
+local channelRegistryKey = ARGV[3]
+local memberNameKey = ARGV[4]
+local roomNamesKey = ARGV[5]
+local userNamesKey = ARGV[6]
+local roomID = ARGV[7]
+local channelID = ARGV[8]
+local memberName = ARGV[9]
+local roomName = ARGV[10]
+local userID = ARGV[11]
+local userName = ARGV[12]
+local registryKey = ARGV[13]
+
+local added = redis.call('SADD', roomAlarmKey, channelID)
+redis.call('SADD', alarmRegistryKey, registryKey)
+redis.call('SADD', channelRegistryKey, channelID)
+
+if memberName ~= '' then
+  redis.call('HSET', memberNameKey, channelID, memberName)
+end
+if roomID ~= '' and roomName ~= '' then
+  redis.call('HSET', roomNamesKey, roomID, roomName)
+end
+if userID ~= '' and userName ~= '' then
+  redis.call('HSET', userNamesKey, userID, userName)
+end
+
+for i = 14, #ARGV do
+  redis.call('SADD', ARGV[i], registryKey)
+end
+
+return added
+`
+
 func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (int64, error) {
 	if record == nil {
 		return 0, stdErrors.New("alarm is nil")
 	}
 
+	alarmTypes, err := normalizeAlarmTypesStrict(record.AlarmTypes, domain.DefaultAlarmTypes)
+	if err != nil {
+		return 0, err
+	}
+	record.AlarmTypes = alarmTypes
+
+	added, err := as.cacheAlarmAtomic(ctx, record)
+	if err == nil {
+		return added, nil
+	}
+
+	return 0, err
+}
+
+func (as *AlarmService) cacheAlarmAtomic(ctx context.Context, record *domain.Alarm) (int64, error) {
+	client, builder, ok := as.rawAlarmCacheEvalClient()
+	if !ok {
+		return as.cacheAlarmSequential(ctx, record)
+	}
+
+	registryKey := as.getRegistryKey(record.RoomID)
+	args := []string{
+		as.getAlarmKey(record.RoomID),
+		AlarmRegistryKey,
+		AlarmChannelRegistryKey,
+		MemberNameKey,
+		RoomNamesCacheKey,
+		UserNamesCacheKey,
+		record.RoomID,
+		record.ChannelID,
+		record.MemberName,
+		record.RoomName,
+		record.UserID,
+		record.UserName,
+		registryKey,
+	}
+	for _, alarmType := range record.AlarmTypes {
+		args = append(args, as.channelSubscribersKeyByType(record.ChannelID, alarmType))
+	}
+
+	resp := client.Do(ctx, builder.Eval().Script(cacheAlarmAtomicScript).Numkeys(0).Arg(args...).Build())
+	added, err := resp.AsInt64()
+	if err != nil {
+		return 0, fmt.Errorf("atomic cache alarm: %w", err)
+	}
+
+	return added, nil
+}
+
+func (as *AlarmService) rawAlarmCacheEvalClient() (_ valkey.Client, _ valkey.Builder, ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+
+	client := as.cache.GetClient()
+	builder := as.cache.B()
+	if client == nil {
+		return nil, valkey.Builder{}, false
+	}
+
+	return client, builder, true
+}
+
+func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain.Alarm) (int64, error) {
 	alarmKey := as.getAlarmKey(record.RoomID)
 	added, err := as.cache.SAdd(ctx, alarmKey, []string{record.ChannelID})
 	if err != nil {
@@ -199,27 +385,67 @@ func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (i
 }
 
 func (as *AlarmService) roomAlarmExists(ctx context.Context, roomID, channelID string) (bool, error) {
+	record, err := as.findAlarmRecordForMutation(ctx, roomID, channelID)
+	if err != nil {
+		return false, err
+	}
+
+	return record != nil, nil
+}
+
+func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
+	roomID = strings.TrimSpace(roomID)
+	channelID = strings.TrimSpace(channelID)
+	if roomID == "" || channelID == "" {
+		return nil, nil
+	}
+
 	if as.alarmRepo != nil {
 		alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepo, roomID)
 		if err != nil {
-			return false, fmt.Errorf("find room alarms: %w", err)
+			return nil, fmt.Errorf("find room alarms: %w", err)
 		}
 
 		for _, alarm := range alarms {
-			if alarm != nil && alarm.ChannelID == channelID {
-				return true, nil
+			if alarm == nil || strings.TrimSpace(alarm.ChannelID) != channelID {
+				continue
 			}
+			cloned := *alarm
+			return &cloned, nil
 		}
 
-		return false, nil
+		return nil, nil
 	}
 
 	exists, err := as.cache.SIsMember(ctx, as.getAlarmKey(roomID), channelID)
 	if err != nil {
-		return false, fmt.Errorf("check room alarm membership: %w", err)
+		return nil, fmt.Errorf("check room alarm membership: %w", err)
+	}
+	if !exists {
+		return nil, nil
 	}
 
-	return exists, nil
+	registryKey := as.getRegistryKey(roomID)
+	currentTypes := make(domain.AlarmTypes, 0, len(domain.AllAlarmTypes))
+	for _, alarmType := range domain.AllAlarmTypes {
+		subscriberKey := as.channelSubscribersKeyByType(channelID, alarmType)
+		isSubscriber, err := as.cache.SIsMember(ctx, subscriberKey, registryKey)
+		if err != nil {
+			return nil, fmt.Errorf("check subscriber type %s: %w", alarmType, err)
+		}
+		if isSubscriber {
+			currentTypes = append(currentTypes, alarmType)
+		}
+	}
+	if len(currentTypes) == 0 {
+		currentTypes = append(domain.AlarmTypes(nil), domain.DefaultAlarmTypes...)
+	}
+
+	return &domain.Alarm{
+		RoomID:     roomID,
+		ChannelID:  channelID,
+		AlarmTypes: currentTypes,
+	}, nil
 }
 
 func (as *AlarmService) loadRoomAlarmsForMutation(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
@@ -267,11 +493,22 @@ func uniqueAlarmChannelIDs(alarms []*domain.Alarm) []string {
 	return channelIDs
 }
 
-func (as *AlarmService) removeAlarmFromCache(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
+func (as *AlarmService) removeAlarmFromCache(
+	ctx context.Context,
+	roomID string,
+	channelID string,
+	alarmTypes domain.AlarmTypes,
+	removeRoomChannel bool,
+) (bool, error) {
 	alarmKey := as.getAlarmKey(roomID)
-	removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
-	if err != nil {
-		return false, fmt.Errorf("remove room alarm: %w", err)
+	removedRoomChannel := int64(0)
+
+	if removeRoomChannel {
+		removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
+		if err != nil {
+			return false, fmt.Errorf("remove room alarm: %w", err)
+		}
+		removedRoomChannel = removed
 	}
 
 	registryKey := as.getRegistryKey(roomID)
@@ -283,20 +520,24 @@ func (as *AlarmService) removeAlarmFromCache(ctx context.Context, roomID, channe
 		return false, fmt.Errorf("cleanup channel registry if empty: %w", err)
 	}
 
-	remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
-	if err != nil {
-		return false, fmt.Errorf("read remaining room alarms: %w", err)
-	}
-
-	if len(remainingAlarms) == 0 {
-		if _, err := as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
-			return false, fmt.Errorf("remove room registry: %w", err)
+	if removeRoomChannel {
+		remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
+		if err != nil {
+			return false, fmt.Errorf("read remaining room alarms: %w", err)
 		}
 
-		as.logger.Info("Room removed from registry (no alarms left)", slog.String("room_id", roomID))
+		if len(remainingAlarms) == 0 {
+			if _, err := as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
+				return false, fmt.Errorf("remove room registry: %w", err)
+			}
+
+			if as.logger != nil {
+				as.logger.Info("Room removed from registry (no alarms left)", slog.String("room_id", roomID))
+			}
+		}
 	}
 
-	return removed > 0, nil
+	return removedRoomChannel > 0 || len(alarmTypes) > 0, nil
 }
 
 func (as *AlarmService) clearRoomAlarmsFromCache(ctx context.Context, roomID string, channelIDs []string) (int, error) {
@@ -344,7 +585,9 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 	deleteErr := as.deleteRoomAlarms(ctx, roomID)
 	if deleteErr != nil {
 		opErr = fmt.Errorf("delete room alarms before cache clear: %w", deleteErr)
-		as.logger.Error("Failed to persist room alarm clear before cache write", slog.Any("error", deleteErr))
+		if as.logger != nil {
+			as.logger.Error("Failed to persist room alarm clear before cache write", slog.Any("error", deleteErr))
+		}
 		return 0, opErr
 	}
 
@@ -352,7 +595,9 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 	removed, err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs)
 	if err != nil {
 		opErr = as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
-		as.logger.Error("Failed to clear room alarms", slog.Any("error", opErr))
+		if as.logger != nil {
+			as.logger.Error("Failed to clear room alarms", slog.Any("error", opErr))
+		}
 		return 0, fmt.Errorf("rebuild clear cache from repository: %w", opErr)
 	}
 
@@ -374,10 +619,12 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 		}
 	}
 
-	as.logger.Info("All alarms cleared",
-		slog.String("room_id", roomID),
-		slog.Int("count", len(channelIDs)),
-	)
+	if as.logger != nil {
+		as.logger.Info("All alarms cleared",
+			slog.String("room_id", roomID),
+			slog.Int("count", len(channelIDs)),
+		)
+	}
 
 	if as.alarmRepo != nil {
 		return len(channelIDs), nil

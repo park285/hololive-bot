@@ -60,7 +60,7 @@ impl Config {
             enable_swagger_ui,
             log_dir: env_string("LOG_DIR", "/app/logs"),
             security: SecurityConfig::load(&environment, allow_localhost_in_prod),
-            session: SessionConfig::load(),
+            session: SessionConfig::load()?,
         })
     }
 }

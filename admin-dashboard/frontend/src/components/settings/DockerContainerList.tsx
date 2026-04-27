@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { VirtualList } from "@/components/ui/VirtualList";
 import toast from "@/lib/toast-api";
+import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
 interface DockerContainerListProps {
 	initialHealth?: { status: string; available: boolean };
@@ -83,8 +84,9 @@ export const DockerContainerList = ({
 				queryKey: queryKeys.docker.containers,
 			});
 		},
-		onError: () => {
+		onError: (error: unknown) => {
 			setActionInProgress(null);
+			toast.error(`컨테이너 작업 실패: ${getErrorMessageFromUnknown(error)}`);
 		},
 	});
 
@@ -103,8 +105,9 @@ export const DockerContainerList = ({
 				queryKey: queryKeys.docker.containers,
 			});
 		},
-		onError: () => {
+		onError: (error: unknown) => {
 			setActionInProgress(null);
+			toast.error(`컨테이너 작업 실패: ${getErrorMessageFromUnknown(error)}`);
 		},
 	});
 
@@ -123,8 +126,9 @@ export const DockerContainerList = ({
 				queryKey: queryKeys.docker.containers,
 			});
 		},
-		onError: () => {
+		onError: (error: unknown) => {
 			setActionInProgress(null);
+			toast.error(`컨테이너 작업 실패: ${getErrorMessageFromUnknown(error)}`);
 		},
 	});
 
@@ -163,12 +167,15 @@ export const DockerContainerList = ({
 		setIsManualRefetching(true);
 		const minDelay = new Promise((resolve) => setTimeout(resolve, 500));
 		try {
-			await Promise.all([refetchContainers(), minDelay]);
+			const [result] = await Promise.all([refetchContainers(), minDelay]);
+			if (result.error) {
+				throw result.error;
+			}
 			toast.success("컨테이너 상태를 갱신했습니다", {
 				id: "refresh-containers",
 			});
-		} catch {
-			toast.error("갱신 실패");
+		} catch (error) {
+			toast.error(`갱신 실패: ${getErrorMessageFromUnknown(error)}`);
 		} finally {
 			setIsManualRefetching(false);
 		}
@@ -212,7 +219,7 @@ export const DockerContainerList = ({
 						onClick={() => {
 							void handleRefresh();
 						}}
-						disabled={containersLoading || isManualRefetching}
+						disabled={!dockerHealth?.available || containersLoading || isManualRefetching}
 						className={clsx(
 							"rounded-lg transition-all duration-200",
 							"hover:bg-slate-100 hover:text-sky-600",
@@ -264,6 +271,7 @@ export const DockerContainerList = ({
 						<VirtualList
 							items={containers}
 							estimateSize={() => 108}
+							getItemKey={(container) => container.id}
 							recomputeKey={actionInProgress}
 							className="max-h-[34rem] pr-1"
 							itemClassName="pb-3"

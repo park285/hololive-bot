@@ -61,7 +61,7 @@ export class Admin<
    * @request POST:/admin/api/auth/heartbeat
    */
   handleHeartbeat = (data: HeartbeatRequest, params: RequestParams = {}) =>
-    this.request<HeartbeatResponse, void>({
+    this.request<HeartbeatResponse, ErrorResponse | void>({
       path: `/admin/api/auth/heartbeat`,
       method: "POST",
       body: data,
@@ -549,7 +549,10 @@ export class Admin<
    */
   holoGetChannelStats = (
     query?: {
-      /** @min 0 */
+      /**
+       * @min 0
+       * @max 500
+       */
       limit?: number | null;
     },
     params: RequestParams = {},

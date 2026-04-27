@@ -3,7 +3,7 @@ import Check from "lucide-react/dist/esm/icons/check";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2";
 import Save from "lucide-react/dist/esm/icons/save";
 import SettingsIcon from "lucide-react/dist/esm/icons/settings";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -19,8 +19,12 @@ interface SettingsFormProps {
 }
 
 const validateAlarmAdvanceMinutes = (value: string) => {
-	const parsed = Number(value);
+	const trimmed = value.trim();
+	if (!trimmed) return "숫자를 입력해주세요.";
+
+	const parsed = Number(trimmed);
 	if (!Number.isFinite(parsed)) return "숫자를 입력해주세요.";
+	if (!Number.isInteger(parsed)) return "분 단위 정수로 입력해주세요.";
 	if (parsed < 1) return "최소 1분 이상이어야 합니다.";
 	if (parsed > 60) return "최대 60분까지만 설정 가능합니다.";
 	return "";
@@ -43,16 +47,22 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 		String(defaultAlarmMinutes),
 	);
 	const [error, setError] = useState("");
-
-	useEffect(() => {
-		setAlarmAdvanceMinutes(String(defaultAlarmMinutes));
-		setError("");
-	}, [defaultAlarmMinutes]);
+	const previousDefaultRef = useRef(defaultAlarmMinutes);
 
 	const isDirty = useMemo(
 		() => alarmAdvanceMinutes.trim() !== String(defaultAlarmMinutes),
 		[alarmAdvanceMinutes, defaultAlarmMinutes],
 	);
+
+	useEffect(() => {
+		const previousDefault = previousDefaultRef.current;
+		previousDefaultRef.current = defaultAlarmMinutes;
+
+		if (alarmAdvanceMinutes.trim() === String(previousDefault)) {
+			setAlarmAdvanceMinutes(String(defaultAlarmMinutes));
+			setError("");
+		}
+	}, [alarmAdvanceMinutes, defaultAlarmMinutes]);
 
 	const updateMutation = useMutation({
 		mutationFn: settingsApi.update,
@@ -77,7 +87,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 		}
 
 		updateMutation.mutate({
-			alarmAdvanceMinutes: Number(alarmAdvanceMinutes),
+			alarmAdvanceMinutes: Number(alarmAdvanceMinutes.trim()),
 		});
 	};
 
@@ -104,6 +114,10 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 									<Input
 										id="alarm-advance-minutes"
 										type="number"
+										min={1}
+										max={60}
+										step={1}
+										inputMode="numeric"
 										value={alarmAdvanceMinutes}
 										onChange={(event) => {
 											setAlarmAdvanceMinutes(event.target.value);

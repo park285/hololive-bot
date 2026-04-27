@@ -31,6 +31,7 @@ import (
 func setRequiredEnvForLoadConfig(t *testing.T) {
 	t.Helper()
 	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
+	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 }
 
 func TestLoadConfig_UsesIRISSharedTokenFallback(t *testing.T) {

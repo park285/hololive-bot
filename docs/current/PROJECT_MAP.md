@@ -30,6 +30,7 @@ Module inventory for the `hololive-bot` workspace.
 ## Maintenance
 - Keep Go module entries aligned with `go.work`.
 - Root build/test commands should use the in-repo shared workspace at `shared-go/` and remain runnable from the repo root.
+- Committed `go.work` must not reference developer-local sibling paths such as `../iris-client-go`; use a local, uncommitted workspace edit for that case.
 - Keep runtime binary and Docker Compose service entries aligned with `docker-compose.prod.yml`.
 - Update roles/ports when service contracts change.
 - Architecture: Go single-language runtime (7 binaries: bot + admin-api + alarm-worker + dispatcher-go + llm-scheduler + stream-ingester + youtube-scraper).

@@ -37,8 +37,21 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid heartbeat payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Session expired or unauthorized"
+          },
+          "503": {
+            "description": "Session store unavailable"
           }
         }
       }
@@ -1578,6 +1591,7 @@
                 "integer",
                 "null"
               ],
+              "maximum": 500,
               "minimum": 0
             }
           }

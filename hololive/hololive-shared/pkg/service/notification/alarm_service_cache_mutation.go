@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/valkey-io/valkey-go"
@@ -56,19 +57,105 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 }
 
 func normalizedAlarmTypes(alarmTypes domain.AlarmTypes) domain.AlarmTypes {
-	if len(alarmTypes) == 0 {
-		return domain.DefaultAlarmTypes
+	normalized, err := normalizeAlarmTypesStrict(alarmTypes, domain.DefaultAlarmTypes)
+	if err != nil {
+		return append(domain.AlarmTypes(nil), domain.DefaultAlarmTypes...)
 	}
 
-	return alarmTypes
+	return normalized
 }
 
 func normalizedRemovalAlarmTypes(alarmTypes domain.AlarmTypes) domain.AlarmTypes {
-	if len(alarmTypes) == 0 {
-		return domain.AllAlarmTypes
+	normalized, err := normalizeAlarmTypesStrict(alarmTypes, domain.AllAlarmTypes)
+	if err != nil {
+		return append(domain.AlarmTypes(nil), domain.AllAlarmTypes...)
 	}
 
-	return alarmTypes
+	return normalized
+}
+
+func normalizeAlarmTypesStrict(input domain.AlarmTypes, fallback domain.AlarmTypes) (domain.AlarmTypes, error) {
+	if len(input) == 0 {
+		input = fallback
+	}
+
+	valid := make(map[domain.AlarmType]struct{}, len(domain.AllAlarmTypes))
+	for _, alarmType := range domain.AllAlarmTypes {
+		valid[alarmType] = struct{}{}
+	}
+
+	seen := make(map[domain.AlarmType]struct{}, len(input))
+	normalized := make(domain.AlarmTypes, 0, len(input))
+	for _, alarmType := range input {
+		trimmed := domain.AlarmType(strings.TrimSpace(string(alarmType)))
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := valid[trimmed]; !ok {
+			return nil, fmt.Errorf("unknown alarm type: %s", alarmType)
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+
+	if len(normalized) == 0 {
+		return nil, fmt.Errorf("alarm types are empty after normalization")
+	}
+
+	return normalized, nil
+}
+
+func alarmTypeSet(types domain.AlarmTypes) map[domain.AlarmType]struct{} {
+	result := make(map[domain.AlarmType]struct{}, len(types))
+	for _, alarmType := range types {
+		result[alarmType] = struct{}{}
+	}
+	return result
+}
+
+func mergeAlarmTypes(existing domain.AlarmTypes, requested domain.AlarmTypes) domain.AlarmTypes {
+	seen := alarmTypeSet(existing)
+	merged := make(domain.AlarmTypes, 0, len(existing)+len(requested))
+	merged = append(merged, existing...)
+	for _, alarmType := range requested {
+		if _, ok := seen[alarmType]; ok {
+			continue
+		}
+		seen[alarmType] = struct{}{}
+		merged = append(merged, alarmType)
+	}
+	return merged
+}
+
+func subtractAlarmTypes(existing domain.AlarmTypes, remove domain.AlarmTypes) domain.AlarmTypes {
+	removeSet := alarmTypeSet(remove)
+	result := make(domain.AlarmTypes, 0, len(existing))
+	for _, alarmType := range existing {
+		if _, shouldRemove := removeSet[alarmType]; shouldRemove {
+			continue
+		}
+		result = append(result, alarmType)
+	}
+	return result
+}
+
+func intersectAlarmTypes(existing domain.AlarmTypes, requested domain.AlarmTypes) domain.AlarmTypes {
+	existingSet := alarmTypeSet(existing)
+	seen := make(map[domain.AlarmType]struct{}, len(requested))
+	result := make(domain.AlarmTypes, 0, len(requested))
+	for _, alarmType := range requested {
+		if _, duplicated := seen[alarmType]; duplicated {
+			continue
+		}
+		seen[alarmType] = struct{}{}
+		if _, ok := existingSet[alarmType]; ok {
+			result = append(result, alarmType)
+		}
+	}
+	return result
 }
 
 func buildAlarmRecord(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) *domain.Alarm {
@@ -84,6 +171,10 @@ func buildAlarmRecord(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) 
 }
 
 func (as *AlarmService) logAlarmAdded(req domain.AddAlarmRequest, alarmTypes domain.AlarmTypes) {
+	if as.logger == nil {
+		return
+	}
+
 	as.logger.Info("Alarm added",
 		slog.String("room_id", req.RoomID),
 		slog.String("room_name", req.RoomName),

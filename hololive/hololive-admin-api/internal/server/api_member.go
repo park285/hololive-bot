@@ -23,7 +23,6 @@ package server
 import (
 	"context"
 	"fmt"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 const aliasMaxLength = 100
@@ -46,30 +46,39 @@ func normalizeAliasInput(alias string) string {
 	return strings.Join(strings.Fields(alias), " ")
 }
 
+func (h *MemberAPIHandler) parsePositiveMemberID(c *gin.Context) (int, bool) {
+	memberID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		h.safeLogger().Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
+		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
+
+		return 0, false
+	}
+
+	if memberID <= 0 {
+		h.safeLogger().Warn("Member ID must be positive", slog.Int("id", memberID))
+		sharedserver.RespondError(c, 400, "Member ID must be positive", nil)
+
+		return 0, false
+	}
+
+	return memberID, true
+}
+
 // handleAliasOperation: 별칭 추가/삭제 작업을 공통 로직으로 처리함.
 func (h *MemberAPIHandler) handleAliasOperation(
 	c *gin.Context,
 	repoFunc func(context.Context, int, string, string) error,
 	operationName string,
 ) {
-	memberID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
-
-		return
-	}
-
-	if memberID <= 0 {
-		h.logger.Warn("Member ID must be positive", slog.Int("id", memberID))
-		sharedserver.RespondError(c, 400, "Member ID must be positive", nil)
-
+	memberID, ok := h.parsePositiveMemberID(c)
+	if !ok {
 		return
 	}
 
 	var req aliasRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -77,16 +86,21 @@ func (h *MemberAPIHandler) handleAliasOperation(
 
 	req.Alias = normalizeAliasInput(req.Alias)
 	if req.Alias == "" {
-		h.logger.Warn("Alias must not be empty after normalization")
+		h.safeLogger().Warn("Alias must not be empty after normalization")
 		sharedserver.RespondError(c, 400, "Alias must not be empty", nil)
 
 		return
 	}
 
 	if utf8.RuneCountInString(req.Alias) > aliasMaxLength {
-		h.logger.Warn("Alias exceeds max length", slog.Int("max", aliasMaxLength))
+		h.safeLogger().Warn("Alias exceeds max length", slog.Int("max", aliasMaxLength))
 		sharedserver.RespondError(c, 400, fmt.Sprintf("Alias must be at most %d characters", aliasMaxLength), nil)
 
+		return
+	}
+
+	if h == nil || h.APIHandler == nil || h.memberCache == nil || repoFunc == nil {
+		respondServiceUnavailable(c, "member service not available")
 		return
 	}
 
@@ -94,7 +108,7 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	defer cancel()
 
 	if err := repoFunc(ctx, memberID, req.Type, req.Alias); err != nil {
-		h.logger.Error("Failed to "+operationName+" alias",
+		h.safeLogger().Error("Failed to "+operationName+" alias",
 			slog.Int("member_id", memberID),
 			slog.String("type", req.Type),
 			slog.String("alias", req.Alias),
@@ -106,19 +120,19 @@ func (h *MemberAPIHandler) handleAliasOperation(
 	}
 
 	if err := h.memberCache.InvalidateAliasCache(ctx, req.Alias); err != nil {
-		h.logger.Error("Failed to invalidate alias cache", slog.Any("error", err))
+		h.safeLogger().Error("Failed to invalidate alias cache", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
 	}
 
-	h.logger.Info("Alias "+operationName,
+	h.safeLogger().Info("Alias "+operationName,
 		slog.Int("member_id", memberID),
 		slog.String("type", req.Type),
 		slog.String("alias", req.Alias),
 	)
 
-	h.activity.Log("member_alias_"+operationName, fmt.Sprintf("Member alias %s: %s (ID: %d)", operationName, req.Alias, memberID), map[string]any{
+	h.logActivity("member_alias_"+operationName, fmt.Sprintf("Member alias %s: %s (ID: %d)", operationName, req.Alias, memberID), map[string]any{
 		"member_id": memberID,
 		"type":      req.Type,
 		"alias":     req.Alias,
@@ -131,21 +145,32 @@ func (h *MemberAPIHandler) handleAliasOperation(
 }
 
 func (h *MemberAPIHandler) AddAlias(c *gin.Context) {
+	if h == nil || h.APIHandler == nil || h.repo == nil {
+		respondServiceUnavailable(c, "member service not available")
+		return
+	}
+
 	h.handleAliasOperation(c, h.repo.AddAlias, "add")
 }
 
 func (h *MemberAPIHandler) RemoveAlias(c *gin.Context) {
+	if h == nil || h.APIHandler == nil || h.repo == nil {
+		respondServiceUnavailable(c, "member service not available")
+		return
+	}
+
 	h.handleAliasOperation(c, h.repo.RemoveAlias, "remove")
 }
 
 //
 
 func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
-	memberID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
+	if !h.requireMemberDeps(c) {
+		return
+	}
 
+	memberID, ok := h.parsePositiveMemberID(c)
+	if !ok {
 		return
 	}
 
@@ -153,7 +178,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 		IsGraduated bool `json:"isGraduated"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -163,7 +188,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 	defer cancel()
 
 	if err := h.repo.SetGraduation(ctx, memberID, req.IsGraduated); err != nil {
-		h.logger.Error("Failed to set graduation status",
+		h.safeLogger().Error("Failed to set graduation status",
 			slog.Int("member_id", memberID),
 			slog.Bool("is_graduated", req.IsGraduated),
 			slog.Any("error", err),
@@ -175,7 +200,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
-		h.logger.Error("Failed to refresh cache after graduation update", slog.Any("error", err))
+		h.safeLogger().Error("Failed to refresh cache after graduation update", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
@@ -183,7 +208,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 
 	h.invalidateMemberIndex()
 
-	h.logger.Info("Graduation status updated",
+	h.safeLogger().Info("Graduation status updated",
 		slog.Int("member_id", memberID),
 		slog.Bool("is_graduated", req.IsGraduated),
 	)
@@ -194,7 +219,7 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 		statusStr = "active"
 	}
 
-	h.activity.Log("member_graduation", fmt.Sprintf("Member status changed to %s (ID: %d)", statusStr, memberID), map[string]any{
+	h.logActivity("member_graduation", fmt.Sprintf("Member status changed to %s (ID: %d)", statusStr, memberID), map[string]any{
 		"member_id":    memberID,
 		"is_graduated": req.IsGraduated,
 	})
@@ -208,11 +233,12 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 //
 //nolint:dupl // Similar patterns for different update operations
 func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
-	memberID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
+	if !h.requireMemberDeps(c) {
+		return
+	}
 
+	memberID, ok := h.parsePositiveMemberID(c)
+	if !ok {
 		return
 	}
 
@@ -220,7 +246,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 		ChannelID string `json:"channelId" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -230,7 +256,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 	defer cancel()
 
 	if err := h.repo.UpdateChannelID(ctx, memberID, req.ChannelID); err != nil {
-		h.logger.Error("Failed to update channel ID",
+		h.safeLogger().Error("Failed to update channel ID",
 			slog.Int("member_id", memberID),
 			slog.String("channel_id", req.ChannelID),
 			slog.Any("error", err),
@@ -242,7 +268,7 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
-		h.logger.Error("Failed to refresh cache after channel ID update", slog.Any("error", err))
+		h.safeLogger().Error("Failed to refresh cache after channel ID update", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
@@ -250,12 +276,12 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 
 	h.invalidateMemberIndex()
 
-	h.logger.Info("Channel ID updated",
+	h.safeLogger().Info("Channel ID updated",
 		slog.Int("member_id", memberID),
 		slog.String("channel_id", req.ChannelID),
 	)
 
-	h.activity.Log("member_channel_update", fmt.Sprintf("Member channel ID updated to %s (ID: %d)", req.ChannelID, memberID), map[string]any{
+	h.logActivity("member_channel_update", fmt.Sprintf("Member channel ID updated to %s (ID: %d)", req.ChannelID, memberID), map[string]any{
 		"member_id":  memberID,
 		"channel_id": req.ChannelID,
 	})
@@ -269,11 +295,12 @@ func (h *MemberAPIHandler) UpdateChannelID(c *gin.Context) {
 //
 //nolint:dupl // Similar patterns for different update operations
 func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
-	memberID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		h.logger.Warn("Invalid member ID", slog.String("id", c.Param("id")), slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "Invalid member ID", nil)
+	if !h.requireMemberDeps(c) {
+		return
+	}
 
+	memberID, ok := h.parsePositiveMemberID(c)
+	if !ok {
 		return
 	}
 
@@ -281,7 +308,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 		Name string `json:"name" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -291,7 +318,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 	defer cancel()
 
 	if err := h.repo.UpdateMemberName(ctx, memberID, req.Name); err != nil {
-		h.logger.Error("Failed to update member name",
+		h.safeLogger().Error("Failed to update member name",
 			slog.Int("member_id", memberID),
 			slog.String("name", req.Name),
 			slog.Any("error", err),
@@ -303,7 +330,7 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
-		h.logger.Error("Failed to refresh cache after member name update", slog.Any("error", err))
+		h.safeLogger().Error("Failed to refresh cache after member name update", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
@@ -311,12 +338,12 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 
 	h.invalidateMemberIndex()
 
-	h.logger.Info("Member name updated",
+	h.safeLogger().Info("Member name updated",
 		slog.Int("member_id", memberID),
 		slog.String("name", req.Name),
 	)
 
-	h.activity.Log("member_name_update", fmt.Sprintf("Member name updated to %s (ID: %d)", req.Name, memberID), map[string]any{
+	h.logActivity("member_name_update", fmt.Sprintf("Member name updated to %s (ID: %d)", req.Name, memberID), map[string]any{
 		"member_id": memberID,
 		"name":      req.Name,
 	})
@@ -328,12 +355,16 @@ func (h *MemberAPIHandler) UpdateMemberName(c *gin.Context) {
 }
 
 func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
+	if !h.requireMemberDeps(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
 	members, err := h.repo.GetAllMembers(ctx)
 	if err != nil {
-		h.logger.Error("Failed to get members", slog.Any("error", err))
+		h.safeLogger().Error("Failed to get members", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get members", nil)
 
 		return
@@ -348,15 +379,19 @@ func (h *MemberAPIHandler) GetMembers(c *gin.Context) {
 func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 	var req domain.Member
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
 
+	if !h.requireMemberDeps(c) {
+		return
+	}
+
 	ctx := c.Request.Context()
 	if err := h.repo.CreateMember(ctx, &req); err != nil {
-		h.logger.Error("Failed to add member", slog.Any("error", err))
+		h.safeLogger().Error("Failed to add member", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to add member", nil)
 
 		return
@@ -364,7 +399,7 @@ func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 
 	if err := h.memberCache.Refresh(ctx); err != nil {
 		h.invalidateMemberIndex()
-		h.logger.Error("Failed to refresh member cache", slog.Any("error", err))
+		h.safeLogger().Error("Failed to refresh member cache", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to synchronize member cache", nil)
 
 		return
@@ -372,7 +407,7 @@ func (h *MemberAPIHandler) AddMember(c *gin.Context) {
 
 	h.invalidateMemberIndex()
 
-	h.activity.Log("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
+	h.logActivity("member_add", "Member added: "+req.Name, map[string]any{"name": req.Name})
 
 	c.JSON(201, gin.H{"status": "ok", "message": "Member added successfully"})
 }

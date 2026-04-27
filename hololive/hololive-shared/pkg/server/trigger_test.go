@@ -36,7 +36,6 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-
 type stubMajorEvent struct {
 	err error
 }
@@ -54,7 +53,6 @@ type stubMemberNewsWeekly struct {
 }
 
 func (s *stubMemberNewsWeekly) SendWeeklyDigest(_ context.Context) error { return s.err }
-
 
 func newDiscardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -86,7 +84,6 @@ func unmarshalBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any 
 	return m
 }
 
-
 func TestTriggerWeeklyNotification(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -103,7 +100,7 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 			scheduler:   nil,
 			wantStatus:  http.StatusServiceUnavailable,
 			wantBodyKey: "error",
-			wantBodyVal: "major event scheduler not initialized",
+			wantBodyVal: "major_event_scheduler_unavailable",
 		},
 		{
 			name:        "정상 실행 → 200",
@@ -117,14 +114,14 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 			scheduler:   &stubMajorEvent{err: triggercontracts.ErrNotificationInProgress},
 			wantStatus:  http.StatusConflict,
 			wantBodyKey: "error",
-			wantBodyVal: "notification already in progress",
+			wantBodyVal: "notification_in_progress",
 		},
 		{
 			name:        "일반 오류 → 500",
 			scheduler:   &stubMajorEvent{err: errors.New("db timeout")},
 			wantStatus:  http.StatusInternalServerError,
 			wantBodyKey: "error",
-			wantBodyVal: "internal server error",
+			wantBodyVal: "internal_server_error",
 		},
 	}
 
@@ -147,7 +144,6 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 	}
 }
 
-
 func TestTriggerMonthlyNotification(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -164,7 +160,7 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 			scheduler:   nil,
 			wantStatus:  http.StatusServiceUnavailable,
 			wantBodyKey: "error",
-			wantBodyVal: "major event monthly scheduler not initialized",
+			wantBodyVal: "major_event_monthly_scheduler_unavailable",
 		},
 		{
 			name:        "정상 실행 → 200",
@@ -178,14 +174,14 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 			scheduler:   &stubMajorEventMonthly{err: triggercontracts.ErrNotificationInProgress},
 			wantStatus:  http.StatusConflict,
 			wantBodyKey: "error",
-			wantBodyVal: "notification already in progress",
+			wantBodyVal: "notification_in_progress",
 		},
 		{
 			name:        "일반 오류 → 500",
 			scheduler:   &stubMajorEventMonthly{err: errors.New("timeout")},
 			wantStatus:  http.StatusInternalServerError,
 			wantBodyKey: "error",
-			wantBodyVal: "internal server error",
+			wantBodyVal: "internal_server_error",
 		},
 	}
 
@@ -208,7 +204,6 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 	}
 }
 
-
 func TestTriggerMemberNewsWeekly(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
@@ -225,7 +220,7 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 			scheduler:   nil,
 			wantStatus:  http.StatusServiceUnavailable,
 			wantBodyKey: "error",
-			wantBodyVal: "member news weekly scheduler not initialized",
+			wantBodyVal: "member_news_weekly_scheduler_unavailable",
 		},
 		{
 			name:        "정상 실행 → 200",
@@ -239,7 +234,7 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 			scheduler:   &stubMemberNewsWeekly{err: errors.New("fetch failed")},
 			wantStatus:  http.StatusInternalServerError,
 			wantBodyKey: "error",
-			wantBodyVal: "internal server error",
+			wantBodyVal: "internal_server_error",
 		},
 	}
 
@@ -261,7 +256,6 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 		})
 	}
 }
-
 
 func TestRegisterInternalRoutesWithAuth(t *testing.T) {
 	t.Parallel()

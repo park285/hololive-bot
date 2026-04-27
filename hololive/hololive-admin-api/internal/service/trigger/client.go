@@ -81,6 +81,9 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	if c == nil {
 		return errors.New("post trigger: client is nil")
 	}
+	if c.httpClient == nil {
+		return errors.New("post trigger: http client is not configured")
+	}
 
 	req, err := c.httpClient.NewRequest(ctx, http.MethodPost, path)
 	if err != nil {

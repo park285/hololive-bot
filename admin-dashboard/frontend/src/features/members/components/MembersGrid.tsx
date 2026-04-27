@@ -1,14 +1,15 @@
+import { useMemo } from "react";
 import MemberCard from "@/components/MemberCard";
 import { Button } from "@/components/ui/Button";
 import { VirtualList } from "@/components/ui/VirtualList";
 import type { Member } from "@/features/members/types";
 
-const MEMBER_GRID_COLUMNS = 4;
+const MEMBERS_PER_ROW = 4;
 
-const chunkMembers = (members: Member[]) => {
+const chunkMembers = (members: Member[]): Member[][] => {
 	const rows: Member[][] = [];
-	for (let index = 0; index < members.length; index += MEMBER_GRID_COLUMNS) {
-		rows.push(members.slice(index, index + MEMBER_GRID_COLUMNS));
+	for (let index = 0; index < members.length; index += MEMBERS_PER_ROW) {
+		rows.push(members.slice(index, index + MEMBERS_PER_ROW));
 	}
 	return rows;
 };
@@ -44,7 +45,7 @@ export const MembersGrid = ({
 	onEditChannel,
 	onEditName,
 }: MembersGridProps) => {
-	const memberRows = chunkMembers(visibleMembers);
+	const memberRows = useMemo(() => chunkMembers(visibleMembers), [visibleMembers]);
 
 	return (
 		<>
@@ -56,31 +57,33 @@ export const MembersGrid = ({
 				<div className="space-y-6">
 					<VirtualList
 						items={memberRows}
-						estimateSize={() => 370}
+						estimateSize={() => 380}
+						getItemKey={(row, rowIndex) =>
+							row.map((member) => member.id).join(":") || `members-row-${String(rowIndex)}`
+						}
 						className="max-h-[70vh] pr-2 pb-2 custom-scrollbar"
 						itemClassName="pb-6"
-						renderItem={(row, rowIndex) => (
-							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-								{row.map((member, columnIndex) => {
-									const memberIndex = rowIndex * MEMBER_GRID_COLUMNS + columnIndex;
-
-									return (
-										<div
-											key={`${String(member.id)}-${String(memberIndex)}`}
-											role="listitem"
-											className="h-full flex flex-col"
-										>
-											<MemberCard
-												member={member}
-												onAddAlias={onAddAlias}
-												onRemoveAlias={onRemoveAlias}
-												onToggleGraduation={onToggleGraduation}
-												onEditChannel={onEditChannel}
-												onEditName={onEditName}
-											/>
-										</div>
-									);
-								})}
+						renderItem={(row) => (
+							<div
+								className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+								role="list"
+							>
+								{row.map((member) => (
+									<div
+										key={member.id}
+										role="listitem"
+										className="h-full flex flex-col"
+									>
+										<MemberCard
+											member={member}
+											onAddAlias={onAddAlias}
+											onRemoveAlias={onRemoveAlias}
+											onToggleGraduation={onToggleGraduation}
+											onEditChannel={onEditChannel}
+											onEditName={onEditName}
+										/>
+									</div>
+								))}
 							</div>
 						)}
 					/>

@@ -22,8 +22,11 @@ package command
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 
@@ -219,15 +222,53 @@ func collectChzzkLiveStreams(
 }
 
 func newChzzkStream(member *domain.Member, title string) *domain.Stream {
+	if member == nil || strings.TrimSpace(member.ChzzkChannelID) == "" {
+		return nil
+	}
+
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "치지직 라이브"
+	}
+
+	now := time.Now().UTC().Truncate(time.Minute)
+	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	link := liveURL
+	org := member.GetOrg()
+
 	return &domain.Stream{
+		ID:             buildChzzkDisplayStreamID(member.ChzzkChannelID, "live", title),
 		Title:          title,
 		ChannelID:      member.ChannelID,
 		ChannelName:    member.Name,
 		Status:         domain.StreamStatusLive,
+		StartScheduled: &now,
+		StartActual:    &now,
+		Link:           &link,
+		Channel: &domain.Channel{
+			ID:   member.ChannelID,
+			Name: member.Name,
+			Org:  &org,
+		},
 		ChzzkChannelID: member.ChzzkChannelID,
-		ChzzkLiveURL:   fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID),
+		ChzzkLiveURL:   liveURL,
 		IsChzzkOnly:    true,
 	}
+}
+
+func buildChzzkDisplayStreamID(chzzkChannelID, kind, seed string) string {
+	chzzkChannelID = strings.TrimSpace(chzzkChannelID)
+	kind = strings.TrimSpace(kind)
+	seed = strings.TrimSpace(seed)
+	if kind == "" {
+		kind = "unknown"
+	}
+	if seed == "" {
+		seed = kind
+	}
+
+	sum := sha256.Sum256([]byte(chzzkChannelID + "|" + kind + "|" + seed))
+	return fmt.Sprintf("chzzk:%s:%s:%x", chzzkChannelID, kind, sum[:8])
 }
 
 func (c *LiveCommand) ensureDeps() error {

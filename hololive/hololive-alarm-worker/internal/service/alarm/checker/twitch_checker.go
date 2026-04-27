@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"strings"
 
-	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -138,7 +137,7 @@ func buildTwitchLookupLogins(loginMappings map[string]string, subscriberMap map[
 }
 
 func (c *TwitchChecker) buildLiveNotifications(
-	ctx context.Context,
+	_ context.Context,
 	loginMappings map[string]string,
 	subscriberMap map[string][]string,
 	streamsResponse *twitch.StreamsResponse,
@@ -163,18 +162,12 @@ func (c *TwitchChecker) buildLiveNotifications(
 			continue
 		}
 
-		dedupKey := buildTwitchLiveDedupKey(streamData.UserID, streamData.ID)
-
-		claimed, claimErr := c.cacheSvc.SetNX(ctx, dedupKey, "true", sharedconstants.CacheTTL.TwitchNotification)
-		if claimErr != nil {
-			return nil, fmt.Errorf("check twitch streams: claim dedup key %s: %w", dedupKey, claimErr)
-		}
-
-		if !claimed {
+		// dedup claim은 큐 발행 성공/실패를 알고 있는 Notifier가 단일 책임으로 처리한다.
+		stream := buildTwitchLiveStream(youtubeChannelID, streamData)
+		if stream == nil {
 			continue
 		}
 
-		stream := buildTwitchLiveStream(youtubeChannelID, streamData)
 		channelNotifications := roomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
 
 		notifications = append(notifications, channelNotifications...)
@@ -183,6 +176,8 @@ func (c *TwitchChecker) buildLiveNotifications(
 	return notifications, nil
 }
 
+// buildTwitchLiveDedupKey는 이전 checker-level preclaim 테스트 호환을 위해 남겨둔다.
+// 실제 dedup claim은 Notifier가 처리한다.
 func buildTwitchLiveDedupKey(userID, streamID string) string {
 	return fmt.Sprintf("%s%s:%s", twitchLiveNotifiedKeyPrefix, userID, streamID)
 }
@@ -212,6 +207,11 @@ func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamDat
 		twitchUserID = normalizedLogin
 	}
 
+	twitchStreamID := strings.TrimSpace(streamData.ID)
+	if twitchStreamID == "" {
+		twitchStreamID = startAt.Format("20060102T150405Z")
+	}
+
 	viewerCount := streamData.ViewerCount
 	liveURL := ""
 
@@ -220,7 +220,7 @@ func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamDat
 	}
 
 	return &domain.Stream{
-		ID:             fmt.Sprintf("twitch:%s:%s", twitchUserID, streamData.ID),
+		ID:             fmt.Sprintf("twitch:%s:%s", twitchUserID, twitchStreamID),
 		Title:          title,
 		ChannelID:      youtubeChannelID,
 		ChannelName:    channelName,
@@ -234,7 +234,7 @@ func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamDat
 		},
 		TwitchUserID:    twitchUserID,
 		TwitchUserLogin: normalizedLogin,
-		TwitchStreamID:  streamData.ID,
+		TwitchStreamID:  twitchStreamID,
 		TwitchLiveURL:   liveURL,
 		IsTwitchOnly:    true,
 	}

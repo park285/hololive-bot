@@ -339,8 +339,8 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile?channelId=UC123", nil)
 		handler.GetProfile(ctx)
 
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 		}
 	})
 
@@ -359,8 +359,8 @@ func TestProfileAPIHandler_ValidationAndConverters(t *testing.T) {
 		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/profile/by-name?name=Sora", nil)
 		handler.GetProfileByName(ctx)
 
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 		}
 	})
 

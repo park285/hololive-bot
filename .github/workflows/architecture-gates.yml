@@ -42,10 +42,31 @@ jobs:
 
       - name: Normalize go.mod replace directives
         run: |
-          for mod in hololive/hololive-shared hololive/hololive-kakao-bot-go; do
-            if grep -q 'github.com/park285/iris-client-go =>' "$mod/go.mod"; then
+          set -euo pipefail
+          modules=(
+            shared-go
+            hololive/hololive-shared
+            hololive/hololive-kakao-bot-go
+            hololive/hololive-admin-api
+            hololive/hololive-alarm-worker
+            hololive/hololive-llm-sched
+            hololive/hololive-stream-ingester
+            hololive/hololive-dispatcher-go
+          )
+          for mod in "${modules[@]}"; do
+            if [ -f "$mod/go.mod" ] && grep -q 'github.com/park285/iris-client-go =>' "$mod/go.mod"; then
               (cd "$mod" && go mod edit -dropreplace github.com/park285/iris-client-go)
             fi
+          done
+
+      - name: Guard committed go.work paths
+        run: |
+          set -euo pipefail
+          awk '$1 ~ /^\.\// || $1 ~ /^\.\.\// { print $1 }' go.work | while read -r path; do
+            case "$path" in
+              ./*) [ -e "$path" ] || { echo "go.work path does not exist: $path" >&2; exit 1; } ;;
+              ../*) echo "go.work must not reference paths outside the repository: $path" >&2; exit 1 ;;
+            esac
           done
 
       - name: Setup Rust (nightly)

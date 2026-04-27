@@ -24,6 +24,7 @@ export const DockerContainerItem = ({
 	onAction,
 }: DockerContainerItemProps) => {
 	const isActionPending = actionInProgress === container.name;
+	const isAnyActionPending = actionInProgress !== null;
 
 	return (
 		<div className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100 hover:bg-white hover:shadow-md hover:border-slate-200 transition-all duration-200 focus-within:ring-2 focus-within:ring-sky-100">
@@ -97,7 +98,7 @@ export const DockerContainerItem = ({
 							onClick={() => {
 								onAction(container.name, "restart");
 							}}
-							disabled={isActionPending}
+							disabled={isAnyActionPending}
 							className={clsx(
 								"h-9 px-3 gap-1.5 font-bold hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 focus-visible:ring-2 focus-visible:ring-amber-200",
 								isActionPending && "cursor-wait opacity-70",
@@ -122,7 +123,7 @@ export const DockerContainerItem = ({
 							onClick={() => {
 								onAction(container.name, "stop");
 							}}
-							disabled={isActionPending}
+							disabled={isAnyActionPending}
 							className="h-9 px-3 gap-1.5 font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 focus-visible:ring-2 focus-visible:ring-rose-200"
 							title="중지"
 							aria-label={`${container.name} 컨테이너 중지`}
@@ -138,7 +139,7 @@ export const DockerContainerItem = ({
 						onClick={() => {
 							onAction(container.name, "start");
 						}}
-						disabled={isActionPending}
+						disabled={isAnyActionPending}
 						className="h-9 px-3 gap-1.5 font-bold hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 focus-visible:ring-2 focus-visible:ring-emerald-200"
 						title="시작"
 						aria-label={`${container.name} 컨테이너 시작`}

@@ -9,7 +9,7 @@ export const SessionAbsoluteWarningModal = () => {
 	const {
 		absoluteWarningOpen,
 		absoluteExpiresAt,
-		closeAbsoluteWarning,
+		dismissAbsoluteWarning,
 	} = useSessionWarningStore();
 
 	const [remainingSeconds, setRemainingSeconds] = useState(0);
@@ -34,7 +34,7 @@ export const SessionAbsoluteWarningModal = () => {
 	return (
 		<BaseModal
 			isOpen={absoluteWarningOpen}
-			onClose={closeAbsoluteWarning}
+			onClose={dismissAbsoluteWarning}
 			title={
 				<div className="flex items-center gap-2 text-red-600">
 					<ShieldAlert className="h-5 w-5" />
@@ -72,7 +72,7 @@ export const SessionAbsoluteWarningModal = () => {
 						variant="secondary"
 						fullWidth
 						className="bg-slate-800 text-white hover:bg-slate-900"
-						onClick={closeAbsoluteWarning}
+						onClick={dismissAbsoluteWarning}
 					>
 						확인했습니다
 					</Button>

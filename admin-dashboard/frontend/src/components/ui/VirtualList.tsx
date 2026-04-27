@@ -1,11 +1,18 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type AriaRole, type ReactNode, useEffect, useRef } from "react";
+import {
+	type AriaRole,
+	type Key,
+	type ReactNode,
+	useEffect,
+	useRef,
+} from "react";
 import { cn } from "@/lib/utils";
 
 interface VirtualListProps<T> {
 	items: T[];
 	estimateSize: (index: number) => number;
 	renderItem: (item: T, index: number) => ReactNode;
+	getItemKey?: (item: T, index: number) => Key;
 	overscan?: number;
 	recomputeKey?: unknown;
 	className?: string;
@@ -18,6 +25,7 @@ export const VirtualList = <T,>({
 	items,
 	estimateSize,
 	renderItem,
+	getItemKey,
 	overscan = 6,
 	recomputeKey,
 	className,
@@ -36,7 +44,7 @@ export const VirtualList = <T,>({
 
 	useEffect(() => {
 		virtualizer.measure();
-	}, [recomputeKey, virtualizer]);
+	}, [items.length, recomputeKey, virtualizer]);
 
 	return (
 		<div
@@ -50,14 +58,15 @@ export const VirtualList = <T,>({
 			>
 				{virtualizer.getVirtualItems().map((virtualItem) => {
 					const item = items[virtualItem.index];
-					if (!item) {
+					if (item === undefined) {
 						return null;
 					}
 
 					return (
 						<div
-							key={virtualItem.key}
+							key={getItemKey?.(item, virtualItem.index) ?? virtualItem.key}
 							ref={virtualizer.measureElement}
+							data-index={virtualItem.index}
 							className={cn("absolute left-0 top-0 w-full", itemClassName)}
 							style={{ transform: `translateY(${String(virtualItem.start)}px)` }}
 						>

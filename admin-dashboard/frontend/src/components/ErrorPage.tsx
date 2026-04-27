@@ -3,12 +3,17 @@ import Home from "lucide-react/dist/esm/icons/home";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
-import { isRouteErrorResponse, useRouteError } from "react-router-dom";
+import { useEffect } from "react";
+import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
 import { extractErrorMessage } from "@/lib/typeUtils";
 
 const ErrorPage = () => {
 	const error = useRouteError();
-	console.error(error);
+	const navigate = useNavigate();
+
+	useEffect(() => {
+		console.error(error);
+	}, [error]);
 
 	let errorMessage = "예기치 않은 오류가 발생했습니다.";
 	let errorTitle = "시스템 오류";
@@ -36,7 +41,7 @@ const ErrorPage = () => {
 		window.location.reload();
 	};
 	const handleGoHome = () => {
-		window.location.href = "/dashboard";
+		void navigate("/dashboard", { replace: true });
 	};
 
 	return (

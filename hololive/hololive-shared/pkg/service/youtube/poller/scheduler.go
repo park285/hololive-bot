@@ -24,11 +24,10 @@ package poller
 import (
 	"container/heap"
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -77,6 +76,7 @@ type Scheduler struct {
 	errorBackoffMin time.Duration
 	errorBackoffMax time.Duration
 	stopCh          chan struct{}
+	stopCancel      context.CancelFunc
 	wakeCh          chan struct{}
 	wg              sync.WaitGroup
 	running         bool
@@ -151,12 +151,37 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 }
 
 func (s *Scheduler) Register(channelID string, poller Poller, priority Priority, interval time.Duration) {
+	if err := s.RegisterChecked(channelID, poller, priority, interval); err != nil {
+		slog.Warn("Skip invalid scheduler registration",
+			slog.String("channel_id", channelID),
+			slog.Any("error", err),
+		)
+	}
+}
+
+func (s *Scheduler) RegisterChecked(channelID string, poller Poller, priority Priority, interval time.Duration) error {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return fmt.Errorf("channel id is empty")
+	}
+	if poller == nil {
+		return fmt.Errorf("poller is nil")
+	}
+	if interval <= 0 {
+		return fmt.Errorf("interval must be positive: %s", interval)
+	}
+
+	pollerName := strings.TrimSpace(poller.Name())
+	if pollerName == "" {
+		return fmt.Errorf("poller name is empty")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	key := channelID + ":" + poller.Name()
+	key := channelID + ":" + pollerName
 	if _, exists := s.jobMap[key]; exists {
-		return // 중복 등록 방지
+		return nil // 중복 등록 방지
 	}
 
 	offset := calculateOffset(key, interval)
@@ -174,6 +199,7 @@ func (s *Scheduler) Register(channelID string, poller Poller, priority Priority,
 	s.jobMap[key] = job
 	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 	s.notifyDispatcher()
+	return nil
 }
 
 func (s *Scheduler) UpdatePriority(channelID string, pollerName string, priority Priority, interval time.Duration) {
@@ -205,9 +231,14 @@ func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	pollerName := targetSync.Poller.Name()
+	pollerName := strings.TrimSpace(targetSync.Poller.Name())
+	if pollerName == "" {
+		return
+	}
+
 	desired := make(map[string]struct{}, len(targetSync.ChannelIDs))
 	for _, channelID := range targetSync.ChannelIDs {
+		channelID = strings.TrimSpace(channelID)
 		if channelID == "" {
 			continue
 		}
@@ -311,6 +342,9 @@ func (s *Scheduler) collectProxyTogglePollers() []proxyTogglePoller {
 	seen := make(map[Poller]struct{})
 	pollers := make([]proxyTogglePoller, 0)
 	for _, job := range s.jobMap {
+		if job == nil || job.Poller == nil {
+			continue
+		}
 		if _, exists := seen[job.Poller]; exists {
 			continue
 		}
@@ -326,33 +360,48 @@ func (s *Scheduler) collectProxyTogglePollers() []proxyTogglePoller {
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
 		return
 	}
+
+	stopCh := make(chan struct{})
+	runCtx, cancel := context.WithCancel(ctx)
+	s.stopCh = stopCh
+	s.stopCancel = cancel
 	s.running = true
+
+	workerCount := s.workerCount
+	jobCount := len(s.jobs)
+	pollTimeout := s.pollTimeout
+	errorBackoffMin := s.errorBackoffMin
+	errorBackoffMax := s.errorBackoffMax
 	s.mu.Unlock()
 
 	slog.Info("Scheduler starting",
-		"worker_count", s.workerCount,
-		"job_count", len(s.jobs),
-		"poll_timeout", s.pollTimeout,
-		"error_backoff_min", s.errorBackoffMin,
-		"error_backoff_max", s.errorBackoffMax)
+		"worker_count", workerCount,
+		"job_count", jobCount,
+		"poll_timeout", pollTimeout,
+		"error_backoff_min", errorBackoffMin,
+		"error_backoff_max", errorBackoffMax)
 
 	// 작업 채널
-	jobCh := make(chan *Job, s.workerCount*2)
+	jobCh := make(chan *Job, workerCount*2)
 
 	// 워커 시작
-	for i := range s.workerCount {
+	for i := range workerCount {
 		s.wg.Add(1)
-		go s.worker(ctx, jobCh, i)
+		go s.worker(runCtx, jobCh, i, stopCh)
 	}
 
 	// 디스패처 시작
 	s.wg.Add(1)
-	go s.dispatcher(ctx, jobCh)
+	go s.dispatcher(runCtx, jobCh, stopCh)
 }
 
 func (s *Scheduler) Stop() {
@@ -361,16 +410,24 @@ func (s *Scheduler) Stop() {
 		s.mu.Unlock()
 		return
 	}
+	stopCh := s.stopCh
+	stopCancel := s.stopCancel
 	s.running = false
+	s.stopCancel = nil
 	s.mu.Unlock()
 
-	close(s.stopCh)
+	if stopCancel != nil {
+		stopCancel()
+	}
+	if stopCh != nil {
+		close(stopCh)
+	}
 	s.wg.Wait()
 	slog.Info("Scheduler stopped")
 }
 
 // dispatcher: 실행 대기 작업을 워커에게 전달
-func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job) {
+func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-chan struct{}) {
 	defer s.wg.Done()
 	defer close(jobCh)
 
@@ -390,7 +447,7 @@ func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.stopCh:
+		case <-stopCh:
 			return
 		case <-s.wakeCh:
 			workerChannelFull = false
@@ -448,14 +505,14 @@ func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 }
 
 // worker: 작업 실행 워커
-func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int) {
+func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopCh <-chan struct{}) {
 	defer s.wg.Done()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.stopCh:
+		case <-stopCh:
 			return
 		case job, ok := <-jobCh:
 			if !ok {
@@ -534,6 +591,10 @@ func (s *Scheduler) rescheduleJob(job *Job) {
 	s.rescheduleJobAfterPoll(job, nil)
 }
 
+type retryDelayError interface {
+	RetryDelay() time.Duration
+}
+
 func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -549,7 +610,14 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	now := time.Now()
 	if pollErr != nil && !errors.Is(pollErr, context.Canceled) {
 		job.consecutiveFailures++
-		job.NextRunAt = nextErrorRetryAt(now, job.Interval, job.consecutiveFailures, s.errorBackoffMin, s.errorBackoffMax)
+
+		var delayed retryDelayError
+		if errors.As(pollErr, &delayed) && delayed.RetryDelay() > 0 {
+			job.NextRunAt = now.Add(delayed.RetryDelay())
+		} else {
+			job.NextRunAt = nextErrorRetryAt(now, job.Interval, job.consecutiveFailures, s.errorBackoffMin, s.errorBackoffMax)
+		}
+
 		slog.Debug("Poll job rescheduled after failure",
 			"poller", job.Poller.Name(),
 			"channel_id", job.ChannelID,
@@ -574,168 +642,9 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	s.notifyDispatcher()
 }
 
-func nextErrorRetryAt(now time.Time, interval time.Duration, consecutiveFailures int, minBackoff, maxBackoff time.Duration) time.Time {
-	delay := errorRetryDelay(interval, consecutiveFailures, minBackoff, maxBackoff)
-	return now.Add(delay)
-}
-
-func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff, maxBackoff time.Duration) time.Duration {
-	if minBackoff <= 0 {
-		minBackoff = 30 * time.Second
-	}
-	if maxBackoff <= 0 {
-		maxBackoff = 5 * time.Minute
-	}
-	if maxBackoff < minBackoff {
-		maxBackoff = minBackoff
-	}
-
-	if consecutiveFailures <= 1 {
-		if interval > 0 && interval < minBackoff {
-			return interval
-		}
-		return minBackoff
-	}
-
-	delay := minBackoff
-	for i := 1; i < consecutiveFailures; i++ {
-		if delay >= maxBackoff/2 {
-			delay = maxBackoff
-			break
-		}
-		delay *= 2
-	}
-
-	if interval > 0 && interval < delay {
-		delay = interval
-	}
-	if delay > maxBackoff {
-		delay = maxBackoff
-	}
-	return delay
-}
-
 func (s *Scheduler) notifyDispatcher() {
 	select {
 	case s.wakeCh <- struct{}{}:
 	default:
 	}
-}
-
-func advanceNextRunAt(scheduledAt time.Time, interval time.Duration, now time.Time) time.Time {
-	if interval <= 0 {
-		return now
-	}
-	if scheduledAt.IsZero() {
-		return now
-	}
-	if scheduledAt.After(now) {
-		return scheduledAt
-	}
-
-	skipped := now.Sub(scheduledAt)/interval + 1
-	return scheduledAt.Add(time.Duration(int64(skipped) * interval.Nanoseconds()))
-}
-
-func nextPollAt(now time.Time, interval, offset time.Duration) time.Time {
-	if interval <= 0 {
-		return now
-	}
-
-	if offset < 0 {
-		offset = 0
-	}
-	if offset >= interval {
-		offset %= interval
-	}
-
-	next := now.Truncate(interval).Add(offset)
-	if next.After(now) {
-		return next
-	}
-
-	return next.Add(interval)
-}
-
-// calculateOffset: 채널별 분산 오프셋 계산
-func calculateOffset(key string, interval time.Duration) time.Duration {
-	h := sha256.Sum256([]byte(key))
-	fraction := float64(binary.BigEndian.Uint32(h[:4])) / float64(^uint32(0))
-	return time.Duration(float64(interval) * fraction)
-}
-
-// jobHeap: 우선순위 큐 (min-heap by NextRunAt)
-type jobHeap []*Job
-
-func (h jobHeap) Len() int { return len(h) }
-
-func (h jobHeap) Less(i, j int) bool {
-	// 먼저 NextRunAt 비교
-	if !h[i].NextRunAt.Equal(h[j].NextRunAt) {
-		return h[i].NextRunAt.Before(h[j].NextRunAt)
-	}
-	// 같으면 우선순위 높은 것 먼저
-	return h[i].Priority > h[j].Priority
-}
-
-func (h jobHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].index = i
-	h[j].index = j
-}
-
-func (h *jobHeap) Push(x any) {
-	n := len(*h)
-	job := x.(*Job)
-	job.index = n
-	*h = append(*h, job)
-}
-
-func (h *jobHeap) Pop() any {
-	old := *h
-	n := len(old)
-	job := old[n-1]
-	old[n-1] = nil
-	job.index = -1
-	*h = old[0 : n-1]
-	return job
-}
-
-type RateLimiter struct {
-	mu       sync.Mutex
-	interval time.Duration
-	lastTime time.Time
-}
-
-func NewRateLimiter(interval time.Duration) *RateLimiter {
-	return &RateLimiter{
-		interval: interval,
-	}
-}
-
-func (r *RateLimiter) Wait(ctx context.Context) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	now := time.Now()
-	if r.lastTime.IsZero() {
-		r.lastTime = now
-		return nil
-	}
-
-	elapsed := now.Sub(r.lastTime)
-	if elapsed < r.interval {
-		waitTime := r.interval - elapsed
-		timer := time.NewTimer(waitTime)
-		defer timer.Stop()
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("rate limit wait canceled: %w", ctx.Err())
-		case <-timer.C:
-		}
-	}
-
-	r.lastTime = time.Now()
-	return nil
 }
