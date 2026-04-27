@@ -86,6 +86,8 @@ func NewYouTubeChecker(
 		evaluationWindowCap = 75 * time.Second
 	}
 
+	initCheckerMetrics()
+
 	return &YouTubeChecker{
 		cacheSvc:            cacheSvc,
 		holodexSvc:          holodexSvc,
@@ -238,31 +240,60 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	}
 
 	targetPolicy := c.targetPolicySnapshot()
-	minutesUntil, ok := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
+	currentMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
+	previousMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.Start)
+	minutesUntil, targetCrossed := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
 	scheduleChanges, err := c.detectRoomScheduleChanges(ctx, stream, subscriberRooms)
 	if err != nil {
 		return nil, fmt.Errorf("build upcoming notifications: detect schedule change: %w", err)
 	}
 
-	if !ok {
+	if !targetCrossed {
 		if len(scheduleChanges) == 0 {
+			observeYouTubeUpcomingNoMinuteDecision("no_target", window)
 			return nil, nil
 		}
-		minutesUntil = sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
+		minutesUntil = currentMinutesUntil
 	}
 
+	selection := youtubeUpcomingSelectionLabel(minutesUntil, currentMinutesUntil, targetCrossed)
 	alreadyNotified, err := c.dedupSvc.IsAlreadyNotifiedForSchedule(ctx, stream.ID, *stream.StartScheduled, minutesUntil)
 	if err != nil {
 		return nil, fmt.Errorf("build upcoming notifications: check already notified for schedule: %w", err)
 	}
 
 	if alreadyNotified {
+		observeYouTubeUpcomingDecision("already_notified", minutesUntil, selection, window)
 		return nil, nil
 	}
 
 	resolvedStream := ensureScheduledTime(stream, *stream.StartScheduled)
+	notifications := roomNotificationsWithScheduleChanges(
+		subscriberRooms,
+		resolvedStream.Channel,
+		resolvedStream,
+		minutesUntil,
+		scheduleChanges,
+		!targetCrossed,
+	)
 
-	return roomNotificationsWithScheduleChanges(subscriberRooms, resolvedStream.Channel, resolvedStream, minutesUntil, scheduleChanges, !ok), nil
+	observeYouTubeUpcomingDecision("selected", minutesUntil, selection, window)
+	c.logger.Info("YouTube upcoming alarm selected",
+		slog.String("stream_id", stream.ID),
+		slog.String("channel_id", youtubeStreamChannelID(stream)),
+		slog.Int("minutes_until", minutesUntil),
+		slog.Int("current_minutes_until", currentMinutesUntil),
+		slog.Int("previous_minutes_until", previousMinutesUntil),
+		slog.Bool("window_capped", window.Capped),
+		slog.Bool("initial_observation", window.InitialObservation),
+		slog.Time("window_start", window.Start),
+		slog.Time("window_end", window.End),
+		slog.Time("start_scheduled", stream.StartScheduled.UTC()),
+		slog.String("selection", selection),
+		slog.Int("rooms", len(notifications)),
+	)
+
+	return notifications, nil
 }
 
 func (c *YouTubeChecker) detectRoomScheduleChanges(
@@ -317,12 +348,18 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	}
 
 	startAt := resolveLiveStart(stream)
-	if startAt == nil || startAt.After(now) {
+	if startAt == nil {
+		observeYouTubeLiveCatchup("missing_start")
+		return nil, nil
+	}
+	if startAt.After(now) {
+		observeYouTubeLiveCatchup("future_start")
 		return nil, nil
 	}
 
 	catchupWindow := sharedconstants.FullRefreshInterval + time.Minute
 	if now.Sub(*startAt) > catchupWindow {
+		observeYouTubeLiveCatchup("outside_window")
 		return nil, nil
 	}
 
@@ -332,12 +369,14 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	}
 
 	if alreadyNotified {
+		observeYouTubeLiveCatchup("already_notified")
 		return nil, nil
 	}
 
 	resolvedStream := ensureScheduledTime(stream, *startAt)
 
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
+	suppressedRooms := 0
 	for _, roomID := range subscriberRooms {
 		recentlyUpcoming, err := c.dedupSvc.WasUpcomingEventNotifiedRecently(
 			ctx,
@@ -351,11 +390,29 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 		}
 
 		if recentlyUpcoming {
+			suppressedRooms++
 			continue
 		}
 
 		notifications = append(notifications, roomNotifications([]string{roomID}, resolvedStream.Channel, resolvedStream, 0, "")...)
 	}
+
+	if suppressedRooms > 0 {
+		observeYouTubeLiveCatchup("suppressed_recent_upcoming")
+	}
+	if len(notifications) == 0 {
+		return notifications, nil
+	}
+
+	observeYouTubeLiveCatchup("selected")
+	c.logger.Info("YouTube live catchup alarm selected",
+		slog.String("stream_id", stream.ID),
+		slog.String("channel_id", youtubeStreamChannelID(stream)),
+		slog.Time("start_at", startAt.UTC()),
+		slog.Int64("elapsed_seconds", int64(now.Sub(*startAt)/time.Second)),
+		slog.Int("rooms", len(notifications)),
+		slog.Int("suppressed_rooms", suppressedRooms),
+	)
 
 	return notifications, nil
 }
@@ -399,4 +456,17 @@ func groupStreamsByChannel(streams []*domain.Stream) map[string][]*domain.Stream
 	}
 
 	return grouped
+}
+
+func youtubeStreamChannelID(stream *domain.Stream) string {
+	if stream == nil {
+		return ""
+	}
+	if stream.ChannelID != "" {
+		return stream.ChannelID
+	}
+	if stream.Channel != nil {
+		return stream.Channel.ID
+	}
+	return ""
 }

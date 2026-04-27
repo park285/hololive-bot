@@ -196,6 +196,13 @@ func TestCommonHelperFunctions(t *testing.T) {
 		logger := newCheckerTestLogger()
 		assert.Same(t, logger, safeLogger(logger))
 	})
+
+	t.Run("youtube upcoming selection label", func(t *testing.T) {
+		assert.Equal(t, "schedule_change_only", youtubeUpcomingSelectionLabel(4, 4, false))
+		assert.Equal(t, "recovered_crossing", youtubeUpcomingSelectionLabel(5, 3, true))
+		assert.Equal(t, "current_bucket", youtubeUpcomingSelectionLabel(3, 3, true))
+		assert.Equal(t, "lower_than_current", youtubeUpcomingSelectionLabel(1, 3, true))
+	})
 }
 
 func TestLoadSubscriberRoomsByChannel(t *testing.T) {
@@ -550,7 +557,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 	})
 
-	t.Run("build upcoming notifications does not backfill stale five minute target after initial observation", func(t *testing.T) {
+	t.Run("build upcoming notifications recovers recent capped five minute target after initial observation", func(t *testing.T) {
 		start := now.Add(4 * time.Minute)
 		stream := &domain.Stream{
 			ID:             "upcoming-stale-five",
@@ -569,7 +576,8 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 
 		notifications, err := checker.buildUpcomingNotifications(ctx, stream, []string{"room1"}, window)
 		require.NoError(t, err)
-		assert.Empty(t, notifications)
+		require.Len(t, notifications, 1)
+		assert.Equal(t, 5, notifications[0].MinutesUntil)
 	})
 
 	t.Run("build live catchup notifications", func(t *testing.T) {
