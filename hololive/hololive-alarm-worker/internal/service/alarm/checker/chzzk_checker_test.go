@@ -50,12 +50,12 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 		secondWantLen int
 	}{
 		{
-			name:          "live OPEN이면 알림 생성 후 같은 버킷 dedup",
+			name:          "live OPEN이면 checker가 후보를 생성하고 dedup은 Notifier에 위임",
 			statusCode:    http.StatusOK,
 			responseBody:  `{"code":200,"content":{"status":"OPEN","liveTitle":"치지직 라이브","concurrentUserCount":77,"liveCategoryValue":"게임"}}`,
 			wantLen:       2,
 			expectSecond:  true,
-			secondWantLen: 0,
+			secondWantLen: 2,
 		},
 		{
 			name:         "CLOSE 상태면 알림 없음",
@@ -134,9 +134,10 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 	}
 }
 
-func TestChzzkCheckerCheck_DedupClaimError(t *testing.T) {
+func TestChzzkCheckerCheck_DoesNotPreclaimDedup(t *testing.T) {
 	t.Parallel()
 
+	setNXCalls := 0
 	cacheSvc := &cachemocks.Client{
 		HGetAllFunc: func(context.Context, string) (map[string]string, error) {
 			return map[string]string{"yt-1": "chzzk-1"}, nil
@@ -145,7 +146,8 @@ func TestChzzkCheckerCheck_DedupClaimError(t *testing.T) {
 			return []string{"room-1"}, nil
 		},
 		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
-			return false, errors.New("setnx failed")
+			setNXCalls++
+			return false, errors.New("checker must not preclaim dedup")
 		},
 	}
 
@@ -164,7 +166,7 @@ func TestChzzkCheckerCheck_DedupClaimError(t *testing.T) {
 	require.NoError(t, err)
 
 	notifications, checkErr := checker.Check(t.Context())
-	require.Error(t, checkErr)
-	assert.Contains(t, checkErr.Error(), "claim dedup key")
-	assert.Nil(t, notifications)
+	require.NoError(t, checkErr)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 0, setNXCalls, "checker must not preclaim dedup before queue publish")
 }

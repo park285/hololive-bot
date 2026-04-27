@@ -306,6 +306,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	t.Setenv("KAKAO_ROOMS", "test-room")
 	t.Setenv("IRIS_WEBHOOK_TOKEN", "test-webhook-token")
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
+	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 
 	// Cliproxy 활성화

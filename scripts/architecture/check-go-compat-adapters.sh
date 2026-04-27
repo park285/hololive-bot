@@ -4,12 +4,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "FAIL: ripgrep (rg) is required for compatibility-adapter checks" >&2
+  exit 1
+fi
+
+admin_server_dir="${ROOT_DIR}/hololive/hololive-admin-api/internal/server"
+bot_server_dir="${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal/server"
+
+if [[ ! -d "${admin_server_dir}" ]]; then
+  echo "FAIL: expected admin-api server directory is missing: ${admin_server_dir}" >&2
+  exit 1
+fi
+
 forbidden_files=(
-  "${ROOT_DIR}/hololive/hololive-admin-api/internal/server/shared_compat.go"
-  "${ROOT_DIR}/hololive/hololive-admin-api/internal/server/api_trigger_compat.go"
-  "${ROOT_DIR}/hololive/hololive-admin-api/internal/server/settings_types.go"
-  "${ROOT_DIR}/hololive/hololive-admin-api/internal/server/settings_result.go"
-  "${ROOT_DIR}/hololive/hololive-admin-api/internal/server/api_response.go"
+  "${admin_server_dir}/shared_compat.go"
+  "${admin_server_dir}/api_trigger_compat.go"
+  "${admin_server_dir}/settings_types.go"
+  "${admin_server_dir}/settings_result.go"
+  "${admin_server_dir}/api_response.go"
+  "${bot_server_dir}/shared_compat.go"
+  "${bot_server_dir}/api_trigger_compat.go"
+  "${bot_server_dir}/settings_types.go"
+  "${bot_server_dir}/settings_result.go"
+  "${bot_server_dir}/api_response.go"
   "${ROOT_DIR}/hololive/hololive-shared/internal/envutil/env.go"
   "${ROOT_DIR}/hololive/hololive-shared/pkg/logging/logging.go"
   "${ROOT_DIR}/hololive/hololive-llm-sched/internal/app/delivery_providers_local.go"
@@ -37,8 +55,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-rg -n 'type\s+[A-Za-z0-9_]+\s*=\s*sharedserver\.' \
-  "${ROOT_DIR}/hololive/hololive-admin-api/internal/server" \
+server_search_dirs=("${admin_server_dir}")
+if [[ -d "${bot_server_dir}" ]]; then
+  server_search_dirs+=("${bot_server_dir}")
+fi
+
+rg -n 'type\s+[A-Za-z0-9_]+\s*=\s*[A-Za-z0-9_]*sharedserver\.' \
+  "${server_search_dirs[@]}" \
   -g '*.go' > "${tmp_alias_hits}" || true
 
 if [[ -s "${tmp_alias_hits}" ]]; then

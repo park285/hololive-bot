@@ -90,10 +90,11 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 	assert.Equal(t, "room-1", notifications[0].RoomID)
 	assert.True(t, notifications[0].Stream.IsTwitchOnly)
 
-	// 동일 stream_id 재조회 시 dedup으로 스킵
+	// dedup claim은 Notifier 책임이므로 checker는 동일 라이브 후보를 다시 반환한다.
 	second, secondErr := checker.Check(ctx)
 	require.NoError(t, secondErr)
-	assert.Empty(t, second)
+	require.Len(t, second, 1)
+	assert.Equal(t, notifications[0].Stream.ID, second[0].Stream.ID)
 }
 
 func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
@@ -174,15 +175,11 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	tests := []struct {
-		name             string
-		loginMappings    map[string]string
-		subscriberMap    map[string][]string
-		streamsResponse  *twitch.StreamsResponse
-		setNXClaimed     bool
-		setNXErr         error
-		wantLen          int
-		wantErrContains  string
-		wantSetNXInvokes int
+		name            string
+		loginMappings   map[string]string
+		subscriberMap   map[string][]string
+		streamsResponse *twitch.StreamsResponse
+		wantLen         int
 	}{
 		{
 			name:          "stream found면 room 수만큼 알림 생성",
@@ -193,9 +190,7 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 					{ID: "stream-1", UserID: "user-1", UserLogin: "aqua", UserName: "Aqua", Type: "live", Title: "hello", StartedAt: now},
 				},
 			},
-			setNXClaimed:     true,
-			wantLen:          2,
-			wantSetNXInvokes: 1,
+			wantLen: 2,
 		},
 		{
 			name:          "stream not found(매핑 없음)이면 스킵",
@@ -206,12 +201,10 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 					{ID: "stream-1", UserID: "user-1", UserLogin: "unknown", Type: "live", StartedAt: now},
 				},
 			},
-			setNXClaimed:     true,
-			wantLen:          0,
-			wantSetNXInvokes: 0,
+			wantLen: 0,
 		},
 		{
-			name:          "dedup 충돌이면 알림 생성 안 함",
+			name:          "checker는 dedup 선점 없이 live 후보를 생성",
 			loginMappings: map[string]string{"aqua": "yt-1"},
 			subscriberMap: map[string][]string{"yt-1": {"room-1"}},
 			streamsResponse: &twitch.StreamsResponse{
@@ -219,22 +212,7 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 					{ID: "stream-1", UserID: "user-1", UserLogin: "aqua", Type: "live", StartedAt: now},
 				},
 			},
-			setNXClaimed:     false,
-			wantLen:          0,
-			wantSetNXInvokes: 1,
-		},
-		{
-			name:          "dedup 에러면 실패 반환",
-			loginMappings: map[string]string{"aqua": "yt-1"},
-			subscriberMap: map[string][]string{"yt-1": {"room-1"}},
-			streamsResponse: &twitch.StreamsResponse{
-				Data: []twitch.StreamData{
-					{ID: "stream-1", UserID: "user-1", UserLogin: "aqua", Type: "live", StartedAt: now},
-				},
-			},
-			setNXErr:         errors.New("setnx failed"),
-			wantErrContains:  "claim dedup key",
-			wantSetNXInvokes: 1,
+			wantLen: 1,
 		},
 	}
 
@@ -246,12 +224,7 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 			cacheSvc := &cachemocks.Client{
 				SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 					setNXInvokes++
-
-					if tc.setNXErr != nil {
-						return false, tc.setNXErr
-					}
-
-					return tc.setNXClaimed, nil
+					return false, errors.New("checker must not preclaim dedup")
 				},
 			}
 			checker := &TwitchChecker{
@@ -265,16 +238,9 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 				tc.subscriberMap,
 				tc.streamsResponse,
 			)
-			if tc.wantErrContains != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErrContains)
-				assert.Nil(t, notifications)
-			} else {
-				require.NoError(t, err)
-				require.Len(t, notifications, tc.wantLen)
-			}
-
-			assert.Equal(t, tc.wantSetNXInvokes, setNXInvokes)
+			require.NoError(t, err)
+			require.Len(t, notifications, tc.wantLen)
+			assert.Equal(t, 0, setNXInvokes, "checker must not preclaim dedup before queue publish")
 		})
 	}
 }

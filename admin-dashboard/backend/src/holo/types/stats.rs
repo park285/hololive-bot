@@ -35,5 +35,6 @@ pub struct ChannelStatsResponse {
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct ChannelStatsQuery {
+    #[param(minimum = 0, maximum = 500)]
     pub limit: Option<usize>,
 }

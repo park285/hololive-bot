@@ -85,11 +85,19 @@ func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData
 }
 
 func (t *CommandTransport) SendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
+	if t == nil || t.irisClient == nil {
+		return errors.New("send multiple images: iris client is not configured")
+	}
+	if len(images) == 0 {
+		return errors.New("send multiple images: images must not be empty")
+	}
+
 	sendCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.BotCommand)
 	defer cancel()
 
 	if _, err := t.irisClient.SendMultipleImages(sendCtx, room, images, opts...); err != nil {
-		return fmt.Errorf("send iris multiple images: %w", err)
+		serviceErr := appErrors.NewServiceError("failed to send multiple images", serviceNameIris, "send_multiple_images", err)
+		return fmt.Errorf("send multiple images to room %s: %w", room, serviceErr)
 	}
 
 	return nil

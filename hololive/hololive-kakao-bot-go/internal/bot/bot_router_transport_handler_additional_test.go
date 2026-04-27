@@ -54,8 +54,9 @@ func (c *testCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 }
 
 type testIrisClient struct {
-	sendMessageErr error
-	sendImageErr   error
+	sendMessageErr        error
+	sendImageErr          error
+	sendMultipleImagesErr error
 
 	mu sync.Mutex
 
@@ -105,7 +106,7 @@ func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, imag
 	c.lastMultiImages = images
 	c.mu.Unlock()
 
-	return nil, nil
+	return nil, c.sendMultipleImagesErr
 }
 
 func (c *testIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
@@ -263,6 +264,29 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		err := transport.SendImage(ctx, "room", []byte("data"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
+	})
+
+	t.Run("send multiple images with nil client returns error", func(t *testing.T) {
+		var transport *CommandTransport
+		err := transport.SendMultipleImages(ctx, "room", [][]byte{[]byte("data")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "iris client is not configured")
+	})
+
+	t.Run("send multiple images rejects empty batch", func(t *testing.T) {
+		transport := NewCommandTransport(&testIrisClient{}, nil)
+		err := transport.SendMultipleImages(ctx, "room", nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "images must not be empty")
+	})
+
+	t.Run("send multiple images wraps iris error", func(t *testing.T) {
+		client := &testIrisClient{sendMultipleImagesErr: errors.New("multi failed")}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendMultipleImages(ctx, "room", [][]byte{[]byte("img")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send multiple images to room room")
 	})
 
 	t.Run("send error uses formatter", func(t *testing.T) {

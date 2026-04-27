@@ -39,7 +39,10 @@ function Badge({
 			{children}
 			{onRemove && (
 				<button
-					onClick={onRemove}
+					onClick={(event) => {
+						event.stopPropagation();
+						onRemove();
+					}}
 					className="ml-1 group rounded-full p-0.5 hover:bg-black/5 transition-colors"
 					type="button"
 					aria-label="삭제"

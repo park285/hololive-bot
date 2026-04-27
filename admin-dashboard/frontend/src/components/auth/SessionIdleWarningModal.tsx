@@ -5,20 +5,23 @@ import { useEffect, useState } from "react";
 import { authApi } from "@/api/core";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
-import { useAuthStore } from "@/stores/authStore";
+import { clearClientSession } from "@/lib/sessionLifecycle";
+import toast from "@/lib/toast-api";
 import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
 export const SessionIdleWarningModal = () => {
-	const logout = useAuthStore((state) => state.logout);
 	const {
 		idleWarningOpen,
 		lastActivityAtMs,
 		policy,
 		closeIdleWarning,
 		markSessionActivity,
+		setAbsoluteExpiresAt,
 	} = useSessionWarningStore();
 
 	const [remainingSeconds, setRemainingSeconds] = useState(0);
+	const [isExtending, setIsExtending] = useState(false);
+	const [isLoggingOut, setIsLoggingOut] = useState(false);
 
 	useEffect(() => {
 		if (!idleWarningOpen || !policy) return;
@@ -27,32 +30,56 @@ export const SessionIdleWarningModal = () => {
 			const now = Date.now();
 			const idleTimeoutMs = lastActivityAtMs + policy.idle_timeout_ms;
 			const remainingMs = idleTimeoutMs - now;
-			setRemainingSeconds(Math.max(0, Math.floor(remainingMs / 1000)));
+			setRemainingSeconds(Math.max(0, Math.ceil(remainingMs / 1000)));
 		};
 
 		updateCountdown();
-		const interval = setInterval(updateCountdown, 1000);
+		const interval = window.setInterval(updateCountdown, 1000);
 		return () => {
-			clearInterval(interval);
+			window.clearInterval(interval);
 		};
 	}, [idleWarningOpen, lastActivityAtMs, policy]);
 
 	const handleExtend = async () => {
+		if (isExtending) {
+			return;
+		}
+
+		setIsExtending(true);
 		try {
+			const response = await authApi.heartbeat(false);
+
+			if (response.idle_rejected || response.absolute_expired || response.error) {
+				clearClientSession(true);
+				toast.error(response.error ?? "세션을 연장하지 못했습니다.");
+				return;
+			}
+
+			if (response.absolute_expires_at !== undefined) {
+				setAbsoluteExpiresAt(response.absolute_expires_at);
+			}
+
 			markSessionActivity(Date.now());
 			closeIdleWarning();
-			await authApi.heartbeat(false);
-		} catch (error) {
-			console.error("Failed to extend session:", error);
+			toast.success("세션이 연장되었습니다.");
+		} catch {
+			toast.error("서버와 통신하지 못해 세션을 연장하지 못했습니다.");
+		} finally {
+			setIsExtending(false);
 		}
 	};
 
 	const handleLogout = async () => {
+		if (isLoggingOut) {
+			return;
+		}
+
+		setIsLoggingOut(true);
 		try {
 			await authApi.logout();
 		} finally {
-			logout();
-			closeIdleWarning();
+			setIsLoggingOut(false);
+			clearClientSession(true);
 		}
 	};
 
@@ -60,7 +87,7 @@ export const SessionIdleWarningModal = () => {
 		<BaseModal
 			isOpen={idleWarningOpen}
 			onClose={() => {
-				void handleExtend();
+				// 보안상 닫기, ESC, overlay 동작만으로 세션을 연장하지 않습니다.
 			}}
 			title={
 				<div className="flex items-center gap-2 text-amber-600">
@@ -94,9 +121,10 @@ export const SessionIdleWarningModal = () => {
 						onClick={() => {
 							void handleLogout();
 						}}
+						disabled={isExtending || isLoggingOut}
 					>
 						<LogOut className="mr-2 h-4 w-4" />
-						로그아웃
+						{isLoggingOut ? "로그아웃 중…" : "로그아웃"}
 					</Button>
 					<Button
 						variant="primary"
@@ -104,9 +132,10 @@ export const SessionIdleWarningModal = () => {
 						onClick={() => {
 							void handleExtend();
 						}}
+						disabled={isExtending || isLoggingOut}
 					>
 						<RefreshCcw className="mr-2 h-4 w-4" />
-						세션 연장
+						{isExtending ? "연장 중…" : "세션 연장"}
 					</Button>
 				</div>
 			</div>

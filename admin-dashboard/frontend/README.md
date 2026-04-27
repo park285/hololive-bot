@@ -29,7 +29,8 @@ npm run build
 - `follow-redirects`는 axios transitive advisory 대응을 위해 `overrides`로 상향 고정되어 있습니다.
 - `@tanstack/react-query-devtools`는 개발 환경에서만 lazy-load 됩니다.
 - `msw`는 opt-in 개발 mocking 용도로 셋업되어 있으며, `VITE_ENABLE_MSW=true`일 때만 worker가 시작됩니다.
-- 긴 리스트는 `@tanstack/react-virtual` 기반 `VirtualList`로 점진적으로 가상화됩니다.
+- 긴 리스트는 `@tanstack/react-virtual` 기반 `VirtualList`로 가상화합니다. `AlarmGroups`, `MembersGrid`, `LiveStreamsSection`, `UpcomingStreamsSection`, Docker/Rooms 목록이 이 경로를 사용합니다.
+- `dist`, `dist-analyze`, `dist-profile` 같은 빌드 산출물은 저장소에 커밋하지 않고 CI artifact로만 보관합니다.
 
 ## 개발 서버
 
@@ -51,12 +52,12 @@ VITE_ENABLE_MSW=true npm run dev
 src/
 ├── api/         # 공용 client + generated wrapper
 ├── components/  # 대시보드/Docker/설정 UI
-├── hooks/       # auth bootstrap, heartbeat, websocket, SSR helpers
+├── hooks/       # auth bootstrap, heartbeat, websocket, activity/session warning
 ├── layouts/     # App shell
 ├── lib/         # toast, query client, 공용 유틸
 ├── pages/       # login
 ├── routes/      # lazy route definitions
-└── stores/      # auth store
+└── stores/      # auth/session warning store
 ```
 
 ## 생성 파일

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
@@ -16,8 +17,17 @@ import (
 )
 
 func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsResponse, error) {
-	if len(userLogins) == 0 || len(userLogins) <= maxUserLoginsPerRequest {
-		streams, err := c.getStreams(ctx, userLogins, true)
+	targets := normalizeUserLogins(userLogins)
+	if len(targets) == 0 {
+		return &StreamsResponse{Data: []StreamData{}}, nil
+	}
+
+	if !c.IsConfigured() {
+		return nil, errors.New("twitch client not configured")
+	}
+
+	if len(targets) <= maxUserLoginsPerRequest {
+		streams, err := c.getStreams(ctx, targets, true)
 		if err != nil {
 			return nil, fmt.Errorf("get streams: %w", err)
 		}
@@ -25,12 +35,8 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 		return streams, nil
 	}
 
-	if !c.IsConfigured() {
-		return nil, errors.New("twitch client not configured")
-	}
-
-	chunks := chunkUserLogins(userLogins, maxUserLoginsPerRequest)
-	merged := &StreamsResponse{Data: make([]StreamData, 0, len(userLogins))}
+	chunks := chunkUserLogins(targets, maxUserLoginsPerRequest)
+	merged := &StreamsResponse{Data: make([]StreamData, 0, len(targets))}
 
 	for i, chunk := range chunks {
 		streams, err := c.getStreams(ctx, chunk, true)
@@ -45,10 +51,33 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 			return nil, fmt.Errorf("get stream chunk %d/%d: %w", i+1, len(chunks), err)
 		}
 
-		merged.Data = append(merged.Data, streams.Data...)
+		if streams != nil {
+			merged.Data = append(merged.Data, streams.Data...)
+		}
 	}
 
 	return merged, nil
+}
+
+func normalizeUserLogins(userLogins []string) []string {
+	seen := make(map[string]struct{}, len(userLogins))
+	normalized := make([]string, 0, len(userLogins))
+
+	for _, login := range userLogins {
+		login = strings.ToLower(strings.TrimSpace(login))
+		if login == "" {
+			continue
+		}
+
+		if _, ok := seen[login]; ok {
+			continue
+		}
+
+		seen[login] = struct{}{}
+		normalized = append(normalized, login)
+	}
+
+	return normalized
 }
 
 func chunkUserLogins(userLogins []string, chunkSize int) [][]string {
@@ -122,6 +151,7 @@ func (c *Client) getStreams(
 
 	result, err := c.decodeStreamsResponse(body)
 	if err != nil {
+		c.recordFailure()
 		return nil, fmt.Errorf("decode streams response: %w", err)
 	}
 

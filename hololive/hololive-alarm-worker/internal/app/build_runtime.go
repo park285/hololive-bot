@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -74,7 +75,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 		Config:           cfg,
 		Logger:           logger,
 		Scheduler:        scheduler,
-		ConfigSubscriber: BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmCRUD, logger),
+		ConfigSubscriber: BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
 		ServerAddr:       addr,
 		HttpServer:       sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
 		Managed:          lifecycle.NewManaged(infra.Cleanup),
@@ -82,7 +83,6 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 }
 
 func BuildAlarmWorkerConfigSubscriber(
-	ctx context.Context,
 	cacheSvc cache.Client,
 	alarmCRUD domain.AlarmCRUD,
 	logger *slog.Logger,
@@ -93,6 +93,9 @@ func BuildAlarmWorkerConfigSubscriber(
 
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
 		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
+			ctx, cancel := context.WithTimeout(context.Background(), constants.RequestTimeout.AdminRequest)
+			defer cancel()
+
 			targets := alarmCRUD.UpdateAlarmAdvanceMinutes(ctx, payload.Minutes)
 			if logger != nil {
 				logger.Info(

@@ -83,6 +83,15 @@ func parseBearerToken(c *gin.Context) (string, bool) {
 	return parts[1], true
 }
 
+func (h *AuthHandler) requireAuthService(c *gin.Context) bool {
+	if h == nil || h.auth == nil {
+		writeAuthError(c, http.StatusServiceUnavailable, authsvc.CodeInternal)
+		return false
+	}
+
+	return true
+}
+
 func mapAuthErrorToHTTP(err error) (status int, code authsvc.ErrorCode) {
 	var ae *authsvc.Error
 	if !stdErrors.As(err, &ae) {
@@ -113,6 +122,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
 		return
 	}
+	if !h.requireAuthService(c) {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
@@ -140,6 +152,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
+		return
+	}
+	if !h.requireAuthService(c) {
 		return
 	}
 
@@ -175,6 +190,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		writeAuthError(c, http.StatusUnauthorized, authsvc.CodeUnauthorized)
 		return
 	}
+	if !h.requireAuthService(c) {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
@@ -193,6 +211,9 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
 		writeAuthError(c, http.StatusUnauthorized, authsvc.CodeUnauthorized)
+		return
+	}
+	if !h.requireAuthService(c) {
 		return
 	}
 
@@ -220,6 +241,9 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
 		writeAuthError(c, http.StatusUnauthorized, authsvc.CodeUnauthorized)
+		return
+	}
+	if !h.requireAuthService(c) {
 		return
 	}
 
@@ -252,6 +276,9 @@ func (h *AuthHandler) ResetRequest(c *gin.Context) {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
 		return
 	}
+	if !h.requireAuthService(c) {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
@@ -273,6 +300,9 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
+		return
+	}
+	if !h.requireAuthService(c) {
 		return
 	}
 

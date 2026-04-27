@@ -104,8 +104,9 @@ func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (iris.Cli
 	if fallbackBaseURL == "" {
 		fallbackBaseURL = strings.TrimSpace(os.Getenv(iris.EnvBaseURL))
 	}
-	if fallbackBaseURL == "" {
-		return nil, fmt.Errorf("provide iris client: base URL is required")
+	baseURLFilePath := strings.TrimSpace(os.Getenv(irisBaseURLFileEnv))
+	if fallbackBaseURL == "" && baseURLFilePath == "" {
+		return nil, fmt.Errorf("provide iris client: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
 	botToken := strings.TrimSpace(cfg.BotToken)
@@ -119,7 +120,7 @@ func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (iris.Cli
 	return delivery.NewRuntimeIrisClient(
 		fallbackBaseURL,
 		botToken,
-		strings.TrimSpace(os.Getenv(irisBaseURLFileEnv)),
+		baseURLFilePath,
 		logger,
 		opts...,
 	), nil

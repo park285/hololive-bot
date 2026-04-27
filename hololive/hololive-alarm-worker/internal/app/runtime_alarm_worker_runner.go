@@ -42,10 +42,12 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 	appruntime.Start(ctx, errCh, appruntime.StartHooks{
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,
-		StartAlarmScheduler: func(ctx context.Context) {
-			if r.Scheduler != nil {
-				r.Scheduler.Start(ctx)
+		StartAlarmScheduler: func(ctx context.Context) error {
+			if r.Scheduler == nil {
+				return nil
 			}
+
+			return r.Scheduler.Start(ctx)
 		},
 		RunConfigSubscriber: func(ctx context.Context) {
 			if r.ConfigSubscriber != nil {

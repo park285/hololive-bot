@@ -142,7 +142,16 @@ func (c *Client) refreshToken(ctx context.Context) error {
 		return fmt.Errorf("unmarshal token response: %w", err)
 	}
 
-	c.token.Store(tokenResp.AccessToken)
+	accessToken := strings.TrimSpace(tokenResp.AccessToken)
+	if accessToken == "" {
+		return fmt.Errorf("twitch token response missing access_token")
+	}
+
+	if tokenResp.ExpiresIn <= 0 {
+		return fmt.Errorf("twitch token response expires_in must be positive: %d", tokenResp.ExpiresIn)
+	}
+
+	c.token.Store(accessToken)
 	c.tokenExpiry.Store(time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second))
 
 	c.logger.Info("Twitch token refreshed",

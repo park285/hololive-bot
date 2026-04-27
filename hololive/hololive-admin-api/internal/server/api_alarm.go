@@ -23,21 +23,25 @@ package server
 import (
 	"context"
 	"fmt"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
 func (h *AlarmAPIHandler) GetAlarms(c *gin.Context) {
+	if !h.requireAlarm(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
 	// 모든 알림 레지스트리 키 조회
 	alarmKeys, err := h.alarm.GetAllAlarmKeys(ctx)
 	if err != nil {
-		h.logger.Error("Failed to get alarm keys", slog.Any("error", err))
+		h.safeLogger().Error("Failed to get alarm keys", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get alarms", nil)
 
 		return
@@ -56,9 +60,13 @@ func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
+		return
+	}
+
+	if !h.requireAlarm(c) {
 		return
 	}
 
@@ -67,13 +75,13 @@ func (h *AlarmAPIHandler) DeleteAlarm(c *gin.Context) {
 
 	removed, err := h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, nil)
 	if err != nil {
-		h.logger.Error("Failed to delete alarm", slog.Any("error", err))
+		h.safeLogger().Error("Failed to delete alarm", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to delete alarm", nil)
 
 		return
 	}
 
-	h.activity.Log("alarm_delete", fmt.Sprintf("Alarm deleted: room=%s channel=%s", req.RoomID, req.ChannelID), map[string]any{
+	h.logActivity("alarm_delete", fmt.Sprintf("Alarm deleted: room=%s channel=%s", req.RoomID, req.ChannelID), map[string]any{
 		"room_id":    req.RoomID,
 		"channel_id": req.ChannelID,
 	})

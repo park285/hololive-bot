@@ -6,6 +6,17 @@ interface AchievedMilestonesSectionProps {
 	achievedData?: MilestonesResponse;
 }
 
+const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
+	year: "numeric",
+	month: "2-digit",
+	day: "2-digit",
+});
+
+const formatAchievedDate = (value: string) => {
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? "날짜 없음" : dateFormatter.format(date);
+};
+
 export const AchievedMilestonesSection = ({
 	achievedData,
 }: AchievedMilestonesSectionProps) => (
@@ -44,7 +55,7 @@ export const AchievedMilestonesSection = ({
 							</div>
 							<div className="text-right">
 								<div className="text-xs text-slate-400 mb-1">
-									{new Date(milestone.achievedAt).toLocaleDateString()}
+									{formatAchievedDate(milestone.achievedAt)}
 								</div>
 								<Badge
 									variant={milestone.notified ? "default" : "outline"}

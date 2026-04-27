@@ -289,3 +289,76 @@ func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
 		"resource":  "channels",
 	}), 0.000001)
 }
+
+func TestAlarmService_AddAlarmMergesTypesForExistingChannel(t *testing.T) {
+	ctx := t.Context()
+	as := newTestAlarmService(t)
+
+	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+		RoomID:     "room-type-1",
+		ChannelID:  "ch-type-1",
+		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
+	})
+	require.NoError(t, err)
+	assert.True(t, added)
+
+	added, err = as.AddAlarm(ctx, domain.AddAlarmRequest{
+		RoomID:     "room-type-1",
+		ChannelID:  "ch-type-1",
+		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
+	})
+	require.NoError(t, err)
+	assert.True(t, added)
+
+	registryKey := as.getRegistryKey("room-type-1")
+	liveSubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-1", domain.AlarmTypeLive), registryKey)
+	require.NoError(t, err)
+	communitySubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-1", domain.AlarmTypeCommunity), registryKey)
+	require.NoError(t, err)
+
+	assert.True(t, liveSubscribed)
+	assert.True(t, communitySubscribed)
+}
+
+func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {
+	ctx := t.Context()
+	as := newTestAlarmService(t)
+
+	_, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+		RoomID:    "room-type-2",
+		ChannelID: "ch-type-2",
+		AlarmTypes: domain.AlarmTypes{
+			domain.AlarmTypeLive,
+			domain.AlarmTypeCommunity,
+		},
+	})
+	require.NoError(t, err)
+
+	removed, err := as.RemoveAlarm(ctx, "room-type-2", "ch-type-2", domain.AlarmTypes{domain.AlarmTypeLive})
+	require.NoError(t, err)
+	assert.True(t, removed)
+
+	registryKey := as.getRegistryKey("room-type-2")
+	roomStillSubscribed, err := as.cache.SIsMember(ctx, as.getAlarmKey("room-type-2"), "ch-type-2")
+	require.NoError(t, err)
+	liveSubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeLive), registryKey)
+	require.NoError(t, err)
+	communitySubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeCommunity), registryKey)
+	require.NoError(t, err)
+
+	assert.True(t, roomStillSubscribed)
+	assert.False(t, liveSubscribed)
+	assert.True(t, communitySubscribed)
+}
+
+func TestAlarmService_RejectsUnknownAlarmType(t *testing.T) {
+	as := newTestAlarmService(t)
+
+	_, err := as.AddAlarm(t.Context(), domain.AddAlarmRequest{
+		RoomID:     "room-type-3",
+		ChannelID:  "ch-type-3",
+		AlarmTypes: domain.AlarmTypes{domain.AlarmType("unknown")},
+	})
+
+	require.Error(t, err)
+}

@@ -8,10 +8,10 @@ import apiClient from "./client";
 
 export interface HeartbeatResponse {
 	status?: string;
-	rotated?: boolean;
-	absolute_expires_at?: number;
-	idle_rejected?: boolean;
-	absolute_expired?: boolean;
+	rotated?: boolean | null;
+	absolute_expires_at?: number | null;
+	idle_rejected?: boolean | null;
+	absolute_expired?: boolean | null;
 	error?: string;
 }
 
@@ -64,31 +64,105 @@ export interface DockerContainersResponse {
 
 export interface StatusOnlyResponse {
 	status: string;
-	message?: string;
+	message?: string | null;
 }
 
 interface AuthStatusResponse {
 	status?: string;
-	message?: string;
+	message?: string | null;
 }
 
+interface LoginStatusResponse extends AuthStatusResponse {
+	csrf_token?: string | null;
+}
+
+type DockerContainerApiResponse = GeneratedContainer &
+	Partial<{
+		managed: boolean;
+		paused: boolean;
+		startedAt: string;
+		cpuPercent: number;
+		memoryUsageMB: number;
+		memoryLimitMB: number;
+		memoryPercent: number;
+		networkRxMB: number;
+		networkTxMB: number;
+		blockReadMB: number;
+		blockWriteMB: number;
+		goroutineCount: number;
+	}>;
+
+const normalizeStatusOnly = (
+	data: Partial<StatusOnlyResponse> | null | undefined,
+): StatusOnlyResponse => ({
+	status: data?.status ?? "ok",
+	message: data?.message,
+});
+
+const mapDockerContainer = (container: DockerContainerApiResponse): DockerContainer => ({
+	id: container.id,
+	name: container.name,
+	state: container.state,
+	status: container.status,
+	image: container.image,
+	health: container.health ?? "none",
+	managed: container.managed ?? false,
+	paused: container.paused ?? container.state === "paused",
+	created: container.created,
+	ports: container.ports,
+	...(container.startedAt !== undefined ? { startedAt: container.startedAt } : {}),
+	...(container.cpuPercent !== undefined
+		? { cpuPercent: container.cpuPercent }
+		: {}),
+	...(container.memoryUsageMB !== undefined
+		? { memoryUsageMB: container.memoryUsageMB }
+		: {}),
+	...(container.memoryLimitMB !== undefined
+		? { memoryLimitMB: container.memoryLimitMB }
+		: {}),
+	...(container.memoryPercent !== undefined
+		? { memoryPercent: container.memoryPercent }
+		: {}),
+	...(container.networkRxMB !== undefined
+		? { networkRxMB: container.networkRxMB }
+		: {}),
+	...(container.networkTxMB !== undefined
+		? { networkTxMB: container.networkTxMB }
+		: {}),
+	...(container.blockReadMB !== undefined
+		? { blockReadMB: container.blockReadMB }
+		: {}),
+	...(container.blockWriteMB !== undefined
+		? { blockWriteMB: container.blockWriteMB }
+		: {}),
+	...(container.goroutineCount !== undefined
+		? { goroutineCount: container.goroutineCount }
+		: {}),
+});
+
 export const authApi = {
-	login: async (username: string, password: string): Promise<void> => {
-		const response = await apiClient.post<AuthStatusResponse>("/auth/login", {
+	login: async (username: string, password: string): Promise<LoginStatusResponse> => {
+		const { data } = await apiClient.post<
+			Partial<LoginStatusResponse> | undefined
+		>("/auth/login", {
 			username,
 			password,
 		});
-		if (response.data.status !== "ok") {
-			throw new Error(response.data.message || "인증에 실패했습니다.");
+
+		if (data?.status !== "ok") {
+			throw new Error(data?.message ?? "인증에 실패했습니다.");
 		}
+
+		return data;
 	},
 
 	logout: async (): Promise<StatusOnlyResponse> => {
-		const response = await apiClient.post<AuthStatusResponse>("/auth/logout");
-		return {
-			status: response.data.status ?? "ok",
-			message: response.data.message,
-		};
+		const { data } = await apiClient.post<
+			Partial<AuthStatusResponse> | undefined
+		>(
+			"/auth/logout",
+		);
+		return normalizeStatusOnly(data);
 	},
 
 	getSession: async (): Promise<SessionStatusResponse> => {
@@ -101,12 +175,12 @@ export const authApi = {
 		signal?: AbortSignal,
 	): Promise<HeartbeatResponse> => {
 		try {
-			const response = await apiClient.post(
+			const response = await apiClient.post<HeartbeatResponse>(
 				"/auth/heartbeat",
 				{ idle },
 				{ signal },
 			);
-			return response.data as HeartbeatResponse;
+			return response.data;
 		} catch (error) {
 			if (isAxiosError(error) && error.response?.data) {
 				return error.response.data as HeartbeatResponse;
@@ -120,10 +194,10 @@ const postDockerAction = async (
 	name: string,
 	action: "restart" | "stop" | "start",
 ): Promise<StatusOnlyResponse> => {
-	const { data } = await apiClient.post<StatusOnlyResponse>(
+	const { data } = await apiClient.post<Partial<StatusOnlyResponse> | undefined>(
 		`/docker/containers/${encodeURIComponent(name)}/${action}`,
 	);
-	return data;
+	return normalizeStatusOnly(data);
 };
 
 export const dockerApi = {
@@ -136,19 +210,8 @@ export const dockerApi = {
 		const { data } = await apiClient.get<GeneratedDockerContainerListResponse>(
 			"/docker/containers",
 		);
-		const containers: DockerContainer[] = data.containers.map(
-			(c: GeneratedContainer) => ({
-				id: c.id,
-				name: c.name,
-				state: c.state,
-				status: c.status,
-				image: c.image,
-				health: c.health ?? "none",
-				managed: true,
-				paused: false,
-				created: c.created,
-				ports: c.ports,
-			}),
+		const containers = (data.containers as DockerContainerApiResponse[]).map(
+			mapDockerContainer,
 		);
 		return { status: data.status, containers };
 	},

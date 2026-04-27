@@ -23,6 +23,7 @@ package providers
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -34,6 +35,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 )
+
+func schedulerLogger(logger *slog.Logger) *slog.Logger {
+	if logger != nil {
+		return logger
+	}
+
+	return slog.Default()
+}
 
 // ProvideScraperService - 스크래퍼 서비스 생성
 func ProvideScraperService(
@@ -76,18 +85,19 @@ func ProvideScraperScheduler(
 	logger *slog.Logger,
 	opts ...ScraperSchedulerOption,
 ) *poller.Scheduler {
+	log := schedulerLogger(logger)
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
 	scheduler := newScraperScheduler(resolvedOpts)
 	channelPollerRegistrations := resolvedOpts.channelPollerRegistrations
 	if len(channelPollerRegistrations) == 0 {
-		logger.Warn("Scraper scheduler initialized without poller registrations")
+		log.Warn("Scraper scheduler initialized without poller registrations")
 		return scheduler
 	}
 
 	allExplicit := allRegistrationsExplicit(channelPollerRegistrations)
-	defaultChannelIDs, defaultTargetChannels := resolveDefaultScraperSchedulerChannels(membersData, logger, resolvedOpts, allExplicit)
+	defaultChannelIDs, defaultTargetChannels := resolveDefaultScraperSchedulerChannels(membersData, log, resolvedOpts, allExplicit)
 	if hasExplicitAndImplicitRegistrations(channelPollerRegistrations) {
-		logger.Warn("scraper scheduler has mixed explicit and default-backed registrations",
+		log.Warn("scraper scheduler has mixed explicit and default-backed registrations",
 			slog.Int("poller_templates", len(channelPollerRegistrations)),
 			slog.Int("default_target_channels", defaultTargetChannels))
 	}
@@ -95,14 +105,14 @@ func ProvideScraperScheduler(
 	distinctTargets := make(map[string]struct{}, len(defaultChannelIDs))
 	totalJobs, totalRPM := registerScraperSchedulerPollers(
 		scheduler,
-		logger,
+		log,
 		channelPollerRegistrations,
 		defaultChannelIDs,
 		distinctTargets,
 	)
 
 	distinctTargetChannels := len(distinctTargets)
-	logger.Info("Scraper scheduler initialized",
+	log.Info("Scraper scheduler initialized",
 		slog.Int("default_target_channels", defaultTargetChannels),
 		slog.Int("distinct_target_channels", distinctTargetChannels),
 		slog.Int("poller_templates", len(channelPollerRegistrations)),
@@ -111,7 +121,7 @@ func ProvideScraperScheduler(
 
 	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
 	if totalRPM > budgetRPM {
-		logger.Warn("scraper_poll_budget_exceeds_rate_limit",
+		log.Warn("scraper_poll_budget_exceeds_rate_limit",
 			slog.Float64("expected_total_rpm", totalRPM),
 			slog.Float64("budget_rpm", budgetRPM),
 			slog.Int("distinct_target_channels", distinctTargetChannels),
@@ -193,18 +203,29 @@ func registerScraperSchedulerPollers(
 			continue
 		}
 
+		registeredTargets := 0
 		for _, channelID := range targetChannelIDs {
-			scheduler.Register(channelID, registration.Poller, registration.Priority, registration.Interval)
+			if err := scheduler.RegisterChecked(channelID, registration.Poller, registration.Priority, registration.Interval); err != nil {
+				logger.Warn("Skip invalid scraper poller registration",
+					slog.String("channel_id", channelID),
+					slog.String("poller", registration.Poller.Name()),
+					slog.Any("error", err),
+				)
+				continue
+			}
+
 			distinctTargets[channelID] = struct{}{}
+			registeredTargets++
 		}
 
-		pollerRPM := float64(len(targetChannelIDs)) * (60.0 / registration.Interval.Seconds())
-		totalJobs += len(targetChannelIDs)
+		pollerRPM := estimatedRegistrationRPM(registration, registeredTargets)
+		totalJobs += registeredTargets
 		totalRPM += pollerRPM
 		logger.Info("Scraper poller targets resolved",
 			slog.String("poller", registration.Poller.Name()),
-			slog.Int("target_channels", len(targetChannelIDs)),
+			slog.Int("target_channels", registeredTargets),
 			slog.Duration("interval", registration.Interval),
+			slog.Float64("request_units_per_run", estimatedRegistrationRequestUnitsPerRun(registration)),
 			slog.Float64("expected_rpm", pollerRPM))
 	}
 
@@ -242,13 +263,41 @@ func hasExplicitAndImplicitRegistrations(registrations []ChannelPollerRegistrati
 	return false
 }
 
+func estimatedRegistrationRequestUnitsPerRun(registration ChannelPollerRegistration) float64 {
+	if registration.WorstCaseRequestUnitsPerRun > 0 {
+		return registration.WorstCaseRequestUnitsPerRun
+	}
+
+	requests := registration.RequestsPerRun
+	if requests <= 0 {
+		requests = 1
+	}
+
+	attempts := registration.WorstCaseAttempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+
+	return float64(requests * attempts)
+}
+
+func estimatedRegistrationRPM(registration ChannelPollerRegistration, targetCount int) float64 {
+	if registration.Interval <= 0 || targetCount <= 0 {
+		return 0
+	}
+
+	return float64(targetCount) * (60.0 / registration.Interval.Seconds()) * estimatedRegistrationRequestUnitsPerRun(registration)
+}
+
 func estimatedRequestsPerMinute(registrations []ChannelPollerRegistration) float64 {
 	var rpm float64
 	for _, registration := range registrations {
-		if registration.Interval <= 0 {
-			continue
+		targetCount := 1
+		if registration.HasExplicitChannelIDs {
+			targetCount = len(uniqueChannelIDs(registration.ChannelIDs))
 		}
-		rpm += 60.0 / registration.Interval.Seconds()
+
+		rpm += estimatedRegistrationRPM(registration, targetCount)
 	}
 	return rpm
 }
@@ -261,6 +310,7 @@ func uniqueChannelIDs(channelIDs []string) []string {
 	seen := make(map[string]struct{}, len(channelIDs))
 	unique := make([]string, 0, len(channelIDs))
 	for _, channelID := range channelIDs {
+		channelID = strings.TrimSpace(channelID)
 		if channelID == "" {
 			continue
 		}

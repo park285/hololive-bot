@@ -15,6 +15,8 @@ use super::types::{
     StreamsResponse, YouTubeCommunityShortsOpsResponse,
 };
 
+pub(crate) const MAX_CHANNEL_STATS_LIMIT: usize = 500;
+
 #[utoipa::path(
     get,
     path = "/admin/api/holo/alarms",
@@ -122,13 +124,25 @@ pub async fn get_channel_stats(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ChannelStatsQuery>,
 ) -> Result<(StatusCode, Json<ChannelStatsResponse>), AppError> {
+    let limit = validate_channel_stats_limit(query.limit)?;
+
     let (status, Json(mut response)) = get_typed(&state, "/api/holo/stats/channels", None).await?;
 
-    if let Some(limit) = query.limit {
+    if let Some(limit) = limit {
         trim_channel_stats(&mut response, limit);
     }
 
     Ok((status, Json(response)))
+}
+
+fn validate_channel_stats_limit(limit: Option<usize>) -> Result<Option<usize>, AppError> {
+    match limit {
+        Some(value) if value > MAX_CHANNEL_STATS_LIMIT => Err(crate::error::ApiError::BadRequest {
+            message: "channel stats limit is too large",
+        }
+        .into()),
+        other => Ok(other),
+    }
 }
 
 fn trim_channel_stats(response: &mut ChannelStatsResponse, limit: usize) {
@@ -137,7 +151,12 @@ fn trim_channel_stats(response: &mut ChannelStatsResponse, limit: usize) {
     }
 
     let mut sorted_stats = response.stats.drain().collect::<Vec<_>>();
-    sorted_stats.sort_by_key(|(_, stat)| std::cmp::Reverse(stat.subscriber_count));
+    sorted_stats.sort_by(|(left_key, left), (right_key, right)| {
+        right
+            .subscriber_count
+            .cmp(&left.subscriber_count)
+            .then_with(|| left_key.cmp(right_key))
+    });
     response.stats = sorted_stats.into_iter().take(limit).collect();
 }
 

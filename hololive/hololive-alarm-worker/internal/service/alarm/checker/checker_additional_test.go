@@ -288,7 +288,7 @@ func TestChzzkHelperFunctions(t *testing.T) {
 	assert.Equal(t, domain.StreamStatusLive, stream.Status)
 	assert.Equal(t, "치지직 라이브", stream.Title)
 	assert.Equal(t, "yt1", stream.ChannelID)
-	assert.Equal(t, "chzzk1", stream.ChannelName)
+	assert.Equal(t, "yt1", stream.ChannelName)
 	assert.True(t, stream.IsChzzkOnly)
 	assert.Equal(t, "https://chzzk.naver.com/live/chzzk1", stream.ChzzkLiveURL)
 
@@ -303,7 +303,7 @@ func TestChzzkHelperFunctions(t *testing.T) {
 	require.NotNil(t, stream.ViewerCount)
 	assert.Equal(t, 777, *stream.ViewerCount)
 	assert.Equal(t, "치지직 타이틀", stream.Title)
-	assert.Equal(t, "게임", stream.ChannelName)
+	assert.Equal(t, "yt2", stream.ChannelName)
 }
 
 func TestTwitchHelperFunctions(t *testing.T) {
@@ -391,17 +391,13 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 		},
 	}
 
-	t.Run("success and dedup skip", func(t *testing.T) {
+	t.Run("success without checker-level dedup preclaim", func(t *testing.T) {
 		setNXCalls := 0
 		checker := &TwitchChecker{
 			cacheSvc: &cachemocks.Client{
 				SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 					setNXCalls++
-					if setNXCalls == 1 {
-						return true, nil
-					}
-
-					return false, nil
+					return false, errors.New("checker must not preclaim dedup")
 				},
 			},
 			logger: newCheckerTestLogger(),
@@ -424,27 +420,8 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 			liveResponse,
 		)
 		require.NoError(t, err)
-		assert.Empty(t, notifications)
-	})
-
-	t.Run("dedup error", func(t *testing.T) {
-		checker := &TwitchChecker{
-			cacheSvc: &cachemocks.Client{
-				SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
-					return false, errors.New("setnx failed")
-				},
-			},
-			logger: newCheckerTestLogger(),
-		}
-
-		_, err := checker.buildLiveNotifications(
-			t.Context(),
-			map[string]string{"aqua": "ch1"},
-			map[string][]string{"ch1": {"room1"}},
-			liveResponse,
-		)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "claim dedup key")
+		require.Len(t, notifications, 2)
+		assert.Equal(t, 0, setNXCalls, "checker must not preclaim dedup before queue publish")
 	})
 }
 

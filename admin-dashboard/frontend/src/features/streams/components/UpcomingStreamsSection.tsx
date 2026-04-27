@@ -1,7 +1,7 @@
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import PlayCircle from "lucide-react/dist/esm/icons/play-circle";
-import type { SyntheticEvent } from "react";
+import { type SyntheticEvent, useMemo } from "react";
 import { VirtualList } from "@/components/ui/VirtualList";
 import {
 	getStreamKey,
@@ -20,6 +20,22 @@ const chunkUpcomingStreams = (streams: Stream[]) => {
 	return rows;
 };
 
+const formatScheduledTime = (value: string | null | undefined) => {
+	if (!value) {
+		return "TBA";
+	}
+
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) {
+		return "TBA";
+	}
+
+	return date.toLocaleTimeString("ko-KR", {
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+};
+
 interface UpcomingStreamsSectionProps {
 	upcomingStreams: Stream[];
 	upcomingLoading: boolean;
@@ -30,31 +46,43 @@ export const UpcomingStreamsSection = ({
 	upcomingStreams,
 	upcomingLoading,
 	onThumbnailError,
-}: UpcomingStreamsSectionProps) => (
-	<div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-		<div className="flex items-center gap-2 mb-4">
-			<Calendar className="text-sky-500" />
-			<h3 className="text-lg font-bold text-slate-800">
-				Upcoming Streams (24h)
-			</h3>
-			<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-600">
-				{upcomingStreams.length}
-			</span>
-		</div>
+}: UpcomingStreamsSectionProps) => {
+	const streamRows = useMemo(
+		() => chunkUpcomingStreams(upcomingStreams),
+		[upcomingStreams],
+	);
 
-		{upcomingLoading ? (
-			<div className="h-40 flex items-center justify-center text-slate-400 text-sm">
-				Loading…
+	return (
+		<div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+			<div className="flex items-center gap-2 mb-4">
+				<Calendar className="text-sky-500" />
+				<h3 className="text-lg font-bold text-slate-800">
+					Upcoming Streams (24h)
+				</h3>
+				<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-600">
+					{upcomingStreams.length}
+				</span>
 			</div>
-		) : (
-			upcomingStreams.length === 0 ? (
-					<p className="col-span-full text-center text-slate-400 text-sm py-10">
-						No upcoming streams found.
-					</p>
-				) : (
+
+			{upcomingLoading ? (
+				<div className="h-40 flex items-center justify-center text-slate-400 text-sm">
+					Loading…
+				</div>
+			) : upcomingStreams.length === 0 ? (
+				<p className="col-span-full text-center text-slate-400 text-sm py-10">
+					No upcoming streams found.
+				</p>
+			) : (
 				<VirtualList
-					items={chunkUpcomingStreams(upcomingStreams)}
+					items={streamRows}
 					estimateSize={() => 94}
+					getItemKey={(row, rowIndex) =>
+						row
+							.map((stream, columnIndex) =>
+								getStreamKey(stream, rowIndex * UPCOMING_ROW_SIZE + columnIndex),
+							)
+							.join("|") || `upcoming-row-${String(rowIndex)}`
+					}
 					className="max-h-[36rem] pr-1"
 					itemClassName="pb-3"
 					renderItem={(row, rowIndex) => (
@@ -72,7 +100,7 @@ export const UpcomingStreamsSection = ({
 										key={getStreamKey(stream, streamIndex)}
 										href={linkMeta.href}
 										target="_blank"
-										rel="noreferrer"
+										rel="noopener noreferrer"
 										className="flex items-center p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors group [content-visibility:auto] contain-intrinsic-size-[80px]"
 									>
 										<div className="w-20 h-14 rounded-lg overflow-hidden shrink-0 bg-slate-100 mr-4 relative flex items-center justify-center text-slate-300">
@@ -102,12 +130,7 @@ export const UpcomingStreamsSection = ({
 										</div>
 										<div className="ml-4 text-right shrink-0 flex flex-col items-end gap-1">
 											<div className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded whitespace-nowrap">
-												{stream.start_scheduled
-													? new Date(stream.start_scheduled).toLocaleTimeString([], {
-															hour: "2-digit",
-															minute: "2-digit",
-														})
-													: "TBA"}
+												{formatScheduledTime(stream.start_scheduled)}
 											</div>
 											<span className="inline-flex items-center gap-1 text-[10px] text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors">
 												{linkMeta.badge}
@@ -120,7 +143,7 @@ export const UpcomingStreamsSection = ({
 						</div>
 					)}
 				/>
-			)
-		)}
-	</div>
-);
+			)}
+		</div>
+	);
+};

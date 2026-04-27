@@ -7,26 +7,33 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "@/api/core";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
+import { broadcastSessionLogout } from "@/hooks/useActivityDetection";
+import { clearClientSession } from "@/lib/sessionLifecycle";
 import { NAV_GROUPS, prefetchRoute, ROUTE_MANIFEST } from "@/routes/manifest";
-import { queryClient } from "@/lib/queryClient";
-import { useAuthStore } from "@/stores/authStore";
 
 export const AppLayout = () => {
 	const navigate = useNavigate();
 	const location = useLocation();
-	const logout = useAuthStore((state) => state.logout);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+	const [isLoggingOut, setIsLoggingOut] = useState(false);
 
 	const handleLogout = () => {
+		if (isLoggingOut) {
+			return;
+		}
+
+		setIsLoggingOut(true);
 		void (async () => {
 			try {
 				await authApi.logout();
 			} catch {
-				// 에러 무시
+				// 서버 로그아웃 실패 여부와 무관하게 클라이언트 세션은 정리합니다.
+			} finally {
+				broadcastSessionLogout();
+				setIsLoggingOut(false);
+				clearClientSession();
+				void navigate("/login", { replace: true });
 			}
-			logout();
-			queryClient.clear();
-			void navigate("/login");
 		})();
 	};
 
@@ -162,7 +169,9 @@ export const AppLayout = () => {
 
 				<div className="p-4 border-t border-slate-100">
 					<button
+						type="button"
 						onClick={handleLogout}
+						disabled={isLoggingOut}
 						className={clsx(
 							"flex items-center w-full p-3.5 rounded-xl hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors group",
 							!isSidebarOpen && "justify-center",
@@ -174,7 +183,9 @@ export const AppLayout = () => {
 							className="group-hover:stroke-rose-600 transition-colors"
 						/>
 						{isSidebarOpen && (
-							<span className="ml-3 font-medium">로그아웃</span>
+							<span className="ml-3 font-medium">
+									{isLoggingOut ? "로그아웃 중…" : "로그아웃"}
+								</span>
 						)}
 					</button>
 				</div>

@@ -104,7 +104,8 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 
 	return &Config{
 		Iris: IrisConfig{
-			BaseURL:                   sharedenv.String("IRIS_BASE_URL", "http://localhost:3000"),
+			BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
+			BaseURLFile:               sharedenv.String("IRIS_BASE_URL_FILE", ""),
 			WebhookToken:              webhookToken,
 			BotToken:                  botToken,
 			HTTPTimeout:               time.Duration(sharedenv.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
@@ -230,6 +231,9 @@ func (c *Config) Validate() error {
 	}
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
 		return fmt.Errorf("IRIS_BOT_TOKEN is required")
+	}
+	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
+		return fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 	if strings.TrimSpace(c.Holodex.APIKey) == "" {
 		return fmt.Errorf("HOLODEX_API_KEY is required")

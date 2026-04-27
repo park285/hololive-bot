@@ -157,8 +157,8 @@ services:
     environment:
       <<: *app-file-log-env
       GOGC: "60"
-      IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
+      IRIS_BASE_URL: ${IRIS_BASE_URL:-}
+      IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -181,7 +181,7 @@ services:
       LOG_DIR: /app/logs
       GOMEMLIMIT: "450MiB"
       # 통합 Goroutine 모니터링용 외부 서비스 Health URL (llm 레포 서비스 → host.docker.internal)
-      SERVICES_LLM_SCHEDULER_HEALTH_URL: http://host.docker.internal:30003/health
+      SERVICES_LLM_SCHEDULER_HEALTH_URL: http://llm-scheduler:30003/health
       SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
       SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
       APP_ENV: "production"
@@ -227,6 +227,7 @@ services:
       hololive-net:
         aliases:
           - hololive-bot
+      docker-proxy-net: {}
 
   hololive-admin-api:
     image: hololive-admin-api:prod
@@ -263,7 +264,7 @@ services:
       GOMEMLIMIT: "320MiB"
       APP_ENV: "production"
       LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
-      SERVICES_LLM_SCHEDULER_HEALTH_URL: http://host.docker.internal:30003/health
+      SERVICES_LLM_SCHEDULER_HEALTH_URL: http://llm-scheduler:30003/health
       SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL: http://host.docker.internal:30081/health
       SERVICES_GAME_BOT_TURTLE_HEALTH_URL: http://host.docker.internal:30082/health
     ports:
@@ -383,8 +384,8 @@ services:
     environment:
       <<: *app-file-log-env
       DISPATCHER_PORT: "30020"
-      IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
+      IRIS_BASE_URL: ${IRIS_BASE_URL:-}
+      IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_HOST: valkey-cache
       CACHE_PORT: 6379
@@ -445,8 +446,8 @@ services:
       YOUTUBE_INGESTION_ENABLED: "false"
       PHOTO_SYNC_ENABLED: "true"
       YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED: "false"
-      IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
+      IRIS_BASE_URL: ${IRIS_BASE_URL:-}
+      IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -538,8 +539,8 @@ services:
       YOUTUBE_INGESTION_ENABLED: "true"
       PHOTO_SYNC_ENABLED: "false"
       YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED: "true"
-      IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
+      IRIS_BASE_URL: ${IRIS_BASE_URL:-}
+      IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -628,8 +629,8 @@ services:
     environment:
       <<: *app-file-log-env
       LLM_SCHEDULER_PORT: 30003
-      IRIS_BASE_URL: ${IRIS_BASE_URL:?IRIS_BASE_URL is required}
-      IRIS_BASE_URL_FILE: /app/runtime-config/iris_base_url
+      IRIS_BASE_URL: ${IRIS_BASE_URL:-}
+      IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
@@ -742,6 +743,7 @@ services:
       hololive-net:
         aliases:
           - admin-dashboard
+      docker-proxy-net: {}
 
   # Docker Socket Proxy
   docker-proxy:
@@ -774,7 +776,7 @@ services:
           memory: 32m
     logging: *default-logging
     networks:
-      - hololive-net
+      - docker-proxy-net
 
   # Container Health Monitor (DeUnhealth)
   deunhealth:
@@ -795,7 +797,7 @@ services:
     logging: *default-logging
     <<: *security-hardening
     networks:
-      - hololive-net
+      - docker-proxy-net
 
 volumes:
   holo-pg-data:
@@ -810,3 +812,6 @@ volumes:
 networks:
   hololive-net:
     driver: bridge
+  docker-proxy-net:
+    driver: bridge
+    internal: true

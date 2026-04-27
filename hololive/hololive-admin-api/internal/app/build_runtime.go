@@ -133,7 +133,7 @@ func BuildAdminAPIRuntime(ctx context.Context, cfg *config.Config, logger *slog.
 		{Name: "llm-scheduler", URL: cfg.Services.LLMSchedulerHealthURL},
 		{Name: "twentyq", URL: cfg.Services.GameBotTwentyQHealthURL},
 		{Name: "turtlesoup", URL: cfg.Services.GameBotTurtleHealthURL},
-	})
+	}, system.WithServiceName("hololive-admin-api"))
 
 	var communityShortsOpsRepo server.YouTubeCommunityShortsOpsRepository
 	if infra.Postgres != nil && infra.Postgres.GetGormDB() != nil {

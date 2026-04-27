@@ -203,7 +203,7 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			}
 		})
 
-		t.Run("not ready when iris is unreachable", func(t *testing.T) {
+		t.Run("ready still passes when iris is unreachable", func(t *testing.T) {
 			rt := newTestRuntimeForReadinessWithIris(true, false)
 			rt.readyState.dispatchLoopRunning.Store(true)
 			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
@@ -211,8 +211,8 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 
 			rt.routes().ServeHTTP(rec, req)
 
-			if rec.Code != http.StatusServiceUnavailable {
-				t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 			}
 
 			var payload map[string]any

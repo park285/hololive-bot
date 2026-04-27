@@ -244,7 +244,7 @@ func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 			result, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
 			require.Error(t, sendErr)
 			assert.Contains(t, sendErr.Error(), "youtube outbox path")
-			assert.Equal(t, SendResult{}, result)
+			assert.Equal(t, SendResult{Failed: 1}, result)
 			assert.Contains(t, logBuffer.String(), legacyCommunityShortsRouteAuditLogMessage)
 			assert.Contains(t, logBuffer.String(), "\"delivery_path\":\""+legacyCommunityShortsDeliveryPath+"\"")
 			assert.Contains(t, logBuffer.String(), "\"alarm_type\":\""+string(alarmType)+"\"")

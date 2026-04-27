@@ -65,6 +65,7 @@ export const RoomsListSection = ({
 					<VirtualList
 						items={rooms}
 						estimateSize={() => 68}
+						getItemKey={(room) => room}
 						recomputeKey={removePending}
 						className="max-h-[32rem]"
 						itemClassName="border-b border-slate-100"

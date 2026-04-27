@@ -25,8 +25,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
+	"github.com/valkey-io/valkey-go"
 )
 
 // - alarm:chzzk_channels (youtube_channel_id -> chzzk_channel_id)
@@ -132,6 +134,11 @@ func (as *AlarmService) logDuplicateTwitchMapping(twitchLogin, keptChannelID, ig
 }
 
 func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, channelID string) error {
+	channelID = stringutil.TrimSpace(channelID)
+	if channelID == "" {
+		return nil
+	}
+
 	if as.cache == nil {
 		return errors.New("cache service not configured")
 	}
@@ -187,29 +194,97 @@ func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, chann
 	return nil
 }
 
+const replaceHashMappingsScript = `
+local source = ARGV[1]
+local target = ARGV[2]
+if redis.call('EXISTS', source) == 1 then
+  redis.call('RENAME', source, target)
+else
+  redis.call('DEL', target)
+end
+return 1
+`
+
 func (as *AlarmService) replaceHashMappings(
 	ctx context.Context,
 	key string,
 	mappings map[string]string,
 ) error {
-	if err := as.cache.Del(ctx, key); err != nil {
-		return fmt.Errorf("delete key %s: %w", key, err)
-	}
-
-	if len(mappings) == 0 {
-		return nil
+	key = stringutil.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("mapping key is empty")
 	}
 
 	fields := make(map[string]any, len(mappings))
 	for field, value := range mappings {
+		field = stringutil.TrimSpace(field)
+		value = stringutil.TrimSpace(value)
+		if field == "" || value == "" {
+			continue
+		}
 		fields[field] = value
 	}
 
-	if err := as.cache.HMSet(ctx, key, fields); err != nil {
-		return fmt.Errorf("hmset key %s: %w", key, err)
+	if len(fields) == 0 {
+		if err := as.cache.Del(ctx, key); err != nil {
+			return fmt.Errorf("delete empty mapping key %s: %w", key, err)
+		}
+
+		return nil
+	}
+
+	tmpKey := fmt.Sprintf("%s:tmp:%d", key, time.Now().UnixNano())
+	if err := as.cache.Del(ctx, tmpKey); err != nil {
+		return fmt.Errorf("delete temp mapping key %s: %w", tmpKey, err)
+	}
+
+	if err := as.cache.HMSet(ctx, tmpKey, fields); err != nil {
+		_ = as.cache.Del(context.WithoutCancel(ctx), tmpKey)
+		return fmt.Errorf("hmset temp mapping key %s: %w", tmpKey, err)
+	}
+
+	if err := as.renameHashMappingKey(ctx, tmpKey, key, fields); err != nil {
+		_ = as.cache.Del(context.WithoutCancel(ctx), tmpKey)
+		return fmt.Errorf("rename mapping key %s from %s: %w", key, tmpKey, err)
 	}
 
 	return nil
+}
+
+func (as *AlarmService) renameHashMappingKey(ctx context.Context, tmpKey, key string, fields map[string]any) error {
+	client, builder, ok := as.rawPlatformMappingEvalClient()
+	if !ok {
+		if err := as.cache.Del(ctx, key); err != nil {
+			return fmt.Errorf("fallback delete key %s: %w", key, err)
+		}
+		if err := as.cache.HMSet(ctx, key, fields); err != nil {
+			return fmt.Errorf("fallback hmset key %s: %w", key, err)
+		}
+		return nil
+	}
+
+	resp := client.Do(ctx, builder.Eval().Script(replaceHashMappingsScript).Numkeys(0).Arg(tmpKey, key).Build())
+	if err := resp.Error(); err != nil {
+		return fmt.Errorf("eval rename key %s from %s: %w", key, tmpKey, err)
+	}
+
+	return nil
+}
+
+func (as *AlarmService) rawPlatformMappingEvalClient() (_ valkey.Client, _ valkey.Builder, ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+
+	client := as.cache.GetClient()
+	builder := as.cache.B()
+	if client == nil {
+		return nil, valkey.Builder{}, false
+	}
+
+	return client, builder, true
 }
 
 func (as *AlarmService) removePlatformMappingsForChannel(ctx context.Context, channelID string) error {
@@ -224,14 +299,40 @@ func (as *AlarmService) removePlatformMappingsForChannel(ctx context.Context, ch
 	return nil
 }
 
+func (as *AlarmService) removeStaleTwitchLoginMappingIfOwned(ctx context.Context, login, channelID string) error {
+	login = stringutil.Normalize(login)
+	channelID = stringutil.TrimSpace(channelID)
+	if login == "" || channelID == "" {
+		return nil
+	}
+
+	owner, err := as.cache.HGet(ctx, TwitchLoginMapKey, login)
+	if err != nil {
+		return fmt.Errorf("get stale twitch login owner: %w", err)
+	}
+	if owner != "" && owner != channelID {
+		return nil
+	}
+
+	if err := as.cache.HDel(ctx, TwitchLoginMapKey, login); err != nil {
+		return fmt.Errorf("delete stale twitch login mapping: %w", err)
+	}
+
+	return nil
+}
+
 func (as *AlarmService) reconcileTwitchMappingsForChannel(ctx context.Context, channelID, desiredLogin string) error {
+	channelID = stringutil.TrimSpace(channelID)
+	desiredLogin = stringutil.Normalize(desiredLogin)
+
 	currentLogin, err := as.cache.HGet(ctx, TwitchChannelLoginMapKey, channelID)
 	if err != nil {
 		return fmt.Errorf("get current twitch channel login: %w", err)
 	}
+	currentLogin = stringutil.Normalize(currentLogin)
 
 	if currentLogin != "" && currentLogin != desiredLogin {
-		if delErr := as.cache.HDel(ctx, TwitchLoginMapKey, currentLogin); delErr != nil {
+		if delErr := as.removeStaleTwitchLoginMappingIfOwned(ctx, currentLogin, channelID); delErr != nil {
 			return fmt.Errorf("delete stale twitch login mapping: %w", delErr)
 		}
 	}

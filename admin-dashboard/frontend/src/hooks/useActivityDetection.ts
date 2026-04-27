@@ -2,78 +2,156 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
 const CHANNEL_NAME = "admin_session";
-const THROTTLE_MS = 1000; // Local throttle: 1s
-const BROADCAST_THROTTLE_MS = 5000; // Broadcast throttle: 5s
+const THROTTLE_MS = 1000;
+const BROADCAST_THROTTLE_MS = 5000;
 
-interface TabSyncMessage {
-	type: "ACTIVITY" | "LOGOUT";
-	timestamp: number;
+type TabSyncMessage =
+	| { type: "ACTIVITY"; timestamp: number }
+	| { type: "LOGOUT"; timestamp: number };
+
+interface UseActivityDetectionOptions {
+	enabled: boolean;
+	idleTimeoutMs: number;
+	onRemoteLogout?: () => void;
 }
 
-export function useActivityDetection(idleTimeoutMs: number) {
+const parseTabSyncMessage = (value: unknown): TabSyncMessage | null => {
+	if (typeof value !== "object" || value === null) {
+		return null;
+	}
+
+	const candidate = value as Partial<TabSyncMessage>;
+
+	if (
+		candidate.type === "ACTIVITY" &&
+		typeof candidate.timestamp === "number"
+	) {
+		return { type: "ACTIVITY", timestamp: candidate.timestamp };
+	}
+
+	if (
+		candidate.type === "LOGOUT" &&
+		typeof candidate.timestamp === "number"
+	) {
+		return { type: "LOGOUT", timestamp: candidate.timestamp };
+	}
+
+	return null;
+};
+
+export const broadcastSessionLogout = (): void => {
+	if (typeof BroadcastChannel === "undefined") {
+		return;
+	}
+
+	const channel = new BroadcastChannel(CHANNEL_NAME);
+	channel.postMessage({
+		type: "LOGOUT",
+		timestamp: Date.now(),
+	} satisfies TabSyncMessage);
+	channel.close();
+};
+
+export function useActivityDetection({
+	enabled,
+	idleTimeoutMs,
+	onRemoteLogout,
+}: UseActivityDetectionOptions) {
 	const [isIdle, setIsIdle] = useState(false);
 	const timeoutRef = useRef<number | null>(null);
 	const channelRef = useRef<BroadcastChannel | null>(null);
 	const lastActivityRef = useRef<number>(0);
 	const lastBroadcastRef = useRef<number>(0);
-	const markSessionActivity = useSessionWarningStore((state) => state.markSessionActivity);
+	const markSessionActivity = useSessionWarningStore(
+		(state) => state.markSessionActivity,
+	);
 
-	const resetTimerInternal = useCallback(() => {
-		setIsIdle(false);
-		markSessionActivity(Date.now());
-
-		if (timeoutRef.current) {
+	const clearIdleTimer = useCallback(() => {
+		if (timeoutRef.current !== null) {
 			window.clearTimeout(timeoutRef.current);
+			timeoutRef.current = null;
 		}
+	}, []);
 
-		timeoutRef.current = window.setTimeout(() => {
-			setIsIdle(true);
-		}, idleTimeoutMs);
-	}, [idleTimeoutMs, markSessionActivity]);
+	const resetTimerInternal = useCallback(
+		(nowMs = Date.now()) => {
+			if (!enabled) {
+				return;
+			}
+
+			clearIdleTimer();
+			setIsIdle(false);
+			markSessionActivity(nowMs);
+
+			timeoutRef.current = window.setTimeout(() => {
+				setIsIdle(true);
+			}, idleTimeoutMs);
+		},
+		[clearIdleTimer, enabled, idleTimeoutMs, markSessionActivity],
+	);
 
 	const resetTimer = useCallback(() => {
+		if (!enabled) {
+			return;
+		}
+
 		const now = Date.now();
 
 		if (now - lastActivityRef.current < THROTTLE_MS) {
 			return;
 		}
+
 		lastActivityRef.current = now;
-		resetTimerInternal();
+		resetTimerInternal(now);
 
 		if (now - lastBroadcastRef.current < BROADCAST_THROTTLE_MS) {
 			return;
 		}
 
-		if (channelRef.current) {
-			const message: TabSyncMessage = {
-				type: "ACTIVITY",
-				timestamp: now,
-			};
-			channelRef.current.postMessage(message);
-			lastBroadcastRef.current = now;
-		}
-	}, [resetTimerInternal]);
+		channelRef.current?.postMessage({
+			type: "ACTIVITY",
+			timestamp: now,
+		} satisfies TabSyncMessage);
+		lastBroadcastRef.current = now;
+	}, [enabled, resetTimerInternal]);
 
 	useEffect(() => {
-		if (typeof BroadcastChannel === "undefined") {
+		if (!enabled || typeof BroadcastChannel === "undefined") {
 			return;
 		}
 
-		channelRef.current = new BroadcastChannel(CHANNEL_NAME);
+		const channel = new BroadcastChannel(CHANNEL_NAME);
+		channelRef.current = channel;
 
-		channelRef.current.onmessage = (event: MessageEvent<TabSyncMessage>) => {
-			if (event.data.type === "ACTIVITY") {
-				resetTimerInternal();
+		channel.onmessage = (event: MessageEvent<unknown>) => {
+			const message = parseTabSyncMessage(event.data);
+			if (!message) {
+				return;
 			}
+
+			if (message.type === "ACTIVITY") {
+				resetTimerInternal(Date.now());
+				return;
+			}
+
+			onRemoteLogout?.();
 		};
 
 		return () => {
-			channelRef.current?.close();
-			channelRef.current = null;
+			channel.close();
+			if (channelRef.current === channel) {
+				channelRef.current = null;
+			}
 		};
-	}, [resetTimerInternal]);
+	}, [enabled, onRemoteLogout, resetTimerInternal]);
 
 	useEffect(() => {
+		if (!enabled) {
+			clearIdleTimer();
+			setIsIdle(false);
+			return;
+		}
+
 		const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
 
 		events.forEach((event) => {
@@ -86,11 +164,9 @@ export function useActivityDetection(idleTimeoutMs: number) {
 			events.forEach((event) => {
 				document.removeEventListener(event, resetTimer);
 			});
-			if (timeoutRef.current) {
-				window.clearTimeout(timeoutRef.current);
-			}
+			clearIdleTimer();
 		};
-	}, [resetTimer, resetTimerInternal]);
+	}, [clearIdleTimer, enabled, resetTimer, resetTimerInternal]);
 
 	return isIdle;
 }

@@ -43,7 +43,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
-const readyCheckTimeout = 2 * time.Second
+const readyCheckTimeout = 500 * time.Millisecond
 
 type Runtime struct {
 	cfg        *Config
@@ -55,6 +55,7 @@ type Runtime struct {
 	dispatcher *dispatch.Dispatcher
 	httpServer *http.Server
 	readyState *readinessState
+	irisProbe  *cachedBoolProbe
 	lifecycle.Managed
 }
 
@@ -136,6 +137,7 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		irisClient: irisClient,
 		dispatcher: dispatcher,
 		readyState: newReadinessState(),
+		irisProbe:  newCachedBoolProbe(2 * time.Second),
 	}
 	runtime.Managed = lifecycle.NewManaged(func() {
 		if runtime.cacheSvc == nil {
@@ -259,9 +261,9 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	checkCtx, cancel := context.WithTimeout(req.Context(), readyCheckTimeout)
 	defer cancel()
 	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
-	irisConnected := r.irisClient != nil && r.irisClient.Ping(checkCtx)
+	irisConnected := r.cachedIrisPing(checkCtx)
 
-	ready := dispatchLoopRunning && valkeyConnected && irisConnected
+	ready := dispatchLoopRunning && valkeyConnected
 	statusCode := http.StatusOK
 	status := "ready"
 	if !ready {
@@ -277,6 +279,60 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	}
 
 	writeJSON(req.Context(), w, statusCode, response)
+}
+
+func (r *Runtime) cachedIrisPing(ctx context.Context) bool {
+	if r == nil || r.irisClient == nil {
+		return false
+	}
+
+	if r.irisProbe == nil {
+		return r.irisClient.Ping(ctx)
+	}
+
+	return r.irisProbe.Get(ctx, func(ctx context.Context) bool {
+		return r.irisClient.Ping(ctx)
+	})
+}
+
+type cachedBoolProbe struct {
+	mu     sync.Mutex
+	ttl    time.Duration
+	lastAt time.Time
+	lastOK bool
+}
+
+func newCachedBoolProbe(ttl time.Duration) *cachedBoolProbe {
+	if ttl <= 0 {
+		ttl = time.Second
+	}
+
+	return &cachedBoolProbe{ttl: ttl}
+}
+
+func (p *cachedBoolProbe) Get(ctx context.Context, fn func(context.Context) bool) bool {
+	if p == nil || fn == nil {
+		return false
+	}
+
+	now := time.Now()
+
+	p.mu.Lock()
+	if !p.lastAt.IsZero() && now.Sub(p.lastAt) < p.ttl {
+		result := p.lastOK
+		p.mu.Unlock()
+		return result
+	}
+	p.mu.Unlock()
+
+	result := fn(ctx)
+
+	p.mu.Lock()
+	p.lastAt = now
+	p.lastOK = result
+	p.mu.Unlock()
+
+	return result
 }
 
 func buildHTTPServer(port int, handler http.Handler) *http.Server {

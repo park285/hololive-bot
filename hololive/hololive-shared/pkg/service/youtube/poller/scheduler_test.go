@@ -368,3 +368,37 @@ func TestSchedulerUpdatePriorityIntervalDecreaseRecalculatesOffsetAndAnchor(t *t
 	assert.False(t, job.NextRunAt.Before(lowerBound))
 	assert.False(t, job.NextRunAt.After(upperBound))
 }
+
+func TestSchedulerCanRestartAfterStop(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{
+		WorkerCount:     1,
+		RequestInterval: 0,
+		PollTimeout:     50 * time.Millisecond,
+	})
+
+	require.NoError(t, scheduler.RegisterChecked(
+		"channel-restart",
+		&togglePollerStub{name: "restart"},
+		PriorityNormal,
+		time.Hour,
+	))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NotPanics(t, func() {
+		scheduler.Start(ctx)
+		scheduler.Stop()
+		scheduler.Start(ctx)
+		scheduler.Stop()
+	})
+}
+
+func TestSchedulerRegisterCheckedRejectsInvalidInput(t *testing.T) {
+	scheduler := NewScheduler(SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
+
+	require.Error(t, scheduler.RegisterChecked("", &togglePollerStub{name: "videos"}, PriorityNormal, time.Minute))
+	require.Error(t, scheduler.RegisterChecked("channel-1", nil, PriorityNormal, time.Minute))
+	require.Error(t, scheduler.RegisterChecked("channel-1", &togglePollerStub{name: "videos"}, PriorityNormal, 0))
+	require.Error(t, scheduler.RegisterChecked("channel-1", &togglePollerStub{name: "   "}, PriorityNormal, time.Minute))
+}

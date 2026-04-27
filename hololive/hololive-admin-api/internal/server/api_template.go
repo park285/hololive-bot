@@ -23,13 +23,13 @@ package server
 import (
 	"context"
 	"errors"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -63,6 +63,10 @@ type templateRevisionsResponse struct {
 }
 
 func (h *TemplateAPIHandler) GetTemplates(c *gin.Context) {
+	if !h.requireTemplateAdmin(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -90,6 +94,10 @@ func (h *TemplateAPIHandler) GetTemplates(c *gin.Context) {
 }
 
 func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
+	if !h.requireTemplateAdmin(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -102,7 +110,7 @@ func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error("Failed to get template", slog.String("key", string(key)), slog.Any("error", err))
+		h.safeLogger().Error("Failed to get template", slog.String("key", string(key)), slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "failed to get template", nil)
 
 		return
@@ -116,18 +124,22 @@ func (h *TemplateAPIHandler) GetTemplateByKey(c *gin.Context) {
 }
 
 func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
-	defer cancel()
-
-	key := domain.TemplateKey(c.Param("key"))
-
 	var req templateUpsertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
+
+	if !h.requireTemplateAdmin(c) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	defer cancel()
+
+	key := domain.TemplateKey(c.Param("key"))
 
 	var channelPtr *string
 
@@ -137,7 +149,7 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 
 	tmpl, err := h.templateAdmin.Save(ctx, key, channelPtr, req.Body)
 	if err != nil {
-		h.logger.Warn("Failed to save template", slog.String("key", string(key)), slog.Any("error", err))
+		h.safeLogger().Warn("Failed to save template", slog.String("key", string(key)), slog.Any("error", err))
 
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
@@ -157,6 +169,10 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 }
 
 func (h *TemplateAPIHandler) DeleteTemplateOverride(c *gin.Context) {
+	if !h.requireTemplateAdmin(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -179,22 +195,26 @@ func (h *TemplateAPIHandler) DeleteTemplateOverride(c *gin.Context) {
 }
 
 func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
-	defer cancel()
-
-	key := domain.TemplateKey(c.Param("key"))
-
 	var req templatePreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
 	}
 
+	if !h.requireTemplateAdmin(c) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+	defer cancel()
+
+	key := domain.TemplateKey(c.Param("key"))
+
 	rendered, sampleData, err := h.templateAdmin.Preview(ctx, key, req.Body)
 	if err != nil {
-		h.logger.Warn("Failed to preview template", slog.String("key", string(key)), slog.Any("error", err))
+		h.safeLogger().Warn("Failed to preview template", slog.String("key", string(key)), slog.Any("error", err))
 
 		switch {
 		case errors.Is(err, template.ErrTemplateKeyNotFound):
@@ -217,6 +237,10 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 }
 
 func (h *TemplateAPIHandler) GetTemplateRevisions(c *gin.Context) {
+	if !h.requireTemplateAdmin(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -242,6 +266,10 @@ func (h *TemplateAPIHandler) GetTemplateRevisions(c *gin.Context) {
 }
 
 func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
+	if !h.requireTemplateAdmin(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -260,7 +288,7 @@ func (h *TemplateAPIHandler) GetTemplateRevision(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error("Failed to get revision", slog.Int64("id", id), slog.Any("error", err))
+		h.safeLogger().Error("Failed to get revision", slog.Int64("id", id), slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "failed to get revision", nil)
 
 		return

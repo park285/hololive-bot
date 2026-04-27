@@ -22,12 +22,16 @@ pub async fn auth_middleware(
     let (session_id, valid) =
         validate_session_signature(&session_cookie, &state.config.session_secret);
     if !valid {
-        return Err(AuthError::Unauthorized.into());
+        return Ok(auth_error_response_with_cookie_clear(
+            AuthError::Unauthorized,
+            should_set_secure_cookie(req.headers(), state.config.security.force_https),
+        ));
     }
 
-    match state.sessions.validate_session(&session_id).await {
-        Ok(true) => {}
-        Ok(false) => {
+    match state.sessions.get_session(&session_id).await {
+        Ok(Some(session)) if session.rotated_to.is_none() => {}
+        Ok(Some(_)) if req.uri().path() == "/admin/api/auth/heartbeat" => {}
+        Ok(Some(_) | None) => {
             return Ok(auth_error_response_with_cookie_clear(
                 AuthError::Unauthorized,
                 should_set_secure_cookie(req.headers(), state.config.security.force_https),
@@ -88,9 +92,12 @@ pub fn set_csrf_cookie(headers: &mut HeaderMap, token: &str, force_https: bool) 
     }
 }
 
-pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool) {
+pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool, http_only: bool) {
     let secure = if force_https { "; Secure" } else { "" };
-    let cookie = format!("{name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=-1{secure}");
+    let http_only = if http_only { "; HttpOnly" } else { "" };
+    let cookie = format!(
+        "{name}=; SameSite=Strict; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT{http_only}{secure}"
+    );
     if let Ok(val) = HeaderValue::from_str(&cookie) {
         headers.append(SET_COOKIE, val);
     }
@@ -98,8 +105,8 @@ pub fn set_clear_cookie(headers: &mut HeaderMap, name: &str, force_https: bool) 
 
 pub fn auth_error_response_with_cookie_clear(error: AuthError, force_https: bool) -> Response {
     let mut response = AppError::Auth(error).into_response();
-    set_clear_cookie(response.headers_mut(), "admin_session", force_https);
-    set_clear_cookie(response.headers_mut(), "csrf_token", false);
+    set_clear_cookie(response.headers_mut(), "admin_session", force_https, true);
+    set_clear_cookie(response.headers_mut(), "csrf_token", force_https, false);
     response
 }
 
@@ -265,13 +272,26 @@ mod tests {
     #[test]
     fn test_set_clear_cookie_attributes() {
         let mut headers = HeaderMap::new();
-        set_clear_cookie(&mut headers, "admin_session", true);
+        set_clear_cookie(&mut headers, "admin_session", true, true);
         let cookie = headers.get(SET_COOKIE).unwrap().to_str().unwrap();
         assert!(cookie.contains("admin_session="));
-        assert!(cookie.contains("Max-Age=-1"));
+        assert!(cookie.contains("Max-Age=0"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("SameSite=Strict"));
         assert!(cookie.contains("Path=/"));
+        assert!(cookie.contains("Secure"));
+        assert!(cookie.contains("Expires=Thu, 01 Jan 1970 00:00:00 GMT"));
+    }
+
+    #[test]
+    fn test_set_clear_cookie_can_clear_non_httponly_csrf_cookie() {
+        let mut headers = HeaderMap::new();
+        set_clear_cookie(&mut headers, "csrf_token", true, false);
+        let cookie = headers.get(SET_COOKIE).unwrap().to_str().unwrap();
+
+        assert!(cookie.contains("csrf_token="));
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(!cookie.contains("HttpOnly"));
         assert!(cookie.contains("Secure"));
     }
 
@@ -291,9 +311,9 @@ mod tests {
     #[test]
     fn test_set_clear_cookie_no_https() {
         let mut headers = HeaderMap::new();
-        set_clear_cookie(&mut headers, "admin_session", false);
+        set_clear_cookie(&mut headers, "admin_session", false, true);
         let cookie = headers.get(SET_COOKIE).unwrap().to_str().unwrap();
-        assert!(cookie.contains("Max-Age=-1"));
+        assert!(cookie.contains("Max-Age=0"));
         assert!(!cookie.contains("Secure"));
     }
 

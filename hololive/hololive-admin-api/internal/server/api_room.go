@@ -31,8 +31,7 @@ import (
 )
 
 func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
-	if h.acl == nil {
-		sharedserver.RespondError(c, 503, "ACL service not available", nil)
+	if !h.requireACL(c) {
 		return
 	}
 
@@ -48,8 +47,7 @@ func (h *RoomAPIHandler) GetRooms(c *gin.Context) {
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
-	if h.acl == nil {
-		sharedserver.RespondError(c, 503, "ACL service not available", nil)
+	if !h.requireACL(c) {
 		return
 	}
 
@@ -58,7 +56,7 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -68,7 +66,7 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 
 	added, err := h.acl.AddRoom(ctx, req.Room)
 	if err != nil {
-		h.logger.Error("Failed to add room", slog.String("room", req.Room), slog.Any("error", err))
+		h.safeLogger().Error("Failed to add room", slog.String("room", req.Room), slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to add room", nil)
 
 		return
@@ -84,14 +82,13 @@ func (h *RoomAPIHandler) AddRoom(c *gin.Context) {
 		"message": "Room added successfully",
 	})
 
-	h.activity.Log("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
+	h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
 //
 //nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
-	if h.acl == nil {
-		sharedserver.RespondError(c, 503, "ACL service not available", nil)
+	if !h.requireACL(c) {
 		return
 	}
 
@@ -100,7 +97,7 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -110,7 +107,7 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 
 	removed, err := h.acl.RemoveRoom(ctx, req.Room)
 	if err != nil {
-		h.logger.Error("Failed to remove room", slog.String("room", req.Room), slog.Any("error", err))
+		h.safeLogger().Error("Failed to remove room", slog.String("room", req.Room), slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to remove room", nil)
 
 		return
@@ -126,12 +123,11 @@ func (h *RoomAPIHandler) RemoveRoom(c *gin.Context) {
 		"message": "Room removed successfully",
 	})
 
-	h.activity.Log("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
+	h.logActivity("room_remove", "Room removed from ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
 func (h *RoomAPIHandler) SetACL(c *gin.Context) {
-	if h.acl == nil {
-		sharedserver.RespondError(c, 503, "ACL service not available", nil)
+	if !h.requireACL(c) {
 		return
 	}
 
@@ -141,7 +137,7 @@ func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 
 		return
@@ -157,7 +153,7 @@ func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	// enabled 변경
 	if req.Enabled != nil {
 		if err := h.acl.SetEnabled(ctx, *req.Enabled); err != nil {
-			h.logger.Error("Failed to set ACL enabled", slog.Bool("enabled", *req.Enabled), slog.Any("error", err))
+			h.safeLogger().Error("Failed to set ACL enabled", slog.Bool("enabled", *req.Enabled), slog.Any("error", err))
 			sharedserver.RespondError(c, 500, "Failed to set ACL enabled", nil)
 
 			return
@@ -168,7 +164,7 @@ func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 	if req.Mode != nil {
 		mode := acl.ParseACLMode(*req.Mode)
 		if err := h.acl.SetMode(ctx, mode); err != nil {
-			h.logger.Error("Failed to set ACL mode", slog.String("mode", *req.Mode), slog.Any("error", err))
+			h.safeLogger().Error("Failed to set ACL mode", slog.String("mode", *req.Mode), slog.Any("error", err))
 			sharedserver.RespondError(c, 500, "Failed to set ACL mode", nil)
 
 			return
@@ -177,9 +173,9 @@ func (h *RoomAPIHandler) SetACL(c *gin.Context) {
 
 	// 최종 상태 조회
 	enabled, mode, _ := h.acl.GetACLStatus()
-	h.logger.Info("Room ACL updated", slog.Bool("enabled", enabled), slog.String("mode", string(mode)))
+	h.safeLogger().Info("Room ACL updated", slog.Bool("enabled", enabled), slog.String("mode", string(mode)))
 
-	h.activity.Log("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s", enabled, mode), map[string]any{"enabled": enabled, "mode": string(mode)})
+	h.logActivity("acl_update", fmt.Sprintf("Room ACL updated: enabled=%v, mode=%s", enabled, mode), map[string]any{"enabled": enabled, "mode": string(mode)})
 	c.JSON(200, gin.H{
 		"status":  "ok",
 		"message": "ACL setting updated successfully",

@@ -35,20 +35,30 @@ const (
 )
 
 func (h *StreamAPIHandler) sharedStreamHandler() *sharedserver.StreamHandler {
-	return &sharedserver.StreamHandler{
-		Logger:            h.logger,
-		Holodex:           h.holodex,
-		YouTube:           h.youtube,
-		ValkeyCache:       h.valkeyCache,
-		StatsRepo:         h.statsRepo,
-		MemberRepo:        h.repo,
-		MemberIndexLoader: h.memberIndexLoader,
-		State:             h.ensureStreamState(),
-		RespondError:      sharedserver.RespondError,
+	var api *APIHandler
+	if h != nil {
+		api = h.APIHandler
+	}
+
+	handler := &sharedserver.StreamHandler{
+		Logger:       api.safeLogger(),
+		State:        api.ensureStreamState(),
+		RespondError: sharedserver.RespondError,
 		RespondInternalError: func(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr) {
-			sharedserver.RespondInternalError(h.logger, c, userMessage, logMessage, err, attrs...)
+			sharedserver.RespondInternalError(api.safeLogger(), c, userMessage, logMessage, err, attrs...)
 		},
 	}
+
+	if api != nil {
+		handler.Holodex = api.holodex
+		handler.YouTube = api.youtube
+		handler.ValkeyCache = api.valkeyCache
+		handler.StatsRepo = api.statsRepo
+		handler.MemberRepo = api.repo
+		handler.MemberIndexLoader = api.memberIndexLoader
+	}
+
+	return handler
 }
 
 func (h *StreamAPIHandler) GetLiveStreams(c *gin.Context) {

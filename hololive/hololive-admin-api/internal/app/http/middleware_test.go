@@ -14,7 +14,7 @@ func TestCorsOriginGuard_ForbiddenResponseContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.Use(corsOriginGuard([]string{"https://allowed.example"}))
+	router.Use(corsOriginGuard([]string{"https://allowed.example"}, true, nil))
 	router.GET("/api/holo/test", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})

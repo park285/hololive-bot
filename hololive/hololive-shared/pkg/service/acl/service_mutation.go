@@ -62,15 +62,20 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 
 // SetMode ACL 모드 변경 (whitelist ↔ blacklist).
 func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
+	normalizedMode, err := normalizeACLModeStrict(mode)
+	if err != nil {
+		return err
+	}
+
 	s.mu.RLock()
 	current := s.mode
 	s.mu.RUnlock()
 
-	if current == mode {
+	if current == normalizedMode {
 		return nil
 	}
 
-	result := s.db.Where("key = ?", dbKeyMode).Assign(Settings{Value: string(mode)}).FirstOrCreate(&Settings{Key: dbKeyMode})
+	result := s.db.Where("key = ?", dbKeyMode).Assign(Settings{Value: string(normalizedMode)}).FirstOrCreate(&Settings{Key: dbKeyMode})
 	if result.Error != nil {
 		return fmt.Errorf("failed to save ACL mode setting: %w", result.Error)
 	}
@@ -88,7 +93,7 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	}
 
 	s.logger.Info("ACL mode updated",
-		slog.String("mode", string(mode)),
+		slog.String("mode", string(normalizedMode)),
 	)
 
 	return nil

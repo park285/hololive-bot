@@ -177,27 +177,34 @@ func NewRuntimeScheduler(
 }
 
 // Start는 3개 플랫폼 루프를 병렬 실행하고 context 취소 시 종료한다.
-func (s *RuntimeScheduler) Start(ctx context.Context) {
+func (s *RuntimeScheduler) Start(ctx context.Context) error {
+	if s == nil {
+		return errors.New("runtime scheduler is nil")
+	}
 	if ctx == nil {
-		s.logger.Warn("Runtime scheduler start skipped: nil context")
-		return
+		return errors.New("runtime scheduler context is nil")
 	}
 
-	var eg errgroup.Group
+	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		s.runLoop(ctx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
-		return nil
+		return s.runLoop(egCtx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
 	})
 	eg.Go(func() error {
-		s.runLoop(ctx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
-		return nil
+		return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
 	})
 	eg.Go(func() error {
-		s.runLoop(ctx, "twitch", s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
-		return nil
+		return s.runLoop(egCtx, "twitch", s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
 	})
 
-	_ = eg.Wait()
+	if err := eg.Wait(); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil
+		}
+
+		return fmt.Errorf("runtime scheduler stopped: %w", err)
+	}
+
+	return nil
 }
 
 func (s *RuntimeScheduler) runLoop(
@@ -207,7 +214,7 @@ func (s *RuntimeScheduler) runLoop(
 	timeout time.Duration,
 	runImmediately bool,
 	run func(context.Context) error,
-) {
+) error {
 	next := time.NewTimer(initialLoopDelay(time.Now(), interval, runImmediately))
 	defer next.Stop()
 
@@ -215,7 +222,7 @@ func (s *RuntimeScheduler) runLoop(
 		select {
 		case <-ctx.Done():
 			s.logger.Info("Alarm loop stopped", slog.String("loop", name))
-			return
+			return ctx.Err()
 		case <-next.C:
 			loopCtx, cancel := context.WithTimeout(ctx, timeout)
 			err := run(loopCtx)
@@ -229,7 +236,11 @@ func (s *RuntimeScheduler) runLoop(
 				)
 			}
 
-			next.Reset(time.Until(nextAligned(time.Now(), interval)))
+			delay := time.Until(nextAligned(time.Now(), interval))
+			if delay < 0 {
+				delay = 0
+			}
+			next.Reset(delay)
 		}
 	}
 }
@@ -336,9 +347,6 @@ func (s *RuntimeScheduler) dispatchNotifications(
 	}
 
 	sendResult, err := s.notifier.Send(ctx, notifications)
-	if err != nil {
-		return fmt.Errorf("dispatch notifications: send notifications: %w", err)
-	}
 
 	s.logger.Debug("Alarm notifications dispatched",
 		slog.String("loop", loopName),
@@ -346,6 +354,10 @@ func (s *RuntimeScheduler) dispatchNotifications(
 		slog.Int("skipped", sendResult.Skipped),
 		slog.Int("failed", sendResult.Failed),
 	)
+
+	if err != nil {
+		return fmt.Errorf("dispatch notifications: send notifications partially failed: %w", err)
+	}
 
 	return nil
 }

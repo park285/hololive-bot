@@ -32,7 +32,7 @@ import (
 )
 
 type runtimeAlarmScheduler interface {
-	Start(ctx context.Context)
+	Start(ctx context.Context) error
 }
 
 type AlarmWorkerRuntime struct {

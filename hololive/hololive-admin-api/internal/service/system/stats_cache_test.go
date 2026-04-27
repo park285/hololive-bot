@@ -135,7 +135,7 @@ func TestCollector_GetCurrentStats_CacheMissThenHit(t *testing.T) {
 		t.Fatalf("first.Goroutines=%d want>0", first.Goroutines)
 	}
 
-	if len(first.ServiceGoroutines) == 0 || first.ServiceGoroutines[0].Name != "hololive-bot" {
+	if len(first.ServiceGoroutines) == 0 || first.ServiceGoroutines[0].Name != "hololive-admin-api" {
 		t.Fatalf("unexpected service goroutines: %+v", first.ServiceGoroutines)
 	}
 

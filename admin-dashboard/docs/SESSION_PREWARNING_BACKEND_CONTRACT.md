@@ -4,7 +4,7 @@
 
 범위:
 
-- 백엔드 계약: 구현 완료
+- 백엔드 계약: 구현 완료 및 동시성/입력검증 방어 반영
 - 프론트엔드 모달/상태/UI: 별도 구현 필요
 
 이 문서의 목적은 아래 두 가지입니다.
@@ -29,7 +29,7 @@
 - absolute timeout pre-warning 모달 UI
 - 위 두 모달의 표시/해제/연장 액션 상태 관리
 
-즉, **백엔드 계약은 닫혔고, 남은 일은 프론트 UI/상태 구현뿐**입니다.
+즉, **백엔드 계약은 세션 회전 동시성, malformed heartbeat 방어, 절대 만료 전달까지 반영된 상태이며, 남은 일은 프론트 UI/상태 구현뿐**입니다.
 
 ---
 
@@ -99,6 +99,17 @@ type SessionStatusResponse = {
 
 ### 활성 상태 응답
 
+세션이 회전되지 않은 일반 heartbeat도 절대 만료 시각을 반환합니다.
+
+```json
+{
+  "status": "ok",
+  "absolute_expires_at": 1735568988
+}
+```
+
+세션 회전이 발생했거나 이미 회전된 구 세션으로 heartbeat가 늦게 도착한 경우에는 새 세션 쿠키와 CSRF 토큰이 함께 내려옵니다.
+
 ```json
 {
   "status": "ok",
@@ -110,8 +121,9 @@ type SessionStatusResponse = {
 
 주의:
 
-- `rotated=true`면 새 세션 기준 CSRF 토큰이 내려옵니다.
+- `rotated=true`면 새 세션 기준 세션 쿠키와 CSRF 토큰이 내려옵니다.
 - `absolute_expires_at`는 절대 만료 시각입니다.
+- malformed heartbeat body는 세션 연장으로 간주하지 않고 HTTP `400`으로 거절합니다.
 
 ### idle 확정 응답
 

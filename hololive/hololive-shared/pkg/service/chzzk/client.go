@@ -121,12 +121,26 @@ func (c *Client) HasOpenAPICredentials() bool {
 	return c.clientID != "" && c.clientSecret != ""
 }
 
+func escapedChannelPath(channelID string) (string, error) {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return "", fmt.Errorf("channel id is empty")
+	}
+
+	return url.PathEscape(channelID), nil
+}
+
 func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStatusContent, error) {
 	if err := c.rejectIfCircuitOpen(); err != nil {
 		return nil, err
 	}
 
-	path := fmt.Sprintf("/polling/v2/channels/%s/live-status", channelID)
+	escapedChannelID, err := escapedChannelPath(channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	path := fmt.Sprintf("/polling/v2/channels/%s/live-status", escapedChannelID)
 	reqURL := c.baseURL + path
 
 	req, err := c.newRequest(ctx, "GET", reqURL)
@@ -145,6 +159,24 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 		return nil, err
 	}
 
+	if liveStatusResp.Code != http.StatusOK {
+		c.handleStatusCodeError(liveStatusResp.Code)
+
+		return nil, &apperrors.APIError{
+			Operation:  chzzkGetLiveStatusOp,
+			StatusCode: liveStatusResp.Code,
+			Err: fmt.Errorf(
+				"chzzk api code=%d message=%s",
+				liveStatusResp.Code,
+				liveStatusResp.Message,
+			),
+		}
+	}
+
+	if liveStatusResp.Content == nil {
+		return nil, fmt.Errorf("chzzk live status content is nil")
+	}
+
 	return liveStatusResp.Content, nil
 }
 
@@ -153,7 +185,12 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 		return nil, err
 	}
 
-	path := fmt.Sprintf("/service/v1/channels/%s/scheduled-lives", channelID)
+	escapedChannelID, err := escapedChannelPath(channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	path := fmt.Sprintf("/service/v1/channels/%s/scheduled-lives", escapedChannelID)
 	reqURL := c.baseURL + path
 
 	req, err := c.newRequest(ctx, "GET", reqURL)
@@ -170,6 +207,20 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+
+	if scheduledResp.Code != http.StatusOK {
+		c.handleStatusCodeError(scheduledResp.Code)
+
+		return nil, &apperrors.APIError{
+			Operation:  chzzkGetScheduledLivesOp,
+			StatusCode: scheduledResp.Code,
+			Err: fmt.Errorf(
+				"chzzk api code=%d message=%s",
+				scheduledResp.Code,
+				scheduledResp.Message,
+			),
+		}
 	}
 
 	if scheduledResp.Content == nil {
@@ -218,6 +269,7 @@ func (c *Client) executeRequest(
 	}
 
 	if err := handleBody(body); err != nil {
+		c.handleRequestFailure()
 		return err
 	}
 
@@ -251,6 +303,7 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 
 	body, err := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
 	if err != nil {
+		c.handleRequestFailure()
 		return nil, fmt.Errorf("%s: %w", readErrorPrefix, err)
 	}
 
