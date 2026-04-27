@@ -261,7 +261,7 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 	}
 }
 
-func TestYouTubeChecker_DoesNotBackfillLateFiveMinuteAlarm(t *testing.T) {
+func TestYouTubeChecker_RecoversRecentCappedFiveMinuteAlarm(t *testing.T) {
 	t.Parallel()
 
 	cacheSvc := newCheckerTestCacheClient(t)
@@ -290,7 +290,8 @@ func TestYouTubeChecker_DoesNotBackfillLateFiveMinuteAlarm(t *testing.T) {
 		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
 	}, []string{"room-1"}, window)
 	require.NoError(t, err)
-	assert.Empty(t, notifications)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 5, notifications[0].MinutesUntil)
 }
 
 func TestYouTubeChecker_BuildUpcomingNotifications_FallsBackToThreeMinuteTarget(t *testing.T) {
@@ -322,6 +323,38 @@ func TestYouTubeChecker_BuildUpcomingNotifications_FallsBackToThreeMinuteTarget(
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 3, notifications[0].MinutesUntil)
+}
+
+func TestYouTubeChecker_BuildUpcomingNotifications_PrefersRecoveredFiveMinuteTargetOverCurrentThree(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService("http://unused", "k", cacheSvc, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
+	require.NoError(t, err)
+
+	window := sharedchecker.EvaluationWindow{
+		Start:  time.Date(2026, 4, 9, 11, 55, 55, 0, time.UTC),
+		End:    time.Date(2026, 4, 9, 11, 57, 10, 0, time.UTC),
+		Capped: true,
+	}
+	startScheduled := time.Date(2026, 4, 9, 12, 1, 9, 0, time.UTC)
+
+	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
+		ID:             "recovered-five-over-three",
+		ChannelID:      "ch-1",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &startScheduled,
+		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
+	}, []string{"room-1"}, window)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 5, notifications[0].MinutesUntil)
 }
 
 func TestYouTubeChecker_BuildUpcomingNotifications_DoesNotInventThreeMinuteTarget(t *testing.T) {

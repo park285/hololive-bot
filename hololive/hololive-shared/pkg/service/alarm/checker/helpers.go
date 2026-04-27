@@ -124,8 +124,9 @@ func IsTargetMinute(targetMinutes []int, minutesUntil int) bool {
 }
 
 type EvaluationWindow struct {
-	Start              time.Time
-	End                time.Time
+	Start time.Time
+	End   time.Time
+	// Capped는 Start가 최대 lookback으로 제한됐다는 진단 정보이며, Start 이후 target crossing은 유효하다.
 	Capped             bool
 	InitialObservation bool
 }

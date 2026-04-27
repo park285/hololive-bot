@@ -437,7 +437,7 @@ func TestHighestCrossedTarget(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name:    "does not backfill stale five minute target outside cap",
+			name:    "recovers recent capped five minute target",
 			targets: []int{5, 3, 1},
 			start:   base.Add(4 * time.Minute),
 			window: EvaluationWindow{
@@ -445,8 +445,20 @@ func TestHighestCrossedTarget(t *testing.T) {
 				End:    base,
 				Capped: true,
 			},
-			want:   0,
-			wantOK: false,
+			want:   5,
+			wantOK: true,
+		},
+		{
+			name:    "prefers higher recent crossing over current lower target",
+			targets: []int{5, 3, 1},
+			start:   base.Add(3*time.Minute + 59*time.Second),
+			window: EvaluationWindow{
+				Start:  base.Add(-75 * time.Second),
+				End:    base,
+				Capped: true,
+			},
+			want:   5,
+			wantOK: true,
 		},
 		{
 			name:    "finds three minute target when five minute is stale",
