@@ -14,21 +14,39 @@ import {
 import { NearMilestonesSection } from "@/features/milestones/components/NearMilestonesSection";
 
 export const MilestonesPage = () => {
-	const { data: stats, isLoading: isStatsLoading } = useQuery({
+	const {
+		data: stats,
+		isLoading: isStatsLoading,
+		isError: isStatsError,
+		error: statsError,
+		refetch: refetchStats,
+	} = useQuery({
 		queryKey: queryKeys.milestones.stats,
 		queryFn: milestonesApi.getStats,
 		staleTime: 30000,
 		refetchInterval: 60000,
 	});
 
-	const { data: nearData, isLoading: isNearLoading } = useQuery({
+	const {
+		data: nearData,
+		isLoading: isNearLoading,
+		isError: isNearError,
+		error: nearError,
+		refetch: refetchNear,
+	} = useQuery({
 		queryKey: queryKeys.milestones.near,
 		queryFn: () => milestonesApi.getNear(0.9),
 		staleTime: 30000,
 		refetchInterval: 60000,
 	});
 
-	const { data: achievedData, isLoading: isAchievedLoading } = useQuery({
+	const {
+		data: achievedData,
+		isLoading: isAchievedLoading,
+		isError: isAchievedError,
+		error: achievedError,
+		refetch: refetchAchieved,
+	} = useQuery({
 		queryKey: queryKeys.milestones.all,
 		queryFn: () => milestonesApi.getAchieved({ limit: 20 }),
 		staleTime: 60000,
@@ -36,6 +54,8 @@ export const MilestonesPage = () => {
 	});
 
 	const isLoading = isStatsLoading || isNearLoading || isAchievedLoading;
+	const hasError = isStatsError || isNearError || isAchievedError;
+	const firstError = statsError ?? nearError ?? achievedError;
 
 	if (isLoading) {
 		return (
@@ -44,6 +64,28 @@ export const MilestonesPage = () => {
 					<Loader2 />
 				</div>
 				마일스톤 데이터를 불러오는 중…
+			</div>
+		);
+	}
+
+	if (hasError) {
+		return (
+			<div className="rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center text-rose-600">
+				<p className="font-bold">마일스톤 데이터를 불러오지 못했습니다.</p>
+				<p className="mt-2 text-sm">
+					{firstError instanceof Error
+						? firstError.message
+						: "잠시 후 다시 시도해주세요."}
+				</p>
+				<button
+					type="button"
+					onClick={() => {
+						void Promise.all([refetchStats(), refetchNear(), refetchAchieved()]);
+					}}
+					className="mt-4 rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+				>
+					다시 시도
+				</button>
 			</div>
 		);
 	}

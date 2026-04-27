@@ -65,16 +65,19 @@ func NewNotifier(
 	}, nil
 }
 
-// Send는 알림 목록을 순차 처리한다.
+// Send는 알림 목록을 독립 처리한다. 단일 큐 발행 실패가 전체 배치를 중단하지 않도록
+// 실패는 집계하고 나머지 알림은 계속 처리한다.
 func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, error) {
 	result := SendResult{}
+	var errs []error
 
 	for _, notification := range notifications {
-		singleResult, err := n.sendOne(ctx, notification)
-		if err != nil {
-			return result, fmt.Errorf("send notifications: send one: %w", err)
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("send notifications: context done: %w", err))
+			break
 		}
 
+		singleResult, err := n.sendOne(ctx, notification)
 		switch singleResult {
 		case sendOutcomeSent:
 			result.Sent++
@@ -82,10 +85,40 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 			result.Skipped++
 		case sendOutcomeFailed:
 			result.Failed++
+		default:
+			if err != nil {
+				result.Failed++
+			}
+		}
+
+		if err != nil {
+			errs = append(errs, fmt.Errorf("send notification room=%q stream=%q: %w", notificationRoomID(notification), notificationStreamID(notification), err))
+			n.logger.Warn("Alarm notification send failed",
+				slog.String("room_id", notificationRoomID(notification)),
+				slog.String("stream_id", notificationStreamID(notification)),
+				slog.Any("error", err),
+			)
+			continue
 		}
 	}
 
-	return result, nil
+	return result, errors.Join(errs...)
+}
+
+func notificationRoomID(notification *domain.AlarmNotification) string {
+	if notification == nil {
+		return ""
+	}
+
+	return notification.RoomID
+}
+
+func notificationStreamID(notification *domain.AlarmNotification) string {
+	if notification == nil || notification.Stream == nil {
+		return ""
+	}
+
+	return notification.Stream.ID
 }
 
 type sendOutcome int

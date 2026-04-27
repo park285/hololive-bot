@@ -61,7 +61,8 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 			APIKey: sharedenv.String("API_SECRET_KEY", ""),
 		},
 		Iris: IrisConfig{
-			BaseURL:      sharedenv.String("IRIS_BASE_URL", "http://localhost:3000"),
+			BaseURL:      sharedenv.String("IRIS_BASE_URL", ""),
+			BaseURLFile:  sharedenv.String("IRIS_BASE_URL_FILE", ""),
 			WebhookToken: webhookToken,
 			BotToken:     botToken,
 		},
@@ -99,6 +100,9 @@ func (c *LLMSchedulerConfig) validate() error {
 	}
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
 		return fmt.Errorf("IRIS_BOT_TOKEN is required")
+	}
+	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
+		return fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return err

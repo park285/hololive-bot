@@ -80,19 +80,19 @@ func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, api
 
 func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 	if h.majorEvent == nil {
-		RespondError(c, http.StatusServiceUnavailable, "major event scheduler not initialized", nil)
+		RespondError(c, http.StatusServiceUnavailable, "major_event_scheduler_unavailable", gin.H{"message": "major event scheduler not initialized"})
 		return
 	}
 
 	if err := h.majorEvent.SendWeeklyNotification(c.Request.Context()); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
-			RespondError(c, http.StatusConflict, "notification already in progress", nil)
+			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{"message": "notification already in progress"})
 			return
 		}
 		RespondInternalError(
 			h.logger,
 			c,
-			"internal server error",
+			"internal_server_error",
 			"Failed to trigger weekly notification",
 			err,
 		)
@@ -104,19 +104,19 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 
 func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 	if h.majorEventMonthly == nil {
-		RespondError(c, http.StatusServiceUnavailable, "major event monthly scheduler not initialized", nil)
+		RespondError(c, http.StatusServiceUnavailable, "major_event_monthly_scheduler_unavailable", gin.H{"message": "major event monthly scheduler not initialized"})
 		return
 	}
 
 	if err := h.majorEventMonthly.SendMonthlyNotification(c.Request.Context()); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
-			RespondError(c, http.StatusConflict, "notification already in progress", nil)
+			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{"message": "notification already in progress"})
 			return
 		}
 		RespondInternalError(
 			h.logger,
 			c,
-			"internal server error",
+			"internal_server_error",
 			"Failed to trigger monthly notification",
 			err,
 		)
@@ -128,7 +128,7 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 
 func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 	if h.memberNewsWeekly == nil {
-		RespondError(c, http.StatusServiceUnavailable, "member news weekly scheduler not initialized", nil)
+		RespondError(c, http.StatusServiceUnavailable, "member_news_weekly_scheduler_unavailable", gin.H{"message": "member news weekly scheduler not initialized"})
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 		RespondInternalError(
 			h.logger,
 			c,
-			"internal server error",
+			"internal_server_error",
 			"Failed to trigger member news weekly",
 			err,
 		)

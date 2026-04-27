@@ -21,6 +21,7 @@
 package middleware
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 
@@ -50,6 +51,13 @@ func respondError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, errorPayload(code, message))
 }
 
+func constantTimeEqualSecret(provided string, expected string) bool {
+	providedHash := sha256.Sum256([]byte(provided))
+	expectedHash := sha256.Sum256([]byte(expected))
+
+	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1 && len(provided) == len(expected)
+}
+
 // apiKey가 빈 문자열이면 인증을 건너뜁니다 (개발 환경용).
 func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -64,7 +72,7 @@ func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
 			return
 		}
 
-		if subtle.ConstantTimeCompare([]byte(providedKey), []byte(apiKey)) != 1 {
+		if !constantTimeEqualSecret(providedKey, apiKey) {
 			abortWithError(c, http.StatusForbidden, "forbidden", "invalid API key")
 			return
 		}
@@ -90,7 +98,7 @@ func NoRouteAuthHandler(apiKey string) gin.HandlerFunc {
 		}
 
 		// 타이밍 공격 방지를 위해 constant-time 비교 사용
-		if subtle.ConstantTimeCompare([]byte(providedKey), []byte(apiKey)) != 1 {
+		if !constantTimeEqualSecret(providedKey, apiKey) {
 			respondError(c, http.StatusForbidden, "forbidden", "invalid API key")
 			return
 		}

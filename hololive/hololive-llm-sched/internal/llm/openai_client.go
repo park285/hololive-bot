@@ -56,6 +56,10 @@ type OpenAIClient struct {
 }
 
 func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	// HTTP/2 비활성화: Cloudflare가 Go HTTP/2 fingerprint를 차단하는 문제 방지
 	httpClient := httputil.NewProfiledClient(httputil.TransportProfile{
 		Timeout:               constants.LLMHTTPTimeout.Request,
@@ -101,6 +105,19 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 
 // chatCompletions=true이면 Chat Completions API, 아니면 Responses API를 사용합니다.
 func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
+	if c == nil {
+		return "", errors.New("openai client is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(c.model) == "" {
+		return "", errors.New("openai model is empty")
+	}
+	if schema == nil {
+		return "", errors.New("json schema is nil")
+	}
+
 	if c.chatCompletions {
 		return c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
 	}
@@ -312,10 +329,19 @@ Do not include any text before or after the JSON. Only output the JSON object.`,
 	// 마크다운 펜스 제거 + JSON 추출
 	extracted, err := jsonutil.Extract(text)
 	if err != nil {
-		return "", fmt.Errorf("chat completions JSON 추출 실패: %w (raw: %s)", err, text)
+		return "", fmt.Errorf("chat completions JSON 추출 실패: %w raw=%q", err, truncateForError(text, 2048))
 	}
 
 	return string(extracted), nil
+}
+
+func truncateForError(value string, maxBytes int) string {
+	value = strings.TrimSpace(value)
+	if maxBytes <= 0 || len(value) <= maxBytes {
+		return value
+	}
+
+	return value[:maxBytes] + "...(truncated)"
 }
 
 func shouldFallbackToChat(err error) bool {

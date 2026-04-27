@@ -36,6 +36,10 @@ import (
 const systemStatsStreamInterval = 5 * time.Second
 
 func (h *StatsAPIHandler) GetStats(c *gin.Context) {
+	if !h.requireStatsDeps(c) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
@@ -64,7 +68,7 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 	wg.Wait()
 
 	if memberErr != nil || alarmErr != nil {
-		h.logger.Error("failed to collect stats",
+		h.safeLogger().Error("failed to collect stats",
 			slog.Any("member_error", memberErr),
 			slog.Any("alarm_error", alarmErr))
 		sharedserver.RespondError(c, 500, "failed to collect stats", nil)
@@ -93,7 +97,7 @@ func (h *StatsAPIHandler) GetStats(c *gin.Context) {
 
 // 5초마다 CPU/메모리 통계를 전송합니다.
 func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
-	if h.systemStats == nil {
+	if h == nil || h.APIHandler == nil || h.systemStats == nil {
 		sharedserver.RespondError(c, 400, "System stats collector not available", nil)
 
 		return
@@ -102,7 +106,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	// WebSocket 업그레이드
 	conn, err := sharedserver.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		h.logger.Warn("failed to upgrade websocket", slog.Any("error", err))
+		h.safeLogger().Warn("failed to upgrade websocket", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "failed to upgrade websocket connection", nil)
 
 		return
@@ -110,7 +114,7 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil {
-			h.logger.Warn("failed to close websocket connection", slog.Any("error", closeErr))
+			h.safeLogger().Warn("failed to close websocket connection", slog.Any("error", closeErr))
 		}
 	}()
 
@@ -122,12 +126,12 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	// 최초 1회 즉시 전송
 	stats, err := h.systemStats.GetCurrentStats(ctx)
 	if err != nil {
-		h.logger.Error("failed to collect initial system stats", slog.Any("error", err))
+		h.safeLogger().Error("failed to collect initial system stats", slog.Any("error", err))
 		return
 	}
 
 	if err := conn.WriteJSON(stats); err != nil {
-		h.logger.Warn("failed to write initial system stats", slog.Any("error", err))
+		h.safeLogger().Warn("failed to write initial system stats", slog.Any("error", err))
 		return
 	}
 
@@ -138,12 +142,12 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 		case <-ticker.C:
 			stats, err := h.systemStats.GetCurrentStats(ctx)
 			if err != nil {
-				h.logger.Error("failed to collect system stats", slog.Any("error", err))
+				h.safeLogger().Error("failed to collect system stats", slog.Any("error", err))
 				return
 			}
 
 			if err := conn.WriteJSON(stats); err != nil {
-				h.logger.Warn("failed to write system stats", slog.Any("error", err))
+				h.safeLogger().Warn("failed to write system stats", slog.Any("error", err))
 				return
 			}
 		}

@@ -23,6 +23,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -33,7 +34,7 @@ import (
 type StartHooks struct {
 	Logger                  *slog.Logger
 	ServerAddr              string
-	StartAlarmScheduler     func(ctx context.Context)
+	StartAlarmScheduler     func(ctx context.Context) error
 	RunConfigSubscriber     func(ctx context.Context)
 	StartBot                func(ctx context.Context) error
 	StartHTTPServer         func(errCh chan<- error)
@@ -54,7 +55,7 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 		ctx = context.Background()
 	}
 
-	startAlarmScheduler(ctx, hooks)
+	startAlarmScheduler(ctx, errCh, hooks)
 
 	if hooks.RunConfigSubscriber != nil {
 		go hooks.RunConfigSubscriber(ctx)
@@ -143,22 +144,36 @@ func Shutdown(ctx context.Context, hooks ShutdownHooks) {
 	}
 }
 
-func startAlarmScheduler(ctx context.Context, hooks StartHooks) {
+func startAlarmScheduler(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 	if hooks.StartAlarmScheduler == nil {
 		logInfo(hooks.Logger, "Alarm runtime scheduler not configured")
 		return
 	}
 
-	if hooks.SetAlarmSchedulerCancel == nil {
-		go hooks.StartAlarmScheduler(ctx)
-		logInfo(hooks.Logger, "Alarm runtime scheduler started")
-		return
+	alarmCtx := ctx
+	if hooks.SetAlarmSchedulerCancel != nil {
+		var alarmCancel context.CancelFunc
+		alarmCtx, alarmCancel = context.WithCancel(ctx)
+		hooks.SetAlarmSchedulerCancel(alarmCancel)
 	}
 
-	alarmCtx, alarmCancel := context.WithCancel(ctx)
-	hooks.SetAlarmSchedulerCancel(alarmCancel)
+	go func() {
+		if err := hooks.StartAlarmScheduler(alarmCtx); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				logInfo(hooks.Logger, "Alarm runtime scheduler stopped")
+				return
+			}
 
-	go hooks.StartAlarmScheduler(alarmCtx)
+			wrapped := fmt.Errorf("alarm runtime scheduler error: %w", err)
+			if errCh != nil {
+				errCh <- wrapped
+				return
+			}
+
+			logError(hooks.Logger, "Alarm runtime scheduler error", wrapped)
+		}
+	}()
+
 	logInfo(hooks.Logger, "Alarm runtime scheduler started")
 }
 

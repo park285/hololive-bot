@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -88,10 +89,14 @@ type Dispatcher struct {
 	delivery  *DeliveryRepository
 	telemetry *DeliveryTelemetryRepository
 	formatter *MessageFormatter
+	started   atomic.Bool
 }
 
 func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, cfg Config) *Dispatcher {
 	initOutboxMetrics()
+	if logger == nil {
+		logger = slog.Default()
+	}
 
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = DefaultConfig().BatchSize
@@ -153,7 +158,18 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
-	go d.run(ctx)
+	if d == nil {
+		return
+	}
+	if !d.started.CompareAndSwap(false, true) {
+		d.logger.Warn("Outbox dispatcher already started")
+		return
+	}
+
+	go func() {
+		defer d.started.Store(false)
+		d.run(ctx)
+	}()
 	if d.delivery != nil {
 		go d.aggregateSyncLoop(ctx)
 	}

@@ -12,6 +12,7 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 )
 
 type stubAlarmWriter struct {
@@ -177,7 +178,7 @@ func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
 		},
 	}
 
-	removed, err := as.RemoveAlarm(ctx, "room-1", "ch-1", domain.AlarmTypes{domain.AlarmTypeLive})
+	removed, err := as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
 	require.Error(t, err)
 	assert.False(t, removed)
 
@@ -187,8 +188,6 @@ func TestRemoveAlarm_PersistFailureDoesNotDeleteCache(t *testing.T) {
 }
 
 func TestClearRoomAlarms_UsesRepositoryAsAuthorityWhenConfigured(t *testing.T) {
-	t.Parallel()
-
 	as := newTestAlarmService(t)
 
 	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
@@ -218,8 +217,6 @@ func TestClearRoomAlarms_UsesRepositoryAsAuthorityWhenConfigured(t *testing.T) {
 }
 
 func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
-	t.Parallel()
-
 	ctx := t.Context()
 	before := counterValueForLabels(t, alarmCacheRebuildMetricName, map[string]string{
 		"operation": "add",
@@ -244,9 +241,15 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 		alarmRepo:   &sharedalarm.Repository{},
 		alarmWriter: &stubAlarmWriter{},
 	}
+	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 
 	originalRebuild := rebuildSubscriberCacheFromRepository
+	originalFindRoomAlarms := findRoomAlarmsFromRepository
 	rebuildCalled := false
+
+	findRoomAlarmsFromRepository = func(context.Context, *sharedalarm.Repository, string) ([]*domain.Alarm, error) {
+		return nil, nil
+	}
 
 	rebuildSubscriberCacheFromRepository = func(context.Context, cache.Client, *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
 		rebuildCalled = true
@@ -260,6 +263,7 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 
 	t.Cleanup(func() {
 		rebuildSubscriberCacheFromRepository = originalRebuild
+		findRoomAlarmsFromRepository = originalFindRoomAlarms
 	})
 
 	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{

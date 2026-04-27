@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useCallback } from "react";
 import {
 	createBrowserRouter,
 	Navigate,
@@ -21,6 +21,7 @@ import {
 	ROUTE_DEFINITIONS,
 } from "@/routes/route-definitions";
 import { useAuthStore } from "@/stores/authStore";
+import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const AppLayout = lazy(() =>
@@ -58,7 +59,20 @@ const FullPageLoader = () => (
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 	const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 	const isAuthResolved = useAuthStore((state) => state.isAuthResolved);
-	const isIdle = useActivityDetection(CONFIG.heartbeat.idleTimeoutMs);
+	const logout = useAuthStore((state) => state.logout);
+	const policy = useSessionWarningStore((state) => state.policy);
+	const idleTimeoutMs =
+		policy?.idle_timeout_ms ?? CONFIG.heartbeat.idleTimeoutMs;
+	const activityEnabled = isAuthResolved && isAuthenticated;
+	const handleRemoteLogout = useCallback(() => {
+		logout();
+		queryClient.clear();
+	}, [logout]);
+	const isIdle = useActivityDetection({
+		enabled: activityEnabled,
+		idleTimeoutMs,
+		onRemoteLogout: handleRemoteLogout,
+	});
 
 	useHeartbeat(isIdle);
 	useSessionWarnings(isIdle);

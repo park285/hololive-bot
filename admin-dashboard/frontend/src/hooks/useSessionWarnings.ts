@@ -1,4 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { clearClientSession } from "@/lib/sessionLifecycle";
+import toast from "@/lib/toast-api";
 import { useAuthStore } from "@/stores/authStore";
 import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
@@ -7,12 +9,20 @@ export function useSessionWarnings(isIdle: boolean) {
 	const {
 		policy,
 		absoluteExpiresAt,
+		absoluteWarningDismissedForExpiresAt,
 		lastActivityAtMs,
 		openIdleWarning,
 		closeIdleWarning,
 		openAbsoluteWarning,
 		closeAbsoluteWarning,
 	} = useSessionWarningStore();
+	const expiredExpiresAtRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		if (absoluteExpiresAt !== expiredExpiresAtRef.current) {
+			expiredExpiresAtRef.current = null;
+		}
+	}, [absoluteExpiresAt]);
 
 	useEffect(() => {
 		if (!isAuthenticated || !policy) {
@@ -21,55 +31,68 @@ export function useSessionWarnings(isIdle: boolean) {
 			return;
 		}
 
-		const interval = setInterval(() => {
+		const evaluateWarnings = () => {
 			const now = Date.now();
 
-			// 1. Idle Warning Check
 			const idleTimeMs = now - lastActivityAtMs;
-			if (
+			const shouldShowIdleWarning =
+				!isIdle &&
 				idleTimeMs >= policy.idle_warning_timeout_ms &&
-				idleTimeMs < policy.idle_timeout_ms
-			) {
+				idleTimeMs < policy.idle_timeout_ms;
+
+			if (shouldShowIdleWarning) {
 				openIdleWarning();
 			} else {
-				// If we're past idle_timeout_ms, heartbeat will handle logout.
-				// If we've had activity, lastActivityAtMs would have been updated and idleTimeMs would be small.
 				closeIdleWarning();
 			}
 
-			// 2. Absolute Warning Check
-			if (absoluteExpiresAt) {
-				const absoluteExpiresAtMs = absoluteExpiresAt * 1000;
-				const timeToAbsoluteExpiryMs = absoluteExpiresAtMs - now;
-
-				if (
-					timeToAbsoluteExpiryMs > 0 &&
-					timeToAbsoluteExpiryMs <= policy.absolute_warning_window_ms
-				) {
-					openAbsoluteWarning();
-				} else {
-					closeAbsoluteWarning();
-				}
+			if (absoluteExpiresAt === null) {
+				closeAbsoluteWarning();
+				return;
 			}
-		}, 1000);
+
+			const absoluteExpiresAtMs = absoluteExpiresAt * 1000;
+			const timeToAbsoluteExpiryMs = absoluteExpiresAtMs - now;
+
+			if (timeToAbsoluteExpiryMs <= 0) {
+				closeAbsoluteWarning();
+				if (expiredExpiresAtRef.current !== absoluteExpiresAt) {
+					expiredExpiresAtRef.current = absoluteExpiresAt;
+					toast.error(
+						"보안을 위해 세션이 만료되었습니다. 다시 로그인해주세요.",
+					);
+					clearClientSession(true);
+				}
+				return;
+			}
+
+			const shouldShowAbsoluteWarning =
+				timeToAbsoluteExpiryMs <= policy.absolute_warning_window_ms &&
+				absoluteWarningDismissedForExpiresAt !== absoluteExpiresAt;
+
+			if (shouldShowAbsoluteWarning) {
+				openAbsoluteWarning();
+			} else {
+				closeAbsoluteWarning();
+			}
+		};
+
+		evaluateWarnings();
+		const interval = window.setInterval(evaluateWarnings, 1000);
 
 		return () => {
-			clearInterval(interval);
+			window.clearInterval(interval);
 		};
 	}, [
-		isAuthenticated,
-		policy,
 		absoluteExpiresAt,
-		lastActivityAtMs,
-		openIdleWarning,
-		closeIdleWarning,
-		openAbsoluteWarning,
+		absoluteWarningDismissedForExpiresAt,
 		closeAbsoluteWarning,
+		closeIdleWarning,
+		isAuthenticated,
+		isIdle,
+		lastActivityAtMs,
+		openAbsoluteWarning,
+		openIdleWarning,
+		policy,
 	]);
-
-	useEffect(() => {
-		if (isIdle) {
-			closeIdleWarning();
-		}
-	}, [isIdle, closeIdleWarning]);
 }

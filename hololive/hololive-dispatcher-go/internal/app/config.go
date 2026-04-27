@@ -60,8 +60,9 @@ type ServerConfig struct {
 }
 
 type IrisConfig struct {
-	BaseURL  string
-	BotToken string
+	BaseURL     string
+	BaseURLFile string
+	BotToken    string
 }
 
 type DispatchConfig struct {
@@ -116,8 +117,9 @@ func LoadConfig() (*Config, error) {
 			Port: lookupInt("DISPATCHER_PORT", 30020),
 		},
 		Iris: IrisConfig{
-			BaseURL:  lookupString("IRIS_BASE_URL", "http://localhost:3000"),
-			BotToken: botToken,
+			BaseURL:     lookupString("IRIS_BASE_URL", ""),
+			BaseURLFile: lookupString("IRIS_BASE_URL_FILE", ""),
+			BotToken:    botToken,
 		},
 		Valkey: cache.Config{
 			Host:       pickTrimmed(lookupOptional("CACHE_HOST"), lookupOptional("VALKEY_HOST"), "localhost"),
@@ -163,8 +165,8 @@ func (c *Config) Validate() error {
 	if c.Server.Port <= 0 {
 		return fmt.Errorf("validate config: DISPATCHER_PORT must be positive")
 	}
-	if strings.TrimSpace(c.Iris.BaseURL) == "" {
-		return fmt.Errorf("validate config: IRIS_BASE_URL is required")
+	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
+		return fmt.Errorf("validate config: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
 		return fmt.Errorf("validate config: IRIS_BOT_TOKEN or IRIS_SHARED_TOKEN is required")

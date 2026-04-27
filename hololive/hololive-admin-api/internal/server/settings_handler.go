@@ -3,14 +3,15 @@ package server
 import (
 	"context"
 	"fmt"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"maps"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
@@ -37,6 +38,52 @@ type SettingsHandler struct {
 	sharedsettings.SettingsApplier
 }
 
+const (
+	minAlarmAdvanceMinutes = 0
+	maxAlarmAdvanceMinutes = 24 * 60
+)
+
+func (h *SettingsHandler) safeLogger() *slog.Logger {
+	if h != nil && h.Logger != nil {
+		return h.Logger
+	}
+
+	return slog.Default()
+}
+
+func (h *SettingsHandler) logActivity(entryType, summary string, details map[string]any) {
+	if h != nil && h.Activity != nil {
+		h.Activity.Log(entryType, summary, details)
+	}
+}
+
+func (h *SettingsHandler) requireAlarm(c *gin.Context) bool {
+	if h == nil || h.Alarm == nil {
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "alarm service not available", nil)
+		return false
+	}
+
+	return true
+}
+
+func (h *SettingsHandler) requireSettings(c *gin.Context) bool {
+	if h == nil || h.Settings == nil {
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "settings service not available", nil)
+		return false
+	}
+
+	return true
+}
+
+func (h *SettingsHandler) requireApplier(c *gin.Context) bool {
+	if h == nil || h.SettingsApplier == nil {
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "settings applier not available", nil)
+		return false
+	}
+
+	return true
+}
+
 func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	var req struct {
 		RoomID   string `json:"roomId" binding:"required"`
@@ -44,8 +91,12 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.Logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		return
+	}
+
+	if !h.requireAlarm(c) {
 		return
 	}
 
@@ -53,17 +104,17 @@ func (h *SettingsHandler) SetRoomName(c *gin.Context) {
 	defer cancel()
 
 	if err := h.Alarm.SetRoomName(ctx, req.RoomID, req.RoomName); err != nil {
-		h.Logger.Error("Failed to set room name", slog.Any("error", err))
+		h.safeLogger().Error("Failed to set room name", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to set room name", nil)
 		return
 	}
 
-	h.Logger.Info("Room name set",
+	h.safeLogger().Info("Room name set",
 		slog.String("room_id", req.RoomID),
 		slog.String("room_name", req.RoomName),
 	)
 
-	h.Activity.Log("name_update", fmt.Sprintf("Room name set: %s -> %s", req.RoomID, req.RoomName), map[string]any{
+	h.logActivity("name_update", fmt.Sprintf("Room name set: %s -> %s", req.RoomID, req.RoomName), map[string]any{
 		"room_id":   req.RoomID,
 		"room_name": req.RoomName,
 	})
@@ -81,8 +132,12 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.Logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		return
+	}
+
+	if !h.requireAlarm(c) {
 		return
 	}
 
@@ -90,12 +145,12 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 	defer cancel()
 
 	if err := h.Alarm.SetUserName(ctx, req.UserID, req.UserName); err != nil {
-		h.Logger.Error("Failed to set user name", slog.Any("error", err))
+		h.safeLogger().Error("Failed to set user name", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to set user name", nil)
 		return
 	}
 
-	h.Logger.Info("User name set",
+	h.safeLogger().Info("User name set",
 		slog.String("user_id", req.UserID),
 		slog.String("user_name", req.UserName),
 	)
@@ -107,9 +162,14 @@ func (h *SettingsHandler) SetUserName(c *gin.Context) {
 }
 
 func (h *SettingsHandler) GetLogs(c *gin.Context) {
+	if h == nil || h.ReadRecentLogs == nil {
+		sharedserver.RespondError(c, http.StatusServiceUnavailable, "activity log service not available", nil)
+		return
+	}
+
 	logs, err := h.ReadRecentLogs(100)
 	if err != nil {
-		h.Logger.Error("Failed to get logs", slog.Any("error", err))
+		h.safeLogger().Error("Failed to get logs", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to get logs", nil)
 		return
 	}
@@ -117,6 +177,10 @@ func (h *SettingsHandler) GetLogs(c *gin.Context) {
 }
 
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
+	if !h.requireSettings(c) || !h.requireApplier(c) {
+		return
+	}
+
 	s := h.Settings.Get()
 	runtime := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled).AsMap()
 	c.JSON(200, gin.H{"status": "ok", "settings": s, "runtime": runtime})
@@ -128,9 +192,26 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		ScraperProxyEnabled *bool `json:"scraperProxyEnabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.Logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
 		return
+	}
+
+	if !h.requireSettings(c) || !h.requireApplier(c) {
+		return
+	}
+
+	if req.AlarmAdvanceMinutes != nil {
+		minutes := *req.AlarmAdvanceMinutes
+		if minutes < minAlarmAdvanceMinutes || minutes > maxAlarmAdvanceMinutes {
+			sharedserver.RespondError(
+				c,
+				400,
+				fmt.Sprintf("alarmAdvanceMinutes must be between %d and %d", minAlarmAdvanceMinutes, maxAlarmAdvanceMinutes),
+				nil,
+			)
+			return
+		}
 	}
 
 	current := h.Settings.Get()
@@ -145,7 +226,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	if err := h.Settings.Update(current); err != nil {
-		h.Logger.Error("Failed to update settings", slog.Any("error", err))
+		h.safeLogger().Error("Failed to update settings", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to update settings", nil)
 		return
 	}
@@ -156,7 +237,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	}
 	h.publishUpdateResult(c.Request.Context(), runtime, req.ScraperProxyEnabled, req.AlarmAdvanceMinutes)
 
-	h.Activity.Log("settings_update", "Settings updated", map[string]any{
+	h.logActivity("settings_update", "Settings updated", map[string]any{
 		"alarm_advance_minutes":  current.AlarmAdvanceMinutes,
 		"scraper_proxy_enabled":  current.ScraperProxyEnabled,
 		"scraper_runtime_status": runtime,
@@ -174,7 +255,7 @@ func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[s
 		if err := h.ConfigPublisher.PublishScraperProxy(ctx, *scraperProxyEnabled); err != nil {
 			runtime["config_publish_scraper_proxy"] = false
 			runtime["config_publish_scraper_proxy_error"] = fmt.Sprint(err)
-			h.Logger.Warn("Failed to publish scraper proxy update", slog.Any("error", err))
+			h.safeLogger().Warn("Failed to publish scraper proxy update", slog.Any("error", err))
 		} else {
 			runtime["config_publish_scraper_proxy"] = true
 		}
@@ -184,7 +265,7 @@ func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[s
 		if err := h.ConfigPublisher.PublishAlarmAdvanceMinutes(ctx, *alarmAdvanceMinutes); err != nil {
 			runtime["config_publish_alarm_advance_minutes"] = false
 			runtime["config_publish_alarm_advance_minutes_error"] = fmt.Sprint(err)
-			h.Logger.Warn("Failed to publish alarm advance minutes update", slog.Any("error", err))
+			h.safeLogger().Warn("Failed to publish alarm advance minutes update", slog.Any("error", err))
 		} else {
 			runtime["config_publish_alarm_advance_minutes"] = true
 		}
@@ -198,8 +279,12 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 		MemberNewsWeeklyRunNow  *bool `json:"memberNewsWeeklyRunNow"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.Logger.Warn("Invalid request body", slog.Any("error", err))
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		return
+	}
+
+	if !h.requireApplier(c) {
 		return
 	}
 
@@ -224,7 +309,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 		runtime["membernews_weekly_run_now"] = h.ApplyMemberNewsWeeklyRunNow(ctx).AsMap()
 	}
 
-	h.Activity.Log("llm_settings_update", "LLM settings updated", map[string]any{
+	h.logActivity("llm_settings_update", "LLM settings updated", map[string]any{
 		"membernews_weekly_run_now": req.MemberNewsWeeklyRunNow,
 		"runtime":                   runtime,
 	})

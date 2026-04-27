@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -108,6 +109,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 		Environment: "production",
 		CORS: config.CORSConfig{
 			AllowedOrigins: []string{"https://allowed.example.com"},
+			Enforce:        true,
 		},
 	}
 
@@ -137,7 +139,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 	}
 }
 
-func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
+func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.DiscardHandler)
 	apiHandler := &server.APIHandler{}
@@ -157,12 +159,16 @@ func TestAPIRouter_CORSProductionMissingOriginsDoesNotFailRouter(t *testing.T) {
 	}
 
 	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("ProvideAPIRouter() unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("ProvideAPIRouter() expected error")
 	}
 
-	if router == nil {
-		t.Fatal("ProvideAPIRouter() expected non-nil router")
+	if err.Error() != "explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true" {
+		t.Fatalf("ProvideAPIRouter() error = %q", err.Error())
+	}
+
+	if router != nil {
+		t.Fatal("ProvideAPIRouter() expected nil router")
 	}
 }
 
@@ -191,6 +197,55 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 
 	if router != nil {
 		t.Fatal("ProvideAPIRouter() expected nil router on error")
+	}
+}
+
+func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
+	ctx := t.Context()
+	logger := slog.New(slog.DiscardHandler)
+	apiHandler := &server.APIHandler{}
+	domainHandlers := apiHandler.DomainHandlers()
+	authHandler := &server.AuthHandler{}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			APIKey: "test-key",
+		},
+		CORS: config.CORSConfig{
+			AllowedOrigins: []string{"http://localhost:3000"},
+		},
+	}
+
+	router, err := ProvideAPIRouter(ctx, cfg, logger, domainHandlers, authHandler, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("ProvideAPIRouter() error = %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		headerVal  string
+		wantStatus int
+	}{
+		{name: "missing api key", wantStatus: http.StatusUnauthorized},
+		{name: "invalid api key", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
+		{name: "valid api key reaches handler", headerVal: "test-key", wantStatus: http.StatusServiceUnavailable},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/register", strings.NewReader(`{"email":"admin@example.com","password":"password123","displayName":"Admin"}`))
+			req.Header.Set("Content-Type", "application/json")
+			if tt.headerVal != "" {
+				req.Header.Set(middleware.APIKeyHeader, tt.headerVal)
+			}
+
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+		})
 	}
 }
 

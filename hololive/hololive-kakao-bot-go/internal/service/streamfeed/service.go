@@ -2,6 +2,7 @@ package streamfeed
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -230,13 +231,23 @@ func mergeLiveStreams(base []*domain.Stream, members []*domain.Member, lives []c
 		liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
 		thumbnail := live.LiveThumbnailImageURL
 		link := liveURL
+		now := time.Now().UTC().Truncate(time.Minute)
+		org := member.GetOrg()
 		merged = append(merged, &domain.Stream{
+			ID:             buildChzzkStreamID(member.ChzzkChannelID, "live", live.LiveTitle, now),
 			Title:          live.LiveTitle,
 			ChannelID:      member.ChannelID,
 			ChannelName:    member.Name,
 			Status:         domain.StreamStatusLive,
+			StartScheduled: &now,
+			StartActual:    &now,
 			Thumbnail:      &thumbnail,
 			Link:           &link,
+			Channel: &domain.Channel{
+				ID:   member.ChannelID,
+				Name: member.Name,
+				Org:  &org,
+			},
 			ChzzkChannelID: member.ChzzkChannelID,
 			ChzzkLiveURL:   liveURL,
 			IsChzzkOnly:    true,
@@ -266,13 +277,20 @@ func buildUpcomingStreams(member *domain.Member, scheduledLives []chzzk.Schedule
 		}
 
 		link := liveURL
+		org := member.GetOrg()
 		streams = append(streams, &domain.Stream{
+			ID:             buildChzzkStreamID(member.ChzzkChannelID, "schedule", scheduledLive.LiveTitle, startAt),
 			Title:          scheduledLive.LiveTitle,
 			ChannelID:      member.ChannelID,
 			ChannelName:    member.Name,
 			Status:         domain.StreamStatusUpcoming,
 			StartScheduled: &startAt,
 			Link:           &link,
+			Channel: &domain.Channel{
+				ID:   member.ChannelID,
+				Name: member.Name,
+				Org:  &org,
+			},
 			ChzzkChannelID: member.ChzzkChannelID,
 			ChzzkLiveURL:   liveURL,
 			IsChzzkOnly:    true,
@@ -339,4 +357,15 @@ func findLiveStreamByChannel(streams []*domain.Stream, channelID string) *domain
 		}
 	}
 	return nil
+}
+
+func buildChzzkStreamID(chzzkChannelID, kind, title string, at time.Time) string {
+	seed := strings.Join([]string{
+		strings.TrimSpace(chzzkChannelID),
+		strings.TrimSpace(kind),
+		strings.TrimSpace(title),
+		at.UTC().Format(time.RFC3339),
+	}, "|")
+	sum := sha256.Sum256([]byte(seed))
+	return fmt.Sprintf("chzzk:%s:%s:%x", strings.TrimSpace(chzzkChannelID), strings.TrimSpace(kind), sum[:8])
 }

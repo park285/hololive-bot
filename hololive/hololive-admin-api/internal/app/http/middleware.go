@@ -21,6 +21,7 @@
 package apphttp
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -31,13 +32,50 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 )
 
-func newAPICORSConfig(cfg *config.Config) cors.Config {
+func normalizedOrigins(origins []string) []string {
+	result := make([]string, 0, len(origins))
+	seen := make(map[string]struct{}, len(origins))
+
+	for _, origin := range origins {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+
+	return result
+}
+
+func containsWildcard(origins []string) bool {
+	for _, origin := range origins {
+		if strings.TrimSpace(origin) == "*" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func newAPICORSConfig(cfg *config.Config, enforce bool) cors.Config {
 	corsConfig := cors.DefaultConfig()
 
-	if len(cfg.CORS.AllowedOrigins) == 0 {
+	origins := normalizedOrigins(cfg.CORS.AllowedOrigins)
+	if !enforce {
+		// 모니터 모드에서는 guard가 차단하지 않으므로 CORS middleware도
+		// 요청 Origin을 반사하도록 둔다. enforce=true에서는 아래에서 명시 origin만 허용한다.
+		corsConfig.AllowOriginFunc = func(string) bool { return true }
+	} else if len(origins) == 0 || containsWildcard(origins) {
+		// API key와 세션 쿠키를 함께 쓰는 admin API에서는 wildcard CORS와
+		// credentials 조합을 안전한 기본값으로 취급하지 않는다.
 		corsConfig.AllowOriginFunc = func(string) bool { return false }
 	} else {
-		corsConfig.AllowOrigins = cfg.CORS.AllowedOrigins
+		corsConfig.AllowOrigins = origins
 	}
 
 	corsConfig.AllowCredentials = true
@@ -47,28 +85,36 @@ func newAPICORSConfig(cfg *config.Config) cors.Config {
 	return corsConfig
 }
 
-func corsOriginGuard(allowedOrigins []string) gin.HandlerFunc {
-	allowAll := false
+func corsOriginGuard(allowedOrigins []string, enforce bool, logger *slog.Logger) gin.HandlerFunc {
+	origins := normalizedOrigins(allowedOrigins)
+	allowAll := containsWildcard(origins)
 
-	allowed := make(map[string]struct{}, len(allowedOrigins))
-	for _, origin := range allowedOrigins {
-		trimmed := strings.TrimSpace(origin)
-		if trimmed == "" {
+	allowed := make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		if origin == "*" {
 			continue
 		}
-
-		if trimmed == "*" {
-			allowAll = true
-			continue
-		}
-
-		allowed[trimmed] = struct{}{}
+		allowed[origin] = struct{}{}
 	}
 
 	return func(c *gin.Context) {
 		origin := strings.TrimSpace(c.GetHeader("Origin"))
-		if origin == "" || allowAll {
+		if origin == "" {
 			c.Next()
+			return
+		}
+
+		if !enforce {
+			if logger != nil {
+				logger.Warn("cors_origin_monitor_only", slog.String("origin", origin))
+			}
+			c.Next()
+			return
+		}
+
+		if allowAll {
+			sharedserver.RespondError(c, http.StatusForbidden, "forbidden", nil)
+			c.Abort()
 			return
 		}
 

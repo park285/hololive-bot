@@ -216,10 +216,10 @@ func TestClient_GetStreams_ChunksLargeUserLoginSets(t *testing.T) {
 	}
 
 	var (
-		mu               sync.Mutex
-		streamCalls      int
-		chunkSizes       []int
-		seenFirstLogins  []string
+		mu              sync.Mutex
+		streamCalls     int
+		chunkSizes      []int
+		seenFirstLogins []string
 	)
 
 	c.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {

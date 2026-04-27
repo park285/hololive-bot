@@ -1,1 +1,0 @@
-import{t as e}from"./adminClient-BgCsIE1A.js";var t={get:async()=>(await e.holoGetStats()).data,getChannels:async()=>(await e.holoGetChannelStats()).data};export{t};

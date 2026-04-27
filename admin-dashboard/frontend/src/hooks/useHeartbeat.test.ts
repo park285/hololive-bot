@@ -20,5 +20,6 @@ test("useHeartbeat logs the user out immediately when heartbeat returns idle_rej
 	);
 
 	assert.ok(idleRejectedBranch, "idle_rejected branch should exist");
-	assert.match(idleRejectedBranch[1], /logout\(\);/);
+	assert.match(idleRejectedBranch[1], /expireSession\(/);
+	assert.match(idleRejectedBranch[1], /response\.error/);
 });

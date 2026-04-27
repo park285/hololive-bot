@@ -29,6 +29,7 @@ const ChzzkTimeLayout = time.DateTime
 
 type LiveStatusResponse struct {
 	Code    int                `json:"code"`
+	Message string             `json:"message"`
 	Content *LiveStatusContent `json:"content"`
 }
 
@@ -42,6 +43,7 @@ type LiveStatusContent struct {
 
 type ScheduledLivesResponse struct {
 	Code    int                    `json:"code"`
+	Message string                 `json:"message"`
 	Content *ScheduledLivesContent `json:"content"`
 }
 

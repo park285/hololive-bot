@@ -25,6 +25,7 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -47,6 +48,49 @@ func ParseACLMode(s string) ACLMode {
 	default:
 		return ACLModeWhitelist
 	}
+}
+
+func normalizeACLModeStrict(mode ACLMode) (ACLMode, error) {
+	switch mode {
+	case ACLModeWhitelist, ACLModeBlacklist:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("unsupported acl mode: %q", mode)
+	}
+}
+
+func parseACLModeStrict(s string) (ACLMode, error) {
+	normalized := stringutil.Normalize(s)
+	switch normalized {
+	case string(ACLModeWhitelist):
+		return ACLModeWhitelist, nil
+	case string(ACLModeBlacklist):
+		return ACLModeBlacklist, nil
+	default:
+		return "", fmt.Errorf("unsupported acl mode: %q", s)
+	}
+}
+
+func normalizeRoomList(input []string) []string {
+	seen := make(map[string]struct{}, len(input))
+	rooms := make([]string, 0, len(input))
+
+	for _, roomID := range input {
+		roomID = stringutil.TrimSpace(roomID)
+		if roomID == "" {
+			continue
+		}
+
+		if _, ok := seen[roomID]; ok {
+			continue
+		}
+
+		seen[roomID] = struct{}{}
+		rooms = append(rooms, roomID)
+	}
+
+	sort.Strings(rooms)
+	return rooms
 }
 
 const (
@@ -123,28 +167,49 @@ func NewACLService(
 	defaultMode ACLMode,
 	defaultRooms []string,
 ) (*Service, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	if postgres == nil {
+		return nil, fmt.Errorf("postgres service is nil")
+	}
+
 	db := postgres.GetGormDB()
+	if db == nil {
+		return nil, fmt.Errorf("gorm db is nil")
+	}
+
+	if cacheSvc == nil {
+		return nil, fmt.Errorf("cache service is nil")
+	}
+
+	normalizedMode, err := normalizeACLModeStrict(defaultMode)
+	if err != nil {
+		return nil, err
+	}
+	normalizedRooms := normalizeRoomList(defaultRooms)
 
 	svc := &Service{
 		db:             db,
 		cache:          cacheSvc,
 		logger:         logger,
 		enabled:        defaultEnabled,
-		mode:           defaultMode,
+		mode:           normalizedMode,
 		whitelistRooms: make(map[string]struct{}),
 		blacklistRooms: make(map[string]struct{}),
 	}
 
 	// 시작 시 로드 (PostgreSQL → 메모리/Valkey)
-	if err := svc.loadFromDatabase(ctx, defaultEnabled, defaultMode, defaultRooms); err != nil {
+	if err := svc.loadFromDatabase(ctx, defaultEnabled, normalizedMode, normalizedRooms); err != nil {
 		logger.Warn("Failed to load ACL from database, using defaults", slog.Any("error", err))
 
 		svc.enabled = defaultEnabled
-		svc.mode = defaultMode
+		svc.mode = normalizedMode
 		// 기존 기본 방 목록을 현재 모드의 목록에 추가
 		targetRooms := svc.activeRoomsMap()
 
-		for _, r := range defaultRooms {
+		for _, r := range normalizedRooms {
 			targetRooms[r] = struct{}{}
 		}
 	}
@@ -251,14 +316,23 @@ func (s *Service) loadModeSetting(defaultMode ACLMode) error {
 
 	switch {
 	case modeFirstInit:
-		s.mode = defaultMode
-		if err := s.db.Create(&Settings{Key: dbKeyMode, Value: string(defaultMode)}).Error; err != nil {
+		normalizedMode, err := normalizeACLModeStrict(defaultMode)
+		if err != nil {
+			return err
+		}
+
+		s.mode = normalizedMode
+		if err := s.db.Create(&Settings{Key: dbKeyMode, Value: string(normalizedMode)}).Error; err != nil {
 			return fmt.Errorf("failed to initialize ACL mode setting: %w", err)
 		}
 	case modeResult.Error != nil:
 		return fmt.Errorf("failed to load ACL mode setting: %w", modeResult.Error)
 	default:
-		s.mode = ParseACLMode(modeSetting.Value)
+		mode, err := parseACLModeStrict(modeSetting.Value)
+		if err != nil {
+			return err
+		}
+		s.mode = mode
 	}
 
 	return nil
@@ -280,12 +354,17 @@ func (s *Service) resetRoomMaps() {
 
 func (s *Service) populateRoomsFromRecords(rooms []Room) {
 	for _, room := range rooms {
-		if room.ListType == listTypeBlacklist {
-			s.blacklistRooms[room.RoomID] = struct{}{}
+		roomID := stringutil.TrimSpace(room.RoomID)
+		if roomID == "" {
 			continue
 		}
 
-		s.whitelistRooms[room.RoomID] = struct{}{}
+		if room.ListType == listTypeBlacklist {
+			s.blacklistRooms[roomID] = struct{}{}
+			continue
+		}
+
+		s.whitelistRooms[roomID] = struct{}{}
 	}
 }
 
@@ -296,7 +375,7 @@ func (s *Service) initializeDefaultRooms(defaultRooms []string) error {
 	targetRooms := s.activeRoomsMap()
 	listType := string(s.mode)
 
-	for _, room := range defaultRooms {
+	for _, room := range normalizeRoomList(defaultRooms) {
 		if err := s.db.Create(&Room{RoomID: room, ListType: listType}).Error; err != nil {
 			return fmt.Errorf("failed to initialize ACL room %q: %w", room, err)
 		}

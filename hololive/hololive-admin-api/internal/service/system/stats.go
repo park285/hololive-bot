@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,22 +55,45 @@ type ServiceEndpoint struct {
 	URL  string
 }
 
+const defaultLocalServiceName = "hololive-admin-api"
+
 type Collector struct {
-	httpClient *http.Client
-	endpoints  []ServiceEndpoint
-	cacheTTL   time.Duration
-	cacheMu    sync.RWMutex
-	refreshMu  sync.Mutex
-	cachedAt   time.Time
-	cached     *SystemStats
+	httpClient  *http.Client
+	endpoints   []ServiceEndpoint
+	cacheTTL    time.Duration
+	serviceName string
+	cacheMu     sync.RWMutex
+	refreshMu   sync.Mutex
+	cachedAt    time.Time
+	cached      *SystemStats
 }
 
-func NewCollector(endpoints []ServiceEndpoint) *Collector {
-	return &Collector{
-		httpClient: httputil.NewInternalServiceClient(2 * time.Second),
-		endpoints:  endpoints,
-		cacheTTL:   2 * time.Second,
+type CollectorOption func(*Collector)
+
+func WithServiceName(name string) CollectorOption {
+	return func(c *Collector) {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			c.serviceName = name
+		}
 	}
+}
+
+func NewCollector(endpoints []ServiceEndpoint, opts ...CollectorOption) *Collector {
+	collector := &Collector{
+		httpClient:  httputil.NewInternalServiceClient(2 * time.Second),
+		endpoints:   endpoints,
+		cacheTTL:    2 * time.Second,
+		serviceName: defaultLocalServiceName,
+	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(collector)
+		}
+	}
+
+	return collector
 }
 
 func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
@@ -129,9 +153,9 @@ func (c *Collector) collectCurrentStats(ctx context.Context) (*SystemStats, erro
 		}
 	}
 
-	// 현재 서비스(hololive-bot)도 목록에 추가
+	// 현재 서비스도 목록에 추가
 	allServices := append([]ServiceGoroutines{{
-		Name:       "hololive-bot",
+		Name:       c.serviceName,
 		Goroutines: localGoroutines,
 		Available:  true,
 	}}, serviceStats...)
@@ -220,6 +244,10 @@ type healthResponse struct {
 
 // fetchGoroutineCount: 단일 서비스의 goroutine 수를 조회합니다.
 func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, bool) {
+	if c == nil || c.httpClient == nil {
+		return 0, false
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return 0, false
@@ -229,9 +257,9 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 	if err != nil {
 		return 0, false
 	}
+	defer resp.Body.Close()
 
 	if err := httputil.CheckStatus(resp); err != nil {
-		_ = resp.Body.Close()
 		return 0, false
 	}
 

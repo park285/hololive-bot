@@ -2,6 +2,7 @@ import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { queryClient } from "@/lib/queryClient";
 
 interface ErrorBoundaryProps {
 	children: ReactNode;
@@ -33,6 +34,7 @@ export class QueryErrorBoundary extends Component<
 	}
 
 	handleRetry = (): void => {
+		void queryClient.resetQueries();
 		this.setState({ hasError: false, error: null });
 	};
 

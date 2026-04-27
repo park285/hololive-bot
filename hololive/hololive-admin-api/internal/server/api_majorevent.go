@@ -39,7 +39,7 @@ type MajorEventMonthlyScheduler interface {
 }
 
 func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
-	if h.majorEventScheduler == nil {
+	if h == nil || h.APIHandler == nil || h.majorEventScheduler == nil {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event scheduler not initialized", nil)
 		return
 	}
@@ -50,7 +50,7 @@ func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
 			return
 		}
 
-		sharedserver.RespondInternalError(h.logger, c, "failed to send notification", "failed to send weekly major event notification", err)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "failed to send notification", "failed to send weekly major event notification", err)
 
 		return
 	}
@@ -59,7 +59,7 @@ func (h *MajorEventAPIHandler) TriggerMajorEventNotification(c *gin.Context) {
 }
 
 func (h *MajorEventAPIHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
-	if h.majorEventMonthlyScheduler == nil {
+	if h == nil || h.APIHandler == nil || h.majorEventMonthlyScheduler == nil {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, "major event monthly scheduler not initialized", nil)
 		return
 	}
@@ -70,7 +70,7 @@ func (h *MajorEventAPIHandler) TriggerMajorEventMonthlyNotification(c *gin.Conte
 			return
 		}
 
-		sharedserver.RespondInternalError(h.logger, c, "failed to send notification", "failed to send monthly major event notification", err)
+		sharedserver.RespondInternalError(h.safeLogger(), c, "failed to send notification", "failed to send monthly major event notification", err)
 
 		return
 	}

@@ -20,20 +20,29 @@
 
 package errors
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type APIError struct {
 	Operation  string
 	StatusCode int
+	Message    string
 	Err        error
 }
 
 func (e APIError) Error() string {
-	if e.Err == nil {
-		return fmt.Sprintf("api error operation=%s status=%d", e.Operation, e.StatusCode)
+	message := strings.TrimSpace(e.Message)
+	if message == "" {
+		message = "api error"
 	}
 
-	return fmt.Sprintf("api error operation=%s status=%d: %v", e.Operation, e.StatusCode, e.Err)
+	if e.Err == nil {
+		return fmt.Sprintf("%s operation=%s status=%d", message, e.Operation, e.StatusCode)
+	}
+
+	return fmt.Sprintf("%s operation=%s status=%d: %v", message, e.Operation, e.StatusCode, e.Err)
 }
 
 func (e APIError) Unwrap() error { return e.Err }
@@ -41,15 +50,18 @@ func (e APIError) Unwrap() error { return e.Err }
 func NewAPIError(message string, statusCode int, context map[string]any) *APIError {
 	op := message
 
-	if v, ok := context["operation"]; ok {
-		if opStr, ok := v.(string); ok {
-			op = opStr
+	if context != nil {
+		if v, ok := context["operation"]; ok {
+			if opStr, ok := v.(string); ok {
+				op = opStr
+			}
 		}
 	}
 
 	return &APIError{
 		Operation:  op,
 		StatusCode: statusCode,
+		Message:    message,
 	}
 }
 
@@ -80,15 +92,21 @@ func NewKeyRotationError(message string, statusCode int, context map[string]any)
 type CacheError struct {
 	Operation string
 	Key       string
+	Message   string
 	Err       error
 }
 
 func (e CacheError) Error() string {
-	if e.Err == nil {
-		return fmt.Sprintf("cache error operation=%s key=%s", e.Operation, e.Key)
+	message := strings.TrimSpace(e.Message)
+	if message == "" {
+		message = "cache error"
 	}
 
-	return fmt.Sprintf("cache error operation=%s key=%s: %v", e.Operation, e.Key, e.Err)
+	if e.Err == nil {
+		return fmt.Sprintf("%s operation=%s key=%s", message, e.Operation, e.Key)
+	}
+
+	return fmt.Sprintf("%s operation=%s key=%s: %v", message, e.Operation, e.Key, e.Err)
 }
 
 func (e CacheError) Unwrap() error { return e.Err }
@@ -97,6 +115,7 @@ func NewCacheError(message, operation, key string, cause error) *CacheError {
 	return &CacheError{
 		Operation: operation,
 		Key:       key,
+		Message:   message,
 		Err:       cause,
 	}
 }
@@ -132,15 +151,21 @@ func NewValidationError(message, field string, value any) *ValidationError {
 type ServiceError struct {
 	Service   string
 	Operation string
+	Message   string
 	Err       error
 }
 
 func (e ServiceError) Error() string {
-	if e.Err == nil {
-		return fmt.Sprintf("service error service=%s operation=%s", e.Service, e.Operation)
+	message := strings.TrimSpace(e.Message)
+	if message == "" {
+		message = "service error"
 	}
 
-	return fmt.Sprintf("service error service=%s operation=%s: %v", e.Service, e.Operation, e.Err)
+	if e.Err == nil {
+		return fmt.Sprintf("%s service=%s operation=%s", message, e.Service, e.Operation)
+	}
+
+	return fmt.Sprintf("%s service=%s operation=%s: %v", message, e.Service, e.Operation, e.Err)
 }
 
 func (e ServiceError) Unwrap() error { return e.Err }
@@ -149,6 +174,7 @@ func NewServiceError(message, service, operation string, cause error) *ServiceEr
 	return &ServiceError{
 		Service:   service,
 		Operation: operation,
+		Message:   message,
 		Err:       cause,
 	}
 }

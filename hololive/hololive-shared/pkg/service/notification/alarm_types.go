@@ -81,15 +81,16 @@ type alarmWriter interface {
 }
 
 type AlarmService struct {
-	cache           cache.Client
-	holodex         *holodex.Service
-	chzzk           *chzzk.Client
-	twitch          *twitch.Client
-	memberData      domain.MemberDataProvider
-	alarmRepo       *alarm.Repository
-	alarmWriter     alarmWriter
-	logger          *slog.Logger
-	targetPolicy    sharedchecker.TargetMinutePolicy
-	targetMinutesMu sync.RWMutex
-	platformMapMu   sync.Mutex
+	cache            cache.Client
+	holodex          *holodex.Service
+	chzzk            *chzzk.Client
+	twitch           *twitch.Client
+	memberData       domain.MemberDataProvider
+	alarmRepo        *alarm.Repository
+	alarmWriter      alarmWriter
+	logger           *slog.Logger
+	targetPolicy     sharedchecker.TargetMinutePolicy
+	targetMinutesMu  sync.RWMutex
+	platformMapMu    sync.Mutex
+	notifiedLegacyMu sync.Mutex
 }

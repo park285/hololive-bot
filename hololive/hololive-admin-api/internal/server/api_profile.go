@@ -72,10 +72,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	if h.profiles == nil {
-		h.logger.Error("ProfileService is not initialized")
-		sharedserver.RespondError(c, 500, "Profile service unavailable", nil)
-
+	if !h.requireProfiles(c) {
 		return
 	}
 
@@ -84,7 +81,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 
 	profile, err := h.profiles.GetByChannel(channelID)
 	if err != nil {
-		h.logger.Warn("Profile not found",
+		h.safeLogger().Warn("Profile not found",
 			slog.String("channel_id", channelID),
 			slog.Any("error", err),
 		)
@@ -95,7 +92,7 @@ func (h *ProfileAPIHandler) GetProfile(c *gin.Context) {
 
 	_, translated, err := h.profiles.GetWithTranslation(ctx, profile.EnglishName)
 	if err != nil {
-		h.logger.Error("Failed to load translated profile",
+		h.safeLogger().Error("Failed to load translated profile",
 			slog.String("english_name", profile.EnglishName),
 			slog.Any("error", err),
 		)
@@ -129,10 +126,7 @@ func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 		return
 	}
 
-	if h.profiles == nil {
-		h.logger.Error("ProfileService is not initialized")
-		sharedserver.RespondError(c, 500, "Profile service unavailable", nil)
-
+	if !h.requireProfiles(c) {
 		return
 	}
 
@@ -141,7 +135,7 @@ func (h *ProfileAPIHandler) GetProfileByName(c *gin.Context) {
 
 	profile, translated, err := h.profiles.GetWithTranslation(ctx, name)
 	if err != nil {
-		h.logger.Warn("Profile not found",
+		h.safeLogger().Warn("Profile not found",
 			slog.String("name", name),
 			slog.Any("error", err),
 		)

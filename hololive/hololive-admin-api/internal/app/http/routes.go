@@ -75,6 +75,7 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *server.SettingsAP
 
 func registerStatsRoutes(holoAPI *gin.RouterGroup, statsHandler *server.StatsAPIHandler, streamHandler *server.StreamAPIHandler) {
 	holoAPI.GET("/stats", statsHandler.GetStats)
+	holoAPI.GET("/stats/system", statsHandler.StreamSystemStats)
 	holoAPI.GET("/stats/channels", streamHandler.GetChannelStats)
 	holoAPI.GET("/stats/youtube/community-shorts", statsHandler.GetYouTubeCommunityShortsOps)
 	holoAPI.GET("/channels", streamHandler.GetChannel)

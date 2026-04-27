@@ -38,6 +38,8 @@ pub enum AuthError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
+    #[error("bad request: {message}")]
+    BadRequest { message: &'static str },
     #[error("not found")]
     NotFound,
     #[error("too many active system stats streams")]
@@ -149,6 +151,10 @@ impl IntoResponse for AppError {
                 ),
             },
             Self::Api(e) => match e {
+                ApiError::BadRequest { message } => (
+                    StatusCode::BAD_REQUEST,
+                    json!({"error": message, "code": "bad_request"}),
+                ),
                 ApiError::NotFound => (StatusCode::NOT_FOUND, json!({"error": "Not found"})),
                 ApiError::TooManyActiveSystemStatsStreams { limit } => (
                     StatusCode::TOO_MANY_REQUESTS,
@@ -242,6 +248,24 @@ mod tests {
         let err = AppError::Auth(AuthError::StoreUnavailable);
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_bad_request_status_and_contract() {
+        let err = AppError::Api(ApiError::BadRequest {
+            message: "Invalid heartbeat payload",
+        });
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json body");
+        assert_eq!(
+            parsed,
+            json!({"error": "Invalid heartbeat payload", "code": "bad_request"})
+        );
     }
 
     #[test]

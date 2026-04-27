@@ -497,13 +497,12 @@ func TestGetScheduledLives_NilContent(t *testing.T) {
 
 	ctx := t.Context()
 	lives, err := client.GetScheduledLives(ctx, "test-channel")
-	// Content가 nil이면 빈 배열 반환 (에러 아님)
-	if err != nil {
-		t.Errorf("Expected no error for nil content, got: %v", err)
+	if err == nil {
+		t.Fatal("Expected API error for non-200 response, got nil")
 	}
 
-	if len(lives) != 0 {
-		t.Errorf("Expected empty array for nil content, got: %d items", len(lives))
+	if lives != nil {
+		t.Errorf("Expected nil lives for API error, got: %d items", len(lives))
 	}
 }
 

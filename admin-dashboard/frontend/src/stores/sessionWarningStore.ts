@@ -14,13 +14,15 @@ interface SessionWarningState {
 	lastActivityAtMs: number;
 	idleWarningOpen: boolean;
 	absoluteWarningOpen: boolean;
-	setSessionPolicy: (policy: SessionPolicy) => void;
-	setAbsoluteExpiresAt: (unixSeconds: number) => void;
-	markSessionActivity: (nowMs: number) => void;
+	absoluteWarningDismissedForExpiresAt: number | null;
+	setSessionPolicy: (policy: SessionPolicy | null) => void;
+	setAbsoluteExpiresAt: (unixSeconds: number | null) => void;
+	markSessionActivity: (nowMs?: number) => void;
 	openIdleWarning: () => void;
 	closeIdleWarning: () => void;
 	openAbsoluteWarning: () => void;
 	closeAbsoluteWarning: () => void;
+	dismissAbsoluteWarning: () => void;
 	resetSessionWarnings: () => void;
 }
 
@@ -30,27 +32,56 @@ export const useSessionWarningStore = create<SessionWarningState>()((set) => ({
 	lastActivityAtMs: Date.now(),
 	idleWarningOpen: false,
 	absoluteWarningOpen: false,
+	absoluteWarningDismissedForExpiresAt: null,
 
 	setSessionPolicy: (policy) => {
-		set({ policy });
+		set((state) => (state.policy === policy ? state : { policy }));
 	},
 	setAbsoluteExpiresAt: (unixSeconds) => {
-		set({ absoluteExpiresAt: unixSeconds });
+		set((state) => {
+			if (state.absoluteExpiresAt === unixSeconds) {
+				return state;
+			}
+
+			return {
+				absoluteExpiresAt: unixSeconds,
+				absoluteWarningDismissedForExpiresAt: null,
+			};
+		});
 	},
-	markSessionActivity: (nowMs) => {
-		set({ lastActivityAtMs: nowMs });
+	markSessionActivity: (nowMs = Date.now()) => {
+		set({
+			lastActivityAtMs: nowMs,
+			idleWarningOpen: false,
+		});
 	},
 	openIdleWarning: () => {
-		set({ idleWarningOpen: true });
+		set((state) => (state.idleWarningOpen ? state : { idleWarningOpen: true }));
 	},
 	closeIdleWarning: () => {
-		set({ idleWarningOpen: false });
+		set((state) => (state.idleWarningOpen ? { idleWarningOpen: false } : state));
 	},
 	openAbsoluteWarning: () => {
-		set({ absoluteWarningOpen: true });
+		set((state) =>
+			state.absoluteWarningOpen ? state : { absoluteWarningOpen: true },
+		);
 	},
 	closeAbsoluteWarning: () => {
-		set({ absoluteWarningOpen: false });
+		set((state) =>
+			state.absoluteWarningOpen ? { absoluteWarningOpen: false } : state,
+		);
+	},
+	dismissAbsoluteWarning: () => {
+		set((state) => {
+			if (state.absoluteExpiresAt === null) {
+				return state;
+			}
+
+			return {
+				absoluteWarningOpen: false,
+				absoluteWarningDismissedForExpiresAt: state.absoluteExpiresAt,
+			};
+		});
 	},
 	resetSessionWarnings: () => {
 		set({
@@ -59,6 +90,7 @@ export const useSessionWarningStore = create<SessionWarningState>()((set) => ({
 			lastActivityAtMs: Date.now(),
 			idleWarningOpen: false,
 			absoluteWarningOpen: false,
+			absoluteWarningDismissedForExpiresAt: null,
 		});
 	},
 }));

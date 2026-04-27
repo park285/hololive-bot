@@ -2,9 +2,11 @@ package streamschedule
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -95,13 +97,20 @@ func buildChzzkScheduleStreams(member *domain.Member, scheduledLives []chzzk.Sch
 		}
 
 		link := liveURL
+		org := member.GetOrg()
 		streams = append(streams, &domain.Stream{
+			ID:             buildChzzkScheduleStreamID(member.ChzzkChannelID, scheduledLive.LiveTitle, startAt),
 			Title:          scheduledLive.LiveTitle,
 			ChannelID:      member.ChannelID,
 			ChannelName:    member.Name,
 			Status:         domain.StreamStatusUpcoming,
 			StartScheduled: &startAt,
 			Link:           &link,
+			Channel: &domain.Channel{
+				ID:   member.ChannelID,
+				Name: member.Name,
+				Org:  &org,
+			},
 			ChzzkChannelID: member.ChzzkChannelID,
 			ChzzkLiveURL:   liveURL,
 			IsChzzkOnly:    true,
@@ -174,4 +183,14 @@ func compareScheduleStreams(a, b *domain.Stream) int {
 	default:
 		return 0
 	}
+}
+
+func buildChzzkScheduleStreamID(chzzkChannelID, title string, startAt time.Time) string {
+	seed := strings.Join([]string{
+		strings.TrimSpace(chzzkChannelID),
+		strings.TrimSpace(title),
+		startAt.UTC().Format(time.RFC3339),
+	}, "|")
+	sum := sha256.Sum256([]byte(seed))
+	return fmt.Sprintf("chzzk:%s:schedule:%x", strings.TrimSpace(chzzkChannelID), sum[:8])
 }

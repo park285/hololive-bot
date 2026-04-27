@@ -11,27 +11,33 @@ import { authApi } from "@/api/core";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { applySessionStatus } from "@/lib/sessionLifecycle";
 import { queryClient } from "@/lib/queryClient";
-import { useAuthStore } from "@/stores/authStore";
 
 import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
 const LoginPage = () => {
 	const navigate = useNavigate();
-	const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");
 
 	const loginMutation = useMutation({
 		mutationFn: async () => {
-			await authApi.login(username, password);
-			await authApi.getSession();
+			const normalizedUsername = username.trim();
+			await authApi.login(normalizedUsername, password);
+			return authApi.getSession();
 		},
-		onSuccess: () => {
+		onSuccess: (session) => {
+			if (!session.authenticated) {
+				setError("로그인 세션을 확인하지 못했습니다. 다시 로그인해주세요.");
+				return;
+			}
+
 			queryClient.clear();
-			setAuthenticated(true);
-			void navigate("/dashboard/stats");
+			applySessionStatus(session);
+			setPassword("");
+			void navigate("/dashboard/stats", { replace: true });
 		},
 		onError: (err: unknown) => {
 			if (axios.isAxiosError(err)) {
@@ -54,7 +60,7 @@ const LoginPage = () => {
 		e.preventDefault();
 		setError("");
 
-		if (!username || !password) {
+		if (!username.trim() || !password) {
 			setError("아이디와 비밀번호를 입력해주세요");
 			return;
 		}

@@ -54,6 +54,43 @@ var ErrRateLimited = errors.New("rate limited by YouTube (429)")
 
 var ErrForbidden = errors.New("forbidden by YouTube (403)")
 
+var ErrTransientCooldown = errors.New("youtube transient cooldown")
+
+type CooldownError struct {
+	Kind  string
+	Delay time.Duration
+	Err   error
+}
+
+func (e *CooldownError) Error() string {
+	if e == nil {
+		return "cooldown error"
+	}
+
+	return fmt.Sprintf(
+		"%s cooldown remaining: %s: %v",
+		e.Kind,
+		e.Delay.Round(time.Second),
+		e.Err,
+	)
+}
+
+func (e *CooldownError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+
+	return e.Err
+}
+
+func (e *CooldownError) RetryDelay() time.Duration {
+	if e == nil || e.Delay <= 0 {
+		return 0
+	}
+
+	return e.Delay
+}
+
 var ErrChannelNotFound = errors.New("channel does not exist")
 
 var ErrChannelUnavailable = errors.New("channel is unavailable")
@@ -268,7 +305,9 @@ func (c *Client) ResolveCommunityPostPublishedAt(ctx context.Context, postID str
 		return nil, ErrCommunityPublishedAtNotFound
 	}
 
-	html, err := c.fetchPage(ctx, fmt.Sprintf("https://www.youtube.com/post/%s", trimmedPostID), MetadataResolveFetchPolicy)
+	postURL := "https://www.youtube.com/post/" + url.PathEscape(trimmedPostID)
+
+	html, err := c.fetchPage(ctx, postURL, MetadataResolveFetchPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("fetch community post page: %w", err)
 	}
@@ -287,7 +326,11 @@ func (c *Client) ResolveVideoPublishedAt(ctx context.Context, videoID string) (*
 		return nil, ErrPublishedAtNotFound
 	}
 
-	html, err := c.fetchPage(ctx, fmt.Sprintf("https://www.youtube.com/watch?v=%s", trimmedVideoID), MetadataResolveFetchPolicy)
+	params := url.Values{}
+	params.Set("v", trimmedVideoID)
+	watchURL := "https://www.youtube.com/watch?" + params.Encode()
+
+	html, err := c.fetchPage(ctx, watchURL, MetadataResolveFetchPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("fetch video page: %w", err)
 	}
@@ -302,14 +345,12 @@ func (c *Client) ResolveVideoPublishedAt(ctx context.Context, videoID string) (*
 
 // fetchPage: YouTube 페이지 HTML 가져오기 (5xx 에러 시 재시도 포함)
 func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchPolicy) (string, error) {
-	// transient cooldown 대기 (호출 간 감속, 내부 재시도와 독립)
+	// transient cooldown은 worker를 점유한 채 sleep하지 않고 스케줄러에 재시도 지연을 위임한다.
 	if wait := c.backoffState.TransientCooldownRemaining(); wait > 0 {
-		timer := time.NewTimer(wait)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return "", fmt.Errorf("transient cooldown wait canceled: %w", ctx.Err())
-		case <-timer.C:
+		return "", &CooldownError{
+			Kind:  "youtube transient",
+			Delay: wait,
+			Err:   ErrTransientCooldown,
 		}
 	}
 
@@ -353,7 +394,7 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 	if err != nil {
 		// context 취소/타임아웃 시 transient 에러 기록 스킵 (셧다운 시 불필요한 cooldown 방지)
 		// retry 모두 소진된 경우에만 transient 에러 기록 (내부 retry 교차 오염 방지)
-		if statusCode, ok := extractHTTPStatusCode(err); ctx.Err() == nil && ok && isRetryableStatusCode(statusCode) {
+		if ctx.Err() == nil && (isRetryableStatusError(err) || isRetryableTransportError(err)) {
 			c.backoffState.RecordTransientErrorWithSuggestedCooldown(extractHTTPRetryAfter(err))
 		}
 		return "", fmt.Errorf("fetchPage failed after retries: %w", err)
