@@ -3,12 +3,12 @@ name: hololive-bot
 x-logging: &default-logging
   driver: "json-file"
   options:
-    max-size: "10m"
+    max-size: "5m"
     max-file: "3"
 
 x-app-file-log-env: &app-file-log-env
   LOG_LEVEL: ${LOG_LEVEL:-info}
-  LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-100}
+  LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-5}
   LOG_MAX_BACKUPS: ${LOG_MAX_BACKUPS:-5}
   LOG_MAX_AGE_DAYS: ${LOG_MAX_AGE_DAYS:-30}
   LOG_COMPRESS: ${LOG_COMPRESS:-true}
@@ -22,8 +22,14 @@ x-security-hardening: &security-hardening
   tmpfs:
     - /tmp:size=64m,mode=1777
 
-x-tailscale-dns: &tailscale-dns
-  - 100.100.100.100
+x-public-dns: &public-dns
+  - 8.8.8.8
+  - 1.1.1.1
+
+x-iris-extra-hosts: &iris-extra-hosts
+  - "host.docker.internal:host-gateway"
+  - "vnic-kapu-iris-seoul-fk:100.100.1.5"
+  - "vnic-kapu-iris-seoul-fk.tail742dd8.ts.net:100.100.1.5"
 
 # DB/Cache용 보안 설정 (setuid/setgid 필요)
 x-db-security: &db-security
@@ -196,7 +202,7 @@ services:
       CLIPROXY_API_KEY: ${CLIPROXY_API_KEY:-}
       CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
       CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
-    dns: *tailscale-dns
+    dns: *public-dns
     ports:
       - "127.0.0.1:30001:30001"
       - "100.100.1.3:30001:30001"
@@ -205,8 +211,7 @@ services:
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    extra_hosts: *iris-extra-hosts
     depends_on:
       holo-postgres:
         condition: service_healthy
@@ -399,15 +404,14 @@ services:
       DISPATCHER_RECONNECT_BACKOFF_MS: "1000"
       LOG_DIR: /app/logs
       TZ: Asia/Seoul
-    dns: *tailscale-dns
+    dns: *public-dns
     ports:
       - "127.0.0.1:30020:30020"
     volumes:
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    extra_hosts: *iris-extra-hosts
     depends_on:
       valkey-cache:
         condition: service_healthy
@@ -490,7 +494,7 @@ services:
       CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
       CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
       LOG_DIR: /app/logs
-    dns: *tailscale-dns
+    dns: *public-dns
     ports:
       - "127.0.0.1:30004:30004"
     volumes:
@@ -498,8 +502,7 @@ services:
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    extra_hosts: *iris-extra-hosts
     depends_on:
       holo-postgres:
         condition: service_healthy
@@ -584,7 +587,7 @@ services:
       CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
       CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
       LOG_DIR: /app/logs
-    dns: *tailscale-dns
+    dns: *public-dns
     ports:
       - "127.0.0.1:30005:30005"
     volumes:
@@ -592,8 +595,7 @@ services:
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    extra_hosts: *iris-extra-hosts
     depends_on:
       holo-postgres:
         condition: service_healthy
@@ -663,7 +665,7 @@ services:
       CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
       CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
       LOG_DIR: /app/logs
-    dns: *tailscale-dns
+    dns: *public-dns
     ports:
       - "127.0.0.1:30003:30003"
     volumes:
@@ -671,8 +673,7 @@ services:
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
       - valkey-cache-socket:/var/run/valkey:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    extra_hosts: *iris-extra-hosts
     depends_on:
       holo-postgres:
         condition: service_healthy
