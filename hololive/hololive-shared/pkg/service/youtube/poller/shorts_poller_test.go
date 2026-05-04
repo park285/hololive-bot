@@ -74,7 +74,7 @@ func TestShortsPollerPollPersistsPublishedAtFromScrapeAndDetectedAt(t *testing.T
 	poller := NewShortsPoller(client, db, 10, func(req NotificationRouteRequest) bool {
 		captured = req
 		return true
-	})
+	}, true)
 
 	var logBuffer bytes.Buffer
 	previousDefaultLogger := slog.Default()
@@ -181,7 +181,7 @@ func TestShortsPollerPollDeduplicatesCollectedShortsByCanonicalPostID(t *testing
 	poller := NewShortsPoller(client, db, 10, func(req NotificationRouteRequest) bool {
 		routeCalls++
 		return true
-	})
+	}, true)
 
 	var logBuffer bytes.Buffer
 	previousDefaultLogger := slog.Default()
@@ -212,6 +212,66 @@ func TestShortsPollerPollDeduplicatesCollectedShortsByCanonicalPostID(t *testing
 	assert.Equal(t, "UC_DUPLICATE_SHORTS", batchEntry[logschema.FieldChannelID])
 	assert.Equal(t, string(domain.AlarmTypeShorts), batchEntry[logschema.FieldAlarmType])
 	assert.Equal(t, float64(1), batchEntry[logschema.FieldDetectedCount])
+}
+
+func TestShortsPoller_RoutedAsyncResolverSkipsRSSPublishedAtLookup(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+		&domain.YouTubeContentAlarmTracking{},
+		&domain.YouTubeCommunityShortsSourcePost{},
+		&domain.YouTubeCommunityShortsAlarmState{},
+	)
+	require.NoError(t, db.Create(&domain.YouTubeContentWatermark{
+		ChannelID:     "UC_TEST",
+		WatermarkType: domain.WatermarkTypeShort,
+		Initialized:   true,
+		LastContentID: "old-short",
+	}).Error)
+
+	shortsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Shorts","content":{"richGridRenderer":{"contents":[{"richItemRenderer":{"content":{"shortsLockupViewModel":{"onTap":{"innertubeCommand":{"reelWatchEndpoint":{"videoId":"short-1"}}},"overlayMetadata":{"primaryText":{"content":"Short One"},"secondaryText":{"content":"1.2K views"}},"thumbnail":{"sources":[{"url":"https://img.test/1.jpg","width":120,"height":200}]}}}}}]}}}}]}}}`
+	shortsHTML := "<script>var ytInitialData = " + shortsJSON + ";</script>"
+	rssCalls := 0
+
+	client := scraper.NewClient(
+		scraper.WithRateLimiter(scraper.NewRateLimiter(0)),
+		scraper.WithUAProvider(ua.NewStaticProvider("test-agent")),
+		scraper.WithHTTPClient(&http.Client{
+			Timeout: 5 * time.Second,
+			Transport: shortsPollerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch {
+				case strings.HasSuffix(req.URL.Path, "/shorts"):
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(shortsHTML)), Header: make(http.Header), Request: req}, nil
+				case strings.HasSuffix(req.URL.Path, "/feeds/videos.xml"):
+					rssCalls++
+					return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<?xml version="1.0" encoding="UTF-8"?><feed></feed>`)), Header: make(http.Header), Request: req}, nil
+				default:
+					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("not found")), Header: make(http.Header), Request: req}, nil
+				}
+			}),
+		}),
+	)
+
+	routeCalls := 0
+	poller := NewShortsPoller(client, db, 10, func(NotificationRouteRequest) bool {
+		routeCalls++
+		return true
+	})
+	require.NoError(t, poller.Poll(context.Background(), "UC_TEST"))
+
+	assert.Zero(t, rssCalls)
+	assert.Zero(t, routeCalls)
+
+	var outboxCount int64
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	assert.Zero(t, outboxCount)
+
+	var alarmState domain.YouTubeCommunityShortsAlarmState
+	require.NoError(t, db.First(&alarmState, "kind = ? AND post_id = ?", domain.OutboxKindNewShort, "short:short-1").Error)
+	assert.Nil(t, alarmState.ActualPublishedAt)
+	assert.Nil(t, alarmState.AuthorizedAt)
+	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, alarmState.DeliveryStatus)
 }
 
 func TestShortsPoller_PublishedAtMissingStillAdvancesWatermark(t *testing.T) {

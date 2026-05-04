@@ -97,7 +97,7 @@ func (p *ShortsPoller) Poll(ctx context.Context, channelID string) error {
 		return err
 	}
 	newShorts := collectNewShorts(shorts, watermark, isInitialized)
-	if isInitialized && len(newShorts) > 0 && (p.routeDecider != nil || p.inlinePublishedAtFallbackEnabled) && shortsNeedPublishedAtLookup(newShorts) {
+	if isInitialized && len(newShorts) > 0 && p.inlinePublishedAtFallbackEnabled && shortsNeedPublishedAtLookup(newShorts) {
 		p.client.EnrichShortsPublishedAtFromRSS(ctx, channelID, newShorts)
 	}
 
