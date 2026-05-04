@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/park285/iris-client-go/iris"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *testing.T) {
@@ -181,4 +184,47 @@ func TestRuntimeIrisClient_SendMessage_FallsBackWhenBaseURLFileIsInvalid(t *test
 		t.Fatalf("fallback calls = %d, want 1", fallbackCalls)
 	}
 	fallbackMu.Unlock()
+}
+
+func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotRequest irisTextReplyRequest
+	server := httptest.NewServer(h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.Header.Get("X-Iris-Signature") == "" {
+			t.Fatal("missing iris signature")
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		if err := json.NewEncoder(w).Encode(iris.ReplyAcceptedResponse{
+			Success:   true,
+			Delivery:  "queued",
+			RequestID: "reply-123",
+			Room:      "room-1",
+			Type:      "text",
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}), &http2.Server{}))
+	defer server.Close()
+
+	client := NewRuntimeIrisClient(server.URL, "bot-token", "", nil)
+	resp, err := client.SendMessageAccepted(context.Background(), "room-1", "hello")
+	if err != nil {
+		t.Fatalf("send accepted: %v", err)
+	}
+
+	if gotPath != iris.PathReply {
+		t.Fatalf("path = %q, want %q", gotPath, iris.PathReply)
+	}
+	if gotRequest.Type != "text" || gotRequest.Room != "room-1" || gotRequest.Data != "hello" {
+		t.Fatalf("request = %+v, want text room-1 hello", gotRequest)
+	}
+	if resp == nil || resp.RequestID != "reply-123" || resp.Delivery != "queued" {
+		t.Fatalf("response = %+v, want queued reply-123", resp)
+	}
 }

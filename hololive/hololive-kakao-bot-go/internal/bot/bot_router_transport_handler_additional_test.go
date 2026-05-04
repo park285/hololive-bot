@@ -74,6 +74,13 @@ type sentMessage struct {
 	message string
 }
 
+type acceptedTestIrisClient struct {
+	testIrisClient
+
+	acceptedCalls int
+	statuses      []*iris.ReplyStatusSnapshot
+}
+
 func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
 	c.mu.Lock()
 	c.lastMessageRoom = room
@@ -115,6 +122,23 @@ func (c *testIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.
 
 func (c *testIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
 	return nil, nil
+}
+
+func (c *acceptedTestIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	c.acceptedCalls++
+	if err := c.SendMessage(ctx, room, message, opts...); err != nil {
+		return nil, err
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-1", Delivery: "queued", Room: room, Type: "text"}, nil
+}
+
+func (c *acceptedTestIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
+	if len(c.statuses) == 0 {
+		return &iris.ReplyStatusSnapshot{State: "handoff_completed"}, nil
+	}
+	status := c.statuses[0]
+	c.statuses = c.statuses[1:]
+	return status, nil
 }
 
 func (c *testIrisClient) Ping(ctx context.Context) bool { return true }
@@ -222,6 +246,22 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		err := transport.SendMessage(ctx, "room", "hello")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send message to room room")
+	})
+
+	t.Run("send message retries failed accepted reply once", func(t *testing.T) {
+		failedDetail := "callback failed"
+		client := &acceptedTestIrisClient{
+			statuses: []*iris.ReplyStatusSnapshot{
+				{State: "failed", Detail: &failedDetail},
+				{State: "handoff_completed"},
+			},
+		}
+		transport := NewCommandTransport(client, nil)
+
+		err := transport.SendMessage(ctx, "room", "hello")
+		require.NoError(t, err)
+		assert.Equal(t, 2, client.acceptedCalls)
+		assert.Equal(t, "hello", client.lastMessage)
 	})
 
 	t.Run("send image wraps iris error", func(t *testing.T) {

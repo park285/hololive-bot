@@ -121,7 +121,7 @@ func TestPendingPublishedAtResolver_ReEnqueuesWhenStaleShortClaimHasNoOutboxRow(
 		&domain.YouTubeCommunityShortsAlarmState{},
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
-	authorizedAt := time.Now().UTC().Add(-2 * time.Minute)
+	authorizedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	publishedAt := detectedAt.Add(-time.Minute)
 	seedPendingShortResolution(t, db, "channel-1", "short-stale-claim", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
@@ -170,7 +170,7 @@ func TestPendingPublishedAtResolver_DoesNotDuplicateWhenStaleShortClaimHasOutbox
 		&domain.YouTubeCommunityShortsAlarmState{},
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
-	authorizedAt := time.Now().UTC().Add(-2 * time.Minute)
+	authorizedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	publishedAt := detectedAt.Add(-time.Minute)
 	seedPendingShortResolution(t, db, "channel-1", "short-stale-outbox", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
@@ -485,7 +485,7 @@ func TestPendingPublishedAtResolver_ReEnqueuesWhenStaleCommunityClaimHasNoOutbox
 		&domain.YouTubeCommunityShortsAlarmState{},
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
-	authorizedAt := time.Now().UTC().Add(-2 * time.Minute)
+	authorizedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	publishedAt := detectedAt.Add(-time.Minute)
 	seedPendingCommunityResolution(t, db, "channel-community", "post-stale-claim", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
@@ -550,7 +550,7 @@ func TestPendingPublishedAtResolver_DoesNotDuplicateWhenStaleCommunityClaimHasOu
 		&domain.YouTubeCommunityShortsAlarmState{},
 	)
 	detectedAt := time.Date(2026, 4, 10, 1, 11, 30, 0, time.UTC)
-	authorizedAt := time.Now().UTC().Add(-2 * time.Minute)
+	authorizedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	publishedAt := detectedAt.Add(-time.Minute)
 	seedPendingCommunityResolution(t, db, "channel-community", "post-stale-outbox", detectedAt)
 	require.NoError(t, db.Model(&domain.YouTubeCommunityShortsAlarmState{}).
