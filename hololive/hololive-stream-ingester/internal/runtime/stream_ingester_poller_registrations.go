@@ -81,7 +81,7 @@ func buildStreamIngesterChannelPollerRegistrationsWithClient(
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
 			WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(shortsWorstCaseRequestUnits(routeDecider != nil, inlineResolveMissingPublishedAt, maxResults)),
+			WithWorstCaseRequestUnitsPerRun(shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt, maxResults)),
 		providers.NewChannelPollerRegistration(communityPoller, poller.PriorityLow, poll.Community).
 			WithChannelIDs(notificationChannelIDs).
 			WithTargetGroup(providers.ChannelTargetGroupNotification).
@@ -104,12 +104,10 @@ func videosWorstCaseRequestUnits() float64 {
 	return float64(scraper.FetchPageMaxAttempts * 3)
 }
 
-func shortsWorstCaseRequestUnits(routeDeciderEnabled, inlineResolveMissingPublishedAt bool, maxResults int) float64 {
+func shortsWorstCaseRequestUnits(inlineResolveMissingPublishedAt bool, maxResults int) float64 {
 	units := 1.0
-	if routeDeciderEnabled {
-		units += float64(scraper.FetchPageMaxAttempts)
-	}
 	if inlineResolveMissingPublishedAt {
+		units += float64(scraper.FetchPageMaxAttempts)
 		units += float64(maxResults)
 	}
 	return units
