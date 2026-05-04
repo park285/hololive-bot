@@ -217,14 +217,18 @@ func (d *Dispatcher) tryClaimDelivery(
 func resolveDeliveryClaimTime(row domain.YouTubeNotificationDelivery, outbox domain.YouTubeNotificationOutbox) time.Time {
 	switch {
 	case !outbox.NextAttemptAt.IsZero():
-		return yttimestamp.Normalize(outbox.NextAttemptAt)
+		return normalizeDeliveryClaimTime(outbox.NextAttemptAt)
 	case !row.CreatedAt.IsZero():
-		return yttimestamp.Normalize(row.CreatedAt)
+		return normalizeDeliveryClaimTime(row.CreatedAt)
 	case !outbox.CreatedAt.IsZero():
-		return yttimestamp.Normalize(outbox.CreatedAt)
+		return normalizeDeliveryClaimTime(outbox.CreatedAt)
 	default:
-		return yttimestamp.Normalize(time.Now())
+		return normalizeDeliveryClaimTime(time.Now())
 	}
+}
+
+func normalizeDeliveryClaimTime(value time.Time) time.Time {
+	return yttimestamp.Normalize(value).Truncate(time.Microsecond)
 }
 
 func deliveryClaimIdentityForOutbox(outbox domain.YouTubeNotificationOutbox) (string, error) {

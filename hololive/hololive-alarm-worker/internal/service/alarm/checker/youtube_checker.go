@@ -268,12 +268,16 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	}
 
 	resolvedStream := ensureScheduledTime(stream, *stream.StartScheduled)
+	notificationScheduleChanges := scheduleChanges
+	if targetCrossed {
+		notificationScheduleChanges = nil
+	}
 	notifications := roomNotificationsWithScheduleChanges(
 		subscriberRooms,
 		resolvedStream.Channel,
 		resolvedStream,
 		minutesUntil,
-		scheduleChanges,
+		notificationScheduleChanges,
 		!targetCrossed,
 	)
 

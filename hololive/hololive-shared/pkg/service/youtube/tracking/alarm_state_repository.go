@@ -206,7 +206,7 @@ func (r *GormRepository) TryClaimAlarmState(ctx context.Context, record *domain.
 		normalizedRecord.ChannelID,
 		normalizedRecord.ActualPublishedAt,
 		normalizedRecord.DetectedAt,
-		normalizedRecord.AuthorizedAt,
+		normalizeDatabaseTimestamp(*normalizedRecord.AuthorizedAt),
 		nil,
 		normalizedRecord.DeliveryStatus,
 		now,
@@ -251,7 +251,7 @@ func (r *GormRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain
 		Model(&domain.YouTubeCommunityShortsAlarmState{}).
 		Where("kind = ? AND post_id = ?", normalizedKind, normalizedPostID).
 		Where("alarm_sent_at IS NULL").
-		Where("authorized_at = ?", yttimestamp.Normalize(authorizedAt)).
+		Where("authorized_at = ?", normalizeDatabaseTimestamp(authorizedAt)).
 		Updates(map[string]any{
 			"authorized_at":   nil,
 			"delivery_status": domain.YouTubeCommunityShortsAlarmStateStatusDetected,
@@ -511,6 +511,8 @@ func normalizeAlarmStateClaim(record *domain.YouTubeCommunityShortsAlarmState) (
 		return nil, fmt.Errorf("alarm_sent_at must be empty")
 	}
 
+	authorizedAt := normalizeDatabaseTimestamp(*normalizedRecord.AuthorizedAt)
+	normalizedRecord.AuthorizedAt = &authorizedAt
 	normalizedRecord.AlarmSentAt = nil
 	normalizedRecord.DeliveryStatus = domain.YouTubeCommunityShortsAlarmStateStatusEnqueued
 	return normalizedRecord, nil
@@ -553,6 +555,10 @@ func normalizeAlarmState(record *domain.YouTubeCommunityShortsAlarmState) (*doma
 		AlarmSentAt:       alarmSentAt,
 		DeliveryStatus:    domain.ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt, alarmSentAt),
 	}, nil
+}
+
+func normalizeDatabaseTimestamp(value time.Time) time.Time {
+	return value.UTC().Truncate(time.Microsecond)
 }
 
 func alarmStateCanonicalKey(kind domain.OutboxKind, postID string) string {

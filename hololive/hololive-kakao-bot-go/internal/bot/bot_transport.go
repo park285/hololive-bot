@@ -24,6 +24,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/iris-client-go/iris"
@@ -33,6 +35,16 @@ import (
 )
 
 const serviceNameIris = "iris"
+
+const (
+	replyStatusPollInterval = 250 * time.Millisecond
+	replySendMaxAttempts    = 2
+)
+
+type acceptedMessageSender interface {
+	SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
+	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
+}
 
 type CommandTransport struct {
 	irisClient irisClient
@@ -60,12 +72,87 @@ func (t *CommandTransport) SendMessage(ctx context.Context, room, message string
 		opts = append(opts, iris.WithThreadID(threadID))
 	}
 
-	if err := t.irisClient.SendMessage(sendCtx, room, message, opts...); err != nil {
+	if err := t.sendMessage(sendCtx, room, message, opts...); err != nil {
 		serviceErr := appErrors.NewServiceError("failed to send message", serviceNameIris, "send_message", err)
 		return fmt.Errorf("send message to room %s: %w", room, serviceErr)
 	}
 
 	return nil
+}
+
+func (t *CommandTransport) sendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+	acceptedSender, ok := t.irisClient.(acceptedMessageSender)
+	if !ok {
+		return t.irisClient.SendMessage(ctx, room, message, opts...)
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < replySendMaxAttempts; attempt++ {
+		accepted, err := acceptedSender.SendMessageAccepted(ctx, room, message, opts...)
+		if err != nil {
+			return err
+		}
+		if accepted == nil || strings.TrimSpace(accepted.RequestID) == "" {
+			return nil
+		}
+		err = waitForReplyHandoff(ctx, acceptedSender, accepted.RequestID)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !isReplyStatusFailed(err) {
+			return nil
+		}
+	}
+
+	return lastErr
+}
+
+type replyStatusFailedError struct {
+	requestID string
+	detail    string
+}
+
+func (e replyStatusFailedError) Error() string {
+	if strings.TrimSpace(e.detail) == "" {
+		return fmt.Sprintf("iris reply %s failed", e.requestID)
+	}
+	return fmt.Sprintf("iris reply %s failed: %s", e.requestID, e.detail)
+}
+
+func isReplyStatusFailed(err error) bool {
+	var failed replyStatusFailedError
+	return errors.As(err, &failed)
+}
+
+func waitForReplyHandoff(ctx context.Context, client acceptedMessageSender, requestID string) error {
+	ticker := time.NewTicker(replyStatusPollInterval)
+	defer ticker.Stop()
+
+	for {
+		status, err := client.GetReplyStatus(ctx, requestID)
+		if err != nil {
+			return nil
+		}
+		if status != nil {
+			switch strings.ToLower(strings.TrimSpace(status.State)) {
+			case "handoff_completed", "delivered", "sent":
+				return nil
+			case "failed":
+				detail := ""
+				if status.Detail != nil {
+					detail = *status.Detail
+				}
+				return replyStatusFailedError{requestID: requestID, detail: detail}
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 func (t *CommandTransport) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error {
