@@ -189,7 +189,7 @@ func TestBuildStreamIngesterYouTubeComponents_AllowsBudgetSafeDefaultPollConfig(
 	require.Len(t, registrations, 5)
 }
 
-func TestBuildStreamIngesterYouTubeComponents_DefaultConfigWarnsWhenRecoveryEnvelopeExceedsBudget(t *testing.T) {
+func TestBuildStreamIngesterYouTubeComponents_ProductionShortsIntervalKeepsRecoveryEnvelopeWithinBudget(t *testing.T) {
 	t.Parallel()
 
 	var logBuf bytes.Buffer
@@ -208,6 +208,13 @@ func TestBuildStreamIngesterYouTubeComponents_DefaultConfigWarnsWhenRecoveryEnve
 
 	_, _, _, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
+			Poll: config.ScraperPoll{
+				Videos:    15 * time.Minute,
+				Shorts:    2 * time.Minute,
+				Community: 15 * time.Minute,
+				Stats:     6 * time.Hour,
+				Live:      10 * time.Minute,
+			},
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
 		&databasemocks.Client{
@@ -226,7 +233,8 @@ func TestBuildStreamIngesterYouTubeComponents_DefaultConfigWarnsWhenRecoveryEnve
 
 	require.NoError(t, err)
 	assert.NotContains(t, logBuf.String(), `"msg":"youtube_scraper_combined_budget_exceeds_rate_limit"`)
-	assert.Contains(t, logBuf.String(), `"msg":"youtube_scraper_fault_envelope_exceeds_rate_limit"`)
+	assert.NotContains(t, logBuf.String(), `"msg":"youtube_scraper_fault_envelope_exceeds_rate_limit"`)
+	assert.Contains(t, logBuf.String(), `"expected_combined_retry_amplified_rpm_max":18.858333333333334`)
 }
 
 func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {

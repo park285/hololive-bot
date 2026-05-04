@@ -1,11 +1,13 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -277,6 +279,45 @@ func TestProvideScraperScheduler_RegistersSyntheticGlobalPollerWithoutDefaults(t
 	}
 }
 
+func TestProvideScraperScheduler_SeparatesExpectedRPMFromFaultEnvelope(t *testing.T) {
+	t.Parallel()
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	scheduler := ProvideScraperScheduler(
+		nil,
+		logger,
+		WithChannelPollerRegistrations([]ChannelPollerRegistration{
+			NewChannelPollerRegistration(namedNoopPoller{name: "shorts"}, poller.PriorityLow, 2*time.Minute).
+				WithChannelIDs(repeatProviderChannelIDs("UC_NOTIFY_", 12)).
+				WithWorstCaseAttempts(1).
+				WithWorstCaseRequestUnitsPerRun(4),
+		}),
+	)
+	if scheduler == nil {
+		t.Fatal("scheduler is nil")
+	}
+
+	logOutput := logBuf.String()
+	assert.Contains(t, logOutput, `"msg":"Scraper scheduler initialized"`)
+	assert.Contains(t, logOutput, `"expected_total_rpm":6`)
+	assert.Contains(t, logOutput, `"expected_total_retry_amplified_rpm_max":24`)
+	assert.NotContains(t, logOutput, `"msg":"scraper_poll_budget_exceeds_rate_limit"`)
+	assert.NotContains(t, logOutput, `"msg":"scraper_poll_fault_envelope_exceeds_rate_limit"`)
+}
+
+func TestEstimatedRegistrationRPMUsesRequestsPerRunNotWorstCaseUnits(t *testing.T) {
+	t.Parallel()
+
+	registration := NewChannelPollerRegistration(namedNoopPoller{name: "shorts"}, poller.PriorityLow, 2*time.Minute).
+		WithChannelIDs([]string{"UC_A", "UC_B"}).
+		WithRequestsPerRun(1).
+		WithWorstCaseRequestUnitsPerRun(4)
+
+	assert.Equal(t, 1.0, estimatedRegistrationRPM(registration, 2))
+	assert.Equal(t, 4.0, estimatedRegistrationWorstCaseRPM(registration, 2))
+}
+
 func providerJobKeys(t *testing.T, scheduler *poller.Scheduler) []string {
 	t.Helper()
 
@@ -293,4 +334,12 @@ func providerJobKeys(t *testing.T, scheduler *poller.Scheduler) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func repeatProviderChannelIDs(prefix string, count int) []string {
+	out := make([]string, 0, count)
+	for i := range count {
+		out = append(out, prefix+strings.Repeat("A", i+1))
+	}
+	return out
 }

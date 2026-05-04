@@ -103,7 +103,7 @@ func ProvideScraperScheduler(
 	}
 
 	distinctTargets := make(map[string]struct{}, len(defaultChannelIDs))
-	totalJobs, totalRPM := registerScraperSchedulerPollers(
+	totalJobs, totalRPM, totalRetryAmplifiedRPM := registerScraperSchedulerPollers(
 		scheduler,
 		log,
 		channelPollerRegistrations,
@@ -117,7 +117,8 @@ func ProvideScraperScheduler(
 		slog.Int("distinct_target_channels", distinctTargetChannels),
 		slog.Int("poller_templates", len(channelPollerRegistrations)),
 		slog.Int("total_jobs", totalJobs),
-		slog.Float64("expected_total_rpm", totalRPM))
+		slog.Float64("expected_total_rpm", totalRPM),
+		slog.Float64("expected_total_retry_amplified_rpm_max", totalRetryAmplifiedRPM))
 
 	budgetRPM := 60.0 / constants.YouTubeScraperRateLimitConfig.RequestInterval.Seconds()
 	if totalRPM > budgetRPM {
@@ -186,9 +187,10 @@ func registerScraperSchedulerPollers(
 	registrations []ChannelPollerRegistration,
 	defaultChannelIDs []string,
 	distinctTargets map[string]struct{},
-) (int, float64) {
+) (int, float64, float64) {
 	totalJobs := 0
 	var totalRPM float64
+	var totalRetryAmplifiedRPM float64
 
 	for _, registration := range registrations {
 		if registration.Poller == nil || registration.Interval <= 0 {
@@ -219,17 +221,21 @@ func registerScraperSchedulerPollers(
 		}
 
 		pollerRPM := estimatedRegistrationRPM(registration, registeredTargets)
+		pollerRetryAmplifiedRPM := estimatedRegistrationWorstCaseRPM(registration, registeredTargets)
 		totalJobs += registeredTargets
 		totalRPM += pollerRPM
+		totalRetryAmplifiedRPM += pollerRetryAmplifiedRPM
 		logger.Info("Scraper poller targets resolved",
 			slog.String("poller", registration.Poller.Name()),
 			slog.Int("target_channels", registeredTargets),
 			slog.Duration("interval", registration.Interval),
 			slog.Float64("request_units_per_run", estimatedRegistrationRequestUnitsPerRun(registration)),
-			slog.Float64("expected_rpm", pollerRPM))
+			slog.Float64("worst_case_request_units_per_run", estimatedRegistrationWorstCaseRequestUnitsPerRun(registration)),
+			slog.Float64("expected_rpm", pollerRPM),
+			slog.Float64("expected_retry_amplified_rpm_max", pollerRetryAmplifiedRPM))
 	}
 
-	return totalJobs, totalRPM
+	return totalJobs, totalRPM, totalRetryAmplifiedRPM
 }
 
 func allRegistrationsExplicit(registrations []ChannelPollerRegistration) bool {
@@ -264,13 +270,17 @@ func hasExplicitAndImplicitRegistrations(registrations []ChannelPollerRegistrati
 }
 
 func estimatedRegistrationRequestUnitsPerRun(registration ChannelPollerRegistration) float64 {
-	if registration.WorstCaseRequestUnitsPerRun > 0 {
-		return registration.WorstCaseRequestUnitsPerRun
-	}
-
 	requests := registration.RequestsPerRun
 	if requests <= 0 {
 		requests = 1
+	}
+
+	return float64(requests)
+}
+
+func estimatedRegistrationWorstCaseRequestUnitsPerRun(registration ChannelPollerRegistration) float64 {
+	if registration.WorstCaseRequestUnitsPerRun > 0 {
+		return registration.WorstCaseRequestUnitsPerRun
 	}
 
 	attempts := registration.WorstCaseAttempts
@@ -278,7 +288,7 @@ func estimatedRegistrationRequestUnitsPerRun(registration ChannelPollerRegistrat
 		attempts = 1
 	}
 
-	return float64(requests * attempts)
+	return estimatedRegistrationRequestUnitsPerRun(registration) * float64(attempts)
 }
 
 func estimatedRegistrationRPM(registration ChannelPollerRegistration, targetCount int) float64 {
@@ -287,6 +297,14 @@ func estimatedRegistrationRPM(registration ChannelPollerRegistration, targetCoun
 	}
 
 	return float64(targetCount) * (60.0 / registration.Interval.Seconds()) * estimatedRegistrationRequestUnitsPerRun(registration)
+}
+
+func estimatedRegistrationWorstCaseRPM(registration ChannelPollerRegistration, targetCount int) float64 {
+	if registration.Interval <= 0 || targetCount <= 0 {
+		return 0
+	}
+
+	return float64(targetCount) * (60.0 / registration.Interval.Seconds()) * estimatedRegistrationWorstCaseRequestUnitsPerRun(registration)
 }
 
 func estimatedRequestsPerMinute(registrations []ChannelPollerRegistration) float64 {
