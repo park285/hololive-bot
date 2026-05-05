@@ -33,6 +33,10 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/logs.sh prune`
 - `./scripts/logs/logs.sh canary`
 - `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh canary-cron`
+- `./scripts/logs/osaka-status.sh`
+- `./scripts/logs/osaka-logs.sh [youtube-scraper|stream-ingester|all]`
+- `./scripts/logs/osaka-smoke.sh`
+- `./scripts/logs/osaka-install-log-rollup.sh`
 
 ## 4. review/
 리뷰 전달용 source/full bundle export와 사후 검증 스크립트입니다.
