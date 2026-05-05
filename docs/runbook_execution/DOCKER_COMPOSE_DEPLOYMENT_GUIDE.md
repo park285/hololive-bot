@@ -22,6 +22,19 @@
 - 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
 - 상태/장애 1차 확인은 `docker compose -f docker-compose.prod.yml ps`, `docker compose ... logs`, `/health`, `/ready` 기준으로 수행합니다.
 - k8s/k3s 시절 절차나 매니페스트가 저장소에 남아 있더라도, 현재 운영 SSOT로 간주하지 않습니다.
+- 앱 이미지는 distroless에서 UID/GID `1000:1000`으로 실행하고 `/etc/passwd`의 `app` 사용자와 `USER=app`, `HOME=/tmp`를 함께 제공합니다.
+- Compose healthcheck는 Dockerfile의 `HEALTHCHECK --start-period=5s`보다 운영 Compose anchor의 `start_period: 30s`를 우선 적용합니다.
+- Compose가 Dockerfile 기본값을 의도적으로 override하는 값이 있습니다. `hololive-bot`은 Dockerfile `GOGC=200` 대신 Compose `GOGC=60`, `llm-scheduler`는 Dockerfile `GOMEMLIMIT=192MiB` 대신 Compose `GOMEMLIMIT=256MiB`를 사용합니다.
+- `docker-proxy`, `deunhealth` 기본 이미지는 `latest` 대신 manifest digest로 고정합니다. 갱신 시 `.env`의 `DOCKER_SOCKET_PROXY_IMAGE`, `DEUNHEALTH_IMAGE`를 새 tag/digest로 명시하고 재검증합니다.
+
+앱 bind mount는 UID `1000`이 쓸 수 있어야 합니다. 운영자 group이 `docker`가 아닌 호스트에서는 아래 group 부분을 실제 운영자 group으로 바꿉니다.
+
+```bash
+mkdir -p data logs runtime-config
+sudo chown -R 1000:docker data logs
+sudo find data logs -type d -exec chmod 2770 {} +
+sudo find data logs -type f -exec chmod 660 {} +
+```
 
 ## ingestion 런타임 분리
 
@@ -40,6 +53,34 @@
 - YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-scraper`의 outbox dispatcher 경로로만 발송합니다.
 - compose 기준 rollout key는 `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED` 하나만 사용하고, canary fallback은 두지 않습니다. 운영 compose에서는 `youtube-scraper=true`, `stream-ingester=false`로 고정합니다.
 
+## Osaka split-host 운영
+
+Osaka split-host 구성에서는 runtime container만 `kapu-iris-osaka-1` (`100.100.1.7`)에서 실행하고, shared state/control은 기존 `kapu` (`100.100.1.3`)에 둡니다.
+
+- Osaka runtime: `youtube-scraper`, `stream-ingester`
+- 기존 state/control: `holo-postgres` (`100.100.1.3:5433`), `valkey-cache` (`100.100.1.3:6379`), CLIProxy (`http://100.100.1.3:8787/v1`), `hololive-bot`, admin 계열 서비스
+- Osaka compose overlay: `docker-compose.prod.yml` + `docker-compose.osaka.yml`
+- Osaka env file: `.env.osaka` (`COMPOSE_ENV_FILE=./.env.osaka`)
+- Osaka `.env.osaka`의 `CACHE_PASSWORD`는 중앙 host `.env`의 `CACHE_PASSWORD`와 동일해야 합니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
+
+Osaka에서는 local infra dependency를 만들지 않도록 service start에 `--no-deps`를 붙입니다.
+
+```bash
+SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
+$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps youtube-scraper'
+$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps stream-ingester'
+```
+
+컷오버는 build를 먼저 완료한 뒤 기존 호스트 service를 stop하고 Osaka service를 start합니다. `youtube-scraper`는 outbox dispatcher를 포함하므로 두 호스트에서 장시간 동시에 실행하지 않습니다.
+
+Osaka에는 source tree를 상시 보관하지 않습니다. 운영 디렉터리에는 compose 파일, `.env.osaka`, `runtime-config/`, `data/`, `logs/`만 둡니다. image는 source host에서 arm64로 build/load하거나, Osaka에 임시 build context를 만들고 image 생성 후 제거합니다.
+
+Osaka의 bind-mounted `data/`, `logs/`는 컨테이너 `app`이 쓰고 `ubuntu`가 읽을 수 있어야 합니다. 현재 Osaka에서 컨테이너 UID `1000`은 host 사용자 `opc`로 보이고, `ubuntu`는 `docker` group에 속합니다.
+
+```bash
+$SSH_OSAKA 'cd ~/hololive-bot && mkdir -p data logs && sudo chown -R 1000:docker data logs && sudo find data logs -type d -exec chmod 2770 {} + && sudo find data logs -type f -exec chmod 660 {} +'
+```
+
 ## 사전 준비
 
 1. `.env` 작성
@@ -48,14 +89,21 @@
    ```
 2. 필수 시크릿/접속값 채우기
    - `DB_PASSWORD`
+   - `CACHE_PASSWORD`
+     - `valkey-cache`는 `--requirepass`로 실행되며 모든 앱 컨테이너와 Osaka AP가 같은 값을 사용해야 합니다.
+     - admin-dashboard Redis URL에도 들어가므로 URL-safe hex 값을 권장합니다.
    - `IRIS_WEBHOOK_TOKEN`
    - `IRIS_BOT_TOKEN`
      - 필요하면 두 값은 동일하게 둘 수 있지만 변수는 분리해서 유지합니다.
    - `HOLODEX_API_KEY_*`
    - 필요 시 `HOLOLIVE_BOT_PORT_BIND_IP`
-     - 기본값: `127.0.0.1` (호스트 로컬에서만 접근)
+     - 기본값: `100.100.1.3` (기존 운영 Tailscale IP)
      - Tailscale/redroid에서 bot webhook(`30001`)에 접근해야 하면 ARM 호스트의 Tailscale IP로 설정
        - 예: `HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.3`
+   - 필요 시 `VALKEY_PORT_BIND_IP`
+     - 기본값: `100.100.1.3` (기존 운영 Tailscale IP)
+     - 다른 Tailscale 노드에서 운영 Valkey를 바라봐야 하면 Valkey가 실행 중인 호스트의 Tailscale IP로 설정
+       - Docker port publish는 `100.100.1.*` 와일드카드가 아니라 실제 로컬 IP 하나를 사용합니다.
 3. Docker Compose 사용 가능 여부 확인
    ```bash
    docker compose version
@@ -106,6 +154,16 @@ curl -fsS http://127.0.0.1:30005/health
 curl -fsS http://127.0.0.1:30020/ready
 ```
 
+Osaka split-host 상태 확인:
+
+```bash
+SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
+$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester'
+$SSH_OSAKA 'curl -fsS http://127.0.0.1:30005/health && curl -fsS http://127.0.0.1:30004/health'
+$SSH_OSAKA 'docker logs --since 15m hololive-youtube-scraper | grep -E "ingestion_lease|outbox|ERR|WRN" | tail -n 120'
+$SSH_OSAKA 'docker logs --since 15m hololive-stream-ingester | grep -E "photo|runtime|ingestion_lease|ERR|WRN" | tail -n 120'
+```
+
 Tailscale/redroid 연동이 필요한 경우에는 배포 전에 다음을 함께 확인하세요.
 
 ```bash
@@ -116,7 +174,8 @@ HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.3
 curl -fsS http://100.100.1.3:30001/health
 ```
 
-- `HOLOLIVE_BOT_PORT_BIND_IP`를 설정하지 않으면 `hololive-bot`은 기본적으로 `127.0.0.1:30001`에만 publish 됩니다.
+- `HOLOLIVE_BOT_PORT_BIND_IP`를 설정하지 않으면 `hololive-bot`은 기존 운영 Tailscale IP인 `100.100.1.3:30001`에도 publish 됩니다.
+- `VALKEY_PORT_BIND_IP`를 설정하지 않으면 `valkey-cache`는 기존 운영 Tailscale IP인 `100.100.1.3:6379`에도 publish 됩니다. 이 포트는 `CACHE_PASSWORD` 인증을 전제로 합니다.
 - redroid/Iris 인바운드 webhook에 필요한 포트는 `30001`입니다.
 - `30081`, `30082`는 외부 health dependency 확인용이며 `hololive-bot` webhook 자체와는 별도입니다.
 

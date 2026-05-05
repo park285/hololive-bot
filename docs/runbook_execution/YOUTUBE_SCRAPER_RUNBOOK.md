@@ -1,6 +1,6 @@
 # YouTube Scraper 운영 Runbook
 
-> 마지막 업데이트: 2026-03-09
+> 마지막 업데이트: 2026-05-05
 > 대상 서비스: `youtube-scraper` (포트 `30005`)
 
 ## 1) 목적
@@ -27,6 +27,14 @@
 - YouTube 커뮤니티/쇼츠 알람 라우팅은 `youtube-scraper` outbox dispatcher로 고정합니다.
 - canary/legacy 선택 플래그 없이 전체 운영 채널에 동일 경로를 적용합니다.
 
+Osaka split-host 운영 기준:
+- `youtube-scraper` 런타임 호스트: `kapu-iris-osaka-1` (`100.100.1.7`)
+- shared state/control 호스트: `kapu` (`100.100.1.3`)
+- Osaka에서는 `holo-postgres`, `hololive-db-migrate`, `valkey-cache`를 올리지 않고 `100.100.1.3:5433`, `100.100.1.3:6379`, `http://100.100.1.3:8787/v1`을 사용합니다.
+- Osaka start는 항상 `docker-compose.prod.yml`에 `docker-compose.osaka.yml`을 overlay하고 `--no-deps`를 붙입니다.
+- Osaka `.env.osaka`의 `CACHE_PASSWORD`는 중앙 `.env`와 동일해야 합니다. 중앙 Valkey는 Tailscale IP에 publish되지만 password 인증을 필수로 사용합니다.
+- `CACHE_PASSWORD`는 admin-dashboard Redis URL에도 들어가므로 URL-safe hex 값을 권장합니다.
+
 스크래퍼 튜닝 env:
 - `SCRAPER_WORKER_COUNT` 기본값 `2`
 - `SCRAPER_VIDEOS_SECONDS` 기본값 `300`
@@ -41,12 +49,29 @@
 ./scripts/deploy/compose-redeploy-service.sh youtube-scraper
 ```
 
+Osaka 재배포:
+
+```bash
+SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
+$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml build youtube-scraper'
+$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps youtube-scraper'
+```
+
 ## 3) 헬스체크
 
 ```bash
 docker compose -f docker-compose.prod.yml ps youtube-scraper
 curl -fsS http://127.0.0.1:30005/health
 docker logs --tail 200 hololive-youtube-scraper
+```
+
+Osaka 확인:
+
+```bash
+SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
+$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper'
+$SSH_OSAKA 'curl -fsS http://127.0.0.1:30005/health'
+$SSH_OSAKA 'docker logs --since 15m hololive-youtube-scraper | grep -E "ingestion_lease|outbox|ERR|WRN" | tail -n 120'
 ```
 
 정상 기준:
@@ -99,6 +124,16 @@ curl -fsS http://127.0.0.1:30005/health
 ```bash
 docker logs --since 15m hololive-youtube-scraper | grep "ingestion_lease"
 ```
+
+Osaka rollback:
+
+```bash
+SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
+$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml stop youtube-scraper'
+docker compose --env-file .env -f docker-compose.prod.yml up -d --no-deps youtube-scraper
+```
+
+rollback도 한 번에 한 서비스만 수행합니다. `youtube-scraper`는 outbox dispatcher를 포함하므로 Osaka와 기존 호스트에 장시간 동시 기동하지 않습니다.
 
 ## 6) 장애 대응 원칙
 

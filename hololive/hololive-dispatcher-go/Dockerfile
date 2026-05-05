@@ -26,7 +26,11 @@ ARG ALPINE_VERSION=3.23
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 ARG VERSION=dev
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 RUN apk add --no-cache git
+RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
+    printf 'app:x:1000:\n' > /tmp/group
 ENV GOWORK=/workspace/hololive-bot/go.work
 
 WORKDIR /workspace/hololive-bot
@@ -47,20 +51,21 @@ WORKDIR /workspace/hololive-bot/hololive/hololive-dispatcher-go
 RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOEXPERIMENT=greenteagc \
-    go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/dispatcher ./cmd/dispatcher
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOEXPERIMENT=greenteagc \
+    go build -tags sonic -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/dispatcher ./cmd/dispatcher && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ../hololive-stream-ingester/cmd/runtime/healthcheck
 
-FROM alpine:${ALPINE_VERSION}
+FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
 
-RUN apk add --no-cache ca-certificates tini tzdata
-
-ENV TZ=Asia/Seoul
-
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+ENV TZ=Asia/Seoul \
+    USER=app \
+    HOME=/tmp
 
 WORKDIR /app
 
+COPY --from=builder --link /tmp/passwd /etc/passwd
+COPY --from=builder --link /tmp/group /etc/group
 COPY --from=builder --link --chown=1000:1000 /dist ./
 
 ENV GOGC=100 \
@@ -69,9 +74,8 @@ ENV GOGC=100 \
 EXPOSE 30020
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://127.0.0.1:30020/health || exit 1
+    CMD ["./bin/healthcheck", "http://127.0.0.1:30020/ready"]
 
-USER appuser
+USER 1000:1000
 
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["./bin/dispatcher"]
+ENTRYPOINT ["./bin/dispatcher"]
