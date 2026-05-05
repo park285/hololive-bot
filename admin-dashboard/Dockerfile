@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG RUST_VERSION=1.94
+ARG GO_VERSION=1.26.2
 ARG ALPINE_VERSION=3.23
 
 # Stage 1: Build Frontend
@@ -39,26 +40,42 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release && \
     cp target/release/admin-dashboard /build/admin-dashboard-bin
 
-# Stage 3: Production Runtime
-FROM alpine:${ALPINE_VERSION}
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS healthcheck-builder
 
-RUN apk add --no-cache ca-certificates tini tzdata
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 
-ENV TZ=Asia/Seoul
+WORKDIR /workspace/hololive-bot/hololive/hololive-stream-ingester
 
-RUN addgroup -g 1000 appgroup && \
-    adduser -u 1000 -G appgroup -s /bin/sh -D appuser
+COPY hololive/hololive-stream-ingester/go.mod hololive/hololive-stream-ingester/go.sum ./
+COPY hololive/hololive-stream-ingester/cmd/runtime/healthcheck ./cmd/runtime/healthcheck
+
+RUN printf 'app:x:1000:1000:app:/tmp:/sbin/nologin\n' > /tmp/passwd && \
+    printf 'app:x:1000:\n' > /tmp/group
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/runtime/healthcheck
+
+FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838
+
+ENV TZ=Asia/Seoul \
+    USER=app \
+    HOME=/tmp
 
 WORKDIR /app
 
+COPY --from=healthcheck-builder --link /tmp/passwd /etc/passwd
+COPY --from=healthcheck-builder --link /tmp/group /etc/group
 COPY --from=builder --link --chown=1000:1000 /build/admin-dashboard-bin ./admin-dashboard
+COPY --from=healthcheck-builder --link --chown=1000:1000 /dist/bin/healthcheck ./bin/healthcheck
 
-USER appuser
+USER 1000:1000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-30190}/health || exit 1
+    CMD ["./bin/healthcheck", "http://127.0.0.1:30190/health"]
 
 EXPOSE 30190
 
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["./admin-dashboard"]
+ENTRYPOINT ["./admin-dashboard"]

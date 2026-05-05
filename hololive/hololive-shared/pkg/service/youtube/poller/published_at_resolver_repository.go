@@ -29,7 +29,24 @@ type publishedAtFinalizeEligibility struct {
 	reason     string
 }
 
-const publishedAtClaimFreshWindow = 30 * time.Second
+type resolvedPublishedAtDispatchGap struct {
+	candidate   trackingrepo.PublishedAtResolutionCandidate
+	publishedAt time.Time
+}
+
+type resolvedPublishedAtDispatchGapRow struct {
+	Kind              domain.OutboxKind `gorm:"column:kind"`
+	PostID            string            `gorm:"column:post_id"`
+	ContentID         string            `gorm:"column:content_id"`
+	ChannelID         string            `gorm:"column:channel_id"`
+	DetectedAt        time.Time         `gorm:"column:detected_at"`
+	ActualPublishedAt time.Time         `gorm:"column:actual_published_at"`
+}
+
+const (
+	publishedAtClaimFreshWindow              = 30 * time.Second
+	resolvedPublishedAtDispatchGapRecoverFor = time.Hour
+)
 
 func newPublishedAtResolverRepository(db *gorm.DB) *publishedAtResolverRepository {
 	return &publishedAtResolverRepository{
@@ -187,6 +204,66 @@ func selectPublishedAtFinalizeReason(primary string, fallback string) string {
 		return primary
 	}
 	return fallback
+}
+
+func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx context.Context, referenceNow time.Time, detectedBefore time.Time, limit int) ([]resolvedPublishedAtDispatchGap, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("list resolved published_at dispatch gaps: db is nil")
+	}
+	if referenceNow.IsZero() {
+		return nil, fmt.Errorf("list resolved published_at dispatch gaps: reference now is empty")
+	}
+	if detectedBefore.IsZero() {
+		return nil, fmt.Errorf("list resolved published_at dispatch gaps: detected before is empty")
+	}
+	if limit <= 0 {
+		return nil, fmt.Errorf("list resolved published_at dispatch gaps: limit must be positive")
+	}
+
+	var rows []resolvedPublishedAtDispatchGapRow
+	if err := r.db.WithContext(ctx).
+		Table("youtube_community_shorts_alarm_states AS s").
+		Select("s.kind, s.post_id, s.content_id, s.channel_id, s.detected_at, s.actual_published_at").
+		Joins("LEFT JOIN youtube_content_alarm_tracking AS t ON t.kind = s.kind AND t.canonical_content_id = s.post_id").
+		Where("s.kind IN ?", []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}).
+		Where("s.actual_published_at IS NOT NULL").
+		Where("s.alarm_sent_at IS NULL").
+		Where("t.alarm_sent_at IS NULL").
+		Where("s.detected_at < ?", yttimestamp.Normalize(detectedBefore)).
+		Where("s.actual_published_at >= ?", yttimestamp.Normalize(referenceNow).Add(-resolvedPublishedAtDispatchGapRecoverFor)).
+		Where("s.published_at_retry_after IS NULL OR s.published_at_retry_after <= ?", yttimestamp.Normalize(referenceNow)).
+		Where(`NOT EXISTS (
+			SELECT 1
+			FROM youtube_notification_outbox AS o
+			WHERE o.kind = s.kind AND (o.content_id = s.content_id OR o.content_id = s.post_id)
+		)`).
+		Order("s.detected_at ASC").
+		Order("s.post_id ASC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list resolved published_at dispatch gaps: query rows: %w", err)
+	}
+
+	gaps := make([]resolvedPublishedAtDispatchGap, 0, len(rows))
+	for i := range rows {
+		postID := normalizeContentID(rows[i].Kind, rows[i].PostID)
+		contentID := normalizeContentID(rows[i].Kind, rows[i].ContentID)
+		if postID == "" || contentID == "" {
+			continue
+		}
+		gaps = append(gaps, resolvedPublishedAtDispatchGap{
+			candidate: trackingrepo.PublishedAtResolutionCandidate{
+				Kind:       rows[i].Kind,
+				PostID:     postID,
+				ContentID:  contentID,
+				ChannelID:  strings.TrimSpace(rows[i].ChannelID),
+				DetectedAt: yttimestamp.Normalize(rows[i].DetectedAt),
+			},
+			publishedAt: yttimestamp.Normalize(rows[i].ActualPublishedAt),
+		})
+	}
+
+	return gaps, nil
 }
 
 func (r *publishedAtResolverRepository) completeFinalizePublishedAt(
@@ -413,38 +490,7 @@ func maybeAuthorizePublishedAtNotification(
 		return false, "route_decider_rejected", nil
 	}
 
-	claimed, err := claimResolvedPublishedAtAlarmState(ctx, txRepo, candidate, publishedAt, scope)
-	if err != nil {
-		return false, "", err
-	}
-	if !claimed {
-		return false, "already_claimed", nil
-	}
-
 	return true, "", nil
-}
-
-func claimResolvedPublishedAtAlarmState(
-	ctx context.Context,
-	txRepo *trackingrepo.GormRepository,
-	candidate trackingrepo.PublishedAtResolutionCandidate,
-	publishedAt time.Time,
-	scope string,
-) (bool, error) {
-	authorizedAt := yttimestamp.Normalize(time.Now())
-	claimed, err := txRepo.TryClaimAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
-		Kind:              candidate.Kind,
-		PostID:            candidate.PostID,
-		ContentID:         candidate.ContentID,
-		ChannelID:         candidate.ChannelID,
-		ActualPublishedAt: &publishedAt,
-		DetectedAt:        candidate.DetectedAt,
-		AuthorizedAt:      &authorizedAt,
-	})
-	if err != nil {
-		return false, fmt.Errorf("claim %s alarm state: %w", scope, err)
-	}
-	return claimed, nil
 }
 
 func newShortPublishedAtNotification(

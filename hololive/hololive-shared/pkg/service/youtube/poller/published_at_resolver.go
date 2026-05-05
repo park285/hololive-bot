@@ -182,7 +182,7 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 		}
 		setPublishedAtResolverPageCandidates(len(candidates))
 		if len(candidates) == 0 {
-			return nil
+			return r.recoverResolvedPublishedAtDispatchGaps(ctx, repo, detectedBefore, batchSize)
 		}
 		pageProcessed, stop, err := r.processPendingPublishedAtCandidates(
 			ctx,
@@ -202,9 +202,59 @@ func (r *PendingPublishedAtResolver) runOnce(ctx context.Context, detectedBefore
 		}
 
 		if nextCursor == nil {
-			return nil
+			return r.recoverResolvedPublishedAtDispatchGaps(ctx, repo, detectedBefore, batchSize)
 		}
 		cursor = nextCursor
+	}
+
+	return r.recoverResolvedPublishedAtDispatchGaps(ctx, repo, detectedBefore, batchSize)
+}
+
+func (r *PendingPublishedAtResolver) recoverResolvedPublishedAtDispatchGaps(
+	ctx context.Context,
+	repo *publishedAtResolverRepository,
+	detectedBefore time.Time,
+	limit int,
+) error {
+	if repo == nil {
+		return fmt.Errorf("recover resolved published_at dispatch gaps: repository is nil")
+	}
+
+	gaps, err := repo.ListResolvedPublishedAtDispatchGaps(ctx, time.Now(), detectedBefore, limit)
+	if err != nil {
+		return fmt.Errorf("recover resolved published_at dispatch gaps: list candidates: %w", err)
+	}
+	if len(gaps) == 0 {
+		return nil
+	}
+
+	tracking := trackingrepo.NewRepository(repo.db)
+	retryAfter := func() time.Time {
+		return time.Now().Add(r.resolverFailureBackoffTTL())
+	}
+	for i := range gaps {
+		candidate := gaps[i].candidate
+		observePublishedAtResolverScanned(candidate.Kind)
+		finalizeResult, err := repo.FinalizePublishedAtAndMaybeEnqueue(ctx, candidate, gaps[i].publishedAt, r.routeDecider)
+		if err != nil {
+			observePublishedAtResolverSkipped(candidate.Kind, "dispatch_gap_recovery_failed")
+			r.markPublishedAtRetryAfterWithReporting(tracking, ctx, candidate, retryAfter(), false, "dispatch_gap_recovery_failed")
+			r.logger.Warn("Resolved published_at dispatch gap recovery failed",
+				slog.String("kind", string(candidate.Kind)),
+				slog.String("post_id", candidate.PostID),
+				slog.String("content_id", candidate.ContentID),
+				slog.String("published_at", yttimestamp.Format(gaps[i].publishedAt)),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		if finalizeResult.enqueued && finalizeResult.reason == "resolved" {
+			finalizeResult.reason = "resolved_dispatch_gap"
+		}
+		r.reportPendingPublishedAtCandidateResult(candidate, &gaps[i].publishedAt, finalizeResult)
+		if !finalizeResult.enqueued && finalizeResult.reason != "already_claimed" && finalizeResult.reason != "already_sent" {
+			r.markPublishedAtRetryAfterWithReporting(tracking, ctx, candidate, retryAfter(), false, "dispatch_gap_"+finalizeResult.reason)
+		}
 	}
 
 	return nil
