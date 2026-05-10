@@ -30,6 +30,9 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -77,6 +80,23 @@ func (s *targetMinutesUpdaterStub) UpdateTargetMinutes(targets []int) {
 	s.calls = append(s.calls, append([]int(nil), targets...))
 }
 
+type alarmCacheWarmerStub struct {
+	calls     atomic.Int32
+	syncCalls atomic.Int32
+	err       error
+	syncErr   error
+}
+
+func (s *alarmCacheWarmerStub) WarmCacheFromDB(context.Context) error {
+	s.calls.Add(1)
+	return s.err
+}
+
+func (s *alarmCacheWarmerStub) SyncPlatformMappings(context.Context) error {
+	s.syncCalls.Add(1)
+	return s.syncErr
+}
+
 func testSchedulerLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
@@ -108,6 +128,12 @@ func TestYouTubeEvaluationWindowCap(t *testing.T) {
 	assert.Equal(t, 75*time.Second, youtubeEvaluationWindowCap(0))
 	assert.Equal(t, 75*time.Second, youtubeEvaluationWindowCap(30*time.Second))
 	assert.Equal(t, 135*time.Second, youtubeEvaluationWindowCap(2*time.Minute))
+}
+
+func TestAlarmCacheRecoveryInterval(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, time.Minute, alarmCacheRecoveryInterval)
 }
 
 func TestRuntimeSchedulerStart_NilContext(t *testing.T) {
@@ -213,6 +239,39 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 		assert.Equal(t, [][]int{{12, 3, 1}}, dedupUpdater.calls)
 	})
 
+	t.Run("youtube cache failure triggers immediate cache recovery", func(t *testing.T) {
+		warmer := &alarmCacheWarmerStub{}
+		waitUntilReadyCalls := atomic.Int32{}
+		cacheSvc := cachemocks.NewStrictClient()
+		cacheSvc.WaitUntilReadyFunc = func(context.Context, time.Duration) error {
+			waitUntilReadyCalls.Add(1)
+			return nil
+		}
+		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+			require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+			return false, nil
+		}
+
+		s := &RuntimeScheduler{
+			youtubeChecker: &runnerFunc{
+				check: func(context.Context) ([]*domain.AlarmNotification, error) {
+					return nil, sharedcache.NewCacheError("failed", "smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
+				},
+			},
+			cacheSvc:              cacheSvc,
+			alarmCacheWarmer:      warmer,
+			platformMappingSyncer: warmer,
+			notifier:              &senderFunc{},
+			logger:                testSchedulerLogger(),
+		}
+
+		err := s.runYouTubeIteration(t.Context())
+		require.Error(t, err)
+		assert.Equal(t, int32(1), waitUntilReadyCalls.Load())
+		assert.Equal(t, int32(1), warmer.calls.Load())
+		assert.Equal(t, int32(1), warmer.syncCalls.Load())
+	})
+
 	t.Run("chzzk success", func(t *testing.T) {
 		sent := atomic.Int32{}
 		s := &RuntimeScheduler{
@@ -253,6 +312,86 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 
 		require.NoError(t, s.runTwitchIteration(t.Context()))
 		assert.Equal(t, int32(0), sent.Load())
+	})
+}
+
+func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
+	t.Parallel()
+
+	t.Run("rebuilds subscriber cache and platform mappings when channel registry key is missing", func(t *testing.T) {
+		warmer := &alarmCacheWarmerStub{}
+		cacheSvc := cachemocks.NewStrictClient()
+		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+			require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+			return false, nil
+		}
+
+		s := &RuntimeScheduler{
+			cacheSvc:              cacheSvc,
+			alarmCacheWarmer:      warmer,
+			platformMappingSyncer: warmer,
+			logger:                testSchedulerLogger(),
+		}
+
+		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
+		assert.Equal(t, int32(1), warmer.calls.Load())
+		assert.Equal(t, int32(1), warmer.syncCalls.Load())
+	})
+
+	t.Run("does not warm cache when registry key exists", func(t *testing.T) {
+		warmer := &alarmCacheWarmerStub{}
+		cacheSvc := cachemocks.NewStrictClient()
+		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+			switch key {
+			case sharedalarmkeys.AlarmChannelRegistryKey,
+				sharedalarmkeys.ChzzkChannelMapKey,
+				sharedalarmkeys.TwitchLoginMapKey,
+				sharedalarmkeys.TwitchChannelLoginMapKey:
+			default:
+				t.Fatalf("unexpected key: %s", key)
+			}
+			return true, nil
+		}
+
+		s := &RuntimeScheduler{
+			cacheSvc:              cacheSvc,
+			alarmCacheWarmer:      warmer,
+			platformMappingSyncer: warmer,
+			logger:                testSchedulerLogger(),
+		}
+
+		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
+		assert.Equal(t, int32(0), warmer.calls.Load())
+		assert.Equal(t, int32(0), warmer.syncCalls.Load())
+	})
+
+	t.Run("syncs platform mappings when registry exists but platform keys are missing", func(t *testing.T) {
+		warmer := &alarmCacheWarmerStub{}
+		cacheSvc := cachemocks.NewStrictClient()
+		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+			switch key {
+			case sharedalarmkeys.AlarmChannelRegistryKey:
+				return true, nil
+			case sharedalarmkeys.ChzzkChannelMapKey:
+				return false, nil
+			case sharedalarmkeys.TwitchLoginMapKey, sharedalarmkeys.TwitchChannelLoginMapKey:
+				return true, nil
+			default:
+				t.Fatalf("unexpected key: %s", key)
+				return false, nil
+			}
+		}
+
+		s := &RuntimeScheduler{
+			cacheSvc:              cacheSvc,
+			alarmCacheWarmer:      warmer,
+			platformMappingSyncer: warmer,
+			logger:                testSchedulerLogger(),
+		}
+
+		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
+		assert.Equal(t, int32(0), warmer.calls.Load())
+		assert.Equal(t, int32(1), warmer.syncCalls.Load())
 	})
 }
 

@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -49,6 +50,9 @@ const (
 	defaultYouTubeTimeout  = 45 * time.Second
 	defaultPlatformTimeout = 30 * time.Second
 	evaluationWindowSlack  = 15 * time.Second
+
+	alarmCacheRecoveryInterval = time.Minute
+	alarmCacheRecoveryTimeout  = 10 * time.Second
 )
 
 type targetMinutesSource interface {
@@ -59,16 +63,27 @@ type targetMinutesUpdater interface {
 	UpdateTargetMinutes([]int)
 }
 
+type alarmCacheWarmer interface {
+	WarmCacheFromDB(ctx context.Context) error
+}
+
+type alarmPlatformMappingSyncer interface {
+	SyncPlatformMappings(ctx context.Context) error
+}
+
 // RuntimeScheduler는 런타임 알람 체크 루프를 관리한다.
 type RuntimeScheduler struct {
 	youtubeChecker checker.Runner
 	chzzkChecker   checker.Runner
 	twitchChecker  checker.Runner
 	notifier       checker.Sender
+	cacheSvc       cache.Client
 
-	youtubeTargetUpdater targetMinutesUpdater
-	dedupTargetUpdater   targetMinutesUpdater
-	targetMinutesSource  targetMinutesSource
+	youtubeTargetUpdater  targetMinutesUpdater
+	dedupTargetUpdater    targetMinutesUpdater
+	targetMinutesSource   targetMinutesSource
+	alarmCacheWarmer      alarmCacheWarmer
+	platformMappingSyncer alarmPlatformMappingSyncer
 
 	youtubeInterval time.Duration
 	chzzkInterval   time.Duration
@@ -159,10 +174,13 @@ func NewRuntimeScheduler(
 		chzzkChecker:   chzzkChecker,
 		twitchChecker:  twitchChecker,
 		notifier:       notifierSvc,
+		cacheSvc:       cacheSvc,
 
-		youtubeTargetUpdater: youtubeChecker,
-		dedupTargetUpdater:   dedupSvc,
-		targetMinutesSource:  alarmCRUD,
+		youtubeTargetUpdater:  youtubeChecker,
+		dedupTargetUpdater:    dedupSvc,
+		targetMinutesSource:   alarmCRUD,
+		alarmCacheWarmer:      alarmCRUD,
+		platformMappingSyncer: alarmPlatformMappingSyncerFrom(alarmCRUD),
 
 		youtubeInterval: youtubeInterval,
 		chzzkInterval:   defaultLiveInterval,
@@ -195,6 +213,9 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	eg.Go(func() error {
 		return s.runLoop(egCtx, "twitch", s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
 	})
+	eg.Go(func() error {
+		return s.runAlarmCacheRecoveryLoop(egCtx)
+	})
 
 	if err := eg.Wait(); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -205,6 +226,113 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *RuntimeScheduler) runAlarmCacheRecoveryLoop(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+
+	ticker := time.NewTicker(alarmCacheRecoveryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Info("Alarm cache recovery loop stopped")
+			return ctx.Err()
+		case <-ticker.C:
+			if err := s.recoverAlarmCacheIfRegistryEmpty(ctx, "periodic"); err != nil {
+				s.logger.Warn("Alarm cache recovery check failed", slog.Any("error", err))
+			}
+		}
+	}
+}
+
+func (s *RuntimeScheduler) recoverAlarmCacheIfRegistryEmpty(ctx context.Context, reason string) error {
+	if s == nil || s.cacheSvc == nil || s.alarmCacheWarmer == nil {
+		return nil
+	}
+
+	registryExists, err := s.cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	if err != nil {
+		return fmt.Errorf("recover alarm cache: check channel registry: %w", err)
+	}
+	if registryExists {
+		return s.syncPlatformMappingsIfMissing(ctx)
+	}
+
+	if err := s.alarmCacheWarmer.WarmCacheFromDB(ctx); err != nil {
+		return fmt.Errorf("recover alarm cache: warm cache from DB: %w", err)
+	}
+
+	if s.platformMappingSyncer != nil {
+		if err := s.platformMappingSyncer.SyncPlatformMappings(ctx); err != nil {
+			return fmt.Errorf("recover alarm cache: sync platform mappings: %w", err)
+		}
+	}
+
+	s.logger.Info("Alarm cache recovered from DB",
+		slog.String("reason", reason),
+		slog.String("missing_key", sharedalarmkeys.AlarmChannelRegistryKey),
+	)
+
+	return nil
+}
+
+func (s *RuntimeScheduler) syncPlatformMappingsIfMissing(ctx context.Context) error {
+	if s == nil || s.cacheSvc == nil || s.platformMappingSyncer == nil {
+		return nil
+	}
+
+	for _, key := range []string{
+		sharedalarmkeys.ChzzkChannelMapKey,
+		sharedalarmkeys.TwitchLoginMapKey,
+		sharedalarmkeys.TwitchChannelLoginMapKey,
+	} {
+		exists, err := s.cacheSvc.Exists(ctx, key)
+		if err != nil {
+			return fmt.Errorf("recover alarm cache: check platform mapping %s: %w", key, err)
+		}
+		if !exists {
+			if err := s.platformMappingSyncer.SyncPlatformMappings(ctx); err != nil {
+				return fmt.Errorf("recover alarm cache: sync platform mappings: %w", err)
+			}
+
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (s *RuntimeScheduler) recoverAlarmCacheAfterCheckFailure(ctx context.Context, checkErr error) error {
+	if s == nil || s.cacheSvc == nil || checkErr == nil || !isCacheFailure(checkErr) {
+		return nil
+	}
+
+	readyCtx, cancel := context.WithTimeout(ctx, alarmCacheRecoveryTimeout)
+	defer cancel()
+
+	if err := s.cacheSvc.WaitUntilReady(readyCtx, alarmCacheRecoveryTimeout); err != nil {
+		return fmt.Errorf("recover alarm cache after check failure: wait cache ready: %w", err)
+	}
+
+	return s.recoverAlarmCacheIfRegistryEmpty(ctx, "youtube_check_cache_error")
+}
+
+func alarmPlatformMappingSyncerFrom(alarmCRUD domain.AlarmCRUD) alarmPlatformMappingSyncer {
+	syncer, ok := alarmCRUD.(alarmPlatformMappingSyncer)
+	if !ok {
+		return nil
+	}
+
+	return syncer
+}
+
+func isCacheFailure(err error) bool {
+	var cacheErr *cache.CacheError
+	return errors.As(err, &cacheErr)
 }
 
 func (s *RuntimeScheduler) runLoop(
@@ -299,6 +427,9 @@ func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
 
 	notifications, err := s.youtubeChecker.Check(ctx)
 	if err != nil {
+		if recoveryErr := s.recoverAlarmCacheAfterCheckFailure(ctx, err); recoveryErr != nil {
+			s.logger.Warn("Immediate alarm cache recovery failed after YouTube check error", slog.Any("error", recoveryErr))
+		}
 		return fmt.Errorf("run youtube iteration: check notifications: %w", err)
 	}
 
