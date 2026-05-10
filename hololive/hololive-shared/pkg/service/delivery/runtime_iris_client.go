@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/park285/iris-client-go/iris"
 )
@@ -23,11 +22,6 @@ type RuntimeIrisClient struct {
 	mu              sync.Mutex
 	cachedBaseURL   string
 	cachedH2CClient *iris.H2CClient
-
-	baseURLFileCachedValid   bool
-	baseURLFileCachedModTime time.Time
-	baseURLFileCachedSize    int64
-	baseURLFileCachedValue   string
 }
 
 func NewRuntimeIrisClient(
@@ -170,38 +164,18 @@ func (c *RuntimeIrisClient) resolveBaseURLLocked() (string, error) {
 }
 
 func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
-	stat, err := os.Stat(c.baseURLFilePath)
+	raw, err := os.ReadFile(c.baseURLFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil
 		}
-
-		c.baseURLFileCachedValid = false
-		return "", fmt.Errorf("stat base URL file: %w", err)
-	}
-
-	if c.baseURLFileCachedValid &&
-		stat.ModTime().Equal(c.baseURLFileCachedModTime) &&
-		stat.Size() == c.baseURLFileCachedSize {
-		return c.baseURLFileCachedValue, nil
-	}
-
-	raw, err := os.ReadFile(c.baseURLFilePath)
-	if err != nil {
-		c.baseURLFileCachedValid = false
 		return "", fmt.Errorf("read base URL file: %w", err)
 	}
 
 	baseURL, err := validateHTTPBaseURL(string(raw))
 	if err != nil {
-		c.baseURLFileCachedValid = false
 		return "", fmt.Errorf("parse base URL file: %w", err)
 	}
-
-	c.baseURLFileCachedValid = true
-	c.baseURLFileCachedModTime = stat.ModTime()
-	c.baseURLFileCachedSize = stat.Size()
-	c.baseURLFileCachedValue = baseURL
 
 	return baseURL, nil
 }

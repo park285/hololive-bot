@@ -117,6 +117,7 @@ BUNDLE_MANIFEST.txt
 *-ai-notes.md
 *.backup
 *.backup-*
+*.bak-*
 AGENTS.md
 .plan/
 .PLAN/

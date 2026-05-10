@@ -104,6 +104,9 @@ x-postgres-env: &postgres-env
 x-iris-env: &iris-env
   IRIS_BASE_URL: ${IRIS_BASE_URL:-}
   IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
+  IRIS_TRANSPORT: ${IRIS_TRANSPORT:-}
+  IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/app/runtime-config/iris-ca.pem}
+  IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
   IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
   IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
 
@@ -223,7 +226,7 @@ services:
     container_name: hololive-db-migrate
     restart: "no"
     environment:
-      PGHOST: host.docker.internal
+      PGHOST: 127.0.0.1
       PGPORT: "5433"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
@@ -243,9 +246,7 @@ services:
     logging: *default-logging
     security_opt:
       - no-new-privileges:true
-    extra_hosts: *host-extra-hosts
-    networks:
-      - hololive-net
+    network_mode: host
 
   # Core Services
   hololive-bot:
@@ -371,6 +372,9 @@ services:
       DISPATCHER_PORT: "30020"
       IRIS_BASE_URL: ${IRIS_BASE_URL:-}
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
+      IRIS_TRANSPORT: ${IRIS_TRANSPORT:-}
+      IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/app/runtime-config/iris-ca.pem}
+      IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       ALARM_DISPATCH_QUEUE_KEY: alarm:dispatch:queue
       ALARM_DISPATCH_MAX_BATCH: "50"
@@ -398,6 +402,7 @@ services:
 
   stream-ingester:
     <<: *app-service
+    profiles: ["oracle"]
     image: hololive-stream-ingester:prod
     build:
       <<: *go-build-base
@@ -432,6 +437,7 @@ services:
 
   youtube-scraper:
     <<: *app-service
+    profiles: ["oracle"]
     image: hololive-youtube-scraper:prod
     build:
       <<: *go-build-base
