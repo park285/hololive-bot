@@ -25,11 +25,11 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -201,6 +201,13 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 		}
 		return false, fmt.Errorf("rebuild remove cache from repository: %w", opErr)
 	}
+	if err := as.markAlarmCacheChanged(ctx); err != nil {
+		opErr = as.rebuildAlarmCacheFromRepository(ctx, "remove_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
+		if as.logger != nil {
+			as.logger.Error("Failed to mark alarm cache changed after remove", slog.Any("error", opErr))
+		}
+		return false, fmt.Errorf("rebuild remove cache version from repository: %w", opErr)
+	}
 
 	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
 		as.logger.Warn("Failed to sync platform alarm mapping after remove",
@@ -241,11 +248,12 @@ local userID = ARGV[11]
 local userName = ARGV[12]
 local registryKey = ARGV[13]
 local emptySubscriberCacheKey = ARGV[14]
+local channelRegistryVersionKey = ARGV[15]
+local channelRegistryVersionValue = ARGV[16]
 
 local added = redis.call('SADD', roomAlarmKey, channelID)
 redis.call('SADD', alarmRegistryKey, registryKey)
 redis.call('SADD', channelRegistryKey, channelID)
-redis.call('DEL', emptySubscriberCacheKey)
 
 if memberName ~= '' then
   redis.call('HSET', memberNameKey, channelID, memberName)
@@ -257,9 +265,11 @@ if userID ~= '' and userName ~= '' then
   redis.call('HSET', userNamesKey, userID, userName)
 end
 
-for i = 15, #ARGV do
+for i = 17, #ARGV do
   redis.call('SADD', ARGV[i], registryKey)
 end
+redis.call('DEL', emptySubscriberCacheKey)
+redis.call('SET', channelRegistryVersionKey, channelRegistryVersionValue)
 
 return added
 `
@@ -304,7 +314,9 @@ func (as *AlarmService) cacheAlarmAtomic(ctx context.Context, record *domain.Ala
 		record.UserID,
 		record.UserName,
 		registryKey,
-		sharedalarmkeys.AlarmSubscriberCacheEmptyKey,
+		AlarmSubscriberCacheEmptyKey,
+		AlarmChannelRegistryVersionKey,
+		alarmCacheMutationVersion(),
 	}
 	for _, alarmType := range record.AlarmTypes {
 		args = append(args, as.channelSubscribersKeyByType(record.ChannelID, alarmType))
@@ -368,9 +380,6 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 	if _, err := as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
 		return 0, fmt.Errorf("add channel registry: %w", err)
 	}
-	if err := as.cache.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
-		return 0, fmt.Errorf("clear empty subscriber cache marker: %w", err)
-	}
 
 	if err := as.CacheMemberName(ctx, record.ChannelID, record.MemberName); err != nil {
 		return 0, fmt.Errorf("cache member name: %w", err)
@@ -388,7 +397,26 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 		}
 	}
 
+	if err := as.markAlarmCacheChanged(ctx); err != nil {
+		return 0, fmt.Errorf("mark alarm cache changed: %w", err)
+	}
+
 	return added, nil
+}
+
+func alarmCacheMutationVersion() string {
+	return strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
+}
+
+func (as *AlarmService) markAlarmCacheChanged(ctx context.Context) error {
+	if err := as.cache.Del(ctx, AlarmSubscriberCacheEmptyKey); err != nil {
+		return fmt.Errorf("clear empty subscriber cache marker: %w", err)
+	}
+	if err := as.cache.Set(ctx, AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0); err != nil {
+		return fmt.Errorf("set channel registry version: %w", err)
+	}
+
+	return nil
 }
 
 func (as *AlarmService) roomAlarmExists(ctx context.Context, roomID, channelID string) (bool, error) {
@@ -624,6 +652,13 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 				slog.String("channel_id", channelID),
 			)
 		}
+	}
+	if err := as.markAlarmCacheChanged(ctx); err != nil {
+		opErr = as.rebuildAlarmCacheFromRepository(ctx, "clear_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
+		if as.logger != nil {
+			as.logger.Error("Failed to mark alarm cache changed after clear", slog.Any("error", opErr))
+		}
+		return 0, fmt.Errorf("rebuild clear cache version from repository: %w", opErr)
 	}
 
 	if as.logger != nil {

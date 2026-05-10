@@ -356,6 +356,33 @@ func TestGetAllAlarmKeys(t *testing.T) {
 	assert.GreaterOrEqual(t, len(entries), 1)
 }
 
+func TestAddAlarmClearsSubscriberCacheEmptyMarkerAndBumpsChannelRegistryVersion(t *testing.T) {
+	t.Parallel()
+
+	as := newTestAlarmService(t)
+	ctx := t.Context()
+	require.NoError(t, as.cache.Set(ctx, AlarmSubscriberCacheEmptyKey, "1", 0))
+
+	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+		RoomID:    "room-1",
+		UserID:    "user-1",
+		ChannelID: "UC_TEST",
+		AlarmTypes: domain.AlarmTypes{
+			domain.AlarmTypeLive,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, added)
+
+	emptyMarkerExists, err := as.cache.Exists(ctx, AlarmSubscriberCacheEmptyKey)
+	require.NoError(t, err)
+	assert.False(t, emptyMarkerExists)
+
+	var version int64
+	require.NoError(t, as.cache.Get(ctx, AlarmChannelRegistryVersionKey, &version))
+	assert.Positive(t, version)
+}
+
 func TestGetDistinctRooms(t *testing.T) {
 	t.Parallel()
 

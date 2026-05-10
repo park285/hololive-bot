@@ -262,18 +262,30 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 		return 0, nil
 	}
 
-	resp := c.client.Do(ctx, c.client.B().Del().Key(keys...).Build())
-	if resp.Error() != nil {
-		c.logger.Error("Cache delete many failed", slog.Int("count", len(keys)), slog.Any("error", resp.Error()))
-		return 0, NewCacheError("delete many failed", "del", fmt.Sprintf("%d keys", len(keys)), resp.Error())
+	const delManyChunkSize = 500
+
+	var totalDeleted int64
+	for start := 0; start < len(keys); start += delManyChunkSize {
+		end := start + delManyChunkSize
+		if end > len(keys) {
+			end = len(keys)
+		}
+
+		chunk := keys[start:end]
+		resp := c.client.Do(ctx, c.client.B().Del().Key(chunk...).Build())
+		if resp.Error() != nil {
+			c.logger.Error("Cache delete many failed", slog.Int("count", len(chunk)), slog.Any("error", resp.Error()))
+			return totalDeleted, NewCacheError("delete many failed", "del", fmt.Sprintf("%d keys", len(chunk)), resp.Error())
+		}
+
+		deleted, err := resp.AsInt64()
+		if err != nil {
+			return totalDeleted, NewCacheError("delete many conversion failed", "del", "", err)
+		}
+		totalDeleted += deleted
 	}
 
-	deleted, err := resp.AsInt64()
-	if err != nil {
-		return 0, NewCacheError("delete many conversion failed", "del", "", err)
-	}
-
-	return deleted, nil
+	return totalDeleted, nil
 }
 
 // KEYS와 달리 Redis를 블로킹하지 않아 대량 키 조회에 안전하다.
