@@ -75,20 +75,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
-	webhookToken := strings.TrimSpace(sharedenv.String("IRIS_WEBHOOK_TOKEN", ""))
-	botToken := strings.TrimSpace(sharedenv.String("IRIS_BOT_TOKEN", ""))
-
-	runtimeEnv := loadAppEnvironment()
-	isProduction := strings.EqualFold(runtimeEnv, "production")
-	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
-		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),
-		isProduction,
-	)
-
-	return webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction
-}
-
 //nolint:funlen // central environment-to-config assembly is intentionally kept in one place
 func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) (*Config, error) {
 	llmSchedulerHealthURL := sharedenv.StringAny(
@@ -115,7 +101,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Server: ServerConfig{
 			Port:           sharedenv.Int("SERVER_PORT", 30001),
 			APIKey:         sharedenv.String("API_SECRET_KEY", ""),
-			HTTPTransports: parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h2c")),
+			HTTPTransports: parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
 			H2CAddr:        sharedenv.String("HOLOLIVE_H2C_ADDR", fmt.Sprintf(":%d", sharedenv.Int("SERVER_PORT", 30001))),
 			H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", sharedenv.Int("SERVER_PORT", 30001))),
 			H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
@@ -266,37 +252,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 	return nil
-}
-
-func (c *Config) validateServerTransports() error {
-	if c.ServerTransportEnabled("h3") {
-		if strings.TrimSpace(c.Server.H3Addr) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_ADDR is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3CertFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_CERT_FILE is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3KeyFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_KEY_FILE is required when h3 transport is enabled")
-		}
-	}
-	return nil
-}
-
-func (c *Config) ServerTransportEnabled(name string) bool {
-	target := strings.TrimSpace(strings.ToLower(name))
-	if target == "" {
-		return false
-	}
-	if len(c.Server.HTTPTransports) == 0 {
-		return target == "h2c"
-	}
-	for _, transport := range c.Server.HTTPTransports {
-		if strings.TrimSpace(strings.ToLower(transport)) == target {
-			return true
-		}
-	}
-	return false
 }
 
 func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {

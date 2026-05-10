@@ -75,12 +75,14 @@ COPY --from=builder --link --chown=1000:1000 /dist ./
 
 ENV GOGC=200 \
     GOMEMLIMIT=450MiB \
-    GIN_MODE=release
+    GIN_MODE=release \
+    HEALTHCHECK_CA_CERT_FILE=/run/hololive-bot/certs/hololive-h3.crt \
+    HEALTHCHECK_SERVER_NAME=100.100.1.3
 
 EXPOSE 30001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["./bin/healthcheck", "http://127.0.0.1:30001/health"]
+    CMD ["./bin/healthcheck", "https://127.0.0.1:30001/health"]
 
 USER 1000:1000
 
