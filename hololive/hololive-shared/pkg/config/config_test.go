@@ -179,6 +179,50 @@ func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 	}
 }
 
+func TestLoad_ServerHTTP3Config(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SERVER_PORT", "30001")
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c,h3")
+	t.Setenv("HOLOLIVE_H2C_ADDR", ":30001")
+	t.Setenv("HOLOLIVE_H3_ADDR", ":30001")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got, want := cfg.Server.HTTPTransports, []string{"h2c", "h3"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Server.HTTPTransports = %#v, want %#v", got, want)
+	}
+	if cfg.Server.H2CAddr != ":30001" {
+		t.Fatalf("Server.H2CAddr = %q, want :30001", cfg.Server.H2CAddr)
+	}
+	if cfg.Server.H3Addr != ":30001" {
+		t.Fatalf("Server.H3Addr = %q, want :30001", cfg.Server.H3Addr)
+	}
+	if cfg.Server.H3CertFile != "/run/hololive-bot/certs/hololive-h3.crt" {
+		t.Fatalf("Server.H3CertFile = %q", cfg.Server.H3CertFile)
+	}
+	if cfg.Server.H3KeyFile != "/run/hololive-bot/certs/hololive-h3.key" {
+		t.Fatalf("Server.H3KeyFile = %q", cfg.Server.H3KeyFile)
+	}
+	if !cfg.ServerTransportEnabled("h3") {
+		t.Fatal("ServerTransportEnabled(h3) = false, want true")
+	}
+}
+
+func TestLoad_ServerHTTP3RequiresCertificateFiles(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h3")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_H3_CERT_FILE is required") {
+		t.Fatalf("Load() error = %v, want missing H3 cert file", err)
+	}
+}
+
 func TestLoad_CommunityShortsBigBangFlagDefaultsFalse(t *testing.T) {
 	setRequiredLoadEnv(t)
 

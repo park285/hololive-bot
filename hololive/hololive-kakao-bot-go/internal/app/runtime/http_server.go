@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"github.com/quic-go/quic-go/http3"
 )
 
 func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
@@ -47,6 +49,25 @@ func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- erro
 	}()
 }
 
+func StartHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
+	if server == nil {
+		return
+	}
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if errCh != nil {
+				errCh <- fmt.Errorf("HTTP/3 server error: %w", err)
+				return
+			}
+
+			if logger != nil {
+				logger.Error("HTTP/3 server error", slog.Any("error", err))
+			}
+		}
+	}()
+}
+
 func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
 	if server == nil {
 		return nil
@@ -54,6 +75,18 @@ func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {
 
 	if err := server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("HTTP server shutdown failed: %w", err)
+	}
+
+	return nil
+}
+
+func ShutdownHTTP3Server(server *http3.Server, ctx context.Context) error {
+	if server == nil {
+		return nil
+	}
+
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("HTTP/3 server shutdown failed: %w", err)
 	}
 
 	return nil
