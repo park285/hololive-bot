@@ -6,7 +6,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-shared v0.0.0
-	github.com/park285/iris-client-go v0.12.3
+	github.com/park285/iris-client-go v0.12.4
 	github.com/park285/llm-kakao-bots/shared-go v0.1.2
 	github.com/prometheus/client_golang v1.23.2
 	golang.org/x/sync v0.20.0
