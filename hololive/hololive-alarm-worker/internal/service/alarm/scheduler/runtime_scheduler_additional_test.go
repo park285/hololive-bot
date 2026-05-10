@@ -248,7 +248,12 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 			return nil
 		}
 		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+			switch key {
+			case sharedalarmkeys.AlarmChannelRegistryKey,
+				sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
+			default:
+				t.Fatalf("unexpected key: %s", key)
+			}
 			return false, nil
 		}
 
@@ -322,7 +327,12 @@ func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 		warmer := &alarmCacheWarmerStub{}
 		cacheSvc := cachemocks.NewStrictClient()
 		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+			switch key {
+			case sharedalarmkeys.AlarmChannelRegistryKey,
+				sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
+			default:
+				t.Fatalf("unexpected key: %s", key)
+			}
 			return false, nil
 		}
 
@@ -336,6 +346,33 @@ func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
 		assert.Equal(t, int32(1), warmer.calls.Load())
 		assert.Equal(t, int32(1), warmer.syncCalls.Load())
+	})
+
+	t.Run("does not rebuild when channel registry is missing because DB alarm state is empty", func(t *testing.T) {
+		warmer := &alarmCacheWarmerStub{}
+		cacheSvc := cachemocks.NewStrictClient()
+		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+			switch key {
+			case sharedalarmkeys.AlarmChannelRegistryKey:
+				return false, nil
+			case sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
+				return true, nil
+			default:
+				t.Fatalf("unexpected key: %s", key)
+				return false, nil
+			}
+		}
+
+		s := &RuntimeScheduler{
+			cacheSvc:              cacheSvc,
+			alarmCacheWarmer:      warmer,
+			platformMappingSyncer: warmer,
+			logger:                testSchedulerLogger(),
+		}
+
+		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
+		assert.Equal(t, int32(0), warmer.calls.Load())
+		assert.Equal(t, int32(0), warmer.syncCalls.Load())
 	})
 
 	t.Run("does not warm cache when registry key exists", func(t *testing.T) {
@@ -393,6 +430,44 @@ func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 		assert.Equal(t, int32(0), warmer.calls.Load())
 		assert.Equal(t, int32(1), warmer.syncCalls.Load())
 	})
+}
+
+func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t *testing.T) {
+	t.Parallel()
+
+	warmer := &alarmCacheWarmerStub{}
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.WaitUntilReadyFunc = func(ctx context.Context, _ time.Duration) error {
+		_, ok := ctx.Deadline()
+		require.True(t, ok)
+		return nil
+	}
+	cacheSvc.ExistsFunc = func(ctx context.Context, key string) (bool, error) {
+		_, ok := ctx.Deadline()
+		require.True(t, ok)
+		switch key {
+		case sharedalarmkeys.AlarmChannelRegistryKey,
+			sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
+		default:
+			t.Fatalf("unexpected key: %s", key)
+		}
+		return false, nil
+	}
+
+	s := &RuntimeScheduler{
+		cacheSvc:              cacheSvc,
+		alarmCacheWarmer:      warmer,
+		platformMappingSyncer: warmer,
+		logger:                testSchedulerLogger(),
+	}
+
+	err := s.recoverAlarmCacheAfterCheckFailure(
+		context.Background(),
+		sharedcache.NewCacheError("failed", "smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF")),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), warmer.calls.Load())
+	assert.Equal(t, int32(1), warmer.syncCalls.Load())
 }
 
 func TestRuntimeSchedulerRunLoop_StopsOnContextCancel(t *testing.T) {

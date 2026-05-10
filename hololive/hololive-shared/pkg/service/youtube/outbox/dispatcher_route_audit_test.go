@@ -53,6 +53,10 @@ func newRouteAuditCacheClient() (*cachemocks.Client, *routeAuditCache) {
 	client.HGetFunc = func(_ context.Context, key, field string) (string, error) {
 		return store.getHash(key, field), nil
 	}
+	client.DelFunc = func(_ context.Context, key string) error {
+		store.deleteKey(key)
+		return nil
+	}
 
 	return client, store
 }
@@ -111,6 +115,14 @@ func (c *routeAuditCache) getHash(key, field string) string {
 	defer c.mu.Unlock()
 
 	return c.hashes[key][field]
+}
+
+func (c *routeAuditCache) deleteKey(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	delete(c.sets, key)
+	delete(c.hashes, key)
 }
 
 func (c *routeAuditCache) lookupKeys() []string {
