@@ -105,7 +105,7 @@ x-iris-env: &iris-env
   IRIS_BASE_URL: ${IRIS_BASE_URL:-}
   IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
   IRIS_TRANSPORT: ${IRIS_TRANSPORT:-}
-  IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/app/runtime-config/iris-ca.pem}
+  IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/run/hololive-bot/certs/iris-ca.pem}
   IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
   IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:?IRIS_WEBHOOK_TOKEN is required}
   IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
@@ -139,6 +139,7 @@ x-go-volumes: &go-volumes
   - ./data:/app/data
   - ./logs:/app/logs
   - ./runtime-config:/app/runtime-config:ro
+  - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-go-basic-volumes: &go-basic-volumes
@@ -149,6 +150,7 @@ x-go-basic-volumes: &go-basic-volumes
 x-logs-runtime-cache-volumes: &logs-runtime-cache-volumes
   - ./logs:/app/logs
   - ./runtime-config:/app/runtime-config:ro
+  - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
 x-db-cache-depends: &db-cache-depends
@@ -373,7 +375,7 @@ services:
       IRIS_BASE_URL: ${IRIS_BASE_URL:-}
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_TRANSPORT: ${IRIS_TRANSPORT:-}
-      IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/app/runtime-config/iris-ca.pem}
+      IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/run/hololive-bot/certs/iris-ca.pem}
       IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       ALARM_DISPATCH_QUEUE_KEY: alarm:dispatch:queue
