@@ -77,6 +77,7 @@ func clearSubscriberCacheNamespace(ctx context.Context, cacheSvc cache.Client) e
 	keysToDelete := []string{
 		sharedalarmkeys.AlarmRegistryKey,
 		sharedalarmkeys.AlarmChannelRegistryKey,
+		sharedalarmkeys.AlarmSubscriberCacheEmptyKey,
 		sharedalarmkeys.MemberNameKey,
 		sharedalarmkeys.RoomNamesCacheKey,
 		sharedalarmkeys.UserNamesCacheKey,
@@ -147,6 +148,7 @@ func isRoomAlarmCacheKey(key string) bool {
 	switch trimmed {
 	case sharedalarmkeys.AlarmRegistryKey,
 		sharedalarmkeys.AlarmChannelRegistryKey,
+		sharedalarmkeys.AlarmSubscriberCacheEmptyKey,
 		sharedalarmkeys.MemberNameKey,
 		sharedalarmkeys.RoomNamesCacheKey,
 		sharedalarmkeys.UserNamesCacheKey,
@@ -288,8 +290,19 @@ func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, a
 
 	summary.RoomCount = len(rooms)
 	summary.ChannelCount = len(channels)
+	if err := markSubscriberCacheEmptyState(ctx, cacheSvc, summary.AlarmCount == 0); err != nil {
+		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: mark empty state: %w", err)
+	}
 
 	return summary, nil
+}
+
+func markSubscriberCacheEmptyState(ctx context.Context, cacheSvc cache.Client, empty bool) error {
+	if empty {
+		return cacheSvc.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0)
+	}
+
+	return cacheSvc.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
 }
 
 func writeWarmSet(ctx context.Context, cacheSvc cache.Client, key string, members []string, scope string) error {
