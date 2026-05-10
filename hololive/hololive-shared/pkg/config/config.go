@@ -113,8 +113,13 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
 		},
 		Server: ServerConfig{
-			Port:   sharedenv.Int("SERVER_PORT", 30001),
-			APIKey: sharedenv.String("API_SECRET_KEY", ""),
+			Port:           sharedenv.Int("SERVER_PORT", 30001),
+			APIKey:         sharedenv.String("API_SECRET_KEY", ""),
+			HTTPTransports: parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h2c")),
+			H2CAddr:        sharedenv.String("HOLOLIVE_H2C_ADDR", fmt.Sprintf(":%d", sharedenv.Int("SERVER_PORT", 30001))),
+			H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", sharedenv.Int("SERVER_PORT", 30001))),
+			H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
+			H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
 		},
 		Kakao: KakaoConfig{
 			Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
@@ -220,6 +225,9 @@ func (c *Config) Validate() error {
 	if c.Server.Port == 0 {
 		return fmt.Errorf("SERVER_PORT is required")
 	}
+	if err := c.validateServerTransports(); err != nil {
+		return err
+	}
 	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return err
 	}
@@ -258,6 +266,37 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 	return nil
+}
+
+func (c *Config) validateServerTransports() error {
+	if c.ServerTransportEnabled("h3") {
+		if strings.TrimSpace(c.Server.H3Addr) == "" {
+			return fmt.Errorf("HOLOLIVE_H3_ADDR is required when h3 transport is enabled")
+		}
+		if strings.TrimSpace(c.Server.H3CertFile) == "" {
+			return fmt.Errorf("HOLOLIVE_H3_CERT_FILE is required when h3 transport is enabled")
+		}
+		if strings.TrimSpace(c.Server.H3KeyFile) == "" {
+			return fmt.Errorf("HOLOLIVE_H3_KEY_FILE is required when h3 transport is enabled")
+		}
+	}
+	return nil
+}
+
+func (c *Config) ServerTransportEnabled(name string) bool {
+	target := strings.TrimSpace(strings.ToLower(name))
+	if target == "" {
+		return false
+	}
+	if len(c.Server.HTTPTransports) == 0 {
+		return target == "h2c"
+	}
+	for _, transport := range c.Server.HTTPTransports {
+		if strings.TrimSpace(strings.ToLower(transport)) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {

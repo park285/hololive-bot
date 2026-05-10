@@ -262,6 +262,11 @@ services:
     container_name: hololive-kakao-bot-go
     environment:
       <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      HOLOLIVE_HTTP_TRANSPORTS: ${HOLOLIVE_HTTP_TRANSPORTS:-h2c}
+      HOLOLIVE_H2C_ADDR: ${HOLOLIVE_H2C_ADDR:-:30001}
+      HOLOLIVE_H3_ADDR: ${HOLOLIVE_H3_ADDR:-:30001}
+      HOLOLIVE_H3_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
+      HOLOLIVE_H3_KEY_FILE: ${HOLOLIVE_H3_KEY_FILE:-/run/hololive-bot/certs/hololive-h3.key}
       # Dockerfile 기본값은 GOGC=200이지만 운영 Compose에서는 메모리 상한을 우선해 60으로 낮춥니다.
       GOGC: "60"
       LLM_SCHEDULER_INTERNAL_URL: http://llm-scheduler:30003
@@ -280,6 +285,8 @@ services:
     ports:
       - "127.0.0.1:30001:30001"
       - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001"
+      - "127.0.0.1:30001:30001/udp"
+      - "${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30001:30001/udp"
     volumes: *go-volumes
     extra_hosts: *iris-extra-hosts
     depends_on:

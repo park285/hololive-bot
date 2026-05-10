@@ -29,6 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
+	"github.com/quic-go/quic-go/http3"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
@@ -43,6 +44,7 @@ type BotRuntime struct {
 
 	ServerAddr string
 	HttpServer *http.Server
+	H3Server   *http3.Server
 
 	webhookHandlerCloser interface{ Close() error }
 	lifecycle.Managed
