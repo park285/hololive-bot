@@ -38,6 +38,9 @@ type fakeIrisClient struct {
 func (f *fakeIrisClient) SendMessage(context.Context, string, string, ...iris.SendOption) error {
 	return nil
 }
+func (f *fakeIrisClient) SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return &iris.ReplyAcceptedResponse{}, nil
+}
 func (f *fakeIrisClient) SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, nil
 }
