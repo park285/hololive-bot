@@ -5,5 +5,6 @@
 현재 기본 compose 설정은 다음 파일을 참조할 수 있다.
 
 - `iris_base_url`: `IRIS_BASE_URL_FILE=/app/runtime-config/iris_base_url`을 사용할 때의 Iris base URL 파일
+- `iris-ca.pem`: `IRIS_TRANSPORT=h3`에서 Iris H3 server 인증서를 검증할 CA bundle
 
 실제 값 파일은 커밋하지 않는다. 예시는 `iris_base_url.example`만 커밋한다.
