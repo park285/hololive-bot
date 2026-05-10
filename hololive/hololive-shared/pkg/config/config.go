@@ -75,20 +75,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-func loadRuntimeTokensAndCORS() (string, string, []string, bool) {
-	webhookToken := strings.TrimSpace(sharedenv.String("IRIS_WEBHOOK_TOKEN", ""))
-	botToken := strings.TrimSpace(sharedenv.String("IRIS_BOT_TOKEN", ""))
-
-	runtimeEnv := loadAppEnvironment()
-	isProduction := strings.EqualFold(runtimeEnv, "production")
-	corsAllowedOrigins, corsMissingInProduction := parseCORSAllowedOrigins(
-		sharedenv.String("CORS_ALLOWED_ORIGINS", ""),
-		isProduction,
-	)
-
-	return webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction
-}
-
 //nolint:funlen // central environment-to-config assembly is intentionally kept in one place
 func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) (*Config, error) {
 	llmSchedulerHealthURL := sharedenv.StringAny(
@@ -266,57 +252,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 	return nil
-}
-
-func (c *Config) validateServerTransports() error {
-	for _, rawTransport := range c.Server.HTTPTransports {
-		if _, ok := normalizeServerHTTPTransport(rawTransport); !ok {
-			return fmt.Errorf("unsupported HOLOLIVE_HTTP_TRANSPORTS value: %s", rawTransport)
-		}
-	}
-
-	if c.ServerTransportEnabled("h3") {
-		if strings.TrimSpace(c.Server.H3Addr) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_ADDR is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3CertFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_CERT_FILE is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3KeyFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_KEY_FILE is required when h3 transport is enabled")
-		}
-	}
-	return nil
-}
-
-func (c *Config) ServerTransportEnabled(name string) bool {
-	target, ok := normalizeServerHTTPTransport(name)
-	if !ok || target == "" {
-		return false
-	}
-	if len(c.Server.HTTPTransports) == 0 {
-		return target == "h3"
-	}
-	for _, transport := range c.Server.HTTPTransports {
-		candidate, ok := normalizeServerHTTPTransport(transport)
-		if ok && candidate == target {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeServerHTTPTransport(raw string) (string, bool) {
-	switch transport := strings.TrimSpace(strings.ToLower(raw)); transport {
-	case "":
-		return "", true
-	case "h2c":
-		return "h2c", true
-	case "h3", "http3", "http/3", "quic":
-		return "h3", true
-	default:
-		return transport, false
-	}
 }
 
 func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {
