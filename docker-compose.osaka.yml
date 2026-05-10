@@ -21,6 +21,10 @@ services:
       options:
         max-size: "2m"
         max-file: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   youtube-scraper:
     environment:
@@ -44,3 +48,7 @@ services:
       options:
         max-size: "2m"
         max-file: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 768m
