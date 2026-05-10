@@ -49,6 +49,12 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	if server.QUICConfig == nil {
 		t.Fatal("QUICConfig = nil")
 	}
+	if server.QUICConfig.InitialPacketSize != 1200 {
+		t.Fatalf("InitialPacketSize = %d, want 1200", server.QUICConfig.InitialPacketSize)
+	}
+	if !server.QUICConfig.DisablePathMTUDiscovery {
+		t.Fatal("DisablePathMTUDiscovery = false, want true")
+	}
 }
 
 func writeLocalhostCertificate(t *testing.T) (string, string) {
