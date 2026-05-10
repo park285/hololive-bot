@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -239,10 +240,12 @@ local roomName = ARGV[10]
 local userID = ARGV[11]
 local userName = ARGV[12]
 local registryKey = ARGV[13]
+local emptySubscriberCacheKey = ARGV[14]
 
 local added = redis.call('SADD', roomAlarmKey, channelID)
 redis.call('SADD', alarmRegistryKey, registryKey)
 redis.call('SADD', channelRegistryKey, channelID)
+redis.call('DEL', emptySubscriberCacheKey)
 
 if memberName ~= '' then
   redis.call('HSET', memberNameKey, channelID, memberName)
@@ -254,7 +257,7 @@ if userID ~= '' and userName ~= '' then
   redis.call('HSET', userNamesKey, userID, userName)
 end
 
-for i = 14, #ARGV do
+for i = 15, #ARGV do
   redis.call('SADD', ARGV[i], registryKey)
 end
 
@@ -301,6 +304,7 @@ func (as *AlarmService) cacheAlarmAtomic(ctx context.Context, record *domain.Ala
 		record.UserID,
 		record.UserName,
 		registryKey,
+		sharedalarmkeys.AlarmSubscriberCacheEmptyKey,
 	}
 	for _, alarmType := range record.AlarmTypes {
 		args = append(args, as.channelSubscribersKeyByType(record.ChannelID, alarmType))
@@ -363,6 +367,9 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 
 	if _, err := as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
 		return 0, fmt.Errorf("add channel registry: %w", err)
+	}
+	if err := as.cache.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
+		return 0, fmt.Errorf("clear empty subscriber cache marker: %w", err)
 	}
 
 	if err := as.CacheMemberName(ctx, record.ChannelID, record.MemberName); err != nil {

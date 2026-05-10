@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +67,28 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 	name, err := as.cache.HGet(ctx, MemberNameKey, "UC_TEST")
 	require.NoError(t, err)
 	assert.Equal(t, "테스트 멤버", name)
+}
+
+func TestAddAlarm_ClearsEmptySubscriberCacheMarker(t *testing.T) {
+	t.Parallel()
+
+	as := newTestAlarmService(t)
+	as.memberData = &mockMemberDataProvider{members: []*domain.Member{}}
+
+	ctx := t.Context()
+	require.NoError(t, as.cache.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
+
+	added, err := as.AddAlarm(ctx, domain.AddAlarmRequest{
+		RoomID:    "room1",
+		UserID:    "user1",
+		ChannelID: "UC_FIRST",
+	})
+	require.NoError(t, err)
+	require.True(t, added)
+
+	emptyMarkerExists, err := as.cache.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	require.NoError(t, err)
+	assert.False(t, emptyMarkerExists)
 }
 
 func TestAddAlarm_DuplicateReturnsNotAdded(t *testing.T) {
