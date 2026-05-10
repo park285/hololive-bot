@@ -132,13 +132,18 @@ func parseVideosFromRichGrid(
 	maxResults int,
 	videoParser func(gjson.Result, string) *Video,
 ) []*Video {
-	items := collectVideoRendererItems(videosContent.Get("richGridRenderer.contents"))
+	items := collectRecentVideoItems(videosContent.Get("richGridRenderer.contents"))
 	videos := make([]*Video, 0, min(len(items), maxResults))
 	for i, item := range items {
 		if i >= maxResults {
 			break
 		}
-		video := videoParser(item, channelID)
+		var video *Video
+		if item.Get("videoRenderer").Exists() {
+			video = videoParser(item.Get("videoRenderer"), channelID)
+		} else if item.Get("lockupViewModel").Exists() {
+			video = parseLockupVideoViewModel(item.Get("lockupViewModel"), channelID)
+		}
 		if video != nil {
 			videos = append(videos, video)
 		}
@@ -146,7 +151,7 @@ func parseVideosFromRichGrid(
 	return videos
 }
 
-func collectVideoRendererItems(richGridItems gjson.Result) []gjson.Result {
+func collectRecentVideoItems(richGridItems gjson.Result) []gjson.Result {
 	var items []gjson.Result
 	if !richGridItems.Exists() {
 		return items
@@ -154,7 +159,13 @@ func collectVideoRendererItems(richGridItems gjson.Result) []gjson.Result {
 	richGridItems.ForEach(func(_, item gjson.Result) bool {
 		videoRenderer := item.Get("richItemRenderer.content.videoRenderer")
 		if videoRenderer.Exists() {
-			items = append(items, videoRenderer)
+			items = append(items, gjson.Parse(`{"videoRenderer":`+videoRenderer.Raw+`}`))
+			return true
+		}
+
+		lockupViewModel := item.Get("richItemRenderer.content.lockupViewModel")
+		if lockupViewModel.Get("contentType").String() == "LOCKUP_CONTENT_TYPE_VIDEO" {
+			items = append(items, gjson.Parse(`{"lockupViewModel":`+lockupViewModel.Raw+`}`))
 		}
 		return true
 	})

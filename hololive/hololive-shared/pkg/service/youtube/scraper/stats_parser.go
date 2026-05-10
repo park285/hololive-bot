@@ -121,11 +121,37 @@ func parseSubscriberCount(text string) int64 {
 
 // parseViewCount: "1,056,229,686 views"를 정수로 변환
 func parseViewCount(text string) int64 {
+	text = strings.TrimSpace(text)
 	text = strings.TrimSuffix(text, " views")
 	text = strings.TrimSuffix(text, " view")
+	text = strings.TrimSuffix(text, "回視聴")
+	text = strings.TrimPrefix(text, "조회수")
+	text = strings.TrimSuffix(text, "회")
+	text = strings.TrimSpace(text)
+
+	multiplier := float64(1)
+	for _, unit := range []struct {
+		suffix string
+		value  float64
+	}{
+		{"K", 1_000},
+		{"M", 1_000_000},
+		{"B", 1_000_000_000},
+		{"천", 1_000},
+		{"만", 10_000},
+		{"万", 10_000},
+	} {
+		if strings.HasSuffix(text, unit.suffix) {
+			text = strings.TrimSuffix(text, unit.suffix)
+			multiplier = unit.value
+			break
+		}
+	}
+
 	text = strings.ReplaceAll(text, ",", "")
-	val, _ := strconv.ParseInt(text, 10, 64)
-	return val
+	text = strings.TrimSpace(text)
+	val, _ := strconv.ParseFloat(text, 64)
+	return int64(val * multiplier)
 }
 
 // parseVideoCount: "2,429 videos"를 정수로 변환
