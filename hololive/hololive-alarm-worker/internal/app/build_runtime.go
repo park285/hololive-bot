@@ -202,6 +202,8 @@ func buildAlarmFoundation(
 	}
 	if err := alarmService.WarmCacheFromDB(ctx); err != nil {
 		logger.Warn("Failed to warm alarm cache from DB", slog.Any("error", err))
+	} else if err := alarmService.SyncPlatformMappings(ctx); err != nil {
+		logger.Warn("Failed to sync platform alarm mappings", slog.Any("error", err))
 	}
 
 	return &alarmFoundation{
