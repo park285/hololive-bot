@@ -52,8 +52,8 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	if server.QUICConfig.InitialPacketSize != 1200 {
 		t.Fatalf("InitialPacketSize = %d, want 1200", server.QUICConfig.InitialPacketSize)
 	}
-	if !server.QUICConfig.DisablePathMTUDiscovery {
-		t.Fatal("DisablePathMTUDiscovery = false, want true")
+	if server.QUICConfig.DisablePathMTUDiscovery {
+		t.Fatal("DisablePathMTUDiscovery = true, want default PMTUD enabled")
 	}
 }
 

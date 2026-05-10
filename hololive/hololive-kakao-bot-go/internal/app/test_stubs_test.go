@@ -12,6 +12,9 @@ type stubIrisClient struct{}
 func (s *stubIrisClient) SendMessage(context.Context, string, string, ...iris.SendOption) error {
 	return nil
 }
+func (s *stubIrisClient) SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	return nil, nil
+}
 func (s *stubIrisClient) SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return nil, nil
 }

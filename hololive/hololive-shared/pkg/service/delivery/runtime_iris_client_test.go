@@ -212,7 +212,7 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 	}), &http2.Server{}))
 	defer server.Close()
 
-	client := NewRuntimeIrisClient(server.URL, "bot-token", "", nil)
+	client := NewRuntimeIrisClient(server.URL, "bot-token", "", nil, iris.WithTransport("h2c"))
 	resp, err := client.SendMessageAccepted(context.Background(), "room-1", "hello")
 	if err != nil {
 		t.Fatalf("send accepted: %v", err)

@@ -38,6 +38,8 @@ func setRequiredLoadEnv(t *testing.T) {
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 }
 
 func assertScraperPoll(t *testing.T, got, want ScraperPoll) {
@@ -216,10 +218,44 @@ func TestLoad_ServerHTTP3Config(t *testing.T) {
 func TestLoad_ServerHTTP3RequiresCertificateFiles(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h3")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", "")
 
 	_, err := Load()
 	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_H3_CERT_FILE is required") {
 		t.Fatalf("Load() error = %v, want missing H3 cert file", err)
+	}
+}
+
+func TestLoad_ServerHTTP3AliasesRequireCertificateFiles(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "http/3,quic")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", "")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_H3_CERT_FILE is required") {
+		t.Fatalf("Load() error = %v, want missing H3 cert file", err)
+	}
+}
+
+func TestLoad_ServerHTTPTransportsRejectUnsupportedValue(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h2c,htp3")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: htp3") {
+		t.Fatalf("Load() error = %v, want unsupported transport", err)
+	}
+}
+
+func TestLoad_ServerHTTPTransportsRejectClientOnlyTransportValue(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "http2")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: http2") {
+		t.Fatalf("Load() error = %v, want unsupported transport", err)
 	}
 }
 
@@ -495,7 +531,13 @@ func TestLoad_ScraperPublishedAtResolverEnvOverrides(t *testing.T) {
 
 func TestConfigValidate_ScraperPublishedAtResolverRejectsMaxRunDurationBelowResolveTimeout(t *testing.T) {
 	cfg := &Config{
-		Server:   ServerConfig{Port: 30001},
+		Server: ServerConfig{
+			Port:           30001,
+			HTTPTransports: []string{"h3"},
+			H3Addr:         ":30001",
+			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
+			H3KeyFile:      "/run/hololive-bot/certs/hololive-h3.key",
+		},
 		Kakao:    KakaoConfig{Rooms: []string{"test-room"}},
 		Iris:     IrisConfig{WebhookToken: "test-webhook-token", BotToken: "test-bot-token", BaseURLFile: "/tmp/iris_base_url"},
 		Holodex:  HolodexConfig{APIKey: "test-key"},

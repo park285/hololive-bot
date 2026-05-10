@@ -60,7 +60,7 @@ func TestBotHandleMessage_PreservesThreadIDForReply(t *testing.T) {
 	srv.Start()
 	t.Cleanup(srv.Close)
 
-	irisClient := iris.NewH2CClient(srv.URL, "bot-token")
+	irisClient := iris.NewH2CClient(srv.URL, "bot-token", iris.WithTransport("h2c"))
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: command.NewRegistry(),
