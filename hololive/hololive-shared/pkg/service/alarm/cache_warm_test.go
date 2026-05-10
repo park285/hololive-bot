@@ -106,6 +106,46 @@ func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testin
 	assert.Equal(t, "Default User", userName)
 }
 
+func TestWarmSubscriberCacheFromAlarms_MarksEmptyCacheState(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheSvc := newMemoryCacheClient(t)
+
+	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheSvc, nil)
+	require.NoError(t, err)
+	assert.Equal(t, CacheWarmSummary{}, summary)
+
+	emptyMarkerExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	require.NoError(t, err)
+	assert.True(t, emptyMarkerExists)
+
+	channelRegistryExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
+	require.NoError(t, err)
+	assert.False(t, channelRegistryExists)
+}
+
+func TestWarmSubscriberCacheFromAlarms_ClearsEmptyCacheMarkerWhenAlarmsExist(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheSvc := newMemoryCacheClient(t)
+	require.NoError(t, cacheSvc.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0))
+
+	_, err := WarmSubscriberCacheFromAlarms(ctx, cacheSvc, []*domain.Alarm{
+		{
+			RoomID:    "room-1",
+			UserID:    "user-1",
+			ChannelID: "UC_ONE",
+		},
+	})
+	require.NoError(t, err)
+
+	emptyMarkerExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	require.NoError(t, err)
+	assert.False(t, emptyMarkerExists)
+}
+
 func TestWarmSubscriberCacheFromAlarms_UsesBatchedWrites(t *testing.T) {
 	t.Parallel()
 
@@ -489,6 +529,9 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 		}
 
 		return resp.AsInt64()
+	}
+	client.DelFunc = func(ctx context.Context, key string) error {
+		return rawClient.Do(ctx, rawClient.B().Del().Key(key).Build()).Error()
 	}
 
 	t.Cleanup(func() {

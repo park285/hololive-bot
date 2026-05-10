@@ -1,13 +1,13 @@
-go 1.26.2
+go 1.26.3
 
-toolchain go1.26.2
+toolchain go1.26.3
 
 use (
 	./
-	./hololive/hololive-dispatcher-go
-	./hololive/hololive-kakao-bot-go
 	./hololive/hololive-admin-api
 	./hololive/hololive-alarm-worker
+	./hololive/hololive-dispatcher-go
+	./hololive/hololive-kakao-bot-go
 	./hololive/hololive-llm-sched
 	./hololive/hololive-shared
 	./hololive/hololive-stream-ingester

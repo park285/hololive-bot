@@ -38,6 +38,7 @@ const (
 	AlarmKeyPrefix                     = "alarm:"
 	AlarmRegistryKey                   = "alarm:registry"
 	AlarmChannelRegistryKey            = "alarm:channel_registry"
+	AlarmSubscriberCacheEmptyKey       = "alarm:subscriber_cache_empty"
 	ChzzkChannelMapKey                 = "alarm:chzzk_channels"
 	TwitchLoginMapKey                  = "alarm:twitch_logins"
 	TwitchChannelLoginMapKey           = "alarm:twitch_channel_logins"
