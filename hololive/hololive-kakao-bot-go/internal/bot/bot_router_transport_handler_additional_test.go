@@ -99,6 +99,13 @@ func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, 
 	return c.sendMessageErr
 }
 
+func (c *testIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	if err := c.SendMessage(ctx, room, message, opts...); err != nil {
+		return nil, err
+	}
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-test", Delivery: "queued", Room: room, Type: "text"}, nil
+}
+
 func (c *testIrisClient) SendImage(ctx context.Context, room string, imageData []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.mu.Lock()
 	c.lastImageRoom = room
