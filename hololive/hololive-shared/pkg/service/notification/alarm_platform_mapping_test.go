@@ -91,6 +91,18 @@ func TestSyncPlatformMappings_ClearsStaleHashes(t *testing.T) {
 	require.NoError(t, as.SyncPlatformMappings(t.Context()))
 	assertChzzkMapContains(t, as, map[string]string{})
 	assertTwitchMaps(t, as, map[string]string{}, map[string]string{})
+
+	chzzkEmpty, err := as.cache.Exists(t.Context(), ChzzkChannelMapEmptyKey)
+	require.NoError(t, err)
+	require.True(t, chzzkEmpty)
+
+	twitchEmpty, err := as.cache.Exists(t.Context(), TwitchLoginMapEmptyKey)
+	require.NoError(t, err)
+	require.True(t, twitchEmpty)
+
+	twitchChannelEmpty, err := as.cache.Exists(t.Context(), TwitchChannelLoginMapEmptyKey)
+	require.NoError(t, err)
+	require.True(t, twitchChannelEmpty)
 }
 
 func TestSyncPlatformMappingForChannel_AddAndRemoveIncrementally(t *testing.T) {
@@ -109,9 +121,24 @@ func TestSyncPlatformMappingForChannel_AddAndRemoveIncrementally(t *testing.T) {
 	}
 
 	seedAlarmChannelRegistry(t, as, "UC_alpha")
+	require.NoError(t, as.cache.Set(t.Context(), ChzzkChannelMapEmptyKey, "1", 0))
+	require.NoError(t, as.cache.Set(t.Context(), TwitchLoginMapEmptyKey, "1", 0))
+	require.NoError(t, as.cache.Set(t.Context(), TwitchChannelLoginMapEmptyKey, "1", 0))
 	require.NoError(t, as.syncPlatformMappingForChannel(t.Context(), "UC_alpha"))
 	assertChzzkMapContains(t, as, map[string]string{"UC_alpha": "chzzk_alpha"})
 	assertTwitchMaps(t, as, map[string]string{"alphalogin": "UC_alpha"}, map[string]string{"UC_alpha": "alphalogin"})
+
+	chzzkEmpty, err := as.cache.Exists(t.Context(), ChzzkChannelMapEmptyKey)
+	require.NoError(t, err)
+	require.False(t, chzzkEmpty)
+
+	twitchEmpty, err := as.cache.Exists(t.Context(), TwitchLoginMapEmptyKey)
+	require.NoError(t, err)
+	require.False(t, twitchEmpty)
+
+	twitchChannelEmpty, err := as.cache.Exists(t.Context(), TwitchChannelLoginMapEmptyKey)
+	require.NoError(t, err)
+	require.False(t, twitchChannelEmpty)
 
 	_, removeErr := as.cache.SRem(t.Context(), AlarmChannelRegistryKey, []string{"UC_alpha"})
 	require.NoError(t, removeErr)

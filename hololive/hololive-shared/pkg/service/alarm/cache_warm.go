@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -77,6 +78,7 @@ func clearSubscriberCacheNamespace(ctx context.Context, cacheSvc cache.Client) e
 	keysToDelete := []string{
 		sharedalarmkeys.AlarmRegistryKey,
 		sharedalarmkeys.AlarmChannelRegistryKey,
+		sharedalarmkeys.AlarmChannelRegistryVersionKey,
 		sharedalarmkeys.AlarmSubscriberCacheEmptyKey,
 		sharedalarmkeys.MemberNameKey,
 		sharedalarmkeys.RoomNamesCacheKey,
@@ -148,6 +150,7 @@ func isRoomAlarmCacheKey(key string) bool {
 	switch trimmed {
 	case sharedalarmkeys.AlarmRegistryKey,
 		sharedalarmkeys.AlarmChannelRegistryKey,
+		sharedalarmkeys.AlarmChannelRegistryVersionKey,
 		sharedalarmkeys.AlarmSubscriberCacheEmptyKey,
 		sharedalarmkeys.MemberNameKey,
 		sharedalarmkeys.RoomNamesCacheKey,
@@ -155,9 +158,12 @@ func isRoomAlarmCacheKey(key string) bool {
 		contractsalarm.DispatchQueueKey,
 		contractsalarm.DispatchRetryQueueKey,
 		contractsalarm.DispatchDLQKey,
-		"alarm:chzzk_channels",
-		"alarm:twitch_logins",
-		"alarm:twitch_channel_logins":
+		sharedalarmkeys.ChzzkChannelMapKey,
+		sharedalarmkeys.ChzzkChannelMapEmptyKey,
+		sharedalarmkeys.TwitchLoginMapKey,
+		sharedalarmkeys.TwitchLoginMapEmptyKey,
+		sharedalarmkeys.TwitchChannelLoginMapKey,
+		sharedalarmkeys.TwitchChannelLoginMapEmptyKey:
 		return false
 	}
 
@@ -293,8 +299,15 @@ func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, a
 	if err := markSubscriberCacheEmptyState(ctx, cacheSvc, summary.AlarmCount == 0); err != nil {
 		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: mark empty state: %w", err)
 	}
+	if err := bumpAlarmChannelRegistryVersion(ctx, cacheSvc); err != nil {
+		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: bump channel registry version: %w", err)
+	}
 
 	return summary, nil
+}
+
+func bumpAlarmChannelRegistryVersion(ctx context.Context, cacheSvc cache.Client) error {
+	return cacheSvc.Set(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0)
 }
 
 func markSubscriberCacheEmptyState(ctx context.Context, cacheSvc cache.Client, empty bool) error {

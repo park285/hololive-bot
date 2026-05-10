@@ -57,6 +57,10 @@ func newRouteAuditCacheClient() (*cachemocks.Client, *routeAuditCache) {
 		store.deleteKey(key)
 		return nil
 	}
+	client.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
+		store.setHash("__strings__", key, fmt.Sprintf("%v", value))
+		return nil
+	}
 
 	return client, store
 }

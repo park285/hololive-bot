@@ -38,22 +38,27 @@ import (
 
 // 알람 키 상수 목록.
 const (
-	AlarmKeyPrefix              = sharedalarmkeys.AlarmKeyPrefix
-	AlarmRegistryKey            = sharedalarmkeys.AlarmRegistryKey
-	AlarmChannelRegistryKey     = sharedalarmkeys.AlarmChannelRegistryKey
-	ChannelSubscribersKeyPrefix = sharedalarmkeys.ChannelSubscribersKeyPrefix
-	ChzzkChannelMapKey          = sharedalarmkeys.ChzzkChannelMapKey
-	TwitchLoginMapKey           = sharedalarmkeys.TwitchLoginMapKey
-	TwitchChannelLoginMapKey    = sharedalarmkeys.TwitchChannelLoginMapKey
-	MemberNameKey               = sharedalarmkeys.MemberNameKey
-	RoomNamesCacheKey           = sharedalarmkeys.RoomNamesCacheKey
-	UserNamesCacheKey           = sharedalarmkeys.UserNamesCacheKey
-	NotifiedKeyPrefix           = "notified:"
-	NotifyClaimKeyPrefix        = "notified:claim:"
-	NotifyLogicalClaimKeyPrefix = "notified:claim:event:"
-	UpcomingEventKeyPrefix      = "notified:upcoming:event:"
-	ScheduleTransitionKeyPrefix = "notified:schedule:transition:"
-	NextStreamKeyPrefix         = sharedalarmkeys.NextStreamKeyPrefix
+	AlarmKeyPrefix                 = sharedalarmkeys.AlarmKeyPrefix
+	AlarmRegistryKey               = sharedalarmkeys.AlarmRegistryKey
+	AlarmChannelRegistryKey        = sharedalarmkeys.AlarmChannelRegistryKey
+	AlarmChannelRegistryVersionKey = sharedalarmkeys.AlarmChannelRegistryVersionKey
+	AlarmSubscriberCacheEmptyKey   = sharedalarmkeys.AlarmSubscriberCacheEmptyKey
+	ChannelSubscribersKeyPrefix    = sharedalarmkeys.ChannelSubscribersKeyPrefix
+	ChzzkChannelMapKey             = sharedalarmkeys.ChzzkChannelMapKey
+	ChzzkChannelMapEmptyKey        = sharedalarmkeys.ChzzkChannelMapEmptyKey
+	TwitchLoginMapKey              = sharedalarmkeys.TwitchLoginMapKey
+	TwitchLoginMapEmptyKey         = sharedalarmkeys.TwitchLoginMapEmptyKey
+	TwitchChannelLoginMapKey       = sharedalarmkeys.TwitchChannelLoginMapKey
+	TwitchChannelLoginMapEmptyKey  = sharedalarmkeys.TwitchChannelLoginMapEmptyKey
+	MemberNameKey                  = sharedalarmkeys.MemberNameKey
+	RoomNamesCacheKey              = sharedalarmkeys.RoomNamesCacheKey
+	UserNamesCacheKey              = sharedalarmkeys.UserNamesCacheKey
+	NotifiedKeyPrefix              = "notified:"
+	NotifyClaimKeyPrefix           = "notified:claim:"
+	NotifyLogicalClaimKeyPrefix    = "notified:claim:event:"
+	UpcomingEventKeyPrefix         = "notified:upcoming:event:"
+	ScheduleTransitionKeyPrefix    = "notified:schedule:transition:"
+	NextStreamKeyPrefix            = sharedalarmkeys.NextStreamKeyPrefix
 
 	// 타입별 구독자 키 접두사 (COMMUNITY, SHORTS용).
 	ChannelSubscribersCommunityPrefix = sharedalarmkeys.ChannelSubscribersCommunityPrefix

@@ -123,6 +123,10 @@ func TestWarmSubscriberCacheFromAlarms_MarksEmptyCacheState(t *testing.T) {
 	channelRegistryExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.False(t, channelRegistryExists)
+
+	versionExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
+	require.NoError(t, err)
+	assert.True(t, versionExists)
 }
 
 func TestWarmSubscriberCacheFromAlarms_ClearsEmptyCacheMarkerWhenAlarmsExist(t *testing.T) {
@@ -144,6 +148,10 @@ func TestWarmSubscriberCacheFromAlarms_ClearsEmptyCacheMarkerWhenAlarmsExist(t *
 	emptyMarkerExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
 	require.NoError(t, err)
 	assert.False(t, emptyMarkerExists)
+
+	versionExists, err := cacheSvc.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
+	require.NoError(t, err)
+	assert.True(t, versionExists)
 }
 
 func TestWarmSubscriberCacheFromAlarms_UsesBatchedWrites(t *testing.T) {
