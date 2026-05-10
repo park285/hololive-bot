@@ -4,15 +4,15 @@ Module inventory for the `hololive-bot` workspace.
 
 | Module | Language | Path | Role | Port |
 |--------|----------|------|------|------|
-| `hololive-kakao-bot-go` | Go 1.26.2 | `hololive/hololive-kakao-bot-go/` | Main bot ingress (webhook + command routing) | 30001 |
-| `hololive-admin-api` | Go 1.26.2 | `hololive/hololive-admin-api/` | Admin HTTP control plane | 30006 |
-| `hololive-alarm-worker` | Go 1.26.2 | `hololive/hololive-alarm-worker/` | Alarm checker / queue publisher worker | 30007 |
-| `hololive-dispatcher-go` | Go 1.26.2 | `hololive/hololive-dispatcher-go/` | Alarm dispatch queue consumer (BRPOP → Iris) | 30020 |
-| `hololive-llm-sched` | Go 1.26.2 | `hololive/hololive-llm-sched/` | LLM scheduler (major event + member news + delivery) | 30003 |
-| `hololive-stream-ingester` | Go 1.26.2 | `hololive/hololive-stream-ingester/` | Photo sync + ingestion-adjacent runtime | 30004 |
-| `youtube-scraper` | Go 1.26.2 | `hololive/hololive-stream-ingester/` | Dedicated YouTube scraping/polling + outbox runtime | 30005 |
-| `hololive-shared` | Go 1.26.2 | `hololive/hololive-shared/` | Shared Go library (hololive domain) | - |
-| `shared-go` | Go 1.26.2 | `shared-go/` | Shared Go utilities (errors, stringutil, valkeyx, workerpool, etc.) | - |
+| `hololive-kakao-bot-go` | Go 1.26.3 | `hololive/hololive-kakao-bot-go/` | Main bot ingress (webhook + command routing) | 30001 |
+| `hololive-admin-api` | Go 1.26.3 | `hololive/hololive-admin-api/` | Admin HTTP control plane | 30006 |
+| `hololive-alarm-worker` | Go 1.26.3 | `hololive/hololive-alarm-worker/` | Alarm checker / queue publisher worker | 30007 |
+| `hololive-dispatcher-go` | Go 1.26.3 | `hololive/hololive-dispatcher-go/` | Alarm dispatch queue consumer (BRPOP → Iris) | 30020 |
+| `hololive-llm-sched` | Go 1.26.3 | `hololive/hololive-llm-sched/` | LLM scheduler (major event + member news + delivery) | 30003 |
+| `hololive-stream-ingester` | Go 1.26.3 | `hololive/hololive-stream-ingester/` | Photo sync + ingestion-adjacent runtime | 30004 |
+| `youtube-scraper` | Go 1.26.3 | `hololive/hololive-stream-ingester/` | Dedicated YouTube scraping/polling + outbox runtime | 30005 |
+| `hololive-shared` | Go 1.26.3 | `hololive/hololive-shared/` | Shared Go library (hololive domain) | - |
+| `shared-go` | Go 1.26.3 | `shared-go/` | Shared Go utilities (errors, stringutil, valkeyx, workerpool, etc.) | - |
 | `docker-compose.prod.yml` | YAML | `docker-compose.prod.yml` | Production docker compose stack | - |
 
 ## Runtime Binaries (7)
