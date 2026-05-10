@@ -24,8 +24,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/quic-go/quic-go/http3"
 
 	appbootstrap "github.com/kapu/hololive-kakao-bot-go/internal/app/bootstrap"
 	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
@@ -46,9 +48,20 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 
 	configSubscriber := appbootstrap.BuildBotConfigSubscriber(ctx, runtimeViews.configSubscriber, runtimeViews.configSubscriberRuntime, nil, logger)
 
-	botServer, err := appbootstrap.BuildBotServer(ctx, cfg, webhookHandler, nil, logger)
-	if err != nil {
-		return nil, err
+	var botServer = nilHTTPServer()
+	if cfg.ServerTransportEnabled("h2c") {
+		botServer, err = appbootstrap.BuildBotServer(ctx, cfg, webhookHandler, nil, logger)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var h3Server *http3.Server
+	if cfg.ServerTransportEnabled("h3") {
+		h3Server, err = appbootstrap.BuildBotHTTP3Server(ctx, cfg, webhookHandler, nil, logger)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &BotRuntime{
@@ -56,8 +69,13 @@ func buildBotRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logge
 		Logger:               logger,
 		Bot:                  botBot,
 		ConfigSubscriber:     configSubscriber,
-		ServerAddr:           fmt.Sprintf(":%d", cfg.Server.Port),
+		ServerAddr:           cfg.Server.H2CAddr,
 		HttpServer:           botServer,
+		H3Server:             h3Server,
 		webhookHandlerCloser: webhookHandler,
 	}, nil
+}
+
+func nilHTTPServer() *http.Server {
+	return nil
 }
