@@ -263,7 +263,7 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
 	irisConnected := r.cachedIrisPing(checkCtx)
 
-	ready := dispatchLoopRunning && valkeyConnected
+	ready := dispatchLoopRunning && valkeyConnected && irisConnected
 	statusCode := http.StatusOK
 	status := "ready"
 	if !ready {
