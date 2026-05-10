@@ -56,17 +56,20 @@ func TestRepoCompose_PostgresUsesHostGatewayWithSecureDefaultTLSMode(t *testing.
 		}
 	}
 
-	if got := strings.Count(content, "POSTGRES_HOST: host.docker.internal"); got != 6 {
-		t.Fatalf("docker-compose.prod.yml POSTGRES_HOST host.docker.internal count = %d, want 6", got)
+	if got := strings.Count(content, "POSTGRES_HOST: host.docker.internal"); got != 1 {
+		t.Fatalf("docker-compose.prod.yml POSTGRES_HOST host.docker.internal anchor count = %d, want 1", got)
 	}
-	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}"); got != 6 {
-		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE secure default count = %d, want 6", got)
+	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}"); got != 1 {
+		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE secure default anchor count = %d, want 1", got)
+	}
+	if got := strings.Count(content, "*postgres-env"); got != 6 {
+		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 6", got)
 	}
 
 	required := []string{
 		"holo-postgres:",
 		"    network_mode: host",
-		"PGHOST: host.docker.internal",
+		"x-postgres-env: &postgres-env",
 		"POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}",
 	}
 	for _, pattern := range required {
