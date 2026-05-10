@@ -53,19 +53,20 @@ func BuildBotHTTP3Server(
 		return nil, fmt.Errorf("load h3 certificate: %w", err)
 	}
 
+	quicCfg := &quic.Config{
+		InitialPacketSize: 1200,
+		KeepAlivePeriod:   10 * time.Second,
+		MaxIdleTimeout:    60 * time.Second,
+	}
+
 	return &http3.Server{
 		Addr:    cfg.Server.H3Addr,
 		Handler: botRouter,
-		TLSConfig: &tls.Config{
+		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{
 			MinVersion:   tls.VersionTLS13,
 			Certificates: []tls.Certificate{cert},
-		},
-		QUICConfig: &quic.Config{
-			KeepAlivePeriod:         10 * time.Second,
-			MaxIdleTimeout:          60 * time.Second,
-			InitialPacketSize:       1200,
-			DisablePathMTUDiscovery: true,
-		},
+		}),
+		QUICConfig:     quicCfg,
 		MaxHeaderBytes: http.DefaultMaxHeaderBytes,
 	}, nil
 }
