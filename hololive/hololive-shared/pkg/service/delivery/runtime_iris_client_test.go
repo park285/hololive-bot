@@ -190,7 +190,7 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 	t.Parallel()
 
 	var gotPath string
-	var gotRequest irisTextReplyRequest
+	var gotRequest iris.ReplyRequest
 	server := httptest.NewServer(h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		if r.Header.Get("X-Iris-Signature") == "" {
