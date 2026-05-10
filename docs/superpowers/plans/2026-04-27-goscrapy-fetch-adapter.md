@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the current `scraper.Client` public methods, parsers, retry/backoff, rate limiting, proxy toggle, poller scheduler, DB writes, and outbox flow. Introduce an internal page-fetcher boundary in `hololive-shared/pkg/service/youtube/scraper`, then wire a `SCRAPER_FETCHER_ENGINE` config value through the stream-ingester client builder.
 
-**Tech Stack:** Go 1.26.2, `github.com/tech-engine/goscrapy@v0.25.0`, existing `testing` + `testify`, existing `httptest`, existing Go workspace.
+**Tech Stack:** Go 1.26.3, `github.com/tech-engine/goscrapy@v0.25.0`, existing `testing` + `testify`, existing `httptest`, existing Go workspace.
 
 ---
 
