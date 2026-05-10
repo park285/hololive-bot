@@ -315,6 +315,73 @@ func TestParseVideosFromRSSFeed_MaxResultsAndInvalidEntries(t *testing.T) {
 	assert.Equal(t, "vid001", videos[0].VideoID)
 }
 
+func TestParseVideosFromInitialData_LockupViewModel(t *testing.T) {
+	data := gjson.Parse(`{
+		"contents": {
+			"twoColumnBrowseResultsRenderer": {
+				"tabs": [{
+					"tabRenderer": {
+						"title": "動画",
+						"endpoint": {"commandMetadata": {"webCommandMetadata": {"url": "/@example/videos"}}},
+						"content": {
+							"richGridRenderer": {
+								"contents": [{
+									"richItemRenderer": {
+										"content": {
+											"lockupViewModel": {
+												"contentId": "lockup001",
+												"contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+												"contentImage": {
+													"thumbnailViewModel": {
+														"image": {"sources": [{"url": "https://i.ytimg.com/vi/lockup001/hqdefault.jpg", "width": 336, "height": 188}]},
+														"overlays": [{
+															"thumbnailBottomOverlayViewModel": {
+																"badges": [{
+																	"thumbnailBadgeViewModel": {"text": "4:23"}
+																}]
+															}
+														}]
+													}
+												},
+												"metadata": {
+													"lockupMetadataViewModel": {
+														"title": {"content": "Lockup Video"},
+														"metadata": {
+															"contentMetadataViewModel": {
+																"metadataRows": [{
+																	"metadataParts": [
+																		{"text": {"content": "69万回視聴"}},
+																		{"text": {"content": "1 month ago"}}
+																	]
+																}]
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+								}]
+							}
+						}
+					}
+				}]
+			}
+		}
+	}`)
+
+	client := NewClient()
+	videos, err := parseVideosFromInitialData(data, "UC_TEST", 10, client.parseVideoRenderer)
+	require.NoError(t, err)
+	require.Len(t, videos, 1)
+	assert.Equal(t, "lockup001", videos[0].VideoID)
+	assert.Equal(t, "Lockup Video", videos[0].Title)
+	assert.Equal(t, "4:23", videos[0].Duration)
+	assert.Equal(t, "1 month ago", videos[0].PublishedText)
+	assert.Equal(t, int64(690000), videos[0].ViewCount)
+	assert.Len(t, videos[0].Thumbnail, 1)
+}
+
 func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 	jsonBytes, err := os.ReadFile("testdata/videos_tab_empty.json")
 	require.NoError(t, err)
