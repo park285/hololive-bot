@@ -61,8 +61,10 @@ func BuildBotHTTP3Server(
 			Certificates: []tls.Certificate{cert},
 		},
 		QUICConfig: &quic.Config{
-			KeepAlivePeriod: 10 * time.Second,
-			MaxIdleTimeout:  60 * time.Second,
+			KeepAlivePeriod:         10 * time.Second,
+			MaxIdleTimeout:          60 * time.Second,
+			InitialPacketSize:       1200,
+			DisablePathMTUDiscovery: true,
 		},
 		MaxHeaderBytes: http.DefaultMaxHeaderBytes,
 	}, nil
