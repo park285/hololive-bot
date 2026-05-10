@@ -340,3 +340,41 @@ func (c *Client) parseGridVideoRenderer(video gjson.Result, channelID string) *V
 		"shortBylineText.runs.0.navigationEndpoint.browseEndpoint.canonicalBaseUrl",
 	)
 }
+
+func parseLockupVideoViewModel(lockup gjson.Result, channelID string) *Video {
+	if lockup.Get("contentType").String() != "LOCKUP_CONTENT_TYPE_VIDEO" {
+		return nil
+	}
+
+	videoID := lockup.Get("contentId").String()
+	if videoID == "" {
+		videoID = lockup.Get("rendererContext.commandContext.onTap.innertubeCommand.watchEndpoint.videoId").String()
+	}
+	if videoID == "" {
+		return nil
+	}
+
+	var thumbnails []Thumbnail
+	lockup.Get("contentImage.thumbnailViewModel.image.sources").ForEach(func(_, t gjson.Result) bool {
+		thumbnails = append(thumbnails, Thumbnail{
+			URL:    t.Get("url").String(),
+			Width:  int(t.Get("width").Int()),
+			Height: int(t.Get("height").Int()),
+		})
+		return true
+	})
+
+	metadataParts := lockup.Get("metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows.0.metadataParts")
+	viewCountText := metadataParts.Get("0.text.content").String()
+	publishedText := metadataParts.Get("1.text.content").String()
+
+	return &Video{
+		VideoID:       videoID,
+		Title:         lockup.Get("metadata.lockupMetadataViewModel.title.content").String(),
+		Thumbnail:     thumbnails,
+		ViewCount:     parseViewCount(viewCountText),
+		PublishedText: publishedText,
+		Duration:      lockup.Get("contentImage.thumbnailViewModel.overlays.0.thumbnailBottomOverlayViewModel.badges.0.thumbnailBadgeViewModel.text").String(),
+		ChannelID:     channelID,
+	}
+}
