@@ -17,6 +17,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
@@ -148,6 +149,116 @@ func TestYouTubePollTargetRefresherRefreshesNotificationPollersFromCache(t *test
 	require.Contains(t, jobKeys, "UC_NEW:live")
 	require.NotContains(t, jobKeys, "UC_OLD:videos")
 	require.Contains(t, jobKeys, "UC_STATS:channel_stats")
+}
+
+func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	smembersCalls := 0
+	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
+		return true, nil
+	}
+	cacheSvc.GetFunc = func(_ context.Context, key string, dest any) error {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
+		version, ok := dest.(*int64)
+		require.True(t, ok)
+		*version = 123
+		return nil
+	}
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		smembersCalls++
+		return []string{"UC_VERSIONED"}, nil
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		&databasemocks.Client{},
+		config.ScraperConfig{Poll: config.ScraperPoll{
+			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
+			Stats: 4 * time.Hour, Live: 3 * time.Minute,
+		}},
+		scraper.NewRateLimiter(time.Second),
+		cacheSvc,
+		nil,
+		[]string{"UC_OLD"},
+		[]string{"UC_VERSIONED"},
+	)
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_VERSIONED"}),
+	)
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
+		func(context.Context) ([]string, error) { return nil, nil },
+		newYouTubePollTargetTestLogger(),
+	)
+
+	refresher.refresh(context.Background())
+	refresher.refresh(context.Background())
+
+	require.Equal(t, 1, smembersCalls)
+}
+
+func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := cachemocks.NewStrictClient()
+	smembersCalls := 0
+	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
+		return true, nil
+	}
+	cacheSvc.GetFunc = func(_ context.Context, key string, dest any) error {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
+		version, ok := dest.(*int64)
+		require.True(t, ok)
+		*version = 0
+		return nil
+	}
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		smembersCalls++
+		return []string{"UC_VERSIONED"}, nil
+	}
+
+	registrations := buildStreamIngesterChannelPollerRegistrations(
+		&databasemocks.Client{},
+		config.ScraperConfig{Poll: config.ScraperPoll{
+			Videos: 7 * time.Minute, Shorts: 11 * time.Minute, Community: 13 * time.Minute,
+			Stats: 4 * time.Hour, Live: 3 * time.Minute,
+		}},
+		scraper.NewRateLimiter(time.Second),
+		cacheSvc,
+		nil,
+		[]string{"UC_OLD"},
+		[]string{"UC_VERSIONED"},
+	)
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_VERSIONED"}),
+	)
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{{ChannelID: "UC_VERSIONED", Enabled: true}},
+		func(context.Context) ([]string, error) { return nil, nil },
+		newYouTubePollTargetTestLogger(),
+	)
+
+	refresher.refresh(context.Background())
+	refresher.refresh(context.Background())
+
+	require.Equal(t, 2, smembersCalls)
 }
 
 func TestYouTubePollTargetRefresher_SkipsImplicitGlobalRegistrationsDuringRefresh(t *testing.T) {

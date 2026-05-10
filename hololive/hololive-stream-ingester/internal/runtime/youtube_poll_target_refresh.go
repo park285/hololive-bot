@@ -17,18 +17,19 @@ const youtubePollTargetEmptyCacheGracePeriod = 30 * time.Second
 const youtubePollTargetCacheOnlyAdditionGracePeriod = 30 * time.Second
 
 type youTubePollTargetRefresher struct {
-	cacheService            cache.Client
-	scheduler               *poller.Scheduler
-	registrations           []providers.ChannelPollerRegistration
-	loadOperationalChannels func(context.Context) ([]communityShortsOperationalChannel, error)
-	lastOperationalChannels []communityShortsOperationalChannel
-	lastOperationalFallback bool
-	loadAlarmChannelIDs     func(context.Context) ([]string, error)
-	lastNonEmptyCacheAt     time.Time
-	lastResolvedTargets     youtubePollTargets
-	cacheOnlyFirstSeen      map[string]time.Time
-	timeNow                 func() time.Time
-	logger                  *slog.Logger
+	cacheService               cache.Client
+	scheduler                  *poller.Scheduler
+	registrations              []providers.ChannelPollerRegistration
+	loadOperationalChannels    func(context.Context) ([]communityShortsOperationalChannel, error)
+	lastOperationalChannels    []communityShortsOperationalChannel
+	lastOperationalFallback    bool
+	loadAlarmChannelIDs        func(context.Context) ([]string, error)
+	lastNonEmptyCacheAt        time.Time
+	lastResolvedTargets        youtubePollTargets
+	lastChannelRegistryVersion int64
+	cacheOnlyFirstSeen         map[string]time.Time
+	timeNow                    func() time.Time
+	logger                     *slog.Logger
 }
 
 func newYouTubePollTargetRefresher(
@@ -118,6 +119,24 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		}
 		r.lastOperationalFallback = false
 	}
+	registryVersion, registryVersionTrusted, registryVersionErr := r.channelRegistryVersion(ctx)
+	if registryVersionErr != nil && r.logger != nil {
+		r.logger.Warn("Failed to read alarm channel registry version",
+			slog.Any("error", registryVersionErr))
+	}
+	if registryVersionTrusted &&
+		r.lastChannelRegistryVersion == registryVersion &&
+		hasYouTubePollTargets(r.lastResolvedTargets) {
+		if operational.changed {
+			targets := r.lastResolvedTargets
+			targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operationalChannels)
+			if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
+				r.applyResolvedTargets(targets)
+			}
+		}
+		return
+	}
+
 	cacheAlarmChannelIDs, cacheErr := r.cacheService.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	var alarmChannelIDs []string
 	candidateFromCache := false
@@ -177,6 +196,9 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	if !ok {
 		return
 	}
+	if candidateFromCache && registryVersionTrusted {
+		r.lastChannelRegistryVersion = registryVersion
+	}
 	targetsChanged := !equalYouTubePollTargets(r.lastResolvedTargets, targets)
 	if r.logger != nil && (operational.changed || targetsChanged) {
 		r.logger.Info("youtube_poll_target_operational_channels_refreshed",
@@ -190,6 +212,33 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		return
 	}
 	r.applyResolvedTargets(targets)
+}
+
+func (r *youTubePollTargetRefresher) channelRegistryVersion(ctx context.Context) (version int64, trusted bool, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			version = 0
+			trusted = false
+			err = nil
+		}
+	}()
+
+	exists, err := r.cacheService.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
+	if err != nil {
+		return 0, false, err
+	}
+	if !exists {
+		return 0, false, nil
+	}
+
+	if err := r.cacheService.Get(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, &version); err != nil {
+		return 0, false, err
+	}
+	if version <= 0 {
+		return 0, false, nil
+	}
+
+	return version, true, nil
 }
 
 func (r *youTubePollTargetRefresher) applyResolvedTargets(targets youtubePollTargets) {

@@ -59,7 +59,10 @@ func (s *RuntimeScheduler) runAlarmCacheRecoveryLoop(ctx context.Context) error 
 			s.logger.Info("Alarm cache recovery loop stopped")
 			return ctx.Err()
 		case <-ticker.C:
-			if err := s.recoverAlarmCacheIfRegistryEmpty(ctx, "periodic"); err != nil {
+			recoveryCtx, cancel := context.WithTimeout(ctx, alarmCacheRecoveryTimeout)
+			err := s.recoverAlarmCacheIfRegistryEmpty(recoveryCtx, "periodic")
+			cancel()
+			if err != nil {
 				s.logger.Warn("Alarm cache recovery check failed", slog.Any("error", err))
 			}
 		}
@@ -110,22 +113,35 @@ func (s *RuntimeScheduler) syncPlatformMappingsIfMissing(ctx context.Context) er
 		return nil
 	}
 
-	for _, key := range []string{
-		sharedalarmkeys.ChzzkChannelMapKey,
-		sharedalarmkeys.TwitchLoginMapKey,
-		sharedalarmkeys.TwitchChannelLoginMapKey,
+	for _, mapping := range []struct {
+		key            string
+		emptyMarkerKey string
+	}{
+		{key: sharedalarmkeys.ChzzkChannelMapKey, emptyMarkerKey: sharedalarmkeys.ChzzkChannelMapEmptyKey},
+		{key: sharedalarmkeys.TwitchLoginMapKey, emptyMarkerKey: sharedalarmkeys.TwitchLoginMapEmptyKey},
+		{key: sharedalarmkeys.TwitchChannelLoginMapKey, emptyMarkerKey: sharedalarmkeys.TwitchChannelLoginMapEmptyKey},
 	} {
-		exists, err := s.cacheSvc.Exists(ctx, key)
+		exists, err := s.cacheSvc.Exists(ctx, mapping.key)
 		if err != nil {
-			return fmt.Errorf("recover alarm cache: check platform mapping %s: %w", key, err)
+			return fmt.Errorf("recover alarm cache: check platform mapping %s: %w", mapping.key, err)
 		}
-		if !exists {
-			if err := s.platformMappingSyncer.SyncPlatformMappings(ctx); err != nil {
-				return fmt.Errorf("recover alarm cache: sync platform mappings: %w", err)
-			}
+		if exists {
+			continue
+		}
 
-			return nil
+		empty, err := s.cacheSvc.Exists(ctx, mapping.emptyMarkerKey)
+		if err != nil {
+			return fmt.Errorf("recover alarm cache: check platform mapping empty marker %s: %w", mapping.emptyMarkerKey, err)
 		}
+		if empty {
+			continue
+		}
+
+		if err := s.platformMappingSyncer.SyncPlatformMappings(ctx); err != nil {
+			return fmt.Errorf("recover alarm cache: sync platform mappings: %w", err)
+		}
+
+		return nil
 	}
 
 	return nil

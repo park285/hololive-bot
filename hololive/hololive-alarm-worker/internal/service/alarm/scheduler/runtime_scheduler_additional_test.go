@@ -382,8 +382,11 @@ func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 			switch key {
 			case sharedalarmkeys.AlarmChannelRegistryKey,
 				sharedalarmkeys.ChzzkChannelMapKey,
+				sharedalarmkeys.ChzzkChannelMapEmptyKey,
 				sharedalarmkeys.TwitchLoginMapKey,
-				sharedalarmkeys.TwitchChannelLoginMapKey:
+				sharedalarmkeys.TwitchLoginMapEmptyKey,
+				sharedalarmkeys.TwitchChannelLoginMapKey,
+				sharedalarmkeys.TwitchChannelLoginMapEmptyKey:
 			default:
 				t.Fatalf("unexpected key: %s", key)
 			}
@@ -411,6 +414,8 @@ func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 				return true, nil
 			case sharedalarmkeys.ChzzkChannelMapKey:
 				return false, nil
+			case sharedalarmkeys.ChzzkChannelMapEmptyKey:
+				return false, nil
 			case sharedalarmkeys.TwitchLoginMapKey, sharedalarmkeys.TwitchChannelLoginMapKey:
 				return true, nil
 			default:
@@ -429,6 +434,37 @@ func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
 		assert.Equal(t, int32(0), warmer.calls.Load())
 		assert.Equal(t, int32(1), warmer.syncCalls.Load())
+	})
+
+	t.Run("skips platform sync when missing mapping has empty marker", func(t *testing.T) {
+		warmer := &alarmCacheWarmerStub{}
+		cacheSvc := cachemocks.NewStrictClient()
+		cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+			switch key {
+			case sharedalarmkeys.AlarmChannelRegistryKey:
+				return true, nil
+			case sharedalarmkeys.ChzzkChannelMapKey:
+				return false, nil
+			case sharedalarmkeys.ChzzkChannelMapEmptyKey:
+				return true, nil
+			case sharedalarmkeys.TwitchLoginMapKey, sharedalarmkeys.TwitchChannelLoginMapKey:
+				return true, nil
+			default:
+				t.Fatalf("unexpected key: %s", key)
+				return false, nil
+			}
+		}
+
+		s := &RuntimeScheduler{
+			cacheSvc:              cacheSvc,
+			alarmCacheWarmer:      warmer,
+			platformMappingSyncer: warmer,
+			logger:                testSchedulerLogger(),
+		}
+
+		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
+		assert.Equal(t, int32(0), warmer.calls.Load())
+		assert.Equal(t, int32(0), warmer.syncCalls.Load())
 	})
 }
 

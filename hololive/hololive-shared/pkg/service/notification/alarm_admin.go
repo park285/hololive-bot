@@ -37,6 +37,7 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	roomNamesMap, _ := as.cache.HGetAll(ctx, RoomNamesCacheKey)
 
 	alarms := make([]*domain.AlarmEntry, 0)
+	channelIDsForNames := make([]string, 0)
 
 	// 방 기반: registry key = roomID
 	for _, roomID := range registryKeys {
@@ -52,20 +53,23 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 		}
 
 		for _, channelID := range channelIDs {
-			memberName, _ := as.GetMemberName(ctx, channelID)
-
 			roomName := roomNamesMap[roomID]
 			if roomName == "" {
 				roomName = roomID
 			}
 
+			channelIDsForNames = append(channelIDsForNames, channelID)
 			alarms = append(alarms, &domain.AlarmEntry{
-				RoomID:     roomID,
-				RoomName:   roomName,
-				ChannelID:  channelID,
-				MemberName: memberName,
+				RoomID:    roomID,
+				RoomName:  roomName,
+				ChannelID: channelID,
 			})
 		}
+	}
+
+	memberNames, _ := as.getMemberNamesBatch(ctx, channelIDsForNames)
+	for _, alarm := range alarms {
+		alarm.MemberName = memberNames[alarm.ChannelID]
 	}
 
 	return alarms, nil

@@ -22,6 +22,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -143,6 +144,28 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("expected 2 deletions, got %d", count)
+	}
+}
+
+func TestCacheServiceDelManyChunksLargeRequests(t *testing.T) {
+	svc, mini := newTestCacheService(t)
+	ctx := context.Background()
+
+	keys := make([]string, 0, 1200)
+	for i := range 1200 {
+		key := fmt.Sprintf("bulk:%d", i)
+		keys = append(keys, key)
+		requireNoError(t, svc.Set(ctx, key, testPayload{Name: key}, 0))
+	}
+
+	before := mini.CommandCount()
+	count, err := svc.DelMany(ctx, keys)
+	requireNoError(t, err)
+	if count != int64(len(keys)) {
+		t.Fatalf("expected %d deletions, got %d", len(keys), count)
+	}
+	if got := mini.CommandCount() - before; got != 3 {
+		t.Fatalf("expected 3 delete commands, got %d", got)
 	}
 }
 

@@ -53,15 +53,15 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 
 	chzzkMappings, twitchMappings, twitchChannelMappings := as.collectPlatformMappings(channelIDs)
 
-	if err := as.replaceHashMappings(ctx, ChzzkChannelMapKey, chzzkMappings); err != nil {
+	if err := as.replaceHashMappingsWithEmptyMarker(ctx, ChzzkChannelMapKey, ChzzkChannelMapEmptyKey, chzzkMappings); err != nil {
 		return fmt.Errorf("sync chzzk channel mappings: %w", err)
 	}
 
-	if err := as.replaceHashMappings(ctx, TwitchLoginMapKey, twitchMappings); err != nil {
+	if err := as.replaceHashMappingsWithEmptyMarker(ctx, TwitchLoginMapKey, TwitchLoginMapEmptyKey, twitchMappings); err != nil {
 		return fmt.Errorf("sync twitch login mappings: %w", err)
 	}
 
-	if err := as.replaceHashMappings(ctx, TwitchChannelLoginMapKey, twitchChannelMappings); err != nil {
+	if err := as.replaceHashMappingsWithEmptyMarker(ctx, TwitchChannelLoginMapKey, TwitchChannelLoginMapEmptyKey, twitchChannelMappings); err != nil {
 		return fmt.Errorf("sync twitch channel login mappings: %w", err)
 	}
 
@@ -182,6 +182,9 @@ func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, chann
 		if err := as.cache.HSet(ctx, ChzzkChannelMapKey, channelID, chzzkChannelID); err != nil {
 			return fmt.Errorf("upsert chzzk mapping: %w", err)
 		}
+		if err := as.cache.Del(ctx, ChzzkChannelMapEmptyKey); err != nil {
+			return fmt.Errorf("clear chzzk empty marker: %w", err)
+		}
 	} else if err := as.cache.HDel(ctx, ChzzkChannelMapKey, channelID); err != nil {
 		return fmt.Errorf("delete missing chzzk mapping: %w", err)
 	}
@@ -246,6 +249,31 @@ func (as *AlarmService) replaceHashMappings(
 	if err := as.renameHashMappingKey(ctx, tmpKey, key, fields); err != nil {
 		_ = as.cache.Del(context.WithoutCancel(ctx), tmpKey)
 		return fmt.Errorf("rename mapping key %s from %s: %w", key, tmpKey, err)
+	}
+
+	return nil
+}
+
+func (as *AlarmService) replaceHashMappingsWithEmptyMarker(
+	ctx context.Context,
+	key string,
+	emptyMarkerKey string,
+	mappings map[string]string,
+) error {
+	if err := as.replaceHashMappings(ctx, key, mappings); err != nil {
+		return err
+	}
+
+	if len(mappings) == 0 {
+		if err := as.cache.Set(ctx, emptyMarkerKey, "1", 0); err != nil {
+			return fmt.Errorf("set empty marker %s: %w", emptyMarkerKey, err)
+		}
+
+		return nil
+	}
+
+	if err := as.cache.Del(ctx, emptyMarkerKey); err != nil {
+		return fmt.Errorf("clear empty marker %s: %w", emptyMarkerKey, err)
 	}
 
 	return nil
@@ -369,9 +397,15 @@ func (as *AlarmService) reconcileTwitchMappingsForChannel(ctx context.Context, c
 	if err := as.cache.HSet(ctx, TwitchLoginMapKey, desiredLogin, channelID); err != nil {
 		return fmt.Errorf("upsert twitch mapping: %w", err)
 	}
+	if err := as.cache.Del(ctx, TwitchLoginMapEmptyKey); err != nil {
+		return fmt.Errorf("clear twitch empty marker: %w", err)
+	}
 
 	if err := as.cache.HSet(ctx, TwitchChannelLoginMapKey, channelID, desiredLogin); err != nil {
 		return fmt.Errorf("upsert twitch channel login mapping: %w", err)
+	}
+	if err := as.cache.Del(ctx, TwitchChannelLoginMapEmptyKey); err != nil {
+		return fmt.Errorf("clear twitch channel empty marker: %w", err)
 	}
 
 	return nil
