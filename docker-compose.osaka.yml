@@ -1,5 +1,7 @@
 services:
   stream-ingester:
+    env_file: !override
+      - /run/hololive-bot/env
     environment:
       LOG_MAX_SIZE_MB: "2"
       LOG_MAX_BACKUPS: "2"
@@ -16,6 +18,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
     logging:
       driver: "json-file"
       options:
@@ -27,6 +30,8 @@ services:
           memory: 512m
 
   youtube-scraper:
+    env_file: !override
+      - /run/hololive-bot/env
     environment:
       LOG_MAX_SIZE_MB: "2"
       LOG_MAX_BACKUPS: "2"
@@ -43,6 +48,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./runtime-config:/app/runtime-config:ro
+      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
     logging:
       driver: "json-file"
       options:
