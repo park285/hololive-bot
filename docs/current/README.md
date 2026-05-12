@@ -1,14 +1,53 @@
 # Current Docs
 
-현재 운영 기준 문서만 둔다.
+현재 운영 기준 문서만 둡니다. 과거 완료 기록, handoff, closeout 문서는 `docs/history`로 이동하고 current에는 bridge만 남길 수 있습니다.
 
-- `PROJECT_MAP.md` — 현재 모듈/런타임 인벤토리
-- `runbooks/README.md` — 현재 운영 runbook 인덱스
-- `architecture/README.md` — 현재 architecture/governance 인덱스
-- `ALARM_DISPATCH_REMEDIATION_20260414.md` — 알람/디스패처 보강 기준
-- `APP_BOOTSTRAP_BOUNDARY_GUIDE.md` — `hololive-kakao-bot-go/internal/app` 현재 경계 기준
-- `RUNTIME_SPLIT_HANDOFF_20260416.md` — runtime split 선행 정리 완료 상태와 다음 컨텍스트 handoff
-- `RUNTIME_SPLIT_PR07_BLOCKERS_20260416.md` — PR-07 모듈 추출 blocker 해소 결과 기록
-- `REMAINING_RISKS_EXECUTION_GUIDE_20260415.md` — repo-wide 리스크 종료 기록
-- `CRITICAL_REVIEW_RESIDUAL_ISSUES_20260415.md` — critical review 잔여 이슈 종료 기록
-- `LEGACY_LINT_RESUME_20260415.md` — legacy lint 종료 기록
+## Core
+
+- `PROJECT_MAP.md` - 현재 module/runtime 운영 인벤토리
+- `DEPLOYMENT_BASELINE.md` - Docker Compose 운영 baseline
+- `SERVICE_OWNERSHIP.md` - 7개 runtime ownership 기준
+- `CONTRACT_MAP.md` - 내부 HTTP/Queue/PubSub/external boundary 계약 지도
+- `ERROR_CONTRACT.md` - 내부 API error response와 client 해석 규칙
+- `QUEUE_AND_PUBSUB_CONTRACTS.md` - alarm queue와 settings Pub/Sub 계약
+
+## Services
+
+- `services/bot.md`
+- `services/admin-api.md`
+- `services/alarm-worker.md`
+- `services/dispatcher-go.md`
+- `services/llm-scheduler.md`
+- `services/stream-ingester.md`
+- `services/youtube-scraper.md`
+
+## Contracts
+
+- `contracts/README.md`
+- `contracts/membernews.md`
+- `contracts/majorevent.md`
+- `contracts/trigger.md`
+- `contracts/alarm.md`
+- `contracts/settings.md`
+- `contracts/iris-boundary.md`
+
+## Runbooks
+
+- `runbooks/README.md`
+
+## Architecture And Governance
+
+- `architecture/README.md`
+- `architecture/ci-gates.md`
+- `architecture/llm-work-rules.md`
+
+## Compatibility Bridges
+
+아래 파일은 기존 링크를 보존하기 위한 bridge입니다. 현재 운영 기준 본문은 위 Core/Services/Contracts/Runbooks 문서를 사용합니다.
+
+- `ALARM_DISPATCH_REMEDIATION_20260414.md`
+- `RUNTIME_SPLIT_HANDOFF_20260416.md`
+- `RUNTIME_SPLIT_PR07_BLOCKERS_20260416.md`
+- `CRITICAL_REVIEW_RESIDUAL_ISSUES_20260415.md`
+- `REMAINING_RISKS_EXECUTION_GUIDE_20260415.md`
+- `LEGACY_LINT_RESUME_20260415.md`
