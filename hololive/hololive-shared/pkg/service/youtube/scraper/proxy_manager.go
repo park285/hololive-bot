@@ -27,6 +27,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -196,6 +197,9 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, erro
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid proxy URL: %w", err)
 	}
+	if err := validateSOCKS5ProxyURL(parsedURL); err != nil {
+		return nil, nil, err
+	}
 
 	auth := newProxyAuth(parsedURL)
 
@@ -221,6 +225,29 @@ func createHTTPClient(proxyCfg ProxyConfig) (*http.Client, *http.Transport, erro
 		Transport: instrumentScraperTransport(transport),
 		Timeout:   constants.YouTubeConfig.ScraperHTTPTimeout,
 	}, transport, nil
+}
+
+func validateSOCKS5ProxyURL(parsedURL *url.URL) error {
+	if parsedURL == nil {
+		return fmt.Errorf("proxy URL is nil")
+	}
+	if parsedURL.Scheme != "socks5" && parsedURL.Scheme != "socks5h" {
+		return fmt.Errorf("unsupported proxy scheme: %s", parsedURL.Scheme)
+	}
+	if strings.TrimSpace(parsedURL.Host) == "" {
+		return fmt.Errorf("proxy URL missing host")
+	}
+	host, port, err := net.SplitHostPort(parsedURL.Host)
+	if err != nil {
+		return fmt.Errorf("proxy URL host must include port: %w", err)
+	}
+	if strings.TrimSpace(host) == "" {
+		return fmt.Errorf("proxy URL missing host")
+	}
+	if strings.TrimSpace(port) == "" {
+		return fmt.Errorf("proxy URL missing port")
+	}
+	return nil
 }
 
 func newScraperTransport(forceHTTP2 bool) *http.Transport {

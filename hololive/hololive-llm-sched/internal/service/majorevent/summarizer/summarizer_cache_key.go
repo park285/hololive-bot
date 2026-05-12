@@ -1,10 +1,11 @@
 package summarizer
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sort"
+	"slices"
 
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
@@ -27,20 +28,20 @@ func buildSummaryInputHash(events []domain.MajorEvent) string {
 	}
 
 	projected := projectPromptEvents(events)
-	sort.Slice(projected, func(i, j int) bool {
-		if projected[i].DateStr != projected[j].DateStr {
-			return projected[i].DateStr < projected[j].DateStr
+	slices.SortFunc(projected, func(a, b eventForPrompt) int {
+		if byDate := cmp.Compare(a.DateStr, b.DateStr); byDate != 0 {
+			return byDate
 		}
-		if projected[i].Title != projected[j].Title {
-			return projected[i].Title < projected[j].Title
+		if byTitle := cmp.Compare(a.Title, b.Title); byTitle != 0 {
+			return byTitle
 		}
-		if projected[i].Link != projected[j].Link {
-			return projected[i].Link < projected[j].Link
+		if byLink := cmp.Compare(a.Link, b.Link); byLink != 0 {
+			return byLink
 		}
-		if projected[i].EventType != projected[j].EventType {
-			return projected[i].EventType < projected[j].EventType
+		if byEventType := cmp.Compare(a.EventType, b.EventType); byEventType != 0 {
+			return byEventType
 		}
-		return projected[i].Members < projected[j].Members
+		return cmp.Compare(a.Members, b.Members)
 	})
 
 	payload, err := json.Marshal(projected)

@@ -127,6 +127,12 @@
     ]
   },
   {
+    "path": "hololive/hololive-stream-ingester/cmd/runtime/healthcheck/main.go",
+    "must_contain": [
+      "checkURL("
+    ]
+  },
+  {
     "path": "hololive/hololive-stream-ingester/cmd/runtime/stream-ingester/main.go",
     "must_contain": [
       "bootstrap.Run("

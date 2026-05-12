@@ -109,7 +109,6 @@ func (s *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 
 	g.SetLimit(constants.ChzzkConfig.MaxConcurrentStatusChecks)
 	for _, member := range members {
-		member := member
 		g.Go(func() error {
 			scheduledLives, fetchErr := s.chzzk.GetScheduledLives(ctx, member.ChzzkChannelID)
 			if fetchErr != nil {
@@ -179,9 +178,7 @@ func cloneMembers(members []*domain.Member) []*domain.Member {
 		return nil
 	}
 
-	cloned := make([]*domain.Member, len(members))
-	copy(cloned, members)
-	return cloned
+	return slices.Clone(members)
 }
 
 func activeStelliveMembers(members []*domain.Member) []*domain.Member {
@@ -204,7 +201,7 @@ func activeStelliveMembers(members []*domain.Member) []*domain.Member {
 }
 
 func mergeLiveStreams(base []*domain.Stream, members []*domain.Member, lives []chzzk.LiveData) []*domain.Stream {
-	merged := append([]*domain.Stream(nil), base...)
+	merged := slices.Clone(base)
 	memberByChzzk := make(map[string]*domain.Member, len(members))
 	for _, member := range members {
 		memberByChzzk[member.ChzzkChannelID] = member
@@ -301,7 +298,7 @@ func buildUpcomingStreams(member *domain.Member, scheduledLives []chzzk.Schedule
 }
 
 func mergeUpcomingStreams(base []*domain.Stream, additions []*domain.Stream) []*domain.Stream {
-	merged := append([]*domain.Stream(nil), base...)
+	merged := slices.Clone(base)
 
 	for _, addition := range additions {
 		if addition == nil {

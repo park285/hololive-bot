@@ -2,8 +2,7 @@ module github.com/kapu/hololive-kakao-bot-go
 
 go 1.26.3
 
-// Gin uses goccy/go-json instead of sonic with -tags=go_json
-// Gin uses goccy/go-json instead of sonic with -tags=go_json
+// Gin uses goccy/go-json instead of sonic with -tags=go_json.
 
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
