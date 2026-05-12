@@ -10,6 +10,9 @@ require_git_checkout "${ROOT_DIR}"
 violations=()
 
 while IFS= read -r path; do
+  if [[ ! -e "${ROOT_DIR}/${path}" ]]; then
+    continue
+  fi
   case "${path}" in
     .worktrees/*|\
     .tasklists/*|\
