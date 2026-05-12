@@ -85,6 +85,12 @@ Rollback:
 curl http://127.0.0.1:30020/ready
 ```
 
+## Rollback
+
+- Use `docs/current/runbooks/rollback.md`.
+- Redeploy the previous `dispatcher-go` image/config.
+- Preserve DLQ/retry contents before replaying queue entries.
+
 ## Related contracts
 
 - `../contracts/alarm.md`

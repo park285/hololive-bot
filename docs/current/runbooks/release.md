@@ -33,6 +33,8 @@ For contract/document changes:
 
 ```bash
 ./scripts/architecture/check-current-docs-no-historical.sh
+./scripts/architecture/check-current-docs-no-historical-body.sh
+./scripts/architecture/check-doc-links-no-local-paths.sh
 ./scripts/architecture/check-runbook-coverage.sh
 ./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh

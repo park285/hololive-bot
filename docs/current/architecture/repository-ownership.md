@@ -13,6 +13,8 @@
 | alarm queue state | `alarm-worker`, `dispatcher-go` by phase | `alarm-worker`, `dispatcher-go` | observability consumers | queue contract `alarm.dispatch` or documented API |
 | YouTube outbox/tracking | ingestion runtime owner | runtime owner only | dispatcher/alarm consumers by contract | shared repository path owned by ingestion runtime |
 
+Structured allowlist: `repository-ownership.allowlist`.
+
 ## Shared Infrastructure Ownership
 
 - Runtime bootstrap owns env loading and passes typed config into shared infra helpers.
@@ -26,6 +28,7 @@
 - `dispatcher-go` must not import `hololive-llm-sched/internal`, `hololive-admin-api/internal`, or `hololive-kakao-bot-go/internal`.
 - `shared-go` must not import any `hololive/*` module.
 - `bot` and `admin-api` must not import major event repository/storage internals directly; they use documented internal HTTP contracts.
+- Shared data ownership changes must update `repository-ownership.allowlist`.
 
 ## YouTube Runtime Role Separation
 

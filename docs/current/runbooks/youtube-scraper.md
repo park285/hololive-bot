@@ -84,6 +84,12 @@ Rollback:
 curl http://127.0.0.1:30005/health
 ```
 
+## Rollback
+
+- Use `docs/current/runbooks/rollback.md`.
+- Redeploy the previous `youtube-scraper` image/config.
+- Confirm `YOUTUBE_INGESTION_ENABLED=true` and outbox production state after rollback.
+
 ## Related contracts
 
 - `../contracts/alarm.md`

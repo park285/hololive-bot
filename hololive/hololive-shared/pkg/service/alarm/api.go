@@ -66,7 +66,7 @@ func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 func (h *APIHandler) AddAlarm(c *gin.Context) {
 	var req AddAlarmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse{Success: false, Message: err.Error()})
+		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *APIHandler) AddAlarm(c *gin.Context) {
 	added, err := h.alarm.AddAlarm(ctx, domainReq)
 	if err != nil {
 		h.logger.Error("알람 추가 실패", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "alarm add failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("alarm_add_failed", "alarm add failed"))
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *APIHandler) AddAlarm(c *gin.Context) {
 func (h *APIHandler) RemoveAlarm(c *gin.Context) {
 	var req RemoveAlarmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse{Success: false, Message: err.Error()})
+		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 		return
 	}
 
@@ -114,7 +114,7 @@ func (h *APIHandler) RemoveAlarm(c *gin.Context) {
 	removed, err := h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, alarmTypes)
 	if err != nil {
 		h.logger.Error("알람 제거 실패", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "alarm remove failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("alarm_remove_failed", "alarm remove failed"))
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *APIHandler) GetRoomAlarmsWithTypes(c *gin.Context) {
 	alarms, err := h.alarm.GetRoomAlarmsWithTypes(ctx, roomID)
 	if err != nil {
 		h.logger.Error("방 알람 조회 실패", slog.String("room_id", roomID), slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "get room alarms failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("get_room_alarms_failed", "get room alarms failed"))
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *APIHandler) GetRoomAlarmsView(c *gin.Context) {
 	entries, err := h.alarm.ListRoomAlarmsView(ctx, roomID)
 	if err != nil {
 		h.logger.Error("방 알람 표시 조회 실패", slog.String("room_id", roomID), slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "get room alarms view failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("get_room_alarms_view_failed", "get room alarms view failed"))
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *APIHandler) GetRoomAlarmsView(c *gin.Context) {
 func (h *APIHandler) ClearRoomAlarms(c *gin.Context) {
 	var req ClearAlarmsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse{Success: false, Message: err.Error()})
+		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 		return
 	}
 
@@ -161,7 +161,7 @@ func (h *APIHandler) ClearRoomAlarms(c *gin.Context) {
 	count, err := h.alarm.ClearRoomAlarms(ctx, req.RoomID)
 	if err != nil {
 		h.logger.Error("방 알람 전체 삭제 실패", slog.String("room_id", req.RoomID), slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "clear room alarms failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("clear_room_alarms_failed", "clear room alarms failed"))
 		return
 	}
 
@@ -175,7 +175,7 @@ func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
 	info, err := h.alarm.GetNextStreamInfo(ctx, channelID)
 	if err != nil {
 		h.logger.Error("다음 방송 정보 조회 실패", slog.String("channel_id", channelID), slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "get next stream info failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("get_next_stream_info_failed", "get next stream info failed"))
 		return
 	}
 
@@ -190,7 +190,7 @@ func (h *APIHandler) GetNextStreamInfo(c *gin.Context) {
 func (h *APIHandler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	var req UpdateAdvanceMinutesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse{Success: false, Message: err.Error()})
+		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *APIHandler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 func (h *APIHandler) SetRoomName(c *gin.Context) {
 	var req SetRoomNameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse{Success: false, Message: err.Error()})
+		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 		return
 	}
 
@@ -209,7 +209,7 @@ func (h *APIHandler) SetRoomName(c *gin.Context) {
 
 	if err := h.alarm.SetRoomName(ctx, req.RoomID, req.RoomName); err != nil {
 		h.logger.Error("방 이름 설정 실패", slog.String("room_id", req.RoomID), slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "set room name failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("set_room_name_failed", "set room name failed"))
 		return
 	}
 
@@ -219,7 +219,7 @@ func (h *APIHandler) SetRoomName(c *gin.Context) {
 func (h *APIHandler) SetUserName(c *gin.Context) {
 	var req SetUserNameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse{Success: false, Message: err.Error()})
+		c.JSON(http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
 		return
 	}
 
@@ -227,7 +227,7 @@ func (h *APIHandler) SetUserName(c *gin.Context) {
 
 	if err := h.alarm.SetUserName(ctx, req.UserID, req.UserName); err != nil {
 		h.logger.Error("사용자 이름 설정 실패", slog.String("user_id", req.UserID), slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "set user name failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("set_user_name_failed", "set user name failed"))
 		return
 	}
 
@@ -240,7 +240,7 @@ func (h *APIHandler) GetAllAlarmKeys(c *gin.Context) {
 	keys, err := h.alarm.GetAllAlarmKeys(ctx)
 	if err != nil {
 		h.logger.Error("알람 키 전체 조회 실패", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: "get all alarm keys failed"})
+		c.JSON(http.StatusInternalServerError, alarmAPIError("get_all_alarm_keys_failed", "get all alarm keys failed"))
 		return
 	}
 

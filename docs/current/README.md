@@ -8,6 +8,7 @@
 - `DEPLOYMENT_BASELINE.md` - Docker Compose 운영 baseline
 - `SERVICE_OWNERSHIP.md` - 7개 runtime ownership 기준
 - `CONTRACT_MAP.md` - 내부 HTTP/Queue/PubSub/external boundary 계약 지도
+- `CONTRACT_MANIFEST.txt` - contract ID/provider/consumer/package/doc 검증 manifest
 - `ERROR_CONTRACT.md` - 내부 API error response와 client 해석 규칙
 - `QUEUE_AND_PUBSUB_CONTRACTS.md` - alarm queue와 settings Pub/Sub 계약
 
@@ -43,7 +44,7 @@
 
 ## Compatibility Bridges
 
-아래 파일은 기존 링크를 보존하기 위한 bridge입니다. 현재 운영 기준 본문은 위 Core/Services/Contracts/Runbooks 문서를 사용합니다.
+아래 파일은 기존 링크를 보존하기 위한 bridge입니다. current bridge는 짧은 이동 안내만 허용하며 historical 본문과 historical status body marker는 둘 수 없습니다.
 
 - `ALARM_DISPATCH_REMEDIATION_20260414.md`
 - `RUNTIME_SPLIT_HANDOFF_20260416.md`

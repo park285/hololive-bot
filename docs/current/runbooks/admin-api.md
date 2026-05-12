@@ -84,6 +84,12 @@ Rollback:
 curl http://127.0.0.1:30006/health
 ```
 
+## Rollback
+
+- Use `docs/current/runbooks/rollback.md`.
+- Redeploy the previous `hololive-admin-api` image/config.
+- Recheck dashboard health and trigger/alarm facade behavior after rollback.
+
 ## Related contracts
 
 - `../contracts/trigger.md`

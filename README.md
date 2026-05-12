@@ -2,7 +2,7 @@
 
 홀로라이브 VTuber 알림/관리 플랫폼입니다. KakaoTalk 챗봇을 통해 방송 알림, 스트림 상태, 멤버 뉴스, 운영 관리 기능을 제공합니다.
 
-이 README는 저장소 진입점입니다. 현재 구조의 상세 SSOT는 [docs/current/PROJECT_MAP.md](/root/work/hololive-bot/docs/current/PROJECT_MAP.md)이며, 배포 절차는 [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](/root/work/hololive-bot/docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)를 따릅니다.
+이 README는 저장소 진입점입니다. 현재 구조의 상세 SSOT는 [docs/current/PROJECT_MAP.md](docs/current/PROJECT_MAP.md)이며, 배포 절차는 [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)를 따릅니다.
 
 ## Architecture
 
@@ -100,9 +100,9 @@ Architecture/doc gates:
 
 세부 기준:
 
-- [docs/current/PROJECT_MAP.md](/root/work/hololive-bot/docs/current/PROJECT_MAP.md)
-- [docs/current/DEPLOYMENT_BASELINE.md](/root/work/hololive-bot/docs/current/DEPLOYMENT_BASELINE.md)
-- [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](/root/work/hololive-bot/docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)
+- [docs/current/PROJECT_MAP.md](docs/current/PROJECT_MAP.md)
+- [docs/current/DEPLOYMENT_BASELINE.md](docs/current/DEPLOYMENT_BASELINE.md)
+- [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)
 
 ## Logs And Health
 
@@ -126,8 +126,8 @@ docker compose -f docker-compose.prod.yml logs -f <service>
 
 ## Documents
 
-- [docs/README.md](/root/work/hololive-bot/docs/README.md) - 문서 인덱스
-- [docs/current/PROJECT_MAP.md](/root/work/hololive-bot/docs/current/PROJECT_MAP.md) - 현재 runtime/module/operation 인벤토리
-- [docs/current/SERVICE_OWNERSHIP.md](/root/work/hololive-bot/docs/current/SERVICE_OWNERSHIP.md) - runtime 소유권
-- [docs/current/CONTRACT_MAP.md](/root/work/hololive-bot/docs/current/CONTRACT_MAP.md) - 내부 계약 지도
-- [docs/current/runbooks/README.md](/root/work/hololive-bot/docs/current/runbooks/README.md) - runtime runbook 인덱스
+- [docs/README.md](docs/README.md) - 문서 인덱스
+- [docs/current/PROJECT_MAP.md](docs/current/PROJECT_MAP.md) - 현재 runtime/module/operation 인벤토리
+- [docs/current/SERVICE_OWNERSHIP.md](docs/current/SERVICE_OWNERSHIP.md) - runtime 소유권
+- [docs/current/CONTRACT_MAP.md](docs/current/CONTRACT_MAP.md) - 내부 계약 지도
+- [docs/current/runbooks/README.md](docs/current/runbooks/README.md) - runtime runbook 인덱스
