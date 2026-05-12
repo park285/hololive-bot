@@ -119,10 +119,13 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
-	cacheKey := buildSummaryCacheKey(events, summaryType, periodKey)
+	cacheKey, cacheKeyErr := buildSummaryCacheKey(events, summaryType, periodKey)
+	if cacheKeyErr != nil {
+		s.logger.Warn("LLM 요약 캐시 키 생성 실패", slog.String("error", cacheKeyErr.Error()))
+	}
 
 	// 캐시 조회
-	if s.cache != nil {
+	if s.cache != nil && cacheKey != "" {
 		var cached string
 		if err := s.cache.Get(ctx, cacheKey, &cached); err == nil && cached != "" {
 			s.logger.Info("LLM 요약 캐시 히트",
@@ -171,7 +174,7 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 	}
 
 	// 캐시 저장
-	if s.cache != nil {
+	if s.cache != nil && cacheKey != "" {
 		if err := s.cache.Set(ctx, cacheKey, result, summaryCacheTTL); err != nil {
 			s.logger.Warn("LLM 요약 캐시 저장 실패", slog.String("error", err.Error()))
 		}
