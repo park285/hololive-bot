@@ -6,7 +6,6 @@ import (
 	"time"
 
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
@@ -19,6 +18,9 @@ const youtubePollTargetCacheOnlyAdditionGracePeriod = 30 * time.Second
 type youTubePollTargetRefresher struct {
 	cacheService               cache.Client
 	scheduler                  *poller.Scheduler
+	registryVersionSource      *youTubePollRegistryVersionSource
+	targetResolver             *youTubePollTargetResolver
+	schedulerSyncer            *youTubePollSchedulerSyncer
 	registrations              []providers.ChannelPollerRegistration
 	loadOperationalChannels    func(context.Context) ([]communityShortsOperationalChannel, error)
 	lastOperationalChannels    []communityShortsOperationalChannel
@@ -46,8 +48,20 @@ func newYouTubePollTargetRefresher(
 	snapshot := append([]communityShortsOperationalChannel(nil), operationalChannels...)
 
 	return &youTubePollTargetRefresher{
-		cacheService:  cacheService,
-		scheduler:     scheduler,
+		cacheService: cacheService,
+		scheduler:    scheduler,
+		registryVersionSource: &youTubePollRegistryVersionSource{
+			cacheService: cacheService,
+		},
+		targetResolver: &youTubePollTargetResolver{
+			cacheService:        cacheService,
+			loadAlarmChannelIDs: loadAlarmChannelIDs,
+			logger:              logger,
+		},
+		schedulerSyncer: &youTubePollSchedulerSyncer{
+			scheduler:     scheduler,
+			registrations: append([]providers.ChannelPollerRegistration(nil), registrations...),
+		},
 		registrations: append([]providers.ChannelPollerRegistration(nil), registrations...),
 		loadOperationalChannels: func(context.Context) ([]communityShortsOperationalChannel, error) {
 			return append([]communityShortsOperationalChannel(nil), snapshot...), nil
@@ -119,7 +133,7 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		}
 		r.lastOperationalFallback = false
 	}
-	registryVersion, registryVersionTrusted, registryVersionErr := r.channelRegistryVersion(ctx)
+	registryVersion, registryVersionTrusted, registryVersionErr := r.registryVersionSource.Version(ctx)
 	if registryVersionErr != nil && r.logger != nil {
 		r.logger.Warn("Failed to read alarm channel registry version",
 			slog.Any("error", registryVersionErr))
@@ -137,53 +151,20 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 		return
 	}
 
-	cacheAlarmChannelIDs, cacheErr := r.cacheService.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
-	var alarmChannelIDs []string
-	candidateFromCache := false
-	switch {
-	case cacheErr == nil && len(cacheAlarmChannelIDs) > 0:
-		r.lastNonEmptyCacheAt = now
-		alarmChannelIDs = cacheAlarmChannelIDs
-		candidateFromCache = true
-	case cacheErr == nil && len(cacheAlarmChannelIDs) == 0:
-		if !r.lastNonEmptyCacheAt.IsZero() && now.Sub(r.lastNonEmptyCacheAt) < youtubePollTargetEmptyCacheGracePeriod {
-			if hasYouTubePollTargets(r.lastResolvedTargets) {
-				if operational.changed {
-					targets := r.lastResolvedTargets
-					targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operationalChannels)
-					if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
-						r.applyResolvedTargets(targets)
-					}
-				}
-				return
+	alarmChannelIDs, candidateFromCache, lastNonEmptyCacheAt, ok := r.targetResolver.ResolveAlarmChannelIDs(ctx, now, r.lastNonEmptyCacheAt)
+	r.lastNonEmptyCacheAt = lastNonEmptyCacheAt
+	if !ok {
+		return
+	}
+	if candidateFromCache && len(alarmChannelIDs) == 0 && hasYouTubePollTargets(r.lastResolvedTargets) {
+		if operational.changed {
+			targets := r.lastResolvedTargets
+			targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operationalChannels)
+			if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
+				r.applyResolvedTargets(targets)
 			}
-			alarmChannelIDs = cacheAlarmChannelIDs
-			candidateFromCache = true
-		} else {
-			dbAlarmChannelIDs, dbErr := r.loadAlarmChannelIDs(ctx)
-			if dbErr != nil {
-				if r.logger != nil {
-					r.logger.Warn("Failed to refresh YouTube poll targets from DB fallback",
-						slog.Any("error", dbErr))
-				}
-				return
-			}
-			alarmChannelIDs = dbAlarmChannelIDs
 		}
-	default:
-		if r.logger != nil {
-			r.logger.Warn("Failed to refresh YouTube poll targets from cache",
-				slog.Any("error", cacheErr))
-		}
-		dbAlarmChannelIDs, dbErr := r.loadAlarmChannelIDs(ctx)
-		if dbErr != nil {
-			if r.logger != nil {
-				r.logger.Warn("Failed to refresh YouTube poll targets from DB fallback",
-					slog.Any("error", dbErr))
-			}
-			return
-		}
-		alarmChannelIDs = dbAlarmChannelIDs
+		return
 	}
 
 	targets, ok := r.resolveTargetsWithCacheValidation(
@@ -214,60 +195,10 @@ func (r *youTubePollTargetRefresher) refresh(ctx context.Context) {
 	r.applyResolvedTargets(targets)
 }
 
-func (r *youTubePollTargetRefresher) channelRegistryVersion(ctx context.Context) (version int64, trusted bool, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			version = 0
-			trusted = false
-			err = nil
-		}
-	}()
-
-	exists, err := r.cacheService.Exists(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey)
-	if err != nil {
-		return 0, false, err
-	}
-	if !exists {
-		return 0, false, nil
-	}
-
-	if err := r.cacheService.Get(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, &version); err != nil {
-		return 0, false, err
-	}
-	if version <= 0 {
-		return 0, false, nil
-	}
-
-	return version, true, nil
-}
-
 func (r *youTubePollTargetRefresher) applyResolvedTargets(targets youtubePollTargets) {
-	if r == nil || r.scheduler == nil {
+	if r == nil || r.schedulerSyncer == nil {
 		return
 	}
-	for _, registration := range r.registrations {
-		if registration.Poller == nil || registration.Interval <= 0 {
-			continue
-		}
-		if !registration.HasExplicitChannelIDs {
-			continue
-		}
-
-		updated := registration
-		switch registration.TargetGroup {
-		case providers.ChannelTargetGroupStats:
-			updated.ChannelIDs = append([]string(nil), targets.StatsChannelIDs...)
-		case providers.ChannelTargetGroupGlobal:
-			updated.ChannelIDs = append([]string(nil), registration.ChannelIDs...)
-		default:
-			updated.ChannelIDs = append([]string(nil), targets.NotificationChannelIDs...)
-		}
-
-		sync := updated.ToTargetSync()
-		if registration.TargetGroup == providers.ChannelTargetGroupNotification {
-			sync.ForceImmediateFirstRun = true
-		}
-		r.scheduler.SyncPollerTargets(sync)
-	}
+	r.schedulerSyncer.Sync(targets)
 	r.lastResolvedTargets = targets
 }
