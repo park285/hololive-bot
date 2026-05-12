@@ -80,3 +80,40 @@ func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {
 		t.Fatal("runtime scheduler did not stop after cancellation")
 	}
 }
+
+func TestRuntimeSchedulerStart_TwitchLoopOptional(t *testing.T) {
+	t.Parallel()
+
+	runtimeScheduler := &RuntimeScheduler{
+		youtubeChecker: &fakeRunner{},
+		chzzkChecker:   &fakeRunner{},
+		notifier:       &fakeSender{},
+
+		youtubeInterval: 5 * time.Second,
+		chzzkInterval:   5 * time.Second,
+		twitchInterval:  5 * time.Second,
+
+		youtubeTimeout: 3 * time.Second,
+		chzzkTimeout:   3 * time.Second,
+		twitchTimeout:  3 * time.Second,
+
+		logger: slog.New(slog.DiscardHandler),
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+
+	go func() {
+		_ = runtimeScheduler.Start(ctx)
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runtime scheduler did not stop with twitch loop disabled")
+	}
+}
