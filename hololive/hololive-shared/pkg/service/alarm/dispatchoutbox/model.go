@@ -86,6 +86,7 @@ type PublishBatchResult struct {
 	DuplicateEvents       int
 	HashConflictEvents    int
 	RequestedDeliveries   int
+	ProcessedDeliveries   int
 	InsertedDeliveries    int
 	DuplicateDeliveries   int
 	TerminalDuplicates    int
@@ -93,16 +94,21 @@ type PublishBatchResult struct {
 	PromotedShadowedCount int
 }
 
+func processedPublishBatchResult(result PublishBatchResult) PublishBatchResult {
+	result.ProcessedDeliveries = result.RequestedDeliveries
+	return result
+}
+
 type RetryUpdate struct {
-	ID            int64
-	AttemptCount  int
-	NextAttemptAt time.Time
-	Error         string
+	ID            int64     `json:"id"`
+	AttemptCount  int       `json:"attempt_count"`
+	NextAttemptAt time.Time `json:"next_attempt_at"`
+	Error         string    `json:"error"`
 }
 
 type TerminalUpdate struct {
-	ID    int64
-	Error string
+	ID    int64  `json:"id"`
+	Error string `json:"error"`
 }
 
 type Writer interface {

@@ -137,6 +137,7 @@ func NewRuntimeScheduler(
 		queue.WithPublishMode(publishCfg.Mode),
 		queue.WithShadowFatal(publishCfg.ShadowFatal),
 		queue.WithWakeupEnabled(publishCfg.WakeupEnabled),
+		queue.WithMaxDeliveriesPerBatch(publishCfg.MaxDeliveriesPerBatch),
 	)
 
 	youtubeChecker, err := checker.NewYouTubeChecker(

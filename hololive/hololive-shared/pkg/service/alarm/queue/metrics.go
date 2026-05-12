@@ -22,7 +22,9 @@ package queue
 
 import (
 	"sync"
+	"time"
 
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -30,14 +32,22 @@ import (
 var (
 	queueMetricsInitOnce sync.Once
 
-	alarmQueueDrainDuration  prometheus.Histogram
-	alarmQueueDrainBatch     prometheus.Histogram
-	alarmQueueDrainTotal     *prometheus.CounterVec
-	alarmQueueEnvelopeTotal  *prometheus.CounterVec
-	alarmQueueClaimReleased  prometheus.Counter
-	alarmQueueRetryScheduled prometheus.Counter
-	alarmQueueRetryDrained   prometheus.Counter
-	alarmQueueDLQMoved       prometheus.Counter
+	alarmQueueDrainDuration               prometheus.Histogram
+	alarmQueueDrainBatch                  prometheus.Histogram
+	alarmQueueDrainTotal                  *prometheus.CounterVec
+	alarmQueueEnvelopeTotal               *prometheus.CounterVec
+	alarmQueueClaimReleased               prometheus.Counter
+	alarmQueueRetryScheduled              prometheus.Counter
+	alarmQueueRetryDrained                prometheus.Counter
+	alarmQueueDLQMoved                    prometheus.Counter
+	alarmDispatchPublishBatchDuration     prometheus.Histogram
+	alarmDispatchPublishRequestedTotal    prometheus.Counter
+	alarmDispatchPublishInsertedTotal     prometheus.Counter
+	alarmDispatchPublishDuplicateTotal    prometheus.Counter
+	alarmDispatchPublishHashConflictTotal prometheus.Counter
+	alarmDispatchWakeupSentTotal          prometheus.Counter
+	alarmDispatchWakeupSuppressedTotal    prometheus.Counter
+	alarmDispatchWakeupFailedTotal        prometheus.Counter
 )
 
 func initQueueMetrics() {
@@ -101,5 +111,71 @@ func initQueueMetrics() {
 				Help: "Total alarm dispatch queue envelopes moved to the dead-letter queue.",
 			},
 		)
+
+		alarmDispatchPublishBatchDuration = promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "alarm_dispatch_publish_batch_duration_seconds",
+				Help:    "Alarm dispatch publisher batch duration in seconds.",
+				Buckets: prometheus.DefBuckets,
+			},
+		)
+
+		alarmDispatchPublishRequestedTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_publish_requested_deliveries_total",
+				Help: "Requested alarm dispatch deliveries published.",
+			},
+		)
+
+		alarmDispatchPublishInsertedTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_publish_inserted_deliveries_total",
+				Help: "Inserted alarm dispatch deliveries.",
+			},
+		)
+
+		alarmDispatchPublishDuplicateTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_publish_duplicate_deliveries_total",
+				Help: "Duplicate alarm dispatch deliveries skipped.",
+			},
+		)
+
+		alarmDispatchPublishHashConflictTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_publish_hash_conflict_total",
+				Help: "Alarm dispatch event hash conflicts observed while publishing.",
+			},
+		)
+
+		alarmDispatchWakeupSentTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_wakeup_sent_total",
+				Help: "Alarm dispatch wakeup tokens sent.",
+			},
+		)
+
+		alarmDispatchWakeupSuppressedTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_wakeup_suppressed_total",
+				Help: "Alarm dispatch wakeup tokens suppressed by guard.",
+			},
+		)
+
+		alarmDispatchWakeupFailedTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_wakeup_failed_total",
+				Help: "Alarm dispatch wakeup token send failures.",
+			},
+		)
 	})
+}
+
+func observeAlarmDispatchPublishBatch(duration time.Duration, result dispatchoutbox.PublishBatchResult) {
+	initQueueMetrics()
+	alarmDispatchPublishBatchDuration.Observe(duration.Seconds())
+	alarmDispatchPublishRequestedTotal.Add(float64(result.RequestedDeliveries))
+	alarmDispatchPublishInsertedTotal.Add(float64(result.InsertedDeliveries))
+	alarmDispatchPublishDuplicateTotal.Add(float64(result.DuplicateDeliveries))
+	alarmDispatchPublishHashConflictTotal.Add(float64(result.HashConflictEvents))
 }

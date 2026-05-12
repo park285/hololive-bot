@@ -137,7 +137,7 @@ func TestAlarmQueueDispatchPipeline_EndToEnd(t *testing.T) {
 		"테스트 일정 변경 메시지",
 	)
 
-	if err := publisher.Publish(context.Background(), notification, []string{"notified:claim:test"}); err != nil {
+	if _, err := publisher.Publish(context.Background(), notification, []string{"notified:claim:test"}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
 
@@ -235,7 +235,7 @@ func TestAlarmQueueDispatchPipeline_RetrySurvivesDispatcherRestart(t *testing.T)
 		"재시도 메시지",
 	)
 
-	if err := publisher.Publish(context.Background(), notification, []string{"notified:claim:retry"}); err != nil {
+	if _, err := publisher.Publish(context.Background(), notification, []string{"notified:claim:retry"}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
 
@@ -367,7 +367,7 @@ func TestAlarmQueueDispatchPipeline_FutureRetryStaysQueuedAcrossRestartUntilDue(
 		"지연 재시도 메시지",
 	)
 
-	if err := publisher.Publish(context.Background(), notification, []string{"notified:claim:future-retry"}); err != nil {
+	if _, err := publisher.Publish(context.Background(), notification, []string{"notified:claim:future-retry"}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
 

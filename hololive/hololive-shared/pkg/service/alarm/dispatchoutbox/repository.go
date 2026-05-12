@@ -2,10 +2,7 @@ package dispatchoutbox
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -39,9 +36,9 @@ func (r *PgxRepository) InsertShadowed(ctx context.Context, envelope domain.Alar
 		return nil, err
 	}
 	if result.InsertedDeliveries == 0 {
-		return r.findByDedupeKey(ctx, BuildDedupeKeyFromEnvelope(envelope))
+		return r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
 	}
-	return r.findByDedupeKey(ctx, BuildDedupeKeyFromEnvelope(envelope))
+	return r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
 }
 
 func (r *PgxRepository) InsertPending(ctx context.Context, envelope domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
@@ -49,7 +46,7 @@ func (r *PgxRepository) InsertPending(ctx context.Context, envelope domain.Alarm
 	if err != nil {
 		return nil, "", err
 	}
-	record, err := r.findByDedupeKey(ctx, BuildDedupeKeyFromEnvelope(envelope))
+	record, err := r.findByDedupeKeyAny(ctx, BuildDedupeKeyFromEnvelope(envelope), BuildLegacyDedupeKeyFromEnvelope(envelope))
 	if err != nil {
 		return nil, "", err
 	}
@@ -89,7 +86,12 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 		if err != nil {
 			return PublishBatchResult{}, err
 		}
-		if _, ok := events[event.EventKey]; !ok {
+		if existing, ok := events[event.EventKey]; ok {
+			if existing.PayloadHash != event.PayloadHash {
+				result.HashConflictEvents++
+				return result, fmt.Errorf("dispatch event hash conflict: event_key=%s", event.EventKey)
+			}
+		} else {
 			events[event.EventKey] = event
 			result.RequestedEvents++
 		}
@@ -106,92 +108,60 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 		}
 	}()
 
-	eventIDs := make(map[string]int64, len(events))
+	eventRows := make([]eventInsert, 0, len(events))
 	for _, event := range events {
-		id, inserted, err := insertEvent(ctx, tx, event)
-		if err != nil {
-			return PublishBatchResult{}, err
-		}
-		if inserted {
-			result.InsertedEvents++
-		} else {
-			result.DuplicateEvents++
-		}
-		eventIDs[event.EventKey] = id
+		eventRows = append(eventRows, event)
 	}
-	for _, delivery := range deliveries {
-		delivery.EventID = eventIDs[delivery.EventKey]
-		inserted, err := insertDelivery(ctx, tx, delivery)
-		if err != nil {
-			return PublishBatchResult{}, err
+	eventIDs, insertedEvents, err := insertEvents(ctx, tx, eventRows)
+	if err != nil {
+		if strings.Contains(err.Error(), "dispatch event hash conflict") {
+			result.HashConflictEvents++
 		}
-		if inserted {
-			result.InsertedDeliveries++
-		} else {
-			result.DuplicateDeliveries++
-		}
+		return result, err
 	}
+	result.InsertedEvents = insertedEvents
+	result.DuplicateEvents = len(eventRows) - insertedEvents
+	for i := range deliveries {
+		deliveries[i].EventID = eventIDs[deliveries[i].EventKey]
+	}
+	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
+	if err != nil {
+		return result, err
+	}
+	result.InsertedDeliveries = insertedDeliveries
+	result.DuplicateDeliveries = len(deliveries) - insertedDeliveries
 	if err = tx.Commit(ctx); err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: commit: %w", err)
 	}
-	return result, nil
+	return processedPublishBatchResult(result), nil
 }
 
-func insertEvent(ctx context.Context, tx pgx.Tx, event eventInsert) (int64, bool, error) {
-	var id int64
-	err := tx.QueryRow(ctx, `
-		INSERT INTO alarm_dispatch_events (
-			event_key, payload_hash, alarm_type, channel_id, stream_id, category,
-			payload_schema_version, payload
-		)
-		VALUES ($1,$2,$3,$4,$5,$6,1,$7)
-		ON CONFLICT (event_key) DO NOTHING
-		RETURNING id`,
-		event.EventKey, event.PayloadHash, string(event.AlarmType), event.ChannelID, event.StreamID, event.Category, event.Payload,
-	).Scan(&id)
-	if err == nil {
-		return id, true, nil
+func (r *PgxRepository) findByDedupeKeyAny(ctx context.Context, dedupeKeys ...string) (*Record, error) {
+	keys := make([]string, 0, len(dedupeKeys))
+	seen := make(map[string]struct{}, len(dedupeKeys))
+	for _, key := range dedupeKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
 	}
-	if !database.IsNoRows(err) {
-		return 0, false, fmt.Errorf("insert dispatch event: %w", err)
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("find dispatch delivery by dedupe key: dedupe key is empty")
 	}
-	var existingHash string
-	err = tx.QueryRow(ctx, `
-		SELECT id, payload_hash
-		FROM alarm_dispatch_events
-		WHERE event_key=$1`, event.EventKey).Scan(&id, &existingHash)
-	if err != nil {
-		return 0, false, fmt.Errorf("load existing dispatch event: %w", err)
-	}
-	if existingHash != event.PayloadHash {
-		return 0, false, fmt.Errorf("dispatch event hash conflict: event_key=%s", event.EventKey)
-	}
-	return id, false, nil
-}
-
-func insertDelivery(ctx context.Context, tx pgx.Tx, delivery deliveryInsert) (bool, error) {
-	tag, err := tx.Exec(ctx, `
-		INSERT INTO alarm_dispatch_deliveries (
-			event_id, room_id, dedupe_key, claim_keys, delivery_context, status, next_attempt_at
-		)
-		VALUES ($1,$2,$3,$4,$5,$6,NOW())
-		ON CONFLICT (dedupe_key) DO NOTHING`,
-		delivery.EventID, delivery.RoomID, delivery.DedupeKey, delivery.ClaimKeys, delivery.DeliveryContext, string(delivery.Status),
-	)
-	if err != nil {
-		return false, fmt.Errorf("insert dispatch delivery: %w", err)
-	}
-	return tag.RowsAffected() == 1, nil
-}
-
-func (r *PgxRepository) findByDedupeKey(ctx context.Context, dedupeKey string) (*Record, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, event_id, room_id, dedupe_key, claim_keys, delivery_context, status,
 			attempt_count, next_attempt_at, locked_by, locked_at, lock_expires_at,
 			sending_started_at, sent_at, dlq_at, quarantined_at, cancelled_at,
 			last_error, created_at, updated_at
 		FROM alarm_dispatch_deliveries
-		WHERE dedupe_key = $1`, dedupeKey)
+		WHERE dedupe_key = ANY($1)
+		ORDER BY CASE WHEN dedupe_key = $2 THEN 0 ELSE 1 END, id ASC
+		LIMIT 1`, keys, keys[0])
 	record, err := scanDeliveryRecord(row)
 	if err != nil {
 		return nil, fmt.Errorf("find dispatch delivery by dedupe key: %w", err)
@@ -328,29 +298,41 @@ func (r *PgxRepository) MarkSent(ctx context.Context, ids []int64, workerID stri
 }
 
 func (r *PgxRepository) ScheduleRetry(ctx context.Context, updates []RetryUpdate, workerID string) error {
-	for _, update := range updates {
-		tag, err := r.pool.Exec(ctx, `
+	if len(updates) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(updates)
+	if err != nil {
+		return fmt.Errorf("schedule dispatch delivery retries: marshal batch: %w", err)
+	}
+	tag, err := r.pool.Exec(ctx, `
+		WITH input AS (
+			SELECT *
+			FROM jsonb_to_recordset($1::jsonb) AS x(
+				id BIGINT,
+				attempt_count INT,
+				next_attempt_at TIMESTAMPTZ,
+				error TEXT
+			)
+		)
 			UPDATE alarm_dispatch_deliveries
 			SET status='retry',
-				attempt_count=$2,
-				next_attempt_at=$3,
+				attempt_count=input.attempt_count,
+				next_attempt_at=input.next_attempt_at,
 				locked_by=NULL,
 				locked_at=NULL,
 				lock_expires_at=NULL,
-				last_error=$4,
+				last_error=input.error,
 				updated_at=NOW()
-			WHERE id=$1
+			FROM input
+			WHERE alarm_dispatch_deliveries.id=input.id
 			  AND status='leased'
-			  AND locked_by=$5
-			  AND lock_expires_at > NOW()`, update.ID, update.AttemptCount, update.NextAttemptAt, update.Error, workerID)
-		if err != nil {
-			return fmt.Errorf("schedule dispatch delivery retry: %w", err)
-		}
-		if err := expectRowsAffected(tag.RowsAffected(), 1, "schedule dispatch delivery retry"); err != nil {
-			return err
-		}
+			  AND locked_by=$2
+			  AND lock_expires_at > NOW()`, raw, workerID)
+	if err != nil {
+		return fmt.Errorf("schedule dispatch delivery retries: %w", err)
 	}
-	return nil
+	return expectRowsAffected(tag.RowsAffected(), len(updates), "schedule dispatch delivery retries")
 }
 
 func (r *PgxRepository) MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error {
@@ -433,50 +415,6 @@ func (r *PgxRepository) recoverWithQuery(ctx context.Context, query string, args
 	return int(tag.RowsAffected()), nil
 }
 
-func (r *PgxRepository) terminal(ctx context.Context, ids []int64, status Status, reason string, workerID string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	column := "sent_at"
-	statusFilter := "status NOT IN ('sent','dlq','quarantined','cancelled')"
-	switch status {
-	case StatusDLQ:
-		column = "dlq_at"
-		statusFilter = "status = 'leased'"
-	case StatusQuarantined:
-		column = "quarantined_at"
-		statusFilter = "status = 'sending'"
-	case StatusCancelled:
-		column = "cancelled_at"
-	}
-	query := fmt.Sprintf(`
-		UPDATE alarm_dispatch_deliveries
-		SET status=$2,
-			%s=NOW(),
-			locked_by=NULL,
-			locked_at=NULL,
-			lock_expires_at=NULL,
-			last_error=CASE WHEN $3 = '' THEN last_error ELSE $3 END,
-			updated_at=NOW()
-		WHERE id = ANY($1)
-		  AND locked_by = $4
-		  AND %s`, column, statusFilter)
-	tag, err := r.pool.Exec(ctx, query, ids, string(status), reason, workerID)
-	if err != nil {
-		return fmt.Errorf("mark dispatch deliveries terminal: %w", err)
-	}
-	return expectRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries terminal")
-}
-
-func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalUpdate, status Status, workerID string) error {
-	for _, update := range updates {
-		if err := r.terminal(ctx, []int64{update.ID}, status, update.Error, workerID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func expectRowsAffected(got int64, want int, action string) error {
 	if got == int64(want) {
 		return nil
@@ -518,102 +456,6 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 	}
 	record.Status = Status(status)
 	return &record, nil
-}
-
-type eventInsert struct {
-	EventKey    string
-	PayloadHash string
-	AlarmType   domain.AlarmType
-	ChannelID   string
-	StreamID    string
-	Category    string
-	Payload     []byte
-}
-
-type deliveryInsert struct {
-	EventID         int64
-	EventKey        string
-	RoomID          string
-	DedupeKey       string
-	ClaimKeys       []string
-	DeliveryContext []byte
-	Status          Status
-}
-
-type eventPayloadEnvelope struct {
-	Notification eventPayloadNotification `json:"notification"`
-	Version      uint8                    `json:"version"`
-}
-
-type eventPayloadNotification struct {
-	AlarmType                   domain.AlarmType `json:"alarm_type,omitempty"`
-	Channel                     *domain.Channel  `json:"channel"`
-	Stream                      *domain.Stream   `json:"stream"`
-	MinutesUntil                int              `json:"minutes_until"`
-	ScheduleChangeMessage       string           `json:"schedule_change_message,omitempty"`
-	ScheduleChangePreviousStart string           `json:"schedule_change_previous_start,omitempty"`
-}
-
-func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventInsert, deliveryInsert, error) {
-	input := EnvelopeDedupeInput(envelope)
-	eventKey := BuildEventKey(input)
-	dedupeInput := input
-	if len(envelope.ClaimKeys) > 0 {
-		dedupeInput.Category = envelope.ClaimKeys[len(envelope.ClaimKeys)-1]
-	}
-	dedupeKey := BuildDedupeKey(dedupeInput)
-	payload, err := marshalEventPayload(envelope)
-	if err != nil {
-		return eventInsert{}, deliveryInsert{}, err
-	}
-	hash := sha256.Sum256(payload)
-	deliveryContext, err := json.Marshal(deliveryContext{Users: envelope.Notification.Users})
-	if err != nil {
-		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch delivery context: %w", err)
-	}
-	return eventInsert{
-			EventKey:    eventKey,
-			PayloadHash: hex.EncodeToString(hash[:]),
-			AlarmType:   input.AlarmType,
-			ChannelID:   input.ChannelID,
-			StreamID:    input.StreamID,
-			Category:    eventCategory(input),
-			Payload:     payload,
-		}, deliveryInsert{
-			EventKey:        eventKey,
-			RoomID:          input.RoomID,
-			DedupeKey:       dedupeKey,
-			ClaimKeys:       envelope.ClaimKeys,
-			DeliveryContext: deliveryContext,
-			Status:          status,
-		}, nil
-}
-
-func eventCategory(input DedupeInput) string {
-	category := strings.TrimSpace(input.Category)
-	if category != "" {
-		return category
-	}
-	return strconv.Itoa(input.MinutesUntil)
-}
-
-func marshalEventPayload(envelope domain.AlarmQueueEnvelope) ([]byte, error) {
-	payload := eventPayloadEnvelope{
-		Notification: eventPayloadNotification{
-			AlarmType:                   envelope.Notification.AlarmType,
-			Channel:                     envelope.Notification.Channel,
-			Stream:                      envelope.Notification.Stream,
-			MinutesUntil:                envelope.Notification.MinutesUntil,
-			ScheduleChangeMessage:       envelope.Notification.ScheduleChangeMessage,
-			ScheduleChangePreviousStart: envelope.Notification.ScheduleChangePreviousStart,
-		},
-		Version: envelope.Version,
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal dispatch event payload: %w", err)
-	}
-	return raw, nil
 }
 
 func idsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []int64 {

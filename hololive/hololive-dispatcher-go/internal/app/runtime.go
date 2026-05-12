@@ -41,7 +41,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
@@ -98,14 +97,20 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 
 	cacheSvc, err := cache.NewCacheService(ctx, cfg.Valkey, logger)
 	if err != nil {
-		return nil, fmt.Errorf("build runtime: create cache service: %w", err)
+		if cfg.Dispatch.ConsumerMode == "pg" {
+			logger.Warn("Dispatch wakeup Valkey unavailable; PG fallback polling will be used", slog.Any("error", err))
+		} else {
+			return nil, fmt.Errorf("build runtime: create cache service: %w", err)
+		}
 	}
 
 	var postgresSvc database.Client
 	if cfg.Dispatch.ConsumerMode == "pg" {
 		postgresSvc, err = database.NewPostgresService(ctx, cfg.Postgres, logger)
 		if err != nil {
-			_ = cacheSvc.Close()
+			if cacheSvc != nil {
+				_ = cacheSvc.Close()
+			}
 			return nil, fmt.Errorf("build runtime: create postgres service: %w", err)
 		}
 	}
@@ -118,7 +123,9 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		iris.WithBotToken(cfg.Iris.BotToken),
 	)
 	if err != nil {
-		_ = cacheSvc.Close()
+		if cacheSvc != nil {
+			_ = cacheSvc.Close()
+		}
 		if postgresSvc != nil {
 			_ = postgresSvc.Close()
 		}
@@ -134,14 +141,18 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		logger,
 	)
 	if err != nil {
-		_ = cacheSvc.Close()
+		if cacheSvc != nil {
+			_ = cacheSvc.Close()
+		}
 		if postgresSvc != nil {
 			_ = postgresSvc.Close()
 		}
 		return nil, fmt.Errorf("build runtime: create dispatcher: %w", err)
 	}
 	if err := configureDispatcherRetryPolicy(dispatcher, cfg.Dispatch); err != nil {
-		_ = cacheSvc.Close()
+		if cacheSvc != nil {
+			_ = cacheSvc.Close()
+		}
 		if postgresSvc != nil {
 			_ = postgresSvc.Close()
 		}
@@ -267,6 +278,7 @@ func (r *Runtime) runDispatchLoop(ctx context.Context) {
 	r.readyState.dispatchLoopRunning.Store(true)
 	defer r.readyState.dispatchLoopRunning.Store(false)
 
+	batchesSinceWait := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -299,52 +311,28 @@ func (r *Runtime) runDispatchLoop(ctx context.Context) {
 		}
 
 		r.readyState.clearLastError()
+		if processed && r.cfg != nil && r.cfg.Dispatch.ConsumerMode == "pg" {
+			batchesSinceWait++
+			maxBatches := r.cfg.Dispatch.MaxBatchesPerWake
+			if maxBatches <= 0 {
+				maxBatches = defaultMaxBatchesPerWake
+			}
+			if batchesSinceWait >= maxBatches {
+				batchesSinceWait = 0
+				if !sleepContext(ctx, 10*time.Millisecond) {
+					r.logger.Info("Dispatcher loop stopped")
+					return
+				}
+			}
+			continue
+		}
 		if !processed && r.cfg != nil && r.cfg.Dispatch.ConsumerMode == "pg" {
+			batchesSinceWait = 0
 			if !r.waitForPGDispatchSignal(ctx) {
 				r.logger.Info("Dispatcher loop stopped")
 				return
 			}
 		}
-	}
-}
-
-func (r *Runtime) waitForPGDispatchSignal(ctx context.Context) bool {
-	if r == nil || r.cfg == nil {
-		return sleepContext(ctx, time.Second)
-	}
-	if !r.cfg.Dispatch.WakeupEnabled || r.cacheSvc == nil {
-		return sleepContext(ctx, r.cfg.Dispatch.PollInterval)
-	}
-	timeout := r.cfg.Dispatch.PollInterval
-	if timeout <= 0 {
-		timeout = time.Second
-	}
-	cmd := r.cacheSvc.B().Brpop().Key(queue.AlarmDispatchWakeupQueue).Timeout(timeout.Seconds()).Build()
-	results := r.cacheSvc.DoMulti(ctx, cmd)
-	if len(results) != 1 {
-		r.logger.Warn("Dispatch wakeup wait returned unexpected result count", slog.Int("result_count", len(results)))
-		return true
-	}
-	if _, err := results[0].AsStrSlice(); err != nil && !util.IsValkeyNil(err) {
-		if ctx.Err() != nil {
-			return false
-		}
-		r.logger.Warn("Dispatch wakeup wait failed", slog.Any("error", err))
-	}
-	return ctx.Err() == nil
-}
-
-func sleepContext(ctx context.Context, d time.Duration) bool {
-	if d <= 0 {
-		d = time.Second
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
 	}
 }
 
@@ -374,8 +362,14 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	if consumerMode == "pg" {
 		postgresConnected = r.postgres != nil && r.postgres.Ping(checkCtx) == nil
 	}
+	wakeupEnabled := true
+	if r.cfg != nil {
+		wakeupEnabled = r.cfg.Dispatch.WakeupEnabled
+	}
+	wakeupDegraded := consumerMode == "pg" && (!wakeupEnabled || !valkeyConnected)
 
-	ready := dispatchLoopRunning && valkeyConnected && irisConnected && postgresConnected
+	valkeyRequired := consumerMode != "pg"
+	ready := dispatchLoopRunning && irisConnected && postgresConnected && (!valkeyRequired || valkeyConnected)
 	statusCode := http.StatusOK
 	status := "ready"
 	if !ready {
@@ -387,6 +381,7 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 		"status":                status,
 		"dispatch_loop_running": dispatchLoopRunning,
 		"valkey_connected":      valkeyConnected,
+		"wakeup_degraded":       wakeupDegraded,
 		"iris_connected":        irisConnected,
 		"postgres_connected":    postgresConnected,
 		"consumer_mode":         consumerMode,

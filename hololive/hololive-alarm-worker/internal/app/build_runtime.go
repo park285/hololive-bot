@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -235,9 +236,10 @@ func loadAlarmDispatchPublishConfig() (queue.PublishConfig, error) {
 		return queue.PublishConfig{}, err
 	}
 	return queue.PublishConfig{
-		Mode:          mode,
-		ShadowFatal:   parseBoolEnv("ALARM_DISPATCH_SHADOW_FATAL", false),
-		WakeupEnabled: parseBoolEnv("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+		Mode:                  mode,
+		ShadowFatal:           parseBoolEnv("ALARM_DISPATCH_SHADOW_FATAL", false),
+		WakeupEnabled:         parseBoolEnv("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+		MaxDeliveriesPerBatch: parsePositiveIntEnv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", 1000),
 	}, nil
 }
 
@@ -286,4 +288,16 @@ func parseBoolEnv(key string, def bool) bool {
 	default:
 		return def
 	}
+}
+
+func parsePositiveIntEnv(key string, def int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return def
+	}
+	return value
 }

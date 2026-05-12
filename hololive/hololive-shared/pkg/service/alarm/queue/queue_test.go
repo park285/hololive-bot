@@ -137,7 +137,7 @@ func TestPublisherPublishEnqueuesJSONEnvelopeWithVersion(t *testing.T) {
 	}
 	claimKeys := []string{"notified:claim:room-1"}
 
-	err := publisher.Publish(context.Background(), notification, claimKeys)
+	_, err := publisher.Publish(context.Background(), notification, claimKeys)
 	require.NoError(t, err)
 
 	items := queueItemsOrEmpty(t, mini)
@@ -156,8 +156,10 @@ func TestPublisherPublishLPushOrderNewestFirst(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	publisher := NewPublisher(cacheClient, newTestLogger())
 
-	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"}, nil))
-	require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"}, nil))
+	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"}, nil)
+	require.NoError(t, err)
+	_, err = publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"}, nil)
+	require.NoError(t, err)
 
 	items := queueItemsOrEmpty(t, mini)
 	require.Len(t, items, 2)
@@ -178,7 +180,7 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 
 	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
 		t.Run(string(alarmType), func(t *testing.T) {
-			err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+			_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
 				AlarmType: alarmType,
 				RoomID:    "room-blocked",
 			}, nil)
@@ -403,7 +405,8 @@ func TestConsumerDrainBatch_UsesBatchedDrain(t *testing.T) {
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 
 	for _, roomID := range []string{"room-1", "room-2", "room-3"} {
-		require.NoError(t, publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: roomID}, nil))
+		_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: roomID}, nil)
+		require.NoError(t, err)
 	}
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 3)
@@ -438,7 +441,7 @@ func TestConsumerRequeue_PreservesEnvelopeOrderAfterExistingBacklog(t *testing.T
 		Version:    contractsalarm.QueueEnvelopeVersionV1,
 	}
 
-	err := publisher.Publish(
+	_, err := publisher.Publish(
 		context.Background(),
 		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "existing"},
 		[]string{"notified:claim:existing"},
@@ -821,11 +824,12 @@ func TestConsumerDrainBatch_ReturnsDueDelayedRetriesBeforeActiveQueueItems(t *te
 	}
 
 	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{due, future}))
-	require.NoError(t, publisher.Publish(
+	_, err := publisher.Publish(
 		context.Background(),
 		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "active"},
 		[]string{"notified:claim:active"},
-	))
+	)
+	require.NoError(t, err)
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 3)
 	require.NoError(t, err)
@@ -863,11 +867,12 @@ func TestConsumerDrainBatch_DoesNotReturnDelayedRetryBeforeNextVisibleAt(t *test
 	}
 
 	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{future}))
-	require.NoError(t, publisher.Publish(
+	_, err := publisher.Publish(
 		context.Background(),
 		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "active-only"},
 		[]string{"notified:claim:active-only"},
-	))
+	)
+	require.NoError(t, err)
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 2)
 	require.NoError(t, err)
@@ -1082,11 +1087,12 @@ func TestConsumerDrainBatch_DropsContentAlarmTypesAndReleasesClaims(t *testing.T
 	require.Len(t, results, 1)
 	require.NoError(t, results[0].Error())
 
-	require.NoError(t, publisher.Publish(
+	_, err = publisher.Publish(
 		context.Background(),
 		&domain.AlarmNotification{AlarmType: domain.AlarmTypeLive, RoomID: "room-live"},
 		[]string{"notified:claim:room-live"},
-	))
+	)
+	require.NoError(t, err)
 
 	envelopes, err := consumer.DrainBatch(context.Background(), 2)
 	require.NoError(t, err)
