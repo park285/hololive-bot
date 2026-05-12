@@ -15,18 +15,30 @@ import (
 func loadRepositoryAST(t *testing.T) *ast.File {
 	t.Helper()
 
-	path := filepath.Join(".", "repository.go")
-	src, err := os.ReadFile(path)
+	paths, err := filepath.Glob(filepath.Join(".", "repository*.go"))
 	if err != nil {
-		t.Fatalf("read repository source: %v", err)
+		t.Fatalf("glob repository source: %v", err)
 	}
 
-	file, err := parser.ParseFile(token.NewFileSet(), path, src, parser.SkipObjectResolution)
-	if err != nil {
-		t.Fatalf("parse repository source: %v", err)
+	merged := &ast.File{}
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read repository source %s: %v", path, err)
+		}
+
+		file, err := parser.ParseFile(token.NewFileSet(), path, src, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatalf("parse repository source %s: %v", path, err)
+		}
+		merged.Decls = append(merged.Decls, file.Decls...)
 	}
 
-	return file
+	return merged
 }
 
 func findRepositoryFunc(t *testing.T, file *ast.File, name string) *ast.FuncDecl {
