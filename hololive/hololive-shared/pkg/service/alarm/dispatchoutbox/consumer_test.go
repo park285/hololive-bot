@@ -284,7 +284,7 @@ func (r *consumerTestRepository) Quarantine(context.Context, []TerminalUpdate, s
 	return nil
 }
 
-func (r *consumerTestRepository) ReleaseLeased(context.Context, []int64) error {
+func (r *consumerTestRepository) ReleaseLeased(context.Context, []int64, string) error {
 	return nil
 }
 

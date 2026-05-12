@@ -186,6 +186,79 @@ func TestRuntimeIrisClient_SendMessage_FallsBackWhenBaseURLFileIsInvalid(t *test
 	fallbackMu.Unlock()
 }
 
+func TestRuntimeIrisClient_SendMessage_FallsBackWhenH3BaseURLFileUsesHTTP(t *testing.T) {
+	t.Setenv("IRIS_TRANSPORT", "h3")
+
+	ctx := context.Background()
+	botToken := "bot-token"
+	var fallbackMu sync.Mutex
+	fallbackCalls := 0
+	fallback := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != iris.PathReply {
+			t.Fatalf("fallback server path = %q", r.URL.Path)
+		}
+		fallbackMu.Lock()
+		fallbackCalls++
+		fallbackMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer fallback.Close()
+
+	dir := t.TempDir()
+	baseURLFilePath := filepath.Join(dir, "iris_base_url")
+	if err := os.WriteFile(baseURLFilePath, []byte("http://stale-iris.example"), 0o600); err != nil {
+		t.Fatalf("write stale base url file: %v", err)
+	}
+
+	client := NewRuntimeIrisClient(fallback.URL, botToken, baseURLFilePath, nil, iris.WithHTTPClient(fallback.Client()))
+	if err := client.SendMessage(ctx, "room-1", "hello"); err != nil {
+		t.Fatalf("send via fallback after incompatible h3 file: %v", err)
+	}
+
+	fallbackMu.Lock()
+	if fallbackCalls != 1 {
+		t.Fatalf("fallback calls = %d, want 1", fallbackCalls)
+	}
+	fallbackMu.Unlock()
+}
+
+func TestValidateRuntimeIrisBaseURL_TransportScheme(t *testing.T) {
+	tests := []struct {
+		name      string
+		transport string
+		baseURL   string
+		wantErr   bool
+	}{
+		{name: "h3 accepts https", transport: "h3", baseURL: "https://iris.example"},
+		{name: "h3 rejects http", transport: "h3", baseURL: "http://iris.example", wantErr: true},
+		{name: "http3 alias rejects http", transport: "http3", baseURL: "http://iris.example", wantErr: true},
+		{name: "quic alias rejects http", transport: "quic", baseURL: "http://iris.example", wantErr: true},
+		{name: "uppercase h3 alias rejects http", transport: "H3", baseURL: "http://iris.example", wantErr: true},
+		{name: "http2 accepts https", transport: "http2", baseURL: "https://iris.example"},
+		{name: "http2 rejects http", transport: "http2", baseURL: "http://iris.example", wantErr: true},
+		{name: "h2 alias rejects http", transport: "h2", baseURL: "http://iris.example", wantErr: true},
+		{name: "h2c accepts http", transport: "h2c", baseURL: "http://iris.example"},
+		{name: "h2c rejects https", transport: "h2c", baseURL: "https://iris.example", wantErr: true},
+		{name: "http1 accepts http", transport: "http1", baseURL: "http://iris.example"},
+		{name: "unknown keeps generic validation", transport: "custom", baseURL: "http://iris.example"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("IRIS_TRANSPORT", tc.transport)
+			_, err := validateRuntimeIrisBaseURL(tc.baseURL)
+			if tc.wantErr && err == nil {
+				t.Fatal("validateRuntimeIrisBaseURL() error = nil, want error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("validateRuntimeIrisBaseURL() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 	t.Parallel()
 

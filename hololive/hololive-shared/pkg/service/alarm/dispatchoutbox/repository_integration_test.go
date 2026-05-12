@@ -326,7 +326,7 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 	if len(claimed) != 1 {
 		t.Fatalf("ClaimDue() rows = %d, want 1", len(claimed))
 	}
-	if err := repo.ReleaseLeased(ctx, []int64{claimed[0].ID}); err != nil {
+	if err := repo.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-1"); err != nil {
 		t.Fatalf("ReleaseLeased() error = %v", err)
 	}
 
@@ -337,5 +337,43 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 	}
 	if status != string(StatusRetry) || expiresAt != nil {
 		t.Fatalf("released row status=%q lock_expires_at=%v, want retry/nil", status, expiresAt)
+	}
+}
+
+func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
+	repo, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-1",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		Version: 1,
+	}
+
+	if _, err := repo.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending}); err != nil {
+		t.Fatalf("InsertBatch() error = %v", err)
+	}
+	claimed, err := repo.ClaimDue(ctx, "worker-1", 1, time.Minute)
+	if err != nil {
+		t.Fatalf("ClaimDue() error = %v", err)
+	}
+	if len(claimed) != 1 {
+		t.Fatalf("ClaimDue() rows = %d, want 1", len(claimed))
+	}
+	if err := repo.ReleaseLeased(ctx, []int64{claimed[0].ID}, "worker-2"); err == nil {
+		t.Fatal("ReleaseLeased() error = nil, want owner mismatch error")
+	}
+
+	var status string
+	var lockedBy string
+	if err := pool.QueryRow(ctx, "SELECT status, locked_by FROM alarm_dispatch_deliveries WHERE id=$1", claimed[0].ID).Scan(&status, &lockedBy); err != nil {
+		t.Fatalf("load delivery after release attempt: %v", err)
+	}
+	if status != string(StatusLeased) || lockedBy != "worker-1" {
+		t.Fatalf("release attempt status=%q locked_by=%q, want leased/worker-1", status, lockedBy)
 	}
 }

@@ -21,8 +21,9 @@ alarm_dispatch_sent_total
 alarm_dispatch_retry_scheduled_total
 alarm_dispatch_dlq_total
 alarm_dispatch_quarantined_total
-alarm_dispatch_recovery_leased_total
-alarm_dispatch_recovery_sending_quarantined_total
+alarm_dispatch_recovery_last_success_timestamp_seconds
+alarm_dispatch_recovery_failed_total{type}
+alarm_dispatch_recovery_rows_total{type}
 ```
 
 ## 완료 기준

@@ -343,11 +343,11 @@ func (r *PgxRepository) Quarantine(ctx context.Context, updates []TerminalUpdate
 	return r.terminalUpdates(ctx, updates, StatusQuarantined, workerID)
 }
 
-func (r *PgxRepository) ReleaseLeased(ctx context.Context, ids []int64) error {
+func (r *PgxRepository) ReleaseLeased(ctx context.Context, ids []int64, workerID string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	_, err := r.pool.Exec(ctx, `
+	tag, err := r.pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
 		SET status='retry',
 			next_attempt_at=NOW(),
@@ -356,11 +356,13 @@ func (r *PgxRepository) ReleaseLeased(ctx context.Context, ids []int64) error {
 			lock_expires_at=NULL,
 			last_error='lease released before external send',
 			updated_at=NOW()
-		WHERE id = ANY($1) AND status = 'leased'`, ids)
+		WHERE id = ANY($1)
+		  AND status = 'leased'
+		  AND locked_by = $2`, ids, workerID)
 	if err != nil {
 		return fmt.Errorf("release dispatch deliveries: %w", err)
 	}
-	return nil
+	return expectRowsAffected(tag.RowsAffected(), len(ids), "release dispatch deliveries")
 }
 
 func (r *PgxRepository) RecoverExpiredLeased(ctx context.Context, limit int) (int, error) {
