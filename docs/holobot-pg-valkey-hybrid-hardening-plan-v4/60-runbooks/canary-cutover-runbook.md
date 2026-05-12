@@ -3,6 +3,12 @@
 ## 1. 사전 확인
 
 ```bash
+TEST_DATABASE_URL=postgres://... go test -tags=integration ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
+```
+
+이 명령이 실패하거나 실제 PostgreSQL 없이 skip되면 canary를 시작하지 않습니다.
+
+```bash
 valkey-cli LLEN alarm:dispatch:queue
 valkey-cli ZCARD alarm:dispatch:retry
 valkey-cli LLEN alarm:dispatch:dlq
@@ -23,6 +29,8 @@ ALARM_DISPATCH_PARALLELISM=2
 ALARM_DISPATCH_LEASE_SECONDS=60
 ALARM_DISPATCH_POLL_INTERVAL_MS=1000
 ALARM_DISPATCH_MAX_BATCHES_PER_WAKE=20
+ALARM_DISPATCH_RECOVERY_INTERVAL_MS=30000
+ALARM_DISPATCH_RECOVERY_BATCH_SIZE=100
 ```
 
 ## 3. 관측
@@ -30,6 +38,7 @@ ALARM_DISPATCH_MAX_BATCHES_PER_WAKE=20
 - publisher batch duration
 - requested/inserted/duplicate deliveries
 - wakeup sent/suppressed/failed
+- recovery last success/failed/rows
 - claimed/sent/retry/dlq/quarantine
 - PG pool wait
 - pending backlog slope

@@ -42,9 +42,9 @@ alarm_dispatch_quarantined_total
 ## Reconciliation
 
 ```text
-alarm_dispatch_recovery_leased_total
-alarm_dispatch_recovery_sending_quarantined_total
-alarm_dispatch_recovery_duration_seconds
+alarm_dispatch_recovery_last_success_timestamp_seconds
+alarm_dispatch_recovery_failed_total{type}
+alarm_dispatch_recovery_rows_total{type}
 ```
 
 ## 금지 label

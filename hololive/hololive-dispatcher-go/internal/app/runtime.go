@@ -34,15 +34,12 @@ import (
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/health"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/park285/iris-client-go/iris"
-	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -96,19 +93,20 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		logger = slog.Default()
 	}
 
-	cacheSvc, err := cache.NewCacheService(ctx, cfg.Valkey, logger)
-	if err != nil {
-		if cfg.Dispatch.ConsumerMode == "pg" {
-			logger.Warn("Dispatch wakeup Valkey unavailable; PG fallback polling will be used", slog.Any("error", err))
-		} else {
-			return nil, fmt.Errorf("build runtime: create cache service: %w", err)
-		}
-	}
+	var cacheSvc cache.Client
 	var wakeupCacheSvc cache.Client
-	if cfg.Dispatch.ConsumerMode == "pg" && cacheSvc != nil {
-		wakeupCacheSvc, err = cache.NewCacheService(ctx, cfg.Valkey, logger)
+	var err error
+	if cfg.Dispatch.ConsumerMode == "pg" {
+		if cfg.Dispatch.WakeupEnabled {
+			wakeupCacheSvc, err = cache.NewCacheService(ctx, cfg.Valkey, logger)
+			if err != nil {
+				logger.Warn("Dispatch wakeup Valkey client unavailable; PG fallback polling will be used", slog.Any("error", err))
+			}
+		}
+	} else {
+		cacheSvc, err = cache.NewCacheService(ctx, cfg.Valkey, logger)
 		if err != nil {
-			logger.Warn("Dispatch wakeup Valkey client unavailable; PG fallback polling will be used", slog.Any("error", err))
+			return nil, fmt.Errorf("build runtime: create cache service: %w", err)
 		}
 	}
 
@@ -361,138 +359,5 @@ func (r *Runtime) runDispatchLoop(ctx context.Context) {
 				return
 			}
 		}
-	}
-}
-
-func (r *Runtime) routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", r.handleHealth)
-	mux.HandleFunc("/ready", r.handleReady)
-	return mux
-}
-
-func (r *Runtime) handleHealth(w http.ResponseWriter, req *http.Request) {
-	writeJSON(req.Context(), w, http.StatusOK, health.Get())
-}
-
-func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
-	dispatchLoopRunning := r.readyState.dispatchLoopRunning.Load()
-
-	checkCtx, cancel := context.WithTimeout(req.Context(), readyCheckTimeout)
-	defer cancel()
-	irisConnected := r.cachedIrisPing(checkCtx)
-	consumerMode := "valkey"
-	if r.cfg != nil && r.cfg.Dispatch.ConsumerMode != "" {
-		consumerMode = r.cfg.Dispatch.ConsumerMode
-	}
-	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
-	wakeupConnected := valkeyConnected
-	if consumerMode == "pg" {
-		wakeupConnected = r.wakeupCacheSvc != nil && r.wakeupCacheSvc.IsConnected(checkCtx)
-	}
-	postgresConnected := consumerMode != "pg"
-	if consumerMode == "pg" {
-		postgresConnected = r.postgres != nil && r.postgres.Ping(checkCtx) == nil
-	}
-	wakeupEnabled := true
-	if r.cfg != nil {
-		wakeupEnabled = r.cfg.Dispatch.WakeupEnabled
-	}
-	wakeupDegraded := consumerMode == "pg" && (!wakeupEnabled || !wakeupConnected)
-
-	valkeyRequired := consumerMode != "pg"
-	ready := dispatchLoopRunning && irisConnected && postgresConnected && (!valkeyRequired || valkeyConnected)
-	statusCode := http.StatusOK
-	status := "ready"
-	if !ready {
-		statusCode = http.StatusServiceUnavailable
-		status = "not_ready"
-	}
-
-	response := map[string]any{
-		"status":                status,
-		"dispatch_loop_running": dispatchLoopRunning,
-		"valkey_connected":      valkeyConnected,
-		"wakeup_degraded":       wakeupDegraded,
-		"iris_connected":        irisConnected,
-		"postgres_connected":    postgresConnected,
-		"consumer_mode":         consumerMode,
-	}
-
-	writeJSON(req.Context(), w, statusCode, response)
-}
-
-func (r *Runtime) cachedIrisPing(ctx context.Context) bool {
-	if r == nil || r.irisClient == nil {
-		return false
-	}
-
-	if r.irisProbe == nil {
-		return r.irisClient.Ping(ctx)
-	}
-
-	return r.irisProbe.Get(ctx, func(ctx context.Context) bool {
-		return r.irisClient.Ping(ctx)
-	})
-}
-
-type cachedBoolProbe struct {
-	mu     sync.Mutex
-	ttl    time.Duration
-	lastAt time.Time
-	lastOK bool
-}
-
-func newCachedBoolProbe(ttl time.Duration) *cachedBoolProbe {
-	if ttl <= 0 {
-		ttl = time.Second
-	}
-
-	return &cachedBoolProbe{ttl: ttl}
-}
-
-func (p *cachedBoolProbe) Get(ctx context.Context, fn func(context.Context) bool) bool {
-	if p == nil || fn == nil {
-		return false
-	}
-
-	now := time.Now()
-
-	p.mu.Lock()
-	if !p.lastAt.IsZero() && now.Sub(p.lastAt) < p.ttl {
-		result := p.lastOK
-		p.mu.Unlock()
-		return result
-	}
-	p.mu.Unlock()
-
-	result := fn(ctx)
-
-	p.mu.Lock()
-	p.lastAt = now
-	p.lastOK = result
-	p.mu.Unlock()
-
-	return result
-}
-
-func buildHTTPServer(port int, handler http.Handler) *http.Server {
-	addr := fmt.Sprintf(":%d", port)
-	return &http.Server{
-		Addr:              addr,
-		Handler:           sharedserver.WrapH2C(handler),
-		ReadHeaderTimeout: constants.ServerTimeout.ReadHeader,
-		ReadTimeout:       constants.ServerTimeout.Read,
-		WriteTimeout:      constants.ServerTimeout.Write,
-		IdleTimeout:       constants.ServerTimeout.Idle,
-		MaxHeaderBytes:    constants.ServerTimeout.MaxHeaderBytes,
-	}
-}
-
-func writeJSON(ctx context.Context, w http.ResponseWriter, statusCode int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		slog.Default().WarnContext(ctx, "Write JSON response failed", slog.Any("error", err))
 	}
 }

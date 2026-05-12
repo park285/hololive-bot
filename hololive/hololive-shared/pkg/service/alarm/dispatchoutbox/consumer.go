@@ -137,11 +137,22 @@ func (c *Consumer) maybeRecover(ctx context.Context) error {
 		return nil
 	}
 	c.lastRecoveryAt = now
-	if _, err := c.repo.RecoverExpiredLeased(ctx, c.recoveryBatchSize); err != nil {
-		c.logger.Warn("Recover expired leased dispatch rows failed", slog.Any("error", err))
+	recoveredLeased, leasedErr := c.repo.RecoverExpiredLeased(ctx, c.recoveryBatchSize)
+	if leasedErr != nil {
+		observeRecoveryFailure(recoveryTypeLeased)
+		c.logger.Warn("Recover expired leased dispatch rows failed", slog.Any("error", leasedErr))
+	} else {
+		observeRecoveryRows(recoveryTypeLeased, recoveredLeased)
 	}
-	if _, err := c.repo.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize); err != nil {
-		c.logger.Warn("Quarantine stale sending dispatch rows failed", slog.Any("error", err))
+	recoveredSending, sendingErr := c.repo.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize)
+	if sendingErr != nil {
+		observeRecoveryFailure(recoveryTypeSending)
+		c.logger.Warn("Quarantine stale sending dispatch rows failed", slog.Any("error", sendingErr))
+	} else {
+		observeRecoveryRows(recoveryTypeSending, recoveredSending)
+	}
+	if leasedErr == nil && sendingErr == nil {
+		observeRecoverySuccess(now)
 	}
 	return nil
 }

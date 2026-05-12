@@ -172,9 +172,38 @@ func (c *RuntimeIrisClient) resolveBaseURLFromFileLocked() (string, error) {
 		return "", fmt.Errorf("read base URL file: %w", err)
 	}
 
-	baseURL, err := validateHTTPBaseURL(string(raw))
+	baseURL, err := validateRuntimeIrisBaseURL(string(raw))
 	if err != nil {
 		return "", fmt.Errorf("parse base URL file: %w", err)
+	}
+
+	return baseURL, nil
+}
+
+func validateRuntimeIrisBaseURL(raw string) (string, error) {
+	baseURL, err := validateHTTPBaseURL(raw)
+	if err != nil {
+		return "", err
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	switch normalizeRuntimeIrisTransport(os.Getenv("IRIS_TRANSPORT")) {
+	case "h3":
+		if parsed.Scheme != "https" {
+			return "", fmt.Errorf("IRIS_TRANSPORT=h3 requires https IRIS_BASE_URL, got %s", parsed.Scheme)
+		}
+	case "h2c":
+		if parsed.Scheme != "http" {
+			return "", fmt.Errorf("IRIS_TRANSPORT=h2c requires http IRIS_BASE_URL, got %s", parsed.Scheme)
+		}
+	case "http2":
+		if parsed.Scheme != "https" {
+			return "", fmt.Errorf("IRIS_TRANSPORT=http2 requires https IRIS_BASE_URL, got %s", parsed.Scheme)
+		}
 	}
 
 	return baseURL, nil
@@ -200,6 +229,21 @@ func validateHTTPBaseURL(raw string) (string, error) {
 	}
 
 	return baseURL, nil
+}
+
+func normalizeRuntimeIrisTransport(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "h3", "http3", "http/3", "quic":
+		return "h3"
+	case "h2c":
+		return "h2c"
+	case "h2", "http2":
+		return "http2"
+	case "http1", "http", "http/1.1":
+		return "http1"
+	default:
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
 }
 
 func (c *RuntimeIrisClient) logBaseURLFileFallback(reason string) {
