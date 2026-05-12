@@ -12,19 +12,24 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func buildSummaryCacheKey(events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
+func buildSummaryCacheKey(events []domain.MajorEvent, summaryType SummaryType, periodKey string) (string, error) {
+	inputHash, err := buildSummaryInputHash(events)
+	if err != nil {
+		return "", err
+	}
+
 	return fmt.Sprintf(
 		"majorevent:summary:%s:%s:%s:%s",
 		promptVersion,
 		summaryType,
 		periodKey,
-		buildSummaryInputHash(events),
-	)
+		inputHash,
+	), nil
 }
 
-func buildSummaryInputHash(events []domain.MajorEvent) string {
+func buildSummaryInputHash(events []domain.MajorEvent) (string, error) {
 	if len(events) == 0 {
-		return "empty"
+		return "empty", nil
 	}
 
 	projected := projectPromptEvents(events)
@@ -46,8 +51,8 @@ func buildSummaryInputHash(events []domain.MajorEvent) string {
 
 	payload, err := json.Marshal(projected)
 	if err != nil {
-		return "marshal-error"
+		return "", fmt.Errorf("marshal summary cache input: %w", err)
 	}
 	checksum := sha256.Sum256(payload)
-	return hex.EncodeToString(checksum[:8])
+	return hex.EncodeToString(checksum[:8]), nil
 }

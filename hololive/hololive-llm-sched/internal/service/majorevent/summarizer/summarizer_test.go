@@ -785,8 +785,8 @@ func TestBuildSummaryCacheKey_ChangesWhenEventsChange(t *testing.T) {
 		},
 	}
 
-	baseKey := buildSummaryCacheKey(baseEvents, SummaryTypeWeekly, "2026-03-01")
-	changedKey := buildSummaryCacheKey(changedEvents, SummaryTypeWeekly, "2026-03-01")
+	baseKey := mustBuildSummaryCacheKey(t, baseEvents, SummaryTypeWeekly, "2026-03-01")
+	changedKey := mustBuildSummaryCacheKey(t, changedEvents, SummaryTypeWeekly, "2026-03-01")
 
 	if baseKey == changedKey {
 		t.Fatalf("cache key should change when input events change: %q", baseKey)
@@ -820,12 +820,35 @@ func TestBuildSummaryCacheKey_IsOrderInsensitive(t *testing.T) {
 		firstOrder[0],
 	}
 
-	firstKey := buildSummaryCacheKey(firstOrder, SummaryTypeWeekly, "2026-03-01")
-	secondKey := buildSummaryCacheKey(secondOrder, SummaryTypeWeekly, "2026-03-01")
+	firstKey := mustBuildSummaryCacheKey(t, firstOrder, SummaryTypeWeekly, "2026-03-01")
+	secondKey := mustBuildSummaryCacheKey(t, secondOrder, SummaryTypeWeekly, "2026-03-01")
 
 	if firstKey != secondKey {
 		t.Fatalf("cache key should be order-insensitive: %q != %q", firstKey, secondKey)
 	}
+}
+
+func TestBuildSummaryCacheKey_ReturnsErrorInsteadOfSentinelOnMarshalFailure(t *testing.T) {
+	t.Parallel()
+
+	key, err := buildSummaryCacheKey([]domain.MajorEvent{{ID: 1, Title: "Test"}}, SummaryTypeWeekly, "2026-03-01")
+	if err != nil {
+		t.Fatalf("buildSummaryCacheKey() error = %v", err)
+	}
+	if strings.Contains(key, "marshal-error") {
+		t.Fatalf("cache key = %q, must not contain marshal-error sentinel", key)
+	}
+}
+
+func mustBuildSummaryCacheKey(t *testing.T, events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
+	t.Helper()
+
+	key, err := buildSummaryCacheKey(events, summaryType, periodKey)
+	if err != nil {
+		t.Fatalf("buildSummaryCacheKey() error = %v", err)
+	}
+
+	return key
 }
 
 // mockSearcher: 검색 결과 mock (병렬 호출 안전 — 쿼리 문자열로 1차/2차 분기)
