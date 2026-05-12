@@ -49,6 +49,14 @@ func WithRecoveryInterval(interval time.Duration) ConsumerOption {
 	}
 }
 
+func WithRecoveryBatchSize(size int) ConsumerOption {
+	return func(c *Consumer) {
+		if size > 0 {
+			c.recoveryBatchSize = size
+		}
+	}
+}
+
 func NewConsumer(repo Repository, logger *slog.Logger, opts ...ConsumerOption) *Consumer {
 	if logger == nil {
 		logger = slog.Default()
@@ -128,13 +136,13 @@ func (c *Consumer) maybeRecover(ctx context.Context) error {
 	if !c.lastRecoveryAt.IsZero() && c.recoveryInterval > 0 && now.Sub(c.lastRecoveryAt) < c.recoveryInterval {
 		return nil
 	}
+	c.lastRecoveryAt = now
 	if _, err := c.repo.RecoverExpiredLeased(ctx, c.recoveryBatchSize); err != nil {
-		return fmt.Errorf("drain outbox batch: recover expired leased: %w", err)
+		c.logger.Warn("Recover expired leased dispatch rows failed", slog.Any("error", err))
 	}
 	if _, err := c.repo.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize); err != nil {
-		return fmt.Errorf("drain outbox batch: quarantine stale sending: %w", err)
+		c.logger.Warn("Quarantine stale sending dispatch rows failed", slog.Any("error", err))
 	}
-	c.lastRecoveryAt = now
 	return nil
 }
 

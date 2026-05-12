@@ -50,6 +50,29 @@ func TestBuildLedgerRows_DedupeKeyDoesNotDependOnClaimKeys(t *testing.T) {
 	}
 }
 
+func TestBuildLedgerRows_DefaultsEmptyAlarmTypeToLive(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			RoomID:  "room-1",
+			Channel: &domain.Channel{ID: "channel-1"},
+			Stream:  &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		Version: 1,
+	}
+
+	event, _, err := buildLedgerRows(envelope, StatusPending)
+	if err != nil {
+		t.Fatalf("buildLedgerRows() error = %v", err)
+	}
+
+	if event.AlarmType != domain.AlarmTypeLive {
+		t.Fatalf("event alarm type = %q, want %q", event.AlarmType, domain.AlarmTypeLive)
+	}
+}
+
 func TestMarshalEventPayload_RemainsRoomAgnostic(t *testing.T) {
 	t.Parallel()
 

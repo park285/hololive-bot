@@ -27,6 +27,12 @@ type eventPayloadNotification struct {
 
 func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventInsert, deliveryInsert, error) {
 	input := EnvelopeDedupeInput(envelope)
+	alarmType := input.AlarmType
+	if alarmType == "" {
+		alarmType = domain.AlarmTypeLive
+		input.AlarmType = alarmType
+		envelope.Notification.AlarmType = alarmType
+	}
 	eventKey := BuildEventKey(input)
 	dedupeKey := BuildDedupeKey(input)
 	payload, err := marshalEventPayload(envelope)
@@ -44,7 +50,7 @@ func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventIn
 	return eventInsert{
 			EventKey:    eventKey,
 			PayloadHash: hex.EncodeToString(hash[:]),
-			AlarmType:   input.AlarmType,
+			AlarmType:   alarmType,
 			ChannelID:   input.ChannelID,
 			StreamID:    input.StreamID,
 			Category:    eventCategory(input),

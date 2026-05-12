@@ -153,11 +153,14 @@ x-logs-runtime-cache-volumes: &logs-runtime-cache-volumes
   - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
   - valkey-cache-socket:/var/run/valkey:ro
 
-x-db-cache-depends: &db-cache-depends
+x-db-depends: &db-depends
   holo-postgres:
     condition: service_healthy
   hololive-db-migrate:
     condition: service_completed_successfully
+
+x-db-cache-depends: &db-cache-depends
+  <<: *db-depends
   valkey-cache:
     condition: service_healthy
 
@@ -408,7 +411,7 @@ services:
     volumes: *logs-runtime-cache-volumes
     extra_hosts: *iris-extra-hosts
     depends_on:
-      <<: *db-cache-depends
+      <<: *db-depends
       hololive-bot:
         condition: service_healthy
     deploy: *deploy-256m

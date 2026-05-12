@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -38,6 +39,7 @@ import (
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"github.com/valkey-io/valkey-go"
 	"gorm.io/gorm"
 )
 
@@ -663,4 +665,39 @@ func TestRunDispatchLoop_ContextCanceledWhileDrainingDoesNotRecordLastError(t *t
 	if lastErr := rt.readyState.getLastError(); lastErr != "" {
 		t.Fatalf("last error = %q, want empty on shutdown cancellation", lastErr)
 	}
+}
+
+func TestWaitForPGDispatchSignal_UsesDedicatedWakeupClient(t *testing.T) {
+	t.Parallel()
+
+	mini := miniredis.RunT(t)
+	rawClient, err := valkey.NewClient(valkey.ClientOption{
+		InitAddress:  []string{mini.Addr()},
+		DisableCache: true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	t.Cleanup(rawClient.Close)
+
+	rt := &Runtime{
+		cfg: &Config{
+			Dispatch: DispatchConfig{
+				ConsumerMode:     "pg",
+				PollInterval:     time.Nanosecond,
+				WakeupEnabled:    true,
+				ReconnectBackoff: time.Second,
+			},
+		},
+		logger:   testLogger(),
+		cacheSvc: cachemocks.NewStrictClient(),
+		wakeupCacheSvc: &cachemocks.Client{
+			BFunc: rawClient.B,
+			DoMultiFunc: func(context.Context, ...valkey.Completed) []valkey.ValkeyResult {
+				return nil
+			},
+		},
+	}
+
+	rt.waitForPGDispatchSignal(context.Background())
 }
