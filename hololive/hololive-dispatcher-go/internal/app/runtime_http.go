@@ -51,28 +51,10 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	checkCtx, cancel := context.WithTimeout(req.Context(), readyCheckTimeout)
 	defer cancel()
 	irisConnected := r.cachedIrisPing(checkCtx)
-	consumerMode := "valkey"
-	if r.cfg != nil && r.cfg.Dispatch.ConsumerMode != "" {
-		consumerMode = r.cfg.Dispatch.ConsumerMode
-	}
-	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
-	wakeupConnected := valkeyConnected
-	if consumerMode == "pg" {
-		wakeupConnected = r.wakeupCacheSvc != nil && r.wakeupCacheSvc.IsConnected(checkCtx)
-		valkeyConnected = wakeupConnected
-	}
-	postgresConnected := consumerMode != "pg"
-	if consumerMode == "pg" {
-		postgresConnected = r.postgres != nil && r.postgres.Ping(checkCtx) == nil
-	}
-	wakeupEnabled := true
-	if r.cfg != nil {
-		wakeupEnabled = r.cfg.Dispatch.WakeupEnabled
-	}
-	wakeupDegraded := consumerMode == "pg" && (!wakeupEnabled || !wakeupConnected)
+	dispatchReady := r.dispatchReadyChecks(checkCtx)
 
-	valkeyRequired := consumerMode != "pg"
-	ready := dispatchLoopRunning && irisConnected && postgresConnected && (!valkeyRequired || valkeyConnected)
+	ready := dispatchLoopRunning && irisConnected && dispatchReady.postgresConnected &&
+		(!dispatchReady.valkeyRequired() || dispatchReady.valkeyConnected)
 	statusCode := http.StatusOK
 	status := "ready"
 	if !ready {
@@ -83,14 +65,54 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	response := map[string]any{
 		"status":                status,
 		"dispatch_loop_running": dispatchLoopRunning,
-		"valkey_connected":      valkeyConnected,
-		"wakeup_degraded":       wakeupDegraded,
+		"valkey_connected":      dispatchReady.valkeyConnected,
+		"wakeup_enabled":        dispatchReady.wakeupEnabled,
+		"wakeup_connected":      dispatchReady.wakeupConnected,
+		"wakeup_degraded":       dispatchReady.wakeupDegraded(),
 		"iris_connected":        irisConnected,
-		"postgres_connected":    postgresConnected,
-		"consumer_mode":         consumerMode,
+		"postgres_connected":    dispatchReady.postgresConnected,
+		"consumer_mode":         dispatchReady.consumerMode,
 	}
 
 	writeJSON(req.Context(), w, statusCode, response)
+}
+
+type dispatchReadyChecks struct {
+	consumerMode      string
+	valkeyConnected   bool
+	wakeupEnabled     bool
+	wakeupConnected   bool
+	postgresConnected bool
+}
+
+func (c dispatchReadyChecks) valkeyRequired() bool {
+	return c.consumerMode != "pg"
+}
+
+func (c dispatchReadyChecks) wakeupDegraded() bool {
+	return c.consumerMode == "pg" && c.wakeupEnabled && !c.wakeupConnected
+}
+
+func (r *Runtime) dispatchReadyChecks(ctx context.Context) dispatchReadyChecks {
+	checks := dispatchReadyChecks{
+		consumerMode:      "valkey",
+		wakeupEnabled:     true,
+		postgresConnected: true,
+	}
+	if r.cfg != nil {
+		checks.wakeupEnabled = r.cfg.Dispatch.WakeupEnabled
+		if r.cfg.Dispatch.ConsumerMode != "" {
+			checks.consumerMode = r.cfg.Dispatch.ConsumerMode
+		}
+	}
+	checks.valkeyConnected = r.cacheSvc != nil && r.cacheSvc.IsConnected(ctx)
+	checks.wakeupConnected = checks.valkeyConnected
+	if checks.consumerMode == "pg" {
+		checks.wakeupConnected = r.wakeupCacheSvc != nil && r.wakeupCacheSvc.IsConnected(ctx)
+		checks.valkeyConnected = checks.wakeupConnected
+		checks.postgresConnected = r.postgres != nil && r.postgres.Ping(ctx) == nil
+	}
+	return checks
 }
 
 func (r *Runtime) cachedIrisPing(ctx context.Context) bool {

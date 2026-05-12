@@ -159,16 +159,10 @@ func NewRuntimeScheduler(
 		return nil, fmt.Errorf("new runtime scheduler: create chzzk checker: %w", err)
 	}
 
-	var twitchChecker checker.Runner
-	if twitchEnabled {
-		twitchChecker, err = checker.NewTwitchChecker(cacheSvc, twitchClient, logger)
-		if err != nil {
-			return nil, fmt.Errorf("new runtime scheduler: create twitch checker: %w", err)
-		}
-	} else {
-		logger.Info("Twitch alarm loop disabled")
+	twitchChecker, err := newOptionalTwitchChecker(cacheSvc, twitchClient, twitchEnabled, logger)
+	if err != nil {
+		return nil, err
 	}
-
 	notifierSvc, err := checker.NewNotifier(dedupSvc, queuePublisher, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
@@ -215,11 +209,7 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	eg.Go(func() error {
 		return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
 	})
-	if s.twitchChecker != nil {
-		eg.Go(func() error {
-			return s.runLoop(egCtx, "twitch", s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
-		})
-	}
+	s.startTwitchLoop(eg, egCtx)
 	eg.Go(func() error {
 		return s.runAlarmCacheRecoveryLoop(egCtx)
 	})
@@ -234,6 +224,8 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 
 	return nil
 }
+
+const runtimeSchedulerLoopNameTwitch = "twitch"
 
 func (s *RuntimeScheduler) runLoop(
 	ctx context.Context,
