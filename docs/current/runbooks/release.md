@@ -55,6 +55,16 @@ Use:
 
 ## Smoke Tests
 
+These scripts do not rebuild, redeploy, or recreate Docker Compose services. `smoke-runtime-health.sh` and `smoke-dispatcher-ready.sh` expect local services to already be running.
+
+```bash
+./scripts/smoke/smoke-compose-config.sh
+./scripts/smoke/smoke-runtime-health.sh
+./scripts/smoke/smoke-dispatcher-ready.sh
+```
+
+Equivalent manual checks:
+
 ```bash
 curl -k https://127.0.0.1:30001/health
 curl http://127.0.0.1:30006/health
