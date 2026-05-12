@@ -51,6 +51,7 @@ hololive/hololive-dispatcher-go/internal/app/config.go:95:LoadConfig:112:14:2
 hololive/hololive-dispatcher-go/internal/app/runtime.go:261:Run:41:9:4
 hololive/hololive-dispatcher-go/internal/app/runtime.go:303:runDispatchLoop:61:48:4
 hololive/hololive-dispatcher-go/internal/app/runtime.go:88:BuildRuntime:127:56:3
+hololive/hololive-dispatcher-go/internal/app/runtime_http.go:48:handleReady:47:15:1
 hololive/hololive-dispatcher-go/internal/app/runtime_wakeup.go:32:waitForPGDispatchSignal:26:10:2
 hololive/hololive-dispatcher-go/internal/dispatch/dispatcher.go:175:dispatchGroup:37:13:3
 hololive/hololive-dispatcher-go/internal/dispatch/dispatcher.go:247:handleDispatchFailure:102:16:2
