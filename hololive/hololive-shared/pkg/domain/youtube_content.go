@@ -21,12 +21,9 @@
 package domain
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
 type YouTubeChannelStatsSnapshot struct {
@@ -149,18 +146,18 @@ func (YouTubeCommunityShortsSourcePost) TableName() string {
 
 // canonical post identifier를 루트 키로 사용해 게시물당 하나의 상태 레코드만 유지한다.
 type YouTubeCommunityShortsAlarmState struct {
-	Kind              OutboxKind                             `gorm:"primaryKey;size:20;uniqueIndex:idx_ycsas_kind_content,priority:1" json:"kind"`
-	PostID            string                                 `gorm:"primaryKey;size:50" json:"post_id"`
-	ContentID         string                                 `gorm:"size:50;not null;uniqueIndex:idx_ycsas_kind_content,priority:2" json:"content_id"`
-	ChannelID         string                                 `gorm:"size:50;not null;index:idx_ycsas_channel_detected" json:"channel_id"`
-	ActualPublishedAt *time.Time                             `json:"actual_published_at,omitempty"`
-	DetectedAt        time.Time                              `gorm:"not null;index:idx_ycsas_detected_at;index:idx_ycsas_channel_detected" json:"detected_at"`
-	PublishedAtRetryAfter *time.Time                         `gorm:"index:idx_ycsas_published_at_retry_after" json:"published_at_retry_after,omitempty"`
-	AuthorizedAt      *time.Time                             `gorm:"index:idx_ycsas_authorized_at" json:"authorized_at,omitempty"`
-	AlarmSentAt       *time.Time                             `gorm:"index:idx_ycsas_alarm_sent_at" json:"alarm_sent_at,omitempty"`
-	DeliveryStatus    YouTubeCommunityShortsAlarmStateStatus `gorm:"size:20;not null;default:'DETECTED';index:idx_ycsas_delivery_status" json:"delivery_status"`
-	CreatedAt         time.Time                              `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt         time.Time                              `gorm:"autoUpdateTime" json:"updated_at"`
+	Kind                  OutboxKind                             `gorm:"primaryKey;size:20;uniqueIndex:idx_ycsas_kind_content,priority:1" json:"kind"`
+	PostID                string                                 `gorm:"primaryKey;size:50" json:"post_id"`
+	ContentID             string                                 `gorm:"size:50;not null;uniqueIndex:idx_ycsas_kind_content,priority:2" json:"content_id"`
+	ChannelID             string                                 `gorm:"size:50;not null;index:idx_ycsas_channel_detected" json:"channel_id"`
+	ActualPublishedAt     *time.Time                             `json:"actual_published_at,omitempty"`
+	DetectedAt            time.Time                              `gorm:"not null;index:idx_ycsas_detected_at;index:idx_ycsas_channel_detected" json:"detected_at"`
+	PublishedAtRetryAfter *time.Time                             `gorm:"index:idx_ycsas_published_at_retry_after" json:"published_at_retry_after,omitempty"`
+	AuthorizedAt          *time.Time                             `gorm:"index:idx_ycsas_authorized_at" json:"authorized_at,omitempty"`
+	AlarmSentAt           *time.Time                             `gorm:"index:idx_ycsas_alarm_sent_at" json:"alarm_sent_at,omitempty"`
+	DeliveryStatus        YouTubeCommunityShortsAlarmStateStatus `gorm:"size:20;not null;default:'DETECTED';index:idx_ycsas_delivery_status" json:"delivery_status"`
+	CreatedAt             time.Time                              `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt             time.Time                              `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (YouTubeCommunityShortsAlarmState) TableName() string {
@@ -374,57 +371,4 @@ type YouTubeStreamStats struct {
 
 func (YouTubeStreamStats) TableName() string {
 	return "youtube_stream_stats"
-}
-
-type ThumbnailsJSON []ThumbnailEntry
-
-type ThumbnailEntry struct {
-	URL    string `json:"url"`
-	Width  int    `json:"width,omitempty"`
-	Height int    `json:"height,omitempty"`
-}
-
-func (t ThumbnailsJSON) Value() (driver.Value, error) {
-	if t == nil {
-		return nil, nil
-	}
-	data, err := json.Marshal(t)
-	if err != nil {
-		return nil, fmt.Errorf("marshal thumbnails: %w", err)
-	}
-	// pgx stdlib 드라이버는 []byte를 bytea로 해석하므로, jsonb 컬럼에는 string으로 반환해야 한다.
-	return string(data), nil
-}
-
-func (t *ThumbnailsJSON) Scan(value any) error {
-	if value == nil {
-		*t = nil
-		return nil
-	}
-	bytes, ok := value.([]byte)
-	if !ok {
-		return fmt.Errorf("failed to scan ThumbnailsJSON: expected []byte, got %T", value)
-	}
-	if err := json.Unmarshal(bytes, t); err != nil {
-		return fmt.Errorf("unmarshal thumbnails: %w", err)
-	}
-	return nil
-}
-
-var YouTubeModels = []any{
-	&YouTubeChannelStatsSnapshot{},
-	&YouTubeChannelProfile{},
-	&YouTubeVideo{},
-	&YouTubeCommunityPost{},
-	&YouTubeContentWatermark{},
-	&YouTubeNotificationOutbox{},
-	&YouTubeContentAlarmTracking{},
-	&YouTubeCommunityShortsSourcePost{},
-	&YouTubeCommunityShortsAlarmState{},
-	&YouTubeCommunityShortsObservationWindow{},
-	&YouTubeNotificationDeliveryTelemetry{},
-	&YouTubeNotificationDelivery{},
-	&YouTubeLiveSession{},
-	&YouTubeLiveViewerSample{},
-	&YouTubeStreamStats{},
 }
