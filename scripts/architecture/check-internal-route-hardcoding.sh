@@ -37,6 +37,9 @@ check_route "membernews" "/internal/membernews" \
 check_route "majorevent" "/internal/majorevent" \
   'hololive-shared/pkg/contracts/majorevent/routes.go|_test\.go' || missing=1
 
+check_route "trigger" "/internal/trigger" \
+  'hololive-shared/pkg/contracts/trigger/routes.go|_test\.go' || missing=1
+
 check_route "alarm" "/internal/alarm" \
   'hololive-shared/pkg/service/alarm/(api|client|api_test|client_test|client_additional_test)\.go|hololive-admin-api/internal/server/.*_test\.go|hololive-kakao-bot-go/internal/app/.*_test\.go|hololive-kakao-bot-go/internal/command/.*_test\.go' || missing=1
 

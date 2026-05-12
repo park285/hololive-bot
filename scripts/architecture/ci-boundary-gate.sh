@@ -67,6 +67,10 @@ echo "[M2] internal route hardcoding check"
 "${SCRIPT_DIR}/check-internal-route-hardcoding.sh"
 echo
 
+echo "[M2] repository ownership boundary check"
+"${SCRIPT_DIR}/check-repository-ownership.sh"
+echo
+
 echo "[M2] error contract coverage check"
 "${SCRIPT_DIR}/check-error-contracts.sh"
 echo
