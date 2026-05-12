@@ -58,10 +58,9 @@ func normalizeForShort(raw string) (string, error) {
 		return "", fmt.Errorf("canonical youtube content id: short video id is empty")
 	}
 
-	switch {
-	case strings.HasPrefix(value, shortPrefix):
-		value = strings.TrimSpace(strings.TrimPrefix(value, shortPrefix))
-	case strings.HasPrefix(value, communityPrefix):
+	if rest, ok := strings.CutPrefix(value, shortPrefix); ok {
+		value = strings.TrimSpace(rest)
+	} else if strings.HasPrefix(value, communityPrefix) {
 		return "", fmt.Errorf("canonical youtube content id: short video id prefix mismatch: %s", value)
 	}
 
@@ -81,10 +80,9 @@ func normalizeForCommunity(raw string) (string, error) {
 		return "", fmt.Errorf("canonical youtube content id: community post id is empty")
 	}
 
-	switch {
-	case strings.HasPrefix(value, communityPrefix):
-		value = strings.TrimSpace(strings.TrimPrefix(value, communityPrefix))
-	case strings.HasPrefix(value, shortPrefix):
+	if rest, ok := strings.CutPrefix(value, communityPrefix); ok {
+		value = strings.TrimSpace(rest)
+	} else if strings.HasPrefix(value, shortPrefix) {
 		return "", fmt.Errorf("canonical youtube content id: community post id prefix mismatch: %s", value)
 	}
 

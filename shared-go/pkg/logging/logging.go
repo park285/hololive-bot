@@ -370,11 +370,15 @@ func backupPrefixAndExt(baseName string) (string, string) {
 }
 
 func backupTimestampFromName(name, prefix, suffix string) (time.Time, error) {
-	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+	timestamp, ok := strings.CutPrefix(name, prefix)
+	if !ok {
+		return time.Time{}, fmt.Errorf("unexpected backup name: %s", name)
+	}
+	timestamp, ok = strings.CutSuffix(timestamp, suffix)
+	if !ok {
 		return time.Time{}, fmt.Errorf("unexpected backup name: %s", name)
 	}
 
-	timestamp := strings.TrimSuffix(strings.TrimPrefix(name, prefix), suffix)
 	parsed, err := time.Parse(backupTimeFormat, timestamp)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("backup timestamp from name: parse %q: %w", timestamp, err)

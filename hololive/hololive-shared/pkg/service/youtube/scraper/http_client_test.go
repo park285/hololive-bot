@@ -47,3 +47,28 @@ func TestCreateHTTPClient_ProxyHTTP2(t *testing.T) {
 	require.NotNil(t, transport, "base transport should be returned")
 	assert.False(t, transport.ForceAttemptHTTP2, "proxy path should disable HTTP/2 (single tunnel multiplex is fragile)")
 }
+
+func TestCreateHTTPClient_RejectsInvalidProxyURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{name: "unsupported scheme", url: "http://proxy.internal:1080"},
+		{name: "missing host", url: "socks5://:1080"},
+		{name: "missing port", url: "socks5://proxy.internal"},
+		{name: "unbracketed ipv6 host", url: "socks5://2001:db8::1:1080"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, transport, err := createHTTPClient(ProxyConfig{
+				Enabled: true,
+				URL:     tt.url,
+			})
+
+			require.Error(t, err)
+			assert.Nil(t, client)
+			assert.Nil(t, transport)
+		})
+	}
+}

@@ -308,6 +308,8 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
 	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
 	t.Setenv("API_SECRET_KEY", "test-api-key")
+	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
 
 	// Cliproxy 활성화
 	t.Setenv("CLIPROXY_ENABLED", "true")
