@@ -4,6 +4,10 @@
 
 Runtime settings changes are broadcast through Valkey Pub/Sub channel `config:update`.
 
+## Contract ID
+
+- `settings.update`
+
 ## Provider
 
 - Service: admin/settings update path 검토 필요

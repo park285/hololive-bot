@@ -4,6 +4,10 @@
 
 `admin-api`가 `llm-scheduler`에 major event/member news manual notification trigger를 요청하는 internal HTTP JSON 계약입니다.
 
+## Contract ID
+
+- `trigger.manual`
+
 ## Provider
 
 - Service: `llm-scheduler`

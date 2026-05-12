@@ -2,6 +2,17 @@
 
 이 디렉터리는 current service-to-service 계약 문서의 진입점입니다.
 
+## Stable Contract IDs
+
+- `membernews.digest` - member news digest HTTP JSON
+- `membernews.subscription` - member news subscription HTTP JSON
+- `majorevent.subscription` - major event subscription HTTP JSON
+- `trigger.manual` - manual notification trigger HTTP JSON
+- `alarm.http` - alarm internal HTTP JSON
+- `alarm.dispatch` - alarm dispatch Valkey queue/retry/DLQ
+- `settings.update` - settings/config update Valkey Pub/Sub
+- `iris.webhook` - Iris external webhook/send boundary
+
 ## Contract Documents
 
 - `membernews.md` - member news subscription/digest HTTP JSON

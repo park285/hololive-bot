@@ -17,6 +17,17 @@ required_contracts=(
   iris-boundary
 )
 
+required_contract_ids=(
+  membernews.digest
+  membernews.subscription
+  majorevent.subscription
+  trigger.manual
+  alarm.http
+  alarm.dispatch
+  settings.update
+  iris.webhook
+)
+
 required_packages=(
   hololive/hololive-shared/pkg/contracts/membernews
   hololive/hololive-shared/pkg/contracts/majorevent
@@ -55,6 +66,15 @@ for contract in "${required_contracts[@]}"; do
     missing=1
   else
     echo "[PASS] contract index links: ${contract}.md"
+  fi
+done
+
+for contract_id in "${required_contract_ids[@]}"; do
+  if ! grep -Fq "${contract_id}" "${CONTRACT_MAP}"; then
+    echo "[FAIL] contract map missing stable contract ID: ${contract_id}"
+    missing=1
+  else
+    echo "[PASS] contract map contains stable ID: ${contract_id}"
   fi
 done
 

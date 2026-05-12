@@ -4,6 +4,10 @@
 
 Iris / Redroid is an external KakaoTalk automation boundary used for webhook ingress and outbound message delivery.
 
+## Contract ID
+
+- `iris.webhook`
+
 ## Provider
 
 - Service: Iris / Redroid instance
