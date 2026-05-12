@@ -15,6 +15,8 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
@@ -39,6 +41,7 @@ type alarmFoundation struct {
 	ChzzkClient    *chzzk.Client
 	TwitchClient   *twitch.Client
 	AlarmCRUD      domain.AlarmCRUD
+	Outbox         dispatchoutbox.Writer
 }
 
 func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*AlarmWorkerRuntime, error) {
@@ -144,6 +147,11 @@ func buildRuntimeScheduler(
 		return nil, nil
 	}
 
+	publishConfig, err := loadAlarmDispatchPublishConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(
 		cacheSvc,
 		foundation.HolodexService,
@@ -151,6 +159,8 @@ func buildRuntimeScheduler(
 		foundation.TwitchClient,
 		foundation.AlarmCRUD,
 		cfg.Notification,
+		foundation.Outbox,
+		publishConfig,
 		logger,
 	)
 	if err != nil {
@@ -195,6 +205,7 @@ func buildAlarmFoundation(
 	}, logger)
 
 	alarmRepo := sharedalarm.NewRepository(infra.Postgres, logger)
+	outboxRepo := dispatchoutbox.NewPgxRepository(infra.Postgres)
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
 	alarmService, err := notification.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepo, logger, resolved)
 	if err != nil {
@@ -211,5 +222,68 @@ func buildAlarmFoundation(
 		ChzzkClient:    chzzkClient,
 		TwitchClient:   twitchClient,
 		AlarmCRUD:      alarmService,
+		Outbox:         outboxRepo,
 	}, nil
+}
+
+func loadAlarmDispatchPublishConfig() (queue.PublishConfig, error) {
+	mode, err := parseAlarmDispatchPublishMode(os.Getenv("ALARM_DISPATCH_PUBLISH_MODE"))
+	if err != nil {
+		return queue.PublishConfig{}, err
+	}
+	if err := validateAlarmDispatchModePair(mode, os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")); err != nil {
+		return queue.PublishConfig{}, err
+	}
+	return queue.PublishConfig{
+		Mode:          mode,
+		ShadowFatal:   parseBoolEnv("ALARM_DISPATCH_SHADOW_FATAL", false),
+		WakeupEnabled: parseBoolEnv("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+	}, nil
+}
+
+func parseAlarmDispatchPublishMode(raw string) (queue.PublishMode, error) {
+	mode := queue.PublishMode(strings.ToLower(strings.TrimSpace(raw)))
+	switch mode {
+	case "", queue.PublishModeValkeyOnly:
+		return queue.PublishModeValkeyOnly, nil
+	case queue.PublishModeShadow, queue.PublishModePGFirst:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE must be valkey_only, shadow, or pg_first")
+	}
+}
+
+func validateAlarmDispatchModePair(publishMode queue.PublishMode, rawConsumerMode string) error {
+	consumerMode := strings.ToLower(strings.TrimSpace(rawConsumerMode))
+	if consumerMode == "" {
+		if publishMode == queue.PublishModePGFirst {
+			return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE is required when ALARM_DISPATCH_PUBLISH_MODE=pg_first")
+		}
+		return nil
+	}
+	if consumerMode != "valkey" && consumerMode != "pg" {
+		return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE must be valkey or pg when provided")
+	}
+	if publishMode == queue.PublishModePGFirst && consumerMode != "pg" {
+		return fmt.Errorf("forbidden alarm dispatch mode combination: publisher=pg_first requires consumer=pg")
+	}
+	if publishMode != queue.PublishModePGFirst && consumerMode == "pg" {
+		return fmt.Errorf("forbidden alarm dispatch mode combination: consumer=pg requires publisher=pg_first")
+	}
+	return nil
+}
+
+func parseBoolEnv(key string, def bool) bool {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return def
+	}
 }

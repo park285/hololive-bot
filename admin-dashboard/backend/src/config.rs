@@ -50,7 +50,7 @@ impl Config {
             admin_user: env_string("ADMIN_USER", "admin"),
             admin_pass_hash,
             session_secret: required_alias(&["SESSION_SECRET", "ADMIN_SECRET_KEY"])?,
-            valkey_url: env_string("VALKEY_URL", "valkey-cache:6379"),
+            valkey_url: validate_valkey_url(env_string("VALKEY_URL", "valkey-cache:6379"))?,
             docker_host: env_string("DOCKER_HOST", "tcp://docker-proxy:2375"),
             holo_admin_api_url: optional_alias(&["HOLO_ADMIN_API_URL", "HOLO_BOT_URL"])
                 .unwrap_or_else(|| "http://hololive-admin-api:30006".to_string()),
@@ -77,6 +77,25 @@ fn validate_admin_pass_hash(hash: &str) -> Result<()> {
     bcrypt::verify("", hash)
         .map(|_| ())
         .map_err(|err| anyhow!("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash: {err}"))
+}
+
+fn validate_valkey_url(value: String) -> Result<String> {
+    if value.contains("://") {
+        return Err(anyhow!(
+            "VALKEY_URL must not include a URL scheme; configure host:port or :urlencoded_password@host:port"
+        ));
+    }
+    if let Some((userinfo, _host)) = value.split_once('@')
+        && !userinfo.is_empty()
+        && userinfo
+            .chars()
+            .any(|ch| matches!(ch, ' ' | '#' | '?' | '/' | '\\'))
+    {
+        return Err(anyhow!(
+            "VALKEY_URL userinfo contains unsafe characters; URL-encode the password or use a safe secret value"
+        ));
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -174,6 +193,40 @@ mod tests {
                 assert!(
                     err.to_string()
                         .contains("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash")
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn test_valkey_url_rejects_scheme_and_unsafe_userinfo() {
+        with_env_vars(
+            &[
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+                ("VALKEY_URL", Some("redis://valkey-cache:6379")),
+            ],
+            || {
+                let err = Config::load().expect_err("scheme should fail");
+                assert!(err.to_string().contains("must not include a URL scheme"));
+            },
+        );
+
+        with_env_vars(
+            &[
+                ("ADMIN_PASS_HASH", Some(primary_hash())),
+                ("ADMIN_PASS_BCRYPT", None),
+                ("SESSION_SECRET", Some("session-secret")),
+                ("ADMIN_SECRET_KEY", None),
+                ("VALKEY_URL", Some(":bad pass@valkey-cache:6379")),
+            ],
+            || {
+                let err = Config::load().expect_err("unsafe userinfo should fail");
+                assert!(
+                    err.to_string()
+                        .contains("userinfo contains unsafe characters")
                 );
             },
         );

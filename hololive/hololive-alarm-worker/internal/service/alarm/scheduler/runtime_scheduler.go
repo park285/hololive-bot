@@ -31,6 +31,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -92,6 +93,8 @@ func NewRuntimeScheduler(
 	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
 	notifCfg config.NotificationConfig,
+	outbox dispatchoutbox.Writer,
+	publishCfg queue.PublishConfig,
 	logger *slog.Logger,
 ) (*RuntimeScheduler, error) {
 	if cacheSvc == nil {
@@ -127,7 +130,14 @@ func NewRuntimeScheduler(
 
 	tierScheduler := tier.NewTieredScheduler(logger)
 	dedupSvc := dedup.NewService(cacheSvc, targetMinutes, logger)
-	queuePublisher := queue.NewPublisher(cacheSvc, logger)
+	queuePublisher := queue.NewPublisher(
+		cacheSvc,
+		logger,
+		queue.WithOutbox(outbox),
+		queue.WithPublishMode(publishCfg.Mode),
+		queue.WithShadowFatal(publishCfg.ShadowFatal),
+		queue.WithWakeupEnabled(publishCfg.WakeupEnabled),
+	)
 
 	youtubeChecker, err := checker.NewYouTubeChecker(
 		cacheSvc,

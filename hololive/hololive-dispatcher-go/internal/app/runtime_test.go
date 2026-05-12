@@ -61,6 +61,14 @@ func (c *testQueueConsumer) ReleaseClaimKeys(ctx context.Context, claimKeys []st
 	return nil
 }
 
+func (c *testQueueConsumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	return nil
+}
+
+func (c *testQueueConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	return nil
+}
+
 func (c *testQueueConsumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	if c.scheduleRetryFunc != nil {
 		return c.scheduleRetryFunc(ctx, envelopes)
@@ -79,6 +87,10 @@ func (c *testQueueConsumer) Requeue(ctx context.Context, envelopes []domain.Alar
 	if c.requeueFunc != nil {
 		return c.requeueFunc(ctx, envelopes)
 	}
+	return nil
+}
+
+func (c *testQueueConsumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
 	return nil
 }
 
@@ -433,6 +445,58 @@ func TestRunDispatchLoop_ErrorThenRecoveryClearsLastError(t *testing.T) {
 	}
 	if rt.readyState.dispatchLoopRunning.Load() {
 		t.Fatal("dispatch loop running flag should be false after stop")
+	}
+}
+
+func TestRunDispatchLoop_PGModeWaitsBetweenEmptyPolls(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var calls atomic.Int32
+	consumer := &testQueueConsumer{
+		drainBatchFunc: func(_ context.Context, _ int) ([]domain.AlarmQueueEnvelope, error) {
+			if calls.Add(1) == 2 {
+				cancel()
+			}
+			return nil, nil
+		},
+	}
+	dispatcher, err := dispatch.NewDispatcher(
+		consumer,
+		&testMessageSender{},
+		dispatch.NewSimpleRenderer(),
+		1,
+		1,
+		testLogger(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	pollInterval := 50 * time.Millisecond
+	rt := &Runtime{
+		cfg: &Config{
+			Dispatch: DispatchConfig{
+				ConsumerMode:     "pg",
+				PollInterval:     pollInterval,
+				ReconnectBackoff: time.Second,
+			},
+		},
+		logger:     testLogger(),
+		dispatcher: dispatcher,
+		readyState: newReadinessState(),
+	}
+
+	start := time.Now()
+	rt.runDispatchLoop(ctx)
+
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("DrainBatch calls = %d, want 2", got)
+	}
+	if elapsed := time.Since(start); elapsed < pollInterval {
+		t.Fatalf("elapsed = %s, want at least %s between empty PG polls", elapsed, pollInterval)
 	}
 }
 

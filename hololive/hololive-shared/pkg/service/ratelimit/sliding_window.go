@@ -22,9 +22,13 @@ package ratelimit
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -72,10 +76,11 @@ type Decision struct {
 }
 
 type SlidingWindowLimiter struct {
-	cacheSvc  cache.Client
-	keyPrefix string
-	logger    *slog.Logger
-	sequence  atomic.Uint64
+	cacheSvc   cache.Client
+	keyPrefix  string
+	logger     *slog.Logger
+	instanceID string
+	sequence   atomic.Uint64
 }
 
 func NewSlidingWindowLimiter(cacheSvc cache.Client, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
@@ -89,9 +94,10 @@ func NewSlidingWindowLimiter(cacheSvc cache.Client, keyPrefix string, logger *sl
 		logger = slog.Default()
 	}
 	return &SlidingWindowLimiter{
-		cacheSvc:  cacheSvc,
-		keyPrefix: keyPrefix,
-		logger:    logger,
+		cacheSvc:   cacheSvc,
+		keyPrefix:  keyPrefix,
+		logger:     logger,
+		instanceID: resolveInstanceID(),
 	}, nil
 }
 
@@ -211,7 +217,44 @@ func (l *SlidingWindowLimiter) buildKey(bucket string) string {
 
 func (l *SlidingWindowLimiter) memberID(nowMS int64) string {
 	seq := l.sequence.Add(1)
-	return strconv.FormatInt(nowMS, 10) + "-" + strconv.FormatUint(seq, 10)
+	return strconv.FormatInt(nowMS, 10) + ":" + l.instanceID + ":" + strconv.FormatUint(seq, 10)
+}
+
+func resolveInstanceID() string {
+	if value := strings.TrimSpace(os.Getenv("INSTANCE_ID")); value != "" {
+		return sanitizeInstanceID(value)
+	}
+	if host, err := os.Hostname(); err == nil && strings.TrimSpace(host) != "" {
+		return sanitizeInstanceID(host)
+	}
+	var raw [8]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return hex.EncodeToString(raw[:])
+	}
+	return "local"
+}
+
+func sanitizeInstanceID(value string) string {
+	value = strings.TrimSpace(value)
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_' || r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "local"
+	}
+	return b.String()
 }
 
 func ttlSecondsFromWindow(window time.Duration) int64 {

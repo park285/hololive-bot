@@ -30,6 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -46,6 +47,30 @@ type failingPublishCacheClient struct {
 
 func (c *failingPublishCacheClient) DoMulti(context.Context, ...valkey.Completed) []valkey.ValkeyResult {
 	return nil
+}
+
+type notifierBatchOutbox struct {
+	insertBatchCalls int
+	lastBatchInput   dispatchoutbox.PublishBatchInput
+}
+
+func (o *notifierBatchOutbox) InsertShadowed(context.Context, domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, error) {
+	return nil, nil
+}
+
+func (o *notifierBatchOutbox) InsertPending(context.Context, domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
+	return nil, dispatchoutbox.Inserted, nil
+}
+
+func (o *notifierBatchOutbox) InsertBatch(_ context.Context, input dispatchoutbox.PublishBatchInput) (dispatchoutbox.PublishBatchResult, error) {
+	o.insertBatchCalls++
+	o.lastBatchInput = input
+	return dispatchoutbox.PublishBatchResult{
+		RequestedEvents:     1,
+		InsertedEvents:      1,
+		RequestedDeliveries: len(input.Envelopes),
+		InsertedDeliveries:  len(input.Envelopes),
+	}, nil
 }
 
 func TestNotifierSend_DedupSkip(t *testing.T) {
@@ -298,6 +323,59 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 
 	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 2 {
 		t.Fatalf("expected dispatch queue size=2, got %d", queueSize)
+	}
+}
+
+func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{10}, logger)
+	outbox := &notifierBatchOutbox{}
+
+	notifier, err := NewNotifier(
+		dedupSvc,
+		queue.NewPublisher(cacheSvc, logger,
+			queue.WithOutbox(outbox),
+			queue.WithPublishMode(queue.PublishModePGFirst),
+			queue.WithWakeupEnabled(false),
+		),
+		tier.NewTieredScheduler(logger),
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewNotifier() error = %v", err)
+	}
+
+	start := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Minute)
+	stream := &domain.Stream{
+		ID:             "stream-batch-pg",
+		Title:          "Batch PG",
+		ChannelID:      "UC_BATCH_PG",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &start,
+		Channel:        &domain.Channel{ID: "UC_BATCH_PG", Name: "Batch PG Channel"},
+	}
+	notifications := []*domain.AlarmNotification{
+		domain.NewAlarmNotification("room-pg-1", stream.Channel, stream, 10, []string{"alice"}, ""),
+		domain.NewAlarmNotification("room-pg-2", stream.Channel, stream, 10, []string{"bob"}, ""),
+		domain.NewAlarmNotification("room-pg-3", stream.Channel, stream, 10, []string{"charlie"}, ""),
+	}
+
+	result, sendErr := notifier.Send(t.Context(), notifications)
+	if sendErr != nil {
+		t.Fatalf("Send() error = %v", sendErr)
+	}
+
+	if result.Sent != 3 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if outbox.insertBatchCalls != 1 {
+		t.Fatalf("InsertBatch calls = %d, want 1", outbox.insertBatchCalls)
+	}
+	if len(outbox.lastBatchInput.Envelopes) != 3 {
+		t.Fatalf("InsertBatch envelopes = %d, want 3", len(outbox.lastBatchInput.Envelopes))
 	}
 }
 
