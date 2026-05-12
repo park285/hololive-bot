@@ -66,7 +66,6 @@ func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	}
 }
 
-
 type addAlarmReq struct {
 	RoomID     string            `json:"room_id"`
 	UserID     string            `json:"user_id"`
@@ -112,7 +111,6 @@ type intResp struct {
 type minutesResp struct {
 	Minutes []int `json:"minutes"`
 }
-
 
 func (c *Client) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool, error) {
 	body := addAlarmReq{
@@ -227,7 +225,7 @@ func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*doma
 	var info domain.NextStreamInfo
 	err := c.getJSON(ctx, "/internal/alarm/next-stream/"+channelID, &info)
 	if err != nil {
-		if strings.Contains(err.Error(), "status 404") {
+		if httputil.IsStatus(err, http.StatusNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -293,7 +291,6 @@ func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, err
 func (c *Client) WarmCacheFromDB(_ context.Context) error {
 	return nil
 }
-
 
 func (c *Client) postJSON(ctx context.Context, path string, body any, out any) error {
 	return c.doJSON(ctx, http.MethodPost, path, body, out)

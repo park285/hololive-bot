@@ -61,6 +61,25 @@ if ! grep -Fq 'CheckStatus' "${ROOT_DIR}/shared-go/pkg/httputil/response.go"; th
   echo "[FAIL] CheckStatus helper missing from shared httputil response"
   missing=1
 fi
+if ! grep -Fq 'type APIError struct' "${ROOT_DIR}/shared-go/pkg/httputil/response.go"; then
+  echo "[FAIL] typed APIError missing from shared httputil response"
+  missing=1
+fi
+if ! grep -Fq 'IsStatus' "${ROOT_DIR}/shared-go/pkg/httputil/response.go"; then
+  echo "[FAIL] IsStatus helper missing from shared httputil response"
+  missing=1
+fi
+
+status_parse_hits="$(
+  rg -n 'strings\.Contains\(.*status [0-9]{3}|status 404|status 409' \
+    "${ROOT_DIR}/hololive" "${ROOT_DIR}/shared-go" \
+    -g '*.go' -g '!**/*_test.go' || true
+)"
+if [[ -n "${status_parse_hits}" ]]; then
+  echo "[FAIL] production code must use httputil.APIError helpers instead of status substring parsing"
+  echo "${status_parse_hits}"
+  missing=1
+fi
 
 if [[ "${missing}" -ne 0 ]]; then
   exit 1

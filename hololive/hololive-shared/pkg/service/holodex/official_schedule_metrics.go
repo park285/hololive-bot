@@ -102,7 +102,7 @@ func classifyOfficialScheduleFallbackReason(err error, matchedStreams int) offic
 	switch {
 	case strings.Contains(message, "HTML parse failed"):
 		return officialScheduleFallbackReasonParse
-	case strings.Contains(message, "HTTP request failed"), strings.Contains(message, "unexpected status code"):
+	case strings.Contains(message, "HTTP request failed"):
 		return officialScheduleFallbackReasonNetwork
 	default:
 		return officialScheduleFallbackReasonUnknown
