@@ -1,0 +1,87 @@
+package dispatchoutbox
+
+import (
+	"context"
+	"fmt"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+)
+
+func (r *PgxRepository) terminal(ctx context.Context, ids []int64, status Status, reason string, workerID string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	column := "sent_at"
+	statusFilter := "status NOT IN ('sent','dlq','quarantined','cancelled')"
+	switch status {
+	case StatusDLQ:
+		column = "dlq_at"
+		statusFilter = "status = 'leased'"
+	case StatusQuarantined:
+		column = "quarantined_at"
+		statusFilter = "status = 'sending'"
+	case StatusCancelled:
+		column = "cancelled_at"
+	}
+	query := fmt.Sprintf(`
+		UPDATE alarm_dispatch_deliveries
+		SET status=$2,
+			%s=NOW(),
+			locked_by=NULL,
+			locked_at=NULL,
+			lock_expires_at=NULL,
+			last_error=CASE WHEN $3 = '' THEN last_error ELSE $3 END,
+			updated_at=NOW()
+		WHERE id = ANY($1)
+		  AND locked_by = $4
+		  AND %s`, column, statusFilter)
+	tag, err := r.pool.Exec(ctx, query, ids, string(status), reason, workerID)
+	if err != nil {
+		return fmt.Errorf("mark dispatch deliveries terminal: %w", err)
+	}
+	return expectRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries terminal")
+}
+
+func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalUpdate, status Status, workerID string) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	column := "sent_at"
+	statusFilter := "status NOT IN ('sent','dlq','quarantined','cancelled')"
+	switch status {
+	case StatusDLQ:
+		column = "dlq_at"
+		statusFilter = "status = 'leased'"
+	case StatusQuarantined:
+		column = "quarantined_at"
+		statusFilter = "status = 'sending'"
+	case StatusCancelled:
+		column = "cancelled_at"
+	}
+	raw, err := json.Marshal(updates)
+	if err != nil {
+		return fmt.Errorf("mark dispatch deliveries terminal: marshal batch: %w", err)
+	}
+	query := fmt.Sprintf(`
+		WITH input AS (
+			SELECT *
+			FROM jsonb_to_recordset($1::jsonb) AS x(id BIGINT, error TEXT)
+		)
+		UPDATE alarm_dispatch_deliveries d
+		SET status=$2,
+			%s=NOW(),
+			locked_by=NULL,
+			locked_at=NULL,
+			lock_expires_at=NULL,
+			last_error=CASE WHEN input.error = '' THEN d.last_error ELSE input.error END,
+			updated_at=NOW()
+		FROM input
+		WHERE d.id = input.id
+		  AND d.locked_by = $3
+		  AND %s`, column, statusFilter)
+	tag, err := r.pool.Exec(ctx, query, raw, string(status), workerID)
+	if err != nil {
+		return fmt.Errorf("mark dispatch deliveries terminal: %w", err)
+	}
+	return expectRowsAffected(tag.RowsAffected(), len(updates), "mark dispatch deliveries terminal")
+}

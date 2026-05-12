@@ -52,3 +52,4 @@
 052 056_add_ycsas_pending_published_at_resolution_index.sql
 053 057_add_ycsas_published_at_retry_after.sql
 054 058_create_alarm_dispatch_outbox.sql
+055 059_harden_alarm_dispatch_outbox.sql

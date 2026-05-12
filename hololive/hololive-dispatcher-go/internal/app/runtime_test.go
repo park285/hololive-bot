@@ -31,12 +31,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
+	"gorm.io/gorm"
 )
 
 type testQueueConsumer struct {
@@ -117,6 +119,17 @@ func (c *readinessTestIrisClient) Ping(ctx context.Context) bool {
 	}
 	return true
 }
+
+type readinessTestPostgres struct {
+	pingErr error
+}
+
+func (p *readinessTestPostgres) GetPool() *pgxpool.Pool { return nil }
+func (p *readinessTestPostgres) GetGormDB() *gorm.DB    { return nil }
+func (p *readinessTestPostgres) Ping(context.Context) error {
+	return p.pingErr
+}
+func (p *readinessTestPostgres) Close() error { return nil }
 
 func newTestRuntimeForReadiness(connected bool) *Runtime {
 	return newTestRuntimeForReadinessWithIris(connected, true)
@@ -236,6 +249,32 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			}
 			if got := payload["iris_connected"]; got != false {
 				t.Fatalf("iris_connected = %v, want false", got)
+			}
+		})
+
+		t.Run("ready in pg mode when valkey wakeup is degraded", func(t *testing.T) {
+			rt := newTestRuntimeForReadinessWithIris(false, true)
+			rt.cfg = &Config{Dispatch: DispatchConfig{ConsumerMode: "pg", WakeupEnabled: true}}
+			rt.postgres = &readinessTestPostgres{}
+			rt.readyState.dispatchLoopRunning.Store(true)
+			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+			rec := httptest.NewRecorder()
+
+			rt.routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+			}
+
+			var payload map[string]any
+			if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode ready response: %v", err)
+			}
+			if got := payload["wakeup_degraded"]; got != true {
+				t.Fatalf("wakeup_degraded = %v, want true", got)
+			}
+			if got := payload["valkey_connected"]; got != false {
+				t.Fatalf("valkey_connected = %v, want false", got)
 			}
 		})
 

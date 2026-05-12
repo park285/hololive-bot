@@ -148,12 +148,13 @@ func (d *Dispatcher) nextBatch(ctx context.Context) ([]domain.AlarmQueueEnvelope
 }
 
 func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGroup) error {
-	eg, egCtx := errgroup.WithContext(ctx)
+	var eg errgroup.Group
 	eg.SetLimit(d.parallelism)
 
 	for _, group := range groups {
+		group := group
 		eg.Go(func() error {
-			if err := d.dispatchGroup(egCtx, group); err != nil {
+			if err := d.dispatchGroup(ctx, group); err != nil {
 				d.logger.Warn("Dispatch group failed",
 					slog.String("room_id", group.RoomID),
 					slog.Int("notifications", len(group.Notifications)),

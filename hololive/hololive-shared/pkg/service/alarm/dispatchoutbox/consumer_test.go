@@ -2,6 +2,7 @@ package dispatchoutbox
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -30,6 +31,62 @@ func TestConsumerDrainBatch_QuarantinesStaleSendingBeforeClaiming(t *testing.T) 
 	}
 	if repo.quarantineOlderThan != 30*time.Second {
 		t.Fatalf("QuarantineStaleSending olderThan = %v, want 30s", repo.quarantineOlderThan)
+	}
+}
+
+func TestConsumerDrainBatch_ThrottlesRecovery(t *testing.T) {
+	t.Parallel()
+
+	repo := &consumerTestRepository{
+		claimDueFunc: func(ctx context.Context, workerID string, limit int, lease time.Duration) ([]*Record, error) {
+			return nil, nil
+		},
+	}
+	now := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
+	consumer := NewConsumer(repo, slog.Default(), WithWorkerID("worker-1"), WithRecoveryInterval(30*time.Second))
+	consumer.now = func() time.Time { return now }
+
+	for range 100 {
+		if _, err := consumer.DrainBatch(context.Background(), 10); err != nil {
+			t.Fatalf("DrainBatch() error = %v", err)
+		}
+	}
+	if repo.recoverExpiredLeasedCalls != 1 {
+		t.Fatalf("RecoverExpiredLeased calls = %d, want 1", repo.recoverExpiredLeasedCalls)
+	}
+	if repo.quarantineStaleSendingCalls != 1 {
+		t.Fatalf("QuarantineStaleSending calls = %d, want 1", repo.quarantineStaleSendingCalls)
+	}
+
+	now = now.Add(31 * time.Second)
+	if _, err := consumer.DrainBatch(context.Background(), 10); err != nil {
+		t.Fatalf("DrainBatch() after interval error = %v", err)
+	}
+	if repo.recoverExpiredLeasedCalls != 2 {
+		t.Fatalf("RecoverExpiredLeased calls = %d, want 2 after interval", repo.recoverExpiredLeasedCalls)
+	}
+}
+
+func TestConsumerDrainBatch_DoesNotThrottleFailedRecovery(t *testing.T) {
+	t.Parallel()
+
+	repo := &consumerTestRepository{
+		recoverExpiredLeasedFunc: func(context.Context, int) (int, error) {
+			return 0, errors.New("postgres unavailable")
+		},
+	}
+	now := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
+	consumer := NewConsumer(repo, slog.Default(), WithWorkerID("worker-1"), WithRecoveryInterval(30*time.Second))
+	consumer.now = func() time.Time { return now }
+
+	if _, err := consumer.DrainBatch(context.Background(), 10); err == nil {
+		t.Fatal("DrainBatch() error = nil, want recovery error")
+	}
+	if _, err := consumer.DrainBatch(context.Background(), 10); err == nil {
+		t.Fatal("DrainBatch() second error = nil, want recovery retry error")
+	}
+	if repo.recoverExpiredLeasedCalls != 2 {
+		t.Fatalf("RecoverExpiredLeased calls = %d, want 2 after failed recovery", repo.recoverExpiredLeasedCalls)
 	}
 }
 
@@ -166,9 +223,11 @@ func mustMarshalTestEnvelope(t *testing.T, envelope domain.AlarmQueueEnvelope) [
 type consumerTestRepository struct {
 	claimDueFunc                func(ctx context.Context, workerID string, limit int, lease time.Duration) ([]*Record, error)
 	markSendingFunc             func(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error
+	recoverExpiredLeasedFunc    func(context.Context, int) (int, error)
 	events                      map[int64]EventRecord
 	loadEventsCalls             int
 	loadedEventIDs              []int64
+	recoverExpiredLeasedCalls   int
 	quarantineStaleSendingCalls int
 	quarantineOlderThan         time.Duration
 	markSendingWorkerID         string
@@ -229,7 +288,11 @@ func (r *consumerTestRepository) ReleaseLeased(context.Context, []int64) error {
 	return nil
 }
 
-func (r *consumerTestRepository) RecoverExpiredLeased(context.Context, int) (int, error) {
+func (r *consumerTestRepository) RecoverExpiredLeased(ctx context.Context, limit int) (int, error) {
+	r.recoverExpiredLeasedCalls++
+	if r.recoverExpiredLeasedFunc != nil {
+		return r.recoverExpiredLeasedFunc(ctx, limit)
+	}
 	return 0, nil
 }
 

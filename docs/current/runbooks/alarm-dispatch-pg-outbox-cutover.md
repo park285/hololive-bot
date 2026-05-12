@@ -8,6 +8,7 @@ Publisher:
 ALARM_DISPATCH_PUBLISH_MODE=valkey_only|shadow|pg_first
 ALARM_DISPATCH_SHADOW_FATAL=false|true
 ALARM_DISPATCH_WAKEUP_ENABLED=true|false
+ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH=1000
 ```
 
 Dispatcher:
@@ -16,17 +17,36 @@ Dispatcher:
 ALARM_DISPATCH_CONSUMER_MODE=valkey|pg
 ALARM_DISPATCH_LEASE_SECONDS=60
 ALARM_DISPATCH_POLL_INTERVAL_MS=1000
+ALARM_DISPATCH_MAX_BATCHES_PER_WAKE=20
 ALARM_DISPATCH_WAKEUP_ENABLED=true|false
 ```
 
+Allowed steady-state pairs:
+
+| publisher | consumer | state |
+|---|---|---|
+| `valkey_only` | `valkey` | legacy production path |
+| `shadow` | `valkey` | PG observation only |
+| `pg_first` | `pg` | PG ledger + Valkey wakeup hybrid |
+
+Forbidden pairs:
+
+| publisher | consumer | reason |
+|---|---|---|
+| `pg_first` | `valkey` | PG rows are written but legacy dispatcher never claims them |
+| `shadow` | `pg` | shadow rows are observation-only and must not be promoted automatically |
+| empty/unknown | `pg` | PG consumer requires explicit `pg_first` peer mode |
+
 ## Safe Sequence
 
-1. Apply migration `058_create_alarm_dispatch_outbox.sql`, which creates `alarm_dispatch_events` and `alarm_dispatch_deliveries`.
+1. Apply migrations through `059_harden_alarm_dispatch_outbox.sql`.
 2. Start `shadow` publisher mode with dispatcher still in `valkey` mode.
 3. Confirm only `shadowed` rows increase in `alarm_dispatch_deliveries`.
 4. Drain or explicitly account for legacy Valkey queue/retry residue.
 5. Switch publisher to `pg_first` and dispatcher to `pg` in the same rollout window.
 6. Watch `pending`, `leased`, `sending`, `sent`, `retry`, `dlq`, and `quarantined` counts.
+
+Do not perform full rollout until the P1-P4 hardening gates are complete: set-based insert, Valkey degraded PG readiness, reconciliation throttle, batch terminal updates, and retention indexes.
 
 Do not run `publisher=pg_first, consumer=valkey` or `publisher=valkey_only/shadow, consumer=pg` as a steady state.
 Unknown publisher modes are startup errors. Treat a failed alarm-worker start during cutover as safer than silently falling back to the wrong producer mode.
@@ -39,12 +59,22 @@ valkey-cli ZCARD alarm:dispatch:retry
 valkey-cli LLEN alarm:dispatch:dlq
 ```
 
+If any legacy residue is non-zero, stop the cutover. Either let the Valkey dispatcher drain it before switching, or record the residue and accept that those legacy items are owned by the rollback/drain procedure. Do not replay legacy Valkey residue into PG and do not promote `shadowed` rows to `pending`.
+
 ```sql
 SELECT status, count(*)
 FROM alarm_dispatch_deliveries
 GROUP BY status
 ORDER BY status;
+
+SELECT status, count(*)
+FROM alarm_dispatch_deliveries
+WHERE dedupe_key NOT LIKE 'v2:%'
+GROUP BY status
+ORDER BY status;
 ```
+
+`dedupe_key NOT LIKE 'v2:%'` identifies pre-v2 PG delivery rows written before the stable room/event dedupe key. The publisher checks the corresponding legacy key before inserting a v2 row, so these rows are treated as duplicates instead of creating a second delivery. Before cutover, account for any non-zero legacy PG rows by status and let retention expire terminal rows. Do not backfill or rewrite these keys without a duplicate-risk review, and do not promote legacy `shadowed` rows to `pending`.
 
 Event payload is stored once in `alarm_dispatch_events`; room state lives in `alarm_dispatch_deliveries`. Do not inspect or replay from a single per-room JSON outbox table.
 
@@ -57,4 +87,12 @@ Manual requeue requires an explicit duplicate-risk acknowledgement and writes an
 ```bash
 DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-requeue.sh \
   <delivery-id> <operator-id> "<reason>" force_duplicate_risk_ack=true
+```
+
+Retention cleanup must be chunked. Run one status at a time and repeat only while the returned row count remains at the chosen limit:
+
+```bash
+DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh sent 90 1000
+DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh dlq 180 500
+DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh quarantined 180 500
 ```

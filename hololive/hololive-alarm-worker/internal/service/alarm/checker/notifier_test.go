@@ -23,6 +23,7 @@ package checker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -52,6 +53,7 @@ func (c *failingPublishCacheClient) DoMulti(context.Context, ...valkey.Completed
 type notifierBatchOutbox struct {
 	insertBatchCalls int
 	lastBatchInput   dispatchoutbox.PublishBatchInput
+	batchErrors      []error
 }
 
 func (o *notifierBatchOutbox) InsertShadowed(context.Context, domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, error) {
@@ -65,10 +67,15 @@ func (o *notifierBatchOutbox) InsertPending(context.Context, domain.AlarmQueueEn
 func (o *notifierBatchOutbox) InsertBatch(_ context.Context, input dispatchoutbox.PublishBatchInput) (dispatchoutbox.PublishBatchResult, error) {
 	o.insertBatchCalls++
 	o.lastBatchInput = input
+	callIndex := o.insertBatchCalls - 1
+	if callIndex < len(o.batchErrors) && o.batchErrors[callIndex] != nil {
+		return dispatchoutbox.PublishBatchResult{}, o.batchErrors[callIndex]
+	}
 	return dispatchoutbox.PublishBatchResult{
 		RequestedEvents:     1,
 		InsertedEvents:      1,
 		RequestedDeliveries: len(input.Envelopes),
+		ProcessedDeliveries: len(input.Envelopes),
 		InsertedDeliveries:  len(input.Envelopes),
 	}, nil
 }
@@ -377,6 +384,58 @@ func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T
 	if len(outbox.lastBatchInput.Envelopes) != 3 {
 		t.Fatalf("InsertBatch envelopes = %d, want 3", len(outbox.lastBatchInput.Envelopes))
 	}
+}
+
+func TestNotifierSend_PGFirstChunkFailureReleasesOnlyUnprocessedClaims(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{10}, logger)
+	outbox := &notifierBatchOutbox{batchErrors: []error{nil, errors.New("pg unavailable")}}
+
+	notifier, err := NewNotifier(
+		dedupSvc,
+		queue.NewPublisher(cacheSvc, logger,
+			queue.WithOutbox(outbox),
+			queue.WithPublishMode(queue.PublishModePGFirst),
+			queue.WithWakeupEnabled(false),
+			queue.WithMaxDeliveriesPerBatch(1),
+		),
+		tier.NewTieredScheduler(logger),
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewNotifier() error = %v", err)
+	}
+
+	start := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Minute)
+	stream := &domain.Stream{
+		ID:             "stream-batch-partial-pg",
+		Title:          "Partial Batch PG",
+		ChannelID:      "UC_BATCH_PARTIAL_PG",
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &start,
+		Channel:        &domain.Channel{ID: "UC_BATCH_PARTIAL_PG", Name: "Batch Partial PG Channel"},
+	}
+	notifications := []*domain.AlarmNotification{
+		domain.NewAlarmNotification("room-pg-partial-1", stream.Channel, stream, 10, []string{"alice"}, ""),
+		domain.NewAlarmNotification("room-pg-partial-2", stream.Channel, stream, 10, []string{"bob"}, ""),
+	}
+
+	result, sendErr := notifier.Send(t.Context(), notifications)
+	require.Error(t, sendErr)
+
+	assert.Equal(t, SendResult{Sent: 1, Failed: 1}, result)
+	assert.Equal(t, 2, outbox.insertBatchCalls)
+
+	_, firstClaimed, err := dedupSvc.TryClaimNotification(t.Context(), "room-pg-partial-1", stream.ID, start, 10)
+	require.NoError(t, err)
+	assert.False(t, firstClaimed)
+
+	_, secondClaimed, err := dedupSvc.TryClaimNotification(t.Context(), "room-pg-partial-2", stream.ID, start, 10)
+	require.NoError(t, err)
+	assert.True(t, secondClaimed)
 }
 
 func readDispatchQueueSize(t *testing.T, cacheSvc cache.Client) int64 {

@@ -1,6 +1,8 @@
 package dispatchoutbox
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,6 +24,16 @@ type DedupeInput struct {
 }
 
 func BuildDedupeKey(input DedupeInput) string {
+	eventKey := BuildEventKey(input)
+	dedupeKey := fmt.Sprintf("v2:room:%s:event:%s", input.RoomID, eventKey)
+	if len(dedupeKey) <= 768 {
+		return dedupeKey
+	}
+	sum := sha256.Sum256([]byte(eventKey))
+	return fmt.Sprintf("v2:room:%s:event_sha:%s", input.RoomID, hex.EncodeToString(sum[:]))
+}
+
+func buildLegacyDedupeKey(input DedupeInput) string {
 	alarmType := input.AlarmType
 	if alarmType == "" {
 		alarmType = domain.AlarmTypeLive
@@ -121,9 +133,13 @@ func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
 }
 
 func BuildDedupeKeyFromEnvelope(envelope domain.AlarmQueueEnvelope) string {
+	return BuildDedupeKey(EnvelopeDedupeInput(envelope))
+}
+
+func BuildLegacyDedupeKeyFromEnvelope(envelope domain.AlarmQueueEnvelope) string {
 	input := EnvelopeDedupeInput(envelope)
 	if len(envelope.ClaimKeys) > 0 {
 		input.Category = envelope.ClaimKeys[len(envelope.ClaimKeys)-1]
 	}
-	return BuildDedupeKey(input)
+	return buildLegacyDedupeKey(input)
 }
