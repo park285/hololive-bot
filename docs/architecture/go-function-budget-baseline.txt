@@ -53,9 +53,6 @@ hololive/hololive-dispatcher-go/internal/dispatch/dispatcher.go:201:handleDispat
 hololive/hololive-dispatcher-go/internal/dispatch/dispatcher.go:357:retryBackoffForAttempt:32:9:2
 hololive/hololive-dispatcher-go/internal/dispatch/render.go:113:resolveStreamURL:20:13:2
 hololive/hololive-kakao-bot-go/cmd/test_db_integration/main.go:37:main:111:9:1
-hololive/hololive-kakao-bot-go/cmd/tools/fetch_profiles/main.go:102:fetchProfile:66:10:2
-hololive/hololive-kakao-bot-go/cmd/tools/fetch_profiles/main.go:220:writeProfiles:46:12:2
-hololive/hololive-kakao-bot-go/cmd/tools/fetch_profiles/main.go:43:main:58:10:2
 hololive/hololive-kakao-bot-go/internal/adapter/formatter_alarm.go:182:buildNextStreamInfoView:36:10:2
 hololive/hololive-kakao-bot-go/internal/adapter/formatter_alarm.go:98:alarmChannelName:41:29:3
 hololive/hololive-kakao-bot-go/internal/adapter/formatter_alarm_notification.go:35:AlarmNotification:59:18:2
