@@ -42,7 +42,7 @@ docker compose -f docker-compose.prod.yml logs -f <service>
 ### 1. <failure>
 
 Symptoms:
-- 
+- TBD
 
 Diagnosis:
 ```bash
@@ -50,10 +50,10 @@ Diagnosis:
 ```
 
 Mitigation:
-- 
+- TBD
 
 Rollback:
-- 
+- TBD
 
 ## Smoke test
 
