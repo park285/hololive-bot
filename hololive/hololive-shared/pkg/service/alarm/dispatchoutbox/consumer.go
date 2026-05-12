@@ -84,9 +84,9 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	if err := c.maybeRecover(ctx); err != nil {
 		return nil, err
 	}
-	records, err := c.repo.ClaimDue(ctx, c.workerID, maxItems, c.lease)
+	records, err := c.claimDue(ctx, maxItems)
 	if err != nil {
-		return nil, fmt.Errorf("drain outbox batch: claim due: %w", err)
+		return nil, err
 	}
 	events, err := c.repo.LoadEventsByID(ctx, distinctEventIDs(records))
 	if err != nil {
@@ -99,22 +99,22 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		if record.EventID > 0 {
 			event, ok := events[record.EventID]
 			if !ok {
-				if moveErr := c.repo.MoveToDLQ(ctx, []TerminalUpdate{{ID: record.ID, Error: "missing event payload"}}, c.workerID); moveErr != nil {
-					return nil, fmt.Errorf("drain outbox batch: move missing event to dlq: %w", moveErr)
+				if err := c.moveRecordToDLQ(ctx, record.ID, "missing event payload", "move missing event to dlq"); err != nil {
+					return nil, err
 				}
 				continue
 			}
 			payload = event.Payload
 		}
 		if err := json.Unmarshal(payload, &envelope); err != nil {
-			if moveErr := c.repo.MoveToDLQ(ctx, []TerminalUpdate{{ID: record.ID, Error: fmt.Sprintf("invalid payload: %v", err)}}, c.workerID); moveErr != nil {
-				return nil, fmt.Errorf("drain outbox batch: move invalid payload to dlq: %w", moveErr)
+			if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); err != nil {
+				return nil, err
 			}
 			continue
 		}
 		if err := rehydrateDeliveryContext(&envelope, record); err != nil {
-			if moveErr := c.repo.MoveToDLQ(ctx, []TerminalUpdate{{ID: record.ID, Error: fmt.Sprintf("invalid delivery context: %v", err)}}, c.workerID); moveErr != nil {
-				return nil, fmt.Errorf("drain outbox batch: move invalid delivery context to dlq: %w", moveErr)
+			if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid delivery context: %v", err), "move invalid delivery context to dlq"); err != nil {
+				return nil, err
 			}
 			continue
 		}
@@ -129,6 +129,23 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		envelopes = append(envelopes, envelope)
 	}
 	return envelopes, nil
+}
+
+func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error) {
+	records, err := c.repo.ClaimDue(ctx, c.workerID, maxItems, c.lease)
+	if err != nil {
+		return nil, fmt.Errorf("drain outbox batch: claim due: %w", err)
+	}
+	observePGClaimed(len(records))
+	return records, nil
+}
+
+func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError string, action string) error {
+	if err := c.repo.MoveToDLQ(ctx, []TerminalUpdate{{ID: id, Error: terminalError}}, c.workerID); err != nil {
+		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
+	}
+	observePGDLQ(1)
+	return nil
 }
 
 func (c *Consumer) maybeRecover(ctx context.Context) error {
@@ -162,7 +179,11 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueu
 	if len(ids) == 0 {
 		return nil
 	}
-	return c.repo.MarkSending(ctx, ids, c.workerID, c.lease)
+	if err := c.repo.MarkSending(ctx, ids, c.workerID, c.lease); err != nil {
+		observePGMarkSendingFailure()
+		return err
+	}
+	return nil
 }
 
 func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -170,7 +191,11 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQ
 	if len(ids) == 0 {
 		return nil
 	}
-	return c.repo.MarkSent(ctx, ids, c.workerID)
+	if err := c.repo.MarkSent(ctx, ids, c.workerID); err != nil {
+		observePGMarkSentFailure()
+		return err
+	}
+	return nil
 }
 
 func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
@@ -181,20 +206,33 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 	updates := make([]RetryUpdate, 0, len(envelopes))
 	now := time.Now().UTC()
 	for _, envelope := range envelopes {
-		if envelope.DispatchOutboxID <= 0 {
+		update, ok := retryUpdateFromEnvelope(envelope, now)
+		if !ok {
 			continue
-		}
-		update := RetryUpdate{ID: envelope.DispatchOutboxID, NextAttemptAt: now}
-		if envelope.Retry != nil {
-			update.AttemptCount = envelope.Retry.Attempt
-			update.Error = envelope.Retry.LastError
-			if parsed, err := time.Parse(time.RFC3339Nano, envelope.Retry.NextVisibleAt); err == nil {
-				update.NextAttemptAt = parsed.UTC()
-			}
 		}
 		updates = append(updates, update)
 	}
-	return c.repo.ScheduleRetry(ctx, updates, c.workerID)
+	if err := c.repo.ScheduleRetry(ctx, updates, c.workerID); err != nil {
+		return err
+	}
+	observePGRetryScheduled(len(updates))
+	return nil
+}
+
+func retryUpdateFromEnvelope(envelope domain.AlarmQueueEnvelope, now time.Time) (RetryUpdate, bool) {
+	if envelope.DispatchOutboxID <= 0 {
+		return RetryUpdate{}, false
+	}
+	update := RetryUpdate{ID: envelope.DispatchOutboxID, NextAttemptAt: now}
+	if envelope.Retry == nil {
+		return update, true
+	}
+	update.AttemptCount = envelope.Retry.Attempt
+	update.Error = envelope.Retry.LastError
+	if parsed, err := time.Parse(time.RFC3339Nano, envelope.Retry.NextVisibleAt); err == nil {
+		update.NextAttemptAt = parsed.UTC()
+	}
+	return update, true
 }
 
 func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -209,7 +247,11 @@ func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueE
 		}
 		updates = append(updates, update)
 	}
-	return c.repo.MoveToDLQ(ctx, updates, c.workerID)
+	if err := c.repo.MoveToDLQ(ctx, updates, c.workerID); err != nil {
+		return err
+	}
+	observePGDLQ(len(updates))
+	return nil
 }
 
 func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
@@ -223,7 +265,11 @@ func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueue
 			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: reason})
 		}
 	}
-	return c.repo.Quarantine(ctx, updates, c.workerID)
+	if err := c.repo.Quarantine(ctx, updates, c.workerID); err != nil {
+		return err
+	}
+	observePGQuarantined(len(updates))
+	return nil
 }
 
 type deliveryContext struct {

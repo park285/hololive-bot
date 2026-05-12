@@ -16,6 +16,12 @@ var (
 	alarmDispatchRecoveryLastSuccessTimestamp prometheus.Gauge
 	alarmDispatchRecoveryFailedTotal          *prometheus.CounterVec
 	alarmDispatchRecoveryRowsTotal            *prometheus.CounterVec
+	alarmDispatchPGClaimedTotal               prometheus.Counter
+	alarmDispatchPGMarkSendingFailedTotal     prometheus.Counter
+	alarmDispatchPGMarkSentFailedTotal        prometheus.Counter
+	alarmDispatchPGQuarantinedTotal           prometheus.Counter
+	alarmDispatchPGDLQTotal                   prometheus.Counter
+	alarmDispatchPGRetryScheduledTotal        prometheus.Counter
 )
 
 func init() {
@@ -39,6 +45,42 @@ func init() {
 		},
 		[]string{"type"},
 	)
+	alarmDispatchPGClaimedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_claimed_total",
+			Help: "Total PG dispatch rows claimed for delivery.",
+		},
+	)
+	alarmDispatchPGMarkSendingFailedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_mark_sending_failed_total",
+			Help: "Total PG dispatch mark-sending operations that failed.",
+		},
+	)
+	alarmDispatchPGMarkSentFailedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_mark_sent_failed_total",
+			Help: "Total PG dispatch mark-sent operations that failed.",
+		},
+	)
+	alarmDispatchPGQuarantinedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_quarantined_total",
+			Help: "Total PG dispatch rows moved to quarantine.",
+		},
+	)
+	alarmDispatchPGDLQTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_dlq_total",
+			Help: "Total PG dispatch rows moved to DLQ.",
+		},
+	)
+	alarmDispatchPGRetryScheduledTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_pg_retry_scheduled_total",
+			Help: "Total PG dispatch rows scheduled for retry.",
+		},
+	)
 }
 
 func observeRecoveryRows(recoveryType string, rows int) {
@@ -53,4 +95,36 @@ func observeRecoveryFailure(recoveryType string) {
 
 func observeRecoverySuccess(at time.Time) {
 	alarmDispatchRecoveryLastSuccessTimestamp.Set(float64(at.Unix()))
+}
+
+func observePGClaimed(rows int) {
+	if rows > 0 {
+		alarmDispatchPGClaimedTotal.Add(float64(rows))
+	}
+}
+
+func observePGMarkSendingFailure() {
+	alarmDispatchPGMarkSendingFailedTotal.Inc()
+}
+
+func observePGMarkSentFailure() {
+	alarmDispatchPGMarkSentFailedTotal.Inc()
+}
+
+func observePGQuarantined(rows int) {
+	if rows > 0 {
+		alarmDispatchPGQuarantinedTotal.Add(float64(rows))
+	}
+}
+
+func observePGDLQ(rows int) {
+	if rows > 0 {
+		alarmDispatchPGDLQTotal.Add(float64(rows))
+	}
+}
+
+func observePGRetryScheduled(rows int) {
+	if rows > 0 {
+		alarmDispatchPGRetryScheduledTotal.Add(float64(rows))
+	}
 }

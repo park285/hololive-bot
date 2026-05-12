@@ -275,8 +275,43 @@ func TestRuntimeRoutes_HealthAndReady(t *testing.T) {
 			if got := payload["wakeup_degraded"]; got != true {
 				t.Fatalf("wakeup_degraded = %v, want true", got)
 			}
+			if got := payload["wakeup_enabled"]; got != true {
+				t.Fatalf("wakeup_enabled = %v, want true", got)
+			}
+			if got := payload["wakeup_connected"]; got != false {
+				t.Fatalf("wakeup_connected = %v, want false", got)
+			}
 			if got := payload["valkey_connected"]; got != false {
 				t.Fatalf("valkey_connected = %v, want false", got)
+			}
+		})
+
+		t.Run("ready in pg mode when wakeup is disabled intentionally", func(t *testing.T) {
+			rt := newTestRuntimeForReadinessWithIris(false, true)
+			rt.cfg = &Config{Dispatch: DispatchConfig{ConsumerMode: "pg", WakeupEnabled: false}}
+			rt.postgres = &readinessTestPostgres{}
+			rt.readyState.dispatchLoopRunning.Store(true)
+			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+			rec := httptest.NewRecorder()
+
+			rt.routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+			}
+
+			var payload map[string]any
+			if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode ready response: %v", err)
+			}
+			if got := payload["wakeup_enabled"]; got != false {
+				t.Fatalf("wakeup_enabled = %v, want false", got)
+			}
+			if got := payload["wakeup_connected"]; got != false {
+				t.Fatalf("wakeup_connected = %v, want false", got)
+			}
+			if got := payload["wakeup_degraded"]; got != false {
+				t.Fatalf("wakeup_degraded = %v, want false", got)
 			}
 		})
 
