@@ -11,7 +11,7 @@ Architecture and document gates keep current docs, contracts, runbooks, and gove
 1. M0 shared-go, removed runtime, artifact, import graph, and project map gates
 2. M1 contract gates
 3. M2 document contract gates
-4. M4 LOC gates
+4. M4 LOC and function budget gates
 5. M6 deprecated deadline and release governance gates
 
 ## Document Gates
@@ -24,6 +24,7 @@ Architecture and document gates keep current docs, contracts, runbooks, and gove
 | internal-route-hardcoding | `check-internal-route-hardcoding.sh` | Keep internal routes centralized in contract/helper packages | hardcoded route appears outside allowed files | Add route constants before new call sites |
 | repository-ownership | `check-repository-ownership.sh` | Keep data ownership and runtime internal imports aligned | forbidden runtime internal import or missing ownership token | Update ownership doc before adding shared repository access |
 | error-contracts | `check-error-contracts.sh` | Ensure error docs cover stable contract codes and helpers | required error doc/helper token missing | Document compatibility gap before code changes |
+| function-budget | `check-function-budget.sh` | Keep Go production functions within Iris-level defaults: 60 lines, complexity 8, nesting 5 | new over-budget function, stale baseline, or existing over-budget function grows | Refactor first; update baseline only for deliberate legacy debt ceilings |
 
 ## Local Validation
 
@@ -34,5 +35,6 @@ Architecture and document gates keep current docs, contracts, runbooks, and gove
 ./scripts/architecture/check-internal-route-hardcoding.sh
 ./scripts/architecture/check-repository-ownership.sh
 ./scripts/architecture/check-error-contracts.sh
+./scripts/architecture/check-function-budget.sh
 ./scripts/architecture/ci-boundary-gate.sh
 ```
