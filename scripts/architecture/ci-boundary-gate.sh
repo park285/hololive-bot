@@ -51,8 +51,12 @@ echo "[M1] migration manifest check"
 echo
 
 echo "[CI] Run M2 document contract gate"
-echo "[M2] current docs historical marker check"
-"${SCRIPT_DIR}/check-current-docs-no-historical.sh"
+echo "[M2] current docs historical body check"
+"${SCRIPT_DIR}/check-current-docs-no-historical-body.sh"
+echo
+
+echo "[M2] markdown local path check"
+"${SCRIPT_DIR}/check-doc-links-no-local-paths.sh"
 echo
 
 echo "[M2] runtime runbook coverage check"

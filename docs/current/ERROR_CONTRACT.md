@@ -14,10 +14,10 @@
 
 호출부가 `extra`를 넘기면 같은 JSON object에 추가 field가 병합됩니다.
 
-Alarm shared API는 일부 endpoint에서 다음 envelope도 사용합니다.
+Alarm shared API는 legacy `success` envelope에 additive `error` field를 함께 사용합니다. 기존 `success`/`message` client 호환성은 유지합니다.
 
 ```json
-{"success":false,"message":"error message"}
+{"success":false,"error":"stable_error_code","message":"error message"}
 ```
 
 ## Additive Typed Format
@@ -70,4 +70,4 @@ Alarm shared API는 일부 endpoint에서 다음 envelope도 사용합니다.
 ## Known Gaps
 
 - `RespondError` does not yet emit `message` or `request_id` by default.
-- Alarm API envelope uses `success/message` rather than the shared `{error}` format.
+- Alarm API envelope still keeps `success/message` compatibility while adding `error`.

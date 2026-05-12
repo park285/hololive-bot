@@ -135,7 +135,6 @@ func decodeResponse(t *testing.T, body *bytes.Buffer) APIResponse {
 	return resp
 }
 
-
 func TestAddAlarm(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -143,6 +142,7 @@ func TestAddAlarm(t *testing.T) {
 		mockFn     func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
 		wantStatus int
 		wantOK     bool
+		wantError  string
 	}{
 		{
 			name: "성공",
@@ -162,6 +162,7 @@ func TestAddAlarm(t *testing.T) {
 			mockFn:     nil,
 			wantStatus: http.StatusBadRequest,
 			wantOK:     false,
+			wantError:  "invalid_request_body",
 		},
 		{
 			name: "서비스 에러",
@@ -174,6 +175,7 @@ func TestAddAlarm(t *testing.T) {
 			},
 			wantStatus: http.StatusInternalServerError,
 			wantOK:     false,
+			wantError:  "alarm_add_failed",
 		},
 	}
 
@@ -197,10 +199,12 @@ func TestAddAlarm(t *testing.T) {
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
 			}
+			if resp.Error != tt.wantError {
+				t.Errorf("error = %q, want %q", resp.Error, tt.wantError)
+			}
 		})
 	}
 }
-
 
 func TestRemoveAlarm(t *testing.T) {
 	tests := []struct {
@@ -250,7 +254,6 @@ func TestRemoveAlarm(t *testing.T) {
 		})
 	}
 }
-
 
 func TestGetRoomAlarmsWithTypes(t *testing.T) {
 	tests := []struct {
@@ -354,7 +357,6 @@ func TestGetRoomAlarmsView(t *testing.T) {
 	}
 }
 
-
 func TestClearRoomAlarms(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -394,7 +396,6 @@ func TestClearRoomAlarms(t *testing.T) {
 		})
 	}
 }
-
 
 func TestGetNextStreamInfo(t *testing.T) {
 	sched := time.Now().Add(time.Hour)
@@ -460,7 +461,6 @@ func TestGetNextStreamInfo(t *testing.T) {
 	}
 }
 
-
 func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -511,7 +511,6 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	}
 }
 
-
 func TestGetAllAlarmKeys(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -550,7 +549,6 @@ func TestGetAllAlarmKeys(t *testing.T) {
 		})
 	}
 }
-
 
 func TestHealthAndReady(t *testing.T) {
 	mock := &mockAlarmCRUD{}

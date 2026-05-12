@@ -10,9 +10,9 @@ Runtime settings changes are broadcast through Valkey Pub/Sub channel `config:up
 
 ## Provider
 
-- Service: admin/settings update path 검토 필요
+- Service: `admin-api` settings update paths
 - Module: `hololive-shared` dispatcher helpers are shared
-- Runtime: publisher runtime depends on current admin/settings flow
+- Runtime: publisher is currently `admin-api`
 
 ## Consumers
 
@@ -90,5 +90,5 @@ Known update types:
 
 ## Known gaps
 
-- Publisher ownership is not fully documented in current service docs.
+- Publisher ownership is `admin-api`; new publishers must update `CONTRACT_MAP.md` and `CONTRACT_MANIFEST.txt`.
 - Pub/Sub startup refresh requirements are runtime-specific and must be checked per subscriber.

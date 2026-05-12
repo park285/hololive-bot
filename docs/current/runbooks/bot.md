@@ -87,6 +87,12 @@ Rollback:
 curl -k https://127.0.0.1:30001/health
 ```
 
+## Rollback
+
+- Use `docs/current/runbooks/rollback.md`.
+- Redeploy the previous `hololive-bot` image/config.
+- Recheck Iris webhook/reply and scheduler-dependent commands after rollback.
+
 ## Related contracts
 
 - `../contracts/iris-boundary.md`
