@@ -34,10 +34,13 @@ import (
 
 type queueConsumer interface {
 	DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
+	MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	ReleaseClaimKeys(ctx context.Context, claimKeys []string) error
 	ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error
 }
 
 type messageSender interface {
@@ -51,16 +54,24 @@ type RetryPolicy struct {
 	JitterPercent float64
 }
 
+type SendFailurePolicy string
+
+const (
+	SendFailurePolicyRetry      SendFailurePolicy = "retry"
+	SendFailurePolicyQuarantine SendFailurePolicy = "quarantine"
+)
+
 type Dispatcher struct {
-	consumer    queueConsumer
-	sender      messageSender
-	renderer    Renderer
-	maxBatch    int
-	parallelism int
-	logger      *slog.Logger
-	retryPolicy RetryPolicy
-	now         func() time.Time
-	randFloat64 func() float64
+	consumer          queueConsumer
+	sender            messageSender
+	renderer          Renderer
+	maxBatch          int
+	parallelism       int
+	logger            *slog.Logger
+	retryPolicy       RetryPolicy
+	sendFailurePolicy SendFailurePolicy
+	now               func() time.Time
+	randFloat64       func() float64
 }
 
 func NewDispatcher(
@@ -104,26 +115,32 @@ func NewDispatcher(
 			MaxBackoff:    30 * time.Second,
 			JitterPercent: 0,
 		},
-		now:         time.Now,
-		randFloat64: rand.Float64,
+		sendFailurePolicy: SendFailurePolicyRetry,
+		now:               time.Now,
+		randFloat64:       rand.Float64,
 	}, nil
 }
 
 func (d *Dispatcher) RunOnce(ctx context.Context) error {
+	_, err := d.RunOnceProcessed(ctx)
+	return err
+}
+
+func (d *Dispatcher) RunOnceProcessed(ctx context.Context) (bool, error) {
 	envelopes, err := d.nextBatch(ctx)
 	if err != nil {
-		return fmt.Errorf("run dispatch once: drain batch: %w", err)
+		return false, fmt.Errorf("run dispatch once: drain batch: %w", err)
 	}
 	if len(envelopes) == 0 {
-		return nil
+		return false, nil
 	}
 
 	groups := GroupEnvelopes(envelopes)
 	if err := d.dispatchGroups(ctx, groups); err != nil {
-		return fmt.Errorf("run dispatch once: dispatch groups: %w", err)
+		return true, fmt.Errorf("run dispatch once: dispatch groups: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func (d *Dispatcher) nextBatch(ctx context.Context) ([]domain.AlarmQueueEnvelope, error) {
@@ -163,11 +180,30 @@ func (d *Dispatcher) dispatchGroup(ctx context.Context, group NotificationGroup)
 		return nil
 	}
 
+	if err := d.consumer.MarkSending(ctx, group.Envelopes); err != nil {
+		return fmt.Errorf("dispatch group: mark sending before external send: %w", err)
+	}
+
 	if err := d.sender.SendMessage(ctx, group.RoomID, message); err != nil {
+		if d.sendFailurePolicy == SendFailurePolicyQuarantine {
+			reason := formatDispatchFailure("send", err)
+			if quarantineErr := d.consumer.Quarantine(ctx, group.Envelopes, reason); quarantineErr != nil {
+				return fmt.Errorf("dispatch group: quarantine ambiguous send failure: %w", quarantineErr)
+			}
+			d.logger.Warn("Dispatch send outcome ambiguous; quarantined envelopes",
+				slog.String("room_id", group.RoomID),
+				slog.Int("envelopes", len(group.Envelopes)),
+			)
+			return nil
+		}
 		if handleErr := d.handleDispatchFailure(ctx, group.RoomID, group.Envelopes, "send", err); handleErr != nil {
 			return fmt.Errorf("dispatch group: persist send failure: %w", handleErr)
 		}
 		return nil
+	}
+
+	if err := d.consumer.MarkDispatched(ctx, group.Envelopes); err != nil {
+		return fmt.Errorf("dispatch group: mark dispatched after successful send: %w", err)
 	}
 
 	return nil
@@ -196,6 +232,15 @@ func (d *Dispatcher) ConfigureRetryPolicy(policy RetryPolicy) error {
 
 func (d *Dispatcher) RetryPolicy() RetryPolicy {
 	return d.retryPolicy
+}
+
+func (d *Dispatcher) ConfigureSendFailurePolicy(policy SendFailurePolicy) {
+	switch policy {
+	case SendFailurePolicyQuarantine:
+		d.sendFailurePolicy = SendFailurePolicyQuarantine
+	default:
+		d.sendFailurePolicy = SendFailurePolicyRetry
+	}
 }
 
 func (d *Dispatcher) handleDispatchFailure(

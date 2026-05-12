@@ -31,6 +31,7 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 	t.Parallel()
 
 	envelope := domain.AlarmQueueEnvelope{
+		DispatchOutboxID: 123,
 		Notification: domain.AlarmNotification{
 			RoomID:       "room1",
 			MinutesUntil: 5,
@@ -59,6 +60,9 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 
 	if decoded.Version != 1 {
 		t.Errorf("Version = %d, want 1", decoded.Version)
+	}
+	if decoded.DispatchOutboxID != 123 {
+		t.Errorf("DispatchOutboxID = %d, want 123", decoded.DispatchOutboxID)
 	}
 	if decoded.Notification.RoomID != "room1" {
 		t.Errorf("RoomID = %q, want %q", decoded.Notification.RoomID, "room1")

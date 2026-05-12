@@ -31,7 +31,9 @@ import (
 	"github.com/joho/godotenv"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
@@ -50,6 +52,7 @@ type Config struct {
 	Server      ServerConfig
 	Iris        IrisConfig
 	Valkey      cache.Config
+	Postgres    PostgresConfig
 	Dispatch    DispatchConfig
 	Logging     sharedlogging.Config
 	Environment string
@@ -65,6 +68,8 @@ type IrisConfig struct {
 	BotToken    string
 }
 
+type PostgresConfig = database.PostgresConfig
+
 type DispatchConfig struct {
 	QueueKey           string
 	MaxBatch           int
@@ -74,6 +79,11 @@ type DispatchConfig struct {
 	RetryBaseBackoff   time.Duration
 	RetryMaxBackoff    time.Duration
 	RetryJitterPercent float64
+	ConsumerMode       string
+	PublishMode        string
+	LeaseSeconds       int
+	PollInterval       time.Duration
+	WakeupEnabled      bool
 }
 
 func LoadConfig() (*Config, error) {
@@ -128,6 +138,18 @@ func LoadConfig() (*Config, error) {
 			DB:         parseIntWithFallback(lookupOptional("CACHE_DB"), lookupOptional("VALKEY_DB"), 0),
 			SocketPath: pickTrimmed(lookupOptional("CACHE_SOCKET_PATH"), lookupOptional("VALKEY_SOCKET_PATH"), ""),
 		},
+		Postgres: PostgresConfig{
+			Host:          lookupString("POSTGRES_HOST", "localhost"),
+			Port:          lookupInt("POSTGRES_PORT", 5432),
+			SocketPath:    lookupString("POSTGRES_SOCKET_PATH", ""),
+			User:          lookupString("POSTGRES_USER", ""),
+			Password:      lookupString("POSTGRES_PASSWORD", ""),
+			Database:      lookupString("POSTGRES_DB", ""),
+			SSLMode:       lookupString("POSTGRES_SSLMODE", "require"),
+			QueryExecMode: lookupString("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
+			PoolMinConns:  lookupInt("POSTGRES_POOL_MIN_CONNS", 1),
+			PoolMaxConns:  lookupInt("POSTGRES_POOL_MAX_CONNS", 4),
+		},
 		Dispatch: DispatchConfig{
 			QueueKey:           lookupString("ALARM_DISPATCH_QUEUE_KEY", "alarm:dispatch:queue"),
 			MaxBatch:           maxBatch,
@@ -137,6 +159,11 @@ func LoadConfig() (*Config, error) {
 			RetryBaseBackoff:   time.Duration(retryBaseBackoffMS) * time.Millisecond,
 			RetryMaxBackoff:    time.Duration(retryMaxBackoffMS) * time.Millisecond,
 			RetryJitterPercent: retryJitterPercent,
+			ConsumerMode:       lookupString("ALARM_DISPATCH_CONSUMER_MODE", "valkey"),
+			PublishMode:        lookupString("ALARM_DISPATCH_PUBLISH_MODE", ""),
+			LeaseSeconds:       lookupInt("ALARM_DISPATCH_LEASE_SECONDS", 60),
+			PollInterval:       time.Duration(lookupInt("ALARM_DISPATCH_POLL_INTERVAL_MS", 1000)) * time.Millisecond,
+			WakeupEnabled:      lookupBool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
 		},
 		Logging: sharedlogging.Config{
 			Level:      lookupString("LOG_LEVEL", "info"),
@@ -201,8 +228,58 @@ func (c *Config) Validate() error {
 	if c.Dispatch.RetryJitterPercent < 0 || c.Dispatch.RetryJitterPercent > 100 {
 		return fmt.Errorf("validate config: ALARM_DISPATCH_RETRY_JITTER_PERCENT must be between 0 and 100")
 	}
+	switch strings.ToLower(strings.TrimSpace(c.Dispatch.ConsumerMode)) {
+	case "", "valkey":
+		c.Dispatch.ConsumerMode = "valkey"
+	case "pg":
+		c.Dispatch.ConsumerMode = "pg"
+	default:
+		return fmt.Errorf("validate config: ALARM_DISPATCH_CONSUMER_MODE must be valkey or pg")
+	}
+	if err := validateAlarmDispatchModePair(c.Dispatch.PublishMode, c.Dispatch.ConsumerMode); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+	if c.Dispatch.LeaseSeconds <= 0 {
+		c.Dispatch.LeaseSeconds = 60
+	}
+	if c.Dispatch.PollInterval <= 0 {
+		c.Dispatch.PollInterval = time.Second
+	}
+	if c.Dispatch.ConsumerMode == "pg" {
+		if strings.TrimSpace(c.Postgres.SocketPath) == "" && strings.TrimSpace(c.Postgres.Host) == "" {
+			return fmt.Errorf("validate config: POSTGRES_HOST is required in pg consumer mode when POSTGRES_SOCKET_PATH is empty")
+		}
+		if strings.TrimSpace(c.Postgres.User) == "" {
+			return fmt.Errorf("validate config: POSTGRES_USER is required in pg consumer mode")
+		}
+		if strings.TrimSpace(c.Postgres.Database) == "" {
+			return fmt.Errorf("validate config: POSTGRES_DB is required in pg consumer mode")
+		}
+	}
 	if strings.TrimSpace(c.Valkey.SocketPath) == "" && strings.TrimSpace(c.Valkey.Host) == "" {
 		return fmt.Errorf("validate config: CACHE_HOST is required when CACHE_SOCKET_PATH is empty")
+	}
+	return nil
+}
+
+func validateAlarmDispatchModePair(rawPublishMode string, consumerMode string) error {
+	publishMode := queue.PublishMode(strings.ToLower(strings.TrimSpace(rawPublishMode)))
+	if publishMode == "" {
+		if consumerMode == "pg" {
+			return fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE is required when ALARM_DISPATCH_CONSUMER_MODE=pg")
+		}
+		return nil
+	}
+	switch publishMode {
+	case queue.PublishModeValkeyOnly, queue.PublishModeShadow, queue.PublishModePGFirst:
+	default:
+		return fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE must be valkey_only, shadow, or pg_first when provided")
+	}
+	if publishMode == queue.PublishModePGFirst && consumerMode != "pg" {
+		return fmt.Errorf("forbidden alarm dispatch mode combination: publisher=pg_first requires consumer=pg")
+	}
+	if publishMode != queue.PublishModePGFirst && consumerMode == "pg" {
+		return fmt.Errorf("forbidden alarm dispatch mode combination: consumer=pg requires publisher=pg_first")
 	}
 	return nil
 }

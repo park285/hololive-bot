@@ -22,6 +22,7 @@ package app
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,6 +190,81 @@ func TestConfigValidate(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
+func TestConfigValidate_RejectsForbiddenPublishConsumerModePair(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Server: ServerConfig{Port: 30020},
+		Iris: IrisConfig{
+			BaseURL:  "http://localhost:3000",
+			BotToken: "token",
+		},
+		Valkey: cache.Config{
+			Host: "localhost",
+			Port: 6379,
+		},
+		Dispatch: DispatchConfig{
+			QueueKey:           "alarm:dispatch:queue",
+			MaxBatch:           50,
+			Parallelism:        4,
+			ReconnectBackoff:   time.Second,
+			RetryMaxAttempts:   3,
+			RetryBaseBackoff:   5 * time.Second,
+			RetryMaxBackoff:    30 * time.Second,
+			RetryJitterPercent: 20,
+			ConsumerMode:       "pg",
+			PublishMode:        "shadow",
+		},
+		Postgres: PostgresConfig{
+			Host:     "localhost",
+			User:     "hololive",
+			Database: "hololive",
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected forbidden mode pair validation error, got nil")
+	}
+}
+
+func TestConfigValidate_RejectsPGConsumerWithoutPeerPublishMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Server: ServerConfig{Port: 30020},
+		Iris: IrisConfig{
+			BaseURL:  "http://localhost:3000",
+			BotToken: "token",
+		},
+		Valkey: cache.Config{
+			Host: "localhost",
+			Port: 6379,
+		},
+		Postgres: PostgresConfig{
+			Host:     "localhost",
+			User:     "hololive",
+			Database: "hololive",
+		},
+		Dispatch: DispatchConfig{
+			QueueKey:           "alarm:dispatch:queue",
+			MaxBatch:           50,
+			Parallelism:        4,
+			ReconnectBackoff:   time.Second,
+			RetryMaxAttempts:   3,
+			RetryBaseBackoff:   5 * time.Second,
+			RetryMaxBackoff:    30 * time.Second,
+			RetryJitterPercent: 20,
+			ConsumerMode:       "pg",
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected missing peer publish mode validation error, got nil")
+	} else if !strings.Contains(err.Error(), "ALARM_DISPATCH_PUBLISH_MODE is required") {
+		t.Fatalf("validation error = %q, want missing publish mode", err.Error())
 	}
 }
 
