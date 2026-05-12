@@ -40,6 +40,25 @@ func TestHTTP3HealthClientUsesConstrainedInitialPacketSize(t *testing.T) {
 	}
 }
 
+func TestParseURLRejectsInvalidInputs(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "missing scheme", raw: "localhost:3000/health"},
+		{name: "unsupported scheme", raw: "ftp://localhost/health"},
+		{name: "missing host", raw: "https:///health"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := parseURL(tt.raw); err == nil {
+				t.Fatalf("parseURL(%q) error = nil, want error", tt.raw)
+			}
+		})
+	}
+}
+
 func TestCheckURLAcceptsHTTP3LoopbackWithServerNameOverride(t *testing.T) {
 	certFile, keyFile := writeHealthcheckCert(t, "hololive-h3.local")
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)

@@ -89,6 +89,14 @@ func parseURL(raw string) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
 	}
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return nil, fmt.Errorf("unsupported url scheme: %s", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("url missing host")
+	}
 	return parsed, nil
 }
 
