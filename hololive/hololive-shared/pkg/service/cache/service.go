@@ -64,7 +64,7 @@ func NewCacheService(ctx context.Context, cfg Config, logger *slog.Logger) (*Ser
 		addr = cfg.SocketPath
 		connMethod = "unix"
 	} else {
-		addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+		addr = net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 		connMethod = "tcp"
 	}
 

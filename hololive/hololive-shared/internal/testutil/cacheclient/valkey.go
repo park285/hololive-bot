@@ -22,7 +22,8 @@ package cacheclient
 
 import (
 	"context"
-	"fmt"
+	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func NewValkeyClientWithMini(t *testing.T) (valkey.Client, *miniredis.Miniredis)
 
 	host, port, mini := testredis.StartMiniRedis(t)
 	client, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress:  []string{fmt.Sprintf("%s:%d", host, port)},
+		InitAddress:  []string{net.JoinHostPort(host, strconv.Itoa(port))},
 		DisableCache: true,
 		// 테스트는 임의 키 조합(MGET/MSET) 검증이 많아 단일 클라이언트 모드가 필요합니다.
 		ForceSingleClient: true,

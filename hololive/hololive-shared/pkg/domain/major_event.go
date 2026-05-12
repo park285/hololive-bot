@@ -21,7 +21,7 @@
 package domain
 
 import (
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -123,8 +123,8 @@ func (e *MajorEvent) SetEventDatesFromParsed() {
 		return
 	}
 
-	sort.Slice(e.EventDates, func(i, j int) bool {
-		return e.EventDates[i].Before(e.EventDates[j])
+	slices.SortFunc(e.EventDates, func(a, b time.Time) int {
+		return a.Compare(b)
 	})
 
 	startDate := e.EventDates[0]
