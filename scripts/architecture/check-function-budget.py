@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,6 +64,24 @@ class FunctionBudget:
 
 
 def iter_go_files(root: Path) -> list[Path]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "*.go"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        result = None
+
+    if result is not None:
+        return sorted(
+            root / line
+            for line in result.stdout.splitlines()
+            if line.endswith(".go") and not line.endswith("_test.go")
+        )
+
     result: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [name for name in dirnames if name not in EXCLUDED_DIR_NAMES and not name.startswith(".")]
