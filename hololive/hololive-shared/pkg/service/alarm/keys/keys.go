@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 )
@@ -68,6 +69,40 @@ const (
 
 func BuildRoomAlarmKey(roomID string) string {
 	return AlarmKeyPrefix + roomID
+}
+
+func IsReservedAlarmKey(key string) bool {
+	switch strings.TrimSpace(key) {
+	case AlarmRegistryKey,
+		AlarmChannelRegistryKey,
+		AlarmChannelRegistryVersionKey,
+		AlarmSubscriberCacheEmptyKey,
+		MemberNameKey,
+		RoomNamesCacheKey,
+		UserNamesCacheKey,
+		contractsalarm.DispatchQueueKey,
+		contractsalarm.DispatchRetryQueueKey,
+		contractsalarm.DispatchDLQKey,
+		ChzzkChannelMapKey,
+		ChzzkChannelMapEmptyKey,
+		TwitchLoginMapKey,
+		TwitchLoginMapEmptyKey,
+		TwitchChannelLoginMapKey,
+		TwitchChannelLoginMapEmptyKey:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsRoomAlarmKey(key string) bool {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" || !strings.HasPrefix(trimmed, AlarmKeyPrefix) || IsReservedAlarmKey(trimmed) {
+		return false
+	}
+
+	suffix := strings.TrimPrefix(trimmed, AlarmKeyPrefix)
+	return suffix != "" && !strings.Contains(suffix, ":")
 }
 
 type ChannelContentAlarmTargetKeys struct {

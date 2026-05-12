@@ -56,24 +56,6 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 	return nil
 }
 
-func normalizedAlarmTypes(alarmTypes domain.AlarmTypes) domain.AlarmTypes {
-	normalized, err := normalizeAlarmTypesStrict(alarmTypes, domain.DefaultAlarmTypes)
-	if err != nil {
-		return append(domain.AlarmTypes(nil), domain.DefaultAlarmTypes...)
-	}
-
-	return normalized
-}
-
-func normalizedRemovalAlarmTypes(alarmTypes domain.AlarmTypes) domain.AlarmTypes {
-	normalized, err := normalizeAlarmTypesStrict(alarmTypes, domain.AllAlarmTypes)
-	if err != nil {
-		return append(domain.AlarmTypes(nil), domain.AllAlarmTypes...)
-	}
-
-	return normalized
-}
-
 func normalizeAlarmTypesStrict(input domain.AlarmTypes, fallback domain.AlarmTypes) (domain.AlarmTypes, error) {
 	if len(input) == 0 {
 		input = fallback
