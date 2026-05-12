@@ -190,6 +190,7 @@ func (n *AlarmNotification) ValidateLegacyRoute() error {
 }
 
 type AlarmQueueEnvelope struct {
+	DispatchOutboxID  int64                    `json:"dispatch_outbox_id,omitempty"`
 	Notification      AlarmNotification        `json:"notification"`
 	ClaimKeys         []string                 `json:"claim_keys"`
 	EnqueuedAt        string                   `json:"enqueued_at"`
@@ -219,16 +220,18 @@ type alarmQueueEnvelopeNotificationWire struct {
 }
 
 type alarmQueueEnvelopeWire struct {
-	Notification  alarmQueueEnvelopeNotificationWire `json:"notification"`
-	ClaimKeys     []string                           `json:"claim_keys"`
-	EnqueuedAt    string                             `json:"enqueued_at"`
-	Version       uint8                              `json:"version"`
-	Retry         *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
-	SourcePayload string                             `json:"source_payload,omitempty"`
+	DispatchOutboxID int64                              `json:"dispatch_outbox_id,omitempty"`
+	Notification     alarmQueueEnvelopeNotificationWire `json:"notification"`
+	ClaimKeys        []string                           `json:"claim_keys"`
+	EnqueuedAt       string                             `json:"enqueued_at"`
+	Version          uint8                              `json:"version"`
+	Retry            *AlarmQueueRetryMetadata           `json:"retry,omitempty"`
+	SourcePayload    string                             `json:"source_payload,omitempty"`
 }
 
 func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alarmQueueEnvelopeWire{
+		DispatchOutboxID: e.DispatchOutboxID,
 		Notification: alarmQueueEnvelopeNotificationWire{
 			AlarmType:                   e.Notification.AlarmType,
 			RoomID:                      e.Notification.RoomID,
@@ -280,6 +283,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 	}
 
 	*e = AlarmQueueEnvelope{
+		DispatchOutboxID: wire.DispatchOutboxID,
 		Notification: AlarmNotification{
 			AlarmType:                   alarmType,
 			RoomID:                      wire.Notification.RoomID,

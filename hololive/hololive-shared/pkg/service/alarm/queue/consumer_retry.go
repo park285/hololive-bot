@@ -80,6 +80,14 @@ func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQu
 	return nil
 }
 
+func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	return nil
+}
+
+func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	return nil
+}
+
 func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
 	if len(envelopes) == 0 {
 		return nil
@@ -110,6 +118,10 @@ func (c *Consumer) MoveToDLQ(ctx context.Context, envelopes []domain.AlarmQueueE
 
 	alarmQueueDLQMoved.Add(float64(len(elements)))
 	return nil
+}
+
+func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+	return c.MoveToDLQ(ctx, envelopes)
 }
 
 func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {

@@ -35,6 +35,8 @@ import (
 // NOTE: keep this interface aligned with Service's public surface to avoid consumer breakage.
 type Client interface {
 	Get(ctx context.Context, key string, dest any) error
+	GetJSON(ctx context.Context, key string, dest any) (bool, error)
+	GetString(ctx context.Context, key string) (string, bool, error)
 	MGet(ctx context.Context, keys []string) (map[string]string, error)
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	MSet(ctx context.Context, pairs map[string]any, ttl time.Duration) error

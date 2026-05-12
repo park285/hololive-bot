@@ -70,6 +70,7 @@ func NewNotifier(
 func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, error) {
 	result := SendResult{}
 	var errs []error
+	prepared := make([]claimedSend, 0, len(notifications))
 
 	for _, notification := range notifications {
 		if err := ctx.Err(); err != nil {
@@ -77,14 +78,14 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 			break
 		}
 
-		singleResult, err := n.sendOne(ctx, notification)
+		payload, claimKeys, singleResult, err := n.prepareOne(ctx, notification)
 		switch singleResult {
-		case sendOutcomeSent:
-			result.Sent++
 		case sendOutcomeSkipped:
 			result.Skipped++
 		case sendOutcomeFailed:
 			result.Failed++
+		case sendOutcomeSent:
+			prepared = append(prepared, claimedSend{payload: payload, claimKeys: claimKeys})
 		default:
 			if err != nil {
 				result.Failed++
@@ -99,6 +100,20 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 				slog.Any("error", err),
 			)
 			continue
+		}
+	}
+
+	if len(prepared) > 0 {
+		if err := n.publishBatchAndMark(ctx, prepared); err != nil {
+			result.Failed += len(prepared)
+			errs = append(errs, fmt.Errorf("send notifications: publish batch: %w", err))
+		} else {
+			result.Sent += len(prepared)
+			for _, item := range prepared {
+				if n.tierScheduler != nil {
+					n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
+				}
+			}
 		}
 	}
 
@@ -136,39 +151,50 @@ type sendInput struct {
 	startScheduled time.Time
 }
 
+type claimedSend struct {
+	payload   *sendInput
+	claimKeys []string
+}
+
 const (
 	legacyCommunityShortsRouteAuditLogMessage = "YouTube community/shorts legacy route audit"
 	legacyCommunityShortsDeliveryPath         = "legacy_alarm_queue"
 )
 
 func (n *Notifier) sendOne(ctx context.Context, notif *domain.AlarmNotification) (sendOutcome, error) {
+	payload, claimKeys, outcome, err := n.prepareOne(ctx, notif)
+	if err != nil || outcome != sendOutcomeSent {
+		return outcome, err
+	}
+	if err := n.publishAndMark(ctx, payload, claimKeys); err != nil {
+		return sendOutcomeFailed, fmt.Errorf("send one: publish and mark: %w", err)
+	}
+	if n.tierScheduler != nil {
+		n.tierScheduler.MarkChannelRecentlyNotified(payload.channelID)
+	}
+	return sendOutcomeSent, nil
+}
+
+func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification) (*sendInput, []string, sendOutcome, error) {
 	payload := resolveSendInput(notif, time.Now().UTC())
 	if payload == nil {
-		return sendOutcomeSkipped, nil
+		return nil, nil, sendOutcomeSkipped, nil
 	}
 	if err := payload.notification.ValidateLegacyRoute(); err != nil {
 		n.logLegacyCommunityShortsRoute(payload, err)
-		return sendOutcomeFailed, fmt.Errorf("send one: validate legacy route: %w", err)
+		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate legacy route: %w", err)
 	}
 
 	claimKeys, claimed, err := n.claimDedup(ctx, payload)
 	if err != nil {
-		return sendOutcomeFailed, fmt.Errorf("send one: claim dedup: %w", err)
+		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: claim dedup: %w", err)
 	}
 
 	if !claimed {
-		return sendOutcomeSkipped, nil
+		return nil, nil, sendOutcomeSkipped, nil
 	}
 
-	if err := n.publishAndMark(ctx, payload, claimKeys); err != nil {
-		return sendOutcomeFailed, fmt.Errorf("send one: publish and mark: %w", err)
-	}
-
-	if n.tierScheduler != nil {
-		n.tierScheduler.MarkChannelRecentlyNotified(payload.channelID)
-	}
-
-	return sendOutcomeSent, nil
+	return payload, claimKeys, sendOutcomeSent, nil
 }
 
 func (n *Notifier) logLegacyCommunityShortsRoute(payload *sendInput, routeErr error) {
@@ -361,6 +387,53 @@ func (n *Notifier) publishAndMark(ctx context.Context, payload *sendInput, claim
 	}
 
 	return nil
+}
+
+func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend) error {
+	notifications := make([]*domain.AlarmNotification, 0, len(items))
+	claimKeys := make([][]string, 0, len(items))
+	allClaimKeys := make([]string, 0, len(items)*2)
+	for _, item := range items {
+		notifications = append(notifications, item.payload.notification)
+		claimKeys = append(claimKeys, item.claimKeys)
+		allClaimKeys = append(allClaimKeys, item.claimKeys...)
+	}
+	if err := n.queuePublisher.PublishBatch(ctx, notifications, claimKeys); err != nil {
+		n.releaseClaimsBestEffort(ctx, allClaimKeys, "failed to release claims after queue batch publish error")
+		return fmt.Errorf("publish queue batch: %w", err)
+	}
+	for _, item := range items {
+		n.markPublishedBestEffort(ctx, item.payload)
+	}
+	return nil
+}
+
+func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInput) {
+	if err := n.dedupSvc.MarkAsNotified(
+		ctx,
+		payload.streamID,
+		payload.startScheduled,
+		payload.notification.MinutesUntil,
+	); err != nil {
+		n.logger.Warn("Failed to mark as notified after publish (non-fatal)",
+			slog.String("stream_id", payload.streamID),
+			slog.Int("minutes_until", payload.notification.MinutesUntil),
+			slog.Any("error", err),
+		)
+	}
+
+	if err := n.dedupSvc.MarkUpcomingEventNotified(
+		ctx,
+		payload.notification.RoomID,
+		payload.channelID,
+		payload.notification.Stream,
+	); err != nil {
+		n.logger.Warn("Failed to mark upcoming event notified after publish (non-fatal)",
+			slog.String("room_id", payload.notification.RoomID),
+			slog.String("channel_id", payload.channelID),
+			slog.Any("error", err),
+		)
+	}
 }
 
 func (n *Notifier) releaseClaimsBestEffort(ctx context.Context, claimKeys []string, message string) {

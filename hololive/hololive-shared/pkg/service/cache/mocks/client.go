@@ -39,13 +39,15 @@ import (
 type Client struct {
 	Lenient bool
 
-	GetFunc      func(ctx context.Context, key string, dest any) error
-	MGetFunc     func(ctx context.Context, keys []string) (map[string]string, error)
-	SetFunc      func(ctx context.Context, key string, value any, ttl time.Duration) error
-	MSetFunc     func(ctx context.Context, pairs map[string]any, ttl time.Duration) error
-	DelFunc      func(ctx context.Context, key string) error
-	DelManyFunc  func(ctx context.Context, keys []string) (int64, error)
-	ScanKeysFunc func(ctx context.Context, pattern string, batchSize int64) ([]string, error)
+	GetFunc       func(ctx context.Context, key string, dest any) error
+	GetJSONFunc   func(ctx context.Context, key string, dest any) (bool, error)
+	GetStringFunc func(ctx context.Context, key string) (string, bool, error)
+	MGetFunc      func(ctx context.Context, keys []string) (map[string]string, error)
+	SetFunc       func(ctx context.Context, key string, value any, ttl time.Duration) error
+	MSetFunc      func(ctx context.Context, pairs map[string]any, ttl time.Duration) error
+	DelFunc       func(ctx context.Context, key string) error
+	DelManyFunc   func(ctx context.Context, keys []string) (int64, error)
+	ScanKeysFunc  func(ctx context.Context, pattern string, batchSize int64) ([]string, error)
 
 	SAddFunc      func(ctx context.Context, key string, members []string) (int64, error)
 	SRemFunc      func(ctx context.Context, key string, members []string) (int64, error)
@@ -120,6 +122,22 @@ func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	}
 	m.panicIfUnset("GetFunc")
 	return nil
+}
+
+func (m *Client) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
+	if m.GetJSONFunc != nil {
+		return m.GetJSONFunc(ctx, key, dest)
+	}
+	m.panicIfUnset("GetJSONFunc")
+	return false, nil
+}
+
+func (m *Client) GetString(ctx context.Context, key string) (string, bool, error) {
+	if m.GetStringFunc != nil {
+		return m.GetStringFunc(ctx, key)
+	}
+	m.panicIfUnset("GetStringFunc")
+	return "", false, nil
 }
 
 func (m *Client) MGet(ctx context.Context, keys []string) (map[string]string, error) {

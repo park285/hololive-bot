@@ -32,7 +32,7 @@ cargo run --bin export-openapi > docs/swagger.json
 | 변수 | 설명 | 기본값 |
 |---|---|---|
 | `PORT` | HTTP 포트 | `30190` |
-| `VALKEY_URL` | 세션 저장소 주소 | `valkey-cache:6379` |
+| `VALKEY_URL` | 세션 저장소 주소. `redis://` scheme 없이 `host:port` 또는 `:urlencoded_password@host:port` 형식을 사용합니다. 관리자 세션은 Valkey 기반 휘발성 상태라 재시작/eviction 시 재로그인이 필요할 수 있습니다. | `valkey-cache:6379` |
 | `DOCKER_HOST` | Docker API 주소 | `tcp://docker-proxy:2375` |
 | `HOLO_ADMIN_API_URL` | 업스트림 hololive admin API | `http://hololive-admin-api:30006` |
 | `HOLO_BOT_URL` | legacy fallback alias for upstream admin API | `http://hololive-admin-api:30006` |

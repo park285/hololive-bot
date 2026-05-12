@@ -223,6 +223,12 @@ func TestDispatcherRunOnce_SendFailureSchedulesDurableRetryWithMetadata(t *testi
 	if fakeSender.sendCalls != 1 {
 		t.Fatalf("send calls = %d, want 1", fakeSender.sendCalls)
 	}
+	if len(fakeConsumer.markSendingEnvelopes) != 1 {
+		t.Fatalf("mark sending envelopes = %d, want 1", len(fakeConsumer.markSendingEnvelopes))
+	}
+	if len(fakeConsumer.dispatchedEnvelopes) != 0 {
+		t.Fatalf("mark dispatched envelopes = %d, want 0", len(fakeConsumer.dispatchedEnvelopes))
+	}
 
 	retry := fakeConsumer.scheduledRetries[0].Retry
 	if retry == nil {
@@ -243,6 +249,129 @@ func TestDispatcherRunOnce_SendFailureSchedulesDurableRetryWithMetadata(t *testi
 	}
 	if fakeConsumer.scheduledRetries[0].ClaimKeys[0] != "claim-1" {
 		t.Fatalf("claim key = %q, want %q", fakeConsumer.scheduledRetries[0].ClaimKeys[0], "claim-1")
+	}
+}
+
+func TestDispatcherRunOnce_SendFailureQuarantinesWhenPolicyRequires(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			return []domain.AlarmQueueEnvelope{testAlarmQueueEnvelope("room-1", "claim-1")}, nil
+		},
+	}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{
+			sendMessageFunc: func(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+				return errors.New("connection reset")
+			},
+		},
+		NewSimpleRenderer(),
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+	dispatcher.ConfigureSendFailurePolicy(SendFailurePolicyQuarantine)
+
+	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() error = %v", runErr)
+	}
+
+	if len(fakeConsumer.scheduledRetries) != 0 {
+		t.Fatalf("scheduled retries = %d, want 0", len(fakeConsumer.scheduledRetries))
+	}
+	if len(fakeConsumer.quarantinedEnvelopes) != 1 {
+		t.Fatalf("quarantined envelopes = %d, want 1", len(fakeConsumer.quarantinedEnvelopes))
+	}
+	if fakeConsumer.quarantineReason != "send failed: connection reset" {
+		t.Fatalf("quarantine reason = %q, want %q", fakeConsumer.quarantineReason, "send failed: connection reset")
+	}
+	if len(fakeConsumer.markSendingEnvelopes) != 1 {
+		t.Fatalf("mark sending envelopes = %d, want 1", len(fakeConsumer.markSendingEnvelopes))
+	}
+	if len(fakeConsumer.dispatchedEnvelopes) != 0 {
+		t.Fatalf("mark dispatched envelopes = %d, want 0", len(fakeConsumer.dispatchedEnvelopes))
+	}
+}
+
+func TestDispatcherRunOnce_SendSuccessMarksSendingThenDispatched(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			return []domain.AlarmQueueEnvelope{testAlarmQueueEnvelope("room-1", "claim-1")}, nil
+		},
+	}
+	fakeSender := &testMessageSender{}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		fakeSender,
+		NewSimpleRenderer(),
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	if runErr := dispatcher.RunOnce(context.Background()); runErr != nil {
+		t.Fatalf("RunOnce() error = %v", runErr)
+	}
+
+	if fakeSender.sendCalls != 1 {
+		t.Fatalf("send calls = %d, want 1", fakeSender.sendCalls)
+	}
+	if len(fakeConsumer.markSendingEnvelopes) != 1 {
+		t.Fatalf("mark sending envelopes = %d, want 1", len(fakeConsumer.markSendingEnvelopes))
+	}
+	if len(fakeConsumer.dispatchedEnvelopes) != 1 {
+		t.Fatalf("mark dispatched envelopes = %d, want 1", len(fakeConsumer.dispatchedEnvelopes))
+	}
+	if got := fakeConsumer.callOrder; len(got) != 2 || got[0] != "mark_sending" || got[1] != "mark_dispatched" {
+		t.Fatalf("call order = %v, want [mark_sending mark_dispatched]", got)
+	}
+}
+
+func TestDispatcherRunOnce_MarkDispatchedFailureDoesNotScheduleRetry(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			return []domain.AlarmQueueEnvelope{testAlarmQueueEnvelope("room-1", "claim-1")}, nil
+		},
+		markDispatchedFunc: func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+			return errors.New("mark sent failed")
+		},
+	}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{},
+		NewSimpleRenderer(),
+		50,
+		1,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	runErr := dispatcher.RunOnce(context.Background())
+	if runErr == nil {
+		t.Fatal("expected RunOnce() error, got nil")
+	}
+	if len(fakeConsumer.scheduledRetries) != 0 {
+		t.Fatalf("scheduled retries = %d, want 0", len(fakeConsumer.scheduledRetries))
+	}
+	if len(fakeConsumer.dlqEnvelopes) != 0 {
+		t.Fatalf("dlq envelopes = %d, want 0", len(fakeConsumer.dlqEnvelopes))
 	}
 }
 
@@ -582,15 +711,23 @@ func testAlarmQueueEnvelope(roomID, claimKey string) domain.AlarmQueueEnvelope {
 }
 
 type testQueueConsumer struct {
-	drainBatchFunc    func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
-	releaseClaimKeys  func(ctx context.Context, claimKeys []string) error
-	scheduleRetryFunc func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	moveToDLQFunc     func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	requeueFunc       func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
-	releasedClaimKeys []string
-	scheduledRetries  []domain.AlarmQueueEnvelope
-	dlqEnvelopes      []domain.AlarmQueueEnvelope
-	requeuedEnvelopes []domain.AlarmQueueEnvelope
+	drainBatchFunc       func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error)
+	markSendingFunc      func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	markDispatchedFunc   func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	releaseClaimKeys     func(ctx context.Context, claimKeys []string) error
+	scheduleRetryFunc    func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	moveToDLQFunc        func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	requeueFunc          func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
+	quarantineFunc       func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error
+	releasedClaimKeys    []string
+	markSendingEnvelopes []domain.AlarmQueueEnvelope
+	dispatchedEnvelopes  []domain.AlarmQueueEnvelope
+	scheduledRetries     []domain.AlarmQueueEnvelope
+	dlqEnvelopes         []domain.AlarmQueueEnvelope
+	requeuedEnvelopes    []domain.AlarmQueueEnvelope
+	quarantinedEnvelopes []domain.AlarmQueueEnvelope
+	quarantineReason     string
+	callOrder            []string
 }
 
 func (c *testQueueConsumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
@@ -605,6 +742,24 @@ func (c *testQueueConsumer) ReleaseClaimKeys(ctx context.Context, claimKeys []st
 		return c.releaseClaimKeys(ctx, claimKeys)
 	}
 	c.releasedClaimKeys = append(c.releasedClaimKeys, claimKeys...)
+	return nil
+}
+
+func (c *testQueueConsumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.callOrder = append(c.callOrder, "mark_sending")
+	if c.markSendingFunc != nil {
+		return c.markSendingFunc(ctx, envelopes)
+	}
+	c.markSendingEnvelopes = append(c.markSendingEnvelopes, envelopes...)
+	return nil
+}
+
+func (c *testQueueConsumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.callOrder = append(c.callOrder, "mark_dispatched")
+	if c.markDispatchedFunc != nil {
+		return c.markDispatchedFunc(ctx, envelopes)
+	}
+	c.dispatchedEnvelopes = append(c.dispatchedEnvelopes, envelopes...)
 	return nil
 }
 
@@ -629,6 +784,15 @@ func (c *testQueueConsumer) Requeue(ctx context.Context, envelopes []domain.Alar
 		return c.requeueFunc(ctx, envelopes)
 	}
 	c.requeuedEnvelopes = append(c.requeuedEnvelopes, envelopes...)
+	return nil
+}
+
+func (c *testQueueConsumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error {
+	if c.quarantineFunc != nil {
+		return c.quarantineFunc(ctx, envelopes, reason)
+	}
+	c.quarantinedEnvelopes = append(c.quarantinedEnvelopes, envelopes...)
+	c.quarantineReason = reason
 	return nil
 }
 

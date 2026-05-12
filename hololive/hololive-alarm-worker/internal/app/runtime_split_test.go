@@ -2,9 +2,11 @@ package app
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,4 +51,41 @@ func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
 			assert.Equal(t, tt.want, runtimeAllowsAlarmScheduler(tt.runtimeRole, tt.configValue))
 		})
 	}
+}
+
+func TestLoadAlarmDispatchPublishConfigRejectsUnknownMode(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg-frist")
+
+	cfg, err := loadAlarmDispatchPublishConfig()
+	require.Error(t, err)
+	assert.Equal(t, queue.PublishConfig{}, cfg)
+	assert.True(t, strings.Contains(err.Error(), "ALARM_DISPATCH_PUBLISH_MODE"))
+}
+
+func TestLoadAlarmDispatchPublishConfigRejectsForbiddenConsumerModePair(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
+	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "valkey")
+
+	cfg, err := loadAlarmDispatchPublishConfig()
+	require.Error(t, err)
+	assert.Equal(t, queue.PublishConfig{}, cfg)
+	assert.Contains(t, err.Error(), "forbidden alarm dispatch mode combination")
+}
+
+func TestLoadAlarmDispatchPublishConfigRejectsPGFirstWithoutPeerConsumerMode(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
+
+	cfg, err := loadAlarmDispatchPublishConfig()
+	require.Error(t, err)
+	assert.Equal(t, queue.PublishConfig{}, cfg)
+	assert.Contains(t, err.Error(), "ALARM_DISPATCH_CONSUMER_MODE is required")
+}
+
+func TestLoadAlarmDispatchPublishConfigAllowsMatchingPGPair(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_PUBLISH_MODE", "pg_first")
+	t.Setenv("ALARM_DISPATCH_CONSUMER_MODE", "pg")
+
+	cfg, err := loadAlarmDispatchPublishConfig()
+	require.NoError(t, err)
+	assert.Equal(t, queue.PublishModePGFirst, cfg.Mode)
 }

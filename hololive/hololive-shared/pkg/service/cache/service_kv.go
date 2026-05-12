@@ -14,29 +14,40 @@ import (
 )
 
 func (c *Service) Get(ctx context.Context, key string, dest any) error {
+	_, err := c.GetJSON(ctx, key, dest)
+	return err
+}
+
+func (c *Service) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
+	value, hit, err := c.GetString(ctx, key)
+	if err != nil || !hit {
+		return hit, err
+	}
+	if dest != nil {
+		if err := json.Unmarshal([]byte(value), dest); err != nil {
+			c.logger.Error("Cache value unmarshal failed", slog.String("key", key), slog.Any("error", err))
+			return true, NewCacheError("unmarshal failed", "get", key, err)
+		}
+	}
+	return true, nil
+}
+
+func (c *Service) GetString(ctx context.Context, key string) (string, bool, error) {
 	resp := c.client.Do(ctx, c.client.B().Get().Key(key).Build())
 	if util.IsValkeyNil(resp.Error()) {
-		return nil // 키가 존재하지 않음 - 에러 아님
+		return "", false, nil
 	}
 	if resp.Error() != nil {
 		c.logger.Error("Cache get operation failed", slog.String("key", key), slog.Any("error", resp.Error()))
-		return NewCacheError("get failed", "get", key, resp.Error())
+		return "", false, NewCacheError("get failed", "get", key, resp.Error())
 	}
 
 	value, err := resp.ToString()
 	if err != nil {
 		c.logger.Error("Cache value conversion failed", slog.String("key", key), slog.Any("error", err))
-		return NewCacheError("conversion failed", "get", key, err)
+		return "", false, NewCacheError("conversion failed", "get", key, err)
 	}
-
-	if dest != nil {
-		if err := json.Unmarshal([]byte(value), dest); err != nil {
-			c.logger.Error("Cache value unmarshal failed", slog.String("key", key), slog.Any("error", err))
-			return NewCacheError("unmarshal failed", "get", key, err)
-		}
-	}
-
-	return nil
+	return value, true, nil
 }
 
 // MGet 배치 조회 (파이프라이닝 활용)

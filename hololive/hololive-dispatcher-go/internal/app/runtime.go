@@ -33,11 +33,15 @@ import (
 
 	"github.com/kapu/hololive-dispatcher-go/internal/dispatch"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/util"
 	"github.com/park285/iris-client-go/iris"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
@@ -49,6 +53,7 @@ type Runtime struct {
 	cfg        *Config
 	logger     *slog.Logger
 	cacheSvc   cache.Client
+	postgres   database.Client
 	irisClient interface {
 		Ping(ctx context.Context) bool
 	}
@@ -96,12 +101,16 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		return nil, fmt.Errorf("build runtime: create cache service: %w", err)
 	}
 
-	consumer := queue.NewConsumer(
-		cacheSvc,
-		logger,
-		queue.WithQueueKey(cfg.Dispatch.QueueKey),
-		queue.WithMaxBatch(cfg.Dispatch.MaxBatch),
-	)
+	var postgresSvc database.Client
+	if cfg.Dispatch.ConsumerMode == "pg" {
+		postgresSvc, err = database.NewPostgresService(ctx, cfg.Postgres, logger)
+		if err != nil {
+			_ = cacheSvc.Close()
+			return nil, fmt.Errorf("build runtime: create postgres service: %w", err)
+		}
+	}
+
+	consumer := buildDispatchConsumer(cfg, cacheSvc, postgresSvc, logger)
 	renderer := dispatch.NewSimpleRenderer()
 	irisClient, err := sharedproviders.ProvideIrisClient(
 		logger,
@@ -110,6 +119,9 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 	)
 	if err != nil {
 		_ = cacheSvc.Close()
+		if postgresSvc != nil {
+			_ = postgresSvc.Close()
+		}
 		return nil, fmt.Errorf("build runtime: create iris client: %w", err)
 	}
 
@@ -123,33 +135,78 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 	)
 	if err != nil {
 		_ = cacheSvc.Close()
+		if postgresSvc != nil {
+			_ = postgresSvc.Close()
+		}
 		return nil, fmt.Errorf("build runtime: create dispatcher: %w", err)
 	}
 	if err := configureDispatcherRetryPolicy(dispatcher, cfg.Dispatch); err != nil {
 		_ = cacheSvc.Close()
+		if postgresSvc != nil {
+			_ = postgresSvc.Close()
+		}
 		return nil, fmt.Errorf("build runtime: configure dispatcher retry policy: %w", err)
+	}
+	if cfg.Dispatch.ConsumerMode == "pg" {
+		dispatcher.ConfigureSendFailurePolicy(dispatch.SendFailurePolicyQuarantine)
 	}
 
 	runtime := &Runtime{
 		cfg:        cfg,
 		logger:     logger,
 		cacheSvc:   cacheSvc,
+		postgres:   postgresSvc,
 		irisClient: irisClient,
 		dispatcher: dispatcher,
 		readyState: newReadinessState(),
 		irisProbe:  newCachedBoolProbe(2 * time.Second),
 	}
 	runtime.Managed = lifecycle.NewManaged(func() {
-		if runtime.cacheSvc == nil {
-			return
+		if runtime.cacheSvc != nil {
+			if err := runtime.cacheSvc.Close(); err != nil {
+				runtime.logger.Warn("Close cache service failed", slog.Any("error", err))
+			}
 		}
-		if err := runtime.cacheSvc.Close(); err != nil {
-			runtime.logger.Warn("Close cache service failed", slog.Any("error", err))
+		if runtime.postgres != nil {
+			if err := runtime.postgres.Close(); err != nil {
+				runtime.logger.Warn("Close postgres service failed", slog.Any("error", err))
+			}
 		}
 	})
 
 	runtime.httpServer = buildHTTPServer(cfg.Server.Port, runtime.routes())
 	return runtime, nil
+}
+
+func buildDispatchConsumer(
+	cfg *Config,
+	cacheSvc cache.Client,
+	postgresSvc database.Client,
+	logger *slog.Logger,
+) interface {
+	DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error)
+	MarkSending(context.Context, []domain.AlarmQueueEnvelope) error
+	MarkDispatched(context.Context, []domain.AlarmQueueEnvelope) error
+	ReleaseClaimKeys(context.Context, []string) error
+	ScheduleRetry(context.Context, []domain.AlarmQueueEnvelope) error
+	MoveToDLQ(context.Context, []domain.AlarmQueueEnvelope) error
+	Requeue(context.Context, []domain.AlarmQueueEnvelope) error
+	Quarantine(context.Context, []domain.AlarmQueueEnvelope, string) error
+} {
+	if cfg.Dispatch.ConsumerMode == "pg" {
+		repo := dispatchoutbox.NewPgxRepository(postgresSvc)
+		return dispatchoutbox.NewConsumer(
+			repo,
+			logger,
+			dispatchoutbox.WithLease(time.Duration(cfg.Dispatch.LeaseSeconds)*time.Second),
+		)
+	}
+	return queue.NewConsumer(
+		cacheSvc,
+		logger,
+		queue.WithQueueKey(cfg.Dispatch.QueueKey),
+		queue.WithMaxBatch(cfg.Dispatch.MaxBatch),
+	)
 }
 
 func configureDispatcherRetryPolicy(dispatcher *dispatch.Dispatcher, cfg DispatchConfig) error {
@@ -218,7 +275,8 @@ func (r *Runtime) runDispatchLoop(ctx context.Context) {
 		default:
 		}
 
-		if err := r.dispatcher.RunOnce(ctx); err != nil {
+		processed, err := r.dispatcher.RunOnceProcessed(ctx)
+		if err != nil {
 			if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 				r.readyState.clearLastError()
 				r.logger.Info("Dispatcher loop stopped")
@@ -241,6 +299,52 @@ func (r *Runtime) runDispatchLoop(ctx context.Context) {
 		}
 
 		r.readyState.clearLastError()
+		if !processed && r.cfg != nil && r.cfg.Dispatch.ConsumerMode == "pg" {
+			if !r.waitForPGDispatchSignal(ctx) {
+				r.logger.Info("Dispatcher loop stopped")
+				return
+			}
+		}
+	}
+}
+
+func (r *Runtime) waitForPGDispatchSignal(ctx context.Context) bool {
+	if r == nil || r.cfg == nil {
+		return sleepContext(ctx, time.Second)
+	}
+	if !r.cfg.Dispatch.WakeupEnabled || r.cacheSvc == nil {
+		return sleepContext(ctx, r.cfg.Dispatch.PollInterval)
+	}
+	timeout := r.cfg.Dispatch.PollInterval
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	cmd := r.cacheSvc.B().Brpop().Key(queue.AlarmDispatchWakeupQueue).Timeout(timeout.Seconds()).Build()
+	results := r.cacheSvc.DoMulti(ctx, cmd)
+	if len(results) != 1 {
+		r.logger.Warn("Dispatch wakeup wait returned unexpected result count", slog.Int("result_count", len(results)))
+		return true
+	}
+	if _, err := results[0].AsStrSlice(); err != nil && !util.IsValkeyNil(err) {
+		if ctx.Err() != nil {
+			return false
+		}
+		r.logger.Warn("Dispatch wakeup wait failed", slog.Any("error", err))
+	}
+	return ctx.Err() == nil
+}
+
+func sleepContext(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		d = time.Second
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -262,8 +366,16 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
 	irisConnected := r.cachedIrisPing(checkCtx)
+	consumerMode := "valkey"
+	if r.cfg != nil && r.cfg.Dispatch.ConsumerMode != "" {
+		consumerMode = r.cfg.Dispatch.ConsumerMode
+	}
+	postgresConnected := consumerMode != "pg"
+	if consumerMode == "pg" {
+		postgresConnected = r.postgres != nil && r.postgres.Ping(checkCtx) == nil
+	}
 
-	ready := dispatchLoopRunning && valkeyConnected && irisConnected
+	ready := dispatchLoopRunning && valkeyConnected && irisConnected && postgresConnected
 	statusCode := http.StatusOK
 	status := "ready"
 	if !ready {
@@ -276,6 +388,8 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 		"dispatch_loop_running": dispatchLoopRunning,
 		"valkey_connected":      valkeyConnected,
 		"iris_connected":        irisConnected,
+		"postgres_connected":    postgresConnected,
+		"consumer_mode":         consumerMode,
 	}
 
 	writeJSON(req.Context(), w, statusCode, response)

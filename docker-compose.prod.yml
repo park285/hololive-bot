@@ -351,6 +351,10 @@ services:
       <<: [*app-file-log-env, *cache-env, *postgres-env]
       NOTIFICATION_SCHEDULER_ROLE: "worker"
       SERVER_PORT: 30007
+      ALARM_DISPATCH_PUBLISH_MODE: ${ALARM_DISPATCH_PUBLISH_MODE:-valkey_only}
+      ALARM_DISPATCH_CONSUMER_MODE: ${ALARM_DISPATCH_CONSUMER_MODE:-valkey}
+      ALARM_DISPATCH_SHADOW_FATAL: ${ALARM_DISPATCH_SHADOW_FATAL:-false}
+      ALARM_DISPATCH_WAKEUP_ENABLED: ${ALARM_DISPATCH_WAKEUP_ENABLED:-true}
       LOG_DIR: /app/logs
       GOMEMLIMIT: "320MiB"
       APP_ENV: "production"
@@ -379,7 +383,7 @@ services:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: hololive-dispatcher-go
     environment:
-      <<: [*app-file-log-env, *cache-env]
+      <<: [*app-file-log-env, *cache-env, *postgres-env]
       DISPATCHER_PORT: "30020"
       IRIS_BASE_URL: ${IRIS_BASE_URL:-}
       IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
@@ -388,6 +392,10 @@ services:
       IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
       IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:?IRIS_BOT_TOKEN is required}
       ALARM_DISPATCH_QUEUE_KEY: alarm:dispatch:queue
+      ALARM_DISPATCH_PUBLISH_MODE: ${ALARM_DISPATCH_PUBLISH_MODE:-valkey_only}
+      ALARM_DISPATCH_CONSUMER_MODE: ${ALARM_DISPATCH_CONSUMER_MODE:-valkey}
+      ALARM_DISPATCH_LEASE_SECONDS: ${ALARM_DISPATCH_LEASE_SECONDS:-60}
+      ALARM_DISPATCH_WAKEUP_ENABLED: ${ALARM_DISPATCH_WAKEUP_ENABLED:-true}
       ALARM_DISPATCH_MAX_BATCH: "50"
       DISPATCHER_RECONNECT_BACKOFF_MS: "1000"
       LOG_DIR: /app/logs
@@ -398,8 +406,7 @@ services:
     volumes: *logs-runtime-cache-volumes
     extra_hosts: *iris-extra-hosts
     depends_on:
-      valkey-cache:
-        condition: service_healthy
+      <<: *db-cache-depends
       hololive-bot:
         condition: service_healthy
     deploy: *deploy-256m
