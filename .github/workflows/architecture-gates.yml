@@ -80,7 +80,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ripgrep
 
-      - name: Run architecture boundary gates (M0 + M1 + M4 + M6)
+      - name: Run architecture boundary gates (M0 + M1 + M2 + M4 + M6)
         run: ./scripts/architecture/ci-boundary-gate.sh
 
       - name: Summarize Go import graph output
