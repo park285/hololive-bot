@@ -273,30 +273,7 @@ func (as *AlarmService) getMemberNamesBatch(ctx context.Context, channelIDs []st
 		return map[string]string{}, nil
 	}
 
-	builder := as.cache.Builder()
-
-	cmds := make([]valkey.Completed, 0, len(channelIDs))
-	for _, channelID := range channelIDs {
-		cmds = append(cmds, builder.Hget().Key(MemberNameKey).Field(channelID).Build())
-	}
-
-	results := as.cache.DoMulti(ctx, cmds...)
-	names := make(map[string]string, len(channelIDs))
-
-	for i, result := range results {
-		if err := result.Error(); err != nil {
-			continue
-		}
-
-		name, err := result.ToString()
-		if err != nil || stringutil.TrimSpace(name) == "" {
-			continue
-		}
-
-		names[channelIDs[i]] = name
-	}
-
-	return names, nil
+	return as.cache.BatchHGet(ctx, MemberNameKey, channelIDs)
 }
 
 func (as *AlarmService) getNextStreamInfosBatch(ctx context.Context, channelIDs []string) (map[string]*domain.NextStreamInfo, error) {
