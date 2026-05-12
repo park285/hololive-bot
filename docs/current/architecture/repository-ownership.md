@@ -1,0 +1,44 @@
+# Repository Ownership
+
+## Scope
+
+이 문서는 shared repository/helper가 runtime ownership을 우회하지 않도록 data owner와 direct import 제한을 고정합니다. Cross-runtime 호출은 HTTP JSON, Valkey queue, Valkey Pub/Sub, Docker Compose 구조를 유지합니다.
+
+## Data Ownership Matrix
+
+| Data area | Owner | Direct writers | Allowed readers | Required access path |
+|---|---|---|---|---|
+| `major_event_subscriptions` | `llm-scheduler` | `llm-scheduler` | `admin-api`, `bot` | internal HTTP contract `majorevent.subscription` |
+| `membernews` state | `llm-scheduler` | `llm-scheduler` | `bot` | internal HTTP contracts `membernews.subscription`, `membernews.digest` |
+| alarm queue state | `alarm-worker`, `dispatcher-go` by phase | `alarm-worker`, `dispatcher-go` | observability consumers | queue contract `alarm.dispatch` or documented API |
+| YouTube outbox/tracking | ingestion runtime owner | runtime owner only | dispatcher/alarm consumers by contract | shared repository path owned by ingestion runtime |
+
+## Shared Infrastructure Ownership
+
+- Runtime bootstrap owns env loading and passes typed config into shared infra helpers.
+- `BuildInfraModule(ctx, cfg, logger)` accepts typed config and cleanup ownership remains with the returned module.
+- Iris SDK env fallback in `ProvideIrisClient` is a documented compatibility exception for runtime Iris configuration; it must not be used as a pattern for database/cache ownership.
+- Shared helpers must not silently override typed database, cache, or repository config from process env.
+
+## Import Boundary Rules
+
+- `bot` must not import `hololive-alarm-worker/internal`, `hololive-admin-api/internal`, or `hololive-llm-sched/internal`.
+- `dispatcher-go` must not import `hololive-llm-sched/internal`, `hololive-admin-api/internal`, or `hololive-kakao-bot-go/internal`.
+- `shared-go` must not import any `hololive/*` module.
+- `bot` and `admin-api` must not import major event repository/storage internals directly; they use documented internal HTTP contracts.
+
+## YouTube Runtime Role Separation
+
+| Runtime | Enabled role | Must stay disabled |
+|---|---|---|
+| `stream-ingester` | photo sync and ingestion-adjacent health/config runtime duties | dedicated YouTube polling/outbox ownership |
+| `youtube-scraper` | YouTube scraping/polling and outbox production | photo sync ownership |
+
+Duplicated polling prevention is enforced operationally by Compose env ownership: `stream-ingester` keeps `YOUTUBE_INGESTION_ENABLED=false`, and `youtube-scraper` owns `YOUTUBE_INGESTION_ENABLED=true`.
+
+## Validation
+
+```bash
+./scripts/architecture/check-repository-ownership.sh
+./scripts/architecture/ci-boundary-gate.sh
+```

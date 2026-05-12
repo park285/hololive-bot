@@ -71,11 +71,11 @@ func (h *TriggerHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 
 // apiKey가 설정된 경우 X-API-Key 미들웨어를 강제합니다.
 func (h *TriggerHandler) RegisterInternalRoutesWithAuth(rg *gin.RouterGroup, apiKey string) {
-	internal := rg.Group("/internal/trigger")
+	internal := rg.Group(triggercontracts.BasePath)
 	internal.Use(middleware.APIKeyAuthMiddleware(apiKey))
-	internal.POST("/majorevent-weekly", h.TriggerWeeklyNotification)
-	internal.POST("/majorevent-monthly", h.TriggerMonthlyNotification)
-	internal.POST("/membernews-weekly", h.TriggerMemberNewsWeekly)
+	internal.POST(triggercontracts.MajorEventWeeklyRoute, h.TriggerWeeklyNotification)
+	internal.POST(triggercontracts.MajorEventMonthlyRoute, h.TriggerMonthlyNotification)
+	internal.POST(triggercontracts.MemberNewsWeeklyRoute, h.TriggerMemberNewsWeekly)
 }
 
 func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {

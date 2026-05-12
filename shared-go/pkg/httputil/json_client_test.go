@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
 func TestJSONClient_NewJSONRequestSetsHeadersAndBody(t *testing.T) {
@@ -33,7 +31,7 @@ func TestJSONClient_NewJSONRequestSetsHeadersAndBody(t *testing.T) {
 	if got, want := req.Header.Get("Content-Type"), "application/json"; got != want {
 		t.Fatalf("Content-Type = %q, want %q", got, want)
 	}
-	if got, want := req.Header.Get(commoncontracts.APIKeyHeader), "secret-key"; got != want {
+	if got, want := req.Header.Get(apiKeyHeader), "secret-key"; got != want {
 		t.Fatalf("API key header = %q, want %q", got, want)
 	}
 
@@ -63,7 +61,7 @@ func TestJSONClient_NewRequestAppliesAPIKeyWithoutBody(t *testing.T) {
 	if got, want := req.URL.String(), "https://example.com/health"; got != want {
 		t.Fatalf("req.URL = %s, want %s", got, want)
 	}
-	if got, want := req.Header.Get(commoncontracts.APIKeyHeader), "token"; got != want {
+	if got, want := req.Header.Get(apiKeyHeader), "token"; got != want {
 		t.Fatalf("API key header = %q, want %q", got, want)
 	}
 }
