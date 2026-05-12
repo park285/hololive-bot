@@ -34,7 +34,7 @@ Alarm domain currently has two contract surfaces: alarm HTTP JSON APIs and the V
 | Queue keys | `alarm:dispatch:queue`, `alarm:dispatch:retry`, `alarm:dispatch:dlq` |
 | Method | mixed HTTP methods; Valkey `LPUSH`, `BRPOP`, `ZADD`, delayed drain script |
 | Version | HTTP unversioned; queue `QueueEnvelopeVersionV1 = 1`, consumer accepts `0` and `1` |
-| Contract package | `hololive/hololive-shared/pkg/contracts/alarm`; HTTP handler/client under `hololive/hololive-shared/pkg/service/alarm` |
+| Contract package | `hololive/hololive-shared/pkg/contracts/alarm`; HTTP DTOs remain under `hololive/hololive-shared/pkg/service/alarm` |
 | Queue fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
 
 ## Request
@@ -98,5 +98,5 @@ Queue success has no response body; delivery outcome is represented by queue mov
 
 ## Known gaps
 
-- Alarm HTTP API is not yet represented by a dedicated `pkg/contracts/alarm` route/DTO package.
+- Alarm HTTP API DTOs are not yet represented by a dedicated `pkg/contracts/alarm` DTO package.
 - Current HTTP provider registration is `admin-api`; long-term ownership remains 검토 필요.

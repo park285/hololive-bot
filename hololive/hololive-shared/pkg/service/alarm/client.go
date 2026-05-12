@@ -34,6 +34,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -123,7 +124,7 @@ func (c *Client) AddAlarm(ctx context.Context, req domain.AddAlarmRequest) (bool
 		AlarmTypes: req.AlarmTypes,
 	}
 	var resp boolResp
-	if err := c.postJSON(ctx, "/internal/alarm/add", body, &resp); err != nil {
+	if err := c.postJSON(ctx, contractsalarm.AddPath, body, &resp); err != nil {
 		return false, err
 	}
 	return resp.Result, nil
@@ -136,7 +137,7 @@ func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alar
 		AlarmTypes: alarmTypes,
 	}
 	var resp boolResp
-	if err := c.postJSON(ctx, "/internal/alarm/remove", body, &resp); err != nil {
+	if err := c.postJSON(ctx, contractsalarm.RemovePath, body, &resp); err != nil {
 		return false, err
 	}
 	return resp.Result, nil
@@ -156,7 +157,7 @@ func (c *Client) GetRoomAlarms(ctx context.Context, roomID string) ([]string, er
 
 func (c *Client) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
 	var alarms []*domain.Alarm
-	if err := c.getJSON(ctx, "/internal/alarm/room/"+roomID, &alarms); err != nil {
+	if err := c.getJSON(ctx, contractsalarm.RoomAlarmsPath(roomID), &alarms); err != nil {
 		return nil, err
 	}
 	if alarms == nil {
@@ -172,9 +173,10 @@ type apiEnvelope struct {
 }
 
 func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/internal/alarm/room/"+roomID+"/view", http.NoBody)
+	path := contractsalarm.RoomAlarmsViewPath(roomID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: new request: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: %s: new request: %w", path, err)
 	}
 	if c.apiKey != "" {
 		req.Header.Set("X-API-Key", c.apiKey)
@@ -182,20 +184,20 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if err := httputil.CheckStatus(resp); err != nil {
-		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: check status: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: %s: check status: %w", path, err)
 	}
 
 	var envelope apiEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: decode envelope: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
 	}
 	if !envelope.Success {
-		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: %s", roomID, envelope.Message)
+		return nil, fmt.Errorf("alarm-api: %s: %s", path, envelope.Message)
 	}
 	if envelope.Data == nil {
 		return []domain.AlarmListView{}, nil
@@ -203,7 +205,7 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 
 	var entries []domain.AlarmListView
 	if err := json.Unmarshal(*envelope.Data, &entries); err != nil {
-		return nil, fmt.Errorf("alarm-api: /internal/alarm/room/%s/view: decode entries: %w", roomID, err)
+		return nil, fmt.Errorf("alarm-api: %s: decode entries: %w", path, err)
 	}
 	if entries == nil {
 		return []domain.AlarmListView{}, nil
@@ -214,7 +216,7 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	body := clearRoomReq{RoomID: roomID}
 	var resp intResp
-	if err := c.postJSON(ctx, "/internal/alarm/clear", body, &resp); err != nil {
+	if err := c.postJSON(ctx, contractsalarm.ClearPath, body, &resp); err != nil {
 		return 0, err
 	}
 	return resp.Count, nil
@@ -223,7 +225,7 @@ func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error
 // 서버에 데이터가 없으면 nil을 반환합니다.
 func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
 	var info domain.NextStreamInfo
-	err := c.getJSON(ctx, "/internal/alarm/next-stream/"+channelID, &info)
+	err := c.getJSON(ctx, contractsalarm.NextStreamPath(channelID), &info)
 	if err != nil {
 		if httputil.IsStatus(err, http.StatusNotFound) {
 			return nil, nil
@@ -243,7 +245,7 @@ func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []i
 		c.logger.Warn("UpdateAlarmAdvanceMinutes skipped: nil context", slog.Int("minutes", minutes))
 		return []int{}
 	}
-	if err := c.putJSON(ctx, "/internal/alarm/settings", body, &resp); err != nil {
+	if err := c.putJSON(ctx, contractsalarm.SettingsPath, body, &resp); err != nil {
 		c.logger.Warn("UpdateAlarmAdvanceMinutes 실패",
 			slog.Int("minutes", minutes),
 			slog.Any("error", err),
@@ -269,17 +271,17 @@ func (c *Client) GetTargetMinutes() []int {
 
 func (c *Client) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	body := setRoomNameReq{RoomID: roomID, RoomName: roomName}
-	return c.putJSON(ctx, "/internal/alarm/room-name", body, nil)
+	return c.putJSON(ctx, contractsalarm.RoomNamePath, body, nil)
 }
 
 func (c *Client) SetUserName(ctx context.Context, userID, userName string) error {
 	body := setUserNameReq{UserID: userID, UserName: userName}
-	return c.putJSON(ctx, "/internal/alarm/user-name", body, nil)
+	return c.putJSON(ctx, contractsalarm.UserNamePath, body, nil)
 }
 
 func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	var entries []*domain.AlarmEntry
-	if err := c.getJSON(ctx, "/internal/alarm/keys", &entries); err != nil {
+	if err := c.getJSON(ctx, contractsalarm.KeysPath, &entries); err != nil {
 		return nil, err
 	}
 	if entries == nil {
