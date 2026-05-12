@@ -79,6 +79,10 @@ echo "[CI] Run M4 Go module LOC gate"
 "${SCRIPT_DIR}/check-go-module-loc.sh"
 echo
 
+echo "[CI] Run M4 Go function budget gate"
+"${SCRIPT_DIR}/check-function-budget.sh"
+echo
+
 echo "[CI] Run M4 multi-language file LOC gate"
 "${SCRIPT_DIR}/check-file-loc.sh"
 echo
