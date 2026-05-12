@@ -126,7 +126,7 @@ type Repository interface {
 	ScheduleRetry(ctx context.Context, updates []RetryUpdate, workerID string) error
 	MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error
-	ReleaseLeased(ctx context.Context, ids []int64) error
+	ReleaseLeased(ctx context.Context, ids []int64, workerID string) error
 	RecoverExpiredLeased(ctx context.Context, limit int) (int, error)
 	QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int, error)
 }

@@ -40,11 +40,17 @@ Forbidden pairs:
 ## Safe Sequence
 
 1. Apply migrations through `059_harden_alarm_dispatch_outbox.sql`.
-2. Start `shadow` publisher mode with dispatcher still in `valkey` mode.
-3. Confirm only `shadowed` rows increase in `alarm_dispatch_deliveries`.
-4. Drain or explicitly account for legacy Valkey queue/retry residue.
-5. Switch publisher to `pg_first` and dispatcher to `pg` in the same rollout window.
-6. Watch `pending`, `leased`, `sending`, `sent`, `retry`, `dlq`, and `quarantined` counts.
+2. Run the PostgreSQL integration gate against a disposable or staging database:
+
+```bash
+TEST_DATABASE_URL=postgres://... go test -tags=integration ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox
+```
+
+3. Start `shadow` publisher mode with dispatcher still in `valkey` mode.
+4. Confirm only `shadowed` rows increase in `alarm_dispatch_deliveries`.
+5. Drain or explicitly account for legacy Valkey queue/retry residue.
+6. Switch publisher to `pg_first` and dispatcher to `pg` in the same rollout window.
+7. Watch `pending`, `leased`, `sending`, `sent`, `retry`, `dlq`, and `quarantined` counts.
 
 Do not perform full rollout until the P1-P4 hardening gates are complete: set-based insert, Valkey degraded PG readiness, reconciliation throttle, batch terminal updates, and retention indexes.
 
