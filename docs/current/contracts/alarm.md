@@ -35,6 +35,7 @@ Alarm domain currently has two contract surfaces: alarm HTTP JSON APIs and the V
 | Method | mixed HTTP methods; Valkey `LPUSH`, `BRPOP`, `ZADD`, delayed drain script |
 | Version | HTTP unversioned; queue `QueueEnvelopeVersionV1 = 1`, consumer accepts `0` and `1` |
 | Contract package | `hololive/hololive-shared/pkg/contracts/alarm`; HTTP handler/client under `hololive/hololive-shared/pkg/service/alarm` |
+| Queue fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
 
 ## Request
 
@@ -72,14 +73,14 @@ Queue success has no response body; delivery outcome is represented by queue mov
 | `alarm remove failed` | 500 | provider remove failed | retry/manual diagnosis |
 | `get room alarms failed` | 500 | provider query failed | retry/manual diagnosis |
 | `get next stream info failed` | 500 | provider query failed | retry/manual diagnosis |
-| unsupported queue version | n/a | queue consumer rejects payload | log and skip; not accepted for delivery |
-| invalid queue JSON | n/a | payload cannot parse | preserve raw payload to DLQ |
+| unsupported queue version | n/a | queue consumer rejects payload | preserve raw payload to DLQ; not accepted for delivery |
+| Invalid JSON | n/a | payload cannot parse | preserve raw payload to DLQ |
 
 ## Timeout and retry policy
 
 - HTTP client timeout: 10 seconds for alarm client.
 - Queue drain: first item blocks up to consumer block timeout, then drains batches.
-- Retry queue: delayed retry uses `alarm:dispatch:retry` sorted set and retry metadata.
+- Retry queue: delayed retry uses `alarm:dispatch:retry` sorted set and retry metadata (`attempt`, `retry_after_ms`, `next_visible_at`, `last_error`).
 - DLQ: invalid raw payloads and moved envelopes are preserved in `alarm:dispatch:dlq`.
 
 ## Compatibility policy
@@ -91,6 +92,7 @@ Queue success has no response body; delivery outcome is represented by queue mov
 ## Tests
 
 - Contract constants: `hololive/hololive-shared/pkg/contracts/alarm/contracts_test.go`
+- Queue fixtures: `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json`
 - Queue behavior: `hololive/hololive-shared/pkg/service/alarm/queue/queue_test.go`
 - HTTP handler/client: `hololive/hololive-shared/pkg/service/alarm/api_test.go`, `client_test.go`
 
