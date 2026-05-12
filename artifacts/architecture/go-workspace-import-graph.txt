@@ -91,6 +91,8 @@ github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-s
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/providers/modules
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/server
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/alarm
+github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
+github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/alarm/queue
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/chzzk
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/configsub
@@ -105,6 +107,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.c
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/alarm/checker
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/alarm/dedup
+github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/alarm/queue
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/alarm/tier
@@ -120,6 +123,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/alarm/checker
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/alarm/dedup
+github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/alarm/keys
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/alarm/queue
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/alarm/tier
@@ -141,9 +145,12 @@ github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/health
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/server
+github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/service/alarm/queue
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
+github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/park285/llm-kakao-bots/shared-go/pkg/logging
 github.com/kapu/hololive-dispatcher-go/internal/app -> github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle
@@ -524,11 +531,15 @@ github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/kapu/holol
 github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm/dedup -> github.com/park285/llm-kakao-bots/shared-go/pkg/logging
+github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/kapu/hololive-shared/pkg/contracts/alarm
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/alarm/keys -> github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/contracts/alarm
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/domain
+github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/service/alarm/queue -> github.com/kapu/hololive-shared/pkg/util
