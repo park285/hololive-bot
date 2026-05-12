@@ -6,15 +6,16 @@
 
 ## Contract Inventory
 
-| Contract | Provider | Consumer | Transport | Path/Event/Queue | Contract package | Version | Tests | Detail |
+| Contract ID | Provider | Consumer | Transport | Path/Event/Queue | Contract package | Version | Tests | Detail |
 |---|---|---|---|---|---|---|---|---|
-| `membernews` | `llm-scheduler` | `bot` | HTTP JSON | `/internal/membernews/subscriptions`, `/internal/membernews/digest` | `hololive/hololive-shared/pkg/contracts/membernews` | route constants, unversioned HTTP body | provider/client route tests | `contracts/membernews.md` |
-| `majorevent` | `llm-scheduler` | `bot` | HTTP JSON | `/internal/majorevent/subscriptions` | `hololive/hololive-shared/pkg/contracts/majorevent` | route constants, unversioned HTTP body | provider/client route tests | `contracts/majorevent.md` |
-| `trigger` | `llm-scheduler` | `admin-api` | HTTP JSON | `/internal/trigger/majorevent-weekly`, `/internal/trigger/majorevent-monthly`, `/internal/trigger/membernews-weekly` | `hololive/hololive-shared/pkg/contracts/trigger` | route constants, unversioned body | route/client tests | `contracts/trigger.md` |
-| `alarm-http` | `admin-api` current registration; provider ownership 검토 필요 | `bot`, `admin-api` facade | HTTP JSON | `/internal/alarm/*` | shared handler/client under `hololive/hololive-shared/pkg/service/alarm` | unversioned | shared alarm API/client tests | `contracts/alarm.md` |
-| `alarm-queue` | `alarm-worker` | `dispatcher-go` | Valkey list + sorted set + DLQ | `alarm:dispatch:queue`, `alarm:dispatch:retry`, `alarm:dispatch:dlq` | `hololive/hololive-shared/pkg/contracts/alarm` | `QueueEnvelopeVersionV1 = 1`, consumer also accepts `0` | queue contract/tests | `contracts/alarm.md` |
-| `settings-pubsub` | admin/settings update path 검토 필요 | `bot`, `alarm-worker`, `llm-scheduler`, ingestion runtimes where subscriber configured | Valkey Pub/Sub | `config:update` | `hololive/hololive-shared/pkg/contracts/settings` | `ConfigUpdateVersionV1 = 1`; message has no `version` field | settings/configsub tests | `contracts/settings.md` |
-| `iris-boundary` | Iris / Redroid | `bot`, `dispatcher-go` | External HTTP/H3 boundary | webhook/reply/send paths 검토 필요 | external boundary, no in-repo contract package | external | router/transport tests 검토 필요 | `contracts/iris-boundary.md` |
+| `membernews.digest` | `llm-scheduler` | `bot` | HTTP JSON | `/internal/membernews/digest` | `hololive/hololive-shared/pkg/contracts/membernews` | route constants, unversioned HTTP body | provider/client route tests | `contracts/membernews.md` |
+| `membernews.subscription` | `llm-scheduler` | `bot` | HTTP JSON | `/internal/membernews/subscriptions` | `hololive/hololive-shared/pkg/contracts/membernews` | route constants, unversioned HTTP body | provider/client route tests | `contracts/membernews.md` |
+| `majorevent.subscription` | `llm-scheduler` | `bot` | HTTP JSON | `/internal/majorevent/subscriptions` | `hololive/hololive-shared/pkg/contracts/majorevent` | route constants, unversioned HTTP body | provider/client route tests | `contracts/majorevent.md` |
+| `trigger.manual` | `llm-scheduler` | `admin-api` | HTTP JSON | `/internal/trigger/majorevent-weekly`, `/internal/trigger/majorevent-monthly`, `/internal/trigger/membernews-weekly` | `hololive/hololive-shared/pkg/contracts/trigger` | route constants, unversioned body | route/client tests | `contracts/trigger.md` |
+| `alarm.http` | `admin-api` current registration; provider ownership 검토 필요 | `bot`, `admin-api` facade | HTTP JSON | `/internal/alarm/*` | shared handler/client under `hololive/hololive-shared/pkg/service/alarm` | unversioned | shared alarm API/client tests | `contracts/alarm.md` |
+| `alarm.dispatch` | `alarm-worker` | `dispatcher-go` | Valkey list + sorted set + DLQ | `alarm:dispatch:queue`, `alarm:dispatch:retry`, `alarm:dispatch:dlq` | `hololive/hololive-shared/pkg/contracts/alarm` | `QueueEnvelopeVersionV1 = 1`, consumer also accepts `0` | queue contract/tests | `contracts/alarm.md` |
+| `settings.update` | admin/settings update path 검토 필요 | `bot`, `alarm-worker`, `llm-scheduler`, ingestion runtimes where subscriber configured | Valkey Pub/Sub | `config:update` | `hololive/hololive-shared/pkg/contracts/settings` | `ConfigUpdateVersionV1 = 1`; message has no `version` field | settings/configsub tests | `contracts/settings.md` |
+| `iris.webhook` | Iris / Redroid | `bot`, `dispatcher-go` | External HTTP/H3 boundary | webhook/reply/send paths 검토 필요 | external boundary, no in-repo contract package | external | router/transport tests 검토 필요 | `contracts/iris-boundary.md` |
 
 ## Contract Change Rule
 

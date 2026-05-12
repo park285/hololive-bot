@@ -4,6 +4,11 @@
 
 `bot`이 `llm-scheduler`에 member news 구독 상태와 digest 생성을 요청하는 internal HTTP JSON 계약입니다.
 
+## Contract IDs
+
+- `membernews.digest`
+- `membernews.subscription`
+
 ## Provider
 
 - Service: `llm-scheduler`

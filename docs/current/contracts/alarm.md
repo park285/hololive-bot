@@ -4,6 +4,11 @@
 
 Alarm domain currently has two contract surfaces: alarm HTTP JSON APIs and the Valkey dispatch queue consumed by `dispatcher-go`.
 
+## Contract IDs
+
+- `alarm.http`
+- `alarm.dispatch`
+
 ## Provider
 
 - HTTP service: `admin-api` registers `hololive-shared/pkg/service/alarm.APIHandler` when `AlarmCRUD` is configured; provider ownership remains 검토 필요 because alarm domain work is split from `alarm-worker`.

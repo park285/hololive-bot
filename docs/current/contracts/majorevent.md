@@ -4,6 +4,10 @@
 
 `bot`이 `llm-scheduler`에 major event 구독 상태를 조회/변경하는 internal HTTP JSON 계약입니다.
 
+## Contract ID
+
+- `majorevent.subscription`
+
 ## Provider
 
 - Service: `llm-scheduler`
