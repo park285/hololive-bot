@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DOC="${ROOT_DIR}/docs/current/architecture/repository-ownership.md"
+ALLOWLIST="${ROOT_DIR}/docs/current/architecture/repository-ownership.allowlist"
 
 echo "[CHECK] repository ownership and runtime import boundaries"
 
@@ -11,6 +12,10 @@ missing=0
 
 if [[ ! -f "${DOC}" ]]; then
   echo "[FAIL] missing repository ownership doc: docs/current/architecture/repository-ownership.md"
+  exit 1
+fi
+if [[ ! -f "${ALLOWLIST}" ]]; then
+  echo "[FAIL] missing repository ownership allowlist: docs/current/architecture/repository-ownership.allowlist"
   exit 1
 fi
 
@@ -32,6 +37,53 @@ for token in "${required_tokens[@]}"; do
     echo "[PASS] repository ownership doc contains: ${token}"
   fi
 done
+
+required_allowlist_entries=(
+  major_event_subscriptions
+  membernews_digest
+  membernews_subscription
+  alarm_dispatch
+  alarm_state
+  youtube_outbox
+)
+
+for entry in "${required_allowlist_entries[@]}"; do
+  if ! grep -Eq "^${entry}\\|owner=[^|]+\\|writers=[^|]+\\|readers=[^|]+" "${ALLOWLIST}"; then
+    echo "[FAIL] repository ownership allowlist missing or malformed: ${entry}"
+    missing=1
+  else
+    echo "[PASS] repository ownership allowlist contains: ${entry}"
+  fi
+done
+
+validate_module_refs() {
+  local field="$1"
+  local refs="$2"
+  local ref
+
+  IFS=',' read -ra ref_list <<< "${refs}"
+  for ref in "${ref_list[@]}"; do
+    if [[ ! -d "${ROOT_DIR}/hololive/${ref}" ]]; then
+      echo "[FAIL] repository ownership allowlist ${field} path missing: hololive/${ref}"
+      missing=1
+    else
+      echo "[PASS] repository ownership allowlist ${field} path exists: hololive/${ref}"
+    fi
+  done
+}
+
+while IFS='|' read -r data_area owner_field writers_field readers_field extra; do
+  if [[ -z "${data_area}" || "${data_area}" == \#* ]]; then
+    continue
+  fi
+  if [[ -n "${extra:-}" || "${owner_field}" != owner=* || "${writers_field}" != writers=* || "${readers_field}" != readers=* ]]; then
+    echo "[FAIL] repository ownership allowlist malformed row: ${data_area}"
+    missing=1
+    continue
+  fi
+  validate_module_refs "writers" "${writers_field#writers=}"
+  validate_module_refs "readers" "${readers_field#readers=}"
+done < "${ALLOWLIST}"
 
 check_no_imports() {
   local label="$1"

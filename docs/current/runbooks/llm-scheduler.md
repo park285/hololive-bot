@@ -85,6 +85,12 @@ curl http://127.0.0.1:30003/health
 curl http://127.0.0.1:30003/ready
 ```
 
+## Rollback
+
+- Use `docs/current/runbooks/rollback.md`.
+- Redeploy the previous `llm-scheduler` image/config.
+- Recheck membernews, majorevent, and trigger contract callers after rollback.
+
 ## Related contracts
 
 - `../contracts/membernews.md`

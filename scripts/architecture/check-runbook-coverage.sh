@@ -18,6 +18,14 @@ required_runtimes=(
   youtube-scraper
 )
 
+required_sections=(
+  "## Role"
+  "## Dependencies"
+  "## Common failure modes"
+  "## Smoke test"
+  "## Rollback"
+)
+
 missing=0
 
 if [[ ! -f "${PROJECT_MAP}" ]]; then
@@ -52,6 +60,15 @@ for runtime in "${required_runtimes[@]}"; do
     missing=1
   else
     echo "[PASS] found runbook: docs/current/${runbook_rel}"
+
+    for section in "${required_sections[@]}"; do
+      if ! grep -Fxq "${section}" "${runbook_file}"; then
+        echo "[FAIL] docs/current/${runbook_rel} missing required section: ${section}"
+        missing=1
+      else
+        echo "[PASS] docs/current/${runbook_rel} contains section: ${section}"
+      fi
+    done
   fi
 
   if ! grep -Fq "${runtime}.md" "${RUNBOOK_INDEX}"; then

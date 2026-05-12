@@ -82,6 +82,12 @@ Rollback:
 curl http://127.0.0.1:30007/health
 ```
 
+## Rollback
+
+- Use `docs/current/runbooks/rollback.md`.
+- Redeploy the previous `hololive-alarm-worker` image/config.
+- Preserve and inspect `alarm:dispatch:*` queues before replaying or deleting queue data.
+
 ## Related contracts
 
 - `../contracts/alarm.md`

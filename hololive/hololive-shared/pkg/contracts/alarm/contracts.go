@@ -20,7 +20,11 @@
 
 package alarm
 
-import "github.com/kapu/hololive-shared/pkg/domain"
+import (
+	"net/url"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
 
 const (
 	BasePath = "/internal/alarm"
@@ -57,15 +61,15 @@ const (
 )
 
 func RoomAlarmsPath(roomID string) string {
-	return BasePath + "/room/" + roomID
+	return BasePath + "/room/" + url.PathEscape(roomID)
 }
 
 func RoomAlarmsViewPath(roomID string) string {
-	return BasePath + "/room/" + roomID + "/view"
+	return BasePath + "/room/" + url.PathEscape(roomID) + "/view"
 }
 
 func NextStreamPath(channelID string) string {
-	return BasePath + "/next-stream/" + channelID
+	return BasePath + "/next-stream/" + url.PathEscape(channelID)
 }
 
 type AlarmQueueEnvelope struct {

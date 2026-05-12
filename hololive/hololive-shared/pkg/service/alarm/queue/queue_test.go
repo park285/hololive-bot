@@ -230,7 +230,7 @@ func TestParseEnvelopeSkipsUnsupportedVersion(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestAlarmQueueConsumerRejectsUnsupportedVersion(t *testing.T) {
+func TestQueueConsumerRejectsUnsupportedEnvelopeVersion(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 	raw := readAlarmQueueFixture(t, "envelope_unsupported_version.json")
@@ -254,7 +254,7 @@ func TestParseEnvelopeSkipsInvalidJSON(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestAlarmQueueConsumerMovesInvalidJSONToDLQ(t *testing.T) {
+func TestQueueConsumerMovesInvalidJSONToDLQ(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 
@@ -299,7 +299,7 @@ func TestAlarmQueueDerivesRetryAndDLQKeys(t *testing.T) {
 	assert.Equal(t, "alarm:test:dlq", consumer.dlqKey)
 }
 
-func TestConsumerDrainBatch_InvalidDelayedRetryMemberMovesRawMemberToDLQ(t *testing.T) {
+func TestQueueConsumerPreservesInvalidDelayedRetryMemberToDLQ(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
 	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
 
@@ -329,6 +329,32 @@ func TestConsumerDrainBatch_InvalidDelayedRetryMemberMovesRawMemberToDLQ(t *test
 	require.NoError(t, err)
 	require.Len(t, dlqItems, 1)
 	assert.Equal(t, invalidMember, dlqItems[0])
+}
+
+func TestQueueConsumerAcceptsLegacyVersionZero(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	raw, err := json.Marshal(domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "legacy-room",
+		},
+		ClaimKeys:  []string{"notified:claim:legacy-room"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    0,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, cacheClient.DoMulti(context.Background(),
+		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(string(raw)).Build(),
+	)[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 1)
+	assert.Equal(t, uint8(0), envelopes[0].Version)
+	assert.Equal(t, "legacy-room", envelopes[0].Notification.RoomID)
 }
 
 func TestReleaseClaimKeysFiltersByPrefix(t *testing.T) {
@@ -538,6 +564,39 @@ func TestConsumerScheduleRetryStoresDelayedEnvelope(t *testing.T) {
 	require.Equal(t, mustMarshalEnvelope(t, envelope), payload)
 	assert.Equal(t, float64(nextVisibleAt.UnixMilli()), score)
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
+}
+
+func TestQueueConsumerRoundTripsRetryMetadata(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	nextVisibleAt := time.Now().UTC().Add(-1 * time.Second).Truncate(time.Millisecond)
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "retry-round-trip",
+		},
+		ClaimKeys:  []string{"notified:claim:retry-round-trip"},
+		EnqueuedAt: time.Now().UTC().Format(time.RFC3339),
+		Version:    contractsalarm.QueueEnvelopeVersionV1,
+		Retry: &domain.AlarmQueueRetryMetadata{
+			Attempt:       4,
+			RetryAfterMS:  120000,
+			NextVisibleAt: nextVisibleAt.Format(time.RFC3339Nano),
+			LastError:     "temporary upstream error",
+		},
+	}
+
+	require.NoError(t, consumer.ScheduleRetry(context.Background(), []domain.AlarmQueueEnvelope{envelope}))
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	require.Len(t, envelopes, 1)
+	require.NotNil(t, envelopes[0].Retry)
+	assert.Equal(t, 4, envelopes[0].Retry.Attempt)
+	assert.Equal(t, int64(120000), envelopes[0].Retry.RetryAfterMS)
+	assert.Equal(t, nextVisibleAt.Format(time.RFC3339Nano), envelopes[0].Retry.NextVisibleAt)
+	assert.Equal(t, "temporary upstream error", envelopes[0].Retry.LastError)
 }
 
 func TestConsumerDrainBatch_PreservesDeterministicSameTimestampRetryOrdering(t *testing.T) {

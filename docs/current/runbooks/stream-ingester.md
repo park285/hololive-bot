@@ -66,6 +66,12 @@ Rollback:
 curl http://127.0.0.1:30004/health
 ```
 
+## Rollback
+
+- Use `docs/current/runbooks/rollback.md`.
+- Redeploy the previous `stream-ingester` image/config.
+- Confirm `YOUTUBE_INGESTION_ENABLED=false` remains unchanged for this runtime.
+
 ## Related contracts
 
 - `../contracts/settings.md`

@@ -11,7 +11,9 @@ Alarm domain currently has two contract surfaces: alarm HTTP JSON APIs and the V
 
 ## Provider
 
-- HTTP service: `admin-api` registers `hololive-shared/pkg/service/alarm.APIHandler` when `AlarmCRUD` is configured; provider ownership remains 검토 필요 because alarm domain work is split from `alarm-worker`.
+- HTTP service: `admin-api` registers `hololive-shared/pkg/service/alarm.APIHandler` when `AlarmCRUD` is configured.
+- Domain owner: `alarm-worker`.
+- Ownership decision: short-term `admin-api` provider 유지, long-term `alarm-worker` provider migration. See `../../design/alarm-http-provider-ownership.md`.
 - Queue service: `alarm-worker`
 - Modules: `hololive-admin-api`, `hololive-alarm-worker`, `hololive-shared`
 
@@ -57,6 +59,7 @@ HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service
 ```go
 type APIResponse struct {
     Success bool        `json:"success"`
+    Error   string      `json:"error,omitempty"`
     Message string      `json:"message,omitempty"`
     Data    interface{} `json:"data,omitempty"`
 }
@@ -68,11 +71,16 @@ Queue success has no response body; delivery outcome is represented by queue mov
 
 | Code | HTTP status | Meaning | Consumer behavior |
 |---|---:|---|---|
-| `invalid request body` / bind error | 400 | invalid HTTP payload | fix caller input |
-| `alarm add failed` | 500 | provider add failed | retry/manual diagnosis |
-| `alarm remove failed` | 500 | provider remove failed | retry/manual diagnosis |
-| `get room alarms failed` | 500 | provider query failed | retry/manual diagnosis |
-| `get next stream info failed` | 500 | provider query failed | retry/manual diagnosis |
+| `invalid_request_body` | 400 | invalid HTTP payload | fix caller input |
+| `alarm_add_failed` | 500 | provider add failed | retry/manual diagnosis |
+| `alarm_remove_failed` | 500 | provider remove failed | retry/manual diagnosis |
+| `get_room_alarms_failed` | 500 | provider query failed | retry/manual diagnosis |
+| `get_room_alarms_view_failed` | 500 | provider view query failed | retry/manual diagnosis |
+| `clear_room_alarms_failed` | 500 | provider clear failed | retry/manual diagnosis |
+| `get_next_stream_info_failed` | 500 | provider query failed | retry/manual diagnosis |
+| `set_room_name_failed` | 500 | provider room name update failed | retry/manual diagnosis |
+| `set_user_name_failed` | 500 | provider user name update failed | retry/manual diagnosis |
+| `get_all_alarm_keys_failed` | 500 | provider key listing failed | retry/manual diagnosis |
 | unsupported queue version | n/a | queue consumer rejects payload | preserve raw payload to DLQ; not accepted for delivery |
 | Invalid JSON | n/a | payload cannot parse | preserve raw payload to DLQ |
 
@@ -87,7 +95,7 @@ Queue success has no response body; delivery outcome is represented by queue mov
 
 - Queue consumers must retain dual-read behavior when introducing a new envelope version.
 - Raw payload preservation must remain in place before changing DLQ tooling.
-- HTTP provider ownership should be clarified before moving `/internal/alarm/*` between runtimes.
+- HTTP provider migration must follow `../../design/alarm-http-provider-ownership.md` before moving `/internal/alarm/*` between runtimes.
 
 ## Tests
 
@@ -99,4 +107,4 @@ Queue success has no response body; delivery outcome is represented by queue mov
 ## Known gaps
 
 - Alarm HTTP API DTOs are not yet represented by a dedicated `pkg/contracts/alarm` DTO package.
-- Current HTTP provider registration is `admin-api`; long-term ownership remains 검토 필요.
+- Current HTTP provider registration is `admin-api`; long-term migration to `alarm-worker` is documented but not implemented.

@@ -18,9 +18,10 @@ Architecture and document gates keep current docs, contracts, runbooks, and gove
 
 | Gate | Script | Purpose | Failure condition | Exception policy |
 |---|---|---|---|---|
-| current-docs-no-historical | `check-current-docs-no-historical.sh` | Keep `docs/current` free of historical body markers | historical marker appears under `docs/current` | Use short bridge files without historical body markers |
-| runbook-coverage | `check-runbook-coverage.sh` | Ensure all 7 runtime rows have runbook links and files | missing runtime/runbook/index link | Add runbook before linking from Project Map |
-| contract-map | `check-contract-map.sh` | Ensure contract map, docs, and code package paths align | missing required contract doc/package/token | Mark uncertain provider as `검토 필요`, not omitted |
+| current-docs-no-historical-body | `check-current-docs-no-historical-body.sh` | Keep `docs/current` free of historical body markers while allowing short bridge files | historical body marker appears under `docs/current` | Use short bridge files without historical body markers |
+| doc-links-no-local-paths | `check-doc-links-no-local-paths.sh` | Keep markdown links portable on GitHub and clones | local machine path marker appears in markdown docs | Use repository-relative links |
+| runbook-coverage | `check-runbook-coverage.sh` | Ensure all 7 runtime rows have runbook links, files, and required sections | missing runtime/runbook/index link or required section | Add runbook content before linking from Project Map |
+| contract-map | `check-contract-map.sh` | Ensure contract map, manifest, docs, and code package paths align | missing required contract doc/package/token/manifest row | Mark uncertain provider as `검토 필요`, not omitted |
 | internal-route-hardcoding | `check-internal-route-hardcoding.sh` | Keep internal routes centralized in contract/helper packages | hardcoded route appears outside allowed files | Add route constants before new call sites |
 | repository-ownership | `check-repository-ownership.sh` | Keep data ownership and runtime internal imports aligned | forbidden runtime internal import or missing ownership token | Update ownership doc before adding shared repository access |
 | error-contracts | `check-error-contracts.sh` | Ensure error docs cover stable contract codes and helpers | required error doc/helper token missing | Document compatibility gap before code changes |
@@ -29,7 +30,9 @@ Architecture and document gates keep current docs, contracts, runbooks, and gove
 ## Local Validation
 
 ```bash
+./scripts/architecture/check-current-docs-no-historical-body.sh
 ./scripts/architecture/check-current-docs-no-historical.sh
+./scripts/architecture/check-doc-links-no-local-paths.sh
 ./scripts/architecture/check-runbook-coverage.sh
 ./scripts/architecture/check-contract-map.sh
 ./scripts/architecture/check-internal-route-hardcoding.sh

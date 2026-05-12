@@ -4,6 +4,8 @@
 
 ## Stable Contract IDs
 
+The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
+
 - `membernews.digest` - member news digest HTTP JSON
 - `membernews.subscription` - member news subscription HTTP JSON
 - `majorevent.subscription` - major event subscription HTTP JSON
