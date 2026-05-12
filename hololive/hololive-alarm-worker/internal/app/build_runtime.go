@@ -255,7 +255,6 @@ func parseAlarmDispatchPublishMode(raw string) (queue.PublishMode, error) {
 		return "", fmt.Errorf("ALARM_DISPATCH_PUBLISH_MODE must be valkey_only, shadow, or pg_first")
 	}
 }
-
 func validateAlarmDispatchModePair(publishMode queue.PublishMode, rawConsumerMode string) error {
 	consumerMode := strings.ToLower(strings.TrimSpace(rawConsumerMode))
 	if consumerMode == "" {
