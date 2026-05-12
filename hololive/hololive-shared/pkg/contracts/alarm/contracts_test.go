@@ -21,7 +21,11 @@
 package alarm_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 )
@@ -71,4 +75,71 @@ func TestAlarmQueueEnvelopeContract(t *testing.T) {
 	if env.SourcePayload == "" {
 		t.Fatal("source payload should be set")
 	}
+}
+
+func TestAlarmQueueEnvelopeV1FixtureRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	raw := readAlarmContractFixture(t, "envelope_v1.json")
+
+	var envelope contractsalarm.AlarmQueueEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+	if envelope.Version != contractsalarm.QueueEnvelopeVersionV1 {
+		t.Fatalf("version = %d, want %d", envelope.Version, contractsalarm.QueueEnvelopeVersionV1)
+	}
+	if envelope.Notification.RoomID != "room-1" {
+		t.Fatalf("room_id = %q, want room-1", envelope.Notification.RoomID)
+	}
+	if envelope.Retry == nil || envelope.Retry.Attempt != 2 {
+		t.Fatalf("retry metadata = %+v, want attempt 2", envelope.Retry)
+	}
+
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	var roundTrip contractsalarm.AlarmQueueEnvelope
+	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
+		t.Fatalf("unmarshal round trip: %v", err)
+	}
+	if roundTrip.Notification.RoomID != envelope.Notification.RoomID {
+		t.Fatalf("roundTrip room_id = %q, want %q", roundTrip.Notification.RoomID, envelope.Notification.RoomID)
+	}
+}
+
+func TestAlarmQueueRetryMetadataRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	raw := readAlarmContractFixture(t, "envelope_v1.json")
+
+	var envelope contractsalarm.AlarmQueueEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+	encoded, err := json.Marshal(envelope.Retry)
+	if err != nil {
+		t.Fatalf("marshal retry metadata: %v", err)
+	}
+	var retry contractsalarm.AlarmQueueRetryMetadata
+	if err := json.Unmarshal(encoded, &retry); err != nil {
+		t.Fatalf("unmarshal retry metadata: %v", err)
+	}
+	if retry.RetryAfterMS != 30000 {
+		t.Fatalf("retry_after_ms = %d, want 30000", retry.RetryAfterMS)
+	}
+	if retry.LastError != "temporary upstream error" {
+		t.Fatalf("last_error = %q, want temporary upstream error", retry.LastError)
+	}
+}
+
+func readAlarmContractFixture(t *testing.T, name string) []byte {
+	t.Helper()
+
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", name, err)
+	}
+	return raw
 }

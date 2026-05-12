@@ -13,8 +13,9 @@ Alarm dispatch queue와 settings/config Pub/Sub의 current contract를 기록합
 | Active queue | `alarm:dispatch:queue` |
 | Delayed retry queue | `alarm:dispatch:retry` |
 | DLQ | `alarm:dispatch:dlq` |
-| Envelope version | `QueueEnvelopeVersionV1 = 1` |
+| Current envelope version | `QueueEnvelopeVersionV1 = 1` |
 | Contract package | `hololive/hololive-shared/pkg/contracts/alarm` |
+| Fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
 
 Current envelope:
 
@@ -32,11 +33,12 @@ type AlarmQueueEnvelope struct {
 Consumer behavior:
 
 - Accepts version `0` and `QueueEnvelopeVersionV1`.
-- Rejects unsupported versions.
-- Invalid active queue JSON is preserved raw in `alarm:dispatch:dlq`.
+- Rejects unsupported version payloads and preserves raw payloads in `alarm:dispatch:dlq`.
+- Invalid JSON from the active queue is preserved raw in `alarm:dispatch:dlq`.
 - Invalid delayed retry wrapper payload is preserved raw in `alarm:dispatch:dlq`.
 - `MoveToDLQ` preserves original legacy raw payload when available.
 - Retry scheduling stores wrapped members in `alarm:dispatch:retry`.
+- Retry metadata fields are `attempt`, `retry_after_ms`, `next_visible_at`, and `last_error`; consumers must round-trip unknown envelope fields when possible.
 
 ## Settings Pub/Sub
 
@@ -72,6 +74,8 @@ Subscriber behavior:
 ## Pub/Sub Delivery Semantics
 
 Valkey Pub/Sub does not provide durable replay for missed messages. Runtime startup must not rely solely on Pub/Sub history; each subscriber needs a startup refresh or source-of-truth read when the setting affects correctness.
+
+Pub/Sub is not durable command transport. Events that need acknowledgement, retry, replay, or auditability must use an internal HTTP contract or a durable queue.
 
 Command-like events that require acknowledgement, retry, or auditability should use documented internal trigger APIs instead of Pub/Sub. This document does not change the current `membernews_weekly_run_now` event.
 

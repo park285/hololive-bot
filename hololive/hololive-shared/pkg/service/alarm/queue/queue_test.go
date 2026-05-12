@@ -24,6 +24,8 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -100,6 +102,14 @@ func mustMarshalEnvelope(t *testing.T, envelope domain.AlarmQueueEnvelope) strin
 	raw, err := json.Marshal(envelope)
 	require.NoError(t, err)
 	return string(raw)
+}
+
+func readAlarmQueueFixture(t *testing.T, name string) []byte {
+	t.Helper()
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "alarm", "testdata", name))
+	require.NoError(t, err)
+	return raw
 }
 
 func unwrapSingleRetryMember(t *testing.T, retrySet map[string]float64) (string, float64) {
@@ -220,9 +230,46 @@ func TestParseEnvelopeSkipsUnsupportedVersion(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestAlarmQueueConsumerRejectsUnsupportedVersion(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+	raw := readAlarmQueueFixture(t, "envelope_unsupported_version.json")
+
+	require.NoError(t, cacheClient.DoMulti(context.Background(),
+		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element(string(raw)).Build(),
+	)[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Empty(t, envelopes)
+
+	dlqItems, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, dlqItems, 1)
+	assert.JSONEq(t, string(raw), dlqItems[0])
+}
+
 func TestParseEnvelopeSkipsInvalidJSON(t *testing.T) {
 	_, ok := parseEnvelope("{invalid-json}", newTestLogger())
 	assert.False(t, ok)
+}
+
+func TestAlarmQueueConsumerMovesInvalidJSONToDLQ(t *testing.T) {
+	cacheClient, mini := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithMaxBatch(5))
+
+	require.NoError(t, cacheClient.DoMulti(context.Background(),
+		cacheClient.B().Lpush().Key(AlarmDispatchQueue).Element("{invalid-json}").Build(),
+	)[0].Error())
+
+	envelopes, err := consumer.DrainBatch(context.Background(), 1)
+	require.NoError(t, err)
+	assert.Empty(t, envelopes)
+
+	dlqItems, err := mini.List(contractsalarm.DispatchDLQKey)
+	require.NoError(t, err)
+	require.Len(t, dlqItems, 1)
+	assert.Equal(t, "{invalid-json}", dlqItems[0])
 }
 
 func TestConsumerDrainBatch_InvalidPayloadMovesRawPayloadToDLQ(t *testing.T) {
@@ -241,6 +288,15 @@ func TestConsumerDrainBatch_InvalidPayloadMovesRawPayloadToDLQ(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, dlqItems, 1)
 	assert.Equal(t, "{invalid-json}", dlqItems[0])
+}
+
+func TestAlarmQueueDerivesRetryAndDLQKeys(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	consumer := NewConsumer(cacheClient, newTestLogger(), WithQueueKey("alarm:test:queue"))
+
+	assert.Equal(t, "alarm:test:queue", consumer.queueKey)
+	assert.Equal(t, "alarm:test:retry", consumer.retryQueueKey)
+	assert.Equal(t, "alarm:test:dlq", consumer.dlqKey)
 }
 
 func TestConsumerDrainBatch_InvalidDelayedRetryMemberMovesRawMemberToDLQ(t *testing.T) {
