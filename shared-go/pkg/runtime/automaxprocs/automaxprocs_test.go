@@ -29,6 +29,32 @@ func TestShouldRunAutomaxprocsDisableOverridesForce(t *testing.T) {
 	}
 }
 
+func TestAutomaxprocsDecision(t *testing.T) {
+	tests := []struct {
+		name       string
+		disable    string
+		force      string
+		wantRun    bool
+		wantReason automaxprocsDecisionReason
+	}{
+		{name: "native default", wantRun: false, wantReason: automaxprocsDecisionNativeRuntime},
+		{name: "forced", force: "1", wantRun: true, wantReason: automaxprocsDecisionForced},
+		{name: "disabled overrides forced", disable: "1", force: "1", wantRun: false, wantReason: automaxprocsDecisionDisabled},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(DisableEnv, tt.disable)
+			t.Setenv(ForceEnv, tt.force)
+
+			got := decideAutomaxprocs()
+			if got.run != tt.wantRun || got.reason != tt.wantReason {
+				t.Fatalf("decideAutomaxprocs() = {run:%t reason:%v}, want {run:%t reason:%v}", got.run, got.reason, tt.wantRun, tt.wantReason)
+			}
+		})
+	}
+}
+
 func TestIsTruthy(t *testing.T) {
 	tests := []struct {
 		value string
