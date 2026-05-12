@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -134,51 +133,11 @@ func scanRoomAlarmKeys(ctx context.Context, cacheSvc cache.Client) ([]string, er
 
 	roomKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
-		if isRoomAlarmCacheKey(key) {
+		if sharedalarmkeys.IsRoomAlarmKey(key) {
 			roomKeys = append(roomKeys, key)
 		}
 	}
 	return roomKeys, nil
-}
-
-func isRoomAlarmCacheKey(key string) bool {
-	trimmed := strings.TrimSpace(key)
-	if trimmed == "" || !strings.HasPrefix(trimmed, sharedalarmkeys.AlarmKeyPrefix) {
-		return false
-	}
-
-	switch trimmed {
-	case sharedalarmkeys.AlarmRegistryKey,
-		sharedalarmkeys.AlarmChannelRegistryKey,
-		sharedalarmkeys.AlarmChannelRegistryVersionKey,
-		sharedalarmkeys.AlarmSubscriberCacheEmptyKey,
-		sharedalarmkeys.MemberNameKey,
-		sharedalarmkeys.RoomNamesCacheKey,
-		sharedalarmkeys.UserNamesCacheKey,
-		contractsalarm.DispatchQueueKey,
-		contractsalarm.DispatchRetryQueueKey,
-		contractsalarm.DispatchDLQKey,
-		sharedalarmkeys.ChzzkChannelMapKey,
-		sharedalarmkeys.ChzzkChannelMapEmptyKey,
-		sharedalarmkeys.TwitchLoginMapKey,
-		sharedalarmkeys.TwitchLoginMapEmptyKey,
-		sharedalarmkeys.TwitchChannelLoginMapKey,
-		sharedalarmkeys.TwitchChannelLoginMapEmptyKey:
-		return false
-	}
-
-	suffix := strings.TrimPrefix(trimmed, sharedalarmkeys.AlarmKeyPrefix)
-	if suffix == "" {
-		return false
-	}
-
-	// 실제 room alarm cache key 는 alarm:{roomID} 단일 세그먼트 형태를 따른다.
-	// 추가 ':' 가 있는 키는 dispatch / typed subscriber / next_stream 등 다른 alarm namespace 로 본다.
-	if strings.Contains(suffix, ":") {
-		return false
-	}
-
-	return true
 }
 
 func compactUniqueStrings(values []string) []string {
