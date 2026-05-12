@@ -22,13 +22,11 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
 	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
-	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -81,8 +79,6 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
 		"SERVICES_LLM_SERVER_HEALTH_URL",
 	)
-	publishedAtResolverDefaults := DefaultScraperPublishedAtResolverConfig()
-	scraperSchedulerDefaults := DefaultScraperSchedulerConfig()
 	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
 	if err != nil {
 		return nil, err
@@ -98,15 +94,7 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
 			HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
 		},
-		Server: ServerConfig{
-			Port:           sharedenv.Int("SERVER_PORT", 30001),
-			APIKey:         sharedenv.String("API_SECRET_KEY", ""),
-			HTTPTransports: parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
-			H2CAddr:        sharedenv.String("HOLOLIVE_H2C_ADDR", fmt.Sprintf(":%d", sharedenv.Int("SERVER_PORT", 30001))),
-			H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", sharedenv.Int("SERVER_PORT", 30001))),
-			H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
-			H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
-		},
+		Server: loadServerConfig(),
 		Kakao: KakaoConfig{
 			Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
 			ACLEnabled: sharedenv.Bool("KAKAO_ACL_ENABLED", true),
@@ -126,12 +114,9 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			CommunityShortsBigBangEnabled:   sharedenv.Bool("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED", false),
 			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
 		},
-		Valkey:   loadValkeyConfig(),
-		Postgres: loadPostgresConfig(),
-		Notification: NotificationConfig{
-			AdvanceMinutes: parseIntList(sharedenv.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
-			CheckInterval:  time.Duration(sharedenv.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
-		},
+		Valkey:       loadValkeyConfig(),
+		Postgres:     loadPostgresConfig(),
+		Notification: loadNotificationConfig(),
 		Logging: LoggingConfig{
 			Level:      sharedenv.String("LOG_LEVEL", "info"),
 			Dir:        sharedenv.String("LOG_DIR", ""),
@@ -151,38 +136,8 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 			GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
 		},
 		Environment: loadAppEnvironment(),
-		Scraper: ScraperConfig{
-			ProxyEnabled:  sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
-			ProxyURL:      sharedenv.String("SCRAPER_PROXY_URL", ""),
-			FetcherEngine: NormalizeScraperFetcherEngine(sharedenv.String("SCRAPER_FETCHER_ENGINE", DefaultScraperFetcherEngine())),
-			WorkerCount: intAliasEnv([]string{
-				"SCRAPER_SCHEDULER_WORKER_COUNT",
-				"SCRAPER_WORKER_COUNT",
-			}, DefaultScraperWorkerCount()),
-			Scheduler: ScraperSchedulerConfig{
-				PollTimeout:     time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS", int(scraperSchedulerDefaults.PollTimeout/time.Second))) * time.Second,
-				ErrorBackoffMin: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMin/time.Second))) * time.Second,
-				ErrorBackoffMax: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMax/time.Second))) * time.Second,
-			},
-			Poll: loadScraperPoll(),
-			PublishedAtResolver: ScraperPublishedAtResolverConfig{
-				Enabled:           sharedenv.Bool("SCRAPER_PUBLISHED_AT_RESOLVER_ENABLED", publishedAtResolverDefaults.Enabled),
-				Interval:          time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS", int(publishedAtResolverDefaults.Interval/time.Second))) * time.Second,
-				BatchSize:         sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE", publishedAtResolverDefaults.BatchSize),
-				MaxResolvePerRun:  sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN", publishedAtResolverDefaults.MaxResolvePerRun),
-				MaxRunDuration:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS", int(publishedAtResolverDefaults.MaxRunDuration/time.Second))) * time.Second,
-				ResolveTimeout:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS", int(publishedAtResolverDefaults.ResolveTimeout/time.Second))) * time.Second,
-				MinDetectedAge:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", int(publishedAtResolverDefaults.MinDetectedAge/time.Second))) * time.Second,
-				FailureBackoffTTL: time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", int(publishedAtResolverDefaults.FailureBackoffTTL/time.Second))) * time.Second,
-			},
-		},
-		Webhook: WebhookConfig{
-			WorkerCount:    sharedenv.Int("WEBHOOK_WORKER_COUNT", 16),
-			QueueSize:      sharedenv.Int("WEBHOOK_QUEUE_SIZE", 1000),
-			EnqueueTimeout: time.Duration(sharedenv.Int("WEBHOOK_ENQUEUE_TIMEOUT_MS", 50)) * time.Millisecond,
-			HandlerTimeout: time.Duration(sharedenv.Int("WEBHOOK_HANDLER_TIMEOUT_SECONDS", 30)) * time.Second,
-			RequireHTTP2:   sharedenv.Bool("WEBHOOK_REQUIRE_HTTP2", false),
-		},
+		Scraper:     loadScraperConfig(),
+		Webhook:     loadWebhookConfig(),
 		Chzzk: ChzzkConfig{
 			ClientID:     sharedenv.String("CHZZK_CLIENT_ID", ""),
 			ClientSecret: sharedenv.String("CHZZK_CLIENT_SECRET", ""),
@@ -202,277 +157,4 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		},
 		Version: sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}, nil
-}
-
-func (c *Config) Validate() error {
-	if err := validateDeprecatedEnvUsage(); err != nil {
-		return err
-	}
-	if c.Server.Port == 0 {
-		return fmt.Errorf("SERVER_PORT is required")
-	}
-	if err := c.validateServerTransports(); err != nil {
-		return err
-	}
-	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
-		return err
-	}
-	if len(c.Kakao.Rooms) == 0 {
-		return fmt.Errorf("KAKAO_ROOMS is required")
-	}
-	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
-		return fmt.Errorf("IRIS_WEBHOOK_TOKEN is required")
-	}
-	if strings.TrimSpace(c.Iris.BotToken) == "" {
-		return fmt.Errorf("IRIS_BOT_TOKEN is required")
-	}
-	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
-		return fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
-	}
-	if strings.TrimSpace(c.Holodex.APIKey) == "" {
-		return fmt.Errorf("HOLODEX_API_KEY is required")
-	}
-	if isPlaceholderAPIKey(c.YouTube.APIKey) {
-		return fmt.Errorf("YOUTUBE_API_KEY uses placeholder value; set a real API key")
-	}
-	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
-		return err
-	}
-	if err := validateScraperSchedulerConfig(c.Scraper.Scheduler); err != nil {
-		return err
-	}
-	if err := validateScraperFetcherEngine(c.Scraper.FetcherEngine); err != nil {
-		return err
-	}
-	if err := validateScraperPublishedAtResolverConfig(c.Scraper.PublishedAtResolver); err != nil {
-		return err
-	}
-	isProduction := strings.EqualFold(strings.TrimSpace(c.Environment), "production")
-	if isProduction && c.CORS.Enforce && len(c.CORS.AllowedOrigins) == 0 {
-		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
-	}
-	return nil
-}
-
-func (c *Config) validateServerTransports() error {
-	for _, rawTransport := range c.Server.HTTPTransports {
-		if _, ok := normalizeServerHTTPTransport(rawTransport); !ok {
-			return fmt.Errorf("unsupported HOLOLIVE_HTTP_TRANSPORTS value: %s", rawTransport)
-		}
-	}
-
-	if c.ServerTransportEnabled("h3") {
-		if strings.TrimSpace(c.Server.H3Addr) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_ADDR is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3CertFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_CERT_FILE is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3KeyFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_KEY_FILE is required when h3 transport is enabled")
-		}
-	}
-	return nil
-}
-
-func (c *Config) ServerTransportEnabled(name string) bool {
-	target, ok := normalizeServerHTTPTransport(name)
-	if !ok || target == "" {
-		return false
-	}
-	if len(c.Server.HTTPTransports) == 0 {
-		return target == "h3"
-	}
-	for _, transport := range c.Server.HTTPTransports {
-		candidate, ok := normalizeServerHTTPTransport(transport)
-		if ok && candidate == target {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeServerHTTPTransport(raw string) (string, bool) {
-	switch transport := strings.TrimSpace(strings.ToLower(raw)); transport {
-	case "":
-		return "", true
-	case "h2c":
-		return "h2c", true
-	case "h3", "http3", "http/3", "quic":
-		return "h3", true
-	default:
-		return transport, false
-	}
-}
-
-func validateScraperSchedulerConfig(cfg ScraperSchedulerConfig) error {
-	if cfg.PollTimeout == 0 && cfg.ErrorBackoffMin == 0 && cfg.ErrorBackoffMax == 0 {
-		return nil
-	}
-	if cfg.PollTimeout <= 0 {
-		return fmt.Errorf("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS must be positive")
-	}
-	if cfg.ErrorBackoffMin <= 0 {
-		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS must be positive")
-	}
-	if cfg.ErrorBackoffMax <= 0 {
-		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be positive")
-	}
-	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
-		return fmt.Errorf("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS must be >= SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS")
-	}
-	return nil
-}
-
-func validateScraperFetcherEngine(engine string) error {
-	switch NormalizeScraperFetcherEngine(engine) {
-	case ScraperFetcherEngineNetHTTP, ScraperFetcherEngineGoScrapy:
-		return nil
-	default:
-		return fmt.Errorf("SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy")
-	}
-}
-
-func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConfig) error {
-	if !cfg.Enabled {
-		return nil
-	}
-	if cfg.Interval <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS must be positive when resolver is enabled")
-	}
-	if cfg.BatchSize <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE must be positive when resolver is enabled")
-	}
-	if cfg.MaxResolvePerRun <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN must be positive when resolver is enabled")
-	}
-	if cfg.MaxRunDuration <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be positive when resolver is enabled")
-	}
-	if cfg.ResolveTimeout <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS must be positive when resolver is enabled")
-	}
-	if cfg.MaxRunDuration < cfg.ResolveTimeout {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be >= SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS")
-	}
-	if cfg.MinDetectedAge <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS must be positive when resolver is enabled")
-	}
-	if cfg.FailureBackoffTTL <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS must be positive when resolver is enabled")
-	}
-	return nil
-}
-
-func loadScraperPoll() ScraperPoll {
-	defaults := DefaultScraperPoll()
-
-	return ScraperPoll{
-		Videos: secondsAliasEnv([]string{
-			"SCRAPER_POLL_VIDEOS_INTERVAL_SECONDS",
-			"SCRAPER_VIDEOS_SECONDS",
-		}, defaults.Videos),
-		Shorts: secondsAliasEnv([]string{
-			"SCRAPER_POLL_SHORTS_INTERVAL_SECONDS",
-			"SCRAPER_SHORTS_SECONDS",
-		}, defaults.Shorts),
-		Community: secondsAliasEnv([]string{
-			"SCRAPER_POLL_COMMUNITY_INTERVAL_SECONDS",
-			"SCRAPER_COMMUNITY_SECONDS",
-		}, defaults.Community),
-		Stats: secondsAliasEnv([]string{
-			"SCRAPER_POLL_STATS_INTERVAL_SECONDS",
-			"SCRAPER_STATS_SECONDS",
-		}, defaults.Stats),
-		Live: secondsAliasEnv([]string{
-			"SCRAPER_POLL_LIVE_INTERVAL_SECONDS",
-			"SCRAPER_LIVE_SECONDS",
-		}, defaults.Live),
-	}
-}
-
-func secondsAliasEnv(keys []string, fallback time.Duration) time.Duration {
-	for _, key := range keys {
-		seconds := sharedenv.Int(key, 0)
-		if seconds > 0 {
-			return time.Duration(seconds) * time.Second
-		}
-	}
-	return fallback
-}
-
-func intAliasEnv(keys []string, fallback int) int {
-	for _, key := range keys {
-		value := sharedenv.Int(key, 0)
-		if value > 0 {
-			return value
-		}
-	}
-	return fallback
-}
-
-func isPlaceholderAPIKey(value string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	switch normalized {
-	case "", "your_api_key", "your_youtube_api_key", "changeme", "change_me", "replace_me", "replace-with-real-key":
-		return true
-	default:
-		return false
-	}
-}
-
-func validateDeprecatedEnvUsage() error {
-	if value, exists := os.LookupEnv("MEMBER_NEWS_CLIPROXY_MODEL"); exists && stringutil.TrimSpace(value) != "" {
-		return fmt.Errorf("MEMBER_NEWS_CLIPROXY_MODEL is no longer supported; use MEMBER_NEWS_LLM_MODEL")
-	}
-	if value, exists := os.LookupEnv("DB_SSLMODE"); exists && stringutil.TrimSpace(value) != "" {
-		return fmt.Errorf("DB_SSLMODE is no longer supported; use POSTGRES_SSLMODE")
-	}
-	if value, exists := os.LookupEnv("DB_QUERY_EXEC_MODE"); exists && stringutil.TrimSpace(value) != "" {
-		return fmt.Errorf("DB_QUERY_EXEC_MODE is no longer supported; use POSTGRES_QUERY_EXEC_MODE")
-	}
-
-	return nil
-}
-
-func validatePostgresSSLMode(environment, sslMode string) error {
-	mode := strings.ToLower(strings.TrimSpace(sslMode))
-	if mode == "" {
-		return fmt.Errorf("POSTGRES_SSLMODE is required")
-	}
-
-	valid := map[string]struct{}{
-		"disable":     {},
-		"allow":       {},
-		"prefer":      {},
-		"require":     {},
-		"verify-ca":   {},
-		"verify-full": {},
-	}
-	if _, ok := valid[mode]; !ok {
-		return fmt.Errorf("invalid POSTGRES_SSLMODE: %s", sslMode)
-	}
-
-	if strings.EqualFold(strings.TrimSpace(environment), "production") {
-		if sharedenv.Bool("POSTGRES_SSLMODE_ALLOW_INSECURE", false) {
-			return nil
-		}
-
-		switch mode {
-		case "disable", "allow", "prefer":
-			return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use require, verify-ca, or verify-full", sslMode)
-		}
-	}
-
-	return nil
-}
-
-func validateAPISecretKey(environment, apiKey string) error {
-	if !strings.EqualFold(strings.TrimSpace(environment), "production") {
-		return nil
-	}
-	if strings.TrimSpace(apiKey) != "" {
-		return nil
-	}
-	return fmt.Errorf("API_SECRET_KEY is required in production")
 }

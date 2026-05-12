@@ -65,6 +65,68 @@ func loadPostgresConfig() PostgresConfig {
 	}
 }
 
+func loadServerConfig() ServerConfig {
+	port := sharedenv.Int("SERVER_PORT", 30001)
+
+	return ServerConfig{
+		Port:           port,
+		APIKey:         sharedenv.String("API_SECRET_KEY", ""),
+		HTTPTransports: parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
+		H2CAddr:        sharedenv.String("HOLOLIVE_H2C_ADDR", fmt.Sprintf(":%d", port)),
+		H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
+		H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
+		H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
+	}
+}
+
+func loadNotificationConfig() NotificationConfig {
+	return NotificationConfig{
+		AdvanceMinutes: parseIntList(sharedenv.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
+		CheckInterval:  time.Duration(sharedenv.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
+	}
+}
+
+func loadScraperConfig() ScraperConfig {
+	publishedAtResolverDefaults := DefaultScraperPublishedAtResolverConfig()
+	scraperSchedulerDefaults := DefaultScraperSchedulerConfig()
+
+	return ScraperConfig{
+		ProxyEnabled:  sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
+		ProxyURL:      sharedenv.String("SCRAPER_PROXY_URL", ""),
+		FetcherEngine: NormalizeScraperFetcherEngine(sharedenv.String("SCRAPER_FETCHER_ENGINE", DefaultScraperFetcherEngine())),
+		WorkerCount: intAliasEnv([]string{
+			"SCRAPER_SCHEDULER_WORKER_COUNT",
+			"SCRAPER_WORKER_COUNT",
+		}, DefaultScraperWorkerCount()),
+		Scheduler: ScraperSchedulerConfig{
+			PollTimeout:     time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_POLL_TIMEOUT_SECONDS", int(scraperSchedulerDefaults.PollTimeout/time.Second))) * time.Second,
+			ErrorBackoffMin: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMin/time.Second))) * time.Second,
+			ErrorBackoffMax: time.Duration(sharedenv.Int("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", int(scraperSchedulerDefaults.ErrorBackoffMax/time.Second))) * time.Second,
+		},
+		Poll: loadScraperPoll(),
+		PublishedAtResolver: ScraperPublishedAtResolverConfig{
+			Enabled:           sharedenv.Bool("SCRAPER_PUBLISHED_AT_RESOLVER_ENABLED", publishedAtResolverDefaults.Enabled),
+			Interval:          time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS", int(publishedAtResolverDefaults.Interval/time.Second))) * time.Second,
+			BatchSize:         sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE", publishedAtResolverDefaults.BatchSize),
+			MaxResolvePerRun:  sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN", publishedAtResolverDefaults.MaxResolvePerRun),
+			MaxRunDuration:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS", int(publishedAtResolverDefaults.MaxRunDuration/time.Second))) * time.Second,
+			ResolveTimeout:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS", int(publishedAtResolverDefaults.ResolveTimeout/time.Second))) * time.Second,
+			MinDetectedAge:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", int(publishedAtResolverDefaults.MinDetectedAge/time.Second))) * time.Second,
+			FailureBackoffTTL: time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", int(publishedAtResolverDefaults.FailureBackoffTTL/time.Second))) * time.Second,
+		},
+	}
+}
+
+func loadWebhookConfig() WebhookConfig {
+	return WebhookConfig{
+		WorkerCount:    sharedenv.Int("WEBHOOK_WORKER_COUNT", 16),
+		QueueSize:      sharedenv.Int("WEBHOOK_QUEUE_SIZE", 1000),
+		EnqueueTimeout: time.Duration(sharedenv.Int("WEBHOOK_ENQUEUE_TIMEOUT_MS", 50)) * time.Millisecond,
+		HandlerTimeout: time.Duration(sharedenv.Int("WEBHOOK_HANDLER_TIMEOUT_SECONDS", 30)) * time.Second,
+		RequireHTTP2:   sharedenv.Bool("WEBHOOK_REQUIRE_HTTP2", false),
+	}
+}
+
 func loadCommunityShortsBigBangCutoverAt() (time.Time, error) {
 	raw := strings.TrimSpace(sharedenv.String("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", ""))
 	if raw == "" {
