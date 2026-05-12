@@ -1,119 +1,133 @@
 # Hololive Bot
 
-홀로라이브 VTuber 알림/관리 플랫폼. KakaoTalk 챗봇을 통해 방송 알림, 스트림 상태, 멤버 뉴스 등을 제공합니다.
+홀로라이브 VTuber 알림/관리 플랫폼입니다. KakaoTalk 챗봇을 통해 방송 알림, 스트림 상태, 멤버 뉴스, 운영 관리 기능을 제공합니다.
 
-## 아키텍처
+이 README는 저장소 진입점입니다. 현재 구조의 상세 SSOT는 [docs/current/PROJECT_MAP.md](/root/work/hololive-bot/docs/current/PROJECT_MAP.md)이며, 배포 절차는 [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](/root/work/hololive-bot/docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)를 따릅니다.
 
-Go 단일 언어 구조:
+## Architecture
 
-> 운영 기준 (2026-03-07): 기존 k8s/k3s 배포에서 **단일 호스트 Docker Compose 기준으로 롤백**했습니다. 현재 배포, 로그 조회, 장애 대응 절차의 SSOT는 compose 문서입니다.
+현재 운영 기준은 Go runtime 7개를 단일 호스트 Docker Compose로 실행하는 구조입니다.
 
-| 영역 | 언어 | 역할 |
-|------|------|------|
-| Runtime | Go | bot(+admin API), dispatcher-go, llm-scheduler, stream-ingester, youtube-scraper |
+> 운영 기준: 2026-03-07 k8s/k3s 배포에서 단일 호스트 Docker Compose 기준으로 롤백했습니다. 현재 배포, 로그 조회, 장애 대응 절차의 기준은 Compose 문서와 `docs/current` 문서군입니다.
 
-데이터 흐름: `webhook → handler → service → repository → PostgreSQL/Valkey`
+| Runtime | Module | Compose service | Port | Role |
+|---|---|---|---:|---|
+| `bot` | `hololive-kakao-bot-go` | `hololive-bot` | 30001 | Kakao/Iris webhook ingress, command routing |
+| `admin-api` | `hololive-admin-api` | `hololive-admin-api` | 30006 | Admin HTTP control plane |
+| `alarm-worker` | `hololive-alarm-worker` | `hololive-alarm-worker` | 30007 | Alarm checker and queue publisher |
+| `dispatcher-go` | `hololive-dispatcher-go` | `dispatcher-go` | 30020 | Alarm dispatch queue consumer and Iris sender |
+| `llm-scheduler` | `hololive-llm-sched` | `llm-scheduler` | 30003 | Major event, member news, LLM scheduling and delivery |
+| `stream-ingester` | `hololive-stream-ingester` | `stream-ingester` | 30004 | Photo sync and ingestion-adjacent runtime |
+| `youtube-scraper` | `hololive-stream-ingester` | `youtube-scraper` | 30005 | YouTube scraping/polling and outbox runtime |
 
-알림 흐름: `bot(alarm scheduler) LPUSH alarm:dispatch:queue → dispatcher-go BRPOP → Iris(Redroid) → KakaoTalk`
+Shared libraries:
 
-## 모듈 구조
+| Module | Role |
+|---|---|
+| `hololive-shared` | Hololive domain, contracts, shared services |
+| `shared-go` | In-repo Go utilities |
 
-### Go 모듈 (6개, go.work: 런타임 4 + 라이브러리 2)
-| 모듈 | 역할 | 포트 |
-|------|------|------|
-| `hololive-kakao-bot-go` | Main bot (webhook + command routing + admin API) | 30001 |
-| `hololive-dispatcher-go` | Alarm dispatch consumer (BRPOP → Iris) | 30020 |
-| `hololive-llm-sched` | LLM scheduler (major event + member news + delivery) | 30003 |
-| `hololive-stream-ingester` | Photo sync + ingestion-adjacent runtime builders (`stream-ingester`, `youtube-scraper`) | 30004 / 30005 |
-| `hololive-shared` | Shared Go library (hololive domain) | - |
-| `shared-go` | In-repo shared Go utilities workspace (`shared-go/`) | - |
+기본 흐름:
 
-### Runtime 바이너리 (5개)
-| 바이너리 | 역할 | 포트 |
-|------|------|------|
-| `bot` | Main bot (+ admin API) | 30001 |
-| `dispatcher-go` | Alarm dispatch consumer | 30020 |
-| `llm-scheduler` | LLM scheduler | 30003 |
-| `stream-ingester` | Photo sync + ingestion-adjacent health/config runtime | 30004 |
-| `youtube-scraper` | YouTube polling/scraping + outbox runtime | 30005 |
+- Kakao/Iris ingress: `Iris -> bot -> command/service/repository -> PostgreSQL/Valkey`
+- Alarm dispatch: `alarm-worker -> Valkey alarm:dispatch:queue -> dispatcher-go -> Iris -> KakaoTalk`
+- LLM/member news: `admin-api` 또는 `bot` 내부 client -> `llm-scheduler` internal HTTP API
+- YouTube ingestion: `youtube-scraper -> shared outbox/tracking -> alarm-worker/dispatcher-go`
 
-현재 `docker-compose.prod.yml` 운영 스택은 `bot`, `dispatcher-go`, `llm-scheduler`, `stream-ingester`, `youtube-scraper` 5개 서비스 기준입니다.
+## Development
 
-### 인프라
-| 항목 | 설명 |
-|------|------|
-| PostgreSQL | 메인 데이터베이스 (Docker) |
-| Valkey | 캐시/큐 (Docker) |
-| Docker Compose | 현재 운영 Go 서비스 배포 (bot, dispatcher-go, llm-scheduler, stream-ingester, youtube-scraper) |
-| Iris (Redroid) | KakaoTalk 자동화 |
+### Prerequisites
 
-상세: `docs/current/PROJECT_MAP.md`
-
-## 개발
-
-### 사전 조건
 - Go 1.26.3
-- PostgreSQL, Valkey
+- PostgreSQL
+- Valkey
+- Docker Compose for production-like local checks
 
-### 빌드
+### Build
+
 ```bash
-# Go (workspace 기준)
 go work sync
 go build ./shared-go/... \
   ./hololive/hololive-shared/... \
+  ./hololive/hololive-admin-api/... \
+  ./hololive/hololive-alarm-worker/... \
   ./hololive/hololive-dispatcher-go/... \
   ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/...
 ```
 
-### 테스트
+### Test
+
 ```bash
-# Go (workspace 주요 모듈)
 go test ./shared-go/... \
   ./hololive/hololive-shared/... \
+  ./hololive/hololive-admin-api/... \
+  ./hololive/hololive-alarm-worker/... \
   ./hololive/hololive-dispatcher-go/... \
   ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/...
 ```
 
-## 배포
-
-현재 운영 기준은 Docker Compose 기반입니다. 상세 배포 가이드: `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
+Runtime split contract check:
 
 ```bash
-# 전체 스택 기동/빌드
-./build-all.sh --no-bump
+go test . -run TestRuntimeSplitStandaloneModulesContract
+```
 
-# 단일 compose 서비스 재배포
+Architecture/doc gates:
+
+```bash
+./scripts/architecture/check-project-map.sh
+./scripts/architecture/ci-boundary-gate.sh
+```
+
+## Deployment
+
+현재 운영 기준은 Docker Compose입니다.
+
+```bash
+./build-all.sh --no-bump
 ./scripts/deploy/compose-redeploy-service.sh hololive-bot
+./scripts/deploy/compose-redeploy-service.sh hololive-admin-api
+./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
 ./scripts/deploy/compose-redeploy-service.sh dispatcher-go
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
 ./scripts/deploy/compose-redeploy-service.sh stream-ingester
 ./scripts/deploy/compose-redeploy-service.sh youtube-scraper
 ```
 
-### 로그 정책
-- SSOT: **application stdout/stderr → `docker compose logs`**
-- 파일 미러링: `./logs/bot.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`, `./logs/youtube-scraper.log`
-- 앱 파일 로그 로테이션: **100MB × 5 backups × 30일 보관 × gzip 압축**
-- 압축 백업 보관: `./logs/archive/*.gz`
-- 컨테이너 로그 드라이버(`json-file`) 로테이션: **10MB × 3 files**
-- 보조 로그 디렉터리:
-  - 기본 운영 경로는 `logs/*.log`와 `logs/archive/*.gz`
-  - `logs/mirror/`, `logs/backfill/`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 opt-in 보조 산출물
-- 기본 확인: `docker compose -f docker-compose.prod.yml logs -f <service>`
-- 범위 조회: `./scripts/logs/logs.sh query <service> --since 1h --limit 1000`
-- 실시간 tail: `./scripts/logs/logs.sh tail <service> --since 30m`
-- 일회성 스냅샷: `ENABLE_LOG_AUX_FILES=1 ./scripts/logs/logs.sh backfill <service> --since 24h`
-- 선택적 로컬 미러링: `ENABLE_LOG_MIRROR=1 ./scripts/logs/logs.sh stream start` 또는 `ENABLE_LOG_MIRROR=1 ./scripts/logs/logs.sh dump`
-- 보조 로그 정리: `./scripts/logs/logs.sh prune`
-- 상태 확인: `docker compose -f docker-compose.prod.yml ps`
-- Health endpoint: `bot(30001)`, `dispatcher-go(30020)`, `llm-scheduler(30003)`, `stream-ingester(30004)`, `youtube-scraper(30005)`
+세부 기준:
 
-## 문서
+- [docs/current/PROJECT_MAP.md](/root/work/hololive-bot/docs/current/PROJECT_MAP.md)
+- [docs/current/DEPLOYMENT_BASELINE.md](/root/work/hololive-bot/docs/current/DEPLOYMENT_BASELINE.md)
+- [docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](/root/work/hololive-bot/docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md)
 
-- `docs/README.md` — 문서 인덱스
-- `docs/current/PROJECT_MAP.md` — 모듈 구조
-- `docs/20260307/COMPOSE_HISTORY_NOTES_20260307.md` — compose 회귀 기준 메모
+## Logs And Health
+
+SSOT는 application stdout/stderr와 `docker compose logs`입니다. 파일 로그는 보조 미러입니다.
+
+| Runtime | Health |
+|---|---|
+| `bot` | `https://127.0.0.1:30001/health` |
+| `admin-api` | `http://127.0.0.1:30006/health` |
+| `alarm-worker` | `http://127.0.0.1:30007/health` |
+| `dispatcher-go` | `http://127.0.0.1:30020/ready` |
+| `llm-scheduler` | `http://127.0.0.1:30003/health` |
+| `stream-ingester` | `http://127.0.0.1:30004/health` |
+| `youtube-scraper` | `http://127.0.0.1:30005/health` |
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f <service>
+./scripts/logs/logs.sh query <service> --since 1h --limit 1000
+```
+
+## Documents
+
+- [docs/README.md](/root/work/hololive-bot/docs/README.md) - 문서 인덱스
+- [docs/current/PROJECT_MAP.md](/root/work/hololive-bot/docs/current/PROJECT_MAP.md) - 현재 runtime/module/operation 인벤토리
+- [docs/current/SERVICE_OWNERSHIP.md](/root/work/hololive-bot/docs/current/SERVICE_OWNERSHIP.md) - runtime 소유권
+- [docs/current/CONTRACT_MAP.md](/root/work/hololive-bot/docs/current/CONTRACT_MAP.md) - 내부 계약 지도
+- [docs/current/runbooks/README.md](/root/work/hololive-bot/docs/current/runbooks/README.md) - runtime runbook 인덱스

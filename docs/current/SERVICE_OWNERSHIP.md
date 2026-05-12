@@ -1,0 +1,31 @@
+# Service Ownership
+
+## Scope
+
+현재 7개 Go runtime의 책임 경계와 금지 소유 범위를 정리합니다. Historical handoff 문서는 `docs/history/runtime-split/`에 보관합니다.
+
+## Ownership Matrix
+
+| Runtime | Owns | Provides | Consumes | Must not own | Detail |
+|---|---|---|---|---|---|
+| `bot` | Kakao/Iris webhook ingress, command routing, user-facing replies | Kakao webhook/H3 ingress | PostgreSQL, Valkey, Iris, `llm-scheduler`, alarm API | alarm checking worker, dispatch queue consumer, admin control plane | `services/bot.md` |
+| `admin-api` | Dashboard-facing admin HTTP control plane | Admin API, trigger client facade | PostgreSQL, Valkey, `llm-scheduler`, alarm API | bot webhook ingress, alarm scheduling loops | `services/admin-api.md` |
+| `alarm-worker` | Alarm checker, alarm scheduler, dispatch queue publishing | Alarm queue publisher, internal alarm HTTP surface where configured | PostgreSQL, Valkey, settings Pub/Sub | Iris sending, Kakao command routing | `services/alarm-worker.md` |
+| `dispatcher-go` | Alarm dispatch queue draining and Iris send | Queue consumer lifecycle, `/ready` | Valkey alarm queue, Iris | alarm ownership mutation, LLM/news scheduling | `services/dispatcher-go.md` |
+| `llm-scheduler` | Major event/member news scheduling, LLM summaries, internal subscription APIs | `membernews`, `majorevent`, `trigger` internal HTTP contracts | PostgreSQL, Valkey, Iris/cliproxy where configured | Kakao webhook ingress, alarm checker loop | `services/llm-scheduler.md` |
+| `stream-ingester` | Photo sync and ingestion-adjacent runtime | stream ingestion health/runtime | PostgreSQL, Valkey, Iris/cliproxy where configured | dedicated YouTube scraping runtime when `youtube-scraper` owns it | `services/stream-ingester.md` |
+| `youtube-scraper` | YouTube scraping/polling and outbox runtime | YouTube poller/outbox production | PostgreSQL, Valkey, Iris/cliproxy where configured | bot command routing, dispatcher queue consume | `services/youtube-scraper.md` |
+
+## Split Rules
+
+- Cross-service APIs must use documented contracts under `docs/current/contracts/` and `hololive/hololive-shared/pkg/contracts/*`.
+- Service-to-service `internal` package imports are not allowed as an ownership shortcut.
+- Queue/PubSub changes must update `CONTRACT_MAP.md`, `QUEUE_AND_PUBSUB_CONTRACTS.md`, and affected service docs.
+- Unclear ownership is marked `검토 필요` in the service doc instead of being silently assigned.
+
+## Validation
+
+```bash
+./scripts/architecture/check-project-map.sh
+./scripts/architecture/check-runbook-coverage.sh
+```
