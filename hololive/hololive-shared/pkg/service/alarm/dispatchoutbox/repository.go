@@ -349,7 +349,13 @@ func (r *PgxRepository) ReleaseLeased(ctx context.Context, ids []int64) error {
 	}
 	_, err := r.pool.Exec(ctx, `
 		UPDATE alarm_dispatch_deliveries
-		SET locked_by=NULL, locked_at=NULL, lock_expires_at=NULL, updated_at=NOW()
+		SET status='retry',
+			next_attempt_at=NOW(),
+			locked_by=NULL,
+			locked_at=NULL,
+			lock_expires_at=NULL,
+			last_error='lease released before external send',
+			updated_at=NOW()
 		WHERE id = ANY($1) AND status = 'leased'`, ids)
 	if err != nil {
 		return fmt.Errorf("release dispatch deliveries: %w", err)

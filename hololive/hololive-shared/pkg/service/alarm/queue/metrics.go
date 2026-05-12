@@ -41,13 +41,15 @@ var (
 	alarmQueueRetryDrained                prometheus.Counter
 	alarmQueueDLQMoved                    prometheus.Counter
 	alarmDispatchPublishBatchDuration     prometheus.Histogram
-	alarmDispatchPublishRequestedTotal    prometheus.Counter
-	alarmDispatchPublishInsertedTotal     prometheus.Counter
-	alarmDispatchPublishDuplicateTotal    prometheus.Counter
-	alarmDispatchPublishHashConflictTotal prometheus.Counter
+	alarmDispatchPublishRequestedTotal    *prometheus.CounterVec
+	alarmDispatchPublishProcessedTotal    *prometheus.CounterVec
+	alarmDispatchPublishInsertedTotal     *prometheus.CounterVec
+	alarmDispatchPublishDuplicateTotal    *prometheus.CounterVec
+	alarmDispatchPublishHashConflictTotal *prometheus.CounterVec
 	alarmDispatchWakeupSentTotal          prometheus.Counter
 	alarmDispatchWakeupSuppressedTotal    prometheus.Counter
 	alarmDispatchWakeupFailedTotal        prometheus.Counter
+	alarmDispatchWakeupExpireFailedTotal  prometheus.Counter
 )
 
 func initQueueMetrics() {
@@ -120,32 +122,44 @@ func initQueueMetrics() {
 			},
 		)
 
-		alarmDispatchPublishRequestedTotal = promauto.NewCounter(
+		alarmDispatchPublishRequestedTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "alarm_dispatch_publish_requested_deliveries_total",
 				Help: "Requested alarm dispatch deliveries published.",
 			},
+			[]string{"mode"},
 		)
 
-		alarmDispatchPublishInsertedTotal = promauto.NewCounter(
+		alarmDispatchPublishProcessedTotal = promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_publish_processed_deliveries_total",
+				Help: "Alarm dispatch deliveries successfully processed by the active publish mode.",
+			},
+			[]string{"mode"},
+		)
+
+		alarmDispatchPublishInsertedTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "alarm_dispatch_publish_inserted_deliveries_total",
 				Help: "Inserted alarm dispatch deliveries.",
 			},
+			[]string{"mode"},
 		)
 
-		alarmDispatchPublishDuplicateTotal = promauto.NewCounter(
+		alarmDispatchPublishDuplicateTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "alarm_dispatch_publish_duplicate_deliveries_total",
 				Help: "Duplicate alarm dispatch deliveries skipped.",
 			},
+			[]string{"mode"},
 		)
 
-		alarmDispatchPublishHashConflictTotal = promauto.NewCounter(
+		alarmDispatchPublishHashConflictTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "alarm_dispatch_publish_hash_conflict_total",
 				Help: "Alarm dispatch event hash conflicts observed while publishing.",
 			},
+			[]string{"mode"},
 		)
 
 		alarmDispatchWakeupSentTotal = promauto.NewCounter(
@@ -168,14 +182,23 @@ func initQueueMetrics() {
 				Help: "Alarm dispatch wakeup token send failures.",
 			},
 		)
+
+		alarmDispatchWakeupExpireFailedTotal = promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "alarm_dispatch_wakeup_expire_failed_total",
+				Help: "Alarm dispatch wakeup list TTL failures.",
+			},
+		)
 	})
 }
 
-func observeAlarmDispatchPublishBatch(duration time.Duration, result dispatchoutbox.PublishBatchResult) {
+func observeAlarmDispatchPublishBatch(duration time.Duration, mode PublishMode, result dispatchoutbox.PublishBatchResult) {
 	initQueueMetrics()
+	modeLabel := string(normalizePublishMode(mode))
 	alarmDispatchPublishBatchDuration.Observe(duration.Seconds())
-	alarmDispatchPublishRequestedTotal.Add(float64(result.RequestedDeliveries))
-	alarmDispatchPublishInsertedTotal.Add(float64(result.InsertedDeliveries))
-	alarmDispatchPublishDuplicateTotal.Add(float64(result.DuplicateDeliveries))
-	alarmDispatchPublishHashConflictTotal.Add(float64(result.HashConflictEvents))
+	alarmDispatchPublishRequestedTotal.WithLabelValues(modeLabel).Add(float64(result.RequestedDeliveries))
+	alarmDispatchPublishProcessedTotal.WithLabelValues(modeLabel).Add(float64(result.ProcessedDeliveries))
+	alarmDispatchPublishInsertedTotal.WithLabelValues(modeLabel).Add(float64(result.InsertedDeliveries))
+	alarmDispatchPublishDuplicateTotal.WithLabelValues(modeLabel).Add(float64(result.DuplicateDeliveries))
+	alarmDispatchPublishHashConflictTotal.WithLabelValues(modeLabel).Add(float64(result.HashConflictEvents))
 }

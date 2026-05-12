@@ -143,6 +143,23 @@ func TestLoadConfig_RetryPolicyOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RecoveryOverrides(t *testing.T) {
+	setRequiredEnvForLoadConfig(t)
+	t.Setenv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", "5000")
+	t.Setenv("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", "250")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.Dispatch.RecoveryInterval != 5*time.Second {
+		t.Fatalf("Dispatch.RecoveryInterval = %v, want 5s", cfg.Dispatch.RecoveryInterval)
+	}
+	if cfg.Dispatch.RecoveryBatchSize != 250 {
+		t.Fatalf("Dispatch.RecoveryBatchSize = %d, want 250", cfg.Dispatch.RecoveryBatchSize)
+	}
+}
+
 func TestLoadConfig_RejectsNonFiniteRetryJitter(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
