@@ -1,39 +1,62 @@
 # Project Map
 
-Module inventory for the `hololive-bot` workspace.
+Module and runtime inventory for the `hololive-bot` workspace.
+
+## Module Inventory
 
 | Module | Language | Path | Role | Port |
 |--------|----------|------|------|------|
 | `hololive-kakao-bot-go` | Go 1.26.3 | `hololive/hololive-kakao-bot-go/` | Main bot ingress (webhook + command routing) | 30001 |
 | `hololive-admin-api` | Go 1.26.3 | `hololive/hololive-admin-api/` | Admin HTTP control plane | 30006 |
 | `hololive-alarm-worker` | Go 1.26.3 | `hololive/hololive-alarm-worker/` | Alarm checker / queue publisher worker | 30007 |
-| `hololive-dispatcher-go` | Go 1.26.3 | `hololive/hololive-dispatcher-go/` | Alarm dispatch queue consumer (BRPOP → Iris) | 30020 |
+| `hololive-dispatcher-go` | Go 1.26.3 | `hololive/hololive-dispatcher-go/` | Alarm dispatch queue consumer (BRPOP -> Iris) | 30020 |
 | `hololive-llm-sched` | Go 1.26.3 | `hololive/hololive-llm-sched/` | LLM scheduler (major event + member news + delivery) | 30003 |
 | `hololive-stream-ingester` | Go 1.26.3 | `hololive/hololive-stream-ingester/` | Photo sync + ingestion-adjacent runtime | 30004 |
 | `youtube-scraper` | Go 1.26.3 | `hololive/hololive-stream-ingester/` | Dedicated YouTube scraping/polling + outbox runtime | 30005 |
-| `hololive-shared` | Go 1.26.3 | `hololive/hololive-shared/` | Shared Go library (hololive domain) | - |
-| `shared-go` | Go 1.26.3 | `shared-go/` | Shared Go utilities (errors, stringutil, valkeyx, workerpool, etc.) | - |
+| `hololive-shared` | Go 1.26.3 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
+| `shared-go` | Go 1.26.3 | `shared-go/` | Shared Go utilities | - |
 | `docker-compose.prod.yml` | YAML | `docker-compose.prod.yml` | Production docker compose stack | - |
 
-## Runtime Binaries (7)
+## Runtime Operations Inventory
 
-| Binary | Module | Port |
+| Runtime | Module | Binary | Compose service | Port | Health / Ready | Service doc | Runbook |
+|---|---|---|---|---:|---|---|---|
+| `bot` | `hololive-kakao-bot-go` | `bot` | `hololive-bot` | 30001 | `https://127.0.0.1:30001/health` | `services/bot.md` | `runbooks/bot.md` |
+| `admin-api` | `hololive-admin-api` | `admin-api` | `hololive-admin-api` | 30006 | `http://127.0.0.1:30006/health` | `services/admin-api.md` | `runbooks/admin-api.md` |
+| `alarm-worker` | `hololive-alarm-worker` | `alarm-worker` | `hololive-alarm-worker` | 30007 | `http://127.0.0.1:30007/health` | `services/alarm-worker.md` | `runbooks/alarm-worker.md` |
+| `dispatcher-go` | `hololive-dispatcher-go` | `dispatcher` | `dispatcher-go` | 30020 | `http://127.0.0.1:30020/ready` | `services/dispatcher-go.md` | `runbooks/dispatcher-go.md` |
+| `llm-scheduler` | `hololive-llm-sched` | `llm-scheduler` | `llm-scheduler` | 30003 | `http://127.0.0.1:30003/health` | `services/llm-scheduler.md` | `runbooks/llm-scheduler.md` |
+| `stream-ingester` | `hololive-stream-ingester` | `stream-ingester` | `stream-ingester` | 30004 | `http://127.0.0.1:30004/health` | `services/stream-ingester.md` | `runbooks/stream-ingester.md` |
+| `youtube-scraper` | `hololive-stream-ingester` | `youtube-scraper` | `youtube-scraper` | 30005 | `http://127.0.0.1:30005/health` | `services/youtube-scraper.md` | `runbooks/youtube-scraper.md` |
+
+## Infra Services
+
+| Compose service | Role | Notes |
 |---|---|---|
-| `bot` | `hololive-kakao-bot-go` | 30001 |
-| `admin-api` | `hololive-admin-api` | 30006 |
-| `alarm-worker` | `hololive-alarm-worker` | 30007 |
-| `dispatcher-go` | `hololive-dispatcher-go` | 30020 |
-| `llm-scheduler` | `hololive-llm-sched` | 30003 |
-| `stream-ingester` | `hololive-stream-ingester` | 30004 |
-| `youtube-scraper` | `hololive-stream-ingester` | 30005 |
+| `holo-postgres` | PostgreSQL data store | Host-networked PostgreSQL on port 5433 |
+| `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start |
+| `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
+| `admin-dashboard` | Dashboard frontend | Not part of the 7 Go runtime set |
+| `docker-proxy` | Docker socket proxy | Used by bot operational endpoints |
+| `deunhealth` | Container autoheal | Restarts unhealthy labeled containers |
+
+## Cross-Runtime Contracts
+
+- Contract map: `CONTRACT_MAP.md`
+- Service ownership: `SERVICE_OWNERSHIP.md`
+- Runtime runbook index: `runbooks/README.md`
+- Deployment baseline: `DEPLOYMENT_BASELINE.md`
 
 ## Maintenance
+
 - Keep Go module entries aligned with `go.work`.
-- Root build/test commands should use the in-repo shared workspace at `shared-go/` and remain runnable from the repo root.
-- Committed `go.work` must not reference developer-local sibling paths such as `../iris-client-go`; use a local, uncommitted workspace edit for that case.
 - Keep runtime binary and Docker Compose service entries aligned with `docker-compose.prod.yml`.
-- Update roles/ports when service contracts change.
+- Keep service docs and runbook links valid for all 7 runtime rows.
+- Keep contract docs aligned with `hololive/hololive-shared/pkg/contracts/*`.
+- Run `./scripts/architecture/check-project-map.sh` after changing `go.work`, module inventory, or repo-root docs references.
+- Run `./scripts/architecture/check-runbook-coverage.sh` after changing runtime docs or runbook links.
+- Run `./scripts/architecture/check-contract-map.sh` after changing contract docs or `hololive-shared/pkg/contracts/*`.
+- Run `./scripts/architecture/ci-boundary-gate.sh` for architecture-wide changes.
 - Architecture: Go single-language runtime (7 binaries: bot + admin-api + alarm-worker + dispatcher-go + llm-scheduler + stream-ingester + youtube-scraper).
 - Deployment baseline: Docker Compose (`docker-compose.prod.yml`) is the current production standard after the 2026-03-07 rollback from k8s/k3s.
 - Retired runtime names: `hololive-alarm`, `hololive-scraper`, `rust-dispatcher`, `hololive-admin`, `hololive-rs`.
-- Run `./scripts/architecture/check-project-map.sh` after changing `go.work`, module inventory, or repo-root docs references.
