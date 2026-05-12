@@ -23,6 +23,29 @@ package alarm
 import "github.com/kapu/hololive-shared/pkg/domain"
 
 const (
+	BasePath = "/internal/alarm"
+
+	AddRoute        = "/add"
+	RemoveRoute     = "/remove"
+	RoomRoute       = "/room/:id"
+	RoomViewRoute   = "/room/:id/view"
+	ClearRoute      = "/clear"
+	NextStreamRoute = "/next-stream/:id"
+	SettingsRoute   = "/settings"
+	RoomNameRoute   = "/room-name"
+	UserNameRoute   = "/user-name"
+	KeysRoute       = "/keys"
+
+	AddPath      = BasePath + AddRoute
+	RemovePath   = BasePath + RemoveRoute
+	ClearPath    = BasePath + ClearRoute
+	SettingsPath = BasePath + SettingsRoute
+	RoomNamePath = BasePath + RoomNameRoute
+	UserNamePath = BasePath + UserNameRoute
+	KeysPath     = BasePath + KeysRoute
+)
+
+const (
 	DispatchQueueKey      = "alarm:dispatch:queue"
 	DispatchRetryQueueKey = "alarm:dispatch:retry"
 	DispatchDLQKey        = "alarm:dispatch:dlq"
@@ -32,6 +55,18 @@ const (
 
 	QueueEnvelopeVersionV1 uint8 = 1
 )
+
+func RoomAlarmsPath(roomID string) string {
+	return BasePath + "/room/" + roomID
+}
+
+func RoomAlarmsViewPath(roomID string) string {
+	return BasePath + "/room/" + roomID + "/view"
+}
+
+func NextStreamPath(channelID string) string {
+	return BasePath + "/next-stream/" + channelID
+}
 
 type AlarmQueueEnvelope struct {
 	Notification  domain.AlarmNotification `json:"notification"`

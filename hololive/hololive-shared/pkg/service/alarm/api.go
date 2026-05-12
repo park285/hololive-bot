@@ -26,6 +26,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -49,17 +50,17 @@ func (h *APIHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (h *APIHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
-	internal := rg.Group("/internal/alarm")
-	internal.POST("/add", h.AddAlarm)
-	internal.POST("/remove", h.RemoveAlarm)
-	internal.GET("/room/:id", h.GetRoomAlarmsWithTypes)
-	internal.GET("/room/:id/view", h.GetRoomAlarmsView)
-	internal.POST("/clear", h.ClearRoomAlarms)
-	internal.GET("/next-stream/:id", h.GetNextStreamInfo)
-	internal.PUT("/settings", h.UpdateAlarmAdvanceMinutes)
-	internal.PUT("/room-name", h.SetRoomName)
-	internal.PUT("/user-name", h.SetUserName)
-	internal.GET("/keys", h.GetAllAlarmKeys)
+	internal := rg.Group(contractsalarm.BasePath)
+	internal.POST(contractsalarm.AddRoute, h.AddAlarm)
+	internal.POST(contractsalarm.RemoveRoute, h.RemoveAlarm)
+	internal.GET(contractsalarm.RoomRoute, h.GetRoomAlarmsWithTypes)
+	internal.GET(contractsalarm.RoomViewRoute, h.GetRoomAlarmsView)
+	internal.POST(contractsalarm.ClearRoute, h.ClearRoomAlarms)
+	internal.GET(contractsalarm.NextStreamRoute, h.GetNextStreamInfo)
+	internal.PUT(contractsalarm.SettingsRoute, h.UpdateAlarmAdvanceMinutes)
+	internal.PUT(contractsalarm.RoomNameRoute, h.SetRoomName)
+	internal.PUT(contractsalarm.UserNameRoute, h.SetUserName)
+	internal.GET(contractsalarm.KeysRoute, h.GetAllAlarmKeys)
 }
 
 func (h *APIHandler) AddAlarm(c *gin.Context) {

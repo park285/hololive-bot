@@ -6,7 +6,7 @@
 
 ## Current Compatibility Format
 
-`hololive-shared/pkg/server.RespondError`는 현재 다음 형태를 반환합니다.
+`hololive-shared/pkg/server.RespondError`와 `hololive-shared/pkg/contracts/common.ErrorResponse`는 현재 다음 형태와 호환됩니다.
 
 ```json
 {"error":"error_code_or_message"}
@@ -22,7 +22,7 @@ Alarm shared API는 일부 endpoint에서 다음 envelope도 사용합니다.
 
 ## Additive Typed Format
 
-`shared-go/pkg/httputil.APIError`는 기존 `{"error":"error_code_or_message"}` 응답을 깨지 않고 다음 추가 field를 해석합니다.
+`hololive-shared/pkg/contracts/common.ErrorResponse`는 provider-side wire contract이고, `shared-go/pkg/httputil.APIError`는 shared-go boundary를 유지하기 위해 같은 wire shape를 client-side typed error로 해석합니다. 기존 `{"error":"error_code_or_message"}` 응답은 계속 호환됩니다.
 
 ```json
 {
@@ -59,6 +59,7 @@ Alarm shared API는 일부 endpoint에서 다음 envelope도 사용합니다.
 - `contracts/membernews.md` documents `no_subscribed_members`.
 - `contracts/trigger.md` documents `notification_in_progress`.
 - `contracts/alarm.md` documents current alarm envelope errors.
+- `hololive-shared/pkg/contracts/common.ErrorResponse` documents the common additive wire shape.
 
 ## Validation
 
