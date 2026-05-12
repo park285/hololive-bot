@@ -169,6 +169,29 @@ func TestCacheServiceDelManyChunksLargeRequests(t *testing.T) {
 	}
 }
 
+func TestCacheServiceBatchHGetReturnsExistingFields(t *testing.T) {
+	svc, _ := newTestCacheService(t)
+	ctx := context.Background()
+
+	requireNoError(t, svc.HMSet(ctx, "members", map[string]any{
+		"UC_A": "Member A",
+		"UC_B": "Member B",
+	}))
+
+	values, err := svc.BatchHGet(ctx, "members", []string{"UC_A", "UC_MISSING", "UC_B"})
+	requireNoError(t, err)
+
+	if got := values["UC_A"]; got != "Member A" {
+		t.Fatalf("values[UC_A] = %q, want Member A", got)
+	}
+	if _, ok := values["UC_MISSING"]; ok {
+		t.Fatalf("values contains missing field: %#v", values)
+	}
+	if got := values["UC_B"]; got != "Member B" {
+		t.Fatalf("values[UC_B] = %q, want Member B", got)
+	}
+}
+
 func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
 	svc, _ := newTestCacheService(t)
 	ctx := context.Background()

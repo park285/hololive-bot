@@ -52,11 +52,12 @@ type Client struct {
 	SMembersFunc  func(ctx context.Context, key string) ([]string, error)
 	SIsMemberFunc func(ctx context.Context, key, member string) (bool, error)
 
-	HSetFunc    func(ctx context.Context, key, field, value string) error
-	HMSetFunc   func(ctx context.Context, key string, fields map[string]any) error
-	HGetFunc    func(ctx context.Context, key, field string) (string, error)
-	HDelFunc    func(ctx context.Context, key string, fields ...string) error
-	HGetAllFunc func(ctx context.Context, key string) (map[string]string, error)
+	HSetFunc      func(ctx context.Context, key, field, value string) error
+	HMSetFunc     func(ctx context.Context, key string, fields map[string]any) error
+	HGetFunc      func(ctx context.Context, key, field string) (string, error)
+	BatchHGetFunc func(ctx context.Context, key string, fields []string) (map[string]string, error)
+	HDelFunc      func(ctx context.Context, key string, fields ...string) error
+	HGetAllFunc   func(ctx context.Context, key string) (map[string]string, error)
 
 	ExpireFunc func(ctx context.Context, key string, ttl time.Duration) error
 	ExistsFunc func(ctx context.Context, key string) (bool, error)
@@ -217,6 +218,14 @@ func (m *Client) HGet(ctx context.Context, key, field string) (string, error) {
 	return "", nil
 }
 
+func (m *Client) BatchHGet(ctx context.Context, key string, fields []string) (map[string]string, error) {
+	if m.BatchHGetFunc != nil {
+		return m.BatchHGetFunc(ctx, key, fields)
+	}
+	m.panicIfUnset("BatchHGetFunc")
+	return nil, nil
+}
+
 func (m *Client) HDel(ctx context.Context, key string, fields ...string) error {
 	if m.HDelFunc != nil {
 		return m.HDelFunc(ctx, key, fields...)
@@ -325,68 +334,4 @@ func (m *Client) CompareAndExpire(ctx context.Context, key, expectedValue string
 	}
 	m.panicIfUnset("CompareAndExpireFunc")
 	return false, nil
-}
-
-func (m *Client) GetStreams(ctx context.Context, key string) ([]*domain.Stream, bool) {
-	if m.GetStreamsFunc != nil {
-		return m.GetStreamsFunc(ctx, key)
-	}
-	m.panicIfUnset("GetStreamsFunc")
-	return nil, false
-}
-
-func (m *Client) SetStreams(ctx context.Context, key string, streams []*domain.Stream, ttl time.Duration) {
-	if m.SetStreamsFunc != nil {
-		m.SetStreamsFunc(ctx, key, streams, ttl)
-		return
-	}
-	m.panicIfUnset("SetStreamsFunc")
-}
-
-func (m *Client) InitializeMemberDatabase(ctx context.Context, memberData map[string]string) error {
-	if m.InitializeMemberDatabaseFunc != nil {
-		return m.InitializeMemberDatabaseFunc(ctx, memberData)
-	}
-	m.panicIfUnset("InitializeMemberDatabaseFunc")
-	return nil
-}
-
-func (m *Client) GetMemberChannelID(ctx context.Context, memberName string) (string, error) {
-	if m.GetMemberChannelIDFunc != nil {
-		return m.GetMemberChannelIDFunc(ctx, memberName)
-	}
-	m.panicIfUnset("GetMemberChannelIDFunc")
-	return "", nil
-}
-
-func (m *Client) GetAllMembers(ctx context.Context) (map[string]string, error) {
-	if m.GetAllMembersFunc != nil {
-		return m.GetAllMembersFunc(ctx)
-	}
-	m.panicIfUnset("GetAllMembersFunc")
-	return nil, nil
-}
-
-func (m *Client) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org string) (string, error) {
-	if m.GetMemberChannelIDWithOrgFunc != nil {
-		return m.GetMemberChannelIDWithOrgFunc(ctx, memberName, org)
-	}
-	m.panicIfUnset("GetMemberChannelIDWithOrgFunc")
-	return "", nil
-}
-
-func (m *Client) GetMemberChannelIDs(ctx context.Context, memberName string) ([]string, error) {
-	if m.GetMemberChannelIDsFunc != nil {
-		return m.GetMemberChannelIDsFunc(ctx, memberName)
-	}
-	m.panicIfUnset("GetMemberChannelIDsFunc")
-	return nil, nil
-}
-
-func (m *Client) AddMember(ctx context.Context, memberName, channelID string) error {
-	if m.AddMemberFunc != nil {
-		return m.AddMemberFunc(ctx, memberName, channelID)
-	}
-	m.panicIfUnset("AddMemberFunc")
-	return nil
 }

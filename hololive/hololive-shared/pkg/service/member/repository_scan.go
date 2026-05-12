@@ -1,0 +1,343 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+package member
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+type memberRow struct {
+	id           int
+	slug         string
+	channelID    *string
+	englishName  string
+	japaneseName *string
+	koreanName   *string
+	status       string
+	isGraduated  bool
+	aliasesJSON  []byte
+	photo        *string
+	org          string
+	suborg       *string
+	syncSource   string
+	twitchUserID *string
+}
+
+type memberRowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanMemberQueryRow(scanner memberRowScanner) (memberRow, error) {
+	var row memberRow
+	err := scanner.Scan(
+		&row.id,
+		&row.slug,
+		&row.channelID,
+		&row.englishName,
+		&row.japaneseName,
+		&row.koreanName,
+		&row.status,
+		&row.isGraduated,
+		&row.aliasesJSON,
+		&row.org,
+		&row.suborg,
+		&row.syncSource,
+		&row.twitchUserID,
+	)
+	return row, err
+}
+
+func scanMemberFullRow(scanner memberRowScanner) (memberRow, error) {
+	var row memberRow
+	err := scanner.Scan(
+		&row.id,
+		&row.slug,
+		&row.channelID,
+		&row.englishName,
+		&row.japaneseName,
+		&row.koreanName,
+		&row.status,
+		&row.isGraduated,
+		&row.aliasesJSON,
+		&row.photo,
+		&row.org,
+		&row.suborg,
+		&row.syncSource,
+		&row.twitchUserID,
+	)
+	return row, err
+}
+
+func scanMemberPhotoQueryRow(scanner memberRowScanner) (memberRow, error) {
+	var row memberRow
+	err := scanner.Scan(
+		&row.id,
+		&row.channelID,
+		&row.englishName,
+		&row.japaneseName,
+		&row.koreanName,
+		&row.isGraduated,
+		&row.aliasesJSON,
+		&row.photo,
+		&row.org,
+		&row.suborg,
+		&row.syncSource,
+		&row.twitchUserID,
+	)
+	return row, err
+}
+
+func (r *Repository) parseMemberRow(row memberRow) (*domain.Member, error) {
+	return r.scanMember(
+		row.id,
+		row.slug,
+		row.channelID,
+		row.englishName,
+		row.japaneseName,
+		row.koreanName,
+		row.status,
+		row.isGraduated,
+		row.aliasesJSON,
+		row.photo,
+		row.org,
+		row.suborg,
+		row.syncSource,
+		row.twitchUserID,
+	)
+}
+
+func (r *Repository) parseMemberPhotoRow(row memberRow) (*domain.Member, error) {
+	return r.scanMemberWithPhoto(
+		row.id,
+		row.channelID,
+		row.englishName,
+		row.japaneseName,
+		row.koreanName,
+		row.isGraduated,
+		row.aliasesJSON,
+		row.photo,
+		row.org,
+		row.suborg,
+		row.syncSource,
+		row.twitchUserID,
+	)
+}
+
+func (r *Repository) querySingleMember(ctx context.Context, query string, args ...any) (*domain.Member, error) {
+	row, err := scanMemberQueryRow(r.pool.QueryRow(ctx, query, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return r.parseMemberRow(row)
+}
+
+func (r *Repository) querySingleMemberWithPhoto(ctx context.Context, query string, args ...any) (*domain.Member, error) {
+	row, err := scanMemberPhotoQueryRow(r.pool.QueryRow(ctx, query, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return r.parseMemberPhotoRow(row)
+}
+
+func (r *Repository) collectAllMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
+	var (
+		members []*domain.Member
+		rowErrs []error
+	)
+
+	for rows.Next() {
+		row, err := scanMemberFullRow(rows)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
+			continue
+		}
+
+		member, err := r.parseMemberRow(row)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
+			continue
+		}
+
+		members = append(members, member)
+	}
+
+	if err := rows.Err(); err != nil {
+		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
+	}
+
+	if len(rowErrs) > 0 {
+		return members, errors.Join(rowErrs...)
+	}
+
+	return members, nil
+}
+
+func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]*domain.Member, error) {
+	result := make(map[string]*domain.Member)
+	var rowErrs []error
+
+	for rows.Next() {
+		row, err := scanMemberPhotoQueryRow(rows)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
+			continue
+		}
+
+		member, err := r.parseMemberPhotoRow(row)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
+			continue
+		}
+
+		if row.channelID != nil {
+			result[*row.channelID] = member
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
+	}
+
+	if len(rowErrs) > 0 {
+		return result, errors.Join(rowErrs...)
+	}
+
+	return result, nil
+}
+
+// scanMember: DB 조회 결과를 domain.Member로 변환함
+func (r *Repository) scanMember(
+	id int,
+	_ string,
+	channelID *string,
+	englishName string,
+	japaneseName *string,
+	koreanName *string,
+	_ string,
+	isGraduated bool,
+	aliasesJSON []byte,
+	photo *string,
+	org string,
+	suborg *string,
+	syncSource string,
+	twitchUserID *string,
+) (*domain.Member, error) {
+	return r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
+}
+
+// scanMemberWithPhoto: DB 조회 결과를 domain.Member로 변환 (photo 포함)
+func (r *Repository) scanMemberWithPhoto(
+	id int,
+	channelID *string,
+	englishName string,
+	japaneseName *string,
+	koreanName *string,
+	isGraduated bool,
+	aliasesJSON []byte,
+	photo *string,
+	org string,
+	suborg *string,
+	syncSource string,
+	twitchUserID *string,
+) (*domain.Member, error) {
+	var aliases domain.Aliases
+	if err := json.Unmarshal(aliasesJSON, &aliases); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal aliases: %w", err)
+	}
+
+	member := &domain.Member{
+		ID:          id,
+		Name:        englishName,
+		Aliases:     &aliases,
+		IsGraduated: isGraduated,
+		Org:         org,
+		SyncSource:  syncSource,
+	}
+
+	if channelID != nil {
+		member.ChannelID = *channelID
+	}
+	if japaneseName != nil {
+		member.NameJa = *japaneseName
+	}
+	if koreanName != nil {
+		member.NameKo = *koreanName
+	}
+	if photo != nil {
+		member.Photo = *photo
+	}
+	if suborg != nil {
+		member.Suborg = *suborg
+	}
+	if twitchUserID != nil {
+		member.TwitchUserID = *twitchUserID
+	}
+
+	return member, nil
+}
+
+func (r *Repository) collectMembersByNameFromRows(rows pgx.Rows) ([]*domain.Member, error) {
+	var (
+		members []*domain.Member
+		rowErrs []error
+	)
+
+	for rows.Next() {
+		row, err := scanMemberQueryRow(rows)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
+			continue
+		}
+
+		member, err := r.parseMemberRow(row)
+		if err != nil {
+			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
+			continue
+		}
+
+		members = append(members, member)
+	}
+
+	if err := rows.Err(); err != nil {
+		rowErrs = append(rowErrs, fmt.Errorf("rows iteration error: %w", err))
+	}
+
+	if len(rowErrs) > 0 {
+		return members, errors.Join(rowErrs...)
+	}
+
+	return members, nil
+}

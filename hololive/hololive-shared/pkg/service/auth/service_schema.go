@@ -18,29 +18,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package cache
+package auth
 
 import (
-	"log/slog"
-	"sync"
-
-	"github.com/valkey-io/valkey-go"
+	"context"
+	"fmt"
 )
 
-// 기본 Key-Value 외에도 Set, Hash 등 다양한 자료구조 연산을 지원한다.
-type Service struct {
-	client    valkey.Client
-	logger    *slog.Logger
-	closeOnce sync.Once
-}
+func (s *Service) createTablesIfNotExist(ctx context.Context) error {
+	db := s.db.WithContext(ctx)
 
-type Config struct {
-	Host       string
-	Port       int
-	Password   string
-	DB         int
-	SocketPath string // UDS 경로 (비어있으면 TCP 사용)
-	// DisableCache: valkey-go client-side caching 비활성화 (miniredis/RESP2 호환)
-	DisableCache      bool
-	ForceSingleClient bool
+	// auth_users 테이블
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS auth_users (
+			id TEXT PRIMARY KEY,
+			email TEXT UNIQUE NOT NULL,
+			password_hash TEXT NOT NULL,
+			display_name TEXT NOT NULL,
+			avatar_url TEXT,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return fmt.Errorf("failed to create auth_users table: %w", err)
+	}
+
+	// auth_password_reset_tokens 테이블
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS auth_password_reset_tokens (
+			token_hash TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			expires_at TIMESTAMP NOT NULL,
+			used_at TIMESTAMP,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return fmt.Errorf("failed to create auth_password_reset_tokens table: %w", err)
+	}
+
+	return nil
 }
