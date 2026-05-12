@@ -13,6 +13,7 @@ required_files=(
   docs/current/contracts/trigger.md
   docs/current/contracts/alarm.md
   hololive/hololive-shared/pkg/server/response.go
+  hololive/hololive-shared/pkg/contracts/common/errors.go
   shared-go/pkg/httputil/response.go
   hololive/hololive-shared/pkg/contracts/trigger/errors.go
 )
@@ -22,6 +23,7 @@ required_tokens=(
   'notification_in_progress'
   'no_subscribed_members'
   'ErrNotificationInProgress'
+  'ErrorResponse'
   'Client Interpretation Rules'
   'Alarm API envelope'
 )

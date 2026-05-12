@@ -53,6 +53,41 @@ func TestAlarmQueueContractConstants(t *testing.T) {
 	}
 }
 
+func TestAlarmHTTPRouteContracts(t *testing.T) {
+	t.Parallel()
+
+	if contractsalarm.BasePath != "/internal/alarm" {
+		t.Fatalf("BasePath = %q, want /internal/alarm", contractsalarm.BasePath)
+	}
+	if contractsalarm.AddPath != "/internal/alarm/add" {
+		t.Fatalf("AddPath = %q, want /internal/alarm/add", contractsalarm.AddPath)
+	}
+	if contractsalarm.RemovePath != "/internal/alarm/remove" {
+		t.Fatalf("RemovePath = %q, want /internal/alarm/remove", contractsalarm.RemovePath)
+	}
+	if got := contractsalarm.RoomAlarmsPath("room1"); got != "/internal/alarm/room/room1" {
+		t.Fatalf("RoomAlarmsPath() = %q, want /internal/alarm/room/room1", got)
+	}
+	if got := contractsalarm.RoomAlarmsViewPath("room1"); got != "/internal/alarm/room/room1/view" {
+		t.Fatalf("RoomAlarmsViewPath() = %q, want /internal/alarm/room/room1/view", got)
+	}
+	if got := contractsalarm.NextStreamPath("ch1"); got != "/internal/alarm/next-stream/ch1" {
+		t.Fatalf("NextStreamPath() = %q, want /internal/alarm/next-stream/ch1", got)
+	}
+	if contractsalarm.SettingsPath != "/internal/alarm/settings" {
+		t.Fatalf("SettingsPath = %q, want /internal/alarm/settings", contractsalarm.SettingsPath)
+	}
+	if contractsalarm.RoomNamePath != "/internal/alarm/room-name" {
+		t.Fatalf("RoomNamePath = %q, want /internal/alarm/room-name", contractsalarm.RoomNamePath)
+	}
+	if contractsalarm.UserNamePath != "/internal/alarm/user-name" {
+		t.Fatalf("UserNamePath = %q, want /internal/alarm/user-name", contractsalarm.UserNamePath)
+	}
+	if contractsalarm.KeysPath != "/internal/alarm/keys" {
+		t.Fatalf("KeysPath = %q, want /internal/alarm/keys", contractsalarm.KeysPath)
+	}
+}
+
 func TestAlarmQueueEnvelopeContract(t *testing.T) {
 	t.Parallel()
 
