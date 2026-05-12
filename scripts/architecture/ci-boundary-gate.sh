@@ -50,6 +50,27 @@ echo "[M1] migration manifest check"
 "${SCRIPT_DIR}/check-migration-manifest.sh"
 echo
 
+echo "[CI] Run M2 document contract gate"
+echo "[M2] current docs historical marker check"
+"${SCRIPT_DIR}/check-current-docs-no-historical.sh"
+echo
+
+echo "[M2] runtime runbook coverage check"
+"${SCRIPT_DIR}/check-runbook-coverage.sh"
+echo
+
+echo "[M2] contract map coverage check"
+"${SCRIPT_DIR}/check-contract-map.sh"
+echo
+
+echo "[M2] internal route hardcoding check"
+"${SCRIPT_DIR}/check-internal-route-hardcoding.sh"
+echo
+
+echo "[M2] error contract coverage check"
+"${SCRIPT_DIR}/check-error-contracts.sh"
+echo
+
 echo "[CI] Run M4 Go module LOC gate"
 "${SCRIPT_DIR}/check-go-module-loc.sh"
 echo
