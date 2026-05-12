@@ -22,7 +22,6 @@ package config
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"

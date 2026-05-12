@@ -168,12 +168,12 @@ hololive/hololive-shared/internal/dbx/config.go:76:normalizeQueryExecMode:16:11:
 hololive/hololive-shared/internal/dbx/errors.go:85:ShouldFallbackToLocalhost:23:9:1
 hololive/hololive-shared/internal/dbx/retry.go:31:OpenWithRetry:60:20:3
 hololive/hololive-shared/internal/retry/retry.go:73:WithRetry:46:19:3
-hololive/hololive-shared/pkg/config/config.go:91:buildConfig:84:1:2
+hololive/hololive-shared/pkg/config/config.go:76:buildConfig:84:1:2
 hololive/hololive-shared/pkg/config/config_parsers.go:81:parseCORSAllowedOrigins:21:9:3
-hololive/hololive-shared/pkg/config/config_validation.go:162:validateScraperPublishedAtResolverConfig:30:9:1
-hololive/hololive-shared/pkg/config/config_validation.go:264:validatePostgresSSLMode:31:10:2
+hololive/hololive-shared/pkg/config/config_validation.go:111:validateScraperPublishedAtResolverConfig:30:9:1
+hololive/hololive-shared/pkg/config/config_validation.go:213:validatePostgresSSLMode:31:10:2
 hololive/hololive-shared/pkg/config/config_validation.go:33:Validate:49:18:1
-hololive/hololive-shared/pkg/config/config_validation.go:83:validateServerTransports:20:10:2
+hololive/hololive-shared/pkg/config/server_transport.go:8:validateServerTransports:20:10:2
 hololive/hololive-shared/pkg/domain/alarm.go:175:ValidateLegacyRoute:16:10:1
 hololive/hololive-shared/pkg/domain/alarm.go:84:Scan:33:10:2
 hololive/hololive-shared/pkg/domain/stats_period.go:124:resolveNamedStatsPeriod:16:11:2
@@ -362,7 +362,7 @@ hololive/hololive-shared/pkg/service/youtube/poller/helpers.go:150:mergeCollecte
 hololive/hololive-shared/pkg/service/youtube/poller/live_poller.go:66:Poll:72:19:4
 hololive/hololive-shared/pkg/service/youtube/poller/published_at_resolver.go:111:Start:26:27:4
 hololive/hololive-shared/pkg/service/youtube/poller/published_at_resolver_candidate.go:14:processPendingPublishedAtCandidate:90:13:3
-hololive/hololive-shared/pkg/service/youtube/poller/published_at_resolver_config.go:128:resolveCandidatePublishedAt:41:23:3
+hololive/hololive-shared/pkg/service/youtube/poller/published_at_resolver_controls.go:128:resolveCandidatePublishedAt:41:23:3
 hololive/hololive-shared/pkg/service/youtube/poller/published_at_resolver_repository.go:120:loadFinalizeEligibility:48:27:4
 hololive/hololive-shared/pkg/service/youtube/poller/published_at_resolver_repository.go:208:ListResolvedPublishedAtDispatchGaps:59:10:3
 hololive/hololive-shared/pkg/service/youtube/poller/published_at_resolver_run.go:22:runOnce:61:16:2
