@@ -104,20 +104,27 @@ func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotifi
 	}
 
 	if len(prepared) > 0 {
-		if err := n.publishBatchAndMark(ctx, prepared); err != nil {
-			result.Failed += len(prepared)
-			errs = append(errs, fmt.Errorf("send notifications: publish batch: %w", err))
-		} else {
-			result.Sent += len(prepared)
-			for _, item := range prepared {
-				if n.tierScheduler != nil {
-					n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
-				}
-			}
-		}
+		errs = n.publishPreparedBatch(ctx, prepared, &result, errs)
 	}
 
 	return result, errors.Join(errs...)
+}
+
+func (n *Notifier) publishPreparedBatch(ctx context.Context, prepared []claimedSend, result *SendResult, errs []error) []error {
+	publishedCount, err := n.publishBatchAndMark(ctx, prepared)
+	if err != nil {
+		result.Sent += publishedCount
+		result.Failed += len(prepared) - publishedCount
+		errs = append(errs, fmt.Errorf("send notifications: publish batch: %w", err))
+	} else {
+		result.Sent += publishedCount
+	}
+	for _, item := range prepared[:publishedCount] {
+		if n.tierScheduler != nil {
+			n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
+		}
+	}
+	return errs
 }
 
 func notificationRoomID(notification *domain.AlarmNotification) string {
@@ -352,96 +359,4 @@ func compactClaimKeys(keys ...string) []string {
 	}
 
 	return compacted
-}
-
-func (n *Notifier) publishAndMark(ctx context.Context, payload *sendInput, claimKeys []string) error {
-	if err := n.queuePublisher.Publish(ctx, payload.notification, claimKeys); err != nil {
-		n.releaseClaimsBestEffort(ctx, claimKeys, "failed to release claims after queue publish error")
-		return fmt.Errorf("publish queue: %w", err)
-	}
-
-	if err := n.dedupSvc.MarkAsNotified(
-		ctx,
-		payload.streamID,
-		payload.startScheduled,
-		payload.notification.MinutesUntil,
-	); err != nil {
-		n.logger.Warn("Failed to mark as notified after publish (non-fatal)",
-			slog.String("stream_id", payload.streamID),
-			slog.Int("minutes_until", payload.notification.MinutesUntil),
-			slog.Any("error", err),
-		)
-	}
-
-	if err := n.dedupSvc.MarkUpcomingEventNotified(
-		ctx,
-		payload.notification.RoomID,
-		payload.channelID,
-		payload.notification.Stream,
-	); err != nil {
-		n.logger.Warn("Failed to mark upcoming event notified after publish (non-fatal)",
-			slog.String("room_id", payload.notification.RoomID),
-			slog.String("channel_id", payload.channelID),
-			slog.Any("error", err),
-		)
-	}
-
-	return nil
-}
-
-func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend) error {
-	notifications := make([]*domain.AlarmNotification, 0, len(items))
-	claimKeys := make([][]string, 0, len(items))
-	allClaimKeys := make([]string, 0, len(items)*2)
-	for _, item := range items {
-		notifications = append(notifications, item.payload.notification)
-		claimKeys = append(claimKeys, item.claimKeys)
-		allClaimKeys = append(allClaimKeys, item.claimKeys...)
-	}
-	if err := n.queuePublisher.PublishBatch(ctx, notifications, claimKeys); err != nil {
-		n.releaseClaimsBestEffort(ctx, allClaimKeys, "failed to release claims after queue batch publish error")
-		return fmt.Errorf("publish queue batch: %w", err)
-	}
-	for _, item := range items {
-		n.markPublishedBestEffort(ctx, item.payload)
-	}
-	return nil
-}
-
-func (n *Notifier) markPublishedBestEffort(ctx context.Context, payload *sendInput) {
-	if err := n.dedupSvc.MarkAsNotified(
-		ctx,
-		payload.streamID,
-		payload.startScheduled,
-		payload.notification.MinutesUntil,
-	); err != nil {
-		n.logger.Warn("Failed to mark as notified after publish (non-fatal)",
-			slog.String("stream_id", payload.streamID),
-			slog.Int("minutes_until", payload.notification.MinutesUntil),
-			slog.Any("error", err),
-		)
-	}
-
-	if err := n.dedupSvc.MarkUpcomingEventNotified(
-		ctx,
-		payload.notification.RoomID,
-		payload.channelID,
-		payload.notification.Stream,
-	); err != nil {
-		n.logger.Warn("Failed to mark upcoming event notified after publish (non-fatal)",
-			slog.String("room_id", payload.notification.RoomID),
-			slog.String("channel_id", payload.channelID),
-			slog.Any("error", err),
-		)
-	}
-}
-
-func (n *Notifier) releaseClaimsBestEffort(ctx context.Context, claimKeys []string, message string) {
-	if len(claimKeys) == 0 {
-		return
-	}
-
-	if err := n.dedupSvc.ReleaseClaims(ctx, claimKeys); err != nil {
-		n.logger.Warn(message, slog.Any("error", err))
-	}
 }

@@ -45,6 +45,7 @@ const (
 	defaultRetryBaseBackoff    = 5 * time.Second
 	defaultRetryMaxBackoff     = 30 * time.Second
 	defaultRetryJitterPercent  = 0.0
+	defaultMaxBatchesPerWake   = 20
 	defaultLoggingLevel        = "info"
 )
 
@@ -84,6 +85,7 @@ type DispatchConfig struct {
 	LeaseSeconds       int
 	PollInterval       time.Duration
 	WakeupEnabled      bool
+	MaxBatchesPerWake  int
 }
 
 func LoadConfig() (*Config, error) {
@@ -164,6 +166,7 @@ func LoadConfig() (*Config, error) {
 			LeaseSeconds:       lookupInt("ALARM_DISPATCH_LEASE_SECONDS", 60),
 			PollInterval:       time.Duration(lookupInt("ALARM_DISPATCH_POLL_INTERVAL_MS", 1000)) * time.Millisecond,
 			WakeupEnabled:      lookupBool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
+			MaxBatchesPerWake:  lookupInt("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", defaultMaxBatchesPerWake),
 		},
 		Logging: sharedlogging.Config{
 			Level:      lookupString("LOG_LEVEL", "info"),
@@ -245,6 +248,9 @@ func (c *Config) Validate() error {
 	if c.Dispatch.PollInterval <= 0 {
 		c.Dispatch.PollInterval = time.Second
 	}
+	if c.Dispatch.MaxBatchesPerWake <= 0 {
+		c.Dispatch.MaxBatchesPerWake = defaultMaxBatchesPerWake
+	}
 	if c.Dispatch.ConsumerMode == "pg" {
 		if strings.TrimSpace(c.Postgres.SocketPath) == "" && strings.TrimSpace(c.Postgres.Host) == "" {
 			return fmt.Errorf("validate config: POSTGRES_HOST is required in pg consumer mode when POSTGRES_SOCKET_PATH is empty")
@@ -256,7 +262,7 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("validate config: POSTGRES_DB is required in pg consumer mode")
 		}
 	}
-	if strings.TrimSpace(c.Valkey.SocketPath) == "" && strings.TrimSpace(c.Valkey.Host) == "" {
+	if c.Dispatch.ConsumerMode == "valkey" && strings.TrimSpace(c.Valkey.SocketPath) == "" && strings.TrimSpace(c.Valkey.Host) == "" {
 		return fmt.Errorf("validate config: CACHE_HOST is required when CACHE_SOCKET_PATH is empty")
 	}
 	return nil

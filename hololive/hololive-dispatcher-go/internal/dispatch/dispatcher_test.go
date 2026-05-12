@@ -375,6 +375,51 @@ func TestDispatcherRunOnce_MarkDispatchedFailureDoesNotScheduleRetry(t *testing.
 	}
 }
 
+func TestDispatcherRunOnce_GroupPersistenceErrorDoesNotCancelSiblingGroup(t *testing.T) {
+	t.Parallel()
+
+	var fakeConsumer *testQueueConsumer
+	fakeConsumer = &testQueueConsumer{
+		drainBatchFunc: func(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
+			return []domain.AlarmQueueEnvelope{
+				testAlarmQueueEnvelope("room-fail", "claim-fail"),
+				testAlarmQueueEnvelope("room-ok", "claim-ok"),
+			}, nil
+		},
+		markDispatchedFunc: func(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+			if envelopes[0].Notification.RoomID == "room-fail" {
+				return errors.New("mark sent failed")
+			}
+			fakeConsumer.dispatchedEnvelopes = append(fakeConsumer.dispatchedEnvelopes, envelopes...)
+			return nil
+		},
+	}
+	fakeSender := &testMessageSender{}
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		fakeSender,
+		NewSimpleRenderer(),
+		50,
+		2,
+		slog.Default(),
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	runErr := dispatcher.RunOnce(context.Background())
+	if runErr == nil {
+		t.Fatal("RunOnce() error = nil, want aggregate group error")
+	}
+	if fakeSender.sendCalls != 2 {
+		t.Fatalf("send calls = %d, want both groups to send", fakeSender.sendCalls)
+	}
+	if len(fakeConsumer.dispatchedEnvelopes) != 1 || fakeConsumer.dispatchedEnvelopes[0].Notification.RoomID != "room-ok" {
+		t.Fatalf("dispatched envelopes = %+v, want room-ok preserved", fakeConsumer.dispatchedEnvelopes)
+	}
+}
+
 func TestDispatcherRunOnce_SendFailureMovesToDLQAfterRetryBudgetExhausted(t *testing.T) {
 	t.Parallel()
 

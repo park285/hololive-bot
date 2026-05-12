@@ -17,7 +17,10 @@ type Consumer struct {
 	workerID          string
 	lease             time.Duration
 	recoveryBatchSize int
+	recoveryInterval  time.Duration
+	lastRecoveryAt    time.Time
 	logger            *slog.Logger
+	now               func() time.Time
 }
 
 type ConsumerOption func(*Consumer)
@@ -38,6 +41,14 @@ func WithLease(lease time.Duration) ConsumerOption {
 	}
 }
 
+func WithRecoveryInterval(interval time.Duration) ConsumerOption {
+	return func(c *Consumer) {
+		if interval > 0 {
+			c.recoveryInterval = interval
+		}
+	}
+}
+
 func NewConsumer(repo Repository, logger *slog.Logger, opts ...ConsumerOption) *Consumer {
 	if logger == nil {
 		logger = slog.Default()
@@ -48,7 +59,9 @@ func NewConsumer(repo Repository, logger *slog.Logger, opts ...ConsumerOption) *
 		workerID:          "dispatcher-" + host,
 		lease:             60 * time.Second,
 		recoveryBatchSize: 100,
+		recoveryInterval:  30 * time.Second,
 		logger:            logger,
+		now:               time.Now,
 	}
 	for _, opt := range opts {
 		opt(consumer)
@@ -60,11 +73,8 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	if c == nil || c.repo == nil {
 		return nil, fmt.Errorf("drain outbox batch: repository is nil")
 	}
-	if _, err := c.repo.RecoverExpiredLeased(ctx, c.recoveryBatchSize); err != nil {
-		return nil, fmt.Errorf("drain outbox batch: recover expired leased: %w", err)
-	}
-	if _, err := c.repo.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize); err != nil {
-		return nil, fmt.Errorf("drain outbox batch: quarantine stale sending: %w", err)
+	if err := c.maybeRecover(ctx); err != nil {
+		return nil, err
 	}
 	records, err := c.repo.ClaimDue(ctx, c.workerID, maxItems, c.lease)
 	if err != nil {
@@ -111,6 +121,21 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		envelopes = append(envelopes, envelope)
 	}
 	return envelopes, nil
+}
+
+func (c *Consumer) maybeRecover(ctx context.Context) error {
+	now := c.now()
+	if !c.lastRecoveryAt.IsZero() && c.recoveryInterval > 0 && now.Sub(c.lastRecoveryAt) < c.recoveryInterval {
+		return nil
+	}
+	if _, err := c.repo.RecoverExpiredLeased(ctx, c.recoveryBatchSize); err != nil {
+		return fmt.Errorf("drain outbox batch: recover expired leased: %w", err)
+	}
+	if _, err := c.repo.QuarantineStaleSending(ctx, c.lease, c.recoveryBatchSize); err != nil {
+		return fmt.Errorf("drain outbox batch: quarantine stale sending: %w", err)
+	}
+	c.lastRecoveryAt = now
+	return nil
 }
 
 func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {

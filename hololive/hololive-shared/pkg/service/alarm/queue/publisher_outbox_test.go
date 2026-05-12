@@ -18,10 +18,13 @@ type fakeOutboxRepository struct {
 	insertPendingCalls  int
 	insertBatchCalls    int
 	lastBatchInput      dispatchoutbox.PublishBatchInput
+	batchInputs         []dispatchoutbox.PublishBatchInput
 	shadowedErr         error
 	pendingRecord       *dispatchoutbox.Record
 	pendingResult       dispatchoutbox.InsertResult
 	batchResult         dispatchoutbox.PublishBatchResult
+	batchResults        []dispatchoutbox.PublishBatchResult
+	batchErrors         []error
 	pendingErr          error
 	batchErr            error
 }
@@ -53,16 +56,29 @@ func (r *fakeOutboxRepository) InsertPending(ctx context.Context, envelope domai
 func (r *fakeOutboxRepository) InsertBatch(ctx context.Context, input dispatchoutbox.PublishBatchInput) (dispatchoutbox.PublishBatchResult, error) {
 	r.insertBatchCalls++
 	r.lastBatchInput = input
+	r.batchInputs = append(r.batchInputs, input)
+	callIndex := r.insertBatchCalls - 1
+	if callIndex < len(r.batchErrors) && r.batchErrors[callIndex] != nil {
+		return dispatchoutbox.PublishBatchResult{}, r.batchErrors[callIndex]
+	}
 	if r.batchErr != nil {
 		return dispatchoutbox.PublishBatchResult{}, r.batchErr
 	}
-	if r.batchResult.RequestedDeliveries == 0 {
-		r.batchResult.RequestedDeliveries = len(input.Envelopes)
-		r.batchResult.InsertedDeliveries = len(input.Envelopes)
-		r.batchResult.RequestedEvents = 1
-		r.batchResult.InsertedEvents = 1
+	result := r.batchResult
+	if callIndex < len(r.batchResults) {
+		result = r.batchResults[callIndex]
 	}
-	return r.batchResult, nil
+	if result.RequestedDeliveries == 0 {
+		result.RequestedDeliveries = len(input.Envelopes)
+		result.InsertedDeliveries = len(input.Envelopes)
+		result.ProcessedDeliveries = len(input.Envelopes)
+		result.RequestedEvents = 1
+		result.InsertedEvents = 1
+	}
+	if result.ProcessedDeliveries == 0 {
+		result.ProcessedDeliveries = result.RequestedDeliveries
+	}
+	return result, nil
 }
 
 func TestPublisherShadowModeWritesOutboxAfterValkeySuccess(t *testing.T) {
@@ -73,7 +89,7 @@ func TestPublisherShadowModeWritesOutboxAfterValkeySuccess(t *testing.T) {
 		WithPublishMode(PublishModeShadow),
 	)
 
-	err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive,
 		RoomID:    "room-shadow",
 	}, []string{"notified:claim:shadow"})
@@ -96,7 +112,7 @@ func TestPublisherShadowModeHonorsFatalFlag(t *testing.T) {
 		WithShadowFatal(true),
 	)
 
-	err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive,
 		RoomID:    "room-shadow-fatal",
 	}, nil)
@@ -113,7 +129,7 @@ func TestPublisherPGFirstDoesNotPushLegacyQueue(t *testing.T) {
 		WithWakeupEnabled(false),
 	)
 
-	err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive,
 		RoomID:    "room-pg-first",
 	}, nil)
@@ -127,14 +143,24 @@ func TestPublisherPGFirstDoesNotPushLegacyQueue(t *testing.T) {
 
 func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 	cacheClient, mini := newTestCacheClient(t)
-	repo := &fakeOutboxRepository{pendingResult: dispatchoutbox.DuplicateTerminal}
+	repo := &fakeOutboxRepository{batchResult: dispatchoutbox.PublishBatchResult{
+		RequestedEvents:       1,
+		ProcessedDeliveries:   1,
+		RequestedDeliveries:   1,
+		DuplicateDeliveries:   1,
+		TerminalDuplicates:    1,
+		InsertedDeliveries:    0,
+		HashConflictEvents:    0,
+		ShadowedDuplicates:    0,
+		PromotedShadowedCount: 0,
+	}}
 	publisher := NewPublisher(cacheClient, newTestLogger(),
 		WithOutbox(repo),
 		WithPublishMode(PublishModePGFirst),
 		WithWakeupEnabled(false),
 	)
 
-	err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+	result, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive,
 		RoomID:    "room-duplicate",
 	}, nil)
@@ -143,6 +169,33 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
 	assert.Equal(t, 1, repo.insertBatchCalls)
 	assert.Equal(t, 0, repo.insertPendingCalls)
+	assert.Equal(t, 1, result.ProcessedDeliveries)
+	assert.Equal(t, 1, result.DuplicateDeliveries)
+	assert.Equal(t, 0, result.InsertedDeliveries)
+}
+
+func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
+	cacheClient, _ := newTestCacheClient(t)
+	repo := &fakeOutboxRepository{
+		batchErrors: []error{nil, errors.New("pg unavailable")},
+	}
+	publisher := NewPublisher(cacheClient, newTestLogger(),
+		WithOutbox(repo),
+		WithPublishMode(PublishModePGFirst),
+		WithWakeupEnabled(false),
+		WithMaxDeliveriesPerBatch(1),
+	)
+
+	result, err := publisher.PublishBatch(context.Background(), []*domain.AlarmNotification{
+		{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"},
+		{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"},
+	}, nil)
+	require.Error(t, err)
+
+	assert.Equal(t, 2, repo.insertBatchCalls)
+	assert.Equal(t, 2, result.RequestedDeliveries)
+	assert.Equal(t, 1, result.ProcessedDeliveries)
+	assert.Equal(t, 1, result.InsertedDeliveries)
 }
 
 func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(t *testing.T) {
@@ -155,7 +208,7 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 	channel := &domain.Channel{ID: "channel-1"}
 	stream := &domain.Stream{ID: "stream-1", ChannelID: "channel-1"}
 
-	err := publisher.PublishBatch(context.Background(), []*domain.AlarmNotification{
+	_, err := publisher.PublishBatch(context.Background(), []*domain.AlarmNotification{
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-1", Channel: channel, Stream: stream, MinutesUntil: 10},
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-2", Channel: channel, Stream: stream, MinutesUntil: 10},
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-3", Channel: channel, Stream: stream, MinutesUntil: 10},
