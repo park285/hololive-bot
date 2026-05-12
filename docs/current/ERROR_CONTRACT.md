@@ -20,9 +20,9 @@ Alarm shared API는 일부 endpoint에서 다음 envelope도 사용합니다.
 {"success":false,"message":"error message"}
 ```
 
-## Target Format
+## Additive Typed Format
 
-향후 typed error helper를 도입할 때의 목표 형식입니다. 이 task에서는 코드를 변경하지 않습니다.
+`shared-go/pkg/httputil.APIError`는 기존 `{"error":"error_code_or_message"}` 응답을 깨지 않고 다음 추가 field를 해석합니다.
 
 ```json
 {
@@ -47,8 +47,10 @@ Alarm shared API는 일부 endpoint에서 다음 envelope도 사용합니다.
 ## Client Interpretation Rules
 
 - Clients must not parse arbitrary full error strings from `httputil.CheckStatus`.
+- Clients should use `httputil.IsStatus`, `httputil.IsCode`, and `httputil.AsAPIError`.
 - Clients may map a specific stable body code only when the contract document lists it.
 - Status code remains the first branch key; body parsing is a secondary contract-specific step.
+- Production code must not use substring parsing for `status 404` or `status 409`.
 - New error codes must be added to the relevant `docs/current/contracts/*.md` file.
 - Error response shape changes must update this document and `scripts/architecture/check-error-contracts.sh`.
 
@@ -67,5 +69,4 @@ Alarm shared API는 일부 endpoint에서 다음 envelope도 사용합니다.
 ## Known Gaps
 
 - `RespondError` does not yet emit `message` or `request_id` by default.
-- `httputil.CheckStatus` returns status/body as a string error.
 - Alarm API envelope uses `success/message` rather than the shared `{error}` format.
