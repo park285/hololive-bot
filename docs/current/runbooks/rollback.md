@@ -42,8 +42,9 @@ Runtime service names:
 ```bash
 ./scripts/architecture/check-project-map.sh
 ./scripts/architecture/check-runbook-coverage.sh
-curl -k https://127.0.0.1:30001/health
-curl http://127.0.0.1:30020/ready
+./scripts/smoke/smoke-compose-config.sh
+./scripts/smoke/smoke-runtime-health.sh
+./scripts/smoke/smoke-dispatcher-ready.sh
 ```
 
 ## Related documents
