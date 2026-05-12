@@ -46,6 +46,8 @@ const (
 	defaultRetryMaxBackoff     = 30 * time.Second
 	defaultRetryJitterPercent  = 0.0
 	defaultMaxBatchesPerWake   = 20
+	defaultRecoveryInterval    = 30 * time.Second
+	defaultRecoveryBatchSize   = 100
 	defaultLoggingLevel        = "info"
 )
 
@@ -86,6 +88,8 @@ type DispatchConfig struct {
 	PollInterval       time.Duration
 	WakeupEnabled      bool
 	MaxBatchesPerWake  int
+	RecoveryInterval   time.Duration
+	RecoveryBatchSize  int
 }
 
 func LoadConfig() (*Config, error) {
@@ -123,6 +127,14 @@ func LoadConfig() (*Config, error) {
 	retryJitterPercent := lookupFloat("ALARM_DISPATCH_RETRY_JITTER_PERCENT", defaultRetryJitterPercent)
 	if isFiniteFloat(retryJitterPercent) && retryJitterPercent < 0 {
 		retryJitterPercent = defaultRetryJitterPercent
+	}
+	recoveryIntervalMS := lookupInt("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", int(defaultRecoveryInterval/time.Millisecond))
+	if recoveryIntervalMS <= 0 {
+		recoveryIntervalMS = int(defaultRecoveryInterval / time.Millisecond)
+	}
+	recoveryBatchSize := lookupInt("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", defaultRecoveryBatchSize)
+	if recoveryBatchSize <= 0 {
+		recoveryBatchSize = defaultRecoveryBatchSize
 	}
 	cfg := &Config{
 		Server: ServerConfig{
@@ -167,6 +179,8 @@ func LoadConfig() (*Config, error) {
 			PollInterval:       time.Duration(lookupInt("ALARM_DISPATCH_POLL_INTERVAL_MS", 1000)) * time.Millisecond,
 			WakeupEnabled:      lookupBool("ALARM_DISPATCH_WAKEUP_ENABLED", true),
 			MaxBatchesPerWake:  lookupInt("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", defaultMaxBatchesPerWake),
+			RecoveryInterval:   time.Duration(recoveryIntervalMS) * time.Millisecond,
+			RecoveryBatchSize:  recoveryBatchSize,
 		},
 		Logging: sharedlogging.Config{
 			Level:      lookupString("LOG_LEVEL", "info"),
@@ -250,6 +264,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Dispatch.MaxBatchesPerWake <= 0 {
 		c.Dispatch.MaxBatchesPerWake = defaultMaxBatchesPerWake
+	}
+	if c.Dispatch.RecoveryInterval <= 0 {
+		c.Dispatch.RecoveryInterval = defaultRecoveryInterval
+	}
+	if c.Dispatch.RecoveryBatchSize <= 0 {
+		c.Dispatch.RecoveryBatchSize = defaultRecoveryBatchSize
 	}
 	if c.Dispatch.ConsumerMode == "pg" {
 		if strings.TrimSpace(c.Postgres.SocketPath) == "" && strings.TrimSpace(c.Postgres.Host) == "" {

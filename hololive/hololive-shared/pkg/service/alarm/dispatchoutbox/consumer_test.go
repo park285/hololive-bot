@@ -67,7 +67,7 @@ func TestConsumerDrainBatch_ThrottlesRecovery(t *testing.T) {
 	}
 }
 
-func TestConsumerDrainBatch_DoesNotThrottleFailedRecovery(t *testing.T) {
+func TestConsumerDrainBatch_RecoveryFailureDoesNotBlockClaimAndIsThrottled(t *testing.T) {
 	t.Parallel()
 
 	repo := &consumerTestRepository{
@@ -79,14 +79,14 @@ func TestConsumerDrainBatch_DoesNotThrottleFailedRecovery(t *testing.T) {
 	consumer := NewConsumer(repo, slog.Default(), WithWorkerID("worker-1"), WithRecoveryInterval(30*time.Second))
 	consumer.now = func() time.Time { return now }
 
-	if _, err := consumer.DrainBatch(context.Background(), 10); err == nil {
-		t.Fatal("DrainBatch() error = nil, want recovery error")
+	if _, err := consumer.DrainBatch(context.Background(), 10); err != nil {
+		t.Fatalf("DrainBatch() error = %v, want recovery warning only", err)
 	}
-	if _, err := consumer.DrainBatch(context.Background(), 10); err == nil {
-		t.Fatal("DrainBatch() second error = nil, want recovery retry error")
+	if _, err := consumer.DrainBatch(context.Background(), 10); err != nil {
+		t.Fatalf("DrainBatch() second error = %v, want throttled recovery warning only", err)
 	}
-	if repo.recoverExpiredLeasedCalls != 2 {
-		t.Fatalf("RecoverExpiredLeased calls = %d, want 2 after failed recovery", repo.recoverExpiredLeasedCalls)
+	if repo.recoverExpiredLeasedCalls != 1 {
+		t.Fatalf("RecoverExpiredLeased calls = %d, want 1 after failed recovery throttle", repo.recoverExpiredLeasedCalls)
 	}
 }
 

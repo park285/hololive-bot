@@ -159,7 +159,7 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
 	defer func() {
-		observeAlarmDispatchPublishBatch(time.Since(startedAt), result)
+		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, result)
 	}()
 
 	var err error
@@ -310,7 +310,8 @@ func (p *Publisher) publishWakeup(ctx context.Context) {
 		return
 	}
 	alarmDispatchWakeupSentTotal.Inc()
-	if err := p.cache.Expire(ctx, AlarmDispatchWakeupQueue, 2*time.Second); err != nil {
+	if err := p.cache.Expire(ctx, AlarmDispatchWakeupQueue, 5*time.Second); err != nil {
+		alarmDispatchWakeupExpireFailedTotal.Inc()
 		p.logger.Warn("Alarm outbox wakeup expire failed", slog.Any("error", err))
 	}
 }

@@ -33,15 +33,15 @@ func (r *Runtime) waitForPGDispatchSignal(ctx context.Context) bool {
 	if r == nil || r.cfg == nil {
 		return sleepContext(ctx, time.Second)
 	}
-	if !r.cfg.Dispatch.WakeupEnabled || r.cacheSvc == nil {
+	if !r.cfg.Dispatch.WakeupEnabled || r.wakeupCacheSvc == nil {
 		return sleepContext(ctx, r.cfg.Dispatch.PollInterval)
 	}
 	timeout := r.cfg.Dispatch.PollInterval
 	if timeout <= 0 {
 		timeout = time.Second
 	}
-	cmd := r.cacheSvc.B().Brpop().Key(queue.AlarmDispatchWakeupQueue).Timeout(timeout.Seconds()).Build()
-	results := r.cacheSvc.DoMulti(ctx, cmd)
+	cmd := r.wakeupCacheSvc.B().Brpop().Key(queue.AlarmDispatchWakeupQueue).Timeout(timeout.Seconds()).Build()
+	results := r.wakeupCacheSvc.DoMulti(ctx, cmd)
 	if len(results) != 1 {
 		r.logger.Warn("Dispatch wakeup wait returned unexpected result count", slog.Int("result_count", len(results)))
 		return sleepContext(ctx, timeout)

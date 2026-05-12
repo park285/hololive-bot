@@ -49,11 +49,12 @@ import (
 const readyCheckTimeout = 500 * time.Millisecond
 
 type Runtime struct {
-	cfg        *Config
-	logger     *slog.Logger
-	cacheSvc   cache.Client
-	postgres   database.Client
-	irisClient interface {
+	cfg            *Config
+	logger         *slog.Logger
+	cacheSvc       cache.Client
+	wakeupCacheSvc cache.Client
+	postgres       database.Client
+	irisClient     interface {
 		Ping(ctx context.Context) bool
 	}
 	dispatcher *dispatch.Dispatcher
@@ -103,6 +104,13 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 			return nil, fmt.Errorf("build runtime: create cache service: %w", err)
 		}
 	}
+	var wakeupCacheSvc cache.Client
+	if cfg.Dispatch.ConsumerMode == "pg" && cacheSvc != nil {
+		wakeupCacheSvc, err = cache.NewCacheService(ctx, cfg.Valkey, logger)
+		if err != nil {
+			logger.Warn("Dispatch wakeup Valkey client unavailable; PG fallback polling will be used", slog.Any("error", err))
+		}
+	}
 
 	var postgresSvc database.Client
 	if cfg.Dispatch.ConsumerMode == "pg" {
@@ -110,6 +118,9 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		if err != nil {
 			if cacheSvc != nil {
 				_ = cacheSvc.Close()
+			}
+			if wakeupCacheSvc != nil {
+				_ = wakeupCacheSvc.Close()
 			}
 			return nil, fmt.Errorf("build runtime: create postgres service: %w", err)
 		}
@@ -125,6 +136,9 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 	if err != nil {
 		if cacheSvc != nil {
 			_ = cacheSvc.Close()
+		}
+		if wakeupCacheSvc != nil {
+			_ = wakeupCacheSvc.Close()
 		}
 		if postgresSvc != nil {
 			_ = postgresSvc.Close()
@@ -144,6 +158,9 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 		if cacheSvc != nil {
 			_ = cacheSvc.Close()
 		}
+		if wakeupCacheSvc != nil {
+			_ = wakeupCacheSvc.Close()
+		}
 		if postgresSvc != nil {
 			_ = postgresSvc.Close()
 		}
@@ -152,6 +169,9 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 	if err := configureDispatcherRetryPolicy(dispatcher, cfg.Dispatch); err != nil {
 		if cacheSvc != nil {
 			_ = cacheSvc.Close()
+		}
+		if wakeupCacheSvc != nil {
+			_ = wakeupCacheSvc.Close()
 		}
 		if postgresSvc != nil {
 			_ = postgresSvc.Close()
@@ -163,19 +183,25 @@ func BuildRuntime(ctx context.Context, cfg *Config, logger *slog.Logger) (*Runti
 	}
 
 	runtime := &Runtime{
-		cfg:        cfg,
-		logger:     logger,
-		cacheSvc:   cacheSvc,
-		postgres:   postgresSvc,
-		irisClient: irisClient,
-		dispatcher: dispatcher,
-		readyState: newReadinessState(),
-		irisProbe:  newCachedBoolProbe(2 * time.Second),
+		cfg:            cfg,
+		logger:         logger,
+		cacheSvc:       cacheSvc,
+		wakeupCacheSvc: wakeupCacheSvc,
+		postgres:       postgresSvc,
+		irisClient:     irisClient,
+		dispatcher:     dispatcher,
+		readyState:     newReadinessState(),
+		irisProbe:      newCachedBoolProbe(2 * time.Second),
 	}
 	runtime.Managed = lifecycle.NewManaged(func() {
 		if runtime.cacheSvc != nil {
 			if err := runtime.cacheSvc.Close(); err != nil {
 				runtime.logger.Warn("Close cache service failed", slog.Any("error", err))
+			}
+		}
+		if runtime.wakeupCacheSvc != nil {
+			if err := runtime.wakeupCacheSvc.Close(); err != nil {
+				runtime.logger.Warn("Close wakeup cache service failed", slog.Any("error", err))
 			}
 		}
 		if runtime.postgres != nil {
@@ -210,6 +236,8 @@ func buildDispatchConsumer(
 			repo,
 			logger,
 			dispatchoutbox.WithLease(time.Duration(cfg.Dispatch.LeaseSeconds)*time.Second),
+			dispatchoutbox.WithRecoveryInterval(cfg.Dispatch.RecoveryInterval),
+			dispatchoutbox.WithRecoveryBatchSize(cfg.Dispatch.RecoveryBatchSize),
 		)
 	}
 	return queue.NewConsumer(
@@ -352,11 +380,15 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 
 	checkCtx, cancel := context.WithTimeout(req.Context(), readyCheckTimeout)
 	defer cancel()
-	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
 	irisConnected := r.cachedIrisPing(checkCtx)
 	consumerMode := "valkey"
 	if r.cfg != nil && r.cfg.Dispatch.ConsumerMode != "" {
 		consumerMode = r.cfg.Dispatch.ConsumerMode
+	}
+	valkeyConnected := r.cacheSvc != nil && r.cacheSvc.IsConnected(checkCtx)
+	wakeupConnected := valkeyConnected
+	if consumerMode == "pg" {
+		wakeupConnected = r.wakeupCacheSvc != nil && r.wakeupCacheSvc.IsConnected(checkCtx)
 	}
 	postgresConnected := consumerMode != "pg"
 	if consumerMode == "pg" {
@@ -366,7 +398,7 @@ func (r *Runtime) handleReady(w http.ResponseWriter, req *http.Request) {
 	if r.cfg != nil {
 		wakeupEnabled = r.cfg.Dispatch.WakeupEnabled
 	}
-	wakeupDegraded := consumerMode == "pg" && (!wakeupEnabled || !valkeyConnected)
+	wakeupDegraded := consumerMode == "pg" && (!wakeupEnabled || !wakeupConnected)
 
 	valkeyRequired := consumerMode != "pg"
 	ready := dispatchLoopRunning && irisConnected && postgresConnected && (!valkeyRequired || valkeyConnected)
