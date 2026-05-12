@@ -162,6 +162,7 @@ func buildRuntimeScheduler(
 		cfg.Notification,
 		foundation.Outbox,
 		publishConfig,
+		parseBoolEnv("ALARM_TWITCH_ENABLED", true),
 		logger,
 	)
 	if err != nil {
