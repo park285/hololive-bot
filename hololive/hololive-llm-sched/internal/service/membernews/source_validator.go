@@ -91,35 +91,41 @@ func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, st
 		return model.SourceTierCommunity, "", fmt.Errorf("source validator is nil")
 	}
 
+	parsed, host, err := parseSourceURL(rawURL)
+	if err != nil {
+		return model.SourceTierCommunity, "", err
+	}
+
+	return v.classifySourceHost(host, parsed)
+}
+
+func parseSourceURL(rawURL string) (*url.URL, string, error) {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {
-		return model.SourceTierCommunity, "", fmt.Errorf("source url is empty")
+		return nil, "", fmt.Errorf("source url is empty")
 	}
 
 	parsed, err := url.Parse(trimmed)
 	if err != nil {
-		return model.SourceTierCommunity, "", fmt.Errorf("parse source url: %w", err)
+		return nil, "", fmt.Errorf("parse source url: %w", err)
 	}
 
 	scheme := strings.ToLower(parsed.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return model.SourceTierCommunity, "", fmt.Errorf("unsupported source url scheme: %s", parsed.Scheme)
+		return nil, "", fmt.Errorf("unsupported source url scheme: %s", parsed.Scheme)
 	}
 
 	host := normalizeHost(parsed.Hostname())
 	if host == "" {
-		return model.SourceTierCommunity, "", fmt.Errorf("source host is empty")
+		return nil, "", fmt.Errorf("source host is empty")
 	}
 
+	return parsed, host, nil
+}
+
+func (v *SourceValidator) classifySourceHost(host string, parsed *url.URL) (model.SourceTier, string, error) {
 	if host == "x.com" || host == "twitter.com" {
-		account := extractXAccount(parsed.Path)
-		if account == "" {
-			return model.SourceTierCommunity, "", fmt.Errorf("x.com account not found")
-		}
-		if !v.isAllowedXAccount(account) {
-			return model.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
-		}
-		return model.SourceTierOfficial, parsed.String(), nil
+		return v.classifyXSource(parsed)
 	}
 
 	if isYouTubeHost(host) {
@@ -134,6 +140,17 @@ func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, st
 	}
 
 	return model.SourceTierCommunity, parsed.String(), nil
+}
+
+func (v *SourceValidator) classifyXSource(parsed *url.URL) (model.SourceTier, string, error) {
+	account := extractXAccount(parsed.Path)
+	if account == "" {
+		return model.SourceTierCommunity, "", fmt.Errorf("x.com account not found")
+	}
+	if !v.isAllowedXAccount(account) {
+		return model.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
+	}
+	return model.SourceTierOfficial, parsed.String(), nil
 }
 
 func (v *SourceValidator) HasCorroboration(text string) bool {
@@ -160,34 +177,36 @@ func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (model.SourceTi
 	}
 
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	if len(segments) >= 2 && segments[0] == "channel" {
-		channelID := strings.TrimSpace(segments[1])
-		if channelID != "" && v.isAllowedYouTubeChannelID(channelID) {
-			return model.SourceTierOfficial, parsed.String(), nil
-		}
-		return model.SourceTierCommunity, parsed.String(), nil
-	}
-
-	if len(segments) >= 1 {
-		first := strings.TrimSpace(segments[0])
-		switch {
-		case strings.HasPrefix(first, "@"):
-			handle := strings.TrimPrefix(first, "@")
-			if v.isAllowedYouTubeHandle(handle) {
-				return model.SourceTierOfficial, parsed.String(), nil
-			}
-			return model.SourceTierCommunity, parsed.String(), nil
-		case (first == "user" || first == "c") && len(segments) >= 2:
-			if v.isAllowedYouTubeHandle(segments[1]) {
-				return model.SourceTierOfficial, parsed.String(), nil
-			}
-			return model.SourceTierCommunity, parsed.String(), nil
-		}
+	if v.isAllowedYouTubeSourcePath(segments) {
+		return model.SourceTierOfficial, parsed.String(), nil
 	}
 
 	// watch / shorts / live / youtu.be — 채널 식별 불가 → community
 	// SSOT: youtube.com(공식 채널)만 official, 동영상 링크는 채널 특정 불가
 	return model.SourceTierCommunity, parsed.String(), nil
+}
+
+func (v *SourceValidator) isAllowedYouTubeSourcePath(segments []string) bool {
+	if len(segments) >= 2 && segments[0] == "channel" {
+		channelID := strings.TrimSpace(segments[1])
+		return channelID != "" && v.isAllowedYouTubeChannelID(channelID)
+	}
+	if len(segments) == 0 {
+		return false
+	}
+	return v.isAllowedYouTubeHandlePath(segments)
+}
+
+func (v *SourceValidator) isAllowedYouTubeHandlePath(segments []string) bool {
+	first := strings.TrimSpace(segments[0])
+	switch {
+	case strings.HasPrefix(first, "@"):
+		return v.isAllowedYouTubeHandle(strings.TrimPrefix(first, "@"))
+	case (first == "user" || first == "c") && len(segments) >= 2:
+		return v.isAllowedYouTubeHandle(segments[1])
+	default:
+		return false
+	}
 }
 
 func (v *SourceValidator) isAllowedXAccount(account string) bool {

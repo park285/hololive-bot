@@ -49,22 +49,22 @@ func (r *Repository) GetRecentExternalIDs(ctx context.Context, eventType domain.
 	}
 	defer rows.Close()
 
+	return scanRecentExternalIDs(rows, limit)
+}
+
+func scanRecentExternalIDs(rows pgx.Rows, limit int) ([]string, *time.Time, error) {
 	externalIDs := make([]string, 0, limit)
 	var latestPubDate *time.Time
 
 	for rows.Next() {
-		var externalID string
-		var pubDate *time.Time
-		if scanErr := rows.Scan(&externalID, &pubDate); scanErr != nil {
-			return nil, nil, fmt.Errorf("scan recent external ID: %w", scanErr)
+		externalID, pubDate, err := scanRecentExternalIDRow(rows)
+		if err != nil {
+			return nil, nil, err
 		}
 		if externalID != "" {
 			externalIDs = append(externalIDs, externalID)
 		}
-		if latestPubDate == nil && pubDate != nil {
-			normalized := pubDate.UTC()
-			latestPubDate = &normalized
-		}
+		latestPubDate = firstRecentPubDate(latestPubDate, pubDate)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -72,6 +72,23 @@ func (r *Repository) GetRecentExternalIDs(ctx context.Context, eventType domain.
 	}
 
 	return externalIDs, latestPubDate, nil
+}
+
+func scanRecentExternalIDRow(rows pgx.Rows) (string, *time.Time, error) {
+	var externalID string
+	var pubDate *time.Time
+	if err := rows.Scan(&externalID, &pubDate); err != nil {
+		return "", nil, fmt.Errorf("scan recent external ID: %w", err)
+	}
+	return externalID, pubDate, nil
+}
+
+func firstRecentPubDate(current *time.Time, candidate *time.Time) *time.Time {
+	if current != nil || candidate == nil {
+		return current
+	}
+	normalized := candidate.UTC()
+	return &normalized
 }
 
 func (r *Repository) queryEvents(ctx context.Context, action string, query string, args ...any) ([]*domain.MajorEvent, error) {

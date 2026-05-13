@@ -53,6 +53,13 @@ type hostResolver interface {
 	LookupIP(context.Context, string, string) ([]net.IP, error)
 }
 
+type eventLinkCheck struct {
+	event     *domain.MajorEvent
+	status    domain.MajorEventLinkStatus
+	checkedAt time.Time
+	err       error
+}
+
 // NewLinkChecker는 LinkChecker를 생성한다.
 func NewLinkChecker(client *http.Client, cfg LinkCheckerConfig, logger *slog.Logger) *LinkChecker {
 	if client == nil {
@@ -101,31 +108,13 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 		}
 
 		eg.Go(func() error {
-			status, checkErr := c.CheckLink(egCtx, event.Link)
-			checkedAt := time.Now().UTC()
+			check := c.checkEventLink(egCtx, event)
 
 			mu.Lock()
-			event.LinkStatus = status
-			event.LinkCheckedAt = &checkedAt
-			result.Checked++
-			switch status {
-			case domain.MajorEventLinkStatusOK:
-				result.OK++
-			case domain.MajorEventLinkStatusBlocked:
-				result.Blocked++
-			default:
-				result.Failed++
-			}
+			applyEventLinkCheck(&result, check)
 			mu.Unlock()
 
-			if checkErr != nil {
-				c.logger.Debug(
-					"Major event link check failed",
-					slog.String("link", redactLinkForLog(event.Link)),
-					slog.String("status", string(status)),
-					slog.String("error", checkErr.Error()),
-				)
-			}
+			c.logEventLinkCheckFailure(check)
 			return nil
 		})
 	}
@@ -137,32 +126,93 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 	return result, nil
 }
 
+func (c *LinkChecker) checkEventLink(ctx context.Context, event *domain.MajorEvent) eventLinkCheck {
+	status, err := c.CheckLink(ctx, event.Link)
+	return eventLinkCheck{
+		event:     event,
+		status:    status,
+		checkedAt: time.Now().UTC(),
+		err:       err,
+	}
+}
+
+func applyEventLinkCheck(result *LinkCheckResult, check eventLinkCheck) {
+	check.event.LinkStatus = check.status
+	check.event.LinkCheckedAt = &check.checkedAt
+	result.Checked++
+	addLinkCheckStatus(result, check.status)
+}
+
+func addLinkCheckStatus(result *LinkCheckResult, status domain.MajorEventLinkStatus) {
+	switch status {
+	case domain.MajorEventLinkStatusOK:
+		result.OK++
+	case domain.MajorEventLinkStatusBlocked:
+		result.Blocked++
+	default:
+		result.Failed++
+	}
+}
+
+func (c *LinkChecker) logEventLinkCheckFailure(check eventLinkCheck) {
+	if check.err == nil {
+		return
+	}
+	c.logger.Debug(
+		"Major event link check failed",
+		slog.String("link", redactLinkForLog(check.event.Link)),
+		slog.String("status", string(check.status)),
+		slog.String("error", check.err.Error()),
+	)
+}
+
 // CheckLink는 단일 링크를 검증한다.
 func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.MajorEventLinkStatus, error) {
 	parsed, err := parseAndValidateLink(rawURL)
 	if err != nil {
-		if isBlockedLinkError(err) {
-			return domain.MajorEventLinkStatusBlocked, err
-		}
-		return domain.MajorEventLinkStatusFailed, err
+		return statusForLinkError(err), err
 	}
 
-	headStatus, headErr := c.probe(ctx, http.MethodHead, parsed.String())
+	targetURL := parsed.String()
+	if status, done, err := c.checkHeadLink(ctx, targetURL); done {
+		return status, err
+	}
+	return c.checkGetLink(ctx, targetURL)
+}
+
+func statusForLinkError(err error) domain.MajorEventLinkStatus {
+	if isBlockedLinkError(err) {
+		return domain.MajorEventLinkStatusBlocked
+	}
+	return domain.MajorEventLinkStatusFailed
+}
+
+func (c *LinkChecker) checkHeadLink(ctx context.Context, targetURL string) (domain.MajorEventLinkStatus, bool, error) {
+	headStatus, headErr := c.probe(ctx, http.MethodHead, targetURL)
 	if isBlockedLinkError(headErr) {
-		return domain.MajorEventLinkStatusBlocked, headErr
+		return domain.MajorEventLinkStatusBlocked, true, headErr
 	}
 	if headErr == nil {
-		if isSuccessStatus(headStatus) {
-			return domain.MajorEventLinkStatusOK, nil
-		}
-		if !shouldFallbackToGET(headStatus, nil) {
-			return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: head status %d", headStatus)
-		}
-	} else if !shouldFallbackToGET(0, headErr) {
-		return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: head request failed: %w", headErr)
+		return statusForHeadResponse(headStatus)
 	}
+	if shouldFallbackToGET(0, headErr) {
+		return "", false, nil
+	}
+	return domain.MajorEventLinkStatusFailed, true, fmt.Errorf("check link: head request failed: %w", headErr)
+}
 
-	getStatus, getErr := c.probe(ctx, http.MethodGet, parsed.String())
+func statusForHeadResponse(headStatus int) (domain.MajorEventLinkStatus, bool, error) {
+	if isSuccessStatus(headStatus) {
+		return domain.MajorEventLinkStatusOK, true, nil
+	}
+	if shouldFallbackToGET(headStatus, nil) {
+		return "", false, nil
+	}
+	return domain.MajorEventLinkStatusFailed, true, fmt.Errorf("check link: head status %d", headStatus)
+}
+
+func (c *LinkChecker) checkGetLink(ctx context.Context, targetURL string) (domain.MajorEventLinkStatus, error) {
+	getStatus, getErr := c.probe(ctx, http.MethodGet, targetURL)
 	if isBlockedLinkError(getErr) {
 		return domain.MajorEventLinkStatusBlocked, getErr
 	}
@@ -287,42 +337,54 @@ func withValidatedDialPolicy(client *http.Client, resolver hostResolver, timeout
 		return nil
 	}
 
-	transport := client.Transport
+	clonedTransport, ok := cloneHTTPTransport(client.Transport)
+	if !ok {
+		return client
+	}
+
+	clonedClient := *client
+	baseDialContext := clonedTransport.DialContext
+	if baseDialContext == nil {
+		dialer := &net.Dialer{}
+		baseDialContext = dialer.DialContext
+	}
+	clonedTransport.DialContext = validatedDialContext(baseDialContext, resolver, timeout)
+	withValidatedDialTLSPolicy(clonedTransport, resolver, timeout)
+	clonedClient.Transport = clonedTransport
+	return &clonedClient
+}
+
+func cloneHTTPTransport(transport http.RoundTripper) (*http.Transport, bool) {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
 
 	baseTransport, ok := transport.(*http.Transport)
 	if !ok {
-		return client
+		return nil, false
 	}
+	return baseTransport.Clone(), true
+}
 
-	clonedClient := *client
-	clonedTransport := baseTransport.Clone()
-	baseDialContext := clonedTransport.DialContext
-	if baseDialContext == nil {
-		dialer := &net.Dialer{}
-		baseDialContext = dialer.DialContext
-	}
-	clonedTransport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+func validatedDialContext(
+	baseDialContext func(context.Context, string, string) (net.Conn, error),
+	resolver hostResolver,
+	timeout time.Duration,
+) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		resolvedAddr, err := resolveDialAddress(ctx, resolver, timeout, addr)
 		if err != nil {
 			return nil, err
 		}
 		return baseDialContext(ctx, network, resolvedAddr)
 	}
-	if clonedTransport.DialTLSContext != nil {
-		baseDialTLSContext := clonedTransport.DialTLSContext
-		clonedTransport.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			resolvedAddr, err := resolveDialAddress(ctx, resolver, timeout, addr)
-			if err != nil {
-				return nil, err
-			}
-			return baseDialTLSContext(ctx, network, resolvedAddr)
-		}
+}
+
+func withValidatedDialTLSPolicy(transport *http.Transport, resolver hostResolver, timeout time.Duration) {
+	if transport.DialTLSContext == nil {
+		return
 	}
-	clonedClient.Transport = clonedTransport
-	return &clonedClient
+	transport.DialTLSContext = validatedDialContext(transport.DialTLSContext, resolver, timeout)
 }
 
 func resolveDialAddress(ctx context.Context, resolver hostResolver, timeout time.Duration, addr string) (string, error) {
