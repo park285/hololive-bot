@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -69,6 +70,36 @@ func TestGetCommunityPosts_404TreatAsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, posts)
 	require.Equal(t, int32(1), attempts.Load(), "community missing cache should skip second network call")
+}
+
+func TestGetCommunityPosts_404DoesNotRecordHTMLCooldown(t *testing.T) {
+	httpClient := &http.Client{
+		Transport: communityRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("")),
+			}, nil
+		}),
+	}
+
+	client := NewClient(
+		WithHTTPClient(httpClient),
+		WithRateLimiter(NewRateLimiter(0)),
+		WithUAProvider(ua.NewStaticProvider("test-agent")),
+		WithStateStore(newChannelHealthTestStore()),
+		WithChannelHealthPolicy(ChannelHealthPolicy{
+			HTTPStatusBase: time.Hour,
+			HTTPStatusMax:  time.Hour,
+		}),
+	)
+
+	posts, err := client.GetCommunityPosts(context.Background(), "UC_TEST", 5)
+	require.NoError(t, err)
+	require.Empty(t, posts)
+
+	wait, skip := client.channelHealth.ShouldSkip(context.Background(), "UC_TEST", FailureSourceHTML, time.Now())
+	require.False(t, skip, "community /posts 404 should not cooldown the shared HTML source; wait=%s", wait)
 }
 
 func TestParseBackstagePostIncludesUpstreamPostID(t *testing.T) {
