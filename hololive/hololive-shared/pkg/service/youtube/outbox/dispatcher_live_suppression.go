@@ -54,7 +54,8 @@ func liveStreamPayloadForSuppression(item domain.YouTubeNotificationOutbox) (vid
 	if err := json.Unmarshal([]byte(item.Payload), &payload); err != nil {
 		return videoPayload{}, false
 	}
-	return payload, payload.VideoID != "" && payload.Title != "" && payload.PublishedAt != nil && !payload.PublishedAt.IsZero()
+	scheduledAt := liveSuppressionScheduledAt(payload)
+	return payload, payload.VideoID != "" && payload.Title != "" && scheduledAt != nil && !scheduledAt.IsZero()
 }
 
 func (d *Dispatcher) wasLiveCatchupRecentlyCoveredByUpcoming(
@@ -63,7 +64,11 @@ func (d *Dispatcher) wasLiveCatchupRecentlyCoveredByUpcoming(
 	channelID string,
 	payload videoPayload,
 ) bool {
-	key := keys.BuildUpcomingEventKey(roomID, channelID, payload.VideoID, payload.Title, payload.PublishedAt.UTC())
+	scheduledAt := liveSuppressionScheduledAt(payload)
+	if scheduledAt == nil || scheduledAt.IsZero() {
+		return false
+	}
+	key := keys.BuildUpcomingEventKey(roomID, channelID, payload.VideoID, payload.Title, scheduledAt.UTC())
 	var data liveUpcomingSuppressionData
 	if err := d.cache.Get(ctx, key, &data); err != nil {
 		d.logger.Warn("Failed to read live catchup upcoming suppression marker",
@@ -81,4 +86,11 @@ func (d *Dispatcher) wasLiveCatchupRecentlyCoveredByUpcoming(
 		return false
 	}
 	return time.Since(notifiedAt) <= constants.LiveCatchupSuppressWindow
+}
+
+func liveSuppressionScheduledAt(payload videoPayload) *time.Time {
+	if payload.ScheduledStartAt != nil && !payload.ScheduledStartAt.IsZero() {
+		return payload.ScheduledStartAt
+	}
+	return payload.PublishedAt
 }
