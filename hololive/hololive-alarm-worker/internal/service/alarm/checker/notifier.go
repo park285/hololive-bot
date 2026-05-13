@@ -203,20 +203,6 @@ const (
 	legacyCommunityShortsDeliveryPath         = "legacy_alarm_queue"
 )
 
-func (n *Notifier) sendOne(ctx context.Context, notif *domain.AlarmNotification) (sendOutcome, error) {
-	payload, claimKeys, outcome, err := n.prepareOne(ctx, notif)
-	if err != nil || outcome != sendOutcomeSent {
-		return outcome, err
-	}
-	if err := n.publishAndMark(ctx, payload, claimKeys); err != nil {
-		return sendOutcomeFailed, fmt.Errorf("send one: publish and mark: %w", err)
-	}
-	if n.tierScheduler != nil {
-		n.tierScheduler.MarkChannelRecentlyNotified(payload.channelID)
-	}
-	return sendOutcomeSent, nil
-}
-
 func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification) (*sendInput, []string, sendOutcome, error) {
 	payload := resolveSendInput(notif, time.Now().UTC())
 	if payload == nil {

@@ -255,10 +255,7 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 		limit = defaultPublishBatchDeliveryLimit
 	}
 	for start := 0; start < len(envelopes); start += limit {
-		end := start + limit
-		if end > len(envelopes) {
-			end = len(envelopes)
-		}
+		end := min(start+limit, len(envelopes))
 		result, err := p.outbox.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes[start:end], Status: status})
 		if err != nil {
 			return total, err

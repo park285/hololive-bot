@@ -55,8 +55,7 @@ func TestLLMSchedulerRuntimeClose(t *testing.T) {
 
 func TestLLMSchedulerRuntimeStartStopSchedulers_NoPanic(t *testing.T) {
 	runtime := &LLMSchedulerRuntime{Logger: testRuntimeLogger()}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	assert.NotPanics(t, func() { runtime.startSchedulers(ctx) })
 	assert.NotPanics(t, runtime.stopSchedulers)

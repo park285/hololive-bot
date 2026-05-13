@@ -383,8 +383,7 @@ func TestSchedulerCanRestartAfterStop(t *testing.T) {
 		time.Hour,
 	))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	require.NotPanics(t, func() {
 		scheduler.Start(ctx)

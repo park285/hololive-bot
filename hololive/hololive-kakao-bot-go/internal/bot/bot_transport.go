@@ -87,7 +87,7 @@ func (t *CommandTransport) sendMessage(ctx context.Context, room, message string
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < replySendMaxAttempts; attempt++ {
+	for range replySendMaxAttempts {
 		done, err := sendAcceptedMessageAttempt(ctx, acceptedSender, room, message, opts...)
 		if err != nil && !isReplyStatusFailed(err) {
 			return err

@@ -33,10 +33,10 @@ func TestNewIPAllowList(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		input    []string
-		wantLen  int
-		wantErr  bool
+		name    string
+		input   []string
+		wantLen int
+		wantErr bool
 	}{
 		{
 			name:    "유효한 CIDR 2개",

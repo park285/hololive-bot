@@ -21,8 +21,8 @@
 package majoreventclient
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"

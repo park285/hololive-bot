@@ -310,7 +310,7 @@ func TestCommunityPollerPollDeduplicatesCollectedPostsByCanonicalPostID(t *testi
 func findLogEntryByMessage(t *testing.T, logBuffer *bytes.Buffer, message string) map[string]any {
 	t.Helper()
 
-	for _, line := range bytes.Split(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}

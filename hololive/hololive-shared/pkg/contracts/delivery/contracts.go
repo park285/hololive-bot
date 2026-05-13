@@ -41,13 +41,11 @@ const (
 	StatusFailed  domain.DeliveryOutboxStatus = domain.DeliveryStatusFailed
 )
 
-//
 // 현재 구현(hololive-shared/pkg/service/delivery/outbox_repository.go)의 JSON({ "message": "..." })과 동일합니다.
 type OutboxPayloadV1 struct {
 	Message string `json:"message"`
 }
 
-//
 // 현재 구현은 periodKey + ":" + roomID 입니다.
 func ContentID(periodKey, roomID string) string {
 	return periodKey + ":" + roomID

@@ -387,7 +387,6 @@ func TestGetPlaylists_MalformedPlaylistJSON_TableDriven(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			client := newPlaylistMockClient("<script>var ytInitialData = " + tc.ytInitialData + ";</script>")
@@ -538,7 +537,6 @@ func TestGetPlaylists_PaginationEdgeCases_TableDriven(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			client := newPlaylistMockClient("<script>var ytInitialData = " + ytInitialData + ";</script>")

@@ -21,8 +21,8 @@
 package command
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"

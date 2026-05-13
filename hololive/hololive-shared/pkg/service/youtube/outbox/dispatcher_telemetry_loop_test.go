@@ -71,8 +71,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	db := openTelemetryLoopTestDB(t)
 	require.NoError(t, db.AutoMigrate(&sqliteTelemetryOutboxModel{}, &sqliteTelemetryDeliveryModel{}, &sqliteTelemetryBufferModel{}, &sqliteTelemetryObservationTrackingModel{}))

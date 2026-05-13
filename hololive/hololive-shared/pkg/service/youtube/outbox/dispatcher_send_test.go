@@ -1073,7 +1073,7 @@ func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body strin
 func findLogEntryByMessage(t *testing.T, logBuffer *safeBuffer, message string) map[string]any {
 	t.Helper()
 
-	for _, line := range bytes.Split(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
@@ -1094,7 +1094,7 @@ func findAllSendLogEntriesByMessage(t *testing.T, logBuffer *safeBuffer, message
 	t.Helper()
 
 	entries := make([]map[string]any, 0)
-	for _, line := range bytes.Split(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
@@ -1209,11 +1209,15 @@ func (s *blockingSender) SendMessage(ctx context.Context, _, _ string) error {
 }
 
 type delayedReturnSender struct {
-	delay time.Duration
+	delay     time.Duration
+	afterDone func()
 }
 
 func (s *delayedReturnSender) SendMessage(ctx context.Context, _, _ string) error {
 	<-ctx.Done()
+	if s.afterDone != nil {
+		s.afterDone()
+	}
 	time.Sleep(s.delay)
 	return ctx.Err()
 }
@@ -1280,16 +1284,21 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t *testing.T) {
 	t.Parallel()
 
+	parentCtx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+
 	dispatcher := NewDispatcher(nil,
 		cachemocks.NewLenientClient(),
-		&delayedReturnSender{delay: 30 * time.Millisecond},
+		&delayedReturnSender{
+			delay: 30 * time.Millisecond,
+			afterDone: func() {
+				cancel(context.DeadlineExceeded)
+			},
+		},
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
-
-	parentCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
 
 	err := dispatcher.sendDeliveryMessage(parentCtx, deliverySendRequest{
 		roomID:     "room-child-timeout-first",

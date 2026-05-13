@@ -91,16 +91,16 @@ func (ys *serviceImpl) streamFromScrapedEvent(event *scraper.UpcomingEvent, chan
 		Status:      ys.mapEventStatus(event.Status),
 	}
 	stream.Thumbnail = scrapedEventThumbnail(event)
-	stream.Link = stringPtr(fmt.Sprintf("https://www.youtube.com/watch?v=%s", event.VideoID))
+	stream.Link = new(fmt.Sprintf("https://www.youtube.com/watch?v=%s", event.VideoID))
 	stream.StartScheduled = scrapedEventStartTime(event)
 	return stream
 }
 
 func scrapedEventThumbnail(event *scraper.UpcomingEvent) *string {
 	if len(event.Thumbnail) > 0 {
-		return stringPtr(event.Thumbnail[len(event.Thumbnail)-1].URL)
+		return new(event.Thumbnail[len(event.Thumbnail)-1].URL)
 	}
-	return stringPtr(fmt.Sprintf("https://i.ytimg.com/vi/%s/maxresdefault.jpg", event.VideoID))
+	return new(fmt.Sprintf("https://i.ytimg.com/vi/%s/maxresdefault.jpg", event.VideoID))
 }
 
 func scrapedEventStartTime(event *scraper.UpcomingEvent) *time.Time {
@@ -109,10 +109,6 @@ func scrapedEventStartTime(event *scraper.UpcomingEvent) *time.Time {
 	}
 	startTime := time.Unix(*event.StartTime, 0)
 	return &startTime
-}
-
-func stringPtr(value string) *string {
-	return &value
 }
 
 func (ys *serviceImpl) mapEventStatus(status string) domain.StreamStatus {

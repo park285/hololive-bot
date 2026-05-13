@@ -155,7 +155,7 @@ func TestDeliveryRepositoryMarkSentBatchRecordsCommunityAlarmSentAtWithCanonical
 		Kind:              string(item.Kind),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
-		ActualPublishedAt: timePtr(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
+		ActualPublishedAt: new(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
 		DetectedAt:        detectedAt,
 		DeliveryStatus:    string(domain.YouTubeContentAlarmDeliveryStatusPending),
 	}).Error)
@@ -215,7 +215,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 		ContentID:          item.ContentID,
 		CanonicalContentID: "community:post-claimed",
 		ChannelID:          item.ChannelID,
-		ActualPublishedAt:  timePtr(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
+		ActualPublishedAt:  new(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
 		DetectedAt:         detectedAt,
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusPending),
 	}).Error)
@@ -224,7 +224,7 @@ func TestDeliveryRepositoryMarkSentBatchFinalizesClaimedAlarmStateWithClaimToken
 		PostID:            "community:post-claimed",
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
-		ActualPublishedAt: timePtr(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
+		ActualPublishedAt: new(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
 		DetectedAt:        detectedAt,
 		AuthorizedAt:      &authorizedAt,
 		DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
@@ -279,7 +279,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 		ContentID:          item.ContentID,
 		CanonicalContentID: "short:short-claimed",
 		ChannelID:          item.ChannelID,
-		ActualPublishedAt:  timePtr(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
+		ActualPublishedAt:  new(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
 		DetectedAt:         detectedAt,
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusPending),
 	}).Error)
@@ -288,7 +288,7 @@ func TestDeliveryRepositoryMarkSentBatchRollsBackOnClaimMismatch(t *testing.T) {
 		PostID:            "short:short-claimed",
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
-		ActualPublishedAt: timePtr(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
+		ActualPublishedAt: new(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
 		DetectedAt:        detectedAt,
 		AuthorizedAt:      &authorizedAt,
 		DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
@@ -357,7 +357,7 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 		Kind:              string(item.Kind),
 		ContentID:         item.ContentID,
 		ChannelID:         item.ChannelID,
-		ActualPublishedAt: timePtr(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
+		ActualPublishedAt: new(time.Date(2026, 4, 10, 1, 9, 0, 0, time.UTC)),
 		DetectedAt:        detectedAt,
 	}).Error)
 
@@ -403,10 +403,6 @@ func TestDeliveryRepositoryMarkSentBatchKeepsEarliestAlarmSentAtAcrossDuplicateE
 	require.NoError(t, db.First(&updatedSecondDelivery, secondDelivery.ID).Error)
 	require.NotNil(t, updatedSecondDelivery.SentAt)
 	require.True(t, updatedSecondDelivery.SentAt.UTC().After(firstExpected))
-}
-
-func timePtr(value time.Time) *time.Time {
-	return &value
 }
 
 func withFixedSentAtNow(t *testing.T, fixed time.Time) {
