@@ -89,6 +89,9 @@ func loadNotificationConfig() NotificationConfig {
 func loadScraperConfig() ScraperConfig {
 	publishedAtResolverDefaults := DefaultScraperPublishedAtResolverConfig()
 	scraperSchedulerDefaults := DefaultScraperSchedulerConfig()
+	snapshotDefaults := DefaultScraperSnapshotConfig()
+	channelHealthDefaults := DefaultScraperChannelHealthConfig()
+	browserDiagnosticDefaults := DefaultScraperBrowserDiagnosticConfig()
 
 	return ScraperConfig{
 		ProxyEnabled:  sharedenv.Bool("SCRAPER_PROXY_ENABLED", false),
@@ -113,6 +116,30 @@ func loadScraperConfig() ScraperConfig {
 			ResolveTimeout:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS", int(publishedAtResolverDefaults.ResolveTimeout/time.Second))) * time.Second,
 			MinDetectedAge:    time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS", int(publishedAtResolverDefaults.MinDetectedAge/time.Second))) * time.Second,
 			FailureBackoffTTL: time.Duration(sharedenv.Int("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS", int(publishedAtResolverDefaults.FailureBackoffTTL/time.Second))) * time.Second,
+		},
+		Snapshot: ScraperSnapshotConfig{
+			Enabled:      sharedenv.Bool("SCRAPER_SNAPSHOT_ENABLED", snapshotDefaults.Enabled),
+			Dir:          sharedenv.String("SCRAPER_SNAPSHOT_DIR", snapshotDefaults.Dir),
+			MaxBodyBytes: sharedenv.Int("SCRAPER_SNAPSHOT_MAX_BODY_BYTES", snapshotDefaults.MaxBodyBytes),
+			MinInterval:  time.Duration(sharedenv.Int("SCRAPER_SNAPSHOT_MIN_INTERVAL_SECONDS", int(snapshotDefaults.MinInterval/time.Second))) * time.Second,
+		},
+		ChannelHealth: ScraperChannelHealthConfig{
+			Enabled:           sharedenv.Bool("SCRAPER_CHANNEL_HEALTH_ENABLED", channelHealthDefaults.Enabled),
+			TTL:               time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_TTL_SECONDS", int(channelHealthDefaults.TTL/time.Second))) * time.Second,
+			ParserDriftBase:   time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_PARSER_DRIFT_BASE_SECONDS", int(channelHealthDefaults.ParserDriftBase/time.Second))) * time.Second,
+			ParserDriftMax:    time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_PARSER_DRIFT_MAX_SECONDS", int(channelHealthDefaults.ParserDriftMax/time.Second))) * time.Second,
+			TransportBase:     time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_TRANSPORT_BASE_SECONDS", int(channelHealthDefaults.TransportBase/time.Second))) * time.Second,
+			TransportMax:      time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_TRANSPORT_MAX_SECONDS", int(channelHealthDefaults.TransportMax/time.Second))) * time.Second,
+			TimeoutBase:       time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_TIMEOUT_BASE_SECONDS", int(channelHealthDefaults.TimeoutBase/time.Second))) * time.Second,
+			TimeoutMax:        time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_TIMEOUT_MAX_SECONDS", int(channelHealthDefaults.TimeoutMax/time.Second))) * time.Second,
+			HTTPStatusBase:    time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_HTTP_STATUS_BASE_SECONDS", int(channelHealthDefaults.HTTPStatusBase/time.Second))) * time.Second,
+			HTTPStatusMax:     time.Duration(sharedenv.Int("SCRAPER_CHANNEL_HEALTH_HTTP_STATUS_MAX_SECONDS", int(channelHealthDefaults.HTTPStatusMax/time.Second))) * time.Second,
+			SuccessDecaySteps: sharedenv.Int("SCRAPER_CHANNEL_HEALTH_SUCCESS_DECAY_STEPS", channelHealthDefaults.SuccessDecaySteps),
+		},
+		BrowserDiagnostic: ScraperBrowserDiagnosticConfig{
+			Enabled:  sharedenv.Bool("SCRAPER_BROWSER_DIAGNOSTIC_ENABLED", browserDiagnosticDefaults.Enabled),
+			Endpoint: sharedenv.String("SCRAPER_BROWSER_DIAGNOSTIC_ENDPOINT", browserDiagnosticDefaults.Endpoint),
+			Timeout:  time.Duration(sharedenv.Int("SCRAPER_BROWSER_DIAGNOSTIC_TIMEOUT_SECONDS", int(browserDiagnosticDefaults.Timeout/time.Second))) * time.Second,
 		},
 	}
 }

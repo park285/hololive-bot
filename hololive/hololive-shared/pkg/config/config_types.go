@@ -97,8 +97,9 @@ func DefaultScraperWorkerCount() int {
 }
 
 const (
-	ScraperFetcherEngineNetHTTP  = "nethttp"
-	ScraperFetcherEngineGoScrapy = "goscrapy"
+	ScraperFetcherEngineNetHTTP         = "nethttp"
+	ScraperFetcherEngineGoScrapy        = "goscrapy"
+	ScraperFetcherEngineBrowserSnapshot = "browser_snapshot"
 )
 
 func DefaultScraperFetcherEngine() string {
@@ -107,10 +108,41 @@ func DefaultScraperFetcherEngine() string {
 
 func NormalizeScraperFetcherEngine(value string) string {
 	normalized := strings.ToLower(strings.TrimSpace(value))
-	if normalized == "" {
+	switch normalized {
+	case "", ScraperFetcherEngineNetHTTP:
 		return DefaultScraperFetcherEngine()
+	case ScraperFetcherEngineGoScrapy, ScraperFetcherEngineBrowserSnapshot:
+		return normalized
+	default:
+		return normalized
 	}
-	return normalized
+}
+
+type ScraperSnapshotConfig struct {
+	Enabled      bool
+	Dir          string
+	MaxBodyBytes int
+	MinInterval  time.Duration
+}
+
+type ScraperChannelHealthConfig struct {
+	Enabled           bool
+	TTL               time.Duration
+	ParserDriftBase   time.Duration
+	ParserDriftMax    time.Duration
+	TransportBase     time.Duration
+	TransportMax      time.Duration
+	TimeoutBase       time.Duration
+	TimeoutMax        time.Duration
+	HTTPStatusBase    time.Duration
+	HTTPStatusMax     time.Duration
+	SuccessDecaySteps int
+}
+
+type ScraperBrowserDiagnosticConfig struct {
+	Enabled  bool
+	Endpoint string
+	Timeout  time.Duration
 }
 
 type ScraperConfig struct {
@@ -121,6 +153,9 @@ type ScraperConfig struct {
 	Scheduler           ScraperSchedulerConfig
 	Poll                ScraperPoll
 	PublishedAtResolver ScraperPublishedAtResolverConfig
+	Snapshot            ScraperSnapshotConfig
+	ChannelHealth       ScraperChannelHealthConfig
+	BrowserDiagnostic   ScraperBrowserDiagnosticConfig
 }
 
 type ScraperSchedulerConfig struct {
@@ -157,6 +192,38 @@ func DefaultScraperPublishedAtResolverConfig() ScraperPublishedAtResolverConfig 
 		ResolveTimeout:    10 * time.Second,
 		MinDetectedAge:    30 * time.Second,
 		FailureBackoffTTL: 5 * time.Minute,
+	}
+}
+
+func DefaultScraperSnapshotConfig() ScraperSnapshotConfig {
+	return ScraperSnapshotConfig{
+		Enabled:      false,
+		Dir:          "./artifacts/youtube-scraper",
+		MaxBodyBytes: 512 << 10,
+		MinInterval:  30 * time.Minute,
+	}
+}
+
+func DefaultScraperChannelHealthConfig() ScraperChannelHealthConfig {
+	return ScraperChannelHealthConfig{
+		Enabled:           true,
+		TTL:               24 * time.Hour,
+		ParserDriftBase:   10 * time.Minute,
+		ParserDriftMax:    6 * time.Hour,
+		TransportBase:     2 * time.Minute,
+		TransportMax:      30 * time.Minute,
+		TimeoutBase:       2 * time.Minute,
+		TimeoutMax:        30 * time.Minute,
+		HTTPStatusBase:    5 * time.Minute,
+		HTTPStatusMax:     time.Hour,
+		SuccessDecaySteps: 1,
+	}
+}
+
+func DefaultScraperBrowserDiagnosticConfig() ScraperBrowserDiagnosticConfig {
+	return ScraperBrowserDiagnosticConfig{
+		Enabled: false,
+		Timeout: 20 * time.Second,
 	}
 }
 
@@ -219,6 +286,54 @@ func (c ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
 		cfg.ErrorBackoffMax = cfg.ErrorBackoffMin
 	}
 
+	return cfg
+}
+
+func (c ScraperConfig) SnapshotOrDefault() ScraperSnapshotConfig {
+	defaults := DefaultScraperSnapshotConfig()
+	cfg := c.Snapshot
+	if strings.TrimSpace(cfg.Dir) == "" {
+		cfg.Dir = defaults.Dir
+	}
+	if cfg.MaxBodyBytes <= 0 {
+		cfg.MaxBodyBytes = defaults.MaxBodyBytes
+	}
+	if cfg.MinInterval <= 0 {
+		cfg.MinInterval = defaults.MinInterval
+	}
+	return cfg
+}
+
+func (c ScraperConfig) ChannelHealthOrDefault() ScraperChannelHealthConfig {
+	defaults := DefaultScraperChannelHealthConfig()
+	cfg := c.ChannelHealth
+	fillDefaultDuration(&cfg.TTL, defaults.TTL)
+	fillDefaultDuration(&cfg.ParserDriftBase, defaults.ParserDriftBase)
+	fillDefaultDuration(&cfg.ParserDriftMax, defaults.ParserDriftMax)
+	fillDefaultDuration(&cfg.TransportBase, defaults.TransportBase)
+	fillDefaultDuration(&cfg.TransportMax, defaults.TransportMax)
+	fillDefaultDuration(&cfg.TimeoutBase, defaults.TimeoutBase)
+	fillDefaultDuration(&cfg.TimeoutMax, defaults.TimeoutMax)
+	fillDefaultDuration(&cfg.HTTPStatusBase, defaults.HTTPStatusBase)
+	fillDefaultDuration(&cfg.HTTPStatusMax, defaults.HTTPStatusMax)
+	if cfg.SuccessDecaySteps <= 0 {
+		cfg.SuccessDecaySteps = defaults.SuccessDecaySteps
+	}
+	return cfg
+}
+
+func fillDefaultDuration(value *time.Duration, fallback time.Duration) {
+	if value != nil && *value <= 0 {
+		*value = fallback
+	}
+}
+
+func (c ScraperConfig) BrowserDiagnosticOrDefault() ScraperBrowserDiagnosticConfig {
+	defaults := DefaultScraperBrowserDiagnosticConfig()
+	cfg := c.BrowserDiagnostic
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = defaults.Timeout
+	}
 	return cfg
 }
 

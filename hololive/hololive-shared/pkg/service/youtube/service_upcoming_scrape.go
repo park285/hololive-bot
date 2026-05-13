@@ -28,6 +28,25 @@ func (ys *serviceImpl) scrapeUpcomingStreams(ctx context.Context, channelIDs []s
 	primary := fallback.RunPrimary(ctx, channelIDs, fallback.FetchPlan[string, struct{}]{Parallelism: 5}, func(gctx context.Context, channelID string) error {
 		events, err := ys.scraper.GetUpcomingEvents(gctx, channelID)
 		if err != nil {
+			detail := scraper.ClassifyFailure(err, scraper.FailureSourceHTML)
+			mu.Lock()
+			result.failures = append(result.failures, upcomingScrapeFailure{
+				ChannelID:  channelID,
+				Source:     string(detail.Source),
+				Reason:     string(detail.Reason),
+				StatusCode: detail.StatusCode,
+				RetryAfter: detail.RetryAfter,
+				Message:    detail.Message,
+			})
+			mu.Unlock()
+			observeYouTubeScraperFailure("upcoming_streams", string(detail.Source), string(detail.Reason))
+			ys.logger.Warn("youtube_upcoming_scraper_channel_failed",
+				slog.String("channelID", channelID),
+				slog.String("source", string(detail.Source)),
+				slog.String("reason", string(detail.Reason)),
+				slog.Int("statusCode", detail.StatusCode),
+				slog.Duration("retryAfter", detail.RetryAfter),
+				slog.Any("error", err))
 			return fmt.Errorf("scraper upcoming events for %s: %w", channelID, err)
 		}
 		if len(events) == 0 {
@@ -47,7 +66,8 @@ func (ys *serviceImpl) scrapeUpcomingStreams(ctx context.Context, channelIDs []s
 	ys.logger.Info("Scraper phase completed (upcoming streams)",
 		slog.Int("total", len(channelIDs)),
 		slog.Int("scraped", result.scraped),
-		slog.Int("failed", len(result.failedIDs)))
+		slog.Int("failed", len(result.failedIDs)),
+		slog.Any("failureSummary", summarizeUpcomingScrapeFailures(result.failures)))
 	return result
 }
 

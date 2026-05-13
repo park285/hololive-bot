@@ -55,7 +55,8 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
 		logStructureWarning("community_posts", channelID, "ytInitialData extraction failed", "error", err)
-		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
+		url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
+		return nil, c.recordParserDrift(ctx, "community_posts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -69,12 +70,14 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 		return nil, nil
 	}
 
-	return c.parseCommunityPosts(postsContent, maxResults), nil
+	posts := c.parseCommunityPosts(postsContent, maxResults)
+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+	return posts, nil
 }
 
 func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) (string, bool, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
-	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
+	html, err := c.fetchChannelSourcePage(ctx, "community_posts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
 	if err == nil {
 		return html, false, nil
 	}

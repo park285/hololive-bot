@@ -15,6 +15,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/fallback"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey string, scrapeResult upcomingScrapeResult) ([]*domain.Stream, error) {
@@ -69,6 +70,7 @@ func (ys *serviceImpl) runUpcomingAPIFallback(
 			apiResult := ys.fetchUpcomingFromAPI(runCtx, scrapeResult.failedIDs)
 			*allStreams = append(*allStreams, apiResult.streams...)
 			ys.consumeQuota(apiResult.quotaCost)
+			ys.observeUpcomingFallbackRecoveries(scrapeResult, apiResult)
 
 			return fallback.SecondaryResult{
 				Items:     len(apiResult.streams),
@@ -113,15 +115,31 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 		g.Go(func() error {
 			streams, err := ys.getChannelUpcomingStreams(gctx, channelID)
 			if err != nil {
+				detail := classifyYouTubeAPIFailure(err)
 				ys.logger.Warn("Failed to fetch channel from API",
 					slog.String("channelID", channelID),
+					slog.String("source", string(scraper.FailureSourceAPI)),
+					slog.String("reason", string(detail.Reason)),
+					slog.Int("statusCode", detail.StatusCode),
 					slog.Any("error", err))
+				mu.Lock()
+				result.failedIDs = append(result.failedIDs, channelID)
+				result.failures = append(result.failures, upcomingScrapeFailure{
+					ChannelID:  channelID,
+					Source:     string(scraper.FailureSourceAPI),
+					Reason:     string(detail.Reason),
+					StatusCode: detail.StatusCode,
+					RetryAfter: detail.RetryAfter,
+					Message:    detail.Message,
+				})
+				mu.Unlock()
 				return nil
 			}
 
 			mu.Lock()
 			result.streams = append(result.streams, streams...)
 			result.successfulChannels++
+			result.successfulIDs = append(result.successfulIDs, channelID)
 			mu.Unlock()
 
 			costMu.Lock()
@@ -135,6 +153,29 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 	_ = g.Wait()
 
 	return result
+}
+
+func (ys *serviceImpl) observeUpcomingFallbackRecoveries(scrapeResult upcomingScrapeResult, apiResult upcomingAPIFallbackResult) {
+	failuresByChannel := upcomingFailureByChannel(scrapeResult.failures)
+	for _, channelID := range apiResult.successfulIDs {
+		failure, ok := failuresByChannel[channelID]
+		if !ok {
+			continue
+		}
+		observeYouTubeScraperRecovery("upcoming_streams", failure.Source, failure.Reason, string(scraper.FailureSourceAPI))
+		ys.logger.Info("youtube_upcoming_api_fallback_recovered_channel",
+			slog.String("channelID", channelID),
+			slog.String("failedSource", failure.Source),
+			slog.String("failedReason", failure.Reason),
+			slog.String("recoverySource", string(scraper.FailureSourceAPI)))
+	}
+	for _, failure := range apiResult.failures {
+		ys.logger.Warn("youtube_upcoming_api_fallback_unrecovered_channel",
+			slog.String("channelID", failure.ChannelID),
+			slog.String("source", failure.Source),
+			slog.String("reason", failure.Reason),
+			slog.Int("statusCode", failure.StatusCode))
+	}
 }
 
 func (ys *serviceImpl) getChannelUpcomingStreams(ctx context.Context, channelID string) ([]*domain.Stream, error) {

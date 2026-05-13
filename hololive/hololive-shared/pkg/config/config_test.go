@@ -446,10 +446,68 @@ func TestLoad_ScraperFetcherEngineValidation(t *testing.T) {
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("Load() error = nil, want scraper fetcher engine validation error")
+		t.Fatal("Load() error = nil, want invalid scraper fetcher engine error")
 	}
-	if !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy") {
-		t.Fatalf("Load() error = %v, want scraper fetcher engine validation error", err)
+	if !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE must be one of") {
+		t.Fatalf("Load() error = %v, want SCRAPER_FETCHER_ENGINE validation error", err)
+	}
+}
+
+func TestLoad_ScraperSnapshotAndChannelHealthDefaults(t *testing.T) {
+	setRequiredLoadEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Scraper.Snapshot.Enabled {
+		t.Fatal("Scraper.Snapshot.Enabled = true, want default false")
+	}
+	if !cfg.Scraper.ChannelHealth.Enabled {
+		t.Fatal("Scraper.ChannelHealth.Enabled = false, want default true")
+	}
+	if cfg.Scraper.Snapshot.MaxBodyBytes != 512<<10 {
+		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want %d", cfg.Scraper.Snapshot.MaxBodyBytes, 512<<10)
+	}
+}
+
+func TestLoad_ScraperSnapshotAndChannelHealthEnvOverride(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_SNAPSHOT_ENABLED", "true")
+	t.Setenv("SCRAPER_SNAPSHOT_DIR", "/tmp/snapshots")
+	t.Setenv("SCRAPER_SNAPSHOT_MAX_BODY_BYTES", "1024")
+	t.Setenv("SCRAPER_SNAPSHOT_MIN_INTERVAL_SECONDS", "60")
+	t.Setenv("SCRAPER_CHANNEL_HEALTH_ENABLED", "false")
+	t.Setenv("SCRAPER_CHANNEL_HEALTH_PARSER_DRIFT_BASE_SECONDS", "120")
+	t.Setenv("SCRAPER_BROWSER_DIAGNOSTIC_ENABLED", "true")
+	t.Setenv("SCRAPER_BROWSER_DIAGNOSTIC_ENDPOINT", "http://browser:9222/snapshot")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.Scraper.Snapshot.Enabled {
+		t.Fatal("Scraper.Snapshot.Enabled = false, want true")
+	}
+	if cfg.Scraper.Snapshot.Dir != "/tmp/snapshots" {
+		t.Fatalf("Scraper.Snapshot.Dir = %q", cfg.Scraper.Snapshot.Dir)
+	}
+	if cfg.Scraper.Snapshot.MaxBodyBytes != 1024 {
+		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want 1024", cfg.Scraper.Snapshot.MaxBodyBytes)
+	}
+	if cfg.Scraper.Snapshot.MinInterval != time.Minute {
+		t.Fatalf("Scraper.Snapshot.MinInterval = %s, want 1m", cfg.Scraper.Snapshot.MinInterval)
+	}
+	if cfg.Scraper.ChannelHealth.Enabled {
+		t.Fatal("Scraper.ChannelHealth.Enabled = true, want false")
+	}
+	if cfg.Scraper.ChannelHealth.ParserDriftBase != 2*time.Minute {
+		t.Fatalf("Scraper.ChannelHealth.ParserDriftBase = %s, want 2m", cfg.Scraper.ChannelHealth.ParserDriftBase)
+	}
+	if !cfg.Scraper.BrowserDiagnostic.Enabled {
+		t.Fatal("Scraper.BrowserDiagnostic.Enabled = false, want true")
 	}
 }
 
