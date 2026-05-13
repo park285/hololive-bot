@@ -54,13 +54,7 @@ func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *dom
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrMemberNewsServiceNotInitialized)
 	}
 
-	action := "status"
-
-	if rawAction, ok := params["action"].(string); ok && rawAction != "" {
-		action = rawAction
-	}
-
-	switch action {
+	switch memberNewsSubscriptionAction(params) {
 	case "on", "켜기", "구독":
 		return c.handleSubscribe(ctx, cmdCtx)
 	case "off", "끄기", "해제":
@@ -68,6 +62,15 @@ func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *dom
 	default:
 		return c.handleStatus(ctx, cmdCtx)
 	}
+}
+
+func memberNewsSubscriptionAction(params map[string]any) string {
+	rawAction, ok := params["action"].(string)
+	if !ok || rawAction == "" {
+		return "status"
+	}
+
+	return rawAction
 }
 
 func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {

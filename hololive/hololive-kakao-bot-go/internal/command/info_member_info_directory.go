@@ -72,26 +72,38 @@ func (c *MemberInfoCommand) buildGroupEntries(ctx context.Context, members []*do
 			continue
 		}
 
-		groups := c.memberGroups(ctx, member)
-		if len(groups) == 0 {
-			groups = []string{defaultMemberDirectoryGroup}
-		}
-
 		entry := adapter.MemberDirectoryEntry{
 			PrimaryName:   primaryMemberName(member),
 			SecondaryName: member.Name,
 		}
-
-		for _, group := range groups {
-			if groupEntries[group] == nil {
-				groupEntries[group] = make(map[string]adapter.MemberDirectoryEntry)
-			}
-
-			groupEntries[group][member.Name] = entry
-		}
+		addMemberDirectoryEntry(groupEntries, member.Name, entry, c.directoryGroupsForMember(ctx, member))
 	}
 
 	return groupEntries
+}
+
+func (c *MemberInfoCommand) directoryGroupsForMember(ctx context.Context, member *domain.Member) []string {
+	groups := c.memberGroups(ctx, member)
+	if len(groups) == 0 {
+		return []string{defaultMemberDirectoryGroup}
+	}
+
+	return groups
+}
+
+func addMemberDirectoryEntry(
+	groupEntries map[string]map[string]adapter.MemberDirectoryEntry,
+	memberName string,
+	entry adapter.MemberDirectoryEntry,
+	groups []string,
+) {
+	for _, group := range groups {
+		if groupEntries[group] == nil {
+			groupEntries[group] = make(map[string]adapter.MemberDirectoryEntry)
+		}
+
+		groupEntries[group][memberName] = entry
+	}
 }
 
 func (c *MemberInfoCommand) sortGroupsByPreference(groupEntries map[string]map[string]adapter.MemberDirectoryEntry) []adapter.MemberDirectoryGroup {

@@ -49,17 +49,23 @@ func (mm *MemberMatcher) tryExactValkeyMatch(provider domain.MemberDataProvider,
 		return candidates[0]
 	}
 
-	for _, c := range candidates {
-		if provider != nil {
-			if member := provider.FindMemberByChannelID(c.channelID); member != nil {
-				if member.Org == "Hololive" {
-					return c
-				}
-			}
-		}
+	if candidate := preferHololiveCandidate(provider, candidates); candidate != nil {
+		return candidate
 	}
 
 	return candidates[0]
+}
+
+func preferHololiveCandidate(provider domain.MemberDataProvider, candidates []*matchCandidate) *matchCandidate {
+	if provider == nil {
+		return nil
+	}
+	for _, candidate := range candidates {
+		if member := provider.FindMemberByChannelID(candidate.channelID); member != nil && member.Org == "Hololive" {
+			return candidate
+		}
+	}
+	return nil
 }
 
 // tryPartialStaticMatch: 정적 멤버 데이터에서 부분 매칭을 시도함.
@@ -92,16 +98,23 @@ func (mm *MemberMatcher) tryPartialValkeyMatch(provider domain.MemberDataProvide
 func (mm *MemberMatcher) tryPartialAliasMatch(provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
 	if provider != nil {
 		for _, member := range provider.GetAllMembers() {
-			for _, alias := range member.GetAllAliases() {
-				aliasNorm := stringutil.Normalize(alias)
-				if strings.Contains(aliasNorm, queryNorm) || strings.Contains(queryNorm, aliasNorm) {
-					return mm.candidateFromMember(member, "alias-partial")
-				}
+			if memberHasPartialAliasMatch(member, queryNorm) {
+				return mm.candidateFromMember(member, "alias-partial")
 			}
 		}
 	}
 
 	return nil
+}
+
+func memberHasPartialAliasMatch(member *domain.Member, queryNorm string) bool {
+	for _, alias := range member.GetAllAliases() {
+		aliasNorm := stringutil.Normalize(alias)
+		if strings.Contains(aliasNorm, queryNorm) || strings.Contains(queryNorm, aliasNorm) {
+			return true
+		}
+	}
+	return false
 }
 
 func (mm *MemberMatcher) candidateFromMember(member *domain.Member, source string) *matchCandidate {
@@ -157,13 +170,7 @@ func (mm *MemberMatcher) hydrateChannel(ctx context.Context, candidate *matchCan
 		return nil, nil
 	}
 
-	fallback := &domain.Channel{
-		ID:   candidate.channelID,
-		Name: candidate.memberName,
-	}
-	if candidate.memberName != "" {
-		fallback.EnglishName = toStringPtr(candidate.memberName)
-	}
+	fallback := fallbackChannelFromCandidate(candidate)
 
 	if mm.holodex == nil {
 		return fallback, nil
@@ -177,15 +184,7 @@ func (mm *MemberMatcher) hydrateChannel(ctx context.Context, candidate *matchCan
 			slog.Any("error", err),
 		)
 
-		if mm.cache != nil {
-			if cachedName, cacheErr := mm.cache.HGet(ctx, constants.RedisKeys.AlarmMemberNames, candidate.channelID); cacheErr == nil && cachedName != "" {
-				fallback.Name = cachedName
-				mm.logger.Debug("Using cached channel name as fallback",
-					slog.String("channel_id", candidate.channelID),
-					slog.String("cached_name", cachedName),
-				)
-			}
-		}
+		mm.applyCachedChannelNameFallback(ctx, fallback, candidate)
 
 		return fallback, nil
 	}
@@ -199,17 +198,47 @@ func (mm *MemberMatcher) hydrateChannel(ctx context.Context, candidate *matchCan
 		return fallback, nil
 	}
 
-	if candidate.memberName != "" {
-		if channel.Name == "" {
-			channel.Name = candidate.memberName
-		}
-
-		if channel.EnglishName == nil {
-			channel.EnglishName = toStringPtr(candidate.memberName)
-		}
-	}
+	applyCandidateNameFallback(channel, candidate)
 
 	return channel, nil
+}
+
+func fallbackChannelFromCandidate(candidate *matchCandidate) *domain.Channel {
+	fallback := &domain.Channel{
+		ID:   candidate.channelID,
+		Name: candidate.memberName,
+	}
+	if candidate.memberName != "" {
+		fallback.EnglishName = toStringPtr(candidate.memberName)
+	}
+	return fallback
+}
+
+func (mm *MemberMatcher) applyCachedChannelNameFallback(ctx context.Context, fallback *domain.Channel, candidate *matchCandidate) {
+	if mm.cache == nil {
+		return
+	}
+	cachedName, cacheErr := mm.cache.HGet(ctx, constants.RedisKeys.AlarmMemberNames, candidate.channelID)
+	if cacheErr != nil || cachedName == "" {
+		return
+	}
+	fallback.Name = cachedName
+	mm.logger.Debug("Using cached channel name as fallback",
+		slog.String("channel_id", candidate.channelID),
+		slog.String("cached_name", cachedName),
+	)
+}
+
+func applyCandidateNameFallback(channel *domain.Channel, candidate *matchCandidate) {
+	if candidate.memberName == "" {
+		return
+	}
+	if channel.Name == "" {
+		channel.Name = candidate.memberName
+	}
+	if channel.EnglishName == nil {
+		channel.EnglishName = toStringPtr(candidate.memberName)
+	}
 }
 
 func (mm *MemberMatcher) finalizeCandidate(ctx context.Context, candidate *matchCandidate) (*domain.Channel, error) {

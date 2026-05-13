@@ -273,43 +273,38 @@ func parseDisplayNameComponents(display string) []string {
 		return nil
 	}
 
-	var rawParts []string
+	return splitDisplayNameParts(displayNameRawParts(display))
+}
 
+func displayNameRawParts(display string) []string {
 	openIdx := strings.Index(display, "(")
-
 	closeIdx := strings.LastIndex(display, ")")
-	if openIdx != -1 && closeIdx != -1 && closeIdx > openIdx {
-		before := stringutil.TrimSpace(display[:openIdx])
-		inside := stringutil.TrimSpace(display[openIdx+1 : closeIdx])
-		after := stringutil.TrimSpace(display[closeIdx+1:])
-
-		if before != "" {
-			rawParts = append(rawParts, before)
-		}
-
-		if inside != "" {
-			rawParts = append(rawParts, inside)
-		}
-
-		if after != "" {
-			rawParts = append(rawParts, after)
-		}
-	} else {
-		rawParts = append(rawParts, display)
+	if openIdx == -1 || closeIdx == -1 || closeIdx <= openIdx {
+		return []string{display}
 	}
 
-	var result []string
+	rawParts := make([]string, 0, 3)
+	appendDisplayNamePart(&rawParts, display[:openIdx])
+	appendDisplayNamePart(&rawParts, display[openIdx+1:closeIdx])
+	appendDisplayNamePart(&rawParts, display[closeIdx+1:])
+	return rawParts
+}
 
+func appendDisplayNamePart(rawParts *[]string, part string) {
+	part = stringutil.TrimSpace(part)
+	if part != "" {
+		*rawParts = append(*rawParts, part)
+	}
+}
+
+func splitDisplayNameParts(rawParts []string) []string {
+	var result []string
 	for _, part := range rawParts {
 		segments := strings.SplitSeq(part, "/")
 		for segment := range segments {
-			candidate := stringutil.TrimSpace(segment)
-			if candidate != "" {
-				result = append(result, candidate)
-			}
+			appendDisplayNamePart(&result, segment)
 		}
 	}
-
 	return result
 }
 

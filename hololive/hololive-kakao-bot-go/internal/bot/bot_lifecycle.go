@@ -113,37 +113,53 @@ func (l *BotLifecycle) Start(ctx context.Context) error {
 func (l *BotLifecycle) Shutdown(ctx context.Context) error {
 	l.logInfo("Shutting down bot...")
 
+	l.shutdownWorkerPool(ctx)
+	l.stopHolodex()
+	l.closeCache()
+	l.closePostgres()
+	l.closeDoneCh()
+
+	l.logInfo("Bot shutdown complete")
+
+	return nil
+}
+
+func (l *BotLifecycle) shutdownWorkerPool(ctx context.Context) {
 	if l.workerPool != nil {
 		if err := l.workerPool.ShutdownWait(ctx); err != nil {
 			l.logWarn("Worker pool shutdown error", slog.Any("error", err))
 		}
 	}
+}
 
+func (l *BotLifecycle) stopHolodex() {
 	if l.holodex != nil {
 		l.holodex.Stop()
 	}
+}
 
+func (l *BotLifecycle) closeCache() {
 	if l.cache != nil {
 		if err := l.cache.Close(); err != nil {
 			l.logWarn("Error closing cache", slog.Any("error", err))
 		}
 	}
+}
 
+func (l *BotLifecycle) closePostgres() {
 	if l.postgres != nil {
 		if err := l.postgres.Close(); err != nil {
 			l.logWarn("Error closing postgres", slog.Any("error", err))
 		}
 	}
+}
 
+func (l *BotLifecycle) closeDoneCh() {
 	l.doneOnce.Do(func() {
 		if l.doneCh != nil {
 			close(l.doneCh)
 		}
 	})
-
-	l.logInfo("Bot shutdown complete")
-
-	return nil
 }
 
 func (l *BotLifecycle) logInfo(msg string, attrs ...slog.Attr) {

@@ -62,11 +62,7 @@ func (ma *MessageAdapter) isAlarmCommand(cmd string) bool {
 
 func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage string) *ParsedCommand {
 	if len(args) == 0 {
-		return &ParsedCommand{
-			Type:       domain.CommandAlarmList,
-			Params:     map[string]any{"action": "list"},
-			RawMessage: rawMessage,
-		}
+		return alarmListCommand(rawMessage)
 	}
 
 	subCmd := stringutil.Normalize(args[0])
@@ -74,48 +70,54 @@ func (ma *MessageAdapter) parseAlarmCommand(_ string, args []string, rawMessage 
 
 	if stringutil.ContainsString([]string{"추가", "설정", "set", "add"}, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
-
-		return &ParsedCommand{
-			Type: domain.CommandAlarmAdd,
-			Params: map[string]any{
-				"action": "add",
-				"member": member,
-				"type":   alarmType,
-			},
-			RawMessage: rawMessage,
-		}
+		return alarmMemberCommand(domain.CommandAlarmAdd, "add", member, alarmType, rawMessage)
 	}
 
 	if stringutil.ContainsString([]string{"제거", "삭제", "remove", "del", "delete"}, subCmd) {
 		member, alarmType := ma.extractMemberAndType(restArgs)
-
-		return &ParsedCommand{
-			Type: domain.CommandAlarmRemove,
-			Params: map[string]any{
-				"action": "remove",
-				"member": member,
-				"type":   alarmType,
-			},
-			RawMessage: rawMessage,
-		}
+		return alarmMemberCommand(domain.CommandAlarmRemove, "remove", member, alarmType, rawMessage)
 	}
 
 	if stringutil.ContainsString([]string{"목록", "list", "show"}, subCmd) {
-		return &ParsedCommand{
-			Type:       domain.CommandAlarmList,
-			Params:     map[string]any{"action": "list"},
-			RawMessage: rawMessage,
-		}
+		return alarmListCommand(rawMessage)
 	}
 
 	if stringutil.ContainsString([]string{"초기화", "clear", "reset"}, subCmd) {
-		return &ParsedCommand{
-			Type:       domain.CommandAlarmClear,
-			Params:     map[string]any{"action": "clear"},
-			RawMessage: rawMessage,
-		}
+		return alarmClearCommand(rawMessage)
 	}
 
+	return alarmInvalidCommand(subCmd, restArgs, rawMessage)
+}
+
+func alarmMemberCommand(commandType domain.CommandType, action string, member string, alarmType string, rawMessage string) *ParsedCommand {
+	return &ParsedCommand{
+		Type: commandType,
+		Params: map[string]any{
+			"action": action,
+			"member": member,
+			"type":   alarmType,
+		},
+		RawMessage: rawMessage,
+	}
+}
+
+func alarmListCommand(rawMessage string) *ParsedCommand {
+	return &ParsedCommand{
+		Type:       domain.CommandAlarmList,
+		Params:     map[string]any{"action": "list"},
+		RawMessage: rawMessage,
+	}
+}
+
+func alarmClearCommand(rawMessage string) *ParsedCommand {
+	return &ParsedCommand{
+		Type:       domain.CommandAlarmClear,
+		Params:     map[string]any{"action": "clear"},
+		RawMessage: rawMessage,
+	}
+}
+
+func alarmInvalidCommand(subCmd string, restArgs []string, rawMessage string) *ParsedCommand {
 	return &ParsedCommand{
 		Type: domain.CommandAlarmInvalid,
 		Params: map[string]any{

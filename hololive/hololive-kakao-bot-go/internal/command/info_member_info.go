@@ -21,8 +21,8 @@
 package command
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -58,20 +58,13 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	englishCandidate := getStringParam(params, "member")
 	channelID := getStringParam(params, "channel_id")
 
-	if stringutil.TrimSpace(rawQuery) == "" &&
-		stringutil.TrimSpace(englishCandidate) == "" &&
-		stringutil.TrimSpace(channelID) == "" {
+	if hasNoMemberInfoQuery(rawQuery, englishCandidate, channelID) {
 		return c.renderMemberDirectory(ctx, cmdCtx)
 	}
 
 	member := c.resolveMember(ctx, channelID, englishCandidate, rawQuery)
 	if member == nil {
-		target := englishCandidate
-		if target == "" {
-			target = rawQuery
-		}
-
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(target))
+		return c.sendMemberNotFound(ctx, cmdCtx.Room, englishCandidate, rawQuery)
 	}
 
 	rawProfile, translated, err := c.Deps().OfficialProfiles.GetWithTranslation(ctx, member.Name)
@@ -96,6 +89,21 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
+func hasNoMemberInfoQuery(rawQuery, englishCandidate, channelID string) bool {
+	return stringutil.TrimSpace(rawQuery) == "" &&
+		stringutil.TrimSpace(englishCandidate) == "" &&
+		stringutil.TrimSpace(channelID) == ""
+}
+
+func (c *MemberInfoCommand) sendMemberNotFound(ctx context.Context, room, englishCandidate, rawQuery string) error {
+	target := englishCandidate
+	if target == "" {
+		target = rawQuery
+	}
+
+	return c.Deps().SendError(ctx, room, c.Deps().Formatter.MemberNotFound(target))
+}
+
 func (c *MemberInfoCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
@@ -112,16 +120,12 @@ func (c *MemberInfoCommand) ensureDeps() error {
 func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englishName, query string) *domain.Member {
 	provider := c.Deps().MembersData.WithContext(ctx)
 
-	if channelID != "" {
-		if member := provider.FindMemberByChannelID(channelID); member != nil {
-			return member
-		}
+	if member := findMemberByChannelID(provider, channelID); member != nil {
+		return member
 	}
 
-	if englishName != "" {
-		if member := provider.FindMemberByName(englishName); member != nil {
-			return member
-		}
+	if member := findMemberByName(provider, englishName); member != nil {
+		return member
 	}
 
 	trimmed := stringutil.TrimSpace(query)
@@ -144,6 +148,22 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 	}
 
 	return provider.FindMemberByChannelID(channel.ID)
+}
+
+func findMemberByChannelID(provider domain.MemberDataProvider, channelID string) *domain.Member {
+	if channelID == "" {
+		return nil
+	}
+
+	return provider.FindMemberByChannelID(channelID)
+}
+
+func findMemberByName(provider domain.MemberDataProvider, englishName string) *domain.Member {
+	if englishName == "" {
+		return nil
+	}
+
+	return provider.FindMemberByName(englishName)
 }
 
 func (c *MemberInfoCommand) log() *slog.Logger {

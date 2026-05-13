@@ -49,51 +49,84 @@ func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Mem
 		return nil
 	}
 
+	return normalizedMemberGroups(rawValues)
+}
+
+func normalizedMemberGroups(rawValues []string) []string {
 	normalized := make([]string, 0, len(rawValues))
 	seen := make(map[string]bool)
 
 	for _, raw := range rawValues {
 		for _, token := range splitGroupTokens(raw) {
-			name := normalizeMemberGroup(token)
-			if name == "" {
-				continue
-			}
-
-			if !seen[name] {
-				normalized = append(normalized, name)
-				seen[name] = true
-			}
+			normalized = appendMemberGroup(normalized, seen, token)
 		}
 	}
 
 	return normalized
 }
 
+func appendMemberGroup(groups []string, seen map[string]bool, token string) []string {
+	name := normalizeMemberGroup(token)
+	if name == "" || seen[name] {
+		return groups
+	}
+
+	seen[name] = true
+	return append(groups, name)
+}
+
 func extractUnitValues(profile *domain.TalentProfile, translated *domain.Translated) []string {
 	values := make([]string, 0, 2)
 
-	if translated != nil {
-		for _, row := range translated.Data {
-			if strings.Contains(row.Label, "유닛") && stringutil.TrimSpace(row.Value) != "" {
-				values = append(values, row.Value)
-				break
-			}
-		}
+	if value, ok := translatedUnitValue(translated); ok {
+		values = append(values, value)
 	}
 
-	if len(values) == 0 && profile != nil {
-		for _, entry := range profile.DataEntries {
-			if strings.Contains(entry.Label, "ユニット") || strings.Contains(entry.Label, "Unit") {
-				if stringutil.TrimSpace(entry.Value) != "" {
-					values = append(values, entry.Value)
-				}
-
-				break
-			}
-		}
+	if len(values) == 0 {
+		values = append(values, profileUnitValues(profile)...)
 	}
 
 	return values
+}
+
+func translatedUnitValue(translated *domain.Translated) (string, bool) {
+	if translated == nil {
+		return "", false
+	}
+
+	for _, row := range translated.Data {
+		if strings.Contains(row.Label, "유닛") && stringutil.TrimSpace(row.Value) != "" {
+			return row.Value, true
+		}
+	}
+
+	return "", false
+}
+
+func profileUnitValues(profile *domain.TalentProfile) []string {
+	if profile == nil {
+		return nil
+	}
+
+	for _, entry := range profile.DataEntries {
+		if profileUnitLabel(entry.Label) {
+			return nonEmptyUnitValue(entry.Value)
+		}
+	}
+
+	return nil
+}
+
+func profileUnitLabel(label string) bool {
+	return strings.Contains(label, "ユニット") || strings.Contains(label, "Unit")
+}
+
+func nonEmptyUnitValue(value string) []string {
+	if stringutil.TrimSpace(value) == "" {
+		return nil
+	}
+
+	return []string{value}
 }
 
 func splitGroupTokens(raw string) []string {
@@ -128,31 +161,53 @@ func normalizeMemberGroup(name string) string {
 		return defaultMemberDirectoryGroup
 	}
 
-	if idx := strings.IndexAny(trimmed, "（("); idx != -1 {
-		trimmed = stringutil.TrimSpace(trimmed[:idx])
-	}
+	trimmed = stripMemberGroupAnnotation(trimmed)
 
 	if mapped, ok := memberDirectoryGroupAliases[trimmed]; ok {
 		return mapped
 	}
 
-	if strings.HasPrefix(trimmed, "ホロライブEnglish -") {
-		suffix := strings.Trim(trimmed[len("ホロライブEnglish -"):], "-")
-		if suffix != "" {
-			return suffix
-		}
+	return normalizeEnglishMemberGroup(trimmed)
+}
+
+func stripMemberGroupAnnotation(name string) string {
+	if idx := strings.IndexAny(name, "（("); idx != -1 {
+		return stringutil.TrimSpace(name[:idx])
 	}
 
-	if after, ok := strings.CutPrefix(trimmed, "hololive English"); ok {
-		suffix := stringutil.TrimSpace(after)
+	return name
+}
 
-		suffix = strings.Trim(suffix, "-")
-		if suffix != "" {
-			return suffix
-		}
+func normalizeEnglishMemberGroup(name string) string {
+	if suffix, ok := japaneseEnglishMemberGroupSuffix(name); ok {
+		return suffix
 	}
 
-	return trimmed
+	if suffix, ok := englishMemberGroupSuffix(name); ok {
+		return suffix
+	}
+
+	return name
+}
+
+func japaneseEnglishMemberGroupSuffix(name string) (string, bool) {
+	if !strings.HasPrefix(name, "ホロライブEnglish -") {
+		return "", false
+	}
+
+	suffix := strings.Trim(name[len("ホロライブEnglish -"):], "-")
+	return suffix, suffix != ""
+}
+
+func englishMemberGroupSuffix(name string) (string, bool) {
+	after, ok := strings.CutPrefix(name, "hololive English")
+	if !ok {
+		return "", false
+	}
+
+	suffix := stringutil.TrimSpace(after)
+	suffix = strings.Trim(suffix, "-")
+	return suffix, suffix != ""
 }
 
 func primaryMemberName(member *domain.Member) string {

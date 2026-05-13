@@ -50,6 +50,14 @@ func (c *MajorEventCommand) Description() string {
 }
 
 func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+	if err := c.ensureMajorEventReady(ctx, cmdCtx); err != nil {
+		return err
+	}
+
+	return c.dispatchMajorEventAction(ctx, cmdCtx, majorEventAction(params))
+}
+
+func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *domain.CommandContext) error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
 	}
@@ -58,11 +66,19 @@ func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return c.Deps().SendError(ctx, cmdCtx.Room, "행사 알림 서비스가 초기화되지 않았습니다")
 	}
 
+	return nil
+}
+
+func majorEventAction(params map[string]any) string {
 	action, hasAction := params["action"].(string)
 	if !hasAction {
-		action = "status"
+		return "status"
 	}
 
+	return action
+}
+
+func (c *MajorEventCommand) dispatchMajorEventAction(ctx context.Context, cmdCtx *domain.CommandContext, action string) error {
 	switch action {
 	case "on", "켜기":
 		return c.handleSubscribe(ctx, cmdCtx)

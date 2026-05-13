@@ -41,18 +41,40 @@ func ProvideBotRouter(
 	triggerHandler *sharedserver.TriggerHandler,
 ) (*gin.Engine, error) {
 	return sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{
-		APIKey: cfg.Server.APIKey,
-		RegisterRoutes: func(router *gin.Engine) error {
-			if webhookHandler != nil {
-				router.POST("/webhook/iris", gin.WrapH(webhookHandler))
-			}
-			if triggerHandler != nil {
-				if strings.TrimSpace(cfg.Server.APIKey) == "" {
-					return errors.New("API_SECRET_KEY required")
-				}
-				triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), cfg.Server.APIKey)
-			}
-			return nil
-		},
+		APIKey:         cfg.Server.APIKey,
+		RegisterRoutes: botRouteRegistrar(cfg.Server.APIKey, webhookHandler, triggerHandler),
 	})
+}
+
+func botRouteRegistrar(
+	apiKey string,
+	webhookHandler *iris.WebhookHandler,
+	triggerHandler *sharedserver.TriggerHandler,
+) func(*gin.Engine) error {
+	return func(router *gin.Engine) error {
+		registerWebhookRoute(router, webhookHandler)
+		return registerTriggerRoutes(router, apiKey, triggerHandler)
+	}
+}
+
+func registerWebhookRoute(router *gin.Engine, webhookHandler *iris.WebhookHandler) {
+	if webhookHandler == nil {
+		return
+	}
+	router.POST("/webhook/iris", gin.WrapH(webhookHandler))
+}
+
+func registerTriggerRoutes(
+	router *gin.Engine,
+	apiKey string,
+	triggerHandler *sharedserver.TriggerHandler,
+) error {
+	if triggerHandler == nil {
+		return nil
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		return errors.New("API_SECRET_KEY required")
+	}
+	triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
+	return nil
 }
