@@ -147,19 +147,25 @@ func (ys *serviceImpl) loadChannelNameMap(ctx context.Context) {
 	ys.channelMu.Lock()
 	defer ys.channelMu.Unlock()
 
-	// memberMap은 name -> channelID이므로 역변환
-	for key, channelID := range memberMap {
-		if channelID != "" {
-			// key format: "name:org" → name 부분만 추출
-			name := key
-			if idx := strings.LastIndex(key, ":"); idx > 0 {
-				name = key[:idx]
-			}
-			ys.channelToName[channelID] = name
-		}
-	}
+	ys.storeChannelNameMap(memberMap)
 
 	ys.logger.Debug("Channel name map loaded", slog.Int("count", len(ys.channelToName)))
+}
+
+func (ys *serviceImpl) storeChannelNameMap(memberMap map[string]string) {
+	for key, channelID := range memberMap {
+		if channelID == "" {
+			continue
+		}
+		ys.channelToName[channelID] = memberNameFromCacheKey(key)
+	}
+}
+
+func memberNameFromCacheKey(key string) string {
+	if idx := strings.LastIndex(key, ":"); idx > 0 {
+		return key[:idx]
+	}
+	return key
 }
 
 // getChannelName: channelID로 멤버 이름 조회 (없으면 빈 문자열)

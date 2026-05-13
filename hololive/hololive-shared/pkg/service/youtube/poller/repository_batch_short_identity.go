@@ -55,32 +55,8 @@ func collectShortIdentityAliases(
 ) ([]string, []string) {
 	canonicalIDs := make([]string, 0, len(notifications)+len(trackingRows))
 	aliasSet := make(map[string]struct{}, (len(notifications)+len(trackingRows))*2)
-	collect := func(kind domain.OutboxKind, contentID string) {
-		if kind != domain.OutboxKindNewShort {
-			return
-		}
-		canonicalID := normalizeContentID(kind, contentID)
-		if canonicalID == "" {
-			return
-		}
-		if _, exists := aliasSet[canonicalID]; !exists {
-			canonicalIDs = append(canonicalIDs, canonicalID)
-		}
-		aliasSet[canonicalID] = struct{}{}
-		if rawID := normalizeShortVideoResourceID(contentID); rawID != "" {
-			aliasSet[rawID] = struct{}{}
-		}
-	}
-	for i := range notifications {
-		if notifications[i] != nil {
-			collect(notifications[i].Kind, notifications[i].ContentID)
-		}
-	}
-	for i := range trackingRows {
-		if trackingRows[i] != nil {
-			collect(trackingRows[i].Kind, trackingRows[i].ContentID)
-		}
-	}
+	canonicalIDs = collectNotificationShortIdentityAliases(notifications, aliasSet, canonicalIDs)
+	canonicalIDs = collectTrackingShortIdentityAliases(trackingRows, aliasSet, canonicalIDs)
 	sort.Strings(canonicalIDs)
 
 	aliases := make([]string, 0, len(aliasSet))
@@ -89,6 +65,55 @@ func collectShortIdentityAliases(
 	}
 	sort.Strings(aliases)
 	return canonicalIDs, aliases
+}
+
+func collectNotificationShortIdentityAliases(
+	notifications []*domain.YouTubeNotificationOutbox,
+	aliasSet map[string]struct{},
+	canonicalIDs []string,
+) []string {
+	for i := range notifications {
+		if notifications[i] != nil {
+			canonicalIDs = addShortIdentityAliases(notifications[i].Kind, notifications[i].ContentID, aliasSet, canonicalIDs)
+		}
+	}
+	return canonicalIDs
+}
+
+func collectTrackingShortIdentityAliases(
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	aliasSet map[string]struct{},
+	canonicalIDs []string,
+) []string {
+	for i := range trackingRows {
+		if trackingRows[i] != nil {
+			canonicalIDs = addShortIdentityAliases(trackingRows[i].Kind, trackingRows[i].ContentID, aliasSet, canonicalIDs)
+		}
+	}
+	return canonicalIDs
+}
+
+func addShortIdentityAliases(
+	kind domain.OutboxKind,
+	contentID string,
+	aliasSet map[string]struct{},
+	canonicalIDs []string,
+) []string {
+	if kind != domain.OutboxKindNewShort {
+		return canonicalIDs
+	}
+	canonicalID := normalizeContentID(kind, contentID)
+	if canonicalID == "" {
+		return canonicalIDs
+	}
+	if _, exists := aliasSet[canonicalID]; !exists {
+		canonicalIDs = append(canonicalIDs, canonicalID)
+	}
+	aliasSet[canonicalID] = struct{}{}
+	if rawID := normalizeShortVideoResourceID(contentID); rawID != "" {
+		aliasSet[rawID] = struct{}{}
+	}
+	return canonicalIDs
 }
 
 func loadResolvedShortContentIDs(

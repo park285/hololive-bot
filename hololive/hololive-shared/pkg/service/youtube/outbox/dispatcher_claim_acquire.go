@@ -16,7 +16,7 @@ func (d *Dispatcher) tryClaimDelivery(
 	row domain.YouTubeNotificationDelivery,
 	outbox domain.YouTubeNotificationOutbox,
 ) (deliveryClaimDecision, *deliveryClaimToken, error) {
-	if d == nil || d.db == nil || !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
+	if shouldSkipDeliveryClaim(d, outbox) {
 		return deliveryClaimDecisionProceed, nil, nil
 	}
 
@@ -50,6 +50,10 @@ func (d *Dispatcher) tryClaimDelivery(
 	}
 
 	return d.acquireAlarmStateClaim(ctx, repo, row, outbox, postID, state, claimAt)
+}
+
+func shouldSkipDeliveryClaim(d *Dispatcher, outbox domain.YouTubeNotificationOutbox) bool {
+	return d == nil || d.db == nil || !isCommunityShortsDeliveryAuditKind(outbox.Kind)
 }
 
 func resolveDeliveryClaimTime(row domain.YouTubeNotificationDelivery, outbox domain.YouTubeNotificationOutbox) time.Time {

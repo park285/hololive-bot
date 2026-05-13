@@ -72,68 +72,87 @@ func (p *LivePoller) Poll(ctx context.Context, channelID string) error {
 	now := time.Now()
 
 	for _, event := range events {
-		var status domain.LiveStatus
-		switch event.Status {
-		case "LIVE":
-			status = domain.LiveStatusLive
-		case "UPCOMING":
-			status = domain.LiveStatusUpcoming
-		default:
-			continue // LIVE나 UPCOMING이 아니면 스킵
-		}
-
-		// 스케줄 시작 시간
-		var scheduledStart *time.Time
-		if event.StartTime != nil {
-			t := time.Unix(*event.StartTime, 0)
-			scheduledStart = &t
-		}
-
-		// 라이브 세션 upsert
-		session := &domain.YouTubeLiveSession{
-			VideoID:            event.VideoID,
-			ChannelID:          channelID,
-			Status:             status,
-			Title:              event.Title,
-			ScheduledStartTime: scheduledStart,
-		}
-
-		// LIVE 상태면 시작 시간 기록
-		if status == domain.LiveStatusLive {
-			session.StartedAt = &now
-		}
-
-		p.db.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "video_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"status", "title", "scheduled_start_time", "started_at", "last_seen_at"}),
-		}).Create(session)
-
-		// LIVE 상태면 시청자 샘플 저장
-		if status == domain.LiveStatusLive {
-			viewerCount := parseViewerCount(event.ViewCountText)
-			if viewerCount > 0 {
-				sample := &domain.YouTubeLiveViewerSample{
-					VideoID:           event.VideoID,
-					CapturedAt:        now,
-					ChannelID:         channelID,
-					ConcurrentViewers: viewerCount,
-				}
-
-				p.db.WithContext(ctx).Clauses(clause.OnConflict{
-					DoNothing: true,
-				}).Create(sample)
-
-				slog.Debug("Live viewer sample saved",
-					"video_id", event.VideoID,
-					"viewers", viewerCount)
-			}
-		}
+		p.pollEvent(ctx, channelID, event, now)
 	}
 
 	// 더 이상 보이지 않는 LIVE 세션을 ENDED로 전환
 	p.markEndedSessions(ctx, channelID, events)
 
 	return nil
+}
+
+func (p *LivePoller) pollEvent(ctx context.Context, channelID string, event *scraper.UpcomingEvent, now time.Time) {
+	status, ok := liveStatusFromEvent(event.Status)
+	if !ok {
+		return
+	}
+
+	p.saveLiveSession(ctx, channelID, event, status, now)
+
+	if status == domain.LiveStatusLive {
+		p.saveLiveViewerSample(ctx, channelID, event, now)
+	}
+}
+
+func liveStatusFromEvent(eventStatus string) (domain.LiveStatus, bool) {
+	switch eventStatus {
+	case "LIVE":
+		return domain.LiveStatusLive, true
+	case "UPCOMING":
+		return domain.LiveStatusUpcoming, true
+	default:
+		return "", false
+	}
+}
+
+func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, event *scraper.UpcomingEvent, status domain.LiveStatus, now time.Time) {
+	session := &domain.YouTubeLiveSession{
+		VideoID:            event.VideoID,
+		ChannelID:          channelID,
+		Status:             status,
+		Title:              event.Title,
+		ScheduledStartTime: scheduledStartTime(event),
+	}
+
+	if status == domain.LiveStatusLive {
+		session.StartedAt = &now
+	}
+
+	p.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "video_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"status", "title", "scheduled_start_time", "started_at", "last_seen_at"}),
+	}).Create(session)
+}
+
+func scheduledStartTime(event *scraper.UpcomingEvent) *time.Time {
+	if event.StartTime == nil {
+		return nil
+	}
+
+	t := time.Unix(*event.StartTime, 0)
+	return &t
+}
+
+func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string, event *scraper.UpcomingEvent, now time.Time) {
+	viewerCount := parseViewerCount(event.ViewCountText)
+	if viewerCount <= 0 {
+		return
+	}
+
+	sample := &domain.YouTubeLiveViewerSample{
+		VideoID:           event.VideoID,
+		CapturedAt:        now,
+		ChannelID:         channelID,
+		ConcurrentViewers: viewerCount,
+	}
+
+	p.db.WithContext(ctx).Clauses(clause.OnConflict{
+		DoNothing: true,
+	}).Create(sample)
+
+	slog.Debug("Live viewer sample saved",
+		"video_id", event.VideoID,
+		"viewers", viewerCount)
 }
 
 // markEndedSessions: 종료된 세션 마킹

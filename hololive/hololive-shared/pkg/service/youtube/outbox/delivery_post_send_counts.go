@@ -60,30 +60,35 @@ type scannableTime struct {
 }
 
 func (s *scannableTime) Scan(value any) error {
+	parsed, err := scanTimeValue(value)
+	if err != nil {
+		return err
+	}
+	s.value = parsed
+	return nil
+}
+
+func scanTimeValue(value any) (*time.Time, error) {
+	if value == nil {
+		return nil, nil
+	}
+	if v, ok := value.(time.Time); ok {
+		return normalizedTimePtr(v), nil
+	}
+	if raw, ok := scanRawString(value); ok {
+		return parseScannableTime(raw)
+	}
+	return nil, fmt.Errorf("scan time: unsupported type %T", value)
+}
+
+func scanRawString(value any) (string, bool) {
 	switch v := value.(type) {
-	case nil:
-		s.value = nil
-		return nil
-	case time.Time:
-		normalized := v.UTC()
-		s.value = &normalized
-		return nil
 	case string:
-		parsed, err := parseScannableTime(v)
-		if err != nil {
-			return err
-		}
-		s.value = parsed
-		return nil
+		return v, true
 	case []byte:
-		parsed, err := parseScannableTime(string(v))
-		if err != nil {
-			return err
-		}
-		s.value = parsed
-		return nil
+		return string(v), true
 	default:
-		return fmt.Errorf("scan time: unsupported type %T", value)
+		return "", false
 	}
 }
 
@@ -114,28 +119,44 @@ type scannableBool struct {
 }
 
 func (s *scannableBool) Scan(value any) error {
+	parsed, err := scanBoolValue(value)
+	if err != nil {
+		return err
+	}
+	s.value = parsed
+	return nil
+}
+
+func scanBoolValue(value any) (*bool, error) {
+	if value == nil {
+		return nil, nil
+	}
+	if parsed, ok := scanBoolPrimitive(value); ok {
+		return parsed, nil
+	}
+	if raw, ok := scanRawString(value); ok {
+		return scanBoolString(raw)
+	}
+	return nil, fmt.Errorf("scan bool: unsupported type %T", value)
+}
+
+func scanBoolPrimitive(value any) (*bool, bool) {
+	if v, ok := value.(bool); ok {
+		return boolPtr(v), true
+	}
+	return scanBoolInteger(value)
+}
+
+func scanBoolInteger(value any) (*bool, bool) {
 	switch v := value.(type) {
-	case nil:
-		s.value = nil
-		return nil
-	case bool:
-		s.value = new(v)
-		return nil
 	case int64:
-		s.value = new(v != 0)
-		return nil
+		return boolPtr(v != 0), true
 	case int32:
-		s.value = new(v != 0)
-		return nil
+		return boolPtr(v != 0), true
 	case int:
-		s.value = new(v != 0)
-		return nil
-	case []byte:
-		return s.scanString(string(v))
-	case string:
-		return s.scanString(v)
+		return boolPtr(v != 0), true
 	default:
-		return fmt.Errorf("scan bool: unsupported type %T", value)
+		return nil, false
 	}
 }
 
@@ -154,27 +175,23 @@ func (s scannableBool) Value() (driver.Value, error) {
 	return *s.value, nil
 }
 
-func (s *scannableBool) scanString(raw string) error {
+func scanBoolString(raw string) (*bool, error) {
 	cleaned := strings.TrimSpace(raw)
 	if cleaned == "" {
-		s.value = nil
-		return nil
+		return nil, nil
 	}
 
 	if parsed, err := strconv.ParseBool(cleaned); err == nil {
-		s.value = new(parsed)
-		return nil
+		return boolPtr(parsed), nil
 	}
 
 	switch cleaned {
 	case "0":
-		s.value = new(false)
-		return nil
+		return boolPtr(false), nil
 	case "1":
-		s.value = new(true)
-		return nil
+		return boolPtr(true), nil
 	default:
-		return fmt.Errorf("scan bool: unsupported value %q", cleaned)
+		return nil, fmt.Errorf("scan bool: unsupported value %q", cleaned)
 	}
 }
 
@@ -209,6 +226,11 @@ func parseScannableTime(raw string) (*time.Time, error) {
 	}
 
 	return nil, fmt.Errorf("scan time: unsupported value %q", cleaned)
+}
+
+func normalizedTimePtr(value time.Time) *time.Time {
+	normalized := value.UTC()
+	return &normalized
 }
 
 func (r *DeliveryTelemetryRepository) ListPostSendCountsSince(ctx context.Context, since time.Time) ([]PostSendCount, error) {
@@ -310,46 +332,13 @@ func (r *DeliveryTelemetryRepository) ListPostSendCountsByFinalizedObservationWi
 	var scanned []postSendCountScanRow
 	query := r.db.WithContext(ctx).
 		Table("youtube_community_shorts_observation_post_baselines AS base").
-		Select(strings.Join([]string{
-			"base.kind AS outbox_kind",
-			"CASE base.kind WHEN 'COMMUNITY_POST' THEN 'COMMUNITY' WHEN 'NEW_SHORT' THEN 'SHORTS' ELSE 'LIVE' END AS alarm_type",
-			"COALESCE(track.channel_id, base.channel_id) AS channel_id",
-			"base.post_id AS post_id",
-			"COALESCE(track.content_id, base.post_id) AS content_id",
-			"COALESCE(track.actual_published_at, base.actual_published_at) AS actual_published_at",
-			"COALESCE(track.detected_at, base.detected_at) AS detected_at",
-			"track.alarm_sent_at AS alarm_sent_at",
-			"track.alarm_latency_millis AS alarm_latency_millis",
-			"track.alarm_latency_exceeded AS alarm_latency_exceeded",
-			"MIN(t.event_at) AS first_event_at",
-			"MAX(t.event_at) AS last_event_at",
-			"MIN(CASE WHEN t.send_result = 'success' THEN t.event_at END) AS first_success_at",
-			"MAX(CASE WHEN t.send_result = 'success' THEN t.event_at END) AS last_success_at",
-			"COUNT(DISTINCT o.id) AS outbox_count",
-			"COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) AS success_send_count",
-			"COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS success_room_count",
-			"COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) - COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS duplicate_success_count",
-			"COALESCE(SUM(CASE WHEN t.send_result <> 'success' THEN 1 ELSE 0 END), 0) AS failed_attempt_count",
-		}, ", ")).
+		Select(finalizedObservationPostSendCountsSelectSQL()).
 		Joins("LEFT JOIN youtube_content_alarm_tracking track ON track.kind = base.kind AND track.canonical_content_id = base.post_id").
 		Joins("LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id").
 		Joins("LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id").
 		Where("base.runtime_name = ?", normalizedRuntimeName).
 		Where("base.bigbang_cutover_at = ?", bigBangCutoverAt.UTC()).
-		Group(strings.Join([]string{
-			"base.kind",
-			"base.channel_id",
-			"base.post_id",
-			"base.actual_published_at",
-			"base.detected_at",
-			"track.channel_id",
-			"track.content_id",
-			"track.actual_published_at",
-			"track.detected_at",
-			"track.alarm_sent_at",
-			"track.alarm_latency_millis",
-			"track.alarm_latency_exceeded",
-		}, ", ")).
+		Group(finalizedObservationPostSendCountsGroupSQL()).
 		Order("COALESCE(MAX(CASE WHEN t.send_result = 'success' THEN t.event_at END), MAX(t.event_at), track.actual_published_at, base.actual_published_at, track.detected_at, base.detected_at) DESC").
 		Order("base.post_id ASC")
 	if err := query.Scan(&scanned).Error; err != nil {
@@ -357,6 +346,47 @@ func (r *DeliveryTelemetryRepository) ListPostSendCountsByFinalizedObservationWi
 	}
 
 	return buildPostSendCountsFromScanRows(scanned), nil
+}
+
+func finalizedObservationPostSendCountsSelectSQL() string {
+	return strings.Join([]string{
+		"base.kind AS outbox_kind",
+		"CASE base.kind WHEN 'COMMUNITY_POST' THEN 'COMMUNITY' WHEN 'NEW_SHORT' THEN 'SHORTS' ELSE 'LIVE' END AS alarm_type",
+		"COALESCE(track.channel_id, base.channel_id) AS channel_id",
+		"base.post_id AS post_id",
+		"COALESCE(track.content_id, base.post_id) AS content_id",
+		"COALESCE(track.actual_published_at, base.actual_published_at) AS actual_published_at",
+		"COALESCE(track.detected_at, base.detected_at) AS detected_at",
+		"track.alarm_sent_at AS alarm_sent_at",
+		"track.alarm_latency_millis AS alarm_latency_millis",
+		"track.alarm_latency_exceeded AS alarm_latency_exceeded",
+		"MIN(t.event_at) AS first_event_at",
+		"MAX(t.event_at) AS last_event_at",
+		"MIN(CASE WHEN t.send_result = 'success' THEN t.event_at END) AS first_success_at",
+		"MAX(CASE WHEN t.send_result = 'success' THEN t.event_at END) AS last_success_at",
+		"COUNT(DISTINCT o.id) AS outbox_count",
+		"COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) AS success_send_count",
+		"COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS success_room_count",
+		"COALESCE(SUM(CASE WHEN t.send_result = 'success' THEN 1 ELSE 0 END), 0) - COUNT(DISTINCT CASE WHEN t.send_result = 'success' THEN t.room_id END) AS duplicate_success_count",
+		"COALESCE(SUM(CASE WHEN t.send_result <> 'success' THEN 1 ELSE 0 END), 0) AS failed_attempt_count",
+	}, ", ")
+}
+
+func finalizedObservationPostSendCountsGroupSQL() string {
+	return strings.Join([]string{
+		"base.kind",
+		"base.channel_id",
+		"base.post_id",
+		"base.actual_published_at",
+		"base.detected_at",
+		"track.channel_id",
+		"track.content_id",
+		"track.actual_published_at",
+		"track.detected_at",
+		"track.alarm_sent_at",
+		"track.alarm_latency_millis",
+		"track.alarm_latency_exceeded",
+	}, ", ")
 }
 
 func (r *DeliveryTelemetryRepository) listPostSendCounts(

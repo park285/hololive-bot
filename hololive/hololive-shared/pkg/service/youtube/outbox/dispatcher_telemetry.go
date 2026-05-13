@@ -16,14 +16,24 @@ func (d *Dispatcher) telemetryLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	d.processDeliveryTelemetry(ctx)
+	d.runDeliveryTelemetryLoop(ctx, ticker.C)
+}
 
+func (d *Dispatcher) runDeliveryTelemetryLoop(ctx context.Context, ticks <-chan time.Time) {
 	for {
-		select {
-		case <-ctx.Done():
+		if !waitForDeliveryTelemetryTick(ctx, ticks) {
 			return
-		case <-ticker.C:
-			d.processDeliveryTelemetry(ctx)
 		}
+		d.processDeliveryTelemetry(ctx)
+	}
+}
+
+func waitForDeliveryTelemetryTick(ctx context.Context, ticks <-chan time.Time) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-ticks:
+		return true
 	}
 }
 
@@ -32,31 +42,56 @@ func (d *Dispatcher) processDeliveryTelemetry(ctx context.Context) {
 		return
 	}
 
-	var backfillSince time.Time
-	if d.cfg.TelemetryRetention > 0 {
-		backfillSince = time.Now().UTC().Add(-d.cfg.TelemetryRetention)
+	d.backfillDeliveryTelemetry(ctx)
+	rows, ok := d.fetchDeliveryTelemetryRows(ctx)
+	if !ok || len(rows) == 0 {
+		return
 	}
 
-	if _, err := d.telemetry.BackfillFromDelivery(ctx, d.cfg.TelemetryBackfillBatch, backfillSince); err != nil {
+	classificationsByOutboxID := d.loadDeliveryTelemetryClassificationsForRows(ctx, rows)
+	loggedIDs, failedIDs := d.emitDeliveryTelemetryRows(rows, classificationsByOutboxID)
+	d.markDeliveryTelemetryResults(ctx, loggedIDs, failedIDs)
+}
+
+func (d *Dispatcher) backfillDeliveryTelemetry(ctx context.Context) {
+	if _, err := d.telemetry.BackfillFromDelivery(ctx, d.cfg.TelemetryBackfillBatch, d.deliveryTelemetryBackfillSince()); err != nil {
 		d.logger.Warn("Failed to backfill delivery telemetry", slog.Any("error", err))
 	}
+}
 
+func (d *Dispatcher) deliveryTelemetryBackfillSince() time.Time {
+	if d.cfg.TelemetryRetention <= 0 {
+		return time.Time{}
+	}
+	return time.Now().UTC().Add(-d.cfg.TelemetryRetention)
+}
+
+func (d *Dispatcher) fetchDeliveryTelemetryRows(ctx context.Context) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
 	rows, err := d.telemetry.FetchAndLockPending(ctx, d.cfg.TelemetryFlushBatch, d.cfg.LockTimeout)
 	if err != nil {
 		d.logger.Warn("Failed to fetch delivery telemetry buffer", slog.Any("error", err))
-		return
+		return nil, false
 	}
-	if len(rows) == 0 {
-		return
-	}
+	return rows, true
+}
 
+func (d *Dispatcher) loadDeliveryTelemetryClassificationsForRows(
+	ctx context.Context,
+	rows []domain.YouTubeNotificationDeliveryTelemetry,
+) map[int64]PostLatencyClassificationResult {
 	classificationsByOutboxID, err := d.loadDeliveryTelemetryLatencyClassifications(ctx, rows)
 	if err != nil {
 		d.logger.Warn("Failed to load delivery telemetry latency classifications",
 			slog.Int("rows", len(rows)),
 			slog.Any("error", err))
 	}
+	return classificationsByOutboxID
+}
 
+func (d *Dispatcher) emitDeliveryTelemetryRows(
+	rows []domain.YouTubeNotificationDeliveryTelemetry,
+	classificationsByOutboxID map[int64]PostLatencyClassificationResult,
+) ([]int64, []int64) {
 	loggedIDs := make([]int64, 0, len(rows))
 	failedIDs := make([]int64, 0)
 	for i := range rows {
@@ -66,7 +101,10 @@ func (d *Dispatcher) processDeliveryTelemetry(ctx context.Context) {
 		}
 		loggedIDs = append(loggedIDs, rows[i].ID)
 	}
+	return loggedIDs, failedIDs
+}
 
+func (d *Dispatcher) markDeliveryTelemetryResults(ctx context.Context, loggedIDs, failedIDs []int64) {
 	if err := d.telemetry.MarkLoggedBatch(ctx, loggedIDs); err != nil {
 		d.logger.Warn("Failed to mark delivery telemetry as logged", slog.Any("error", err))
 	}

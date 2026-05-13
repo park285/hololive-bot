@@ -52,8 +52,8 @@ func (r *GormRepository) FindClosedCommunityShortsObservationWindow(
 	bigBangCutoverAt time.Time,
 	now time.Time,
 ) (*domain.YouTubeCommunityShortsObservationWindow, error) {
-	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("find closed community shorts observation window: db is nil")
+	if err := r.requireCommunityShortsObservationWindowDB("find closed community shorts observation window"); err != nil {
+		return nil, err
 	}
 
 	normalizedNow := yttimestamp.Normalize(now)
@@ -69,37 +69,81 @@ func (r *GormRepository) FindClosedCommunityShortsObservationWindow(
 		return nil, nil
 	}
 
-	if !normalizedNow.Before(window.ObservationEndedAt.UTC()) {
-		closeErr := r.closeCommunityShortsObservationWindow(ctx, window.RuntimeName, window.BigBangCutoverAt, window.ObservationEndedAt)
-		if closeErr != nil {
-			return nil, fmt.Errorf("find closed community shorts observation window: close due window: %w", closeErr)
-		}
-		window, err = r.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
-		if err != nil {
-			return nil, fmt.Errorf("find closed community shorts observation window: reload row: %w", err)
-		}
-		if window == nil {
-			return nil, nil
-		}
-	}
-
-	if !communityShortsObservationWindowClosed(window) {
-		return nil, fmt.Errorf(
-			"find closed community shorts observation window: observation window is still open until %s",
-			window.ObservationEndedAt.UTC().Format(time.RFC3339),
-		)
-	}
-	finalizeErr := r.ensureCommunityShortsObservationPostBaselines(ctx, window)
-	if finalizeErr != nil {
-		return nil, fmt.Errorf("find closed community shorts observation window: finalize observation post baseline: %w", finalizeErr)
-	}
-
-	window, err = r.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
+	window, err = r.closeDueCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt, normalizedNow, window)
 	if err != nil {
-		return nil, fmt.Errorf("find closed community shorts observation window: reload finalized row: %w", err)
+		return nil, fmt.Errorf("find closed community shorts observation window: %w", err)
 	}
 	if window == nil {
 		return nil, nil
+	}
+
+	if err := requireClosedCommunityShortsObservationWindow(window); err != nil {
+		return nil, fmt.Errorf("find closed community shorts observation window: %w", err)
+	}
+
+	window, err = r.finalizeCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt, window)
+	if err != nil {
+		return nil, fmt.Errorf("find closed community shorts observation window: %w", err)
+	}
+
+	return window, nil
+}
+
+func (r *GormRepository) requireCommunityShortsObservationWindowDB(action string) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("%s: db is nil", action)
+	}
+	return nil
+}
+
+func (r *GormRepository) closeDueCommunityShortsObservationWindow(
+	ctx context.Context,
+	runtimeName string,
+	bigBangCutoverAt time.Time,
+	normalizedNow time.Time,
+	window *domain.YouTubeCommunityShortsObservationWindow,
+) (*domain.YouTubeCommunityShortsObservationWindow, error) {
+	if normalizedNow.Before(window.ObservationEndedAt.UTC()) {
+		return window, nil
+	}
+
+	closeErr := r.closeCommunityShortsObservationWindow(ctx, window.RuntimeName, window.BigBangCutoverAt, window.ObservationEndedAt)
+	if closeErr != nil {
+		return nil, fmt.Errorf("close due window: %w", closeErr)
+	}
+
+	window, err := r.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
+	if err != nil {
+		return nil, fmt.Errorf("reload row: %w", err)
+	}
+
+	return window, nil
+}
+
+func requireClosedCommunityShortsObservationWindow(window *domain.YouTubeCommunityShortsObservationWindow) error {
+	if communityShortsObservationWindowClosed(window) {
+		return nil
+	}
+	return fmt.Errorf(
+		"observation window is still open until %s",
+		window.ObservationEndedAt.UTC().Format(time.RFC3339),
+	)
+}
+
+func (r *GormRepository) finalizeCommunityShortsObservationWindow(
+	ctx context.Context,
+	runtimeName string,
+	bigBangCutoverAt time.Time,
+	window *domain.YouTubeCommunityShortsObservationWindow,
+) (*domain.YouTubeCommunityShortsObservationWindow, error) {
+	finalizeErr := r.ensureCommunityShortsObservationPostBaselines(ctx, window)
+	if finalizeErr != nil {
+		return nil, fmt.Errorf("finalize observation post baseline: %w", finalizeErr)
+	}
+
+	window, err := r.FindCommunityShortsObservationWindow(ctx, runtimeName, bigBangCutoverAt)
+	if err != nil {
+		return nil, fmt.Errorf("reload finalized row: %w", err)
 	}
 
 	return window, nil
@@ -197,14 +241,9 @@ func normalizeCommunityShortsObservationWindow(
 		return nil, fmt.Errorf("window is nil")
 	}
 
-	runtimeName := strings.TrimSpace(window.RuntimeName)
-	if runtimeName == "" {
-		return nil, fmt.Errorf("runtime name is empty")
-	}
-
-	appVersion := strings.TrimSpace(window.AppVersion)
-	if appVersion == "" {
-		return nil, fmt.Errorf("app version is empty")
+	text, err := normalizeCommunityShortsObservationWindowText(window)
+	if err != nil {
+		return nil, err
 	}
 
 	times, normalizeErr := normalizeCommunityShortsObservationWindowTimes(window)
@@ -235,9 +274,9 @@ func normalizeCommunityShortsObservationWindow(
 	}
 
 	return &domain.YouTubeCommunityShortsObservationWindow{
-		RuntimeName:             runtimeName,
+		RuntimeName:             text.runtimeName,
 		BigBangCutoverAt:        times.bigBangCutoverAt,
-		AppVersion:              appVersion,
+		AppVersion:              text.appVersion,
 		TargetChannelCount:      window.TargetChannelCount,
 		DeploymentCompletedAt:   times.deploymentCompletedAt,
 		ObservationStartedAt:    times.observationStartedAt,
@@ -245,6 +284,30 @@ func normalizeCommunityShortsObservationWindow(
 		ClosedAt:                closedAt,
 		FinalizedPostBaselineAt: finalizedPostBaselineAt,
 		FinalizedPostCount:      window.FinalizedPostCount,
+	}, nil
+}
+
+type normalizedObservationWindowText struct {
+	runtimeName string
+	appVersion  string
+}
+
+func normalizeCommunityShortsObservationWindowText(
+	window *domain.YouTubeCommunityShortsObservationWindow,
+) (normalizedObservationWindowText, error) {
+	runtimeName := strings.TrimSpace(window.RuntimeName)
+	if runtimeName == "" {
+		return normalizedObservationWindowText{}, fmt.Errorf("runtime name is empty")
+	}
+
+	appVersion := strings.TrimSpace(window.AppVersion)
+	if appVersion == "" {
+		return normalizedObservationWindowText{}, fmt.Errorf("app version is empty")
+	}
+
+	return normalizedObservationWindowText{
+		runtimeName: runtimeName,
+		appVersion:  appVersion,
 	}, nil
 }
 

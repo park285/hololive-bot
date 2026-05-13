@@ -154,12 +154,20 @@ func mergeCollectedShort(dst *scraper.Short, src *scraper.Short) {
 	if dst.Title == "" {
 		dst.Title = src.Title
 	}
-	if len(dst.Thumbnail) == 0 && len(src.Thumbnail) > 0 {
-		dst.Thumbnail = append([]scraper.Thumbnail(nil), src.Thumbnail...)
-	}
+	mergeShortThumbnail(dst, src)
 	if dst.ViewCount == 0 && src.ViewCount != 0 {
 		dst.ViewCount = src.ViewCount
 	}
+	mergeShortPublishedAt(dst, src)
+}
+
+func mergeShortThumbnail(dst *scraper.Short, src *scraper.Short) {
+	if len(dst.Thumbnail) == 0 && len(src.Thumbnail) > 0 {
+		dst.Thumbnail = append([]scraper.Thumbnail(nil), src.Thumbnail...)
+	}
+}
+
+func mergeShortPublishedAt(dst *scraper.Short, src *scraper.Short) {
 	if dst.PublishedAt == nil && src.PublishedAt != nil {
 		publishedAt := *src.PublishedAt
 		dst.PublishedAt = &publishedAt

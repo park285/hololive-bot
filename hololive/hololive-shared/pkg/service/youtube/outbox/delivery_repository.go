@@ -166,41 +166,72 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 
 	sentAt := canonicalSentAtNow()
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		trackingMarks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, claimTokens)
-		if err != nil {
-			return fmt.Errorf("load tracking marks: %w", err)
-		}
-
-		result := tx.Model(&domain.YouTubeNotificationDelivery{}).
-			Where("id IN ? AND status = ?", uniqueIDs, domain.OutboxStatusPending).
-			Updates(map[string]any{
-				"status":    domain.OutboxStatusSent,
-				"sent_at":   sentAt,
-				"locked_at": nil,
-				"error":     "",
-			})
-		if result.Error != nil {
-			return fmt.Errorf("update delivery rows: %w", result.Error)
-		}
-
-		if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
-			return fmt.Errorf("update tracking rows: %w", err)
-		}
-		if len(trackingMarks) > 0 {
-			identities := make([]PostTrackingIdentity, 0, len(trackingMarks))
-			for i := range trackingMarks {
-				identities = append(identities, PostTrackingIdentity{Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID})
-			}
-			if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-				return fmt.Errorf("persist tracking latency classifications: %w", err)
-			}
-		}
-
-		return nil
+		return markSentBatchTx(ctx, tx, uniqueIDs, sentAt, claimTokens)
 	}); err != nil {
 		return fmt.Errorf("mark delivery rows sent transaction: %w", err)
 	}
 
+	return nil
+}
+
+func markSentBatchTx(
+	ctx context.Context,
+	tx *gorm.DB,
+	uniqueIDs []int64,
+	sentAt time.Time,
+	claimTokens []deliveryClaimToken,
+) error {
+	trackingMarks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, claimTokens)
+	if err != nil {
+		return fmt.Errorf("load tracking marks: %w", err)
+	}
+	if err := updateSentDeliveryRows(tx, uniqueIDs, sentAt); err != nil {
+		return err
+	}
+	return persistSentDeliveryTracking(ctx, tx, trackingMarks)
+}
+
+func updateSentDeliveryRows(tx *gorm.DB, uniqueIDs []int64, sentAt time.Time) error {
+	result := tx.Model(&domain.YouTubeNotificationDelivery{}).
+		Where("id IN ? AND status = ?", uniqueIDs, domain.OutboxStatusPending).
+		Updates(map[string]any{
+			"status":    domain.OutboxStatusSent,
+			"sent_at":   sentAt,
+			"locked_at": nil,
+			"error":     "",
+		})
+	if result.Error != nil {
+		return fmt.Errorf("update delivery rows: %w", result.Error)
+	}
+	return nil
+}
+
+func persistSentDeliveryTracking(
+	ctx context.Context,
+	tx *gorm.DB,
+	trackingMarks []trackingrepo.AlarmSentMark,
+) error {
+	if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
+		return fmt.Errorf("update tracking rows: %w", err)
+	}
+	return persistSentDeliveryLatencyClassifications(ctx, tx, trackingMarks)
+}
+
+func persistSentDeliveryLatencyClassifications(
+	ctx context.Context,
+	tx *gorm.DB,
+	trackingMarks []trackingrepo.AlarmSentMark,
+) error {
+	if len(trackingMarks) == 0 {
+		return nil
+	}
+	identities := make([]PostTrackingIdentity, 0, len(trackingMarks))
+	for i := range trackingMarks {
+		identities = append(identities, PostTrackingIdentity{Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID})
+	}
+	if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+		return fmt.Errorf("persist tracking latency classifications: %w", err)
+	}
 	return nil
 }
 

@@ -63,52 +63,86 @@ func (d *Dispatcher) selectClaimedDeliveries(
 	limit := min(len(outboxes), len(rows))
 
 	for i := range limit {
-		claimIdentity, identityErr := deliveryClaimIdentityForOutbox(outboxes[i])
-		if identityErr != nil {
-			d.logClaimIssue(
-				"Failed to resolve community/shorts delivery claim identity before send",
-				rows[i],
-				outboxes[i],
-				slog.LevelWarn,
-				slog.Any("error", identityErr),
-			)
-			selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, rows[i].ID)
-			selection.retryOutboxIDs = append(selection.retryOutboxIDs, outboxes[i].ID)
-			continue
-		}
-		decision, claimToken, reused, err := reuseCache.resolve(claimIdentity, func() (deliveryClaimDecision, *deliveryClaimToken, error) {
-			return d.tryClaimDelivery(ctx, rows[i], outboxes[i])
-		})
-		if err != nil {
-			d.logClaimIssue("Failed to claim community/shorts alarm state before send", rows[i], outboxes[i], slog.LevelWarn, slog.Any("error", err))
-			selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, rows[i].ID)
-			selection.retryOutboxIDs = append(selection.retryOutboxIDs, outboxes[i].ID)
-			continue
-		}
-
-		switch decision {
-		case deliveryClaimDecisionProceed:
-			rowClaimTokens := []deliveryClaimToken(nil)
-			if claimToken != nil && !reused {
-				token := *claimToken
-				selection.claimTokens = append(selection.claimTokens, token)
-				rowClaimTokens = []deliveryClaimToken{token}
-			}
-			selection.sendRows = append(selection.sendRows, rows[i])
-			selection.sendOutboxes = append(selection.sendOutboxes, outboxes[i])
-			selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
-		case deliveryClaimDecisionAlreadySent:
-			d.logClaimIssue("Skipped community/shorts delivery because the post was already sent", rows[i], outboxes[i], slog.LevelInfo)
-			selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, rows[i].ID)
-			selection.alreadySentOutboxIDs = append(selection.alreadySentOutboxIDs, outboxes[i].ID)
-		case deliveryClaimDecisionRetryLater:
-			d.logClaimIssue("Skipped community/shorts delivery because another execution owns the post claim", rows[i], outboxes[i], slog.LevelInfo)
-			selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, rows[i].ID)
-			selection.retryOutboxIDs = append(selection.retryOutboxIDs, outboxes[i].ID)
-		}
+		d.applyDeliveryClaimSelection(ctx, &selection, rows[i], outboxes[i], reuseCache)
 	}
 
 	return selection
+}
+
+func (d *Dispatcher) applyDeliveryClaimSelection(
+	ctx context.Context,
+	selection *deliveryClaimSelection,
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+	reuseCache *deliveryClaimReuseCache,
+) {
+	claimIdentity, err := deliveryClaimIdentityForOutbox(outbox)
+	if err != nil {
+		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve community/shorts delivery claim identity before send", err)
+		return
+	}
+
+	decision, claimToken, reused, err := reuseCache.resolve(claimIdentity, func() (deliveryClaimDecision, *deliveryClaimToken, error) {
+		return d.tryClaimDelivery(ctx, row, outbox)
+	})
+	if err != nil {
+		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to claim community/shorts alarm state before send", err)
+		return
+	}
+
+	d.applyDeliveryClaimDecision(selection, row, outbox, decision, claimToken, reused)
+}
+
+func (d *Dispatcher) retryDeliveryClaimSelection(
+	selection *deliveryClaimSelection,
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+	message string,
+	err error,
+) {
+	d.logClaimIssue(message, row, outbox, slog.LevelWarn, slog.Any("error", err))
+	selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
+	selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+}
+
+func (d *Dispatcher) applyDeliveryClaimDecision(
+	selection *deliveryClaimSelection,
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+	decision deliveryClaimDecision,
+	claimToken *deliveryClaimToken,
+	reused bool,
+) {
+	switch decision {
+	case deliveryClaimDecisionProceed:
+		appendProceedingDeliveryClaim(selection, row, outbox, claimToken, reused)
+	case deliveryClaimDecisionAlreadySent:
+		d.logClaimIssue("Skipped community/shorts delivery because the post was already sent", row, outbox, slog.LevelInfo)
+		selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, row.ID)
+		selection.alreadySentOutboxIDs = append(selection.alreadySentOutboxIDs, outbox.ID)
+	case deliveryClaimDecisionRetryLater:
+		d.logClaimIssue("Skipped community/shorts delivery because another execution owns the post claim", row, outbox, slog.LevelInfo)
+		selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
+		selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+	}
+}
+
+func appendProceedingDeliveryClaim(
+	selection *deliveryClaimSelection,
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+	claimToken *deliveryClaimToken,
+	reused bool,
+) {
+	rowClaimTokens := []deliveryClaimToken(nil)
+	if claimToken != nil && !reused {
+		token := *claimToken
+		selection.claimTokens = append(selection.claimTokens, token)
+		rowClaimTokens = []deliveryClaimToken{token}
+	}
+	selection.sendRows = append(selection.sendRows, row)
+	selection.sendOutboxes = append(selection.sendOutboxes, outbox)
+	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
 }
 
 func newDeliveryClaimReuseCache(capacity int) *deliveryClaimReuseCache {

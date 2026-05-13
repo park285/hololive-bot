@@ -170,21 +170,12 @@ func isRetryableTransportError(err error) bool {
 	// 호출자 deadline 초과는 재시도하지 않는다.
 	// 단, http.Client 자체 타임아웃은 문자열 시그니처로 구분하여 재시도 허용.
 	if errors.Is(err, context.DeadlineExceeded) {
-		return hasTransientTransportSignature(err.Error())
+		return isRetryableDeadlineExceeded(err)
 	}
 
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
-		if isTimeoutOrTemporaryError(urlErr) {
-			return true
-		}
-		if urlErr.Err == nil {
-			return false
-		}
-		if isTimeoutOrTemporaryError(urlErr.Err) {
-			return true
-		}
-		return hasTransientTransportSignature(urlErr.Err.Error())
+		return isRetryableURLError(urlErr)
 	}
 
 	if isTimeoutOrTemporaryError(err) {
@@ -192,6 +183,28 @@ func isRetryableTransportError(err error) bool {
 	}
 
 	return hasTransientTransportSignature(err.Error())
+}
+
+func isRetryableDeadlineExceeded(err error) bool {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return hasTransientTransportSignature(urlErr.Err.Error())
+	}
+
+	return hasTransientTransportSignature(err.Error())
+}
+
+func isRetryableURLError(err *url.Error) bool {
+	if isTimeoutOrTemporaryError(err) {
+		return true
+	}
+	if err.Err == nil {
+		return false
+	}
+	if isTimeoutOrTemporaryError(err.Err) {
+		return true
+	}
+	return hasTransientTransportSignature(err.Err.Error())
 }
 
 type temporaryError interface {

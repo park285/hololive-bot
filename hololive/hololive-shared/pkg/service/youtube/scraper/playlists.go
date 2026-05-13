@@ -33,25 +33,38 @@ func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults 
 		return []*Playlist{}, nil
 	}
 
+	data, err := c.fetchPlaylistBrowseData(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.playlistsFromBrowseData(data, channelID, maxResults), nil
+}
+
+func (c *Client) fetchPlaylistBrowseData(ctx context.Context, channelID string) (gjson.Result, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/playlists", channelID)
 	html, err := c.fetchPage(ctx, url)
 	if err != nil {
-		return nil, err
+		return gjson.Result{}, err
 	}
 
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
+		return gjson.Result{}, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
 	if !json.Valid([]byte(jsonStr)) {
-		return nil, fmt.Errorf("invalid ytInitialData JSON")
+		return gjson.Result{}, fmt.Errorf("invalid ytInitialData JSON")
 	}
 
 	data := gjson.Parse(jsonStr)
 	if err := checkAlerts(data); err != nil {
-		return nil, err
+		return gjson.Result{}, err
 	}
 
+	return data, nil
+}
+
+func (c *Client) playlistsFromBrowseData(data gjson.Result, channelID string, maxResults int) []*Playlist {
 	playlistItems := collectPlaylistItemsFromBrowseData(data)
 
 	playlists := make([]*Playlist, 0, min(len(playlistItems), maxResults))
@@ -65,7 +78,7 @@ func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults 
 		}
 	}
 
-	return playlists, nil
+	return playlists
 }
 
 func collectPlaylistItemsFromBrowseData(data gjson.Result) []gjson.Result {

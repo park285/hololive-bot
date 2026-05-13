@@ -63,44 +63,70 @@ func (r *DeliveryTelemetryRepository) persistPostLatencyClassifications(ctx cont
 	updatedAt := time.Now().UTC()
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
-		if !isCommunityShortsDeliveryAuditKind(rows[i].OutboxKind) {
+		contentID, ok := markPostLatencyClassificationRowSeen(rows[i], seen)
+		if !ok {
 			continue
 		}
-		contentID := strings.TrimSpace(rows[i].ContentID)
-		if contentID == "" {
-			continue
-		}
-		key := postTrackingIdentityKey(rows[i].OutboxKind, contentID)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-
-		status := rows[i].LatencyClassification.Status
-		if status == "" {
-			status = PostLatencyClassificationStatusInsufficientEvidence
-		}
-		delaySource := rows[i].DelaySource
-		if delaySource == "" {
-			delaySource = PostDelaySourceNone
-		}
-		internalDelayCause := rows[i].InternalDelayCause
-		if internalDelayCause == "" {
-			internalDelayCause = PostInternalDelayCauseNone
-		}
-
-		if err := r.db.WithContext(ctx).
-			Model(&domain.YouTubeContentAlarmTracking{}).
-			Where("kind = ? AND content_id = ?", rows[i].OutboxKind, contentID).
-			Updates(map[string]any{
-				"latency_classification_status": string(status),
-				"delay_source":                  string(delaySource),
-				"internal_delay_cause":          string(internalDelayCause),
-				"updated_at":                    updatedAt,
-			}).Error; err != nil {
+		if err := r.updatePostLatencyClassification(ctx, rows[i], contentID, updatedAt); err != nil {
 			return fmt.Errorf("update persisted latency classification: kind=%s content_id=%s: %w", rows[i].OutboxKind, contentID, err)
 		}
 	}
 
 	return nil
+}
+
+func markPostLatencyClassificationRowSeen(row PostDeliveryTimeline, seen map[string]struct{}) (string, bool) {
+	if !isCommunityShortsDeliveryAuditKind(row.OutboxKind) {
+		return "", false
+	}
+
+	contentID := strings.TrimSpace(row.ContentID)
+	if contentID == "" {
+		return "", false
+	}
+
+	key := postTrackingIdentityKey(row.OutboxKind, contentID)
+	if _, ok := seen[key]; ok {
+		return "", false
+	}
+	seen[key] = struct{}{}
+
+	return contentID, true
+}
+
+func (r *DeliveryTelemetryRepository) updatePostLatencyClassification(
+	ctx context.Context,
+	row PostDeliveryTimeline,
+	contentID string,
+	updatedAt time.Time,
+) error {
+	status, delaySource, internalDelayCause := normalizedPostLatencyClassificationPersistenceValues(row)
+	return r.db.WithContext(ctx).
+		Model(&domain.YouTubeContentAlarmTracking{}).
+		Where("kind = ? AND content_id = ?", row.OutboxKind, contentID).
+		Updates(map[string]any{
+			"latency_classification_status": string(status),
+			"delay_source":                  string(delaySource),
+			"internal_delay_cause":          string(internalDelayCause),
+			"updated_at":                    updatedAt,
+		}).Error
+}
+
+func normalizedPostLatencyClassificationPersistenceValues(
+	row PostDeliveryTimeline,
+) (PostLatencyClassificationStatus, PostDelaySource, PostInternalDelayCause) {
+	status := row.LatencyClassification.Status
+	if status == "" {
+		status = PostLatencyClassificationStatusInsufficientEvidence
+	}
+	delaySource := row.DelaySource
+	if delaySource == "" {
+		delaySource = PostDelaySourceNone
+	}
+	internalDelayCause := row.InternalDelayCause
+	if internalDelayCause == "" {
+		internalDelayCause = PostInternalDelayCauseNone
+	}
+
+	return status, delaySource, internalDelayCause
 }

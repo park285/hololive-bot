@@ -57,44 +57,62 @@ func (ys *serviceImpl) convertScrapedEvents(events []*scraper.UpcomingEvent, cha
 	}
 
 	streams := make([]*domain.Stream, 0, len(events))
-	channelName := ys.getChannelName(channelID)
-	if channelName == "" {
-		channelName = events[0].ChannelTitle
-	}
+	channelName := ys.scrapedEventChannelName(channelID, events[0])
 
 	for _, event := range events {
-		if event.Status != "LIVE" && event.Status != "UPCOMING" {
+		if !isScrapedEventStreamStatus(event.Status) {
 			continue
 		}
 
-		stream := &domain.Stream{
-			ID:          event.VideoID,
-			Title:       event.Title,
-			ChannelID:   channelID,
-			ChannelName: channelName,
-			Status:      ys.mapEventStatus(event.Status),
-		}
-
-		if len(event.Thumbnail) > 0 {
-			thumbURL := event.Thumbnail[len(event.Thumbnail)-1].URL
-			stream.Thumbnail = &thumbURL
-		} else {
-			thumbURL := fmt.Sprintf("https://i.ytimg.com/vi/%s/maxresdefault.jpg", event.VideoID)
-			stream.Thumbnail = &thumbURL
-		}
-
-		linkURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", event.VideoID)
-		stream.Link = &linkURL
-
-		if event.StartTime != nil {
-			startTime := time.Unix(*event.StartTime, 0)
-			stream.StartScheduled = &startTime
-		}
-
-		streams = append(streams, stream)
+		streams = append(streams, ys.streamFromScrapedEvent(event, channelID, channelName))
 	}
 
 	return streams
+}
+
+func (ys *serviceImpl) scrapedEventChannelName(channelID string, event *scraper.UpcomingEvent) string {
+	channelName := ys.getChannelName(channelID)
+	if channelName != "" {
+		return channelName
+	}
+	return event.ChannelTitle
+}
+
+func isScrapedEventStreamStatus(status string) bool {
+	return status == "LIVE" || status == "UPCOMING"
+}
+
+func (ys *serviceImpl) streamFromScrapedEvent(event *scraper.UpcomingEvent, channelID string, channelName string) *domain.Stream {
+	stream := &domain.Stream{
+		ID:          event.VideoID,
+		Title:       event.Title,
+		ChannelID:   channelID,
+		ChannelName: channelName,
+		Status:      ys.mapEventStatus(event.Status),
+	}
+	stream.Thumbnail = scrapedEventThumbnail(event)
+	stream.Link = stringPtr(fmt.Sprintf("https://www.youtube.com/watch?v=%s", event.VideoID))
+	stream.StartScheduled = scrapedEventStartTime(event)
+	return stream
+}
+
+func scrapedEventThumbnail(event *scraper.UpcomingEvent) *string {
+	if len(event.Thumbnail) > 0 {
+		return stringPtr(event.Thumbnail[len(event.Thumbnail)-1].URL)
+	}
+	return stringPtr(fmt.Sprintf("https://i.ytimg.com/vi/%s/maxresdefault.jpg", event.VideoID))
+}
+
+func scrapedEventStartTime(event *scraper.UpcomingEvent) *time.Time {
+	if event.StartTime == nil {
+		return nil
+	}
+	startTime := time.Unix(*event.StartTime, 0)
+	return &startTime
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func (ys *serviceImpl) mapEventStatus(status string) domain.StreamStatus {
