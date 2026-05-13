@@ -36,14 +36,9 @@ func (as *AlarmService) removeAlarmFromCache(
 	removeRoomChannel bool,
 ) (bool, error) {
 	alarmKey := as.getAlarmKey(roomID)
-	removedRoomChannel := int64(0)
-
-	if removeRoomChannel {
-		removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
-		if err != nil {
-			return false, fmt.Errorf("remove room alarm: %w", err)
-		}
-		removedRoomChannel = removed
+	removedRoomChannel, err := as.removeRoomAlarmMember(ctx, alarmKey, channelID, removeRoomChannel)
+	if err != nil {
+		return false, err
 	}
 
 	registryKey := as.getRegistryKey(roomID)
@@ -55,24 +50,49 @@ func (as *AlarmService) removeAlarmFromCache(
 		return false, fmt.Errorf("cleanup channel registry if empty: %w", err)
 	}
 
-	if removeRoomChannel {
-		remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
-		if err != nil {
-			return false, fmt.Errorf("read remaining room alarms: %w", err)
-		}
-
-		if len(remainingAlarms) == 0 {
-			if _, err := as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
-				return false, fmt.Errorf("remove room registry: %w", err)
-			}
-
-			if as.logger != nil {
-				as.logger.Info("Room removed from registry (no alarms left)", slog.String("room_id", roomID))
-			}
-		}
+	if err := as.cleanupRoomRegistryAfterRemoval(ctx, roomID, alarmKey, registryKey, removeRoomChannel); err != nil {
+		return false, err
 	}
 
 	return removedRoomChannel > 0 || len(alarmTypes) > 0, nil
+}
+
+func (as *AlarmService) removeRoomAlarmMember(ctx context.Context, alarmKey string, channelID string, removeRoomChannel bool) (int64, error) {
+	if !removeRoomChannel {
+		return 0, nil
+	}
+
+	removed, err := as.cache.SRem(ctx, alarmKey, []string{channelID})
+	if err != nil {
+		return 0, fmt.Errorf("remove room alarm: %w", err)
+	}
+
+	return removed, nil
+}
+
+func (as *AlarmService) cleanupRoomRegistryAfterRemoval(ctx context.Context, roomID string, alarmKey string, registryKey string, removeRoomChannel bool) error {
+	if !removeRoomChannel {
+		return nil
+	}
+
+	remainingAlarms, err := as.cache.SMembers(ctx, alarmKey)
+	if err != nil {
+		return fmt.Errorf("read remaining room alarms: %w", err)
+	}
+
+	if len(remainingAlarms) > 0 {
+		return nil
+	}
+
+	if _, err := as.cache.SRem(ctx, AlarmRegistryKey, []string{registryKey}); err != nil {
+		return fmt.Errorf("remove room registry: %w", err)
+	}
+
+	if as.logger != nil {
+		as.logger.Info("Room removed from registry (no alarms left)", slog.String("room_id", roomID))
+	}
+
+	return nil
 }
 
 func (as *AlarmService) clearRoomAlarmsFromCache(ctx context.Context, roomID string, channelIDs []string) (int, error) {

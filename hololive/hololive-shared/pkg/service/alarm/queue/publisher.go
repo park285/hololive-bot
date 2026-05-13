@@ -142,19 +142,9 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 	if len(claimKeys) > 0 && len(claimKeys) != len(notifications) {
 		return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("publish alarm queue batch: claim key count %d does not match notification count %d", len(claimKeys), len(notifications))
 	}
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(notifications))
-	for i, notification := range notifications {
-		if notification == nil {
-			return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("publish alarm queue batch: notification %d is nil", i)
-		}
-		if err := notification.ValidateLegacyRoute(); err != nil {
-			return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("publish alarm queue batch: validate legacy route: %w", err)
-		}
-		var keys []string
-		if len(claimKeys) > 0 {
-			keys = claimKeys[i]
-		}
-		envelopes = append(envelopes, p.buildEnvelope(notification, keys))
+	envelopes, err := p.buildPublishBatchEnvelopes(notifications, claimKeys)
+	if err != nil {
+		return dispatchoutbox.PublishBatchResult{}, err
 	}
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
@@ -162,17 +152,53 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, result)
 	}()
 
-	var err error
+	result, err = p.publishEnvelopes(ctx, envelopes)
+	return result, err
+}
+
+func (p *Publisher) buildPublishBatchEnvelopes(
+	notifications []*domain.AlarmNotification,
+	claimKeys [][]string,
+) ([]domain.AlarmQueueEnvelope, error) {
+	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(notifications))
+	for i, notification := range notifications {
+		envelope, err := p.buildPublishBatchEnvelope(i, notification, claimKeys)
+		if err != nil {
+			return nil, err
+		}
+		envelopes = append(envelopes, envelope)
+	}
+	return envelopes, nil
+}
+
+func (p *Publisher) buildPublishBatchEnvelope(
+	index int,
+	notification *domain.AlarmNotification,
+	claimKeys [][]string,
+) (domain.AlarmQueueEnvelope, error) {
+	if notification == nil {
+		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: notification %d is nil", index)
+	}
+	if err := notification.ValidateLegacyRoute(); err != nil {
+		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: validate legacy route: %w", err)
+	}
+	if len(claimKeys) == 0 {
+		return p.buildEnvelope(notification, nil), nil
+	}
+	return p.buildEnvelope(notification, claimKeys[index]), nil
+}
+
+func (p *Publisher) publishEnvelopes(
+	ctx context.Context,
+	envelopes []domain.AlarmQueueEnvelope,
+) (dispatchoutbox.PublishBatchResult, error) {
 	switch p.publishConfig.Mode {
 	case PublishModeShadow:
-		result, err = p.publishShadowBatch(ctx, envelopes)
-		return result, err
+		return p.publishShadowBatch(ctx, envelopes)
 	case PublishModePGFirst:
-		result, err = p.publishPGFirstBatch(ctx, envelopes)
-		return result, err
+		return p.publishPGFirstBatch(ctx, envelopes)
 	default:
-		result, err = p.publishValkeyBatch(ctx, envelopes)
-		return result, err
+		return p.publishValkeyBatch(ctx, envelopes)
 	}
 }
 

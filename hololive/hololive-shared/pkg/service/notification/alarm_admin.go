@@ -36,10 +36,23 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	// 이름 맵 미리 로드
 	roomNamesMap, _ := as.cache.HGetAll(ctx, RoomNamesCacheKey)
 
+	alarms, channelIDsForNames := as.collectAlarmEntries(ctx, registryKeys, roomNamesMap)
+	memberNames, _ := as.getMemberNamesBatch(ctx, channelIDsForNames)
+	for _, alarm := range alarms {
+		alarm.MemberName = memberNames[alarm.ChannelID]
+	}
+
+	return alarms, nil
+}
+
+func (as *AlarmService) collectAlarmEntries(
+	ctx context.Context,
+	registryKeys []string,
+	roomNamesMap map[string]string,
+) ([]*domain.AlarmEntry, []string) {
 	alarms := make([]*domain.AlarmEntry, 0)
 	channelIDsForNames := make([]string, 0)
 
-	// 방 기반: registry key = roomID
 	for _, roomID := range registryKeys {
 		if roomID == "" {
 			continue
@@ -52,27 +65,28 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 			continue
 		}
 
-		for _, channelID := range channelIDs {
-			roomName := roomNamesMap[roomID]
-			if roomName == "" {
-				roomName = roomID
-			}
-
-			channelIDsForNames = append(channelIDsForNames, channelID)
-			alarms = append(alarms, &domain.AlarmEntry{
-				RoomID:    roomID,
-				RoomName:  roomName,
-				ChannelID: channelID,
-			})
-		}
+		roomAlarms := buildRoomAlarmEntries(roomID, roomNamesMap[roomID], channelIDs)
+		channelIDsForNames = append(channelIDsForNames, channelIDs...)
+		alarms = append(alarms, roomAlarms...)
 	}
 
-	memberNames, _ := as.getMemberNamesBatch(ctx, channelIDsForNames)
-	for _, alarm := range alarms {
-		alarm.MemberName = memberNames[alarm.ChannelID]
+	return alarms, channelIDsForNames
+}
+
+func buildRoomAlarmEntries(roomID string, roomName string, channelIDs []string) []*domain.AlarmEntry {
+	if roomName == "" {
+		roomName = roomID
 	}
 
-	return alarms, nil
+	alarms := make([]*domain.AlarmEntry, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		alarms = append(alarms, &domain.AlarmEntry{
+			RoomID:    roomID,
+			RoomName:  roomName,
+			ChannelID: channelID,
+		})
+	}
+	return alarms
 }
 
 func (as *AlarmService) GetDistinctRooms(ctx context.Context) ([]string, error) {

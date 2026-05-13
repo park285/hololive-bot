@@ -31,23 +31,25 @@ func ComputeNextCheckAt(nearestStart *time.Time, lastNotifiedAt *time.Time) time
 	now := time.Now()
 
 	if nearestStart == nil {
-		// 예정 없음: 최근 알림 발송 채널은 고빈도 폴링 유지
-		if lastNotifiedAt != nil {
-			elapsed := now.Sub(*lastNotifiedAt)
-			if elapsed <= constants.RecentlyNotifiedWindow {
-				return now.Add(constants.Tier2Interval)
-			}
-		}
-		return now.Add(constants.NoUpcomingInterval)
+		return nextCheckAtWithoutUpcoming(now, lastNotifiedAt)
 	}
 
 	timeToStart := nearestStart.Sub(now)
+	return nextCheckAtForTimeToStart(now, timeToStart)
+}
 
-	// 이미 지남 또는 현재 -> Tier1
-	if timeToStart <= 0 {
-		return now.Add(constants.Tier1Interval)
+func nextCheckAtWithoutUpcoming(now time.Time, lastNotifiedAt *time.Time) time.Time {
+	if isRecentlyNotified(now, lastNotifiedAt) {
+		return now.Add(constants.Tier2Interval)
 	}
+	return now.Add(constants.NoUpcomingInterval)
+}
 
+func isRecentlyNotified(now time.Time, lastNotifiedAt *time.Time) bool {
+	return lastNotifiedAt != nil && now.Sub(*lastNotifiedAt) <= constants.RecentlyNotifiedWindow
+}
+
+func nextCheckAtForTimeToStart(now time.Time, timeToStart time.Duration) time.Time {
 	switch {
 	case timeToStart <= constants.Tier1Window:
 		return now.Add(constants.Tier1Interval)
