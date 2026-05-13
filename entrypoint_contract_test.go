@@ -86,6 +86,39 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 	}
 }
 
+func TestDocsUseConsolidatedStreamIngesterOpsCommand(t *testing.T) {
+	t.Parallel()
+
+	deprecatedCommandPaths := []string{
+		"hololive/hololive-stream-ingester/cmd/youtube-",
+		"hololive/hololive-stream-ingester/cmd/ops/youtube-community-alarm-sent-history",
+		"hololive/hololive-stream-ingester/cmd/ops/youtube-shorts-alarm-sent-history",
+		"hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts-",
+	}
+
+	if err := filepath.WalkDir(filepath.Join("docs", "current"), func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Ext(path) != ".md" {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, deprecatedPath := range deprecatedCommandPaths {
+			if strings.Contains(string(content), deprecatedPath) {
+				t.Fatalf("%s contains deprecated command path %q", path, deprecatedPath)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("docs/current scan 실패: %v", err)
+	}
+}
+
 func loadEntrypointContracts(t *testing.T) []entrypointContract {
 	t.Helper()
 

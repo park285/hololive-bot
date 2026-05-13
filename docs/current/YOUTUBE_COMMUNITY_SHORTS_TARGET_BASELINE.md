@@ -9,13 +9,13 @@
 리포지토리 루트에서 다음 명령을 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-target-baseline
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts target-baseline
 ```
 
 운영자용 Markdown 리포트가 필요하면 다음 명령을 사용합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-route-report
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report
 ```
 
 필요 조건:

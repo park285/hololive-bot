@@ -16,11 +16,11 @@
 repo root에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-shorts-alarm-sent-history \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-shorts-alarm-sent-history \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts shorts-alarm-sent-history \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z \
   -format json
