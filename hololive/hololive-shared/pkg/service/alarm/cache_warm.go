@@ -27,6 +27,19 @@ var loadAllAlarmsFromRepository = func(ctx context.Context, repo *Repository) ([
 
 const cacheScanBatchSize int64 = 100
 
+type subscriberCacheWarmData struct {
+	summary            CacheWarmSummary
+	rooms              map[string]struct{}
+	channels           map[string]struct{}
+	roomAlarmMembers   map[string][]string
+	channelSubscribers map[string][]string
+	memberNames        map[string]string
+	roomNames          map[string]string
+	userNames          map[string]string
+	registryRooms      []string
+	channelRegistry    []string
+}
+
 func WarmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
 	if repo == nil {
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from repository: repository is nil")
@@ -74,6 +87,27 @@ func clearSubscriberCacheNamespace(ctx context.Context, cacheSvc cache.Client) e
 		return errors.New("rebuild subscriber cache from alarms: cache service is nil")
 	}
 
+	keysToDelete, err := subscriberCacheStaticKeysToDelete(ctx, cacheSvc)
+	if err != nil {
+		return err
+	}
+
+	roomAlarmKeys, err := scanRoomAlarmKeys(ctx, cacheSvc)
+	if err != nil {
+		return err
+	}
+	keysToDelete = append(keysToDelete, roomAlarmKeys...)
+
+	patternKeys, err := scanSubscriberCachePatternKeys(ctx, cacheSvc)
+	if err != nil {
+		return err
+	}
+	keysToDelete = append(keysToDelete, patternKeys...)
+
+	return deleteSubscriberCacheKeys(ctx, cacheSvc, keysToDelete)
+}
+
+func subscriberCacheStaticKeysToDelete(ctx context.Context, cacheSvc cache.Client) ([]string, error) {
 	keysToDelete := []string{
 		sharedalarmkeys.AlarmRegistryKey,
 		sharedalarmkeys.AlarmChannelRegistryKey,
@@ -86,33 +120,38 @@ func clearSubscriberCacheNamespace(ctx context.Context, cacheSvc cache.Client) e
 
 	registryRooms, err := cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	if err != nil {
-		return fmt.Errorf("rebuild subscriber cache from alarms: read room registry: %w", err)
+		return nil, fmt.Errorf("rebuild subscriber cache from alarms: read room registry: %w", err)
 	}
 	for _, roomID := range registryRooms {
-		roomID = strings.TrimSpace(roomID)
-		if roomID == "" {
-			continue
-		}
-		keysToDelete = append(keysToDelete, sharedalarmkeys.BuildRoomAlarmKey(roomID))
+		keysToDelete = appendRoomAlarmKey(keysToDelete, roomID)
 	}
+	return keysToDelete, nil
+}
 
-	roomAlarmKeys, err := scanRoomAlarmKeys(ctx, cacheSvc)
-	if err != nil {
-		return err
+func appendRoomAlarmKey(keys []string, roomID string) []string {
+	roomID = strings.TrimSpace(roomID)
+	if roomID == "" {
+		return keys
 	}
-	keysToDelete = append(keysToDelete, roomAlarmKeys...)
+	return append(keys, sharedalarmkeys.BuildRoomAlarmKey(roomID))
+}
 
+func scanSubscriberCachePatternKeys(ctx context.Context, cacheSvc cache.Client) ([]string, error) {
+	var keysToDelete []string
 	for _, pattern := range []string{
 		sharedalarmkeys.ChannelSubscribersKeyPrefix + "*",
 		sharedalarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
 	} {
 		keys, scanErr := cacheSvc.ScanKeys(ctx, pattern, cacheScanBatchSize)
 		if scanErr != nil {
-			return fmt.Errorf("rebuild subscriber cache from alarms: scan keys %q: %w", pattern, scanErr)
+			return nil, fmt.Errorf("rebuild subscriber cache from alarms: scan keys %q: %w", pattern, scanErr)
 		}
 		keysToDelete = append(keysToDelete, keys...)
 	}
+	return keysToDelete, nil
+}
 
+func deleteSubscriberCacheKeys(ctx context.Context, cacheSvc cache.Client, keysToDelete []string) error {
 	keysToDelete = compactUniqueStrings(keysToDelete)
 	if len(keysToDelete) == 0 {
 		return nil
@@ -168,101 +207,139 @@ func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheSvc cache.Client, a
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from alarms: cache service is nil")
 	}
 
-	summary := CacheWarmSummary{}
-	rooms := make(map[string]struct{}, len(alarms))
-	channels := make(map[string]struct{}, len(alarms))
-	roomAlarmMembers := make(map[string][]string, len(alarms))
-	channelSubscribers := make(map[string][]string, len(alarms))
-	memberNames := make(map[string]string, len(alarms))
-	roomNames := make(map[string]string, len(alarms))
-	userNames := make(map[string]string, len(alarms))
-	registryRooms := make([]string, 0, len(alarms))
-	channelRegistry := make([]string, 0, len(alarms))
-
+	warmData := newSubscriberCacheWarmData(alarms)
 	for _, alarmRecord := range alarms {
-		if alarmRecord == nil {
-			continue
-		}
-
-		roomID := strings.TrimSpace(alarmRecord.RoomID)
-		channelID := strings.TrimSpace(alarmRecord.ChannelID)
-		if roomID == "" || channelID == "" {
-			continue
-		}
-
-		alarmTypes := alarmRecord.AlarmTypes
-		if len(alarmTypes) == 0 {
-			alarmTypes = domain.DefaultAlarmTypes
-		}
-
-		registryKey := alarmRecord.RegistryKey()
-		roomAlarmMembers[sharedalarmkeys.BuildRoomAlarmKey(roomID)] = append(
-			roomAlarmMembers[sharedalarmkeys.BuildRoomAlarmKey(roomID)],
-			channelID,
-		)
-		registryRooms = append(registryRooms, registryKey)
-		channelRegistry = append(channelRegistry, channelID)
-
-		for _, alarmType := range alarmTypes {
-			key := sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
-			channelSubscribers[key] = append(channelSubscribers[key], registryKey)
-		}
-
-		if alarmRecord.MemberName != "" {
-			memberNames[channelID] = alarmRecord.MemberName
-		}
-		if alarmRecord.RoomName != "" {
-			roomNames[roomID] = alarmRecord.RoomName
-		}
-		if alarmRecord.UserName != "" && alarmRecord.UserID != "" {
-			userNames[alarmRecord.UserID] = alarmRecord.UserName
-		}
-
-		summary.AlarmCount++
-		rooms[roomID] = struct{}{}
-		channels[channelID] = struct{}{}
+		warmData.addAlarm(alarmRecord)
 	}
 
-	if err := writeWarmSetMap(ctx, cacheSvc, roomAlarmMembers, "room alarms"); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: %w", err)
+	if err := writeSubscriberCacheWarmData(ctx, cacheSvc, warmData); err != nil {
+		return CacheWarmSummary{}, err
 	}
 
-	registryRooms = compactUniqueStrings(registryRooms)
-	if err := writeWarmSet(ctx, cacheSvc, sharedalarmkeys.AlarmRegistryKey, registryRooms, "room registry"); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: %w", err)
+	return warmData.finish(), nil
+}
+
+func newSubscriberCacheWarmData(alarms []*domain.Alarm) *subscriberCacheWarmData {
+	return &subscriberCacheWarmData{
+		rooms:              make(map[string]struct{}, len(alarms)),
+		channels:           make(map[string]struct{}, len(alarms)),
+		roomAlarmMembers:   make(map[string][]string, len(alarms)),
+		channelSubscribers: make(map[string][]string, len(alarms)),
+		memberNames:        make(map[string]string, len(alarms)),
+		roomNames:          make(map[string]string, len(alarms)),
+		userNames:          make(map[string]string, len(alarms)),
+		registryRooms:      make([]string, 0, len(alarms)),
+		channelRegistry:    make([]string, 0, len(alarms)),
+	}
+}
+
+func (data *subscriberCacheWarmData) addAlarm(alarmRecord *domain.Alarm) {
+	roomID, channelID, ok := normalizedWarmAlarmIdentity(alarmRecord)
+	if !ok {
+		return
 	}
 
-	channelRegistry = compactUniqueStrings(channelRegistry)
-	if err := writeWarmSet(ctx, cacheSvc, sharedalarmkeys.AlarmChannelRegistryKey, channelRegistry, "channel registry"); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: %w", err)
-	}
+	registryKey := alarmRecord.RegistryKey()
+	data.addRoomAlarmMember(roomID, channelID)
+	data.registryRooms = append(data.registryRooms, registryKey)
+	data.channelRegistry = append(data.channelRegistry, channelID)
+	data.addChannelSubscribers(channelID, registryKey, alarmRecord.AlarmTypes)
+	data.addNames(alarmRecord, roomID, channelID)
 
-	if err := writeWarmSetMap(ctx, cacheSvc, channelSubscribers, "channel subscribers"); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: %w", err)
-	}
+	data.summary.AlarmCount++
+	data.rooms[roomID] = struct{}{}
+	data.channels[channelID] = struct{}{}
+}
 
-	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.MemberNameKey, memberNames); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: cache member names: %w", err)
+func normalizedWarmAlarmIdentity(alarmRecord *domain.Alarm) (string, string, bool) {
+	if alarmRecord == nil {
+		return "", "", false
 	}
+	roomID := strings.TrimSpace(alarmRecord.RoomID)
+	channelID := strings.TrimSpace(alarmRecord.ChannelID)
+	return roomID, channelID, roomID != "" && channelID != ""
+}
 
-	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.RoomNamesCacheKey, roomNames); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: cache room names: %w", err)
+func (data *subscriberCacheWarmData) addRoomAlarmMember(roomID string, channelID string) {
+	key := sharedalarmkeys.BuildRoomAlarmKey(roomID)
+	data.roomAlarmMembers[key] = append(data.roomAlarmMembers[key], channelID)
+}
+
+func (data *subscriberCacheWarmData) addChannelSubscribers(channelID string, registryKey string, alarmTypes domain.AlarmTypes) {
+	if len(alarmTypes) == 0 {
+		alarmTypes = domain.DefaultAlarmTypes
 	}
-
-	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.UserNamesCacheKey, userNames); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: cache user names: %w", err)
+	for _, alarmType := range alarmTypes {
+		key := sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
+		data.channelSubscribers[key] = append(data.channelSubscribers[key], registryKey)
 	}
+}
 
-	summary.RoomCount = len(rooms)
-	summary.ChannelCount = len(channels)
-	if err := markSubscriberCacheEmptyState(ctx, cacheSvc, summary.AlarmCount == 0); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: mark empty state: %w", err)
+func (data *subscriberCacheWarmData) addNames(alarmRecord *domain.Alarm, roomID string, channelID string) {
+	if alarmRecord.MemberName != "" {
+		data.memberNames[channelID] = alarmRecord.MemberName
+	}
+	if alarmRecord.RoomName != "" {
+		data.roomNames[roomID] = alarmRecord.RoomName
+	}
+	if alarmRecord.UserName != "" && alarmRecord.UserID != "" {
+		data.userNames[alarmRecord.UserID] = alarmRecord.UserName
+	}
+}
+
+func (data *subscriberCacheWarmData) finish() CacheWarmSummary {
+	data.summary.RoomCount = len(data.rooms)
+	data.summary.ChannelCount = len(data.channels)
+	return data.summary
+}
+
+func writeSubscriberCacheWarmData(ctx context.Context, cacheSvc cache.Client, data *subscriberCacheWarmData) error {
+	if err := writeSubscriberCacheSets(ctx, cacheSvc, data); err != nil {
+		return err
+	}
+	if err := writeSubscriberCacheHashes(ctx, cacheSvc, data); err != nil {
+		return err
+	}
+	return writeSubscriberCacheWarmMarkers(ctx, cacheSvc, data.summary.AlarmCount == 0)
+}
+
+func writeSubscriberCacheSets(ctx context.Context, cacheSvc cache.Client, data *subscriberCacheWarmData) error {
+	if err := writeWarmSetMap(ctx, cacheSvc, data.roomAlarmMembers, "room alarms"); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
+	}
+	if err := writeWarmSet(ctx, cacheSvc, sharedalarmkeys.AlarmRegistryKey, compactUniqueStrings(data.registryRooms), "room registry"); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
+	}
+	if err := writeWarmSet(ctx, cacheSvc, sharedalarmkeys.AlarmChannelRegistryKey, compactUniqueStrings(data.channelRegistry), "channel registry"); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
+	}
+	if err := writeWarmSetMap(ctx, cacheSvc, data.channelSubscribers, "channel subscribers"); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
+	}
+	return nil
+}
+
+func writeSubscriberCacheHashes(ctx context.Context, cacheSvc cache.Client, data *subscriberCacheWarmData) error {
+	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.MemberNameKey, data.memberNames); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: cache member names: %w", err)
+	}
+	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.RoomNamesCacheKey, data.roomNames); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: cache room names: %w", err)
+	}
+	if err := writeWarmHash(ctx, cacheSvc, sharedalarmkeys.UserNamesCacheKey, data.userNames); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: cache user names: %w", err)
+	}
+	return nil
+}
+
+func writeSubscriberCacheWarmMarkers(ctx context.Context, cacheSvc cache.Client, empty bool) error {
+	if err := markSubscriberCacheEmptyState(ctx, cacheSvc, empty); err != nil {
+		return fmt.Errorf("warm subscriber cache from alarms: mark empty state: %w", err)
 	}
 	if err := bumpAlarmChannelRegistryVersion(ctx, cacheSvc); err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from alarms: bump channel registry version: %w", err)
+		return fmt.Errorf("warm subscriber cache from alarms: bump channel registry version: %w", err)
 	}
-
-	return summary, nil
+	return nil
 }
 
 func bumpAlarmChannelRegistryVersion(ctx context.Context, cacheSvc cache.Client) error {
@@ -287,18 +364,26 @@ func writeWarmSetMap(ctx context.Context, cacheSvc cache.Client, setMembers map[
 	}
 
 	if !supportsWarmSetBatch(cacheSvc) {
-		for key, members := range setMembers {
-			dedupedMembers := compactUniqueStrings(members)
-			if len(dedupedMembers) == 0 {
-				continue
-			}
-			if _, err := cacheSvc.SAdd(ctx, key, dedupedMembers); err != nil {
-				return fmt.Errorf("add %s for key %s: %w", scope, key, err)
-			}
-		}
-		return nil
+		return writeWarmSetMapSequential(ctx, cacheSvc, setMembers, scope)
 	}
 
+	return writeWarmSetMapBatch(ctx, cacheSvc, setMembers, scope)
+}
+
+func writeWarmSetMapSequential(ctx context.Context, cacheSvc cache.Client, setMembers map[string][]string, scope string) error {
+	for key, members := range setMembers {
+		dedupedMembers := compactUniqueStrings(members)
+		if len(dedupedMembers) == 0 {
+			continue
+		}
+		if _, err := cacheSvc.SAdd(ctx, key, dedupedMembers); err != nil {
+			return fmt.Errorf("add %s for key %s: %w", scope, key, err)
+		}
+	}
+	return nil
+}
+
+func writeWarmSetMapBatch(ctx context.Context, cacheSvc cache.Client, setMembers map[string][]string, scope string) error {
 	keys := make([]string, 0, len(setMembers))
 	cmds := make([]valkey.Completed, 0, len(setMembers))
 	for key, members := range setMembers {
@@ -317,6 +402,10 @@ func writeWarmSetMap(ctx context.Context, cacheSvc cache.Client, setMembers map[
 	if len(results) != len(cmds) {
 		return fmt.Errorf("add %s: unexpected result count: %d", scope, len(results))
 	}
+	return verifyWarmSetBatchResults(results, keys, scope)
+}
+
+func verifyWarmSetBatchResults(results []valkey.ValkeyResult, keys []string, scope string) error {
 	for i, result := range results {
 		if err := result.Error(); err != nil {
 			return fmt.Errorf("add %s for key %s: %w", scope, keys[i], err)
@@ -343,13 +432,7 @@ func writeWarmHash(ctx context.Context, cacheSvc cache.Client, key string, value
 
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			err = nil
-			for field, value := range values {
-				if setErr := cacheSvc.HSet(ctx, key, field, value); setErr != nil {
-					err = setErr
-					return
-				}
-			}
+			err = writeWarmHashFields(ctx, cacheSvc, key, values)
 		}
 	}()
 
@@ -361,6 +444,10 @@ func writeWarmHash(ctx context.Context, cacheSvc cache.Client, key string, value
 		return nil
 	}
 
+	return writeWarmHashFields(ctx, cacheSvc, key, values)
+}
+
+func writeWarmHashFields(ctx context.Context, cacheSvc cache.Client, key string, values map[string]string) error {
 	for field, value := range values {
 		if setErr := cacheSvc.HSet(ctx, key, field, value); setErr != nil {
 			return setErr

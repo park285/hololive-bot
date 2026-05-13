@@ -73,16 +73,12 @@ func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID
 		return nil, false, nil
 	}
 
-	oldScheduled, ok := parseScheduledString(previousScheduled)
+	oldScheduled, ok, err := s.resolvePreviousNotificationSchedule(ctx, roomID, channelID, stream, previousScheduled)
+	if err != nil {
+		return nil, false, err
+	}
 	if !ok {
-		change, err := s.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
-		if err != nil {
-			return nil, false, err
-		}
-		if change == nil {
-			return nil, false, nil
-		}
-		oldScheduled = change.PreviousScheduled
+		return nil, false, nil
 	}
 
 	newScheduled := keys.NormalizeScheduledMinute(stream.StartScheduled.UTC())
@@ -90,6 +86,26 @@ func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID
 		return nil, false, nil
 	}
 
+	return s.tryClaimNotificationScheduleTransitions(ctx, roomID, channelID, stream, oldScheduled, newScheduled)
+}
+
+func (s *Service) resolvePreviousNotificationSchedule(ctx context.Context, roomID, channelID string, stream *domain.Stream, previousScheduled string) (time.Time, bool, error) {
+	if oldScheduled, ok := parseScheduledString(previousScheduled); ok {
+		return oldScheduled, true, nil
+	}
+
+	change, err := s.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if change == nil {
+		return time.Time{}, false, nil
+	}
+
+	return change.PreviousScheduled, true, nil
+}
+
+func (s *Service) tryClaimNotificationScheduleTransitions(ctx context.Context, roomID, channelID string, stream *domain.Stream, oldScheduled, newScheduled time.Time) ([]string, bool, error) {
 	claimKeys := make([]string, 0, 2)
 	streamKey, streamClaimed, err := s.TryClaimRoomScheduleTransition(ctx, roomID, stream.ID, oldScheduled, newScheduled)
 	if err != nil {
@@ -183,28 +199,32 @@ func (s *Service) detectLegacyUpcomingEventScheduleChange(ctx context.Context, r
 		return nil, nil
 	}
 
-	var best time.Time
-	var bestDelta time.Duration
-	for _, match := range matches {
-		scheduled, ok := parseUpcomingEventScheduledFromKey(match, titleFP)
-		if !ok {
-			continue
-		}
-		if scheduled.Equal(keys.NormalizeScheduledMinute(stream.StartScheduled.UTC())) {
-			continue
-		}
-
-		delta := absDuration(stream.StartScheduled.Sub(scheduled))
-		if best.IsZero() || delta < bestDelta {
-			best = scheduled
-			bestDelta = delta
-		}
-	}
+	best := selectClosestLegacySchedule(matches, titleFP, *stream.StartScheduled)
 	if best.IsZero() {
 		return nil, nil
 	}
 
 	return newScheduleChange(keys.FormatScheduled(best), *stream.StartScheduled), nil
+}
+
+func selectClosestLegacySchedule(matches []string, titleFP string, currentScheduled time.Time) time.Time {
+	normalizedCurrent := keys.NormalizeScheduledMinute(currentScheduled.UTC())
+
+	var best time.Time
+	var bestDelta time.Duration
+	for _, match := range matches {
+		scheduled, ok := parseUpcomingEventScheduledFromKey(match, titleFP)
+		if !ok || scheduled.Equal(normalizedCurrent) {
+			continue
+		}
+
+		delta := absDuration(currentScheduled.Sub(scheduled))
+		if best.IsZero() || delta < bestDelta {
+			best = scheduled
+			bestDelta = delta
+		}
+	}
+	return best
 }
 
 func newScheduleChange(previousScheduled string, currentScheduled time.Time) *ScheduleChange {

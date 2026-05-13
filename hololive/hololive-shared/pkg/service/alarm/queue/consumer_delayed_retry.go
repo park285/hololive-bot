@@ -43,6 +43,17 @@ func (c *Consumer) drainDelayedRetries(ctx context.Context, count int, now time.
 		return nil, nil
 	}
 
+	values, err := c.drainDelayedRetryValues(ctx, count, now)
+	if err != nil {
+		return nil, err
+	}
+	if len(values) > 0 {
+		alarmQueueRetryDrained.Add(float64(len(values)))
+	}
+	return c.retryPayloadsFromMembers(ctx, values), nil
+}
+
+func (c *Consumer) drainDelayedRetryValues(ctx context.Context, count int, now time.Time) ([]string, error) {
 	cmd := c.cache.B().Eval().
 		Script(drainDelayedRetriesScript).
 		Numkeys(1).
@@ -60,9 +71,10 @@ func (c *Consumer) drainDelayedRetries(ctx context.Context, count int, now time.
 		}
 		return nil, fmt.Errorf("drain delayed retry payloads: execute script: %w", err)
 	}
-	if len(values) > 0 {
-		alarmQueueRetryDrained.Add(float64(len(values)))
-	}
+	return values, nil
+}
+
+func (c *Consumer) retryPayloadsFromMembers(ctx context.Context, values []string) []string {
 	payloads := make([]string, 0, len(values))
 	invalidMembers := make([]string, 0)
 	for _, value := range values {
@@ -80,7 +92,7 @@ func (c *Consumer) drainDelayedRetries(ctx context.Context, count int, now time.
 	if len(invalidMembers) > 0 {
 		c.moveRawPayloadsToDLQ(ctx, "drain_delayed_invalid_member", invalidMembers)
 	}
-	return payloads, nil
+	return payloads
 }
 
 // brpop: Valkey BRPOP 래퍼

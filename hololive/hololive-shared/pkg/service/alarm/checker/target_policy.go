@@ -78,20 +78,31 @@ func (p TargetMinutePolicy) HighestCrossed(startScheduled time.Time, window Eval
 		return 0, false
 	}
 
-	resolvedTargets := p.targetMinutes
-	if len(resolvedTargets) == 0 {
-		resolvedTargets = cloneDefaultTargetMinutes()
-	}
-
+	resolvedTargets := p.resolvedTargetMinutes()
 	current := minutesUntilFloorZeroClamped(startScheduled, window.End)
 	previous := minutesUntilFloorZeroClamped(startScheduled, window.Start)
 	if previous <= current {
-		if slices.Contains(resolvedTargets, current) {
-			return current, true
-		}
-		return 0, false
+		return currentTargetIfConfigured(resolvedTargets, current)
 	}
 
+	return highestDescendingCrossedTarget(resolvedTargets, current, previous)
+}
+
+func (p TargetMinutePolicy) resolvedTargetMinutes() []int {
+	if len(p.targetMinutes) == 0 {
+		return cloneDefaultTargetMinutes()
+	}
+	return p.targetMinutes
+}
+
+func currentTargetIfConfigured(resolvedTargets []int, current int) (int, bool) {
+	if slices.Contains(resolvedTargets, current) {
+		return current, true
+	}
+	return 0, false
+}
+
+func highestDescendingCrossedTarget(resolvedTargets []int, current int, previous int) (int, bool) {
 	for _, target := range resolvedTargets {
 		if current == target || (current < target && target <= previous) {
 			return target, true
