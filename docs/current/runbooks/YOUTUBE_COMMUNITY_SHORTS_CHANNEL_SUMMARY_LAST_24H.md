@@ -17,8 +17,8 @@
 우선 경로는 저장소의 집계 로직을 그대로 사용하는 전용 명령입니다. repo root에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-channel-summary -window 24h
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-channel-summary -window 24h -format json
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts channel-summary -window 24h
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts channel-summary -window 24h -format json
 ```
 
 - 기본 출력은 Markdown 표이며, 채널별 `detected`, `alarm_sent`, `success`, `failure`, `detected_unsent` 집계를 한 줄로 보여 줍니다.
