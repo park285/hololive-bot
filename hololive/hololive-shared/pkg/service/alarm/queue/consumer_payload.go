@@ -93,30 +93,65 @@ func (c *Consumer) acceptLegacyEnvelope(
 	envelope domain.AlarmQueueEnvelope,
 	source string,
 ) (domain.AlarmQueueEnvelope, bool) {
+	if envelope.SourceKind != "" {
+		if c.rejectInvalidCanonicalEnvelope(ctx, envelope, source) {
+			return domain.AlarmQueueEnvelope{}, false
+		}
+		return envelope, true
+	}
 	if envelope.Notification.AlarmType == "" {
 		envelope.Notification.AlarmType = domain.AlarmTypeLive
 	}
-	if err := envelope.Notification.ValidateLegacyRoute(); err != nil {
-		alarmQueueEnvelopeTotal.WithLabelValues("rejected_legacy_route").Inc()
-		c.logger.Warn("dropping unsupported legacy alarm queue envelope",
-			slog.String("source", source),
-			slog.String("queue", c.queueKey),
-			slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
-			slog.String("alarm_type", string(envelope.Notification.AlarmType)),
-			slog.Any("error", err),
-		)
-		if releaseErr := c.ReleaseClaimKeys(ctx, envelope.ClaimKeys); releaseErr != nil {
-			c.logger.Warn("failed to release claim keys for dropped alarm queue envelope",
-				slog.String("source", source),
-				slog.String("queue", c.queueKey),
-				slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
-				slog.Any("error", releaseErr),
-			)
-		}
+	if c.rejectInvalidLegacyEnvelope(ctx, envelope, source) {
 		return domain.AlarmQueueEnvelope{}, false
 	}
 
 	return envelope, true
+}
+
+func (c *Consumer) rejectInvalidCanonicalEnvelope(ctx context.Context, envelope domain.AlarmQueueEnvelope, source string) bool {
+	err := envelope.ValidateCanonicalDispatch()
+	if err == nil {
+		return false
+	}
+	alarmQueueEnvelopeTotal.WithLabelValues("rejected_canonical_source").Inc()
+	c.logger.Warn("dropping unsupported canonical alarm queue envelope",
+		slog.String("source", source),
+		slog.String("queue", c.queueKey),
+		slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
+		slog.String("source_kind", string(envelope.SourceKind)),
+		slog.Any("error", err),
+	)
+	c.releaseDroppedEnvelopeClaims(ctx, envelope, source)
+	return true
+}
+
+func (c *Consumer) rejectInvalidLegacyEnvelope(ctx context.Context, envelope domain.AlarmQueueEnvelope, source string) bool {
+	err := envelope.Notification.ValidateLegacyRoute()
+	if err == nil {
+		return false
+	}
+	alarmQueueEnvelopeTotal.WithLabelValues("rejected_legacy_route").Inc()
+	c.logger.Warn("dropping unsupported legacy alarm queue envelope",
+		slog.String("source", source),
+		slog.String("queue", c.queueKey),
+		slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
+		slog.String("alarm_type", string(envelope.Notification.AlarmType)),
+		slog.Any("error", err),
+	)
+	c.releaseDroppedEnvelopeClaims(ctx, envelope, source)
+	return true
+}
+
+func (c *Consumer) releaseDroppedEnvelopeClaims(ctx context.Context, envelope domain.AlarmQueueEnvelope, source string) {
+	if releaseErr := c.ReleaseClaimKeys(ctx, envelope.ClaimKeys); releaseErr != nil {
+		c.logger.Warn("failed to release claim keys for dropped alarm queue envelope",
+			slog.String("source", source),
+			slog.String("queue", c.queueKey),
+			slog.String("room_id", strings.TrimSpace(envelope.Notification.RoomID)),
+			slog.Any("error", releaseErr),
+		)
+	}
 }
 
 func parseEnvelope(raw string, logger *slog.Logger) (domain.AlarmQueueEnvelope, bool) {

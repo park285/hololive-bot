@@ -121,6 +121,72 @@ func TestFormatMessageFallbackFailures(t *testing.T) {
 	}
 }
 
+func TestFormatYouTubeOutboxPayloadMatchesSingleFallbackFormatter(t *testing.T) {
+	t.Parallel()
+
+	formatter := &MessageFormatter{}
+	item := domain.YouTubeNotificationOutbox{
+		ID:        1,
+		Kind:      domain.OutboxKindNewShort,
+		ChannelID: "UC_test",
+		ContentID: "short:abc",
+		Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
+	}
+	want, err := formatter.formatMessageFallback("멤버", item)
+	if err != nil {
+		t.Fatalf("formatMessageFallback() error = %v", err)
+	}
+
+	got, err := FormatYouTubeOutboxPayload(context.Background(), domain.YouTubeOutboxDispatchPayload{
+		OutboxIDs:  []int64{1},
+		Kind:       domain.OutboxKindNewShort,
+		AlarmType:  domain.AlarmTypeShorts,
+		ChannelID:  "UC_test",
+		MemberName: "멤버",
+		Items: []domain.YouTubeOutboxItem{{
+			OutboxID:  item.ID,
+			ContentID: item.ContentID,
+			Payload:   item.Payload,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("FormatYouTubeOutboxPayload() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+}
+
+func TestFormatYouTubeOutboxPayloadGroupedFallback(t *testing.T) {
+	t.Parallel()
+
+	got, err := FormatYouTubeOutboxPayload(context.Background(), domain.YouTubeOutboxDispatchPayload{
+		OutboxIDs:  []int64{1, 2},
+		Kind:       domain.OutboxKindCommunityPost,
+		AlarmType:  domain.AlarmTypeCommunity,
+		ChannelID:  "UC_test",
+		MemberName: "멤버",
+		Items: []domain.YouTubeOutboxItem{
+			{OutboxID: 1, ContentID: "post-a", Payload: `{"post_id":"post-a","content_text":"첫 글"}`},
+			{OutboxID: 2, ContentID: "post-b", Payload: `{"post_id":"post-b","content_text":"둘째 글"}`},
+		},
+	})
+	if err != nil {
+		t.Fatalf("FormatYouTubeOutboxPayload() error = %v", err)
+	}
+	for _, want := range []string{
+		"📝 멤버 커뮤니티 알림 (2개)",
+		"첫 글",
+		"https://www.youtube.com/post/post-a",
+		"둘째 글",
+		"https://www.youtube.com/post/post-b",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("message %q does not contain %q", got, want)
+		}
+	}
+}
+
 func TestTruncateString(t *testing.T) {
 	t.Parallel()
 

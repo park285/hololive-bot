@@ -73,6 +73,21 @@ func TestGroupEnvelopes_GroupByMinutesWhenScheduleMissing(t *testing.T) {
 	}
 }
 
+func TestGroupEnvelopes_SeparatesYouTubeOutboxSourceByIdentity(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []domain.AlarmQueueEnvelope{
+		newYouTubeOutboxEnvelope("room-a", domain.OutboxKindNewShort, "short-a"),
+		newYouTubeOutboxEnvelope("room-a", domain.OutboxKindCommunityPost, "post-a"),
+		newEnvelope("room-a", "stream-1", 0, nil, "claim-live"),
+	}
+
+	groups := GroupEnvelopes(envelopes)
+	if len(groups) != 3 {
+		t.Fatalf("expected 3 groups, got %d", len(groups))
+	}
+}
+
 func TestGroupEnvelopes_SeparateByScheduledMinuteBucket(t *testing.T) {
 	t.Parallel()
 
@@ -117,6 +132,30 @@ func newEnvelope(roomID, streamID string, minutesUntil int, startScheduled *time
 			MinutesUntil: minutesUntil,
 		},
 		ClaimKeys: []string{claimKey},
+		Version:   1,
+	}
+}
+
+func newYouTubeOutboxEnvelope(roomID string, kind domain.OutboxKind, contentID string) domain.AlarmQueueEnvelope {
+	alarmType := kind.ToAlarmType()
+	return domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: alarmType,
+			RoomID:    roomID,
+		},
+		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
+		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+			OutboxIDs: []int64{1},
+			Kind:      kind,
+			AlarmType: alarmType,
+			ChannelID: "UC_test",
+			Items: []domain.YouTubeOutboxItem{{
+				OutboxID:  1,
+				ContentID: contentID,
+				Payload:   `{"video_id":"abc","title":"테스트"}`,
+			}},
+		},
+		ClaimKeys: []string{"youtube-notification:" + string(kind) + ":" + contentID + ":" + roomID},
 		Version:   1,
 	}
 }

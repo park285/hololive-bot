@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 )
 
 type Renderer interface {
@@ -38,9 +39,12 @@ func NewSimpleRenderer() *SimpleRenderer {
 	return &SimpleRenderer{}
 }
 
-func (r *SimpleRenderer) RenderGroup(_ context.Context, group NotificationGroup) (string, error) {
+func (r *SimpleRenderer) RenderGroup(ctx context.Context, group NotificationGroup) (string, error) {
 	if len(group.Notifications) == 0 {
 		return "", fmt.Errorf("render group: notifications is empty")
+	}
+	if len(group.Envelopes) > 0 && group.Envelopes[0].SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
+		return renderYouTubeOutboxSource(ctx, group.Envelopes[0])
 	}
 
 	if len(group.Notifications) == 1 {
@@ -60,6 +64,13 @@ func (r *SimpleRenderer) RenderGroup(_ context.Context, group NotificationGroup)
 	}
 
 	return builder.String(), nil
+}
+
+func renderYouTubeOutboxSource(ctx context.Context, envelope domain.AlarmQueueEnvelope) (string, error) {
+	if envelope.YouTubeOutbox == nil {
+		return "", fmt.Errorf("render youtube outbox source: payload is nil")
+	}
+	return outbox.FormatYouTubeOutboxPayload(ctx, *envelope.YouTubeOutbox)
 }
 
 func renderNotification(notification domain.AlarmNotification) string {

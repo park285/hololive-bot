@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
@@ -153,6 +154,32 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 	}()
 
 	result, err = p.publishEnvelopes(ctx, envelopes)
+	return result, err
+}
+
+func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
+	startedAt := time.Now()
+	if len(envelopes) == 0 {
+		return dispatchoutbox.PublishBatchResult{}, nil
+	}
+	for i := range envelopes {
+		if err := envelopes[i].ValidateCanonicalDispatch(); err != nil {
+			return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("publish alarm dispatch batch: validate envelope %d: %w", i, err)
+		}
+		if strings.TrimSpace(envelopes[i].EnqueuedAt) == "" {
+			envelopes[i].EnqueuedAt = p.now().UTC().Format(time.RFC3339)
+		}
+		if envelopes[i].Version == 0 {
+			envelopes[i].Version = contractsalarm.QueueEnvelopeVersionV1
+		}
+	}
+
+	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
+	defer func() {
+		observeAlarmDispatchPublishBatch(time.Since(startedAt), p.publishConfig.Mode, result)
+	}()
+
+	result, err := p.publishEnvelopes(ctx, envelopes)
 	return result, err
 }
 

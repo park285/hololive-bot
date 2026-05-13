@@ -87,6 +87,63 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 	}
 }
 
+func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
+	t.Parallel()
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeShorts,
+			RoomID:    "room1",
+		},
+		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
+		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+			OutboxIDs:         []int64{101},
+			Kind:              domain.OutboxKindNewShort,
+			AlarmType:         domain.AlarmTypeShorts,
+			ChannelID:         "UC_test",
+			RenderTemplateKey: domain.TemplateKeyOutboxShorts,
+			Items: []domain.YouTubeOutboxItem{{
+				OutboxID:  101,
+				ContentID: "short:abc",
+				Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
+			}},
+		},
+		ClaimKeys:  []string{"youtube-notification:NEW_SHORT:short:abc:room1"},
+		EnqueuedAt: "2026-05-14T00:00:00Z",
+		Version:    1,
+	}
+
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatalf("Marshal 실패: %v", err)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("raw Unmarshal 실패: %v", err)
+	}
+	if raw["source_kind"] != string(domain.AlarmDispatchSourceKindYouTubeOutbox) {
+		t.Fatalf("source_kind = %v, want %q", raw["source_kind"], domain.AlarmDispatchSourceKindYouTubeOutbox)
+	}
+	if _, ok := raw["youtube_outbox"]; !ok {
+		t.Fatal("youtube_outbox 필드 없음")
+	}
+
+	var decoded domain.AlarmQueueEnvelope
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal 실패: %v", err)
+	}
+	if decoded.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
+		t.Fatalf("SourceKind = %q, want %q", decoded.SourceKind, domain.AlarmDispatchSourceKindYouTubeOutbox)
+	}
+	if decoded.YouTubeOutbox == nil {
+		t.Fatal("YouTubeOutbox = nil")
+	}
+	if decoded.YouTubeOutbox.Items[0].ContentID != "short:abc" {
+		t.Fatalf("ContentID = %q, want short:abc", decoded.YouTubeOutbox.Items[0].ContentID)
+	}
+}
+
 func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
 	t.Parallel()
 

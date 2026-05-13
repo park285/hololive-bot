@@ -66,6 +66,49 @@ func TestSimpleRenderer_RenderGroupSingle(t *testing.T) {
 	}
 }
 
+func TestSimpleRenderer_RenderGroupYouTubeOutboxSource(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewSimpleRenderer()
+	group := NotificationGroup{
+		RoomID: "room-1",
+		Envelopes: []domain.AlarmQueueEnvelope{{
+			Notification: domain.AlarmNotification{
+				AlarmType: domain.AlarmTypeShorts,
+				RoomID:    "room-1",
+			},
+			SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
+			YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+				OutboxIDs:  []int64{1},
+				Kind:       domain.OutboxKindNewShort,
+				AlarmType:  domain.AlarmTypeShorts,
+				ChannelID:  "UC_test",
+				MemberName: "멤버",
+				Items: []domain.YouTubeOutboxItem{{
+					OutboxID:  1,
+					ContentID: "short:abc",
+					Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
+				}},
+			},
+		}},
+		Notifications: []domain.AlarmNotification{{
+			AlarmType: domain.AlarmTypeShorts,
+			RoomID:    "room-1",
+		}},
+	}
+
+	got, err := renderer.RenderGroup(context.Background(), group)
+	if err != nil {
+		t.Fatalf("RenderGroup() error = %v", err)
+	}
+	if !strings.Contains(got, "📱 멤버 쇼츠 알림") {
+		t.Fatalf("message = %q, want shorts header", got)
+	}
+	if strings.Contains(got, "방송 시작") || strings.Contains(got, "방송 예정") {
+		t.Fatalf("message = %q, must not use live broadcast wording", got)
+	}
+}
+
 func TestSimpleRenderer_RenderGroupMultiple_DetailedFormat(t *testing.T) {
 	t.Parallel()
 
