@@ -6,4 +6,4 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 python3 "${SCRIPT_DIR}/check-function-budget.py" \
   --root "${ROOT_DIR}" \
-  --baseline "docs/architecture/go-function-budget-baseline.txt"
+  "$@"

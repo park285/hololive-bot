@@ -1,3 +1,8 @@
+# A00 — check-function-budget.py target code
+
+아래 코드로 `scripts/architecture/check-function-budget.py`를 교체합니다. baseline budget map, baseline loader, baseline writer가 없어야 합니다.
+
+```python
 #!/usr/bin/env python3
 from __future__ import annotations
 
@@ -286,3 +291,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+```
