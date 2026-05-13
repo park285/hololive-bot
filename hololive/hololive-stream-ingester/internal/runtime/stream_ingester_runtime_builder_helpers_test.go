@@ -130,7 +130,7 @@ func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRate
 	)
 	require.NotNil(t, resolver)
 
-	_, _, _, err := buildStreamIngesterYouTubeComponents(
+	_, _, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    15 * time.Minute,
@@ -152,9 +152,6 @@ func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRate
 		repeatChannelIDs("UC_STATS_", 111),
 		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
 		nil,
-		nil,
-		nil,
-		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		resolver,
 		testLogger(),
@@ -168,7 +165,7 @@ func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRate
 func TestBuildStreamIngesterYouTubeComponents_AllowsBudgetSafeDefaultPollConfig(t *testing.T) {
 	t.Parallel()
 
-	scheduler, dispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
+	scheduler, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{},
 		&databasemocks.Client{
 			GetGormDBFunc: func() *gorm.DB { return nil },
@@ -179,15 +176,11 @@ func TestBuildStreamIngesterYouTubeComponents_AllowsBudgetSafeDefaultPollConfig(
 		nil,
 		nil,
 		nil,
-		nil,
-		nil,
-		nil,
 		testLogger(),
 	)
 
 	require.NoError(t, err)
 	require.NotNil(t, scheduler)
-	require.NotNil(t, dispatcher)
 	require.Len(t, registrations, 5)
 }
 
@@ -208,7 +201,7 @@ func TestBuildStreamIngesterYouTubeComponents_ProductionShortsIntervalKeepsRecov
 	)
 	require.NotNil(t, resolver)
 
-	_, _, _, err := buildStreamIngesterYouTubeComponents(
+	_, _, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    15 * time.Minute,
@@ -225,9 +218,6 @@ func TestBuildStreamIngesterYouTubeComponents_ProductionShortsIntervalKeepsRecov
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
 		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
-		nil,
-		nil,
-		nil,
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		resolver,

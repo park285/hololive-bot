@@ -31,24 +31,18 @@ import (
 type DeliveryModule struct {
 	Locker     delivery.NotificationLocker
 	Repository *delivery.OutboxRepository
-	Sender     delivery.MessageSender
-	Dispatcher *delivery.Dispatcher
 }
 
 func BuildDeliveryModule(
 	cacheSvc cache.Client,
 	postgres database.Client,
-	sender delivery.MessageSender,
 	logger *slog.Logger,
 ) *DeliveryModule {
 	locker := delivery.NewLocker(cacheSvc, logger)
 	repository := delivery.NewOutboxRepository(postgres.GetGormDB(), logger)
-	dispatcher := delivery.NewDispatcher(repository, sender, logger, delivery.DefaultDispatcherConfig())
 
 	return &DeliveryModule{
 		Locker:     locker,
 		Repository: repository,
-		Sender:     sender,
-		Dispatcher: dispatcher,
 	}
 }

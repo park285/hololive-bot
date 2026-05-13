@@ -1,12 +1,16 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -88,4 +92,37 @@ func TestLoadAlarmDispatchPublishConfigAllowsMatchingPGPair(t *testing.T) {
 	cfg, err := loadAlarmDispatchPublishConfig()
 	require.NoError(t, err)
 	assert.Equal(t, queue.PublishModePGFirst, cfg.Mode)
+}
+
+func TestNotificationEgressRunnerRetriesHeldLeaseUntilAcquired(t *testing.T) {
+	var setNXCalls atomic.Int32
+	var schedulerStarts atomic.Int32
+	cacheSvc := &cachemocks.Client{
+		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
+			return setNXCalls.Add(1) > 1, nil
+		},
+		CompareAndDeleteFunc: func(context.Context, string, string) (bool, error) {
+			return true, nil
+		},
+	}
+	runner := notificationEgressRunner{
+		leaseCache:         cacheSvc,
+		leaseEnabled:       true,
+		leaseRetryInterval: time.Millisecond,
+	}
+
+	err := runner.startWithLease(t.Context(), []namedRuntimeScheduler{{
+		name:      "test",
+		scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error { schedulerStarts.Add(1); return nil }),
+	}})
+
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, setNXCalls.Load(), int32(2))
+	assert.Equal(t, int32(1), schedulerStarts.Load())
+}
+
+type runtimeAlarmSchedulerFunc func(context.Context) error
+
+func (f runtimeAlarmSchedulerFunc) Start(ctx context.Context) error {
+	return f(ctx)
 }

@@ -382,7 +382,7 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		},
 	})
 
-	scheduler, dispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
+	scheduler, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
@@ -399,18 +399,12 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		nil,
 		nil,
 		nil,
-		nil,
-		nil,
-		nil,
 		newPollerRegistrationTestLogger(),
 	)
 	require.NoError(t, err)
 
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
-	}
-	if dispatcher == nil {
-		t.Fatal("dispatcher is nil")
 	}
 	if len(registrations) != 5 {
 		t.Fatalf("len(registrations) = %d, want 5", len(registrations))

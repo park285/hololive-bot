@@ -7,12 +7,8 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
-	"github.com/park285/iris-client-go/iris"
 )
 
 func buildStreamIngesterYouTubeComponents(
@@ -22,13 +18,10 @@ func buildStreamIngesterYouTubeComponents(
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
 	liveStatusProvider poller.LiveStatusProvider,
-	cacheService cache.Client,
-	irisClient iris.Sender,
-	templateRenderer *template.Renderer,
 	routeDecider poller.NotificationRouteDecider,
 	publishedAtResolver *poller.PendingPublishedAtResolver,
 	logger *slog.Logger,
-) (*poller.Scheduler, *outbox.Dispatcher, []providers.ChannelPollerRegistration, error) {
+) (*poller.Scheduler, []providers.ChannelPollerRegistration, error) {
 	pollerRegistrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
 		postgresService,
 		scraperCfg,
@@ -42,12 +35,12 @@ func buildStreamIngesterYouTubeComponents(
 		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
 	}
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	budgetSummary := summarizeYouTubeScraperBudget(pollerRegistrations)
 	logYouTubeScraperBudgetSummary(budgetSummary, logger)
 	if err := validateYouTubeScraperPollerBudget(budgetSummary); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	schedulerCfg := scraperCfg.SchedulerOrDefault()
@@ -60,16 +53,7 @@ func buildStreamIngesterYouTubeComponents(
 		providers.WithSchedulerErrorBackoff(schedulerCfg.ErrorBackoffMin, schedulerCfg.ErrorBackoffMax),
 	)
 
-	outboxDispatcher := outbox.NewDispatcher(
-		postgresService.GetGormDB(),
-		cacheService,
-		delivery.NewIrisMessageSender(irisClient),
-		templateRenderer,
-		logger,
-		outbox.DefaultConfig(),
-	)
-
-	return scraperScheduler, outboxDispatcher, pollerRegistrations, nil
+	return scraperScheduler, pollerRegistrations, nil
 }
 
 func buildSharedYouTubeScraperClient(

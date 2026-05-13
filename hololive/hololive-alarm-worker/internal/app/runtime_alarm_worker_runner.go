@@ -24,6 +24,7 @@ import (
 	"context"
 
 	appruntime "github.com/kapu/hololive-alarm-worker/internal/app/runtime"
+	"golang.org/x/sync/errgroup"
 )
 
 func (r *AlarmWorkerRuntime) Run() {
@@ -43,11 +44,7 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,
 		StartAlarmScheduler: func(ctx context.Context) error {
-			if r.Scheduler == nil {
-				return nil
-			}
-
-			return r.Scheduler.Start(ctx)
+			return r.startBackgroundSchedulers(ctx)
 		},
 		RunConfigSubscriber: func(ctx context.Context) {
 			if r.ConfigSubscriber != nil {
@@ -57,6 +54,21 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 		StartHTTPServer:         r.StartHTTPServer,
 		SetAlarmSchedulerCancel: r.setAlarmSchedulerCancel,
 	})
+}
+
+func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) error {
+	eg, egCtx := errgroup.WithContext(ctx)
+	if r.Scheduler != nil {
+		eg.Go(func() error {
+			return r.Scheduler.Start(egCtx)
+		})
+	}
+	if r.NotificationEgress != nil {
+		eg.Go(func() error {
+			return r.NotificationEgress.Start(egCtx)
+		})
+	}
+	return eg.Wait()
 }
 
 func (r *AlarmWorkerRuntime) StartHTTPServer(errCh chan<- error) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -68,6 +67,12 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 		return nil, fmt.Errorf("build alarm worker runtime: scheduler: %w", err)
 	}
 
+	notificationEgress, err := buildNotificationEgress(cfg, infra, logger)
+	if err != nil {
+		infra.Cleanup()
+		return nil, fmt.Errorf("build alarm worker runtime: notification egress: %w", err)
+	}
+
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, sharedserver.RuntimeRouterOptions{APIKey: cfg.Server.APIKey})
 	if err != nil {
 		infra.Cleanup()
@@ -76,13 +81,14 @@ func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *sl
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	return &AlarmWorkerRuntime{
-		Config:           cfg,
-		Logger:           logger,
-		Scheduler:        scheduler,
-		ConfigSubscriber: BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
-		ServerAddr:       addr,
-		HttpServer:       sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
-		Managed:          lifecycle.NewManaged(infra.Cleanup),
+		Config:             cfg,
+		Logger:             logger,
+		Scheduler:          scheduler,
+		NotificationEgress: notificationEgress,
+		ConfigSubscriber:   BuildAlarmWorkerConfigSubscriber(infra.Cache, foundation.AlarmCRUD, logger),
+		ServerAddr:         addr,
+		HttpServer:         sharedserver.NewH2CServer(addr, router, "hololive-alarm-worker.http"),
+		Managed:            lifecycle.NewManaged(infra.Cleanup),
 	}, nil
 }
 
@@ -281,31 +287,4 @@ func alarmDispatchModeRequiresPGConsumer(publishMode queue.PublishMode, consumer
 
 func alarmDispatchModeRequiresPGPublisher(publishMode queue.PublishMode, consumerMode string) bool {
 	return publishMode != queue.PublishModePGFirst && consumerMode == "pg"
-}
-
-func parseBoolEnv(key string, def bool) bool {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return def
-	}
-	switch strings.ToLower(raw) {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return def
-	}
-}
-
-func parsePositiveIntEnv(key string, def int) int {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return def
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
-		return def
-	}
-	return value
 }

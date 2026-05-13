@@ -48,10 +48,6 @@ func (r *StreamIngesterRuntime) startBackgroundServices(ctx context.Context, err
 		go r.PollTargetRefresher.Start(ctx)
 		r.Logger.Info("YouTube poll target refresher started", slog.String("runtime", r.runtimeName()))
 	}
-	if r.OutboxDispatcher != nil {
-		r.OutboxDispatcher.Start(ctx)
-		r.Logger.Info("YouTube outbox dispatcher started", slog.String("runtime", r.runtimeName()))
-	}
 	if r.PhotoSync != nil {
 		go r.PhotoSync.Start(ctx)
 		r.Logger.Info("Photo sync service started", slog.String("runtime", r.runtimeName()))

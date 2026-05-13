@@ -8,7 +8,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
@@ -24,7 +23,6 @@ type ingestionRuntimeYouTubeState struct {
 
 type ingestionRuntimeYouTubeDependencies struct {
 	scraperScheduler    *poller.Scheduler
-	outboxDispatcher    *outbox.Dispatcher
 	publishedAtResolver *poller.PendingPublishedAtResolver
 	pollerRegistrations []providers.ChannelPollerRegistration
 	pollTargetRefresher *youTubePollTargetRefresher
@@ -123,16 +121,13 @@ func buildIngestionRuntimeYouTubeDependencies(
 		logger,
 	)
 	var err error
-	deps.scraperScheduler, deps.outboxDispatcher, deps.pollerRegistrations, err = buildStreamIngesterYouTubeComponents(
+	deps.scraperScheduler, deps.pollerRegistrations, err = buildStreamIngesterYouTubeComponents(
 		cfg.Scraper,
 		infra.postgresService,
 		state.pollTargets.NotificationChannelIDs,
 		state.pollTargets.StatsChannelIDs,
 		sharedScraperClient,
 		infra.holodexService,
-		infra.cacheService,
-		infra.irisClient,
-		infra.templateRenderer,
 		routeDecider,
 		deps.publishedAtResolver,
 		logger,
