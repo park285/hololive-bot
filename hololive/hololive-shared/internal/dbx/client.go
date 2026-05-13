@@ -37,6 +37,14 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+var queryExecModes = map[string]pgx.QueryExecMode{
+	"cache_statement": pgx.QueryExecModeCacheStatement,
+	"cache_describe":  pgx.QueryExecModeCacheDescribe,
+	"describe_exec":   pgx.QueryExecModeDescribeExec,
+	"exec":            pgx.QueryExecModeExec,
+	"simple_protocol": pgx.QueryExecModeSimpleProtocol,
+}
+
 type Client struct {
 	cfg Config
 	opt OpenOptions
@@ -164,20 +172,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		retry.PingTimeout = 5 * time.Second
 	}
 
-	client, connectErr := c.tryConnect(ctx, cfg, pool, retry)
-	if connectErr != nil && opt.DNSFallback && ShouldFallbackToLocalhost(connectErr, cfg.Host) {
-		fallbackCfg := cfg
-		fallbackCfg.Host = "127.0.0.1"
-		client, connectErr = c.tryConnect(ctx, fallbackCfg, pool, retry)
-		if connectErr == nil {
-			opt.Logger.Warn("postgres_host_fallback",
-				slog.String("configured_host", cfg.Host),
-				slog.String("effective_host", "127.0.0.1"),
-			)
-			c.cfg = fallbackCfg
-		}
-	}
-
+	client, connectErr := c.connectWithOptionalDNSFallback(ctx, cfg, opt, pool, retry)
 	if connectErr != nil {
 		return connectErr
 	}
@@ -202,6 +197,31 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	opt.Logger.Info("postgres_gorm_connected")
 	return nil
+}
+
+func (c *Client) connectWithOptionalDNSFallback(
+	ctx context.Context,
+	cfg Config,
+	opt OpenOptions,
+	pool PoolConfig,
+	retry RetryConfig,
+) (*Client, error) {
+	client, connectErr := c.tryConnect(ctx, cfg, pool, retry)
+	if connectErr == nil || !opt.DNSFallback || !ShouldFallbackToLocalhost(connectErr, cfg.Host) {
+		return client, connectErr
+	}
+
+	fallbackCfg := cfg
+	fallbackCfg.Host = "127.0.0.1"
+	client, connectErr = c.tryConnect(ctx, fallbackCfg, pool, retry)
+	if connectErr == nil {
+		opt.Logger.Warn("postgres_host_fallback",
+			slog.String("configured_host", cfg.Host),
+			slog.String("effective_host", "127.0.0.1"),
+		)
+		c.cfg = fallbackCfg
+	}
+	return client, connectErr
 }
 
 func (c *Client) Connected() bool {
@@ -268,20 +288,11 @@ func (c *Client) tryConnect(ctx context.Context, cfg Config, pool PoolConfig, re
 }
 
 func parseQueryExecMode(mode string) (pgx.QueryExecMode, error) {
-	switch normalizeQueryExecMode(mode) {
-	case "cache_statement":
-		return pgx.QueryExecModeCacheStatement, nil
-	case "cache_describe":
-		return pgx.QueryExecModeCacheDescribe, nil
-	case "describe_exec":
-		return pgx.QueryExecModeDescribeExec, nil
-	case "exec":
-		return pgx.QueryExecModeExec, nil
-	case "simple_protocol":
-		return pgx.QueryExecModeSimpleProtocol, nil
-	default:
+	queryMode, ok := queryExecModes[normalizeQueryExecMode(mode)]
+	if !ok {
 		return pgx.QueryExecModeCacheStatement, errors.New("allowed: cache_statement, cache_describe, describe_exec, exec, simple_protocol")
 	}
+	return queryMode, nil
 }
 
 func normalizePoolConfig(pool PoolConfig) PoolConfig {

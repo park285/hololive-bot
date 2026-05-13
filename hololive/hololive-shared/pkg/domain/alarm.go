@@ -86,21 +86,29 @@ func (a *AlarmTypes) Scan(value any) error {
 		*a = nil
 		return nil
 	}
-	var str string
+	str, err := alarmTypesString(value)
+	if err != nil {
+		return err
+	}
+	*a = parseAlarmTypesArray(str)
+	return nil
+}
+
+func alarmTypesString(value any) (string, error) {
 	switch v := value.(type) {
 	case []byte:
-		str = string(v)
+		return string(v), nil
 	case string:
-		str = v
+		return v, nil
 	default:
-		return fmt.Errorf("failed to scan AlarmTypes: expected string or []byte, got %T", value)
+		return "", fmt.Errorf("failed to scan AlarmTypes: expected string or []byte, got %T", value)
 	}
+}
 
-	// PostgreSQL 배열 형식 파싱: {LIVE,COMMUNITY,SHORTS}
+func parseAlarmTypesArray(str string) AlarmTypes {
 	str = strings.TrimPrefix(str, "{")
 	str = strings.TrimSuffix(str, "}")
 	if str == "" {
-		*a = nil
 		return nil
 	}
 	parts := strings.Split(str, ",")
@@ -111,8 +119,7 @@ func (a *AlarmTypes) Scan(value any) error {
 			result = append(result, t)
 		}
 	}
-	*a = result
-	return nil
+	return result
 }
 
 func (a AlarmTypes) Contains(t AlarmType) bool {
@@ -176,17 +183,25 @@ func (n *AlarmNotification) ValidateLegacyRoute() error {
 	if n == nil {
 		return fmt.Errorf("legacy alarm route: notification is nil")
 	}
+	return validateLegacyRouteAlarmType(n.AlarmType)
+}
 
-	switch n.AlarmType {
-	case AlarmTypeLive:
+func validateLegacyRouteAlarmType(alarmType AlarmType) error {
+	if alarmType == AlarmTypeLive {
 		return nil
-	case AlarmTypeCommunity, AlarmTypeShorts:
-		return fmt.Errorf("legacy alarm route only supports %s notifications; use youtube outbox path for %s", AlarmTypeLive, n.AlarmType)
-	case "":
-		return fmt.Errorf("legacy alarm route requires explicit alarm type")
-	default:
-		return fmt.Errorf("legacy alarm route does not support alarm type %q", n.AlarmType)
 	}
+	if _, ok := legacyRouteOutboxAlarmTypes[alarmType]; ok {
+		return fmt.Errorf("legacy alarm route only supports %s notifications; use youtube outbox path for %s", AlarmTypeLive, alarmType)
+	}
+	if alarmType == "" {
+		return fmt.Errorf("legacy alarm route requires explicit alarm type")
+	}
+	return fmt.Errorf("legacy alarm route does not support alarm type %q", alarmType)
+}
+
+var legacyRouteOutboxAlarmTypes = map[AlarmType]struct{}{
+	AlarmTypeCommunity: {},
+	AlarmTypeShorts:    {},
 }
 
 type AlarmQueueEnvelope struct {

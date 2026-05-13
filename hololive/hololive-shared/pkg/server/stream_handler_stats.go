@@ -34,50 +34,71 @@ import (
 func (h *StreamHandler) GetChannelStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if h.ValkeyCache != nil {
-		var cachedStats map[string]*youtube.ChannelStats
-		if err := h.ValkeyCache.Get(ctx, ChannelStatsCacheKey, &cachedStats); err != nil {
-			h.respondInternalError(
-				c,
-				"Failed to get channel stats",
-				"Failed to get channel stats from cache",
-				err,
-			)
-			return
-		}
-		if cachedStats != nil {
-			h.Logger.Debug("Channel stats cache hit", slog.Int("count", len(cachedStats)))
-			c.JSON(200, gin.H{"status": "ok", "stats": cachedStats})
-			return
-		}
+	handled, err := h.respondChannelStatsFromCache(c, ctx)
+	if err != nil || handled {
+		return
 	}
 
-	if h.StatsRepo != nil {
-		stats, err := h.getChannelStatsFromDB(ctx)
-		if err != nil {
-			h.respondInternalError(
-				c,
-				"Failed to get channel stats",
-				"Failed to get channel stats from DB",
-				err,
-			)
-			return
-		}
-		if len(stats) > 0 {
-			h.Logger.Debug("Channel stats DB snapshot hit", slog.Int("count", len(stats)))
-
-			h.cacheChannelStatsAsync(ctx, stats)
-			h.triggerChannelStatsRefreshAsync(ctx)
-
-			c.JSON(200, gin.H{"status": "ok", "stats": stats, "source": "db_snapshot"})
-			return
-		}
+	handled, err = h.respondChannelStatsFromDB(c, ctx)
+	if err != nil || handled {
+		return
 	}
 
 	h.respondError(c, 503, "Channel stats snapshot not ready", gin.H{
 		"code": "channel_stats_snapshot_not_ready",
 		"hint": "retry later after background poller sync",
 	})
+}
+
+func (h *StreamHandler) respondChannelStatsFromCache(c *gin.Context, ctx context.Context) (bool, error) {
+	if h.ValkeyCache == nil {
+		return false, nil
+	}
+
+	var cachedStats map[string]*youtube.ChannelStats
+	if err := h.ValkeyCache.Get(ctx, ChannelStatsCacheKey, &cachedStats); err != nil {
+		h.respondInternalError(
+			c,
+			"Failed to get channel stats",
+			"Failed to get channel stats from cache",
+			err,
+		)
+		return true, err
+	}
+	if cachedStats == nil {
+		return false, nil
+	}
+
+	h.Logger.Debug("Channel stats cache hit", slog.Int("count", len(cachedStats)))
+	c.JSON(200, gin.H{"status": "ok", "stats": cachedStats})
+	return true, nil
+}
+
+func (h *StreamHandler) respondChannelStatsFromDB(c *gin.Context, ctx context.Context) (bool, error) {
+	if h.StatsRepo == nil {
+		return false, nil
+	}
+
+	stats, err := h.getChannelStatsFromDB(ctx)
+	if err != nil {
+		h.respondInternalError(
+			c,
+			"Failed to get channel stats",
+			"Failed to get channel stats from DB",
+			err,
+		)
+		return true, err
+	}
+	if len(stats) == 0 {
+		return false, nil
+	}
+
+	h.Logger.Debug("Channel stats DB snapshot hit", slog.Int("count", len(stats)))
+	h.cacheChannelStatsAsync(ctx, stats)
+	h.triggerChannelStatsRefreshAsync(ctx)
+
+	c.JSON(200, gin.H{"status": "ok", "stats": stats, "source": "db_snapshot"})
+	return true, nil
 }
 
 func (h *StreamHandler) getChannelStatsFromDB(ctx context.Context) (map[string]*youtube.ChannelStats, error) {
@@ -146,33 +167,44 @@ func (h *StreamHandler) triggerChannelStatsRefreshAsync(ctx context.Context) {
 		)
 		defer cancel()
 
-		acquired, err := h.ValkeyCache.SetNX(bgCtx, ChannelStatsRefreshLockKey, ChannelStatsRefreshLockValue, ChannelStatsRefreshLockTTL)
-		if err != nil {
-			h.Logger.Warn("Failed to acquire refresh lock", slog.Any("error", err))
-			return
-		}
-		if !acquired {
-			h.Logger.Debug("Refresh lock already held, skipping background refresh")
+		if !h.acquireChannelStatsRefreshLock(bgCtx) {
 			return
 		}
 
-		h.Logger.Info("Background channel stats refresh started")
-
-		channelIDs, _, err := h.GetActiveMemberIndex(bgCtx)
-		if err != nil {
-			h.Logger.Warn("Background refresh: failed to get members", slog.Any("error", err))
-			return
-		}
-
-		stats, err := h.YouTube.GetChannelStatistics(bgCtx, channelIDs)
-		if err != nil {
-			h.Logger.Warn("Background refresh: failed to get stats", slog.Any("error", err))
-			return
-		}
-
-		h.cacheChannelStatsAsync(bgCtx, stats)
-		h.Logger.Info("Background channel stats refresh completed", slog.Int("count", len(stats)))
+		h.refreshChannelStats(bgCtx)
 	})
+}
+
+func (h *StreamHandler) acquireChannelStatsRefreshLock(ctx context.Context) bool {
+	acquired, err := h.ValkeyCache.SetNX(ctx, ChannelStatsRefreshLockKey, ChannelStatsRefreshLockValue, ChannelStatsRefreshLockTTL)
+	if err != nil {
+		h.Logger.Warn("Failed to acquire refresh lock", slog.Any("error", err))
+		return false
+	}
+	if !acquired {
+		h.Logger.Debug("Refresh lock already held, skipping background refresh")
+		return false
+	}
+	return true
+}
+
+func (h *StreamHandler) refreshChannelStats(ctx context.Context) {
+	h.Logger.Info("Background channel stats refresh started")
+
+	channelIDs, _, err := h.GetActiveMemberIndex(ctx)
+	if err != nil {
+		h.Logger.Warn("Background refresh: failed to get members", slog.Any("error", err))
+		return
+	}
+
+	stats, err := h.YouTube.GetChannelStatistics(ctx, channelIDs)
+	if err != nil {
+		h.Logger.Warn("Background refresh: failed to get stats", slog.Any("error", err))
+		return
+	}
+
+	h.cacheChannelStatsAsync(ctx, stats)
+	h.Logger.Info("Background channel stats refresh completed", slog.Int("count", len(stats)))
 }
 
 func (h *StreamHandler) runAsyncWithLimiter(limiter chan struct{}, task string, fn func()) {
