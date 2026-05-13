@@ -41,8 +41,13 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 
 	rg := router.Group(majoreventcontracts.BasePath)
 	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
+	rg.GET(majoreventcontracts.SubscriptionsRoute+"/:roomID", getMajorEventSubscriptionHandler(repo))
+	rg.POST(majoreventcontracts.SubscriptionsRoute, subscribeMajorEventHandler(repo))
+	rg.DELETE(majoreventcontracts.SubscriptionsRoute+"/:roomID", unsubscribeMajorEventHandler(repo))
+}
 
-	rg.GET(majoreventcontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
+func getMajorEventSubscriptionHandler(repo *majorevent.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
 			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
@@ -56,9 +61,11 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 		}
 
 		c.JSON(http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
-	})
+	}
+}
 
-	rg.POST(majoreventcontracts.SubscriptionsRoute, func(c *gin.Context) {
+func subscribeMajorEventHandler(repo *majorevent.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req subscription.SubscribeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
@@ -77,9 +84,11 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 		}
 
 		c.JSON(http.StatusOK, gin.H{"status": "subscribed"})
-	})
+	}
+}
 
-	rg.DELETE(majoreventcontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
+func unsubscribeMajorEventHandler(repo *majorevent.Repository) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		roomID := strings.TrimSpace(c.Param("roomID"))
 		if roomID == "" {
 			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
@@ -92,5 +101,5 @@ func registerMajorEventInternalRoutes(router *gin.Engine, apiKey string, repo *m
 		}
 
 		c.JSON(http.StatusOK, gin.H{"status": "unsubscribed"})
-	})
+	}
 }

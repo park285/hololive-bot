@@ -66,24 +66,32 @@ func (c *Service) BatchHGet(ctx context.Context, key string, fields []string) (m
 	results := c.client.DoMulti(ctx, cmds...)
 	values := make(map[string]string, len(fields))
 	for i, result := range results {
-		if err := result.Error(); err != nil {
-			if util.IsValkeyNil(err) {
-				continue
-			}
-			c.logger.Error("Cache batch hget failed", slog.String("key", key), slog.Any("error", err))
-			return values, NewCacheError("batch hget failed", "hget", key, err)
-		}
-
-		value, err := result.ToString()
+		value, found, err := c.batchHGetValue(key, result)
 		if err != nil {
-			return values, NewCacheError("batch hget conversion failed", "hget", key, err)
+			return values, err
 		}
-		if value != "" {
+		if found {
 			values[fields[i]] = value
 		}
 	}
 
 	return values, nil
+}
+
+func (c *Service) batchHGetValue(key string, result valkey.ValkeyResult) (string, bool, error) {
+	if err := result.Error(); err != nil {
+		if util.IsValkeyNil(err) {
+			return "", false, nil
+		}
+		c.logger.Error("Cache batch hget failed", slog.String("key", key), slog.Any("error", err))
+		return "", false, NewCacheError("batch hget failed", "hget", key, err)
+	}
+
+	value, err := result.ToString()
+	if err != nil {
+		return "", false, NewCacheError("batch hget conversion failed", "hget", key, err)
+	}
+	return value, value != "", nil
 }
 
 func (c *Service) HDel(ctx context.Context, key string, fields ...string) error {

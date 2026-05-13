@@ -211,7 +211,7 @@ func TestClient_GetStreams_ChunksLargeUserLoginSets(t *testing.T) {
 	c.tokenExpiry.Store(time.Now().Add(1 * time.Hour))
 
 	userLogins := make([]string, 0, 205)
-	for i := 0; i < 205; i++ {
+	for i := range 205 {
 		userLogins = append(userLogins, fmt.Sprintf("user-%03d", i))
 	}
 

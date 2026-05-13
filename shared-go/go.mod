@@ -5,7 +5,6 @@ go 1.26.3
 require (
 	github.com/bytedance/sonic v1.15.0
 	github.com/gin-gonic/gin v1.12.0
-	github.com/kapu/hololive-shared v0.0.0
 	github.com/lmittmann/tint v1.1.3
 	github.com/mattn/go-isatty v0.0.20
 	github.com/panjf2000/ants/v2 v2.12.0

@@ -28,19 +28,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (n *Notifier) publishAndMark(ctx context.Context, payload *sendInput, claimKeys []string) error {
-	result, err := n.queuePublisher.Publish(ctx, payload.notification, claimKeys)
-	if err != nil {
-		if result.ProcessedDeliveries == 0 {
-			n.releaseClaimsBestEffort(ctx, claimKeys, "failed to release claims after queue publish error")
-		}
-		return fmt.Errorf("publish queue: %w", err)
-	}
-
-	n.markPublishedBestEffort(ctx, payload)
-	return nil
-}
-
 func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend) (int, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(items))
 	claimKeys := make([][]string, 0, len(items))

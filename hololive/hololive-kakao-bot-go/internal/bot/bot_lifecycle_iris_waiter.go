@@ -32,8 +32,8 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 	ctx context.Context,
 	timeout, retryInterval, pingTimeout time.Duration,
 ) error {
-	if l == nil || l.irisClient == nil {
-		return errors.New("wait for iris ready: iris client is not configured")
+	if err := l.validateIrisReadyWaiter(); err != nil {
+		return err
 	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -42,6 +42,21 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 	ticker := time.NewTicker(retryInterval)
 	defer ticker.Stop()
 
+	return l.runIrisReadyWaitLoop(waitCtx, ticker.C, timeout, retryInterval, pingTimeout)
+}
+
+func (l *BotLifecycle) validateIrisReadyWaiter() error {
+	if l == nil || l.irisClient == nil {
+		return errors.New("wait for iris ready: iris client is not configured")
+	}
+	return nil
+}
+
+func (l *BotLifecycle) runIrisReadyWaitLoop(
+	waitCtx context.Context,
+	tick <-chan time.Time,
+	timeout, retryInterval, pingTimeout time.Duration,
+) error {
 	attempt := 0
 	startedAt := time.Now()
 	lastWarnLoggedAt := time.Time{}
@@ -49,43 +64,64 @@ func (l *BotLifecycle) WaitUntilIrisReady(
 	for {
 		attempt++
 
-		pingCtx, pingCancel := context.WithTimeout(waitCtx, pingTimeout)
-		ready := l.irisClient.Ping(pingCtx)
-
-		pingCancel()
-
-		if ready {
-			if attempt > 1 {
-				l.logInfo(
-					"Iris server became ready after retry",
-					slog.Int("attempt", attempt),
-					slog.Duration("elapsed", time.Since(startedAt)),
-				)
-			}
-
+		if l.pingIrisReady(waitCtx, pingTimeout) {
+			l.logIrisReadyAfterRetry(attempt, startedAt)
 			return nil
 		}
 
-		now := time.Now()
-		if attempt == 1 || lastWarnLoggedAt.IsZero() || now.Sub(lastWarnLoggedAt) >= time.Minute {
-			l.logWarn(
-				"Iris server not ready, retrying",
-				slog.Int("attempt", attempt),
-				slog.Duration("retry_interval", retryInterval),
-				slog.Duration("elapsed", now.Sub(startedAt)),
-			)
-
-			lastWarnLoggedAt = now
+		if loggedAt, ok := l.logIrisNotReadyRetry(attempt, retryInterval, startedAt, lastWarnLoggedAt); ok {
+			lastWarnLoggedAt = loggedAt
 		}
 
-		select {
-		case <-waitCtx.Done():
-			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
-				return fmt.Errorf("wait for iris ready: timeout after %s", timeout)
-			}
-
-			return fmt.Errorf("wait for iris ready: canceled: %w", waitCtx.Err())
-		case <-ticker.C:
+		if err := waitNextIrisReadyRetry(waitCtx, tick, timeout); err != nil {
+			return err
 		}
 	}
+}
+
+func (l *BotLifecycle) pingIrisReady(ctx context.Context, pingTimeout time.Duration) bool {
+	pingCtx, pingCancel := context.WithTimeout(ctx, pingTimeout)
+	defer pingCancel()
+	return l.irisClient.Ping(pingCtx)
+}
+
+func (l *BotLifecycle) logIrisReadyAfterRetry(attempt int, startedAt time.Time) {
+	if attempt <= 1 {
+		return
+	}
+	l.logInfo(
+		"Iris server became ready after retry",
+		slog.Int("attempt", attempt),
+		slog.Duration("elapsed", time.Since(startedAt)),
+	)
+}
+
+func (l *BotLifecycle) logIrisNotReadyRetry(attempt int, retryInterval time.Duration, startedAt time.Time, lastWarnLoggedAt time.Time) (time.Time, bool) {
+	now := time.Now()
+	if attempt != 1 && !lastWarnLoggedAt.IsZero() && now.Sub(lastWarnLoggedAt) < time.Minute {
+		return lastWarnLoggedAt, false
+	}
+	l.logWarn(
+		"Iris server not ready, retrying",
+		slog.Int("attempt", attempt),
+		slog.Duration("retry_interval", retryInterval),
+		slog.Duration("elapsed", now.Sub(startedAt)),
+	)
+	return now, true
+}
+
+func waitNextIrisReadyRetry(ctx context.Context, tick <-chan time.Time, timeout time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return irisReadyWaitErr(ctx.Err(), timeout)
+	case <-tick:
+		return nil
+	}
+}
+
+func irisReadyWaitErr(err error, timeout time.Duration) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("wait for iris ready: timeout after %s", timeout)
+	}
+	return fmt.Errorf("wait for iris ready: canceled: %w", err)
 }

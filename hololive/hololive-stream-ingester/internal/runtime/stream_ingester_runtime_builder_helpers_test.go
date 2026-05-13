@@ -285,7 +285,7 @@ func TestSummarizeYouTubeScraperBudget_ExcludesInactiveResolver(t *testing.T) {
 
 func repeatChannelIDs(prefix string, count int) []string {
 	channelIDs := make([]string, 0, count)
-	for idx := 0; idx < count; idx++ {
+	for idx := range count {
 		channelIDs = append(channelIDs, fmt.Sprintf("%s%d", prefix, idx+1))
 	}
 	return channelIDs

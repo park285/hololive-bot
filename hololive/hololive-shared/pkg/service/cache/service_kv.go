@@ -124,29 +124,11 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 		return nil
 	}
 
-	// 파이프라인 사용
-	cmds := make([]valkey.Completed, 0, len(pairs))
-	for key, value := range pairs {
-		jsonData, err := json.Marshal(value)
-		if err != nil {
-			c.logger.Error("Failed to marshal value for MSet", slog.String("key", key), slog.Any("error", err))
-			return NewCacheError("marshal failed", "mset", key, err)
-		}
-
-		var cmd valkey.Completed
-		if ttl > 0 {
-			ttlSeconds, err := ttlSecondsCeil(ttl)
-			if err != nil {
-				return NewCacheError("invalid ttl", "mset", key, err)
-			}
-			cmd = c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(ttlSeconds).Build()
-		} else {
-			cmd = c.client.B().Set().Key(key).Value(string(jsonData)).Build()
-		}
-		cmds = append(cmds, cmd)
+	cmds, err := c.msetCommands(pairs, ttl)
+	if err != nil {
+		return err
 	}
 
-	// 배치 실행
 	for _, resp := range c.client.DoMulti(ctx, cmds...) {
 		if resp.Error() != nil {
 			c.logger.Error("MSet command failed", slog.Any("error", resp.Error()))
@@ -155,6 +137,36 @@ func (c *Service) MSet(ctx context.Context, pairs map[string]any, ttl time.Durat
 	}
 
 	return nil
+}
+
+func (c *Service) msetCommands(pairs map[string]any, ttl time.Duration) ([]valkey.Completed, error) {
+	cmds := make([]valkey.Completed, 0, len(pairs))
+	for key, value := range pairs {
+		cmd, err := c.msetCommand(key, value, ttl)
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, cmd)
+	}
+	return cmds, nil
+}
+
+func (c *Service) msetCommand(key string, value any, ttl time.Duration) (valkey.Completed, error) {
+	jsonData, err := json.Marshal(value)
+	if err != nil {
+		c.logger.Error("Failed to marshal value for MSet", slog.String("key", key), slog.Any("error", err))
+		return valkey.Completed{}, NewCacheError("marshal failed", "mset", key, err)
+	}
+
+	if ttl > 0 {
+		ttlSeconds, err := ttlSecondsCeil(ttl)
+		if err != nil {
+			return valkey.Completed{}, NewCacheError("invalid ttl", "mset", key, err)
+		}
+		return c.client.B().Set().Key(key).Value(string(jsonData)).ExSeconds(ttlSeconds).Build(), nil
+	}
+
+	return c.client.B().Set().Key(key).Value(string(jsonData)).Build(), nil
 }
 
 func (c *Service) Del(ctx context.Context, key string) error {
@@ -174,10 +186,7 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 
 	var totalDeleted int64
 	for start := 0; start < len(keys); start += delManyChunkSize {
-		end := start + delManyChunkSize
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(start+delManyChunkSize, len(keys))
 
 		chunk := keys[start:end]
 		resp := c.client.Do(ctx, c.client.B().Del().Key(chunk...).Build())

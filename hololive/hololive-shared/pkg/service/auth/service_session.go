@@ -60,19 +60,9 @@ func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
 		return nil, newError(CodeInternal, "cache service not configured", nil)
 	}
 
-	sessionHash := sha256Hex(token)
-	oldKey := sessionKeyPrefix + sessionHash
-
-	var data sessionData
-	if err := s.cacheSvc.Get(ctx, oldKey, &data); err != nil {
-		return nil, newError(CodeInternal, "failed to read session", err)
-	}
-	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
-		_ = s.cacheSvc.Del(ctx, oldKey)
-		if data.UserID != "" {
-			_, _ = s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+data.UserID, []string{sessionHash})
-		}
-		return nil, newError(CodeUnauthorized, "invalid session", nil)
+	sessionHash, data, err := s.refreshSessionData(ctx, token)
+	if err != nil {
+		return nil, err
 	}
 
 	newSession, err := s.createSession(ctx, data.UserID)
@@ -80,25 +70,60 @@ func (s *Service) Refresh(ctx context.Context, token string) (*Session, error) {
 		return nil, err
 	}
 
-	invalidation := s.deleteSessionByHash(ctx, data.UserID, sessionHash)
-	if invalidation.keyErr != nil {
-		rollbackErr := s.deleteSessionByHash(context.Background(), data.UserID, sha256Hex(newSession.Token))
-		if rollbackErr.Err() != nil {
-			err = stdErrors.Join(invalidation.keyErr, fmt.Errorf("rollback new session: %w", rollbackErr.Err()))
-		} else {
-			err = invalidation.keyErr
-		}
-		return nil, newError(CodeInternal, "failed to invalidate previous session during refresh", err)
+	if err := s.invalidatePreviousRefreshSession(ctx, data.UserID, sessionHash, newSession.Token); err != nil {
+		return nil, err
 	}
+
+	return newSession, nil
+}
+
+func (s *Service) refreshSessionData(ctx context.Context, token string) (string, sessionData, error) {
+	sessionHash := sha256Hex(token)
+	key := sessionKeyPrefix + sessionHash
+
+	var data sessionData
+	if err := s.cacheSvc.Get(ctx, key, &data); err != nil {
+		return "", data, newError(CodeInternal, "failed to read session", err)
+	}
+	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
+		s.deleteExpiredSession(ctx, key, sessionHash, data.UserID)
+		return "", data, newError(CodeUnauthorized, "invalid session", nil)
+	}
+
+	return sessionHash, data, nil
+}
+
+func (s *Service) deleteExpiredSession(ctx context.Context, key, sessionHash, userID string) {
+	_ = s.cacheSvc.Del(ctx, key)
+	if userID != "" {
+		_, _ = s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+userID, []string{sessionHash})
+	}
+}
+
+func (s *Service) invalidatePreviousRefreshSession(ctx context.Context, userID, sessionHash, newToken string) error {
+	invalidation := s.deleteSessionByHash(ctx, userID, sessionHash)
+	if invalidation.keyErr != nil {
+		return s.refreshInvalidationError(userID, newToken, invalidation.keyErr)
+	}
+
 	if invalidation.indexErr != nil && s.logger != nil {
 		s.logger.Warn(
 			"Failed to remove previous session from user index during refresh",
-			slog.String("user_id", data.UserID),
+			slog.String("user_id", userID),
 			slog.Any("error", invalidation.indexErr),
 		)
 	}
 
-	return newSession, nil
+	return nil
+}
+
+func (s *Service) refreshInvalidationError(userID, newToken string, invalidationErr error) error {
+	err := invalidationErr
+	rollbackErr := s.deleteSessionByHash(context.Background(), userID, sha256Hex(newToken))
+	if rollbackErr.Err() != nil {
+		err = stdErrors.Join(err, fmt.Errorf("rollback new session: %w", rollbackErr.Err()))
+	}
+	return newError(CodeInternal, "failed to invalidate previous session during refresh", err)
 }
 
 func (s *Service) Me(ctx context.Context, token string) (*User, error) {
@@ -139,10 +164,7 @@ func (s *Service) validateSession(ctx context.Context, token string) (string, er
 		return "", newError(CodeInternal, "failed to read session", err)
 	}
 	if data.UserID == "" || time.Now().UTC().After(data.ExpiresAt) {
-		_ = s.cacheSvc.Del(ctx, key)
-		if data.UserID != "" {
-			_, _ = s.cacheSvc.SRem(ctx, userSessionsKeyPrefix+data.UserID, []string{sessionHash})
-		}
+		s.deleteExpiredSession(ctx, key, sessionHash, data.UserID)
 		return "", newError(CodeUnauthorized, "invalid session", nil)
 	}
 	return data.UserID, nil
@@ -196,47 +218,53 @@ func (s *Service) createSession(ctx context.Context, userID string) (*Session, e
 		return nil, newError(CodeInternal, "failed to marshal session", err)
 	}
 
-	var token string
-	var sessionHash string
-
-	for range 3 {
-		raw, err := generateToken(sessionTokenPrefix, 32)
-		if err != nil {
-			return nil, newError(CodeInternal, "failed to generate session token", err)
-		}
-		hash := sha256Hex(raw)
-		k := sessionKeyPrefix + hash
-
-		acquired, err := s.cacheSvc.SetNX(ctx, k, string(payload), s.cfg.SessionTTL)
-		if err != nil {
-			return nil, newError(CodeInternal, "failed to store session", err)
-		}
-		if acquired {
-			token = raw
-			sessionHash = hash
-			break
-		}
-	}
-	if token == "" {
-		return nil, newError(CodeInternal, "failed to allocate unique session token", nil)
+	token, sessionHash, err := s.allocateSessionToken(ctx, string(payload))
+	if err != nil {
+		return nil, err
 	}
 
-	// 유저별 세션 인덱스 유지 (비밀번호 변경 시 전체 폐기 용도)
-	userSessionsKey := userSessionsKeyPrefix + userID
-	if _, err := s.cacheSvc.SAdd(ctx, userSessionsKey, []string{sessionHash}); err != nil {
-		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
-		return nil, newError(CodeInternal, "failed to update session index", err)
-	}
-	if err := s.cacheSvc.Expire(ctx, userSessionsKey, s.cfg.UserSessionsTTL); err != nil {
-		_, _ = s.cacheSvc.SRem(ctx, userSessionsKey, []string{sessionHash})
-		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
-		return nil, newError(CodeInternal, "failed to expire session index", err)
+	if err := s.addSessionIndex(ctx, userID, sessionHash); err != nil {
+		return nil, err
 	}
 
 	return &Session{
 		Token:     token,
 		ExpiresAt: expiresAt,
 	}, nil
+}
+
+func (s *Service) allocateSessionToken(ctx context.Context, payload string) (string, string, error) {
+	for range 3 {
+		raw, err := generateToken(sessionTokenPrefix, 32)
+		if err != nil {
+			return "", "", newError(CodeInternal, "failed to generate session token", err)
+		}
+
+		hash := sha256Hex(raw)
+		acquired, err := s.cacheSvc.SetNX(ctx, sessionKeyPrefix+hash, payload, s.cfg.SessionTTL)
+		if err != nil {
+			return "", "", newError(CodeInternal, "failed to store session", err)
+		}
+		if acquired {
+			return raw, hash, nil
+		}
+	}
+
+	return "", "", newError(CodeInternal, "failed to allocate unique session token", nil)
+}
+
+func (s *Service) addSessionIndex(ctx context.Context, userID, sessionHash string) error {
+	userSessionsKey := userSessionsKeyPrefix + userID
+	if _, err := s.cacheSvc.SAdd(ctx, userSessionsKey, []string{sessionHash}); err != nil {
+		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
+		return newError(CodeInternal, "failed to update session index", err)
+	}
+	if err := s.cacheSvc.Expire(ctx, userSessionsKey, s.cfg.UserSessionsTTL); err != nil {
+		_, _ = s.cacheSvc.SRem(ctx, userSessionsKey, []string{sessionHash})
+		_ = s.cacheSvc.Del(ctx, sessionKeyPrefix+sessionHash)
+		return newError(CodeInternal, "failed to expire session index", err)
+	}
+	return nil
 }
 
 func (s *Service) revokeAllSessions(ctx context.Context, userID string) error {
@@ -250,27 +278,38 @@ func (s *Service) revokeAllSessions(ctx context.Context, userID string) error {
 		return fmt.Errorf("cache smembers failed: %w", err)
 	}
 	if len(hashes) == 0 {
-		if err := s.cacheSvc.Del(ctx, userSessionsKey); err != nil {
-			return fmt.Errorf("delete user session index: %w", err)
-		}
-		return nil
+		return s.deleteUserSessionsIndex(ctx, userSessionsKey)
 	}
 
+	keys := sessionKeysFromHashes(hashes)
+	return s.deleteUserSessionKeysAndIndex(ctx, userSessionsKey, keys)
+}
+
+func sessionKeysFromHashes(hashes []string) []string {
 	keys := make([]string, 0, len(hashes))
 	for _, h := range hashes {
-		if h == "" {
-			continue
+		if h != "" {
+			keys = append(keys, sessionKeyPrefix+h)
 		}
-		keys = append(keys, sessionKeyPrefix+h)
 	}
+	return keys
+}
 
+func (s *Service) deleteUserSessionKeysAndIndex(ctx context.Context, userSessionsKey string, keys []string) error {
 	var errs []error
 	if _, err := s.cacheSvc.DelMany(ctx, keys); err != nil {
 		errs = append(errs, fmt.Errorf("delete session keys: %w", err))
 	}
-	if err := s.cacheSvc.Del(ctx, userSessionsKey); err != nil {
-		errs = append(errs, fmt.Errorf("delete user session index: %w", err))
+	if err := s.deleteUserSessionsIndex(ctx, userSessionsKey); err != nil {
+		errs = append(errs, err)
 	}
 
 	return stdErrors.Join(errs...)
+}
+
+func (s *Service) deleteUserSessionsIndex(ctx context.Context, userSessionsKey string) error {
+	if err := s.cacheSvc.Del(ctx, userSessionsKey); err != nil {
+		return fmt.Errorf("delete user session index: %w", err)
+	}
+	return nil
 }

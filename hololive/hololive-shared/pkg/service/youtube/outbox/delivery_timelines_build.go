@@ -1,6 +1,19 @@
 package outbox
 
+import "slices"
+
 import "time"
+
+var postLatencyDelaySourceReasonCodes = map[PostDelaySource]PostLatencyReasonCode{
+	PostDelaySourceExternalCollection: PostLatencyReasonCodeExternalCollection,
+	PostDelaySourceMixed:              PostLatencyReasonCodeMixed,
+}
+
+var postLatencyInternalCauseReasonCodes = map[PostInternalDelayCause]PostLatencyReasonCode{
+	PostInternalDelayCauseQueueWait:         PostLatencyReasonCodeQueueWait,
+	PostInternalDelayCauseRetryAccumulation: PostLatencyReasonCodeRetryAccumulation,
+	PostInternalDelayCauseJobFailure:        PostLatencyReasonCodeJobFailure,
+}
 
 func buildPostDeliveryTimelinesFromScanRows(scanned []postDeliveryTimelineScanRow) []PostDeliveryTimeline {
 	rows := make([]PostDeliveryTimeline, 0, len(scanned))
@@ -139,24 +152,18 @@ func classifyDelaySource(row *PostDeliveryTimeline) PostDelaySource {
 	externalMillis, hasExternal := positiveDurationMillis(row.PublishToDetectMillis)
 	internalMillis, hasInternal := positiveDurationMillis(row.InternalLatencyMillis)
 
-	if row.AlarmLatencyExceeded != nil {
-		if !*row.AlarmLatencyExceeded {
-			if row.InternalLatencyExceeded != nil && *row.InternalLatencyExceeded {
-				return selectDominantDelaySource(externalMillis, hasExternal, internalMillis, hasInternal)
-			}
-			return PostDelaySourceNone
-		}
-		return selectDominantDelaySource(externalMillis, hasExternal, internalMillis, hasInternal)
-	}
-
-	if row.InternalLatencyExceeded != nil && *row.InternalLatencyExceeded {
-		return selectDominantDelaySource(externalMillis, hasExternal, internalMillis, hasInternal)
-	}
-	if row.PublishToDetectMillis != nil && *row.PublishToDetectMillis > postLatencyExceededThresholdMillis {
+	if postLatencyDelaySourceEligible(row) {
 		return selectDominantDelaySource(externalMillis, hasExternal, internalMillis, hasInternal)
 	}
 
 	return PostDelaySourceNone
+}
+
+func postLatencyDelaySourceEligible(row *PostDeliveryTimeline) bool {
+	if row.AlarmLatencyExceeded != nil {
+		return *row.AlarmLatencyExceeded || boolPtrTrue(row.InternalLatencyExceeded)
+	}
+	return boolPtrTrue(row.InternalLatencyExceeded) || postLatencyMillisExceeded(row.PublishToDetectMillis)
 }
 
 func positiveDurationMillis(value *int64) (int64, bool) {
@@ -167,20 +174,22 @@ func positiveDurationMillis(value *int64) (int64, bool) {
 }
 
 func selectDominantDelaySource(externalMillis int64, hasExternal bool, internalMillis int64, hasInternal bool) PostDelaySource {
-	switch {
-	case hasExternal && !hasInternal:
-		return PostDelaySourceExternalCollection
-	case !hasExternal && hasInternal:
-		return PostDelaySourceInternalDelivery
-	case !hasExternal && !hasInternal:
+	if !hasExternal && !hasInternal {
 		return PostDelaySourceNone
-	case externalMillis > internalMillis:
-		return PostDelaySourceExternalCollection
-	case internalMillis > externalMillis:
+	}
+	if !hasExternal {
 		return PostDelaySourceInternalDelivery
-	default:
+	}
+	if !hasInternal {
+		return PostDelaySourceExternalCollection
+	}
+	if externalMillis == internalMillis {
 		return PostDelaySourceMixed
 	}
+	if externalMillis > internalMillis {
+		return PostDelaySourceExternalCollection
+	}
+	return PostDelaySourceInternalDelivery
 }
 
 func classifyPrimaryInternalDelayCause(row *PostDeliveryTimeline) PostInternalDelayCause {
@@ -192,40 +201,44 @@ func classifyPrimaryInternalDelayCause(row *PostDeliveryTimeline) PostInternalDe
 		return PostInternalDelayCauseJobFailure
 	}
 
-	candidates := []postInternalDelayCauseCandidate{
+	selected := postInternalDelayCauseCandidate{cause: PostInternalDelayCauseNone}
+	for _, candidate := range postInternalDelayCauseCandidates(row) {
+		selected = selectInternalDelayCauseCandidate(selected, candidate)
+	}
+
+	return selected.cause
+}
+
+func postInternalDelayCauseCandidates(row *PostDeliveryTimeline) []postInternalDelayCauseCandidate {
+	return []postInternalDelayCauseCandidate{
 		{
 			cause:     PostInternalDelayCauseRetryAccumulation,
 			millis:    row.RetryAccumulationMillis,
 			priority:  postInternalDelayCausePriorityRetryAccumulation,
-			available: row.RetryAccumulationMillis != nil && *row.RetryAccumulationMillis > 0,
+			available: postLatencyPositiveMillis(row.RetryAccumulationMillis),
 		},
 		{
 			cause:     PostInternalDelayCauseQueueWait,
 			millis:    row.QueueWaitMillis,
 			priority:  postInternalDelayCausePriorityQueueWait,
-			available: row.QueueWaitMillis != nil && *row.QueueWaitMillis > 0,
+			available: postLatencyPositiveMillis(row.QueueWaitMillis),
 		},
 	}
+}
 
-	selected := postInternalDelayCauseCandidate{cause: PostInternalDelayCauseNone}
-	for i := range candidates {
-		if !candidates[i].available {
-			continue
-		}
-		if selected.cause == PostInternalDelayCauseNone {
-			selected = candidates[i]
-			continue
-		}
-		if *candidates[i].millis > *selected.millis {
-			selected = candidates[i]
-			continue
-		}
-		if *candidates[i].millis == *selected.millis && candidates[i].priority > selected.priority {
-			selected = candidates[i]
-		}
+func selectInternalDelayCauseCandidate(selected, candidate postInternalDelayCauseCandidate) postInternalDelayCauseCandidate {
+	if !candidate.available {
+		return selected
 	}
+	if selected.cause == PostInternalDelayCauseNone || internalDelayCandidateBeatsSelected(candidate, selected) {
+		return candidate
+	}
+	return selected
+}
 
-	return selected.cause
+func internalDelayCandidateBeatsSelected(candidate, selected postInternalDelayCauseCandidate) bool {
+	return *candidate.millis > *selected.millis ||
+		(*candidate.millis == *selected.millis && candidate.priority > selected.priority)
 }
 
 func BuildPostLatencyClassification(row PostDeliveryTimeline) PostLatencyClassificationResult {
@@ -254,22 +267,12 @@ func buildPostLatencyClassification(row *PostDeliveryTimeline) PostLatencyClassi
 }
 
 func classifyPostLatencyReasonCode(classification PostLatencyClassificationResult) PostLatencyReasonCode {
-	switch classification.DelaySource {
-	case PostDelaySourceExternalCollection:
-		return PostLatencyReasonCodeExternalCollection
-	case PostDelaySourceMixed:
-		return PostLatencyReasonCodeMixed
+	if reasonCode, ok := postLatencyDelaySourceReasonCodes[classification.DelaySource]; ok {
+		return reasonCode
 	}
-
-	switch classification.InternalDelayCause {
-	case PostInternalDelayCauseQueueWait:
-		return PostLatencyReasonCodeQueueWait
-	case PostInternalDelayCauseRetryAccumulation:
-		return PostLatencyReasonCodeRetryAccumulation
-	case PostInternalDelayCauseJobFailure:
-		return PostLatencyReasonCodeJobFailure
+	if reasonCode, ok := postLatencyInternalCauseReasonCodes[classification.InternalDelayCause]; ok {
+		return reasonCode
 	}
-
 	if classification.DelaySource == PostDelaySourceInternalDelivery {
 		return PostLatencyReasonCodeInternalDelivery
 	}
@@ -289,19 +292,29 @@ func classifyPostLatencyClassificationStatus(row *PostDeliveryTimeline) PostLate
 		}
 		return PostLatencyClassificationStatusWithinTarget
 	}
-	if row.InternalLatencyExceeded != nil && *row.InternalLatencyExceeded {
-		return PostLatencyClassificationStatusExceeded
-	}
-	if row.PublishToDetectMillis != nil && *row.PublishToDetectMillis > postLatencyExceededThresholdMillis {
-		return PostLatencyClassificationStatusExceeded
-	}
-	if row.QueueWaitMillis != nil && *row.QueueWaitMillis > postLatencyExceededThresholdMillis {
-		return PostLatencyClassificationStatusExceeded
-	}
-	if row.RetryAccumulationMillis != nil && *row.RetryAccumulationMillis > postLatencyExceededThresholdMillis {
+	if postLatencyDerivedMetricsExceeded(row) {
 		return PostLatencyClassificationStatusExceeded
 	}
 	return PostLatencyClassificationStatusInsufficientEvidence
+}
+
+func postLatencyDerivedMetricsExceeded(row *PostDeliveryTimeline) bool {
+	if boolPtrTrue(row.InternalLatencyExceeded) {
+		return true
+	}
+	return slices.ContainsFunc([]*int64{row.PublishToDetectMillis, row.QueueWaitMillis, row.RetryAccumulationMillis}, postLatencyMillisExceeded)
+}
+
+func boolPtrTrue(value *bool) bool {
+	return value != nil && *value
+}
+
+func postLatencyPositiveMillis(value *int64) bool {
+	return value != nil && *value > 0
+}
+
+func postLatencyMillisExceeded(value *int64) bool {
+	return value != nil && *value > postLatencyExceededThresholdMillis
 }
 
 func buildPostLatencyClassificationEvidence(row *PostDeliveryTimeline) []PostLatencyClassificationEvidence {

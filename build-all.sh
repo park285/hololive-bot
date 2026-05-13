@@ -6,6 +6,7 @@
 #   ./build-all.sh --no-bump            # 버전 bump 없이 빌드/배포
 #   ./build-all.sh --build-only         # 빌드만 수행 (배포/재기동 없음)
 #   ./build-all.sh --remote-cache       # registry-backed remote cache 사용 (REMOTE_CACHE_PREFIX 필요)
+#   ./build-all.sh --skip-local-ci      # 로컬 CI gate를 건너뜀
 #   ./build-all.sh hololive-bot         # 특정 서비스만 빌드
 #   ./build-all.sh bot                  # hololive-bot alias
 
@@ -106,6 +107,7 @@ declare -A VERSION_DIR_BY_SERVICE=(
 NO_BUMP=false
 BUILD_ONLY=false
 REMOTE_CACHE=false
+SKIP_LOCAL_CI=false
 TARGET_SERVICES=()
 
 while [[ $# -gt 0 ]]; do
@@ -120,6 +122,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --remote-cache)
             REMOTE_CACHE=true
+            shift
+            ;;
+        --skip-local-ci)
+            SKIP_LOCAL_CI=true
             shift
             ;;
         --help|-h)
@@ -249,6 +255,16 @@ validate_runtime_config_for_deploy() {
         fi
     fi
 }
+
+# Step 0: 로컬 CI gate
+if [[ "${SKIP_LOCAL_CI}" == false ]]; then
+    echo "[CHECK] Running local CI gate before build..."
+    ./scripts/ci/local-ci.sh
+    echo ""
+else
+    echo "[SKIP] Skipping local CI gate (--skip-local-ci set)"
+    echo ""
+fi
 
 # Step 1: 버전 범프
 if [[ "${NO_BUMP}" == false ]]; then

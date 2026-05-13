@@ -39,57 +39,70 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 
 	channelName := alarmChannelName(notification)
 	stream := notification.Stream
-
-	var urlText string
-
-	switch {
-	case stream.IsTwitchOnly:
-		urlText = fmt.Sprintf("📺 Twitch: %s", stream.GetTwitchLiveURL())
-	case stream.IsIntegrated && stream.HasYouTubeInfo() && stream.ChzzkChannelID != "":
-		urlText = fmt.Sprintf("📺 YouTube: %s\n📺 치지직: %s",
-			stream.GetYouTubeURL(),
-			stream.GetChzzkLiveURL())
-	case stream.IsChzzkOnly || (!stream.HasYouTubeInfo() && stream.ChzzkChannelID != ""):
-		urlText = fmt.Sprintf("📺 치지직: %s", stream.GetChzzkLiveURL())
-	default:
-		urlText = stream.GetYouTubeURL()
-	}
-
-	// 방송 시각 표시: StartScheduled가 있으면 MinutesUntil 값과 무관하게 절대 시각 표시
-	var scheduledTimeKST string
-
-	if notification.Stream.StartScheduled != nil {
-		scheduledTimeKST = util.FormatKST(*notification.Stream.StartScheduled, "15:04")
-	}
-
 	data := alarmNotificationTemplateData{
 		Emoji:            DefaultEmoji,
 		ChannelName:      channelName,
 		MinutesUntil:     notification.MinutesUntil,
-		Title:            stringutil.TruncateString(notification.Stream.Title, constants.StringLimits.StreamTitle),
-		URL:              urlText,
+		Title:            stringutil.TruncateString(stream.Title, constants.StringLimits.StreamTitle),
+		URL:              alarmNotificationURLText(stream),
 		ScheduleMessage:  notification.ScheduleChangeMessage,
-		ScheduledTimeKST: scheduledTimeKST,
+		ScheduledTimeKST: alarmNotificationScheduledKST(stream),
 	}
 
-	templateKey := domain.TemplateKeyCmdAlarmNotification
-
-	if notification.MinutesUntil <= 0 {
-		templateKey = domain.TemplateKeyCmdAlarmLiveStarted
-	}
+	templateKey := alarmNotificationTemplateKey(notification.MinutesUntil)
 
 	rendered, err := f.render(ctx, templateKey, data)
 	if err != nil {
-		if templateKey == domain.TemplateKeyCmdAlarmLiveStarted {
-			// 마이그레이션 적용 전에도 catch-up 문구가 "방송 시작"으로 보이도록 안전한 fallback.
-			return fmt.Sprintf("🔴 %s 방송 시작됨\n📺 %s\n🔗 %s", channelName, data.Title, data.URL)
-		}
-
-		return ErrorMessage(ErrDisplayAlarmNotifyFailed)
+		return alarmNotificationRenderFallback(templateKey, data)
 	}
 
-	// 단건 알림은 즉시성이 중요 → 패딩 미적용 (전체 보기 없이 바로 노출)
 	return rendered
+}
+
+func alarmNotificationURLText(stream *domain.Stream) string {
+	if stream.IsTwitchOnly {
+		return fmt.Sprintf("📺 Twitch: %s", stream.GetTwitchLiveURL())
+	}
+	if isIntegratedYouTubeChzzkStream(stream) {
+		return fmt.Sprintf("📺 YouTube: %s\n📺 치지직: %s", stream.GetYouTubeURL(), stream.GetChzzkLiveURL())
+	}
+	if isChzzkOnlyAlarmStream(stream) {
+		return fmt.Sprintf("📺 치지직: %s", stream.GetChzzkLiveURL())
+	}
+
+	return stream.GetYouTubeURL()
+}
+
+func isIntegratedYouTubeChzzkStream(stream *domain.Stream) bool {
+	return stream.IsIntegrated && stream.HasYouTubeInfo() && stream.ChzzkChannelID != ""
+}
+
+func isChzzkOnlyAlarmStream(stream *domain.Stream) bool {
+	return stream.IsChzzkOnly || (!stream.HasYouTubeInfo() && stream.ChzzkChannelID != "")
+}
+
+func alarmNotificationScheduledKST(stream *domain.Stream) string {
+	if stream.StartScheduled == nil {
+		return ""
+	}
+
+	return util.FormatKST(*stream.StartScheduled, "15:04")
+}
+
+func alarmNotificationTemplateKey(minutesUntil int) domain.TemplateKey {
+	if minutesUntil <= 0 {
+		return domain.TemplateKeyCmdAlarmLiveStarted
+	}
+
+	return domain.TemplateKeyCmdAlarmNotification
+}
+
+func alarmNotificationRenderFallback(templateKey domain.TemplateKey, data alarmNotificationTemplateData) string {
+	if templateKey == domain.TemplateKeyCmdAlarmLiveStarted {
+		return fmt.Sprintf("🔴 %s 방송 시작됨\n📺 %s\n🔗 %s", data.ChannelName, data.Title, data.URL)
+	}
+
+	return ErrorMessage(ErrDisplayAlarmNotifyFailed)
 }
 
 func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notifications []*domain.AlarmNotification) string {
@@ -97,6 +110,16 @@ func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notificatio
 		return ""
 	}
 
+	entries := alarmNotificationGroupEntries(notifications)
+	if len(entries) == 0 {
+		return ""
+	}
+
+	sortAlarmNotificationGroupEntries(entries)
+	return renderAlarmNotificationGroup(minutesUntil, entries)
+}
+
+func alarmNotificationGroupEntries(notifications []*domain.AlarmNotification) []alarmNotificationGroupEntry {
 	entries := make([]alarmNotificationGroupEntry, 0, len(notifications))
 	for _, notification := range notifications {
 		if notification == nil || notification.Stream == nil {
@@ -117,30 +140,32 @@ func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notificatio
 		})
 	}
 
-	if len(entries) == 0 {
-		return ""
-	}
+	return entries
+}
 
+func sortAlarmNotificationGroupEntries(entries []alarmNotificationGroupEntry) {
 	slices.SortStableFunc(entries, func(a, b alarmNotificationGroupEntry) int {
-		if a.ChannelName != b.ChannelName {
-			if a.ChannelName < b.ChannelName {
-				return -1
-			}
-
-			return 1
-		}
-
-		if a.Title < b.Title {
-			return -1
-		}
-
-		if a.Title > b.Title {
-			return 1
-		}
-
-		return 0
+		return compareAlarmNotificationGroupEntry(a, b)
 	})
+}
 
+func compareAlarmNotificationGroupEntry(a, b alarmNotificationGroupEntry) int {
+	if a.ChannelName < b.ChannelName {
+		return -1
+	}
+	if a.ChannelName > b.ChannelName {
+		return 1
+	}
+	if a.Title < b.Title {
+		return -1
+	}
+	if a.Title > b.Title {
+		return 1
+	}
+	return 0
+}
+
+func renderAlarmNotificationGroup(minutesUntil int, entries []alarmNotificationGroupEntry) string {
 	instruction := DefaultEmoji.Alarm + " 방송 알림"
 
 	var sb strings.Builder
@@ -150,25 +175,7 @@ func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notificatio
 	sb.WriteString("\n\n")
 
 	for idx, entry := range entries {
-		name := stringutil.TrimSpace(entry.ChannelName)
-		if name == "" {
-			name = "알 수 없는 채널"
-		}
-
-		sb.WriteString(groupAlarmEntryLine(idx+1, name, entry.ScheduledKST, minutesUntil))
-		sb.WriteByte('\n')
-
-		if entry.Title != "" {
-			fmt.Fprintf(&sb, "   %s\n", entry.Title)
-		}
-
-		if entry.URL != "" {
-			fmt.Fprintf(&sb, "   %s\n", entry.URL)
-		}
-
-		if idx < len(entries)-1 {
-			sb.WriteString("\n")
-		}
+		writeAlarmNotificationGroupEntry(&sb, idx, len(entries), minutesUntil, entry)
 	}
 
 	content := stringutil.TrimSpace(sb.String())
@@ -177,6 +184,26 @@ func (f *ResponseFormatter) AlarmNotificationGroup(minutesUntil int, notificatio
 	}
 
 	return util.ApplyKakaoSeeMorePadding(content, instruction)
+}
+
+func writeAlarmNotificationGroupEntry(sb *strings.Builder, idx, count, minutesUntil int, entry alarmNotificationGroupEntry) {
+	name := stringutil.TrimSpace(entry.ChannelName)
+	if name == "" {
+		name = "알 수 없는 채널"
+	}
+
+	sb.WriteString(groupAlarmEntryLine(idx+1, name, entry.ScheduledKST, minutesUntil))
+	sb.WriteByte('\n')
+
+	if entry.Title != "" {
+		fmt.Fprintf(sb, "   %s\n", entry.Title)
+	}
+	if entry.URL != "" {
+		fmt.Fprintf(sb, "   %s\n", entry.URL)
+	}
+	if idx < count-1 {
+		sb.WriteString("\n")
+	}
 }
 
 func groupAlarmEntryLine(index int, channelName, scheduledKST string, minutesUntil int) string {

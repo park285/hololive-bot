@@ -92,6 +92,10 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryPathUsageSince(ctx context
 		return nil, fmt.Errorf("list post delivery path usage since: scan rows: %w", err)
 	}
 
+	return buildPostDeliveryPathUsageRows(scanned), nil
+}
+
+func buildPostDeliveryPathUsageRows(scanned []postDeliveryPathUsageScanRow) []PostDeliveryPathUsage {
 	rows := make([]PostDeliveryPathUsage, 0, len(scanned))
 	for i := range scanned {
 		rows = append(rows, PostDeliveryPathUsage{
@@ -113,5 +117,5 @@ func (r *DeliveryTelemetryRepository) ListPostDeliveryPathUsageSince(ctx context
 		})
 	}
 
-	return rows, nil
+	return rows
 }

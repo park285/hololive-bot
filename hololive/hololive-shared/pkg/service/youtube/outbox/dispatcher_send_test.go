@@ -1073,7 +1073,7 @@ func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body strin
 func findLogEntryByMessage(t *testing.T, logBuffer *safeBuffer, message string) map[string]any {
 	t.Helper()
 
-	for _, line := range bytes.Split(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
@@ -1094,7 +1094,7 @@ func findAllSendLogEntriesByMessage(t *testing.T, logBuffer *safeBuffer, message
 	t.Helper()
 
 	entries := make([]map[string]any, 0)
-	for _, line := range bytes.Split(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
@@ -1208,13 +1208,19 @@ func (s *blockingSender) SendMessage(ctx context.Context, _, _ string) error {
 	return ctx.Err()
 }
 
-type delayedReturnSender struct {
-	delay time.Duration
+type parentDeadlineBeforeReturnSender struct {
+	parentCtx             context.Context
+	parentDoneBeforeChild atomic.Bool
 }
 
-func (s *delayedReturnSender) SendMessage(ctx context.Context, _, _ string) error {
+func (s *parentDeadlineBeforeReturnSender) SendMessage(ctx context.Context, _, _ string) error {
 	<-ctx.Done()
-	time.Sleep(s.delay)
+	select {
+	case <-s.parentCtx.Done():
+		s.parentDoneBeforeChild.Store(true)
+	default:
+	}
+	<-s.parentCtx.Done()
 	return ctx.Err()
 }
 
@@ -1280,16 +1286,17 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t *testing.T) {
 	t.Parallel()
 
+	parentCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	sender := &parentDeadlineBeforeReturnSender{parentCtx: parentCtx}
+
 	dispatcher := NewDispatcher(nil,
 		cachemocks.NewLenientClient(),
-		&delayedReturnSender{delay: 30 * time.Millisecond},
+		sender,
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
-
-	parentCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
 
 	err := dispatcher.sendDeliveryMessage(parentCtx, deliverySendRequest{
 		roomID:     "room-child-timeout-first",
@@ -1299,6 +1306,9 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want configured timeout")
+	}
+	if sender.parentDoneBeforeChild.Load() {
+		t.Fatal("parent deadline expired before configured delivery timeout")
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)

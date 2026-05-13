@@ -65,10 +65,7 @@ func buildRetryRuns(baseRun, failedAt time.Time, delays []time.Duration) []time.
 		}
 
 		candidate := baseKST.Add(delay)
-		if candidate.Year() != baseKST.Year() || candidate.YearDay() != baseKST.YearDay() {
-			continue
-		}
-		if !candidate.After(failedKST) {
+		if !isRetryRunCandidate(candidate, baseKST, failedKST) {
 			continue
 		}
 
@@ -76,4 +73,10 @@ func buildRetryRuns(baseRun, failedAt time.Time, delays []time.Duration) []time.
 	}
 
 	return runs
+}
+
+func isRetryRunCandidate(candidate, baseKST, failedKST time.Time) bool {
+	return candidate.Year() == baseKST.Year() &&
+		candidate.YearDay() == baseKST.YearDay() &&
+		candidate.After(failedKST)
 }

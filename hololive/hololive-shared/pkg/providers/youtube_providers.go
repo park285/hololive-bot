@@ -251,22 +251,30 @@ func allRegistrationsExplicit(registrations []ChannelPollerRegistration) bool {
 }
 
 func hasExplicitAndImplicitRegistrations(registrations []ChannelPollerRegistration) bool {
-	hasExplicit := false
-	hasImplicit := false
+	const explicitAndImplicitRegistrations = 3
+
+	observedRegistrations := 0
 	for _, registration := range registrations {
-		if registration.Poller == nil || registration.Interval <= 0 {
+		registrationMode := explicitImplicitRegistrationMode(registration)
+		if registrationMode == 0 {
 			continue
 		}
-		if registration.HasExplicitChannelIDs {
-			hasExplicit = true
-		} else {
-			hasImplicit = true
-		}
-		if hasExplicit && hasImplicit {
+		observedRegistrations |= registrationMode
+		if observedRegistrations == explicitAndImplicitRegistrations {
 			return true
 		}
 	}
 	return false
+}
+
+func explicitImplicitRegistrationMode(registration ChannelPollerRegistration) int {
+	if registration.Poller == nil || registration.Interval <= 0 {
+		return 0
+	}
+	if registration.HasExplicitChannelIDs {
+		return 1
+	}
+	return 2
 }
 
 func estimatedRegistrationRequestUnitsPerRun(registration ChannelPollerRegistration) float64 {

@@ -67,13 +67,7 @@ func (ma *MessageAdapter) isUpcomingCommand(cmd string) bool {
 
 func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 	params := make(map[string]any)
-
-	if len(args) == 0 {
-		return params
-	}
-
 	memberTokens := make([]string, 0, len(args))
-	limitSet := false
 	all := false
 
 	for _, arg := range args {
@@ -82,35 +76,55 @@ func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 			continue
 		}
 
-		normalized := stringutil.Normalize(token)
-		if stringutil.ContainsString([]string{"전체", "전부", "모두", "all"}, normalized) {
+		if isAllUpcomingToken(token) {
 			all = true
 			continue
 		}
 
-		if !limitSet {
-			if n, err := strconv.Atoi(token); err == nil && n > 0 {
-				params["limit"] = n
-				limitSet = true
-
-				continue
-			}
+		if applyUpcomingLimit(params, token) {
+			continue
 		}
 
 		memberTokens = append(memberTokens, token)
 	}
 
-	if all {
-		params["all"] = true
-		delete(params, "limit")
+	applyUpcomingAll(params, all)
+	applyUpcomingMember(params, memberTokens)
+	return params
+}
+
+func isAllUpcomingToken(token string) bool {
+	return stringutil.ContainsString([]string{"전체", "전부", "모두", "all"}, stringutil.Normalize(token))
+}
+
+func applyUpcomingLimit(params map[string]any, token string) bool {
+	if _, exists := params["limit"]; exists {
+		return false
 	}
 
+	n, err := strconv.Atoi(token)
+	if err != nil || n <= 0 {
+		return false
+	}
+
+	params["limit"] = n
+	return true
+}
+
+func applyUpcomingAll(params map[string]any, all bool) {
+	if !all {
+		return
+	}
+
+	params["all"] = true
+	delete(params, "limit")
+}
+
+func applyUpcomingMember(params map[string]any, memberTokens []string) {
 	member := stringutil.TrimSpace(strings.Join(memberTokens, " "))
 	if member != "" {
 		params["member"] = member
 	}
-
-	return params
 }
 
 func (ma *MessageAdapter) tryScheduleCommand(command string, args []string, raw string) (*ParsedCommand, bool) {

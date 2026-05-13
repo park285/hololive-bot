@@ -150,30 +150,35 @@ func (c *TwitchChecker) buildLiveNotifications(
 			continue
 		}
 
-		normalizedLogin := stringutil.Normalize(streamData.UserLogin)
-
-		youtubeChannelID, ok := loginMappings[normalizedLogin]
-		if !ok {
-			continue
-		}
-
-		subscriberRooms := subscriberMap[youtubeChannelID]
-		if len(subscriberRooms) == 0 {
-			continue
-		}
-
-		// dedup claim은 큐 발행 성공/실패를 알고 있는 Notifier가 단일 책임으로 처리한다.
-		stream := buildTwitchLiveStream(youtubeChannelID, streamData)
-		if stream == nil {
-			continue
-		}
-
-		channelNotifications := roomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
-
-		notifications = append(notifications, channelNotifications...)
+		notifications = append(notifications, buildTwitchStreamNotifications(streamData, loginMappings, subscriberMap)...)
 	}
 
 	return notifications, nil
+}
+
+func buildTwitchStreamNotifications(
+	streamData *twitch.StreamData,
+	loginMappings map[string]string,
+	subscriberMap map[string][]string,
+) []*domain.AlarmNotification {
+	normalizedLogin := stringutil.Normalize(streamData.UserLogin)
+
+	youtubeChannelID, ok := loginMappings[normalizedLogin]
+	if !ok {
+		return nil
+	}
+
+	subscriberRooms := subscriberMap[youtubeChannelID]
+	if len(subscriberRooms) == 0 {
+		return nil
+	}
+
+	stream := buildTwitchLiveStream(youtubeChannelID, streamData)
+	if stream == nil {
+		return nil
+	}
+
+	return roomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
 }
 
 // buildTwitchLiveDedupKey는 이전 checker-level preclaim 테스트 호환을 위해 남겨둔다.

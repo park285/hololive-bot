@@ -109,11 +109,20 @@ func validateEventPayloadRoomAgnostic(raw []byte) error {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return fmt.Errorf("validate dispatch event payload: %w", err)
 	}
-	if payload.RoomID != nil || payload.RoomIDCamel != nil || payload.Room != nil || payload.Users != nil {
+	if hasDeliverySpecificFields(payload.RoomID, payload.RoomIDCamel, payload.Room, payload.Users) {
 		return fmt.Errorf("validate dispatch event payload: delivery-specific top-level field")
 	}
-	if payload.Notification.RoomID != nil || payload.Notification.RoomIDCamel != nil || payload.Notification.Room != nil || payload.Notification.Users != nil {
+	if hasDeliverySpecificFields(payload.Notification.RoomID, payload.Notification.RoomIDCamel, payload.Notification.Room, payload.Notification.Users) {
 		return fmt.Errorf("validate dispatch event payload: delivery-specific notification field")
 	}
 	return nil
+}
+
+func hasDeliverySpecificFields(fields ...json.RawMessage) bool {
+	for _, field := range fields {
+		if field != nil {
+			return true
+		}
+	}
+	return false
 }

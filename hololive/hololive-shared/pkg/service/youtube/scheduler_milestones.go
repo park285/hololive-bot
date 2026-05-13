@@ -40,46 +40,76 @@ func (ys *schedulerImpl) processMilestones(
 ) (achieved int, checkErrors int, saveErrors int) {
 	achievedSet := buildMilestoneSet(achievedMilestones)
 	for _, milestone := range milestones {
-		if milestonePreloadAvailable {
-			if _, exists := achievedSet[milestone]; exists {
-				ys.logger.Debug("Milestone already achieved, skipping",
-					slog.String("member", member.Name),
-					slog.Any("value", milestone))
-				continue
-			}
-		} else {
-			alreadyAchieved, err := ys.statsRepo.HasAchievedMilestone(ctx, channelID, domain.MilestoneSubscribers, milestone)
-			if err != nil {
-				checkErrors++
-				continue
-			}
-			if alreadyAchieved {
-				ys.logger.Debug("Milestone already achieved, skipping",
-					slog.String("member", member.Name),
-					slog.Any("value", milestone))
-				continue
-			}
+		alreadyAchieved, checkErr := ys.milestoneAlreadyAchieved(ctx, channelID, member, milestone, achievedSet, milestonePreloadAvailable)
+		if checkErr {
+			checkErrors++
+			continue
 		}
-
-		milestoneRecord := &domain.Milestone{
-			ChannelID:  channelID,
-			MemberName: member.Name,
-			Type:       domain.MilestoneSubscribers,
-			Value:      milestone,
-			AchievedAt: now,
-			Notified:   false,
+		if alreadyAchieved {
+			continue
 		}
-
-		if err := ys.statsRepo.SaveMilestone(ctx, milestoneRecord); err != nil {
-			saveErrors++
-		} else {
+		if ys.saveSubscriberMilestone(ctx, channelID, member, milestone, now) {
 			achieved++
-			ys.logger.Info("Milestone achieved",
-				slog.String("member", member.Name),
-				slog.Any("subscribers", milestone))
+		} else {
+			saveErrors++
 		}
 	}
 	return achieved, checkErrors, saveErrors
+}
+
+func (ys *schedulerImpl) milestoneAlreadyAchieved(
+	ctx context.Context,
+	channelID string,
+	member *domain.Member,
+	milestone uint64,
+	achievedSet map[uint64]struct{},
+	preloadAvailable bool,
+) (bool, bool) {
+	if preloadAvailable {
+		_, exists := achievedSet[milestone]
+		if exists {
+			ys.logMilestoneAlreadyAchieved(member, milestone)
+		}
+		return exists, false
+	}
+	alreadyAchieved, err := ys.statsRepo.HasAchievedMilestone(ctx, channelID, domain.MilestoneSubscribers, milestone)
+	if err != nil {
+		return false, true
+	}
+	if alreadyAchieved {
+		ys.logMilestoneAlreadyAchieved(member, milestone)
+	}
+	return alreadyAchieved, false
+}
+
+func (ys *schedulerImpl) logMilestoneAlreadyAchieved(member *domain.Member, milestone uint64) {
+	ys.logger.Debug("Milestone already achieved, skipping",
+		slog.String("member", member.Name),
+		slog.Any("value", milestone))
+}
+
+func (ys *schedulerImpl) saveSubscriberMilestone(
+	ctx context.Context,
+	channelID string,
+	member *domain.Member,
+	milestone uint64,
+	now time.Time,
+) bool {
+	milestoneRecord := &domain.Milestone{
+		ChannelID:  channelID,
+		MemberName: member.Name,
+		Type:       domain.MilestoneSubscribers,
+		Value:      milestone,
+		AchievedAt: now,
+		Notified:   false,
+	}
+	if err := ys.statsRepo.SaveMilestone(ctx, milestoneRecord); err != nil {
+		return false
+	}
+	ys.logger.Info("Milestone achieved",
+		slog.String("member", member.Name),
+		slog.Any("subscribers", milestone))
+	return true
 }
 
 func (ys *schedulerImpl) checkMilestones(previous, current uint64) []uint64 {

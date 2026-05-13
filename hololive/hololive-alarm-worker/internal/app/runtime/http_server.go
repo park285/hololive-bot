@@ -33,18 +33,24 @@ func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- erro
 		return
 	}
 
-	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			if errCh != nil {
-				errCh <- fmt.Errorf("HTTP server error: %w", err)
-				return
-			}
+	go runHTTPServer(server, logger, errCh)
+}
 
-			if logger != nil {
-				logger.Error("HTTP server error", slog.Any("error", err))
-			}
-		}
-	}()
+func runHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		reportHTTPServerError(err, logger, errCh)
+	}
+}
+
+func reportHTTPServerError(err error, logger *slog.Logger, errCh chan<- error) {
+	if errCh != nil {
+		errCh <- fmt.Errorf("HTTP server error: %w", err)
+		return
+	}
+
+	if logger != nil {
+		logger.Error("HTTP server error", slog.Any("error", err))
+	}
 }
 
 func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {

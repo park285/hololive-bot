@@ -23,31 +23,53 @@ func (d *Dispatcher) logFinalizedCommunityShortsOutboxResults(ctx context.Contex
 		return nil
 	}
 
-	timelinesByOutboxID := make(map[int64]PostDeliveryTimeline, len(results))
-	if d.telemetry != nil {
-		timelines, err := d.telemetry.ListPostDeliveryTimelinesByOutboxIDs(ctx, outboxIDs)
-		if err != nil {
-			return err
-		}
-		for i := range timelines {
-			if timelines[i].OutboxID == 0 {
-				continue
-			}
-			timelinesByOutboxID[timelines[i].OutboxID] = timelines[i]
-		}
+	timelinesByOutboxID, err := d.loadFinalizedCommunityShortsTimelines(ctx, outboxIDs, len(results))
+	if err != nil {
+		return err
 	}
 
 	finalizedAt := time.Now().UTC()
 	for i := range results {
-		timing := alarmtiming.Build(nil, results[i].SentAt)
-		if timeline, ok := timelinesByOutboxID[results[i].OutboxID]; ok {
-			results[i].LatencyClassification = timeline.LatencyClassification
-			timing = communityShortsAlarmTimingForTimeline(timeline)
-		}
-		d.logFinalizedCommunityShortsOutboxResult(results[i], finalizedAt, timing)
+		d.logFinalizedCommunityShortsOutboxResultWithTimeline(results[i], timelinesByOutboxID, finalizedAt)
 	}
 
 	return nil
+}
+
+func (d *Dispatcher) loadFinalizedCommunityShortsTimelines(
+	ctx context.Context,
+	outboxIDs []int64,
+	resultCount int,
+) (map[int64]PostDeliveryTimeline, error) {
+	timelinesByOutboxID := make(map[int64]PostDeliveryTimeline, resultCount)
+	if d.telemetry == nil {
+		return timelinesByOutboxID, nil
+	}
+
+	timelines, err := d.telemetry.ListPostDeliveryTimelinesByOutboxIDs(ctx, outboxIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range timelines {
+		if timelines[i].OutboxID == 0 {
+			continue
+		}
+		timelinesByOutboxID[timelines[i].OutboxID] = timelines[i]
+	}
+	return timelinesByOutboxID, nil
+}
+
+func (d *Dispatcher) logFinalizedCommunityShortsOutboxResultWithTimeline(
+	result terminalCommunityShortsOutboxResult,
+	timelinesByOutboxID map[int64]PostDeliveryTimeline,
+	finalizedAt time.Time,
+) {
+	timing := alarmtiming.Build(nil, result.SentAt)
+	if timeline, ok := timelinesByOutboxID[result.OutboxID]; ok {
+		result.LatencyClassification = timeline.LatencyClassification
+		timing = communityShortsAlarmTimingForTimeline(timeline)
+	}
+	d.logFinalizedCommunityShortsOutboxResult(result, finalizedAt, timing)
 }
 
 func (d *Dispatcher) logFinalizedCommunityShortsOutboxResult(

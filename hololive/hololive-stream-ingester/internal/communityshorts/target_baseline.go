@@ -177,25 +177,41 @@ func BuildTargetBaseline(
 func buildAlarmActivationIndex(alarms []*domain.Alarm) map[alarmActivationKey]map[string]struct{} {
 	index := make(map[alarmActivationKey]map[string]struct{})
 	for _, alarmRecord := range alarms {
-		if alarmRecord == nil {
-			continue
-		}
-
-		roomID := strings.TrimSpace(alarmRecord.RoomID)
-		channelID := strings.TrimSpace(alarmRecord.ChannelID)
-		if roomID == "" || channelID == "" {
-			continue
-		}
-
-		for _, alarmType := range normalizedAlarmTypes(alarmRecord.AlarmTypes) {
-			key := alarmActivationKey{channelID: channelID, alarmType: alarmType}
-			roomSet := index[key]
-			if roomSet == nil {
-				roomSet = make(map[string]struct{})
-				index[key] = roomSet
-			}
-			roomSet[alarmRecord.RegistryKey()] = struct{}{}
-		}
+		addAlarmActivation(index, alarmRecord)
 	}
 	return index
+}
+
+func addAlarmActivation(index map[alarmActivationKey]map[string]struct{}, alarmRecord *domain.Alarm) {
+	channelID, ok := alarmActivationChannelID(alarmRecord)
+	if !ok {
+		return
+	}
+
+	for _, alarmType := range normalizedAlarmTypes(alarmRecord.AlarmTypes) {
+		key := alarmActivationKey{channelID: channelID, alarmType: alarmType}
+		addAlarmActivationRoom(index, key, alarmRecord.RegistryKey())
+	}
+}
+
+func alarmActivationChannelID(alarmRecord *domain.Alarm) (string, bool) {
+	if alarmRecord == nil {
+		return "", false
+	}
+
+	roomID := strings.TrimSpace(alarmRecord.RoomID)
+	channelID := strings.TrimSpace(alarmRecord.ChannelID)
+	if roomID == "" || channelID == "" {
+		return "", false
+	}
+	return channelID, true
+}
+
+func addAlarmActivationRoom(index map[alarmActivationKey]map[string]struct{}, key alarmActivationKey, registryKey string) {
+	roomSet := index[key]
+	if roomSet == nil {
+		roomSet = make(map[string]struct{})
+		index[key] = roomSet
+	}
+	roomSet[registryKey] = struct{}{}
 }

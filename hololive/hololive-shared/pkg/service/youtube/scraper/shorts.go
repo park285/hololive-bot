@@ -50,38 +50,8 @@ func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int
 		return nil, err
 	}
 
-	// Shorts 탭 찾기
-	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
-	var shortItems []gjson.Result
-
-	data.Get(tabPath).ForEach(func(_, tab gjson.Result) bool {
-		tabTitle := tab.Get("tabRenderer.title").String()
-		if tabTitle == "Shorts" {
-			richGridContents := tab.Get("tabRenderer.content.richGridRenderer.contents")
-			richGridContents.ForEach(func(_, item gjson.Result) bool {
-				shortsRenderer := item.Get("richItemRenderer.content.shortsLockupViewModel")
-				if shortsRenderer.Exists() {
-					shortItems = append(shortItems, shortsRenderer)
-				}
-				return true
-			})
-			return false
-		}
-		return true
-	})
-
-	shorts := make([]*Short, 0, min(len(shortItems), maxResults))
-	for i, item := range shortItems {
-		if i >= maxResults {
-			break
-		}
-		short := c.parseShortsLockupViewModel(item)
-		if short != nil {
-			shorts = append(shorts, short)
-		}
-	}
-
-	return shorts, nil
+	shortItems := extractShortsLockupViewModels(data)
+	return c.parseShortsLockupViewModels(shortItems, maxResults), nil
 }
 
 func (c *Client) EnrichShortsPublishedAtFromRSS(ctx context.Context, channelID string, shorts []*Short) {
@@ -106,21 +76,63 @@ func (c *Client) enrichShortsPublishedAt(ctx context.Context, channelID string, 
 		return
 	}
 
-	publishedAtByVideoID := make(map[string]*time.Time, len(videos))
-	for _, video := range videos {
-		if video == nil || video.VideoID == "" {
-			continue
-		}
-		publishedAt, ok := yttimestamp.ParsePublishedAt(video.PublishedText)
-		if !ok {
-			continue
-		}
-		publishedAtByVideoID[video.VideoID] = publishedAt
-	}
-
+	publishedAtByVideoID := publishedAtByRSSVideoID(videos)
 	for _, short := range shorts {
 		short.PublishedAt = yttimestamp.NormalizePtr(publishedAtByVideoID[short.VideoID])
 	}
+}
+
+func extractShortsLockupViewModels(data gjson.Result) []gjson.Result {
+	var shortItems []gjson.Result
+	data.Get("contents.twoColumnBrowseResultsRenderer.tabs").ForEach(func(_, tab gjson.Result) bool {
+		if tab.Get("tabRenderer.title").String() != "Shorts" {
+			return true
+		}
+		appendShortsLockupViewModels(&shortItems, tab.Get("tabRenderer.content.richGridRenderer.contents"))
+		return false
+	})
+	return shortItems
+}
+
+func appendShortsLockupViewModels(shortItems *[]gjson.Result, contents gjson.Result) {
+	contents.ForEach(func(_, item gjson.Result) bool {
+		shortsRenderer := item.Get("richItemRenderer.content.shortsLockupViewModel")
+		if shortsRenderer.Exists() {
+			*shortItems = append(*shortItems, shortsRenderer)
+		}
+		return true
+	})
+}
+
+func (c *Client) parseShortsLockupViewModels(shortItems []gjson.Result, maxResults int) []*Short {
+	shorts := make([]*Short, 0, min(len(shortItems), maxResults))
+	for i, item := range shortItems {
+		if i >= maxResults {
+			break
+		}
+		short := c.parseShortsLockupViewModel(item)
+		if short != nil {
+			shorts = append(shorts, short)
+		}
+	}
+	return shorts
+}
+
+func publishedAtByRSSVideoID(videos []*Video) map[string]*time.Time {
+	publishedAtByVideoID := make(map[string]*time.Time, len(videos))
+	for _, video := range videos {
+		if videoPublishedAt, ok := rssVideoPublishedAt(video); ok {
+			publishedAtByVideoID[video.VideoID] = videoPublishedAt
+		}
+	}
+	return publishedAtByVideoID
+}
+
+func rssVideoPublishedAt(video *Video) (*time.Time, bool) {
+	if video == nil || video.VideoID == "" {
+		return nil, false
+	}
+	return yttimestamp.ParsePublishedAt(video.PublishedText)
 }
 
 // parseShortsLockupViewModel: shortsLockupViewModel JSON을 Short 구조체로 변환

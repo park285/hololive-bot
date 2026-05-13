@@ -47,8 +47,6 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 	"golang.org/x/time/rate"
 
-	"github.com/kapu/hololive-shared/internal/ctxutil"
-	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -70,6 +68,13 @@ type APIClient struct {
 	rateLimiter      *rate.Limiter // Rate limiter: 초당 10 요청
 	semaphore        chan struct{} // Semaphore: 동시 API 요청 수 제한
 	distributed      distributedRateLimiter
+}
+
+type holodexRequestRetryState struct {
+	maxAttempts       int
+	maxTimeoutRetries int
+	timeoutCount      int
+	lastErr           error
 }
 
 type distributedRateLimiter interface {
@@ -108,61 +113,82 @@ func (c *APIClient) DoRequest(ctx context.Context, method, path string, params u
 		return nil, errNoAPIKeys
 	}
 
-	maxAttempts := util.Min(1+constants.RetryConfig.MaxAttempts, 10)
-	const maxTimeoutRetries = 3
-	timeoutCount := 0
-	var lastErr error
+	state := holodexRequestRetryState{
+		maxAttempts:       util.Min(1+constants.RetryConfig.MaxAttempts, 10),
+		maxTimeoutRetries: 3,
+	}
 
-	for attempt := range maxAttempts {
-		if err := c.waitForRateLimiter(ctx, path); err != nil {
-			return nil, err
-		}
+	return c.doRequestWithRetry(ctx, method, path, params, state)
+}
 
-		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("context canceled before request: %w", err)
-		}
-
-		// 동시성 제한은 실제 HTTP 시도 구간에만 적용하고, backoff 구간에서는 즉시 반납한다.
-		if err := c.acquireSemaphore(ctx); err != nil {
-			return nil, err
-		}
-
-		body, done, err := c.tryHolodexRequest(ctx, method, path, params, attempt, maxAttempts)
-		c.releaseSemaphore()
+func (c *APIClient) doRequestWithRetry(ctx context.Context, method string, path string, params url.Values, state holodexRequestRetryState) ([]byte, error) {
+	for attempt := range state.maxAttempts {
+		body, done, err := c.runHolodexRequestAttempt(ctx, method, path, params, attempt, state.maxAttempts)
 		if done {
-			if err != nil {
-				return nil, err
-			}
-			c.resetCircuit()
-			return body, nil
+			return c.finishHolodexRequestAttempt(body, err)
 		}
 
-		if err != nil {
-			lastErr = err
-			if isTimeoutError(err) {
-				timeoutCount++
-				if timeoutCount >= maxTimeoutRetries {
-					c.logger.Warn("Timeout retry limit reached",
-						slog.Int("timeout_count", timeoutCount),
-						slog.String("path", path),
-					)
-					break
-				}
-			}
+		if state.recordAttemptError(c.logger, path, err) {
+			break
 		}
-
-		if attempt < maxAttempts-1 {
-			if err := c.waitBackoff(ctx, attempt); err != nil {
-				return nil, err
-			}
+		if err := c.waitHolodexRequestBackoff(ctx, attempt, state.maxAttempts); err != nil {
+			return nil, err
 		}
 	}
 
-	if lastErr != nil {
-		return nil, lastErr
+	if state.lastErr != nil {
+		return nil, state.lastErr
 	}
 
-	return nil, fmt.Errorf("holodex request failed after %d attempts", maxAttempts)
+	return nil, fmt.Errorf("holodex request failed after %d attempts", state.maxAttempts)
+}
+
+func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method string, path string, params url.Values, attempt int, maxAttempts int) ([]byte, bool, error) {
+	if err := c.waitForRateLimiter(ctx, path); err != nil {
+		return nil, true, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, true, fmt.Errorf("context canceled before request: %w", err)
+	}
+	if err := c.acquireSemaphore(ctx); err != nil {
+		return nil, true, err
+	}
+	defer c.releaseSemaphore()
+	return c.tryHolodexRequest(ctx, method, path, params, attempt, maxAttempts)
+}
+
+func (c *APIClient) finishHolodexRequestAttempt(body []byte, err error) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	c.resetCircuit()
+	return body, nil
+}
+
+func (state *holodexRequestRetryState) recordAttemptError(logger *slog.Logger, path string, err error) bool {
+	if err == nil {
+		return false
+	}
+	state.lastErr = err
+	if !isTimeoutError(err) {
+		return false
+	}
+	state.timeoutCount++
+	if state.timeoutCount < state.maxTimeoutRetries {
+		return false
+	}
+	logger.Warn("Timeout retry limit reached",
+		slog.Int("timeout_count", state.timeoutCount),
+		slog.String("path", path),
+	)
+	return true
+}
+
+func (c *APIClient) waitHolodexRequestBackoff(ctx context.Context, attempt int, maxAttempts int) error {
+	if attempt >= maxAttempts-1 {
+		return nil
+	}
+	return c.waitBackoff(ctx, attempt)
 }
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
@@ -177,51 +203,36 @@ func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path stri
 		return nil
 	}
 
-	bucket := distributedRateLimitBucket(path)
-	for {
-		decision, err := c.distributed.Allow(
-			ctx,
-			bucket,
-			constants.HolodexDistributedRateLimitConfig.Limit,
-			constants.HolodexDistributedRateLimitConfig.Window,
-		)
-		if err != nil {
-			return fmt.Errorf("distributed rate limiter allow failed: %w", err)
-		}
+	return c.waitForDistributedRateLimitBucket(ctx, distributedRateLimitBucket(path))
+}
 
-		if decision.Allowed {
+func (c *APIClient) waitForDistributedRateLimitBucket(ctx context.Context, bucket string) error {
+	for {
+		decision, err := c.allowDistributedRateLimit(ctx, bucket)
+		if err != nil {
+			return err
+		}
+		done, err := waitDistributedRateLimitDecision(ctx, bucket, decision)
+		if err != nil {
+			return err
+		}
+		if done {
 			return nil
 		}
-		if decision.RetryAfter <= 0 {
-			return fmt.Errorf(
-				"distributed rate limiter denied without retry_after: bucket=%s current=%d limit=%d",
-				bucket,
-				decision.Current,
-				decision.Limit,
-			)
-		}
-
-		if !ctxutil.SleepWithContext(ctx, decision.RetryAfter) {
-			return fmt.Errorf("distributed rate limiter wait canceled: %w", ctx.Err())
-		}
 	}
 }
 
-func distributedRateLimitBucket(path string) string {
-	trimmed := strings.Trim(path, "/")
-	if trimmed == "" {
-		trimmed = "root"
+func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string) (ratelimit.Decision, error) {
+	decision, err := c.distributed.Allow(
+		ctx,
+		bucket,
+		constants.HolodexDistributedRateLimitConfig.Limit,
+		constants.HolodexDistributedRateLimitConfig.Window,
+	)
+	if err != nil {
+		return ratelimit.Decision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
 	}
-	normalized := strings.ReplaceAll(trimmed, "/", ":")
-	return constants.HolodexDistributedRateLimitConfig.BucketBase + ":" + normalized
-}
-
-func (c *APIClient) waitBackoff(ctx context.Context, attempt int) error {
-	delay := retry.ComputeBackoffDelay(attempt, constants.RetryConfig.BaseDelay, constants.RetryConfig.Jitter)
-	if !ctxutil.SleepWithContext(ctx, delay) {
-		return fmt.Errorf("context canceled during backoff: %w", ctx.Err())
-	}
-	return nil
+	return decision, nil
 }
 
 func (c *APIClient) rejectIfCircuitOpen() error {
@@ -331,39 +342,51 @@ func isTimeoutError(err error) bool {
 }
 
 func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) ([]byte, bool, error) {
-	switch {
-	case status == http.StatusTooManyRequests:
-		c.logger.Warn("Holodex rate limited, retrying",
-			slog.Int("status", status),
-			slog.Int("attempt", attempt+1),
-			slog.String("url", reqURL),
-		)
-		if attempt < maxAttempts-1 {
-			return nil, false, nil
-		}
-		return nil, true, NewKeyRotationError("Holodex rate limit exhausted", status, map[string]any{
-			"url": reqURL,
-		})
-	// Holodex 403은 권한/키 상태 문제일 가능성이 높아 retryable rate limit로 취급하지 않는다.
-	case status == http.StatusForbidden:
-		c.logger.Error("Holodex forbidden response",
-			slog.Int("status", status),
-			slog.Int("attempt", attempt+1),
-			slog.String("url", reqURL),
-			slog.String("body_preview", summarizeHolodexErrorBody(body)),
-		)
-		return nil, true, NewAPIError("Holodex forbidden", status, map[string]any{
-			"operation": reqURL,
-		})
-	case status >= 500:
-		return c.handleServerError(ctx, status, attempt, maxAttempts)
-	case status >= 400:
-		return nil, true, NewAPIError(fmt.Sprintf("Client error: %d", status), status, map[string]any{
-			"operation": reqURL,
-		})
-	default:
-		return body, true, nil
+	if status == http.StatusTooManyRequests {
+		return c.handleRateLimitedResponse(status, reqURL, attempt, maxAttempts)
 	}
+	if status == http.StatusForbidden {
+		return c.handleForbiddenResponse(status, body, reqURL, attempt)
+	}
+	if status >= 500 {
+		return c.handleServerError(ctx, status, attempt, maxAttempts)
+	}
+	if status >= 400 {
+		return nil, true, holodexClientError(status, reqURL)
+	}
+	return body, true, nil
+}
+
+func (c *APIClient) handleRateLimitedResponse(status int, reqURL string, attempt int, maxAttempts int) ([]byte, bool, error) {
+	c.logger.Warn("Holodex rate limited, retrying",
+		slog.Int("status", status),
+		slog.Int("attempt", attempt+1),
+		slog.String("url", reqURL),
+	)
+	if attempt < maxAttempts-1 {
+		return nil, false, nil
+	}
+	return nil, true, NewKeyRotationError("Holodex rate limit exhausted", status, map[string]any{
+		"url": reqURL,
+	})
+}
+
+func (c *APIClient) handleForbiddenResponse(status int, body []byte, reqURL string, attempt int) ([]byte, bool, error) {
+	c.logger.Error("Holodex forbidden response",
+		slog.Int("status", status),
+		slog.Int("attempt", attempt+1),
+		slog.String("url", reqURL),
+		slog.String("body_preview", summarizeHolodexErrorBody(body)),
+	)
+	return nil, true, NewAPIError("Holodex forbidden", status, map[string]any{
+		"operation": reqURL,
+	})
+}
+
+func holodexClientError(status int, reqURL string) error {
+	return NewAPIError(fmt.Sprintf("Client error: %d", status), status, map[string]any{
+		"operation": reqURL,
+	})
 }
 
 func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAttempts int) ([]byte, bool, error) {

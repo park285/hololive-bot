@@ -45,6 +45,11 @@ type LocalFallback struct {
 	now      func() time.Time
 }
 
+type fallbackClaimResult struct {
+	done     bool
+	acquired bool
+}
+
 func NewLocalFallback(logger ...*slog.Logger) *LocalFallback {
 	log := slog.Default()
 	if len(logger) > 0 && logger[0] != nil {
@@ -95,30 +100,46 @@ func (f *LocalFallback) tryClaim(key string, ttl time.Duration) bool {
 	newEntry := fallbackEntry{expiresAtUnixNano: expiresAt}
 
 	for {
-		loadedEntry, exists := f.keys.Load(key)
-		if !exists {
-			if _, loaded := f.keys.LoadOrStore(key, newEntry); !loaded {
-				f.keyCount.Add(1)
-				return true
-			}
-			continue
+		result := f.tryClaimOnce(key, now, newEntry)
+		if result.done {
+			return result.acquired
 		}
+	}
+}
 
-		entry, ok := loadedEntry.(fallbackEntry)
-		if !ok {
-			if f.keys.CompareAndDelete(key, loadedEntry) {
-				f.keyCount.Add(-1)
-			}
-			continue
-		}
+func (f *LocalFallback) tryClaimOnce(key string, now time.Time, newEntry fallbackEntry) fallbackClaimResult {
+	loadedEntry, exists := f.keys.Load(key)
+	if !exists {
+		return fallbackClaimResult{done: f.tryStoreNewClaim(key, newEntry), acquired: true}
+	}
 
-		if !entry.isExpired(now) {
-			return false
-		}
+	entry, ok := loadedEntry.(fallbackEntry)
+	if !ok {
+		f.deleteCorruptEntry(key, loadedEntry)
+		return fallbackClaimResult{}
+	}
 
-		if f.keys.CompareAndSwap(key, entry, newEntry) {
-			return true
-		}
+	if !entry.isExpired(now) {
+		return fallbackClaimResult{done: true}
+	}
+
+	return fallbackClaimResult{
+		done:     f.keys.CompareAndSwap(key, entry, newEntry),
+		acquired: true,
+	}
+}
+
+func (f *LocalFallback) tryStoreNewClaim(key string, newEntry fallbackEntry) bool {
+	if _, loaded := f.keys.LoadOrStore(key, newEntry); loaded {
+		return false
+	}
+	f.keyCount.Add(1)
+	return true
+}
+
+func (f *LocalFallback) deleteCorruptEntry(key any, value any) {
+	if f.keys.CompareAndDelete(key, value) {
+		f.keyCount.Add(-1)
 	}
 }
 
@@ -127,19 +148,21 @@ func (f *LocalFallback) cleanupExpired(now time.Time) {
 	f.keys.Range(func(key, value any) bool {
 		entry, ok := value.(fallbackEntry)
 		if !ok {
-			if f.keys.CompareAndDelete(key, value) {
-				f.keyCount.Add(-1)
-			}
+			f.deleteCorruptEntry(key, value)
 			return true
 		}
 
 		if entry.isExpired(now) {
-			if f.keys.CompareAndDelete(key, entry) {
-				f.keyCount.Add(-1)
-			}
+			f.deleteExpiredEntry(key, entry)
 		}
 		return true
 	})
+}
+
+func (f *LocalFallback) deleteExpiredEntry(key any, entry fallbackEntry) {
+	if f.keys.CompareAndDelete(key, entry) {
+		f.keyCount.Add(-1)
+	}
 }
 
 // normalizeFallbackTTL: TTL 정규화 (0 또는 최대치 초과 시 기본값 적용)

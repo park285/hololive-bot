@@ -37,8 +37,8 @@ import (
 )
 
 type ProxyConfig struct {
-	Enabled bool   // 프록시 사용 여부
-	URL     string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
+	Enabled bool
+	URL     string
 }
 
 func WithProxy(cfg ProxyConfig) ClientOption {
@@ -53,11 +53,21 @@ func (c *Client) initHTTPClients() {
 	}
 
 	if c.httpClient != nil {
-		c.activeHTTPClient.Store(c.httpClient)
-		c.proxyEnabled.Store(false)
+		c.activateInjectedHTTPClient()
 		return
 	}
 
+	c.initDirectHTTPClient()
+	c.initProxyHTTPClient()
+	c.activateConfiguredHTTPClient()
+}
+
+func (c *Client) activateInjectedHTTPClient() {
+	c.activeHTTPClient.Store(c.httpClient)
+	c.proxyEnabled.Store(false)
+}
+
+func (c *Client) initDirectHTTPClient() {
 	directClient, directTransport, err := createHTTPClient(ProxyConfig{})
 	if err != nil {
 		slog.Error("Failed to create direct scraper client, using fallback default transport",
@@ -66,18 +76,23 @@ func (c *Client) initHTTPClients() {
 	}
 	c.directHTTPClient = directClient
 	c.directTransport = directTransport
+}
 
-	if c.proxyConfig.URL != "" {
-		proxyClient, proxyTransport, proxyErr := createHTTPClient(ProxyConfig{Enabled: true, URL: c.proxyConfig.URL})
-		if proxyErr != nil {
-			slog.Error("Failed to create proxy scraper client, proxy toggle unavailable until restart",
-				"error", proxyErr)
-		} else {
-			c.proxyHTTPClient = proxyClient
-			c.proxyTransport = proxyTransport
-		}
+func (c *Client) initProxyHTTPClient() {
+	if c.proxyConfig.URL == "" {
+		return
 	}
+	proxyClient, proxyTransport, err := createHTTPClient(ProxyConfig{Enabled: true, URL: c.proxyConfig.URL})
+	if err != nil {
+		slog.Error("Failed to create proxy scraper client, proxy toggle unavailable until restart",
+			"error", err)
+		return
+	}
+	c.proxyHTTPClient = proxyClient
+	c.proxyTransport = proxyTransport
+}
 
+func (c *Client) activateConfiguredHTTPClient() {
 	if c.proxyConfig.Enabled && c.proxyHTTPClient != nil {
 		c.activeHTTPClient.Store(c.proxyHTTPClient)
 		c.proxyEnabled.Store(true)
@@ -137,10 +152,19 @@ func (c *Client) currentHTTPClient() *http.Client {
 }
 
 func (c *Client) closeIdleConnections() {
-	transports := []*http.Transport{
+	seen := closeIdleTransports([]*http.Transport{
 		c.directTransport,
 		c.proxyTransport,
-	}
+	})
+	c.closeIdleClientTransports(seen, []*http.Client{
+		c.httpClient,
+		c.directHTTPClient,
+		c.proxyHTTPClient,
+		c.activeHTTPClient.Load(),
+	})
+}
+
+func closeIdleTransports(transports []*http.Transport) map[*http.Transport]struct{} {
 	seen := make(map[*http.Transport]struct{})
 	for _, transport := range transports {
 		if transport == nil {
@@ -152,32 +176,33 @@ func (c *Client) closeIdleConnections() {
 		seen[transport] = struct{}{}
 		transport.CloseIdleConnections()
 	}
+	return seen
+}
 
-	clients := []*http.Client{
-		c.httpClient,
-		c.directHTTPClient,
-		c.proxyHTTPClient,
-		c.activeHTTPClient.Load(),
-	}
+func (c *Client) closeIdleClientTransports(seen map[*http.Transport]struct{}, clients []*http.Client) {
 	for _, client := range clients {
-		if client == nil {
-			continue
-		}
-		transport, ok := client.Transport.(interface{ CloseIdleConnections() })
-		if !ok || transport == nil {
-			continue
-		}
-		httpTransport, ok := unwrapHTTPTransport(client.Transport)
-		if !ok || httpTransport == nil {
-			transport.CloseIdleConnections()
-			continue
-		}
-		if _, exists := seen[httpTransport]; exists {
-			continue
-		}
-		seen[httpTransport] = struct{}{}
-		transport.CloseIdleConnections()
+		closeIdleClientTransport(seen, client)
 	}
+}
+
+func closeIdleClientTransport(seen map[*http.Transport]struct{}, client *http.Client) {
+	if client == nil {
+		return
+	}
+	transport, ok := client.Transport.(interface{ CloseIdleConnections() })
+	if !ok || transport == nil {
+		return
+	}
+	httpTransport, ok := unwrapHTTPTransport(client.Transport)
+	if !ok || httpTransport == nil {
+		transport.CloseIdleConnections()
+		return
+	}
+	if _, exists := seen[httpTransport]; exists {
+		return
+	}
+	seen[httpTransport] = struct{}{}
+	transport.CloseIdleConnections()
 }
 
 // createHTTPClient: 프록시 설정에 따라 HTTP 클라이언트 생성
@@ -316,54 +341,4 @@ func unwrapHTTPTransport(roundTripper http.RoundTripper) (*http.Transport, bool)
 		return transport, true
 	}
 	return nil, false
-}
-
-type dialResult struct {
-	conn net.Conn
-	err  error
-}
-
-func dialSOCKS5WithContextFallback(ctx context.Context, dialer proxy.Dialer, network, addr string) (net.Conn, error) {
-	done := make(chan dialResult, 1)
-
-	go func() {
-		conn, err := dialer.Dial(network, addr)
-		if ctx.Err() != nil {
-			if conn != nil {
-				_ = conn.Close()
-			}
-			return
-		}
-
-		select {
-		case done <- dialResult{conn: conn, err: err}:
-		default:
-			if conn != nil {
-				_ = conn.Close()
-			}
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		select {
-		case result := <-done:
-			if result.conn != nil {
-				_ = result.conn.Close()
-			}
-		default:
-		}
-		return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
-	case result := <-done:
-		if result.err != nil {
-			return nil, fmt.Errorf("proxy dial failed: %w", result.err)
-		}
-		if ctx.Err() != nil {
-			if result.conn != nil {
-				_ = result.conn.Close()
-			}
-			return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
-		}
-		return result.conn, nil
-	}
 }

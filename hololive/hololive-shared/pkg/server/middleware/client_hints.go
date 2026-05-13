@@ -100,31 +100,12 @@ func (ch ClientHints) Summary() string {
 
 	// 플랫폼 + 버전
 	if ch.Platform != "" {
-		platformStr := ch.Platform
-		if ch.PlatformVersion != "" {
-			// 주요 버전만 추출 (예: "16.0.0" → "16")
-			majorVersion := ch.PlatformVersion
-			if idx := strings.Index(ch.PlatformVersion, "."); idx > 0 {
-				majorVersion = ch.PlatformVersion[:idx]
-			}
-
-			// Windows 특수 처리: platformVersion을 마케팅 버전으로 변환
-			if strings.EqualFold(ch.Platform, "Windows") {
-				windowsVersion := translateWindowsVersion(majorVersion)
-				platformStr = "Windows " + windowsVersion
-			} else {
-				platformStr += " " + majorVersion
-			}
-		}
-		parts = append(parts, platformStr)
+		parts = append(parts, ch.platformSummary())
 	}
 
 	// 모델명 (모바일) 또는 아키텍처 (데스크톱)
-	if ch.Model != "" {
-		parts = append(parts, "("+ch.Model+")")
-	} else if ch.Architecture != "" {
-		arch := formatArchitecture(ch.Architecture, ch.Bitness)
-		parts = append(parts, arch)
+	if device := ch.deviceSummary(); device != "" {
+		parts = append(parts, device)
 	}
 
 	// 모바일 표시 (모델이 없는 경우)
@@ -133,6 +114,35 @@ func (ch ClientHints) Summary() string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func (ch ClientHints) platformSummary() string {
+	if ch.PlatformVersion == "" {
+		return ch.Platform
+	}
+
+	majorVersion := clientHintMajorVersion(ch.PlatformVersion)
+	if strings.EqualFold(ch.Platform, "Windows") {
+		return "Windows " + translateWindowsVersion(majorVersion)
+	}
+	return ch.Platform + " " + majorVersion
+}
+
+func (ch ClientHints) deviceSummary() string {
+	if ch.Model != "" {
+		return "(" + ch.Model + ")"
+	}
+	if ch.Architecture == "" {
+		return ""
+	}
+	return formatArchitecture(ch.Architecture, ch.Bitness)
+}
+
+func clientHintMajorVersion(version string) string {
+	if idx := strings.Index(version, "."); idx > 0 {
+		return version[:idx]
+	}
+	return version
 }
 
 // translateWindowsVersion: Windows Client Hints platformVersion을 마케팅 버전으로 변환합니다.
@@ -146,15 +156,7 @@ func (ch ClientHints) Summary() string {
 //
 // 참고: https://learn.microsoft.com/en-us/microsoft-edge/web-platform/how-to-detect-win11
 func translateWindowsVersion(majorVersion string) string {
-	// 숫자로 변환
-	var major int
-	for _, ch := range majorVersion {
-		if ch >= '0' && ch <= '9' {
-			major = major*10 + int(ch-'0')
-		} else {
-			break
-		}
-	}
+	major := parseLeadingInt(majorVersion)
 
 	switch {
 	case major >= 13:
@@ -166,6 +168,17 @@ func translateWindowsVersion(majorVersion string) string {
 	default:
 		return majorVersion // 알 수 없는 경우 원본 반환
 	}
+}
+
+func parseLeadingInt(value string) int {
+	var parsed int
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			break
+		}
+		parsed = parsed*10 + int(ch-'0')
+	}
+	return parsed
 }
 
 // formatArchitecture: 아키텍처와 비트 수를 사용자 친화적인 형식으로 변환합니다.
@@ -204,33 +217,36 @@ func formatArchitecture(arch, bitness string) string {
 func (ch ClientHints) ToLogFields() map[string]any {
 	fields := make(map[string]any)
 
-	if ch.Platform != "" {
-		fields["platform"] = ch.Platform
-	}
-	if ch.PlatformVersion != "" {
-		// Windows는 내부 버전을 마케팅 버전으로 변환
-		if strings.EqualFold(ch.Platform, "Windows") {
-			majorVersion := ch.PlatformVersion
-			if idx := strings.Index(ch.PlatformVersion, "."); idx > 0 {
-				majorVersion = ch.PlatformVersion[:idx]
-			}
-			fields["platform_version"] = translateWindowsVersion(majorVersion)
-		} else {
-			// Android, macOS 등은 실제 OS 버전 그대로
-			fields["platform_version"] = ch.PlatformVersion
-		}
-	}
-	if ch.Model != "" {
-		fields["device_model"] = ch.Model
-	}
-	if ch.Mobile {
-		fields["mobile"] = true
-	}
-	if ch.Architecture != "" {
-		fields["arch"] = ch.Architecture
-	}
+	ch.addPlatformLogFields(fields)
+	addStringLogField(fields, "device_model", ch.Model)
+	addBoolLogField(fields, "mobile", ch.Mobile)
+	addStringLogField(fields, "arch", ch.Architecture)
 
 	return fields
+}
+
+func (ch ClientHints) addPlatformLogFields(fields map[string]any) {
+	addStringLogField(fields, "platform", ch.Platform)
+	if ch.PlatformVersion == "" {
+		return
+	}
+	if strings.EqualFold(ch.Platform, "Windows") {
+		fields["platform_version"] = translateWindowsVersion(clientHintMajorVersion(ch.PlatformVersion))
+		return
+	}
+	fields["platform_version"] = ch.PlatformVersion
+}
+
+func addStringLogField(fields map[string]any, key, value string) {
+	if value != "" {
+		fields[key] = value
+	}
+}
+
+func addBoolLogField(fields map[string]any, key string, value bool) {
+	if value {
+		fields[key] = true
+	}
 }
 
 // clientHintsToRequest: 서버가 브라우저에게 요청할 Client Hints 목록입니다.

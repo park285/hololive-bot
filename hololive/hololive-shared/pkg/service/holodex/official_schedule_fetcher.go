@@ -56,6 +56,24 @@ func (s *ScraperService) fetchAllStreams(ctx context.Context) ([]*domain.Stream,
 }
 
 func (s *ScraperService) fetchAllStreamsFromOrigin(ctx context.Context) ([]*domain.Stream, error) {
+	doc, err := s.loadOfficialScheduleDocument(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	streams, parseErrors := s.parseOfficialScheduleDocument(doc)
+	if len(streams) == 0 {
+		return nil, &StructureChangedError{
+			Message:     "No streams found - HTML structure may have changed",
+			ParseErrors: parseErrors,
+		}
+	}
+
+	s.logOfficialScheduleParseSummary(streams, parseErrors)
+	return streams, nil
+}
+
+func (s *ScraperService) loadOfficialScheduleDocument(ctx context.Context) (*goquery.Document, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+"/lives/hololive", http.NoBody)
 	if err != nil {
 		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonUnknown, fmt.Errorf("failed to create scraper request: %w", err))
@@ -77,7 +95,10 @@ func (s *ScraperService) fetchAllStreamsFromOrigin(ctx context.Context) ([]*doma
 	if err != nil {
 		return nil, wrapOfficialScheduleError(officialScheduleFallbackReasonParse, fmt.Errorf("HTML parse failed: %w", err))
 	}
+	return doc, nil
+}
 
+func (s *ScraperService) parseOfficialScheduleDocument(doc *goquery.Document) ([]*domain.Stream, int) {
 	streams := make([]*domain.Stream, 0)
 	parseErrors := 0
 	currentDate := ""
@@ -85,35 +106,46 @@ func (s *ScraperService) fetchAllStreamsFromOrigin(ctx context.Context) ([]*doma
 	doc.Find(".container .col-12").Each(func(i int, container *goquery.Selection) {
 		dateHeader := container.Find(".navbar-inverse .holodule.navbar-text")
 		if dateHeader.Length() > 0 {
-			dateText := stringutil.TrimSpace(dateHeader.Text())
-			dateText = strings.Split(dateText, "(")[0]
-			currentDate = stringutil.TrimSpace(dateText)
+			currentDate = officialScheduleDateText(dateHeader)
 			s.logger.Debug("Found date section", slog.String("date", currentDate))
 			return
 		}
 
-		container.Find("a.thumbnail").Each(func(j int, sel *goquery.Selection) {
-			stream, err := s.parseStreamElement(sel, currentDate)
-			if err != nil {
-				parseErrors++
-				s.logger.Debug("Failed to parse stream element",
-					slog.String("date", currentDate),
-					slog.Any("error", err))
-				return
-			}
-			if stream != nil {
-				streams = append(streams, stream)
-			}
-		})
+		streams, parseErrors = s.appendOfficialScheduleContainerStreams(streams, parseErrors, container, currentDate)
 	})
 
-	if len(streams) == 0 {
-		return nil, &StructureChangedError{
-			Message:     "No streams found - HTML structure may have changed",
-			ParseErrors: parseErrors,
-		}
-	}
+	return streams, parseErrors
+}
 
+func officialScheduleDateText(dateHeader *goquery.Selection) string {
+	dateText := stringutil.TrimSpace(dateHeader.Text())
+	dateText = strings.Split(dateText, "(")[0]
+	return stringutil.TrimSpace(dateText)
+}
+
+func (s *ScraperService) appendOfficialScheduleContainerStreams(
+	streams []*domain.Stream,
+	parseErrors int,
+	container *goquery.Selection,
+	currentDate string,
+) ([]*domain.Stream, int) {
+	container.Find("a.thumbnail").Each(func(j int, sel *goquery.Selection) {
+		stream, err := s.parseStreamElement(sel, currentDate)
+		if err != nil {
+			parseErrors++
+			s.logger.Debug("Failed to parse stream element",
+				slog.String("date", currentDate),
+				slog.Any("error", err))
+			return
+		}
+		if stream != nil {
+			streams = append(streams, stream)
+		}
+	})
+	return streams, parseErrors
+}
+
+func (s *ScraperService) logOfficialScheduleParseSummary(streams []*domain.Stream, parseErrors int) {
 	if parseErrors > len(streams)/2 {
 		s.logger.Warn("High parse error rate detected",
 			slog.Int("successes", len(streams)),
@@ -123,8 +155,6 @@ func (s *ScraperService) fetchAllStreamsFromOrigin(ctx context.Context) ([]*doma
 	s.logger.Info("Scraper fetched all streams",
 		slog.Int("total", len(streams)),
 		slog.Int("parse_errors", parseErrors))
-
-	return streams, nil
 }
 
 func (s *ScraperService) getOfficialPageCache() ([]*domain.Stream, bool) {
@@ -183,37 +213,45 @@ func cloneStream(stream *domain.Stream) *domain.Stream {
 	}
 
 	cloned := *stream
-	if stream.StartScheduled != nil {
-		startScheduled := *stream.StartScheduled
-		cloned.StartScheduled = &startScheduled
+	cloned.StartScheduled = cloneTimePtr(stream.StartScheduled)
+	cloned.StartActual = cloneTimePtr(stream.StartActual)
+	cloned.Duration = cloneIntPtr(stream.Duration)
+	cloned.Thumbnail = cloneStringPtr(stream.Thumbnail)
+	cloned.Link = cloneStringPtr(stream.Link)
+	cloned.TopicID = cloneStringPtr(stream.TopicID)
+	cloned.Channel = cloneChannelPtr(stream.Channel)
+	cloned.ViewerCount = cloneIntPtr(stream.ViewerCount)
+	return &cloned
+}
+
+func cloneTimePtr(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
 	}
-	if stream.StartActual != nil {
-		startActual := *stream.StartActual
-		cloned.StartActual = &startActual
+	cloned := *value
+	return &cloned
+}
+
+func cloneStringPtr(value *string) *string {
+	if value == nil {
+		return nil
 	}
-	if stream.Duration != nil {
-		duration := *stream.Duration
-		cloned.Duration = &duration
+	cloned := *value
+	return &cloned
+}
+
+func cloneChannelPtr(value *domain.Channel) *domain.Channel {
+	if value == nil {
+		return nil
 	}
-	if stream.Thumbnail != nil {
-		thumbnail := *stream.Thumbnail
-		cloned.Thumbnail = &thumbnail
+	cloned := *value
+	return &cloned
+}
+
+func cloneIntPtr(value *int) *int {
+	if value == nil {
+		return nil
 	}
-	if stream.Link != nil {
-		link := *stream.Link
-		cloned.Link = &link
-	}
-	if stream.TopicID != nil {
-		topicID := *stream.TopicID
-		cloned.TopicID = &topicID
-	}
-	if stream.Channel != nil {
-		channel := *stream.Channel
-		cloned.Channel = &channel
-	}
-	if stream.ViewerCount != nil {
-		viewerCount := *stream.ViewerCount
-		cloned.ViewerCount = &viewerCount
-	}
+	cloned := *value
 	return &cloned
 }

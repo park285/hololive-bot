@@ -84,34 +84,56 @@ func summarizeTerminalCommunityShortsOutbox(
 		TargetRoomCount: len(deliveries),
 	}
 
-	reasons := make([]string, 0)
-	seenReasons := make(map[string]struct{}, len(deliveries))
-	for i := range deliveries {
-		row := deliveries[i]
-		switch row.Status {
-		case domain.OutboxStatusSent:
-			result.SuccessfulRoomCount++
-		case domain.OutboxStatusFailed:
-			result.FailedRoomCount++
-		}
-
-		reason := strings.TrimSpace(row.Error)
-		if reason == "" {
-			continue
-		}
-		if _, exists := seenReasons[reason]; exists {
-			continue
-		}
-		seenReasons[reason] = struct{}{}
-		reasons = append(reasons, reason)
-	}
-
-	if len(reasons) > 0 {
-		sort.Strings(reasons)
-		result.AggregatedFailReason = strings.Join(reasons, " | ")
-	} else {
+	result.SuccessfulRoomCount, result.FailedRoomCount, result.AggregatedFailReason = summarizeTerminalCommunityShortsDeliveries(deliveries)
+	if result.AggregatedFailReason == "" {
 		result.AggregatedFailReason = result.Error
 	}
 
 	return result
+}
+
+func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotificationDelivery) (int, int, string) {
+	reasons := make([]string, 0)
+	seenReasons := make(map[string]struct{}, len(deliveries))
+	successfulRoomCount := 0
+	failedRoomCount := 0
+
+	for i := range deliveries {
+		row := deliveries[i]
+		successIncrement, failureIncrement := terminalCommunityShortsDeliveryStatusCounts(row.Status)
+		successfulRoomCount += successIncrement
+		failedRoomCount += failureIncrement
+
+		reasons = appendUniqueTerminalCommunityShortsDeliveryReason(reasons, seenReasons, row.Error)
+	}
+
+	if len(reasons) > 0 {
+		sort.Strings(reasons)
+		return successfulRoomCount, failedRoomCount, strings.Join(reasons, " | ")
+	}
+
+	return successfulRoomCount, failedRoomCount, ""
+}
+
+func terminalCommunityShortsDeliveryStatusCounts(status domain.OutboxStatus) (int, int) {
+	switch status {
+	case domain.OutboxStatusSent:
+		return 1, 0
+	case domain.OutboxStatusFailed:
+		return 0, 1
+	default:
+		return 0, 0
+	}
+}
+
+func appendUniqueTerminalCommunityShortsDeliveryReason(reasons []string, seenReasons map[string]struct{}, rawReason string) []string {
+	reason := strings.TrimSpace(rawReason)
+	if reason == "" {
+		return reasons
+	}
+	if _, exists := seenReasons[reason]; exists {
+		return reasons
+	}
+	seenReasons[reason] = struct{}{}
+	return append(reasons, reason)
 }

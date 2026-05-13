@@ -35,60 +35,80 @@ func validateBotDependencies(deps *Dependencies) (streamRuntime, error) {
 	data := deps.dataDeps()
 	stream := deps.streamDeps()
 
-	if core.logger == nil {
-		return nil, errors.New("logger dependency is required")
+	if err := validateCoreDependencies(core); err != nil {
+		return nil, err
 	}
-
 	core.logger.Info("Bot dependency snapshot", slog.Bool("stats_repo", stream.youTubeStatsRepo != nil))
 
+	if err := validateMessagingDependencies(messaging); err != nil {
+		return nil, err
+	}
+	if err := validateDataDependencies(data); err != nil {
+		return nil, err
+	}
+	if err := validateStreamDependencies(stream); err != nil {
+		return nil, err
+	}
+
+	return validateStreamRuntime(stream)
+}
+
+func validateCoreDependencies(core coreDependencies) error {
+	if core.logger == nil {
+		return errors.New("logger dependency is required")
+	}
+	return nil
+}
+
+func validateMessagingDependencies(messaging messagingDependencies) error {
 	if messaging.client == nil {
-		return nil, errors.New("iris client dependency is required")
+		return errors.New("iris client dependency is required")
 	}
-
 	if messaging.messageAdapter == nil {
-		return nil, errors.New("message adapter dependency is required")
+		return errors.New("message adapter dependency is required")
 	}
-
 	if messaging.formatter == nil {
-		return nil, errors.New("response formatter dependency is required")
+		return errors.New("response formatter dependency is required")
 	}
+	return nil
+}
 
+func validateDataDependencies(data dataDependencies) error {
 	if data.cache == nil {
-		return nil, errors.New("cache dependency is required")
+		return errors.New("cache dependency is required")
 	}
-
 	if data.postgres == nil {
-		return nil, errors.New("postgres dependency is required")
+		return errors.New("postgres dependency is required")
 	}
+	return nil
+}
 
+func validateStreamDependencies(stream streamDependencies) error {
 	if stream.holodex == nil {
-		return nil, errors.New("holodex dependency is required")
+		return errors.New("holodex dependency is required")
 	}
-
 	if stream.profiles == nil {
-		return nil, errors.New("profile service dependency is required")
+		return errors.New("profile service dependency is required")
 	}
-
 	if stream.alarm == nil {
-		return nil, errors.New("alarm service dependency is required")
+		return errors.New("alarm service dependency is required")
 	}
-
 	if stream.matcher == nil {
-		return nil, errors.New("matcher dependency is required")
+		return errors.New("matcher dependency is required")
 	}
-
 	if stream.membersData == nil {
-		return nil, errors.New("member data dependency is required")
+		return errors.New("member data dependency is required")
 	}
-
 	if stream.youTubeStatsRepo == nil {
-		return nil, errors.New("youtube stats repository dependency is required")
+		return errors.New("youtube stats repository dependency is required")
 	}
+	return nil
+}
 
+func validateStreamRuntime(stream streamDependencies) (streamRuntime, error) {
 	holodexRuntime, ok := stream.holodex.(streamRuntime)
 	if !ok {
 		return nil, errors.New("holodex dependency does not implement stream runtime interface")
 	}
-
 	return holodexRuntime, nil
 }

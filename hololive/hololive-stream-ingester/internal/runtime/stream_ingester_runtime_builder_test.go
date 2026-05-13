@@ -210,7 +210,6 @@ func TestIngestionRuntimeSpecs_KeepYouTubeOwnershipExclusiveAcrossRolloutStates(
 	}
 
 	for name, tc := range tests {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

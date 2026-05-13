@@ -71,30 +71,7 @@ func (ma *MessageAdapter) parseStatsArgs(args []string) map[string]any {
 			continue
 		}
 
-		if strings.Contains(token, "=") {
-			parts := strings.SplitN(token, "=", 2)
-			if len(parts) != 2 {
-				continue
-			}
-
-			key := stringutil.TrimSpace(parts[0])
-
-			value := stringutil.TrimSpace(parts[1])
-			if key == "" || value == "" {
-				continue
-			}
-
-			lowerKey := stringutil.Normalize(key)
-			if isStatsPeriodKey(lowerKey) {
-				if canonical := normalizePeriodToken(value); canonical != "" {
-					params["period"] = canonical
-				} else {
-					params["period"] = value
-				}
-			} else if canonical := normalizePeriodToken(value); canonical != "" {
-				params["period"] = canonical
-			}
-
+		if applyStatsKeyValueArg(params, token) {
 			continue
 		}
 
@@ -106,13 +83,59 @@ func (ma *MessageAdapter) parseStatsArgs(args []string) map[string]any {
 	return params
 }
 
-func isStatsPeriodKey(key string) bool {
-	switch key {
-	case "period", "기간", "주기", "순위", "랭킹", "구독자", "통계":
+func applyStatsKeyValueArg(params map[string]any, token string) bool {
+	if !strings.Contains(token, "=") {
+		return false
+	}
+
+	key, value, ok := splitStatsKeyValueArg(token)
+	if !ok {
 		return true
 	}
 
-	return false
+	if isStatsPeriodKey(stringutil.Normalize(key)) {
+		params["period"] = normalizeStatsPeriodValue(value)
+		return true
+	}
+	if canonical := normalizePeriodToken(value); canonical != "" {
+		params["period"] = canonical
+	}
+	return true
+}
+
+func splitStatsKeyValueArg(token string) (string, string, bool) {
+	parts := strings.SplitN(token, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+
+	key := stringutil.TrimSpace(parts[0])
+	value := stringutil.TrimSpace(parts[1])
+	if key == "" || value == "" {
+		return "", "", false
+	}
+	return key, value, true
+}
+
+func normalizeStatsPeriodValue(value string) string {
+	if canonical := normalizePeriodToken(value); canonical != "" {
+		return canonical
+	}
+	return value
+}
+
+func isStatsPeriodKey(key string) bool {
+	statsPeriodKeys := map[string]struct{}{
+		"period": {},
+		"기간":     {},
+		"주기":     {},
+		"순위":     {},
+		"랭킹":     {},
+		"구독자":    {},
+		"통계":     {},
+	}
+	_, ok := statsPeriodKeys[key]
+	return ok
 }
 
 func normalizePeriodToken(raw string) string {

@@ -66,37 +66,15 @@ func BuildPostLatencyPeriodSummaries(posts []PostSendCount, periods []PostLatenc
 		return []PostLatencyPeriodSummary{}, nil
 	}
 
-	accumulators := make([]postLatencyPeriodSummaryAccumulator, len(normalizedPeriods))
-	for i := range normalizedPeriods {
-		accumulators[i].summary = PostLatencyPeriodSummary{
-			Label:   normalizedPeriods[i].Label,
-			StartAt: normalizedPeriods[i].StartAt,
-			EndAt:   normalizedPeriods[i].EndAt,
-		}
-	}
+	accumulators := newPostLatencyPeriodSummaryAccumulators(normalizedPeriods)
 
 	for i := range posts {
-		observedAt, err := postLatencyObservedAt(posts[i])
-		if err != nil {
-			return nil, fmt.Errorf("post[%d] %s: %w", i, strings.TrimSpace(posts[i].ContentID), err)
-		}
-
-		for j := range normalizedPeriods {
-			if observedAt.Before(normalizedPeriods[j].StartAt) || !observedAt.Before(normalizedPeriods[j].EndAt) {
-				continue
-			}
-			if err := accumulators[j].add(posts[i]); err != nil {
-				return nil, fmt.Errorf("post[%d] %s: %w", i, strings.TrimSpace(posts[i].ContentID), err)
-			}
+		if err := addPostToLatencyPeriodSummaries(accumulators, normalizedPeriods, posts[i], i); err != nil {
+			return nil, err
 		}
 	}
 
-	summaries := make([]PostLatencyPeriodSummary, 0, len(accumulators))
-	for i := range accumulators {
-		summaries = append(summaries, accumulators[i].finalize())
-	}
-
-	return summaries, nil
+	return finalizePostLatencyPeriodSummaries(accumulators), nil
 }
 
 type postLatencyPeriodSummaryAccumulator struct {
@@ -107,43 +85,117 @@ type postLatencyPeriodSummaryAccumulator struct {
 	maxLatencyMillis     int64
 }
 
+func newPostLatencyPeriodSummaryAccumulators(periods []PostLatencyPeriod) []postLatencyPeriodSummaryAccumulator {
+	accumulators := make([]postLatencyPeriodSummaryAccumulator, len(periods))
+	for i := range periods {
+		accumulators[i].summary = PostLatencyPeriodSummary{
+			Label:   periods[i].Label,
+			StartAt: periods[i].StartAt,
+			EndAt:   periods[i].EndAt,
+		}
+	}
+	return accumulators
+}
+
+func addPostToLatencyPeriodSummaries(
+	accumulators []postLatencyPeriodSummaryAccumulator,
+	periods []PostLatencyPeriod,
+	post PostSendCount,
+	index int,
+) error {
+	observedAt, err := postLatencyObservedAt(post)
+	if err != nil {
+		return fmt.Errorf("post[%d] %s: %w", index, strings.TrimSpace(post.ContentID), err)
+	}
+
+	for j := range periods {
+		if !postObservedInLatencyPeriod(observedAt, periods[j]) {
+			continue
+		}
+		if err := accumulators[j].add(post); err != nil {
+			return fmt.Errorf("post[%d] %s: %w", index, strings.TrimSpace(post.ContentID), err)
+		}
+	}
+	return nil
+}
+
+func postObservedInLatencyPeriod(observedAt time.Time, period PostLatencyPeriod) bool {
+	return !observedAt.Before(period.StartAt) && observedAt.Before(period.EndAt)
+}
+
+func finalizePostLatencyPeriodSummaries(accumulators []postLatencyPeriodSummaryAccumulator) []PostLatencyPeriodSummary {
+	summaries := make([]PostLatencyPeriodSummary, 0, len(accumulators))
+	for i := range accumulators {
+		summaries = append(summaries, accumulators[i].finalize())
+	}
+	return summaries
+}
+
 func (a *postLatencyPeriodSummaryAccumulator) add(post PostSendCount) error {
 	a.summary.TotalPostCount++
 
-	switch post.AlarmType {
+	if err := a.addAlarmType(post.AlarmType); err != nil {
+		return err
+	}
+	a.addAlarmSendStatus(post)
+	a.addLatencyResult(post)
+	a.addLatencySample(post)
+	return nil
+}
+
+func (a *postLatencyPeriodSummaryAccumulator) addAlarmType(alarmType domain.AlarmType) error {
+	switch alarmType {
 	case domain.AlarmTypeCommunity:
 		a.summary.CommunityPostCount++
 	case domain.AlarmTypeShorts:
 		a.summary.ShortsPostCount++
 	default:
-		return fmt.Errorf("unsupported alarm type: %s", post.AlarmType)
+		return fmt.Errorf("unsupported alarm type: %s", alarmType)
 	}
 
+	return nil
+}
+
+func (a *postLatencyPeriodSummaryAccumulator) addAlarmSendStatus(post PostSendCount) {
 	if post.AlarmSentAt != nil {
 		a.summary.AlarmSentPostCount++
 	} else {
 		a.summary.PendingPostCount++
 	}
+}
 
+func (a *postLatencyPeriodSummaryAccumulator) addLatencyResult(post PostSendCount) {
 	hasLatencyResult := post.AlarmLatencyMillis != nil || post.AlarmLatencyExceeded != nil
 	if hasLatencyResult {
 		a.summary.LatencyMeasuredPostCount++
 	}
 
-	if post.AlarmLatencyExceeded != nil {
-		if *post.AlarmLatencyExceeded {
-			a.summary.ExceededPostCount++
-			switch post.AlarmType {
-			case domain.AlarmTypeCommunity:
-				a.summary.CommunityExceededPostCount++
-			case domain.AlarmTypeShorts:
-				a.summary.ShortsExceededPostCount++
-			}
-		} else {
-			a.summary.WithinTargetPostCount++
-		}
+	a.addLatencyExceeded(post)
+}
+
+func (a *postLatencyPeriodSummaryAccumulator) addLatencyExceeded(post PostSendCount) {
+	if post.AlarmLatencyExceeded == nil {
+		return
 	}
 
+	if *post.AlarmLatencyExceeded {
+		a.addExceededPost(post.AlarmType)
+		return
+	}
+	a.summary.WithinTargetPostCount++
+}
+
+func (a *postLatencyPeriodSummaryAccumulator) addExceededPost(alarmType domain.AlarmType) {
+	a.summary.ExceededPostCount++
+	switch alarmType {
+	case domain.AlarmTypeCommunity:
+		a.summary.CommunityExceededPostCount++
+	case domain.AlarmTypeShorts:
+		a.summary.ShortsExceededPostCount++
+	}
+}
+
+func (a *postLatencyPeriodSummaryAccumulator) addLatencySample(post PostSendCount) {
 	if post.AlarmLatencyMillis != nil {
 		latencyMillis := *post.AlarmLatencyMillis
 		a.latencySumMillis += latencyMillis
@@ -153,8 +205,6 @@ func (a *postLatencyPeriodSummaryAccumulator) add(post PostSendCount) error {
 			a.maxLatencyMillis = latencyMillis
 		}
 	}
-
-	return nil
 }
 
 func (a postLatencyPeriodSummaryAccumulator) finalize() PostLatencyPeriodSummary {
@@ -192,31 +242,39 @@ func normalizePostLatencyPeriods(periods []PostLatencyPeriod) ([]PostLatencyPeri
 
 	normalized := make([]PostLatencyPeriod, 0, len(periods))
 	for i := range periods {
-		label := strings.TrimSpace(periods[i].Label)
-		if label == "" {
-			return nil, fmt.Errorf("period at index %d: label is empty", i)
+		period, err := normalizePostLatencyPeriod(periods[i], i)
+		if err != nil {
+			return nil, err
 		}
-		if periods[i].StartAt.IsZero() {
-			return nil, fmt.Errorf("period %q: start at is empty", label)
-		}
-		if periods[i].EndAt.IsZero() {
-			return nil, fmt.Errorf("period %q: end at is empty", label)
-		}
-
-		startAt := periods[i].StartAt.UTC()
-		endAt := periods[i].EndAt.UTC()
-		if !endAt.After(startAt) {
-			return nil, fmt.Errorf("period %q: end at must be after start at", label)
-		}
-
-		normalized = append(normalized, PostLatencyPeriod{
-			Label:   label,
-			StartAt: startAt,
-			EndAt:   endAt,
-		})
+		normalized = append(normalized, period)
 	}
 
 	return normalized, nil
+}
+
+func normalizePostLatencyPeriod(period PostLatencyPeriod, index int) (PostLatencyPeriod, error) {
+	label := strings.TrimSpace(period.Label)
+	if label == "" {
+		return PostLatencyPeriod{}, fmt.Errorf("period at index %d: label is empty", index)
+	}
+	if period.StartAt.IsZero() {
+		return PostLatencyPeriod{}, fmt.Errorf("period %q: start at is empty", label)
+	}
+	if period.EndAt.IsZero() {
+		return PostLatencyPeriod{}, fmt.Errorf("period %q: end at is empty", label)
+	}
+
+	startAt := period.StartAt.UTC()
+	endAt := period.EndAt.UTC()
+	if !endAt.After(startAt) {
+		return PostLatencyPeriod{}, fmt.Errorf("period %q: end at must be after start at", label)
+	}
+
+	return PostLatencyPeriod{
+		Label:   label,
+		StartAt: startAt,
+		EndAt:   endAt,
+	}, nil
 }
 
 func earliestPostLatencyPeriodStart(periods []PostLatencyPeriod) time.Time {

@@ -34,23 +34,28 @@ func (ma *MessageAdapter) tryMajorEventCommand(command string, args []string, ra
 		return nil, false
 	}
 
-	params := make(map[string]any)
+	params := map[string]any{"action": majorEventAction(args)}
+	return &ParsedCommand{Type: domain.CommandMajorEvent, Params: params, RawMessage: raw}, true
+}
 
-	if len(args) > 0 {
-		action := stringutil.Normalize(args[0])
-		switch action {
-		case "켜기", "on", "구독":
-			params["action"] = "on"
-		case "끄기", "off", "해제":
-			params["action"] = "off"
-		case "목록", "list", "상태":
-			params["action"] = actionStatus
-		default:
-			params["action"] = actionStatus
-		}
-	} else {
-		params["action"] = actionStatus
+func majorEventAction(args []string) string {
+	if len(args) == 0 {
+		return actionStatus
 	}
 
-	return &ParsedCommand{Type: domain.CommandMajorEvent, Params: params, RawMessage: raw}, true
+	actions := map[string]string{
+		"켜기":   "on",
+		"on":   "on",
+		"구독":   "on",
+		"끄기":   "off",
+		"off":  "off",
+		"해제":   "off",
+		"목록":   actionStatus,
+		"list": actionStatus,
+		"상태":   actionStatus,
+	}
+	if action, ok := actions[stringutil.Normalize(args[0])]; ok {
+		return action
+	}
+	return actionStatus
 }

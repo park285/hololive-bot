@@ -255,10 +255,8 @@ func TestAllowConcurrentLimit(t *testing.T) {
 	results := make(chan Decision, concurrency)
 
 	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range concurrency {
+		wg.Go(func() {
 
 			decision, err := limiter.Allow(ctx, "youtube:concurrent", limit, window)
 			if err != nil {
@@ -271,7 +269,7 @@ func TestAllowConcurrentLimit(t *testing.T) {
 				deniedCount.Add(1)
 			}
 			results <- decision
-		}()
+		})
 	}
 
 	wg.Wait()

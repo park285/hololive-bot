@@ -95,42 +95,7 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 		logger = slog.Default()
 	}
 
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = DefaultConfig().BatchSize
-	}
-	if cfg.LockTimeout <= 0 {
-		cfg.LockTimeout = DefaultConfig().LockTimeout
-	}
-	if cfg.PollInterval <= 0 {
-		cfg.PollInterval = DefaultConfig().PollInterval
-	}
-	if cfg.DeliveryParallelism <= 0 {
-		cfg.DeliveryParallelism = DefaultConfig().DeliveryParallelism
-	}
-	if cfg.DeliverySendTimeout <= 0 {
-		cfg.DeliverySendTimeout = DefaultConfig().DeliverySendTimeout
-	}
-	if cfg.SubscriberLookupParallelism <= 0 {
-		cfg.SubscriberLookupParallelism = DefaultConfig().SubscriberLookupParallelism
-	}
-	if cfg.TelemetryBackfillBatch <= 0 {
-		cfg.TelemetryBackfillBatch = DefaultConfig().TelemetryBackfillBatch
-	}
-	if cfg.TelemetryPollInterval <= 0 {
-		cfg.TelemetryPollInterval = DefaultConfig().TelemetryPollInterval
-	}
-	if cfg.AggregateSyncInterval <= 0 {
-		cfg.AggregateSyncInterval = DefaultConfig().AggregateSyncInterval
-	}
-	if cfg.TelemetryFlushBatch <= 0 {
-		cfg.TelemetryFlushBatch = DefaultConfig().TelemetryFlushBatch
-	}
-	if cfg.TelemetryRetryBackoff <= 0 {
-		cfg.TelemetryRetryBackoff = DefaultConfig().TelemetryRetryBackoff
-	}
-	if cfg.TelemetryRetention <= 0 {
-		cfg.TelemetryRetention = DefaultConfig().TelemetryRetention
-	}
+	cfg = normalizeDispatcherConfig(cfg)
 
 	var telemetryRepo *DeliveryTelemetryRepository
 	if db != nil {
@@ -152,6 +117,62 @@ func NewDispatcher(db *gorm.DB, cacheSvc cache.Client, sender delivery.MessageSe
 			logger:   logger,
 		},
 	}
+}
+
+func normalizeDispatcherConfig(cfg Config) Config {
+	defaults := DefaultConfig()
+	cfg = normalizeDispatcherCoreConfig(cfg, defaults)
+	cfg = normalizeDispatcherDeliveryConfig(cfg, defaults)
+	cfg = normalizeDispatcherTelemetryConfig(cfg, defaults)
+	return cfg
+}
+
+func normalizeDispatcherCoreConfig(cfg Config, defaults Config) Config {
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = defaults.BatchSize
+	}
+	if cfg.LockTimeout <= 0 {
+		cfg.LockTimeout = defaults.LockTimeout
+	}
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = defaults.PollInterval
+	}
+	if cfg.AggregateSyncInterval <= 0 {
+		cfg.AggregateSyncInterval = defaults.AggregateSyncInterval
+	}
+	return cfg
+}
+
+func normalizeDispatcherDeliveryConfig(cfg Config, defaults Config) Config {
+	if cfg.DeliveryParallelism <= 0 {
+		cfg.DeliveryParallelism = defaults.DeliveryParallelism
+	}
+	if cfg.DeliverySendTimeout <= 0 {
+		cfg.DeliverySendTimeout = defaults.DeliverySendTimeout
+	}
+	if cfg.SubscriberLookupParallelism <= 0 {
+		cfg.SubscriberLookupParallelism = defaults.SubscriberLookupParallelism
+	}
+	return cfg
+}
+
+func normalizeDispatcherTelemetryConfig(cfg Config, defaults Config) Config {
+	if cfg.TelemetryBackfillBatch <= 0 {
+		cfg.TelemetryBackfillBatch = defaults.TelemetryBackfillBatch
+	}
+	if cfg.TelemetryPollInterval <= 0 {
+		cfg.TelemetryPollInterval = defaults.TelemetryPollInterval
+	}
+	if cfg.TelemetryFlushBatch <= 0 {
+		cfg.TelemetryFlushBatch = defaults.TelemetryFlushBatch
+	}
+	if cfg.TelemetryRetryBackoff <= 0 {
+		cfg.TelemetryRetryBackoff = defaults.TelemetryRetryBackoff
+	}
+	if cfg.TelemetryRetention <= 0 {
+		cfg.TelemetryRetention = defaults.TelemetryRetention
+	}
+	return cfg
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
@@ -179,26 +200,15 @@ func (d *Dispatcher) Start(ctx context.Context) {
 }
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
-	ticker := time.NewTicker(d.cfg.AggregateSyncInterval)
-	defer ticker.Stop()
-
-	d.reconcileTerminalOutboxStatuses(ctx)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			d.reconcileTerminalOutboxStatuses(ctx)
-		}
-	}
+	runDispatcherTickerLoop(ctx, d.cfg.AggregateSyncInterval, func() {
+		d.reconcileTerminalOutboxStatuses(ctx)
+	}, func() {
+		d.reconcileTerminalOutboxStatuses(ctx)
+	})
 }
 
 // run: 메인 폴링 루프
 func (d *Dispatcher) run(ctx context.Context) {
-	ticker := time.NewTicker(d.cfg.PollInterval)
-	defer ticker.Stop()
-
 	d.logger.Info("Outbox dispatcher started",
 		slog.Duration("poll_interval", d.cfg.PollInterval),
 		slog.Int("batch_size", d.cfg.BatchSize),
@@ -206,17 +216,12 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("delivery_parallelism", d.cfg.DeliveryParallelism),
 		slog.Int("subscriber_lookup_parallelism", d.subscriberLookupParallelism()))
 
-	d.processOnce(ctx)
-
-	for {
-		select {
-		case <-ctx.Done():
-			d.logger.Info("Outbox dispatcher stopped")
-			return
-		case <-ticker.C:
-			d.processOnce(ctx)
-		}
-	}
+	runDispatcherTickerLoop(ctx, d.cfg.PollInterval, func() {
+		d.processOnce(ctx)
+	}, func() {
+		d.processOnce(ctx)
+	})
+	d.logger.Info("Outbox dispatcher stopped")
 }
 
 // processOnce: 한 번의 폴링 사이클
@@ -230,40 +235,61 @@ func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
 	}
 
 	for round := range maxRounds {
-		outboxItems, err := d.claimOutboxBatch(ctx)
-		if err != nil {
-			d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
-			return
-		}
-
-		var deliveryCount int
-		if len(outboxItems) > 0 {
-			d.logger.Debug("Processing outbox batch",
-				slog.Int("count", len(outboxItems)),
-				slog.Int("round", round+1))
-			deliveryCount = d.processPerRoomBatch(ctx, outboxItems)
-		} else {
-			deliveryCount = d.processPendingDeliveries(ctx)
-		}
-
-		if len(outboxItems) == 0 && deliveryCount == 0 {
+		processed, ok := d.processAvailableRound(ctx, round)
+		if !ok || !processed {
 			return
 		}
 	}
 }
 
+func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (bool, bool) {
+	outboxItems, err := d.claimOutboxBatch(ctx)
+	if err != nil {
+		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
+		return false, false
+	}
+
+	deliveryCount := d.processClaimedOrPendingDeliveries(ctx, outboxItems, round)
+	return len(outboxItems) > 0 || deliveryCount > 0, true
+}
+
+func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, round int) int {
+	if len(outboxItems) == 0 {
+		return d.processPendingDeliveries(ctx)
+	}
+
+	d.logger.Debug("Processing outbox batch",
+		slog.Int("count", len(outboxItems)),
+		slog.Int("round", round+1))
+	return d.processPerRoomBatch(ctx, outboxItems)
+}
+
 // cleanupLoop: 오래된 완료 알림 정리 루프
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Hour)
+	runDispatcherTickerLoop(ctx, 1*time.Hour, nil, func() {
+		d.cleanup(ctx)
+	})
+}
+
+func runDispatcherTickerLoop(ctx context.Context, interval time.Duration, before func(), onTick func()) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			d.cleanup(ctx)
-		}
+	if before != nil {
+		before()
+	}
+
+	for waitForDispatcherTick(ctx, ticker.C) {
+		onTick()
+	}
+}
+
+func waitForDispatcherTick(ctx context.Context, ticks <-chan time.Time) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-ticks:
+		return true
 	}
 }
 

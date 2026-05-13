@@ -68,46 +68,81 @@ func NewNotifier(
 // Send는 알림 목록을 독립 처리한다. 단일 큐 발행 실패가 전체 배치를 중단하지 않도록
 // 실패는 집계하고 나머지 알림은 계속 처리한다.
 func (n *Notifier) Send(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, error) {
-	result := SendResult{}
-	var errs []error
-	prepared := make([]claimedSend, 0, len(notifications))
-
-	for _, notification := range notifications {
-		if err := ctx.Err(); err != nil {
-			errs = append(errs, fmt.Errorf("send notifications: context done: %w", err))
-			break
-		}
-
-		payload, claimKeys, singleResult, err := n.prepareOne(ctx, notification)
-		switch singleResult {
-		case sendOutcomeSkipped:
-			result.Skipped++
-		case sendOutcomeFailed:
-			result.Failed++
-		case sendOutcomeSent:
-			prepared = append(prepared, claimedSend{payload: payload, claimKeys: claimKeys})
-		default:
-			if err != nil {
-				result.Failed++
-			}
-		}
-
-		if err != nil {
-			errs = append(errs, fmt.Errorf("send notification room=%q stream=%q: %w", notificationRoomID(notification), notificationStreamID(notification), err))
-			n.logger.Warn("Alarm notification send failed",
-				slog.String("room_id", notificationRoomID(notification)),
-				slog.String("stream_id", notificationStreamID(notification)),
-				slog.Any("error", err),
-			)
-			continue
-		}
-	}
+	result, prepared, errs := n.prepareSendBatch(ctx, notifications)
 
 	if len(prepared) > 0 {
 		errs = n.publishPreparedBatch(ctx, prepared, &result, errs)
 	}
 
 	return result, errors.Join(errs...)
+}
+
+func (n *Notifier) prepareSendBatch(ctx context.Context, notifications []*domain.AlarmNotification) (SendResult, []claimedSend, []error) {
+	result := SendResult{}
+	var errs []error
+	prepared := make([]claimedSend, 0, len(notifications))
+	for _, notification := range notifications {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("send notifications: context done: %w", err))
+			break
+		}
+
+		prepared = n.prepareBatchNotification(ctx, notification, prepared, &result, &errs)
+	}
+
+	return result, prepared, errs
+}
+
+func (n *Notifier) prepareBatchNotification(
+	ctx context.Context,
+	notification *domain.AlarmNotification,
+	prepared []claimedSend,
+	result *SendResult,
+	errs *[]error,
+) []claimedSend {
+	payload, claimKeys, singleResult, err := n.prepareOne(ctx, notification)
+	prepared = appendPreparedOutcome(prepared, payload, claimKeys, singleResult, err, result)
+	if err != nil {
+		n.recordPrepareError(notification, err, errs)
+	}
+
+	return prepared
+}
+
+func appendPreparedOutcome(
+	prepared []claimedSend,
+	payload *sendInput,
+	claimKeys []string,
+	outcome sendOutcome,
+	err error,
+	result *SendResult,
+) []claimedSend {
+	if outcome == sendOutcomeSent {
+		return append(prepared, claimedSend{payload: payload, claimKeys: claimKeys})
+	}
+
+	applyNonSentOutcome(outcome, err, result)
+	return prepared
+}
+
+func applyNonSentOutcome(outcome sendOutcome, err error, result *SendResult) {
+	if outcome == sendOutcomeSkipped {
+		result.Skipped++
+		return
+	}
+
+	if outcome == sendOutcomeFailed || err != nil {
+		result.Failed++
+	}
+}
+
+func (n *Notifier) recordPrepareError(notification *domain.AlarmNotification, err error, errs *[]error) {
+	*errs = append(*errs, fmt.Errorf("send notification room=%q stream=%q: %w", notificationRoomID(notification), notificationStreamID(notification), err))
+	n.logger.Warn("Alarm notification send failed",
+		slog.String("room_id", notificationRoomID(notification)),
+		slog.String("stream_id", notificationStreamID(notification)),
+		slog.Any("error", err),
+	)
 }
 
 func (n *Notifier) publishPreparedBatch(ctx context.Context, prepared []claimedSend, result *SendResult, errs []error) []error {
@@ -168,20 +203,6 @@ const (
 	legacyCommunityShortsDeliveryPath         = "legacy_alarm_queue"
 )
 
-func (n *Notifier) sendOne(ctx context.Context, notif *domain.AlarmNotification) (sendOutcome, error) {
-	payload, claimKeys, outcome, err := n.prepareOne(ctx, notif)
-	if err != nil || outcome != sendOutcomeSent {
-		return outcome, err
-	}
-	if err := n.publishAndMark(ctx, payload, claimKeys); err != nil {
-		return sendOutcomeFailed, fmt.Errorf("send one: publish and mark: %w", err)
-	}
-	if n.tierScheduler != nil {
-		n.tierScheduler.MarkChannelRecentlyNotified(payload.channelID)
-	}
-	return sendOutcomeSent, nil
-}
-
 func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification) (*sendInput, []string, sendOutcome, error) {
 	payload := resolveSendInput(notif, time.Now().UTC())
 	if payload == nil {
@@ -232,36 +253,22 @@ func (n *Notifier) logLegacyCommunityShortsRoute(payload *sendInput, routeErr er
 }
 
 func resolveSendInput(notif *domain.AlarmNotification, now time.Time) *sendInput {
-	if notif == nil || notif.Stream == nil {
+	resolvedStream, startScheduled, ok := resolveScheduledStream(notif, now)
+	if !ok {
 		return nil
 	}
 
-	resolvedStream := ensureScheduledTime(notif.Stream, now)
-	if resolvedStream == nil || resolvedStream.StartScheduled == nil {
-		return nil
-	}
-
-	startScheduled := resolvedStream.StartScheduled.UTC()
-	if startScheduled.IsZero() {
-		return nil
-	}
-
-	streamID := strings.TrimSpace(resolvedStream.ID)
+	streamID := resolveStreamID(resolvedStream)
 	if streamID == "" {
 		return nil
 	}
 
-	channelID := strings.TrimSpace(resolvedStream.ChannelID)
-	if channelID == "" && resolvedStream.Channel != nil {
-		channelID = strings.TrimSpace(resolvedStream.Channel.ID)
-	}
-
+	channelID := resolveChannelID(resolvedStream)
 	if channelID == "" {
 		return nil
 	}
 
 	resolvedNotification := *notif
-
 	resolvedNotification.Stream = resolvedStream
 
 	return &sendInput{
@@ -270,6 +277,45 @@ func resolveSendInput(notif *domain.AlarmNotification, now time.Time) *sendInput
 		channelID:      channelID,
 		startScheduled: startScheduled,
 	}
+}
+
+func resolveScheduledStream(notif *domain.AlarmNotification, now time.Time) (*domain.Stream, time.Time, bool) {
+	if notif == nil || notif.Stream == nil {
+		return nil, time.Time{}, false
+	}
+
+	resolvedStream := ensureScheduledTime(notif.Stream, now)
+	if resolvedStream == nil || resolvedStream.StartScheduled == nil {
+		return nil, time.Time{}, false
+	}
+
+	startScheduled := resolvedStream.StartScheduled.UTC()
+	if startScheduled.IsZero() {
+		return nil, time.Time{}, false
+	}
+
+	return resolvedStream, startScheduled, true
+}
+
+func resolveStreamID(stream *domain.Stream) string {
+	if stream == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(stream.ID)
+}
+
+func resolveChannelID(stream *domain.Stream) string {
+	if stream == nil {
+		return ""
+	}
+
+	channelID := strings.TrimSpace(stream.ChannelID)
+	if channelID != "" || stream.Channel == nil {
+		return channelID
+	}
+
+	return strings.TrimSpace(stream.Channel.ID)
 }
 
 func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) ([]string, bool, error) {

@@ -25,7 +25,7 @@ Architecture and document gates keep current docs, contracts, runbooks, and gove
 | internal-route-hardcoding | `check-internal-route-hardcoding.sh` | Keep internal routes centralized in contract/helper packages | hardcoded route appears outside allowed files | Add route constants before new call sites |
 | repository-ownership | `check-repository-ownership.sh` | Keep data ownership and runtime internal imports aligned | forbidden runtime internal import or missing ownership token | Update ownership doc before adding shared repository access |
 | error-contracts | `check-error-contracts.sh` | Ensure error docs cover stable contract codes and helpers | required error doc/helper token missing | Document compatibility gap before code changes |
-| function-budget | `check-function-budget.sh` | Keep Go production functions within Iris-level defaults: 60 lines, complexity 8, nesting 5 | new over-budget function, stale baseline, or existing over-budget function grows | Refactor first; update baseline only for deliberate legacy debt ceilings |
+| function-budget | `check-function-budget.sh` | Keep Go production functions within Iris-level defaults: 60 lines, complexity 8, nesting 5 | any production Go function exceeds lines, complexity, or nesting defaults | Refactor until every function passes the default budget; baseline exceptions are not allowed |
 
 ## Local Validation
 

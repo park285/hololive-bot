@@ -19,14 +19,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-type failingPageFetcher struct {
-	err error
-}
-
-func (f failingPageFetcher) FetchPage(context.Context, pageFetchRequest) (pageFetchResponse, error) {
-	return pageFetchResponse{}, f.err
-}
-
 func TestGoScrapyPageFetcher_ReturnsStatusHeadersAndBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "test-agent", r.Header.Get("User-Agent"))

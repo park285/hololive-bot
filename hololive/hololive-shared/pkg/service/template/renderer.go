@@ -198,38 +198,52 @@ var templateFuncs = template.FuncMap{
 // toInt64는 다양한 타입의 값을 int64로 변환합니다.
 // nil이거나 변환할 수 없는 타입인 경우 (0, false)를 반환합니다.
 func toInt64(v any) (int64, bool) {
-	if v == nil {
+	rv, ok := dereferenceValue(v)
+	if !ok {
 		return 0, false
 	}
+	return reflectValueToInt64(rv)
+}
 
-	// 포인터 타입인 경우 역참조
+func dereferenceValue(v any) (reflect.Value, bool) {
+	if v == nil {
+		return reflect.Value{}, false
+	}
 	rv := reflect.ValueOf(v)
 	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
-			return 0, false
+			return reflect.Value{}, false
 		}
 		rv = rv.Elem()
 	}
+	return rv, true
+}
 
-	// 타입별 변환
+func reflectValueToInt64(rv reflect.Value) (int64, bool) {
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return rv.Int(), true
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		u := rv.Uint()
-		if u > math.MaxInt64 {
-			return 0, false // 오버플로우
-		}
-		return int64(u), true
+		return uintToInt64(rv.Uint())
 	case reflect.Float32, reflect.Float64:
-		f := rv.Float()
-		if f > math.MaxInt64 || f < math.MinInt64 {
-			return 0, false // 오버플로우
-		}
-		return int64(f), true
+		return floatToInt64(rv.Float())
 	default:
 		return 0, false
 	}
+}
+
+func uintToInt64(u uint64) (int64, bool) {
+	if u > math.MaxInt64 {
+		return 0, false // 오버플로우
+	}
+	return int64(u), true
+}
+
+func floatToInt64(f float64) (int64, bool) {
+	if f > math.MaxInt64 || f < math.MinInt64 {
+		return 0, false // 오버플로우
+	}
+	return int64(f), true
 }
 
 func formatNumber(v any) string {
@@ -286,6 +300,13 @@ func formatNumberKRInt64(n int64) string {
 
 func timeAgo(t time.Time) string {
 	d := time.Since(t)
+	if d < 7*24*time.Hour {
+		return formatRecentDuration(d)
+	}
+	return t.Format("2006-01-02")
+}
+
+func formatRecentDuration(d time.Duration) string {
 	switch {
 	case d < time.Minute:
 		return "방금 전"
@@ -293,10 +314,8 @@ func timeAgo(t time.Time) string {
 		return fmt.Sprintf("%d분 전", int(d.Minutes()))
 	case d < 24*time.Hour:
 		return fmt.Sprintf("%d시간 전", int(d.Hours()))
-	case d < 7*24*time.Hour:
-		return fmt.Sprintf("%d일 전", int(d.Hours()/24))
 	default:
-		return t.Format("2006-01-02")
+		return fmt.Sprintf("%d일 전", int(d.Hours()/24))
 	}
 }
 

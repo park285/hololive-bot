@@ -42,55 +42,77 @@ func NewApplyFn(logger *slog.Logger, handlers ApplyHandlers) func(ConfigUpdate) 
 	}
 
 	return func(update ConfigUpdate) {
-		switch update.Type {
-		case contractssettings.UpdateTypeScraperProxy:
-			if handlers.ScraperProxy == nil {
-				logger.Debug("Ignoring config update type: handler not configured", slog.String("type", update.Type))
-				return
-			}
-
-			var payload contractssettings.ScraperProxyPayloadV1
-			if err := json.Unmarshal(update.Payload, &payload); err != nil {
-				logger.Warn("Failed to decode config update payload",
-					slog.String("type", update.Type),
-					slog.Any("error", err),
-				)
-				return
-			}
-
-			handlers.ScraperProxy(payload)
-
-		case contractssettings.UpdateTypeAlarmAdvanceMinutes:
-			if handlers.AlarmAdvanceMinutes == nil {
-				logger.Debug("Ignoring config update type: handler not configured", slog.String("type", update.Type))
-				return
-			}
-
-			var payload contractssettings.AlarmAdvanceMinutesPayloadV1
-			if err := json.Unmarshal(update.Payload, &payload); err != nil {
-				logger.Warn("Failed to decode config update payload",
-					slog.String("type", update.Type),
-					slog.Any("error", err),
-				)
-				return
-			}
-
-			handlers.AlarmAdvanceMinutes(payload)
-
-		case contractssettings.UpdateTypeMemberNewsRunNow:
-			if handlers.MemberNewsWeeklyNow == nil {
-				logger.Debug("Ignoring config update type: handler not configured", slog.String("type", update.Type))
-				return
-			}
-			handlers.MemberNewsWeeklyNow()
-
-		default:
-			if handlers.Unknown != nil {
-				handlers.Unknown(update.Type)
-				return
-			}
-
-			logger.Warn("Unknown config update type", slog.String("type", update.Type))
-		}
+		dispatchConfigUpdate(logger, handlers, update)
 	}
+}
+
+func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+	switch update.Type {
+	case contractssettings.UpdateTypeScraperProxy:
+		applyScraperProxyUpdate(logger, handlers, update)
+	case contractssettings.UpdateTypeAlarmAdvanceMinutes:
+		applyAlarmAdvanceMinutesUpdate(logger, handlers, update)
+	case contractssettings.UpdateTypeMemberNewsRunNow:
+		applyMemberNewsRunNowUpdate(logger, handlers, update)
+	default:
+		applyUnknownConfigUpdate(logger, handlers, update)
+	}
+}
+
+func applyScraperProxyUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+	if handlers.ScraperProxy == nil {
+		logConfigUpdateHandlerMissing(logger, update.Type)
+		return
+	}
+
+	var payload contractssettings.ScraperProxyPayloadV1
+	if !decodeConfigUpdatePayload(logger, update, &payload) {
+		return
+	}
+	handlers.ScraperProxy(payload)
+}
+
+func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+	if handlers.AlarmAdvanceMinutes == nil {
+		logConfigUpdateHandlerMissing(logger, update.Type)
+		return
+	}
+
+	var payload contractssettings.AlarmAdvanceMinutesPayloadV1
+	if !decodeConfigUpdatePayload(logger, update, &payload) {
+		return
+	}
+	handlers.AlarmAdvanceMinutes(payload)
+}
+
+func applyMemberNewsRunNowUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+	if handlers.MemberNewsWeeklyNow == nil {
+		logConfigUpdateHandlerMissing(logger, update.Type)
+		return
+	}
+	handlers.MemberNewsWeeklyNow()
+}
+
+func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update ConfigUpdate) {
+	if handlers.Unknown != nil {
+		handlers.Unknown(update.Type)
+		return
+	}
+
+	logger.Warn("Unknown config update type", slog.String("type", update.Type))
+}
+
+func decodeConfigUpdatePayload(logger *slog.Logger, update ConfigUpdate, target any) bool {
+	if err := json.Unmarshal(update.Payload, target); err != nil {
+		logger.Warn("Failed to decode config update payload",
+			slog.String("type", update.Type),
+			slog.Any("error", err),
+		)
+		return false
+	}
+	return true
+}
+
+func logConfigUpdateHandlerMissing(logger *slog.Logger, updateType string) {
+	logger.Debug("Ignoring config update type: handler not configured", slog.String("type", updateType))
 }

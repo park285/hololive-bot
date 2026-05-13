@@ -130,6 +130,12 @@ func mergeNormalizedTrackingRecord(existing *domain.YouTubeContentAlarmTracking,
 	}
 
 	merged := *existing
+	mergeTrackingRecordFields(&merged, next)
+
+	return normalizeMergedTrackingRecord(merged)
+}
+
+func mergeTrackingRecordFields(merged *domain.YouTubeContentAlarmTracking, next *domain.YouTubeContentAlarmTracking) {
 	if strings.TrimSpace(next.ChannelID) != "" {
 		merged.ChannelID = next.ChannelID
 	}
@@ -139,13 +145,20 @@ func mergeNormalizedTrackingRecord(existing *domain.YouTubeContentAlarmTracking,
 	if next.DetectedAt.Before(merged.DetectedAt) {
 		merged.DetectedAt = next.DetectedAt
 	}
+
+	mergeTrackingAlarmSentAt(merged, next.AlarmSentAt)
+}
+
+func mergeTrackingAlarmSentAt(merged *domain.YouTubeContentAlarmTracking, nextAlarmSentAt *time.Time) {
 	switch {
 	case merged.AlarmSentAt == nil:
-		merged.AlarmSentAt = next.AlarmSentAt
-	case next.AlarmSentAt != nil && next.AlarmSentAt.Before(*merged.AlarmSentAt):
-		merged.AlarmSentAt = next.AlarmSentAt
+		merged.AlarmSentAt = nextAlarmSentAt
+	case nextAlarmSentAt != nil && nextAlarmSentAt.Before(*merged.AlarmSentAt):
+		merged.AlarmSentAt = nextAlarmSentAt
 	}
+}
 
+func normalizeMergedTrackingRecord(merged domain.YouTubeContentAlarmTracking) *domain.YouTubeContentAlarmTracking {
 	timing := alarmtiming.Build(merged.ActualPublishedAt, merged.AlarmSentAt)
 	merged.ActualPublishedAt = timing.ActualPublishedAt
 	merged.AlarmSentAt = timing.AlarmSentAt
@@ -176,28 +189,25 @@ func trackingIdentityCandidates(kind domain.OutboxKind, contentID string) []stri
 	case domain.OutboxKindNewShort:
 		canonicalContentID := canonicalTrackingIdentity(kind, normalizedContentID)
 		rawContentID, err := ytcontentid.NormalizeShortVideoID(normalizedContentID)
-		if err != nil || strings.TrimSpace(rawContentID) == "" {
-			return []string{canonicalContentID}
-		}
-		if canonicalContentID == rawContentID {
-			return []string{canonicalContentID}
-		}
-
-		return []string{canonicalContentID, rawContentID}
+		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
 	case domain.OutboxKindCommunityPost:
 		canonicalContentID := canonicalTrackingIdentity(kind, normalizedContentID)
 		rawContentID, err := ytcontentid.NormalizeCommunityPostID(normalizedContentID)
-		if err != nil || strings.TrimSpace(rawContentID) == "" {
-			return []string{canonicalContentID}
-		}
-		if canonicalContentID == rawContentID {
-			return []string{canonicalContentID}
-		}
-
-		return []string{canonicalContentID, rawContentID}
+		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
 	default:
 		return []string{normalizedContentID}
 	}
+}
+
+func trackingIdentityCandidatePair(canonicalContentID string, rawContentID string, err error) []string {
+	if err != nil || strings.TrimSpace(rawContentID) == "" {
+		return []string{canonicalContentID}
+	}
+	if canonicalContentID == rawContentID {
+		return []string{canonicalContentID}
+	}
+
+	return []string{canonicalContentID, rawContentID}
 }
 
 func canonicalTrackingIdentity(kind domain.OutboxKind, contentID string) string {

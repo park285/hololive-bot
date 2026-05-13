@@ -34,38 +34,30 @@ import (
 )
 
 func (c *Consumer) ScheduleRetry(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	if len(envelopes) == 0 {
-		return nil
+	cmds, err := c.buildRetryCommands(ctx, envelopes)
+	if err != nil {
+		return err
 	}
+	return c.executeRetryCommands(ctx, cmds)
+}
 
+func (c *Consumer) buildRetryCommands(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) ([]valkey.Completed, error) {
 	cmds := make([]valkey.Completed, 0, len(envelopes))
 	now := time.Now().UTC()
 	batchToken := atomic.AddUint64(&c.retryBatchSeq, 1)
 	for i := range envelopes {
-		normalized, accepted := c.acceptLegacyEnvelope(ctx, envelopes[i], "schedule_retry")
-		if !accepted {
-			continue
-		}
-		normalized.EnsureSourcePayloadFromRaw()
-
-		nextVisibleAt, err := resolveRetryVisibleAt(normalized, now)
+		cmd, ok, err := c.buildRetryCommand(ctx, envelopes[i], now, batchToken, len(cmds))
 		if err != nil {
-			return fmt.Errorf("schedule retry envelopes: resolve next visible at: %w", err)
+			return nil, err
 		}
-
-		jsonBytes, err := json.Marshal(normalized)
-		if err != nil {
-			return fmt.Errorf("schedule retry envelopes: marshal envelope: %w", err)
+		if ok {
+			cmds = append(cmds, cmd)
 		}
-
-		member := buildRetryMember(nextVisibleAt.UnixMilli(), batchToken, len(cmds), string(jsonBytes))
-		cmds = append(cmds, c.cache.B().Zadd().
-			Key(c.retryQueueKey).
-			ScoreMember().
-			ScoreMember(float64(nextVisibleAt.UnixMilli()), member).
-			Build())
 	}
+	return cmds, nil
+}
 
+func (c *Consumer) executeRetryCommands(ctx context.Context, cmds []valkey.Completed) error {
 	if len(cmds) == 0 {
 		return nil
 	}
@@ -125,24 +117,28 @@ func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueue
 }
 
 func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	if len(envelopes) == 0 {
-		return nil
+	elements, err := c.marshalRequeueEnvelopes(ctx, envelopes)
+	if err != nil {
+		return err
 	}
+	return c.pushRequeueElements(ctx, elements)
+}
 
+func (c *Consumer) marshalRequeueEnvelopes(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) ([]string, error) {
 	elements := make([]string, 0, len(envelopes))
 	for i := range envelopes {
-		normalized, accepted := c.acceptLegacyEnvelope(ctx, envelopes[i], "requeue")
-		if !accepted {
-			continue
-		}
-
-		jsonBytes, err := json.Marshal(normalized)
+		element, ok, err := c.marshalRequeueEnvelope(ctx, envelopes[i])
 		if err != nil {
-			return fmt.Errorf("requeue envelopes: marshal envelope: %w", err)
+			return nil, err
 		}
-		elements = append(elements, string(jsonBytes))
+		if ok {
+			elements = append(elements, element)
+		}
 	}
+	return elements, nil
+}
 
+func (c *Consumer) pushRequeueElements(ctx context.Context, elements []string) error {
 	if len(elements) == 0 {
 		return nil
 	}
@@ -157,6 +153,51 @@ func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnv
 	}
 
 	return nil
+}
+
+func (c *Consumer) buildRetryCommand(
+	ctx context.Context,
+	envelope domain.AlarmQueueEnvelope,
+	now time.Time,
+	batchToken uint64,
+	batchIndex int,
+) (valkey.Completed, bool, error) {
+	normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "schedule_retry")
+	if !accepted {
+		return valkey.Completed{}, false, nil
+	}
+	normalized.EnsureSourcePayloadFromRaw()
+
+	nextVisibleAt, err := resolveRetryVisibleAt(normalized, now)
+	if err != nil {
+		return valkey.Completed{}, false, fmt.Errorf("schedule retry envelopes: resolve next visible at: %w", err)
+	}
+
+	jsonBytes, err := json.Marshal(normalized)
+	if err != nil {
+		return valkey.Completed{}, false, fmt.Errorf("schedule retry envelopes: marshal envelope: %w", err)
+	}
+
+	member := buildRetryMember(nextVisibleAt.UnixMilli(), batchToken, batchIndex, string(jsonBytes))
+	cmd := c.cache.B().Zadd().
+		Key(c.retryQueueKey).
+		ScoreMember().
+		ScoreMember(float64(nextVisibleAt.UnixMilli()), member).
+		Build()
+	return cmd, true, nil
+}
+
+func (c *Consumer) marshalRequeueEnvelope(ctx context.Context, envelope domain.AlarmQueueEnvelope) (string, bool, error) {
+	normalized, accepted := c.acceptLegacyEnvelope(ctx, envelope, "requeue")
+	if !accepted {
+		return "", false, nil
+	}
+
+	jsonBytes, err := json.Marshal(normalized)
+	if err != nil {
+		return "", false, fmt.Errorf("requeue envelopes: marshal envelope: %w", err)
+	}
+	return string(jsonBytes), true, nil
 }
 
 func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {

@@ -834,7 +834,7 @@ func TestRepositoryTryClaimAlarmStateConcurrentCASClaimsDetectedRowOnce(t *testi
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 
-	for i := 0; i < contenders; i++ {
+	for i := range contenders {
 		attemptedAuthorizedAt[i] = detectedAt.Add(time.Duration(i+1) * time.Second)
 		wg.Add(1)
 		go func(idx int) {
@@ -856,7 +856,7 @@ func TestRepositoryTryClaimAlarmStateConcurrentCASClaimsDetectedRowOnce(t *testi
 	wg.Wait()
 
 	successCount := 0
-	for i := 0; i < contenders; i++ {
+	for i := range contenders {
 		require.NoError(t, errResults[i])
 		if claimedResults[i] {
 			successCount++
@@ -872,7 +872,7 @@ func TestRepositoryTryClaimAlarmStateConcurrentCASClaimsDetectedRowOnce(t *testi
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, record.DeliveryStatus)
 
 	matchedAttempt := false
-	for i := 0; i < contenders; i++ {
+	for i := range contenders {
 		if record.AuthorizedAt.UTC().Equal(attemptedAuthorizedAt[i]) {
 			matchedAttempt = true
 			break
@@ -1544,7 +1544,6 @@ func TestRepositoryUpsertKeepsSingleTrackingRowForConcurrentSaves(t *testing.T) 
 			var wg sync.WaitGroup
 			wg.Add(len(variants))
 			for _, variant := range variants {
-				variant := variant
 				go func() {
 					defer wg.Done()
 					<-start

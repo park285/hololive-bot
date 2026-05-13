@@ -45,14 +45,7 @@ func (ys *serviceImpl) isRetryableError(err error) bool {
 
 	var apiErr *googleapi.Error
 	if errors.As(err, &apiErr) {
-		switch apiErr.Code {
-		case 429:
-			return true
-		case 500, 502, 503, 504:
-			return true
-		case 400, 401, 403, 404:
-			return false
-		}
+		return isRetryableGoogleAPIError(apiErr.Code)
 	}
 
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -60,6 +53,19 @@ func (ys *serviceImpl) isRetryableError(err error) bool {
 	}
 
 	return true
+}
+
+func isRetryableGoogleAPIError(code int) bool {
+	switch code {
+	case 429:
+		return true
+	case 500, 502, 503, 504:
+		return true
+	case 400, 401, 403, 404:
+		return false
+	default:
+		return true
+	}
 }
 
 func (ys *serviceImpl) withRetry(ctx context.Context, fn func(context.Context) error) error {

@@ -149,23 +149,16 @@ func (h *TemplateAPIHandler) UpsertTemplate(c *gin.Context) {
 
 	tmpl, err := h.templateAdmin.Save(ctx, key, channelPtr, req.Body)
 	if err != nil {
-		h.safeLogger().Warn("Failed to save template", slog.String("key", string(key)), slog.Any("error", err))
-
-		switch {
-		case errors.Is(err, template.ErrTemplateKeyNotFound):
-			sharedserver.RespondError(c, 404, "template not found", nil)
-		case errors.Is(err, template.ErrTemplateParseError):
-			sharedserver.RespondError(c, 400, "template parse error", nil)
-		case errors.Is(err, template.ErrTemplateRenderError):
-			sharedserver.RespondError(c, 400, "template render error", nil)
-		default:
-			sharedserver.RespondError(c, 500, "failed to save template", nil)
-		}
-
+		h.respondTemplateSaveError(c, key, err)
 		return
 	}
 
 	c.JSON(200, tmpl)
+}
+
+func (h *TemplateAPIHandler) respondTemplateSaveError(c *gin.Context, key domain.TemplateKey, err error) {
+	h.safeLogger().Warn("Failed to save template", slog.String("key", string(key)), slog.Any("error", err))
+	respondTemplateMutationError(c, err, "failed to save template")
 }
 
 func (h *TemplateAPIHandler) DeleteTemplateOverride(c *gin.Context) {
@@ -214,19 +207,7 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 
 	rendered, sampleData, err := h.templateAdmin.Preview(ctx, key, req.Body)
 	if err != nil {
-		h.safeLogger().Warn("Failed to preview template", slog.String("key", string(key)), slog.Any("error", err))
-
-		switch {
-		case errors.Is(err, template.ErrTemplateKeyNotFound):
-			sharedserver.RespondError(c, 404, "template not found", nil)
-		case errors.Is(err, template.ErrTemplateParseError):
-			sharedserver.RespondError(c, 400, "template parse error", nil)
-		case errors.Is(err, template.ErrTemplateRenderError):
-			sharedserver.RespondError(c, 400, "template render error", nil)
-		default:
-			sharedserver.RespondError(c, 500, "failed to preview template", nil)
-		}
-
+		h.respondTemplatePreviewError(c, key, err)
 		return
 	}
 
@@ -234,6 +215,24 @@ func (h *TemplateAPIHandler) PreviewTemplate(c *gin.Context) {
 		Rendered:       rendered,
 		SampleDataUsed: sampleData,
 	})
+}
+
+func (h *TemplateAPIHandler) respondTemplatePreviewError(c *gin.Context, key domain.TemplateKey, err error) {
+	h.safeLogger().Warn("Failed to preview template", slog.String("key", string(key)), slog.Any("error", err))
+	respondTemplateMutationError(c, err, "failed to preview template")
+}
+
+func respondTemplateMutationError(c *gin.Context, err error, defaultMessage string) {
+	switch {
+	case errors.Is(err, template.ErrTemplateKeyNotFound):
+		sharedserver.RespondError(c, 404, "template not found", nil)
+	case errors.Is(err, template.ErrTemplateParseError):
+		sharedserver.RespondError(c, 400, "template parse error", nil)
+	case errors.Is(err, template.ErrTemplateRenderError):
+		sharedserver.RespondError(c, 400, "template render error", nil)
+	default:
+		sharedserver.RespondError(c, 500, defaultMessage, nil)
+	}
 }
 
 func (h *TemplateAPIHandler) GetTemplateRevisions(c *gin.Context) {

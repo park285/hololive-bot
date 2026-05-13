@@ -36,6 +36,8 @@ type AlarmCommand struct {
 	BaseCommand
 }
 
+type alarmActionHandler func(context.Context, *domain.CommandContext, map[string]any) error
+
 func NewAlarmCommand(deps *Dependencies) *AlarmCommand {
 	return &AlarmCommand{BaseCommand: NewBaseCommand(deps)}
 }
@@ -57,35 +59,59 @@ func (c *AlarmCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContex
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrAlarmServiceNotInitialized)
 	}
 
+	return c.executeAction(ctx, cmdCtx, params, alarmAction(params))
+}
+
+func alarmAction(params map[string]any) string {
 	action, hasAction := params["action"].(string)
 	if !hasAction {
-		action = "list"
+		return "list"
 	}
 
-	switch action {
-	case "set", "add":
-		return c.handleAdd(ctx, cmdCtx, params)
-	case "remove", "delete":
-		return c.handleRemove(ctx, cmdCtx, params)
-	case "list":
-		c.Deps().Logger.Info("Alarm list requested")
-		return c.handleList(ctx, cmdCtx)
-	case "clear":
-		return c.handleClear(ctx, cmdCtx)
-	case "invalid":
-		subCmd, _ := params["sub_command"].(string)
-		memberName, _ := params["member"].(string)
-		c.Deps().Logger.Info("Invalid alarm command received",
-			slog.String("room", cmdCtx.Room),
-			slog.String("sender", cmdCtx.UserName),
-			slog.String("sub_command", subCmd),
-			slog.String("member", memberName),
-		)
+	return action
+}
 
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.InvalidAlarmUsage())
-	default:
+func (c *AlarmCommand) executeAction(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, action string) error {
+	handler, ok := c.alarmActionHandlers()[action]
+	if !ok {
 		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatHelp(ctx))
 	}
+
+	return handler(ctx, cmdCtx, params)
+}
+
+func (c *AlarmCommand) alarmActionHandlers() map[string]alarmActionHandler {
+	return map[string]alarmActionHandler{
+		"set":     c.handleAdd,
+		"add":     c.handleAdd,
+		"remove":  c.handleRemove,
+		"delete":  c.handleRemove,
+		"list":    c.handleListAction,
+		"clear":   c.handleClearAction,
+		"invalid": c.handleInvalid,
+	}
+}
+
+func (c *AlarmCommand) handleListAction(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+	c.Deps().Logger.Info("Alarm list requested")
+	return c.handleList(ctx, cmdCtx)
+}
+
+func (c *AlarmCommand) handleClearAction(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+	return c.handleClear(ctx, cmdCtx)
+}
+
+func (c *AlarmCommand) handleInvalid(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+	subCmd, _ := params["sub_command"].(string)
+	memberName, _ := params["member"].(string)
+	c.Deps().Logger.Info("Invalid alarm command received",
+		slog.String("room", cmdCtx.Room),
+		slog.String("sender", cmdCtx.UserName),
+		slog.String("sub_command", subCmd),
+		slog.String("member", memberName),
+	)
+
+	return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.InvalidAlarmUsage())
 }
 
 func (c *AlarmCommand) ensureDeps() error {
@@ -112,27 +138,17 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 		slog.String("member", memberName),
 		slog.Any("types", alarmTypes))
 
-	channel, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
+	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)
 	if err != nil {
-		var ambiguousErr *matcher.AmbiguousMatchError
-		if stdErrors.As(err, &ambiguousErr) {
-			// 동명이인 발견 시 선택 리스트 메시지 반환
-			message := c.Deps().Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
-			return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
-		}
-
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
+		return err
 	}
-
 	if channel == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
+		return nil
 	}
 
 	// 졸업 멤버 체크 (기존 로직 유지)
-	if c.Deps().Matcher != nil {
-		if member := c.Deps().Matcher.GetMemberByChannelID(ctx, channel.ID); member != nil && member.IsGraduated {
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrGraduatedMemberBlocked)
-		}
+	if c.isGraduatedMember(ctx, channel.ID) {
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrGraduatedMemberBlocked)
 	}
 
 	added, err := c.Deps().Alarm.AddAlarm(ctx, domain.AddAlarmRequest{
@@ -160,6 +176,34 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
+func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room string, memberName string) (*domain.Channel, error) {
+	channel, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
+	if err != nil {
+		var ambiguousErr *matcher.AmbiguousMatchError
+		if stdErrors.As(err, &ambiguousErr) {
+			message := c.Deps().Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
+			return nil, c.Deps().SendMessage(ctx, room, message)
+		}
+
+		return nil, c.Deps().SendError(ctx, room, c.Deps().Formatter.MemberNotFound(memberName))
+	}
+
+	if channel == nil {
+		return nil, c.Deps().SendError(ctx, room, c.Deps().Formatter.MemberNotFound(memberName))
+	}
+
+	return channel, nil
+}
+
+func (c *AlarmCommand) isGraduatedMember(ctx context.Context, channelID string) bool {
+	if c.Deps().Matcher == nil {
+		return false
+	}
+
+	member := c.Deps().Matcher.GetMemberByChannelID(ctx, channelID)
+	return member != nil && member.IsGraduated
+}
+
 func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	memberName, hasMember := params["member"].(string)
 	if !hasMember || memberName == "" {
@@ -172,19 +216,12 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 		slog.String("member", memberName),
 		slog.Any("types", alarmTypes))
 
-	channel, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
+	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)
 	if err != nil {
-		var ambiguousErr *matcher.AmbiguousMatchError
-		if stdErrors.As(err, &ambiguousErr) {
-			message := c.Deps().Formatter.FormatAmbiguousMembers(ambiguousErr.Candidates)
-			return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
-		}
-
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
+		return err
 	}
-
 	if channel == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberName))
+		return nil
 	}
 
 	removed, err := c.Deps().Alarm.RemoveAlarm(ctx, cmdCtx.Room, channel.ID, alarmTypes)
@@ -240,16 +277,21 @@ func (c *AlarmCommand) parseAlarmTypes(params map[string]any) domain.AlarmTypes 
 		return domain.DefaultAlarmTypes
 	}
 
-	switch typeStr {
-	case "방송", "라이브", "live":
-		return domain.AlarmTypes{domain.AlarmTypeLive}
-	case "커뮤니티", "community":
-		return domain.AlarmTypes{domain.AlarmTypeCommunity}
-	case "쇼츠", "shorts":
-		return domain.AlarmTypes{domain.AlarmTypeShorts}
-	case "전체", "all":
-		return domain.AllAlarmTypes
-	default:
-		return domain.DefaultAlarmTypes
+	if alarmTypes, ok := alarmTypesByName[typeStr]; ok {
+		return alarmTypes
 	}
+
+	return domain.DefaultAlarmTypes
+}
+
+var alarmTypesByName = map[string]domain.AlarmTypes{
+	"방송":        {domain.AlarmTypeLive},
+	"라이브":       {domain.AlarmTypeLive},
+	"live":      {domain.AlarmTypeLive},
+	"커뮤니티":      {domain.AlarmTypeCommunity},
+	"community": {domain.AlarmTypeCommunity},
+	"쇼츠":        {domain.AlarmTypeShorts},
+	"shorts":    {domain.AlarmTypeShorts},
+	"전체":        domain.AllAlarmTypes,
+	"all":       domain.AllAlarmTypes,
 }

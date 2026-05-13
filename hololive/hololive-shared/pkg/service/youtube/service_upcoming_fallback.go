@@ -20,18 +20,42 @@ import (
 func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey string, scrapeResult upcomingScrapeResult) ([]*domain.Stream, error) {
 	allStreams := scrapeResult.streams
 	if len(scrapeResult.failedIDs) == 0 {
-		_, _ = fallback.RunSecondary(ctx, fallback.SecondaryPlan{
-			Service:   "youtube",
-			Operation: "upcoming_streams",
-			Trigger:   fallback.TriggerOnFailures,
-			ShouldRun: false,
-		})
+		ys.recordUpcomingFallbackSkipped(ctx)
 		return allStreams, nil
 	}
 
 	estimatedCost := len(scrapeResult.failedIDs) * constants.YouTubeConfig.SearchQuotaCost
 	quotaErr := ys.checkQuota(estimatedCost)
-	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+	secondary, err := ys.runUpcomingAPIFallback(ctx, scrapeResult, estimatedCost, quotaErr, &allStreams)
+	if err != nil {
+		return nil, fmt.Errorf("get upcoming streams: api fallback execution: %w", err)
+	}
+	if handled, streams, err := ys.handleUpcomingFallbackBlocked(ctx, cacheKey, allStreams, secondary, quotaErr); handled {
+		return streams, err
+	}
+	if shouldReturnFallbackError(len(allStreams), len(scrapeResult.failedIDs), secondary.Result.Successes) {
+		return nil, fmt.Errorf("get upcoming streams: scraper and api fallback failed for %d channels", len(scrapeResult.failedIDs))
+	}
+	return allStreams, nil
+}
+
+func (ys *serviceImpl) recordUpcomingFallbackSkipped(ctx context.Context) {
+	_, _ = fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+		Service:   "youtube",
+		Operation: "upcoming_streams",
+		Trigger:   fallback.TriggerOnFailures,
+		ShouldRun: false,
+	})
+}
+
+func (ys *serviceImpl) runUpcomingAPIFallback(
+	ctx context.Context,
+	scrapeResult upcomingScrapeResult,
+	estimatedCost int,
+	quotaErr error,
+	allStreams *[]*domain.Stream,
+) (fallback.SecondaryExecution, error) {
+	return fallback.RunSecondary(ctx, fallback.SecondaryPlan{
 		Service:   "youtube",
 		Operation: "upcoming_streams",
 		Trigger:   fallback.TriggerOnFailures,
@@ -43,7 +67,7 @@ func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey
 				slog.Int("estimatedCost", estimatedCost))
 
 			apiResult := ys.fetchUpcomingFromAPI(runCtx, scrapeResult.failedIDs)
-			allStreams = append(allStreams, apiResult.streams...)
+			*allStreams = append(*allStreams, apiResult.streams...)
 			ys.consumeQuota(apiResult.quotaCost)
 
 			return fallback.SecondaryResult{
@@ -52,23 +76,26 @@ func (ys *serviceImpl) completeUpcomingAPIFallback(ctx context.Context, cacheKey
 			}, nil
 		},
 	})
-	if err != nil {
-		return nil, fmt.Errorf("get upcoming streams: api fallback execution: %w", err)
+}
+
+func (ys *serviceImpl) handleUpcomingFallbackBlocked(
+	ctx context.Context,
+	cacheKey string,
+	allStreams []*domain.Stream,
+	secondary fallback.SecondaryExecution,
+	quotaErr error,
+) (bool, []*domain.Stream, error) {
+	if secondary.Outcome != "blocked" {
+		return false, nil, nil
 	}
-	if secondary.Outcome == "blocked" {
-		ys.logger.Warn("Quota exceeded for API fallback, returning partial results",
-			slog.Int("scraped_count", len(allStreams)),
-			slog.Any("error", quotaErr))
-		if len(allStreams) > 0 {
-			ys.cache.SetStreams(ctx, cacheKey, allStreams, constants.YouTubeConfig.CacheExpiration)
-			return allStreams, nil
-		}
-		return nil, fmt.Errorf("get upcoming streams: api fallback blocked after scraper failures: %w", quotaErr)
+	ys.logger.Warn("Quota exceeded for API fallback, returning partial results",
+		slog.Int("scraped_count", len(allStreams)),
+		slog.Any("error", quotaErr))
+	if len(allStreams) > 0 {
+		ys.cache.SetStreams(ctx, cacheKey, allStreams, constants.YouTubeConfig.CacheExpiration)
+		return true, allStreams, nil
 	}
-	if shouldReturnFallbackError(len(allStreams), len(scrapeResult.failedIDs), secondary.Result.Successes) {
-		return nil, fmt.Errorf("get upcoming streams: scraper and api fallback failed for %d channels", len(scrapeResult.failedIDs))
-	}
-	return allStreams, nil
+	return true, nil, fmt.Errorf("get upcoming streams: api fallback blocked after scraper failures: %w", quotaErr)
 }
 
 func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) upcomingAPIFallbackResult {
@@ -111,6 +138,22 @@ func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []st
 }
 
 func (ys *serviceImpl) getChannelUpcomingStreams(ctx context.Context, channelID string) ([]*domain.Stream, error) {
+	response, err := ys.fetchChannelUpcomingSearch(ctx, channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	streams := make([]*domain.Stream, 0, len(response.Items))
+	for _, item := range response.Items {
+		if stream := buildUpcomingAPIStream(channelID, item); stream != nil {
+			streams = append(streams, stream)
+		}
+	}
+
+	return streams, nil
+}
+
+func (ys *serviceImpl) fetchChannelUpcomingSearch(ctx context.Context, channelID string) (*youtube.SearchListResponse, error) {
 	call := ys.service.Search.List([]string{"snippet"}).
 		ChannelId(channelID).
 		Type("video").
@@ -139,39 +182,44 @@ func (ys *serviceImpl) getChannelUpcomingStreams(ctx context.Context, channelID 
 	if err != nil {
 		return nil, fmt.Errorf("YouTube API error: %w", err)
 	}
+	return response, nil
+}
 
-	streams := make([]*domain.Stream, 0, len(response.Items))
-	for _, item := range response.Items {
-		if item.Id == nil || item.Id.VideoId == "" {
-			continue
-		}
-
-		stream := &domain.Stream{
-			ID:        item.Id.VideoId,
-			Title:     item.Snippet.Title,
-			ChannelID: channelID,
-			Status:    domain.StreamStatusUpcoming,
-			Link:      new(fmt.Sprintf("https://www.youtube.com/watch?v=%s", item.Id.VideoId)),
-			Thumbnail: extractThumbnail(item.Snippet.Thumbnails),
-		}
-
-		if item.Snippet.PublishedAt != "" {
-			if startTime, err := time.Parse(time.RFC3339, item.Snippet.PublishedAt); err == nil {
-				stream.StartScheduled = &startTime
-			}
-		}
-
-		if item.Snippet.ChannelTitle != "" {
-			stream.Channel = &domain.Channel{
-				ID:   channelID,
-				Name: item.Snippet.ChannelTitle,
-			}
-		}
-
-		streams = append(streams, stream)
+func buildUpcomingAPIStream(channelID string, item *youtube.SearchResult) *domain.Stream {
+	if item.Id == nil || item.Id.VideoId == "" {
+		return nil
 	}
 
-	return streams, nil
+	stream := &domain.Stream{
+		ID:        item.Id.VideoId,
+		Title:     item.Snippet.Title,
+		ChannelID: channelID,
+		Status:    domain.StreamStatusUpcoming,
+		Link:      new(fmt.Sprintf("https://www.youtube.com/watch?v=%s", item.Id.VideoId)),
+		Thumbnail: extractThumbnail(item.Snippet.Thumbnails),
+	}
+	applyUpcomingAPIStreamPublishedAt(stream, item.Snippet.PublishedAt)
+	applyUpcomingAPIStreamChannel(stream, channelID, item.Snippet.ChannelTitle)
+	return stream
+}
+
+func applyUpcomingAPIStreamPublishedAt(stream *domain.Stream, publishedAt string) {
+	if publishedAt == "" {
+		return
+	}
+	if startTime, err := time.Parse(time.RFC3339, publishedAt); err == nil {
+		stream.StartScheduled = &startTime
+	}
+}
+
+func applyUpcomingAPIStreamChannel(stream *domain.Stream, channelID string, channelTitle string) {
+	if channelTitle == "" {
+		return
+	}
+	stream.Channel = &domain.Channel{
+		ID:   channelID,
+		Name: channelTitle,
+	}
 }
 
 func extractThumbnail(thumbnails *youtube.ThumbnailDetails) *string {
@@ -179,17 +227,16 @@ func extractThumbnail(thumbnails *youtube.ThumbnailDetails) *string {
 		return nil
 	}
 
-	if thumbnails.Maxres != nil && thumbnails.Maxres.Url != "" {
-		return &thumbnails.Maxres.Url
+	candidates := []*youtube.Thumbnail{
+		thumbnails.Maxres,
+		thumbnails.High,
+		thumbnails.Medium,
+		thumbnails.Default,
 	}
-	if thumbnails.High != nil && thumbnails.High.Url != "" {
-		return &thumbnails.High.Url
-	}
-	if thumbnails.Medium != nil && thumbnails.Medium.Url != "" {
-		return &thumbnails.Medium.Url
-	}
-	if thumbnails.Default != nil && thumbnails.Default.Url != "" {
-		return &thumbnails.Default.Url
+	for _, thumbnail := range candidates {
+		if thumbnail != nil && thumbnail.Url != "" {
+			return &thumbnail.Url
+		}
 	}
 
 	return nil

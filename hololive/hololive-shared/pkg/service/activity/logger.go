@@ -128,12 +128,16 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 		}
 	}()
 
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), activityLogReadMaxLineBytes)
+
+	return scanRecentLogEntries(scanner, limit)
+}
+
+func scanRecentLogEntries(scanner *bufio.Scanner, limit int) ([]LogEntry, error) {
 	ring := make([]LogEntry, limit)
 	count := 0
 	writePos := 0
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), activityLogReadMaxLineBytes)
 
 	for scanner.Scan() {
 		var entry LogEntry
@@ -153,15 +157,19 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 		return nil, fmt.Errorf("failed to read activity log: %w", err)
 	}
 
+	return orderRecentLogEntries(ring, count, writePos, limit), nil
+}
+
+func orderRecentLogEntries(ring []LogEntry, count, writePos, limit int) []LogEntry {
 	if count == 0 {
-		return []LogEntry{}, nil
+		return []LogEntry{}
 	}
 
 	if count < limit {
 		logs := make([]LogEntry, count)
 		copy(logs, ring[:count])
 
-		return logs, nil
+		return logs
 	}
 
 	logs := make([]LogEntry, count)
@@ -169,7 +177,7 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 		logs[i] = ring[(writePos+i)%limit]
 	}
 
-	return logs, nil
+	return logs
 }
 
 func (l *Logger) rotateIfNeeded() error {

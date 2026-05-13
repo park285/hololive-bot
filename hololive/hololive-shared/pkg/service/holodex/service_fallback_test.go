@@ -35,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	ytscraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
@@ -121,7 +122,7 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 			time.Sleep(20 * time.Millisecond)
 			atomic.AddInt32(&inFlight, -1)
 
-			return []byte(fmt.Sprintf(`{"id":"%s","name":"%s"}`, channelID, channelID)), nil
+			return fmt.Appendf(nil, `{"id":"%s","name":"%s"}`, channelID, channelID), nil
 		},
 	}
 
@@ -187,6 +188,32 @@ func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&fallbackChannelReqs); got != 0 {
 		t.Fatalf("fallback channel request count = %d, want 0", got)
+	}
+}
+
+func TestCollectIndividualChannelFetchResultsReturnsOnCancel(t *testing.T) {
+	svc := newServiceForFallbackTest(&MockRequester{})
+	ctx, cancel := context.WithCancel(context.Background())
+	resultChan := make(chan channelFetchResult)
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := svc.collectIndividualChannelFetchResults(ctx, []string{"c1"}, map[string]*domain.Channel{}, resultChan)
+		done <- err
+	}()
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("collectIndividualChannelFetchResults() error = nil, want non-nil")
+		}
+		if !strings.Contains(err.Error(), "batch channel fetch canceled") {
+			t.Fatalf("collectIndividualChannelFetchResults() error = %v, want canceled batch error", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("collectIndividualChannelFetchResults() did not return after context cancellation")
 	}
 }
 

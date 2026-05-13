@@ -40,6 +40,10 @@ func (r *Runtime) waitForPGDispatchSignal(ctx context.Context) bool {
 	if timeout <= 0 {
 		timeout = time.Second
 	}
+	return r.waitForPGWakeupSignal(ctx, timeout)
+}
+
+func (r *Runtime) waitForPGWakeupSignal(ctx context.Context, timeout time.Duration) bool {
 	cmd := r.wakeupCacheSvc.B().Brpop().Key(queue.AlarmDispatchWakeupQueue).Timeout(timeout.Seconds()).Build()
 	results := r.wakeupCacheSvc.DoMulti(ctx, cmd)
 	if len(results) != 1 {
