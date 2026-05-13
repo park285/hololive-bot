@@ -35,7 +35,7 @@ bot.log
 
 # Runtime config (tracked file 제거는 별도 git 작업 필요)
 config.json
-fetch_profiles
+/fetch_profiles
 
 # IDE and editor files
 .vscode/
