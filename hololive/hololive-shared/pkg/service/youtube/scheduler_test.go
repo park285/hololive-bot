@@ -1536,7 +1536,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 		close(firstDone)
 	}()
 
-	for i := 0; i < recentVideosFetchParallelism; i++ {
+	for range recentVideosFetchParallelism {
 		select {
 		case <-youtubeSvc.startedCh:
 		case <-time.After(time.Second):

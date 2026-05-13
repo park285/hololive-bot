@@ -31,11 +31,11 @@ import (
 func TestCollectVideoRenderers_BoundedScan(t *testing.T) {
 	var builder strings.Builder
 	builder.WriteString(`{"contents":`)
-	for i := 0; i < maxVideoRendererFallbackNodes+32; i++ {
+	for range maxVideoRendererFallbackNodes + 32 {
 		builder.WriteString(`{"child":`)
 	}
 	builder.WriteString(`{"videoRenderer":{"videoId":"too-deep","title":{"runs":[{"text":"Too Deep"}]}}}`)
-	for i := 0; i < maxVideoRendererFallbackNodes+32; i++ {
+	for range maxVideoRendererFallbackNodes + 32 {
 		builder.WriteString(`}`)
 	}
 	builder.WriteString(`}`)

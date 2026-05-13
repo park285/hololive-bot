@@ -4,12 +4,15 @@ go 1.26.3
 
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
+	github.com/jackc/pgx/v5 v5.9.1
 	github.com/joho/godotenv v1.5.1
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/park285/iris-client-go v0.12.4
 	github.com/park285/llm-kakao-bots/shared-go v0.1.2
 	github.com/prometheus/client_golang v1.23.2
+	github.com/valkey-io/valkey-go v1.0.73
 	golang.org/x/sync v0.20.0
+	gorm.io/gorm v1.31.1
 )
 
 require (
@@ -70,7 +73,6 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.9.1 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
@@ -105,7 +107,6 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
-	github.com/valkey-io/valkey-go v1.0.73 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/gopher-lua v1.1.2 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
@@ -131,7 +132,6 @@ require (
 	gorm.io/datatypes v1.2.7 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
-	gorm.io/gorm v1.31.1 // indirect
 )
 
 replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go

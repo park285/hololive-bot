@@ -245,7 +245,6 @@ func TestValidateRuntimeIrisBaseURL_TransportScheme(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("IRIS_TRANSPORT", tc.transport)
 			_, err := validateRuntimeIrisBaseURL(tc.baseURL)

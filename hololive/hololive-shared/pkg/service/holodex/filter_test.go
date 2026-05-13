@@ -257,7 +257,7 @@ func TestIsHolostarsChannel(t *testing.T) {
 			name: "영문 이름에 HOLOSTARS 포함 - true",
 			channel: &domain.Channel{
 				ID:          "ch-4",
-				EnglishName: strPtr("HOLOSTARS English"),
+				EnglishName: new("HOLOSTARS English"),
 			},
 			want: true,
 		},

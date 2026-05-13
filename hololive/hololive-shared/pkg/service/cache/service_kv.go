@@ -186,10 +186,7 @@ func (c *Service) DelMany(ctx context.Context, keys []string) (int64, error) {
 
 	var totalDeleted int64
 	for start := 0; start < len(keys); start += delManyChunkSize {
-		end := start + delManyChunkSize
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(start+delManyChunkSize, len(keys))
 
 		chunk := keys[start:end]
 		resp := c.client.Do(ctx, c.client.B().Del().Key(chunk...).Build())

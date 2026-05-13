@@ -694,17 +694,15 @@ func TestScraperFetchAllStreams_DeduplicatesConcurrentRequests(t *testing.T) {
 	results := make(chan []*domain.Stream, concurrency)
 
 	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range concurrency {
+		wg.Go(func() {
 			streams, err := svc.FetchAllStreams(context.Background())
 			if err != nil {
 				t.Errorf("FetchAllStreams() error = %v", err)
 				return
 			}
 			results <- streams
-		}()
+		})
 	}
 
 	wg.Wait()

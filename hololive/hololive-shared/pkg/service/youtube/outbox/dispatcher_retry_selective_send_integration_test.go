@@ -67,7 +67,6 @@ func TestProcessOnce_RetrySkipsAlreadySentCommunityShortsPostAndResendsOnlyPendi
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			db := newRecoveryInputFixtureDB(t, "retry_selective_send_"+tc.name)

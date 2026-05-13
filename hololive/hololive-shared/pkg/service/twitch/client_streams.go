@@ -94,10 +94,7 @@ func chunkUserLogins(userLogins []string, chunkSize int) [][]string {
 
 	chunks := make([][]string, 0, (len(userLogins)+chunkSize-1)/chunkSize)
 	for start := 0; start < len(userLogins); start += chunkSize {
-		end := start + chunkSize
-		if end > len(userLogins) {
-			end = len(userLogins)
-		}
+		end := min(start+chunkSize, len(userLogins))
 
 		chunks = append(chunks, userLogins[start:end])
 	}

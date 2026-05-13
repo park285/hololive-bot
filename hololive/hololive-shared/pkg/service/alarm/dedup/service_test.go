@@ -183,9 +183,7 @@ func newMockDedupCache(t *testing.T) (*cachemocks.Client, *mockDedupCacheState) 
 			return map[string]string{}, nil
 		}
 		copied := make(map[string]string, len(fields))
-		for k, v := range fields {
-			copied[k] = v
-		}
+		maps.Copy(copied, fields)
 		return copied, nil
 	}
 	client.ExpireFunc = func(_ context.Context, _ string, _ time.Duration) error {
@@ -269,7 +267,7 @@ func TestLocalFallback_CleanupExpiredEntriesOnCapacity(t *testing.T) {
 	fb := NewLocalFallback(newTestLogger())
 	fb.now = func() time.Time { return current }
 
-	for i := 0; i < constants.LocalFallbackCleanupMaxKeys; i++ {
+	for i := range constants.LocalFallbackCleanupMaxKeys {
 		require.True(t, fb.tryClaim(fmt.Sprintf("expired:%d", i), time.Second))
 	}
 	require.Equal(t, constants.LocalFallbackCleanupMaxKeys, fallbackKeyCount(fb))

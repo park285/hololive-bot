@@ -37,7 +37,6 @@ func newTestScheduler() *TieredScheduler {
 	return NewTieredScheduler(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
 }
 
-
 func TestComputeNextCheckAt(t *testing.T) {
 	tolerance := 2 * time.Second
 
@@ -119,7 +118,6 @@ func TestComputeNextCheckAt(t *testing.T) {
 	}
 }
 
-
 func TestSelectDueChannels_UnknownChannelsAreDue(t *testing.T) {
 	ts := newTestScheduler()
 	// full_refresh_at을 미래로 설정하여 forceAll 방지
@@ -172,7 +170,6 @@ func TestSelectDueChannels_FullRefreshReturnsAll(t *testing.T) {
 	assert.Len(t, due, 3)
 }
 
-
 func TestUpdateChannelState_SetsNearestStart(t *testing.T) {
 	ts := newTestScheduler()
 	start := time.Now().Add(2 * time.Hour)
@@ -217,7 +214,6 @@ func TestUpdateChannelState_PreservesLastNotifiedAt(t *testing.T) {
 	assert.Equal(t, notifiedAt, *st.lastNotifiedAt)
 }
 
-
 func TestMarkChannelDue_ThenSelectReturnsIt(t *testing.T) {
 	ts := newTestScheduler()
 	ts.fullRefreshAt = time.Now().Add(1 * time.Hour)
@@ -234,7 +230,6 @@ func TestMarkChannelDue_ThenSelectReturnsIt(t *testing.T) {
 	due := ts.SelectDueChannels([]string{"UC_A"})
 	assert.Len(t, due, 1)
 }
-
 
 func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 	ts := newTestScheduler()
@@ -255,7 +250,6 @@ func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 	assert.Less(t, diff, 2*time.Second)
 }
 
-
 func TestForgetChannel(t *testing.T) {
 	ts := newTestScheduler()
 	ts.states["UC_A"] = &channelScheduleState{}
@@ -267,4 +261,3 @@ func TestForgetChannel(t *testing.T) {
 	_, ok := ts.states["UC_A"]
 	assert.False(t, ok)
 }
-

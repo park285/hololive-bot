@@ -97,15 +97,15 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 	}
 	for _, rel := range copyChecks {
 		rel := rel
-			t.Run(rel, func(t *testing.T) {
-				t.Parallel()
-				assertFileMissingToken(
-					t,
-					root,
-					rel,
-					"COPY hololive/"+removedRuntimeName()+" ./hololive/"+removedRuntimeName(),
-				)
-			})
+		t.Run(rel, func(t *testing.T) {
+			t.Parallel()
+			assertFileMissingToken(
+				t,
+				root,
+				rel,
+				"COPY hololive/"+removedRuntimeName()+" ./hololive/"+removedRuntimeName(),
+			)
+		})
 	}
 
 	residueChecks := []struct {

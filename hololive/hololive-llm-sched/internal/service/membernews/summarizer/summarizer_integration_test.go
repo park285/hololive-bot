@@ -34,7 +34,6 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-
 func skipIfNoLLMKey(t *testing.T) {
 	t.Helper()
 	if os.Getenv("INTEGRATION_TEST") != "true" {
@@ -182,7 +181,6 @@ func integrationCandidates() []model.FilteredCandidate {
 		},
 	}
 }
-
 
 func TestIntegration_MemberNewsSummarize_Weekly(t *testing.T) {
 	skipIfNoLLMKey(t)

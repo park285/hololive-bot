@@ -110,8 +110,8 @@ func shortNumberBaseAndMultiplier(text string) (string, int64) {
 		{"B", 1_000_000_000},
 	}
 	for _, unit := range units {
-		if strings.HasSuffix(text, unit.suffix) {
-			return strings.TrimSuffix(text, unit.suffix), unit.multiplier
+		if before, ok := strings.CutSuffix(text, unit.suffix); ok {
+			return before, unit.multiplier
 		}
 	}
 	return text, 1
@@ -146,8 +146,8 @@ func parseViewCount(text string) int64 {
 		{"만", 10_000},
 		{"万", 10_000},
 	} {
-		if strings.HasSuffix(text, unit.suffix) {
-			text = strings.TrimSuffix(text, unit.suffix)
+		if before, ok := strings.CutSuffix(text, unit.suffix); ok {
+			text = before
 			multiplier = unit.value
 			break
 		}

@@ -20,6 +20,8 @@
 
 package domain
 
+import "maps"
+
 import "slices"
 
 var templateSampleData = mergeTemplateSampleData(
@@ -31,9 +33,7 @@ var templateSampleData = mergeTemplateSampleData(
 func mergeTemplateSampleData(groups ...map[TemplateKey]any) map[TemplateKey]any {
 	merged := make(map[TemplateKey]any)
 	for _, group := range groups {
-		for key, value := range group {
-			merged[key] = value
-		}
+		maps.Copy(merged, group)
 	}
 	return merged
 }

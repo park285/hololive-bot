@@ -142,6 +142,9 @@ func (c *AlarmCommand) handleAdd(ctx context.Context, cmdCtx *domain.CommandCont
 	if err != nil {
 		return err
 	}
+	if channel == nil {
+		return nil
+	}
 
 	// 졸업 멤버 체크 (기존 로직 유지)
 	if c.isGraduatedMember(ctx, channel.ID) {
@@ -216,6 +219,9 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 	channel, err := c.resolveAlarmMember(ctx, cmdCtx.Room, memberName)
 	if err != nil {
 		return err
+	}
+	if channel == nil {
+		return nil
 	}
 
 	removed, err := c.Deps().Alarm.RemoveAlarm(ctx, cmdCtx.Room, channel.ID, alarmTypes)

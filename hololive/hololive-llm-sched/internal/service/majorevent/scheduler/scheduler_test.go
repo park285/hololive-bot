@@ -192,7 +192,6 @@ func TestScheduler_Interface(t *testing.T) {
 	t.Log("Scheduler interface verified")
 }
 
-
 type mockEventRepository struct {
 	rooms          []*domain.EventRoomSubscription
 	roomsErr       error
@@ -234,7 +233,6 @@ func (m *mockEventRepository) MarkEventsAsMonthlyNotified(_ context.Context, eve
 	m.markedMonthKey = monthKey
 	return m.markMonthlyErr
 }
-
 
 func newTestScheduler(repo EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *Scheduler {
 	return NewScheduler(
@@ -360,7 +358,6 @@ func TestSendWeeklyNotification_NoRooms_ReturnsNil(t *testing.T) {
 	}
 }
 
-
 func newTestMonthlyScheduler(repo EventRepository, outbox outboxEnqueuer, locker delivery.NotificationLocker) *MonthlyScheduler {
 	return NewMonthlyScheduler(
 		repo,
@@ -414,7 +411,6 @@ func TestSendMonthlyNotification_PartialFailure_NoMarking(t *testing.T) {
 	}
 }
 
-
 func TestSendWeeklyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing.T) {
 	locker := &mockNotificationLocker{
 		acquireToken:    "",
@@ -448,7 +444,6 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 		t.Errorf("expected ErrNotificationInProgress, got: %v", err)
 	}
 }
-
 
 func TestSendWeeklyNotification_EnqueueMarking_AllSuccess_Marks(t *testing.T) {
 	repo := &mockEventRepository{

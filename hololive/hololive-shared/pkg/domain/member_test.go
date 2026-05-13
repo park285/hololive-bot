@@ -82,9 +82,9 @@ func TestMember_HasAlias(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		alias  string
-		want   bool
+		name  string
+		alias string
+		want  bool
 	}{
 		{
 			// Ko 별명에서 발견 → true
