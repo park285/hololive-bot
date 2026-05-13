@@ -62,6 +62,15 @@ type resetPasswordRequest struct {
 	NewPassword string `json:"newPassword" binding:"required"`
 }
 
+var authErrorHTTPStatus = map[authsvc.ErrorCode]int{
+	authsvc.CodeInvalidInput:       http.StatusBadRequest,
+	authsvc.CodeEmailExists:        http.StatusConflict,
+	authsvc.CodeInvalidCredentials: http.StatusUnauthorized,
+	authsvc.CodeAccountLocked:      http.StatusForbidden,
+	authsvc.CodeRateLimited:        http.StatusTooManyRequests,
+	authsvc.CodeUnauthorized:       http.StatusUnauthorized,
+}
+
 func writeAuthError(c *gin.Context, status int, code authsvc.ErrorCode) {
 	c.JSON(status, gin.H{
 		"success": false,
@@ -98,22 +107,11 @@ func mapAuthErrorToHTTP(err error) (status int, code authsvc.ErrorCode) {
 		return http.StatusInternalServerError, authsvc.CodeInternal
 	}
 
-	switch ae.Code {
-	case authsvc.CodeInvalidInput:
-		return http.StatusBadRequest, ae.Code
-	case authsvc.CodeEmailExists:
-		return http.StatusConflict, ae.Code
-	case authsvc.CodeInvalidCredentials:
-		return http.StatusUnauthorized, ae.Code
-	case authsvc.CodeAccountLocked:
-		return http.StatusForbidden, ae.Code
-	case authsvc.CodeRateLimited:
-		return http.StatusTooManyRequests, ae.Code
-	case authsvc.CodeUnauthorized:
-		return http.StatusUnauthorized, ae.Code
-	default:
+	status, ok := authErrorHTTPStatus[ae.Code]
+	if !ok {
 		return http.StatusInternalServerError, authsvc.CodeInternal
 	}
+	return status, ae.Code
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {

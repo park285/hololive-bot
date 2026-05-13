@@ -3,13 +3,14 @@ package server
 import (
 	"context"
 	"fmt"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 )
 
@@ -117,11 +118,10 @@ func (h *StatsAPIHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 		return
 	}
 
-	latencySummaries, err := outbox.BuildPostLatencyPeriodSummaries(posts, []outbox.PostLatencyPeriod{{
-		Label:   "last_24h",
-		StartAt: windowStart,
-		EndAt:   now,
-	}})
+	latencySummaries, err := outbox.BuildPostLatencyPeriodSummaries(
+		posts,
+		youtubeCommunityShortsOpsLatencyPeriods(windowStart, now),
+	)
 	if err != nil {
 		h.safeLogger().Error("Failed to build YouTube community/shorts latency summaries", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts latency summaries", nil)
@@ -136,10 +136,7 @@ func (h *StatsAPIHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	}
 
 	memberNames := h.loadYouTubeCommunityShortsMemberNames(ctx)
-	var latencySummary outbox.PostLatencyPeriodSummary
-	if len(latencySummaries) > 0 {
-		latencySummary = latencySummaries[0]
-	}
+	latencySummary := firstYouTubeCommunityShortsOpsLatencySummary(latencySummaries)
 
 	c.JSON(200, YouTubeCommunityShortsOpsResponse{
 		Status:             "ok",
@@ -167,21 +164,46 @@ func (h *StatsAPIHandler) loadYouTubeCommunityShortsMemberNames(ctx context.Cont
 	}
 
 	for i := range members {
-		if members[i] == nil {
-			continue
-		}
-		channelID := strings.TrimSpace(members[i].ChannelID)
-		if channelID == "" {
-			continue
-		}
-		memberName := strings.TrimSpace(members[i].Name)
-		if memberName == "" {
-			memberName = channelID
-		}
-		memberNames[channelID] = memberName
+		addYouTubeCommunityShortsMemberName(memberNames, members[i])
 	}
 
 	return memberNames
+}
+
+func addYouTubeCommunityShortsMemberName(memberNames map[string]string, member *domain.Member) {
+	if member == nil {
+		return
+	}
+	channelID := strings.TrimSpace(member.ChannelID)
+	if channelID == "" {
+		return
+	}
+	memberNames[channelID] = youtubeCommunityShortsMemberName(member, channelID)
+}
+
+func youtubeCommunityShortsMemberName(member *domain.Member, channelID string) string {
+	memberName := strings.TrimSpace(member.Name)
+	if memberName == "" {
+		return channelID
+	}
+	return memberName
+}
+
+func youtubeCommunityShortsOpsLatencyPeriods(windowStart, now time.Time) []outbox.PostLatencyPeriod {
+	return []outbox.PostLatencyPeriod{{
+		Label:   "last_24h",
+		StartAt: windowStart,
+		EndAt:   now,
+	}}
+}
+
+func firstYouTubeCommunityShortsOpsLatencySummary(
+	latencySummaries []outbox.PostLatencyPeriodSummary,
+) outbox.PostLatencyPeriodSummary {
+	if len(latencySummaries) == 0 {
+		return outbox.PostLatencyPeriodSummary{}
+	}
+	return latencySummaries[0]
 }
 
 func buildYouTubeCommunityShortsOpsOverview(
@@ -286,19 +308,27 @@ func (a *youtubeCommunityShortsChannelLatencyAccumulator) add(post outbox.PostSe
 	}
 
 	if post.AlarmLatencyExceeded != nil {
-		if *post.AlarmLatencyExceeded {
-			a.summary.ExceededPostCount++
-		} else {
-			a.summary.WithinTargetPostCount++
-		}
+		a.addLatencyExceeded(*post.AlarmLatencyExceeded)
 	}
 
 	if post.AlarmLatencyMillis != nil {
-		a.latencySumMillis += *post.AlarmLatencyMillis
-		a.latencyMeasuredCount++
-		if a.latencyMeasuredCount == 1 || *post.AlarmLatencyMillis > a.maxLatencyMillis {
-			a.maxLatencyMillis = *post.AlarmLatencyMillis
-		}
+		a.addLatencyMillis(*post.AlarmLatencyMillis)
+	}
+}
+
+func (a *youtubeCommunityShortsChannelLatencyAccumulator) addLatencyExceeded(exceeded bool) {
+	if exceeded {
+		a.summary.ExceededPostCount++
+		return
+	}
+	a.summary.WithinTargetPostCount++
+}
+
+func (a *youtubeCommunityShortsChannelLatencyAccumulator) addLatencyMillis(latencyMillis int64) {
+	a.latencySumMillis += latencyMillis
+	a.latencyMeasuredCount++
+	if a.latencyMeasuredCount == 1 || latencyMillis > a.maxLatencyMillis {
+		a.maxLatencyMillis = latencyMillis
 	}
 }
 
