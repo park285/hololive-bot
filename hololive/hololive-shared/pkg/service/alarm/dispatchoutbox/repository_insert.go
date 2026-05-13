@@ -56,6 +56,23 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[str
 	if len(events) == 0 {
 		return eventIDs, 0, nil
 	}
+	rows, keys, expectedHashes := buildEventBatchRows(events)
+	raw, err := json.Marshal(rows)
+	if err != nil {
+		return nil, 0, fmt.Errorf("insert dispatch events: marshal batch: %w", err)
+	}
+	inserted, err := insertEventBatch(ctx, tx, raw)
+	if err != nil {
+		return nil, 0, err
+	}
+	eventIDs, err = loadEventIDs(ctx, tx, keys, expectedHashes, len(events))
+	if err != nil {
+		return nil, 0, err
+	}
+	return eventIDs, inserted, nil
+}
+
+func buildEventBatchRows(events []eventInsert) ([]eventBatchRow, []string, map[string]string) {
 	rows := make([]eventBatchRow, 0, len(events))
 	keys := make([]string, 0, len(events))
 	expectedHashes := make(map[string]string, len(events))
@@ -72,10 +89,10 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[str
 		keys = append(keys, event.EventKey)
 		expectedHashes[event.EventKey] = event.PayloadHash
 	}
-	raw, err := json.Marshal(rows)
-	if err != nil {
-		return nil, 0, fmt.Errorf("insert dispatch events: marshal batch: %w", err)
-	}
+	return rows, keys, expectedHashes
+}
+
+func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, error) {
 	insertedRows, err := tx.Query(ctx, `
 		WITH input AS (
 			SELECT *
@@ -98,7 +115,7 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[str
 		ON CONFLICT (event_key) DO NOTHING
 		RETURNING event_key`, raw)
 	if err != nil {
-		return nil, 0, fmt.Errorf("insert dispatch events: %w", err)
+		return 0, fmt.Errorf("insert dispatch events: %w", err)
 	}
 	inserted := 0
 	for insertedRows.Next() {
@@ -106,47 +123,70 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[str
 	}
 	if err := insertedRows.Err(); err != nil {
 		insertedRows.Close()
-		return nil, 0, fmt.Errorf("insert dispatch events: rows: %w", err)
+		return 0, fmt.Errorf("insert dispatch events: rows: %w", err)
 	}
 	insertedRows.Close()
+	return inserted, nil
+}
 
+func loadEventIDs(ctx context.Context, tx pgx.Tx, keys []string, expectedHashes map[string]string, eventCount int) (map[string]int64, error) {
 	existingRows, err := tx.Query(ctx, `
 		SELECT id, event_key, payload_hash
 		FROM alarm_dispatch_events
 		WHERE event_key = ANY($1)`, keys)
 	if err != nil {
-		return nil, 0, fmt.Errorf("load dispatch event ids: %w", err)
+		return nil, fmt.Errorf("load dispatch event ids: %w", err)
 	}
 	defer existingRows.Close()
+	eventIDs := make(map[string]int64, eventCount)
 	for existingRows.Next() {
 		var id int64
 		var hash string
 		var key string
 		if err := existingRows.Scan(&id, &key, &hash); err != nil {
-			return nil, 0, fmt.Errorf("load dispatch event ids: scan: %w", err)
+			return nil, fmt.Errorf("load dispatch event ids: scan: %w", err)
 		}
 		if expectedHashes[key] != hash {
-			return nil, 0, fmt.Errorf("dispatch event hash conflict: event_key=%s", key)
+			return nil, fmt.Errorf("dispatch event hash conflict: event_key=%s", key)
 		}
 		eventIDs[key] = id
 	}
 	if err := existingRows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("load dispatch event ids: rows: %w", err)
+		return nil, fmt.Errorf("load dispatch event ids: rows: %w", err)
 	}
-	if len(eventIDs) != len(events) {
-		return nil, 0, fmt.Errorf("load dispatch event ids: found %d of %d rows", len(eventIDs), len(events))
+	if len(eventIDs) != eventCount {
+		return nil, fmt.Errorf("load dispatch event ids: found %d of %d rows", len(eventIDs), eventCount)
 	}
-	return eventIDs, inserted, nil
+	return eventIDs, nil
 }
 
 func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInsert) (int, error) {
 	if len(deliveries) == 0 {
 		return 0, nil
 	}
+	rows, err := buildDeliveryBatchRows(deliveries)
+	if err != nil {
+		return 0, err
+	}
+	raw, err := json.Marshal(rows)
+	if err != nil {
+		return 0, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
+	}
+	selected, inserted, err := insertDeliveryBatch(ctx, tx, raw)
+	if err != nil {
+		return 0, err
+	}
+	if selected != len(deliveries) {
+		return 0, fmt.Errorf("insert dispatch deliveries: selected %d of %d rows", selected, len(deliveries))
+	}
+	return inserted, nil
+}
+
+func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, error) {
 	rows := make([]deliveryBatchRow, 0, len(deliveries))
 	for _, delivery := range deliveries {
 		if delivery.EventID <= 0 {
-			return 0, fmt.Errorf("insert dispatch deliveries: missing event id for event_key=%s", delivery.EventKey)
+			return nil, fmt.Errorf("insert dispatch deliveries: missing event id for event_key=%s", delivery.EventKey)
 		}
 		rows = append(rows, deliveryBatchRow{
 			EventID:         delivery.EventID,
@@ -158,13 +198,13 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 			Status:          string(delivery.Status),
 		})
 	}
-	raw, err := json.Marshal(rows)
-	if err != nil {
-		return 0, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
-	}
+	return rows, nil
+}
+
+func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, int, error) {
 	var selected int
 	var inserted int
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		WITH input AS (
 			SELECT *
 			FROM jsonb_to_recordset($1::jsonb) AS x(
@@ -201,10 +241,7 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 		)
 		SELECT (SELECT count(*) FROM normalized), (SELECT count(*) FROM inserted)`, raw).Scan(&selected, &inserted)
 	if err != nil {
-		return 0, fmt.Errorf("insert dispatch deliveries: %w", err)
+		return 0, 0, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}
-	if selected != len(deliveries) {
-		return 0, fmt.Errorf("insert dispatch deliveries: selected %d of %d rows", selected, len(deliveries))
-	}
-	return inserted, nil
+	return selected, inserted, nil
 }

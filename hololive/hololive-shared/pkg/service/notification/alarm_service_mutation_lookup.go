@@ -36,22 +36,30 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 	}
 
 	if as.alarmRepo != nil {
-		alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepo, roomID)
-		if err != nil {
-			return nil, fmt.Errorf("find room alarms: %w", err)
-		}
-
-		for _, alarm := range alarms {
-			if alarm == nil || strings.TrimSpace(alarm.ChannelID) != channelID {
-				continue
-			}
-			cloned := *alarm
-			return &cloned, nil
-		}
-
-		return nil, nil
+		return as.findAlarmRecordForMutationFromRepository(ctx, roomID, channelID)
 	}
 
+	return as.findAlarmRecordForMutationFromCache(ctx, roomID, channelID)
+}
+
+func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID string, channelID string) (*domain.Alarm, error) {
+	alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepo, roomID)
+	if err != nil {
+		return nil, fmt.Errorf("find room alarms: %w", err)
+	}
+
+	for _, alarm := range alarms {
+		if alarm == nil || strings.TrimSpace(alarm.ChannelID) != channelID {
+			continue
+		}
+		cloned := *alarm
+		return &cloned, nil
+	}
+
+	return nil, nil
+}
+
+func (as *AlarmService) findAlarmRecordForMutationFromCache(ctx context.Context, roomID string, channelID string) (*domain.Alarm, error) {
 	exists, err := as.cache.SIsMember(ctx, as.getAlarmKey(roomID), channelID)
 	if err != nil {
 		return nil, fmt.Errorf("check room alarm membership: %w", err)
@@ -61,6 +69,19 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 	}
 
 	registryKey := as.getRegistryKey(roomID)
+	currentTypes, err := as.currentCachedAlarmTypes(ctx, channelID, registryKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.Alarm{
+		RoomID:     roomID,
+		ChannelID:  channelID,
+		AlarmTypes: currentTypes,
+	}, nil
+}
+
+func (as *AlarmService) currentCachedAlarmTypes(ctx context.Context, channelID string, registryKey string) (domain.AlarmTypes, error) {
 	currentTypes := make(domain.AlarmTypes, 0, len(domain.AllAlarmTypes))
 	for _, alarmType := range domain.AllAlarmTypes {
 		subscriberKey := as.channelSubscribersKeyByType(channelID, alarmType)
@@ -76,11 +97,7 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 		currentTypes = append(domain.AlarmTypes(nil), domain.DefaultAlarmTypes...)
 	}
 
-	return &domain.Alarm{
-		RoomID:     roomID,
-		ChannelID:  channelID,
-		AlarmTypes: currentTypes,
-	}, nil
+	return currentTypes, nil
 }
 
 func (as *AlarmService) loadRoomAlarmsForMutation(ctx context.Context, roomID string) ([]*domain.Alarm, error) {

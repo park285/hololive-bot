@@ -79,51 +79,62 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 		return result, nil
 	}
 
-	events := make(map[string]eventInsert, len(input.Envelopes))
-	deliveries := make([]deliveryInsert, 0, len(input.Envelopes))
-	for _, envelope := range input.Envelopes {
+	eventRows, deliveries, result, err := prepareInsertBatchRows(input.Envelopes, status, result)
+	if err != nil {
+		return result, err
+	}
+	return r.insertPreparedBatch(ctx, eventRows, deliveries, result)
+}
+
+func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status, result PublishBatchResult) ([]eventInsert, []deliveryInsert, PublishBatchResult, error) {
+	events := make(map[string]eventInsert, len(envelopes))
+	deliveries := make([]deliveryInsert, 0, len(envelopes))
+	for _, envelope := range envelopes {
 		event, delivery, err := buildLedgerRows(envelope, status)
 		if err != nil {
-			return PublishBatchResult{}, err
+			return nil, nil, PublishBatchResult{}, err
 		}
-		if existing, ok := events[event.EventKey]; ok {
-			if existing.PayloadHash != event.PayloadHash {
-				result.HashConflictEvents++
-				return result, fmt.Errorf("dispatch event hash conflict: event_key=%s", event.EventKey)
-			}
-		} else {
-			events[event.EventKey] = event
-			result.RequestedEvents++
+		result, err = addPreparedEvent(events, event, result)
+		if err != nil {
+			return nil, nil, result, err
 		}
 		deliveries = append(deliveries, delivery)
 	}
-
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback(ctx)
-		}
-	}()
 
 	eventRows := make([]eventInsert, 0, len(events))
 	for _, event := range events {
 		eventRows = append(eventRows, event)
 	}
-	eventIDs, insertedEvents, err := insertEvents(ctx, tx, eventRows)
+	return eventRows, deliveries, result, nil
+}
+
+func addPreparedEvent(events map[string]eventInsert, event eventInsert, result PublishBatchResult) (PublishBatchResult, error) {
+	existing, ok := events[event.EventKey]
+	if ok && existing.PayloadHash != event.PayloadHash {
+		result.HashConflictEvents++
+		return result, fmt.Errorf("dispatch event hash conflict: event_key=%s", event.EventKey)
+	}
+	if !ok {
+		events[event.EventKey] = event
+		result.RequestedEvents++
+	}
+	return result, nil
+}
+
+func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eventInsert, deliveries []deliveryInsert, result PublishBatchResult) (PublishBatchResult, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		if strings.Contains(err.Error(), "dispatch event hash conflict") {
-			result.HashConflictEvents++
-		}
+		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
+	}
+	defer rollbackDispatchBatchOnError(ctx, tx, &err)
+
+	var eventIDs map[string]int64
+	eventIDs, result, err = insertPreparedEvents(ctx, tx, eventRows, result)
+	if err != nil {
 		return result, err
 	}
-	result.InsertedEvents = insertedEvents
-	result.DuplicateEvents = len(eventRows) - insertedEvents
-	for i := range deliveries {
-		deliveries[i].EventID = eventIDs[deliveries[i].EventKey]
-	}
+	assignDeliveryEventIDs(deliveries, eventIDs)
+
 	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
 	if err != nil {
 		return result, err
@@ -134,6 +145,31 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: commit: %w", err)
 	}
 	return processedPublishBatchResult(result), nil
+}
+
+func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err *error) {
+	if *err != nil {
+		_ = tx.Rollback(ctx)
+	}
+}
+
+func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result PublishBatchResult) (map[string]int64, PublishBatchResult, error) {
+	eventIDs, insertedEvents, err := insertEvents(ctx, tx, eventRows)
+	if err != nil {
+		if strings.Contains(err.Error(), "dispatch event hash conflict") {
+			result.HashConflictEvents++
+		}
+		return nil, result, err
+	}
+	result.InsertedEvents = insertedEvents
+	result.DuplicateEvents = len(eventRows) - insertedEvents
+	return eventIDs, result, nil
+}
+
+func assignDeliveryEventIDs(deliveries []deliveryInsert, eventIDs map[string]int64) {
+	for i := range deliveries {
+		deliveries[i].EventID = eventIDs[deliveries[i].EventKey]
+	}
 }
 
 func (r *PgxRepository) findByDedupeKeyAny(ctx context.Context, dedupeKeys ...string) (*Record, error) {

@@ -174,26 +174,18 @@ type apiEnvelope struct {
 
 func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
 	path := contractsalarm.RoomAlarmsViewPath(roomID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, http.NoBody)
+	resp, err := c.doRequest(ctx, http.MethodGet, path, http.NoBody, false)
 	if err != nil {
-		return nil, fmt.Errorf("alarm-api: %s: new request: %w", path, err)
-	}
-	if c.apiKey != "" {
-		req.Header.Set("X-API-Key", c.apiKey)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("alarm-api: %s: %w", path, err)
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if err := httputil.CheckStatus(resp); err != nil {
-		return nil, fmt.Errorf("alarm-api: %s: check status: %w", path, err)
-	}
+	return decodeAlarmListViewEnvelope(path, resp.Body)
+}
 
+func decodeAlarmListViewEnvelope(path string, body io.Reader) ([]domain.AlarmListView, error) {
 	var envelope apiEnvelope
-	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+	if err := json.NewDecoder(body).Decode(&envelope); err != nil {
 		return nil, fmt.Errorf("alarm-api: %s: decode envelope: %w", path, err)
 	}
 	if !envelope.Success {
@@ -203,8 +195,12 @@ func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domai
 		return []domain.AlarmListView{}, nil
 	}
 
+	return decodeAlarmListViewEntries(path, *envelope.Data)
+}
+
+func decodeAlarmListViewEntries(path string, data json.RawMessage) ([]domain.AlarmListView, error) {
 	var entries []domain.AlarmListView
-	if err := json.Unmarshal(*envelope.Data, &entries); err != nil {
+	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, fmt.Errorf("alarm-api: %s: decode entries: %w", path, err)
 	}
 	if entries == nil {
@@ -307,35 +303,16 @@ func (c *Client) putJSON(ctx context.Context, path string, body any, out any) er
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, body any, out any) error {
-	var bodyReader io.Reader
-	if body != nil {
-		var buf bytes.Buffer
-		if err := json.NewEncoder(&buf).Encode(body); err != nil {
-			return fmt.Errorf("alarm-api: %s: encode request: %w", path, err)
-		}
-		bodyReader = &buf
+	bodyReader, err := encodeJSONRequestBody(path, body)
+	if err != nil {
+		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
+	resp, err := c.doRequest(ctx, method, path, bodyReader, body != nil)
 	if err != nil {
-		return fmt.Errorf("alarm-api: %s: new request: %w", path, err)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.apiKey != "" {
-		req.Header.Set("X-API-Key", c.apiKey)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("alarm-api: %s: %w", path, err)
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if err := httputil.CheckStatus(resp); err != nil {
-		return fmt.Errorf("alarm-api: %s: check status: %w", path, err)
-	}
 
 	if out == nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -346,4 +323,45 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 		return fmt.Errorf("alarm-api: %s: decode response: %w", path, err)
 	}
 	return nil
+}
+
+func encodeJSONRequestBody(path string, body any) (io.Reader, error) {
+	if body == nil {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+		return nil, fmt.Errorf("alarm-api: %s: encode request: %w", path, err)
+	}
+	return &buf, nil
+}
+
+func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader, hasJSONBody bool) (*http.Response, error) {
+	req, err := c.newRequest(ctx, method, path, body, hasJSONBody)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("alarm-api: %s: %w", path, err)
+	}
+	if err := httputil.CheckStatus(resp); err != nil {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("alarm-api: %s: check status: %w", path, err)
+	}
+	return resp, nil
+}
+
+func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader, hasJSONBody bool) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return nil, fmt.Errorf("alarm-api: %s: new request: %w", path, err)
+	}
+	if hasJSONBody {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	return req, nil
 }

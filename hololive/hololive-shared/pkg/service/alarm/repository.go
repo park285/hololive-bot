@@ -236,38 +236,54 @@ func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, 
 func (r *Repository) scanAlarms(rows pgx.Rows) ([]*domain.Alarm, error) {
 	var alarms []*domain.Alarm
 	for rows.Next() {
-		var a domain.Alarm
-		var memberName, roomName, userName *string
-		var alarmTypesStr *string
-
-		err := rows.Scan(
-			&a.ID, &a.RoomID, &a.UserID, &a.ChannelID,
-			&memberName, &roomName, &userName, &alarmTypesStr, &a.CreatedAt,
-		)
+		alarm, err := scanAlarmRow(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan alarm: %w", err)
+			return nil, err
 		}
-
-		if memberName != nil {
-			a.MemberName = *memberName
-		}
-		if roomName != nil {
-			a.RoomName = *roomName
-		}
-		if userName != nil {
-			a.UserName = *userName
-		}
-		if alarmTypesStr != nil {
-			_ = a.AlarmTypes.Scan(*alarmTypesStr)
-		}
-		if len(a.AlarmTypes) == 0 {
-			a.AlarmTypes = domain.DefaultAlarmTypes
-		}
-		alarms = append(alarms, &a)
+		alarms = append(alarms, alarm)
 	}
 
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("iterate alarms: %w", rowsErr)
 	}
 	return alarms, nil
+}
+
+func scanAlarmRow(rows pgx.Rows) (*domain.Alarm, error) {
+	var alarm domain.Alarm
+	var memberName, roomName, userName *string
+	var alarmTypesStr *string
+
+	err := rows.Scan(
+		&alarm.ID, &alarm.RoomID, &alarm.UserID, &alarm.ChannelID,
+		&memberName, &roomName, &userName, &alarmTypesStr, &alarm.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("scan alarm: %w", err)
+	}
+
+	applyAlarmNullableFields(&alarm, memberName, roomName, userName)
+	applyAlarmTypes(&alarm, alarmTypesStr)
+	return &alarm, nil
+}
+
+func applyAlarmNullableFields(alarm *domain.Alarm, memberName, roomName, userName *string) {
+	if memberName != nil {
+		alarm.MemberName = *memberName
+	}
+	if roomName != nil {
+		alarm.RoomName = *roomName
+	}
+	if userName != nil {
+		alarm.UserName = *userName
+	}
+}
+
+func applyAlarmTypes(alarm *domain.Alarm, alarmTypesStr *string) {
+	if alarmTypesStr != nil {
+		_ = alarm.AlarmTypes.Scan(*alarmTypesStr)
+	}
+	if len(alarm.AlarmTypes) == 0 {
+		alarm.AlarmTypes = domain.DefaultAlarmTypes
+	}
 }

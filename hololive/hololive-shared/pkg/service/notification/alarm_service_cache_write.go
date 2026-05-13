@@ -157,6 +157,26 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 		return 0, fmt.Errorf("add room registry: %w", err)
 	}
 
+	if err := as.cacheAlarmSubscribersSequential(ctx, record, registryKey); err != nil {
+		return 0, err
+	}
+
+	if _, err := as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
+		return 0, fmt.Errorf("add channel registry: %w", err)
+	}
+
+	if err := as.cacheAlarmMetadataSequential(ctx, record); err != nil {
+		return 0, err
+	}
+
+	if err := as.markAlarmCacheChanged(ctx); err != nil {
+		return 0, fmt.Errorf("mark alarm cache changed: %w", err)
+	}
+
+	return added, nil
+}
+
+func (as *AlarmService) cacheAlarmSubscribersSequential(ctx context.Context, record *domain.Alarm, registryKey string) error {
 	builder := as.cache.Builder()
 	saddCmds := make([]valkey.Completed, len(record.AlarmTypes))
 	for i, alarmType := range record.AlarmTypes {
@@ -166,40 +186,36 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 
 	results := as.cache.DoMulti(ctx, saddCmds...)
 	if len(results) != len(saddCmds) {
-		return 0, fmt.Errorf("add channel subscribers: unexpected result count: %d", len(results))
+		return fmt.Errorf("add channel subscribers: unexpected result count: %d", len(results))
 	}
 
 	for i, result := range results {
 		if err := result.Error(); err != nil {
-			return 0, fmt.Errorf("add channel subscriber type %s: %w", record.AlarmTypes[i], err)
+			return fmt.Errorf("add channel subscriber type %s: %w", record.AlarmTypes[i], err)
 		}
 	}
 
-	if _, err := as.cache.SAdd(ctx, AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
-		return 0, fmt.Errorf("add channel registry: %w", err)
-	}
+	return nil
+}
 
+func (as *AlarmService) cacheAlarmMetadataSequential(ctx context.Context, record *domain.Alarm) error {
 	if err := as.CacheMemberName(ctx, record.ChannelID, record.MemberName); err != nil {
-		return 0, fmt.Errorf("cache member name: %w", err)
+		return fmt.Errorf("cache member name: %w", err)
 	}
 
 	if record.RoomName != "" {
 		if err := as.cache.HSet(ctx, RoomNamesCacheKey, record.RoomID, record.RoomName); err != nil {
-			return 0, fmt.Errorf("cache room name: %w", err)
+			return fmt.Errorf("cache room name: %w", err)
 		}
 	}
 
 	if record.UserName != "" && record.UserID != "" {
 		if err := as.cache.HSet(ctx, UserNamesCacheKey, record.UserID, record.UserName); err != nil {
-			return 0, fmt.Errorf("cache user name: %w", err)
+			return fmt.Errorf("cache user name: %w", err)
 		}
 	}
 
-	if err := as.markAlarmCacheChanged(ctx); err != nil {
-		return 0, fmt.Errorf("mark alarm cache changed: %w", err)
-	}
-
-	return added, nil
+	return nil
 }
 
 func alarmCacheMutationVersion() string {

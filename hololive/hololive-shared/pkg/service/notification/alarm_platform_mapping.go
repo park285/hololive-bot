@@ -80,33 +80,40 @@ func (as *AlarmService) collectPlatformMappings(channelIDs []string) (map[string
 	twitchChannelMappings := make(map[string]string, len(channelIDs))
 
 	for _, channelID := range channelIDs {
-		member := as.memberData.FindMemberByChannelID(channelID)
-		if member == nil {
-			as.logUnknownPlatformMappingChannel(channelID)
-
-			continue
-		}
-
-		if chzzkChannelID := stringutil.TrimSpace(member.ChzzkChannelID); chzzkChannelID != "" {
-			chzzkMappings[channelID] = chzzkChannelID
-		}
-
-		twitchLogin := stringutil.Normalize(member.TwitchUserID)
-		if twitchLogin == "" {
-			continue
-		}
-
-		if existingChannelID, exists := twitchMappings[twitchLogin]; exists && existingChannelID != channelID {
-			as.logDuplicateTwitchMapping(twitchLogin, existingChannelID, channelID)
-
-			continue
-		}
-
-		twitchMappings[twitchLogin] = channelID
-		twitchChannelMappings[channelID] = twitchLogin
+		as.collectPlatformMappingForChannel(channelID, chzzkMappings, twitchMappings, twitchChannelMappings)
 	}
 
 	return chzzkMappings, twitchMappings, twitchChannelMappings
+}
+
+func (as *AlarmService) collectPlatformMappingForChannel(
+	channelID string,
+	chzzkMappings map[string]string,
+	twitchMappings map[string]string,
+	twitchChannelMappings map[string]string,
+) {
+	member := as.memberData.FindMemberByChannelID(channelID)
+	if member == nil {
+		as.logUnknownPlatformMappingChannel(channelID)
+		return
+	}
+
+	if chzzkChannelID := stringutil.TrimSpace(member.ChzzkChannelID); chzzkChannelID != "" {
+		chzzkMappings[channelID] = chzzkChannelID
+	}
+
+	twitchLogin := stringutil.Normalize(member.TwitchUserID)
+	if twitchLogin == "" {
+		return
+	}
+
+	if existingChannelID, exists := twitchMappings[twitchLogin]; exists && existingChannelID != channelID {
+		as.logDuplicateTwitchMapping(twitchLogin, existingChannelID, channelID)
+		return
+	}
+
+	twitchMappings[twitchLogin] = channelID
+	twitchChannelMappings[channelID] = twitchLogin
 }
 
 func (as *AlarmService) logUnknownPlatformMappingChannel(channelID string) {
@@ -137,12 +144,8 @@ func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, chann
 		return nil
 	}
 
-	if as.cache == nil {
-		return errors.New("cache service not configured")
-	}
-
-	if as.memberData == nil {
-		return errors.New("member data provider not configured")
+	if err := as.validatePlatformMappingDependencies(); err != nil {
+		return err
 	}
 
 	as.platformMapMu.Lock()
@@ -154,37 +157,37 @@ func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, chann
 	}
 
 	if !registered {
-		if err := as.removePlatformMappingsForChannel(ctx, channelID); err != nil {
-			return fmt.Errorf("remove stale platform mappings: %w", err)
-		}
-
-		return nil
+		return as.removeStalePlatformMappingsForChannel(ctx, channelID)
 	}
 
+	return as.syncRegisteredPlatformMappingForChannel(ctx, channelID)
+}
+
+func (as *AlarmService) validatePlatformMappingDependencies() error {
+	if as.cache == nil {
+		return errors.New("cache service not configured")
+	}
+	if as.memberData == nil {
+		return errors.New("member data provider not configured")
+	}
+	return nil
+}
+
+func (as *AlarmService) removeStalePlatformMappingsForChannel(ctx context.Context, channelID string) error {
+	if err := as.removePlatformMappingsForChannel(ctx, channelID); err != nil {
+		return fmt.Errorf("remove stale platform mappings: %w", err)
+	}
+	return nil
+}
+
+func (as *AlarmService) syncRegisteredPlatformMappingForChannel(ctx context.Context, channelID string) error {
 	member := as.memberData.FindMemberByChannelID(channelID)
 	if member == nil {
-		if as.logger != nil {
-			as.logger.Warn("Skip platform mapping update for unknown channel",
-				slog.String("channel_id", channelID),
-			)
-		}
-
-		if err := as.removePlatformMappingsForChannel(ctx, channelID); err != nil {
-			return fmt.Errorf("remove unknown channel platform mappings: %w", err)
-		}
-
-		return nil
+		return as.removeUnknownPlatformMappingsForChannel(ctx, channelID)
 	}
 
-	if chzzkChannelID := stringutil.TrimSpace(member.ChzzkChannelID); chzzkChannelID != "" {
-		if err := as.cache.HSet(ctx, ChzzkChannelMapKey, channelID, chzzkChannelID); err != nil {
-			return fmt.Errorf("upsert chzzk mapping: %w", err)
-		}
-		if err := as.cache.Del(ctx, ChzzkChannelMapEmptyKey); err != nil {
-			return fmt.Errorf("clear chzzk empty marker: %w", err)
-		}
-	} else if err := as.cache.HDel(ctx, ChzzkChannelMapKey, channelID); err != nil {
-		return fmt.Errorf("delete missing chzzk mapping: %w", err)
+	if err := as.syncChzzkMappingForChannel(ctx, channelID, member.ChzzkChannelID); err != nil {
+		return err
 	}
 
 	twitchLogin := stringutil.Normalize(member.TwitchUserID)
@@ -192,6 +195,37 @@ func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, chann
 		return fmt.Errorf("reconcile twitch mapping: %w", err)
 	}
 
+	return nil
+}
+
+func (as *AlarmService) removeUnknownPlatformMappingsForChannel(ctx context.Context, channelID string) error {
+	if as.logger != nil {
+		as.logger.Warn("Skip platform mapping update for unknown channel",
+			slog.String("channel_id", channelID),
+		)
+	}
+
+	if err := as.removePlatformMappingsForChannel(ctx, channelID); err != nil {
+		return fmt.Errorf("remove unknown channel platform mappings: %w", err)
+	}
+	return nil
+}
+
+func (as *AlarmService) syncChzzkMappingForChannel(ctx context.Context, channelID, rawChzzkChannelID string) error {
+	chzzkChannelID := stringutil.TrimSpace(rawChzzkChannelID)
+	if chzzkChannelID == "" {
+		if err := as.cache.HDel(ctx, ChzzkChannelMapKey, channelID); err != nil {
+			return fmt.Errorf("delete missing chzzk mapping: %w", err)
+		}
+		return nil
+	}
+
+	if err := as.cache.HSet(ctx, ChzzkChannelMapKey, channelID, chzzkChannelID); err != nil {
+		return fmt.Errorf("upsert chzzk mapping: %w", err)
+	}
+	if err := as.cache.Del(ctx, ChzzkChannelMapEmptyKey); err != nil {
+		return fmt.Errorf("clear chzzk empty marker: %w", err)
+	}
 	return nil
 }
 
@@ -233,47 +267,88 @@ func (as *AlarmService) reconcileTwitchMappingsForChannel(ctx context.Context, c
 	channelID = stringutil.TrimSpace(channelID)
 	desiredLogin = stringutil.Normalize(desiredLogin)
 
-	currentLogin, err := as.cache.HGet(ctx, TwitchChannelLoginMapKey, channelID)
+	currentLogin, err := as.currentTwitchChannelLogin(ctx, channelID)
 	if err != nil {
-		return fmt.Errorf("get current twitch channel login: %w", err)
+		return err
 	}
-	currentLogin = stringutil.Normalize(currentLogin)
 
-	if currentLogin != "" && currentLogin != desiredLogin {
-		if delErr := as.removeStaleTwitchLoginMappingIfOwned(ctx, currentLogin, channelID); delErr != nil {
-			return fmt.Errorf("delete stale twitch login mapping: %w", delErr)
-		}
+	if err := as.removeChangedTwitchLoginMapping(ctx, currentLogin, channelID, desiredLogin); err != nil {
+		return err
 	}
 
 	if desiredLogin == "" {
-		if delErr := as.cache.HDel(ctx, TwitchChannelLoginMapKey, channelID); delErr != nil {
-			return fmt.Errorf("delete twitch channel login mapping: %w", delErr)
-		}
-
 		return nil
 	}
 
+	return as.reconcileDesiredTwitchLoginMapping(ctx, channelID, desiredLogin)
+}
+
+func (as *AlarmService) reconcileDesiredTwitchLoginMapping(ctx context.Context, channelID, desiredLogin string) error {
 	existingChannelID, err := as.cache.HGet(ctx, TwitchLoginMapKey, desiredLogin)
 	if err != nil {
 		return fmt.Errorf("get desired twitch login mapping: %w", err)
 	}
 
 	if existingChannelID != "" && existingChannelID != channelID {
-		if err := as.cache.HDel(ctx, TwitchChannelLoginMapKey, channelID); err != nil {
-			return fmt.Errorf("clear conflicting twitch channel login mapping: %w", err)
-		}
-
-		if as.logger != nil {
-			as.logger.Warn("Duplicate Twitch login detected while incrementally syncing platform mappings",
-				slog.String("twitch_login", desiredLogin),
-				slog.String("kept_channel_id", existingChannelID),
-				slog.String("ignored_channel_id", channelID),
-			)
-		}
-
-		return nil
+		return as.clearConflictingTwitchChannelLoginMapping(ctx, desiredLogin, existingChannelID, channelID)
 	}
 
+	return as.upsertTwitchMappingsForChannel(ctx, channelID, desiredLogin)
+}
+
+func (as *AlarmService) currentTwitchChannelLogin(ctx context.Context, channelID string) (string, error) {
+	currentLogin, err := as.cache.HGet(ctx, TwitchChannelLoginMapKey, channelID)
+	if err != nil {
+		return "", fmt.Errorf("get current twitch channel login: %w", err)
+	}
+	return stringutil.Normalize(currentLogin), nil
+}
+
+func (as *AlarmService) removeChangedTwitchLoginMapping(
+	ctx context.Context,
+	currentLogin string,
+	channelID string,
+	desiredLogin string,
+) error {
+	if currentLogin != "" && currentLogin != desiredLogin {
+		if err := as.removeStaleTwitchLoginMappingIfOwned(ctx, currentLogin, channelID); err != nil {
+			return fmt.Errorf("delete stale twitch login mapping: %w", err)
+		}
+	}
+	if desiredLogin == "" {
+		return as.deleteTwitchChannelLoginMapping(ctx, channelID)
+	}
+	return nil
+}
+
+func (as *AlarmService) deleteTwitchChannelLoginMapping(ctx context.Context, channelID string) error {
+	if err := as.cache.HDel(ctx, TwitchChannelLoginMapKey, channelID); err != nil {
+		return fmt.Errorf("delete twitch channel login mapping: %w", err)
+	}
+	return nil
+}
+
+func (as *AlarmService) clearConflictingTwitchChannelLoginMapping(
+	ctx context.Context,
+	desiredLogin string,
+	existingChannelID string,
+	channelID string,
+) error {
+	if err := as.cache.HDel(ctx, TwitchChannelLoginMapKey, channelID); err != nil {
+		return fmt.Errorf("clear conflicting twitch channel login mapping: %w", err)
+	}
+
+	if as.logger != nil {
+		as.logger.Warn("Duplicate Twitch login detected while incrementally syncing platform mappings",
+			slog.String("twitch_login", desiredLogin),
+			slog.String("kept_channel_id", existingChannelID),
+			slog.String("ignored_channel_id", channelID),
+		)
+	}
+	return nil
+}
+
+func (as *AlarmService) upsertTwitchMappingsForChannel(ctx context.Context, channelID, desiredLogin string) error {
 	if err := as.cache.HSet(ctx, TwitchLoginMapKey, desiredLogin, channelID); err != nil {
 		return fmt.Errorf("upsert twitch mapping: %w", err)
 	}

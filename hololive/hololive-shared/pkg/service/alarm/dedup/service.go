@@ -159,29 +159,51 @@ func (s *Service) MarkAsNotified(ctx context.Context, streamID string, startSche
 		return fmt.Errorf("mark as notified: load existing data: %w", err)
 	}
 
-	if existing != nil && existing.StartScheduled != "" && existing.StartScheduled != scheduledStr {
-		if err := s.cache.Del(ctx, key); err != nil {
-			return fmt.Errorf("mark as notified: reset old schedule hash: %w", err)
-		}
-		existing = nil
-		source = notifiedDataSourceMissing
+	existing, source, err = s.resetStaleNotifiedData(ctx, key, existing, source, scheduledStr)
+	if err != nil {
+		return err
 	}
 
 	if source == notifiedDataSourceLegacyString {
-		if existing == nil {
-			existing = &NotifiedData{}
-		}
-		if existing.SentAt == nil {
-			existing.SentAt = make(map[int]bool)
-		}
-		existing.StartScheduled = scheduledStr
-		existing.SentAt[minutesUntil] = true
-		if err := s.migrateLegacyNotifiedData(ctx, key, existing); err != nil {
-			return fmt.Errorf("mark as notified: migrate legacy data: %w", err)
-		}
-		return nil
+		return s.markLegacyNotified(ctx, key, existing, scheduledStr, minutesUntil)
 	}
 
+	return s.writeNotifiedHashFields(ctx, key, scheduledStr, minutesUntil)
+}
+
+func (s *Service) resetStaleNotifiedData(
+	ctx context.Context,
+	key string,
+	existing *NotifiedData,
+	source notifiedDataSource,
+	scheduledStr string,
+) (*NotifiedData, notifiedDataSource, error) {
+	if existing == nil || existing.StartScheduled == "" || existing.StartScheduled == scheduledStr {
+		return existing, source, nil
+	}
+
+	if err := s.cache.Del(ctx, key); err != nil {
+		return nil, source, fmt.Errorf("mark as notified: reset old schedule hash: %w", err)
+	}
+	return nil, notifiedDataSourceMissing, nil
+}
+
+func (s *Service) markLegacyNotified(ctx context.Context, key string, existing *NotifiedData, scheduledStr string, minutesUntil int) error {
+	if existing == nil {
+		existing = &NotifiedData{}
+	}
+	if existing.SentAt == nil {
+		existing.SentAt = make(map[int]bool)
+	}
+	existing.StartScheduled = scheduledStr
+	existing.SentAt[minutesUntil] = true
+	if err := s.migrateLegacyNotifiedData(ctx, key, existing); err != nil {
+		return fmt.Errorf("mark as notified: migrate legacy data: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) writeNotifiedHashFields(ctx context.Context, key string, scheduledStr string, minutesUntil int) error {
 	if err := s.cache.HSet(ctx, key, "start_scheduled", scheduledStr); err != nil {
 		return fmt.Errorf("mark as notified: set start_scheduled field: %w", err)
 	}
@@ -220,16 +242,20 @@ func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID str
 	targetMinutes := targetPolicy.Clone()
 
 	if targetPolicy.Contains(minutesUntil) {
-		for _, target := range targetMinutes {
-			if data.SentAt[target] {
-				return true, nil
-			}
-		}
-		return false, nil
+		return targetMinuteAlreadySent(data.SentAt, targetMinutes), nil
 	}
 
 	// non-target: 해당 분만 확인
 	return data.SentAt[minutesUntil], nil
+}
+
+func targetMinuteAlreadySent(sentAt map[int]bool, targetMinutes []int) bool {
+	for _, target := range targetMinutes {
+		if sentAt[target] {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) IsAlreadyNotified(ctx context.Context, streamID string) (bool, error) {
