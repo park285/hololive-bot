@@ -16,10 +16,14 @@ type youTubePollSchedulerSyncer struct {
 }
 
 func (s *youTubePollSchedulerSyncer) Sync(targets youtubePollTargets) {
+	s.SyncAt(targets, time.Now())
+}
+
+func (s *youTubePollSchedulerSyncer) SyncAt(targets youtubePollTargets, now time.Time) {
 	if s == nil || s.scheduler == nil {
 		return
 	}
-	tieredTargets, hasTieredTargets := s.classifyTargetsForTieredRegistrations(targets)
+	tieredTargets, hasTieredTargets := s.classifyTargetsForTieredRegistrations(targets, now)
 	tieredSyncs := make(map[string][]poller.PollerTargetSync)
 	for _, registration := range s.registrations {
 		if !shouldSyncYouTubePollRegistration(registration) {
@@ -37,11 +41,11 @@ func (s *youTubePollSchedulerSyncer) Sync(targets youtubePollTargets) {
 	}
 }
 
-func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(targets youtubePollTargets) (youtubeTieredPollTargets, bool) {
+func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(targets youtubePollTargets, now time.Time) (youtubeTieredPollTargets, bool) {
 	if !s.hasTieredRegistrations() {
 		return youtubeTieredPollTargets{}, false
 	}
-	tieredTargets, err := classifyYouTubePollTargetsByActivity(context.Background(), s.tieringDB, targets, time.Now())
+	tieredTargets, err := classifyYouTubePollTargetsByActivity(context.Background(), s.tieringDB, targets, now)
 	if err != nil {
 		return youtubeTieredPollTargets{}, false
 	}
