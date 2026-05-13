@@ -71,50 +71,89 @@ func randomJitter(maxDuration time.Duration) time.Duration {
 // fn이 nil 에러를 반환하면 즉시 성공으로 종료됩니다.
 // 모든 재시도가 실패하면 마지막 에러를 반환합니다.
 func WithRetry(ctx context.Context, opts RetryOptions, fn func(ctx context.Context) error) error {
+	opts = normalizeRetryOptions(opts)
+
+	var lastErr error
+
+	for attempt := range opts.MaxAttempts {
+		outcome := runRetryAttempt(ctx, opts, fn, attempt, lastErr)
+		if outcome.done {
+			return outcome.err
+		}
+		lastErr = outcome.lastErr
+	}
+
+	return lastErr
+}
+
+type retryAttemptOutcome struct {
+	lastErr error
+	done    bool
+	err     error
+}
+
+func runRetryAttempt(
+	ctx context.Context,
+	opts RetryOptions,
+	fn func(ctx context.Context) error,
+	attempt int,
+	lastErr error,
+) retryAttemptOutcome {
+	if err := retryContextError(ctx, lastErr); err != nil {
+		return retryAttemptOutcome{done: true, err: err}
+	}
+
+	err := fn(ctx)
+	if err == nil {
+		return retryAttemptOutcome{done: true}
+	}
+
+	return handleRetryFailure(ctx, opts, attempt, err)
+}
+
+func handleRetryFailure(ctx context.Context, opts RetryOptions, attempt int, err error) retryAttemptOutcome {
+	if !shouldContinueRetry(opts, err) {
+		return retryAttemptOutcome{done: true, err: fmt.Errorf("retry aborted by ShouldRetry predicate: %w", err)}
+	}
+	if attempt >= opts.MaxAttempts-1 {
+		return retryAttemptOutcome{done: true, err: err}
+	}
+	if !sleepBeforeRetry(ctx, opts, attempt, err) {
+		return retryAttemptOutcome{done: true, err: err}
+	}
+	return retryAttemptOutcome{lastErr: err}
+}
+
+func normalizeRetryOptions(opts RetryOptions) RetryOptions {
 	if opts.MaxAttempts < 1 {
 		opts.MaxAttempts = 1
 	}
 	if opts.Sleep == nil {
 		opts.Sleep = ctxutil.SleepWithContext
 	}
+	return opts
+}
 
-	var lastErr error
-
-	for attempt := range opts.MaxAttempts {
-		if ctx.Err() != nil {
-			if lastErr != nil {
-				return lastErr
-			}
-			return fmt.Errorf("context error: %w", ctx.Err())
-		}
-
-		err := fn(ctx)
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-
-		if opts.ShouldRetry != nil && !opts.ShouldRetry(err) {
-			return fmt.Errorf("retry aborted by ShouldRetry predicate: %w", err)
-		}
-
-		if attempt >= opts.MaxAttempts-1 {
-			break
-		}
-
-		delay := ComputeBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)
-
-		if opts.OnRetry != nil {
-			opts.OnRetry(attempt+1, err, delay)
-		}
-
-		if !opts.Sleep(ctx, delay) {
-			return lastErr
-		}
+func retryContextError(ctx context.Context, lastErr error) error {
+	if ctx.Err() == nil {
+		return nil
 	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("context error: %w", ctx.Err())
+}
 
-	return lastErr
+func shouldContinueRetry(opts RetryOptions, err error) bool {
+	return opts.ShouldRetry == nil || opts.ShouldRetry(err)
+}
+
+func sleepBeforeRetry(ctx context.Context, opts RetryOptions, attempt int, err error) bool {
+	delay := ComputeBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)
+	if opts.OnRetry != nil {
+		opts.OnRetry(attempt+1, err, delay)
+	}
+	return opts.Sleep(ctx, delay)
 }
 
 func DefaultRetryOptions(maxAttempts int, baseDelay, jitter time.Duration) RetryOptions {

@@ -79,38 +79,46 @@ func (r *StreamIngesterRuntime) runtimeName() string {
 func (r *StreamIngesterRuntime) Run() {
 	_ = lifecycle.Run(lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
-		Start: func(ctx context.Context, errCh chan<- error) {
-			r.startBackgroundServices(ctx, errCh)
-			r.startHTTPServer(errCh)
-			if err := r.ensureCommunityShortsObservationWindow(ctx); err != nil {
-				errCh <- err
-				return
-			}
-			if r.Readiness != nil {
-				r.Readiness.markRunning()
-			}
-		},
-		OnSignal: func(sig os.Signal) {
-			if r.Readiness != nil {
-				r.Readiness.markStopping("")
-			}
-			r.Logger.Info("Received shutdown signal",
-				slog.String("runtime", r.runtimeName()),
-				slog.String("signal", sig.String()),
-			)
-		},
-		OnError: func(err error) {
-			if r.Readiness != nil {
-				r.Readiness.markStopping(err.Error())
-			}
-			r.Logger.Error("Server error",
-				slog.String("runtime", r.runtimeName()),
-				slog.Any("error", err),
-			)
-		},
-		Shutdown: func(ctx context.Context) error {
-			r.shutdown(ctx)
-			return nil
-		},
+		Start:           r.startRuntime,
+		OnSignal:        r.handleShutdownSignal,
+		OnError:         r.handleRuntimeError,
+		Shutdown:        r.shutdownRuntime,
 	})
+}
+
+func (r *StreamIngesterRuntime) startRuntime(ctx context.Context, errCh chan<- error) {
+	r.startBackgroundServices(ctx, errCh)
+	r.startHTTPServer(errCh)
+	if err := r.ensureCommunityShortsObservationWindow(ctx); err != nil {
+		errCh <- err
+		return
+	}
+	if r.Readiness != nil {
+		r.Readiness.markRunning()
+	}
+}
+
+func (r *StreamIngesterRuntime) handleShutdownSignal(sig os.Signal) {
+	if r.Readiness != nil {
+		r.Readiness.markStopping("")
+	}
+	r.Logger.Info("Received shutdown signal",
+		slog.String("runtime", r.runtimeName()),
+		slog.String("signal", sig.String()),
+	)
+}
+
+func (r *StreamIngesterRuntime) handleRuntimeError(err error) {
+	if r.Readiness != nil {
+		r.Readiness.markStopping(err.Error())
+	}
+	r.Logger.Error("Server error",
+		slog.String("runtime", r.runtimeName()),
+		slog.Any("error", err),
+	)
+}
+
+func (r *StreamIngesterRuntime) shutdownRuntime(ctx context.Context) error {
+	r.shutdown(ctx)
+	return nil
 }

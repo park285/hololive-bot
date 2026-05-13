@@ -131,38 +131,63 @@ func (r *PendingPublishedAtResolver) resolveCandidatePublishedAt(
 ) (*time.Time, error) {
 	switch candidate.Kind {
 	case domain.OutboxKindNewShort:
-		videoID := normalizeShortVideoResourceID(candidate.PostID)
-		if videoID == "" {
-			videoID = normalizeShortVideoResourceID(candidate.ContentID)
-		}
-		if videoID == "" {
-			return nil, fmt.Errorf("resolve candidate published_at: empty short video id")
-		}
-		publishedAt, err := r.client.ResolveVideoPublishedAt(ctx, videoID)
-		if err != nil {
-			if errors.Is(err, scraper.ErrPublishedAtNotFound) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("resolve candidate published_at: resolve short video %s: %w", videoID, err)
-		}
-		return yttimestamp.NormalizePtr(publishedAt), nil
+		return r.resolveShortCandidatePublishedAt(ctx, candidate)
 	case domain.OutboxKindCommunityPost:
-		postID := normalizeCommunityResourceID(candidate.PostID)
-		if postID == "" {
-			postID = normalizeCommunityResourceID(candidate.ContentID)
-		}
-		if postID == "" {
-			return nil, fmt.Errorf("resolve candidate published_at: empty community post id")
-		}
-		publishedAt, err := r.client.ResolveCommunityPostPublishedAt(ctx, postID)
-		if err != nil {
-			if errors.Is(err, scraper.ErrCommunityPublishedAtNotFound) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("resolve candidate published_at: resolve community post %s: %w", postID, err)
-		}
-		return yttimestamp.NormalizePtr(publishedAt), nil
+		return r.resolveCommunityCandidatePublishedAt(ctx, candidate)
 	default:
 		return nil, fmt.Errorf("resolve candidate published_at: unsupported kind %s", candidate.Kind)
 	}
+}
+
+func (r *PendingPublishedAtResolver) resolveShortCandidatePublishedAt(
+	ctx context.Context,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+) (*time.Time, error) {
+	videoID := normalizeCandidateResourceID(
+		candidate,
+		normalizeShortVideoResourceID,
+	)
+	if videoID == "" {
+		return nil, fmt.Errorf("resolve candidate published_at: empty short video id")
+	}
+	publishedAt, err := r.client.ResolveVideoPublishedAt(ctx, videoID)
+	if err != nil {
+		if errors.Is(err, scraper.ErrPublishedAtNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("resolve candidate published_at: resolve short video %s: %w", videoID, err)
+	}
+	return yttimestamp.NormalizePtr(publishedAt), nil
+}
+
+func (r *PendingPublishedAtResolver) resolveCommunityCandidatePublishedAt(
+	ctx context.Context,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+) (*time.Time, error) {
+	postID := normalizeCandidateResourceID(
+		candidate,
+		normalizeCommunityResourceID,
+	)
+	if postID == "" {
+		return nil, fmt.Errorf("resolve candidate published_at: empty community post id")
+	}
+	publishedAt, err := r.client.ResolveCommunityPostPublishedAt(ctx, postID)
+	if err != nil {
+		if errors.Is(err, scraper.ErrCommunityPublishedAtNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("resolve candidate published_at: resolve community post %s: %w", postID, err)
+	}
+	return yttimestamp.NormalizePtr(publishedAt), nil
+}
+
+func normalizeCandidateResourceID(
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	normalize func(string) string,
+) string {
+	id := normalize(candidate.PostID)
+	if id != "" {
+		return id
+	}
+	return normalize(candidate.ContentID)
 }

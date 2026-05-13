@@ -31,10 +31,13 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 		if err != nil {
 			return nil, fmt.Errorf("get streams: %w", err)
 		}
-
 		return streams, nil
 	}
 
+	return c.getStreamChunks(ctx, targets)
+}
+
+func (c *Client) getStreamChunks(ctx context.Context, targets []string) (*StreamsResponse, error) {
 	chunks := chunkUserLogins(targets, maxUserLoginsPerRequest)
 	merged := &StreamsResponse{Data: make([]StreamData, 0, len(targets))}
 
@@ -51,12 +54,16 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 			return nil, fmt.Errorf("get stream chunk %d/%d: %w", i+1, len(chunks), err)
 		}
 
-		if streams != nil {
-			merged.Data = append(merged.Data, streams.Data...)
-		}
+		appendStreamData(merged, streams)
 	}
 
 	return merged, nil
+}
+
+func appendStreamData(merged *StreamsResponse, streams *StreamsResponse) {
+	if streams != nil {
+		merged.Data = append(merged.Data, streams.Data...)
+	}
 }
 
 func normalizeUserLogins(userLogins []string) []string {
@@ -87,10 +94,7 @@ func chunkUserLogins(userLogins []string, chunkSize int) [][]string {
 
 	chunks := make([][]string, 0, (len(userLogins)+chunkSize-1)/chunkSize)
 	for start := 0; start < len(userLogins); start += chunkSize {
-		end := start + chunkSize
-		if end > len(userLogins) {
-			end = len(userLogins)
-		}
+		end := min(start+chunkSize, len(userLogins))
 
 		chunks = append(chunks, userLogins[start:end])
 	}
@@ -136,14 +140,25 @@ func (c *Client) getStreams(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		retriedStreams, retryErr := c.retryUnauthorizedStreams(ctx, userLogins, allowRefreshRetry)
-		if retryErr != nil {
-			return nil, fmt.Errorf("retry unauthorized streams: %w", retryErr)
-		}
-
-		return retriedStreams, nil
+		return c.retryUnauthorizedStreamsWithContext(ctx, userLogins, allowRefreshRetry)
 	}
 
+	return c.decodeStreamsHTTPResponse(resp)
+}
+
+func (c *Client) retryUnauthorizedStreamsWithContext(
+	ctx context.Context,
+	userLogins []string,
+	allowRefreshRetry bool,
+) (*StreamsResponse, error) {
+	retriedStreams, retryErr := c.retryUnauthorizedStreams(ctx, userLogins, allowRefreshRetry)
+	if retryErr != nil {
+		return nil, fmt.Errorf("retry unauthorized streams: %w", retryErr)
+	}
+	return retriedStreams, nil
+}
+
+func (c *Client) decodeStreamsHTTPResponse(resp *http.Response) (*StreamsResponse, error) {
 	body, err := c.readStreamsResponseBody(resp)
 	if err != nil {
 		return nil, fmt.Errorf("read streams response body: %w", err)

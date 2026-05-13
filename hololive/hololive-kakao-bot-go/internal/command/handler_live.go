@@ -57,44 +57,59 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	}
 
 	memberName, hasMember := params["member"].(string)
-
 	if hasMember && memberName != "" {
-		channel, err := FindActiveMemberOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
-		if err != nil {
-			return fmt.Errorf("failed to find member %q: %w", memberName, err)
-		}
-
-		streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
-		if err != nil {
-			return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrLiveStreamQueryFailed)
-		}
-
-		memberStreams := make([]*domain.Stream, 0, len(streams))
-		for _, stream := range streams {
-			if stream.ChannelID == channel.ID {
-				memberStreams = append(memberStreams, stream)
-			}
-		}
-
-		if len(memberStreams) == 0 {
-			member := c.Deps().Matcher.GetMemberByChannelID(ctx, channel.ID)
-			if member != nil && member.ChzzkChannelID != "" && c.Deps().Chzzk != nil {
-				chzzkStream := c.checkChzzkLive(ctx, member)
-				if chzzkStream != nil {
-					memberStreams = append(memberStreams, chzzkStream)
-				}
-			}
-		}
-
-		if len(memberStreams) == 0 {
-			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNotLive(channel.Name))
-		}
-
-		message := c.Deps().Formatter.FormatLiveStreams(ctx, memberStreams)
-
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+		return c.executeMemberLive(ctx, cmdCtx, memberName)
 	}
 
+	return c.executeAllLive(ctx, cmdCtx)
+}
+
+func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.CommandContext, memberName string) error {
+	channel, err := FindActiveMemberOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
+	if err != nil {
+		return fmt.Errorf("failed to find member %q: %w", memberName, err)
+	}
+
+	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
+	if err != nil {
+		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrLiveStreamQueryFailed)
+	}
+
+	memberStreams := filterLiveStreamsByChannel(streams, channel.ID)
+	if len(memberStreams) == 0 {
+		memberStreams = c.memberChzzkLiveStreams(ctx, channel.ID)
+	}
+	if len(memberStreams) == 0 {
+		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNotLive(channel.Name))
+	}
+
+	message := c.Deps().Formatter.FormatLiveStreams(ctx, memberStreams)
+	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+}
+
+func filterLiveStreamsByChannel(streams []*domain.Stream, channelID string) []*domain.Stream {
+	memberStreams := make([]*domain.Stream, 0, len(streams))
+	for _, stream := range streams {
+		if stream.ChannelID == channelID {
+			memberStreams = append(memberStreams, stream)
+		}
+	}
+	return memberStreams
+}
+
+func (c *LiveCommand) memberChzzkLiveStreams(ctx context.Context, channelID string) []*domain.Stream {
+	member := c.Deps().Matcher.GetMemberByChannelID(ctx, channelID)
+	if member == nil || member.ChzzkChannelID == "" || c.Deps().Chzzk == nil {
+		return nil
+	}
+	chzzkStream := c.checkChzzkLive(ctx, member)
+	if chzzkStream == nil {
+		return nil
+	}
+	return []*domain.Stream{chzzkStream}
+}
+
+func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.CommandContext) error {
 	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
 	if err != nil {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrLiveStreamQueryFailed)
@@ -167,14 +182,7 @@ func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*
 		return nil
 	}
 
-	byChzzkChannelID := make(map[string]*domain.Member, len(members))
-	for _, member := range members {
-		if member == nil || member.ChzzkChannelID == "" || member.IsGraduated {
-			continue
-		}
-
-		byChzzkChannelID[member.ChzzkChannelID] = member
-	}
+	byChzzkChannelID := buildLiveMemberByChzzkChannelID(members)
 
 	streams := make([]*domain.Stream, 0, len(lives))
 	for i := range lives {
@@ -187,6 +195,20 @@ func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*
 	}
 
 	return streams
+}
+
+func buildLiveMemberByChzzkChannelID(members []*domain.Member) map[string]*domain.Member {
+	byChzzkChannelID := make(map[string]*domain.Member, len(members))
+	for _, member := range members {
+		if isEligibleChzzkLiveMember(member) {
+			byChzzkChannelID[member.ChzzkChannelID] = member
+		}
+	}
+	return byChzzkChannelID
+}
+
+func isEligibleChzzkLiveMember(member *domain.Member) bool {
+	return member != nil && member.ChzzkChannelID != "" && !member.IsGraduated
 }
 
 func collectChzzkLiveStreams(

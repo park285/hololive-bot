@@ -21,8 +21,8 @@
 package command
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -64,17 +64,7 @@ func (c *SubscriberGraphCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
 	}
 
-	days := 30
-
-	if daysStr, ok := params["days"].(string); ok && daysStr != "" {
-		if parsed, parseErr := strconv.Atoi(daysStr); parseErr == nil && parsed > 0 {
-			days = parsed
-		}
-	}
-
-	if days > 90 {
-		days = 90
-	}
+	days := subscriberGraphDays(params)
 
 	graphData, err := c.Deps().StatsRepo.GetSubscriberGraph(ctx, channel.ID, days)
 	if err != nil {
@@ -86,8 +76,30 @@ func (c *SubscriberGraphCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 		return c.Deps().SendMessage(ctx, cmdCtx.Room, adapter.MsgNoGraphData)
 	}
 
-	message := c.Deps().Formatter.FormatSubscriberGraph(
-		channel.Name,
+	message := c.formatSubscriberGraph(channel.Name, days, graphData)
+	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+}
+
+func subscriberGraphDays(params map[string]any) int {
+	days := 30
+
+	daysStr, ok := params["days"].(string)
+	if ok && daysStr != "" {
+		if parsed, parseErr := strconv.Atoi(daysStr); parseErr == nil && parsed > 0 {
+			days = parsed
+		}
+	}
+
+	if days > 90 {
+		return 90
+	}
+
+	return days
+}
+
+func (c *SubscriberGraphCommand) formatSubscriberGraph(memberName string, days int, graphData *stats.SubscriberGraphData) string {
+	return c.Deps().Formatter.FormatSubscriberGraph(
+		memberName,
 		days,
 		graphData.Current,
 		graphData.Change7d,
@@ -96,8 +108,6 @@ func (c *SubscriberGraphCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 		graphData.UpdatedAt,
 		graphPointValues(graphData.Points),
 	)
-
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
 }
 
 func graphPointValues(points []stats.SubscriberGraphPoint) []int64 {

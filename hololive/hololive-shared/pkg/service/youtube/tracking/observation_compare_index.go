@@ -121,28 +121,38 @@ func mergeObservationPostComparisonInputs(
 	right ObservationPostComparisonInput,
 ) ObservationPostComparisonInput {
 	merged := left
-	if merged.Kind == "" && right.Kind != "" {
-		merged.Kind = right.Kind
-	}
-	if merged.AlarmType == "" && right.AlarmType != "" {
-		merged.AlarmType = right.AlarmType
-	}
-	if strings.TrimSpace(merged.CanonicalPostID) == "" && strings.TrimSpace(right.CanonicalPostID) != "" {
-		merged.CanonicalPostID = strings.TrimSpace(right.CanonicalPostID)
-	}
-	if strings.TrimSpace(merged.ContentID) == "" && strings.TrimSpace(right.ContentID) != "" {
-		merged.ContentID = strings.TrimSpace(right.ContentID)
-	}
-	if strings.TrimSpace(merged.ChannelID) == "" && strings.TrimSpace(right.ChannelID) != "" {
-		merged.ChannelID = strings.TrimSpace(right.ChannelID)
-	}
-	if strings.TrimSpace(merged.TitleHint) == "" && strings.TrimSpace(right.TitleHint) != "" {
-		merged.TitleHint = observationComparisonNormalizeTitleHint(right.TitleHint)
-	}
+	merged.Kind = firstNonZeroObservationPostComparisonValue(merged.Kind, right.Kind)
+	merged.AlarmType = firstNonZeroObservationPostComparisonValue(merged.AlarmType, right.AlarmType)
+	merged.CanonicalPostID = firstNonBlankObservationPostComparisonString(merged.CanonicalPostID, right.CanonicalPostID)
+	merged.ContentID = firstNonBlankObservationPostComparisonString(merged.ContentID, right.ContentID)
+	merged.ChannelID = firstNonBlankObservationPostComparisonString(merged.ChannelID, right.ChannelID)
+	merged.TitleHint = firstNonBlankObservationPostComparisonTitleHint(merged.TitleHint, right.TitleHint)
 	merged.ActualPublishedAt = earliestObservationPostComparisonTime(merged.ActualPublishedAt, right.ActualPublishedAt)
 	merged.DetectedAt = earliestObservationPostComparisonTime(merged.DetectedAt, right.DetectedAt)
 	merged.AlarmSentAt = earliestObservationPostComparisonTime(merged.AlarmSentAt, right.AlarmSentAt)
 	return merged
+}
+
+func firstNonZeroObservationPostComparisonValue[T comparable](left T, right T) T {
+	var zero T
+	if left == zero && right != zero {
+		return right
+	}
+	return left
+}
+
+func firstNonBlankObservationPostComparisonString(left string, right string) string {
+	if strings.TrimSpace(left) != "" || strings.TrimSpace(right) == "" {
+		return left
+	}
+	return strings.TrimSpace(right)
+}
+
+func firstNonBlankObservationPostComparisonTitleHint(left string, right string) string {
+	if strings.TrimSpace(left) != "" || strings.TrimSpace(right) == "" {
+		return left
+	}
+	return observationComparisonNormalizeTitleHint(right)
 }
 
 func earliestObservationPostComparisonTime(left *time.Time, right *time.Time) *time.Time {

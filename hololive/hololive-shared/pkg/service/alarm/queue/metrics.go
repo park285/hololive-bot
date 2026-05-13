@@ -54,141 +54,120 @@ var (
 
 func initQueueMetrics() {
 	queueMetricsInitOnce.Do(func() {
-		alarmQueueDrainDuration = promauto.NewHistogram(
-			prometheus.HistogramOpts{
-				Name:    "hololive_alarm_dispatch_queue_drain_duration_seconds",
-				Help:    "Alarm dispatch queue drain duration in seconds.",
-				Buckets: prometheus.DefBuckets,
-			},
-		)
+		initAlarmQueueDrainMetrics()
+		initAlarmDispatchPublishMetrics()
+		initAlarmDispatchWakeupMetrics()
+	})
+}
 
-		alarmQueueDrainBatch = promauto.NewHistogram(
-			prometheus.HistogramOpts{
-				Name:    "hololive_alarm_dispatch_queue_drain_batch_size",
-				Help:    "Alarm dispatch queue drained envelope count per batch.",
-				Buckets: []float64{0, 1, 2, 5, 10, 20, 50, 100},
-			},
-		)
+func initAlarmQueueDrainMetrics() {
+	alarmQueueDrainDuration = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "hololive_alarm_dispatch_queue_drain_duration_seconds",
+			Help:    "Alarm dispatch queue drain duration in seconds.",
+			Buckets: prometheus.DefBuckets,
+		},
+	)
+	alarmQueueDrainBatch = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "hololive_alarm_dispatch_queue_drain_batch_size",
+			Help:    "Alarm dispatch queue drained envelope count per batch.",
+			Buckets: []float64{0, 1, 2, 5, 10, 20, 50, 100},
+		},
+	)
+	alarmQueueDrainTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "hololive_alarm_dispatch_queue_drain_total",
+			Help: "Total alarm dispatch queue drain attempts by result.",
+		},
+		[]string{"result"},
+	)
+	alarmQueueEnvelopeTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "hololive_alarm_dispatch_queue_envelopes_total",
+			Help: "Total parsed alarm dispatch queue envelopes by result.",
+		},
+		[]string{"result"},
+	)
+	alarmQueueClaimReleased = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "hololive_alarm_dispatch_queue_claim_keys_released_total",
+		Help: "Total released alarm dispatch queue claim keys.",
+	})
+	alarmQueueRetryScheduled = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "hololive_alarm_dispatch_queue_retry_scheduled_total",
+		Help: "Total alarm dispatch queue envelopes scheduled into the delayed retry queue.",
+	})
+	alarmQueueRetryDrained = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "hololive_alarm_dispatch_queue_retry_drained_total",
+		Help: "Total delayed retry envelopes drained into active processing.",
+	})
+	alarmQueueDLQMoved = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "hololive_alarm_dispatch_queue_dlq_moved_total",
+		Help: "Total alarm dispatch queue envelopes moved to the dead-letter queue.",
+	})
+}
 
-		alarmQueueDrainTotal = promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_dispatch_queue_drain_total",
-				Help: "Total alarm dispatch queue drain attempts by result.",
-			},
-			[]string{"result"},
-		)
+func initAlarmDispatchPublishMetrics() {
+	alarmDispatchPublishBatchDuration = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "alarm_dispatch_publish_batch_duration_seconds",
+			Help:    "Alarm dispatch publisher batch duration in seconds.",
+			Buckets: prometheus.DefBuckets,
+		},
+	)
+	alarmDispatchPublishRequestedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_requested_deliveries_total",
+			Help: "Requested alarm dispatch deliveries published.",
+		},
+		[]string{"mode"},
+	)
+	alarmDispatchPublishProcessedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_processed_deliveries_total",
+			Help: "Alarm dispatch deliveries successfully processed by the active publish mode.",
+		},
+		[]string{"mode"},
+	)
+	alarmDispatchPublishInsertedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_inserted_deliveries_total",
+			Help: "Inserted alarm dispatch deliveries.",
+		},
+		[]string{"mode"},
+	)
+	alarmDispatchPublishDuplicateTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_duplicate_deliveries_total",
+			Help: "Duplicate alarm dispatch deliveries skipped.",
+		},
+		[]string{"mode"},
+	)
+	alarmDispatchPublishHashConflictTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "alarm_dispatch_publish_hash_conflict_total",
+			Help: "Alarm dispatch event hash conflicts observed while publishing.",
+		},
+		[]string{"mode"},
+	)
+}
 
-		alarmQueueEnvelopeTotal = promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_dispatch_queue_envelopes_total",
-				Help: "Total parsed alarm dispatch queue envelopes by result.",
-			},
-			[]string{"result"},
-		)
-
-		alarmQueueClaimReleased = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_dispatch_queue_claim_keys_released_total",
-				Help: "Total released alarm dispatch queue claim keys.",
-			},
-		)
-
-		alarmQueueRetryScheduled = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_dispatch_queue_retry_scheduled_total",
-				Help: "Total alarm dispatch queue envelopes scheduled into the delayed retry queue.",
-			},
-		)
-
-		alarmQueueRetryDrained = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_dispatch_queue_retry_drained_total",
-				Help: "Total delayed retry envelopes drained into active processing.",
-			},
-		)
-
-		alarmQueueDLQMoved = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "hololive_alarm_dispatch_queue_dlq_moved_total",
-				Help: "Total alarm dispatch queue envelopes moved to the dead-letter queue.",
-			},
-		)
-
-		alarmDispatchPublishBatchDuration = promauto.NewHistogram(
-			prometheus.HistogramOpts{
-				Name:    "alarm_dispatch_publish_batch_duration_seconds",
-				Help:    "Alarm dispatch publisher batch duration in seconds.",
-				Buckets: prometheus.DefBuckets,
-			},
-		)
-
-		alarmDispatchPublishRequestedTotal = promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_publish_requested_deliveries_total",
-				Help: "Requested alarm dispatch deliveries published.",
-			},
-			[]string{"mode"},
-		)
-
-		alarmDispatchPublishProcessedTotal = promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_publish_processed_deliveries_total",
-				Help: "Alarm dispatch deliveries successfully processed by the active publish mode.",
-			},
-			[]string{"mode"},
-		)
-
-		alarmDispatchPublishInsertedTotal = promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_publish_inserted_deliveries_total",
-				Help: "Inserted alarm dispatch deliveries.",
-			},
-			[]string{"mode"},
-		)
-
-		alarmDispatchPublishDuplicateTotal = promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_publish_duplicate_deliveries_total",
-				Help: "Duplicate alarm dispatch deliveries skipped.",
-			},
-			[]string{"mode"},
-		)
-
-		alarmDispatchPublishHashConflictTotal = promauto.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_publish_hash_conflict_total",
-				Help: "Alarm dispatch event hash conflicts observed while publishing.",
-			},
-			[]string{"mode"},
-		)
-
-		alarmDispatchWakeupSentTotal = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_wakeup_sent_total",
-				Help: "Alarm dispatch wakeup tokens sent.",
-			},
-		)
-
-		alarmDispatchWakeupSuppressedTotal = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_wakeup_suppressed_total",
-				Help: "Alarm dispatch wakeup tokens suppressed by guard.",
-			},
-		)
-
-		alarmDispatchWakeupFailedTotal = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_wakeup_failed_total",
-				Help: "Alarm dispatch wakeup token send failures.",
-			},
-		)
-
-		alarmDispatchWakeupExpireFailedTotal = promauto.NewCounter(
-			prometheus.CounterOpts{
-				Name: "alarm_dispatch_wakeup_expire_failed_total",
-				Help: "Alarm dispatch wakeup list TTL failures.",
-			},
-		)
+func initAlarmDispatchWakeupMetrics() {
+	alarmDispatchWakeupSentTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "alarm_dispatch_wakeup_sent_total",
+		Help: "Alarm dispatch wakeup tokens sent.",
+	})
+	alarmDispatchWakeupSuppressedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "alarm_dispatch_wakeup_suppressed_total",
+		Help: "Alarm dispatch wakeup tokens suppressed by guard.",
+	})
+	alarmDispatchWakeupFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "alarm_dispatch_wakeup_failed_total",
+		Help: "Alarm dispatch wakeup token send failures.",
+	})
+	alarmDispatchWakeupExpireFailedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "alarm_dispatch_wakeup_expire_failed_total",
+		Help: "Alarm dispatch wakeup list TTL failures.",
 	})
 }
 

@@ -170,15 +170,10 @@ func NewACLService(
 		logger = slog.Default()
 	}
 
-	if postgres == nil {
-		return nil, fmt.Errorf("postgres service is nil")
+	db, err := aclDatabase(postgres)
+	if err != nil {
+		return nil, err
 	}
-
-	db := postgres.GetGormDB()
-	if db == nil {
-		return nil, fmt.Errorf("gorm db is nil")
-	}
-
 	if cacheSvc == nil {
 		return nil, fmt.Errorf("cache service is nil")
 	}
@@ -205,12 +200,7 @@ func NewACLService(
 
 		svc.enabled = defaultEnabled
 		svc.mode = normalizedMode
-		// 기존 기본 방 목록을 현재 모드의 목록에 추가
-		targetRooms := svc.activeRoomsMap()
-
-		for _, r := range normalizedRooms {
-			targetRooms[r] = struct{}{}
-		}
+		svc.addDefaultRooms(normalizedRooms)
 	}
 
 	logger.Info("ACL service initialized",
@@ -221,6 +211,24 @@ func NewACLService(
 	)
 
 	return svc, nil
+}
+
+func aclDatabase(postgres database.Client) (*gorm.DB, error) {
+	if postgres == nil {
+		return nil, fmt.Errorf("postgres service is nil")
+	}
+	db := postgres.GetGormDB()
+	if db == nil {
+		return nil, fmt.Errorf("gorm db is nil")
+	}
+	return db, nil
+}
+
+func (s *Service) addDefaultRooms(rooms []string) {
+	targetRooms := s.activeRoomsMap()
+	for _, r := range rooms {
+		targetRooms[r] = struct{}{}
+	}
 }
 
 // activeRoomsMap: 현재 활성 모드의 방 목록 맵을 반환한다 (잠금 없음, 호출자가 관리).

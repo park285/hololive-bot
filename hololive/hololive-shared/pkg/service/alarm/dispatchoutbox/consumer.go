@@ -92,43 +92,85 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 	if err != nil {
 		return nil, fmt.Errorf("drain outbox batch: load events: %w", err)
 	}
+	return c.envelopesFromRecords(ctx, records, events)
+}
+
+func (c *Consumer) envelopesFromRecords(ctx context.Context, records []*Record, events map[int64]EventRecord) ([]domain.AlarmQueueEnvelope, error) {
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(records))
 	for _, record := range records {
-		var envelope domain.AlarmQueueEnvelope
-		payload := record.Payload
-		if record.EventID > 0 {
-			event, ok := events[record.EventID]
-			if !ok {
-				if err := c.moveRecordToDLQ(ctx, record.ID, "missing event payload", "move missing event to dlq"); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			payload = event.Payload
+		envelope, ok, err := c.envelopeFromRecord(ctx, record, events)
+		if err != nil {
+			return nil, err
 		}
-		if err := json.Unmarshal(payload, &envelope); err != nil {
-			if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); err != nil {
-				return nil, err
-			}
+		if !ok {
 			continue
-		}
-		if err := rehydrateDeliveryContext(&envelope, record); err != nil {
-			if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid delivery context: %v", err), "move invalid delivery context to dlq"); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		envelope.DispatchOutboxID = record.ID
-		envelope.ClaimKeys = record.ClaimKeys
-		if record.AttemptCount > 0 {
-			envelope.Retry = &domain.AlarmQueueRetryMetadata{
-				Attempt:   record.AttemptCount,
-				LastError: record.Error,
-			}
 		}
 		envelopes = append(envelopes, envelope)
 	}
 	return envelopes, nil
+}
+
+func (c *Consumer) envelopeFromRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (domain.AlarmQueueEnvelope, bool, error) {
+	payload, ok, err := c.payloadForRecord(ctx, record, events)
+	if err != nil || !ok {
+		return domain.AlarmQueueEnvelope{}, false, err
+	}
+	envelope, ok, err := c.decodeEnvelopePayload(ctx, record, payload)
+	if err != nil || !ok {
+		return domain.AlarmQueueEnvelope{}, false, err
+	}
+	ok, err = c.rehydrateEnvelope(ctx, record, &envelope)
+	if err != nil || !ok {
+		return domain.AlarmQueueEnvelope{}, false, err
+	}
+	attachRecordMetadata(&envelope, record)
+	return envelope, true, nil
+}
+
+func (c *Consumer) decodeEnvelopePayload(ctx context.Context, record *Record, payload []byte) (domain.AlarmQueueEnvelope, bool, error) {
+	var envelope domain.AlarmQueueEnvelope
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); err != nil {
+			return domain.AlarmQueueEnvelope{}, false, err
+		}
+		return domain.AlarmQueueEnvelope{}, false, nil
+	}
+	return envelope, true, nil
+}
+
+func (c *Consumer) rehydrateEnvelope(ctx context.Context, record *Record, envelope *domain.AlarmQueueEnvelope) (bool, error) {
+	if err := rehydrateDeliveryContext(envelope, record); err != nil {
+		if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid delivery context: %v", err), "move invalid delivery context to dlq"); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
+	envelope.DispatchOutboxID = record.ID
+	envelope.ClaimKeys = record.ClaimKeys
+	if record.AttemptCount > 0 {
+		envelope.Retry = &domain.AlarmQueueRetryMetadata{
+			Attempt:   record.AttemptCount,
+			LastError: record.Error,
+		}
+	}
+}
+
+func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events map[int64]EventRecord) ([]byte, bool, error) {
+	if record.EventID <= 0 {
+		return record.Payload, true, nil
+	}
+	event, ok := events[record.EventID]
+	if ok {
+		return event.Payload, true, nil
+	}
+	if err := c.moveRecordToDLQ(ctx, record.ID, "missing event payload", "move missing event to dlq"); err != nil {
+		return nil, false, err
+	}
+	return nil, false, nil
 }
 
 func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error) {

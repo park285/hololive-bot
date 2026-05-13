@@ -105,27 +105,39 @@ func (s *FeedScheduler) run(ctx context.Context) {
 		nextRun, trigger := s.nextRun(now)
 		waitDuration := max(time.Until(nextRun), time.Duration(0))
 
-		s.logger.Info(
-			"Major event feed scheduler waiting",
-			slog.String("next_run_kst", formatKST(nextRun)),
-			slog.String("trigger", string(trigger)),
-			slog.Duration("wait_duration", waitDuration),
-		)
-
-		timer := time.NewTimer(waitDuration)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			s.logger.Info("Major event feed scheduler stopped by context")
+		if !s.waitUntilNextRun(ctx, nextRun, trigger, waitDuration) {
 			return
-		case <-s.stopCh:
-			timer.Stop()
-			s.logger.Info("Major event feed scheduler stopped")
-			return
-		case <-timer.C:
 		}
 
 		s.executeCycle(ctx, trigger, nextRun)
+	}
+}
+
+func (s *FeedScheduler) waitUntilNextRun(
+	ctx context.Context,
+	nextRun time.Time,
+	trigger scrapeTriggerType,
+	waitDuration time.Duration,
+) bool {
+	s.logger.Info(
+		"Major event feed scheduler waiting",
+		slog.String("next_run_kst", formatKST(nextRun)),
+		slog.String("trigger", string(trigger)),
+		slog.Duration("wait_duration", waitDuration),
+	)
+
+	timer := time.NewTimer(waitDuration)
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		s.logger.Info("Major event feed scheduler stopped by context")
+		return false
+	case <-s.stopCh:
+		timer.Stop()
+		s.logger.Info("Major event feed scheduler stopped")
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 

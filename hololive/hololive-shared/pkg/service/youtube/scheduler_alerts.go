@@ -24,9 +24,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync/atomic"
-
-	"golang.org/x/sync/errgroup"
 
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -40,13 +37,6 @@ type milestoneAlertWork struct {
 type approachingAlertWork struct {
 	notification ytstats.ApproachingNotification
 	message      string
-}
-
-type alertDispatchResult[T any] struct {
-	notification T
-	targetRooms  int
-	successCount atomic.Int32
-	failureCount atomic.Int32
 }
 
 func (ys *schedulerImpl) dispatchMilestoneAlerts(ctx context.Context) {
@@ -143,75 +133,6 @@ func (ys *schedulerImpl) formatMilestoneAchievedMessage(ctx context.Context, mem
 	}
 
 	return message, true
-}
-
-func dispatchAlertWorks[T any, W any](
-	logger *slog.Logger,
-	ctx context.Context,
-	sendMessage func(room, message string) error,
-	rooms []string,
-	works []W,
-	notificationOf func(W) T,
-	messageOf func(W) string,
-	memberNameOf func(T) string,
-	sendFailureLog string,
-	partialWarnLog string,
-) []T {
-	if len(works) == 0 || len(rooms) == 0 {
-		return nil
-	}
-
-	results := make([]alertDispatchResult[T], len(works))
-	for i := range works {
-		results[i] = alertDispatchResult[T]{
-			notification: notificationOf(works[i]),
-			targetRooms:  len(rooms),
-		}
-	}
-
-	eg, _ := errgroup.WithContext(ctx)
-	eg.SetLimit(4)
-
-	for i := range works {
-		work := works[i]
-		notification := notificationOf(work)
-		message := messageOf(work)
-		for _, room := range rooms {
-			result := &results[i]
-			eg.Go(func() error {
-				if err := sendMessage(room, message); err != nil {
-					logger.Error(sendFailureLog,
-						slog.String("room", room),
-						slog.String("member", memberNameOf(notification)),
-						slog.Any("error", err))
-					result.failureCount.Add(1)
-					return nil
-				}
-				result.successCount.Add(1)
-				return nil
-			})
-		}
-	}
-
-	_ = eg.Wait()
-	sentNotifications := make([]T, 0, len(works))
-	for i := range results {
-		successCount := int(results[i].successCount.Load())
-		failureCount := int(results[i].failureCount.Load())
-		if results[i].targetRooms > 0 && successCount == results[i].targetRooms && failureCount == 0 {
-			sentNotifications = append(sentNotifications, results[i].notification)
-			continue
-		}
-		if successCount > 0 {
-			logger.Warn(partialWarnLog,
-				slog.String("member", memberNameOf(results[i].notification)),
-				slog.Int("target_rooms", results[i].targetRooms),
-				slog.Int("success_count", successCount),
-				slog.Int("failure_count", failureCount))
-		}
-	}
-
-	return sentNotifications
 }
 
 func (ys *schedulerImpl) dispatchMilestoneAlertWorks(

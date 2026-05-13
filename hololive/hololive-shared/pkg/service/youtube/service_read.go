@@ -25,17 +25,17 @@ import (
 	"fmt"
 	"log/slog"
 
+	"google.golang.org/api/youtube/v3"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 )
 
 // 스크래퍼를 우선 사용하고, 실패 시 YouTube API로 폴백합니다.
 func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error) {
 	videos, err := ys.scraper.GetRecentVideos(ctx, channelID, int(maxResults))
-	if err == nil && len(videos) > 0 {
-		videoIDs := make([]string, 0, len(videos))
-		for _, v := range videos {
-			videoIDs = append(videoIDs, v.VideoID)
-		}
+	if hasScrapedRecentVideos(videos, err) {
+		videoIDs := recentScraperVideoIDs(videos)
 		ys.logger.Debug("Recent videos fetched via scraper",
 			slog.String("channel", channelID),
 			slog.Int("count", len(videoIDs)))
@@ -64,12 +64,7 @@ func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, ma
 		return nil, fmt.Errorf("YouTube search error: %w", err)
 	}
 
-	videoIDs := make([]string, 0, len(response.Items))
-	for _, item := range response.Items {
-		if item.Id != nil && item.Id.VideoId != "" {
-			videoIDs = append(videoIDs, item.Id.VideoId)
-		}
-	}
+	videoIDs := recentAPIResponseVideoIDs(response.Items)
 
 	ys.consumeQuota(constants.YouTubeConfig.SearchQuotaCost)
 
@@ -78,4 +73,26 @@ func (ys *serviceImpl) GetRecentVideos(ctx context.Context, channelID string, ma
 		slog.Int("count", len(videoIDs)))
 
 	return videoIDs, nil
+}
+
+func hasScrapedRecentVideos(videos []*scraper.Video, err error) bool {
+	return err == nil && len(videos) > 0
+}
+
+func recentScraperVideoIDs(videos []*scraper.Video) []string {
+	videoIDs := make([]string, 0, len(videos))
+	for _, v := range videos {
+		videoIDs = append(videoIDs, v.VideoID)
+	}
+	return videoIDs
+}
+
+func recentAPIResponseVideoIDs(items []*youtube.SearchResult) []string {
+	videoIDs := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.Id != nil && item.Id.VideoId != "" {
+			videoIDs = append(videoIDs, item.Id.VideoId)
+		}
+	}
+	return videoIDs
 }

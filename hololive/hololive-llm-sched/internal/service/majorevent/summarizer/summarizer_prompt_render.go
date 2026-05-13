@@ -150,23 +150,20 @@ func writeHighlights(sb *strings.Builder, highlights []eventHighlight) {
 		if i > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(h.Date)
-		sb.WriteByte(' ')
-		sb.WriteString(h.Name)
-		if h.Members != "" {
-			sb.WriteString(" (")
-			sb.WriteString(h.Members)
-			sb.WriteByte(')')
-		}
-		if h.Note != "" {
-			sb.WriteString("\n- ")
-			sb.WriteString(h.Note)
-		}
-		if h.Link != "" {
-			sb.WriteByte('\n')
-			sb.WriteString(h.Link)
-		}
+		writeHighlight(sb, h)
 	}
+}
+
+func writeHighlight(sb *strings.Builder, h eventHighlight) {
+	sb.WriteString(h.Date)
+	sb.WriteByte(' ')
+	sb.WriteString(h.Name)
+	if h.Members != "" {
+		sb.WriteString(" (")
+		sb.WriteString(h.Members)
+		sb.WriteByte(')')
+	}
+	writeNoteAndLink(sb, h.Note, h.Link)
 }
 
 func writeOngoingEvents(sb *strings.Builder, events []ongoingEvent) {
@@ -174,19 +171,27 @@ func writeOngoingEvents(sb *strings.Builder, events []ongoingEvent) {
 		if i > 0 {
 			sb.WriteByte('\n')
 		}
-		if o.Date != "" {
-			sb.WriteString(o.Date)
-			sb.WriteByte(' ')
-		}
-		sb.WriteString(o.Name)
-		if o.Note != "" {
-			sb.WriteString("\n- ")
-			sb.WriteString(o.Note)
-		}
-		if o.Link != "" {
-			sb.WriteByte('\n')
-			sb.WriteString(o.Link)
-		}
+		writeOngoingEvent(sb, o)
+	}
+}
+
+func writeOngoingEvent(sb *strings.Builder, o ongoingEvent) {
+	if o.Date != "" {
+		sb.WriteString(o.Date)
+		sb.WriteByte(' ')
+	}
+	sb.WriteString(o.Name)
+	writeNoteAndLink(sb, o.Note, o.Link)
+}
+
+func writeNoteAndLink(sb *strings.Builder, note string, link string) {
+	if note != "" {
+		sb.WriteString("\n- ")
+		sb.WriteString(note)
+	}
+	if link != "" {
+		sb.WriteByte('\n')
+		sb.WriteString(link)
 	}
 }
 

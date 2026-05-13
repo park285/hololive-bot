@@ -75,12 +75,21 @@ func (r *StreamIngesterRuntime) shutdown(ctx context.Context) {
 		r.Readiness.markStopping("")
 	}
 
+	r.stopSchedulers()
+	r.shutdownHTTPServer(ctx)
+	r.releaseIngestionLease(ctx)
+}
+
+func (r *StreamIngesterRuntime) stopSchedulers() {
 	if r.Scheduler != nil {
 		r.Scheduler.Stop()
 	}
 	if r.ScraperScheduler != nil {
 		r.ScraperScheduler.Stop()
 	}
+}
+
+func (r *StreamIngesterRuntime) shutdownHTTPServer(ctx context.Context) {
 	if r.HttpServer != nil {
 		if err := r.HttpServer.Shutdown(ctx); err != nil {
 			r.Logger.Error("Ingestion runtime HTTP shutdown failed",
@@ -89,6 +98,9 @@ func (r *StreamIngesterRuntime) shutdown(ctx context.Context) {
 			)
 		}
 	}
+}
+
+func (r *StreamIngesterRuntime) releaseIngestionLease(ctx context.Context) {
 	if r.ingestionLease != nil {
 		if err := r.ingestionLease.Release(ctx); err != nil {
 			r.Logger.Error("Ingestion runtime lease release failed",

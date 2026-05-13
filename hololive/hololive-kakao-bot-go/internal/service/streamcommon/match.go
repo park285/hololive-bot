@@ -7,18 +7,26 @@ func FindByChannelAndScheduledMinute(streams []*domain.Stream, candidate *domain
 		return nil
 	}
 
-	candidateMinute := candidate.StartScheduled.UTC().Unix() / 60
+	candidateMinute := scheduledMinute(candidate)
 	for _, stream := range streams {
-		if stream == nil || stream.StartScheduled == nil {
-			continue
-		}
-		if stream.ChannelID != candidate.ChannelID {
-			continue
-		}
-		if stream.StartScheduled.UTC().Unix()/60 == candidateMinute {
+		if matchesChannelAndScheduledMinute(stream, candidate.ChannelID, candidateMinute) {
 			return stream
 		}
 	}
 
 	return nil
+}
+
+func matchesChannelAndScheduledMinute(stream *domain.Stream, channelID string, minute int64) bool {
+	if stream == nil || stream.StartScheduled == nil {
+		return false
+	}
+	if stream.ChannelID != channelID {
+		return false
+	}
+	return scheduledMinute(stream) == minute
+}
+
+func scheduledMinute(stream *domain.Stream) int64 {
+	return stream.StartScheduled.UTC().Unix() / 60
 }

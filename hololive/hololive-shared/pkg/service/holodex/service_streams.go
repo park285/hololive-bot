@@ -23,17 +23,14 @@ package holodex
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/fallback"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
@@ -132,92 +129,6 @@ type streamFetchPlan struct {
 	retry              func(ctx context.Context, org string, hours int)
 }
 
-func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan streamFetchPlan) ([]*domain.Stream, error) {
-	if plan.cacheGet != nil {
-		if cached, found := plan.cacheGet(ctx, plan.resolvedOrg, plan.hours); found {
-			return cached, nil
-		}
-	}
-
-	var allStreams []*domain.Stream
-	seen := make(map[string]bool)
-	var mu sync.Mutex
-
-	targetOrgs := streamTargetOrgs(plan.resolvedOrg)
-	primary := fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg)}, func(fetchCtx context.Context, targetOrg string) error {
-		streams, fetchErr := h.fetchStreamsByOrg(fetchCtx, targetOrg, plan.status, plan.hours)
-		if fetchErr != nil {
-			h.logger.Warn("Failed to get streams for org",
-				slog.String("org", targetOrg),
-				slog.String("status", plan.status),
-				slog.Any("error", fetchErr),
-			)
-			return fetchErr
-		}
-
-		filtered := h.filter.FilterHololiveStreams(streams)
-		filtered = filterStreamsByRequestedOrg(filtered, plan.resolvedOrg)
-		if plan.primaryFilter != nil {
-			filtered = plan.primaryFilter(filtered)
-		}
-
-		mu.Lock()
-		for _, stream := range filtered {
-			if !seen[stream.ID] {
-				seen[stream.ID] = true
-				allStreams = append(allStreams, stream)
-			}
-		}
-		mu.Unlock()
-		return nil
-	})
-	fallback.ObservePrimaryPhase("holodex", plan.operation, len(targetOrgs), primary.Succeeded, len(primary.Failed))
-
-	if primary.HasFailures() && plan.retry != nil {
-		h.scheduleRetryIfNeeded(ctx, plan.retryKey, func(retryCtx context.Context) {
-			plan.retry(retryCtx, plan.resolvedOrg, plan.hours)
-		})
-	}
-
-	scraperFallbackPolicy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
-	secondary, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
-		Service:   "holodex",
-		Operation: plan.operation,
-		Trigger:   scraperFallbackPolicy.Trigger,
-		ShouldRun: h.scraper != nil && supportsScraperFallback(plan.resolvedOrg) &&
-			scraperFallbackPolicy.ShouldRun(len(allStreams), len(primary.Failed)),
-		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
-			h.logger.Warn(plan.fallbackLogMessage,
-				slog.Int("failed_orgs", len(primary.Failed)),
-			)
-			scraperStreams, scraperErr := h.scraper.FetchAllStreams(runCtx)
-			if scraperErr != nil {
-				return fallback.SecondaryResult{}, scraperErr
-			}
-			if plan.scraperFilter != nil {
-				scraperStreams = plan.scraperFilter(scraperStreams)
-			}
-			if plan.cacheSet != nil {
-				plan.cacheSet(runCtx, plan.resolvedOrg, plan.hours, scraperStreams)
-			}
-			allStreams = scraperStreams
-			return fallback.SecondaryResult{
-				Items:     len(scraperStreams),
-				Successes: 1,
-			}, nil
-		},
-	})
-	if err == nil && secondary.Outcome == "hit" {
-		return allStreams, nil
-	}
-
-	if plan.cacheSet != nil {
-		plan.cacheSet(ctx, plan.resolvedOrg, plan.hours, allStreams)
-	}
-
-	return allStreams, nil
-}
-
 func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hours int) ([]*domain.Stream, error) {
 	if org == constants.HolodexAPIParams.OrgIndie {
 		streams, err := h.fetchIndieStreams(ctx)
@@ -251,19 +162,21 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 }
 
 func resolveStreamOrg(org string) (string, error) {
-	switch normalizeStreamOrg(org) {
-	case "", "holo", strings.ToLower(constants.HolodexAPIParams.OrgHololive):
-		return constants.HolodexAPIParams.OrgHololive, nil
-	case strings.ToLower(constants.HolodexAPIParams.OrgVSpo):
-		return constants.HolodexAPIParams.OrgVSpo, nil
-	case strings.ToLower(constants.HolodexAPIParams.OrgStellive):
-		return constants.HolodexAPIParams.OrgStellive, nil
-	case strings.ToLower(constants.HolodexAPIParams.OrgIndie):
-		return constants.HolodexAPIParams.OrgIndie, nil
-	case constants.HolodexAPIParams.OrgAll:
-		return constants.HolodexAPIParams.OrgAll, nil
-	default:
-		return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, stringutil.TrimSpace(org))
+	if resolvedOrg, ok := streamOrgAliases()[normalizeStreamOrg(org)]; ok {
+		return resolvedOrg, nil
+	}
+	return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, stringutil.TrimSpace(org))
+}
+
+func streamOrgAliases() map[string]string {
+	return map[string]string{
+		"":     constants.HolodexAPIParams.OrgHololive,
+		"holo": constants.HolodexAPIParams.OrgHololive,
+		strings.ToLower(constants.HolodexAPIParams.OrgHololive): constants.HolodexAPIParams.OrgHololive,
+		strings.ToLower(constants.HolodexAPIParams.OrgVSpo):     constants.HolodexAPIParams.OrgVSpo,
+		strings.ToLower(constants.HolodexAPIParams.OrgStellive): constants.HolodexAPIParams.OrgStellive,
+		strings.ToLower(constants.HolodexAPIParams.OrgIndie):    constants.HolodexAPIParams.OrgIndie,
+		constants.HolodexAPIParams.OrgAll:                       constants.HolodexAPIParams.OrgAll,
 	}
 }
 

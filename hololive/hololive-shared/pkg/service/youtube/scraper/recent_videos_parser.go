@@ -138,17 +138,21 @@ func parseVideosFromRichGrid(
 		if i >= maxResults {
 			break
 		}
-		var video *Video
-		if item.Get("videoRenderer").Exists() {
-			video = videoParser(item.Get("videoRenderer"), channelID)
-		} else if item.Get("lockupViewModel").Exists() {
-			video = parseLockupVideoViewModel(item.Get("lockupViewModel"), channelID)
-		}
-		if video != nil {
+		if video := parseRecentVideoItem(item, channelID, videoParser); video != nil {
 			videos = append(videos, video)
 		}
 	}
 	return videos
+}
+
+func parseRecentVideoItem(item gjson.Result, channelID string, videoParser func(gjson.Result, string) *Video) *Video {
+	if renderer := item.Get("videoRenderer"); renderer.Exists() {
+		return videoParser(renderer, channelID)
+	}
+	if lockup := item.Get("lockupViewModel"); lockup.Exists() {
+		return parseLockupVideoViewModel(lockup, channelID)
+	}
+	return nil
 }
 
 func collectRecentVideoItems(richGridItems gjson.Result) []gjson.Result {
@@ -200,41 +204,68 @@ func collectVideoRenderers(root gjson.Result, maxResults int) []gjson.Result {
 		return nil
 	}
 
-	results := make([]gjson.Result, 0, maxResults)
-	seen := make(map[string]struct{}, maxResults)
-	visited := 0
+	collector := newVideoRendererCollector(maxResults)
+	collector.walk(root)
+	return collector.results
+}
 
-	var walk func(gjson.Result)
-	walk = func(node gjson.Result) {
-		if len(results) >= maxResults || !node.Exists() || visited >= maxVideoRendererFallbackNodes {
-			return
-		}
-		if !node.IsArray() && !node.IsObject() {
-			return
-		}
-		visited++
+type videoRendererCollector struct {
+	results    []gjson.Result
+	seen       map[string]struct{}
+	visited    int
+	maxResults int
+}
 
-		node.ForEach(func(key, value gjson.Result) bool {
-			if len(results) >= maxResults || visited >= maxVideoRendererFallbackNodes {
-				return false
-			}
+func newVideoRendererCollector(maxResults int) *videoRendererCollector {
+	return &videoRendererCollector{
+		results:    make([]gjson.Result, 0, maxResults),
+		seen:       make(map[string]struct{}, maxResults),
+		maxResults: maxResults,
+	}
+}
 
-			if key.String() == "videoRenderer" && value.Exists() {
-				videoID := value.Get("videoId").String()
-				if videoID != "" {
-					if _, ok := seen[videoID]; !ok {
-						seen[videoID] = struct{}{}
-						results = append(results, value)
-					}
-				}
-				return true
-			}
-
-			walk(value)
-			return len(results) < maxResults && visited < maxVideoRendererFallbackNodes
-		})
+func (c *videoRendererCollector) walk(node gjson.Result) {
+	if !c.canVisit(node) {
+		return
 	}
 
-	walk(root)
-	return results
+	c.visited++
+	node.ForEach(c.visit)
+}
+
+func (c *videoRendererCollector) canVisit(node gjson.Result) bool {
+	if c.shouldStop() || !node.Exists() {
+		return false
+	}
+	return node.IsArray() || node.IsObject()
+}
+
+func (c *videoRendererCollector) shouldStop() bool {
+	return len(c.results) >= c.maxResults || c.visited >= maxVideoRendererFallbackNodes
+}
+
+func (c *videoRendererCollector) visit(key, value gjson.Result) bool {
+	if c.shouldStop() {
+		return false
+	}
+	if key.String() == "videoRenderer" {
+		c.add(value)
+		return true
+	}
+
+	c.walk(value)
+	return !c.shouldStop()
+}
+
+func (c *videoRendererCollector) add(value gjson.Result) {
+	videoID := value.Get("videoId").String()
+	if videoID == "" {
+		return
+	}
+	if _, ok := c.seen[videoID]; ok {
+		return
+	}
+
+	c.seen[videoID] = struct{}{}
+	c.results = append(c.results, value)
 }

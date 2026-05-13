@@ -1016,7 +1016,10 @@ func TestSendMilestoneAlerts_SendsAndMarksBothKinds(t *testing.T) {
 	}
 
 	var sent []string
+	var sentMu sync.Mutex
 	sendMessage := func(room, message string) error {
+		sentMu.Lock()
+		defer sentMu.Unlock()
 		sent = append(sent, room+"|"+message)
 		return nil
 	}
@@ -1536,7 +1539,7 @@ func TestRunBatch_SkipsOverlapWhilePreviousBatchRunning(t *testing.T) {
 		close(firstDone)
 	}()
 
-	for i := 0; i < recentVideosFetchParallelism; i++ {
+	for range recentVideosFetchParallelism {
 		select {
 		case <-youtubeSvc.startedCh:
 		case <-time.After(time.Second):

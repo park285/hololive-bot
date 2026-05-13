@@ -66,34 +66,45 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (string, err
 		return "", err
 	}
 
-	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
-
-	switch resp.StatusCode {
-	case http.StatusTooManyRequests:
-		c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
-		cooldown := c.backoffState.HardCooldownRemaining()
-		slog.Warn("YouTube rate limit hit, entering cooldown",
-			"url", pageURL,
-			"cooldown", cooldown.Round(time.Second),
-			"retry_after", retryAfter.Round(time.Second))
-		return "", fmt.Errorf("status %d: %w", resp.StatusCode, ErrRateLimited)
-
-	case http.StatusForbidden:
-		c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
-		slog.Warn("YouTube access forbidden",
-			"url", pageURL,
-			"retry_after", retryAfter.Round(time.Second))
-		return "", fmt.Errorf("status %d: %w", resp.StatusCode, ErrForbidden)
-
-	case http.StatusOK:
-		// body 읽기 성공 후에 RecordSuccess 호출
-
-	default:
-		return "", &httpStatusError{code: resp.StatusCode, retryAfter: retryAfter}
+	if err := c.handleFetchStatus(pageURL, resp); err != nil {
+		return "", err
 	}
 
 	c.backoffState.RecordSuccess()
 	return string(resp.Body), nil
+}
+
+func (c *Client) handleFetchStatus(pageURL string, resp pageFetchResponse) error {
+	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+
+	switch resp.StatusCode {
+	case http.StatusTooManyRequests:
+		return c.handleRateLimitedFetch(pageURL, resp.StatusCode, retryAfter)
+	case http.StatusForbidden:
+		return c.handleForbiddenFetch(pageURL, resp.StatusCode, retryAfter)
+	case http.StatusOK:
+		return nil
+	default:
+		return &httpStatusError{code: resp.StatusCode, retryAfter: retryAfter}
+	}
+}
+
+func (c *Client) handleRateLimitedFetch(pageURL string, statusCode int, retryAfter time.Duration) error {
+	c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
+	cooldown := c.backoffState.HardCooldownRemaining()
+	slog.Warn("YouTube rate limit hit, entering cooldown",
+		"url", pageURL,
+		"cooldown", cooldown.Round(time.Second),
+		"retry_after", retryAfter.Round(time.Second))
+	return fmt.Errorf("status %d: %w", statusCode, ErrRateLimited)
+}
+
+func (c *Client) handleForbiddenFetch(pageURL string, statusCode int, retryAfter time.Duration) error {
+	c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
+	slog.Warn("YouTube access forbidden",
+		"url", pageURL,
+		"retry_after", retryAfter.Round(time.Second))
+	return fmt.Errorf("status %d: %w", statusCode, ErrForbidden)
 }
 
 func parseRetryAfter(value string, now time.Time) time.Duration {

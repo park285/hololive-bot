@@ -18,45 +18,37 @@ func buildMemberNameMap(membersData domain.MemberDataProvider) map[string]string
 		return nameMap
 	}
 	for _, member := range membersData.GetAllMembers() {
-		nameMap[stringutil.Normalize(member.Name)] = member.ChannelID
-		if member.NameJa != "" {
-			nameMap[stringutil.Normalize(member.NameJa)] = member.ChannelID
-		}
-		if member.Aliases != nil {
-			for _, alias := range member.Aliases.Ko {
-				nameMap[stringutil.Normalize(alias)] = member.ChannelID
-			}
-			for _, alias := range member.Aliases.Ja {
-				nameMap[stringutil.Normalize(alias)] = member.ChannelID
-			}
-		}
+		addMemberNames(nameMap, member)
 	}
 	return nameMap
 }
 
-func (s *ScraperService) parseStreamElement(sel *goquery.Selection, currentDate string) (*domain.Stream, error) {
-	videoURL, exists := sel.Attr("href")
-	if !exists || !strings.Contains(videoURL, "youtube.com/watch?v=") {
-		return nil, fmt.Errorf("invalid video URL")
+func addMemberNames(nameMap map[string]string, member *domain.Member) {
+	nameMap[stringutil.Normalize(member.Name)] = member.ChannelID
+	if member.NameJa != "" {
+		nameMap[stringutil.Normalize(member.NameJa)] = member.ChannelID
 	}
+	if member.Aliases == nil {
+		return
+	}
+	addMemberAliases(nameMap, member.Aliases.Ko, member.ChannelID)
+	addMemberAliases(nameMap, member.Aliases.Ja, member.ChannelID)
+}
 
-	videoID := s.extractVideoID(videoURL)
-	if videoID == "" {
-		return nil, fmt.Errorf("could not extract video ID from %s", videoURL)
+func addMemberAliases(nameMap map[string]string, aliases []string, channelID string) {
+	for _, alias := range aliases {
+		nameMap[stringutil.Normalize(alias)] = channelID
+	}
+}
+
+func (s *ScraperService) parseStreamElement(sel *goquery.Selection, currentDate string) (*domain.Stream, error) {
+	videoURL, videoID, err := s.parseStreamVideo(sel)
+	if err != nil {
+		return nil, err
 	}
 
 	timeText := stringutil.TrimSpace(sel.Find(".datetime").Text())
-	memberName := stringutil.TrimSpace(sel.Find(".name").Text())
-	if memberName == "" {
-		memberName = stringutil.TrimSpace(sel.Find(".text").Text())
-	}
-
-	if onclickStr, exists := sel.Attr("onclick"); exists {
-		if extractedName := s.extractMemberFromOnClick(onclickStr); extractedName != "" {
-			memberName = extractedName
-		}
-	}
-
+	memberName := s.extractMemberName(sel)
 	startTime, err := s.parseDatetimeWithContext(currentDate, timeText)
 	if err != nil {
 		s.logger.Debug("Failed to parse datetime",
@@ -65,7 +57,6 @@ func (s *ScraperService) parseStreamElement(sel *goquery.Selection, currentDate 
 			slog.Any("error", err))
 	}
 
-	thumbnailURL := fmt.Sprintf("https://img.youtube.com/vi/%s/maxresdefault.jpg", videoID)
 	channelID := s.matchMemberToChannel(memberName)
 	if channelID == "" {
 		s.logger.Debug("Could not match member name to channel ID",
@@ -73,7 +64,39 @@ func (s *ScraperService) parseStreamElement(sel *goquery.Selection, currentDate 
 			slog.String("video_id", videoID))
 	}
 
-	stream := &domain.Stream{
+	return buildStream(videoID, videoURL, memberName, channelID, startTime), nil
+}
+
+func (s *ScraperService) parseStreamVideo(sel *goquery.Selection) (string, string, error) {
+	videoURL, exists := sel.Attr("href")
+	if !exists || !strings.Contains(videoURL, "youtube.com/watch?v=") {
+		return "", "", fmt.Errorf("invalid video URL")
+	}
+
+	videoID := s.extractVideoID(videoURL)
+	if videoID == "" {
+		return "", "", fmt.Errorf("could not extract video ID from %s", videoURL)
+	}
+	return videoURL, videoID, nil
+}
+
+func (s *ScraperService) extractMemberName(sel *goquery.Selection) string {
+	memberName := stringutil.TrimSpace(sel.Find(".name").Text())
+	if memberName == "" {
+		memberName = stringutil.TrimSpace(sel.Find(".text").Text())
+	}
+
+	if onclickStr, exists := sel.Attr("onclick"); exists {
+		if extractedName := s.extractMemberFromOnClick(onclickStr); extractedName != "" {
+			return extractedName
+		}
+	}
+	return memberName
+}
+
+func buildStream(videoID, videoURL, memberName, channelID string, startTime *time.Time) *domain.Stream {
+	thumbnailURL := fmt.Sprintf("https://img.youtube.com/vi/%s/maxresdefault.jpg", videoID)
+	return &domain.Stream{
 		ID:             videoID,
 		Title:          memberName,
 		ChannelID:      channelID,
@@ -83,7 +106,6 @@ func (s *ScraperService) parseStreamElement(sel *goquery.Selection, currentDate 
 		Link:           &videoURL,
 		Thumbnail:      &thumbnailURL,
 	}
-	return stream, nil
 }
 
 func (s *ScraperService) matchMemberToChannel(memberName string) string {

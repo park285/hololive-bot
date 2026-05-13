@@ -48,8 +48,15 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 	rg := router.Group(membernewscontracts.BasePath)
 	rg.Use(middleware.APIKeyAuthMiddleware(apiKey))
 
-	rg.GET(membernewscontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
-		roomID := strings.TrimSpace(c.Param("roomID"))
+	rg.GET(membernewscontracts.SubscriptionsRoute+"/:roomID", memberNewsSubscriptionStatusHandler(svc))
+	rg.POST(membernewscontracts.SubscriptionsRoute, memberNewsSubscribeHandler(svc))
+	rg.DELETE(membernewscontracts.SubscriptionsRoute+"/:roomID", memberNewsUnsubscribeHandler(svc))
+	rg.POST(membernewscontracts.DigestRoute, memberNewsDigestHandler(svc))
+}
+
+func memberNewsSubscriptionStatusHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roomID := trimmedRoomIDParam(c)
 		if roomID == "" {
 			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
@@ -62,18 +69,13 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 		}
 
 		c.JSON(http.StatusOK, subscription.SubscriptionStatusResponse{Subscribed: subscribed})
-	})
+	}
+}
 
-	rg.POST(membernewscontracts.SubscriptionsRoute, func(c *gin.Context) {
-		var req subscription.SubscribeRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
-			return
-		}
-		req.RoomID = strings.TrimSpace(req.RoomID)
-		req.RoomName = strings.TrimSpace(req.RoomName)
-		if req.RoomID == "" {
-			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+func memberNewsSubscribeHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		req, ok := bindMemberNewsSubscribeRequest(c)
+		if !ok {
 			return
 		}
 
@@ -83,10 +85,12 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 		}
 
 		c.JSON(http.StatusOK, gin.H{"status": "subscribed"})
-	})
+	}
+}
 
-	rg.DELETE(membernewscontracts.SubscriptionsRoute+"/:roomID", func(c *gin.Context) {
-		roomID := strings.TrimSpace(c.Param("roomID"))
+func memberNewsUnsubscribeHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roomID := trimmedRoomIDParam(c)
 		if roomID == "" {
 			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
 			return
@@ -98,35 +102,66 @@ func registerMemberNewsInternalRoutes(router *gin.Engine, apiKey string, svc *me
 		}
 
 		c.JSON(http.StatusOK, gin.H{"status": "unsubscribed"})
-	})
+	}
+}
 
-	rg.POST(membernewscontracts.DigestRoute, func(c *gin.Context) {
-		var req memberNewsDigestRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
-			return
-		}
-
-		req.RoomID = strings.TrimSpace(req.RoomID)
-		if req.RoomID == "" {
-			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+func memberNewsDigestHandler(svc *membernewssvc.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		req, ok := bindMemberNewsDigestRequest(c)
+		if !ok {
 			return
 		}
 
 		period := membernewscontracts.NormalizePeriod(membernewscontracts.Period(req.Period))
-
 		digest, err := svc.GenerateRoomDigest(c.Request.Context(), req.RoomID, membernewssvc.Period(period))
 		if err != nil {
-			if errors.Is(err, membernewssvc.ErrNoSubscribedMembers) {
-				sharedserver.RespondError(c, http.StatusNotFound, "no_subscribed_members", nil)
-				return
-			}
-			sharedserver.RespondError(c, http.StatusInternalServerError, "digest_generation_failed", nil)
+			respondMemberNewsDigestError(c, err)
 			return
 		}
 
 		c.JSON(http.StatusOK, convertMemberNewsDigest(digest))
-	})
+	}
+}
+
+func trimmedRoomIDParam(c *gin.Context) string {
+	return strings.TrimSpace(c.Param("roomID"))
+}
+
+func bindMemberNewsSubscribeRequest(c *gin.Context) (subscription.SubscribeRequest, bool) {
+	var req subscription.SubscribeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
+		return subscription.SubscribeRequest{}, false
+	}
+	req.RoomID = strings.TrimSpace(req.RoomID)
+	req.RoomName = strings.TrimSpace(req.RoomName)
+	if req.RoomID == "" {
+		sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+		return subscription.SubscribeRequest{}, false
+	}
+	return req, true
+}
+
+func bindMemberNewsDigestRequest(c *gin.Context) (memberNewsDigestRequest, bool) {
+	var req memberNewsDigestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
+		return memberNewsDigestRequest{}, false
+	}
+	req.RoomID = strings.TrimSpace(req.RoomID)
+	if req.RoomID == "" {
+		sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+		return memberNewsDigestRequest{}, false
+	}
+	return req, true
+}
+
+func respondMemberNewsDigestError(c *gin.Context, err error) {
+	if errors.Is(err, membernewssvc.ErrNoSubscribedMembers) {
+		sharedserver.RespondError(c, http.StatusNotFound, "no_subscribed_members", nil)
+		return
+	}
+	sharedserver.RespondError(c, http.StatusInternalServerError, "digest_generation_failed", nil)
 }
 
 func convertMemberNewsDigest(digest *membernewssvc.Digest) *membernewscontracts.Digest {

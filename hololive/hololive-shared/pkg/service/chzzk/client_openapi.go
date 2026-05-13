@@ -44,6 +44,10 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 		return nil, err
 	}
 
+	return getOpenAPIContent[LivesResponse](ctx, c, chzzkGetLivesOp, c.openAPILivesURL(size, next))
+}
+
+func (c *Client) openAPILivesURL(size int, next string) string {
 	params := url.Values{}
 
 	if size > 0 && size <= 20 {
@@ -60,27 +64,7 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 		reqURL += "?" + params.Encode()
 	}
 
-	req, err := c.newOpenAPIRequest(ctx, "GET", reqURL)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	var apiResp OpenAPIResponse[LivesResponse]
-	if err := c.executeRequest(chzzkGetLivesOp, req, "read response body", func(body []byte) error {
-		if err := json.Unmarshal(body, &apiResp); err != nil {
-			return fmt.Errorf("unmarshal response: %w", err)
-		}
-
-		if apiResp.Code != http.StatusOK {
-			return fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
-		}
-
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	return &apiResp.Content, nil
+	return reqURL
 }
 
 func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*ChannelsResponse, error) {
@@ -100,32 +84,42 @@ func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*Channel
 		return nil, err
 	}
 
+	return getOpenAPIContent[ChannelsResponse](ctx, c, chzzkGetChannelsOp, c.openAPIChannelsURL(channelIDs))
+}
+
+func (c *Client) openAPIChannelsURL(channelIDs []string) string {
 	params := url.Values{}
 	params.Set("channelIds", strings.Join(channelIDs, ","))
 
-	reqURL := c.openAPIBaseURL + "/open/v1/channels?" + params.Encode()
+	return c.openAPIBaseURL + "/open/v1/channels?" + params.Encode()
+}
 
+func getOpenAPIContent[T any](ctx context.Context, c *Client, op, reqURL string) (*T, error) {
 	req, err := c.newOpenAPIRequest(ctx, "GET", reqURL)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	var apiResp OpenAPIResponse[ChannelsResponse]
-	if err := c.executeRequest(chzzkGetChannelsOp, req, "read response body", func(body []byte) error {
-		if err := json.Unmarshal(body, &apiResp); err != nil {
-			return fmt.Errorf("unmarshal response: %w", err)
-		}
-
-		if apiResp.Code != http.StatusOK {
-			return fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
-		}
-
-		return nil
+	var apiResp OpenAPIResponse[T]
+	if err := c.executeRequest(op, req, "read response body", func(body []byte) error {
+		return decodeOpenAPIResponse(body, &apiResp)
 	}); err != nil {
 		return nil, err
 	}
 
 	return &apiResp.Content, nil
+}
+
+func decodeOpenAPIResponse[T any](body []byte, apiResp *OpenAPIResponse[T]) error {
+	if err := json.Unmarshal(body, apiResp); err != nil {
+		return fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	if apiResp.Code != http.StatusOK {
+		return fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
+	}
+
+	return nil
 }
 
 func (c *Client) GetLivesByChannelIDs(ctx context.Context, channelIDs []string) ([]LiveData, error) {
@@ -176,23 +170,16 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 
 	for _, channelID := range channelIDs {
 		g.Go(func() error {
-			status, err := c.GetLiveStatus(ctx, channelID)
+			live, ok, err := c.liveDataFromStatus(ctx, channelID)
 			if err != nil {
-				return fmt.Errorf("get live status for %s: %w", channelID, err)
+				return err
 			}
 
-			if status == nil || !strings.EqualFold(status.Status, "OPEN") {
-				return nil
+			if ok {
+				mu.Lock()
+				liveMap[channelID] = live
+				mu.Unlock()
 			}
-
-			mu.Lock()
-			liveMap[channelID] = LiveData{
-				ChannelID:           channelID,
-				LiveTitle:           status.LiveTitle,
-				ConcurrentUserCount: status.ConcurrentUserCount,
-				LiveCategoryValue:   status.LiveCategoryValue,
-			}
-			mu.Unlock()
 
 			return nil
 		})
@@ -202,26 +189,29 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 		return nil, fmt.Errorf("get lives by status checks: %w", err)
 	}
 
-	result := make([]LiveData, 0, len(liveMap))
+	return orderedLives(channelIDs, liveMap), nil
+}
 
-	for _, channelID := range channelIDs {
-		live, ok := liveMap[channelID]
-		if !ok {
-			continue
-		}
-
-		result = append(result, live)
+func (c *Client) liveDataFromStatus(ctx context.Context, channelID string) (LiveData, bool, error) {
+	status, err := c.GetLiveStatus(ctx, channelID)
+	if err != nil {
+		return LiveData{}, false, fmt.Errorf("get live status for %s: %w", channelID, err)
 	}
 
-	return result, nil
+	if status == nil || !strings.EqualFold(status.Status, "OPEN") {
+		return LiveData{}, false, nil
+	}
+
+	return LiveData{
+		ChannelID:           channelID,
+		LiveTitle:           status.LiveTitle,
+		ConcurrentUserCount: status.ConcurrentUserCount,
+		LiveCategoryValue:   status.LiveCategoryValue,
+	}, true, nil
 }
 
 func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([]LiveData, error) {
-	targets := make(map[string]struct{}, len(channelIDs))
-	for _, channelID := range channelIDs {
-		targets[channelID] = struct{}{}
-	}
-
+	targets := channelIDSet(channelIDs)
 	found := make(map[string]LiveData, len(targets))
 	next := ""
 
@@ -231,17 +221,7 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 			return nil, fmt.Errorf("get lives page: %w", err)
 		}
 
-		for i := range resp.Data {
-			if _, ok := targets[resp.Data[i].ChannelID]; !ok {
-				continue
-			}
-
-			if _, exists := found[resp.Data[i].ChannelID]; exists {
-				continue
-			}
-
-			found[resp.Data[i].ChannelID] = resp.Data[i]
-		}
+		addTargetLives(found, targets, resp.Data)
 
 		if len(found) == len(targets) || resp.Page.Next == "" {
 			break
@@ -250,17 +230,43 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 		next = resp.Page.Next
 	}
 
-	result := make([]LiveData, 0, len(found))
+	return orderedLives(channelIDs, found), nil
+}
+
+func channelIDSet(channelIDs []string) map[string]struct{} {
+	targets := make(map[string]struct{}, len(channelIDs))
 	for _, channelID := range channelIDs {
-		live, ok := found[channelID]
+		targets[channelID] = struct{}{}
+	}
+
+	return targets
+}
+
+func addTargetLives(found map[string]LiveData, targets map[string]struct{}, lives []LiveData) {
+	for i := range lives {
+		if _, ok := targets[lives[i].ChannelID]; !ok {
+			continue
+		}
+
+		if _, exists := found[lives[i].ChannelID]; exists {
+			continue
+		}
+
+		found[lives[i].ChannelID] = lives[i]
+	}
+}
+
+func orderedLives(channelIDs []string, liveMap map[string]LiveData) []LiveData {
+	result := make([]LiveData, 0, len(liveMap))
+	for _, channelID := range channelIDs {
+		live, ok := liveMap[channelID]
 		if !ok {
 			continue
 		}
 
 		result = append(result, live)
 	}
-
-	return result, nil
+	return result
 }
 
 func (c *Client) newOpenAPIRequest(ctx context.Context, method, reqURL string) (*http.Request, error) {

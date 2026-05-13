@@ -47,18 +47,27 @@ func (r *GormRepository) EnrichObservationPostComparisonInputs(
 	enriched := make([]ObservationPostComparisonInput, 0, len(inputs))
 	for i := range inputs {
 		normalized := normalizeObservationPostComparisonComparableInput(inputs[i])
-		if metadata, ok := metadataByKey[observationComparisonMetadataKey(normalized.Kind, normalized.CanonicalPostID, normalized.ContentID)]; ok {
-			if strings.TrimSpace(normalized.TitleHint) == "" {
-				normalized.TitleHint = metadata.titleHint
-			}
-			if normalized.ActualPublishedAt == nil && metadata.actualPublishedAt != nil {
-				normalized.ActualPublishedAt = cloneObservationComparisonTime(metadata.actualPublishedAt)
-			}
-		}
-		enriched = append(enriched, normalized)
+		enriched = append(enriched, enrichObservationPostComparisonInput(normalized, metadataByKey))
 	}
 
 	return enriched, nil
+}
+
+func enrichObservationPostComparisonInput(
+	input ObservationPostComparisonInput,
+	metadataByKey map[string]observationComparisonMetadata,
+) ObservationPostComparisonInput {
+	metadata, ok := metadataByKey[observationComparisonMetadataKey(input.Kind, input.CanonicalPostID, input.ContentID)]
+	if !ok {
+		return input
+	}
+	if strings.TrimSpace(input.TitleHint) == "" {
+		input.TitleHint = metadata.titleHint
+	}
+	if input.ActualPublishedAt == nil && metadata.actualPublishedAt != nil {
+		input.ActualPublishedAt = cloneObservationComparisonTime(metadata.actualPublishedAt)
+	}
+	return input
 }
 
 func (r *GormRepository) loadObservationComparisonMetadata(
@@ -95,23 +104,43 @@ func collectObservationComparisonCanonicalIDs(inputs []ObservationPostComparison
 			continue
 		}
 
-		switch inputs[i].Kind {
-		case domain.OutboxKindCommunityPost:
-			if _, ok := communitySeen[canonicalID]; ok {
-				continue
-			}
-			communitySeen[canonicalID] = struct{}{}
-			communityCanonicalIDs = append(communityCanonicalIDs, canonicalID)
-		case domain.OutboxKindNewShort:
-			if _, ok := shortSeen[canonicalID]; ok {
-				continue
-			}
-			shortSeen[canonicalID] = struct{}{}
-			shortCanonicalIDs = append(shortCanonicalIDs, canonicalID)
-		}
+		communityCanonicalIDs, shortCanonicalIDs = appendObservationComparisonCanonicalID(
+			inputs[i].Kind,
+			canonicalID,
+			communitySeen,
+			shortSeen,
+			communityCanonicalIDs,
+			shortCanonicalIDs,
+		)
 	}
 
 	return communityCanonicalIDs, shortCanonicalIDs
+}
+
+func appendObservationComparisonCanonicalID(
+	kind domain.OutboxKind,
+	canonicalID string,
+	communitySeen map[string]struct{},
+	shortSeen map[string]struct{},
+	communityCanonicalIDs []string,
+	shortCanonicalIDs []string,
+) ([]string, []string) {
+	switch kind {
+	case domain.OutboxKindCommunityPost:
+		return appendUniqueObservationComparisonID(communitySeen, communityCanonicalIDs, canonicalID), shortCanonicalIDs
+	case domain.OutboxKindNewShort:
+		return communityCanonicalIDs, appendUniqueObservationComparisonID(shortSeen, shortCanonicalIDs, canonicalID)
+	default:
+		return communityCanonicalIDs, shortCanonicalIDs
+	}
+}
+
+func appendUniqueObservationComparisonID(seen map[string]struct{}, ids []string, canonicalID string) []string {
+	if _, ok := seen[canonicalID]; ok {
+		return ids
+	}
+	seen[canonicalID] = struct{}{}
+	return append(ids, canonicalID)
 }
 
 func (r *GormRepository) loadObservationCommunityPostMetadata(

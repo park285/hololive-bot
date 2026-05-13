@@ -98,18 +98,22 @@ func (b *BackoffState) RecordTransientErrorWithSuggestedCooldown(suggested time.
 }
 
 func hardCooldownForErrorCount(errors int) time.Duration {
-	switch {
-	case errors >= 5:
-		return 6 * time.Hour
-	case errors >= 4:
-		return 4 * time.Hour
-	case errors >= 3:
-		return 2 * time.Hour
-	case errors >= 2:
-		return 1 * time.Hour
-	default:
-		return 30 * time.Minute
+	thresholds := []struct {
+		errors   int
+		cooldown time.Duration
+	}{
+		{errors: 5, cooldown: 6 * time.Hour},
+		{errors: 4, cooldown: 4 * time.Hour},
+		{errors: 3, cooldown: 2 * time.Hour},
+		{errors: 2, cooldown: 1 * time.Hour},
 	}
+
+	for _, threshold := range thresholds {
+		if errors >= threshold.errors {
+			return threshold.cooldown
+		}
+	}
+	return 30 * time.Minute
 }
 
 func transientCooldownForErrorCount(errors int) time.Duration {

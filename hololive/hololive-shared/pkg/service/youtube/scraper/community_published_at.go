@@ -65,46 +65,70 @@ func extractCommunityPublishedAtFromHTML(html string) (*time.Time, error) {
 }
 
 func collectPublishedAtCandidates(html string) []string {
-	candidates := make([]string, 0, 8)
-	seen := make(map[string]struct{}, 8)
-	addCandidate := func(value string) {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return
-		}
-		if _, exists := seen[value]; exists {
-			return
-		}
-		seen[value] = struct{}{}
-		candidates = append(candidates, value)
-	}
+	collector := newPublishedAtCandidateCollector()
+	collector.collectMetaCandidates(html)
+	collector.collectJSONCandidates(html)
 
+	return collector.candidates
+}
+
+type publishedAtCandidateCollector struct {
+	candidates []string
+	seen       map[string]struct{}
+}
+
+func newPublishedAtCandidateCollector() *publishedAtCandidateCollector {
+	return &publishedAtCandidateCollector{
+		candidates: make([]string, 0, 8),
+		seen:       make(map[string]struct{}, 8),
+	}
+}
+
+func (collector *publishedAtCandidateCollector) add(value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	if _, exists := collector.seen[value]; exists {
+		return
+	}
+	collector.seen[value] = struct{}{}
+	collector.candidates = append(collector.candidates, value)
+}
+
+func (collector *publishedAtCandidateCollector) collectMetaCandidates(html string) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err == nil {
-		doc.Find("meta").Each(func(_ int, selection *goquery.Selection) {
-			content := strings.TrimSpace(selection.AttrOr("content", ""))
-			if content == "" {
-				return
-			}
-
-			for _, attr := range []string{"itemprop", "property", "name"} {
-				switch strings.ToLower(strings.TrimSpace(selection.AttrOr(attr, ""))) {
-				case "datepublished", "datecreated", "uploaddate", "publishdate":
-					addCandidate(content)
-				}
-			}
-		})
+	if err != nil {
+		return
 	}
 
+	doc.Find("meta").Each(func(_ int, selection *goquery.Selection) {
+		collector.collectMetaCandidate(selection)
+	})
+}
+
+func (collector *publishedAtCandidateCollector) collectMetaCandidate(selection *goquery.Selection) {
+	content := strings.TrimSpace(selection.AttrOr("content", ""))
+	if content == "" {
+		return
+	}
+
+	for _, attr := range []string{"itemprop", "property", "name"} {
+		switch strings.ToLower(strings.TrimSpace(selection.AttrOr(attr, ""))) {
+		case "datepublished", "datecreated", "uploaddate", "publishdate":
+			collector.add(content)
+		}
+	}
+}
+
+func (collector *publishedAtCandidateCollector) collectJSONCandidates(html string) {
 	for _, pattern := range communityPublishedAtJSONPatterns {
 		matches := pattern.FindAllStringSubmatch(html, -1)
 		for _, match := range matches {
 			if len(match) < 2 {
 				continue
 			}
-			addCandidate(match[1])
+			collector.add(match[1])
 		}
 	}
-
-	return candidates
 }

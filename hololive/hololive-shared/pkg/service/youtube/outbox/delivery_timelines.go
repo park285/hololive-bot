@@ -172,23 +172,34 @@ func normalizePostTrackingIdentities(identities []PostTrackingIdentity) ([]PostT
 	normalized := make([]PostTrackingIdentity, 0, len(identities))
 	seen := make(map[string]struct{}, len(identities))
 	for i := range identities {
-		contentID := strings.TrimSpace(identities[i].ContentID)
-		if contentID == "" {
+		identity, ok, err := normalizePostTrackingIdentity(identities[i])
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			continue
 		}
-		switch identities[i].Kind {
-		case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
-		default:
-			return nil, fmt.Errorf("unsupported tracking identity kind: %s", identities[i].Kind)
-		}
-		key := postTrackingIdentityKey(identities[i].Kind, contentID)
+		key := postTrackingIdentityKey(identity.Kind, identity.ContentID)
 		if _, ok := seen[key]; ok {
 			continue
 		}
 		seen[key] = struct{}{}
-		normalized = append(normalized, PostTrackingIdentity{Kind: identities[i].Kind, ContentID: contentID})
+		normalized = append(normalized, identity)
 	}
 	return normalized, nil
+}
+
+func normalizePostTrackingIdentity(identity PostTrackingIdentity) (PostTrackingIdentity, bool, error) {
+	contentID := strings.TrimSpace(identity.ContentID)
+	if contentID == "" {
+		return PostTrackingIdentity{}, false, nil
+	}
+	switch identity.Kind {
+	case domain.OutboxKindCommunityPost, domain.OutboxKindNewShort:
+		return PostTrackingIdentity{Kind: identity.Kind, ContentID: contentID}, true, nil
+	default:
+		return PostTrackingIdentity{}, false, fmt.Errorf("unsupported tracking identity kind: %s", identity.Kind)
+	}
 }
 
 func postTrackingIdentityKey(kind domain.OutboxKind, contentID string) string {

@@ -147,14 +147,8 @@ func (a *ServiceAdapter) FindMembersByAlias(alias string) []*domain.Member {
 	members := a.searchableMembers()
 	matched := make([]*domain.Member, 0, len(members))
 	for _, member := range members {
-		if member == nil {
-			continue
-		}
-		for _, candidate := range member.GetAllAliases() {
-			if strings.EqualFold(strings.TrimSpace(candidate), needle) {
-				matched = append(matched, member)
-				break
-			}
+		if memberHasAlias(member, needle) {
+			matched = append(matched, member)
 		}
 	}
 	return cloneMemberSlice(matched)
@@ -185,13 +179,8 @@ func (a *ServiceAdapter) membersFromCacheSnapshot() ([]*domain.Member, bool) {
 	members := make([]*domain.Member, 0, len(channelIDs))
 	seen := make(map[*domain.Member]struct{}, len(channelIDs))
 	for _, channelID := range channelIDs {
-		value, ok := a.cache.byChannelID.Load(channelID)
+		member, ok := a.memberFromChannelSnapshot(channelID)
 		if !ok {
-			return nil, false
-		}
-
-		member, ok := value.(*domain.Member)
-		if !ok || member == nil {
 			return nil, false
 		}
 		if _, exists := seen[member]; exists {
@@ -202,19 +191,49 @@ func (a *ServiceAdapter) membersFromCacheSnapshot() ([]*domain.Member, bool) {
 	}
 
 	a.cache.byName.Range(func(_, value any) bool {
-		member, ok := value.(*domain.Member)
-		if !ok || member == nil || member.ChannelID != "" {
-			return true
-		}
-		if _, exists := seen[member]; exists {
-			return true
-		}
-		members = append(members, member)
-		seen[member] = struct{}{}
+		members = appendNameOnlySnapshotMember(members, seen, value)
 		return true
 	})
 
 	return cloneMemberSlice(members), true
+}
+
+func memberHasAlias(member *domain.Member, needle string) bool {
+	if member == nil {
+		return false
+	}
+	for _, candidate := range member.GetAllAliases() {
+		if strings.EqualFold(strings.TrimSpace(candidate), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *ServiceAdapter) memberFromChannelSnapshot(channelID string) (*domain.Member, bool) {
+	value, ok := a.cache.byChannelID.Load(channelID)
+	if !ok {
+		return nil, false
+	}
+
+	member, ok := value.(*domain.Member)
+	if !ok || member == nil {
+		return nil, false
+	}
+	return member, true
+}
+
+func appendNameOnlySnapshotMember(members []*domain.Member, seen map[*domain.Member]struct{}, value any) []*domain.Member {
+	member, ok := value.(*domain.Member)
+	if !ok || member == nil || member.ChannelID != "" {
+		return members
+	}
+	if _, exists := seen[member]; exists {
+		return members
+	}
+	members = append(members, member)
+	seen[member] = struct{}{}
+	return members
 }
 
 func equalFoldAny(target string, values ...string) bool {

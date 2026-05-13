@@ -86,23 +86,31 @@ func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alar
 	defer cancel()
 
 	if writer, ok := as.alarmWriter.(alarmTypesUpdater); ok {
-		if err := writer.UpdateTypes(persistCtx, alarm.RoomID, alarm.ChannelID, alarm.AlarmTypes); err != nil {
-			return fmt.Errorf("update alarm types: %w", err)
-		}
-
-		return nil
+		return updateAlarmTypesWithWriter(persistCtx, writer, alarm)
 	}
 
 	if writer, ok := as.alarmWriter.(alarmUpsertWriter); ok {
-		if err := writer.Upsert(persistCtx, alarm); err != nil {
-			return fmt.Errorf("upsert alarm type update: %w", err)
-		}
-
-		return nil
+		return upsertAlarmTypeUpdate(persistCtx, writer, alarm)
 	}
 
 	if err := as.alarmWriter.Add(persistCtx, alarm); err != nil {
 		return fmt.Errorf("persist alarm type update: %w", err)
+	}
+
+	return nil
+}
+
+func updateAlarmTypesWithWriter(ctx context.Context, writer alarmTypesUpdater, alarm *domain.Alarm) error {
+	if err := writer.UpdateTypes(ctx, alarm.RoomID, alarm.ChannelID, alarm.AlarmTypes); err != nil {
+		return fmt.Errorf("update alarm types: %w", err)
+	}
+
+	return nil
+}
+
+func upsertAlarmTypeUpdate(ctx context.Context, writer alarmUpsertWriter, alarm *domain.Alarm) error {
+	if err := writer.Upsert(ctx, alarm); err != nil {
+		return fmt.Errorf("upsert alarm type update: %w", err)
 	}
 
 	return nil

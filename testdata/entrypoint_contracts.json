@@ -30,12 +30,6 @@
     ]
   },
   {
-    "path": "hololive/hololive-kakao-bot-go/cmd/tools/fetch_profiles/main.go",
-    "must_contain": [
-      "app.BuildFetchProfilesRuntime("
-    ]
-  },
-  {
     "path": "hololive/hololive-kakao-bot-go/cmd/tools/verifyhash/main.go",
     "must_contain": [
       "bcrypt.CompareHashAndPassword("

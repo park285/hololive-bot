@@ -94,20 +94,25 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 
 	var result string
 
-	err := retry.WithRetry(ctx, retry.RetryOptions{
-		MaxAttempts: resolvedPolicy.MaxAttempts,
+	err := retry.WithRetry(ctx, c.fetchPageRetryOptions(pageURL, resolvedPolicy), func(ctx context.Context) error {
+		var err error
+		result, err = c.fetchPageOnce(ctx, pageURL)
+		return err
+	})
+
+	if err != nil {
+		c.recordFetchPageTransientError(ctx, err)
+		return "", fmt.Errorf("fetchPage failed after retries: %w", err)
+	}
+	return result, nil
+}
+
+func (c *Client) fetchPageRetryOptions(pageURL string, policy FetchPolicy) retry.RetryOptions {
+	return retry.RetryOptions{
+		MaxAttempts: policy.MaxAttempts,
 		BaseDelay:   2 * time.Second,
 		Jitter:      1500 * time.Millisecond,
-		ShouldRetry: func(err error) bool {
-			if errors.Is(err, ErrRateLimited) || errors.Is(err, ErrForbidden) {
-				return false
-			}
-			var statusErr *httpStatusError
-			if errors.As(err, &statusErr) {
-				return isRetryableStatusCode(statusErr.code)
-			}
-			return isRetryableTransportError(err)
-		},
+		ShouldRetry: shouldRetryFetchPage,
 		OnRetry: func(attempt int, err error, delay time.Duration) {
 			if isRetryableTransportError(err) {
 				c.closeIdleConnections()
@@ -118,19 +123,25 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 				"delay", delay.Round(time.Millisecond),
 				"error", err)
 		},
-	}, func(ctx context.Context) error {
-		var err error
-		result, err = c.fetchPageOnce(ctx, pageURL)
-		return err
-	})
-
-	if err != nil {
-		// context 취소/타임아웃 시 transient 에러 기록 스킵 (셧다운 시 불필요한 cooldown 방지)
-		// retry 모두 소진된 경우에만 transient 에러 기록 (내부 retry 교차 오염 방지)
-		if ctx.Err() == nil && (isRetryableStatusError(err) || isRetryableTransportError(err)) {
-			c.backoffState.RecordTransientErrorWithSuggestedCooldown(extractHTTPRetryAfter(err))
-		}
-		return "", fmt.Errorf("fetchPage failed after retries: %w", err)
 	}
-	return result, nil
+}
+
+func shouldRetryFetchPage(err error) bool {
+	if errors.Is(err, ErrRateLimited) || errors.Is(err, ErrForbidden) {
+		return false
+	}
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) {
+		return isRetryableStatusCode(statusErr.code)
+	}
+	return isRetryableTransportError(err)
+}
+
+func (c *Client) recordFetchPageTransientError(ctx context.Context, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	if isRetryableStatusError(err) || isRetryableTransportError(err) {
+		c.backoffState.RecordTransientErrorWithSuggestedCooldown(extractHTTPRetryAfter(err))
+	}
 }

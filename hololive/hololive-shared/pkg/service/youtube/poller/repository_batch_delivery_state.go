@@ -40,7 +40,31 @@ type failedNotificationOutboxRow struct {
 	ContentID string            `gorm:"column:content_id"`
 }
 
+type completedNotificationIdentityCandidate struct {
+	notification *domain.YouTubeNotificationOutbox
+	contentID    string
+	identityKey  string
+}
+
 func loadFailedNotificationOutboxRows(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) ([]failedNotificationOutboxRow, error) {
+	clauses, args := failedNotificationOutboxQueryArgs(notifications)
+	if len(clauses) == 0 {
+		return nil, nil
+	}
+
+	var rows []failedNotificationOutboxRow
+	if err := tx.WithContext(ctx).
+		Model(&domain.YouTubeNotificationOutbox{}).
+		Select("id, kind, content_id").
+		Where("status = ?", domain.OutboxStatusFailed).
+		Where(strings.Join(clauses, " OR "), args...).
+		Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("query failed outbox rows: %w", err)
+	}
+	return rows, nil
+}
+
+func failedNotificationOutboxQueryArgs(notifications []*domain.YouTubeNotificationOutbox) ([]string, []any) {
 	clauses := make([]string, 0, len(notifications))
 	args := make([]any, 0, len(notifications)*2)
 	seen := make(map[string]struct{}, len(notifications))
@@ -61,20 +85,7 @@ func loadFailedNotificationOutboxRows(ctx context.Context, tx *gorm.DB, notifica
 		clauses = append(clauses, "(kind = ? AND content_id = ?)")
 		args = append(args, notification.Kind, contentID)
 	}
-	if len(clauses) == 0 {
-		return nil, nil
-	}
-
-	var rows []failedNotificationOutboxRow
-	if err := tx.WithContext(ctx).
-		Model(&domain.YouTubeNotificationOutbox{}).
-		Select("id, kind, content_id").
-		Where("status = ?", domain.OutboxStatusFailed).
-		Where(strings.Join(clauses, " OR "), args...).
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("query failed outbox rows: %w", err)
-	}
-	return rows, nil
+	return clauses, args
 }
 
 func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) (map[string]time.Time, error) {
@@ -84,44 +95,85 @@ func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx *gorm.DB,
 	}
 
 	repo := trackingrepo.NewRepository(tx)
-	seen := make(map[string]struct{}, len(notifications))
-	for i := range notifications {
-		notification := notifications[i]
-		if notification == nil || !isCommunityShortsOutboxKind(notification.Kind) {
-			continue
-		}
-		contentID := strings.TrimSpace(notification.ContentID)
-		if contentID == "" {
-			continue
-		}
-		identityKey := notificationIdentityKey(notification.Kind, contentID)
-		if _, ok := seen[identityKey]; ok {
-			continue
-		}
-		seen[identityKey] = struct{}{}
-
-		trackingRow, err := repo.FindByIdentity(ctx, notification.Kind, contentID)
-		if err != nil {
-			return nil, fmt.Errorf("load notification tracking row: %w", err)
-		}
-		if trackingRow != nil && trackingRow.AlarmSentAt != nil && !trackingRow.AlarmSentAt.IsZero() {
-			completed[identityKey] = yttimestamp.Normalize(*trackingRow.AlarmSentAt)
-		}
-
-		postID := resolveNotificationReactivationPostID(notification.Kind, contentID, notification.Payload)
-		if postID == "" {
-			continue
-		}
-		stateRow, err := repo.FindAlarmStateByPostID(ctx, notification.Kind, postID)
-		if err != nil {
-			return nil, fmt.Errorf("load notification alarm state: %w", err)
-		}
-		if stateRow != nil && stateRow.AlarmSentAt != nil && !stateRow.AlarmSentAt.IsZero() {
-			completed[identityKey] = selectEarlierSentAt(completed[identityKey], yttimestamp.Normalize(*stateRow.AlarmSentAt))
+	candidates := collectCompletedNotificationIdentityCandidates(notifications)
+	for i := range candidates {
+		if err := recordCompletedNotificationSentAtByCandidate(ctx, repo, completed, candidates[i]); err != nil {
+			return nil, err
 		}
 	}
 
 	return completed, nil
+}
+
+func recordCompletedNotificationSentAtByCandidate(
+	ctx context.Context,
+	repo *trackingrepo.GormRepository,
+	completed map[string]time.Time,
+	candidate completedNotificationIdentityCandidate,
+) error {
+	trackingRow, err := repo.FindByIdentity(ctx, candidate.notification.Kind, candidate.contentID)
+	if err != nil {
+		return fmt.Errorf("load notification tracking row: %w", err)
+	}
+	recordCompletedNotificationTrackingSentAt(completed, candidate.identityKey, trackingRow)
+
+	postID := resolveNotificationReactivationPostID(candidate.notification.Kind, candidate.contentID, candidate.notification.Payload)
+	if postID == "" {
+		return nil
+	}
+	stateRow, err := repo.FindAlarmStateByPostID(ctx, candidate.notification.Kind, postID)
+	if err != nil {
+		return fmt.Errorf("load notification alarm state: %w", err)
+	}
+	recordCompletedNotificationAlarmStateSentAt(completed, candidate.identityKey, stateRow)
+	return nil
+}
+
+func collectCompletedNotificationIdentityCandidates(notifications []*domain.YouTubeNotificationOutbox) []completedNotificationIdentityCandidate {
+	candidates := make([]completedNotificationIdentityCandidate, 0, len(notifications))
+	seen := make(map[string]struct{}, len(notifications))
+	for i := range notifications {
+		notification := notifications[i]
+		candidate, ok := completedNotificationIdentityCandidateFor(notification)
+		if !ok {
+			continue
+		}
+		if _, ok := seen[candidate.identityKey]; ok {
+			continue
+		}
+		seen[candidate.identityKey] = struct{}{}
+		candidates = append(candidates, candidate)
+	}
+	return candidates
+}
+
+func completedNotificationIdentityCandidateFor(notification *domain.YouTubeNotificationOutbox) (completedNotificationIdentityCandidate, bool) {
+	if notification == nil || !isCommunityShortsOutboxKind(notification.Kind) {
+		return completedNotificationIdentityCandidate{}, false
+	}
+	contentID := strings.TrimSpace(notification.ContentID)
+	if contentID == "" {
+		return completedNotificationIdentityCandidate{}, false
+	}
+	return completedNotificationIdentityCandidate{
+		notification: notification,
+		contentID:    contentID,
+		identityKey:  notificationIdentityKey(notification.Kind, contentID),
+	}, true
+}
+
+func recordCompletedNotificationTrackingSentAt(completed map[string]time.Time, identityKey string, row *domain.YouTubeContentAlarmTracking) {
+	if row == nil || row.AlarmSentAt == nil || row.AlarmSentAt.IsZero() {
+		return
+	}
+	completed[identityKey] = yttimestamp.Normalize(*row.AlarmSentAt)
+}
+
+func recordCompletedNotificationAlarmStateSentAt(completed map[string]time.Time, identityKey string, row *domain.YouTubeCommunityShortsAlarmState) {
+	if row == nil || row.AlarmSentAt == nil || row.AlarmSentAt.IsZero() {
+		return
+	}
+	completed[identityKey] = selectEarlierSentAt(completed[identityKey], yttimestamp.Normalize(*row.AlarmSentAt))
 }
 
 func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) ([]failedNotificationOutboxRow, []failedNotificationOutboxRow) {
@@ -140,47 +192,65 @@ func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, c
 
 func finalizeCompletedFailedNotificationRows(ctx context.Context, tx *gorm.DB, rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
 	for i := range rows {
-		identityKey := notificationIdentityKey(rows[i].Kind, rows[i].ContentID)
-		sentAt, ok := completedSentAtByIdentity[identityKey]
-		if !ok || sentAt.IsZero() {
-			continue
-		}
-		sentAt = yttimestamp.Normalize(sentAt)
-
-		if err := tx.WithContext(ctx).
-			Model(&domain.YouTubeNotificationOutbox{}).
-			Where("id = ? AND status = ?", rows[i].ID, domain.OutboxStatusFailed).
-			Updates(map[string]any{
-				"status":    domain.OutboxStatusSent,
-				"locked_at": nil,
-				"sent_at": gorm.Expr(
-					"CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END",
-					sentAt,
-					sentAt,
-				),
-				"error": "",
-			}).Error; err != nil {
-			return fmt.Errorf("update completed outbox row %d: %w", rows[i].ID, err)
-		}
-
-		if err := tx.WithContext(ctx).
-			Model(&domain.YouTubeNotificationDelivery{}).
-			Where("outbox_id = ? AND status = ?", rows[i].ID, domain.OutboxStatusFailed).
-			Updates(map[string]any{
-				"status":    domain.OutboxStatusSent,
-				"locked_at": nil,
-				"sent_at": gorm.Expr(
-					"CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END",
-					sentAt,
-					sentAt,
-				),
-				"error": "",
-			}).Error; err != nil {
-			return fmt.Errorf("update completed delivery rows for outbox %d: %w", rows[i].ID, err)
+		if err := finalizeCompletedFailedNotificationRow(ctx, tx, rows[i], completedSentAtByIdentity); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func finalizeCompletedFailedNotificationRow(ctx context.Context, tx *gorm.DB, row failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) error {
+	sentAt, ok := completedSentAtForFailedNotification(row, completedSentAtByIdentity)
+	if !ok {
+		return nil
+	}
+	if err := updateCompletedFailedNotificationOutboxRow(ctx, tx, row.ID, sentAt); err != nil {
+		return err
+	}
+	return updateCompletedFailedNotificationDeliveryRows(ctx, tx, row.ID, sentAt)
+}
+
+func completedSentAtForFailedNotification(row failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) (time.Time, bool) {
+	identityKey := notificationIdentityKey(row.Kind, row.ContentID)
+	sentAt, ok := completedSentAtByIdentity[identityKey]
+	if !ok || sentAt.IsZero() {
+		return time.Time{}, false
+	}
+	return yttimestamp.Normalize(sentAt), true
+}
+
+func updateCompletedFailedNotificationOutboxRow(ctx context.Context, tx *gorm.DB, id int64, sentAt time.Time) error {
+	if err := tx.WithContext(ctx).
+		Model(&domain.YouTubeNotificationOutbox{}).
+		Where("id = ? AND status = ?", id, domain.OutboxStatusFailed).
+		Updates(completedFailedNotificationUpdates(sentAt)).Error; err != nil {
+		return fmt.Errorf("update completed outbox row %d: %w", id, err)
+	}
+	return nil
+}
+
+func updateCompletedFailedNotificationDeliveryRows(ctx context.Context, tx *gorm.DB, outboxID int64, sentAt time.Time) error {
+	if err := tx.WithContext(ctx).
+		Model(&domain.YouTubeNotificationDelivery{}).
+		Where("outbox_id = ? AND status = ?", outboxID, domain.OutboxStatusFailed).
+		Updates(completedFailedNotificationUpdates(sentAt)).Error; err != nil {
+		return fmt.Errorf("update completed delivery rows for outbox %d: %w", outboxID, err)
+	}
+	return nil
+}
+
+func completedFailedNotificationUpdates(sentAt time.Time) map[string]any {
+	return map[string]any{
+		"status":    domain.OutboxStatusSent,
+		"locked_at": nil,
+		"sent_at": gorm.Expr(
+			"CASE WHEN sent_at IS NULL OR sent_at > ? THEN ? ELSE sent_at END",
+			sentAt,
+			sentAt,
+		),
+		"error": "",
+	}
 }
 
 func filterCompletedNotifications(notifications []*domain.YouTubeNotificationOutbox, completedSentAtByIdentity map[string]time.Time) []*domain.YouTubeNotificationOutbox {
@@ -223,34 +293,37 @@ func collectFailedNotificationOutboxIDs(rows []failedNotificationOutboxRow) []in
 func resolveNotificationReactivationPostID(kind domain.OutboxKind, contentID, payload string) string {
 	switch kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
-		var parsed shortNotificationPublishedAtPayload
-		if err := json.Unmarshal([]byte(payload), &parsed); err == nil {
-			if postID := strings.TrimSpace(parsed.CanonicalPostID); postID != "" {
-				return postID
-			}
-			if postID := strings.TrimSpace(contentID); postID != "" {
-				return postID
-			}
-			if postID := strings.TrimSpace(parsed.VideoID); postID != "" {
-				return postID
-			}
-		}
+		return resolveShortNotificationReactivationPostID(contentID, payload)
 	case domain.OutboxKindCommunityPost:
-		var parsed communityNotificationPublishedAtPayload
-		if err := json.Unmarshal([]byte(payload), &parsed); err == nil {
-			if postID := strings.TrimSpace(parsed.CanonicalPostID); postID != "" {
-				return postID
-			}
-			if postID := strings.TrimSpace(contentID); postID != "" {
-				return postID
-			}
-			if postID := strings.TrimSpace(parsed.PostID); postID != "" {
-				return postID
-			}
-		}
+		return resolveCommunityNotificationReactivationPostID(contentID, payload)
 	}
 
 	return strings.TrimSpace(contentID)
+}
+
+func resolveShortNotificationReactivationPostID(contentID, payload string) string {
+	var parsed shortNotificationPublishedAtPayload
+	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+		return strings.TrimSpace(contentID)
+	}
+	return firstNonBlankNotificationPostID(parsed.CanonicalPostID, contentID, parsed.VideoID)
+}
+
+func resolveCommunityNotificationReactivationPostID(contentID, payload string) string {
+	var parsed communityNotificationPublishedAtPayload
+	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+		return strings.TrimSpace(contentID)
+	}
+	return firstNonBlankNotificationPostID(parsed.CanonicalPostID, contentID, parsed.PostID)
+}
+
+func firstNonBlankNotificationPostID(values ...string) string {
+	for i := range values {
+		if postID := strings.TrimSpace(values[i]); postID != "" {
+			return postID
+		}
+	}
+	return ""
 }
 
 func notificationIdentityKey(kind domain.OutboxKind, contentID string) string {

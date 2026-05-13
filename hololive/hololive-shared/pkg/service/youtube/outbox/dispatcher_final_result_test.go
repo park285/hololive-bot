@@ -443,7 +443,7 @@ func findAllLogEntriesByMessage(t *testing.T, logBuffer *bytes.Buffer, message s
 	t.Helper()
 
 	entries := make([]map[string]any, 0)
-	for _, line := range bytes.Split(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}

@@ -12,6 +12,15 @@ import (
 
 var ErrNoJSONFound = errors.New("no valid JSON found in response")
 
+const (
+	jsonObjectOpen  byte = 123
+	jsonObjectClose byte = 125
+	jsonArrayOpen   byte = 91
+	jsonArrayClose  byte = 93
+	jsonQuote       byte = 34
+	jsonEscape      byte = 92
+)
+
 // 코드펜스 정규식
 var fenceRe = regexp.MustCompile("(?s)```(?:json)?\\s*([\\s\\S]*?)```")
 
@@ -50,7 +59,7 @@ func ExtractToMap(text string) (map[string]any, error) {
 func extractFirstJSON(text string) ([]byte, error) {
 	b := []byte(text)
 	for i := range b {
-		if b[i] != '{' && b[i] != '[' {
+		if b[i] != jsonObjectOpen && b[i] != jsonArrayOpen {
 			continue
 		}
 		end := findMatchingEnd(b, i)
@@ -67,48 +76,66 @@ func extractFirstJSON(text string) ([]byte, error) {
 
 // findMatchingEnd: 문자열/이스케이프를 인식하여 매칭되는 닫는 괄호 위치를 반환합니다.
 func findMatchingEnd(b []byte, start int) int {
-	open := b[start]
-	var closeBracket byte
-	if open == '{' {
-		closeBracket = '}'
-	} else {
-		closeBracket = ']'
-	}
-
-	depth := 0
-	inString := false
-	escape := false
-
+	matcher := newJSONBracketMatcher(b[start])
 	for i := start; i < len(b); i++ {
-		c := b[i]
-
-		if inString {
-			if escape {
-				escape = false
-				continue
-			}
-			if c == '\\' {
-				escape = true
-				continue
-			}
-			if c == '"' {
-				inString = false
-			}
-			continue
-		}
-
-		// 문자열 밖
-		switch c {
-		case '"':
-			inString = true
-		case open:
-			depth++
-		case closeBracket:
-			depth--
-			if depth == 0 {
-				return i
-			}
+		if matcher.consume(b[i]) {
+			return i
 		}
 	}
 	return -1
+}
+
+type jsonBracketMatcher struct {
+	open     byte
+	close    byte
+	depth    int
+	inString bool
+	escape   bool
+}
+
+func newJSONBracketMatcher(open byte) jsonBracketMatcher {
+	closeBracket := jsonArrayClose
+	if open == jsonObjectOpen {
+		closeBracket = jsonObjectClose
+	}
+	return jsonBracketMatcher{open: open, close: closeBracket}
+}
+
+func (m *jsonBracketMatcher) consume(c byte) bool {
+	if m.inString {
+		m.consumeStringByte(c)
+		return false
+	}
+	return m.consumeStructuralByte(c)
+}
+
+func (m *jsonBracketMatcher) consumeStringByte(c byte) {
+	if m.escape {
+		m.escape = false
+		return
+	}
+	if c == jsonEscape {
+		m.escape = true
+		return
+	}
+	if c == jsonQuote {
+		m.inString = false
+	}
+}
+
+func (m *jsonBracketMatcher) consumeStructuralByte(c byte) bool {
+	if c == jsonQuote {
+		m.inString = true
+		return false
+	}
+	if c == m.open {
+		m.depth++
+		return false
+	}
+	if c != m.close {
+		return false
+	}
+
+	m.depth--
+	return m.depth == 0
 }

@@ -81,7 +81,6 @@ func TestFormatKoreanNumber(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if got := FormatKoreanNumber(tc.in); got != tc.want {
@@ -105,7 +104,6 @@ func TestNormalizeSuffix(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if got := NormalizeSuffix(tc.in); got != tc.want {

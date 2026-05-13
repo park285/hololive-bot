@@ -124,19 +124,31 @@ func (r *Runtime) run(ctx context.Context, cfg Config, logger *slog.Logger, stop
 		)
 
 		timer := time.NewTimer(time.Until(nextRun))
-
-		select {
-		case <-ctx.Done():
-			stopTimer(timer)
-			logger.Info(cfg.ContextStopLog)
-			return StopReasonContextCancelled
-		case <-stopCh:
-			stopTimer(timer)
-			logger.Info(cfg.StopLog)
-			return StopReasonManual
-		case <-timer.C:
-			cfg.OnTick(ctx)
+		if reason, stopped := waitRuntimeTick(ctx, cfg, logger, stopCh, timer); stopped {
+			return reason
 		}
+		cfg.OnTick(ctx)
+	}
+}
+
+func waitRuntimeTick(
+	ctx context.Context,
+	cfg Config,
+	logger *slog.Logger,
+	stopCh <-chan struct{},
+	timer *time.Timer,
+) (StopReason, bool) {
+	select {
+	case <-ctx.Done():
+		stopTimer(timer)
+		logger.Info(cfg.ContextStopLog)
+		return StopReasonContextCancelled, true
+	case <-stopCh:
+		stopTimer(timer)
+		logger.Info(cfg.StopLog)
+		return StopReasonManual, true
+	case <-timer.C:
+		return 0, false
 	}
 }
 

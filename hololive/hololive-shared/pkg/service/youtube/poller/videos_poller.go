@@ -77,15 +77,29 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 		return nil
 	}
 
+	watermark, isInitialized := p.videoWatermark(ctx, channelID)
+	newVideos := videosAfterWatermark(videos, watermark.LastContentID, isInitialized)
+	dbVideos, notifications := buildVideoPollResults(channelID, newVideos, isInitialized)
+
+	if err := p.persistVideoPollResults(ctx, channelID, videos[0].VideoID, dbVideos, notifications); err != nil {
+		return fmt.Errorf("persist video batch: %w", err)
+	}
+
+	return nil
+}
+
+func (p *VideosPoller) videoWatermark(ctx context.Context, channelID string) (domain.YouTubeContentWatermark, bool) {
 	var watermark domain.YouTubeContentWatermark
-	err = p.db.WithContext(ctx).Where(
+	err := p.db.WithContext(ctx).Where(
 		"channel_id = ? AND watermark_type = ?",
 		channelID, domain.WatermarkTypeVideo,
 	).First(&watermark).Error
 
 	isInitialized := err == nil && watermark.Initialized
-	lastSeenID := watermark.LastContentID
+	return watermark, isInitialized
+}
 
+func videosAfterWatermark(videos []*scraper.Video, lastSeenID string, isInitialized bool) []*scraper.Video {
 	newVideos := make([]*scraper.Video, 0, len(videos))
 	for _, video := range videos {
 		if isInitialized && video.VideoID == lastSeenID {
@@ -93,46 +107,63 @@ func (p *VideosPoller) Poll(ctx context.Context, channelID string) error {
 		}
 		newVideos = append(newVideos, video)
 	}
+	return newVideos
+}
 
+func buildVideoPollResults(
+	channelID string,
+	newVideos []*scraper.Video,
+	isInitialized bool,
+) ([]*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox) {
 	dbVideos := make([]*domain.YouTubeVideo, 0, len(newVideos))
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(newVideos))
 	for _, video := range newVideos {
 		isLiveReplay := isLiveReplayVideo(video.PublishedText)
-		thumbnails := convertThumbnails(video.Thumbnail)
-
-		dbVideo := &domain.YouTubeVideo{
-			VideoID:       video.VideoID,
-			ChannelID:     channelID,
-			Title:         video.Title,
-			Thumbnail:     thumbnails,
-			Duration:      video.Duration,
-			PublishedText: video.PublishedText,
-			IsShort:       false,
-			IsLiveReplay:  isLiveReplay,
-			ViewCount:     video.ViewCount,
-		}
-
+		dbVideo := buildYouTubeVideo(channelID, video, isLiveReplay)
 		dbVideos = append(dbVideos, dbVideo)
 
 		if isInitialized && !isLiveReplay {
-			notifications = append(notifications, &domain.YouTubeNotificationOutbox{
-				Kind:      domain.OutboxKindNewVideo,
-				ChannelID: channelID,
-				ContentID: video.VideoID,
-				Payload:   mustMarshalJSON(dbVideo),
-				Status:    domain.OutboxStatusPending,
-			})
+			notifications = append(notifications, buildVideoNotification(channelID, dbVideo))
 		}
 	}
+	return dbVideos, notifications
+}
 
-	if err := p.repo.PersistVideos(ctx, dbVideos, notifications, nil, &domain.YouTubeContentWatermark{
+func buildYouTubeVideo(channelID string, video *scraper.Video, isLiveReplay bool) *domain.YouTubeVideo {
+	return &domain.YouTubeVideo{
+		VideoID:       video.VideoID,
+		ChannelID:     channelID,
+		Title:         video.Title,
+		Thumbnail:     convertThumbnails(video.Thumbnail),
+		Duration:      video.Duration,
+		PublishedText: video.PublishedText,
+		IsShort:       false,
+		IsLiveReplay:  isLiveReplay,
+		ViewCount:     video.ViewCount,
+	}
+}
+
+func buildVideoNotification(channelID string, video *domain.YouTubeVideo) *domain.YouTubeNotificationOutbox {
+	return &domain.YouTubeNotificationOutbox{
+		Kind:      domain.OutboxKindNewVideo,
+		ChannelID: channelID,
+		ContentID: video.VideoID,
+		Payload:   mustMarshalJSON(video),
+		Status:    domain.OutboxStatusPending,
+	}
+}
+
+func (p *VideosPoller) persistVideoPollResults(
+	ctx context.Context,
+	channelID string,
+	lastContentID string,
+	dbVideos []*domain.YouTubeVideo,
+	notifications []*domain.YouTubeNotificationOutbox,
+) error {
+	return p.repo.PersistVideos(ctx, dbVideos, notifications, nil, &domain.YouTubeContentWatermark{
 		ChannelID:     channelID,
 		WatermarkType: domain.WatermarkTypeVideo,
 		Initialized:   true,
-		LastContentID: videos[0].VideoID,
-	}); err != nil {
-		return fmt.Errorf("persist video batch: %w", err)
-	}
-
-	return nil
+		LastContentID: lastContentID,
+	})
 }

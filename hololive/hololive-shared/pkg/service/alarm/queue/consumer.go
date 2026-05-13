@@ -122,29 +122,38 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 		return envelopes, nil
 	}
 
+	envelopes, resultLabel, err = c.drainActiveAfterBlock(ctx, envelopes, limit)
+	if err != nil {
+		return nil, err
+	}
+	return envelopes, nil
+}
+
+func (c *Consumer) drainActiveAfterBlock(
+	ctx context.Context,
+	envelopes []domain.AlarmQueueEnvelope,
+	limit int,
+) ([]domain.AlarmQueueEnvelope, string, error) {
 	firstRaw, err := c.brpop(ctx, c.blockTimeout)
 	if err != nil {
-		resultLabel = "error"
-		return nil, fmt.Errorf("drain queue batch: pop first payload: %w", err)
+		return envelopes, "error", fmt.Errorf("drain queue batch: pop first payload: %w", err)
 	}
 	if firstRaw == "" {
-		resultLabel = "empty"
-		return envelopes, nil
+		return envelopes, "empty", nil
 	}
 
 	envelopes = c.appendAcceptedPayloads(ctx, "drain", []string{firstRaw}, envelopes)
 
-	remaining = limit - len(envelopes)
+	remaining := limit - len(envelopes)
 	if remaining <= 0 {
-		return envelopes, nil
+		return envelopes, "ok", nil
 	}
 
 	drained, err := c.rpopMany(ctx, remaining)
 	if err != nil {
-		resultLabel = "error"
-		return nil, fmt.Errorf("drain queue batch: pop drain payloads: %w", err)
+		return envelopes, "error", fmt.Errorf("drain queue batch: pop drain payloads: %w", err)
 	}
 	envelopes = c.appendAcceptedPayloads(ctx, "drain", drained, envelopes)
 
-	return envelopes, nil
+	return envelopes, "ok", nil
 }

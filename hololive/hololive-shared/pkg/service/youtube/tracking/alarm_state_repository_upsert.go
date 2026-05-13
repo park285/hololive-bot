@@ -221,21 +221,21 @@ func mergeNormalizedAlarmState(existing *domain.YouTubeCommunityShortsAlarmState
 	if next.DetectedAt.Before(merged.DetectedAt) {
 		merged.DetectedAt = next.DetectedAt
 	}
-	switch {
-	case merged.AuthorizedAt == nil:
-		merged.AuthorizedAt = next.AuthorizedAt
-	case next.AuthorizedAt != nil && next.AuthorizedAt.Before(*merged.AuthorizedAt):
-		merged.AuthorizedAt = next.AuthorizedAt
-	}
-	switch {
-	case merged.AlarmSentAt == nil:
-		merged.AlarmSentAt = next.AlarmSentAt
-	case next.AlarmSentAt != nil && next.AlarmSentAt.Before(*merged.AlarmSentAt):
-		merged.AlarmSentAt = next.AlarmSentAt
-	}
+	merged.AuthorizedAt = earliestAlarmStateTimestamp(merged.AuthorizedAt, next.AuthorizedAt)
+	merged.AlarmSentAt = earliestAlarmStateTimestamp(merged.AlarmSentAt, next.AlarmSentAt)
 	merged.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(merged.AuthorizedAt, merged.AlarmSentAt)
 
 	return &merged
+}
+
+func earliestAlarmStateTimestamp(existing *time.Time, next *time.Time) *time.Time {
+	if existing == nil {
+		return next
+	}
+	if next != nil && next.Before(*existing) {
+		return next
+	}
+	return existing
 }
 
 func buildAlarmStateDeliveryStatusExpr(authorizedExpr string, alarmSentExpr string) string {

@@ -26,6 +26,17 @@ func (r *GormRepository) TryClaimAlarmState(ctx context.Context, record *domain.
 		return false, fmt.Errorf("try claim alarm state: %w", err)
 	}
 
+	claimed, err := r.insertAlarmStateClaim(ctx, normalizedRecord)
+	if err != nil || !claimed {
+		return claimed, err
+	}
+	return r.confirmAlarmStateClaim(ctx, normalizedRecord)
+}
+
+func (r *GormRepository) insertAlarmStateClaim(
+	ctx context.Context,
+	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
+) (bool, error) {
 	now := yttimestamp.Normalize(time.Now())
 	result := r.db.WithContext(ctx).Exec(`
         INSERT INTO youtube_community_shorts_alarm_states
@@ -66,7 +77,13 @@ func (r *GormRepository) TryClaimAlarmState(ctx context.Context, record *domain.
 	if result.RowsAffected == 0 {
 		return false, nil
 	}
+	return true, nil
+}
 
+func (r *GormRepository) confirmAlarmStateClaim(
+	ctx context.Context,
+	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
+) (bool, error) {
 	current, err := r.FindAlarmStateByPostID(ctx, normalizedRecord.Kind, normalizedRecord.PostID)
 	if err != nil {
 		return false, fmt.Errorf("try claim alarm state: reload row: %w", err)

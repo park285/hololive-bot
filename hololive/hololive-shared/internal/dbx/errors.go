@@ -86,10 +86,7 @@ func ShouldFallbackToLocalhost(err error, host string) bool {
 	if err == nil {
 		return false
 	}
-	if host == "" || host == "127.0.0.1" || strings.EqualFold(host, "localhost") {
-		return false
-	}
-	if !strings.EqualFold(host, "postgres") {
+	if !isFallbackEligibleHost(host) {
 		return false
 	}
 
@@ -104,4 +101,11 @@ func ShouldFallbackToLocalhost(err error, host string) bool {
 		return true
 	}
 	return strings.Contains(lower, "no such host") && strings.Contains(lower, hostLower)
+}
+
+func isFallbackEligibleHost(host string) bool {
+	if host == "" || host == "127.0.0.1" || strings.EqualFold(host, "localhost") {
+		return false
+	}
+	return strings.EqualFold(host, "postgres")
 }

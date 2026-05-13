@@ -34,9 +34,6 @@ func newTestMapper(t *testing.T) *StreamMapper {
 	return NewStreamMapper(logger)
 }
 
-func strPtr(s string) *string { return &s }
-func intPtr(i int) *int       { return &i }
-
 func TestMapStreamResponse(t *testing.T) {
 	t.Parallel()
 
@@ -51,19 +48,19 @@ func TestMapStreamResponse(t *testing.T) {
 			input: &StreamRaw{
 				ID:             "vid-001",
 				Title:          "테스트 방송",
-				ChannelID:      strPtr("ch-001"),
+				ChannelID:      new("ch-001"),
 				Status:         domain.StreamStatusLive,
-				StartScheduled: strPtr("2024-01-01T10:00:00Z"),
-				StartActual:    strPtr("2024-01-01T10:05:00Z"),
-				Duration:       intPtr(3600),
-				Thumbnail:      strPtr("https://example.com/thumb.jpg"),
-				Link:           strPtr("https://youtube.com/watch?v=vid-001"),
-				TopicID:        strPtr("gaming"),
-				LiveViewers:    intPtr(1000),
+				StartScheduled: new("2024-01-01T10:00:00Z"),
+				StartActual:    new("2024-01-01T10:05:00Z"),
+				Duration:       new(3600),
+				Thumbnail:      new("https://example.com/thumb.jpg"),
+				Link:           new("https://youtube.com/watch?v=vid-001"),
+				TopicID:        new("gaming"),
+				LiveViewers:    new(1000),
 				Channel: &ChannelRaw{
 					ID:   "ch-001",
 					Name: "Test Channel",
-					Org:  strPtr("Hololive"),
+					Org:  new("Hololive"),
 				},
 			},
 			wantNil: false,
@@ -108,7 +105,7 @@ func TestMapStreamResponse(t *testing.T) {
 			input: &StreamRaw{
 				ID:        "vid-003",
 				Title:     "채널 nil 방송",
-				ChannelID: strPtr("ch-003"),
+				ChannelID: new("ch-003"),
 				Channel:   nil,
 			},
 			wantNil: false,
@@ -158,13 +155,13 @@ func TestMapChannelResponse(t *testing.T) {
 			input: &ChannelRaw{
 				ID:          "ch-100",
 				Name:        "하이라이트 채널",
-				EnglishName: strPtr("Highlight Channel"),
-				Photo:       strPtr("https://example.com/photo.jpg"),
-				Twitter:     strPtr("@highlight"),
-				VideoCount:  intPtr(200),
-				Org:         strPtr("Hololive"),
-				Suborg:      strPtr("HololiveJP"),
-				Group:       strPtr("Gen3"),
+				EnglishName: new("Highlight Channel"),
+				Photo:       new("https://example.com/photo.jpg"),
+				Twitter:     new("@highlight"),
+				VideoCount:  new(200),
+				Org:         new("Hololive"),
+				Suborg:      new("HololiveJP"),
+				Group:       new("Gen3"),
 			},
 			checkFunc: func(t *testing.T, c *domain.Channel) {
 				t.Helper()
@@ -222,7 +219,7 @@ func TestMapStreamsResponse(t *testing.T) {
 				{
 					ID:        "vid-a",
 					Title:     "방송 A",
-					ChannelID: strPtr("ch-a"),
+					ChannelID: new("ch-a"),
 				},
 				// ChannelID 없음 - nil 반환 → 필터링
 				{

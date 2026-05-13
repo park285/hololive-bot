@@ -66,72 +66,28 @@ func NewMessageIngress(
 }
 
 func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool) {
-	if message == nil {
-		i.logWarn("Nil message received")
-		return nil, false
-	}
-
-	if message.JSON != nil && message.JSON.Type != "" && message.JSON.Type != irisMessageTypeText {
-		return nil, false
-	}
-
-	if i.messageAdapter == nil {
-		i.logWarn("Message adapter is not configured")
+	if !i.canHandleMessage(message) {
 		return nil, false
 	}
 
 	chatID, roomName := resolveRoom(message)
 	userID, userName := resolveUser(message)
 
-	if i.isSelfSender(userName) {
-		i.logDebug(
-			"Skipping self-issued message",
-			slog.String("user", userName),
-			slog.String("room", chatID),
-			slog.String("payload", message.Msg),
-		)
-
+	if i.shouldSkipSender(message, chatID, userName) {
 		return nil, false
 	}
 
-	if i.acl != nil && !i.acl.IsRoomAllowed(roomName, chatID) {
-		i.logDebug(
-			"Room blocked by ACL, ignoring message",
-			slog.String("room", chatID),
-			slog.String("room_name", roomName),
-			slog.String("user_name", userName),
-		)
-
+	if i.isRoomBlocked(roomName, chatID, userName) {
 		return nil, false
 	}
 
-	parsed := i.messageAdapter.ParseMessage(message)
+	parsed := i.parseCommand(message, chatID, userName)
 	if parsed == nil {
-		i.logWarn("Parsed command is nil", slog.String("room", chatID))
 		return nil, false
 	}
 
 	commandType := parsed.Type.String()
-	if parsed.Type == domain.CommandUnknown {
-		i.logDebug(
-			"Unknown command ignored",
-			slog.String("msg", message.Msg),
-			slog.String("room", chatID),
-			slog.String("user_name", userName),
-		)
-
-		return nil, false
-	}
-
-	i.logInfo(
-		"Command received",
-		slog.String("raw", parsed.RawMessage),
-		slog.String("type", commandType),
-		slog.String("user_id", userID),
-		slog.String("user_name", userName),
-		slog.String("room", chatID),
-		slog.String("room_name", roomName),
-	)
+	i.logCommandReceived(parsed, commandType, userID, userName, chatID, roomName)
 
 	return &ingressEnvelope{
 		CommandType: commandType,
@@ -141,6 +97,94 @@ func (i *MessageIngress) Prepare(message *iris.Message) (*ingressEnvelope, bool)
 		UserName:    userName,
 		Parsed:      parsed,
 	}, true
+}
+
+func (i *MessageIngress) canHandleMessage(message *iris.Message) bool {
+	if message == nil {
+		i.logWarn("Nil message received")
+		return false
+	}
+
+	if message.JSON != nil && message.JSON.Type != "" && message.JSON.Type != irisMessageTypeText {
+		return false
+	}
+
+	if i.messageAdapter == nil {
+		i.logWarn("Message adapter is not configured")
+		return false
+	}
+
+	return true
+}
+
+func (i *MessageIngress) shouldSkipSender(message *iris.Message, chatID, userName string) bool {
+	if !i.isSelfSender(userName) {
+		return false
+	}
+
+	i.logDebug(
+		"Skipping self-issued message",
+		slog.String("user", userName),
+		slog.String("room", chatID),
+		slog.String("payload", message.Msg),
+	)
+
+	return true
+}
+
+func (i *MessageIngress) isRoomBlocked(roomName, chatID, userName string) bool {
+	if i.acl == nil || i.acl.IsRoomAllowed(roomName, chatID) {
+		return false
+	}
+
+	i.logDebug(
+		"Room blocked by ACL, ignoring message",
+		slog.String("room", chatID),
+		slog.String("room_name", roomName),
+		slog.String("user_name", userName),
+	)
+
+	return true
+}
+
+func (i *MessageIngress) parseCommand(message *iris.Message, chatID, userName string) *adapter.ParsedCommand {
+	parsed := i.messageAdapter.ParseMessage(message)
+	if parsed == nil {
+		i.logWarn("Parsed command is nil", slog.String("room", chatID))
+		return nil
+	}
+
+	if parsed.Type == domain.CommandUnknown {
+		i.logDebug(
+			"Unknown command ignored",
+			slog.String("msg", message.Msg),
+			slog.String("room", chatID),
+			slog.String("user_name", userName),
+		)
+
+		return nil
+	}
+
+	return parsed
+}
+
+func (i *MessageIngress) logCommandReceived(
+	parsed *adapter.ParsedCommand,
+	commandType string,
+	userID string,
+	userName string,
+	chatID string,
+	roomName string,
+) {
+	i.logInfo(
+		"Command received",
+		slog.String("raw", parsed.RawMessage),
+		slog.String("type", commandType),
+		slog.String("user_id", userID),
+		slog.String("user_name", userName),
+		slog.String("room", chatID),
+		slog.String("room_name", roomName),
+	)
 }
 
 func (i *MessageIngress) isSelfSender(sender string) bool {

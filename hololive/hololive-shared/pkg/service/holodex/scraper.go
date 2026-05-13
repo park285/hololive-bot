@@ -107,11 +107,7 @@ func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]
 		streams, err := s.fetchFromYouTubeScraper(ctx, channelID)
 		fallback.ObservePrimaryPhase("holodex", "channel_schedule", 1, boolToInt(len(streams) > 0), boolToInt(err != nil))
 		if !policy.ShouldRun(len(streams), boolToInt(err != nil)) {
-			fallback.ObserveExecution("holodex", "channel_schedule", policy.Trigger, "skipped")
-			s.cache.SetStreams(ctx, cacheKey, streams, constants.OfficialScheduleConfig.CacheExpiry)
-			s.logger.Info("YouTube scraper channel schedule resolved",
-				slog.String("channel", channelID),
-				slog.Int("streams", len(streams)))
+			s.finishYouTubeChannelSchedule(ctx, cacheKey, channelID, streams, policy)
 			return streams, nil
 		}
 		if err != nil {
@@ -121,6 +117,28 @@ func (s *ScraperService) FetchChannel(ctx context.Context, channelID string) ([]
 		}
 	}
 
+	return s.fetchOfficialChannelSchedule(ctx, cacheKey, channelID)
+}
+
+func (s *ScraperService) finishYouTubeChannelSchedule(
+	ctx context.Context,
+	cacheKey string,
+	channelID string,
+	streams []*domain.Stream,
+	policy fallback.Policy,
+) {
+	fallback.ObserveExecution("holodex", "channel_schedule", policy.Trigger, "skipped")
+	s.cache.SetStreams(ctx, cacheKey, streams, constants.OfficialScheduleConfig.CacheExpiry)
+	s.logger.Info("YouTube scraper channel schedule resolved",
+		slog.String("channel", channelID),
+		slog.Int("streams", len(streams)))
+}
+
+func (s *ScraperService) fetchOfficialChannelSchedule(
+	ctx context.Context,
+	cacheKey string,
+	channelID string,
+) ([]*domain.Stream, error) {
 	s.logger.Info("Fetching from official schedule (FALLBACK MODE)",
 		slog.String("channel", channelID),
 		slog.String("url", s.baseURL))

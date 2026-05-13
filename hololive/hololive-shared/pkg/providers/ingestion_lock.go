@@ -113,15 +113,26 @@ func (l *IngestionLease) StartRenewLoop(ctx context.Context, errCh chan<- error)
 	defer ticker.Stop()
 
 	for {
-		select {
-		case <-ctx.Done():
+		if l.waitAndRenew(ctx, ticker.C, errCh) {
 			return
-		case <-ticker.C:
-			if err := l.renew(ctx); err != nil && l.handleRenewError(errCh, err) {
-				return
-			}
 		}
 	}
+}
+
+func (l *IngestionLease) waitAndRenew(ctx context.Context, ticks <-chan time.Time, errCh chan<- error) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case <-ticks:
+		return l.renewOnce(ctx, errCh)
+	}
+}
+
+func (l *IngestionLease) renewOnce(ctx context.Context, errCh chan<- error) bool {
+	if err := l.renew(ctx); err != nil {
+		return l.handleRenewError(errCh, err)
+	}
+	return false
 }
 
 func (l *IngestionLease) handleRenewError(errCh chan<- error, err error) bool {

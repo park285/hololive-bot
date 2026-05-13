@@ -40,17 +40,9 @@ func main() {
 	log.Println("=== PostgreSQL Member Data Integration Test ===")
 	log.Println()
 
-	postgresCfg := config.PostgresConfig{
-		Host:     envOrDefault("POSTGRES_HOST", constants.DatabaseDefaults.Host),
-		Port:     envOrDefaultInt("POSTGRES_PORT", constants.DatabaseDefaults.Port),
-		User:     envOrDefault("POSTGRES_USER", constants.DatabaseDefaults.User),
-		Password: envOrDefault("POSTGRES_PASSWORD", constants.DatabaseDefaults.Password),
-		Database: envOrDefault("POSTGRES_DB", constants.DatabaseDefaults.Database),
-	}
-
+	postgresCfg := postgresConfigFromEnv()
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
 	runtime, err := app.BuildDBIntegrationRuntime(buildCtx, postgresCfg, logger)
-
 	buildCancel()
 
 	if err != nil {
@@ -61,11 +53,38 @@ func main() {
 
 	log.Println("PostgreSQL connected")
 
+	memberCount, channelIDCount := runIntegrationChecks(context.Background(), runtime)
+
+	log.Println()
+	log.Println("=== ALL TESTS PASSED ===")
+	log.Println()
+	printSummary(memberCount, channelIDCount)
+}
+
+func postgresConfigFromEnv() config.PostgresConfig {
+	return config.PostgresConfig{
+		Host:     envOrDefault("POSTGRES_HOST", constants.DatabaseDefaults.Host),
+		Port:     envOrDefaultInt("POSTGRES_PORT", constants.DatabaseDefaults.Port),
+		User:     envOrDefault("POSTGRES_USER", constants.DatabaseDefaults.User),
+		Password: envOrDefault("POSTGRES_PASSWORD", constants.DatabaseDefaults.Password),
+		Database: envOrDefault("POSTGRES_DB", constants.DatabaseDefaults.Database),
+	}
+}
+
+func runIntegrationChecks(ctx context.Context, runtime *app.DBIntegrationRuntime) (int, int) {
+	testChannelID := "UChAnqc_AY5_I3Px5dig3X1Q" // Korone
+
+	memberCount := runRepositoryChecks(ctx, runtime, testChannelID)
+	runCacheCheck(ctx, runtime, testChannelID)
+	channelIDCount := runAdapterChecks(ctx, runtime, testChannelID)
+
+	return memberCount, channelIDCount
+}
+
+func runRepositoryChecks(ctx context.Context, runtime *app.DBIntegrationRuntime, testChannelID string) int {
 	repo := runtime.Repository
 
 	log.Println("Repository created")
-
-	ctx := context.Background()
 
 	members, err := repo.GetAllMembers(ctx)
 	if err != nil {
@@ -74,8 +93,6 @@ func main() {
 
 	log.Printf("Loaded %d members from PostgreSQL", len(members))
 
-	testChannelID := "UChAnqc_AY5_I3Px5dig3X1Q" // Korone
-
 	foundMember, err := repo.FindByChannelID(ctx, testChannelID)
 	if err != nil {
 		log.Fatalf("Failed to find by channel ID: %v", err)
@@ -83,7 +100,7 @@ func main() {
 
 	if foundMember == nil {
 		log.Fatal("Korone not found")
-		return
+		return 0
 	}
 
 	log.Printf("Find by channel ID: %s (aliases: ko=%d, ja=%d)",
@@ -96,16 +113,20 @@ func main() {
 
 	if foundMember == nil {
 		log.Fatal("Alias '코로네' not found")
-		return
+		return 0
 	}
 
 	log.Printf("Find by alias '코로네': %s", foundMember.Name)
 
+	return len(members)
+}
+
+func runCacheCheck(ctx context.Context, runtime *app.DBIntegrationRuntime, testChannelID string) {
 	memberCache := runtime.Cache
 
 	log.Println("Cache created with warm-up")
 
-	foundMember, err = memberCache.GetByChannelID(ctx, testChannelID)
+	foundMember, err := memberCache.GetByChannelID(ctx, testChannelID)
 	if err != nil {
 		log.Fatalf("Cache GetByChannelID failed: %v", err)
 	}
@@ -116,14 +137,16 @@ func main() {
 	}
 
 	log.Printf("Cache hit: %s", foundMember.Name)
+}
 
+func runAdapterChecks(ctx context.Context, runtime *app.DBIntegrationRuntime, testChannelID string) int {
 	adapter := runtime.MemberAdapter
 	adapterCtx := adapter.WithContext(ctx)
 
-	foundMember = adapterCtx.FindMemberByChannelID(testChannelID)
+	foundMember := adapterCtx.FindMemberByChannelID(testChannelID)
 	if foundMember == nil {
 		log.Fatal("Adapter failed")
-		return
+		return 0
 	}
 
 	log.Printf("Adapter works: %s", foundMember.Name)
@@ -134,12 +157,13 @@ func main() {
 	allMembers := adapterCtx.GetAllMembers()
 	log.Printf("Adapter GetAllMembers: %d members", len(allMembers))
 
-	log.Println()
-	log.Println("=== ALL TESTS PASSED ===")
-	log.Println()
+	return len(channelIDs)
+}
+
+func printSummary(memberCount, channelIDCount int) {
 	fmt.Println("Summary:")
-	fmt.Printf("- Total members: %d\n", len(members))
-	fmt.Printf("- With channel ID: %d\n", len(channelIDs))
+	fmt.Printf("- Total members: %d\n", memberCount)
+	fmt.Printf("- With channel ID: %d\n", channelIDCount)
 	fmt.Println("- Repository: OK")
 	fmt.Println("- Cache: OK")
 	fmt.Println("- Adapter: OK")

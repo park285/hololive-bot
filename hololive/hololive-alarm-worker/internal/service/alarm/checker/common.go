@@ -160,23 +160,33 @@ func roomNotificationsWithScheduleChanges(
 		}
 
 		change := scheduleChanges[roomID]
-		if scheduleChangeOnly && change == nil {
+		if !shouldSendScheduleChangeNotification(change, scheduleChangeOnly) {
 			continue
 		}
 
-		scheduleMessage := ""
-		previousScheduled := ""
-		if change != nil {
-			scheduleMessage = change.Message
-			previousScheduled = change.PreviousScheduledString()
-		}
-
+		scheduleMessage, previousScheduled := scheduleChangeNotificationDetails(change)
 		notification := domain.NewAlarmNotification(roomID, channel, stream, minutesUntil, []string{}, scheduleMessage)
 		notification.ScheduleChangePreviousStart = previousScheduled
 		notifications = append(notifications, notification)
 	}
 
 	return notifications
+}
+
+func shouldSendScheduleChangeNotification(change *dedup.ScheduleChange, scheduleChangeOnly bool) bool {
+	if !scheduleChangeOnly {
+		return true
+	}
+
+	return change != nil
+}
+
+func scheduleChangeNotificationDetails(change *dedup.ScheduleChange) (string, string) {
+	if change == nil {
+		return "", ""
+	}
+
+	return change.Message, change.PreviousScheduledString()
 }
 
 func loadSubscriberRoomsByChannel(
@@ -202,9 +212,8 @@ func tryLoadSubscriberRoomsByChannelBatched(
 	uniqueChannelIDs []string,
 ) (_ map[string][]string, ok bool, _ error) {
 	defer func() {
-		if recover() != nil {
-			ok = false
-		}
+		recovered := recover()
+		ok = recovered == nil && ok
 	}()
 
 	client := cacheSvc.GetClient()
@@ -222,18 +231,26 @@ func tryLoadSubscriberRoomsByChannelBatched(
 		return nil, false, nil
 	}
 
+	result, err := collectBatchedSubscriberRooms(results, uniqueChannelIDs)
+	return result, true, err
+}
+
+func collectBatchedSubscriberRooms(
+	results []valkey.ValkeyResult,
+	uniqueChannelIDs []string,
+) (map[string][]string, error) {
 	result := make(map[string][]string, len(uniqueChannelIDs))
 	for i, channelID := range uniqueChannelIDs {
 		rooms, err := results[i].AsStrSlice()
 		if err != nil {
-			return nil, true, fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
+			return nil, fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
 		}
 		if len(rooms) > 0 {
 			result[channelID] = rooms
 		}
 	}
 
-	return result, true, nil
+	return result, nil
 }
 
 func loadSubscriberRoomsByChannelSequential(

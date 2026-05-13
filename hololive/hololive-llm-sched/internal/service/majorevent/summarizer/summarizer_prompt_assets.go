@@ -188,6 +188,20 @@ func buildMemberFilterSection() string {
   Remove graduated or retired members from the "members" output field.
   Known graduated/retired members (reverse-chronological):
 `)
+	writeGraduatedBranches(&sb)
+	writeAffiliateInactiveMembers(&sb)
+	writeDissolvedBranches(&sb)
+
+	sb.WriteString(`  If unsure about a member's status, keep them in the list.
+  <large_group>
+    If >8 participating members after filtering: abbreviate as "JP/EN 다수" or "전체 참여" — do NOT list individually.
+    Exception: unit events (holoX, ReGLOSS, FLOW GLOW, etc.) — always list all unit members.
+  </large_group>
+</member_filter>`)
+	return sb.String()
+}
+
+func writeGraduatedBranches(sb *strings.Builder) {
 	branchOrder := []string{"JP", "EN", "DEV_IS", "HOLOSTARS_EN", "HOLOSTARS_JP"}
 	for _, branch := range branchOrder {
 		members := parsedGraduatedData.Graduated[branch]
@@ -197,32 +211,33 @@ func buildMemberFilterSection() string {
 		sb.WriteString("    ")
 		sb.WriteString(branch)
 		sb.WriteString(": ")
-		for i, m := range members {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(m.Name)
-			sb.WriteString(" (")
-			sb.WriteString(m.Date)
-			sb.WriteByte(')')
-		}
+		writeDatedMembers(sb, members)
 		sb.WriteByte('\n')
 	}
+}
 
-	if len(parsedGraduatedData.AffiliateInactive) > 0 {
-		sb.WriteString("  Affiliate (inactive — remove from regular event listings):\n    ")
-		for i, m := range parsedGraduatedData.AffiliateInactive {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(m.Name)
-			sb.WriteString(" (")
-			sb.WriteString(m.Date)
-			sb.WriteByte(')')
-		}
-		sb.WriteByte('\n')
+func writeAffiliateInactiveMembers(sb *strings.Builder) {
+	if len(parsedGraduatedData.AffiliateInactive) == 0 {
+		return
 	}
+	sb.WriteString("  Affiliate (inactive — remove from regular event listings):\n    ")
+	writeDatedMembers(sb, parsedGraduatedData.AffiliateInactive)
+	sb.WriteByte('\n')
+}
 
+func writeDatedMembers(sb *strings.Builder, members []graduatedMember) {
+	for i, m := range members {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(m.Name)
+		sb.WriteString(" (")
+		sb.WriteString(m.Date)
+		sb.WriteByte(')')
+	}
+}
+
+func writeDissolvedBranches(sb *strings.Builder) {
 	for _, d := range parsedGraduatedData.DissolvedBranches {
 		sb.WriteString("  ")
 		sb.WriteString(d.Branch)
@@ -232,14 +247,6 @@ func buildMemberFilterSection() string {
 		sb.WriteString(strings.Join(d.Members, ", "))
 		sb.WriteByte('\n')
 	}
-
-	sb.WriteString(`  If unsure about a member's status, keep them in the list.
-  <large_group>
-    If >8 participating members after filtering: abbreviate as "JP/EN 다수" or "전체 참여" — do NOT list individually.
-    Exception: unit events (holoX, ReGLOSS, FLOW GLOW, etc.) — always list all unit members.
-  </large_group>
-</member_filter>`)
-	return sb.String()
 }
 
 func getDomainContext() string {

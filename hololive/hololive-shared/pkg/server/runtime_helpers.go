@@ -51,24 +51,24 @@ func NewTriggerRuntimeRouter(
 	opts ...func(*RuntimeRouterOptions),
 ) (*gin.Engine, error) {
 	options := RuntimeRouterOptions{
-		APIKey: apiKey,
-		RegisterRoutes: func(router *gin.Engine) error {
-			if triggerHandler == nil {
-				return nil
-			}
-			if strings.TrimSpace(apiKey) == "" {
-				return errors.New("API_SECRET_KEY required")
-			}
-			triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
-			return nil
-		},
+		APIKey:         apiKey,
+		RegisterRoutes: triggerRuntimeRouteRegistrar(triggerHandler, apiKey),
 	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&options)
-		}
-	}
+	applyRuntimeRouterOptions(&options, opts)
 	return NewRuntimeRouter(ctx, logger, options)
+}
+
+func triggerRuntimeRouteRegistrar(triggerHandler *TriggerHandler, apiKey string) func(*gin.Engine) error {
+	return func(router *gin.Engine) error {
+		if triggerHandler == nil {
+			return nil
+		}
+		if strings.TrimSpace(apiKey) == "" {
+			return errors.New("API_SECRET_KEY required")
+		}
+		triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
+		return nil
+	}
 }
 
 func NewH2CServer(addr string, handler http.Handler, operation string) *http.Server {
@@ -99,29 +99,12 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts RuntimeRout
 	}
 	router.TrustedPlatform = gin.PlatformCloudflare
 
-	router.Use(gin.Recovery())
-	if opts.EnableGzip {
-		router.Use(gzip.Gzip(gzip.DefaultCompression))
-	}
-	ApplyBaseMiddleware(router, ctx, logger, BaseMiddlewareOptions{
-		SkipLogPaths: append([]string{"/health", "/ready", "/metrics"}, opts.SkipLogPaths...),
-	})
-	for _, use := range opts.PreRouteUse {
-		if use != nil {
-			router.Use(use)
-		}
-	}
+	installRuntimeMiddleware(router, ctx, logger, opts)
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, health.Get())
 	})
-	if opts.ReadyResponder != nil {
-		router.GET("/ready", opts.ReadyResponder)
-	} else {
-		router.GET("/ready", func(c *gin.Context) {
-			c.JSON(http.StatusOK, health.Get())
-		})
-	}
+	registerRuntimeReadyRoute(router, opts.ReadyResponder)
 
 	metrics := router.Group("")
 	metrics.Use(middleware.APIKeyAuthMiddleware(opts.APIKey))
@@ -134,4 +117,37 @@ func NewRuntimeRouter(ctx context.Context, logger *slog.Logger, opts RuntimeRout
 	}
 
 	return router, nil
+}
+
+func applyRuntimeRouterOptions(options *RuntimeRouterOptions, opts []func(*RuntimeRouterOptions)) {
+	for _, opt := range opts {
+		if opt != nil {
+			opt(options)
+		}
+	}
+}
+
+func installRuntimeMiddleware(router *gin.Engine, ctx context.Context, logger *slog.Logger, opts RuntimeRouterOptions) {
+	router.Use(gin.Recovery())
+	if opts.EnableGzip {
+		router.Use(gzip.Gzip(gzip.DefaultCompression))
+	}
+	ApplyBaseMiddleware(router, ctx, logger, BaseMiddlewareOptions{
+		SkipLogPaths: append([]string{"/health", "/ready", "/metrics"}, opts.SkipLogPaths...),
+	})
+	for _, use := range opts.PreRouteUse {
+		if use != nil {
+			router.Use(use)
+		}
+	}
+}
+
+func registerRuntimeReadyRoute(router *gin.Engine, readyResponder func(*gin.Context)) {
+	if readyResponder != nil {
+		router.GET("/ready", readyResponder)
+		return
+	}
+	router.GET("/ready", func(c *gin.Context) {
+		c.JSON(http.StatusOK, health.Get())
+	})
 }

@@ -54,6 +54,21 @@ func assertFileMissingToken(t *testing.T, root string, rel string, token string)
 	}
 }
 
+func assertOptionalFileMissingToken(t *testing.T, root string, rel string, token string) {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(root, rel))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		t.Fatalf("read %s: %v", rel, err)
+	}
+	if strings.Contains(string(data), token) {
+		t.Fatalf("%s still contains %q", rel, token)
+	}
+}
+
 func TestSettlementRuntimeIsRemovedFromWorkspaceInventory(t *testing.T) {
 	t.Parallel()
 
@@ -65,18 +80,21 @@ func TestSettlementRuntimeIsRemovedFromWorkspaceInventory(t *testing.T) {
 	}{
 		{file: "go.work", token: "./hololive/" + removedRuntimeName()},
 		{file: "README.md", token: removedRuntimeName()},
-		{file: "AGENTS.md", token: "settlement service"},
 		{file: "docs/current/PROJECT_MAP.md", token: removedRuntimeName()},
 		{file: "internal/workspace/monorepo_test.go", token: "./hololive/" + removedRuntimeName() + "/..."},
 	}
 
 	for _, check := range checks {
-		check := check
 		t.Run(check.file, func(t *testing.T) {
 			t.Parallel()
 			assertFileMissingToken(t, root, check.file, check.token)
 		})
 	}
+
+	t.Run("AGENTS.md", func(t *testing.T) {
+		t.Parallel()
+		assertOptionalFileMissingToken(t, root, "AGENTS.md", "settlement service")
+	})
 }
 
 func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
@@ -96,16 +114,15 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 		"hololive/hololive-stream-ingester/Dockerfile.youtube-scraper",
 	}
 	for _, rel := range copyChecks {
-		rel := rel
-			t.Run(rel, func(t *testing.T) {
-				t.Parallel()
-				assertFileMissingToken(
-					t,
-					root,
-					rel,
-					"COPY hololive/"+removedRuntimeName()+" ./hololive/"+removedRuntimeName(),
-				)
-			})
+		t.Run(rel, func(t *testing.T) {
+			t.Parallel()
+			assertFileMissingToken(
+				t,
+				root,
+				rel,
+				"COPY hololive/"+removedRuntimeName()+" ./hololive/"+removedRuntimeName(),
+			)
+		})
 	}
 
 	residueChecks := []struct {
@@ -120,7 +137,6 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 		{file: "hololive/hololive-kakao-bot-go/internal/bot/bot_command_init_views_test.go", token: removedCommandToken("SettlementStatus")},
 	}
 	for _, check := range residueChecks {
-		check := check
 		t.Run(check.file, func(t *testing.T) {
 			t.Parallel()
 			assertFileMissingToken(t, root, check.file, check.token)
@@ -138,7 +154,6 @@ func TestSettlementMigrationsAreArchivedAndRunbookExists(t *testing.T) {
 		"hololive/hololive-kakao-bot-go/scripts/migrations/039_create_settlement_v2.sql",
 	}
 	for _, rel := range activePaths {
-		rel := rel
 		t.Run("active-"+filepath.Base(rel), func(t *testing.T) {
 			t.Parallel()
 			if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
@@ -155,7 +170,6 @@ func TestSettlementMigrationsAreArchivedAndRunbookExists(t *testing.T) {
 		"docs/history/settlement/README.md",
 	}
 	for _, rel := range requiredPaths {
-		rel := rel
 		t.Run("required-"+filepath.Base(rel), func(t *testing.T) {
 			t.Parallel()
 			if _, err := os.Stat(filepath.Join(root, rel)); err != nil {

@@ -59,8 +59,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&item).Error)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	dispatcher.Start(ctx)
 

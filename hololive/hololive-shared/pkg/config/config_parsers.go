@@ -87,15 +87,23 @@ func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bo
 		return origins, false
 	}
 
+	filtered := productionCORSAllowedOrigins(origins)
+	return filtered, len(filtered) == 0
+}
+
+func productionCORSAllowedOrigins(origins []string) []string {
 	filtered := make([]string, 0, len(origins))
 	for _, origin := range origins {
-		if origin == "*" {
-			continue
-		}
-		if strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "https://localhost") {
+		if isProductionCORSOriginBlocked(origin) {
 			continue
 		}
 		filtered = append(filtered, origin)
 	}
-	return filtered, len(filtered) == 0
+	return filtered
+}
+
+func isProductionCORSOriginBlocked(origin string) bool {
+	return origin == "*" ||
+		strings.HasPrefix(origin, "http://localhost") ||
+		strings.HasPrefix(origin, "https://localhost")
 }

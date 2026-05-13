@@ -152,7 +152,6 @@ func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGr
 	eg.SetLimit(d.parallelism)
 
 	for _, group := range groups {
-		group := group
 		eg.Go(func() error {
 			if err := d.dispatchGroup(ctx, group); err != nil {
 				d.logger.Warn("Dispatch group failed",
@@ -186,27 +185,32 @@ func (d *Dispatcher) dispatchGroup(ctx context.Context, group NotificationGroup)
 	}
 
 	if err := d.sender.SendMessage(ctx, group.RoomID, message); err != nil {
-		if d.sendFailurePolicy == SendFailurePolicyQuarantine {
-			reason := formatDispatchFailure("send", err)
-			if quarantineErr := d.consumer.Quarantine(ctx, group.Envelopes, reason); quarantineErr != nil {
-				return fmt.Errorf("dispatch group: quarantine ambiguous send failure: %w", quarantineErr)
-			}
-			d.logger.Warn("Dispatch send outcome ambiguous; quarantined envelopes",
-				slog.String("room_id", group.RoomID),
-				slog.Int("envelopes", len(group.Envelopes)),
-			)
-			return nil
-		}
-		if handleErr := d.handleDispatchFailure(ctx, group.RoomID, group.Envelopes, "send", err); handleErr != nil {
-			return fmt.Errorf("dispatch group: persist send failure: %w", handleErr)
-		}
-		return nil
+		return d.handleSendFailure(ctx, group, err)
 	}
 
 	if err := d.consumer.MarkDispatched(ctx, group.Envelopes); err != nil {
 		return fmt.Errorf("dispatch group: mark dispatched after successful send: %w", err)
 	}
 
+	return nil
+}
+
+func (d *Dispatcher) handleSendFailure(ctx context.Context, group NotificationGroup, sendErr error) error {
+	if d.sendFailurePolicy == SendFailurePolicyQuarantine {
+		reason := formatDispatchFailure("send", sendErr)
+		if err := d.consumer.Quarantine(ctx, group.Envelopes, reason); err != nil {
+			return fmt.Errorf("dispatch group: quarantine ambiguous send failure: %w", err)
+		}
+		d.logger.Warn("Dispatch send outcome ambiguous; quarantined envelopes",
+			slog.String("room_id", group.RoomID),
+			slog.Int("envelopes", len(group.Envelopes)),
+		)
+		return nil
+	}
+
+	if err := d.handleDispatchFailure(ctx, group.RoomID, group.Envelopes, "send", sendErr); err != nil {
+		return fmt.Errorf("dispatch group: persist send failure: %w", err)
+	}
 	return nil
 }
 
@@ -242,200 +246,4 @@ func (d *Dispatcher) ConfigureSendFailurePolicy(policy SendFailurePolicy) {
 	default:
 		d.sendFailurePolicy = SendFailurePolicyRetry
 	}
-}
-
-func (d *Dispatcher) handleDispatchFailure(
-	ctx context.Context,
-	roomID string,
-	envelopes []domain.AlarmQueueEnvelope,
-	failureKind string,
-	dispatchErr error,
-) error {
-	if len(envelopes) == 0 {
-		return nil
-	}
-
-	retryEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
-	dlqEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
-	retryBackoffs := make([]time.Duration, 0, len(envelopes))
-	failureMessage := formatDispatchFailure(failureKind, dispatchErr)
-
-	for _, envelope := range envelopes {
-		updated := envelope
-		retryMetadata := &domain.AlarmQueueRetryMetadata{}
-		if envelope.Retry != nil {
-			*retryMetadata = *envelope.Retry
-		}
-		retryMetadata.Attempt = nextRetryAttempt(envelope)
-		retryMetadata.LastError = failureMessage
-		dispatcherRetryAttempt.Observe(float64(retryMetadata.Attempt))
-
-		if retryMetadata.Attempt >= d.retryPolicy.MaxAttempts {
-			retryMetadata.RetryAfterMS = 0
-			retryMetadata.NextVisibleAt = ""
-			updated.Retry = retryMetadata
-			dlqEnvelopes = append(dlqEnvelopes, updated)
-			continue
-		}
-
-		backoff := d.retryBackoffForAttempt(retryMetadata.Attempt)
-		retryMetadata.RetryAfterMS = backoff.Milliseconds()
-		retryMetadata.NextVisibleAt = d.now().UTC().Add(backoff).Format(time.RFC3339Nano)
-		updated.Retry = retryMetadata
-		retryEnvelopes = append(retryEnvelopes, updated)
-		retryBackoffs = append(retryBackoffs, backoff)
-	}
-
-	if len(retryEnvelopes) > 0 {
-		if err := d.consumer.ScheduleRetry(ctx, retryEnvelopes); err != nil {
-			d.logger.Warn("Dispatch failed; schedule retry failed",
-				slog.String("room_id", roomID),
-				slog.String("failure_kind", failureKind),
-				slog.Int("retry_envelopes", len(retryEnvelopes)),
-				slog.Any("error", err),
-			)
-			return d.preserveEnvelopesAfterPersistenceFailure(
-				ctx,
-				roomID,
-				failureKind+"_schedule_retry_failed",
-				retryEnvelopes,
-				fmt.Errorf("schedule retry: %w", err),
-			)
-		}
-
-		dispatcherRetryScheduled.Add(float64(len(retryEnvelopes)))
-		for _, backoff := range retryBackoffs {
-			dispatcherRetryBackoff.Observe(backoff.Seconds())
-		}
-		d.logger.Warn("Dispatch failed; scheduled durable retries",
-			slog.String("room_id", roomID),
-			slog.String("failure_kind", failureKind),
-			slog.Int("retry_envelopes", len(retryEnvelopes)),
-		)
-	}
-
-	if len(dlqEnvelopes) > 0 {
-		if err := d.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
-			d.logger.Warn("Dispatch retries exhausted; move to DLQ failed",
-				slog.String("room_id", roomID),
-				slog.String("failure_kind", failureKind),
-				slog.Int("dlq_envelopes", len(dlqEnvelopes)),
-				slog.Any("error", err),
-			)
-			return d.preserveEnvelopesAfterPersistenceFailure(
-				ctx,
-				roomID,
-				failureKind+"_move_to_dlq_failed",
-				dlqEnvelopes,
-				fmt.Errorf("move to DLQ: %w", err),
-			)
-		}
-		dispatcherRetryDLQMoved.WithLabelValues(failureKind + "_retry_budget_exhausted").Add(float64(len(dlqEnvelopes)))
-		dispatcherRetryBudgetExhausted.Add(float64(len(dlqEnvelopes)))
-
-		releaseClaimKeys := make([]string, 0, len(dlqEnvelopes))
-		for _, envelope := range dlqEnvelopes {
-			releaseClaimKeys = append(releaseClaimKeys, envelope.ClaimKeys...)
-		}
-		d.releaseClaimKeys(ctx, roomID, releaseClaimKeys, failureKind+" retries exhausted")
-		d.logger.Warn("Dispatch retries exhausted; moved envelopes to DLQ",
-			slog.String("room_id", roomID),
-			slog.String("failure_kind", failureKind),
-			slog.Int("dlq_envelopes", len(dlqEnvelopes)),
-		)
-	}
-	return nil
-}
-
-func formatDispatchFailure(failureKind string, err error) string {
-	kind := failureKind
-	if kind == "" {
-		kind = "dispatch"
-	}
-	if err == nil {
-		return kind + " failed"
-	}
-	return fmt.Sprintf("%s failed: %v", kind, err)
-}
-
-func (d *Dispatcher) preserveEnvelopesAfterPersistenceFailure(
-	ctx context.Context,
-	roomID string,
-	reason string,
-	envelopes []domain.AlarmQueueEnvelope,
-	persistErr error,
-) error {
-	if len(envelopes) == 0 {
-		return persistErr
-	}
-
-	if err := d.consumer.Requeue(ctx, envelopes); err != nil {
-		d.logger.Warn("Dispatch persistence fallback requeue failed",
-			slog.String("room_id", roomID),
-			slog.String("reason", reason),
-			slog.Int("envelopes", len(envelopes)),
-			slog.Any("error", err),
-		)
-		return fmt.Errorf("%w: fallback requeue: %w", persistErr, err)
-	}
-
-	d.logger.Warn("Dispatch persistence fallback requeued envelopes",
-		slog.String("room_id", roomID),
-		slog.String("reason", reason),
-		slog.Int("envelopes", len(envelopes)),
-	)
-	return persistErr
-}
-
-func (d *Dispatcher) releaseClaimKeys(ctx context.Context, roomID string, claimKeys []string, reason string) {
-	if len(claimKeys) == 0 {
-		return
-	}
-	if err := d.consumer.ReleaseClaimKeys(ctx, claimKeys); err != nil {
-		d.logger.Warn("Release claim keys failed",
-			slog.String("room_id", roomID),
-			slog.String("reason", reason),
-			slog.Any("error", err),
-		)
-	}
-}
-
-func (d *Dispatcher) retryBackoffForAttempt(attempt int) time.Duration {
-	if attempt <= 0 {
-		attempt = 1
-	}
-
-	backoff := d.retryPolicy.BaseBackoff
-	for i := 1; i < attempt && backoff < d.retryPolicy.MaxBackoff; i++ {
-		if backoff > d.retryPolicy.MaxBackoff/2 {
-			backoff = d.retryPolicy.MaxBackoff
-			break
-		}
-		backoff *= 2
-	}
-	if backoff > d.retryPolicy.MaxBackoff {
-		backoff = d.retryPolicy.MaxBackoff
-	}
-
-	if d.retryPolicy.JitterPercent <= 0 {
-		return backoff
-	}
-
-	jitterRange := d.retryPolicy.JitterPercent / 100
-	factor := 1 + ((d.randFloat64()*2)-1)*jitterRange
-	if factor < 0 {
-		factor = 0
-	}
-	jittered := time.Duration(float64(backoff) * factor)
-	if jittered > d.retryPolicy.MaxBackoff {
-		return d.retryPolicy.MaxBackoff
-	}
-	return jittered
-}
-
-func nextRetryAttempt(envelope domain.AlarmQueueEnvelope) int {
-	if envelope.Retry == nil || envelope.Retry.Attempt < 0 {
-		return 1
-	}
-	return envelope.Retry.Attempt + 1
 }

@@ -97,17 +97,7 @@ func (ts *TieredScheduler) SelectDueChannels(channelIDs []string) []string {
 
 func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domain.Stream) {
 	now := time.Now()
-
-	// 미래 예정 방송 중 가장 가까운 시작 시각 탐색
-	var nearest *time.Time
-	for _, s := range streams {
-		if s.IsUpcoming() && s.StartScheduled != nil && s.StartScheduled.After(now) {
-			if nearest == nil || s.StartScheduled.Before(*nearest) {
-				t := *s.StartScheduled
-				nearest = &t
-			}
-		}
-	}
+	nearest := nearestUpcomingStart(streams, now)
 
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -135,6 +125,24 @@ func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domai
 		slog.Bool("has_nearest", nearest != nil),
 		slog.Int("streams", len(streams)),
 	)
+}
+
+func nearestUpcomingStart(streams []*domain.Stream, now time.Time) *time.Time {
+	var nearest *time.Time
+	for _, s := range streams {
+		if !streamStartsAfter(s, now) {
+			continue
+		}
+		if nearest == nil || s.StartScheduled.Before(*nearest) {
+			t := *s.StartScheduled
+			nearest = &t
+		}
+	}
+	return nearest
+}
+
+func streamStartsAfter(stream *domain.Stream, now time.Time) bool {
+	return stream.IsUpcoming() && stream.StartScheduled != nil && stream.StartScheduled.After(now)
 }
 
 func (ts *TieredScheduler) LastCheckedAt(channelID string) time.Time {

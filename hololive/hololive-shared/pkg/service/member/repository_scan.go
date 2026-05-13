@@ -210,20 +210,14 @@ func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]
 	var rowErrs []error
 
 	for rows.Next() {
-		row, err := scanMemberPhotoQueryRow(rows)
+		channelID, member, err := r.collectMemberWithPhotoRow(rows)
 		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to scan member row: %w", err))
+			rowErrs = append(rowErrs, err)
 			continue
 		}
 
-		member, err := r.parseMemberPhotoRow(row)
-		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err))
-			continue
-		}
-
-		if row.channelID != nil {
-			result[*row.channelID] = member
+		if channelID != nil {
+			result[*channelID] = member
 		}
 	}
 
@@ -236,6 +230,20 @@ func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]
 	}
 
 	return result, nil
+}
+
+func (r *Repository) collectMemberWithPhotoRow(rows pgx.Rows) (*string, *domain.Member, error) {
+	row, err := scanMemberPhotoQueryRow(rows)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to scan member row: %w", err)
+	}
+
+	member, err := r.parseMemberPhotoRow(row)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
+	}
+
+	return row.channelID, member, nil
 }
 
 // scanMember: DB 조회 결과를 domain.Member로 변환함

@@ -61,26 +61,15 @@ func normalizeAlarmTypesStrict(input domain.AlarmTypes, fallback domain.AlarmTyp
 		input = fallback
 	}
 
-	valid := make(map[domain.AlarmType]struct{}, len(domain.AllAlarmTypes))
-	for _, alarmType := range domain.AllAlarmTypes {
-		valid[alarmType] = struct{}{}
-	}
-
+	valid := alarmTypeSet(domain.AllAlarmTypes)
 	seen := make(map[domain.AlarmType]struct{}, len(input))
 	normalized := make(domain.AlarmTypes, 0, len(input))
 	for _, alarmType := range input {
-		trimmed := domain.AlarmType(strings.TrimSpace(string(alarmType)))
-		if trimmed == "" {
-			continue
+		var err error
+		normalized, err = appendNormalizedAlarmType(normalized, seen, alarmType, valid)
+		if err != nil {
+			return nil, err
 		}
-		if _, ok := valid[trimmed]; !ok {
-			return nil, fmt.Errorf("unknown alarm type: %s", alarmType)
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		normalized = append(normalized, trimmed)
 	}
 
 	if len(normalized) == 0 {
@@ -88,6 +77,34 @@ func normalizeAlarmTypesStrict(input domain.AlarmTypes, fallback domain.AlarmTyp
 	}
 
 	return normalized, nil
+}
+
+func appendNormalizedAlarmType(normalized domain.AlarmTypes, seen map[domain.AlarmType]struct{}, alarmType domain.AlarmType, valid map[domain.AlarmType]struct{}) (domain.AlarmTypes, error) {
+	trimmed, ok, err := normalizeAlarmTypeStrict(alarmType, valid)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return normalized, nil
+	}
+	if _, ok := seen[trimmed]; ok {
+		return normalized, nil
+	}
+	seen[trimmed] = struct{}{}
+
+	return append(normalized, trimmed), nil
+}
+
+func normalizeAlarmTypeStrict(alarmType domain.AlarmType, valid map[domain.AlarmType]struct{}) (domain.AlarmType, bool, error) {
+	trimmed := domain.AlarmType(strings.TrimSpace(string(alarmType)))
+	if trimmed == "" {
+		return "", false, nil
+	}
+	if _, ok := valid[trimmed]; !ok {
+		return "", false, fmt.Errorf("unknown alarm type: %s", alarmType)
+	}
+
+	return trimmed, true, nil
 }
 
 func alarmTypeSet(types domain.AlarmTypes) map[domain.AlarmType]struct{} {
@@ -225,12 +242,17 @@ func buildSubscriberSRemCommands(builder valkey.Builder, subscriberKeys []string
 	return commands
 }
 
-func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder valkey.Builder, subscriberKeys []string, alarmTypes domain.AlarmTypes, operation string) ([]string, error) {
-	scardCommands := make([]valkey.Completed, len(subscriberKeys))
+func buildSubscriberScardCommands(builder valkey.Builder, subscriberKeys []string) []valkey.Completed {
+	commands := make([]valkey.Completed, len(subscriberKeys))
 	for i, key := range subscriberKeys {
-		scardCommands[i] = builder.Scard().Key(key).Build()
+		commands[i] = builder.Scard().Key(key).Build()
 	}
 
+	return commands
+}
+
+func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder valkey.Builder, subscriberKeys []string, alarmTypes domain.AlarmTypes, operation string) ([]string, error) {
+	scardCommands := buildSubscriberScardCommands(builder, subscriberKeys)
 	results := as.cache.DoMulti(ctx, scardCommands...)
 	if len(results) != len(scardCommands) {
 		return nil, fmt.Errorf("%s: unexpected SCARD result count: %d", operation, len(results))
@@ -240,11 +262,7 @@ func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder 
 	for i, result := range results {
 		count, err := result.AsInt64()
 		if err != nil {
-			if len(alarmTypes) > 0 {
-				return nil, fmt.Errorf("%s: scard type %s: %w", operation, alarmTypes[i], err)
-			}
-
-			return nil, fmt.Errorf("%s: scard key %s: %w", operation, subscriberKeys[i], err)
+			return nil, formatSubscriberScardError(operation, subscriberKeys, alarmTypes, i, err)
 		}
 
 		if count == 0 {
@@ -253,6 +271,14 @@ func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder 
 	}
 
 	return cleanupKeys, nil
+}
+
+func formatSubscriberScardError(operation string, subscriberKeys []string, alarmTypes domain.AlarmTypes, index int, err error) error {
+	if len(alarmTypes) > 0 {
+		return fmt.Errorf("%s: scard type %s: %w", operation, alarmTypes[index], err)
+	}
+
+	return fmt.Errorf("%s: scard key %s: %w", operation, subscriberKeys[index], err)
 }
 
 func (as *AlarmService) deleteSubscriberKeys(ctx context.Context, builder valkey.Builder, cleanupKeys []string, operation string) error {
@@ -281,30 +307,19 @@ func (as *AlarmService) deleteSubscriberKeys(ctx context.Context, builder valkey
 
 func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, channelID string) error {
 	builder := as.cache.Builder()
-
-	allSubsKeys := make([]string, 0, len(domain.AllAlarmTypes))
-	for _, alarmType := range domain.AllAlarmTypes {
-		allSubsKeys = append(allSubsKeys, as.channelSubscribersKeyByType(channelID, alarmType))
-	}
-
-	scardCmds := make([]valkey.Completed, 0, len(allSubsKeys))
-	for _, key := range allSubsKeys {
-		scardCmds = append(scardCmds, builder.Scard().Key(key).Build())
-	}
-
+	allSubsKeys := as.channelSubscriberKeys(channelID, domain.AllAlarmTypes)
+	scardCmds := buildSubscriberScardCommands(builder, allSubsKeys)
 	scardResults := as.cache.DoMulti(ctx, scardCmds...)
 	if len(scardResults) != len(scardCmds) {
 		return fmt.Errorf("cleanup channel registry: unexpected SCARD result count: %d", len(scardResults))
 	}
 
-	for i, res := range scardResults {
-		count, err := res.AsInt64()
-		if err != nil {
-			return fmt.Errorf("cleanup channel registry: scard key %s: %w", allSubsKeys[i], err)
-		}
-		if count > 0 {
-			return nil
-		}
+	hasSubscribers, err := anySubscriberKeyHasMembers(scardResults, allSubsKeys)
+	if err != nil {
+		return err
+	}
+	if hasSubscribers {
+		return nil
 	}
 
 	if _, err := as.cache.SRem(ctx, AlarmChannelRegistryKey, []string{channelID}); err != nil {
@@ -312,4 +327,18 @@ func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, chann
 	}
 
 	return nil
+}
+
+func anySubscriberKeyHasMembers(results []valkey.ValkeyResult, subscriberKeys []string) (bool, error) {
+	for i, result := range results {
+		count, err := result.AsInt64()
+		if err != nil {
+			return false, fmt.Errorf("cleanup channel registry: scard key %s: %w", subscriberKeys[i], err)
+		}
+		if count > 0 {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

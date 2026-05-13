@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/valkey-io/valkey-go"
 )
 
 const defaultKeyPrefix = "ratelimit:sliding"
@@ -181,8 +182,11 @@ func (l *SlidingWindowLimiter) allowByScript(
 	if results[0].Error() != nil {
 		return false, 0, 0, fmt.Errorf("eval allow script: %w", results[0].Error())
 	}
+	return parseAllowScriptResult(results[0])
+}
 
-	values, err := results[0].ToArray()
+func parseAllowScriptResult(result valkey.ValkeyResult) (bool, int, time.Duration, error) {
+	values, err := result.ToArray()
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse allow script result: %w", err)
 	}
@@ -194,21 +198,26 @@ func (l *SlidingWindowLimiter) allowByScript(
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse allow flag: %w", err)
 	}
-	count, err := values[1].AsInt64()
+	count, err := parseNonNegativeScriptInt(values[1], "current count", "current count result")
 	if err != nil {
-		return false, 0, 0, fmt.Errorf("parse current count: %w", err)
+		return false, 0, 0, err
 	}
-	if count < 0 {
-		return false, 0, 0, fmt.Errorf("invalid current count result: %d", count)
-	}
-	retryAfterMS, err := values[2].AsInt64()
+	retryAfterMS, err := parseNonNegativeScriptInt(values[2], "retry after", "retry after result")
 	if err != nil {
-		return false, 0, 0, fmt.Errorf("parse retry after: %w", err)
-	}
-	if retryAfterMS < 0 {
-		return false, 0, 0, fmt.Errorf("invalid retry after result: %d", retryAfterMS)
+		return false, 0, 0, err
 	}
 	return flag == 1, int(count), time.Duration(retryAfterMS) * time.Millisecond, nil
+}
+
+func parseNonNegativeScriptInt(message valkey.ValkeyMessage, name string, resultName string) (int64, error) {
+	value, err := message.AsInt64()
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", name, err)
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("invalid %s: %d", resultName, value)
+	}
+	return value, nil
 }
 
 func (l *SlidingWindowLimiter) buildKey(bucket string) string {
@@ -238,23 +247,20 @@ func sanitizeInstanceID(value string) string {
 	value = strings.TrimSpace(value)
 	var b strings.Builder
 	for _, r := range value {
-		switch {
-		case r >= 'a' && r <= 'z':
+		if isInstanceIDRune(r) {
 			b.WriteRune(r)
-		case r >= 'A' && r <= 'Z':
-			b.WriteRune(r)
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == '-' || r == '_' || r == '.':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
+			continue
 		}
+		b.WriteByte('_')
 	}
 	if b.Len() == 0 {
 		return "local"
 	}
 	return b.String()
+}
+
+func isInstanceIDRune(r rune) bool {
+	return strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.", r)
 }
 
 func ttlSecondsFromWindow(window time.Duration) int64 {

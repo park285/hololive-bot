@@ -41,6 +41,18 @@ type outboxItemGroup struct {
 
 type channelAlarmRoomTargets map[domain.AlarmType]map[string]bool
 
+type channelAlarmEntry struct {
+	channelID string
+	alarmType domain.AlarmType
+}
+
+type subscriberLookupResult struct {
+	channelID string
+	alarmType domain.AlarmType
+	rooms     map[string]bool
+	ok        bool
+}
+
 func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item domain.YouTubeNotificationOutbox) (map[string]bool, bool) {
 	alarmTargets, ok := roomsByChannel[item.ChannelID]
 	if !ok {
@@ -53,6 +65,27 @@ func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item domain
 	}
 
 	return rooms, true
+}
+
+func outboxItemGroupKey(roomID string, item domain.YouTubeNotificationOutbox) string {
+	return fmt.Sprintf("%s|%s|%s", roomID, item.ChannelID, item.Kind)
+}
+
+func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, roomID string, item domain.YouTubeNotificationOutbox) []*outboxItemGroup {
+	key := outboxItemGroupKey(roomID, item)
+	if idx, exists := index[key]; exists {
+		groups[idx].items = append(groups[idx].items, item)
+		return groups
+	}
+
+	groups = append(groups, &outboxItemGroup{
+		roomID:    roomID,
+		channelID: item.ChannelID,
+		kind:      item.Kind,
+		items:     []domain.YouTubeNotificationOutbox{item},
+	})
+	index[key] = len(groups) - 1
+	return groups
 }
 
 func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) []*outboxItemGroup {
@@ -71,34 +104,15 @@ func (d *Dispatcher) groupOutboxItems(items []domain.YouTubeNotificationOutbox, 
 		}
 
 		for roomID := range rooms {
-			key := fmt.Sprintf("%s|%s|%s", roomID, item.ChannelID, item.Kind)
-			if idx, exists := index[key]; exists {
-				groups[idx].items = append(groups[idx].items, *item)
-				continue
-			}
-
-			groups = append(groups, &outboxItemGroup{
-				roomID:    roomID,
-				channelID: item.ChannelID,
-				kind:      item.Kind,
-				items:     []domain.YouTubeNotificationOutbox{*item},
-			})
-			index[key] = len(groups) - 1
+			groups = appendOutboxItemGroup(groups, index, roomID, *item)
 		}
 	}
 
 	return groups
 }
 
-func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
-	result := make(map[string]channelAlarmRoomTargets)
-
-	// 고유 채널 ID + 알람 타입 추출
-	type channelEntry struct {
-		channelID string
-		alarmType domain.AlarmType
-	}
-	var entries []channelEntry
+func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []channelAlarmEntry {
+	entries := make([]channelAlarmEntry, 0)
 	seen := make(map[string]bool)
 	for i := range items {
 		item := &items[i]
@@ -108,50 +122,62 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 			continue
 		}
 		seen[lookupKey] = true
-		entries = append(entries, channelEntry{channelID: item.ChannelID, alarmType: alarmType})
+		entries = append(entries, channelAlarmEntry{channelID: item.ChannelID, alarmType: alarmType})
 	}
 
+	return entries
+}
+
+func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
+	result := make(map[string]channelAlarmRoomTargets)
+	entries := channelAlarmEntriesForItems(items)
 	if len(entries) == 0 {
 		return result
 	}
 
-	type lookupResult struct {
-		channelID string
-		alarmType domain.AlarmType
-		rooms     map[string]bool
-		ok        bool
-	}
+	mergeSubscriberLookupResults(result, d.lookupSubscriberRooms(ctx, entries))
+	return result
+}
 
-	results := make([]lookupResult, len(entries))
+func (d *Dispatcher) lookupSubscriberRooms(ctx context.Context, entries []channelAlarmEntry) []subscriberLookupResult {
+	results := make([]subscriberLookupResult, len(entries))
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(d.subscriberLookupParallelism())
 	for idx := range entries {
 		eg.Go(func() error {
 			e := entries[idx]
-			members, err := sharedalarm.ResolveChannelSubscribersByType(egCtx, d.cache, d.db, e.channelID, e.alarmType)
-			if err != nil {
-				d.logger.Warn("Failed to get subscribers for channel",
-					slog.String("channel_id", e.channelID),
-					slog.String("alarm_type", string(e.alarmType)),
-					slog.Any("error", err))
-				return nil
-			}
-
-			roomSet := make(map[string]bool, len(members))
-			for _, roomID := range members {
-				roomSet[roomID] = true
-			}
-			results[idx] = lookupResult{
+			rooms, ok := d.resolveSubscriberRooms(egCtx, e)
+			results[idx] = subscriberLookupResult{
 				channelID: e.channelID,
 				alarmType: e.alarmType,
-				rooms:     roomSet,
-				ok:        true,
+				rooms:     rooms,
+				ok:        ok,
 			}
 			return nil
 		})
 	}
 	_ = eg.Wait()
+	return results
+}
 
+func (d *Dispatcher) resolveSubscriberRooms(ctx context.Context, entry channelAlarmEntry) (map[string]bool, bool) {
+	members, err := sharedalarm.ResolveChannelSubscribersByType(ctx, d.cache, d.db, entry.channelID, entry.alarmType)
+	if err != nil {
+		d.logger.Warn("Failed to get subscribers for channel",
+			slog.String("channel_id", entry.channelID),
+			slog.String("alarm_type", string(entry.alarmType)),
+			slog.Any("error", err))
+		return nil, false
+	}
+
+	roomSet := make(map[string]bool, len(members))
+	for _, roomID := range members {
+		roomSet[roomID] = true
+	}
+	return roomSet, true
+}
+
+func mergeSubscriberLookupResults(result map[string]channelAlarmRoomTargets, results []subscriberLookupResult) {
 	for i := range results {
 		if !results[i].ok {
 			continue
@@ -164,8 +190,6 @@ func (d *Dispatcher) collectRoomsByChannel(ctx context.Context, items []domain.Y
 		}
 		alarmTargets[results[i].alarmType] = results[i].rooms
 	}
-
-	return result
 }
 
 func (d *Dispatcher) subscriberLookupParallelism() int {

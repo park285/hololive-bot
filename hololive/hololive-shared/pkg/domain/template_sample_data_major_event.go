@@ -21,106 +21,71 @@
 package domain
 
 func templateSampleMajorEventData() map[TemplateKey]any {
-	return map[TemplateKey]any{
-		TemplateKeyCmdMajorEventWeeklySummary: map[string]any{
-			"Emoji": map[string]string{
-				"Schedule": "📅",
-				"Member":   "👥",
-				"Link":     "🔗",
-			},
-			"Count":      2,
-			"LLMSummary": "",
-			"Events": []map[string]any{
-				{
-					"Title":    "hololive SUPER EXPO 2026",
-					"DateStr":  "2026년 3월 7일(토) ~ 2026년 3월 8일(일)",
-					"Members":  "사쿠라 미코, 호시마치 스이세이",
-					"Link":     "https://hololive.hololivepro.com/events/",
-					"HasDates": true,
-				},
-				{
-					"Title":    "hololive 7th fes.",
-					"DateStr":  "TBA",
-					"Members":  "hololive members",
-					"Link":     "https://hololive.hololivepro.com/",
-					"HasDates": false,
-				},
-			},
-		},
+	data := map[TemplateKey]any{}
+	addTemplateMajorEventSummarySamples(data)
+	addTemplateMajorEventSubscriptionSamples(data)
+	return data
+}
 
-		TemplateKeyCmdMajorEventMonthlySummary: map[string]any{
-			"Emoji": map[string]string{
-				"Schedule": "📅",
-				"Member":   "👥",
-				"Link":     "🔗",
-			},
-			"Count":      2,
-			"LLMSummary": "",
-			"Events": []map[string]any{
-				{
-					"Title":    "hololive SUPER EXPO 2026",
-					"DateStr":  "2026년 3월 7일(토) ~ 2026년 3월 8일(일)",
-					"Members":  "사쿠라 미코, 호시마치 스이세이",
-					"Link":     "https://hololive.hololivepro.com/events/",
-					"HasDates": true,
-				},
-				{
-					"Title":    "hololive 7th fes.",
-					"DateStr":  "TBA",
-					"Members":  "hololive members",
-					"Link":     "https://hololive.hololivepro.com/",
-					"HasDates": false,
-				},
-			},
-		},
+func addTemplateMajorEventSummarySamples(data map[TemplateKey]any) {
+	data[TemplateKeyCmdMajorEventWeeklySummary] = templateMajorEventSummarySample()
+	data[TemplateKeyCmdMajorEventMonthlySummary] = templateMajorEventSummarySample()
+}
 
-		TemplateKeyCmdMajorEventSubscribed: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm":   "🔔",
-				"Success": "✅",
-			},
-			"Prefix": "!",
-		},
+func templateMajorEventSummarySample() map[string]any {
+	return map[string]any{
+		"Emoji":      map[string]string{"Schedule": "📅", "Member": "👥", "Link": "🔗"},
+		"Count":      2,
+		"LLMSummary": "",
+		"Events":     templateMajorEventItems(),
+	}
+}
 
-		TemplateKeyCmdMajorEventUnsubscribed: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm":   "🔔",
-				"Success": "✅",
-			},
-			"Prefix": "!",
+func templateMajorEventItems() []map[string]any {
+	return []map[string]any{
+		{
+			"Title":    "hololive SUPER EXPO 2026",
+			"DateStr":  "2026년 3월 7일(토) ~ 2026년 3월 8일(일)",
+			"Members":  "사쿠라 미코, 호시마치 스이세이",
+			"Link":     "https://hololive.hololivepro.com/events/",
+			"HasDates": true,
 		},
+		{
+			"Title":    "hololive 7th fes.",
+			"DateStr":  "TBA",
+			"Members":  "hololive members",
+			"Link":     "https://hololive.hololivepro.com/",
+			"HasDates": false,
+		},
+	}
+}
 
-		TemplateKeyCmdMajorEventAlreadySub: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm": "🔔",
-				"Info":  "ℹ️",
-			},
-			"Prefix": "!",
-		},
+func addTemplateMajorEventSubscriptionSamples(data map[TemplateKey]any) {
+	data[TemplateKeyCmdMajorEventSubscribed] = templateMajorEventAlarmSuccessSample()
+	data[TemplateKeyCmdMajorEventUnsubscribed] = templateMajorEventAlarmSuccessSample()
+	data[TemplateKeyCmdMajorEventAlreadySub] = templateMajorEventAlarmInfoSample()
+	data[TemplateKeyCmdMajorEventNotSub] = templateMajorEventAlarmInfoSample()
+	data[TemplateKeyCmdMajorEventStatus] = map[string]any{
+		"Emoji":        map[string]string{"Alarm": "🔔", "Info": "ℹ️"},
+		"IsSubscribed": true,
+		"Prefix":       "!",
+	}
+	data[TemplateKeyCmdMajorEventUsage] = map[string]any{
+		"Emoji":  map[string]string{"Alarm": "🔔", "Hint": "💡"},
+		"Prefix": "!",
+	}
+}
 
-		TemplateKeyCmdMajorEventNotSub: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm": "🔔",
-				"Info":  "ℹ️",
-			},
-			"Prefix": "!",
-		},
+func templateMajorEventAlarmSuccessSample() map[string]any {
+	return map[string]any{
+		"Emoji":  map[string]string{"Alarm": "🔔", "Success": "✅"},
+		"Prefix": "!",
+	}
+}
 
-		TemplateKeyCmdMajorEventStatus: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm": "🔔",
-				"Info":  "ℹ️",
-			},
-			"IsSubscribed": true,
-			"Prefix":       "!",
-		},
-
-		TemplateKeyCmdMajorEventUsage: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm": "🔔",
-				"Hint":  "💡",
-			},
-			"Prefix": "!",
-		},
+func templateMajorEventAlarmInfoSample() map[string]any {
+	return map[string]any{
+		"Emoji":  map[string]string{"Alarm": "🔔", "Info": "ℹ️"},
+		"Prefix": "!",
 	}
 }

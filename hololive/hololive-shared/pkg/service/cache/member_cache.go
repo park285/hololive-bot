@@ -64,17 +64,25 @@ func (c *Service) GetMemberChannelID(ctx context.Context, memberName string) (st
 		return "", nil
 	}
 
-	// 1. 먼저 name:Hololive 형식 시도
-	keyWithOrg := memberName + ":Hololive"
-	resp := c.client.Do(ctx, c.client.B().Hget().Key(memberHashKey).Field(keyWithOrg).Build())
-	if !valkey.IsValkeyNil(resp.Error()) && resp.Error() == nil {
-		if value, err := resp.ToString(); err == nil && value != "" {
-			return value, nil
-		}
+	if value, ok := c.getMemberChannelIDIfPresent(ctx, memberName+":Hololive"); ok {
+		return value, nil
 	}
 
-	// 2. 레거시 키 시도 (name만)
-	resp = c.client.Do(ctx, c.client.B().Hget().Key(memberHashKey).Field(memberName).Build())
+	return c.getLegacyMemberChannelID(ctx, memberName)
+}
+
+func (c *Service) getMemberChannelIDIfPresent(ctx context.Context, key string) (string, bool) {
+	resp := c.client.Do(ctx, c.client.B().Hget().Key(memberHashKey).Field(key).Build())
+	if valkey.IsValkeyNil(resp.Error()) || resp.Error() != nil {
+		return "", false
+	}
+
+	value, err := resp.ToString()
+	return value, err == nil && value != ""
+}
+
+func (c *Service) getLegacyMemberChannelID(ctx context.Context, memberName string) (string, error) {
+	resp := c.client.Do(ctx, c.client.B().Hget().Key(memberHashKey).Field(memberName).Build())
 	if valkey.IsValkeyNil(resp.Error()) {
 		return "", nil
 	}

@@ -120,22 +120,29 @@ func (r *StatsRepository) SaveStatsBatch(ctx context.Context, stats []*domain.Ti
 		if err := r.saveStatsBatchChunk(ctx, chunk); err != nil {
 			return err
 		}
-		if !r.isLatestTableAvailable() {
-			continue
-		}
-
-		if latestErr := r.upsertLatestStatsBatch(ctx, chunk); latestErr != nil {
-			if isUndefinedTableError(latestErr) {
-				r.markLatestTableUnavailable()
-				continue
-			}
-			return fmt.Errorf("failed to save latest stats snapshot batch: %w", latestErr)
+		if err := r.saveLatestStatsBatchIfAvailable(ctx, chunk); err != nil {
+			return err
 		}
 	}
 
 	r.logger.Debug("Stats batch saved to TimescaleDB",
 		slog.Int("count", len(stats)),
 	)
+	return nil
+}
+
+func (r *StatsRepository) saveLatestStatsBatchIfAvailable(ctx context.Context, stats []*domain.TimestampedStats) error {
+	if !r.isLatestTableAvailable() {
+		return nil
+	}
+
+	if latestErr := r.upsertLatestStatsBatch(ctx, stats); latestErr != nil {
+		if isUndefinedTableError(latestErr) {
+			r.markLatestTableUnavailable()
+			return nil
+		}
+		return fmt.Errorf("failed to save latest stats snapshot batch: %w", latestErr)
+	}
 	return nil
 }
 
@@ -146,20 +153,7 @@ func (r *StatsRepository) saveStatsBatchChunk(ctx context.Context, stats []*doma
 
 	args := make([]any, 0, len(stats)*columnsPerRow)
 	for i, s := range stats {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		base := i * columnsPerRow
-		sb.WriteByte('(')
-		for j := range columnsPerRow {
-			if j > 0 {
-				sb.WriteByte(',')
-			}
-			sb.WriteByte('$')
-			sb.WriteString(strconv.Itoa(base + j + 1))
-		}
-		sb.WriteByte(')')
-
+		writeValuePlaceholders(&sb, i, columnsPerRow, "")
 		args = append(args, s.Timestamp, s.ChannelID, s.MemberName, s.SubscriberCount, s.VideoCount, s.ViewCount)
 	}
 
@@ -178,20 +172,7 @@ func (r *StatsRepository) upsertLatestStatsBatch(ctx context.Context, stats []*d
 
 	args := make([]any, 0, len(stats)*columnsPerRow)
 	for i, s := range stats {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		base := i * columnsPerRow
-		sb.WriteByte('(')
-		for j := range columnsPerRow {
-			if j > 0 {
-				sb.WriteByte(',')
-			}
-			sb.WriteByte('$')
-			sb.WriteString(strconv.Itoa(base + j + 1))
-		}
-		sb.WriteString(`,NOW())`)
-
+		writeValuePlaceholders(&sb, i, columnsPerRow, ",NOW()")
 		args = append(args, s.ChannelID, s.MemberName, s.SubscriberCount, s.VideoCount, s.ViewCount, s.Timestamp)
 	}
 
@@ -202,6 +183,23 @@ func (r *StatsRepository) upsertLatestStatsBatch(ctx context.Context, stats []*d
 		return fmt.Errorf("upsert latest stats batch (%d rows): %w", len(stats), err)
 	}
 	return nil
+}
+
+func writeValuePlaceholders(sb *strings.Builder, rowIndex int, columns int, suffix string) {
+	if rowIndex > 0 {
+		sb.WriteByte(',')
+	}
+	base := rowIndex * columns
+	sb.WriteByte('(')
+	for j := range columns {
+		if j > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('$')
+		sb.WriteString(strconv.Itoa(base + j + 1))
+	}
+	sb.WriteString(suffix)
+	sb.WriteByte(')')
 }
 
 func (r *StatsRepository) RecordChange(ctx context.Context, change *domain.StatsChange) error {
@@ -271,33 +269,8 @@ func (r *StatsRepository) recordChangeBatchChunk(ctx context.Context, changes []
 
 	args := make([]any, 0, len(changes)*recordChangeColumnsPerRow)
 	for i, change := range changes {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		base := i * recordChangeColumnsPerRow
-		sb.WriteByte('(')
-		for j := range recordChangeColumnsPerRow {
-			if j > 0 {
-				sb.WriteByte(',')
-			}
-			sb.WriteByte('$')
-			sb.WriteString(strconv.Itoa(base + j + 1))
-		}
-		sb.WriteByte(')')
-
-		var prevSubs, currSubs, prevVideos, currVideos *int64
-		if change.PreviousStats != nil {
-			v := int64(change.PreviousStats.SubscriberCount)
-			prevSubs = &v
-			v2 := int64(change.PreviousStats.VideoCount)
-			prevVideos = &v2
-		}
-		if change.CurrentStats != nil {
-			v := int64(change.CurrentStats.SubscriberCount)
-			currSubs = &v
-			v2 := int64(change.CurrentStats.VideoCount)
-			currVideos = &v2
-		}
+		writeValuePlaceholders(&sb, i, recordChangeColumnsPerRow, "")
+		prevSubs, currSubs, prevVideos, currVideos := changeBatchPreviousCurrentValues(change)
 
 		args = append(args,
 			change.ChannelID, change.MemberName,
@@ -312,4 +285,20 @@ func (r *StatsRepository) recordChangeBatchChunk(ctx context.Context, changes []
 		return fmt.Errorf("failed to batch record changes (%d rows): %w", len(changes), err)
 	}
 	return nil
+}
+
+func changeBatchPreviousCurrentValues(change *domain.StatsChange) (prevSubs, currSubs, prevVideos, currVideos *int64) {
+	if change.PreviousStats != nil {
+		v := int64(change.PreviousStats.SubscriberCount)
+		prevSubs = &v
+		v2 := int64(change.PreviousStats.VideoCount)
+		prevVideos = &v2
+	}
+	if change.CurrentStats != nil {
+		v := int64(change.CurrentStats.SubscriberCount)
+		currSubs = &v
+		v2 := int64(change.CurrentStats.VideoCount)
+		currVideos = &v2
+	}
+	return prevSubs, currSubs, prevVideos, currVideos
 }

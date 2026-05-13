@@ -112,8 +112,7 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		gin.SetMode(prevMode)
 	})
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
+	ctx := t.Context()
 
 	readiness := newIngestionReadinessState(youtubeScraperRuntimeName, ingestionRuntimeFeatures{
 		youtubeEnabled:   true,
@@ -266,8 +265,7 @@ func TestBuildStreamIngesterHTTPServer(t *testing.T) {
 		gin.SetMode(prevMode)
 	})
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
+	ctx := t.Context()
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{

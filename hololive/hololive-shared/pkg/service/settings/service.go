@@ -117,17 +117,31 @@ func (s *Service) load() {
 	if disk.ScraperProxyEnabled != nil {
 		s.cache.ScraperProxyEnabled = *disk.ScraperProxyEnabled
 	}
-	if len(disk.TargetMinutes) > 0 {
-		resolved := sharedchecker.NewTargetMinutePolicyFromPersisted(s.cache.AlarmAdvanceMinutes, disk.TargetMinutes).Clone()
-		s.cache.TargetMinutes = cloneTargetMinutes(resolved)
-		if !slices.Equal(resolved, disk.TargetMinutes) && s.logger != nil {
-			s.logger.Info("Healing persisted target minutes", slog.Any("from", disk.TargetMinutes), slog.Any("to", resolved))
-		}
-		if !slices.Equal(resolved, disk.TargetMinutes) {
-			if err := s.persistCache(); err != nil && s.logger != nil {
-				s.logger.Warn("Failed to persist healed settings", slog.String("error", err.Error()))
-			}
-		}
+	s.applyDiskTargetMinutes(disk.TargetMinutes)
+}
+
+func (s *Service) applyDiskTargetMinutes(targetMinutes []int) {
+	if len(targetMinutes) == 0 {
+		return
+	}
+	resolved := sharedchecker.NewTargetMinutePolicyFromPersisted(s.cache.AlarmAdvanceMinutes, targetMinutes).Clone()
+	s.cache.TargetMinutes = cloneTargetMinutes(resolved)
+	if slices.Equal(resolved, targetMinutes) {
+		return
+	}
+	s.logHealedTargetMinutes(targetMinutes, resolved)
+	s.persistHealedSettings()
+}
+
+func (s *Service) logHealedTargetMinutes(from []int, to []int) {
+	if s.logger != nil {
+		s.logger.Info("Healing persisted target minutes", slog.Any("from", from), slog.Any("to", to))
+	}
+}
+
+func (s *Service) persistHealedSettings() {
+	if err := s.persistCache(); err != nil && s.logger != nil {
+		s.logger.Warn("Failed to persist healed settings", slog.String("error", err.Error()))
 	}
 }
 

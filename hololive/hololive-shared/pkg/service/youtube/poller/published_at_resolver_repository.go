@@ -124,46 +124,102 @@ func (r *publishedAtResolverRepository) loadFinalizeEligibility(
 ) (publishedAtFinalizeEligibility, error) {
 	eligibility := publishedAtFinalizeEligibility{enqueuable: true}
 
-	stateRow, err := txRepo.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
+	stateEligibility, resolved, err := r.loadFinalizeAlarmStateEligibility(ctx, txRepo, candidate)
 	if err != nil {
-		return publishedAtFinalizeEligibility{}, fmt.Errorf("load alarm state row: %w", err)
+		return publishedAtFinalizeEligibility{}, err
 	}
-	if stateRow != nil {
-		if stateRow.AlarmSentAt != nil && !stateRow.AlarmSentAt.IsZero() {
-			return publishedAtFinalizeEligibility{reason: "already_sent"}, nil
-		}
-		if stateRow.AuthorizedAt != nil && !stateRow.AuthorizedAt.IsZero() {
-			if isPublishedAtClaimFresh(*stateRow.AuthorizedAt) {
-				return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
-			}
-
-			exists, err := r.outboxExistsForCandidate(ctx, txRepo, candidate)
-			if err != nil {
-				return publishedAtFinalizeEligibility{}, err
-			}
-			if exists {
-				return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
-			}
-
-			released, err := txRepo.ReleaseAlarmStateClaim(ctx, candidate.Kind, candidate.PostID, *stateRow.AuthorizedAt)
-			if err != nil {
-				return publishedAtFinalizeEligibility{}, fmt.Errorf("release stale alarm state claim: %w", err)
-			}
-			if !released {
-				return publishedAtFinalizeEligibility{reason: "already_claimed"}, nil
-			}
-		}
+	if resolved {
+		return stateEligibility, nil
 	}
 
-	trackingRow, err := txRepo.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
+	trackingEligibility, resolved, err := loadFinalizeTrackingEligibility(ctx, txRepo, candidate)
 	if err != nil {
-		return publishedAtFinalizeEligibility{}, fmt.Errorf("load tracking row: %w", err)
+		return publishedAtFinalizeEligibility{}, err
 	}
-	if trackingRow != nil && trackingRow.AlarmSentAt != nil && !trackingRow.AlarmSentAt.IsZero() {
-		return publishedAtFinalizeEligibility{reason: "already_sent"}, nil
+	if resolved {
+		return trackingEligibility, nil
 	}
 
 	return eligibility, nil
+}
+
+func (r *publishedAtResolverRepository) loadFinalizeAlarmStateEligibility(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+) (publishedAtFinalizeEligibility, bool, error) {
+	stateRow, err := txRepo.FindAlarmStateByPostID(ctx, candidate.Kind, candidate.PostID)
+	if err != nil {
+		return publishedAtFinalizeEligibility{}, false, fmt.Errorf("load alarm state row: %w", err)
+	}
+	if stateRow == nil {
+		return publishedAtFinalizeEligibility{}, false, nil
+	}
+	if isPublishedAtAlarmStateSent(stateRow) {
+		return publishedAtFinalizeEligibility{reason: "already_sent"}, true, nil
+	}
+	if !isPublishedAtAlarmStateClaimed(stateRow) {
+		return publishedAtFinalizeEligibility{}, false, nil
+	}
+
+	return r.resolveFinalizeAlarmStateClaimEligibility(ctx, txRepo, candidate, *stateRow.AuthorizedAt)
+}
+
+func isPublishedAtAlarmStateSent(stateRow *domain.YouTubeCommunityShortsAlarmState) bool {
+	return stateRow.AlarmSentAt != nil && !stateRow.AlarmSentAt.IsZero()
+}
+
+func isPublishedAtAlarmStateClaimed(stateRow *domain.YouTubeCommunityShortsAlarmState) bool {
+	return stateRow.AuthorizedAt != nil && !stateRow.AuthorizedAt.IsZero()
+}
+
+func (r *publishedAtResolverRepository) resolveFinalizeAlarmStateClaimEligibility(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+	authorizedAt time.Time,
+) (publishedAtFinalizeEligibility, bool, error) {
+	if isPublishedAtClaimFresh(authorizedAt) {
+		return publishedAtFinalizeEligibility{reason: "already_claimed"}, true, nil
+	}
+
+	exists, err := r.outboxExistsForCandidate(ctx, txRepo, candidate)
+	if err != nil {
+		return publishedAtFinalizeEligibility{}, false, err
+	}
+	if exists {
+		return publishedAtFinalizeEligibility{reason: "already_claimed"}, true, nil
+	}
+
+	released, err := txRepo.ReleaseAlarmStateClaim(ctx, candidate.Kind, candidate.PostID, authorizedAt)
+	if err != nil {
+		return publishedAtFinalizeEligibility{}, false, fmt.Errorf("release stale alarm state claim: %w", err)
+	}
+	if !released {
+		return publishedAtFinalizeEligibility{reason: "already_claimed"}, true, nil
+	}
+
+	return publishedAtFinalizeEligibility{}, false, nil
+}
+
+func loadFinalizeTrackingEligibility(
+	ctx context.Context,
+	txRepo *trackingrepo.GormRepository,
+	candidate trackingrepo.PublishedAtResolutionCandidate,
+) (publishedAtFinalizeEligibility, bool, error) {
+	trackingRow, err := txRepo.FindByIdentity(ctx, candidate.Kind, candidate.ContentID)
+	if err != nil {
+		return publishedAtFinalizeEligibility{}, false, fmt.Errorf("load tracking row: %w", err)
+	}
+	if isPublishedAtTrackingSent(trackingRow) {
+		return publishedAtFinalizeEligibility{reason: "already_sent"}, true, nil
+	}
+
+	return publishedAtFinalizeEligibility{}, false, nil
+}
+
+func isPublishedAtTrackingSent(trackingRow *domain.YouTubeContentAlarmTracking) bool {
+	return trackingRow != nil && trackingRow.AlarmSentAt != nil && !trackingRow.AlarmSentAt.IsZero()
 }
 
 func isPublishedAtClaimFresh(authorizedAt time.Time) bool {
@@ -209,14 +265,8 @@ func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx 
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("list resolved published_at dispatch gaps: db is nil")
 	}
-	if referenceNow.IsZero() {
-		return nil, fmt.Errorf("list resolved published_at dispatch gaps: reference now is empty")
-	}
-	if detectedBefore.IsZero() {
-		return nil, fmt.Errorf("list resolved published_at dispatch gaps: detected before is empty")
-	}
-	if limit <= 0 {
-		return nil, fmt.Errorf("list resolved published_at dispatch gaps: limit must be positive")
+	if err := validateResolvedPublishedAtDispatchGapRequest(referenceNow, detectedBefore, limit); err != nil {
+		return nil, err
 	}
 
 	var rows []resolvedPublishedAtDispatchGapRow
@@ -243,6 +293,24 @@ func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx 
 		return nil, fmt.Errorf("list resolved published_at dispatch gaps: query rows: %w", err)
 	}
 
+	return buildResolvedPublishedAtDispatchGaps(rows), nil
+}
+
+func validateResolvedPublishedAtDispatchGapRequest(referenceNow time.Time, detectedBefore time.Time, limit int) error {
+	if referenceNow.IsZero() {
+		return fmt.Errorf("list resolved published_at dispatch gaps: reference now is empty")
+	}
+	if detectedBefore.IsZero() {
+		return fmt.Errorf("list resolved published_at dispatch gaps: detected before is empty")
+	}
+	if limit <= 0 {
+		return fmt.Errorf("list resolved published_at dispatch gaps: limit must be positive")
+	}
+
+	return nil
+}
+
+func buildResolvedPublishedAtDispatchGaps(rows []resolvedPublishedAtDispatchGapRow) []resolvedPublishedAtDispatchGap {
 	gaps := make([]resolvedPublishedAtDispatchGap, 0, len(rows))
 	for i := range rows {
 		postID := normalizeContentID(rows[i].Kind, rows[i].PostID)
@@ -262,5 +330,5 @@ func (r *publishedAtResolverRepository) ListResolvedPublishedAtDispatchGaps(ctx 
 		})
 	}
 
-	return gaps, nil
+	return gaps
 }

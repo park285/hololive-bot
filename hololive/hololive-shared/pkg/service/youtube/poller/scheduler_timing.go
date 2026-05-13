@@ -32,6 +32,18 @@ func nextErrorRetryAt(now time.Time, interval time.Duration, consecutiveFailures
 }
 
 func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff, maxBackoff time.Duration) time.Duration {
+	minBackoff, maxBackoff = normalizeRetryBackoffBounds(minBackoff, maxBackoff)
+
+	if consecutiveFailures <= 1 {
+		return capRetryDelayByInterval(minBackoff, interval)
+	}
+
+	delay := exponentialRetryBackoff(minBackoff, maxBackoff, consecutiveFailures)
+	delay = min(capRetryDelayByInterval(delay, interval), maxBackoff)
+	return delay
+}
+
+func normalizeRetryBackoffBounds(minBackoff, maxBackoff time.Duration) (time.Duration, time.Duration) {
 	if minBackoff <= 0 {
 		minBackoff = 30 * time.Second
 	}
@@ -41,14 +53,10 @@ func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff
 	if maxBackoff < minBackoff {
 		maxBackoff = minBackoff
 	}
+	return minBackoff, maxBackoff
+}
 
-	if consecutiveFailures <= 1 {
-		if interval > 0 && interval < minBackoff {
-			return interval
-		}
-		return minBackoff
-	}
-
+func exponentialRetryBackoff(minBackoff, maxBackoff time.Duration, consecutiveFailures int) time.Duration {
 	delay := minBackoff
 	for i := 1; i < consecutiveFailures; i++ {
 		if delay >= maxBackoff/2 {
@@ -57,12 +65,12 @@ func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff
 		}
 		delay *= 2
 	}
+	return delay
+}
 
+func capRetryDelayByInterval(delay, interval time.Duration) time.Duration {
 	if interval > 0 && interval < delay {
-		delay = interval
-	}
-	if delay > maxBackoff {
-		delay = maxBackoff
+		return interval
 	}
 	return delay
 }

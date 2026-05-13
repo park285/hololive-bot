@@ -31,8 +31,8 @@ func TestBuildDeliveryAuditLogAttrsIncludesObservationWindowFields(t *testing.T)
 		AlarmType:                   domain.AlarmTypeShorts,
 		ActualPublishedAt:           &actualPublishedAt,
 		DetectedAt:                  &detectedAt,
-		AlarmSentAt:                 ptrTime(detectedAt.Add(time.Minute)),
-		AlarmLatencyMillis:          ptrInt64(int64(55 * time.Second / time.Millisecond)),
+		AlarmSentAt:                 new(detectedAt.Add(time.Minute)),
+		AlarmLatencyMillis:          new(int64(55 * time.Second / time.Millisecond)),
 		ObservationStatus:           deliveryTelemetryObservationStatusMatched,
 		ObservationRuntimeName:      "youtube-scraper",
 		ObservationBigBangCutoverAt: &cutoverAt,
@@ -131,7 +131,7 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesLatencyClassificati
 		InternalDelayCause: PostInternalDelayCauseRetryAccumulation,
 		Evidence: []PostLatencyClassificationEvidence{{
 			Key:      PostLatencyClassificationEvidenceKeyRetryAccumulation,
-			Millis:   ptrInt64(evidenceMillis),
+			Millis:   new(evidenceMillis),
 			Selected: true,
 		}},
 	}
@@ -182,12 +182,4 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesExternalDelayReason
 	require.Contains(t, logLine, `"delay_source":"external_collection"`)
 	require.Contains(t, logLine, `"internal_delay_cause":"none"`)
 	require.Contains(t, logLine, `"reason_code":"external_collection"`)
-}
-
-func ptrTime(value time.Time) *time.Time {
-	return &value
-}
-
-func ptrInt64(value int64) *int64 {
-	return &value
 }

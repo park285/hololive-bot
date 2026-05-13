@@ -28,8 +28,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/kapu/hololive-llm-sched/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-llm-sched/internal/service/majorevent/scheduler"
@@ -68,85 +66,6 @@ type LLMSchedulerRuntime struct {
 
 type memberNewsWeeklyDigestSender interface {
 	SendWeeklyDigest(ctx context.Context) error
-}
-
-type memberNewsRunNowExecutor struct {
-	baseCtx context.Context
-	timeout time.Duration
-	sender  memberNewsWeeklyDigestSender
-	logger  *slog.Logger
-	stateMu sync.Mutex
-	running bool
-	pending bool
-}
-
-func newMemberNewsRunNowExecutor(
-	baseCtx context.Context,
-	sender memberNewsWeeklyDigestSender,
-	timeout time.Duration,
-	logger *slog.Logger,
-) *memberNewsRunNowExecutor {
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	return &memberNewsRunNowExecutor{
-		baseCtx: baseCtx,
-		timeout: timeout,
-		sender:  sender,
-		logger:  logger,
-	}
-}
-
-func (e *memberNewsRunNowExecutor) Trigger() {
-	e.stateMu.Lock()
-	if e.running {
-		e.pending = true
-		e.stateMu.Unlock()
-		e.logger.Info("Member news weekly run-now coalesced: run already in progress")
-		return
-	}
-	e.running = true
-	e.stateMu.Unlock()
-
-	go e.runLoop()
-}
-
-func (e *memberNewsRunNowExecutor) runLoop() {
-	for {
-		e.runOnce()
-
-		e.stateMu.Lock()
-		if !e.pending {
-			e.running = false
-			e.stateMu.Unlock()
-			return
-		}
-		e.pending = false
-		e.stateMu.Unlock()
-
-		e.logger.Info("Member news weekly run-now processing coalesced trigger")
-	}
-}
-
-func (e *memberNewsRunNowExecutor) runOnce() {
-	if e.sender == nil {
-		e.logger.Warn("Ignored membernews weekly run-now: scheduler not initialized")
-		return
-	}
-
-	runCtx, cancel := context.WithTimeout(e.baseCtx, e.timeout)
-	defer cancel()
-
-	if err := e.sender.SendWeeklyDigest(runCtx); err != nil {
-		e.logger.Error("Member news weekly run-now failed", slog.Any("error", err))
-		return
-	}
-
-	e.logger.Info("Member news weekly run-now completed via config update")
 }
 
 func (r *LLMSchedulerRuntime) Run() {
@@ -320,30 +239,15 @@ func buildLLMSchedulerComponents(
 
 	templateRenderer := template.NewRenderer(postgresService.GetGormDB(), logger)
 	formatter := newLLMSchedulerFormatter(cfg.Bot.Prefix, templateRenderer, logger)
-	majorEventRepo := majorevent.NewRepository(postgresService, logger)
-	if cfg.Postgres.AutoPrepareSchema {
-		if createErr := majorEventRepo.CreateTable(ctx); createErr != nil {
-			logger.Error("Failed to create major_event_subscriptions table", slog.String("error", createErr.Error()))
-		}
-	}
+	majorEventRepo := buildMajorEventRepository(ctx, postgresService, logger, cfg.Postgres.AutoPrepareSchema)
 	memberNewsService := initMemberNewsService(ctx, cfg.Cliproxy, cfg.LLM, cfg.Exa, postgresService, cacheService, memberDataProvider, logger)
 
-	irisClient, err := providers.ProvideIrisClient(
-		logger,
-		iris.WithBaseURL(cfg.Iris.BaseURL),
-		iris.WithBotToken(cfg.Iris.BotToken),
-	)
+	deliveryModule, err := buildLLMSchedulerDeliveryModule(cfg, cacheService, postgresService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init iris client: %w", err)
 	}
-	deliverySender := delivery.NewIrisMessageSender(irisClient)
-	deliveryModule := BuildDeliveryModule(cacheService, postgresService, deliverySender, logger)
 
-	majorEventLLMClient := ProvideMajorEventLLMClient(cfg.Cliproxy, logger)
-	majorEventReviewer := ProvideMajorEventReviewerClient(cfg.Cliproxy, cfg.LLM, logger)
-	majorEventAdjudicator := ProvideMajorEventAdjudicatorClient(cfg.Cliproxy, cfg.LLM, logger)
-	exaSearcher := provideExaSearcher(cfg.Exa, logger)
-	summarizer := provideEventSummarizer(cfg.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheService, exaSearcher, logger)
+	summarizer := buildMajorEventSummarizer(cfg, cacheService, logger)
 
 	majorEventScheduler, majorEventMonthlyScheduler, majorEventScraperScheduler := buildMajorEventComponents(
 		ctx,
@@ -364,6 +268,32 @@ func buildLLMSchedulerComponents(
 	}
 	configSubscriber := buildLLMSchedulerConfigSubscriber(ctx, cacheService, memberNewsScheduler, logger)
 
+	return newLLMSchedulerRuntime(
+		cfg,
+		logger,
+		deliveryModule,
+		majorEventScheduler,
+		majorEventMonthlyScheduler,
+		majorEventScraperScheduler,
+		memberNewsScheduler,
+		memberNewsMonthlyScheduler,
+		configSubscriber,
+		httpServer,
+	), nil
+}
+
+func newLLMSchedulerRuntime(
+	cfg *config.LLMSchedulerConfig,
+	logger *slog.Logger,
+	deliveryModule *DeliveryModule,
+	majorEventScheduler *mescheduler.Scheduler,
+	majorEventMonthlyScheduler *mescheduler.MonthlyScheduler,
+	majorEventScraperScheduler *mescraper.RuntimeScheduler,
+	memberNewsScheduler *mnscheduler.Scheduler,
+	memberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler,
+	configSubscriber *configsub.Subscriber,
+	httpServer *http.Server,
+) *LLMSchedulerRuntime {
 	return &LLMSchedulerRuntime{
 		Config:                     cfg,
 		Logger:                     logger,
@@ -375,7 +305,40 @@ func buildLLMSchedulerComponents(
 		MemberNewsMonthlyScheduler: memberNewsMonthlyScheduler,
 		configSubscriber:           configSubscriber,
 		httpServer:                 httpServer,
-	}, nil
+	}
+}
+
+func buildMajorEventRepository(
+	ctx context.Context,
+	postgresService database.Client,
+	logger *slog.Logger,
+	autoPrepareSchema bool,
+) *majorevent.Repository {
+	repo := majorevent.NewRepository(postgresService, logger)
+	if autoPrepareSchema {
+		if createErr := repo.CreateTable(ctx); createErr != nil {
+			logger.Error("Failed to create major_event_subscriptions table", slog.String("error", createErr.Error()))
+		}
+	}
+	return repo
+}
+
+func buildLLMSchedulerDeliveryModule(
+	cfg *config.LLMSchedulerConfig,
+	cacheService cache.Client,
+	postgresService database.Client,
+	logger *slog.Logger,
+) (*DeliveryModule, error) {
+	irisClient, err := providers.ProvideIrisClient(
+		logger,
+		iris.WithBaseURL(cfg.Iris.BaseURL),
+		iris.WithBotToken(cfg.Iris.BotToken),
+	)
+	if err != nil {
+		return nil, err
+	}
+	deliverySender := delivery.NewIrisMessageSender(irisClient)
+	return BuildDeliveryModule(cacheService, postgresService, deliverySender, logger), nil
 }
 
 func buildLLMSchedulerHTTPServer(
