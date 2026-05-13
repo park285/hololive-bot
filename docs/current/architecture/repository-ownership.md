@@ -10,8 +10,8 @@
 |---|---|---|---|---|
 | `major_event_subscriptions` | `llm-scheduler` | `llm-scheduler` | `admin-api`, `bot` | internal HTTP contract `majorevent.subscription` |
 | `membernews` state | `llm-scheduler` | `llm-scheduler` | `bot` | internal HTTP contracts `membernews.subscription`, `membernews.digest` |
-| alarm queue state | `alarm-worker`, `dispatcher-go` by phase | `alarm-worker`, `dispatcher-go` | observability consumers | queue contract `alarm.dispatch` or documented API |
-| YouTube outbox/tracking | ingestion runtime owner | runtime owner only | dispatcher/alarm consumers by contract | shared repository path owned by ingestion runtime |
+| alarm queue state | `alarm-worker` | `alarm-worker` | `alarm-worker`, observability consumers, legacy `dispatcher-go` where explicitly enabled | queue contract `alarm.dispatch` or documented API |
+| YouTube outbox/tracking | `youtube-scraper` production, `alarm-worker` egress | `youtube-scraper` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `youtube-scraper` writes rows, `alarm-worker` owns final send state |
 
 Structured allowlist: `repository-ownership.allowlist`.
 
@@ -35,9 +35,10 @@ Structured allowlist: `repository-ownership.allowlist`.
 | Runtime | Enabled role | Must stay disabled |
 |---|---|---|
 | `stream-ingester` | photo sync and ingestion-adjacent health/config runtime duties | dedicated YouTube polling/outbox ownership |
-| `youtube-scraper` | YouTube scraping/polling and outbox production | photo sync ownership |
+| `youtube-scraper` | YouTube scraping/polling and `youtube_notification_outbox` production | photo sync ownership, Iris send, direct outbox dispatch |
 
 Duplicated polling prevention is enforced operationally by Compose env ownership: `stream-ingester` keeps `YOUTUBE_INGESTION_ENABLED=false`, and `youtube-scraper` owns `YOUTUBE_INGESTION_ENABLED=true`.
+Duplicated sending prevention is enforced by code and architecture gates: `youtube-scraper` and producer runtimes must not import `pkg/service/delivery` for proactive egress, call `delivery.NewIrisMessageSender`, call `outbox.NewDispatcher`, or start `OutboxDispatcher`.
 
 ## Validation
 

@@ -19,7 +19,7 @@
 |---|---|---|
 | PostgreSQL | yes | sync/ingestion state fails |
 | Valkey | yes | cache/config coordination degrades |
-| Iris | partial | external interactions fail where configured |
+| Iris | no | proactive egress is owned by `alarm-worker` |
 
 ## Key environment variables
 
@@ -28,6 +28,7 @@
 | `SERVER_PORT` | HTTP health port | yes |
 | `PHOTO_SYNC_ENABLED` | runtime ownership switch | yes |
 | `YOUTUBE_INGESTION_ENABLED` | must be false for this service | yes |
+| `NOTIFICATION_EGRESS_ROLE=producer` | producer-only egress boundary | yes |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 
 ## Logs

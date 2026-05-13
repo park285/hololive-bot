@@ -2,12 +2,13 @@
 
 ## Summary
 
-Alarm domain currently has two contract surfaces: alarm HTTP JSON APIs and the Valkey dispatch queue consumed by `dispatcher-go`.
+Alarm domain currently has HTTP JSON APIs, the Valkey dispatch queue, generic notification delivery outbox egress, and the YouTube notification outbox egress path owned by `alarm-worker`.
 
 ## Contract IDs
 
 - `alarm.http`
 - `alarm.dispatch`
+- `youtube.outbox.egress`
 
 ## Provider
 
@@ -20,8 +21,8 @@ Alarm domain currently has two contract surfaces: alarm HTTP JSON APIs and the V
 ## Consumers
 
 - HTTP consumers: `bot`, `admin-api` facade paths
-- Queue consumer: `dispatcher-go`
-- Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery
+- Queue consumer: legacy `dispatcher-go` where enabled; production proactive egress owner is `alarm-worker`.
+- Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery, YouTube outbox handoff
 
 ## Transport
 
@@ -43,14 +44,19 @@ Alarm domain currently has two contract surfaces: alarm HTTP JSON APIs and the V
 
 ```go
 type AlarmQueueEnvelope struct {
-    Notification  domain.AlarmNotification `json:"notification"`
-    ClaimKeys     []string                 `json:"claim_keys"`
-    EnqueuedAt    string                   `json:"enqueued_at"`
-    Version       uint8                    `json:"version"`
-    Retry         *AlarmQueueRetryMetadata `json:"retry,omitempty"`
-    SourcePayload string                   `json:"source_payload,omitempty"`
+    Notification  domain.AlarmNotification          `json:"notification"`
+    ClaimKeys     []string                          `json:"claim_keys"`
+    EnqueuedAt    string                            `json:"enqueued_at"`
+    Version       uint8                             `json:"version"`
+    Retry         *AlarmQueueRetryMetadata          `json:"retry,omitempty"`
+    SourcePayload string                            `json:"source_payload,omitempty"`
+    SourceKind    domain.AlarmDispatchSourceKind    `json:"source_kind,omitempty"`
+    YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
 }
 ```
+
+Legacy alarm notifications keep using `Notification` and `ValidateLegacyRoute`.
+Major event/member news rows are produced in `notification_delivery_outbox`; `alarm-worker` claims those rows and sends them through Iris/Kakao. YouTube live/video/community/shorts rows are produced in `youtube_notification_outbox`; `alarm-worker` claims those rows, resolves rooms, renders with the shared YouTube outbox formatter, sends through Iris/Kakao, and writes per-room delivery state.
 
 HTTP request DTOs are currently defined in `hololive/hololive-shared/pkg/service/alarm/dto.go` and the client-local request structs in `client.go`.
 

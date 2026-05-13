@@ -75,6 +75,10 @@ echo "[M2] repository ownership boundary check"
 "${SCRIPT_DIR}/check-repository-ownership.sh"
 echo
 
+echo "[M2] notification egress ownership check"
+"${SCRIPT_DIR}/ci-notification-egress-gate.sh"
+echo
+
 echo "[M2] error contract coverage check"
 "${SCRIPT_DIR}/check-error-contracts.sh"
 echo

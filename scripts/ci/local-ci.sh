@@ -118,7 +118,10 @@ ensure_govulncheck() {
 }
 
 go_source_files() {
-    git ls-files --cached --others --exclude-standard '*.go'
+    local file
+    git ls-files --cached --others --exclude-standard '*.go' | while IFS= read -r file; do
+        [[ -f "${file}" ]] && printf '%s\n' "${file}"
+    done
 }
 
 workspace_metadata_files() {

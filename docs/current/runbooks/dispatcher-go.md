@@ -2,12 +2,13 @@
 
 ## Role
 
-`dispatcher-go`는 `alarm:dispatch:queue`를 drain하고 Iris로 알림을 발송합니다.
+`dispatcher-go`는 legacy profile에서만 `alarm:dispatch:queue`를 drain하고 Iris로 알림을 발송합니다. Default production proactive egress owner는 `alarm-worker`입니다.
 
 ## Normal status
 
 | Check | Expected |
 |---|---|
+| Profile | `legacy-dispatcher-go`가 명시적으로 켜진 경우에만 실행 |
 | Health | `http://127.0.0.1:30020/ready` returns success |
 | Ready | `http://127.0.0.1:30020/ready` |
 | Logs | no repeated Iris send, retry, DLQ, or Valkey errors |
@@ -61,7 +62,7 @@ Mitigation:
 - Check Valkey connectivity and queue key configuration.
 
 Rollback:
-- Roll back dispatcher or Iris config changes. Preserve DLQ before replay.
+- In default production, check `hololive-alarm-worker` first. If the legacy profile is intentionally enabled, roll back dispatcher or Iris config changes. Preserve DLQ before replay.
 
 ### 2. DLQ grows
 

@@ -19,7 +19,7 @@
 |---|---|---|
 | PostgreSQL | yes | polling/outbox persistence fails |
 | Valkey | yes | cache/config/coordination degrades |
-| Iris | partial | external interactions fail where configured |
+| Iris | no | final proactive egress is owned by `alarm-worker` |
 
 ## Key environment variables
 
@@ -28,6 +28,7 @@
 | `SERVER_PORT` | HTTP health port | yes |
 | `YOUTUBE_INGESTION_ENABLED` | must be true for this service | yes |
 | `PHOTO_SYNC_ENABLED` | must be false for this service | yes |
+| `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false` | producer-only egress boundary | yes |
 | `SCRAPER_*` | poller intervals/workers | yes |
 
 ## Logs
