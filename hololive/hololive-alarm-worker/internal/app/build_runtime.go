@@ -266,13 +266,21 @@ func validateAlarmDispatchModePair(publishMode queue.PublishMode, rawConsumerMod
 	if consumerMode != "valkey" && consumerMode != "pg" {
 		return fmt.Errorf("ALARM_DISPATCH_CONSUMER_MODE must be valkey or pg when provided")
 	}
-	if publishMode == queue.PublishModePGFirst && consumerMode != "pg" {
+	if alarmDispatchModeRequiresPGConsumer(publishMode, consumerMode) {
 		return fmt.Errorf("forbidden alarm dispatch mode combination: publisher=pg_first requires consumer=pg")
 	}
-	if publishMode != queue.PublishModePGFirst && consumerMode == "pg" {
+	if alarmDispatchModeRequiresPGPublisher(publishMode, consumerMode) {
 		return fmt.Errorf("forbidden alarm dispatch mode combination: consumer=pg requires publisher=pg_first")
 	}
 	return nil
+}
+
+func alarmDispatchModeRequiresPGConsumer(publishMode queue.PublishMode, consumerMode string) bool {
+	return publishMode == queue.PublishModePGFirst && consumerMode != "pg"
+}
+
+func alarmDispatchModeRequiresPGPublisher(publishMode queue.PublishMode, consumerMode string) bool {
+	return publishMode != queue.PublishModePGFirst && consumerMode == "pg"
 }
 
 func parseBoolEnv(key string, def bool) bool {
