@@ -39,6 +39,9 @@ func (c *Client) currentPageFetcher() pageFetcher {
 	case FetcherEngineGoScrapy:
 		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}
 	case FetcherEngineBrowserSnapshot:
+		if c.browserSnapshotFetcher != nil {
+			return c.browserSnapshotFetcher
+		}
 		return netHTTPFetcher
 	default:
 		return netHTTPFetcher
