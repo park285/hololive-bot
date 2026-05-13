@@ -21,6 +21,9 @@ type DedupeInput struct {
 	MinutesUntil                int
 	ScheduleChangePreviousStart string
 	Category                    string
+	SourceKind                  domain.AlarmDispatchSourceKind
+	SourceIdentity              string
+	SourceOutboxKind            domain.OutboxKind
 }
 
 func BuildDedupeKey(input DedupeInput) string {
@@ -69,6 +72,9 @@ func buildLegacyDedupeKey(input DedupeInput) string {
 }
 
 func BuildEventKey(input DedupeInput) string {
+	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
+		return fmt.Sprintf("youtube-outbox:%s:%s", input.SourceOutboxKind, input.SourceIdentity)
+	}
 	alarmType := input.AlarmType
 	if alarmType == "" {
 		alarmType = domain.AlarmTypeLive
@@ -120,7 +126,7 @@ func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
 			scheduled = *notification.Stream.StartScheduled
 		}
 	}
-	return DedupeInput{
+	input := DedupeInput{
 		RoomID:                      notification.RoomID,
 		ChannelID:                   channelID,
 		AlarmType:                   notification.AlarmType,
@@ -130,6 +136,15 @@ func EnvelopeDedupeInput(envelope domain.AlarmQueueEnvelope) DedupeInput {
 		MinutesUntil:                notification.MinutesUntil,
 		ScheduleChangePreviousStart: notification.ScheduleChangePreviousStart,
 	}
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
+		input.SourceKind = envelope.SourceKind
+		input.SourceIdentity = envelope.YouTubeOutbox.Identity()
+		input.SourceOutboxKind = envelope.YouTubeOutbox.Kind
+		input.ChannelID = strings.TrimSpace(envelope.YouTubeOutbox.ChannelID)
+		input.AlarmType = envelope.YouTubeOutbox.AlarmType
+		input.Category = string(envelope.SourceKind)
+	}
+	return input
 }
 
 func BuildDedupeKeyFromEnvelope(envelope domain.AlarmQueueEnvelope) string {

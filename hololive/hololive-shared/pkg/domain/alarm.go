@@ -205,12 +205,14 @@ var legacyRouteOutboxAlarmTypes = map[AlarmType]struct{}{
 }
 
 type AlarmQueueEnvelope struct {
-	DispatchOutboxID  int64                    `json:"dispatch_outbox_id,omitempty"`
-	Notification      AlarmNotification        `json:"notification"`
-	ClaimKeys         []string                 `json:"claim_keys"`
-	EnqueuedAt        string                   `json:"enqueued_at"`
-	Version           uint8                    `json:"version"`
-	Retry             *AlarmQueueRetryMetadata `json:"retry,omitempty"`
+	DispatchOutboxID  int64                         `json:"dispatch_outbox_id,omitempty"`
+	Notification      AlarmNotification             `json:"notification"`
+	SourceKind        AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
+	YouTubeOutbox     *YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
+	ClaimKeys         []string                      `json:"claim_keys"`
+	EnqueuedAt        string                        `json:"enqueued_at"`
+	Version           uint8                         `json:"version"`
+	Retry             *AlarmQueueRetryMetadata      `json:"retry,omitempty"`
 	rawPayload        string
 	normalizedPayload string
 	sourcePayload     string
@@ -237,6 +239,8 @@ type alarmQueueEnvelopeNotificationWire struct {
 type alarmQueueEnvelopeWire struct {
 	DispatchOutboxID int64                              `json:"dispatch_outbox_id,omitempty"`
 	Notification     alarmQueueEnvelopeNotificationWire `json:"notification"`
+	SourceKind       AlarmDispatchSourceKind            `json:"source_kind,omitempty"`
+	YouTubeOutbox    *YouTubeOutboxDispatchPayload      `json:"youtube_outbox,omitempty"`
 	ClaimKeys        []string                           `json:"claim_keys"`
 	EnqueuedAt       string                             `json:"enqueued_at"`
 	Version          uint8                              `json:"version"`
@@ -257,6 +261,8 @@ func (e AlarmQueueEnvelope) MarshalJSON() ([]byte, error) {
 			ScheduleChangeMessage:       e.Notification.ScheduleChangeMessage,
 			ScheduleChangePreviousStart: e.Notification.ScheduleChangePreviousStart,
 		},
+		SourceKind:    e.SourceKind,
+		YouTubeOutbox: e.YouTubeOutbox,
 		ClaimKeys:     e.ClaimKeys,
 		EnqueuedAt:    e.EnqueuedAt,
 		Version:       e.Version,
@@ -309,6 +315,8 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 			ScheduleChangeMessage:       wire.Notification.ScheduleChangeMessage,
 			ScheduleChangePreviousStart: wire.Notification.ScheduleChangePreviousStart,
 		},
+		SourceKind:    wire.SourceKind,
+		YouTubeOutbox: wire.YouTubeOutbox,
 		ClaimKeys:     wire.ClaimKeys,
 		EnqueuedAt:    wire.EnqueuedAt,
 		Version:       wire.Version,

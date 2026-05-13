@@ -191,6 +191,37 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 	}
 }
 
+func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *testing.T) {
+	t.Parallel()
+
+	publisher := NewPublisher(cachemocks.NewStrictClient(), newTestLogger(), WithPublishMode(PublishModePGFirst), WithWakeupEnabled(false), WithOutbox(&fakeOutboxRepository{}))
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeShorts,
+			RoomID:    "room-canonical",
+		},
+		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
+		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+			OutboxIDs:         []int64{1},
+			Kind:              domain.OutboxKindNewShort,
+			AlarmType:         domain.AlarmTypeShorts,
+			ChannelID:         "UC_test",
+			RenderTemplateKey: domain.TemplateKeyOutboxShorts,
+			Items: []domain.YouTubeOutboxItem{{
+				OutboxID:  1,
+				ContentID: "short:abc",
+				Payload:   `{"video_id":"abc","title":"테스트 쇼츠"}`,
+			}},
+		},
+		ClaimKeys: []string{"youtube-notification:NEW_SHORT:short:abc:room-canonical"},
+		Version:   contractsalarm.QueueEnvelopeVersionV1,
+	}
+
+	result, err := publisher.PublishDispatchBatch(context.Background(), []domain.AlarmQueueEnvelope{envelope})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.RequestedDeliveries)
+}
+
 func TestParseEnvelopeSupportsV0AndV1(t *testing.T) {
 	tests := []struct {
 		name    string

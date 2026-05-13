@@ -44,7 +44,7 @@ func GroupEnvelopes(envelopes []domain.AlarmQueueEnvelope) []NotificationGroup {
 
 	for i := range envelopes {
 		envelope := envelopes[i]
-		key := buildGroupKey(envelope.Notification)
+		key := buildGroupKey(envelope)
 		groupIndex, exists := index[key]
 		if !exists {
 			index[key] = len(groups)
@@ -68,7 +68,17 @@ func GroupEnvelopes(envelopes []domain.AlarmQueueEnvelope) []NotificationGroup {
 	return groups
 }
 
-func buildGroupKey(notification domain.AlarmNotification) string {
+func buildGroupKey(envelope domain.AlarmQueueEnvelope) string {
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
+		return fmt.Sprintf("%s|source|%s|%s|%s|%s",
+			envelope.Notification.RoomID,
+			envelope.SourceKind,
+			envelope.YouTubeOutbox.ChannelID,
+			envelope.YouTubeOutbox.Kind,
+			envelope.YouTubeOutbox.Identity(),
+		)
+	}
+	notification := envelope.Notification
 	if notification.Stream != nil && notification.Stream.StartScheduled != nil {
 		minuteBucket := notification.Stream.StartScheduled.UTC().Unix() / 60
 		return fmt.Sprintf("%s|scheduled|%d", notification.RoomID, minuteBucket)
