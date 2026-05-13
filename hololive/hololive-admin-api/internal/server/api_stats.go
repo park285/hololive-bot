@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
@@ -103,7 +104,6 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 		return
 	}
 
-	// WebSocket 업그레이드
 	conn, err := sharedserver.WSUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.safeLogger().Warn("failed to upgrade websocket", slog.Any("error", err))
@@ -119,37 +119,54 @@ func (h *StatsAPIHandler) StreamSystemStats(c *gin.Context) {
 	}()
 
 	ctx := c.Request.Context()
+	h.streamSystemStats(ctx, conn)
+}
 
+func (h *StatsAPIHandler) streamSystemStats(ctx context.Context, conn *websocket.Conn) {
 	ticker := time.NewTicker(systemStatsStreamInterval)
 	defer ticker.Stop()
 
-	// 최초 1회 즉시 전송
+	if !h.writeInitialSystemStats(ctx, conn) {
+		return
+	}
+
+	h.writeSystemStatsTicks(ctx, conn, ticker)
+}
+
+func (h *StatsAPIHandler) writeSystemStatsTicks(ctx context.Context, conn *websocket.Conn, ticker *time.Ticker) {
+	for h.writeNextSystemStatsTick(ctx, conn, ticker) {
+	}
+}
+
+func (h *StatsAPIHandler) writeNextSystemStatsTick(ctx context.Context, conn *websocket.Conn, ticker *time.Ticker) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-ticker.C:
+		return h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats")
+	}
+}
+
+func (h *StatsAPIHandler) writeInitialSystemStats(ctx context.Context, conn *websocket.Conn) bool {
+	return h.writeSystemStats(ctx, conn, "failed to collect initial system stats", "failed to write initial system stats")
+}
+
+func (h *StatsAPIHandler) writeSystemStats(
+	ctx context.Context,
+	conn *websocket.Conn,
+	collectMessage string,
+	writeMessage string,
+) bool {
 	stats, err := h.systemStats.GetCurrentStats(ctx)
 	if err != nil {
-		h.safeLogger().Error("failed to collect initial system stats", slog.Any("error", err))
-		return
+		h.safeLogger().Error(collectMessage, slog.Any("error", err))
+		return false
 	}
 
 	if err := conn.WriteJSON(stats); err != nil {
-		h.safeLogger().Warn("failed to write initial system stats", slog.Any("error", err))
-		return
+		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
+		return false
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			stats, err := h.systemStats.GetCurrentStats(ctx)
-			if err != nil {
-				h.safeLogger().Error("failed to collect system stats", slog.Any("error", err))
-				return
-			}
-
-			if err := conn.WriteJSON(stats); err != nil {
-				h.safeLogger().Warn("failed to write system stats", slog.Any("error", err))
-				return
-			}
-		}
-	}
+	return true
 }

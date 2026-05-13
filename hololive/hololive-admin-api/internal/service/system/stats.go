@@ -268,22 +268,35 @@ func (c *Collector) fetchGoroutineCount(ctx context.Context, url string) (int, b
 		return 0, false
 	}
 
-	// 직접 goroutines 필드가 있는 경우 (game-bot 형식)
+	return goroutineCountFromHealthResponse(hr)
+}
+
+func goroutineCountFromHealthResponse(hr healthResponse) (int, bool) {
 	if hr.Goroutines > 0 {
 		return hr.Goroutines, true
 	}
 
-	// components.app.detail.goroutines 형식 (mcp-llm-server 형식)
-	if app, ok := hr.Components["app"]; ok {
-		if gr, ok := app.Detail["goroutines"]; ok {
-			switch v := gr.(type) {
-			case float64:
-				return int(v), true
-			case int:
-				return v, true
-			}
-		}
+	app, ok := hr.Components["app"]
+	if !ok {
+		return 0, false
 	}
+	return goroutineCountFromDetail(app.Detail)
+}
 
+func goroutineCountFromDetail(detail map[string]any) (int, bool) {
+	gr, ok := detail["goroutines"]
+	if !ok {
+		return 0, false
+	}
+	return goroutineCountValue(gr)
+}
+
+func goroutineCountValue(value any) (int, bool) {
+	switch v := value.(type) {
+	case float64:
+		return int(v), true
+	case int:
+		return v, true
+	}
 	return 0, false
 }
