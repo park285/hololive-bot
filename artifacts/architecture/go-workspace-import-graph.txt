@@ -169,11 +169,6 @@ github.com/kapu/hololive-kakao-bot-go/cmd/test_db_integration -> github.com/kapu
 github.com/kapu/hololive-kakao-bot-go/cmd/test_db_integration -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-kakao-bot-go/cmd/test_db_integration -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-kakao-bot-go/cmd/test_db_integration -> github.com/park285/llm-kakao-bots/shared-go/pkg/logging
-github.com/kapu/hololive-kakao-bot-go/cmd/tools/fetch_profiles -> github.com/kapu/hololive-kakao-bot-go/internal/app
-github.com/kapu/hololive-kakao-bot-go/cmd/tools/fetch_profiles -> github.com/kapu/hololive-shared/pkg/constants
-github.com/kapu/hololive-kakao-bot-go/cmd/tools/fetch_profiles -> github.com/kapu/hololive-shared/pkg/domain
-github.com/kapu/hololive-kakao-bot-go/cmd/tools/fetch_profiles -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
-github.com/kapu/hololive-kakao-bot-go/cmd/tools/fetch_profiles -> github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil
 github.com/kapu/hololive-kakao-bot-go/cmd/tools/warm_member_cache -> github.com/kapu/hololive-kakao-bot-go/internal/app
 github.com/kapu/hololive-kakao-bot-go/cmd/tools/warm_member_cache -> github.com/kapu/hololive-shared/pkg/config
 github.com/kapu/hololive-kakao-bot-go/cmd/tools/warm_member_cache -> github.com/park285/llm-kakao-bots/shared-go/pkg/logging
