@@ -2,7 +2,8 @@
 
 이 디렉터리는 운영 중 컨테이너에 read-only로 마운트되는 비밀이 아닌 파일 기반 런타임 설정 위치다.
 
-현재 기본 compose 설정은 다음 파일을 참조할 수 있다.
+현재 기본 compose 설정은 OpenBao Agent가 렌더링한 `IRIS_BASE_URL` env를 사용한다.
+파일 기반 override는 `IRIS_BASE_URL_FILE`을 명시적으로 설정한 경우에만 사용한다.
 
 - `iris_base_url`: `IRIS_BASE_URL_FILE=/app/runtime-config/iris_base_url`을 사용할 때의 Iris base URL 파일
 
