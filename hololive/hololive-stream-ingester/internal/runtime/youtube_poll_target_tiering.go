@@ -190,7 +190,3 @@ func timeCandidate(value any) time.Time {
 	}
 	return time.Time{}
 }
-
-func shouldUseTieredPollTargets(targets youtubeTieredPollTargets) bool {
-	return len(targets.WarmNotificationChannelIDs) > 0 || len(targets.ColdNotificationChannelIDs) > 0
-}
