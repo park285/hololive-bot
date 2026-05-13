@@ -18,6 +18,16 @@ func TestBrowserSnapshotEngineDoesNotBecomeDefaultPageFetcher(t *testing.T) {
 	require.True(t, isNetHTTP)
 }
 
+func TestBrowserSnapshotEngineRequiresExplicitFetcher(t *testing.T) {
+	fetcher := NewBrowserSnapshotFetcher("http://127.0.0.1:1/browser", time.Second)
+	client := NewClient(
+		WithFetcherEngine(FetcherEngineBrowserSnapshot),
+		WithBrowserSnapshotFetcher(fetcher),
+	)
+
+	require.Same(t, fetcher, client.currentPageFetcher())
+}
+
 func TestCaptureBrowserDiagnosticSnapshotRequiresParserDriftHealth(t *testing.T) {
 	ctx := context.Background()
 	store := newChannelHealthTestStore()

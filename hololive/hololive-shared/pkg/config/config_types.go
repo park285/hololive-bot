@@ -111,7 +111,7 @@ func NormalizeScraperFetcherEngine(value string) string {
 	switch normalized {
 	case "", ScraperFetcherEngineNetHTTP:
 		return DefaultScraperFetcherEngine()
-	case ScraperFetcherEngineGoScrapy, ScraperFetcherEngineBrowserSnapshot:
+	case ScraperFetcherEngineGoScrapy:
 		return normalized
 	default:
 		return normalized

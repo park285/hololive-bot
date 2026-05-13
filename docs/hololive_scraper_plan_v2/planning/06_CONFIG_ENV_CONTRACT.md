@@ -75,11 +75,10 @@ SCRAPER_FETCHER_ENGINE=nethttp
 
 - `nethttp`
 - `goscrapy`
-- `browser_snapshot`
 
 주의:
 
-`browser_snapshot`은 normalize 가능하되, 기본 poller path에서 browser를 쓰지 않아야 합니다. 이 값은 diagnostic mode 또는 별도 tool에서만 의미를 갖게 하는 것이 안전합니다.
+`browser_snapshot`은 `SCRAPER_FETCHER_ENGINE` 값으로 허용하지 않습니다. browser snapshot은 `SCRAPER_BROWSER_DIAGNOSTIC_*` 설정과 명시적 diagnostic path에서만 사용합니다.
 
 ## 5. Rollback env set
 
