@@ -47,73 +47,109 @@ func (r *GormRepository) ensureCommunityShortsObservationPostBaselines(
 		return fmt.Errorf("ensure community shorts observation post baselines: db is nil")
 	}
 
-	normalizedWindow, err := normalizeCommunityShortsObservationWindow(window)
+	normalizedWindow, shouldBuild, err := normalizePendingCommunityShortsObservationPostBaselineWindow(window)
 	if err != nil {
 		return fmt.Errorf("ensure community shorts observation post baselines: %w", err)
 	}
-	if !communityShortsObservationWindowClosed(normalizedWindow) {
-		return fmt.Errorf("ensure community shorts observation post baselines: observation window is not closed")
-	}
-	if communityShortsObservationPostBaselineFinalized(normalizedWindow) {
+	if !shouldBuild {
 		return nil
 	}
 
 	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txRepo := NewRepository(tx)
-		currentWindow, err := txRepo.FindCommunityShortsObservationWindow(ctx, normalizedWindow.RuntimeName, normalizedWindow.BigBangCutoverAt)
-		if err != nil {
-			return fmt.Errorf("reload observation window: %w", err)
-		}
-		if currentWindow == nil {
-			return fmt.Errorf(
-				"observation window not found: runtime=%s cutover=%s",
-				normalizedWindow.RuntimeName,
-				normalizedWindow.BigBangCutoverAt.UTC().Format(time.RFC3339),
-			)
-		}
-
-		normalizedCurrentWindow, err := normalizeCommunityShortsObservationWindow(currentWindow)
-		if err != nil {
-			return fmt.Errorf("normalize observation window: %w", err)
-		}
-		if !communityShortsObservationWindowClosed(normalizedCurrentWindow) {
-			return fmt.Errorf("observation window is not closed")
-		}
-		if communityShortsObservationPostBaselineFinalized(normalizedCurrentWindow) {
-			return nil
-		}
-
-		sourcePosts, err := txRepo.ListSourcePostsWithinObservationWindow(
-			ctx,
-			normalizedCurrentWindow.ObservationStartedAt,
-			normalizedCurrentWindow.ObservationEndedAt,
-			normalizedCurrentWindow.ObservationEndedAt,
-		)
-		if err != nil {
-			return fmt.Errorf("list source posts: %w", err)
-		}
-		baselineRows, err := buildCommunityShortsObservationPostBaselines(normalizedCurrentWindow, sourcePosts)
-		if err != nil {
-			return fmt.Errorf("build baseline rows: %w", err)
-		}
-		if err := txRepo.upsertCommunityShortsObservationPostBaselines(ctx, baselineRows); err != nil {
-			return fmt.Errorf("upsert baseline rows: %w", err)
-		}
-		if err := txRepo.markCommunityShortsObservationPostBaselineFinalized(
-			ctx,
-			normalizedCurrentWindow.RuntimeName,
-			normalizedCurrentWindow.BigBangCutoverAt,
-			normalizedCurrentWindow.ObservationEndedAt,
-			len(baselineRows),
-		); err != nil {
-			return fmt.Errorf("mark finalized metadata: %w", err)
-		}
-		return nil
+		return ensureCommunityShortsObservationPostBaselinesInTx(ctx, NewRepository(tx), normalizedWindow)
 	}); err != nil {
 		return fmt.Errorf("ensure community shorts observation post baselines: %w", err)
 	}
 
 	return nil
+}
+
+func normalizePendingCommunityShortsObservationPostBaselineWindow(
+	window *domain.YouTubeCommunityShortsObservationWindow,
+) (*domain.YouTubeCommunityShortsObservationWindow, bool, error) {
+	normalizedWindow, err := normalizeCommunityShortsObservationWindow(window)
+	if err != nil {
+		return nil, false, err
+	}
+	if !communityShortsObservationWindowClosed(normalizedWindow) {
+		return nil, false, fmt.Errorf("observation window is not closed")
+	}
+	if communityShortsObservationPostBaselineFinalized(normalizedWindow) {
+		return normalizedWindow, false, nil
+	}
+
+	return normalizedWindow, true, nil
+}
+
+func ensureCommunityShortsObservationPostBaselinesInTx(
+	ctx context.Context,
+	txRepo *GormRepository,
+	normalizedWindow *domain.YouTubeCommunityShortsObservationWindow,
+) error {
+	normalizedCurrentWindow, shouldBuild, err := reloadPendingCommunityShortsObservationPostBaselineWindow(ctx, txRepo, normalizedWindow)
+	if err != nil {
+		return err
+	}
+	if !shouldBuild {
+		return nil
+	}
+
+	sourcePosts, err := txRepo.ListSourcePostsWithinObservationWindow(
+		ctx,
+		normalizedCurrentWindow.ObservationStartedAt,
+		normalizedCurrentWindow.ObservationEndedAt,
+		normalizedCurrentWindow.ObservationEndedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("list source posts: %w", err)
+	}
+	baselineRows, err := buildCommunityShortsObservationPostBaselines(normalizedCurrentWindow, sourcePosts)
+	if err != nil {
+		return fmt.Errorf("build baseline rows: %w", err)
+	}
+	if err := txRepo.upsertCommunityShortsObservationPostBaselines(ctx, baselineRows); err != nil {
+		return fmt.Errorf("upsert baseline rows: %w", err)
+	}
+	if err := txRepo.markCommunityShortsObservationPostBaselineFinalized(
+		ctx,
+		normalizedCurrentWindow.RuntimeName,
+		normalizedCurrentWindow.BigBangCutoverAt,
+		normalizedCurrentWindow.ObservationEndedAt,
+		len(baselineRows),
+	); err != nil {
+		return fmt.Errorf("mark finalized metadata: %w", err)
+	}
+	return nil
+}
+
+func reloadPendingCommunityShortsObservationPostBaselineWindow(
+	ctx context.Context,
+	txRepo *GormRepository,
+	normalizedWindow *domain.YouTubeCommunityShortsObservationWindow,
+) (*domain.YouTubeCommunityShortsObservationWindow, bool, error) {
+	currentWindow, err := txRepo.FindCommunityShortsObservationWindow(ctx, normalizedWindow.RuntimeName, normalizedWindow.BigBangCutoverAt)
+	if err != nil {
+		return nil, false, fmt.Errorf("reload observation window: %w", err)
+	}
+	if currentWindow == nil {
+		return nil, false, fmt.Errorf(
+			"observation window not found: runtime=%s cutover=%s",
+			normalizedWindow.RuntimeName,
+			normalizedWindow.BigBangCutoverAt.UTC().Format(time.RFC3339),
+		)
+	}
+
+	normalizedCurrentWindow, err := normalizeCommunityShortsObservationWindow(currentWindow)
+	if err != nil {
+		return nil, false, fmt.Errorf("normalize observation window: %w", err)
+	}
+	if !communityShortsObservationWindowClosed(normalizedCurrentWindow) {
+		return nil, false, fmt.Errorf("observation window is not closed")
+	}
+	if communityShortsObservationPostBaselineFinalized(normalizedCurrentWindow) {
+		return normalizedCurrentWindow, false, nil
+	}
+	return normalizedCurrentWindow, true, nil
 }
 
 func buildCommunityShortsObservationPostBaselines(
@@ -203,39 +239,87 @@ func (r *GormRepository) markCommunityShortsObservationPostBaselineFinalized(
 	if r == nil || r.db == nil {
 		return fmt.Errorf("mark community shorts observation post baseline finalized: db is nil")
 	}
+
+	normalizedRuntimeName, normalizedCutoverAt, finalizedAtPtr, err := normalizeCommunityShortsObservationPostBaselineFinalizedArgs(
+		runtimeName,
+		bigBangCutoverAt,
+		finalizedAt,
+		finalizedCount,
+	)
+	if err != nil {
+		return err
+	}
+
+	updated, err := r.updateCommunityShortsObservationPostBaselineFinalized(
+		ctx,
+		normalizedRuntimeName,
+		normalizedCutoverAt,
+		*finalizedAtPtr,
+		finalizedCount,
+	)
+	if err != nil {
+		return err
+	}
+	if updated {
+		return nil
+	}
+
+	return r.verifyCommunityShortsObservationPostBaselineFinalized(ctx, normalizedRuntimeName, normalizedCutoverAt)
+}
+
+func normalizeCommunityShortsObservationPostBaselineFinalizedArgs(
+	runtimeName string,
+	bigBangCutoverAt time.Time,
+	finalizedAt time.Time,
+	finalizedCount int,
+) (string, time.Time, *time.Time, error) {
 	if finalizedCount < 0 {
-		return fmt.Errorf("mark community shorts observation post baseline finalized: finalized count must not be negative")
+		return "", time.Time{}, nil, fmt.Errorf("mark community shorts observation post baseline finalized: finalized count must not be negative")
 	}
 
 	normalizedRuntimeName, normalizedCutoverAt, err := normalizeCommunityShortsObservationWindowKey(runtimeName, bigBangCutoverAt)
 	if err != nil {
-		return fmt.Errorf("mark community shorts observation post baseline finalized: %w", err)
+		return "", time.Time{}, nil, fmt.Errorf("mark community shorts observation post baseline finalized: %w", err)
 	}
 	finalizedAtPtr, err := normalizeCommunityShortsObservationFinalizedAt(&finalizedAt, finalizedAt.UTC())
 	if err != nil {
-		return fmt.Errorf("mark community shorts observation post baseline finalized: %w", err)
+		return "", time.Time{}, nil, fmt.Errorf("mark community shorts observation post baseline finalized: %w", err)
 	}
 	if finalizedAtPtr == nil {
-		return fmt.Errorf("mark community shorts observation post baseline finalized: finalized at is empty")
+		return "", time.Time{}, nil, fmt.Errorf("mark community shorts observation post baseline finalized: finalized at is empty")
 	}
 
+	return normalizedRuntimeName, normalizedCutoverAt, finalizedAtPtr, nil
+}
+
+func (r *GormRepository) updateCommunityShortsObservationPostBaselineFinalized(
+	ctx context.Context,
+	normalizedRuntimeName string,
+	normalizedCutoverAt time.Time,
+	finalizedAt time.Time,
+	finalizedCount int,
+) (bool, error) {
 	result := r.db.WithContext(ctx).
 		Model(&domain.YouTubeCommunityShortsObservationWindow{}).
 		Where("runtime_name = ? AND bigbang_cutover_at = ?", normalizedRuntimeName, normalizedCutoverAt).
-		Where("closed_at = ?", *finalizedAtPtr).
+		Where("closed_at = ?", finalizedAt).
 		Where("finalized_post_baseline_at IS NULL").
 		Updates(map[string]any{
-			"finalized_post_baseline_at": *finalizedAtPtr,
+			"finalized_post_baseline_at": finalizedAt,
 			"finalized_post_count":       finalizedCount,
-			"updated_at":                 *finalizedAtPtr,
+			"updated_at":                 finalizedAt,
 		})
 	if result.Error != nil {
-		return fmt.Errorf("mark community shorts observation post baseline finalized: update window: %w", result.Error)
+		return false, fmt.Errorf("mark community shorts observation post baseline finalized: update window: %w", result.Error)
 	}
-	if result.RowsAffected > 0 {
-		return nil
-	}
+	return result.RowsAffected > 0, nil
+}
 
+func (r *GormRepository) verifyCommunityShortsObservationPostBaselineFinalized(
+	ctx context.Context,
+	normalizedRuntimeName string,
+	normalizedCutoverAt time.Time,
+) error {
 	window, err := r.FindCommunityShortsObservationWindow(ctx, normalizedRuntimeName, normalizedCutoverAt)
 	if err != nil {
 		return fmt.Errorf("mark community shorts observation post baseline finalized: reload window: %w", err)

@@ -38,48 +38,19 @@ func buildShortSourcePosts(videos []*domain.YouTubeVideo, trackingRows []*domain
 	rowsByKey := make(map[sourcePostKey]*domain.YouTubeCommunityShortsSourcePost, len(videos)+len(trackingRows))
 	fallbackDetectedAt := yttimestamp.Normalize(time.Now())
 
-	for i := range trackingRows {
-		if trackingRows[i] == nil || trackingRows[i].Kind != domain.OutboxKindNewShort {
-			continue
-		}
-		postID := normalizeSourcePostID(domain.OutboxKindNewShort, trackingRows[i].ContentID)
-		if postID == "" {
-			continue
-		}
-		rowsByKey[sourcePostKey{kind: domain.OutboxKindNewShort, postID: postID}] = &domain.YouTubeCommunityShortsSourcePost{
-			Kind:              domain.OutboxKindNewShort,
-			PostID:            postID,
-			ChannelID:         strings.TrimSpace(trackingRows[i].ChannelID),
-			ActualPublishedAt: yttimestamp.NormalizePtr(trackingRows[i].ActualPublishedAt),
-			DetectedAt:        yttimestamp.Normalize(trackingRows[i].DetectedAt),
-		}
-	}
-
+	addTrackingSourcePosts(rowsByKey, trackingRows, domain.OutboxKindNewShort)
 	for i := range videos {
 		if videos[i] == nil || !videos[i].IsShort {
 			continue
 		}
-		postID := normalizeSourcePostID(domain.OutboxKindNewShort, videos[i].VideoID)
-		if postID == "" {
-			continue
-		}
-		key := sourcePostKey{kind: domain.OutboxKindNewShort, postID: postID}
-		if row, ok := rowsByKey[key]; ok {
-			if row.ActualPublishedAt == nil {
-				row.ActualPublishedAt = yttimestamp.NormalizePtr(videos[i].PublishedAt)
-			}
-			if row.ChannelID == "" {
-				row.ChannelID = strings.TrimSpace(videos[i].ChannelID)
-			}
-			continue
-		}
-		rowsByKey[key] = &domain.YouTubeCommunityShortsSourcePost{
-			Kind:              domain.OutboxKindNewShort,
-			PostID:            postID,
-			ChannelID:         strings.TrimSpace(videos[i].ChannelID),
-			ActualPublishedAt: yttimestamp.NormalizePtr(videos[i].PublishedAt),
-			DetectedAt:        fallbackDetectedAt,
-		}
+		addContentSourcePost(
+			rowsByKey,
+			domain.OutboxKindNewShort,
+			videos[i].VideoID,
+			videos[i].ChannelID,
+			videos[i].PublishedAt,
+			fallbackDetectedAt,
+		)
 	}
 
 	return flattenSourcePosts(rowsByKey)
@@ -89,51 +60,77 @@ func buildCommunitySourcePosts(posts []*domain.YouTubeCommunityPost, trackingRow
 	rowsByKey := make(map[sourcePostKey]*domain.YouTubeCommunityShortsSourcePost, len(posts)+len(trackingRows))
 	fallbackDetectedAt := yttimestamp.Normalize(time.Now())
 
-	for i := range trackingRows {
-		if trackingRows[i] == nil || trackingRows[i].Kind != domain.OutboxKindCommunityPost {
+	addTrackingSourcePosts(rowsByKey, trackingRows, domain.OutboxKindCommunityPost)
+	for i := range posts {
+		if posts[i] == nil {
 			continue
 		}
-		postID := normalizeSourcePostID(domain.OutboxKindCommunityPost, trackingRows[i].ContentID)
+		addContentSourcePost(
+			rowsByKey,
+			domain.OutboxKindCommunityPost,
+			posts[i].PostID,
+			posts[i].ChannelID,
+			posts[i].PublishedAt,
+			fallbackDetectedAt,
+		)
+	}
+
+	return flattenSourcePosts(rowsByKey)
+}
+
+func addTrackingSourcePosts(
+	rowsByKey map[sourcePostKey]*domain.YouTubeCommunityShortsSourcePost,
+	trackingRows []*domain.YouTubeContentAlarmTracking,
+	kind domain.OutboxKind,
+) {
+	for i := range trackingRows {
+		if trackingRows[i] == nil || trackingRows[i].Kind != kind {
+			continue
+		}
+		postID := normalizeSourcePostID(kind, trackingRows[i].ContentID)
 		if postID == "" {
 			continue
 		}
-		rowsByKey[sourcePostKey{kind: domain.OutboxKindCommunityPost, postID: postID}] = &domain.YouTubeCommunityShortsSourcePost{
-			Kind:              domain.OutboxKindCommunityPost,
+		rowsByKey[sourcePostKey{kind: kind, postID: postID}] = &domain.YouTubeCommunityShortsSourcePost{
+			Kind:              kind,
 			PostID:            postID,
 			ChannelID:         strings.TrimSpace(trackingRows[i].ChannelID),
 			ActualPublishedAt: yttimestamp.NormalizePtr(trackingRows[i].ActualPublishedAt),
 			DetectedAt:        yttimestamp.Normalize(trackingRows[i].DetectedAt),
 		}
 	}
+}
 
-	for i := range posts {
-		if posts[i] == nil {
-			continue
-		}
-		postID := normalizeSourcePostID(domain.OutboxKindCommunityPost, posts[i].PostID)
-		if postID == "" {
-			continue
-		}
-		key := sourcePostKey{kind: domain.OutboxKindCommunityPost, postID: postID}
-		if row, ok := rowsByKey[key]; ok {
-			if row.ActualPublishedAt == nil {
-				row.ActualPublishedAt = yttimestamp.NormalizePtr(posts[i].PublishedAt)
-			}
-			if row.ChannelID == "" {
-				row.ChannelID = strings.TrimSpace(posts[i].ChannelID)
-			}
-			continue
-		}
-		rowsByKey[key] = &domain.YouTubeCommunityShortsSourcePost{
-			Kind:              domain.OutboxKindCommunityPost,
-			PostID:            postID,
-			ChannelID:         strings.TrimSpace(posts[i].ChannelID),
-			ActualPublishedAt: yttimestamp.NormalizePtr(posts[i].PublishedAt),
-			DetectedAt:        fallbackDetectedAt,
-		}
+func addContentSourcePost(
+	rowsByKey map[sourcePostKey]*domain.YouTubeCommunityShortsSourcePost,
+	kind domain.OutboxKind,
+	rawPostID string,
+	channelID string,
+	publishedAt *time.Time,
+	fallbackDetectedAt time.Time,
+) {
+	postID := normalizeSourcePostID(kind, rawPostID)
+	if postID == "" {
+		return
 	}
 
-	return flattenSourcePosts(rowsByKey)
+	key := sourcePostKey{kind: kind, postID: postID}
+	if row, ok := rowsByKey[key]; ok {
+		if row.ActualPublishedAt == nil {
+			row.ActualPublishedAt = yttimestamp.NormalizePtr(publishedAt)
+		}
+		if row.ChannelID == "" {
+			row.ChannelID = strings.TrimSpace(channelID)
+		}
+		return
+	}
+	rowsByKey[key] = &domain.YouTubeCommunityShortsSourcePost{
+		Kind:              kind,
+		PostID:            postID,
+		ChannelID:         strings.TrimSpace(channelID),
+		ActualPublishedAt: yttimestamp.NormalizePtr(publishedAt),
+		DetectedAt:        fallbackDetectedAt,
+	}
 }
 
 func flattenSourcePosts(rowsByKey map[sourcePostKey]*domain.YouTubeCommunityShortsSourcePost) []*domain.YouTubeCommunityShortsSourcePost {

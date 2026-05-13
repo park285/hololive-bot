@@ -80,27 +80,39 @@ func collectClaimTokensByIdentity(claimTokens []deliveryClaimToken) (map[string]
 
 	collected := make(map[string]time.Time, len(claimTokens))
 	for i := range claimTokens {
-		postID := strings.TrimSpace(claimTokens[i].postID)
-		if postID == "" {
-			return nil, fmt.Errorf("collect claim tokens: post id is empty at index %d", i)
+		identity, authorizedAt, err := claimTokenIdentityAndAuthorizedAt(claimTokens[i], i)
+		if err != nil {
+			return nil, err
 		}
-		if claimTokens[i].authorizedAt.IsZero() {
-			return nil, fmt.Errorf("collect claim tokens: authorized_at is empty at index %d", i)
+		if err := collectClaimTokenAuthorizedAt(collected, identity, authorizedAt); err != nil {
+			return nil, err
 		}
-
-		identity := deliveryClaimIdentityKey(claimTokens[i].kind, postID)
-		authorizedAt := claimTokens[i].authorizedAt.UTC()
-		if existingAuthorizedAt, ok := collected[identity]; ok {
-			if !existingAuthorizedAt.Equal(authorizedAt) {
-				return nil, fmt.Errorf("collect claim tokens: conflicting authorized_at for %s", identity)
-			}
-			continue
-		}
-
-		collected[identity] = authorizedAt
 	}
 
 	return collected, nil
+}
+
+func claimTokenIdentityAndAuthorizedAt(claimToken deliveryClaimToken, index int) (string, time.Time, error) {
+	postID := strings.TrimSpace(claimToken.postID)
+	if postID == "" {
+		return "", time.Time{}, fmt.Errorf("collect claim tokens: post id is empty at index %d", index)
+	}
+	if claimToken.authorizedAt.IsZero() {
+		return "", time.Time{}, fmt.Errorf("collect claim tokens: authorized_at is empty at index %d", index)
+	}
+	return deliveryClaimIdentityKey(claimToken.kind, postID), claimToken.authorizedAt.UTC(), nil
+}
+
+func collectClaimTokenAuthorizedAt(collected map[string]time.Time, identity string, authorizedAt time.Time) error {
+	existingAuthorizedAt, ok := collected[identity]
+	if !ok {
+		collected[identity] = authorizedAt
+		return nil
+	}
+	if !existingAuthorizedAt.Equal(authorizedAt) {
+		return fmt.Errorf("collect claim tokens: conflicting authorized_at for %s", identity)
+	}
+	return nil
 }
 
 func deliveryClaimIdentityKey(kind domain.OutboxKind, postID string) string {
@@ -134,16 +146,20 @@ func groupOutboxIDsByAggregateStatus(outboxIDs []int64, counts []deliveryStatusC
 
 func parseStatusCounts(counts []deliveryStatusCount) (pending int64, sent int64, failed int64) {
 	for _, item := range counts {
-		switch item.Status {
-		case domain.OutboxStatusPending:
-			pending = item.Count
-		case domain.OutboxStatusSent:
-			sent = item.Count
-		case domain.OutboxStatusFailed:
-			failed = item.Count
-		}
+		applyStatusCount(item, &pending, &sent, &failed)
 	}
 	return pending, sent, failed
+}
+
+func applyStatusCount(item deliveryStatusCount, pending *int64, sent *int64, failed *int64) {
+	switch item.Status {
+	case domain.OutboxStatusPending:
+		*pending = item.Count
+	case domain.OutboxStatusSent:
+		*sent = item.Count
+	case domain.OutboxStatusFailed:
+		*failed = item.Count
+	}
 }
 
 func resolveOutboxStatus(pending int64, sent int64, failed int64) domain.OutboxStatus {

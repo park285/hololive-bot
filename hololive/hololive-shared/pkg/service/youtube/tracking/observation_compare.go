@@ -108,8 +108,42 @@ func CompareObservationPostInputs(
 ) ObservationPostComparisonResult {
 	baselineIndex, baselineKeys, baselineDuplicateInputCount := indexObservationPostComparisonInputs(baselineInputs)
 	sentIndex, sentKeys, sentDuplicateInputCount := indexObservationPostComparisonInputs(sentInputs)
+	result := newObservationPostComparisonResult(
+		baselineInputs,
+		baselineKeys,
+		baselineDuplicateInputCount,
+		sentInputs,
+		sentKeys,
+		sentDuplicateInputCount,
+	)
 
-	result := ObservationPostComparisonResult{
+	unmatchedBaselineKeys := appendObservationPostComparisonMatchedRows(&result, baselineIndex, baselineKeys, sentIndex)
+	unmatchedSentKeys := collectObservationPostComparisonUnmatchedSentKeys(sentKeys, baselineIndex)
+
+	mismatchCandidates, consumedBaseline, consumedSent := buildObservationIdentifierMismatchCandidates(
+		baselineIndex,
+		unmatchedBaselineKeys,
+		sentIndex,
+		unmatchedSentKeys,
+	)
+	result.IdentifierMismatchCandidates = mismatchCandidates
+
+	appendObservationPostComparisonUnsentRows(&result, baselineIndex, unmatchedBaselineKeys, consumedBaseline)
+	appendObservationPostComparisonUnexpectedSentRows(&result, sentIndex, unmatchedSentKeys, consumedSent)
+	finalizeObservationPostComparisonResult(&result)
+
+	return result
+}
+
+func newObservationPostComparisonResult(
+	baselineInputs []ObservationPostComparisonInput,
+	baselineKeys []observationPostComparisonKey,
+	baselineDuplicateInputCount int,
+	sentInputs []ObservationPostComparisonInput,
+	sentKeys []observationPostComparisonKey,
+	sentDuplicateInputCount int,
+) ObservationPostComparisonResult {
+	return ObservationPostComparisonResult{
 		Summary: ObservationPostComparisonSummary{
 			BaselineInputCount:          len(baselineInputs),
 			BaselineUniquePostCount:     len(baselineKeys),
@@ -125,52 +159,85 @@ func CompareObservationPostInputs(
 		IdentifierMismatchCandidates: make([]ObservationIdentifierMismatchCandidate, 0),
 		VerdictRows:                  make([]ObservationPostComparisonVerdictRow, 0, len(baselineKeys)+len(sentKeys)),
 	}
+}
 
+func appendObservationPostComparisonMatchedRows(
+	result *ObservationPostComparisonResult,
+	baselineIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
+	baselineKeys []observationPostComparisonKey,
+	sentIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
+) []observationPostComparisonKey {
 	unmatchedBaselineKeys := make([]observationPostComparisonKey, 0, len(baselineKeys))
-	unmatchedSentKeys := make([]observationPostComparisonKey, 0, len(sentKeys))
-
 	for _, key := range baselineKeys {
 		baseline := baselineIndex[key]
 		sent, ok := sentIndex[key]
-		switch {
-		case !ok:
+		if appendObservationPostComparisonKnownBaselineRow(result, baseline, sent, ok) {
 			unmatchedBaselineKeys = append(unmatchedBaselineKeys, key)
-		case sent.count > 1:
-			result.DuplicateSentRows = append(result.DuplicateSentRows, buildObservationPostComparisonRow(baseline, sent))
-		default:
-			result.MatchedRows = append(result.MatchedRows, buildObservationPostComparisonRow(baseline, sent))
 		}
 	}
+	return unmatchedBaselineKeys
+}
 
+func appendObservationPostComparisonKnownBaselineRow(
+	result *ObservationPostComparisonResult,
+	baseline *observationPostComparisonAccumulator,
+	sent *observationPostComparisonAccumulator,
+	sentExists bool,
+) bool {
+	if !sentExists {
+		return true
+	}
+	if sent.count > 1 {
+		result.DuplicateSentRows = append(result.DuplicateSentRows, buildObservationPostComparisonRow(baseline, sent))
+		return false
+	}
+	result.MatchedRows = append(result.MatchedRows, buildObservationPostComparisonRow(baseline, sent))
+	return false
+}
+
+func collectObservationPostComparisonUnmatchedSentKeys(
+	sentKeys []observationPostComparisonKey,
+	baselineIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
+) []observationPostComparisonKey {
+	unmatchedSentKeys := make([]observationPostComparisonKey, 0, len(sentKeys))
 	for _, key := range sentKeys {
 		if _, ok := baselineIndex[key]; ok {
 			continue
 		}
 		unmatchedSentKeys = append(unmatchedSentKeys, key)
 	}
+	return unmatchedSentKeys
+}
 
-	mismatchCandidates, consumedBaseline, consumedSent := buildObservationIdentifierMismatchCandidates(
-		baselineIndex,
-		unmatchedBaselineKeys,
-		sentIndex,
-		unmatchedSentKeys,
-	)
-	result.IdentifierMismatchCandidates = mismatchCandidates
-
+func appendObservationPostComparisonUnsentRows(
+	result *ObservationPostComparisonResult,
+	baselineIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
+	unmatchedBaselineKeys []observationPostComparisonKey,
+	consumedBaseline map[observationPostComparisonKey]struct{},
+) {
 	for _, key := range unmatchedBaselineKeys {
 		if _, ok := consumedBaseline[key]; ok {
 			continue
 		}
 		result.UnsentRows = append(result.UnsentRows, buildObservationPostComparisonRow(baselineIndex[key], nil))
 	}
+}
 
+func appendObservationPostComparisonUnexpectedSentRows(
+	result *ObservationPostComparisonResult,
+	sentIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
+	unmatchedSentKeys []observationPostComparisonKey,
+	consumedSent map[observationPostComparisonKey]struct{},
+) {
 	for _, key := range unmatchedSentKeys {
 		if _, ok := consumedSent[key]; ok {
 			continue
 		}
 		result.UnexpectedSentRows = append(result.UnexpectedSentRows, buildObservationPostComparisonRow(nil, sentIndex[key]))
 	}
+}
 
+func finalizeObservationPostComparisonResult(result *ObservationPostComparisonResult) {
 	sortObservationPostComparisonRows(result.MatchedRows)
 	sortObservationPostComparisonRows(result.UnsentRows)
 	sortObservationPostComparisonRows(result.DuplicateSentRows)
@@ -182,7 +249,5 @@ func CompareObservationPostInputs(
 	result.Summary.DuplicateSentPostCount = len(result.DuplicateSentRows)
 	result.Summary.UnexpectedSentPostCount = len(result.UnexpectedSentRows)
 	result.Summary.IdentifierMismatchCandidateCount = len(result.IdentifierMismatchCandidates)
-	result.VerdictRows = buildObservationPostComparisonVerdictRows(result)
-
-	return result
+	result.VerdictRows = buildObservationPostComparisonVerdictRows(*result)
 }

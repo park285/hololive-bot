@@ -26,16 +26,37 @@ func (r *GormRepository) UpsertSourcePostsBatch(ctx context.Context, records []*
 		return fmt.Errorf("upsert source posts batch: db is nil")
 	}
 
+	normalized, err := normalizeSourcePostsBatch(records)
+	if err != nil {
+		return fmt.Errorf("upsert source posts batch: %w", err)
+	}
+
+	query, args := buildSourcePostsBatchUpsert(normalized, yttimestamp.Normalize(time.Now()))
+	if err := r.db.WithContext(ctx).Exec(query, args...).Error; err != nil {
+		return fmt.Errorf("upsert source posts batch: exec query: %w", err)
+	}
+
+	return nil
+}
+
+func normalizeSourcePostsBatch(
+	records []*domain.YouTubeCommunityShortsSourcePost,
+) ([]*domain.YouTubeCommunityShortsSourcePost, error) {
 	normalized := make([]*domain.YouTubeCommunityShortsSourcePost, 0, len(records))
 	for i, record := range records {
 		normalizedRecord, err := normalizeSourcePost(record)
 		if err != nil {
-			return fmt.Errorf("upsert source posts batch: normalize record at index %d: %w", i, err)
+			return nil, fmt.Errorf("normalize record at index %d: %w", i, err)
 		}
 		normalized = append(normalized, normalizedRecord)
 	}
+	return normalized, nil
+}
 
-	now := yttimestamp.Normalize(time.Now())
+func buildSourcePostsBatchUpsert(
+	normalized []*domain.YouTubeCommunityShortsSourcePost,
+	now time.Time,
+) (string, []any) {
 	args := make([]any, 0, len(normalized)*7)
 	var sb strings.Builder
 	sb.WriteString(`
@@ -66,11 +87,7 @@ func (r *GormRepository) UpsertSourcePostsBatch(ctx context.Context, records []*
 		    updated_at = EXCLUDED.updated_at
 	`)
 
-	if err := r.db.WithContext(ctx).Exec(sb.String(), args...).Error; err != nil {
-		return fmt.Errorf("upsert source posts batch: exec query: %w", err)
-	}
-
-	return nil
+	return sb.String(), args
 }
 
 func (r *GormRepository) ListSourcePostsDetectedWithinWindow(

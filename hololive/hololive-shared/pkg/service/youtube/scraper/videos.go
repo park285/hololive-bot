@@ -59,22 +59,8 @@ func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResul
 		return []*Video{}, nil
 	}
 
-	if c.isVideoRSSBackoff(ctx, channelID) {
-		rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults)
-		if rssErr == nil && len(rssVideos) > 0 {
-			return rssVideos, nil
-		}
-		if rssErr == nil {
-			slog.Debug("video rss backoff returned no videos, retrying html scraping",
-				"channel_id", channelID)
-			c.clearVideoRSSBackoff(ctx, channelID)
-		}
-
-		if rssErr != nil {
-			slog.Warn("video rss backoff path failed, retrying html scraping",
-				"channel_id", channelID,
-				"error", rssErr.Error())
-		}
+	if rssVideos, ok := c.getRecentVideosFromRSSBackoff(ctx, channelID, maxResults); ok {
+		return rssVideos, nil
 	}
 
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/videos", channelID)
@@ -92,22 +78,51 @@ func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResul
 		c.markVideoRSSBackoff(ctx, channelID)
 	}
 
-	// 마지막 폴백: 채널 RSS feed. HTML 파싱 실패 시에도 최근 업로드 ID를 복구한다.
+	if rssVideos, recovered := c.getRecentVideosFromRSSFallback(ctx, channelID, maxResults, videos); recovered {
+		return rssVideos, nil
+	}
+
+	return []*Video{}, nil
+}
+
+func (c *Client) getRecentVideosFromRSSBackoff(ctx context.Context, channelID string, maxResults int) ([]*Video, bool) {
+	if !c.isVideoRSSBackoff(ctx, channelID) {
+		return nil, false
+	}
+
+	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults)
+	if rssErr == nil && len(rssVideos) > 0 {
+		return rssVideos, true
+	}
+	if rssErr == nil {
+		slog.Debug("video rss backoff returned no videos, retrying html scraping",
+			"channel_id", channelID)
+		c.clearVideoRSSBackoff(ctx, channelID)
+		return nil, false
+	}
+
+	slog.Warn("video rss backoff path failed, retrying html scraping",
+		"channel_id", channelID,
+		"error", rssErr.Error())
+	return nil, false
+}
+
+func (c *Client) getRecentVideosFromRSSFallback(ctx context.Context, channelID string, maxResults int, pageVideos []*Video) ([]*Video, bool) {
 	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults)
 	if rssErr != nil {
 		slog.Debug("recent videos rss fallback failed",
 			"channel_id", channelID,
 			"error", rssErr.Error())
-		return videos, nil
+		return pageVideos, true
 	}
-	if len(rssVideos) > 0 {
-		logStructureWarning("recent_videos", channelID, "html parser recovered via rss fallback",
-			"channel_id", channelID,
-			"count", len(rssVideos))
-		return rssVideos, nil
+	if len(rssVideos) == 0 {
+		return nil, false
 	}
 
-	return []*Video{}, nil
+	logStructureWarning("recent_videos", channelID, "html parser recovered via rss fallback",
+		"channel_id", channelID,
+		"count", len(rssVideos))
+	return rssVideos, true
 }
 
 func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID string, maxResults int) ([]*Video, error) {
@@ -191,44 +206,59 @@ func parseVideosFromRSSFeed(feedXML, channelID string, maxResults int) ([]*Video
 		if len(videos) >= maxResults {
 			break
 		}
-		videoID := strings.TrimSpace(entry.VideoID)
-		title := strings.TrimSpace(entry.Title)
-		if videoID == "" || title == "" {
+		video, ok := parseVideoFromRSSEntry(entry, channelID, seen)
+		if !ok {
 			continue
 		}
-		if _, exists := seen[videoID]; exists {
-			continue
-		}
-		seen[videoID] = struct{}{}
-
-		publishedText := strings.TrimSpace(entry.Published)
-		if parsed, err := time.Parse(time.RFC3339, publishedText); err == nil {
-			publishedText = parsed.UTC().Format(time.RFC3339)
-		}
-
-		thumbnails := entry.MediaGroup.Thumbnails
-		if len(thumbnails) == 0 && len(entry.MediaThumbs) > 0 {
-			thumbnails = entry.MediaThumbs
-		}
-		convertedThumbs := make([]Thumbnail, 0, len(thumbnails))
-		for _, thumb := range thumbnails {
-			if strings.TrimSpace(thumb.URL) == "" {
-				continue
-			}
-			convertedThumbs = append(convertedThumbs, Thumbnail(thumb))
-		}
-
-		videos = append(videos, &Video{
-			VideoID:       videoID,
-			Title:         title,
-			Thumbnail:     convertedThumbs,
-			PublishedText: publishedText,
-			ChannelID:     channelID,
-			ChannelTitle:  strings.TrimSpace(entry.AuthorName),
-		})
+		videos = append(videos, video)
 	}
 
 	return videos, nil
+}
+
+func parseVideoFromRSSEntry(entry rssEntry, channelID string, seen map[string]struct{}) (*Video, bool) {
+	videoID := strings.TrimSpace(entry.VideoID)
+	title := strings.TrimSpace(entry.Title)
+	if videoID == "" || title == "" {
+		return nil, false
+	}
+	if _, exists := seen[videoID]; exists {
+		return nil, false
+	}
+	seen[videoID] = struct{}{}
+
+	return &Video{
+		VideoID:       videoID,
+		Title:         title,
+		Thumbnail:     rssEntryThumbnails(entry),
+		PublishedText: formatRSSPublishedText(entry.Published),
+		ChannelID:     channelID,
+		ChannelTitle:  strings.TrimSpace(entry.AuthorName),
+	}, true
+}
+
+func formatRSSPublishedText(published string) string {
+	publishedText := strings.TrimSpace(published)
+	if parsed, err := time.Parse(time.RFC3339, publishedText); err == nil {
+		return parsed.UTC().Format(time.RFC3339)
+	}
+	return publishedText
+}
+
+func rssEntryThumbnails(entry rssEntry) []Thumbnail {
+	thumbnails := entry.MediaGroup.Thumbnails
+	if len(thumbnails) == 0 && len(entry.MediaThumbs) > 0 {
+		thumbnails = entry.MediaThumbs
+	}
+
+	convertedThumbs := make([]Thumbnail, 0, len(thumbnails))
+	for _, thumb := range thumbnails {
+		if strings.TrimSpace(thumb.URL) == "" {
+			continue
+		}
+		convertedThumbs = append(convertedThumbs, Thumbnail(thumb))
+	}
+	return convertedThumbs
 }
 
 func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {
@@ -248,25 +278,46 @@ func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResu
 		return nil, err
 	}
 
-	// Home 탭에서 "Popular" shelf 찾기
-	sectionsPath := "contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.content.sectionListRenderer.contents"
-	var popularItems []gjson.Result
+	popularItems := findPopularGridVideoRenderers(data)
+	videos := c.parsePopularGridVideos(popularItems, channelID, maxResults)
+	return videos, nil
+}
 
-	data.Get(sectionsPath).ForEach(func(_, section gjson.Result) bool {
-		shelfTitle := section.Get("itemSectionRenderer.contents.0.shelfRenderer.title.runs.0.text").String()
-		if shelfTitle == "Popular videos" || shelfTitle == "Popular" {
-			gridItems := section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.gridRenderer.items")
-			gridItems.ForEach(func(_, item gjson.Result) bool {
-				if item.Get("gridVideoRenderer").Exists() {
-					popularItems = append(popularItems, item.Get("gridVideoRenderer"))
-				}
-				return true
-			})
-			return false
+func findPopularGridVideoRenderers(data gjson.Result) []gjson.Result {
+	var popularItems []gjson.Result
+	popularSections(data).ForEach(func(_, section gjson.Result) bool {
+		if !isPopularVideosShelf(section) {
+			return true
+		}
+		popularItems = collectGridVideoRenderers(section)
+		return false
+	})
+	return popularItems
+}
+
+func popularSections(data gjson.Result) gjson.Result {
+	sectionsPath := "contents.twoColumnBrowseResultsRenderer.tabs.0.tabRenderer.content.sectionListRenderer.contents"
+	return data.Get(sectionsPath)
+}
+
+func isPopularVideosShelf(section gjson.Result) bool {
+	shelfTitle := section.Get("itemSectionRenderer.contents.0.shelfRenderer.title.runs.0.text").String()
+	return shelfTitle == "Popular videos" || shelfTitle == "Popular"
+}
+
+func collectGridVideoRenderers(section gjson.Result) []gjson.Result {
+	var gridVideos []gjson.Result
+	gridItems := section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.gridRenderer.items")
+	gridItems.ForEach(func(_, item gjson.Result) bool {
+		if item.Get("gridVideoRenderer").Exists() {
+			gridVideos = append(gridVideos, item.Get("gridVideoRenderer"))
 		}
 		return true
 	})
+	return gridVideos
+}
 
+func (c *Client) parsePopularGridVideos(popularItems []gjson.Result, channelID string, maxResults int) []*Video {
 	videos := make([]*Video, 0, min(len(popularItems), maxResults))
 	for i, item := range popularItems {
 		if i >= maxResults {
@@ -278,7 +329,7 @@ func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResu
 		}
 	}
 
-	return videos, nil
+	return videos
 }
 
 // parseVideoCommon: videoRenderer/gridVideoRenderer 공통 파싱 로직

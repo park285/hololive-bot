@@ -50,40 +50,13 @@ func (r *StatsRepository) GetUnnotifiedChanges(ctx context.Context, limit int) (
 
 	var changes []*domain.StatsChange
 	for rows.Next() {
-		var change domain.StatsChange
-		var prevSubs, currSubs *int64
-
-		if err := rows.Scan(
-			&change.ChannelID,
-			&change.MemberName,
-			&change.SubscriberChange,
-			&change.VideoChange,
-			&change.ViewChange,
-			&prevSubs,
-			&currSubs,
-			&change.DetectedAt,
-		); err != nil {
+		change, err := scanUnnotifiedChangeRow(rows)
+		if err != nil {
 			r.logger.Warn("Failed to scan change row", slog.Any("error", err))
 			continue
 		}
 
-		// PreviousStats/CurrentStats 복원 (마일스톤 검출에 필요)
-		if prevSubs != nil {
-			change.PreviousStats = &domain.TimestampedStats{
-				ChannelID:       change.ChannelID,
-				MemberName:      change.MemberName,
-				SubscriberCount: uint64(*prevSubs),
-			}
-		}
-		if currSubs != nil {
-			change.CurrentStats = &domain.TimestampedStats{
-				ChannelID:       change.ChannelID,
-				MemberName:      change.MemberName,
-				SubscriberCount: uint64(*currSubs),
-			}
-		}
-
-		changes = append(changes, &change)
+		changes = append(changes, change)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -91,6 +64,46 @@ func (r *StatsRepository) GetUnnotifiedChanges(ctx context.Context, limit int) (
 	}
 
 	return changes, nil
+}
+
+func scanUnnotifiedChangeRow(rows interface {
+	Scan(dest ...any) error
+}) (*domain.StatsChange, error) {
+	var change domain.StatsChange
+	var prevSubs, currSubs *int64
+
+	if err := rows.Scan(
+		&change.ChannelID,
+		&change.MemberName,
+		&change.SubscriberChange,
+		&change.VideoChange,
+		&change.ViewChange,
+		&prevSubs,
+		&currSubs,
+		&change.DetectedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	restoreChangeSubscriberStats(&change, prevSubs, currSubs)
+	return &change, nil
+}
+
+func restoreChangeSubscriberStats(change *domain.StatsChange, prevSubs *int64, currSubs *int64) {
+	if prevSubs != nil {
+		change.PreviousStats = buildChangeSubscriberStats(change, *prevSubs)
+	}
+	if currSubs != nil {
+		change.CurrentStats = buildChangeSubscriberStats(change, *currSubs)
+	}
+}
+
+func buildChangeSubscriberStats(change *domain.StatsChange, subscribers int64) *domain.TimestampedStats {
+	return &domain.TimestampedStats{
+		ChannelID:       change.ChannelID,
+		MemberName:      change.MemberName,
+		SubscriberCount: uint64(subscribers),
+	}
 }
 
 func (r *StatsRepository) MarkChangeNotified(ctx context.Context, channelID string, detectedAt time.Time) error {

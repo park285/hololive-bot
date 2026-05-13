@@ -139,12 +139,53 @@ const (
 	osMac16
 )
 
+type snapshotGenerator func(*RotatingProvider, os) HeaderSnapshot
+
 // GREASE 브랜드 후보 (Chromium GREASE 사양)
 var greaseBrands = []string{
 	"Not(A:Brand",
 	"Not A;Brand",
 	"Not_A Brand",
 	"Not/A)Brand",
+}
+
+var browserWeights = []weighted[browser]{
+	{brChrome, 68},
+	{brEdge, 7},
+	{brFirefox, 5},
+	{brSafari, 20},
+}
+
+var safariOSWeights = []weighted[os]{
+	{osMac13, 25},
+	{osMac14, 35},
+	{osMac15, 25},
+	{osMac16, 15},
+}
+
+var desktopOSWeights = []weighted[os]{
+	{osWin10, 45},
+	{osWin11, 35},
+	{osMac13, 5},
+	{osMac14, 5},
+	{osMac15, 5},
+	{osMac16, 5},
+}
+
+var osTokens = map[os]string{
+	osWin10: "Windows NT 10.0; Win64; x64",
+	osWin11: "Windows NT 10.0; Win64; x64",
+	osMac13: "Macintosh; Intel Mac OS X 13_6",
+	osMac14: "Macintosh; Intel Mac OS X 14_2",
+	osMac15: "Macintosh; Intel Mac OS X 15_0",
+	osMac16: "Macintosh; Intel Mac OS X 16_0",
+}
+
+var snapshotGenerators = map[browser]snapshotGenerator{
+	brChrome:  (*RotatingProvider).genChromeSnapshot,
+	brEdge:    (*RotatingProvider).genEdgeSnapshot,
+	brFirefox: genFirefoxSnapshotFromProvider,
+	brSafari:  genSafariSnapshotFromProvider,
 }
 
 const (
@@ -154,49 +195,25 @@ const (
 
 // generate: 가중치 기반으로 새 HeaderSnapshot 생성
 func (p *RotatingProvider) generate() HeaderSnapshot {
-	// 대략적인 데스크톱 브라우저 점유율 기반 가중치
-	// Chrome ~68%, Safari ~20%, Edge ~7%, Firefox ~5%
-	b := pickWeighted(p.r, []weighted[browser]{
-		{brChrome, 68},
-		{brEdge, 7},
-		{brFirefox, 5},
-		{brSafari, 20},
-	})
-
-	var o os
-	switch b {
-	case brSafari:
-		// Safari는 macOS에서만 사용
-		o = pickWeighted(p.r, []weighted[os]{
-			{osMac13, 25},
-			{osMac14, 35},
-			{osMac15, 25},
-			{osMac16, 15},
-		})
-	default:
-		// Chrome/Edge/Firefox는 Windows와 macOS 모두 지원
-		o = pickWeighted(p.r, []weighted[os]{
-			{osWin10, 45},
-			{osWin11, 35},
-			{osMac13, 5},
-			{osMac14, 5},
-			{osMac15, 5},
-			{osMac16, 5},
-		})
+	b := p.pickBrowser()
+	generator := snapshotGenerators[b]
+	if generator == nil {
+		generator = (*RotatingProvider).genChromeSnapshot
 	}
+	return generator(p, p.pickOS(b))
+}
 
-	switch b {
-	case brChrome:
-		return p.genChromeSnapshot(o)
-	case brEdge:
-		return p.genEdgeSnapshot(o)
-	case brFirefox:
-		return genFirefoxSnapshot(p.r, o)
-	case brSafari:
-		return genSafariSnapshot(p.r, o)
-	default:
-		return p.genChromeSnapshot(o)
+// pickBrowser: 대략적인 데스크톱 브라우저 점유율 기반 가중치로 선택
+func (p *RotatingProvider) pickBrowser() browser {
+	return pickWeighted(p.r, browserWeights)
+}
+
+// pickOS: 브라우저별 지원 OS 분포 기반 가중치로 선택
+func (p *RotatingProvider) pickOS(b browser) os {
+	if b == brSafari {
+		return pickWeighted(p.r, safariOSWeights)
 	}
+	return pickWeighted(p.r, desktopOSWeights)
 }
 
 // genChromeSnapshot: Chrome HeaderSnapshot 생성 (UA Reduction + Client Hints)
@@ -263,25 +280,20 @@ func genSafariSnapshot(r *rand.Rand, o os) HeaderSnapshot {
 	}
 }
 
+func genFirefoxSnapshotFromProvider(p *RotatingProvider, o os) HeaderSnapshot {
+	return genFirefoxSnapshot(p.r, o)
+}
+
+func genSafariSnapshotFromProvider(p *RotatingProvider, o os) HeaderSnapshot {
+	return genSafariSnapshot(p.r, o)
+}
+
 // osToken: OS 토큰 문자열 반환
 func osToken(o os) string {
-	switch o {
-	case osWin10:
-		return "Windows NT 10.0; Win64; x64"
-	case osWin11:
-		// Windows 11도 내부적으로는 NT 10.0으로 보고됨
-		return "Windows NT 10.0; Win64; x64"
-	case osMac13:
-		return "Macintosh; Intel Mac OS X 13_6"
-	case osMac14:
-		return "Macintosh; Intel Mac OS X 14_2"
-	case osMac15:
-		return "Macintosh; Intel Mac OS X 15_0"
-	case osMac16:
-		return "Macintosh; Intel Mac OS X 16_0"
-	default:
-		return "Windows NT 10.0; Win64; x64"
+	if token, ok := osTokens[o]; ok {
+		return token
 	}
+	return osTokens[osWin10]
 }
 
 // osPlatform: Sec-CH-UA-Platform 값 반환

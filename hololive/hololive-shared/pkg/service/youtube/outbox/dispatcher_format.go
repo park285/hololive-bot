@@ -85,73 +85,94 @@ func (mf *MessageFormatter) buildTemplateData(memberName string, item domain.You
 
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
-		var p videoPayload
-		if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
-			return data, fmt.Errorf("unmarshal video payload: %w", err)
-		}
-		data.Title = p.Title
-		data.VideoID = p.VideoID
-		if item.Kind == domain.OutboxKindNewShort {
-			data.URL = fmt.Sprintf("https://www.youtube.com/shorts/%s", p.VideoID)
-		} else {
-			data.URL = fmt.Sprintf("https://youtu.be/%s", p.VideoID)
-		}
-
+		return buildVideoTemplateData(data, item)
 	case domain.OutboxKindCommunityPost:
-		var p communityPayload
-		if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
-			return data, fmt.Errorf("unmarshal community payload: %w", err)
-		}
-		data.ContentText = p.ContentText
-		data.PostID = p.PostID
-		data.URL = fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID)
-
+		return buildCommunityTemplateData(data, item.Payload)
 	case domain.OutboxKindMilestone:
-		var p milestonePayload
-		if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
-			return data, fmt.Errorf("unmarshal milestone payload: %w", err)
-		}
-		data.Milestone = p.Milestone
+		return buildMilestoneTemplateData(data, item.Payload)
 	}
 
 	return data, nil
+}
+
+func buildVideoTemplateData(data templateData, item domain.YouTubeNotificationOutbox) (templateData, error) {
+	var p videoPayload
+	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
+		return data, fmt.Errorf("unmarshal video payload: %w", err)
+	}
+	data.Title = p.Title
+	data.VideoID = p.VideoID
+	data.URL = videoTemplateURL(item.Kind, p.VideoID)
+	return data, nil
+}
+
+func videoTemplateURL(kind domain.OutboxKind, videoID string) string {
+	if kind == domain.OutboxKindNewShort {
+		return fmt.Sprintf("https://www.youtube.com/shorts/%s", videoID)
+	}
+	return fmt.Sprintf("https://youtu.be/%s", videoID)
+}
+
+func buildCommunityTemplateData(data templateData, payload string) (templateData, error) {
+	var p communityPayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return data, fmt.Errorf("unmarshal community payload: %w", err)
+	}
+	data.ContentText = p.ContentText
+	data.PostID = p.PostID
+	data.URL = fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID)
+	return data, nil
+}
+
+func buildMilestoneTemplateData(data templateData, payload string) (templateData, error) {
+	var p milestonePayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return data, fmt.Errorf("unmarshal milestone payload: %w", err)
+	}
+	data.Milestone = p.Milestone
+	return data, nil
+}
+
+var singleMessageHeaderFormats = map[domain.OutboxKind]string{
+	domain.OutboxKindCommunityPost: "📝 %s 커뮤니티 알림",
+	domain.OutboxKindNewShort:      "📱 %s 쇼츠 알림",
+	domain.OutboxKindNewVideo:      "📺 %s 새 영상",
+	domain.OutboxKindMilestone:     "🎉 %s 마일스톤 알림",
 }
 
 // applySeeMorePadding: 카카오톡 '전체 보기' 패딩 적용
 // - COMMUNITY: 헤더 + 패딩 적용 (본문 길이 가변)
 // - VIDEO, SHORTS, MILESTONE: 헤더만 추가, 패딩 미적용 (짧은 알림 → 즉시 노출)
 func (mf *MessageFormatter) applySeeMorePadding(msg string, kind domain.OutboxKind, data templateData) string {
-	switch kind {
-	case domain.OutboxKindCommunityPost:
-		header := fmt.Sprintf("📝 %s 커뮤니티 알림", data.MemberName)
-		return util.ApplyKakaoSeeMorePadding(msg, header)
-	case domain.OutboxKindNewShort:
-		header := fmt.Sprintf("📱 %s 쇼츠 알림", data.MemberName)
-		return header + "\n" + msg
-	case domain.OutboxKindNewVideo:
-		header := fmt.Sprintf("📺 %s 새 영상", data.MemberName)
-		return header + "\n" + msg
-	case domain.OutboxKindMilestone:
-		header := fmt.Sprintf("🎉 %s 마일스톤 알림", data.MemberName)
-		return header + "\n" + msg
-	default:
+	header, ok := singleMessageHeader(kind, data.MemberName)
+	if !ok {
 		return msg
 	}
+	if kind == domain.OutboxKindCommunityPost {
+		return util.ApplyKakaoSeeMorePadding(msg, header)
+	}
+	return header + "\n" + msg
+}
+
+func singleMessageHeader(kind domain.OutboxKind, memberName string) (string, bool) {
+	format, ok := singleMessageHeaderFormats[kind]
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf(format, memberName), true
 }
 
 func (mf *MessageFormatter) formatMessageFallback(memberName string, item domain.YouTubeNotificationOutbox) (string, error) {
-	switch item.Kind {
-	case domain.OutboxKindNewVideo:
-		return mf.formatVideoMessage(memberName, item.Payload, false)
-	case domain.OutboxKindNewShort:
-		return mf.formatVideoMessage(memberName, item.Payload, true)
-	case domain.OutboxKindCommunityPost:
-		return mf.formatCommunityMessage(memberName, item.Payload)
-	case domain.OutboxKindMilestone:
-		return mf.formatMilestoneMessage(memberName, item.Payload)
-	default:
-		return "", fmt.Errorf("unknown outbox kind: %s", item.Kind)
+	if item.Kind == domain.OutboxKindNewVideo || item.Kind == domain.OutboxKindNewShort {
+		return mf.formatVideoMessage(memberName, item.Payload, item.Kind == domain.OutboxKindNewShort)
 	}
+	if item.Kind == domain.OutboxKindCommunityPost {
+		return mf.formatCommunityMessage(memberName, item.Payload)
+	}
+	if item.Kind == domain.OutboxKindMilestone {
+		return mf.formatMilestoneMessage(memberName, item.Payload)
+	}
+	return "", fmt.Errorf("unknown outbox kind: %s", item.Kind)
 }
 
 // videoPayload: 영상 payload 구조
@@ -283,30 +304,41 @@ func (mf *MessageFormatter) buildGroupedTemplateData(memberName string, kind dom
 	}
 
 	for i := range items {
-		item := &items[i]
-		itemData := groupedItemData{}
-
-		switch item.Kind {
-		case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
-			var p videoPayload
-			if err := json.Unmarshal([]byte(item.Payload), &p); err == nil {
-				itemData.Title = p.Title
-				if item.Kind == domain.OutboxKindNewShort {
-					itemData.URL = fmt.Sprintf("https://www.youtube.com/shorts/%s", p.VideoID)
-				} else {
-					itemData.URL = fmt.Sprintf("https://youtu.be/%s", p.VideoID)
-				}
-			}
-		case domain.OutboxKindCommunityPost:
-			var p communityPayload
-			if err := json.Unmarshal([]byte(item.Payload), &p); err == nil {
-				itemData.ContentText = p.ContentText
-				itemData.URL = fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID)
-			}
-		}
-
-		data.Items = append(data.Items, itemData)
+		data.Items = append(data.Items, buildGroupedItemData(items[i]))
 	}
 
 	return data
+}
+
+func buildGroupedItemData(item domain.YouTubeNotificationOutbox) groupedItemData {
+	switch item.Kind {
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
+		return buildGroupedVideoItemData(item)
+	case domain.OutboxKindCommunityPost:
+		return buildGroupedCommunityItemData(item.Payload)
+	default:
+		return groupedItemData{}
+	}
+}
+
+func buildGroupedVideoItemData(item domain.YouTubeNotificationOutbox) groupedItemData {
+	var p videoPayload
+	if err := json.Unmarshal([]byte(item.Payload), &p); err != nil {
+		return groupedItemData{}
+	}
+	return groupedItemData{
+		Title: p.Title,
+		URL:   videoTemplateURL(item.Kind, p.VideoID),
+	}
+}
+
+func buildGroupedCommunityItemData(payload string) groupedItemData {
+	var p communityPayload
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return groupedItemData{}
+	}
+	return groupedItemData{
+		ContentText: p.ContentText,
+		URL:         fmt.Sprintf("https://www.youtube.com/post/%s", p.PostID),
+	}
 }

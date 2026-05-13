@@ -15,34 +15,40 @@ func normalizeTelemetryPostID(value string) string {
 func resolveTelemetryPostID(kind domain.OutboxKind, contentID, payload string) string {
 	switch kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
-		var parsed videoPayload
-		if err := json.Unmarshal([]byte(payload), &parsed); err == nil {
-			if postID := normalizeTelemetryPostID(parsed.CanonicalPostID); postID != "" {
-				return postID
-			}
-			if postID := normalizeTelemetryPostID(contentID); postID != "" {
-				return postID
-			}
-			if postID := normalizeTelemetryPostID(parsed.VideoID); postID != "" {
-				return postID
-			}
-		}
+		return resolveVideoTelemetryPostID(contentID, payload)
 	case domain.OutboxKindCommunityPost:
-		var parsed communityPayload
-		if err := json.Unmarshal([]byte(payload), &parsed); err == nil {
-			if postID := normalizeTelemetryPostID(parsed.CanonicalPostID); postID != "" {
-				return postID
-			}
-			if postID := normalizeTelemetryPostID(contentID); postID != "" {
-				return postID
-			}
-			if postID := normalizeTelemetryPostID(parsed.PostID); postID != "" {
-				return postID
-			}
-		}
+		return resolveCommunityTelemetryPostID(contentID, payload)
 	}
 
 	return normalizeTelemetryPostID(contentID)
+}
+
+func resolveVideoTelemetryPostID(contentID, payload string) string {
+	var parsed videoPayload
+	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+		return normalizeTelemetryPostID(contentID)
+	}
+
+	return firstTelemetryPostID(parsed.CanonicalPostID, contentID, parsed.VideoID)
+}
+
+func resolveCommunityTelemetryPostID(contentID, payload string) string {
+	var parsed communityPayload
+	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
+		return normalizeTelemetryPostID(contentID)
+	}
+
+	return firstTelemetryPostID(parsed.CanonicalPostID, contentID, parsed.PostID)
+}
+
+func firstTelemetryPostID(values ...string) string {
+	for _, value := range values {
+		if postID := normalizeTelemetryPostID(value); postID != "" {
+			return postID
+		}
+	}
+
+	return ""
 }
 
 func applyTelemetryPostID(row *domain.YouTubeNotificationDeliveryTelemetry) {

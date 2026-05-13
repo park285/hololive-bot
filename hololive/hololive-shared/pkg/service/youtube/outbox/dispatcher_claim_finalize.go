@@ -138,18 +138,29 @@ func resolveClaimDetectedAt(
 	trackingRow *domain.YouTubeContentAlarmTracking,
 	claimAt time.Time,
 ) time.Time {
-	switch {
-	case state != nil && !state.DetectedAt.IsZero():
-		return yttimestamp.Normalize(state.DetectedAt)
-	case trackingRow != nil && !trackingRow.DetectedAt.IsZero():
-		return yttimestamp.Normalize(trackingRow.DetectedAt)
-	case !outbox.CreatedAt.IsZero():
-		return yttimestamp.Normalize(outbox.CreatedAt)
-	case !row.CreatedAt.IsZero():
-		return yttimestamp.Normalize(row.CreatedAt)
-	default:
-		return yttimestamp.Normalize(claimAt)
+	for _, candidate := range claimDetectedAtCandidates(row, outbox, state, trackingRow, claimAt) {
+		if !candidate.IsZero() {
+			return yttimestamp.Normalize(candidate)
+		}
 	}
+	return yttimestamp.Normalize(claimAt)
+}
+
+func claimDetectedAtCandidates(
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+	state *domain.YouTubeCommunityShortsAlarmState,
+	trackingRow *domain.YouTubeContentAlarmTracking,
+	claimAt time.Time,
+) []time.Time {
+	candidates := make([]time.Time, 0, 5)
+	if state != nil {
+		candidates = append(candidates, state.DetectedAt)
+	}
+	if trackingRow != nil {
+		candidates = append(candidates, trackingRow.DetectedAt)
+	}
+	return append(candidates, outbox.CreatedAt, row.CreatedAt, claimAt)
 }
 
 func resolveClaimActualPublishedAt(
@@ -170,15 +181,25 @@ func resolveClaimActualPublishedAt(
 func resolveOutboxPublishedAt(outbox domain.YouTubeNotificationOutbox) *time.Time {
 	switch outbox.Kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindNewVideo:
-		var payload videoPayload
-		if err := json.Unmarshal([]byte(outbox.Payload), &payload); err == nil {
-			return yttimestamp.NormalizePtr(payload.PublishedAt)
-		}
+		return resolveVideoPayloadPublishedAt(outbox.Payload)
 	case domain.OutboxKindCommunityPost:
-		var payload communityPayload
-		if err := json.Unmarshal([]byte(outbox.Payload), &payload); err == nil {
-			return yttimestamp.NormalizePtr(payload.PublishedAt)
-		}
+		return resolveCommunityPayloadPublishedAt(outbox.Payload)
 	}
 	return nil
+}
+
+func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
+	var payload videoPayload
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		return nil
+	}
+	return yttimestamp.NormalizePtr(payload.PublishedAt)
+}
+
+func resolveCommunityPayloadPublishedAt(rawPayload string) *time.Time {
+	var payload communityPayload
+	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+		return nil
+	}
+	return yttimestamp.NormalizePtr(payload.PublishedAt)
 }

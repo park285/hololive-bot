@@ -33,17 +33,22 @@ func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopC
 	defer s.wg.Done()
 
 	for {
-		select {
-		case <-ctx.Done():
+		job, ok := nextWorkerJob(ctx, jobCh, stopCh)
+		if !ok {
 			return
-		case <-stopCh:
-			return
-		case job, ok := <-jobCh:
-			if !ok {
-				return
-			}
-			s.executeJob(ctx, job, id)
 		}
+		s.executeJob(ctx, job, id)
+	}
+}
+
+func nextWorkerJob(ctx context.Context, jobCh <-chan *Job, stopCh <-chan struct{}) (*Job, bool) {
+	select {
+	case <-ctx.Done():
+		return nil, false
+	case <-stopCh:
+		return nil, false
+	case job, ok := <-jobCh:
+		return job, ok
 	}
 }
 
@@ -70,42 +75,48 @@ func (s *Scheduler) executeJob(ctx context.Context, job *Job, workerID int) {
 	start := time.Now()
 	err := job.Poller.Poll(pollCtx, job.ChannelID)
 	elapsed := time.Since(start)
-	status := "success"
+	status := s.logPollResult(job, workerID, pollCtx, elapsed, err)
+	schedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
 
-	if err != nil {
-		status = "error"
-		if errors.Is(err, context.Canceled) {
-			status = "canceled"
-			slog.Debug("Poll canceled",
-				"poller", job.Poller.Name(),
-				"channel_id", job.ChannelID,
-				"worker_id", workerID,
-				"elapsed", elapsed)
-		} else if errors.Is(err, context.DeadlineExceeded) || errors.Is(pollCtx.Err(), context.DeadlineExceeded) {
-			status = "timeout"
-			slog.Warn("Poll timed out",
-				"poller", job.Poller.Name(),
-				"channel_id", job.ChannelID,
-				"worker_id", workerID,
-				"timeout", s.pollTimeout,
-				"elapsed", elapsed,
-				"error", err)
-		} else {
-			slog.Warn("Poll failed",
-				"poller", job.Poller.Name(),
-				"channel_id", job.ChannelID,
-				"worker_id", workerID,
-				"error", err,
-				"elapsed", elapsed)
-		}
-	} else {
+	s.rescheduleJobAfterPoll(job, err)
+}
+
+func (s *Scheduler) logPollResult(job *Job, workerID int, pollCtx context.Context, elapsed time.Duration, err error) string {
+	if err == nil {
 		slog.Debug("Poll succeeded",
 			"poller", job.Poller.Name(),
 			"channel_id", job.ChannelID,
 			"worker_id", workerID,
 			"elapsed", elapsed)
+		return "success"
 	}
-	schedulerPollDuration.WithLabelValues(job.Poller.Name(), status).Observe(elapsed.Seconds())
+	if errors.Is(err, context.Canceled) {
+		slog.Debug("Poll canceled",
+			"poller", job.Poller.Name(),
+			"channel_id", job.ChannelID,
+			"worker_id", workerID,
+			"elapsed", elapsed)
+		return "canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(pollCtx.Err(), context.DeadlineExceeded) {
+		s.logPollTimeout(job, workerID, elapsed, err)
+		return "timeout"
+	}
+	slog.Warn("Poll failed",
+		"poller", job.Poller.Name(),
+		"channel_id", job.ChannelID,
+		"worker_id", workerID,
+		"error", err,
+		"elapsed", elapsed)
+	return "error"
+}
 
-	s.rescheduleJobAfterPoll(job, err)
+func (s *Scheduler) logPollTimeout(job *Job, workerID int, elapsed time.Duration, err error) {
+	slog.Warn("Poll timed out",
+		"poller", job.Poller.Name(),
+		"channel_id", job.ChannelID,
+		"worker_id", workerID,
+		"timeout", s.pollTimeout,
+		"elapsed", elapsed,
+		"error", err)
 }

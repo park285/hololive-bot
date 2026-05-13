@@ -107,73 +107,98 @@ func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
 		return
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pollerName := strings.TrimSpace(targetSync.Poller.Name())
 	if pollerName == "" {
 		return
 	}
 
-	desired := make(map[string]struct{}, len(targetSync.ChannelIDs))
-	for _, channelID := range targetSync.ChannelIDs {
-		channelID = strings.TrimSpace(channelID)
-		if channelID == "" {
-			continue
-		}
-		desired[channelID] = struct{}{}
-	}
+	desired := desiredPollerTargetChannels(targetSync.ChannelIDs)
 
-	for key, job := range s.jobMap {
-		if job == nil || job.Poller == nil || job.Poller.Name() != pollerName {
-			continue
-		}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-		if _, keep := desired[job.ChannelID]; !keep {
-			job.retired = true
-			if job.index >= 0 {
-				heap.Remove(&s.jobs, job.index)
-			}
-			delete(s.jobMap, key)
-			continue
-		}
-
-		job.Poller = targetSync.Poller
-		job.Priority = targetSync.Priority
-		if job.Interval != targetSync.Interval {
-			s.resetJobScheduleForIntervalChange(job, targetSync.Interval)
-		}
-		job.Interval = targetSync.Interval
-		if job.index >= 0 {
-			heap.Fix(&s.jobs, job.index)
-		}
-		delete(desired, job.ChannelID)
-	}
-
-	now := time.Now()
-	for channelID := range desired {
-		key := channelID + ":" + pollerName
-		offset := calculateOffset(key, targetSync.Interval)
-		nextRunAt := nextPollAt(now, targetSync.Interval, offset)
-		if targetSync.ForceImmediateFirstRun {
-			nextRunAt = now
-		}
-		job := &Job{
-			ChannelID:         channelID,
-			Poller:            targetSync.Poller,
-			Priority:          targetSync.Priority,
-			NextRunAt:         nextRunAt,
-			Interval:          targetSync.Interval,
-			Offset:            offset,
-			key:               key,
-			immediateFirstRun: targetSync.ForceImmediateFirstRun,
-		}
-		heap.Push(&s.jobs, job)
-		s.jobMap[key] = job
-	}
+	s.syncExistingPollerTargetJobs(pollerName, targetSync, desired)
+	s.addMissingPollerTargetJobs(pollerName, targetSync, desired)
 
 	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 	s.notifyDispatcher()
+}
+
+func desiredPollerTargetChannels(channelIDs []string) map[string]struct{} {
+	desired := make(map[string]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		channelID = strings.TrimSpace(channelID)
+		if channelID != "" {
+			desired[channelID] = struct{}{}
+		}
+	}
+	return desired
+}
+
+func (s *Scheduler) syncExistingPollerTargetJobs(pollerName string, targetSync PollerTargetSync, desired map[string]struct{}) {
+	for key, job := range s.jobMap {
+		if !pollerTargetJobMatches(job, pollerName) {
+			continue
+		}
+		if _, keep := desired[job.ChannelID]; !keep {
+			s.removePollerTargetJob(key, job)
+			continue
+		}
+		s.updatePollerTargetJob(job, targetSync)
+		delete(desired, job.ChannelID)
+	}
+}
+
+func pollerTargetJobMatches(job *Job, pollerName string) bool {
+	return job != nil && job.Poller != nil && job.Poller.Name() == pollerName
+}
+
+func (s *Scheduler) removePollerTargetJob(key string, job *Job) {
+	job.retired = true
+	if job.index >= 0 {
+		heap.Remove(&s.jobs, job.index)
+	}
+	delete(s.jobMap, key)
+}
+
+func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync PollerTargetSync) {
+	job.Poller = targetSync.Poller
+	job.Priority = targetSync.Priority
+	if job.Interval != targetSync.Interval {
+		s.resetJobScheduleForIntervalChange(job, targetSync.Interval)
+	}
+	job.Interval = targetSync.Interval
+	if job.index >= 0 {
+		heap.Fix(&s.jobs, job.index)
+	}
+}
+
+func (s *Scheduler) addMissingPollerTargetJobs(pollerName string, targetSync PollerTargetSync, desired map[string]struct{}) {
+	now := time.Now()
+	for channelID := range desired {
+		job := newPollerTargetJob(channelID, pollerName, targetSync, now)
+		heap.Push(&s.jobs, job)
+		s.jobMap[job.key] = job
+	}
+}
+
+func newPollerTargetJob(channelID string, pollerName string, targetSync PollerTargetSync, now time.Time) *Job {
+	key := channelID + ":" + pollerName
+	offset := calculateOffset(key, targetSync.Interval)
+	nextRunAt := nextPollAt(now, targetSync.Interval, offset)
+	if targetSync.ForceImmediateFirstRun {
+		nextRunAt = now
+	}
+	return &Job{
+		ChannelID:         channelID,
+		Poller:            targetSync.Poller,
+		Priority:          targetSync.Priority,
+		NextRunAt:         nextRunAt,
+		Interval:          targetSync.Interval,
+		Offset:            offset,
+		key:               key,
+		immediateFirstRun: targetSync.ForceImmediateFirstRun,
+	}
 }
 
 func (s *Scheduler) resetJobScheduleForIntervalChange(job *Job, interval time.Duration) {

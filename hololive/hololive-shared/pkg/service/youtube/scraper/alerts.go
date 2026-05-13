@@ -33,44 +33,65 @@ func checkAlerts(data gjson.Result) error {
 		return nil
 	}
 
-	var foundAlert bool
-	var selectedText string
-	var selectedNotFound bool
-
-	alerts.ForEach(func(_, alert gjson.Result) bool {
-		alertType := alert.Get("alertRenderer.type").String()
-		alertText := extractAlertText(alert)
-
-		if alertType == "ERROR" {
-			foundAlert = true
-			if selectedText == "" {
-				selectedText = alertText
-			}
-			lowerText := strings.ToLower(alertText)
-			if strings.Contains(lowerText, "does not exist") ||
-				strings.Contains(lowerText, "doesn't exist") ||
-				strings.Contains(lowerText, "been terminated") {
-				selectedNotFound = true
-				if alertText != "" {
-					selectedText = alertText
-				}
-				return false
-			}
-		}
-		return true
-	})
-
-	if foundAlert {
-		if selectedText == "" {
-			selectedText = "unknown channel alert"
-		}
-		if selectedNotFound {
-			return fmt.Errorf("%w: %s", ErrChannelNotFound, selectedText)
-		}
-		return fmt.Errorf("%w: %s", ErrChannelUnavailable, selectedText)
+	selected := selectAlertError(alerts)
+	if !selected.found {
+		return nil
 	}
 
-	return nil
+	if selected.text == "" {
+		selected.text = "unknown channel alert"
+	}
+	if selected.notFound {
+		return fmt.Errorf("%w: %s", ErrChannelNotFound, selected.text)
+	}
+	return fmt.Errorf("%w: %s", ErrChannelUnavailable, selected.text)
+}
+
+type selectedAlertError struct {
+	found    bool
+	text     string
+	notFound bool
+}
+
+func selectAlertError(alerts gjson.Result) selectedAlertError {
+	selected := selectedAlertError{}
+	alerts.ForEach(func(_, alert gjson.Result) bool {
+		selected = selectAlertCandidate(selected, alert)
+		return !selected.notFound
+	})
+	return selected
+}
+
+func selectAlertCandidate(selected selectedAlertError, alert gjson.Result) selectedAlertError {
+	if alert.Get("alertRenderer.type").String() != "ERROR" {
+		return selected
+	}
+
+	alertText := extractAlertText(alert)
+	selected.found = true
+	if selected.text == "" {
+		selected.text = alertText
+	}
+	return selectNotFoundAlertText(selected, alertText)
+}
+
+func selectNotFoundAlertText(selected selectedAlertError, alertText string) selectedAlertError {
+	if !alertTextMeansNotFound(alertText) {
+		return selected
+	}
+
+	selected.notFound = true
+	if alertText != "" {
+		selected.text = alertText
+	}
+	return selected
+}
+
+func alertTextMeansNotFound(alertText string) bool {
+	lowerText := strings.ToLower(alertText)
+	return strings.Contains(lowerText, "does not exist") ||
+		strings.Contains(lowerText, "doesn't exist") ||
+		strings.Contains(lowerText, "been terminated")
 }
 
 func extractAlertText(alert gjson.Result) string {

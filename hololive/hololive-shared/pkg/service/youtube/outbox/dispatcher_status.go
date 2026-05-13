@@ -72,31 +72,39 @@ func (d *Dispatcher) markFailed(ctx context.Context, id int64, errMsg string) {
 
 	newAttemptCount := item.AttemptCount + 1
 	if newAttemptCount >= d.cfg.MaxRetries {
-		result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
-			Where("id = ?", id).
-			Updates(map[string]any{
-				"status":        domain.OutboxStatusFailed,
-				"locked_at":     nil,
-				"attempt_count": newAttemptCount,
-				"error":         truncateString(errMsg, 500),
-			})
-		if result.Error != nil {
-			d.logger.Error("Failed to mark outbox item as permanently failed",
-				slog.Int64("id", id),
-				slog.Any("error", result.Error))
-		}
-		d.logger.Warn("Outbox item permanently failed after max retries",
-			slog.Int64("id", id),
-			slog.Int("attempts", newAttemptCount))
+		d.markFailedPermanently(ctx, id, newAttemptCount, errMsg)
 		return
 	}
 
-	nextAttempt := time.Now().Add(d.cfg.RetryBackoff * time.Duration(newAttemptCount))
+	d.scheduleFailedRetry(ctx, id, newAttemptCount, errMsg)
+}
+
+func (d *Dispatcher) markFailedPermanently(ctx context.Context, id int64, attemptCount int, errMsg string) {
+	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"status":        domain.OutboxStatusFailed,
+			"locked_at":     nil,
+			"attempt_count": attemptCount,
+			"error":         truncateString(errMsg, 500),
+		})
+	if result.Error != nil {
+		d.logger.Error("Failed to mark outbox item as permanently failed",
+			slog.Int64("id", id),
+			slog.Any("error", result.Error))
+	}
+	d.logger.Warn("Outbox item permanently failed after max retries",
+		slog.Int64("id", id),
+		slog.Int("attempts", attemptCount))
+}
+
+func (d *Dispatcher) scheduleFailedRetry(ctx context.Context, id int64, attemptCount int, errMsg string) {
+	nextAttempt := time.Now().Add(d.cfg.RetryBackoff * time.Duration(attemptCount))
 	result := d.db.WithContext(ctx).Model(&domain.YouTubeNotificationOutbox{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
 			"locked_at":       nil,
-			"attempt_count":   newAttemptCount,
+			"attempt_count":   attemptCount,
 			"next_attempt_at": nextAttempt,
 			"error":           truncateString(errMsg, 500),
 		})
@@ -108,7 +116,7 @@ func (d *Dispatcher) markFailed(ctx context.Context, id int64, errMsg string) {
 
 	d.logger.Info("Outbox item scheduled for retry",
 		slog.Int64("id", id),
-		slog.Int("attempt", newAttemptCount),
+		slog.Int("attempt", attemptCount),
 		slog.Time("next_attempt", nextAttempt))
 }
 

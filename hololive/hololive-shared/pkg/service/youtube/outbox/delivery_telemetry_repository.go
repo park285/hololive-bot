@@ -49,37 +49,9 @@ func (r *DeliveryTelemetryRepository) prepareRows(
 	normalized := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(rows))
 	now := time.Now().UTC()
 	for i := range rows {
-		row := rows[i]
-		if row.DeliveryID <= 0 || row.AttemptOrdinal <= 0 {
-			continue
+		if row, ok := prepareDeliveryTelemetryRow(rows[i], now); ok {
+			normalized = append(normalized, row)
 		}
-		row.AttemptStartedAt = cloneUTCTimePtr(row.AttemptStartedAt)
-		row.AttemptFinishedAt = cloneUTCTimePtr(row.AttemptFinishedAt)
-		if row.AttemptFinishedAt == nil && !row.EventAt.IsZero() {
-			finishedAt := row.EventAt.UTC()
-			row.AttemptFinishedAt = &finishedAt
-		}
-		if row.EventAt.IsZero() && row.AttemptFinishedAt != nil {
-			row.EventAt = row.AttemptFinishedAt.UTC()
-		}
-		if row.EventAt.IsZero() {
-			row.EventAt = now
-		}
-		timing := communityShortsAlarmTimingForTelemetryRow(row)
-		row.ActualPublishedAt = timing.ActualPublishedAt
-		row.AlarmSentAt = timing.AlarmSentAt
-		row.AlarmLatencyMillis = clonePostLatencyInt64(timing.AlarmLatencyMillis)
-		if row.AttemptFinishedAt == nil {
-			finishedAt := row.EventAt.UTC()
-			row.AttemptFinishedAt = &finishedAt
-		}
-		if row.NextAttemptAt.IsZero() {
-			row.NextAttemptAt = now
-		}
-		row.DeliveryPath = normalizeCommunityShortsDeliveryPath(row.DeliveryPath)
-		applyTelemetryPostID(&row)
-		row.ObservationStatus = normalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)
-		normalized = append(normalized, row)
 	}
 	if len(normalized) == 0 {
 		return nil, nil
@@ -89,6 +61,55 @@ func (r *DeliveryTelemetryRepository) prepareRows(
 	}
 
 	return normalized, nil
+}
+
+func prepareDeliveryTelemetryRow(
+	row domain.YouTubeNotificationDeliveryTelemetry,
+	now time.Time,
+) (domain.YouTubeNotificationDeliveryTelemetry, bool) {
+	if row.DeliveryID <= 0 || row.AttemptOrdinal <= 0 {
+		return domain.YouTubeNotificationDeliveryTelemetry{}, false
+	}
+
+	normalizeDeliveryTelemetryAttemptTimes(&row, now)
+	applyDeliveryTelemetryTiming(&row)
+	applyDeliveryTelemetryDefaults(&row, now)
+	return row, true
+}
+
+func normalizeDeliveryTelemetryAttemptTimes(row *domain.YouTubeNotificationDeliveryTelemetry, now time.Time) {
+	row.AttemptStartedAt = cloneUTCTimePtr(row.AttemptStartedAt)
+	row.AttemptFinishedAt = cloneUTCTimePtr(row.AttemptFinishedAt)
+	if row.AttemptFinishedAt == nil && !row.EventAt.IsZero() {
+		finishedAt := row.EventAt.UTC()
+		row.AttemptFinishedAt = &finishedAt
+	}
+	if row.EventAt.IsZero() && row.AttemptFinishedAt != nil {
+		row.EventAt = row.AttemptFinishedAt.UTC()
+	}
+	if row.EventAt.IsZero() {
+		row.EventAt = now
+	}
+	if row.AttemptFinishedAt == nil {
+		finishedAt := row.EventAt.UTC()
+		row.AttemptFinishedAt = &finishedAt
+	}
+}
+
+func applyDeliveryTelemetryTiming(row *domain.YouTubeNotificationDeliveryTelemetry) {
+	timing := communityShortsAlarmTimingForTelemetryRow(*row)
+	row.ActualPublishedAt = timing.ActualPublishedAt
+	row.AlarmSentAt = timing.AlarmSentAt
+	row.AlarmLatencyMillis = clonePostLatencyInt64(timing.AlarmLatencyMillis)
+}
+
+func applyDeliveryTelemetryDefaults(row *domain.YouTubeNotificationDeliveryTelemetry, now time.Time) {
+	if row.NextAttemptAt.IsZero() {
+		row.NextAttemptAt = now
+	}
+	row.DeliveryPath = normalizeCommunityShortsDeliveryPath(row.DeliveryPath)
+	applyTelemetryPostID(row)
+	row.ObservationStatus = normalizeDeliveryTelemetryObservationStatus(row.ObservationStatus)
 }
 
 func (r *DeliveryTelemetryRepository) enqueuePrepared(

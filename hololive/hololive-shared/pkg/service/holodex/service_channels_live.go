@@ -36,27 +36,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+type channelFetchResult struct {
+	id      string
+	channel *domain.Channel
+}
+
 func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[string]*domain.Channel, error) {
 	if len(channelIDs) == 0 {
 		return make(map[string]*domain.Channel), nil
 	}
 
-	result := make(map[string]*domain.Channel, len(channelIDs))
-	var missedIDs []string
-
-	for _, id := range channelIDs {
-		if cached, found := h.cacheManager.GetChannel(ctx, id); found {
-			result[id] = cached
-		} else {
-			missedIDs = append(missedIDs, id)
-		}
-	}
-
-	h.logger.Debug("GetChannels cache status",
-		slog.Int("total", len(channelIDs)),
-		slog.Int("cache_hits", len(result)),
-		slog.Int("cache_misses", len(missedIDs)),
-	)
+	result, missedIDs := h.collectCachedChannels(ctx, channelIDs)
+	h.logGetChannelsCacheStatus(channelIDs, result, missedIDs)
 
 	if len(missedIDs) == 0 {
 		return result, nil
@@ -64,28 +55,10 @@ func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[str
 
 	allChannels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
-		if !h.shouldUseFallback(ctx, err) {
-			return result, fmt.Errorf("get channels batch list: %w", err)
-		}
-
-		h.logger.Warn("Failed to fetch channel list, falling back to individual queries",
-			slog.Any("error", err),
-			slog.Int("missed_count", len(missedIDs)),
-		)
-		return h.fetchChannelsIndividually(ctx, channelIDs, result, missedIDs)
+		return h.handleChannelListFetchError(ctx, channelIDs, result, missedIDs, err)
 	}
 
-	missedSet := make(map[string]bool, len(missedIDs))
-	for _, id := range missedIDs {
-		missedSet[id] = true
-	}
-
-	for _, ch := range allChannels {
-		if missedSet[ch.ID] {
-			result[ch.ID] = ch
-			h.cacheManager.SetChannel(ctx, ch.ID, ch)
-		}
-	}
+	h.addMissedChannelsFromList(ctx, result, missedIDs, allChannels)
 
 	h.logger.Info("GetChannels batch complete (optimized)",
 		slog.Int("requested", len(channelIDs)),
@@ -94,6 +67,59 @@ func (h *Service) GetChannels(ctx context.Context, channelIDs []string) (map[str
 	)
 
 	return result, nil
+}
+
+func (h *Service) collectCachedChannels(ctx context.Context, channelIDs []string) (map[string]*domain.Channel, []string) {
+	result := make(map[string]*domain.Channel, len(channelIDs))
+	var missedIDs []string
+
+	for _, id := range channelIDs {
+		if cached, found := h.cacheManager.GetChannel(ctx, id); found {
+			result[id] = cached
+			continue
+		}
+		missedIDs = append(missedIDs, id)
+	}
+
+	return result, missedIDs
+}
+
+func (h *Service) logGetChannelsCacheStatus(channelIDs []string, result map[string]*domain.Channel, missedIDs []string) {
+	h.logger.Debug("GetChannels cache status",
+		slog.Int("total", len(channelIDs)),
+		slog.Int("cache_hits", len(result)),
+		slog.Int("cache_misses", len(missedIDs)),
+	)
+}
+
+func (h *Service) handleChannelListFetchError(ctx context.Context, channelIDs []string, result map[string]*domain.Channel, missedIDs []string, err error) (map[string]*domain.Channel, error) {
+	if !h.shouldUseFallback(ctx, err) {
+		return result, fmt.Errorf("get channels batch list: %w", err)
+	}
+
+	h.logger.Warn("Failed to fetch channel list, falling back to individual queries",
+		slog.Any("error", err),
+		slog.Int("missed_count", len(missedIDs)),
+	)
+	return h.fetchChannelsIndividually(ctx, channelIDs, result, missedIDs)
+}
+
+func (h *Service) addMissedChannelsFromList(ctx context.Context, result map[string]*domain.Channel, missedIDs []string, allChannels []*domain.Channel) {
+	missedSet := stringSet(missedIDs)
+	for _, ch := range allChannels {
+		if missedSet[ch.ID] {
+			result[ch.ID] = ch
+			h.cacheManager.SetChannel(ctx, ch.ID, ch)
+		}
+	}
+}
+
+func stringSet(values []string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, value := range values {
+		set[value] = true
+	}
+	return set
 }
 
 // /users/live 엔드포인트를 우선 사용하고, retryable 오류에서만 채널별 YouTube scraper 경로로 제한 폴백합니다.
@@ -114,29 +140,47 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 
 	body, err := h.requester.DoRequest(ctx, "GET", "/users/live", params)
 	if err != nil {
-		h.logger.Error("Failed to get channels live status",
-			slog.Int("channel_count", len(channelIDs)),
-			slog.Any("error", err),
-		)
-
-		if h.shouldUseFallback(ctx, err) && h.scraper != nil {
-			h.logger.Warn("Using scraper fallback for channels live status", slog.Any("error", err))
-			allStreams, fallbackErr := h.getChannelsLiveStatusFromScraper(ctx, channelIDs)
-			if fallbackErr != nil {
-				h.logger.Warn("Scraper live status fallback failed",
-					slog.Int("channel_count", len(channelIDs)),
-					slog.Any("error", fallbackErr),
-				)
-			}
-			if len(allStreams) > 0 {
-				h.cacheManager.SetChannelsLiveStatusStreams(ctx, channelIDs, allStreams, 30*time.Second)
-				return allStreams, nil
-			}
-		}
-
-		return nil, fmt.Errorf("get channels live status: %w", err)
+		return h.handleChannelsLiveStatusRequestError(ctx, channelIDs, err)
 	}
 
+	return h.mapAndCacheChannelsLiveStatus(ctx, channelIDs, body)
+}
+
+func (h *Service) handleChannelsLiveStatusRequestError(ctx context.Context, channelIDs []string, err error) ([]*domain.Stream, error) {
+	h.logger.Error("Failed to get channels live status",
+		slog.Int("channel_count", len(channelIDs)),
+		slog.Any("error", err),
+	)
+
+	allStreams, ok := h.tryChannelsLiveStatusFallback(ctx, channelIDs, err)
+	if ok {
+		return allStreams, nil
+	}
+	return nil, fmt.Errorf("get channels live status: %w", err)
+}
+
+func (h *Service) tryChannelsLiveStatusFallback(ctx context.Context, channelIDs []string, err error) ([]*domain.Stream, bool) {
+	if !h.shouldUseFallback(ctx, err) || h.scraper == nil {
+		return nil, false
+	}
+
+	h.logger.Warn("Using scraper fallback for channels live status", slog.Any("error", err))
+	allStreams, fallbackErr := h.getChannelsLiveStatusFromScraper(ctx, channelIDs)
+	if fallbackErr != nil {
+		h.logger.Warn("Scraper live status fallback failed",
+			slog.Int("channel_count", len(channelIDs)),
+			slog.Any("error", fallbackErr),
+		)
+	}
+	if len(allStreams) == 0 {
+		return nil, false
+	}
+
+	h.cacheManager.SetChannelsLiveStatusStreams(ctx, channelIDs, allStreams, 30*time.Second)
+	return allStreams, true
+}
+
+func (h *Service) mapAndCacheChannelsLiveStatus(ctx context.Context, channelIDs []string, body []byte) ([]*domain.Stream, error) {
 	var rawStreams []StreamRaw
 	if err := json.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal channels live status: %w", err)
@@ -147,7 +191,6 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 	filtered := h.filter.FilterHololiveStreams(streams)
 
 	h.cacheManager.SetChannelsLiveStatusStreams(ctx, channelIDs, filtered, 30*time.Second)
-
 	h.logger.Debug("GetChannelsLiveStatus completed",
 		slog.Int("requested_channels", len(channelIDs)),
 		slog.Int("streams_found", len(filtered)),
@@ -157,8 +200,17 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 }
 
 func (h *Service) hydrateIndieStreamChannels(streams []*domain.Stream, requestedChannelIDs []string) {
-	if len(streams) == 0 || len(requestedChannelIDs) == 0 || len(constants.IndieChannelIDs) == 0 {
+	indieRequested := requestedIndieChannels(requestedChannelIDs)
+	if len(streams) == 0 || len(indieRequested) == 0 {
 		return
+	}
+
+	h.applyIndieStreamChannels(streams, indieRequested)
+}
+
+func requestedIndieChannels(requestedChannelIDs []string) map[string]struct{} {
+	if len(requestedChannelIDs) == 0 || len(constants.IndieChannelIDs) == 0 {
+		return nil
 	}
 
 	indieRequested := make(map[string]struct{}, len(constants.IndieChannelIDs))
@@ -170,28 +222,32 @@ func (h *Service) hydrateIndieStreamChannels(streams []*domain.Stream, requested
 			indieRequested[channelID] = struct{}{}
 		}
 	}
-	if len(indieRequested) == 0 {
+	return indieRequested
+}
+
+func (h *Service) applyIndieStreamChannels(streams []*domain.Stream, indieRequested map[string]struct{}) {
+	indie := constants.HolodexAPIParams.OrgIndie
+	for _, stream := range streams {
+		h.hydrateIndieStreamChannel(stream, indieRequested, indie)
+	}
+}
+
+func (h *Service) hydrateIndieStreamChannel(stream *domain.Stream, indieRequested map[string]struct{}, indie string) {
+	if stream == nil || stream.ChannelID == "" {
+		return
+	}
+	if _, ok := indieRequested[stream.ChannelID]; !ok {
 		return
 	}
 
-	indie := constants.HolodexAPIParams.OrgIndie
-	for _, stream := range streams {
-		if stream == nil || stream.ChannelID == "" {
-			continue
+	if stream.Channel == nil {
+		stream.Channel = &domain.Channel{
+			ID:   stream.ChannelID,
+			Name: stream.ChannelName,
 		}
-		if _, ok := indieRequested[stream.ChannelID]; !ok {
-			continue
-		}
-
-		if stream.Channel == nil {
-			stream.Channel = &domain.Channel{
-				ID:   stream.ChannelID,
-				Name: stream.ChannelName,
-			}
-		}
-		if stream.Channel.Org == nil || *stream.Channel.Org == "" {
-			stream.Channel.Org = &indie
-		}
+	}
+	if stream.Channel.Org == nil || *stream.Channel.Org == "" {
+		stream.Channel.Org = &indie
 	}
 }
 
@@ -223,45 +279,67 @@ func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Chann
 		return cached, nil
 	}
 
-	var allChannels []*domain.Channel
-	pageSize := constants.HolodexAPIParams.DefaultChannelLimit
-	offset := 0
-
-	for {
-		params := url.Values{}
-		params.Set("org", constants.HolodexAPIParams.OrgHololive)
-		params.Set("type", constants.HolodexAPIParams.TypeVtuber)
-		params.Set("limit", fmt.Sprintf("%d", pageSize))
-		params.Set("offset", fmt.Sprintf("%d", offset))
-
-		body, err := h.requester.DoRequest(ctx, "GET", "/channels", params)
-		if err != nil {
-			return nil, fmt.Errorf("fetch hololive channel list (offset=%d): %w", offset, err)
-		}
-
-		var rawChannels []ChannelRaw
-		if err := json.Unmarshal(body, &rawChannels); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal channel list: %w", err)
-		}
-
-		channels := h.mapper.MapChannelsResponse(rawChannels)
-		allChannels = append(allChannels, channels...)
-
-		if len(rawChannels) < pageSize {
-			break
-		}
-
-		offset += pageSize
-		if offset >= constants.HolodexAPIParams.MaxPaginationOffset {
-			h.logger.Warn("Pagination limit reached", slog.Int("offset", offset))
-			break
-		}
+	allChannels, err := h.fetchHololiveChannelListPages(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	h.logger.Debug("Fetched all Hololive channels", slog.Int("total", len(allChannels)))
 	h.cacheManager.SetHololiveChannelList(ctx, allChannels, 5*time.Minute)
 
 	return allChannels, nil
+}
+
+func (h *Service) fetchHololiveChannelListPages(ctx context.Context) ([]*domain.Channel, error) {
+	var allChannels []*domain.Channel
+	pageSize := constants.HolodexAPIParams.DefaultChannelLimit
+	offset := 0
+	for {
+		channels, rawCount, err := h.fetchHololiveChannelListPage(ctx, pageSize, offset)
+		if err != nil {
+			return nil, err
+		}
+
+		allChannels = append(allChannels, channels...)
+		if rawCount < pageSize {
+			break
+		}
+
+		offset += pageSize
+		if h.channelListPaginationLimitReached(offset) {
+			break
+		}
+	}
+
+	return allChannels, nil
+}
+
+func (h *Service) fetchHololiveChannelListPage(ctx context.Context, pageSize int, offset int) ([]*domain.Channel, int, error) {
+	params := url.Values{}
+	params.Set("org", constants.HolodexAPIParams.OrgHololive)
+	params.Set("type", constants.HolodexAPIParams.TypeVtuber)
+	params.Set("limit", fmt.Sprintf("%d", pageSize))
+	params.Set("offset", fmt.Sprintf("%d", offset))
+
+	body, err := h.requester.DoRequest(ctx, "GET", "/channels", params)
+	if err != nil {
+		return nil, 0, fmt.Errorf("fetch hololive channel list (offset=%d): %w", offset, err)
+	}
+
+	var rawChannels []ChannelRaw
+	if err := json.Unmarshal(body, &rawChannels); err != nil {
+		return nil, 0, fmt.Errorf("failed to unmarshal channel list: %w", err)
+	}
+
+	return h.mapper.MapChannelsResponse(rawChannels), len(rawChannels), nil
+}
+
+func (h *Service) channelListPaginationLimitReached(offset int) bool {
+	if offset < constants.HolodexAPIParams.MaxPaginationOffset {
+		return false
+	}
+	h.logger.Warn("Pagination limit reached", slog.Int("offset", offset))
+	return true
 }
 
 // fetchChannelsIndividually: 개별 /channels/{id} API로 채널을 조회합니다. (폴백용)
@@ -272,61 +350,12 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 	}
 
 	workerCount := min(maxConcurrent, len(missedIDs))
-
 	jobs := make(chan string)
-	resultChan := make(chan struct {
-		id      string
-		channel *domain.Channel
-	}, len(missedIDs))
-
-	var workerWG sync.WaitGroup
-	worker := func() {
-		defer workerWG.Done()
-		for channelID := range jobs {
-			select {
-			case <-ctx.Done():
-				resultChan <- struct {
-					id      string
-					channel *domain.Channel
-				}{channelID, nil}
-				continue
-			default:
-			}
-
-			channel, err := h.fetchChannelDirect(ctx, channelID)
-			if err != nil {
-				h.logger.Warn("Failed to get channel in batch",
-					slog.String("channel_id", channelID),
-					slog.Any("error", err),
-				)
-				resultChan <- struct {
-					id      string
-					channel *domain.Channel
-				}{channelID, nil}
-				continue
-			}
-
-			resultChan <- struct {
-				id      string
-				channel *domain.Channel
-			}{channelID, channel}
-		}
-	}
-
-	workerWG.Add(workerCount)
-	for range workerCount {
-		go worker()
-	}
+	resultChan := make(chan channelFetchResult, len(missedIDs))
+	workerWG := h.startChannelFetchWorkers(ctx, workerCount, jobs, resultChan)
 
 	go func() {
-		defer close(jobs)
-		for _, id := range missedIDs {
-			select {
-			case <-ctx.Done():
-				return
-			case jobs <- id:
-			}
-		}
+		enqueueChannelFetchJobs(ctx, jobs, missedIDs)
 	}()
 
 	go func() {
@@ -334,21 +363,63 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 		close(resultChan)
 	}()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return result, fmt.Errorf("batch channel fetch canceled: %w", ctx.Err())
-		case r, ok := <-resultChan:
-			if !ok {
-				h.logger.Info("GetChannels batch complete (fallback)",
-					slog.Int("requested", len(channelIDs)),
-					slog.Int("returned", len(result)),
-				)
-				return result, nil
-			}
-			if r.channel != nil {
-				result[r.id] = r.channel
-			}
+	return h.collectIndividualChannelFetchResults(ctx, channelIDs, result, resultChan)
+}
+
+func (h *Service) startChannelFetchWorkers(ctx context.Context, workerCount int, jobs <-chan string, resultChan chan<- channelFetchResult) *sync.WaitGroup {
+	workerWG := &sync.WaitGroup{}
+	workerWG.Add(workerCount)
+	for range workerCount {
+		go h.runChannelFetchWorker(ctx, jobs, resultChan, workerWG)
+	}
+	return workerWG
+}
+
+func (h *Service) runChannelFetchWorker(ctx context.Context, jobs <-chan string, resultChan chan<- channelFetchResult, workerWG *sync.WaitGroup) {
+	defer workerWG.Done()
+	for channelID := range jobs {
+		if ctx.Err() != nil {
+			resultChan <- channelFetchResult{id: channelID}
+			continue
+		}
+		resultChan <- h.fetchIndividualChannel(ctx, channelID)
+	}
+}
+
+func (h *Service) fetchIndividualChannel(ctx context.Context, channelID string) channelFetchResult {
+	channel, err := h.fetchChannelDirect(ctx, channelID)
+	if err != nil {
+		h.logger.Warn("Failed to get channel in batch",
+			slog.String("channel_id", channelID),
+			slog.Any("error", err),
+		)
+		return channelFetchResult{id: channelID}
+	}
+	return channelFetchResult{id: channelID, channel: channel}
+}
+
+func enqueueChannelFetchJobs(ctx context.Context, jobs chan<- string, missedIDs []string) {
+	defer close(jobs)
+	for _, id := range missedIDs {
+		if ctx.Err() != nil {
+			return
+		}
+		jobs <- id
+	}
+}
+
+func (h *Service) collectIndividualChannelFetchResults(ctx context.Context, channelIDs []string, result map[string]*domain.Channel, resultChan <-chan channelFetchResult) (map[string]*domain.Channel, error) {
+	for r := range resultChan {
+		if r.channel != nil {
+			result[r.id] = r.channel
 		}
 	}
+	if ctx.Err() != nil {
+		return result, fmt.Errorf("batch channel fetch canceled: %w", ctx.Err())
+	}
+	h.logger.Info("GetChannels batch complete (fallback)",
+		slog.Int("requested", len(channelIDs)),
+		slog.Int("returned", len(result)),
+	)
+	return result, nil
 }
