@@ -181,15 +181,9 @@ func buildCommunityShortsLatencyPeriods(
 	periods := make([]outbox.PostLatencyPeriod, 0, len(specs))
 	seenLabels := make(map[string]struct{}, len(specs))
 	for i := range specs {
-		label := strings.TrimSpace(specs[i].Label)
-		if label == "" {
-			return nil, fmt.Errorf("period spec at index %d: label is empty", i)
-		}
-		if specs[i].Window <= 0 {
-			return nil, fmt.Errorf("period %q: window must be greater than zero", label)
-		}
-		if _, exists := seenLabels[label]; exists {
-			return nil, fmt.Errorf("period %q: duplicate label", label)
+		label, err := validateCommunityShortsLatencyPeriodSpec(i, specs[i], seenLabels)
+		if err != nil {
+			return nil, err
 		}
 		seenLabels[label] = struct{}{}
 		periods = append(periods, outbox.PostLatencyPeriod{
@@ -200,6 +194,24 @@ func buildCommunityShortsLatencyPeriods(
 	}
 
 	return periods, nil
+}
+
+func validateCommunityShortsLatencyPeriodSpec(
+	index int,
+	spec CommunityShortsLatencyPeriodSpec,
+	seenLabels map[string]struct{},
+) (string, error) {
+	label := strings.TrimSpace(spec.Label)
+	if label == "" {
+		return "", fmt.Errorf("period spec at index %d: label is empty", index)
+	}
+	if spec.Window <= 0 {
+		return "", fmt.Errorf("period %q: window must be greater than zero", label)
+	}
+	if _, exists := seenLabels[label]; exists {
+		return "", fmt.Errorf("period %q: duplicate label", label)
+	}
+	return label, nil
 }
 
 func cloneCommunityShortsLatencyPeriodSummary(row outbox.PostLatencyPeriodSummary) outbox.PostLatencyPeriodSummary {

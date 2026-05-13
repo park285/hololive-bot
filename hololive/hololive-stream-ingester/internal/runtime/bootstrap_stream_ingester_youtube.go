@@ -60,23 +60,40 @@ func resolveIngestionRuntimeYouTubeState(
 
 	state.operationalChannels = operationalChannels
 	state.pollTargets = pollTargets
-	if features.communityShortsBigBangEnabled {
-		state.communityShortsPolicy, err = communityshorts.BuildPolicy(cfg.Ingestion, operationalChannels)
-		if err != nil {
-			return state, err
-		}
-		if state.communityShortsPolicy.Enabled() {
-			logger.Info("Community/shorts big-bang request switch configured",
-				slog.Time("community_shorts_bigbang_cutover_at", state.communityShortsPolicy.CutoverAt()),
-				slog.Int("community_shorts_bigbang_target_channels", state.communityShortsPolicy.TargetChannelCount()),
-			)
-		} else {
-			logger.Warn("Community/shorts big-bang request switch is missing cutover criteria",
-				slog.Int("community_shorts_bigbang_target_channels", state.communityShortsPolicy.TargetChannelCount()))
-		}
+	communityShortsPolicy, err := resolveCommunityShortsBigBangPolicy(cfg, logger, operationalChannels, features)
+	if err != nil {
+		return state, err
 	}
+	state.communityShortsPolicy = communityShortsPolicy
 
 	return state, nil
+}
+
+func resolveCommunityShortsBigBangPolicy(
+	cfg *config.Config,
+	logger *slog.Logger,
+	operationalChannels []communityShortsOperationalChannel,
+	features ingestionRuntimeFeatures,
+) (communityShortsBigBangPolicy, error) {
+	if !features.communityShortsBigBangEnabled {
+		return communityShortsBigBangPolicy{}, nil
+	}
+
+	policy, err := communityshorts.BuildPolicy(cfg.Ingestion, operationalChannels)
+	if err != nil {
+		return policy, err
+	}
+	if policy.Enabled() {
+		logger.Info("Community/shorts big-bang request switch configured",
+			slog.Time("community_shorts_bigbang_cutover_at", policy.CutoverAt()),
+			slog.Int("community_shorts_bigbang_target_channels", policy.TargetChannelCount()),
+		)
+		return policy, nil
+	}
+
+	logger.Warn("Community/shorts big-bang request switch is missing cutover criteria",
+		slog.Int("community_shorts_bigbang_target_channels", policy.TargetChannelCount()))
+	return policy, nil
 }
 
 func buildIngestionRuntimeYouTubeDependencies(

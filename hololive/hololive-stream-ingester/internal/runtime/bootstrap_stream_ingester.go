@@ -30,6 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -49,11 +50,8 @@ func BuildYouTubeScraperRuntime(ctx context.Context, cfg *config.Config, logger 
 }
 
 func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, spec ingestionRuntimeSpec) (*StreamIngesterRuntime, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("config must not be nil")
-	}
-	if logger == nil {
-		return nil, fmt.Errorf("logger must not be nil")
+	if err := validateIngestionRuntimeInputs(cfg, logger); err != nil {
+		return nil, err
 	}
 
 	logFeatureOverride(logger, spec)
@@ -61,14 +59,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	features := spec.features
 	readiness := newIngestionReadinessState(spec.name, features)
 
-	logger.Info("Ingestion runtime configured",
-		slog.String("runtime", spec.name),
-		slog.String("event", "ingestion_runtime_configured"),
-		slog.Bool("youtube_enabled", features.youtubeEnabled),
-		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
-		slog.Bool("community_shorts_bigbang_enabled", features.communityShortsBigBangEnabled),
-		slog.String("lock_key", providers.IngestionLeaseKey),
-	)
+	logIngestionRuntimeConfigured(logger, spec.name, features)
 
 	infra, err := initStreamIngesterInfrastructureFn(ctx, cfg, logger)
 	if err != nil {
@@ -87,12 +78,9 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 			slog.Any("error", warnErr),
 		)
 	}
-	if features.youtubeEnabled {
-		youtubeState.ingestionLease, err = providers.AcquireIngestionLease(ctx, infra.cacheService, spec.name, logger)
-		if err != nil {
-			infra.cleanup()
-			return nil, fmt.Errorf("acquire ingestion lease: %w", err)
-		}
+	if err := acquireIngestionLeaseIfEnabled(ctx, infra, logger, spec.name, features.youtubeEnabled, &youtubeState); err != nil {
+		infra.cleanup()
+		return nil, err
 	}
 
 	youtubeDeps, err := buildIngestionRuntimeYouTubeDependencies(ctx, cfg, logger, infra, features.youtubeEnabled, youtubeState)
@@ -110,12 +98,68 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		return nil, err
 	}
 
+	return newStreamIngesterRuntime(cfg, logger, spec.name, features, readiness, infra, youtubeState, youtubeDeps, configSubscriber, observationWindowWriter, httpServer), nil
+}
+
+func validateIngestionRuntimeInputs(cfg *config.Config, logger *slog.Logger) error {
+	if cfg == nil {
+		return fmt.Errorf("config must not be nil")
+	}
+	if logger == nil {
+		return fmt.Errorf("logger must not be nil")
+	}
+	return nil
+}
+
+func logIngestionRuntimeConfigured(logger *slog.Logger, runtimeName string, features ingestionRuntimeFeatures) {
+	logger.Info("Ingestion runtime configured",
+		slog.String("runtime", runtimeName),
+		slog.String("event", "ingestion_runtime_configured"),
+		slog.Bool("youtube_enabled", features.youtubeEnabled),
+		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
+		slog.Bool("community_shorts_bigbang_enabled", features.communityShortsBigBangEnabled),
+		slog.String("lock_key", providers.IngestionLeaseKey),
+	)
+}
+
+func acquireIngestionLeaseIfEnabled(
+	ctx context.Context,
+	infra *streamIngesterInfrastructure,
+	logger *slog.Logger,
+	runtimeName string,
+	enabled bool,
+	state *ingestionRuntimeYouTubeState,
+) error {
+	if !enabled {
+		return nil
+	}
+	lease, err := providers.AcquireIngestionLease(ctx, infra.cacheService, runtimeName, logger)
+	if err != nil {
+		return fmt.Errorf("acquire ingestion lease: %w", err)
+	}
+	state.ingestionLease = lease
+	return nil
+}
+
+func newStreamIngesterRuntime(
+	cfg *config.Config,
+	logger *slog.Logger,
+	runtimeName string,
+	features ingestionRuntimeFeatures,
+	readiness *ingestionReadinessState,
+	infra *streamIngesterInfrastructure,
+	youtubeState ingestionRuntimeYouTubeState,
+	youtubeDeps ingestionRuntimeYouTubeDependencies,
+	configSubscriber *configsub.Subscriber,
+	observationWindowWriter communityShortsObservationWindowWriter,
+	httpServer *http.Server,
+) *StreamIngesterRuntime {
 	cleanup := func() {
 		infra.cleanup()
 	}
 
 	return &StreamIngesterRuntime{
-		RuntimeName:                            spec.name,
+		RuntimeName:                            runtimeName,
 		Config:                                 cfg,
 		Logger:                                 logger,
 		Scheduler:                              youtubeDeps.youtubeScheduler,
@@ -132,7 +176,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		communityShortsObservationWindowWriter: observationWindowWriter,
 		ingestionLease:                         youtubeState.ingestionLease,
 		Managed:                                lifecycle.NewManaged(cleanup),
-	}, nil
+	}
 }
 
 func buildStreamIngesterHTTPServer(

@@ -20,6 +20,23 @@ func BuildCommunityShortsDeliveryLogReport(
 	}
 	query = normalizeCommunityShortsDeliveryLogQuery(query)
 
+	normalizedRows, summary := buildCommunityShortsDeliveryLogRows(rows)
+	sort.SliceStable(normalizedRows, func(i, j int) bool {
+		return communityShortsDeliveryLogRowLess(normalizedRows[i], normalizedRows[j])
+	})
+
+	return CommunityShortsDeliveryLogReport{
+		GeneratedAt: generatedAt,
+		Query:       query,
+		Summary:     summary,
+		Rows:        normalizedRows,
+	}
+}
+
+func buildCommunityShortsDeliveryLogRows(rows []domain.YouTubeNotificationDeliveryTelemetry) (
+	[]CommunityShortsDeliveryLogRow,
+	CommunityShortsDeliveryLogSummary,
+) {
 	normalizedRows := make([]CommunityShortsDeliveryLogRow, 0, len(rows))
 	postSet := make(map[string]struct{}, len(rows))
 	roomSet := make(map[string]struct{}, len(rows))
@@ -45,30 +62,24 @@ func BuildCommunityShortsDeliveryLogReport(
 
 	summary.UniquePostCount = len(postSet)
 	summary.UniqueRoomCount = len(roomSet)
+	return normalizedRows, summary
+}
 
-	sort.SliceStable(normalizedRows, func(i, j int) bool {
-		leftSortTime := communityShortsDeliveryLogSortTime(normalizedRows[i])
-		rightSortTime := communityShortsDeliveryLogSortTime(normalizedRows[j])
-		if !leftSortTime.Equal(rightSortTime) {
-			return leftSortTime.After(rightSortTime)
-		}
-		leftPostID := resolveCommunityShortsDeliveryLogPostID(normalizedRows[i])
-		rightPostID := resolveCommunityShortsDeliveryLogPostID(normalizedRows[j])
-		if leftPostID != rightPostID {
-			return leftPostID < rightPostID
-		}
-		if !normalizedRows[i].EventAt.Equal(normalizedRows[j].EventAt) {
-			return normalizedRows[i].EventAt.Before(normalizedRows[j].EventAt)
-		}
-		return normalizedRows[i].ID < normalizedRows[j].ID
-	})
-
-	return CommunityShortsDeliveryLogReport{
-		GeneratedAt: generatedAt,
-		Query:       query,
-		Summary:     summary,
-		Rows:        normalizedRows,
+func communityShortsDeliveryLogRowLess(left CommunityShortsDeliveryLogRow, right CommunityShortsDeliveryLogRow) bool {
+	leftSortTime := communityShortsDeliveryLogSortTime(left)
+	rightSortTime := communityShortsDeliveryLogSortTime(right)
+	if !leftSortTime.Equal(rightSortTime) {
+		return leftSortTime.After(rightSortTime)
 	}
+	leftPostID := resolveCommunityShortsDeliveryLogPostID(left)
+	rightPostID := resolveCommunityShortsDeliveryLogPostID(right)
+	if leftPostID != rightPostID {
+		return leftPostID < rightPostID
+	}
+	if !left.EventAt.Equal(right.EventAt) {
+		return left.EventAt.Before(right.EventAt)
+	}
+	return left.ID < right.ID
 }
 
 func RenderCommunityShortsDeliveryLogMarkdown(report CommunityShortsDeliveryLogReport) string {

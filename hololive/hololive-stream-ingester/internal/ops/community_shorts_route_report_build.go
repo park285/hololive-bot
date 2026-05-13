@@ -18,47 +18,95 @@ func BuildCommunityShortsRouteVerificationReport(
 	generatedAt time.Time,
 	since time.Time,
 ) CommunityShortsRouteVerificationReport {
-	generatedAt = normalizeRouteReportTime(generatedAt)
-	if generatedAt.IsZero() {
-		generatedAt = normalizeRouteReportTime(baseline.GeneratedAt)
-	}
+	generatedAt = resolveCommunityShortsRouteReportGeneratedAt(generatedAt, baseline.GeneratedAt)
 	since = normalizeRouteReportTime(since)
 
-	pathUsageIndex := make(map[communityShortsRouteReportContentKey][]outbox.PostDeliveryPathUsage)
-	for i := range pathUsageRows {
-		row := pathUsageRows[i]
-		channelID := strings.TrimSpace(row.ChannelID)
-		contentID := strings.TrimSpace(row.ContentID)
-		if channelID == "" || contentID == "" {
-			continue
-		}
-		if row.AlarmType != domain.AlarmTypeCommunity && row.AlarmType != domain.AlarmTypeShorts {
-			continue
-		}
-		key := communityShortsRouteReportContentKey{
-			channelID: channelID,
-			alarmType: row.AlarmType,
-			contentID: contentID,
-		}
-		pathUsageIndex[key] = append(pathUsageIndex[key], row)
+	pathUsageIndex := indexCommunityShortsRouteReportPathUsage(pathUsageRows)
+	sendCountIndex := indexCommunityShortsRouteReportSendCounts(sendCountRows)
+	report := newCommunityShortsRouteVerificationReport(baseline, generatedAt, since)
+
+	for i := range baseline.Channels {
+		channelReport := buildCommunityShortsRouteVerificationChannel(baseline.Channels[i], sendCountIndex, pathUsageIndex, &report.Summary)
+		report.Channels = append(report.Channels, channelReport)
 	}
 
-	sendCountIndex := make(map[communityShortsRouteReportKey][]outbox.PostSendCount)
-	for i := range sendCountRows {
-		row := sendCountRows[i]
-		channelID := strings.TrimSpace(row.ChannelID)
-		contentID := strings.TrimSpace(row.ContentID)
-		if channelID == "" || contentID == "" {
-			continue
-		}
-		if row.AlarmType != domain.AlarmTypeCommunity && row.AlarmType != domain.AlarmTypeShorts {
-			continue
-		}
-		key := communityShortsRouteReportKey{channelID: channelID, alarmType: row.AlarmType}
-		sendCountIndex[key] = append(sendCountIndex[key], row)
-	}
+	return report
+}
 
-	report := CommunityShortsRouteVerificationReport{
+func resolveCommunityShortsRouteReportGeneratedAt(generatedAt time.Time, baselineGeneratedAt time.Time) time.Time {
+	generatedAt = normalizeRouteReportTime(generatedAt)
+	if generatedAt.IsZero() {
+		return normalizeRouteReportTime(baselineGeneratedAt)
+	}
+	return generatedAt
+}
+
+func indexCommunityShortsRouteReportPathUsage(
+	rows []outbox.PostDeliveryPathUsage,
+) map[communityShortsRouteReportContentKey][]outbox.PostDeliveryPathUsage {
+	index := make(map[communityShortsRouteReportContentKey][]outbox.PostDeliveryPathUsage)
+	for i := range rows {
+		key, ok := communityShortsRouteReportContentKeyFor(rows[i].ChannelID, rows[i].AlarmType, rows[i].ContentID)
+		if !ok {
+			continue
+		}
+		index[key] = append(index[key], rows[i])
+	}
+	return index
+}
+
+func indexCommunityShortsRouteReportSendCounts(
+	rows []outbox.PostSendCount,
+) map[communityShortsRouteReportKey][]outbox.PostSendCount {
+	index := make(map[communityShortsRouteReportKey][]outbox.PostSendCount)
+	for i := range rows {
+		key, ok := communityShortsRouteReportKeyFor(rows[i].ChannelID, rows[i].AlarmType, rows[i].ContentID)
+		if !ok {
+			continue
+		}
+		index[key] = append(index[key], rows[i])
+	}
+	return index
+}
+
+func communityShortsRouteReportKeyFor(channelID string, alarmType domain.AlarmType, contentID string) (communityShortsRouteReportKey, bool) {
+	channelID = strings.TrimSpace(channelID)
+	contentID = strings.TrimSpace(contentID)
+	if channelID == "" || contentID == "" {
+		return communityShortsRouteReportKey{}, false
+	}
+	if !isCommunityShortsRouteReportAlarmType(alarmType) {
+		return communityShortsRouteReportKey{}, false
+	}
+	return communityShortsRouteReportKey{channelID: channelID, alarmType: alarmType}, true
+}
+
+func communityShortsRouteReportContentKeyFor(
+	channelID string,
+	alarmType domain.AlarmType,
+	contentID string,
+) (communityShortsRouteReportContentKey, bool) {
+	key, ok := communityShortsRouteReportKeyFor(channelID, alarmType, contentID)
+	if !ok {
+		return communityShortsRouteReportContentKey{}, false
+	}
+	return communityShortsRouteReportContentKey{
+		channelID: key.channelID,
+		alarmType: key.alarmType,
+		contentID: strings.TrimSpace(contentID),
+	}, true
+}
+
+func isCommunityShortsRouteReportAlarmType(alarmType domain.AlarmType) bool {
+	return alarmType == domain.AlarmTypeCommunity || alarmType == domain.AlarmTypeShorts
+}
+
+func newCommunityShortsRouteVerificationReport(
+	baseline communityshorts.TargetBaseline,
+	generatedAt time.Time,
+	since time.Time,
+) CommunityShortsRouteVerificationReport {
+	return CommunityShortsRouteVerificationReport{
 		GeneratedAt: generatedAt,
 		WindowStart: since,
 		WindowEnd:   generatedAt,
@@ -73,27 +121,27 @@ func BuildCommunityShortsRouteVerificationReport(
 		},
 		Channels: make([]CommunityShortsRouteVerificationChannel, 0, len(baseline.Channels)),
 	}
+}
 
-	for i := range baseline.Channels {
-		channel := baseline.Channels[i]
-		channelReport := CommunityShortsRouteVerificationChannel{
-			OwnerLabel: strings.TrimSpace(channel.OwnerLabel),
-			ChannelID:  strings.TrimSpace(channel.ChannelID),
-			Routes:     make([]CommunityShortsRouteVerificationRoute, 0, len(channel.Routes)),
-		}
-
-		for j := range channel.Routes {
-			baseRoute := channel.Routes[j]
-			routeKey := communityShortsRouteReportKey{channelID: channelReport.ChannelID, alarmType: baseRoute.AlarmType}
-			routeReport := buildCommunityShortsRouteVerificationRoute(baseRoute, sendCountIndex[routeKey], pathUsageIndex)
-			channelReport.Routes = append(channelReport.Routes, routeReport)
-			applyCommunityShortsRouteVerificationSummary(&report.Summary, routeReport)
-		}
-
-		report.Channels = append(report.Channels, channelReport)
+func buildCommunityShortsRouteVerificationChannel(
+	channel communityshorts.TargetBaselineChannel,
+	sendCountIndex map[communityShortsRouteReportKey][]outbox.PostSendCount,
+	pathUsageIndex map[communityShortsRouteReportContentKey][]outbox.PostDeliveryPathUsage,
+	summary *CommunityShortsRouteVerificationSummary,
+) CommunityShortsRouteVerificationChannel {
+	channelReport := CommunityShortsRouteVerificationChannel{
+		OwnerLabel: strings.TrimSpace(channel.OwnerLabel),
+		ChannelID:  strings.TrimSpace(channel.ChannelID),
+		Routes:     make([]CommunityShortsRouteVerificationRoute, 0, len(channel.Routes)),
 	}
-
-	return report
+	for i := range channel.Routes {
+		baseRoute := channel.Routes[i]
+		routeKey := communityShortsRouteReportKey{channelID: channelReport.ChannelID, alarmType: baseRoute.AlarmType}
+		routeReport := buildCommunityShortsRouteVerificationRoute(baseRoute, sendCountIndex[routeKey], pathUsageIndex)
+		channelReport.Routes = append(channelReport.Routes, routeReport)
+		applyCommunityShortsRouteVerificationSummary(summary, routeReport)
+	}
+	return channelReport
 }
 
 func buildCommunityShortsRouteVerificationRoute(
@@ -114,43 +162,46 @@ func buildCommunityShortsRouteVerificationRoute(
 
 	observedPathSet := make(map[string]struct{})
 	for i := range sendCounts {
-		sendCount := sendCounts[i]
-		route.ObservedPostCount++
-		if sendCount.SuccessSendCount > 0 {
-			route.SuccessfulPostCount++
-		}
-
-		for _, path := range classifyCommunityShortsPostPaths(pathUsageIndex[communityShortsRouteReportContentKey{
-			channelID: strings.TrimSpace(sendCount.ChannelID),
-			alarmType: sendCount.AlarmType,
-			contentID: strings.TrimSpace(sendCount.ContentID),
-		}]).ObservedPaths {
-			observedPathSet[path] = struct{}{}
-		}
-
-		postUsage := classifyCommunityShortsPostPaths(pathUsageIndex[communityShortsRouteReportContentKey{
-			channelID: strings.TrimSpace(sendCount.ChannelID),
-			alarmType: sendCount.AlarmType,
-			contentID: strings.TrimSpace(sendCount.ContentID),
-		}])
-		switch postUsage.State {
-		case communityShortsRouteUsageNewOnlyVerified:
-			route.NewPathOnlyPostCount++
-		case communityShortsRouteUsageMixedPathsDetected:
-			route.MixedPathPostCount++
-		case communityShortsRouteUsageUnexpectedPathDetected:
-			route.UnexpectedPathPostCount++
-		default:
-			route.NoPathPostCount++
-		}
-
-		route.LatestPublishedAt = laterRouteReportTime(route.LatestPublishedAt, resolveRouteReportPublishedAt(sendCount.ActualPublishedAt, sendCount.DetectedAt))
-		route.LatestSuccessAt = laterRouteReportTime(route.LatestSuccessAt, resolveRouteReportSuccessAt(sendCount.LastSuccessAt, sendCount.AlarmSentAt, sendCount.FirstSuccessAt))
+		applyCommunityShortsRouteVerificationPost(&route, sendCounts[i], pathUsageIndex, observedPathSet)
 	}
 
 	route.ObservedPaths = sortedRouteReportPaths(observedPathSet)
 	route.ActualUsageState = resolveCommunityShortsActualUsageState(route)
 	return route
+}
+
+func applyCommunityShortsRouteVerificationPost(
+	route *CommunityShortsRouteVerificationRoute,
+	sendCount outbox.PostSendCount,
+	pathUsageIndex map[communityShortsRouteReportContentKey][]outbox.PostDeliveryPathUsage,
+	observedPathSet map[string]struct{},
+) {
+	route.ObservedPostCount++
+	if sendCount.SuccessSendCount > 0 {
+		route.SuccessfulPostCount++
+	}
+
+	contentKey, _ := communityShortsRouteReportContentKeyFor(sendCount.ChannelID, sendCount.AlarmType, sendCount.ContentID)
+	postUsage := classifyCommunityShortsPostPaths(pathUsageIndex[contentKey])
+	for _, path := range postUsage.ObservedPaths {
+		observedPathSet[path] = struct{}{}
+	}
+	applyCommunityShortsRouteVerificationPostUsage(route, postUsage.State)
+	route.LatestPublishedAt = laterRouteReportTime(route.LatestPublishedAt, resolveRouteReportPublishedAt(sendCount.ActualPublishedAt, sendCount.DetectedAt))
+	route.LatestSuccessAt = laterRouteReportTime(route.LatestSuccessAt, resolveRouteReportSuccessAt(sendCount.LastSuccessAt, sendCount.AlarmSentAt, sendCount.FirstSuccessAt))
+}
+
+func applyCommunityShortsRouteVerificationPostUsage(route *CommunityShortsRouteVerificationRoute, usageState string) {
+	switch usageState {
+	case communityShortsRouteUsageNewOnlyVerified:
+		route.NewPathOnlyPostCount++
+	case communityShortsRouteUsageMixedPathsDetected:
+		route.MixedPathPostCount++
+	case communityShortsRouteUsageUnexpectedPathDetected:
+		route.UnexpectedPathPostCount++
+	default:
+		route.NoPathPostCount++
+	}
 }
 
 func applyCommunityShortsRouteVerificationSummary(
@@ -161,6 +212,14 @@ func applyCommunityShortsRouteVerificationSummary(
 		return
 	}
 	summary.RouteCount++
+	applyCommunityShortsRouteVerificationRouteStateSummary(summary, route)
+	applyCommunityShortsRouteVerificationUsageSummary(summary, route)
+}
+
+func applyCommunityShortsRouteVerificationRouteStateSummary(
+	summary *CommunityShortsRouteVerificationSummary,
+	route CommunityShortsRouteVerificationRoute,
+) {
 	if route.AlarmEnabled {
 		summary.ActiveRouteCount++
 	} else {
@@ -169,16 +228,38 @@ func applyCommunityShortsRouteVerificationSummary(
 	if route.ActivationState == communityshorts.DeliveryModePending {
 		summary.PendingCutoverRouteCount++
 	}
+}
+
+func applyCommunityShortsRouteVerificationUsageSummary(
+	summary *CommunityShortsRouteVerificationSummary,
+	route CommunityShortsRouteVerificationRoute,
+) {
 	if !route.AlarmEnabled {
 		return
 	}
-	switch route.ActualUsageState {
+	applyCommunityShortsRouteVerificationPrimaryUsageSummary(summary, route.ActualUsageState)
+	applyCommunityShortsRouteVerificationPathIssueSummary(summary, route.ActualUsageState)
+}
+
+func applyCommunityShortsRouteVerificationPrimaryUsageSummary(
+	summary *CommunityShortsRouteVerificationSummary,
+	actualUsageState string,
+) {
+	switch actualUsageState {
 	case communityShortsRouteUsageNewOnlyVerified:
 		summary.NewOnlyUsageRouteCount++
 	case communityShortsRouteUsageNoRecentPosts:
 		summary.NoRecentPostRouteCount++
 	case communityShortsRouteUsageNoPathObserved:
 		summary.NoPathObservedRouteCount++
+	}
+}
+
+func applyCommunityShortsRouteVerificationPathIssueSummary(
+	summary *CommunityShortsRouteVerificationSummary,
+	actualUsageState string,
+) {
+	switch actualUsageState {
 	case communityShortsRouteUsageUnexpectedPathDetected:
 		summary.UnexpectedPathRouteCount++
 	case communityShortsRouteUsageMixedPathsDetected:

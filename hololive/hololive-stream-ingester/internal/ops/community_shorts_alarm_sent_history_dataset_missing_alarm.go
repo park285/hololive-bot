@@ -63,85 +63,140 @@ func buildCommunityShortsAlarmSentHistoryDatasetMissingAlarmRows(
 		return nil, summary
 	}
 
-	sendStateByPostKey := make(map[string]CommunityShortsSendStateRow, len(sendStateRows))
-	for i := range sendStateRows {
-		row := sendStateRows[i]
-		postKey := strings.TrimSpace(row.PostKey)
-		if postKey == "" {
-			postKey = buildCommunityShortsObservationPostKey(row.ReportAlarmType, row.ReportChannelID, row.ReportPostID)
-		}
-		if postKey == "" {
-			continue
-		}
-		if existing, ok := sendStateByPostKey[postKey]; ok {
-			sendStateByPostKey[postKey] = mergeCommunityShortsAlarmSentHistoryDatasetMissingAlarmStateRow(existing, row)
-			continue
-		}
-		sendStateByPostKey[postKey] = row
-	}
-
+	sendStateByPostKey := buildCommunityShortsMissingAlarmSendStateIndex(sendStateRows)
 	rows := make([]CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow, 0, len(referenceRows))
 	for i := range referenceRows {
-		referenceRow := referenceRows[i]
-		postKey := buildCommunityShortsObservationPostKey(referenceRow.AlarmType, referenceRow.ChannelID, referenceRow.PostID)
-		stateRow, ok := sendStateByPostKey[postKey]
-		if ok && stateRow.SendState == CommunityShortsPerPostSendStateSent {
+		missingRow, ok := buildCommunityShortsMissingAlarmRow(referenceRows[i], sendStateByPostKey, &summary)
+		if !ok {
 			continue
 		}
-
-		missingRow := CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow{
-			AlarmType:           referenceRow.AlarmType,
-			ChannelID:           referenceRow.ChannelID,
-			ChannelPostKey:      referenceRow.ChannelPostKey,
-			PostKey:             postKey,
-			PostID:              referenceRow.PostID,
-			ActualPublishedAt:   cloneCommunityShortsSendCountTime(referenceRow.ActualPublishedAt),
-			DetectedAt:          cloneCommunityShortsSendCountTime(referenceRow.DetectedAt),
-			VerificationVerdict: referenceRow.VerificationVerdict,
-			VerificationReason:  referenceRow.VerificationReason,
-			RelatedSentPostIDs:  cloneCommunityShortsAlarmSentHistoryDatasetStrings(referenceRow.RelatedSentPostIDs),
-		}
-
-		switch {
-		case !ok:
-			summary.MissingSendStatePostCount++
-			missingRow.MissingReason = CommunityShortsMissingAlarmReasonSendStateMissing
-		case stateRow.SendState == CommunityShortsPerPostSendStateAttemptedWithoutSuccess:
-			summary.AttemptedMissingPostCount++
-			missingRow.MissingReason = CommunityShortsMissingAlarmReasonAttempted
-			missingRow.SendState = stateRow.SendState
-			missingRow.StateContentID = strings.TrimSpace(stateRow.ContentID)
-			missingRow.StateDetectedAt = cloneCommunityShortsSendCountTime(stateRow.ReportDetectedAt)
-			missingRow.StateAlarmSentAt = cloneCommunityShortsSendCountTime(stateRow.ReportAlarmSentAt)
-		default:
-			summary.NotSentMissingPostCount++
-			missingRow.MissingReason = CommunityShortsMissingAlarmReasonNotSent
-			missingRow.SendState = stateRow.SendState
-			missingRow.StateContentID = strings.TrimSpace(stateRow.ContentID)
-			missingRow.StateDetectedAt = cloneCommunityShortsSendCountTime(stateRow.ReportDetectedAt)
-			missingRow.StateAlarmSentAt = cloneCommunityShortsSendCountTime(stateRow.ReportAlarmSentAt)
-		}
-
-		summary.MissingAlarmPostCount++
 		rows = append(rows, missingRow)
 	}
 
-	sort.SliceStable(rows, func(i, j int) bool {
-		left := communityShortsAlarmSentHistoryDatasetMissingAlarmSortTime(rows[i])
-		right := communityShortsAlarmSentHistoryDatasetMissingAlarmSortTime(rows[j])
-		if !left.Equal(right) {
-			return left.Before(right)
-		}
-		if rows[i].AlarmType != rows[j].AlarmType {
-			return rows[i].AlarmType < rows[j].AlarmType
-		}
-		if rows[i].ChannelID != rows[j].ChannelID {
-			return rows[i].ChannelID < rows[j].ChannelID
-		}
-		return rows[i].PostID < rows[j].PostID
-	})
+	sortCommunityShortsMissingAlarmRows(rows)
 
 	return rows, summary
+}
+
+func buildCommunityShortsMissingAlarmSendStateIndex(sendStateRows []CommunityShortsSendStateRow) map[string]CommunityShortsSendStateRow {
+	sendStateByPostKey := make(map[string]CommunityShortsSendStateRow, len(sendStateRows))
+	for i := range sendStateRows {
+		upsertCommunityShortsMissingAlarmSendState(sendStateByPostKey, sendStateRows[i])
+	}
+	return sendStateByPostKey
+}
+
+func upsertCommunityShortsMissingAlarmSendState(
+	sendStateByPostKey map[string]CommunityShortsSendStateRow,
+	row CommunityShortsSendStateRow,
+) {
+	postKey := missingAlarmSendStatePostKey(row)
+	if postKey == "" {
+		return
+	}
+	if existing, ok := sendStateByPostKey[postKey]; ok {
+		sendStateByPostKey[postKey] = mergeCommunityShortsAlarmSentHistoryDatasetMissingAlarmStateRow(existing, row)
+		return
+	}
+	sendStateByPostKey[postKey] = row
+}
+
+func missingAlarmSendStatePostKey(row CommunityShortsSendStateRow) string {
+	postKey := strings.TrimSpace(row.PostKey)
+	if postKey != "" {
+		return postKey
+	}
+	return buildCommunityShortsObservationPostKey(row.ReportAlarmType, row.ReportChannelID, row.ReportPostID)
+}
+
+func buildCommunityShortsMissingAlarmRow(
+	referenceRow CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+	sendStateByPostKey map[string]CommunityShortsSendStateRow,
+	summary *communityShortsAlarmSentHistoryDatasetMissingAlarmSummary,
+) (CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow, bool) {
+	postKey := buildCommunityShortsObservationPostKey(referenceRow.AlarmType, referenceRow.ChannelID, referenceRow.PostID)
+	stateRow, ok := sendStateByPostKey[postKey]
+	if ok && stateRow.SendState == CommunityShortsPerPostSendStateSent {
+		return CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow{}, false
+	}
+
+	missingRow := newCommunityShortsMissingAlarmRow(referenceRow, postKey)
+	applyCommunityShortsMissingAlarmReason(&missingRow, stateRow, ok, summary)
+	summary.MissingAlarmPostCount++
+	return missingRow, true
+}
+
+func newCommunityShortsMissingAlarmRow(
+	referenceRow CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+	postKey string,
+) CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow {
+	return CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow{
+		AlarmType:           referenceRow.AlarmType,
+		ChannelID:           referenceRow.ChannelID,
+		ChannelPostKey:      referenceRow.ChannelPostKey,
+		PostKey:             postKey,
+		PostID:              referenceRow.PostID,
+		ActualPublishedAt:   cloneCommunityShortsSendCountTime(referenceRow.ActualPublishedAt),
+		DetectedAt:          cloneCommunityShortsSendCountTime(referenceRow.DetectedAt),
+		VerificationVerdict: referenceRow.VerificationVerdict,
+		VerificationReason:  referenceRow.VerificationReason,
+		RelatedSentPostIDs:  cloneCommunityShortsAlarmSentHistoryDatasetStrings(referenceRow.RelatedSentPostIDs),
+	}
+}
+
+func applyCommunityShortsMissingAlarmReason(
+	missingRow *CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow,
+	stateRow CommunityShortsSendStateRow,
+	hasState bool,
+	summary *communityShortsAlarmSentHistoryDatasetMissingAlarmSummary,
+) {
+	switch {
+	case !hasState:
+		summary.MissingSendStatePostCount++
+		missingRow.MissingReason = CommunityShortsMissingAlarmReasonSendStateMissing
+	case stateRow.SendState == CommunityShortsPerPostSendStateAttemptedWithoutSuccess:
+		summary.AttemptedMissingPostCount++
+		fillCommunityShortsMissingAlarmState(missingRow, stateRow, CommunityShortsMissingAlarmReasonAttempted)
+	default:
+		summary.NotSentMissingPostCount++
+		fillCommunityShortsMissingAlarmState(missingRow, stateRow, CommunityShortsMissingAlarmReasonNotSent)
+	}
+}
+
+func fillCommunityShortsMissingAlarmState(
+	missingRow *CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow,
+	stateRow CommunityShortsSendStateRow,
+	reason CommunityShortsMissingAlarmReason,
+) {
+	missingRow.MissingReason = reason
+	missingRow.SendState = stateRow.SendState
+	missingRow.StateContentID = strings.TrimSpace(stateRow.ContentID)
+	missingRow.StateDetectedAt = cloneCommunityShortsSendCountTime(stateRow.ReportDetectedAt)
+	missingRow.StateAlarmSentAt = cloneCommunityShortsSendCountTime(stateRow.ReportAlarmSentAt)
+}
+
+func sortCommunityShortsMissingAlarmRows(rows []CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		return lessCommunityShortsMissingAlarmRow(rows[i], rows[j])
+	})
+}
+
+func lessCommunityShortsMissingAlarmRow(
+	leftRow CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow,
+	rightRow CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow,
+) bool {
+	left := communityShortsAlarmSentHistoryDatasetMissingAlarmSortTime(leftRow)
+	right := communityShortsAlarmSentHistoryDatasetMissingAlarmSortTime(rightRow)
+	if !left.Equal(right) {
+		return left.Before(right)
+	}
+	if leftRow.AlarmType != rightRow.AlarmType {
+		return leftRow.AlarmType < rightRow.AlarmType
+	}
+	if leftRow.ChannelID != rightRow.ChannelID {
+		return leftRow.ChannelID < rightRow.ChannelID
+	}
+	return leftRow.PostID < rightRow.PostID
 }
 
 func mergeCommunityShortsAlarmSentHistoryDatasetMissingAlarmStateRow(

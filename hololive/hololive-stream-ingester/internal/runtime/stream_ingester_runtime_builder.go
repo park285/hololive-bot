@@ -54,6 +54,13 @@ type streamIngesterInfrastructure struct {
 	cleanup          func()
 }
 
+type streamIngesterYouTubeResources struct {
+	holodexService *holodex.Service
+	ytStack        *sharedproviders.YouTubeStack
+	photoSync      *holodex.PhotoSyncService
+	sharedRL       *scraper.RateLimiter
+}
+
 // initStreamIngesterInfrastructure: stream-ingester에 필요한 최소 인프라만 초기화한다.
 // alarm/ACL/activity/workerPool 등 bot 전용 구성요소를 제외한다.
 func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *streamIngesterInfrastructure, retErr error) {
@@ -77,7 +84,27 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	}
 	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
 
-	holodexAPIKey := cfg.Holodex.APIKey
+	youTube, err := buildStreamIngesterYouTubeResources(ctx, cfg, logger, infra, irisClient)
+	if err != nil {
+		return nil, err
+	}
+
+	return &streamIngesterInfrastructure{
+		cacheService:     infra.Cache,
+		postgresService:  infra.Postgres,
+		memberRepo:       infra.MemberRepo,
+		irisClient:       irisClient,
+		settingsService:  sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger),
+		holodexService:   youTube.holodexService,
+		ytStack:          youTube.ytStack,
+		photoSync:        youTube.photoSync,
+		templateRenderer: templateRenderer,
+		sharedRL:         youTube.sharedRL,
+		cleanup:          infra.Cleanup,
+	}, nil
+}
+
+func buildStreamIngesterYouTubeResources(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule, irisClient iris.Sender) (*streamIngesterYouTubeResources, error) {
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 	scraperProxyConfig := scraper.ProxyConfig{
 		Enabled: cfg.Scraper.ProxyEnabled,
@@ -90,19 +117,18 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	}
 
 	scraperService := sharedproviders.ProvideScraperService(infra.Cache, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
-	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, holodexAPIKey, infra.Cache, scraperService, logger)
+	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, cfg.Holodex.APIKey, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	youTubeStatsRepository := ytstats.NewYouTubeStatsRepository(infra.Postgres, logger)
 	youTubeStack := sharedmodules.BuildYouTubeStack(ctx, sharedmodules.YouTubeStackParams{
 		YouTubeConfig:   cfg.YouTube,
 		ScraperConfig:   cfg.Scraper,
 		CacheService:    infra.Cache,
 		HolodexService:  holodexService,
 		Members:         memberServiceAdapter,
-		StatsRepo:       youTubeStatsRepository,
+		StatsRepo:       ytstats.NewYouTubeStatsRepository(infra.Postgres, logger),
 		AlarmState:      nil,
 		IrisClient:      irisClient,
 		Formatter:       nil,
@@ -110,19 +136,10 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		Logger:          logger,
 	})
 
-	settingsService := sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger)
-
-	return &streamIngesterInfrastructure{
-		cacheService:     infra.Cache,
-		postgresService:  infra.Postgres,
-		memberRepo:       infra.MemberRepo,
-		irisClient:       irisClient,
-		settingsService:  settingsService,
-		holodexService:   holodexService,
-		ytStack:          youTubeStack,
-		photoSync:        holodex.NewPhotoSyncService(holodexService, infra.MemberRepo, logger),
-		templateRenderer: templateRenderer,
-		sharedRL:         sharedRL,
-		cleanup:          infra.Cleanup,
+	return &streamIngesterYouTubeResources{
+		holodexService: holodexService,
+		ytStack:        youTubeStack,
+		photoSync:      holodex.NewPhotoSyncService(holodexService, infra.MemberRepo, logger),
+		sharedRL:       sharedRL,
 	}, nil
 }

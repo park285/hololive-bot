@@ -30,21 +30,7 @@ func BuildCommunityShortsSendStateReport(
 	}
 
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
-		left := communityShortsSendStateSortTime(normalizedRows[i])
-		right := communityShortsSendStateSortTime(normalizedRows[j])
-		if !left.Equal(right) {
-			return left.After(right)
-		}
-		if normalizedRows[i].ReportAlarmType != normalizedRows[j].ReportAlarmType {
-			return normalizedRows[i].ReportAlarmType < normalizedRows[j].ReportAlarmType
-		}
-		if normalizedRows[i].ReportChannelID != normalizedRows[j].ReportChannelID {
-			return normalizedRows[i].ReportChannelID < normalizedRows[j].ReportChannelID
-		}
-		if normalizedRows[i].ReportPostID != normalizedRows[j].ReportPostID {
-			return normalizedRows[i].ReportPostID < normalizedRows[j].ReportPostID
-		}
-		return normalizedRows[i].ContentID < normalizedRows[j].ContentID
+		return communityShortsSendStateRowsLess(normalizedRows[i], normalizedRows[j])
 	})
 
 	return CommunityShortsSendStateReport{
@@ -94,6 +80,30 @@ func accumulateCommunityShortsSendStateSummary(
 		return
 	}
 	summary.PostStateCount++
+	accumulateCommunityShortsSendStateStatusCounts(summary, row)
+	accumulateCommunityShortsSendStateAlarmTypeCounts(summary, row.ReportAlarmType)
+	updateCommunityShortsSendStateSummaryTimes(summary, resolveCommunityShortsSendStateObservedAt(row), row.ReportAlarmSentAt)
+}
+
+func communityShortsSendStateRowsLess(leftRow, rightRow CommunityShortsSendStateRow) bool {
+	left := communityShortsSendStateSortTime(leftRow)
+	right := communityShortsSendStateSortTime(rightRow)
+	if !left.Equal(right) {
+		return left.After(right)
+	}
+	if leftRow.ReportAlarmType != rightRow.ReportAlarmType {
+		return leftRow.ReportAlarmType < rightRow.ReportAlarmType
+	}
+	if leftRow.ReportChannelID != rightRow.ReportChannelID {
+		return leftRow.ReportChannelID < rightRow.ReportChannelID
+	}
+	if leftRow.ReportPostID != rightRow.ReportPostID {
+		return leftRow.ReportPostID < rightRow.ReportPostID
+	}
+	return leftRow.ContentID < rightRow.ContentID
+}
+
+func accumulateCommunityShortsSendStateStatusCounts(summary *CommunityShortsSendStateSummary, row CommunityShortsSendStateRow) {
 	switch row.SendState {
 	case CommunityShortsPerPostSendStateSent:
 		summary.SentPostCount++
@@ -108,13 +118,15 @@ func accumulateCommunityShortsSendStateSummary(
 	if row.FailedAttemptCount > 0 {
 		summary.FailedAttemptPostCount++
 	}
-	switch row.ReportAlarmType {
+}
+
+func accumulateCommunityShortsSendStateAlarmTypeCounts(summary *CommunityShortsSendStateSummary, alarmType domain.AlarmType) {
+	switch alarmType {
 	case domain.AlarmTypeCommunity:
 		summary.CommunityPostCount++
 	case domain.AlarmTypeShorts:
 		summary.ShortsPostCount++
 	}
-	updateCommunityShortsSendStateSummaryTimes(summary, resolveCommunityShortsSendStateObservedAt(row), row.ReportAlarmSentAt)
 }
 
 func updateCommunityShortsSendStateSummaryTimes(
@@ -125,22 +137,30 @@ func updateCommunityShortsSendStateSummaryTimes(
 	if summary == nil {
 		return
 	}
-	if observedAt != nil {
-		if summary.EarliestObservedAt == nil || observedAt.Before(summary.EarliestObservedAt.UTC()) {
-			summary.EarliestObservedAt = cloneCommunityShortsSendCountTime(observedAt)
-		}
-		if summary.LatestObservedAt == nil || observedAt.After(summary.LatestObservedAt.UTC()) {
-			summary.LatestObservedAt = cloneCommunityShortsSendCountTime(observedAt)
-		}
+	summary.EarliestObservedAt = earlierCommunityShortsSendStateTime(summary.EarliestObservedAt, observedAt)
+	summary.LatestObservedAt = laterCommunityShortsSendStateTime(summary.LatestObservedAt, observedAt)
+	summary.EarliestAlarmSentAt = earlierCommunityShortsSendStateTime(summary.EarliestAlarmSentAt, alarmSentAt)
+	summary.LatestAlarmSentAt = laterCommunityShortsSendStateTime(summary.LatestAlarmSentAt, alarmSentAt)
+}
+
+func earlierCommunityShortsSendStateTime(current *time.Time, candidate *time.Time) *time.Time {
+	if candidate == nil {
+		return current
 	}
-	if alarmSentAt != nil {
-		if summary.EarliestAlarmSentAt == nil || alarmSentAt.Before(summary.EarliestAlarmSentAt.UTC()) {
-			summary.EarliestAlarmSentAt = cloneCommunityShortsSendCountTime(alarmSentAt)
-		}
-		if summary.LatestAlarmSentAt == nil || alarmSentAt.After(summary.LatestAlarmSentAt.UTC()) {
-			summary.LatestAlarmSentAt = cloneCommunityShortsSendCountTime(alarmSentAt)
-		}
+	if current == nil || candidate.Before(current.UTC()) {
+		return cloneCommunityShortsSendCountTime(candidate)
 	}
+	return current
+}
+
+func laterCommunityShortsSendStateTime(current *time.Time, candidate *time.Time) *time.Time {
+	if candidate == nil {
+		return current
+	}
+	if current == nil || candidate.After(current.UTC()) {
+		return cloneCommunityShortsSendCountTime(candidate)
+	}
+	return current
 }
 
 func buildCommunityShortsSendStateMetadataMarkdown(report CommunityShortsSendStateReport) string {

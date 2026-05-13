@@ -19,6 +19,21 @@ type communityShortsAlarmSentHistoryDatasetComparisonAccumulator struct {
 	MissingAlarmPostCount            int
 }
 
+var communityShortsAlarmSentHistoryDatasetVerdictAppliers = map[trackingrepo.ObservationPostComparisonVerdict]func(*communityShortsAlarmSentHistoryDatasetComparisonAccumulator){
+	trackingrepo.ObservationPostComparisonVerdictMatched: func(accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator) {
+		accumulator.MatchedPostCount++
+	},
+	trackingrepo.ObservationPostComparisonVerdictUnsent: func(accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator) {
+		accumulator.UnsentPostCount++
+	},
+	trackingrepo.ObservationPostComparisonVerdictDuplicateSent: func(accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator) {
+		accumulator.DuplicateSentPostCount++
+	},
+	trackingrepo.ObservationPostComparisonVerdictIdentifierMismatchCandidate: func(accumulator *communityShortsAlarmSentHistoryDatasetComparisonAccumulator) {
+		accumulator.IdentifierMismatchCandidateCount++
+	},
+}
+
 func buildCommunityShortsAlarmSentHistoryDatasetResults(
 	rows []CommunityShortsAlarmSentHistoryDatasetRow,
 	verificationRows []CommunityShortsAlarmSentHistoryDatasetVerificationRow,
@@ -30,6 +45,23 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 	alarmTypeAccumulators := make(map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator)
 	channelAccumulators := make(map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator)
 
+	accumulateCommunityShortsAlarmSentHistoryDatasetRows(alarmTypeAccumulators, channelAccumulators, rows)
+	accumulateCommunityShortsAlarmSentHistoryDatasetReferenceRows(alarmTypeAccumulators, channelAccumulators, referenceRows)
+	accumulateCommunityShortsAlarmSentHistoryDatasetVerificationRows(alarmTypeAccumulators, channelAccumulators, verificationRows)
+	accumulateCommunityShortsAlarmSentHistoryDatasetMissingAlarmRows(alarmTypeAccumulators, channelAccumulators, missingAlarmRows)
+
+	results := buildCommunityShortsAlarmSentHistoryDatasetResultSummary(summary, missingAlarmEvaluated)
+	results.AlarmTypeComparisons = buildCommunityShortsAlarmSentHistoryDatasetAlarmTypeComparisons(alarmTypeAccumulators)
+	results.ChannelComparisons = buildCommunityShortsAlarmSentHistoryDatasetChannelComparisons(channelAccumulators)
+
+	return results
+}
+
+func accumulateCommunityShortsAlarmSentHistoryDatasetRows(
+	alarmTypeAccumulators map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	channelAccumulators map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	rows []CommunityShortsAlarmSentHistoryDatasetRow,
+) {
 	for i := range rows {
 		row := rows[i]
 		incrementCommunityShortsAlarmSentHistoryDatasetSentPost(
@@ -39,7 +71,13 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 			ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(channelAccumulators, row.ChannelID),
 		)
 	}
+}
 
+func accumulateCommunityShortsAlarmSentHistoryDatasetReferenceRows(
+	alarmTypeAccumulators map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	channelAccumulators map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	referenceRows []CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+) {
 	for i := range referenceRows {
 		row := referenceRows[i]
 		accumulateCommunityShortsAlarmSentHistoryDatasetReference(
@@ -51,7 +89,13 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 			row.VerificationVerdict,
 		)
 	}
+}
 
+func accumulateCommunityShortsAlarmSentHistoryDatasetVerificationRows(
+	alarmTypeAccumulators map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	channelAccumulators map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	verificationRows []CommunityShortsAlarmSentHistoryDatasetVerificationRow,
+) {
 	for i := range verificationRows {
 		row := verificationRows[i]
 		if row.Verdict != trackingrepo.ObservationPostComparisonVerdictUnexpectedSent {
@@ -64,7 +108,13 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 			ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(channelAccumulators, row.ChannelID),
 		)
 	}
+}
 
+func accumulateCommunityShortsAlarmSentHistoryDatasetMissingAlarmRows(
+	alarmTypeAccumulators map[domain.AlarmType]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	channelAccumulators map[string]*communityShortsAlarmSentHistoryDatasetComparisonAccumulator,
+	missingAlarmRows []CommunityShortsAlarmSentHistoryDatasetMissingAlarmRow,
+) {
 	for i := range missingAlarmRows {
 		row := missingAlarmRows[i]
 		incrementCommunityShortsAlarmSentHistoryDatasetMissingAlarm(
@@ -74,8 +124,13 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 			ensureCommunityShortsAlarmSentHistoryDatasetChannelAccumulator(channelAccumulators, row.ChannelID),
 		)
 	}
+}
 
-	results := CommunityShortsAlarmSentHistoryDatasetResults{
+func buildCommunityShortsAlarmSentHistoryDatasetResultSummary(
+	summary CommunityShortsAlarmSentHistoryDatasetSummary,
+	missingAlarmEvaluated bool,
+) CommunityShortsAlarmSentHistoryDatasetResults {
+	return CommunityShortsAlarmSentHistoryDatasetResults{
 		MissingAlarmEvaluated:     missingAlarmEvaluated,
 		MissingAlarmPostCount:     summary.MissingAlarmPostCount,
 		MissingSendStatePostCount: summary.MissingSendStatePostCount,
@@ -83,11 +138,6 @@ func buildCommunityShortsAlarmSentHistoryDatasetResults(
 		NotSentMissingPostCount:   summary.NotSentMissingPostCount,
 		MissingAlarmZero:          missingAlarmEvaluated && summary.MissingAlarmPostCount == 0,
 	}
-
-	results.AlarmTypeComparisons = buildCommunityShortsAlarmSentHistoryDatasetAlarmTypeComparisons(alarmTypeAccumulators)
-	results.ChannelComparisons = buildCommunityShortsAlarmSentHistoryDatasetChannelComparisons(channelAccumulators)
-
-	return results
 }
 
 func ensureCommunityShortsAlarmSentHistoryDatasetAlarmTypeAccumulator(
@@ -221,14 +271,7 @@ func applyCommunityShortsAlarmSentHistoryDatasetVerdict(
 	if accumulator == nil {
 		return
 	}
-	switch verdict {
-	case trackingrepo.ObservationPostComparisonVerdictMatched:
-		accumulator.MatchedPostCount++
-	case trackingrepo.ObservationPostComparisonVerdictUnsent:
-		accumulator.UnsentPostCount++
-	case trackingrepo.ObservationPostComparisonVerdictDuplicateSent:
-		accumulator.DuplicateSentPostCount++
-	case trackingrepo.ObservationPostComparisonVerdictIdentifierMismatchCandidate:
-		accumulator.IdentifierMismatchCandidateCount++
+	if applyVerdict, ok := communityShortsAlarmSentHistoryDatasetVerdictAppliers[verdict]; ok {
+		applyVerdict(accumulator)
 	}
 }

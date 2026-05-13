@@ -38,29 +38,12 @@ func CollectCommunityShortsChannelSummaryReport(
 	now time.Time,
 	since time.Time,
 ) (CommunityShortsChannelSummaryReport, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if cfg == nil {
-		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: config is nil")
-	}
-	if logger == nil {
-		logger = slog.Default()
+	request, err := normalizeCommunityShortsChannelSummaryRequest(ctx, cfg, logger, now, since)
+	if err != nil {
+		return CommunityShortsChannelSummaryReport{}, err
 	}
 
-	now = normalizeCommunityShortsSendCountTime(now)
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	if since.IsZero() {
-		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: since is empty")
-	}
-	since = normalizeCommunityShortsSendCountTime(since)
-	if since.After(now) {
-		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: since is after now")
-	}
-
-	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
+	session, cleanupDB, err := openCommunityShortsOpsSession(request.ctx, cfg, request.logger)
 	if err != nil {
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: %w", err)
 	}
@@ -72,12 +55,56 @@ func CollectCommunityShortsChannelSummaryReport(
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: session is nil")
 	}
 
-	rows, err := session.telemetryRepo.ListChannelPostDeliverySummariesSince(ctx, since)
+	rows, err := session.telemetryRepo.ListChannelPostDeliverySummariesSince(request.ctx, request.since)
 	if err != nil {
 		return CommunityShortsChannelSummaryReport{}, fmt.Errorf("collect community shorts channel summary report: list channel summaries: %w", err)
 	}
 
-	return BuildCommunityShortsChannelSummaryReport(rows, now, since), nil
+	return BuildCommunityShortsChannelSummaryReport(rows, request.now, request.since), nil
+}
+
+type communityShortsChannelSummaryRequest struct {
+	ctx    context.Context
+	logger *slog.Logger
+	now    time.Time
+	since  time.Time
+}
+
+func normalizeCommunityShortsChannelSummaryRequest(
+	ctx context.Context,
+	cfg *config.Config,
+	logger *slog.Logger,
+	now time.Time,
+	since time.Time,
+) (communityShortsChannelSummaryRequest, error) {
+	if cfg == nil {
+		return communityShortsChannelSummaryRequest{}, fmt.Errorf("collect community shorts channel summary report: config is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	now = normalizeCommunityShortsSendCountTime(now)
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	since = normalizeCommunityShortsSendCountTime(since)
+	if since.IsZero() {
+		return communityShortsChannelSummaryRequest{}, fmt.Errorf("collect community shorts channel summary report: since is empty")
+	}
+	if since.After(now) {
+		return communityShortsChannelSummaryRequest{}, fmt.Errorf("collect community shorts channel summary report: since is after now")
+	}
+
+	return communityShortsChannelSummaryRequest{
+		ctx:    ctx,
+		logger: logger,
+		now:    now,
+		since:  since,
+	}, nil
 }
 
 func BuildCommunityShortsChannelSummaryReport(

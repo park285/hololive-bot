@@ -74,11 +74,46 @@ func CollectCommunityShortsSendStateReport(
 	now time.Time,
 	options CommunityShortsSendStateCollectOptions,
 ) (CommunityShortsSendStateReport, error) {
+	ctx, logger, now, query, err := prepareCommunityShortsSendStateCollectInputs(ctx, cfg, logger, now, options)
+	if err != nil {
+		return CommunityShortsSendStateReport{}, err
+	}
+
+	session, cleanupDB, err := openCommunityShortsSendStateSession(ctx, cfg, logger)
+	if err != nil {
+		return CommunityShortsSendStateReport{}, err
+	}
+	defer cleanupCommunityShortsSendStateSession(cleanupDB)
+
+	state, err := resolveCommunityShortsSendStateObservationState(ctx, session, query, now)
+	if err != nil {
+		return CommunityShortsSendStateReport{}, err
+	}
+
+	query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
+	query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
+	query.Finalized = state.Finalized
+
+	rows, err := listCommunityShortsSendStateRows(ctx, session, query, state)
+	if err != nil {
+		return CommunityShortsSendStateReport{}, err
+	}
+
+	return BuildCommunityShortsSendStateReport(rows, query, now), nil
+}
+
+func prepareCommunityShortsSendStateCollectInputs(
+	ctx context.Context,
+	cfg *config.Config,
+	logger *slog.Logger,
+	now time.Time,
+	options CommunityShortsSendStateCollectOptions,
+) (context.Context, *slog.Logger, time.Time, CommunityShortsSendStateQuery, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if cfg == nil {
-		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: config is nil")
+		return nil, nil, time.Time{}, CommunityShortsSendStateQuery{}, fmt.Errorf("collect community shorts send state report: config is nil")
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -91,21 +126,42 @@ func CollectCommunityShortsSendStateReport(
 
 	query, err := normalizeCommunityShortsSendStateCollectOptions(options)
 	if err != nil {
-		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: %w", err)
+		return nil, nil, time.Time{}, CommunityShortsSendStateQuery{}, fmt.Errorf("collect community shorts send state report: %w", err)
 	}
 
+	return ctx, logger, now, query, nil
+}
+
+func cleanupCommunityShortsSendStateSession(cleanupDB func()) {
+	if cleanupDB != nil {
+		cleanupDB()
+	}
+}
+
+func openCommunityShortsSendStateSession(
+	ctx context.Context,
+	cfg *config.Config,
+	logger *slog.Logger,
+) (*communityShortsOpsSession, func(), error) {
 	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
 	if err != nil {
-		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: %w", err)
+		return nil, nil, fmt.Errorf("collect community shorts send state report: %w", err)
 	}
-	if cleanupDB != nil {
-		defer cleanupDB()
-	}
-
 	if session == nil {
-		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: session is nil")
+		if cleanupDB != nil {
+			cleanupDB()
+		}
+		return nil, nil, fmt.Errorf("collect community shorts send state report: session is nil")
 	}
+	return session, cleanupDB, nil
+}
 
+func resolveCommunityShortsSendStateObservationState(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsSendStateQuery,
+	now time.Time,
+) (communityShortsObservationQueryState, error) {
 	state, err := resolveCommunityShortsObservationQueryState(
 		ctx,
 		session.trackingRepository,
@@ -114,34 +170,37 @@ func CollectCommunityShortsSendStateReport(
 		now,
 	)
 	if err != nil {
-		return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: find observation window: %w", err)
+		return communityShortsObservationQueryState{}, fmt.Errorf("collect community shorts send state report: find observation window: %w", err)
 	}
 	if state.Window == nil {
-		return CommunityShortsSendStateReport{}, fmt.Errorf(
+		return communityShortsObservationQueryState{}, fmt.Errorf(
 			"collect community shorts send state report: observation window not found: runtime=%s cutover=%s",
 			query.ObservationRuntimeName,
 			formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
 		)
 	}
+	return state, nil
+}
 
-	query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
-	query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
-	query.Finalized = state.Finalized
-
-	var rows []outbox.PostSendCount
+func listCommunityShortsSendStateRows(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsSendStateQuery,
+	state communityShortsObservationQueryState,
+) ([]outbox.PostSendCount, error) {
 	if state.Finalized {
-		rows, err = session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+		rows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
 		if err != nil {
-			return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: list finalized observation-window send states: %w", err)
+			return nil, fmt.Errorf("collect community shorts send state report: list finalized observation-window send states: %w", err)
 		}
-	} else {
-		rows, err = session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-		if err != nil {
-			return CommunityShortsSendStateReport{}, fmt.Errorf("collect community shorts send state report: list active observation-window send states: %w", err)
-		}
+		return rows, nil
 	}
 
-	return BuildCommunityShortsSendStateReport(rows, query, now), nil
+	rows, err := session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	if err != nil {
+		return nil, fmt.Errorf("collect community shorts send state report: list active observation-window send states: %w", err)
+	}
+	return rows, nil
 }
 
 func normalizeCommunityShortsSendStateCollectOptions(

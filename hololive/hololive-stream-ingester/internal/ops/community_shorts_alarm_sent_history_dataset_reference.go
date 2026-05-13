@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"cmp"
 	"sort"
 	"strings"
 	"time"
@@ -19,40 +20,9 @@ func buildCommunityShortsAlarmSentHistoryDatasetReferenceRows(
 	rowsByKey := make(map[string]CommunityShortsAlarmSentHistoryDatasetReferenceRow, len(verdictRows))
 	orderKeys := make([]string, 0, len(verdictRows))
 	for i := range verdictRows {
-		verdict := verdictRows[i]
-		if verdict.Verdict == trackingrepo.ObservationPostComparisonVerdictUnexpectedSent {
-			continue
-		}
-		channelID := strings.TrimSpace(verdict.ChannelID)
-		if channelID == "" {
-			continue
-		}
-		postIDs := communityShortsAlarmSentHistoryDatasetReferencePostIDs(verdict)
-		for j := range postIDs {
-			postID := strings.TrimSpace(postIDs[j])
-			channelPostKey := buildCommunityShortsObservationChannelPostKey(channelID, postID)
-			if channelPostKey == "" {
-				continue
-			}
-			candidate := CommunityShortsAlarmSentHistoryDatasetReferenceRow{
-				AlarmType:           verdict.AlarmType,
-				ChannelID:           channelID,
-				ChannelPostKey:      channelPostKey,
-				PostID:              postID,
-				ActualPublishedAt:   cloneCommunityShortsSendCountTime(verdict.ActualPublishedAt),
-				DetectedAt:          cloneCommunityShortsSendCountTime(verdict.DetectedAt),
-				VerificationVerdict: verdict.Verdict,
-				VerificationReason:  verdict.Reason,
-				SentCount:           verdict.SentCount,
-				ReviewStatus:        verdict.ReviewStatus,
-				RelatedSentPostIDs:  uniqueCommunityShortsAlarmSentHistoryDatasetStrings(verdict.RelatedSentPostIDs),
-			}
-			if existing, ok := rowsByKey[channelPostKey]; ok {
-				rowsByKey[channelPostKey] = mergeCommunityShortsAlarmSentHistoryDatasetReferenceRow(existing, candidate)
-				continue
-			}
-			rowsByKey[channelPostKey] = candidate
-			orderKeys = append(orderKeys, channelPostKey)
+		candidates := buildCommunityShortsAlarmSentHistoryDatasetReferenceCandidateRows(verdictRows[i])
+		for j := range candidates {
+			orderKeys = addCommunityShortsAlarmSentHistoryDatasetReferenceRow(rowsByKey, orderKeys, candidates[j])
 		}
 	}
 
@@ -65,21 +35,70 @@ func buildCommunityShortsAlarmSentHistoryDatasetReferenceRows(
 		rows = append(rows, rowsByKey[orderKeys[i]])
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
-		left := communityShortsAlarmSentHistoryDatasetReferenceSortTime(rows[i])
-		right := communityShortsAlarmSentHistoryDatasetReferenceSortTime(rows[j])
-		if !left.Equal(right) {
-			return left.Before(right)
-		}
-		if rows[i].ChannelID != rows[j].ChannelID {
-			return rows[i].ChannelID < rows[j].ChannelID
-		}
-		if rows[i].PostID != rows[j].PostID {
-			return rows[i].PostID < rows[j].PostID
-		}
-		return rows[i].AlarmType < rows[j].AlarmType
+		return compareCommunityShortsAlarmSentHistoryDatasetReferenceRows(rows[i], rows[j]) < 0
 	})
 
 	return rows
+}
+
+func buildCommunityShortsAlarmSentHistoryDatasetReferenceCandidateRows(
+	verdict trackingrepo.ObservationPostComparisonVerdictRow,
+) []CommunityShortsAlarmSentHistoryDatasetReferenceRow {
+	if verdict.Verdict == trackingrepo.ObservationPostComparisonVerdictUnexpectedSent {
+		return nil
+	}
+
+	channelID := strings.TrimSpace(verdict.ChannelID)
+	if channelID == "" {
+		return nil
+	}
+
+	postIDs := communityShortsAlarmSentHistoryDatasetReferencePostIDs(verdict)
+	rows := make([]CommunityShortsAlarmSentHistoryDatasetReferenceRow, 0, len(postIDs))
+	for i := range postIDs {
+		if row, ok := buildCommunityShortsAlarmSentHistoryDatasetReferenceCandidateRow(verdict, channelID, postIDs[i]); ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}
+
+func buildCommunityShortsAlarmSentHistoryDatasetReferenceCandidateRow(
+	verdict trackingrepo.ObservationPostComparisonVerdictRow,
+	channelID string,
+	postID string,
+) (CommunityShortsAlarmSentHistoryDatasetReferenceRow, bool) {
+	postID = strings.TrimSpace(postID)
+	channelPostKey := buildCommunityShortsObservationChannelPostKey(channelID, postID)
+	if channelPostKey == "" {
+		return CommunityShortsAlarmSentHistoryDatasetReferenceRow{}, false
+	}
+	return CommunityShortsAlarmSentHistoryDatasetReferenceRow{
+		AlarmType:           verdict.AlarmType,
+		ChannelID:           channelID,
+		ChannelPostKey:      channelPostKey,
+		PostID:              postID,
+		ActualPublishedAt:   cloneCommunityShortsSendCountTime(verdict.ActualPublishedAt),
+		DetectedAt:          cloneCommunityShortsSendCountTime(verdict.DetectedAt),
+		VerificationVerdict: verdict.Verdict,
+		VerificationReason:  verdict.Reason,
+		SentCount:           verdict.SentCount,
+		ReviewStatus:        verdict.ReviewStatus,
+		RelatedSentPostIDs:  uniqueCommunityShortsAlarmSentHistoryDatasetStrings(verdict.RelatedSentPostIDs),
+	}, true
+}
+
+func addCommunityShortsAlarmSentHistoryDatasetReferenceRow(
+	rowsByKey map[string]CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+	orderKeys []string,
+	candidate CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+) []string {
+	if existing, ok := rowsByKey[candidate.ChannelPostKey]; ok {
+		rowsByKey[candidate.ChannelPostKey] = mergeCommunityShortsAlarmSentHistoryDatasetReferenceRow(existing, candidate)
+		return orderKeys
+	}
+	rowsByKey[candidate.ChannelPostKey] = candidate
+	return append(orderKeys, candidate.ChannelPostKey)
 }
 
 func communityShortsAlarmSentHistoryDatasetReferencePostIDs(
@@ -96,49 +115,57 @@ func mergeCommunityShortsAlarmSentHistoryDatasetReferenceRow(
 	next CommunityShortsAlarmSentHistoryDatasetReferenceRow,
 ) CommunityShortsAlarmSentHistoryDatasetReferenceRow {
 	merged := current
-	if merged.AlarmType == "" && next.AlarmType != "" {
-		merged.AlarmType = next.AlarmType
-	}
-	if merged.ChannelID == "" && next.ChannelID != "" {
-		merged.ChannelID = next.ChannelID
-	}
-	if merged.ChannelPostKey == "" && next.ChannelPostKey != "" {
-		merged.ChannelPostKey = next.ChannelPostKey
-	}
-	if merged.PostID == "" && next.PostID != "" {
-		merged.PostID = next.PostID
-	}
+	merged.AlarmType = firstNonEmptyCommunityShortsAlarmSentHistoryDatasetValue(merged.AlarmType, next.AlarmType)
+	merged.ChannelID = firstNonEmptyCommunityShortsAlarmSentHistoryDatasetValue(merged.ChannelID, next.ChannelID)
+	merged.ChannelPostKey = firstNonEmptyCommunityShortsAlarmSentHistoryDatasetValue(merged.ChannelPostKey, next.ChannelPostKey)
+	merged.PostID = firstNonEmptyCommunityShortsAlarmSentHistoryDatasetValue(merged.PostID, next.PostID)
 	merged.ActualPublishedAt = communityShortsAlarmSentHistoryDatasetEarlierTime(merged.ActualPublishedAt, next.ActualPublishedAt)
 	merged.DetectedAt = communityShortsAlarmSentHistoryDatasetEarlierTime(merged.DetectedAt, next.DetectedAt)
-	if communityShortsAlarmSentHistoryDatasetReferenceVerdictPriority(next.VerificationVerdict) > communityShortsAlarmSentHistoryDatasetReferenceVerdictPriority(merged.VerificationVerdict) {
+	if hasHigherCommunityShortsAlarmSentHistoryDatasetReferenceVerdictPriority(next.VerificationVerdict, merged.VerificationVerdict) {
 		merged.VerificationVerdict = next.VerificationVerdict
 		merged.VerificationReason = next.VerificationReason
 	}
 	if next.SentCount > merged.SentCount {
 		merged.SentCount = next.SentCount
 	}
-	if next.ReviewStatus != "" {
-		merged.ReviewStatus = next.ReviewStatus
-	}
+	merged.ReviewStatus = lastNonEmptyCommunityShortsAlarmSentHistoryDatasetValue(merged.ReviewStatus, next.ReviewStatus)
 	merged.RelatedSentPostIDs = mergeUniqueCommunityShortsAlarmSentHistoryDatasetStrings(merged.RelatedSentPostIDs, next.RelatedSentPostIDs)
 	return merged
+}
+
+func firstNonEmptyCommunityShortsAlarmSentHistoryDatasetValue[T ~string](current T, next T) T {
+	if current == "" {
+		return next
+	}
+	return current
+}
+
+func lastNonEmptyCommunityShortsAlarmSentHistoryDatasetValue[T ~string](current T, next T) T {
+	if next != "" {
+		return next
+	}
+	return current
+}
+
+func hasHigherCommunityShortsAlarmSentHistoryDatasetReferenceVerdictPriority(
+	next trackingrepo.ObservationPostComparisonVerdict,
+	current trackingrepo.ObservationPostComparisonVerdict,
+) bool {
+	return communityShortsAlarmSentHistoryDatasetReferenceVerdictPriority(next) >
+		communityShortsAlarmSentHistoryDatasetReferenceVerdictPriority(current)
+}
+
+var communityShortsAlarmSentHistoryDatasetReferenceVerdictPriorities = map[trackingrepo.ObservationPostComparisonVerdict]int{
+	trackingrepo.ObservationPostComparisonVerdictMatched:                     40,
+	trackingrepo.ObservationPostComparisonVerdictDuplicateSent:               30,
+	trackingrepo.ObservationPostComparisonVerdictUnsent:                      20,
+	trackingrepo.ObservationPostComparisonVerdictIdentifierMismatchCandidate: 10,
 }
 
 func communityShortsAlarmSentHistoryDatasetReferenceVerdictPriority(
 	verdict trackingrepo.ObservationPostComparisonVerdict,
 ) int {
-	switch verdict {
-	case trackingrepo.ObservationPostComparisonVerdictMatched:
-		return 40
-	case trackingrepo.ObservationPostComparisonVerdictDuplicateSent:
-		return 30
-	case trackingrepo.ObservationPostComparisonVerdictUnsent:
-		return 20
-	case trackingrepo.ObservationPostComparisonVerdictIdentifierMismatchCandidate:
-		return 10
-	default:
-		return 0
-	}
+	return communityShortsAlarmSentHistoryDatasetReferenceVerdictPriorities[verdict]
 }
 
 func communityShortsAlarmSentHistoryDatasetReferenceSortTime(
@@ -150,6 +177,20 @@ func communityShortsAlarmSentHistoryDatasetReferenceSortTime(
 		}
 	}
 	return time.Time{}
+}
+
+func compareCommunityShortsAlarmSentHistoryDatasetReferenceRows(
+	left CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+	right CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+) int {
+	leftTime := communityShortsAlarmSentHistoryDatasetReferenceSortTime(left)
+	rightTime := communityShortsAlarmSentHistoryDatasetReferenceSortTime(right)
+	return cmp.Or(
+		compareCommunityShortsAlarmSentHistoryDatasetTimes(leftTime, rightTime),
+		cmp.Compare(left.ChannelID, right.ChannelID),
+		cmp.Compare(left.PostID, right.PostID),
+		cmp.Compare(left.AlarmType, right.AlarmType),
+	)
 }
 
 func communityShortsAlarmSentHistoryDatasetEarlierTime(left *time.Time, right *time.Time) *time.Time {
@@ -238,30 +279,27 @@ func buildCommunityShortsAlarmSentHistoryDatasetVerificationRows(
 	}
 
 	sort.SliceStable(rows, func(i, j int) bool {
-		left := communityShortsAlarmSentHistoryDatasetVerificationSortTime(rows[i])
-		right := communityShortsAlarmSentHistoryDatasetVerificationSortTime(rows[j])
-		if !left.Equal(right) {
-			return left.Before(right)
-		}
-		if rows[i].AlarmType != rows[j].AlarmType {
-			return rows[i].AlarmType < rows[j].AlarmType
-		}
-		if rows[i].ChannelID != rows[j].ChannelID {
-			return rows[i].ChannelID < rows[j].ChannelID
-		}
-		if rows[i].PostKey != rows[j].PostKey {
-			return rows[i].PostKey < rows[j].PostKey
-		}
-		if rows[i].PostID != rows[j].PostID {
-			return rows[i].PostID < rows[j].PostID
-		}
-		if rows[i].ContentID != rows[j].ContentID {
-			return rows[i].ContentID < rows[j].ContentID
-		}
-		return rows[i].Verdict < rows[j].Verdict
+		return compareCommunityShortsAlarmSentHistoryDatasetVerificationRows(rows[i], rows[j]) < 0
 	})
 
 	return rows
+}
+
+func compareCommunityShortsAlarmSentHistoryDatasetVerificationRows(
+	left CommunityShortsAlarmSentHistoryDatasetVerificationRow,
+	right CommunityShortsAlarmSentHistoryDatasetVerificationRow,
+) int {
+	leftTime := communityShortsAlarmSentHistoryDatasetVerificationSortTime(left)
+	rightTime := communityShortsAlarmSentHistoryDatasetVerificationSortTime(right)
+	return cmp.Or(
+		compareCommunityShortsAlarmSentHistoryDatasetTimes(leftTime, rightTime),
+		cmp.Compare(left.AlarmType, right.AlarmType),
+		cmp.Compare(left.ChannelID, right.ChannelID),
+		cmp.Compare(left.PostKey, right.PostKey),
+		cmp.Compare(left.PostID, right.PostID),
+		cmp.Compare(left.ContentID, right.ContentID),
+		cmp.Compare(left.Verdict, right.Verdict),
+	)
 }
 
 func communityShortsAlarmSentHistoryDatasetVerificationSortTime(
@@ -273,6 +311,16 @@ func communityShortsAlarmSentHistoryDatasetVerificationSortTime(
 		}
 	}
 	return time.Time{}
+}
+
+func compareCommunityShortsAlarmSentHistoryDatasetTimes(left time.Time, right time.Time) int {
+	if left.Equal(right) {
+		return 0
+	}
+	if left.Before(right) {
+		return -1
+	}
+	return 1
 }
 
 func cloneCommunityShortsAlarmSentHistoryDatasetStrings(values []string) []string {

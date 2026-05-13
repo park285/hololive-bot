@@ -16,21 +16,7 @@ func buildTargetBaselinePaths(
 ) []TargetBaselinePath {
 	paths := make([]TargetBaselinePath, 0, len(targetAlarmTypes()))
 	for _, alarmType := range targetAlarmTypes() {
-		configuredChannelCount := len(channels)
-		alarmEnabledChannelCount := 0
-		alarmEnabledRoomCount := 0
-		pathCutoverPending := false
-		for i := range channels {
-			route, ok := RouteForType(channels[i].Routes, alarmType)
-			if !ok || !route.AlarmEnabled {
-				continue
-			}
-			alarmEnabledChannelCount++
-			alarmEnabledRoomCount += route.SubscriberRoomCount
-			if route.CutoverPending {
-				pathCutoverPending = true
-			}
-		}
+		alarmEnabledChannelCount, alarmEnabledRoomCount, pathCutoverPending := targetBaselinePathCounts(channels, alarmType)
 
 		paths = append(paths, TargetBaselinePath{
 			AlarmType:                alarmType,
@@ -43,13 +29,31 @@ func buildTargetBaselinePaths(
 			FinalDeliveryOwner:       finalOwner,
 			FinalDeliveryPath:        finalDeliveryPath(finalOwner),
 			SubscriberKeyPrefix:      subscriberKeyPrefix(alarmType),
-			ConfiguredChannelCount:   configuredChannelCount,
+			ConfiguredChannelCount:   len(channels),
 			AlarmEnabledChannelCount: alarmEnabledChannelCount,
 			AlarmEnabledRoomCount:    alarmEnabledRoomCount,
 			ActivationSource:         "postgres.alarms alarm_types",
 		})
 	}
 	return paths
+}
+
+func targetBaselinePathCounts(channels []TargetBaselineChannel, alarmType domain.AlarmType) (int, int, bool) {
+	alarmEnabledChannelCount := 0
+	alarmEnabledRoomCount := 0
+	pathCutoverPending := false
+	for i := range channels {
+		route, ok := RouteForType(channels[i].Routes, alarmType)
+		if !ok || !route.AlarmEnabled {
+			continue
+		}
+		alarmEnabledChannelCount++
+		alarmEnabledRoomCount += route.SubscriberRoomCount
+		if route.CutoverPending {
+			pathCutoverPending = true
+		}
+	}
+	return alarmEnabledChannelCount, alarmEnabledRoomCount, pathCutoverPending
 }
 
 func buildTargetBaselineRoutes(

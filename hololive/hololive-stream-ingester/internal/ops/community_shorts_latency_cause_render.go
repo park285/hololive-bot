@@ -15,11 +15,26 @@ func RenderCommunityShortsLatencyCauseMarkdown(report CommunityShortsLatencyCaus
 	var builder strings.Builder
 
 	writeCommunityShortsMarkdownHeading(&builder, 1, "YouTube Community/Shorts Latency Cause Report")
-	writeCommunityShortsMarkdownKV(&builder, "generated at", formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.GeneratedAt)))
-	writeCommunityShortsMarkdownKV(&builder, "mode", formatCommunityShortsMarkdownCode(string(report.Query.Mode)))
+	writeCommunityShortsLatencyCauseReportMetadata(&builder, report)
+
+	if len(report.Periods) == 0 {
+		builder.WriteString("\n조회된 community/shorts 지연 원인 리포트가 없습니다.\n")
+		return builder.String()
+	}
+
+	for i := range report.Periods {
+		writeCommunityShortsLatencyCausePeriod(&builder, report.Periods[i], report.Verification)
+	}
+
+	return builder.String()
+}
+
+func writeCommunityShortsLatencyCauseReportMetadata(builder *strings.Builder, report CommunityShortsLatencyCauseReport) {
+	writeCommunityShortsMarkdownKV(builder, "generated at", formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(report.GeneratedAt)))
+	writeCommunityShortsMarkdownKV(builder, "mode", formatCommunityShortsMarkdownCode(string(report.Query.Mode)))
 	if report.Query.WindowStart != nil || report.Query.WindowEnd != nil {
 		writeCommunityShortsMarkdownKV(
-			&builder,
+			builder,
 			"window",
 			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.WindowStart))+
 				" -> "+
@@ -28,56 +43,52 @@ func RenderCommunityShortsLatencyCauseMarkdown(report CommunityShortsLatencyCaus
 	}
 	if report.Query.Mode == communityShortsLatencyCauseQueryModeObservation {
 		writeCommunityShortsMarkdownKV(
-			&builder,
+			builder,
 			"observation runtime",
 			formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(report.Query.ObservationRuntimeName))+
 				", cutover: "+
 				formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTimePtr(report.Query.ObservationBigBangCutoverAt)),
 		)
 	}
-	writeCommunityShortsMarkdownKV(&builder, "observed at basis", formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(report.ObservedAtBasis)))
-	writeCommunityShortsMarkdownKV(&builder, "threshold millis", formatCommunityShortsMarkdownCode(strconv.FormatInt(report.ThresholdMillis, 10)))
-	writeCommunityShortsMarkdownKV(&builder, "internal cause rule", formatCommunityShortsMarkdownCode(report.Verification.InternalCauseRule))
-	writeCommunityShortsMarkdownKV(&builder, "non internal rule", formatCommunityShortsMarkdownCode(report.Verification.NonInternalCauseRule))
-	writeCommunityShortsMarkdownKV(&builder, "excluded external rule", formatCommunityShortsMarkdownCode(report.Verification.ExcludedExternalRule))
-	writeCommunityShortsMarkdownKV(&builder, "insufficient evidence rule", formatCommunityShortsMarkdownCode(report.Verification.InsufficientEvidenceRule))
-	writeCommunityShortsMarkdownKV(&builder, "cause evidence fields", formatCommunityShortsMarkdownCode(strings.Join(report.Verification.EvidenceFieldCatalog, ", ")))
-	writeCommunityShortsMarkdownKV(&builder, "periods", formatCommunityShortsMarkdownCode(strconv.Itoa(len(report.Periods))))
+	writeCommunityShortsMarkdownKV(builder, "observed at basis", formatCommunityShortsMarkdownCode(fallbackCommunityShortsSendCountValue(report.ObservedAtBasis)))
+	writeCommunityShortsMarkdownKV(builder, "threshold millis", formatCommunityShortsMarkdownCode(strconv.FormatInt(report.ThresholdMillis, 10)))
+	writeCommunityShortsMarkdownKV(builder, "internal cause rule", formatCommunityShortsMarkdownCode(report.Verification.InternalCauseRule))
+	writeCommunityShortsMarkdownKV(builder, "non internal rule", formatCommunityShortsMarkdownCode(report.Verification.NonInternalCauseRule))
+	writeCommunityShortsMarkdownKV(builder, "excluded external rule", formatCommunityShortsMarkdownCode(report.Verification.ExcludedExternalRule))
+	writeCommunityShortsMarkdownKV(builder, "insufficient evidence rule", formatCommunityShortsMarkdownCode(report.Verification.InsufficientEvidenceRule))
+	writeCommunityShortsMarkdownKV(builder, "cause evidence fields", formatCommunityShortsMarkdownCode(strings.Join(report.Verification.EvidenceFieldCatalog, ", ")))
+	writeCommunityShortsMarkdownKV(builder, "periods", formatCommunityShortsMarkdownCode(strconv.Itoa(len(report.Periods))))
+}
 
-	if len(report.Periods) == 0 {
-		builder.WriteString("\n조회된 community/shorts 지연 원인 리포트가 없습니다.\n")
-		return builder.String()
+func writeCommunityShortsLatencyCausePeriod(
+	builder *strings.Builder,
+	period CommunityShortsLatencyCausePeriodView,
+	verification CommunityShortsLatencyCauseVerification,
+) {
+	builder.WriteString("\n")
+	writeCommunityShortsMarkdownHeading(builder, 2, formatCommunityShortsMarkdownCode(strings.TrimSpace(period.Summary.Label)))
+	writeCommunityShortsMarkdownKV(
+		builder,
+		"window",
+		formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(period.Summary.StartAt))+
+			" -> "+
+			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(period.Summary.EndAt)),
+	)
+	writeCommunityShortsMarkdownKV(builder, "latency summary", buildCommunityShortsLatencyPeriodSummaryMarkdown(period.Summary))
+	writeCommunityShortsMarkdownKV(builder, "cause summary", buildCommunityShortsLatencyCauseSummaryMarkdown(period.CauseSummary))
+	writeCommunityShortsMarkdownKV(
+		builder,
+		"excluded external reference",
+		"excluded_external_delay_posts="+formatCommunityShortsMarkdownCode(strconv.FormatInt(period.CauseSummary.ExcludedExternalDelayPostCount, 10))+
+			", rule="+formatCommunityShortsMarkdownCode(verification.ExcludedExternalRule),
+	)
+
+	if len(period.Rows) == 0 {
+		builder.WriteString("\n2분 초과 community/shorts 게시물이 없습니다.\n")
+		return
 	}
 
-	for i := range report.Periods {
-		period := report.Periods[i]
-		builder.WriteString("\n")
-		writeCommunityShortsMarkdownHeading(&builder, 2, formatCommunityShortsMarkdownCode(strings.TrimSpace(period.Summary.Label)))
-		writeCommunityShortsMarkdownKV(
-			&builder,
-			"window",
-			formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(period.Summary.StartAt))+
-				" -> "+
-				formatCommunityShortsMarkdownCode(formatCommunityShortsSendCountTime(period.Summary.EndAt)),
-		)
-		writeCommunityShortsMarkdownKV(&builder, "latency summary", buildCommunityShortsLatencyPeriodSummaryMarkdown(period.Summary))
-		writeCommunityShortsMarkdownKV(&builder, "cause summary", buildCommunityShortsLatencyCauseSummaryMarkdown(period.CauseSummary))
-		writeCommunityShortsMarkdownKV(
-			&builder,
-			"excluded external reference",
-			"excluded_external_delay_posts="+formatCommunityShortsMarkdownCode(strconv.FormatInt(period.CauseSummary.ExcludedExternalDelayPostCount, 10))+
-				", rule="+formatCommunityShortsMarkdownCode(report.Verification.ExcludedExternalRule),
-		)
-
-		if len(period.Rows) == 0 {
-			builder.WriteString("\n2분 초과 community/shorts 게시물이 없습니다.\n")
-			continue
-		}
-
-		writeCommunityShortsMarkdownTable(&builder, communityShortsLatencyCauseMarkdownColumns, buildCommunityShortsLatencyCauseMarkdownRows(period.Rows))
-	}
-
-	return builder.String()
+	writeCommunityShortsMarkdownTable(builder, communityShortsLatencyCauseMarkdownColumns, buildCommunityShortsLatencyCauseMarkdownRows(period.Rows))
 }
 
 var communityShortsLatencyCauseMarkdownColumns = []communityShortsMarkdownColumn{
@@ -170,38 +181,67 @@ func buildCommunityShortsLatencyCauseMarkdownRows(rows []CommunityShortsLatencyC
 func buildCommunityShortsLatencyCauseSummary(rows []CommunityShortsLatencyCauseRow) CommunityShortsLatencyCauseSummary {
 	summary := CommunityShortsLatencyCauseSummary{}
 	for i := range rows {
-		row := rows[i]
-		summary.ExceededPostCount++
-		switch row.InternalCauseJudgment {
-		case CommunityShortsInternalCauseJudgmentInternalSystem:
-			summary.InternalSystemCausePostCount++
-			summary.InternalCauseCandidatePostCount++
-			incrementCommunityShortsLatencyCauseInternalCause(&summary, row.InternalDelayCause)
-		default:
-			summary.NonInternalSystemCausePostCount++
-		}
-		switch row.AlarmType {
-		case domain.AlarmTypeCommunity:
-			summary.CommunityExceededPostCount++
-		case domain.AlarmTypeShorts:
-			summary.ShortsExceededPostCount++
-		}
-		switch row.DelaySource {
-		case outbox.PostDelaySourceExternalCollection:
-			summary.ExcludedExternalDelayPostCount++
-			summary.ExternalCollectionSourcePostCount++
-		case outbox.PostDelaySourceInternalDelivery:
-			summary.InternalDeliverySourcePostCount++
-		case outbox.PostDelaySourceMixed:
-			summary.MixedDelaySourcePostCount++
-		default:
-			summary.NoDominantSourcePostCount++
-		}
-		if row.LatencyClassification.Status == outbox.PostLatencyClassificationStatusInsufficientEvidence {
-			summary.InsufficientEvidencePostCount++
-		}
+		accumulateCommunityShortsLatencyCauseSummaryRow(&summary, rows[i])
 	}
 	return summary
+}
+
+func accumulateCommunityShortsLatencyCauseSummaryRow(
+	summary *CommunityShortsLatencyCauseSummary,
+	row CommunityShortsLatencyCauseRow,
+) {
+	if summary == nil {
+		return
+	}
+	summary.ExceededPostCount++
+	accumulateCommunityShortsLatencyCauseJudgment(summary, row)
+	accumulateCommunityShortsLatencyCauseAlarmType(summary, row.AlarmType)
+	accumulateCommunityShortsLatencyCauseDelaySource(summary, row.DelaySource)
+	if row.LatencyClassification.Status == outbox.PostLatencyClassificationStatusInsufficientEvidence {
+		summary.InsufficientEvidencePostCount++
+	}
+}
+
+func accumulateCommunityShortsLatencyCauseJudgment(
+	summary *CommunityShortsLatencyCauseSummary,
+	row CommunityShortsLatencyCauseRow,
+) {
+	if row.InternalCauseJudgment != CommunityShortsInternalCauseJudgmentInternalSystem {
+		summary.NonInternalSystemCausePostCount++
+		return
+	}
+	summary.InternalSystemCausePostCount++
+	summary.InternalCauseCandidatePostCount++
+	incrementCommunityShortsLatencyCauseInternalCause(summary, row.InternalDelayCause)
+}
+
+func accumulateCommunityShortsLatencyCauseAlarmType(
+	summary *CommunityShortsLatencyCauseSummary,
+	alarmType domain.AlarmType,
+) {
+	switch alarmType {
+	case domain.AlarmTypeCommunity:
+		summary.CommunityExceededPostCount++
+	case domain.AlarmTypeShorts:
+		summary.ShortsExceededPostCount++
+	}
+}
+
+func accumulateCommunityShortsLatencyCauseDelaySource(
+	summary *CommunityShortsLatencyCauseSummary,
+	delaySource outbox.PostDelaySource,
+) {
+	switch delaySource {
+	case outbox.PostDelaySourceExternalCollection:
+		summary.ExcludedExternalDelayPostCount++
+		summary.ExternalCollectionSourcePostCount++
+	case outbox.PostDelaySourceInternalDelivery:
+		summary.InternalDeliverySourcePostCount++
+	case outbox.PostDelaySourceMixed:
+		summary.MixedDelaySourcePostCount++
+	default:
+		summary.NoDominantSourcePostCount++
+	}
 }
 
 func buildCommunityShortsLatencyCauseVerification() CommunityShortsLatencyCauseVerification {

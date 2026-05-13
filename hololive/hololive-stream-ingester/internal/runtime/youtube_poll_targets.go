@@ -120,28 +120,13 @@ func logYouTubePollTargetStartupSourceState(
 }
 
 func diffChannelIDs(left, right []string) []string {
-	rightSet := make(map[string]struct{}, len(right))
-	for _, channelID := range right {
-		if channelID == "" {
-			continue
-		}
-		rightSet[channelID] = struct{}{}
-	}
-
+	rightSet := buildChannelIDSet(right)
 	out := make([]string, 0)
 	seen := make(map[string]struct{}, len(left))
 	for _, channelID := range left {
-		if channelID == "" {
-			continue
+		if includeDiffChannelID(channelID, seen, rightSet) {
+			out = append(out, channelID)
 		}
-		if _, exists := seen[channelID]; exists {
-			continue
-		}
-		seen[channelID] = struct{}{}
-		if _, exists := rightSet[channelID]; exists {
-			continue
-		}
-		out = append(out, channelID)
 	}
 	return out
 }
@@ -151,15 +136,41 @@ func mergeUniqueChannelIDs(channelIDSets ...[]string) []string {
 	merged := make([]string, 0)
 	for _, channelIDs := range channelIDSets {
 		for _, channelID := range channelIDs {
-			if channelID == "" {
-				continue
-			}
-			if _, exists := seen[channelID]; exists {
-				continue
-			}
-			seen[channelID] = struct{}{}
-			merged = append(merged, channelID)
+			merged = appendUniqueChannelID(merged, seen, channelID)
 		}
 	}
 	return merged
+}
+
+func buildChannelIDSet(channelIDs []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		if channelID != "" {
+			set[channelID] = struct{}{}
+		}
+	}
+	return set
+}
+
+func includeDiffChannelID(channelID string, seen map[string]struct{}, rightSet map[string]struct{}) bool {
+	if channelID == "" {
+		return false
+	}
+	if _, exists := seen[channelID]; exists {
+		return false
+	}
+	seen[channelID] = struct{}{}
+	_, exists := rightSet[channelID]
+	return !exists
+}
+
+func appendUniqueChannelID(merged []string, seen map[string]struct{}, channelID string) []string {
+	if channelID == "" {
+		return merged
+	}
+	if _, exists := seen[channelID]; exists {
+		return merged
+	}
+	seen[channelID] = struct{}{}
+	return append(merged, channelID)
 }
