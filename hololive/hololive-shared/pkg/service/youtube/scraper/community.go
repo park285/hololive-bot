@@ -77,17 +77,26 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 
 func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) (string, bool, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
-	html, err := c.fetchChannelSourcePage(ctx, "community_posts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
-	if err == nil {
-		return html, false, nil
+	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
+		return "", false, err
 	}
+	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
 	if statusCode, ok := extractHTTPStatusCode(err); ok && statusCode == http.StatusNotFound {
 		c.markCommunityMissing(ctx, channelID)
 		slog.Info("community posts endpoint missing; channel temporarily skipped",
 			"channel_id", channelID)
 		return "", true, nil
 	}
-	return "", false, err
+	if err != nil {
+		delay := c.recordChannelSourceFailure(ctx, channelID, ClassifyFailure(err, FailureSourceHTML))
+		return "", false, channelSourceCooldownError(FailureSourceHTML, delay, err)
+	}
+	if strings.TrimSpace(html) == "" {
+		err := fmt.Errorf("community_posts empty response from %s", url)
+		delay := c.recordChannelSourceFailure(ctx, channelID, ClassifyFailure(err, FailureSourceHTML))
+		return "", false, channelSourceCooldownError(FailureSourceHTML, delay, err)
+	}
+	return html, false, nil
 }
 
 func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string, data gjson.Result) error {
