@@ -5,7 +5,7 @@
 다음 문서를 보고 적용합니다.
 
 ```text
-02-patches/A00-check-function-budget-sh.diff
+02-patches/A00-check-function-budget-sh.md
 02-patches/A00-check-function-budget-py-target.md
 ```
 
