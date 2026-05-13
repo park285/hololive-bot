@@ -103,7 +103,7 @@ x-postgres-env: &postgres-env
 
 x-iris-env: &iris-env
   IRIS_BASE_URL: ${IRIS_BASE_URL:-}
-  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-}
+  IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
   IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h3}
   IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/run/hololive-bot/certs/iris-ca.pem}
   IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
@@ -391,7 +391,7 @@ services:
       <<: [*app-file-log-env, *cache-env, *postgres-env]
       DISPATCHER_PORT: "30020"
       IRIS_BASE_URL: ${IRIS_BASE_URL:-}
-      IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-}
+      IRIS_BASE_URL_FILE: ${IRIS_BASE_URL_FILE:-/app/runtime-config/iris_base_url}
       IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h3}
       IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/run/hololive-bot/certs/iris-ca.pem}
       IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
