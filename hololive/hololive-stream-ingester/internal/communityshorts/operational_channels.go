@@ -28,7 +28,7 @@ func ResolveOperationalChannelsFromRepository(
 		return nil, fmt.Errorf("member repository is nil")
 	}
 	value := reflect.ValueOf(repo)
-	if value.Kind() == reflect.Ptr && value.IsNil() {
+	if value.Kind() == reflect.Pointer && value.IsNil() {
 		return nil, fmt.Errorf("member repository is nil")
 	}
 
