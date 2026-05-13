@@ -167,6 +167,17 @@ func (r *Repository) WarmupCacheFromDB(ctx context.Context) error {
 		return nil
 	}
 
+	r.clearMemberNewsRoomCache(ctx)
+
+	if len(rooms) == 0 {
+		return nil
+	}
+
+	r.loadMemberNewsRoomsCache(ctx, rooms)
+	return nil
+}
+
+func (r *Repository) clearMemberNewsRoomCache(ctx context.Context) {
 	if err := r.cache.Del(ctx, memberNewsRoomsKey); err != nil {
 		r.log.Warn("MemberNews warmup: failed to clear rooms set",
 			slog.String("key", memberNewsRoomsKey),
@@ -179,11 +190,9 @@ func (r *Repository) WarmupCacheFromDB(ctx context.Context) error {
 			slog.String("error", err.Error()),
 		)
 	}
+}
 
-	if len(rooms) == 0 {
-		return nil
-	}
-
+func (r *Repository) loadMemberNewsRoomsCache(ctx context.Context, rooms []model.SubscribedRoom) {
 	roomIDs := make([]string, 0, len(rooms))
 	nameFields := make(map[string]any, len(rooms))
 	for _, room := range rooms {
@@ -204,8 +213,6 @@ func (r *Repository) WarmupCacheFromDB(ctx context.Context) error {
 			slog.String("error", err.Error()),
 		)
 	}
-
-	return nil
 }
 
 func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]string, error) {

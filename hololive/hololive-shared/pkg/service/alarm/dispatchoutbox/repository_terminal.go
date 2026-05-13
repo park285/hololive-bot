@@ -7,57 +7,11 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-func (r *PgxRepository) terminal(ctx context.Context, ids []int64, status Status, reason string, workerID string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	column := "sent_at"
-	statusFilter := "status NOT IN ('sent','dlq','quarantined','cancelled')"
-	switch status {
-	case StatusDLQ:
-		column = "dlq_at"
-		statusFilter = "status = 'leased'"
-	case StatusQuarantined:
-		column = "quarantined_at"
-		statusFilter = "status = 'sending'"
-	case StatusCancelled:
-		column = "cancelled_at"
-	}
-	query := fmt.Sprintf(`
-		UPDATE alarm_dispatch_deliveries
-		SET status=$2,
-			%s=NOW(),
-			locked_by=NULL,
-			locked_at=NULL,
-			lock_expires_at=NULL,
-			last_error=CASE WHEN $3 = '' THEN last_error ELSE $3 END,
-			updated_at=NOW()
-		WHERE id = ANY($1)
-		  AND locked_by = $4
-		  AND %s`, column, statusFilter)
-	tag, err := r.pool.Exec(ctx, query, ids, string(status), reason, workerID)
-	if err != nil {
-		return fmt.Errorf("mark dispatch deliveries terminal: %w", err)
-	}
-	return expectRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries terminal")
-}
-
 func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalUpdate, status Status, workerID string) error {
 	if len(updates) == 0 {
 		return nil
 	}
-	column := "sent_at"
-	statusFilter := "status NOT IN ('sent','dlq','quarantined','cancelled')"
-	switch status {
-	case StatusDLQ:
-		column = "dlq_at"
-		statusFilter = "status = 'leased'"
-	case StatusQuarantined:
-		column = "quarantined_at"
-		statusFilter = "status = 'sending'"
-	case StatusCancelled:
-		column = "cancelled_at"
-	}
+	column, statusFilter := terminalStatusSQL(status)
 	raw, err := json.Marshal(updates)
 	if err != nil {
 		return fmt.Errorf("mark dispatch deliveries terminal: marshal batch: %w", err)
@@ -84,4 +38,17 @@ func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalU
 		return fmt.Errorf("mark dispatch deliveries terminal: %w", err)
 	}
 	return expectRowsAffected(tag.RowsAffected(), len(updates), "mark dispatch deliveries terminal")
+}
+
+func terminalStatusSQL(status Status) (string, string) {
+	switch status {
+	case StatusDLQ:
+		return "dlq_at", "status = 'leased'"
+	case StatusQuarantined:
+		return "quarantined_at", "status = 'sending'"
+	case StatusCancelled:
+		return "cancelled_at", "status NOT IN ('sent','dlq','quarantined','cancelled')"
+	default:
+		return "sent_at", "status NOT IN ('sent','dlq','quarantined','cancelled')"
+	}
 }

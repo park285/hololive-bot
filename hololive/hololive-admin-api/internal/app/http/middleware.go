@@ -87,43 +87,63 @@ func newAPICORSConfig(cfg *config.Config, enforce bool) cors.Config {
 
 func corsOriginGuard(allowedOrigins []string, enforce bool, logger *slog.Logger) gin.HandlerFunc {
 	origins := normalizedOrigins(allowedOrigins)
-	allowAll := containsWildcard(origins)
-
-	allowed := make(map[string]struct{}, len(origins))
-	for _, origin := range origins {
-		if origin == "*" {
-			continue
-		}
-		allowed[origin] = struct{}{}
+	guard := corsOriginGuardState{
+		allowed:  corsOriginAllowedSet(origins),
+		allowAll: containsWildcard(origins),
+		enforce:  enforce,
+		logger:   logger,
 	}
 
 	return func(c *gin.Context) {
-		origin := strings.TrimSpace(c.GetHeader("Origin"))
-		if origin == "" {
-			c.Next()
-			return
-		}
-
-		if !enforce {
-			if logger != nil {
-				logger.Warn("cors_origin_monitor_only", slog.String("origin", origin))
-			}
-			c.Next()
-			return
-		}
-
-		if allowAll {
-			sharedserver.RespondError(c, http.StatusForbidden, "forbidden", nil)
-			c.Abort()
-			return
-		}
-
-		if _, ok := allowed[origin]; !ok {
-			sharedserver.RespondError(c, http.StatusForbidden, "forbidden", nil)
-			c.Abort()
-			return
-		}
-
-		c.Next()
+		guard.handle(c, strings.TrimSpace(c.GetHeader("Origin")))
 	}
+}
+
+type corsOriginGuardState struct {
+	allowed  map[string]struct{}
+	allowAll bool
+	enforce  bool
+	logger   *slog.Logger
+}
+
+func corsOriginAllowedSet(origins []string) map[string]struct{} {
+	allowed := make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		if origin != "*" {
+			allowed[origin] = struct{}{}
+		}
+	}
+	return allowed
+}
+
+func (g corsOriginGuardState) handle(c *gin.Context, origin string) {
+	if origin == "" {
+		c.Next()
+		return
+	}
+	if !g.enforce {
+		g.warnMonitorOnly(origin)
+		c.Next()
+		return
+	}
+	if !g.allows(origin) {
+		sharedserver.RespondError(c, http.StatusForbidden, "forbidden", nil)
+		c.Abort()
+		return
+	}
+	c.Next()
+}
+
+func (g corsOriginGuardState) warnMonitorOnly(origin string) {
+	if g.logger != nil {
+		g.logger.Warn("cors_origin_monitor_only", slog.String("origin", origin))
+	}
+}
+
+func (g corsOriginGuardState) allows(origin string) bool {
+	if g.allowAll {
+		return false
+	}
+	_, ok := g.allowed[origin]
+	return ok
 }

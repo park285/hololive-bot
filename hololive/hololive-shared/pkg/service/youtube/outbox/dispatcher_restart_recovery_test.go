@@ -179,7 +179,6 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			db := newRecoveryInputFixtureDB(t, "restart_does_not_resend_"+tc.name)
@@ -203,7 +202,7 @@ func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherR
 				ContentID:          item.ContentID,
 				CanonicalContentID: postID,
 				ChannelID:          item.ChannelID,
-				ActualPublishedAt:  timePtr(tc.actualPublishedAt),
+				ActualPublishedAt:  new(tc.actualPublishedAt),
 				DetectedAt:         tc.detectedAt,
 				DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusPending),
 			}).Error)
@@ -364,7 +363,6 @@ func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactly
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			db := newRecoveryInputFixtureDB(t, "restart_recovery_selective_"+tc.name)

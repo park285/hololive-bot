@@ -45,10 +45,25 @@ func (s *EventSummarizer) runConsensus(
 		return primary, false
 	}
 
+	verdict, needsAdjudication := s.reviewConsensusVerdict(ctx, events, summaryType, periodKey, primary)
+	if !needsAdjudication {
+		return primary, false
+	}
+
+	return s.applyConsensusAdjudication(ctx, events, summaryType, periodKey, searchContext, primary, verdict)
+}
+
+func (s *EventSummarizer) reviewConsensusVerdict(
+	ctx context.Context,
+	events []domain.MajorEvent,
+	summaryType SummaryType,
+	periodKey string,
+	primary *summaryResponse,
+) (*consensus.ReviewVerdict, bool) {
 	reviewCtx, cancel, ok := deriveConsensusBudget(ctx, s.consensus.ReviewTimeout, 250*time.Millisecond)
 	if !ok {
 		s.logger.Warn("major event consensus skipped: insufficient budget for review")
-		return primary, false
+		return nil, false
 	}
 	defer cancel()
 
@@ -56,15 +71,26 @@ func (s *EventSummarizer) runConsensus(
 	if err != nil {
 		s.logger.Warn("major event consensus review failed; keep primary",
 			slog.String("error", err.Error()))
-		return primary, false
+		return nil, false
 	}
 	if !consensus.NeedsAdjudication(verdict, s.consensus.ConfidenceThreshold) {
 		s.logger.Info("major event consensus review passed",
 			slog.Bool("approved", verdict.Approved),
 			slog.Float64("confidence", verdict.Confidence))
-		return primary, false
+		return nil, false
 	}
 
+	return verdict, true
+}
+
+func (s *EventSummarizer) applyConsensusAdjudication(
+	ctx context.Context,
+	events []domain.MajorEvent,
+	summaryType SummaryType,
+	periodKey, searchContext string,
+	primary *summaryResponse,
+	verdict *consensus.ReviewVerdict,
+) (*summaryResponse, bool) {
 	if s.adjudicator == nil {
 		s.logger.Info("major event consensus adjudicator not configured; keep primary")
 		return primary, false
@@ -310,30 +336,34 @@ func reviewSummarySchema() map[string]any {
 				"maximum": 1,
 			},
 			"issues": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"field": map[string]any{
-							"type": "string",
-						},
-						"item_index": map[string]any{
-							"type": "integer",
-						},
-						"severity": map[string]any{
-							"type": "string",
-							"enum": []string{"critical", "warning", "info"},
-						},
-						"description": map[string]any{
-							"type": "string",
-						},
-					},
-					"required": []string{"field", "item_index", "severity", "description"},
-				},
+				"type":  "array",
+				"items": reviewIssueSchema(),
 			},
 		},
 		"required": []string{"approved", "confidence", "issues"},
+	}
+}
+
+func reviewIssueSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"field": map[string]any{
+				"type": "string",
+			},
+			"item_index": map[string]any{
+				"type": "integer",
+			},
+			"severity": map[string]any{
+				"type": "string",
+				"enum": []string{"critical", "warning", "info"},
+			},
+			"description": map[string]any{
+				"type": "string",
+			},
+		},
+		"required": []string{"field", "item_index", "severity", "description"},
 	}
 }
 

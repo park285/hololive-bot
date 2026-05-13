@@ -54,55 +54,13 @@ func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvi
 		logger = slog.Default()
 	}
 
-	profiles, err := domain.LoadProfiles()
+	profiles, preTranslated, members, err := loadProfileServiceData(membersData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load official profiles dataset: %w", err)
+		return nil, err
 	}
 
-	preTranslated, err := domain.LoadTranslated()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load translated profiles dataset: %w", err)
-	}
-
-	members, err := domain.LoadAllMembers(membersData)
-	if err != nil {
-		return nil, fmt.Errorf("load members data: %w", err)
-	}
-
-	service := &ProfileService{
-		cache:         cacheSvc,
-		logger:        logger,
-		membersData:   membersData,
-		profiles:      profiles,
-		translations:  preTranslated,
-		englishToSlug: make(map[string]string, len(profiles)),
-		channelToSlug: make(map[string]string, len(members)),
-	}
-
-	for slug, profile := range profiles {
-		if profile == nil {
-			continue
-		}
-		key := stringutil.NormalizeKey(profile.EnglishName)
-		if key != "" {
-			service.englishToSlug[key] = slug
-		}
-	}
-
-	for _, member := range members {
-		if member == nil {
-			continue
-		}
-		if slug, ok := service.slugFor(member.Name); ok {
-			service.channelToSlug[stringutil.Normalize(member.ChannelID)] = slug
-			continue
-		}
-
-		key := stringutil.NormalizeKey(member.Name)
-		if key != "" {
-			service.englishToSlug[key] = stringutil.Slugify(member.Name)
-		}
-	}
+	service := newProfileService(cacheSvc, membersData, logger, profiles, preTranslated, members)
+	service.buildIndexes(members)
 
 	logger.Info("ProfileService initialized",
 		slog.Int("profiles", len(service.profiles)),
@@ -112,6 +70,71 @@ func NewProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvi
 	)
 
 	return service, nil
+}
+
+func loadProfileServiceData(membersData domain.MemberDataProvider) (map[string]*domain.TalentProfile, map[string]*domain.Translated, []*domain.Member, error) {
+	profiles, err := domain.LoadProfiles()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load official profiles dataset: %w", err)
+	}
+
+	preTranslated, err := domain.LoadTranslated()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load translated profiles dataset: %w", err)
+	}
+
+	members, err := domain.LoadAllMembers(membersData)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("load members data: %w", err)
+	}
+
+	return profiles, preTranslated, members, nil
+}
+
+func newProfileService(cacheSvc cache.Client, membersData domain.MemberDataProvider, logger *slog.Logger, profiles map[string]*domain.TalentProfile, preTranslated map[string]*domain.Translated, members []*domain.Member) *ProfileService {
+	return &ProfileService{
+		cache:         cacheSvc,
+		logger:        logger,
+		membersData:   membersData,
+		profiles:      profiles,
+		translations:  preTranslated,
+		englishToSlug: make(map[string]string, len(profiles)),
+		channelToSlug: make(map[string]string, len(members)),
+	}
+}
+
+func (s *ProfileService) buildIndexes(members []*domain.Member) {
+	s.indexProfileEnglishNames()
+	s.indexMemberChannelsAndNames(members)
+}
+
+func (s *ProfileService) indexProfileEnglishNames() {
+	for slug, profile := range s.profiles {
+		if profile == nil {
+			continue
+		}
+		key := stringutil.NormalizeKey(profile.EnglishName)
+		if key != "" {
+			s.englishToSlug[key] = slug
+		}
+	}
+}
+
+func (s *ProfileService) indexMemberChannelsAndNames(members []*domain.Member) {
+	for _, member := range members {
+		if member == nil {
+			continue
+		}
+		if slug, ok := s.slugFor(member.Name); ok {
+			s.channelToSlug[stringutil.Normalize(member.ChannelID)] = slug
+			continue
+		}
+
+		key := stringutil.NormalizeKey(member.Name)
+		if key != "" {
+			s.englishToSlug[key] = stringutil.Slugify(member.Name)
+		}
+	}
 }
 
 func (s *ProfileService) GetWithTranslation(ctx context.Context, englishName string) (*domain.TalentProfile, *domain.Translated, error) {
@@ -181,35 +204,15 @@ func (s *ProfileService) getTranslated(ctx context.Context, raw *domain.TalentPr
 	}
 
 	cacheKey := fmt.Sprintf(cacheKeyProfileTranslated, translationLocale, raw.Slug)
-
-	if s.cache != nil {
-		var cached domain.Translated
-		if err := s.cache.Get(ctx, cacheKey, &cached); err == nil && cached.DisplayName != "" {
-			return &cached, nil
-		}
+	if cached, ok := s.cachedTranslatedProfile(ctx, cacheKey); ok {
+		return cached, nil
 	}
 
-	if translated := s.translations[raw.Slug]; translated != nil {
-		cloned := cloneTranslatedProfile(translated)
-		if s.cache != nil && cloned != nil {
-			if err := s.cache.Set(ctx, cacheKey, cloned, 0); err != nil {
-				s.logger.Warn("Failed to cache translated profile",
-					slog.String("slug", raw.Slug),
-					slog.Any("error", err),
-				)
-			}
-		}
+	if cloned := s.translatedProfileFromDataset(ctx, raw.Slug, cacheKey); cloned != nil {
 		return cloned, nil
 	}
 
-	// Fallback: raw profile에서 단순 번역 생성 (AI 미사용)
-	fallback := &domain.Translated{
-		DisplayName: raw.EnglishName,
-		Catchphrase: raw.Catchphrase,
-		Summary:     raw.Description,
-		Highlights:  []string{},
-		Data:        convertToTranslatedRows(raw.DataEntries),
-	}
+	fallback := fallbackTranslatedProfile(raw)
 	if s.cache != nil {
 		if err := s.cache.Set(ctx, cacheKey, fallback, 0); err != nil {
 			s.logger.Warn("Failed to cache fallback translated profile",
@@ -219,6 +222,46 @@ func (s *ProfileService) getTranslated(ctx context.Context, raw *domain.TalentPr
 		}
 	}
 	return fallback, nil
+}
+
+func (s *ProfileService) cachedTranslatedProfile(ctx context.Context, cacheKey string) (*domain.Translated, bool) {
+	if s.cache == nil {
+		return nil, false
+	}
+
+	var cached domain.Translated
+	if err := s.cache.Get(ctx, cacheKey, &cached); err == nil && cached.DisplayName != "" {
+		return &cached, true
+	}
+	return nil, false
+}
+
+func (s *ProfileService) translatedProfileFromDataset(ctx context.Context, slug, cacheKey string) *domain.Translated {
+	translated := s.translations[slug]
+	if translated == nil {
+		return nil
+	}
+
+	cloned := cloneTranslatedProfile(translated)
+	if s.cache != nil && cloned != nil {
+		if err := s.cache.Set(ctx, cacheKey, cloned, 0); err != nil {
+			s.logger.Warn("Failed to cache translated profile",
+				slog.String("slug", slug),
+				slog.Any("error", err),
+			)
+		}
+	}
+	return cloned
+}
+
+func fallbackTranslatedProfile(raw *domain.TalentProfile) *domain.Translated {
+	return &domain.Translated{
+		DisplayName: raw.EnglishName,
+		Catchphrase: raw.Catchphrase,
+		Summary:     raw.Description,
+		Highlights:  []string{},
+		Data:        convertToTranslatedRows(raw.DataEntries),
+	}
 }
 
 func convertToTranslatedRows(entries []domain.TalentProfileEntry) []domain.TranslatedProfileDataRow {
@@ -244,23 +287,29 @@ func (s *ProfileService) PreloadTranslations(ctx context.Context) {
 
 	written := 0
 	for slug, profile := range s.translations {
-		if profile == nil {
-			continue
+		if s.preloadTranslation(ctx, slug, profile) {
+			written++
 		}
-		if err := s.cache.Set(ctx, fmt.Sprintf(cacheKeyProfileTranslated, translationLocale, slug), profile, 0); err != nil {
-			s.logger.Warn("Failed to preload translated profile",
-				slog.String("slug", slug),
-				slog.Any("error", err),
-			)
-			continue
-		}
-		written++
 	}
 
 	if written > 0 {
 		s.logger.Info("Preloaded translated profiles",
 			slog.Int("count", written))
 	}
+}
+
+func (s *ProfileService) preloadTranslation(ctx context.Context, slug string, profile *domain.Translated) bool {
+	if profile == nil {
+		return false
+	}
+	if err := s.cache.Set(ctx, fmt.Sprintf(cacheKeyProfileTranslated, translationLocale, slug), profile, 0); err != nil {
+		s.logger.Warn("Failed to preload translated profile",
+			slog.String("slug", slug),
+			slog.Any("error", err),
+		)
+		return false
+	}
+	return true
 }
 
 func cloneTranslatedProfile(src *domain.Translated) *domain.Translated {

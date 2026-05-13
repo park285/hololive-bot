@@ -95,38 +95,52 @@ func prepareMemberDirectoryGroups(groups []MemberDirectoryGroup) []memberDirecto
 
 	views := make([]memberDirectoryGroupView, 0, len(groups))
 	for _, group := range groups {
-		name := stringutil.TrimSpace(group.GroupName)
-		if name == "" {
-			name = "기타"
-		}
-
-		members := make([]memberDirectoryEntryView, 0, len(group.Members))
-		for _, member := range group.Members {
-			primary := stringutil.TrimSpace(member.PrimaryName)
-
-			secondary := stringutil.TrimSpace(member.SecondaryName)
-			if primary == "" && secondary == "" {
-				continue
-			}
-
-			entry := memberDirectoryEntryView{
-				Primary:   primary,
-				Secondary: secondary,
-				ShowBoth:  primary != "" && secondary != "" && !strings.EqualFold(primary, secondary),
-			}
-
-			members = append(members, entry)
-		}
-
-		if len(members) == 0 {
+		view, ok := prepareMemberDirectoryGroup(group)
+		if !ok {
 			continue
 		}
-
-		views = append(views, memberDirectoryGroupView{
-			GroupName: name,
-			Members:   members,
-		})
+		views = append(views, view)
 	}
 
 	return views
+}
+
+func prepareMemberDirectoryGroup(group MemberDirectoryGroup) (memberDirectoryGroupView, bool) {
+	members := prepareMemberDirectoryEntries(group.Members)
+	if len(members) == 0 {
+		return memberDirectoryGroupView{}, false
+	}
+
+	name := stringutil.TrimSpace(group.GroupName)
+	if name == "" {
+		name = "기타"
+	}
+
+	return memberDirectoryGroupView{GroupName: name, Members: members}, true
+}
+
+func prepareMemberDirectoryEntries(members []MemberDirectoryEntry) []memberDirectoryEntryView {
+	views := make([]memberDirectoryEntryView, 0, len(members))
+	for _, member := range members {
+		entry, ok := prepareMemberDirectoryEntry(member)
+		if !ok {
+			continue
+		}
+		views = append(views, entry)
+	}
+	return views
+}
+
+func prepareMemberDirectoryEntry(member MemberDirectoryEntry) (memberDirectoryEntryView, bool) {
+	primary := stringutil.TrimSpace(member.PrimaryName)
+	secondary := stringutil.TrimSpace(member.SecondaryName)
+	if primary == "" && secondary == "" {
+		return memberDirectoryEntryView{}, false
+	}
+
+	return memberDirectoryEntryView{
+		Primary:   primary,
+		Secondary: secondary,
+		ShowBoth:  primary != "" && secondary != "" && !strings.EqualFold(primary, secondary),
+	}, true
 }

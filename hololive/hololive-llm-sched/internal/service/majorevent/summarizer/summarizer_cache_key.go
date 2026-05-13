@@ -33,21 +33,7 @@ func buildSummaryInputHash(events []domain.MajorEvent) (string, error) {
 	}
 
 	projected := projectPromptEvents(events)
-	slices.SortFunc(projected, func(a, b eventForPrompt) int {
-		if byDate := cmp.Compare(a.DateStr, b.DateStr); byDate != 0 {
-			return byDate
-		}
-		if byTitle := cmp.Compare(a.Title, b.Title); byTitle != 0 {
-			return byTitle
-		}
-		if byLink := cmp.Compare(a.Link, b.Link); byLink != 0 {
-			return byLink
-		}
-		if byEventType := cmp.Compare(a.EventType, b.EventType); byEventType != 0 {
-			return byEventType
-		}
-		return cmp.Compare(a.Members, b.Members)
-	})
+	slices.SortFunc(projected, comparePromptEvents)
 
 	payload, err := json.Marshal(projected)
 	if err != nil {
@@ -55,4 +41,20 @@ func buildSummaryInputHash(events []domain.MajorEvent) (string, error) {
 	}
 	checksum := sha256.Sum256(payload)
 	return hex.EncodeToString(checksum[:8]), nil
+}
+
+func comparePromptEvents(a, b eventForPrompt) int {
+	if byDate := cmp.Compare(a.DateStr, b.DateStr); byDate != 0 {
+		return byDate
+	}
+	if byTitle := cmp.Compare(a.Title, b.Title); byTitle != 0 {
+		return byTitle
+	}
+	if byLink := cmp.Compare(a.Link, b.Link); byLink != 0 {
+		return byLink
+	}
+	if byEventType := cmp.Compare(a.EventType, b.EventType); byEventType != 0 {
+		return byEventType
+	}
+	return cmp.Compare(a.Members, b.Members)
 }

@@ -51,14 +51,7 @@ func (as *AlarmService) replaceHashMappings(
 	}
 
 	fields := make(map[string]any, len(mappings))
-	for field, value := range mappings {
-		field = stringutil.TrimSpace(field)
-		value = stringutil.TrimSpace(value)
-		if field == "" || value == "" {
-			continue
-		}
-		fields[field] = value
-	}
+	normalizeHashMappingFields(fields, mappings)
 
 	if len(fields) == 0 {
 		if err := as.cache.Del(ctx, key); err != nil {
@@ -84,6 +77,17 @@ func (as *AlarmService) replaceHashMappings(
 	}
 
 	return nil
+}
+
+func normalizeHashMappingFields(fields map[string]any, mappings map[string]string) {
+	for field, value := range mappings {
+		field = stringutil.TrimSpace(field)
+		value = stringutil.TrimSpace(value)
+		if field == "" || value == "" {
+			continue
+		}
+		fields[field] = value
+	}
 }
 
 func (as *AlarmService) replaceHashMappingsWithEmptyMarker(

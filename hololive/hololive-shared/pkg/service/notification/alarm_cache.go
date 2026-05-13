@@ -310,49 +310,83 @@ func (as *AlarmService) parseNextStreamInfo(channelID string, data map[string]st
 		return nil
 	}
 
-	info := &domain.NextStreamInfo{
-		Status:  domain.NextStreamStatus(stringutil.TrimSpace(data["status"])),
-		VideoID: stringutil.TrimSpace(data["video_id"]),
-		Title:   stringutil.TrimSpace(data["title"]),
-	}
-
-	if !info.Status.IsValid() {
-		as.logger.Warn("Unexpected cache status",
-			slog.String("channel_id", channelID),
-			slog.String("status", info.Status.String()),
-		)
-
+	info := parseCachedNextStreamInfo(data)
+	if !as.hasValidNextStreamStatus(channelID, info.Status) {
 		return nil
 	}
 
 	startScheduledStr := stringutil.TrimSpace(data["start_scheduled"])
-	if startScheduledStr != "" {
-		scheduledDate, err := time.Parse(time.RFC3339, startScheduledStr)
-		if err != nil {
-			as.logger.Error("Failed to parse scheduled time",
-				slog.String("channel_id", channelID),
-				slog.String("start_scheduled", startScheduledStr),
-				slog.Any("error", err),
-			)
-
-			return nil
-		}
-
-		info.StartScheduled = &scheduledDate
+	if !as.parseNextStreamStart(channelID, startScheduledStr, info) {
+		return nil
 	}
 
-	if info.Status.IsUpcoming() {
-		if startScheduledStr == "" || info.Title == "" || info.VideoID == "" || info.StartScheduled == nil {
-			as.logger.Error("Incomplete cache data for upcoming stream",
-				slog.String("channel_id", channelID),
-				slog.Bool("has_title", info.Title != ""),
-				slog.Bool("has_start", startScheduledStr != ""),
-				slog.Bool("has_video_id", info.VideoID != ""),
-			)
-
-			return nil
-		}
+	if !as.hasCompleteUpcomingStreamInfo(channelID, startScheduledStr, info) {
+		return nil
 	}
 
 	return info
+}
+
+func parseCachedNextStreamInfo(data map[string]string) *domain.NextStreamInfo {
+	return &domain.NextStreamInfo{
+		Status:  domain.NextStreamStatus(stringutil.TrimSpace(data["status"])),
+		VideoID: stringutil.TrimSpace(data["video_id"]),
+		Title:   stringutil.TrimSpace(data["title"]),
+	}
+}
+
+func (as *AlarmService) hasValidNextStreamStatus(channelID string, status domain.NextStreamStatus) bool {
+	if status.IsValid() {
+		return true
+	}
+
+	as.logger.Warn("Unexpected cache status",
+		slog.String("channel_id", channelID),
+		slog.String("status", status.String()),
+	)
+
+	return false
+}
+
+func (as *AlarmService) parseNextStreamStart(channelID, startScheduledStr string, info *domain.NextStreamInfo) bool {
+	if startScheduledStr == "" {
+		return true
+	}
+
+	scheduledDate, err := time.Parse(time.RFC3339, startScheduledStr)
+	if err != nil {
+		as.logger.Error("Failed to parse scheduled time",
+			slog.String("channel_id", channelID),
+			slog.String("start_scheduled", startScheduledStr),
+			slog.Any("error", err),
+		)
+
+		return false
+	}
+
+	info.StartScheduled = &scheduledDate
+
+	return true
+}
+
+func (as *AlarmService) hasCompleteUpcomingStreamInfo(
+	channelID, startScheduledStr string,
+	info *domain.NextStreamInfo,
+) bool {
+	if !info.Status.IsUpcoming() {
+		return true
+	}
+
+	if startScheduledStr != "" && info.Title != "" && info.VideoID != "" && info.StartScheduled != nil {
+		return true
+	}
+
+	as.logger.Error("Incomplete cache data for upcoming stream",
+		slog.String("channel_id", channelID),
+		slog.Bool("has_title", info.Title != ""),
+		slog.Bool("has_start", startScheduledStr != ""),
+		slog.Bool("has_video_id", info.VideoID != ""),
+	)
+
+	return false
 }

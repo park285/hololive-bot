@@ -27,6 +27,14 @@ import (
 	"time"
 )
 
+type dispatcherSignal int
+
+const (
+	dispatcherSignalStop dispatcherSignal = iota
+	dispatcherSignalWake
+	dispatcherSignalTimer
+)
+
 // dispatcher: 실행 대기 작업을 워커에게 전달
 func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-chan struct{}) {
 	defer s.wg.Done()
@@ -35,27 +43,57 @@ func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	workerChannelFull := false
+	doneCh, cancelDone := dispatcherDoneChannel(ctx, stopCh)
+	defer cancelDone()
 
 	for {
-		if !timer.Stop() {
-			select {
-			case <-timer.C:
-			default:
-			}
-		}
-		timer.Reset(s.nextDispatchDelay(workerChannelFull))
+		s.resetDispatchTimer(timer, workerChannelFull)
 
-		select {
-		case <-ctx.Done():
+		signal := s.awaitDispatcherSignal(doneCh, timer)
+		if signal == dispatcherSignalStop {
 			return
-		case <-stopCh:
-			return
-		case <-s.wakeCh:
+		}
+		if signal == dispatcherSignalWake {
 			workerChannelFull = false
-		case <-timer.C:
+			continue
+		}
+		if signal == dispatcherSignalTimer {
 			workerChannelFull = s.dispatchDueJobs(jobCh)
 		}
 	}
+}
+
+func dispatcherDoneChannel(ctx context.Context, stopCh <-chan struct{}) (<-chan struct{}, context.CancelFunc) {
+	dispatchCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-stopCh:
+			cancel()
+		case <-dispatchCtx.Done():
+		}
+	}()
+	return dispatchCtx.Done(), cancel
+}
+
+func (s *Scheduler) awaitDispatcherSignal(doneCh <-chan struct{}, timer *time.Timer) dispatcherSignal {
+	select {
+	case <-doneCh:
+		return dispatcherSignalStop
+	case <-s.wakeCh:
+		return dispatcherSignalWake
+	case <-timer.C:
+		return dispatcherSignalTimer
+	}
+}
+
+func (s *Scheduler) resetDispatchTimer(timer *time.Timer, workerChannelFull bool) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(s.nextDispatchDelay(workerChannelFull))
 }
 
 func (s *Scheduler) nextDispatchDelay(workerChannelFull bool) time.Duration {

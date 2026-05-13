@@ -89,7 +89,7 @@ func TestMemberNewsRunNowExecutor_CoalescesConcurrentTriggers(t *testing.T) {
 		t.Fatal("first run-now invocation did not start")
 	}
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		executor.Trigger()
 	}
 

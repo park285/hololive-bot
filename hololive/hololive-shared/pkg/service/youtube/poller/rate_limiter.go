@@ -43,23 +43,11 @@ func (r *RateLimiter) Wait(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if r == nil || r.interval <= 0 {
+	if r.disabled() {
 		return nil
 	}
 
-	r.mu.Lock()
-	now := time.Now()
-	nextAllowedAt := now
-	if !r.lastTime.IsZero() {
-		earliest := r.lastTime.Add(r.interval)
-		if earliest.After(now) {
-			nextAllowedAt = earliest
-		}
-	}
-	r.lastTime = nextAllowedAt
-	waitTime := time.Until(nextAllowedAt)
-	r.mu.Unlock()
-
+	waitTime := r.reserveWaitTime(time.Now())
 	if waitTime <= 0 {
 		return nil
 	}
@@ -73,4 +61,23 @@ func (r *RateLimiter) Wait(ctx context.Context) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+func (r *RateLimiter) disabled() bool {
+	return r == nil || r.interval <= 0
+}
+
+func (r *RateLimiter) reserveWaitTime(now time.Time) time.Duration {
+	r.mu.Lock()
+	nextAllowedAt := now
+	if !r.lastTime.IsZero() {
+		earliest := r.lastTime.Add(r.interval)
+		if earliest.After(now) {
+			nextAllowedAt = earliest
+		}
+	}
+	r.lastTime = nextAllowedAt
+	waitTime := time.Until(nextAllowedAt)
+	r.mu.Unlock()
+	return waitTime
 }

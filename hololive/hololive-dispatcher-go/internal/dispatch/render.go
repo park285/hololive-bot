@@ -116,17 +116,43 @@ func resolveStreamURL(notification domain.AlarmNotification) string {
 	}
 
 	stream := notification.Stream
-	switch {
-	case stream.IsTwitchOnly && stream.GetTwitchLiveURL() != "":
-		return stream.GetTwitchLiveURL()
-	case stream.IsChzzkOnly && stream.GetChzzkLiveURL() != "":
-		return stream.GetChzzkLiveURL()
-	case stream.IsIntegrated && stream.GetYouTubeURL() != "":
-		if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
-			return fmt.Sprintf("%s | %s", stream.GetYouTubeURL(), chzzkURL)
-		}
-		return stream.GetYouTubeURL()
-	default:
-		return stream.GetYouTubeURL()
+	if url := resolveTwitchOnlyURL(stream); url != "" {
+		return url
 	}
+	if url := resolveChzzkOnlyURL(stream); url != "" {
+		return url
+	}
+	if url := resolveIntegratedStreamURL(stream); url != "" {
+		return url
+	}
+	return stream.GetYouTubeURL()
+}
+
+func resolveTwitchOnlyURL(stream *domain.Stream) string {
+	if !stream.IsTwitchOnly {
+		return ""
+	}
+	return stream.GetTwitchLiveURL()
+}
+
+func resolveChzzkOnlyURL(stream *domain.Stream) string {
+	if !stream.IsChzzkOnly {
+		return ""
+	}
+	return stream.GetChzzkLiveURL()
+}
+
+func resolveIntegratedStreamURL(stream *domain.Stream) string {
+	if !stream.IsIntegrated {
+		return ""
+	}
+
+	youtubeURL := stream.GetYouTubeURL()
+	if youtubeURL == "" {
+		return ""
+	}
+	if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
+		return fmt.Sprintf("%s | %s", youtubeURL, chzzkURL)
+	}
+	return youtubeURL
 }

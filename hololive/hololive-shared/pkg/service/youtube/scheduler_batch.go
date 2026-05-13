@@ -9,6 +9,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type recentVideosBatchStats struct {
+	mu           sync.Mutex
+	successCount int
+	errorCount   int
+}
+
 func (ys *schedulerImpl) Start(ctx context.Context) {
 	ys.ticker = time.NewTicker(schedulerInterval)
 
@@ -18,43 +24,71 @@ func (ys *schedulerImpl) Start(ctx context.Context) {
 		slog.Int("daily_quota_target", totalDailyQuota))
 
 	go func() {
-		for {
-			select {
-			case <-ys.ticker.C:
-				ys.runBatch(ctx)
-			case <-ys.stopCh:
-				ys.logger.Info("YouTube scheduler stopped")
-				return
-			case <-ctx.Done():
-				ys.logger.Info("YouTube scheduler context canceled")
-				return
-			}
-		}
+		ys.runSchedulerLoop(ctx)
 	}()
 
 	if ys.holodex != nil {
-		ys.milestoneWatchTicker = time.NewTicker(milestoneWatchInterval)
-		ys.logger.Info("Milestone watcher started",
-			slog.Duration("interval", milestoneWatchInterval),
-			slog.Float64("threshold_ratio", MilestoneThresholdRatio))
-
-		go func() {
-			ys.watchNearMilestoneMembers(ctx)
-			ys.dispatchMilestoneAlerts(ctx)
-
-			for {
-				select {
-				case <-ys.milestoneWatchTicker.C:
-					ys.watchNearMilestoneMembers(ctx)
-					ys.dispatchMilestoneAlerts(ctx)
-				case <-ys.stopCh:
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
+		ys.startMilestoneWatcher(ctx)
 	}
+}
+
+func (ys *schedulerImpl) runSchedulerLoop(ctx context.Context) {
+	for {
+		if ys.handleNextSchedulerEvent(ctx) {
+			return
+		}
+	}
+}
+
+func (ys *schedulerImpl) handleNextSchedulerEvent(ctx context.Context) bool {
+	select {
+	case <-ys.ticker.C:
+		ys.runBatch(ctx)
+		return false
+	case <-ys.stopCh:
+		ys.logger.Info("YouTube scheduler stopped")
+		return true
+	case <-ctx.Done():
+		ys.logger.Info("YouTube scheduler context canceled")
+		return true
+	}
+}
+
+func (ys *schedulerImpl) startMilestoneWatcher(ctx context.Context) {
+	ys.milestoneWatchTicker = time.NewTicker(milestoneWatchInterval)
+	ys.logger.Info("Milestone watcher started",
+		slog.Duration("interval", milestoneWatchInterval),
+		slog.Float64("threshold_ratio", MilestoneThresholdRatio))
+
+	go func() {
+		ys.runMilestoneWatcherLoop(ctx)
+	}()
+}
+
+func (ys *schedulerImpl) runMilestoneWatcherLoop(ctx context.Context) {
+	ys.runMilestoneWatcherCycle(ctx)
+	for {
+		if ys.handleNextMilestoneWatcherEvent(ctx) {
+			return
+		}
+	}
+}
+
+func (ys *schedulerImpl) handleNextMilestoneWatcherEvent(ctx context.Context) bool {
+	select {
+	case <-ys.milestoneWatchTicker.C:
+		ys.runMilestoneWatcherCycle(ctx)
+		return false
+	case <-ys.stopCh:
+		return true
+	case <-ctx.Done():
+		return true
+	}
+}
+
+func (ys *schedulerImpl) runMilestoneWatcherCycle(ctx context.Context) {
+	ys.watchNearMilestoneMembers(ctx)
+	ys.dispatchMilestoneAlerts(ctx)
 }
 
 func (ys *schedulerImpl) Stop() {
@@ -115,42 +149,50 @@ func (ys *schedulerImpl) fetchRecentVideosRotation(ctx context.Context, batchNum
 		slog.Int("channels", len(channels)),
 		slog.Int("quota_cost", len(channels)*100))
 
-	successCount := 0
-	errorCount := 0
-	var mu sync.Mutex
+	stats := &recentVideosBatchStats{}
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(recentVideosFetchParallelism)
 
 	for _, channelID := range channels {
 		eg.Go(func() error {
-			videos, err := ys.youtube.GetRecentVideos(egCtx, channelID, 10)
-			if err != nil {
-				mu.Lock()
-				errorCount++
-				mu.Unlock()
-				return nil
-			}
-
-			cacheKey := "youtube:recent_videos:" + channelID
-			if cacheErr := ys.cache.Set(egCtx, cacheKey, videos, 24*time.Hour); cacheErr != nil {
-				mu.Lock()
-				errorCount++
-				mu.Unlock()
-				return nil
-			}
-
-			mu.Lock()
-			successCount++
-			mu.Unlock()
-			return nil
+			return ys.fetchAndCacheRecentVideos(egCtx, channelID, stats)
 		})
 	}
 	_ = eg.Wait()
 
 	ys.logger.Info("Recent videos batch completed",
 		slog.Int("batch", batchNum),
-		slog.Int("success", successCount),
-		slog.Int("errors", errorCount))
+		slog.Int("success", stats.successCount),
+		slog.Int("errors", stats.errorCount))
+}
+
+func (ys *schedulerImpl) fetchAndCacheRecentVideos(ctx context.Context, channelID string, stats *recentVideosBatchStats) error {
+	videos, err := ys.youtube.GetRecentVideos(ctx, channelID, 10)
+	if err != nil {
+		stats.recordError()
+		return nil
+	}
+
+	cacheKey := "youtube:recent_videos:" + channelID
+	if cacheErr := ys.cache.Set(ctx, cacheKey, videos, 24*time.Hour); cacheErr != nil {
+		stats.recordError()
+		return nil
+	}
+
+	stats.recordSuccess()
+	return nil
+}
+
+func (stats *recentVideosBatchStats) recordError() {
+	stats.mu.Lock()
+	defer stats.mu.Unlock()
+	stats.errorCount++
+}
+
+func (stats *recentVideosBatchStats) recordSuccess() {
+	stats.mu.Lock()
+	defer stats.mu.Unlock()
+	stats.successCount++
 }
 
 func (ys *schedulerImpl) getRotatingBatch(batchNum int, size int) []string {

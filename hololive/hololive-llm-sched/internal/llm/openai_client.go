@@ -25,10 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
 	"strings"
-	"syscall"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -226,64 +223,7 @@ func (c *OpenAIClient) generateJSONResponses(ctx context.Context, systemPrompt, 
 }
 
 func extractResponsesOutputText(resp *responses.Response) (string, error) {
-	if resp == nil {
-		return "", errOpenAIEmptyOutput
-	}
-
-	text := strings.TrimSpace(resp.OutputText())
-	if text != "" {
-		return text, nil
-	}
-
-	diagnostic := describeResponsesOutput(resp)
-	if diagnostic == "" {
-		return "", errOpenAIEmptyOutput
-	}
-
-	return "", fmt.Errorf("%w: %s", errOpenAIEmptyOutput, diagnostic)
-}
-
-func describeResponsesOutput(resp *responses.Response) string {
-	if resp == nil {
-		return ""
-	}
-
-	parts := make([]string, 0, 4)
-	if resp.Status != "" {
-		parts = append(parts, fmt.Sprintf("status=%s", resp.Status))
-	}
-	if resp.IncompleteDetails.Reason != "" {
-		parts = append(parts, fmt.Sprintf("incomplete_reason=%s", resp.IncompleteDetails.Reason))
-	}
-
-	outputTypes := make([]string, 0, len(resp.Output))
-	for _, item := range resp.Output {
-		itemType := strings.TrimSpace(item.Type)
-		if itemType == "" {
-			itemType = "unknown"
-		}
-		if item.Status != "" {
-			outputTypes = append(outputTypes, fmt.Sprintf("%s/%s", itemType, item.Status))
-		} else {
-			outputTypes = append(outputTypes, itemType)
-		}
-
-		if item.Type != "message" {
-			continue
-		}
-		for _, content := range item.Content {
-			if content.Type == "refusal" && strings.TrimSpace(content.Refusal) != "" {
-				parts = append(parts, fmt.Sprintf("refusal=%s", strings.TrimSpace(content.Refusal)))
-				break
-			}
-		}
-	}
-
-	if len(outputTypes) > 0 {
-		parts = append(parts, fmt.Sprintf("output=%s", strings.Join(outputTypes, ",")))
-	}
-
-	return strings.Join(parts, " ")
+	return extractResponsesOutputTextWithDiagnostics(resp)
 }
 
 // generateJSONChatCompletions: Chat Completions API로 구조화 JSON 출력을 생성합니다.
@@ -336,79 +276,13 @@ Do not include any text before or after the JSON. Only output the JSON object.`,
 }
 
 func truncateForError(value string, maxBytes int) string {
-	value = strings.TrimSpace(value)
-	if maxBytes <= 0 || len(value) <= maxBytes {
-		return value
-	}
-
-	return value[:maxBytes] + "...(truncated)"
+	return truncateForOpenAIError(value, maxBytes)
 }
 
 func shouldFallbackToChat(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, errOpenAIEmptyOutput) {
-		return true
-	}
-
-	var apiErr *openai.Error
-	if errors.As(err, &apiErr) {
-		if shouldFallbackOpenAIStatus(apiErr.StatusCode) {
-			return true
-		}
-
-		switch strings.ToLower(apiErr.Code) {
-		case "unsupported", "unsupported_endpoint", "unsupported_api", "not_implemented":
-			return true
-		default:
-			return false
-		}
-	}
-
-	// 최소 허용 네트워크 오류:
-	// - dial refused (일시적 라우팅/프록시 장애 가능성)
-	// - 명시적 timeout 계열
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return true
-	}
-
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return true
-	}
-
-	return false
-}
-
-func shouldFallbackOpenAIStatus(statusCode int) bool {
-	switch statusCode {
-	// responses 엔드포인트 미지원/미구현
-	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
-		return true
-	// 일시 서버 장애
-	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return true
-	default:
-		return false
-	}
+	return shouldFallbackToChatCompletions(err)
 }
 
 func suppressDiscoveredEvents(rawJSON string) (string, error) {
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(rawJSON), &payload); err != nil {
-		return "", fmt.Errorf("parse fallback json: %w", err)
-	}
-
-	if _, exists := payload["discovered_events"]; !exists {
-		return rawJSON, nil
-	}
-
-	payload["discovered_events"] = make([]any, 0)
-
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("marshal sanitized json: %w", err)
-	}
-	return string(b), nil
+	return suppressFallbackDiscoveredEvents(rawJSON)
 }

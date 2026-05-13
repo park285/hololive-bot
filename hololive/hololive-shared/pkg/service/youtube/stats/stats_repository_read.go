@@ -175,27 +175,15 @@ func scanTimestampedStatsRows(rows pgx.Rows, logger *slog.Logger, capacity int) 
 	result := make(map[string]*domain.TimestampedStats, capacity)
 
 	for rows.Next() {
-		var stats domain.TimestampedStats
-		var memberName *string
-
-		if err := rows.Scan(
-			&stats.Timestamp,
-			&stats.ChannelID,
-			&memberName,
-			&stats.SubscriberCount,
-			&stats.VideoCount,
-			&stats.ViewCount,
-		); err != nil {
+		stats, err := scanTimestampedStatsRow(rows)
+		if err != nil {
 			if logger != nil {
 				logger.Warn("Failed to scan batch stats row", slog.Any("error", err))
 			}
 			continue
 		}
 
-		if memberName != nil {
-			stats.MemberName = *memberName
-		}
-		result[stats.ChannelID] = &stats
+		result[stats.ChannelID] = stats
 	}
 
 	if err := rows.Err(); err != nil {
@@ -203,6 +191,27 @@ func scanTimestampedStatsRows(rows pgx.Rows, logger *slog.Logger, capacity int) 
 	}
 
 	return result, nil
+}
+
+func scanTimestampedStatsRow(rows pgx.Rows) (*domain.TimestampedStats, error) {
+	var stats domain.TimestampedStats
+	var memberName *string
+
+	if err := rows.Scan(
+		&stats.Timestamp,
+		&stats.ChannelID,
+		&memberName,
+		&stats.SubscriberCount,
+		&stats.VideoCount,
+		&stats.ViewCount,
+	); err != nil {
+		return nil, err
+	}
+
+	if memberName != nil {
+		stats.MemberName = *memberName
+	}
+	return &stats, nil
 }
 
 func (r *StatsRepository) isLatestTableAvailable() bool {

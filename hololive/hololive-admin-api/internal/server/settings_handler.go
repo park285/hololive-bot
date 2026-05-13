@@ -38,6 +38,17 @@ type SettingsHandler struct {
 	sharedsettings.SettingsApplier
 }
 
+type updateSettingsRequest struct {
+	AlarmAdvanceMinutes *int  `json:"alarmAdvanceMinutes"`
+	ScraperProxyEnabled *bool `json:"scraperProxyEnabled"`
+}
+
+type updateLLMSettingsRequest struct {
+	MajorEventScrapeHourKST *int  `json:"majorEventScrapeHourKST"`
+	MajorEventScrapeRunNow  *bool `json:"majorEventScrapeRunNow"`
+	MemberNewsWeeklyRunNow  *bool `json:"memberNewsWeeklyRunNow"`
+}
+
 const (
 	minAlarmAdvanceMinutes = 0
 	maxAlarmAdvanceMinutes = 24 * 60
@@ -187,13 +198,8 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 }
 
 func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
-	var req struct {
-		AlarmAdvanceMinutes *int  `json:"alarmAdvanceMinutes"`
-		ScraperProxyEnabled *bool `json:"scraperProxyEnabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+	req, ok := h.bindUpdateSettingsRequest(c)
+	if !ok {
 		return
 	}
 
@@ -201,29 +207,8 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	if req.AlarmAdvanceMinutes != nil {
-		minutes := *req.AlarmAdvanceMinutes
-		if minutes < minAlarmAdvanceMinutes || minutes > maxAlarmAdvanceMinutes {
-			sharedserver.RespondError(
-				c,
-				400,
-				fmt.Sprintf("alarmAdvanceMinutes must be between %d and %d", minAlarmAdvanceMinutes, maxAlarmAdvanceMinutes),
-				nil,
-			)
-			return
-		}
-	}
-
 	current := h.Settings.Get()
-	alarmAdvanceUpdated := false
-	if req.AlarmAdvanceMinutes != nil {
-		current.AlarmAdvanceMinutes = *req.AlarmAdvanceMinutes
-		current.TargetMinutes = sharedchecker.BuildRuntimeTargetMinutes(*req.AlarmAdvanceMinutes)
-		alarmAdvanceUpdated = true
-	}
-	if req.ScraperProxyEnabled != nil {
-		current.ScraperProxyEnabled = *req.ScraperProxyEnabled
-	}
+	alarmAdvanceUpdated := req.applyTo(&current)
 
 	if err := h.Settings.Update(current); err != nil {
 		h.safeLogger().Error("Failed to update settings", slog.Any("error", err))
@@ -231,19 +216,64 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	runtime := h.ApplyScraperProxy(c.Request.Context(), current.ScraperProxyEnabled).AsMap()
-	if alarmAdvanceUpdated {
-		maps.Copy(runtime, h.ApplyAlarmAdvanceMinutes(c.Request.Context(), current.AlarmAdvanceMinutes).AsMap())
-	}
+	runtime := h.applySettingsRuntime(c.Request.Context(), current, alarmAdvanceUpdated)
 	h.publishUpdateResult(c.Request.Context(), runtime, req.ScraperProxyEnabled, req.AlarmAdvanceMinutes)
+	h.logSettingsUpdate(current, runtime)
 
+	c.JSON(200, gin.H{"status": "ok", "message": "Settings updated", "settings": current, "runtime": runtime})
+}
+
+func (h *SettingsHandler) bindUpdateSettingsRequest(c *gin.Context) (updateSettingsRequest, bool) {
+	var req updateSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		return req, false
+	}
+
+	if !validAlarmAdvanceMinutes(req.AlarmAdvanceMinutes) {
+		sharedserver.RespondError(
+			c,
+			400,
+			fmt.Sprintf("alarmAdvanceMinutes must be between %d and %d", minAlarmAdvanceMinutes, maxAlarmAdvanceMinutes),
+			nil,
+		)
+		return req, false
+	}
+
+	return req, true
+}
+
+func validAlarmAdvanceMinutes(minutes *int) bool {
+	return minutes == nil || (*minutes >= minAlarmAdvanceMinutes && *minutes <= maxAlarmAdvanceMinutes)
+}
+
+func (req updateSettingsRequest) applyTo(current *settingssvc.Settings) bool {
+	alarmAdvanceUpdated := req.AlarmAdvanceMinutes != nil
+	if alarmAdvanceUpdated {
+		current.AlarmAdvanceMinutes = *req.AlarmAdvanceMinutes
+		current.TargetMinutes = sharedchecker.BuildRuntimeTargetMinutes(*req.AlarmAdvanceMinutes)
+	}
+	if req.ScraperProxyEnabled != nil {
+		current.ScraperProxyEnabled = *req.ScraperProxyEnabled
+	}
+	return alarmAdvanceUpdated
+}
+
+func (h *SettingsHandler) applySettingsRuntime(ctx context.Context, current settingssvc.Settings, alarmAdvanceUpdated bool) map[string]any {
+	runtime := h.ApplyScraperProxy(ctx, current.ScraperProxyEnabled).AsMap()
+	if alarmAdvanceUpdated {
+		maps.Copy(runtime, h.ApplyAlarmAdvanceMinutes(ctx, current.AlarmAdvanceMinutes).AsMap())
+	}
+	return runtime
+}
+
+func (h *SettingsHandler) logSettingsUpdate(current settingssvc.Settings, runtime map[string]any) {
 	h.logActivity("settings_update", "Settings updated", map[string]any{
 		"alarm_advance_minutes":  current.AlarmAdvanceMinutes,
 		"scraper_proxy_enabled":  current.ScraperProxyEnabled,
 		"scraper_runtime_status": runtime,
 	})
-
-	c.JSON(200, gin.H{"status": "ok", "message": "Settings updated", "settings": current, "runtime": runtime})
 }
 
 func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[string]any, scraperProxyEnabled *bool, alarmAdvanceMinutes *int) {
@@ -273,14 +303,8 @@ func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[s
 }
 
 func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
-	var req struct {
-		MajorEventScrapeHourKST *int  `json:"majorEventScrapeHourKST"`
-		MajorEventScrapeRunNow  *bool `json:"majorEventScrapeRunNow"`
-		MemberNewsWeeklyRunNow  *bool `json:"memberNewsWeeklyRunNow"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
+	req, ok := h.bindUpdateLLMSettingsRequest(c)
+	if !ok {
 		return
 	}
 
@@ -288,16 +312,7 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 		return
 	}
 
-	if req.MajorEventScrapeHourKST != nil || req.MajorEventScrapeRunNow != nil {
-		sharedserver.RespondError(c, 410, "majorEventScrape* controls are no longer supported; major event scraping is owned by llm-scheduler", nil)
-		return
-	}
-	if req.MemberNewsWeeklyRunNow == nil {
-		sharedserver.RespondError(c, 400, "at least one llm setting field is required", nil)
-		return
-	}
-	if req.MemberNewsWeeklyRunNow != nil && !*req.MemberNewsWeeklyRunNow {
-		sharedserver.RespondError(c, 400, "memberNewsWeeklyRunNow must be true when provided", nil)
+	if !req.validate(c) {
 		return
 	}
 
@@ -319,4 +334,30 @@ func (h *SettingsHandler) UpdateLLMSettings(c *gin.Context) {
 		"message": "LLM settings updated",
 		"runtime": runtime,
 	})
+}
+
+func (h *SettingsHandler) bindUpdateLLMSettingsRequest(c *gin.Context) (updateLLMSettingsRequest, bool) {
+	var req updateLLMSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
+		return req, false
+	}
+	return req, true
+}
+
+func (req updateLLMSettingsRequest) validate(c *gin.Context) bool {
+	if req.MajorEventScrapeHourKST != nil || req.MajorEventScrapeRunNow != nil {
+		sharedserver.RespondError(c, 410, "majorEventScrape* controls are no longer supported; major event scraping is owned by llm-scheduler", nil)
+		return false
+	}
+	if req.MemberNewsWeeklyRunNow == nil {
+		sharedserver.RespondError(c, 400, "at least one llm setting field is required", nil)
+		return false
+	}
+	if req.MemberNewsWeeklyRunNow != nil && !*req.MemberNewsWeeklyRunNow {
+		sharedserver.RespondError(c, 400, "memberNewsWeeklyRunNow must be true when provided", nil)
+		return false
+	}
+	return true
 }

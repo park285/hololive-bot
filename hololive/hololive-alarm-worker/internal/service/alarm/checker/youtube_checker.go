@@ -108,81 +108,70 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
 func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
+	dueChannels, streamsByChannel, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(dueChannels) == 0 {
+		return []*domain.AlarmNotification{}, nil
+	}
+
+	return c.collectDueYouTubeNotifications(ctx, dueChannels, streamsByChannel, subscriberMap)
+}
+
+func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
+	ctx context.Context,
+) ([]string, map[string][]*domain.Stream, map[string][]string, error) {
 	channelIDs, err := c.cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	if err != nil {
-		return nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
+		return nil, nil, nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
 	}
 
 	if len(channelIDs) == 0 {
-		return []*domain.AlarmNotification{}, nil
+		return nil, nil, nil, nil
 	}
 
 	dueChannels := c.tierScheduler.SelectDueChannels(channelIDs)
 	if len(dueChannels) == 0 {
-		return []*domain.AlarmNotification{}, nil
+		return nil, nil, nil, nil
 	}
 	sort.Strings(dueChannels)
 
 	streams, err := c.holodexSvc.GetChannelsLiveStatus(ctx, dueChannels)
 	if err != nil {
-		return nil, fmt.Errorf("check youtube streams: fetch channels live status: %w", err)
+		return nil, nil, nil, fmt.Errorf("check youtube streams: fetch channels live status: %w", err)
 	}
 
 	streamsByChannel := groupStreamsByChannel(streams)
 
 	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, dueChannels)
 	if err != nil {
-		return nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
+		return nil, nil, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
 	}
 
+	return dueChannels, streamsByChannel, subscriberMap, nil
+}
+
+func (c *YouTubeChecker) collectDueYouTubeNotifications(
+	ctx context.Context,
+	dueChannels []string,
+	streamsByChannel map[string][]*domain.Stream,
+	subscriberMap map[string][]string,
+) ([]*domain.AlarmNotification, error) {
 	now := time.Now().UTC()
 	notifications := make([]*domain.AlarmNotification, 0, len(dueChannels)*5)
-
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(channelProcessingConcurrency)
 
 	for _, channelID := range dueChannels {
-		channelStreams := streamsByChannel[channelID]
-		if len(channelStreams) == 0 {
-			channelStreams = []*domain.Stream{}
-		}
-
-		prevCheckedAt := c.tierScheduler.LastCheckedAt(channelID)
-		c.tierScheduler.UpdateChannelState(channelID, channelStreams)
-
-		subscriberRooms := subscriberMap[channelID]
-		if len(subscriberRooms) == 0 {
+		work, ok := c.prepareYouTubeChannelWork(channelID, streamsByChannel, subscriberMap, now)
+		if !ok {
 			continue
 		}
-
-		window := sharedchecker.ResolveEvaluationWindow(prevCheckedAt, now, c.evaluationWindowCap)
-
-		eg.Go(func() error {
-			channelNotifications, channelErr := c.buildChannelNotifications(
-				egCtx,
-				channelID,
-				subscriberRooms,
-				channelStreams,
-				window,
-				now,
-			)
-			if channelErr != nil {
-				return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", channelID, channelErr)
-			}
-
-			if len(channelNotifications) == 0 {
-				return nil
-			}
-
-			mu.Lock()
-
-			notifications = append(notifications, channelNotifications...)
-			mu.Unlock()
-
-			return nil
-		})
+		c.startYouTubeChannelWorker(eg, egCtx, work, now, &mu, &notifications)
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -190,6 +179,79 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 	}
 
 	return notifications, nil
+}
+
+func (c *YouTubeChecker) startYouTubeChannelWorker(
+	eg *errgroup.Group,
+	ctx context.Context,
+	work youtubeChannelCheckWork,
+	now time.Time,
+	mu *sync.Mutex,
+	notifications *[]*domain.AlarmNotification,
+) {
+	eg.Go(func() error {
+		channelNotifications, err := c.buildChannelNotifications(
+			ctx,
+			work.channelID,
+			work.subscriberRooms,
+			work.streams,
+			work.window,
+			now,
+		)
+		if err != nil {
+			return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", work.channelID, err)
+		}
+		appendYouTubeChannelNotifications(mu, notifications, channelNotifications)
+		return nil
+	})
+}
+
+func appendYouTubeChannelNotifications(
+	mu *sync.Mutex,
+	notifications *[]*domain.AlarmNotification,
+	channelNotifications []*domain.AlarmNotification,
+) {
+	if len(channelNotifications) == 0 {
+		return
+	}
+
+	mu.Lock()
+	*notifications = append(*notifications, channelNotifications...)
+	mu.Unlock()
+}
+
+type youtubeChannelCheckWork struct {
+	channelID       string
+	streams         []*domain.Stream
+	subscriberRooms []string
+	window          sharedchecker.EvaluationWindow
+}
+
+func (c *YouTubeChecker) prepareYouTubeChannelWork(
+	channelID string,
+	streamsByChannel map[string][]*domain.Stream,
+	subscriberMap map[string][]string,
+	now time.Time,
+) (youtubeChannelCheckWork, bool) {
+	channelStreams := streamsByChannel[channelID]
+	if len(channelStreams) == 0 {
+		channelStreams = []*domain.Stream{}
+	}
+
+	prevCheckedAt := c.tierScheduler.LastCheckedAt(channelID)
+	c.tierScheduler.UpdateChannelState(channelID, channelStreams)
+
+	subscriberRooms := subscriberMap[channelID]
+	if len(subscriberRooms) == 0 {
+		return youtubeChannelCheckWork{}, false
+	}
+
+	return youtubeChannelCheckWork{
+		channelID:       channelID,
+		streams:         channelStreams,
+		subscriberRooms: subscriberRooms,
+		window:          sharedchecker.ResolveEvaluationWindow(prevCheckedAt, now, c.evaluationWindowCap),
+	}, true
 }
 
 func (c *YouTubeChecker) buildChannelNotifications(
@@ -230,73 +292,124 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	subscriberRooms []string,
 	window sharedchecker.EvaluationWindow,
 ) ([]*domain.AlarmNotification, error) {
-	if stream == nil || !stream.IsUpcoming() || stream.StartScheduled == nil {
+	if !isUpcomingNotificationCandidate(stream, window) {
 		return nil, nil
 	}
 
-	if !stream.StartScheduled.After(window.End) {
+	selection, err := c.resolveYouTubeUpcomingSelection(ctx, stream, subscriberRooms, window)
+	if err != nil {
+		return nil, err
+	}
+
+	if !selection.selected {
 		return nil, nil
 	}
 
+	alreadyNotified, err := c.dedupSvc.IsAlreadyNotifiedForSchedule(ctx, stream.ID, *stream.StartScheduled, selection.minutesUntil)
+	if err != nil {
+		return nil, fmt.Errorf("build upcoming notifications: check already notified for schedule: %w", err)
+	}
+
+	if alreadyNotified {
+		observeYouTubeUpcomingDecision("already_notified", selection.minutesUntil, selection.label, window)
+		return nil, nil
+	}
+
+	notifications := buildYouTubeUpcomingRoomNotifications(stream, subscriberRooms, selection)
+
+	observeYouTubeUpcomingDecision("selected", selection.minutesUntil, selection.label, window)
+	c.logYouTubeUpcomingSelection(stream, selection, window, len(notifications))
+
+	return notifications, nil
+}
+
+func isUpcomingNotificationCandidate(stream *domain.Stream, window sharedchecker.EvaluationWindow) bool {
+	return stream != nil && stream.IsUpcoming() && stream.StartScheduled != nil && stream.StartScheduled.After(window.End)
+}
+
+type youtubeUpcomingSelection struct {
+	currentMinutesUntil  int
+	previousMinutesUntil int
+	minutesUntil         int
+	targetCrossed        bool
+	scheduleChanges      map[string]*dedup.ScheduleChange
+	label                string
+	selected             bool
+}
+
+func (c *YouTubeChecker) resolveYouTubeUpcomingSelection(
+	ctx context.Context,
+	stream *domain.Stream,
+	subscriberRooms []string,
+	window sharedchecker.EvaluationWindow,
+) (youtubeUpcomingSelection, error) {
 	targetPolicy := c.targetPolicySnapshot()
 	currentMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.End)
 	previousMinutesUntil := sharedchecker.MinutesUntilFloorZeroClamped(*stream.StartScheduled, window.Start)
 	minutesUntil, targetCrossed := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
 	scheduleChanges, err := c.detectRoomScheduleChanges(ctx, stream, subscriberRooms)
 	if err != nil {
-		return nil, fmt.Errorf("build upcoming notifications: detect schedule change: %w", err)
+		return youtubeUpcomingSelection{}, fmt.Errorf("build upcoming notifications: detect schedule change: %w", err)
 	}
-
+	if !targetCrossed && len(scheduleChanges) == 0 {
+		observeYouTubeUpcomingNoMinuteDecision("no_target", window)
+		return youtubeUpcomingSelection{}, nil
+	}
 	if !targetCrossed {
-		if len(scheduleChanges) == 0 {
-			observeYouTubeUpcomingNoMinuteDecision("no_target", window)
-			return nil, nil
-		}
 		minutesUntil = currentMinutesUntil
 	}
 
-	selection := youtubeUpcomingSelectionLabel(minutesUntil, currentMinutesUntil, targetCrossed)
-	alreadyNotified, err := c.dedupSvc.IsAlreadyNotifiedForSchedule(ctx, stream.ID, *stream.StartScheduled, minutesUntil)
-	if err != nil {
-		return nil, fmt.Errorf("build upcoming notifications: check already notified for schedule: %w", err)
-	}
+	return youtubeUpcomingSelection{
+		currentMinutesUntil:  currentMinutesUntil,
+		previousMinutesUntil: previousMinutesUntil,
+		minutesUntil:         minutesUntil,
+		targetCrossed:        targetCrossed,
+		scheduleChanges:      scheduleChanges,
+		label:                youtubeUpcomingSelectionLabel(minutesUntil, currentMinutesUntil, targetCrossed),
+		selected:             true,
+	}, nil
+}
 
-	if alreadyNotified {
-		observeYouTubeUpcomingDecision("already_notified", minutesUntil, selection, window)
-		return nil, nil
-	}
-
+func buildYouTubeUpcomingRoomNotifications(
+	stream *domain.Stream,
+	subscriberRooms []string,
+	selection youtubeUpcomingSelection,
+) []*domain.AlarmNotification {
 	resolvedStream := ensureScheduledTime(stream, *stream.StartScheduled)
-	notificationScheduleChanges := scheduleChanges
-	if targetCrossed {
+	notificationScheduleChanges := selection.scheduleChanges
+	if selection.targetCrossed {
 		notificationScheduleChanges = nil
 	}
-	notifications := roomNotificationsWithScheduleChanges(
+	return roomNotificationsWithScheduleChanges(
 		subscriberRooms,
 		resolvedStream.Channel,
 		resolvedStream,
-		minutesUntil,
+		selection.minutesUntil,
 		notificationScheduleChanges,
-		!targetCrossed,
+		!selection.targetCrossed,
 	)
+}
 
-	observeYouTubeUpcomingDecision("selected", minutesUntil, selection, window)
+func (c *YouTubeChecker) logYouTubeUpcomingSelection(
+	stream *domain.Stream,
+	selection youtubeUpcomingSelection,
+	window sharedchecker.EvaluationWindow,
+	roomCount int,
+) {
 	c.logger.Info("YouTube upcoming alarm selected",
 		slog.String("stream_id", stream.ID),
 		slog.String("channel_id", youtubeStreamChannelID(stream)),
-		slog.Int("minutes_until", minutesUntil),
-		slog.Int("current_minutes_until", currentMinutesUntil),
-		slog.Int("previous_minutes_until", previousMinutesUntil),
+		slog.Int("minutes_until", selection.minutesUntil),
+		slog.Int("current_minutes_until", selection.currentMinutesUntil),
+		slog.Int("previous_minutes_until", selection.previousMinutesUntil),
 		slog.Bool("window_capped", window.Capped),
 		slog.Bool("initial_observation", window.InitialObservation),
 		slog.Time("window_start", window.Start),
 		slog.Time("window_end", window.End),
 		slog.Time("start_scheduled", stream.StartScheduled.UTC()),
-		slog.String("selection", selection),
-		slog.Int("rooms", len(notifications)),
+		slog.String("selection", selection.label),
+		slog.Int("rooms", roomCount),
 	)
-
-	return notifications, nil
 }
 
 func (c *YouTubeChecker) detectRoomScheduleChanges(

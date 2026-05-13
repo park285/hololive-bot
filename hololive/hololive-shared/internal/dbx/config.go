@@ -30,6 +30,14 @@ import (
 	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
 )
 
+var queryExecModeNames = map[string]string{
+	"cache_statement": "cache_statement",
+	"cache_describe":  "cache_describe",
+	"describe_exec":   "describe_exec",
+	"exec":            "exec",
+	"simple_protocol": "simple_protocol",
+}
+
 type Config struct {
 	Host       string // TCP 호스트 (예: "localhost", "postgres")
 	Port       int    // TCP 포트 (예: 5432)
@@ -74,20 +82,11 @@ func (c Config) DSN() string {
 }
 
 func normalizeQueryExecMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "cache_statement":
-		return "cache_statement"
-	case "cache_describe":
-		return "cache_describe"
-	case "describe_exec":
-		return "describe_exec"
-	case "exec":
-		return "exec"
-	case "simple_protocol":
-		return "simple_protocol"
-	default:
+	normalized, ok := queryExecModeNames[strings.ToLower(strings.TrimSpace(mode))]
+	if !ok {
 		return ""
 	}
+	return normalized
 }
 
 type PoolConfig struct {

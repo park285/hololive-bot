@@ -28,7 +28,7 @@ func TestGetChannelsLiveStatus_FillsIndieOrgWhenUsersLiveOmitsIt(t *testing.T) {
 			if got := params.Get("channels"); got != channelID {
 				return nil, fmt.Errorf("channels = %q, want %q", got, channelID)
 			}
-			return []byte(fmt.Sprintf(`[
+			return fmt.Appendf(nil, `[
 				{
 					"id":"video-1",
 					"title":"indie live",
@@ -36,7 +36,7 @@ func TestGetChannelsLiveStatus_FillsIndieOrgWhenUsersLiveOmitsIt(t *testing.T) {
 					"status":"live",
 					"channel":{"id":"%s","name":"Sakuna Ch. 結城さくな"}
 				}
-			]`, channelID, channelID)), nil
+			]`, channelID, channelID), nil
 		},
 	}
 
@@ -72,14 +72,14 @@ func TestGetChannelsLiveStatus_FillsIndieChannelWhenUsersLiveOmitsChannelObject(
 			if got := params.Get("channels"); got != channelID {
 				return nil, fmt.Errorf("channels = %q, want %q", got, channelID)
 			}
-			return []byte(fmt.Sprintf(`[
+			return fmt.Appendf(nil, `[
 				{
 					"id":"video-1",
 					"title":"indie live no channel object",
 					"channel_id":"%s",
 					"status":"live"
 				}
-			]`, channelID)), nil
+			]`, channelID), nil
 		},
 	}
 

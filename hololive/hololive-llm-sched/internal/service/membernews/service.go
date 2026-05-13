@@ -71,14 +71,8 @@ func (s *Service) SetClock(clockFn func() time.Time) {
 }
 
 func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period model.Period) (*model.Digest, error) {
-	if s == nil {
-		return nil, fmt.Errorf("membernews service is nil")
-	}
-	if s.repository == nil {
-		return nil, fmt.Errorf("membernews repository is nil")
-	}
-	if stringutil.TrimSpace(roomID) == "" {
-		return nil, fmt.Errorf("room id is required")
+	if err := s.validateGenerateRoomDigestRequest(roomID); err != nil {
+		return nil, err
 	}
 
 	normalizedPeriod := model.NormalizePeriod(period)
@@ -102,25 +96,48 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 
 	filtered := FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
 	if len(filtered) == 0 {
-		return &model.Digest{
-			ResultType:   sharedmodel.SummaryResultEmpty,
-			Period:       normalizedPeriod,
-			Headline:     model.DefaultHeadline(normalizedPeriod),
-			TopItems:     []model.SummaryItem{},
-			MoreSummary:  "",
-			OmittedCount: 0,
-			TotalCount:   0,
-		}, nil
+		return emptyDigest(normalizedPeriod), nil
 	}
 
+	digest := s.summarizeRoomDigest(ctx, roomID, normalizedPeriod, members, filtered)
+	normalizeDigest(digest, normalizedPeriod, len(filtered))
+	return digest, nil
+}
+
+func (s *Service) validateGenerateRoomDigestRequest(roomID string) error {
+	if s == nil {
+		return fmt.Errorf("membernews service is nil")
+	}
+	if s.repository == nil {
+		return fmt.Errorf("membernews repository is nil")
+	}
+	if stringutil.TrimSpace(roomID) == "" {
+		return fmt.Errorf("room id is required")
+	}
+	return nil
+}
+
+func emptyDigest(period model.Period) *model.Digest {
+	return &model.Digest{
+		ResultType:   sharedmodel.SummaryResultEmpty,
+		Period:       period,
+		Headline:     model.DefaultHeadline(period),
+		TopItems:     []model.SummaryItem{},
+		MoreSummary:  "",
+		OmittedCount: 0,
+		TotalCount:   0,
+	}
+}
+
+func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate) *model.Digest {
 	if s.summarizer == nil {
-		digest := BuildDeterministicFallback(normalizedPeriod, filtered)
+		digest := BuildDeterministicFallback(period, filtered)
 		digest.TotalCount = len(filtered)
-		return digest, nil
+		return digest
 	}
 
 	digest, err := s.summarizer.Summarize(ctx, model.SummarizeInput{
-		Period:      normalizedPeriod,
+		Period:      period,
 		Now:         s.now(),
 		RoomID:      roomID,
 		RoomMembers: members,
@@ -129,26 +146,28 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 	if err != nil {
 		s.logger.Warn("Member news summarize failed, using deterministic fallback",
 			slog.String("room_id", roomID),
-			slog.String("period", string(normalizedPeriod)),
+			slog.String("period", string(period)),
 			slog.String("error", err.Error()),
 		)
-		digest = BuildDeterministicFallback(normalizedPeriod, filtered)
+		digest = BuildDeterministicFallback(period, filtered)
 	}
 
 	if digest == nil || len(digest.TopItems) == 0 {
-		digest = BuildDeterministicFallback(normalizedPeriod, filtered)
+		digest = BuildDeterministicFallback(period, filtered)
 	}
 
-	digest.Period = normalizedPeriod
+	return digest
+}
+
+func normalizeDigest(digest *model.Digest, period model.Period, totalCount int) {
+	digest.Period = period
 	if digest.Headline == "" {
-		digest.Headline = model.DefaultHeadline(normalizedPeriod)
+		digest.Headline = model.DefaultHeadline(period)
 	}
 	if digest.OmittedCount < 0 {
 		digest.OmittedCount = 0
 	}
-	digest.TotalCount = len(filtered)
-
-	return digest, nil
+	digest.TotalCount = totalCount
 }
 
 func (s *Service) SubscribeRoom(ctx context.Context, roomID, roomName string) error {

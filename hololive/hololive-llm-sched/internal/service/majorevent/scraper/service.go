@@ -214,46 +214,73 @@ func (s *Service) filterIncrementalEvents(
 		return nil, 0, fmt.Errorf("filter incremental events: get recent external ids: %w", err)
 	}
 
-	knownExternalIDs := make(map[string]struct{}, len(recentExternalIDs))
-	for _, externalID := range recentExternalIDs {
-		trimmed := strings.TrimSpace(externalID)
-		if trimmed == "" {
-			continue
-		}
-		knownExternalIDs[trimmed] = struct{}{}
-	}
+	knownExternalIDs := knownExternalIDSet(recentExternalIDs)
+	latestUTC := latestPubDateUTC(latestPubDate)
 
-	latestUTC := time.Time{}
-	if latestPubDate != nil {
-		latestUTC = latestPubDate.UTC()
-	}
+	filtered, skipped := collectIncrementalEvents(events, knownExternalIDs, latestUTC)
+	return filtered, skipped, nil
+}
 
+func collectIncrementalEvents(
+	events []*domain.MajorEvent,
+	knownExternalIDs map[string]struct{},
+	latestUTC time.Time,
+) ([]*domain.MajorEvent, int) {
 	filtered := make([]*domain.MajorEvent, 0, len(events))
 	skipped := 0
 	for _, event := range events {
-		if event == nil {
-			continue
-		}
-
-		externalID := strings.TrimSpace(event.ExternalID)
-		if externalID == "" {
-			continue
-		}
-
-		if _, exists := knownExternalIDs[externalID]; exists {
-			skipped++
-			continue
-		}
-
-		if !latestUTC.IsZero() && event.PubDate != nil && event.PubDate.Before(latestUTC) {
-			skipped++
+		keep, skipKnown := filterIncrementalEvent(event, knownExternalIDs, latestUTC)
+		if !keep {
+			if skipKnown {
+				skipped++
+			}
 			continue
 		}
 
 		filtered = append(filtered, event)
 	}
 
-	return filtered, skipped, nil
+	return filtered, skipped
+}
+
+func knownExternalIDSet(externalIDs []string) map[string]struct{} {
+	knownExternalIDs := make(map[string]struct{}, len(externalIDs))
+	for _, externalID := range externalIDs {
+		trimmed := strings.TrimSpace(externalID)
+		if trimmed == "" {
+			continue
+		}
+		knownExternalIDs[trimmed] = struct{}{}
+	}
+	return knownExternalIDs
+}
+
+func latestPubDateUTC(latestPubDate *time.Time) time.Time {
+	if latestPubDate == nil {
+		return time.Time{}
+	}
+	return latestPubDate.UTC()
+}
+
+func filterIncrementalEvent(event *domain.MajorEvent, knownExternalIDs map[string]struct{}, latestUTC time.Time) (bool, bool) {
+	if event == nil {
+		return false, false
+	}
+
+	externalID := strings.TrimSpace(event.ExternalID)
+	if externalID == "" {
+		return false, false
+	}
+
+	if _, exists := knownExternalIDs[externalID]; exists {
+		return false, true
+	}
+
+	if !latestUTC.IsZero() && event.PubDate != nil && event.PubDate.Before(latestUTC) {
+		return false, true
+	}
+
+	return true, false
 }
 
 func dedupeEvents(events []*domain.MajorEvent) []*domain.MajorEvent {
@@ -264,24 +291,40 @@ func dedupeEvents(events []*domain.MajorEvent) []*domain.MajorEvent {
 	seen := make(map[string]struct{}, len(events))
 	deduped := make([]*domain.MajorEvent, 0, len(events))
 	for _, event := range events {
-		if event == nil {
-			continue
-		}
-
-		key := strings.TrimSpace(event.ExternalID)
-		if key == "" {
-			key = strings.TrimSpace(event.Link)
-		}
-		if key == "" {
-			continue
-		}
-
-		if _, exists := seen[key]; exists {
-			continue
-		}
-
-		seen[key] = struct{}{}
-		deduped = append(deduped, event)
+		deduped = appendDedupeEvent(deduped, seen, event)
 	}
 	return deduped
+}
+
+func appendDedupeEvent(
+	deduped []*domain.MajorEvent,
+	seen map[string]struct{},
+	event *domain.MajorEvent,
+) []*domain.MajorEvent {
+	key, ok := dedupeEventKey(event)
+	if !ok {
+		return deduped
+	}
+
+	if _, exists := seen[key]; exists {
+		return deduped
+	}
+
+	seen[key] = struct{}{}
+	return append(deduped, event)
+}
+
+func dedupeEventKey(event *domain.MajorEvent) (string, bool) {
+	if event == nil {
+		return "", false
+	}
+
+	key := strings.TrimSpace(event.ExternalID)
+	if key == "" {
+		key = strings.TrimSpace(event.Link)
+	}
+	if key == "" {
+		return "", false
+	}
+	return key, true
 }

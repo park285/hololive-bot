@@ -100,41 +100,56 @@ func alarmChannelName(notification *domain.AlarmNotification) string {
 		return ""
 	}
 
-	var name string
-
-	if notification.Channel != nil {
-		name = stringutil.TrimSpace(notification.Channel.GetDisplayName())
-	}
-
-	if name == "" && notification.Stream != nil {
-		name = stringutil.TrimSpace(notification.Stream.ChannelName)
-	}
-
+	name := alarmBaseChannelName(notification)
 	if name == "" {
 		return ""
 	}
 
-	// org 태그 추가 (Hololive 제외)
-	if notification.Channel != nil && notification.Channel.Org != nil {
-		org := *notification.Channel.Org
-		if org != "" && org != "Hololive" {
-			displayOrg := org
-			switch org {
-			case "Nijisanji":
-				displayOrg = "니지산지"
-			case "VSPO":
-				displayOrg = "VSPO"
-			case "Independents":
-				displayOrg = "개인세"
-			case "Stellive":
-				displayOrg = "스텔라이브"
-			}
+	return alarmChannelNameWithOrg(name, notification.Channel)
+}
 
-			name = fmt.Sprintf("[%s] %s", displayOrg, name)
+func alarmBaseChannelName(notification *domain.AlarmNotification) string {
+	if notification.Channel != nil {
+		if name := stringutil.TrimSpace(notification.Channel.GetDisplayName()); name != "" {
+			return name
 		}
 	}
 
-	return name
+	if notification.Stream == nil {
+		return ""
+	}
+
+	return stringutil.TrimSpace(notification.Stream.ChannelName)
+}
+
+func alarmChannelNameWithOrg(name string, channel *domain.Channel) string {
+	if channel == nil || channel.Org == nil {
+		return name
+	}
+
+	displayOrg := displayAlarmOrg(*channel.Org)
+	if displayOrg == "" {
+		return name
+	}
+
+	return fmt.Sprintf("[%s] %s", displayOrg, name)
+}
+
+func displayAlarmOrg(org string) string {
+	if org == "" || org == "Hololive" {
+		return ""
+	}
+
+	labels := map[string]string{
+		"Nijisanji":    "니지산지",
+		"Independents": "개인세",
+		"Stellive":     "스텔라이브",
+	}
+	if label, ok := labels[org]; ok {
+		return label
+	}
+
+	return org
 }
 
 func (f *ResponseFormatter) FormatAlarmAdded(ctx context.Context, memberName string, added bool, nextStreamInfo *domain.NextStreamInfo) string {
@@ -197,23 +212,30 @@ func buildNextStreamInfoView(info *domain.NextStreamInfo) *nextStreamInfoView {
 	}
 
 	if info.Status.IsUpcoming() {
-		if info.StartScheduled == nil || view.URL == "" {
+		if !populateUpcomingNextStreamView(view, info) {
 			return nil
-		}
-
-		scheduled := *info.StartScheduled
-
-		view.ScheduledKST = util.FormatKST(scheduled, "01/02 15:04")
-
-		timeLeft := time.Until(scheduled)
-		if timeLeft <= 0 {
-			view.StartingSoon = true
-		} else {
-			view.TimeDetail = formatUpcomingTimeDetail(timeLeft)
 		}
 	}
 
 	return view
+}
+
+func populateUpcomingNextStreamView(view *nextStreamInfoView, info *domain.NextStreamInfo) bool {
+	if info.StartScheduled == nil || view.URL == "" {
+		return false
+	}
+
+	scheduled := *info.StartScheduled
+	view.ScheduledKST = util.FormatKST(scheduled, "01/02 15:04")
+
+	timeLeft := time.Until(scheduled)
+	if timeLeft <= 0 {
+		view.StartingSoon = true
+		return true
+	}
+
+	view.TimeDetail = formatUpcomingTimeDetail(timeLeft)
+	return true
 }
 
 func formatUpcomingTimeDetail(timeLeft time.Duration) string {

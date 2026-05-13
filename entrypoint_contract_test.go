@@ -26,7 +26,6 @@ func TestCommandEntrypointsStayAnchoredToOwningHelpers(t *testing.T) {
 	}
 
 	for _, contract := range contracts {
-		contract := contract
 		t.Run(contract.Path, func(t *testing.T) {
 			t.Parallel()
 

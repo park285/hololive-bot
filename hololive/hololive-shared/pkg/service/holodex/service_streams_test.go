@@ -39,7 +39,7 @@ func TestGetLiveStreamsByOrg_CachesFilteredResults(t *testing.T) {
 					ID:        "live-1",
 					Title:     "Live stream",
 					Status:    domain.StreamStatusLive,
-					ChannelID: stringPtr("channel-live"),
+					ChannelID: new("channel-live"),
 					Channel: &ChannelRaw{
 						ID:   "channel-live",
 						Name: "Live Member",
@@ -50,7 +50,7 @@ func TestGetLiveStreamsByOrg_CachesFilteredResults(t *testing.T) {
 					ID:        "live-stars",
 					Title:     "Filtered stars",
 					Status:    domain.StreamStatusLive,
-					ChannelID: stringPtr("channel-stars"),
+					ChannelID: new("channel-stars"),
 					Channel: &ChannelRaw{
 						ID:     "channel-stars",
 						Name:   "Stars Member",
@@ -62,7 +62,7 @@ func TestGetLiveStreamsByOrg_CachesFilteredResults(t *testing.T) {
 					ID:        "upcoming-ignored",
 					Title:     "Upcoming",
 					Status:    domain.StreamStatusUpcoming,
-					ChannelID: stringPtr("channel-live"),
+					ChannelID: new("channel-live"),
 					Channel: &ChannelRaw{
 						ID:   "channel-live",
 						Name: "Live Member",
@@ -125,7 +125,7 @@ func TestGetUpcomingStreamsByOrg_CachesFilteredResults(t *testing.T) {
 					ID:             "upcoming-1",
 					Title:          "Upcoming stream",
 					Status:         domain.StreamStatusUpcoming,
-					ChannelID:      stringPtr("channel-upcoming"),
+					ChannelID:      new("channel-upcoming"),
 					StartScheduled: &future,
 					Channel: &ChannelRaw{
 						ID:   "channel-upcoming",
@@ -137,7 +137,7 @@ func TestGetUpcomingStreamsByOrg_CachesFilteredResults(t *testing.T) {
 					ID:        "live-ignored",
 					Title:     "Already live",
 					Status:    domain.StreamStatusLive,
-					ChannelID: stringPtr("channel-upcoming"),
+					ChannelID: new("channel-upcoming"),
 					Channel: &ChannelRaw{
 						ID:   "channel-upcoming",
 						Name: "Upcoming Member",
@@ -179,8 +179,4 @@ func mustMarshalStreamRawList(t *testing.T, streams []StreamRaw) []byte {
 		t.Fatalf("marshal streams: %v", err)
 	}
 	return body
-}
-
-func stringPtr(value string) *string {
-	return &value
 }

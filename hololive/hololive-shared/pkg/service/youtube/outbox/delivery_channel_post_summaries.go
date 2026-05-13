@@ -52,24 +52,9 @@ func BuildChannelPostDeliverySummaries(posts []PostSendCount) ([]ChannelPostDeli
 		return []ChannelPostDeliverySummary{}, nil
 	}
 
-	accumulators := make(map[string]*channelPostDeliverySummaryAccumulator, len(posts))
-	for i := range posts {
-		channelID := strings.TrimSpace(posts[i].ChannelID)
-		if channelID == "" {
-			return nil, fmt.Errorf("post[%d] channel id is empty", i)
-		}
-
-		accumulator, ok := accumulators[channelID]
-		if !ok {
-			accumulator = &channelPostDeliverySummaryAccumulator{
-				summary: ChannelPostDeliverySummary{ChannelID: channelID},
-			}
-			accumulators[channelID] = accumulator
-		}
-
-		if err := accumulator.add(posts[i]); err != nil {
-			return nil, fmt.Errorf("post[%d] %s: %w", i, strings.TrimSpace(posts[i].ContentID), err)
-		}
+	accumulators, err := buildChannelPostDeliverySummaryAccumulators(posts)
+	if err != nil {
+		return nil, err
 	}
 
 	summaries := make([]ChannelPostDeliverySummary, 0, len(accumulators))
@@ -89,6 +74,40 @@ func BuildChannelPostDeliverySummaries(posts []PostSendCount) ([]ChannelPostDeli
 	return summaries, nil
 }
 
+func buildChannelPostDeliverySummaryAccumulators(
+	posts []PostSendCount,
+) (map[string]*channelPostDeliverySummaryAccumulator, error) {
+	accumulators := make(map[string]*channelPostDeliverySummaryAccumulator, len(posts))
+	for i := range posts {
+		channelID := strings.TrimSpace(posts[i].ChannelID)
+		if channelID == "" {
+			return nil, fmt.Errorf("post[%d] channel id is empty", i)
+		}
+
+		accumulator := channelPostDeliverySummaryAccumulatorFor(accumulators, channelID)
+		if err := accumulator.add(posts[i]); err != nil {
+			return nil, fmt.Errorf("post[%d] %s: %w", i, strings.TrimSpace(posts[i].ContentID), err)
+		}
+	}
+	return accumulators, nil
+}
+
+func channelPostDeliverySummaryAccumulatorFor(
+	accumulators map[string]*channelPostDeliverySummaryAccumulator,
+	channelID string,
+) *channelPostDeliverySummaryAccumulator {
+	accumulator, ok := accumulators[channelID]
+	if ok {
+		return accumulator
+	}
+
+	accumulator = &channelPostDeliverySummaryAccumulator{
+		summary: ChannelPostDeliverySummary{ChannelID: channelID},
+	}
+	accumulators[channelID] = accumulator
+	return accumulator
+}
+
 type channelPostDeliverySummaryAccumulator struct {
 	summary ChannelPostDeliverySummary
 }
@@ -100,24 +119,39 @@ func (a *channelPostDeliverySummaryAccumulator) add(post PostSendCount) error {
 	}
 	observedAt = observedAt.UTC()
 
+	a.addObservedAt(observedAt)
+	a.summary.DetectedPostCount++
+
+	if err := a.addDetectedPostType(post.AlarmType); err != nil {
+		return err
+	}
+	a.addDeliveryResult(post)
+
+	return nil
+}
+
+func (a *channelPostDeliverySummaryAccumulator) addObservedAt(observedAt time.Time) {
 	if a.summary.EarliestObservedAt == nil || observedAt.Before(a.summary.EarliestObservedAt.UTC()) {
 		a.summary.EarliestObservedAt = cloneUTCTimePtr(&observedAt)
 	}
 	if a.summary.LatestObservedAt == nil || observedAt.After(a.summary.LatestObservedAt.UTC()) {
 		a.summary.LatestObservedAt = cloneUTCTimePtr(&observedAt)
 	}
+}
 
-	a.summary.DetectedPostCount++
-
-	switch post.AlarmType {
+func (a *channelPostDeliverySummaryAccumulator) addDetectedPostType(alarmType domain.AlarmType) error {
+	switch alarmType {
 	case domain.AlarmTypeCommunity:
 		a.summary.CommunityDetectedPostCount++
 	case domain.AlarmTypeShorts:
 		a.summary.ShortsDetectedPostCount++
 	default:
-		return fmt.Errorf("unsupported alarm type: %s", post.AlarmType)
+		return fmt.Errorf("unsupported alarm type: %s", alarmType)
 	}
+	return nil
+}
 
+func (a *channelPostDeliverySummaryAccumulator) addDeliveryResult(post PostSendCount) {
 	if hasChannelPostDeliverySendActivity(post) {
 		a.summary.AlarmSentPostCount++
 	}
@@ -129,8 +163,6 @@ func (a *channelPostDeliverySummaryAccumulator) add(post PostSendCount) error {
 	if hasChannelPostDeliveryFailure(post) {
 		a.summary.FailedPostCount++
 	}
-
-	return nil
 }
 
 func hasChannelPostDeliverySendActivity(post PostSendCount) bool {

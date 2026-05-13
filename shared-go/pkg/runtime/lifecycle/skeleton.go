@@ -23,65 +23,100 @@ type Options struct {
 }
 
 func Run(opts Options) error {
-	baseCtx := opts.BaseContext
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
-
-	notifySignals := opts.NotifySignals
-	if notifySignals == nil {
-		notifySignals = defaultSignalNotifier
-	}
-
-	signals := opts.Signals
-	if len(signals) == 0 {
-		signals = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
-	}
-
-	sigCh, stopSignals := notifySignals(signals...)
-	if stopSignals == nil {
-		stopSignals = func() {}
-	}
+	baseCtx := baseContext(opts.BaseContext)
+	sigCh, stopSignals := signalSubscription(opts.NotifySignals, opts.Signals)
 	defer stopSignals()
 
 	runCtx, cancel := context.WithCancel(baseCtx)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	if opts.Start != nil {
-		opts.Start(runCtx, errCh)
-	}
-
-	select {
-	case sig := <-sigCh:
-		if opts.OnSignal != nil {
-			opts.OnSignal(sig)
-		}
-	case err := <-errCh:
-		if opts.OnError != nil {
-			opts.OnError(err)
-		}
-	case <-baseCtx.Done():
-	}
-
-	if opts.BeforeShutdown != nil {
-		opts.BeforeShutdown()
-	}
+	startRuntime(opts.Start, runCtx, errCh)
+	waitForStop(baseCtx, sigCh, errCh, opts.OnSignal, opts.OnError)
+	beforeShutdown(opts.BeforeShutdown)
 
 	cancel()
 
-	shutdownCtx := context.Background()
-	shutdownCancel := func() {}
-	if opts.ShutdownTimeout > 0 {
-		shutdownCtx, shutdownCancel = context.WithTimeout(context.Background(), opts.ShutdownTimeout)
-	}
+	shutdownCtx, shutdownCancel := shutdownContext(opts.ShutdownTimeout)
 	defer shutdownCancel()
 
-	if opts.Shutdown == nil {
-		return nil
+	return shutdown(opts.Shutdown, shutdownCtx)
+}
+
+func baseContext(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
+}
+
+func signalSubscription(notifySignals SignalNotifier, signals []os.Signal) (<-chan os.Signal, func()) {
+	if notifySignals == nil {
+		notifySignals = defaultSignalNotifier
+	}
+	if len(signals) == 0 {
+		signals = []os.Signal{syscall.SIGINT, syscall.SIGTERM}
 	}
 
-	return opts.Shutdown(shutdownCtx)
+	sigCh, stopSignals := notifySignals(signals...)
+	if stopSignals != nil {
+		return sigCh, stopSignals
+	}
+	return sigCh, func() {}
+}
+
+func startRuntime(start func(ctx context.Context, errCh chan<- error), ctx context.Context, errCh chan<- error) {
+	if start != nil {
+		start(ctx, errCh)
+	}
+}
+
+func waitForStop(
+	baseCtx context.Context,
+	sigCh <-chan os.Signal,
+	errCh <-chan error,
+	onSignal func(os.Signal),
+	onError func(error),
+) {
+	select {
+	case sig := <-sigCh:
+		handleSignal(onSignal, sig)
+	case err := <-errCh:
+		handleRuntimeError(onError, err)
+	case <-baseCtx.Done():
+	}
+}
+
+func handleSignal(fn func(os.Signal), sig os.Signal) {
+	if fn != nil {
+		fn(sig)
+	}
+}
+
+func handleRuntimeError(fn func(error), err error) {
+	if fn != nil {
+		fn(err)
+	}
+}
+
+func beforeShutdown(fn func()) {
+	if fn != nil {
+		fn()
+	}
+}
+
+func shutdownContext(timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(context.Background(), timeout)
+	}
+	return context.Background(), func() {}
+}
+
+func shutdown(fn func(ctx context.Context) error, ctx context.Context) error {
+	if fn == nil {
+		return nil
+	}
+	return fn(ctx)
 }
 
 func defaultSignalNotifier(signals ...os.Signal) (<-chan os.Signal, func()) {

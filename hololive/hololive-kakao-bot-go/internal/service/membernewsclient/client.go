@@ -74,15 +74,8 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == http.StatusNotFound {
-		var parsed errorResponse
-		if decodeErr := sharedjson.NewDecoder(resp.Body).Decode(&parsed); decodeErr != nil {
-			return nil, fmt.Errorf("decode not found response: %w", decodeErr)
-		}
-
-		if strings.EqualFold(strings.TrimSpace(parsed.Error), "no_subscribed_members") {
-			return nil, membernewscontracts.ErrNoSubscribedMembers
-		}
+	if err := handleRoomDigestNotFound(resp); err != nil {
+		return nil, err
 	}
 
 	if err := c.httpClient.CheckStatus(resp); err != nil {
@@ -95,6 +88,23 @@ func (c *Client) GenerateRoomDigest(ctx context.Context, roomID string, period m
 	}
 
 	return &digest, nil
+}
+
+func handleRoomDigestNotFound(resp *http.Response) error {
+	if resp.StatusCode != http.StatusNotFound {
+		return nil
+	}
+
+	var parsed errorResponse
+	if decodeErr := sharedjson.NewDecoder(resp.Body).Decode(&parsed); decodeErr != nil {
+		return fmt.Errorf("decode not found response: %w", decodeErr)
+	}
+
+	if strings.EqualFold(strings.TrimSpace(parsed.Error), "no_subscribed_members") {
+		return membernewscontracts.ErrNoSubscribedMembers
+	}
+
+	return nil
 }
 
 func (c *Client) SubscribeRoom(ctx context.Context, roomID, roomName string) error {

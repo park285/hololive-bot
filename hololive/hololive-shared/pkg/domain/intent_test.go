@@ -57,9 +57,9 @@ func TestMemberIntent_IsMemberInfoIntent(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		mic    *domain.MemberIntent
-		want   bool
+		name string
+		mic  *domain.MemberIntent
+		want bool
 	}{
 		{
 			name: "nil 포인터는 false",

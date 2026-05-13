@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
+	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
 
 func TestParseContinuousObservationCutover(t *testing.T) {

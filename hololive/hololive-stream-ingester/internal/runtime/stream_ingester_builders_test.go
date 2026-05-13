@@ -245,7 +245,7 @@ func extractScraperClientFromPoller(t *testing.T, channelPoller poller.Poller) *
 
 	value := reflect.ValueOf(channelPoller)
 	require.True(t, value.IsValid())
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		value = value.Elem()
 	}
 	field := value.FieldByName("client")
@@ -261,7 +261,7 @@ func extractPollerBoolField(t *testing.T, channelPoller poller.Poller, fieldName
 
 	value := reflect.ValueOf(channelPoller)
 	require.True(t, value.IsValid())
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		value = value.Elem()
 	}
 	field := value.FieldByName(fieldName)

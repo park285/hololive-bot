@@ -88,6 +88,29 @@ func parseVideoToEvent(video gjson.Result) *UpcomingEvent {
 		return nil
 	}
 
+	return &UpcomingEvent{
+		VideoID:       videoID,
+		Title:         videoTitleText(video),
+		Thumbnail:     parseThumbnailSources(video.Get("thumbnail.thumbnails")),
+		Status:        videoEventStatus(video),
+		StartTime:     videoEventStartTime(video),
+		ViewCountText: videoViewCountText(video),
+		ChannelTitle:  video.Get("shortBylineText.runs.0.text").String(),
+	}
+}
+
+func videoEventStatus(video gjson.Result) string {
+	status := thumbnailOverlayEventStatus(video)
+	if status != "DEFAULT" {
+		return status
+	}
+	if video.Get("upcomingEventData").Exists() {
+		return "UPCOMING"
+	}
+	return status
+}
+
+func thumbnailOverlayEventStatus(video gjson.Result) string {
 	status := "DEFAULT"
 	video.Get("thumbnailOverlays").ForEach(func(_, overlay gjson.Result) bool {
 		style := overlay.Get("thumbnailOverlayTimeStatusRenderer.style").String()
@@ -97,33 +120,27 @@ func parseVideoToEvent(video gjson.Result) *UpcomingEvent {
 		}
 		return true
 	})
+	return status
+}
 
-	if video.Get("upcomingEventData").Exists() && status == "DEFAULT" {
-		status = "UPCOMING"
+func videoEventStartTime(video gjson.Result) *int64 {
+	st := video.Get("upcomingEventData.startTime").Int()
+	if st <= 0 {
+		return nil
 	}
+	return &st
+}
 
-	var startTime *int64
-	if st := video.Get("upcomingEventData.startTime").Int(); st > 0 {
-		startTime = &st
+func videoTitleText(video gjson.Result) string {
+	if title := video.Get("title.simpleText").String(); title != "" {
+		return title
 	}
+	return video.Get("title.runs.0.text").String()
+}
 
-	title := video.Get("title.simpleText").String()
-	if title == "" {
-		title = video.Get("title.runs.0.text").String()
+func videoViewCountText(video gjson.Result) string {
+	if text := video.Get("viewCountText.simpleText").String(); text != "" {
+		return text
 	}
-
-	viewCountText := video.Get("viewCountText.simpleText").String()
-	if viewCountText == "" {
-		viewCountText = video.Get("viewCountText.runs.0.text").String()
-	}
-
-	return &UpcomingEvent{
-		VideoID:       videoID,
-		Title:         title,
-		Thumbnail:     parseThumbnailSources(video.Get("thumbnail.thumbnails")),
-		Status:        status,
-		StartTime:     startTime,
-		ViewCountText: viewCountText,
-		ChannelTitle:  video.Get("shortBylineText.runs.0.text").String(),
-	}
+	return video.Get("viewCountText.runs.0.text").String()
 }

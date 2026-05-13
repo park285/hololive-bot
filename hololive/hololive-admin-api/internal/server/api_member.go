@@ -76,26 +76,8 @@ func (h *MemberAPIHandler) handleAliasOperation(
 		return
 	}
 
-	var req aliasRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
-		sharedserver.RespondError(c, 400, "invalid request body", nil)
-
-		return
-	}
-
-	req.Alias = normalizeAliasInput(req.Alias)
-	if req.Alias == "" {
-		h.safeLogger().Warn("Alias must not be empty after normalization")
-		sharedserver.RespondError(c, 400, "Alias must not be empty", nil)
-
-		return
-	}
-
-	if utf8.RuneCountInString(req.Alias) > aliasMaxLength {
-		h.safeLogger().Warn("Alias exceeds max length", slog.Int("max", aliasMaxLength))
-		sharedserver.RespondError(c, 400, fmt.Sprintf("Alias must be at most %d characters", aliasMaxLength), nil)
-
+	req, ok := h.bindAliasRequest(c)
+	if !ok {
 		return
 	}
 
@@ -126,16 +108,47 @@ func (h *MemberAPIHandler) handleAliasOperation(
 		return
 	}
 
+	h.respondAliasOperationSuccess(c, memberID, req.Type, req.Alias, operationName)
+}
+
+func (h *MemberAPIHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
+	var req aliasRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
+		sharedserver.RespondError(c, 400, "invalid request body", nil)
+
+		return aliasRequest{}, false
+	}
+
+	req.Alias = normalizeAliasInput(req.Alias)
+	if req.Alias == "" {
+		h.safeLogger().Warn("Alias must not be empty after normalization")
+		sharedserver.RespondError(c, 400, "Alias must not be empty", nil)
+
+		return aliasRequest{}, false
+	}
+
+	if utf8.RuneCountInString(req.Alias) > aliasMaxLength {
+		h.safeLogger().Warn("Alias exceeds max length", slog.Int("max", aliasMaxLength))
+		sharedserver.RespondError(c, 400, fmt.Sprintf("Alias must be at most %d characters", aliasMaxLength), nil)
+
+		return aliasRequest{}, false
+	}
+
+	return req, true
+}
+
+func (h *MemberAPIHandler) respondAliasOperationSuccess(c *gin.Context, memberID int, aliasType, alias, operationName string) {
 	h.safeLogger().Info("Alias "+operationName,
 		slog.Int("member_id", memberID),
-		slog.String("type", req.Type),
-		slog.String("alias", req.Alias),
+		slog.String("type", aliasType),
+		slog.String("alias", alias),
 	)
 
-	h.logActivity("member_alias_"+operationName, fmt.Sprintf("Member alias %s: %s (ID: %d)", operationName, req.Alias, memberID), map[string]any{
+	h.logActivity("member_alias_"+operationName, fmt.Sprintf("Member alias %s: %s (ID: %d)", operationName, alias, memberID), map[string]any{
 		"member_id": memberID,
-		"type":      req.Type,
-		"alias":     req.Alias,
+		"type":      aliasType,
+		"alias":     alias,
 	})
 
 	c.JSON(200, gin.H{
@@ -208,20 +221,24 @@ func (h *MemberAPIHandler) SetGraduation(c *gin.Context) {
 
 	h.invalidateMemberIndex()
 
+	h.respondGraduationSuccess(c, memberID, req.IsGraduated)
+}
+
+func (h *MemberAPIHandler) respondGraduationSuccess(c *gin.Context, memberID int, isGraduated bool) {
 	h.safeLogger().Info("Graduation status updated",
 		slog.Int("member_id", memberID),
-		slog.Bool("is_graduated", req.IsGraduated),
+		slog.Bool("is_graduated", isGraduated),
 	)
 
 	statusStr := "graduated"
 
-	if !req.IsGraduated {
+	if !isGraduated {
 		statusStr = "active"
 	}
 
 	h.logActivity("member_graduation", fmt.Sprintf("Member status changed to %s (ID: %d)", statusStr, memberID), map[string]any{
 		"member_id":    memberID,
-		"is_graduated": req.IsGraduated,
+		"is_graduated": isGraduated,
 	})
 
 	c.JSON(200, gin.H{

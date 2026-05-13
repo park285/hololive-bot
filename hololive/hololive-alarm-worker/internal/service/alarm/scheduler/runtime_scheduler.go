@@ -21,7 +21,6 @@
 package scheduler
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,7 +35,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
@@ -98,50 +96,19 @@ func NewRuntimeScheduler(
 	twitchEnabled bool,
 	logger *slog.Logger,
 ) (*RuntimeScheduler, error) {
-	if cacheSvc == nil {
-		return nil, errors.New("new runtime scheduler: cache service is nil")
+	if err := validateRuntimeSchedulerDeps(cacheSvc, holodexSvc, chzzkClient, twitchClient, alarmCRUD); err != nil {
+		return nil, err
 	}
 
-	if holodexSvc == nil {
-		return nil, errors.New("new runtime scheduler: holodex service is nil")
-	}
-
-	if chzzkClient == nil {
-		return nil, errors.New("new runtime scheduler: chzzk client is nil")
-	}
-
-	if twitchClient == nil {
-		return nil, errors.New("new runtime scheduler: twitch client is nil")
-	}
-
-	if alarmCRUD == nil {
-		return nil, errors.New("new runtime scheduler: alarm CRUD is nil")
-	}
-
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = runtimeSchedulerLogger(logger)
 
 	targetMinutes := sharedchecker.NormalizeTargetMinutes(alarmCRUD.GetTargetMinutes())
-	youtubeInterval := notifCfg.CheckInterval
-	youtubeEvaluationWindowCap := youtubeEvaluationWindowCap(youtubeInterval)
-	if youtubeInterval <= 0 {
-		youtubeInterval = defaultYouTubeInterval
-	}
-
+	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(notifCfg.CheckInterval)
 	tierScheduler := tier.NewTieredScheduler(logger)
 	dedupSvc := dedup.NewService(cacheSvc, targetMinutes, logger)
-	queuePublisher := queue.NewPublisher(
-		cacheSvc,
-		logger,
-		queue.WithOutbox(outbox),
-		queue.WithPublishMode(publishCfg.Mode),
-		queue.WithShadowFatal(publishCfg.ShadowFatal),
-		queue.WithWakeupEnabled(publishCfg.WakeupEnabled),
-		queue.WithMaxDeliveriesPerBatch(publishCfg.MaxDeliveriesPerBatch),
-	)
+	queuePublisher := newRuntimeSchedulerQueuePublisher(cacheSvc, logger, outbox, publishCfg)
 
-	youtubeChecker, err := checker.NewYouTubeChecker(
+	youtubeChecker, err := newRuntimeSchedulerYouTubeChecker(
 		cacheSvc,
 		holodexSvc,
 		tierScheduler,
@@ -151,7 +118,7 @@ func NewRuntimeScheduler(
 		logger,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("new runtime scheduler: create youtube checker: %w", err)
+		return nil, err
 	}
 
 	chzzkChecker, err := checker.NewChzzkChecker(cacheSvc, chzzkClient, logger)
@@ -168,6 +135,109 @@ func NewRuntimeScheduler(
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
 
+	return newRuntimeSchedulerInstance(cacheSvc, alarmCRUD, youtubeChecker, chzzkChecker, twitchChecker, notifierSvc, dedupSvc, youtubeInterval, logger), nil
+}
+
+func newRuntimeSchedulerYouTubeChecker(
+	cacheSvc cache.Client,
+	holodexSvc *holodex.Service,
+	tierScheduler *tier.TieredScheduler,
+	dedupSvc *dedup.Service,
+	targetMinutes []int,
+	evaluationWindowCap time.Duration,
+	logger *slog.Logger,
+) (*checker.YouTubeChecker, error) {
+	youtubeChecker, err := checker.NewYouTubeChecker(
+		cacheSvc,
+		holodexSvc,
+		tierScheduler,
+		dedupSvc,
+		targetMinutes,
+		evaluationWindowCap,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("new runtime scheduler: create youtube checker: %w", err)
+	}
+
+	return youtubeChecker, nil
+}
+
+func runtimeSchedulerLogger(logger *slog.Logger) *slog.Logger {
+	if logger == nil {
+		return slog.Default()
+	}
+
+	return logger
+}
+
+func validateRuntimeSchedulerDeps(
+	cacheSvc cache.Client,
+	holodexSvc *holodex.Service,
+	chzzkClient *chzzk.Client,
+	twitchClient *twitch.Client,
+	alarmCRUD domain.AlarmCRUD,
+) error {
+	if cacheSvc == nil {
+		return errors.New("new runtime scheduler: cache service is nil")
+	}
+
+	if holodexSvc == nil {
+		return errors.New("new runtime scheduler: holodex service is nil")
+	}
+
+	if chzzkClient == nil {
+		return errors.New("new runtime scheduler: chzzk client is nil")
+	}
+
+	if twitchClient == nil {
+		return errors.New("new runtime scheduler: twitch client is nil")
+	}
+
+	if alarmCRUD == nil {
+		return errors.New("new runtime scheduler: alarm CRUD is nil")
+	}
+
+	return nil
+}
+
+func runtimeSchedulerYouTubeTiming(checkInterval time.Duration) (time.Duration, time.Duration) {
+	evaluationWindowCap := youtubeEvaluationWindowCap(checkInterval)
+	if checkInterval <= 0 {
+		return defaultYouTubeInterval, evaluationWindowCap
+	}
+
+	return checkInterval, evaluationWindowCap
+}
+
+func newRuntimeSchedulerQueuePublisher(
+	cacheSvc cache.Client,
+	logger *slog.Logger,
+	outbox dispatchoutbox.Writer,
+	publishCfg queue.PublishConfig,
+) *queue.Publisher {
+	return queue.NewPublisher(
+		cacheSvc,
+		logger,
+		queue.WithOutbox(outbox),
+		queue.WithPublishMode(publishCfg.Mode),
+		queue.WithShadowFatal(publishCfg.ShadowFatal),
+		queue.WithWakeupEnabled(publishCfg.WakeupEnabled),
+		queue.WithMaxDeliveriesPerBatch(publishCfg.MaxDeliveriesPerBatch),
+	)
+}
+
+func newRuntimeSchedulerInstance(
+	cacheSvc cache.Client,
+	alarmCRUD domain.AlarmCRUD,
+	youtubeChecker *checker.YouTubeChecker,
+	chzzkChecker checker.Runner,
+	twitchChecker checker.Runner,
+	notifierSvc checker.Sender,
+	dedupSvc targetMinutesUpdater,
+	youtubeInterval time.Duration,
+	logger *slog.Logger,
+) *RuntimeScheduler {
 	return &RuntimeScheduler{
 		youtubeChecker: youtubeChecker,
 		chzzkChecker:   chzzkChecker,
@@ -190,197 +260,5 @@ func NewRuntimeScheduler(
 		twitchTimeout:  defaultPlatformTimeout,
 
 		logger: logger,
-	}, nil
-}
-
-// Start는 3개 플랫폼 루프를 병렬 실행하고 context 취소 시 종료한다.
-func (s *RuntimeScheduler) Start(ctx context.Context) error {
-	if s == nil {
-		return errors.New("runtime scheduler is nil")
 	}
-	if ctx == nil {
-		return errors.New("runtime scheduler context is nil")
-	}
-
-	eg, egCtx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		return s.runLoop(egCtx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
-	})
-	eg.Go(func() error {
-		return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
-	})
-	s.startTwitchLoop(eg, egCtx)
-	eg.Go(func() error {
-		return s.runAlarmCacheRecoveryLoop(egCtx)
-	})
-
-	if err := eg.Wait(); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil
-		}
-
-		return fmt.Errorf("runtime scheduler stopped: %w", err)
-	}
-
-	return nil
-}
-
-const runtimeSchedulerLoopNameTwitch = "twitch"
-
-func (s *RuntimeScheduler) runLoop(
-	ctx context.Context,
-	name string,
-	interval time.Duration,
-	timeout time.Duration,
-	runImmediately bool,
-	run func(context.Context) error,
-) error {
-	next := time.NewTimer(initialLoopDelay(time.Now(), interval, runImmediately))
-	defer next.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Info("Alarm loop stopped", slog.String("loop", name))
-			return ctx.Err()
-		case <-next.C:
-			loopCtx, cancel := context.WithTimeout(ctx, timeout)
-			err := run(loopCtx)
-
-			cancel()
-
-			if err != nil {
-				s.logger.Warn("Alarm loop iteration failed",
-					slog.String("loop", name),
-					slog.Any("error", err),
-				)
-			}
-
-			delay := time.Until(nextAligned(time.Now(), interval))
-			if delay < 0 {
-				delay = 0
-			}
-			next.Reset(delay)
-		}
-	}
-}
-
-func initialLoopDelay(now time.Time, interval time.Duration, runImmediately bool) time.Duration {
-	if runImmediately || interval <= 0 {
-		return 0
-	}
-
-	firstRunAt := firstAlignedRunAt(now, interval)
-	if !firstRunAt.After(now) {
-		return 0
-	}
-
-	return firstRunAt.Sub(now)
-}
-
-func firstAlignedRunAt(now time.Time, interval time.Duration) time.Time {
-	if interval <= 0 {
-		return now
-	}
-
-	if now.Equal(now.Truncate(interval)) {
-		return now
-	}
-
-	return nextAligned(now, interval)
-}
-
-func nextAligned(now time.Time, interval time.Duration) time.Time {
-	if interval <= 0 {
-		return now
-	}
-
-	next := now.Truncate(interval).Add(interval)
-	if next.After(now) {
-		return next
-	}
-
-	return next.Add(interval)
-}
-
-func youtubeEvaluationWindowCap(interval time.Duration) time.Duration {
-	if interval <= 0 {
-		interval = defaultYouTubeInterval
-	}
-	if interval < time.Minute {
-		return time.Minute + evaluationWindowSlack
-	}
-
-	return interval + evaluationWindowSlack
-}
-
-func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
-	s.syncYouTubeTargetMinutes()
-
-	notifications, err := s.youtubeChecker.Check(ctx)
-	if err != nil {
-		if recoveryErr := s.recoverAlarmCacheAfterCheckFailure(ctx, err); recoveryErr != nil {
-			s.logger.Warn("Immediate alarm cache recovery failed after YouTube check error", slog.Any("error", recoveryErr))
-		}
-		return fmt.Errorf("run youtube iteration: check notifications: %w", err)
-	}
-
-	return s.dispatchNotifications(ctx, "youtube", notifications)
-}
-
-func (s *RuntimeScheduler) syncYouTubeTargetMinutes() {
-	if s.targetMinutesSource == nil {
-		return
-	}
-
-	targetMinutes := s.targetMinutesSource.GetTargetMinutes()
-	if s.youtubeTargetUpdater != nil {
-		s.youtubeTargetUpdater.UpdateTargetMinutes(targetMinutes)
-	}
-	if s.dedupTargetUpdater != nil {
-		s.dedupTargetUpdater.UpdateTargetMinutes(targetMinutes)
-	}
-}
-
-func (s *RuntimeScheduler) runChzzkIteration(ctx context.Context) error {
-	notifications, err := s.chzzkChecker.Check(ctx)
-	if err != nil {
-		return fmt.Errorf("run chzzk iteration: check notifications: %w", err)
-	}
-
-	return s.dispatchNotifications(ctx, "chzzk", notifications)
-}
-
-func (s *RuntimeScheduler) runTwitchIteration(ctx context.Context) error {
-	notifications, err := s.twitchChecker.Check(ctx)
-	if err != nil {
-		return fmt.Errorf("run twitch iteration: check notifications: %w", err)
-	}
-
-	return s.dispatchNotifications(ctx, "twitch", notifications)
-}
-
-func (s *RuntimeScheduler) dispatchNotifications(
-	ctx context.Context,
-	loopName string,
-	notifications []*domain.AlarmNotification,
-) error {
-	if len(notifications) == 0 {
-		return nil
-	}
-
-	sendResult, err := s.notifier.Send(ctx, notifications)
-
-	s.logger.Debug("Alarm notifications dispatched",
-		slog.String("loop", loopName),
-		slog.Int("sent", sendResult.Sent),
-		slog.Int("skipped", sendResult.Skipped),
-		slog.Int("failed", sendResult.Failed),
-	)
-
-	if err != nil {
-		return fmt.Errorf("dispatch notifications: send notifications partially failed: %w", err)
-	}
-
-	return nil
 }

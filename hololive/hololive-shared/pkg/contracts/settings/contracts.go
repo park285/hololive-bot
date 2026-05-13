@@ -40,7 +40,6 @@ const (
 	UpdateTypeMemberNewsRunNow    = "membernews_weekly_run_now"
 )
 
-//
 // 현재 hololive-shared/pkg/service/configsub.ConfigUpdate 와 동일한 형태입니다.
 type ConfigUpdateV1 struct {
 	Type    string          `json:"type"`

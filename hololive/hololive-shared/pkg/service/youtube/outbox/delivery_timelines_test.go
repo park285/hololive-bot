@@ -338,7 +338,7 @@ func TestDerivePostDeliveryTimelineMetrics_ClassifiesExternalCollectionDelaySour
 		DetectedAt:           &detectedAt,
 		AlarmSentAt:          &alarmSentAt,
 		AlarmLatencyMillis:   &alarmLatencyMillis,
-		AlarmLatencyExceeded: boolPtr(alarmLatencyExceeded),
+		AlarmLatencyExceeded: new(alarmLatencyExceeded),
 	}
 
 	derivePostDeliveryTimelineMetrics(&row)
@@ -373,7 +373,7 @@ func TestDerivePostDeliveryTimelineMetrics_ClassifiesMixedDelaySource(t *testing
 		DetectedAt:           &detectedAt,
 		AlarmSentAt:          &alarmSentAt,
 		AlarmLatencyMillis:   &alarmLatencyMillis,
-		AlarmLatencyExceeded: boolPtr(alarmLatencyExceeded),
+		AlarmLatencyExceeded: new(alarmLatencyExceeded),
 	}
 
 	derivePostDeliveryTimelineMetrics(&row)

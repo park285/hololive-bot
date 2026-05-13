@@ -35,18 +35,11 @@ func StartHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- erro
 		return
 	}
 
-	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			if errCh != nil {
-				errCh <- fmt.Errorf("HTTP server error: %w", err)
-				return
-			}
+	go runHTTPServer(server, logger, errCh)
+}
 
-			if logger != nil {
-				logger.Error("HTTP server error", slog.Any("error", err))
-			}
-		}
-	}()
+func runHTTPServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
+	handleHTTPServerError(server.ListenAndServe(), logger, errCh, "HTTP server error")
 }
 
 func StartHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
@@ -54,18 +47,34 @@ func StartHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- er
 		return
 	}
 
-	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			if errCh != nil {
-				errCh <- fmt.Errorf("HTTP/3 server error: %w", err)
-				return
-			}
+	go runHTTP3Server(server, logger, errCh)
+}
 
-			if logger != nil {
-				logger.Error("HTTP/3 server error", slog.Any("error", err))
-			}
-		}
-	}()
+func runHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- error) {
+	handleHTTPServerError(server.ListenAndServe(), logger, errCh, "HTTP/3 server error")
+}
+
+func handleHTTPServerError(err error, logger *slog.Logger, errCh chan<- error, message string) {
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		return
+	}
+
+	if sendHTTPServerError(errCh, err, message) {
+		return
+	}
+
+	if logger != nil {
+		logger.Error(message, slog.Any("error", err))
+	}
+}
+
+func sendHTTPServerError(errCh chan<- error, err error, message string) bool {
+	if errCh == nil {
+		return false
+	}
+
+	errCh <- fmt.Errorf("%s: %w", message, err)
+	return true
 }
 
 func ShutdownHTTPServer(server *http.Server, ctx context.Context) error {

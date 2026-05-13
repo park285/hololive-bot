@@ -23,6 +23,20 @@ func (r *GormRepository) FindByIdentity(ctx context.Context, kind domain.OutboxK
 	candidates := trackingIdentityCandidates(normalizedKind, normalizedContentID)
 	preferredContentID := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
 
+	records, err := r.findByIdentityRecords(ctx, normalizedKind, preferredContentID, candidates)
+	if err != nil {
+		return nil, err
+	}
+
+	return preferTrackingIdentityRecord(records, preferredContentID), nil
+}
+
+func (r *GormRepository) findByIdentityRecords(
+	ctx context.Context,
+	normalizedKind domain.OutboxKind,
+	preferredContentID string,
+	candidates []string,
+) ([]domain.YouTubeContentAlarmTracking, error) {
 	var records []domain.YouTubeContentAlarmTracking
 	query := r.db.WithContext(ctx).Where("kind = ?", normalizedKind)
 	if len(candidates) == 1 {
@@ -33,21 +47,29 @@ func (r *GormRepository) FindByIdentity(ctx context.Context, kind domain.OutboxK
 	if err := query.Find(&records).Error; err != nil {
 		return nil, fmt.Errorf("find tracking by identity: query row: %w", err)
 	}
+
+	return records, nil
+}
+
+func preferTrackingIdentityRecord(
+	records []domain.YouTubeContentAlarmTracking,
+	preferredContentID string,
+) *domain.YouTubeContentAlarmTracking {
 	if len(records) == 0 {
-		return nil, nil
+		return nil
 	}
 	for i := range records {
 		if strings.TrimSpace(records[i].ContentID) == preferredContentID {
-			return &records[i], nil
+			return &records[i]
 		}
 	}
 	for i := range records {
 		if strings.TrimSpace(records[i].CanonicalContentID) == preferredContentID {
-			return &records[i], nil
+			return &records[i]
 		}
 	}
 
-	return &records[0], nil
+	return &records[0]
 }
 
 func (r *GormRepository) Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error {
@@ -137,20 +159,7 @@ func buildTrackingUpsertQuery(
 			sb.WriteByte(',')
 		}
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-		args = append(args,
-			record.Kind,
-			record.ContentID,
-			record.CanonicalContentID,
-			record.ChannelID,
-			record.ActualPublishedAt,
-			record.DetectedAt,
-			record.AlarmSentAt,
-			record.AlarmLatencyMillis,
-			record.AlarmLatencyExceeded,
-			record.DeliveryStatus,
-			now,
-			now,
-		)
+		args = appendTrackingUpsertValues(args, record, now)
 	}
 	sb.WriteString(`
 		ON CONFLICT (kind, canonical_content_id) DO UPDATE
@@ -181,4 +190,21 @@ func buildTrackingUpsertQuery(
 		    updated_at = EXCLUDED.updated_at
 	`)
 	return sb.String(), args
+}
+
+func appendTrackingUpsertValues(args []any, record *domain.YouTubeContentAlarmTracking, now time.Time) []any {
+	return append(args,
+		record.Kind,
+		record.ContentID,
+		record.CanonicalContentID,
+		record.ChannelID,
+		record.ActualPublishedAt,
+		record.DetectedAt,
+		record.AlarmSentAt,
+		record.AlarmLatencyMillis,
+		record.AlarmLatencyExceeded,
+		record.DeliveryStatus,
+		now,
+		now,
+	)
 }

@@ -52,8 +52,19 @@ func ProvideMemberCache(
 		logger.Warn("Cache service is nil; member database init skipped")
 		return memberCache, nil
 	}
+	if err := initializeMemberDatabase(ctx, repo, cacheSvc, logger); err != nil {
+		return nil, err
+	}
 
-	// Valkey member database 초기화 (이름 -> 채널ID 맵)
+	return memberCache, nil
+}
+
+func initializeMemberDatabase(
+	ctx context.Context,
+	repo *member.Repository,
+	cacheSvc cache.Client,
+	logger *slog.Logger,
+) error {
 	members, err := repo.GetAllMembers(ctx)
 	if err != nil {
 		logger.Warn("Failed to load members for member database init", slog.Any("error", err))
@@ -69,10 +80,9 @@ func ProvideMemberCache(
 	}
 
 	if err := cacheSvc.InitializeMemberDatabase(ctx, memberMap); err != nil {
-		return nil, fmt.Errorf("failed to initialize member database: %w", err)
+		return fmt.Errorf("failed to initialize member database: %w", err)
 	}
-
-	return memberCache, nil
+	return nil
 }
 
 // ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성

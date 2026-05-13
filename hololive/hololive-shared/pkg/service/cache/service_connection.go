@@ -99,15 +99,27 @@ func (c *Service) WaitUntilReady(ctx context.Context, timeout time.Duration) err
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
+	return c.waitUntilReady(ctx, ticker.C)
+}
+
+func (c *Service) waitUntilReady(ctx context.Context, ticks <-chan time.Time) error {
 	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timeout waiting for cache store to be ready")
-		case <-ticker.C:
-			if c.IsConnected(ctx) {
-				return nil
-			}
+		ready, err := c.waitUntilReadyTick(ctx, ticks)
+		if err != nil {
+			return err
 		}
+		if ready {
+			return nil
+		}
+	}
+}
+
+func (c *Service) waitUntilReadyTick(ctx context.Context, ticks <-chan time.Time) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return false, fmt.Errorf("timeout waiting for cache store to be ready")
+	case <-ticks:
+		return c.IsConnected(ctx), nil
 	}
 }
 

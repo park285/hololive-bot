@@ -89,19 +89,7 @@ func parseShortNumber(text string) int64 {
 		return 0
 	}
 
-	multiplier := int64(1)
-	switch {
-	case strings.HasSuffix(text, "K"):
-		multiplier = 1_000
-		text = strings.TrimSuffix(text, "K")
-	case strings.HasSuffix(text, "M"):
-		multiplier = 1_000_000
-		text = strings.TrimSuffix(text, "M")
-	case strings.HasSuffix(text, "B"):
-		multiplier = 1_000_000_000
-		text = strings.TrimSuffix(text, "B")
-	}
-
+	text, multiplier := shortNumberBaseAndMultiplier(text)
 	text = strings.ReplaceAll(text, ",", "")
 
 	val, err := strconv.ParseFloat(text, 64)
@@ -110,6 +98,23 @@ func parseShortNumber(text string) int64 {
 	}
 
 	return int64(val * float64(multiplier))
+}
+
+func shortNumberBaseAndMultiplier(text string) (string, int64) {
+	units := []struct {
+		suffix     string
+		multiplier int64
+	}{
+		{"K", 1_000},
+		{"M", 1_000_000},
+		{"B", 1_000_000_000},
+	}
+	for _, unit := range units {
+		if before, ok := strings.CutSuffix(text, unit.suffix); ok {
+			return before, unit.multiplier
+		}
+	}
+	return text, 1
 }
 
 // parseSubscriberCount: "2.76M subscribers"를 2760000으로 변환
@@ -141,8 +146,8 @@ func parseViewCount(text string) int64 {
 		{"만", 10_000},
 		{"万", 10_000},
 	} {
-		if strings.HasSuffix(text, unit.suffix) {
-			text = strings.TrimSuffix(text, unit.suffix)
+		if before, ok := strings.CutSuffix(text, unit.suffix); ok {
+			text = before
 			multiplier = unit.value
 			break
 		}

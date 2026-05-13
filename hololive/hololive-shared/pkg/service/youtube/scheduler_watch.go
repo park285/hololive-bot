@@ -30,14 +30,32 @@ import (
 )
 
 func (ys *schedulerImpl) watchNearMilestoneMembers(ctx context.Context) {
-	nearMembers, err := ys.statsRepo.GetNearMilestoneMembers(ctx, MilestoneThresholdRatio, SubscriberMilestones, 50)
-	if err != nil {
-		ys.logger.Error("Failed to get near milestone members", slog.Any("error", err))
+	input, ok := ys.loadNearMilestoneWatchInput(ctx)
+	if !ok {
 		return
 	}
 
+	now := time.Now()
+	for _, nm := range input.nearMembers {
+		ys.watchNearMilestoneMember(ctx, nm, input.channelToMember, input.channelMap, now)
+	}
+}
+
+type nearMilestoneWatchInput struct {
+	nearMembers     []ytstats.NearMilestoneEntry
+	channelToMember map[string]*domain.Member
+	channelMap      map[string]*domain.Channel
+}
+
+func (ys *schedulerImpl) loadNearMilestoneWatchInput(ctx context.Context) (nearMilestoneWatchInput, bool) {
+	nearMembers, err := ys.statsRepo.GetNearMilestoneMembers(ctx, MilestoneThresholdRatio, SubscriberMilestones, 50)
+	if err != nil {
+		ys.logger.Error("Failed to get near milestone members", slog.Any("error", err))
+		return nearMilestoneWatchInput{}, false
+	}
+
 	if len(nearMembers) == 0 {
-		return
+		return nearMilestoneWatchInput{}, false
 	}
 
 	_, channelToMember := ys.buildChannelMaps()
@@ -46,55 +64,87 @@ func (ys *schedulerImpl) watchNearMilestoneMembers(ctx context.Context) {
 	ys.logger.Info("Checking near-milestone members via Holodex",
 		slog.Int("count", len(nearMembers)))
 
-	now := time.Now()
-	for _, nm := range nearMembers {
-		member := channelToMember[nm.ChannelID]
-		if member == nil {
-			continue
-		}
+	return nearMilestoneWatchInput{
+		nearMembers:     nearMembers,
+		channelToMember: channelToMember,
+		channelMap:      channelMap,
+	}, true
+}
 
-		channel := channelMap[nm.ChannelID]
-		if channel == nil {
-			channel, err = ys.holodex.GetChannel(ctx, nm.ChannelID)
-			if err != nil {
-				ys.logger.Warn("Failed to get channel from Holodex",
-					slog.String("channel", nm.ChannelID),
-					slog.Any("error", err))
-				continue
-			}
-		}
-		if channel == nil || channel.SubscriberCount == nil {
-			continue
-		}
+func (ys *schedulerImpl) watchNearMilestoneMember(
+	ctx context.Context,
+	nm ytstats.NearMilestoneEntry,
+	channelToMember map[string]*domain.Member,
+	channelMap map[string]*domain.Channel,
+	now time.Time,
+) {
+	member := channelToMember[nm.ChannelID]
+	if member == nil {
+		return
+	}
 
-		currentSubs := uint64(*channel.SubscriberCount)
-		prevSubs := nm.CurrentSubs
+	channel := ys.resolveNearMilestoneChannel(ctx, nm.ChannelID, channelMap)
+	if channel == nil || channel.SubscriberCount == nil {
+		return
+	}
 
-		milestones := ys.checkMilestones(prevSubs, currentSubs)
-		if len(milestones) > 0 {
-			achieved, _, _ := ys.processMilestones(ctx, nm.ChannelID, member, milestones, nil, false, now)
-			if achieved > 0 {
-				ys.logger.Info("Milestone detected via Holodex watcher",
-					slog.String("member", member.Name),
-					slog.Any("milestones", milestones),
-					slog.Any("current_subs", currentSubs))
+	currentSubs := uint64(*channel.SubscriberCount)
+	milestones := ys.checkMilestones(nm.CurrentSubs, currentSubs)
+	if len(milestones) > 0 {
+		ys.processWatchedMilestones(ctx, nm, member, milestones, currentSubs, now)
+		return
+	}
 
-				stats := &domain.TimestampedStats{
-					ChannelID:       nm.ChannelID,
-					MemberName:      member.Name,
-					SubscriberCount: currentSubs,
-					Timestamp:       now,
-				}
-				if err := ys.statsRepo.SaveStats(ctx, stats); err != nil {
-					ys.logger.Warn("Failed to save Holodex stats",
-						slog.String("channel", nm.ChannelID),
-						slog.Any("error", err))
-				}
-			}
-			continue
-		}
+	ys.checkApproachingAlert(ctx, nm, member, currentSubs, now)
+}
 
-		ys.checkApproachingAlert(ctx, nm, member, currentSubs, now)
+func (ys *schedulerImpl) resolveNearMilestoneChannel(
+	ctx context.Context,
+	channelID string,
+	channelMap map[string]*domain.Channel,
+) *domain.Channel {
+	if channel := channelMap[channelID]; channel != nil {
+		return channel
+	}
+
+	channel, err := ys.holodex.GetChannel(ctx, channelID)
+	if err != nil {
+		ys.logger.Warn("Failed to get channel from Holodex",
+			slog.String("channel", channelID),
+			slog.Any("error", err))
+		return nil
+	}
+	return channel
+}
+
+func (ys *schedulerImpl) processWatchedMilestones(
+	ctx context.Context,
+	nm ytstats.NearMilestoneEntry,
+	member *domain.Member,
+	milestones []uint64,
+	currentSubs uint64,
+	now time.Time,
+) {
+	achieved, _, _ := ys.processMilestones(ctx, nm.ChannelID, member, milestones, nil, false, now)
+	if achieved <= 0 {
+		return
+	}
+
+	ys.logger.Info("Milestone detected via Holodex watcher",
+		slog.String("member", member.Name),
+		slog.Any("milestones", milestones),
+		slog.Any("current_subs", currentSubs))
+
+	stats := &domain.TimestampedStats{
+		ChannelID:       nm.ChannelID,
+		MemberName:      member.Name,
+		SubscriberCount: currentSubs,
+		Timestamp:       now,
+	}
+	if err := ys.statsRepo.SaveStats(ctx, stats); err != nil {
+		ys.logger.Warn("Failed to save Holodex stats",
+			slog.String("channel", nm.ChannelID),
+			slog.Any("error", err))
 	}
 }
 

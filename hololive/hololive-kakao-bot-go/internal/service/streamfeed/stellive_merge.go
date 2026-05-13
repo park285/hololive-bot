@@ -35,7 +35,7 @@ func (s *Service) mergeStelliveLiveStreams(ctx context.Context, org string, live
 }
 
 func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, hours int, upcomingStreams []*domain.Stream) []*domain.Stream {
-	if !shouldMergeStellive(org) || s.chzzk == nil || s.members == nil {
+	if !s.canMergeStelliveUpcomingStreams(org) {
 		return upcomingStreams
 	}
 
@@ -53,24 +53,8 @@ func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, 
 	g.SetLimit(constants.ChzzkConfig.MaxConcurrentStatusChecks)
 	for _, member := range members {
 		g.Go(func() error {
-			scheduledLives, fetchErr := s.chzzk.GetScheduledLives(ctx, member.ChzzkChannelID)
-			if fetchErr != nil {
-				s.logger.Warn("stream feed: chzzk upcoming lookup failed",
-					slog.String("channel_id", member.ChannelID),
-					slog.String("chzzk_channel_id", member.ChzzkChannelID),
-					slog.Any("error", fetchErr),
-				)
-				return nil
-			}
-
-			streams := buildUpcomingStreams(member, scheduledLives, hours)
-			if len(streams) == 0 {
-				return nil
-			}
-
-			mu.Lock()
-			chzzkStreams = append(chzzkStreams, streams...)
-			mu.Unlock()
+			streams := s.fetchStelliveUpcomingStreams(ctx, member, hours)
+			appendStelliveUpcomingStreams(&mu, &chzzkStreams, streams)
 			return nil
 		})
 	}
@@ -81,4 +65,32 @@ func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, 
 	}
 
 	return mergeUpcomingStreams(upcomingStreams, chzzkStreams)
+}
+
+func (s *Service) canMergeStelliveUpcomingStreams(org string) bool {
+	return shouldMergeStellive(org) && s.chzzk != nil && s.members != nil
+}
+
+func (s *Service) fetchStelliveUpcomingStreams(ctx context.Context, member *domain.Member, hours int) []*domain.Stream {
+	scheduledLives, err := s.chzzk.GetScheduledLives(ctx, member.ChzzkChannelID)
+	if err != nil {
+		s.logger.Warn("stream feed: chzzk upcoming lookup failed",
+			slog.String("channel_id", member.ChannelID),
+			slog.String("chzzk_channel_id", member.ChzzkChannelID),
+			slog.Any("error", err),
+		)
+		return nil
+	}
+
+	return buildUpcomingStreams(member, scheduledLives, hours)
+}
+
+func appendStelliveUpcomingStreams(mu *sync.Mutex, streams *[]*domain.Stream, additions []*domain.Stream) {
+	if len(additions) == 0 {
+		return
+	}
+
+	mu.Lock()
+	*streams = append(*streams, additions...)
+	mu.Unlock()
 }

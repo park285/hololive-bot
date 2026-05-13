@@ -89,50 +89,29 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 		return nil, fmt.Errorf("check chzzk streams: load subscriber rooms: %w", err)
 	}
 
-	now := time.Now().UTC()
+	return c.collectChzzkNotifications(ctx, channelMappings, subscriberMap, time.Now().UTC())
+}
+
+func (c *ChzzkChecker) collectChzzkNotifications(
+	ctx context.Context,
+	channelMappings map[string]string,
+	subscriberMap map[string][]string,
+	now time.Time,
+) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0)
 
 	var mu sync.Mutex
-
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(defaultLookupConcurrency)
 
 	for youtubeChannelID, chzzkChannelID := range channelMappings {
-		youtubeChannelID := strings.TrimSpace(youtubeChannelID)
-		chzzkChannelID := strings.TrimSpace(chzzkChannelID)
-		if youtubeChannelID == "" || chzzkChannelID == "" {
-			continue
-		}
-
-		subscriberRooms := subscriberMap[youtubeChannelID]
-		if len(subscriberRooms) == 0 {
+		job, ok := newChzzkLookupJob(youtubeChannelID, chzzkChannelID, subscriberMap)
+		if !ok {
 			continue
 		}
 
 		eg.Go(func() error {
-			liveStatus, liveErr := c.chzzkClient.GetLiveStatus(egCtx, chzzkChannelID)
-			if liveErr != nil {
-				c.logger.Warn("Chzzk live status lookup failed",
-					slog.String("youtube_channel_id", youtubeChannelID),
-					slog.String("chzzk_channel_id", chzzkChannelID),
-					slog.Any("error", liveErr),
-				)
-
-				return nil
-			}
-
-			if !isChzzkLive(liveStatus) {
-				return nil
-			}
-
-			// dedup claim은 큐 발행 성공/실패를 알고 있는 Notifier가 단일 책임으로 처리한다.
-			// checker 단계에서 SetNX를 선점하면 publish 실패 후 알림이 영구 누락될 수 있다.
-			stream := buildChzzkLiveStream(youtubeChannelID, chzzkChannelID, liveStatus, now)
-			if stream == nil {
-				return nil
-			}
-
-			channelNotifications := roomNotifications(subscriberRooms, stream.Channel, stream, 0, "")
+			channelNotifications := c.lookupChzzkNotifications(egCtx, job, now)
 			if len(channelNotifications) == 0 {
 				return nil
 			}
@@ -150,6 +129,29 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 	}
 
 	return notifications, nil
+}
+
+func (c *ChzzkChecker) lookupChzzkNotifications(ctx context.Context, job chzzkLookupJob, now time.Time) []*domain.AlarmNotification {
+	liveStatus, liveErr := c.chzzkClient.GetLiveStatus(ctx, job.chzzkChannelID)
+	if liveErr != nil {
+		c.logger.Warn("Chzzk live status lookup failed",
+			slog.String("youtube_channel_id", job.youtubeChannelID),
+			slog.String("chzzk_channel_id", job.chzzkChannelID),
+			slog.Any("error", liveErr),
+		)
+		return nil
+	}
+
+	if !isChzzkLive(liveStatus) {
+		return nil
+	}
+
+	stream := buildChzzkLiveStream(job.youtubeChannelID, job.chzzkChannelID, liveStatus, now)
+	if stream == nil {
+		return nil
+	}
+
+	return roomNotifications(job.subscriberRooms, stream.Channel, stream, 0, "")
 }
 
 func isChzzkLive(status *chzzk.LiveStatusContent) bool {
@@ -249,54 +251,68 @@ func chzzkStartedAtOrFallback(status *chzzk.LiveStatusContent, detectedAt time.T
 }
 
 func reflectStringField(v any, name string) string {
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() || rv.Kind() != reflect.Ptr || rv.IsNil() {
+	field, ok := reflectStructField(v, name)
+	if !ok {
 		return ""
 	}
+	return reflectStringValue(field)
+}
 
-	elem := rv.Elem()
-	if elem.Kind() != reflect.Struct {
-		return ""
-	}
-
-	field := elem.FieldByName(name)
-	if !field.IsValid() {
-		return ""
-	}
-
+func reflectStringValue(field reflect.Value) string {
 	switch field.Kind() {
 	case reflect.String:
 		return strings.TrimSpace(field.String())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if field.Int() != 0 {
-			return strconv.FormatInt(field.Int(), 10)
-		}
+		return reflectSignedIntegerString(field)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if field.Uint() != 0 {
-			return strconv.FormatUint(field.Uint(), 10)
-		}
+		return reflectUnsignedIntegerString(field)
 	}
 
 	return ""
 }
 
+func reflectSignedIntegerString(field reflect.Value) string {
+	if field.Int() == 0 {
+		return ""
+	}
+	return strconv.FormatInt(field.Int(), 10)
+}
+
+func reflectUnsignedIntegerString(field reflect.Value) string {
+	if field.Uint() == 0 {
+		return ""
+	}
+	return strconv.FormatUint(field.Uint(), 10)
+}
+
 func reflectTimeField(v any, name string) time.Time {
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() || rv.Kind() != reflect.Ptr || rv.IsNil() {
+	field, ok := reflectStructField(v, name)
+	if !ok {
 		return time.Time{}
+	}
+	return reflectTimeValue(field)
+}
+
+func reflectStructField(v any, name string) (reflect.Value, bool) {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() || rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return reflect.Value{}, false
 	}
 
 	elem := rv.Elem()
 	if elem.Kind() != reflect.Struct {
-		return time.Time{}
+		return reflect.Value{}, false
 	}
 
 	field := elem.FieldByName(name)
 	if !field.IsValid() {
-		return time.Time{}
+		return reflect.Value{}, false
 	}
+	return field, true
+}
 
-	if field.Type() == reflect.TypeOf(time.Time{}) {
+func reflectTimeValue(field reflect.Value) time.Time {
+	if field.Type() == reflect.TypeFor[time.Time]() {
 		parsed, _ := field.Interface().(time.Time)
 		return parsed
 	}
@@ -305,21 +321,32 @@ func reflectTimeField(v any, name string) time.Time {
 		return parseChzzkTime(field.String())
 	}
 
-	if field.Kind() >= reflect.Int && field.Kind() <= reflect.Int64 {
-		raw := field.Int()
-		if raw > 0 {
-			return unixByMagnitude(raw)
-		}
+	if parsed := reflectSignedUnixTime(field); !parsed.IsZero() {
+		return parsed
 	}
+	return reflectUnsignedUnixTime(field)
+}
 
-	if field.Kind() >= reflect.Uint && field.Kind() <= reflect.Uint64 {
-		raw := field.Uint()
-		if raw > 0 {
-			return unixByMagnitude(int64(raw))
-		}
+func reflectSignedUnixTime(field reflect.Value) time.Time {
+	if field.Kind() < reflect.Int || field.Kind() > reflect.Int64 {
+		return time.Time{}
 	}
+	raw := field.Int()
+	if raw <= 0 {
+		return time.Time{}
+	}
+	return unixByMagnitude(raw)
+}
 
-	return time.Time{}
+func reflectUnsignedUnixTime(field reflect.Value) time.Time {
+	if field.Kind() < reflect.Uint || field.Kind() > reflect.Uint64 {
+		return time.Time{}
+	}
+	raw := field.Uint()
+	if raw <= 0 {
+		return time.Time{}
+	}
+	return unixByMagnitude(int64(raw))
 }
 
 func parseChzzkTime(raw string) time.Time {

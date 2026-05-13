@@ -126,19 +126,32 @@ func writeFormattedReport[Report any](
 	}
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "markdown":
-		if _, err := fmt.Fprint(stdout, renderMarkdown(report)); err != nil {
-			return fmt.Errorf("%s: %w", markdownWriteError, err)
-		}
-		return nil
+		return writeMarkdownReport(stdout, report, renderMarkdown, markdownWriteError)
 	case "json":
-		encoder := json.NewEncoder(stdout)
-		encoder.SetEscapeHTML(false)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(report); err != nil {
-			return fmt.Errorf("%s: %w", jsonWriteError, err)
-		}
-		return nil
+		return writeJSONReport(stdout, report, jsonWriteError)
 	default:
 		return fmt.Errorf("unsupported format %q (want markdown or json)", format)
 	}
+}
+
+func writeMarkdownReport[Report any](
+	stdout io.Writer,
+	report Report,
+	renderMarkdown func(Report) string,
+	markdownWriteError string,
+) error {
+	if _, err := fmt.Fprint(stdout, renderMarkdown(report)); err != nil {
+		return fmt.Errorf("%s: %w", markdownWriteError, err)
+	}
+	return nil
+}
+
+func writeJSONReport[Report any](stdout io.Writer, report Report, jsonWriteError string) error {
+	encoder := json.NewEncoder(stdout)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return fmt.Errorf("%s: %w", jsonWriteError, err)
+	}
+	return nil
 }

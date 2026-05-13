@@ -122,80 +122,114 @@ func (s *MonthlyScheduler) calculateNextRun(now time.Time) time.Time {
 
 func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 	monthKey := s.getMonthKey()
-	lockKey := fmt.Sprintf("majorevent:lock:monthly:%s", monthKey)
-
-	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
+	releaseLock, err := s.acquireMonthlyNotificationLock(ctx, monthKey)
 	if err != nil {
-		return fmt.Errorf("acquire lock: %w", err)
+		return err
 	}
-	if !acquired {
-		return triggercontracts.ErrNotificationInProgress
-	}
-	defer func() { _ = s.locker.Release(ctx, lockKey, token) }()
+	defer releaseLock()
 
-	rooms, err := s.repository.GetSubscribedRooms(ctx)
+	rooms, events, ok, err := s.monthlyNotificationInputs(ctx, monthKey)
 	if err != nil {
-		return fmt.Errorf("get subscribed rooms: %w", err)
+		return err
 	}
-
-	if len(rooms) == 0 {
-		s.logger.Info("No subscribed rooms, skipping monthly notification")
+	if !ok {
 		return nil
 	}
 
-	nowKST := s.clock().In(kst)
-	year, month := nowKST.Year(), int(nowKST.Month())
-
-	events, err := s.repository.GetEventsByMonth(ctx, year, month, monthKey)
-	if err != nil {
-		return fmt.Errorf("get events by month: %w", err)
+	eventIDs, shouldMark, err := s.enqueueMonthlyNotification(ctx, rooms, events, monthKey)
+	if err != nil || !shouldMark {
+		return err
 	}
-
-	if len(events) == 0 {
-		s.logger.Info("No events for this month, skipping notification",
-			slog.Int("year", year),
-			slog.Int("month", month))
-		return nil
-	}
-
-	domainEvents, eventIDs := toDomainEventsAndIDs(events)
-
-	// LLM 요약 시도
-	var llmSummary string
-	if s.summarizer != nil {
-		llmSummary = s.summarizer.Summarize(ctx, domainEvents, mesummarizer.SummaryTypeMonthly, monthKey)
-	}
-
-	message := s.formatter.FormatMajorEventMonthlySummary(ctx, domainEvents, llmSummary)
-
-	// Room별 outbox enqueue
-	targets := toRoomTargets(rooms)
-
-	result := enqueueToRooms(ctx, s.outboxRepo, targets, domain.DeliveryKindMajorEventMonthly, monthKey, message, s.logger)
-
-	s.logger.Info("Monthly notification enqueue result",
-		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
-		slog.Int("failed", result.Failed),
-		slog.Int("event_count", len(events)))
-
-	// 마킹 결정표
-	switch {
-	case result.Sent == 0 && result.Failed > 0:
-		return fmt.Errorf("all %d room(s) failed to enqueue monthly notification", result.Failed)
-	case result.Failed > 0:
-		s.logger.Warn("Partial room enqueue failure, deferring monthly event marking",
-			slog.Int("sent", result.Sent),
-			slog.Int("failed", result.Failed),
-			slog.Any("failed_rooms", result.FailedRooms))
-		return nil
-	}
-
 	if err := s.repository.MarkEventsAsMonthlyNotified(ctx, eventIDs, monthKey); err != nil {
 		s.logger.Error("Failed to mark events as monthly notified", slog.String("error", err.Error()))
 	}
 
 	return nil
+}
+
+func (s *MonthlyScheduler) acquireMonthlyNotificationLock(ctx context.Context, monthKey string) (func(), error) {
+	lockKey := fmt.Sprintf("majorevent:lock:monthly:%s", monthKey)
+	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
+	if err != nil {
+		return nil, fmt.Errorf("acquire lock: %w", err)
+	}
+	if !acquired {
+		return nil, triggercontracts.ErrNotificationInProgress
+	}
+	return func() { _ = s.locker.Release(ctx, lockKey, token) }, nil
+}
+
+func (s *MonthlyScheduler) monthlyNotificationInputs(
+	ctx context.Context,
+	monthKey string,
+) ([]*domain.EventRoomSubscription, []*domain.MajorEvent, bool, error) {
+	rooms, err := s.repository.GetSubscribedRooms(ctx)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("get subscribed rooms: %w", err)
+	}
+	if len(rooms) == 0 {
+		s.logger.Info("No subscribed rooms, skipping monthly notification")
+		return nil, nil, false, nil
+	}
+
+	nowKST := s.clock().In(kst)
+	year, month := nowKST.Year(), int(nowKST.Month())
+	events, err := s.repository.GetEventsByMonth(ctx, year, month, monthKey)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("get events by month: %w", err)
+	}
+	if len(events) == 0 {
+		s.logger.Info("No events for this month, skipping notification",
+			slog.Int("year", year),
+			slog.Int("month", month))
+		return nil, nil, false, nil
+	}
+	return rooms, events, true, nil
+}
+
+func (s *MonthlyScheduler) enqueueMonthlyNotification(
+	ctx context.Context,
+	rooms []*domain.EventRoomSubscription,
+	events []*domain.MajorEvent,
+	monthKey string,
+) ([]int, bool, error) {
+	domainEvents, eventIDs := toDomainEventsAndIDs(events)
+	message := s.monthlyNotificationMessage(ctx, domainEvents, monthKey)
+	result := enqueueToRooms(ctx, s.outboxRepo, toRoomTargets(rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.logger)
+	s.logMonthlyNotificationEnqueueResult(result, len(events))
+	shouldMark, err := s.shouldMarkMonthlyEvents(result)
+	return eventIDs, shouldMark, err
+}
+
+func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, events []domain.MajorEvent, monthKey string) string {
+	var llmSummary string
+	if s.summarizer != nil {
+		llmSummary = s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeMonthly, monthKey)
+	}
+	return s.formatter.FormatMajorEventMonthlySummary(ctx, events, llmSummary)
+}
+
+func (s *MonthlyScheduler) logMonthlyNotificationEnqueueResult(result delivery.SendResult, eventCount int) {
+	s.logger.Info("Monthly notification enqueue result",
+		slog.Int("attempted", result.Attempted),
+		slog.Int("sent", result.Sent),
+		slog.Int("failed", result.Failed),
+		slog.Int("event_count", eventCount))
+}
+
+func (s *MonthlyScheduler) shouldMarkMonthlyEvents(result delivery.SendResult) (bool, error) {
+	switch {
+	case result.Sent == 0 && result.Failed > 0:
+		return false, fmt.Errorf("all %d room(s) failed to enqueue monthly notification", result.Failed)
+	case result.Failed > 0:
+		s.logger.Warn("Partial room enqueue failure, deferring monthly event marking",
+			slog.Int("sent", result.Sent),
+			slog.Int("failed", result.Failed),
+			slog.Any("failed_rooms", result.FailedRooms))
+		return false, nil
+	default:
+		return true, nil
+	}
 }
 
 func toDomainEventsAndIDs(events []*domain.MajorEvent) ([]domain.MajorEvent, []int) {

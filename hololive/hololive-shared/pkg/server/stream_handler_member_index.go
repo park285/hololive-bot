@@ -31,42 +31,12 @@ import (
 
 func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map[string]string, error) {
 	state := h.ensureState()
-	now := time.Now()
-
-	state.memberIndexMu.RLock()
-	if state.memberIndexReady && now.Before(state.memberIndexExpiresAt) {
-		channelIDs := append([]string(nil), state.memberChannelIDs...)
-		channelToName := maps.Clone(state.memberChannelName)
-		state.memberIndexMu.RUnlock()
-		return channelIDs, channelToName, nil
+	if snapshot, ok := state.cachedMemberIndexSnapshot(time.Now()); ok {
+		return snapshot.channelIDs, snapshot.channelNames, nil
 	}
-	state.memberIndexMu.RUnlock()
 
 	value, err, _ := state.memberIndexBuildGroup.Do("refresh", func() (any, error) {
-		state.memberIndexMu.RLock()
-		if state.memberIndexReady && time.Now().Before(state.memberIndexExpiresAt) {
-			channelIDs := append([]string(nil), state.memberChannelIDs...)
-			channelToName := maps.Clone(state.memberChannelName)
-			state.memberIndexMu.RUnlock()
-			return memberIndexSnapshot{channelIDs: channelIDs, channelNames: channelToName}, nil
-		}
-		state.memberIndexMu.RUnlock()
-
-		members, loadErr := h.fetchAllMembers(ctx)
-		if loadErr != nil {
-			return nil, loadErr
-		}
-
-		channelIDs, channelToName := BuildActiveMemberIndex(members)
-
-		state.memberIndexMu.Lock()
-		state.memberChannelIDs = append([]string(nil), channelIDs...)
-		state.memberChannelName = maps.Clone(channelToName)
-		state.memberIndexExpiresAt = time.Now().Add(MemberIndexCacheTTL)
-		state.memberIndexReady = true
-		state.memberIndexMu.Unlock()
-
-		return memberIndexSnapshot{channelIDs: channelIDs, channelNames: channelToName}, nil
+		return h.refreshActiveMemberIndexSnapshot(ctx, state)
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("member index singleflight: %w", err)
@@ -78,6 +48,46 @@ func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) ([]string, map
 	}
 
 	return snapshot.channelIDs, snapshot.channelNames, nil
+}
+
+func (h *StreamHandler) refreshActiveMemberIndexSnapshot(ctx context.Context, state *StreamState) (memberIndexSnapshot, error) {
+	if snapshot, ok := state.cachedMemberIndexSnapshot(time.Now()); ok {
+		return snapshot, nil
+	}
+
+	members, err := h.fetchAllMembers(ctx)
+	if err != nil {
+		return memberIndexSnapshot{}, err
+	}
+
+	channelIDs, channelToName := BuildActiveMemberIndex(members)
+	state.storeMemberIndexSnapshot(channelIDs, channelToName)
+
+	return memberIndexSnapshot{channelIDs: channelIDs, channelNames: channelToName}, nil
+}
+
+func (s *StreamState) cachedMemberIndexSnapshot(now time.Time) (memberIndexSnapshot, bool) {
+	s.memberIndexMu.RLock()
+	defer s.memberIndexMu.RUnlock()
+
+	if !s.memberIndexReady || !now.Before(s.memberIndexExpiresAt) {
+		return memberIndexSnapshot{}, false
+	}
+
+	return memberIndexSnapshot{
+		channelIDs:   append([]string(nil), s.memberChannelIDs...),
+		channelNames: maps.Clone(s.memberChannelName),
+	}, true
+}
+
+func (s *StreamState) storeMemberIndexSnapshot(channelIDs []string, channelToName map[string]string) {
+	s.memberIndexMu.Lock()
+	defer s.memberIndexMu.Unlock()
+
+	s.memberChannelIDs = append([]string(nil), channelIDs...)
+	s.memberChannelName = maps.Clone(channelToName)
+	s.memberIndexExpiresAt = time.Now().Add(MemberIndexCacheTTL)
+	s.memberIndexReady = true
 }
 
 func (h *StreamHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, error) {

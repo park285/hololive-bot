@@ -116,14 +116,18 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 	d.processOnce(ctx)
 
-	for {
-		select {
-		case <-ctx.Done():
-			d.logger.Info("Delivery dispatcher stopped")
-			return
-		case <-ticker.C:
-			d.processOnce(ctx)
-		}
+	for d.waitNextDispatchTick(ctx, ticker.C) {
+		d.processOnce(ctx)
+	}
+}
+
+func (d *Dispatcher) waitNextDispatchTick(ctx context.Context, ticks <-chan time.Time) bool {
+	select {
+	case <-ctx.Done():
+		d.logger.Info("Delivery dispatcher stopped")
+		return false
+	case <-ticks:
+		return true
 	}
 }
 
@@ -139,11 +143,17 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 	}
 
 	d.processBatch(ctx, items)
+	d.logAccumulatedFailures(ctx)
+	d.cleanupIfDue(ctx)
+}
 
+func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) {
 	if cnt, _ := d.repo.CountByStatus(ctx, domain.DeliveryStatusFailed); cnt > 5 {
 		d.logger.Error("delivery outbox accumulated failures", slog.Int64("count", cnt))
 	}
+}
 
+func (d *Dispatcher) cleanupIfDue(ctx context.Context) {
 	if d.cfg.CleanupEnabled && time.Since(d.lastCleanupAt) >= d.cfg.CleanupInterval {
 		if cleaned, cleanErr := d.repo.Cleanup(ctx, d.cfg.CleanupAfter); cleanErr != nil {
 			d.logger.Warn("Outbox cleanup failed", slog.String("error", cleanErr.Error()))
@@ -159,40 +169,66 @@ func (d *Dispatcher) processBatch(ctx context.Context, items []domain.Notificati
 		return
 	}
 
-	maxConcurrent := d.cfg.MaxConcurrent
-	if maxConcurrent <= 1 || len(items) == 1 {
-		for i := range items {
-			d.processItem(ctx, &items[i])
-		}
+	maxConcurrent := d.batchConcurrency(len(items))
+	if maxConcurrent <= 1 {
+		d.processBatchSequential(ctx, items)
 		return
 	}
-	if maxConcurrent > len(items) {
-		maxConcurrent = len(items)
-	}
 
+	d.processBatchConcurrent(ctx, items, maxConcurrent)
+}
+
+func (d *Dispatcher) batchConcurrency(itemCount int) int {
+	if itemCount == 1 || d.cfg.MaxConcurrent <= 1 {
+		return 1
+	}
+	if d.cfg.MaxConcurrent > itemCount {
+		return itemCount
+	}
+	return d.cfg.MaxConcurrent
+}
+
+func (d *Dispatcher) processBatchSequential(ctx context.Context, items []domain.NotificationDeliveryOutbox) {
+	for i := range items {
+		d.processItem(ctx, &items[i])
+	}
+}
+
+func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.NotificationDeliveryOutbox, maxConcurrent int) {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, maxConcurrent)
 
 	for i := range items {
-		select {
-		case <-ctx.Done():
-			d.logger.Warn("Delivery batch canceled before completion",
-				slog.String("error", ctx.Err().Error()))
-			wg.Wait()
+		if !d.acquireBatchSlot(ctx, sem, &wg) {
 			return
-		case sem <- struct{}{}:
 		}
 
 		item := &items[i]
 		wg.Add(1)
-		go func(item *domain.NotificationDeliveryOutbox) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			d.processItem(ctx, item)
-		}(item)
+		d.processBatchItemAsync(ctx, item, sem, &wg)
 	}
 
 	wg.Wait()
+}
+
+func (d *Dispatcher) acquireBatchSlot(ctx context.Context, sem chan<- struct{}, wg *sync.WaitGroup) bool {
+	select {
+	case <-ctx.Done():
+		d.logger.Warn("Delivery batch canceled before completion",
+			slog.String("error", ctx.Err().Error()))
+		wg.Wait()
+		return false
+	case sem <- struct{}{}:
+		return true
+	}
+}
+
+func (d *Dispatcher) processBatchItemAsync(ctx context.Context, item *domain.NotificationDeliveryOutbox, sem <-chan struct{}, wg *sync.WaitGroup) {
+	go func() {
+		defer wg.Done()
+		defer func() { <-sem }()
+		d.processItem(ctx, item)
+	}()
 }
 
 func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationDeliveryOutbox) {

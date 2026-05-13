@@ -48,6 +48,15 @@ type MaintenanceScheduler struct {
 	wg       sync.WaitGroup
 }
 
+type maintenanceTrigger int
+
+const (
+	maintenanceTriggerContextDone maintenanceTrigger = iota
+	maintenanceTriggerStop
+	maintenanceTriggerExpired
+	maintenanceTriggerLinkCheck
+)
+
 // NewMaintenanceScheduler는 MaintenanceScheduler를 생성한다.
 func NewMaintenanceScheduler(
 	repository maintenanceRepository,
@@ -111,31 +120,59 @@ func (s *MaintenanceScheduler) run(ctx context.Context) {
 	defer linkTicker.Stop()
 
 	for {
-		nextExpiredRun := calculateNextRunAtHour(s.now(), s.config.ExpireHourKST)
-		waitDuration := max(time.Until(nextExpiredRun), time.Duration(0))
-
-		s.logger.Info(
-			"Major event maintenance scheduler waiting",
-			slog.String("next_expired_run_kst", formatKST(nextExpiredRun)),
-			slog.Duration("wait_duration", waitDuration),
-		)
-
-		expiredTimer := time.NewTimer(waitDuration)
-		select {
-		case <-ctx.Done():
-			expiredTimer.Stop()
-			s.logger.Info("Major event maintenance scheduler stopped by context")
+		if !s.runMaintenanceCycle(ctx, linkTicker.C) {
 			return
-		case <-s.stopCh:
-			expiredTimer.Stop()
-			s.logger.Info("Major event maintenance scheduler stopped")
-			return
-		case <-expiredTimer.C:
-			s.runExpiredUpdate(ctx)
-		case <-linkTicker.C:
-			expiredTimer.Stop()
-			s.runLinkCheck(ctx)
 		}
+	}
+}
+
+func (s *MaintenanceScheduler) runMaintenanceCycle(ctx context.Context, linkTicker <-chan time.Time) bool {
+	nextExpiredRun := calculateNextRunAtHour(s.now(), s.config.ExpireHourKST)
+	waitDuration := max(time.Until(nextExpiredRun), time.Duration(0))
+
+	s.logger.Info(
+		"Major event maintenance scheduler waiting",
+		slog.String("next_expired_run_kst", formatKST(nextExpiredRun)),
+		slog.Duration("wait_duration", waitDuration),
+	)
+
+	expiredTimer := time.NewTimer(waitDuration)
+	trigger := waitMaintenanceTrigger(ctx, s.stopCh, expiredTimer.C, linkTicker)
+	if trigger == maintenanceTriggerContextDone {
+		expiredTimer.Stop()
+		s.logger.Info("Major event maintenance scheduler stopped by context")
+		return false
+	}
+	if trigger == maintenanceTriggerStop {
+		expiredTimer.Stop()
+		s.logger.Info("Major event maintenance scheduler stopped")
+		return false
+	}
+	if trigger == maintenanceTriggerExpired {
+		s.runExpiredUpdate(ctx)
+	}
+	if trigger == maintenanceTriggerLinkCheck {
+		expiredTimer.Stop()
+		s.runLinkCheck(ctx)
+	}
+	return true
+}
+
+func waitMaintenanceTrigger(
+	ctx context.Context,
+	stopCh <-chan struct{},
+	expiredTimer <-chan time.Time,
+	linkTicker <-chan time.Time,
+) maintenanceTrigger {
+	select {
+	case <-ctx.Done():
+		return maintenanceTriggerContextDone
+	case <-stopCh:
+		return maintenanceTriggerStop
+	case <-expiredTimer:
+		return maintenanceTriggerExpired
+	case <-linkTicker:
+		return maintenanceTriggerLinkCheck
 	}
 }
 

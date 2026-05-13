@@ -96,12 +96,7 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 	}
 
 	if existing != nil && existing.Body != body {
-		if revErr := s.repo.CreateRevision(ctx, existing.ID, existing.Body); revErr != nil {
-			s.logger.Warn("failed to create revision", slog.Any("error", revErr))
-		}
-		if pruneErr := s.repo.PruneOldRevisions(ctx, existing.ID, maxRevisions); pruneErr != nil {
-			s.logger.Warn("failed to prune revisions", slog.Any("error", pruneErr))
-		}
+		s.createRevision(ctx, existing)
 	}
 
 	result, err := s.repo.Upsert(ctx, key, channelID, body)
@@ -109,13 +104,26 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 		return nil, fmt.Errorf("upsert template: %w", err)
 	}
 
-	if channelID != nil {
-		s.renderer.InvalidateCache(key, *channelID)
-	} else {
-		s.renderer.InvalidateKey(key)
-	}
+	s.invalidateRendererCache(key, channelID)
 
 	return result, nil
+}
+
+func (s *AdminService) createRevision(ctx context.Context, existing *domain.NotificationTemplate) {
+	if revErr := s.repo.CreateRevision(ctx, existing.ID, existing.Body); revErr != nil {
+		s.logger.Warn("failed to create revision", slog.Any("error", revErr))
+	}
+	if pruneErr := s.repo.PruneOldRevisions(ctx, existing.ID, maxRevisions); pruneErr != nil {
+		s.logger.Warn("failed to prune revisions", slog.Any("error", pruneErr))
+	}
+}
+
+func (s *AdminService) invalidateRendererCache(key domain.TemplateKey, channelID *string) {
+	if channelID != nil {
+		s.renderer.InvalidateCache(key, *channelID)
+		return
+	}
+	s.renderer.InvalidateKey(key)
 }
 
 func (s *AdminService) DeleteOverride(ctx context.Context, key domain.TemplateKey, channelID string) error {

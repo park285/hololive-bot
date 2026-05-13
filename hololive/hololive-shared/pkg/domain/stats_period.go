@@ -64,7 +64,20 @@ var (
 		"년": "years", "연": "years", "year": "years", "years": "years", "y": "years",
 		"시간": "hours", "hour": "hours", "hours": "hours", "h": "hours",
 	}
+
+	namedStatsPeriods = map[string]namedStatsPeriod{
+		"today":   {label: "오늘", start: func(now time.Time) time.Time { return now.Add(-24 * time.Hour) }},
+		"week":    {label: "최근 7일", start: func(now time.Time) time.Time { return now.AddDate(0, 0, -7) }},
+		"month":   {label: "최근 1개월", start: func(now time.Time) time.Time { return now.AddDate(0, -1, 0) }},
+		"quarter": {label: "최근 1분기", start: func(now time.Time) time.Time { return now.AddDate(0, -3, 0) }},
+		"year":    {label: "최근 1년", start: func(now time.Time) time.Time { return now.AddDate(-1, 0, 0) }},
+	}
 )
+
+type namedStatsPeriod struct {
+	label string
+	start func(now time.Time) time.Time
+}
 
 func NormalizeStatsPeriodToken(raw string) string {
 	token := stringutil.TrimSpace(raw)
@@ -74,33 +87,51 @@ func NormalizeStatsPeriodToken(raw string) string {
 
 	lower := stringutil.Normalize(token)
 
-	// prefix 처리
-	for _, p := range periodPrefixes {
-		if strings.HasPrefix(lower, p.prefix) {
-			if value, ok := parsePositiveInt(lower[p.length:]); ok {
-				return p.unit + ":" + strconv.Itoa(value)
-			}
-		}
+	if normalized := normalizePrefixedStatsPeriodToken(lower); normalized != "" {
+		return normalized
 	}
 
-	// 키워드 매칭
 	if normalized, ok := periodKeywords[lower]; ok {
 		return normalized
 	}
 
-	// 숫자+단위 형식 처리
-	if matches := statsNumericPattern.FindStringSubmatch(token); len(matches) == 3 {
-		value, err := strconv.Atoi(matches[1])
-		if err != nil || value <= 0 {
-			return ""
-		}
+	return normalizeNumericStatsPeriodToken(token)
+}
 
-		if unit, ok := periodUnits[stringutil.Normalize(matches[2])]; ok {
-			return unit + ":" + strconv.Itoa(value)
+func normalizePrefixedStatsPeriodToken(lower string) string {
+	for _, p := range periodPrefixes {
+		if normalized := normalizeStatsPeriodPrefix(lower, p.prefix, p.length, p.unit); normalized != "" {
+			return normalized
 		}
 	}
-
 	return ""
+}
+
+func normalizeStatsPeriodPrefix(lower string, prefix string, length int, unit string) string {
+	if !strings.HasPrefix(lower, prefix) {
+		return ""
+	}
+	value, ok := parsePositiveInt(lower[length:])
+	if !ok {
+		return ""
+	}
+	return unit + ":" + strconv.Itoa(value)
+}
+
+func normalizeNumericStatsPeriodToken(token string) string {
+	matches := statsNumericPattern.FindStringSubmatch(token)
+	if len(matches) != 3 {
+		return ""
+	}
+	value, ok := parsePositiveInt(matches[1])
+	if !ok {
+		return ""
+	}
+	unit, ok := periodUnits[stringutil.Normalize(matches[2])]
+	if !ok {
+		return ""
+	}
+	return unit + ":" + strconv.Itoa(value)
 }
 
 // 기본값은 "최근 10일"이다.
@@ -122,20 +153,11 @@ func ResolveStatsPeriod(now time.Time, raw string) (time.Time, string) {
 }
 
 func resolveNamedStatsPeriod(now time.Time, normalized string) (time.Time, string, bool) {
-	switch normalized {
-	case "today":
-		return now.Add(-24 * time.Hour), "오늘", true
-	case "week":
-		return now.AddDate(0, 0, -7), "최근 7일", true
-	case "month":
-		return now.AddDate(0, -1, 0), "최근 1개월", true
-	case "quarter":
-		return now.AddDate(0, -3, 0), "최근 1분기", true
-	case "year":
-		return now.AddDate(-1, 0, 0), "최근 1년", true
-	default:
+	period, ok := namedStatsPeriods[normalized]
+	if !ok {
 		return time.Time{}, "", false
 	}
+	return period.start(now), period.label, true
 }
 
 func resolvePrefixedStatsPeriod(now time.Time, normalized string) (time.Time, string, bool) {

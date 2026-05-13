@@ -46,6 +46,25 @@ type ExaMCPClient struct {
 	logger   *slog.Logger
 }
 
+type exaRPCResponse struct {
+	Result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"result"`
+	Error *struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+type exaSearchItem struct {
+	Title         string `json:"title"`
+	URL           string `json:"url"`
+	PublishedDate string `json:"publishedDate"`
+	Text          string `json:"text"`
+}
+
 func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *slog.Logger) *ExaMCPClient {
 	if httpClient == nil {
 		httpClient = httputil.NewExternalAPIClient(30 * time.Second)
@@ -121,17 +140,7 @@ func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.Search
 
 // parseExaResponse: JSON-RPC 응답을 파싱하여 검색 결과를 추출합니다.
 func parseExaResponse(respBody []byte) ([]model.SearchResult, error) {
-	var rpcResp struct {
-		Result struct {
-			Content []struct {
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"result"`
-		Error *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
+	var rpcResp exaRPCResponse
 	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
 		return nil, fmt.Errorf("unmarshal exa response: %w", err)
 	}
@@ -139,58 +148,15 @@ func parseExaResponse(respBody []byte) ([]model.SearchResult, error) {
 		return nil, fmt.Errorf("exa mcp rpc error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
 	}
 
-	type exaItem struct {
-		Title         string `json:"title"`
-		URL           string `json:"url"`
-		PublishedDate string `json:"publishedDate"`
-		Text          string `json:"text"`
-	}
-	toResult := func(item exaItem) model.SearchResult {
-		return model.SearchResult{
-			Title:         item.Title,
-			URL:           item.URL,
-			Content:       item.Text,
-			PublishedDate: item.PublishedDate,
-		}
-	}
-
 	results := make([]model.SearchResult, 0)
 	var parseErr error
 	for i, content := range rpcResp.Result.Content {
-		if content.Text == "" {
+		items, err := parseExaContentItems(i, content.Text)
+		if err != nil {
+			parseErr = errors.Join(parseErr, err)
 			continue
 		}
-
-		var wrapped struct {
-			Results []exaItem `json:"results"`
-		}
-		if err := json.Unmarshal([]byte(content.Text), &wrapped); err != nil {
-			var direct []exaItem
-			if directErr := json.Unmarshal([]byte(content.Text), &direct); directErr != nil {
-				parseErr = errors.Join(parseErr, fmt.Errorf("unmarshal exa content[%d]: %w", i, err))
-				continue
-			}
-			for _, item := range direct {
-				results = append(results, toResult(item))
-			}
-			continue
-		}
-
-		if len(wrapped.Results) == 0 {
-			var direct []exaItem
-			if err := json.Unmarshal([]byte(content.Text), &direct); err != nil {
-				parseErr = errors.Join(parseErr, fmt.Errorf("unmarshal exa direct content[%d]: %w", i, err))
-				continue
-			}
-			for _, item := range direct {
-				results = append(results, toResult(item))
-			}
-			continue
-		}
-
-		for _, item := range wrapped.Results {
-			results = append(results, toResult(item))
-		}
+		results = append(results, exaItemsToSearchResults(items)...)
 	}
 
 	if len(results) == 0 && parseErr != nil {
@@ -198,4 +164,52 @@ func parseExaResponse(respBody []byte) ([]model.SearchResult, error) {
 	}
 
 	return results, nil
+}
+
+func parseExaContentItems(index int, text string) ([]exaSearchItem, error) {
+	if text == "" {
+		return nil, nil
+	}
+
+	var wrapped struct {
+		Results []exaSearchItem `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(text), &wrapped); err != nil {
+		direct, directErr := parseDirectExaContentItems(text)
+		if directErr != nil {
+			return nil, fmt.Errorf("unmarshal exa content[%d]: %w", index, err)
+		}
+		return direct, nil
+	}
+
+	if len(wrapped.Results) == 0 {
+		direct, err := parseDirectExaContentItems(text)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal exa direct content[%d]: %w", index, err)
+		}
+		return direct, nil
+	}
+
+	return wrapped.Results, nil
+}
+
+func parseDirectExaContentItems(text string) ([]exaSearchItem, error) {
+	var direct []exaSearchItem
+	if err := json.Unmarshal([]byte(text), &direct); err != nil {
+		return nil, err
+	}
+	return direct, nil
+}
+
+func exaItemsToSearchResults(items []exaSearchItem) []model.SearchResult {
+	results := make([]model.SearchResult, 0, len(items))
+	for _, item := range items {
+		results = append(results, model.SearchResult{
+			Title:         item.Title,
+			URL:           item.URL,
+			Content:       item.Text,
+			PublishedDate: item.PublishedDate,
+		})
+	}
+	return results
 }

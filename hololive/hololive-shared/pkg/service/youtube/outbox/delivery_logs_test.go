@@ -166,7 +166,7 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 	windowStart := now.Add(-24 * time.Hour)
 
 	rows := []sqliteTelemetryBufferModel{}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		publishedAt := now.Add(time.Duration(-(i + 1)) * time.Hour)
 		eventAt := publishedAt.Add(time.Minute)
 		rows = append(rows, sqliteTelemetryBufferModel{

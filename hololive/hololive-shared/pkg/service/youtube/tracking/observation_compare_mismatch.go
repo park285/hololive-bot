@@ -24,51 +24,85 @@ type observationIdentifierMismatchGroup struct {
 	sent      []observationIdentifierMismatchGroupMember
 }
 
+type observationIdentifierMismatchGroups struct {
+	groups map[observationIdentifierMismatchAuxiliaryKey]*observationIdentifierMismatchGroup
+	order  []observationIdentifierMismatchAuxiliaryKey
+}
+
 func buildObservationIdentifierMismatchCandidates(
 	baselineIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
 	baselineKeys []observationPostComparisonKey,
 	sentIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
 	sentKeys []observationPostComparisonKey,
 ) ([]ObservationIdentifierMismatchCandidate, map[observationPostComparisonKey]struct{}, map[observationPostComparisonKey]struct{}) {
-	groups := make(map[observationIdentifierMismatchAuxiliaryKey]*observationIdentifierMismatchGroup, len(baselineKeys)+len(sentKeys))
-	order := make([]observationIdentifierMismatchAuxiliaryKey, 0, len(baselineKeys)+len(sentKeys))
+	groups := newObservationIdentifierMismatchGroups(len(baselineKeys) + len(sentKeys))
+	appendObservationIdentifierMismatchBaselines(groups, baselineIndex, baselineKeys)
+	appendObservationIdentifierMismatchSent(groups, sentIndex, sentKeys)
+	return buildObservationIdentifierMismatchCandidateSet(groups, baselineKeys, sentKeys)
+}
 
-	appendGroup := func(auxKey observationIdentifierMismatchAuxiliaryKey) *observationIdentifierMismatchGroup {
-		group, ok := groups[auxKey]
-		if ok {
-			return group
-		}
-		group = &observationIdentifierMismatchGroup{}
-		groups[auxKey] = group
-		order = append(order, auxKey)
+func newObservationIdentifierMismatchGroups(capacity int) *observationIdentifierMismatchGroups {
+	return &observationIdentifierMismatchGroups{
+		groups: make(map[observationIdentifierMismatchAuxiliaryKey]*observationIdentifierMismatchGroup, capacity),
+		order:  make([]observationIdentifierMismatchAuxiliaryKey, 0, capacity),
+	}
+}
+
+func (groups *observationIdentifierMismatchGroups) appendGroup(
+	auxKey observationIdentifierMismatchAuxiliaryKey,
+) *observationIdentifierMismatchGroup {
+	group, ok := groups.groups[auxKey]
+	if ok {
 		return group
 	}
+	group = &observationIdentifierMismatchGroup{}
+	groups.groups[auxKey] = group
+	groups.order = append(groups.order, auxKey)
+	return group
+}
 
+func appendObservationIdentifierMismatchBaselines(
+	groups *observationIdentifierMismatchGroups,
+	baselineIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
+	baselineKeys []observationPostComparisonKey,
+) {
 	for _, key := range baselineKeys {
 		accumulator := baselineIndex[key]
 		auxKey, ok := buildObservationIdentifierMismatchAuxiliaryKey(accumulator.representative)
 		if !ok {
 			continue
 		}
-		group := appendGroup(auxKey)
+		group := groups.appendGroup(auxKey)
 		group.baselines = append(group.baselines, observationIdentifierMismatchGroupMember{key: key, accumulator: accumulator})
 	}
+}
 
+func appendObservationIdentifierMismatchSent(
+	groups *observationIdentifierMismatchGroups,
+	sentIndex map[observationPostComparisonKey]*observationPostComparisonAccumulator,
+	sentKeys []observationPostComparisonKey,
+) {
 	for _, key := range sentKeys {
 		accumulator := sentIndex[key]
 		auxKey, ok := buildObservationIdentifierMismatchAuxiliaryKey(accumulator.representative)
 		if !ok {
 			continue
 		}
-		group := appendGroup(auxKey)
+		group := groups.appendGroup(auxKey)
 		group.sent = append(group.sent, observationIdentifierMismatchGroupMember{key: key, accumulator: accumulator})
 	}
+}
 
-	candidates := make([]ObservationIdentifierMismatchCandidate, 0, len(order))
+func buildObservationIdentifierMismatchCandidateSet(
+	groups *observationIdentifierMismatchGroups,
+	baselineKeys []observationPostComparisonKey,
+	sentKeys []observationPostComparisonKey,
+) ([]ObservationIdentifierMismatchCandidate, map[observationPostComparisonKey]struct{}, map[observationPostComparisonKey]struct{}) {
+	candidates := make([]ObservationIdentifierMismatchCandidate, 0, len(groups.order))
 	consumedBaseline := make(map[observationPostComparisonKey]struct{}, len(baselineKeys))
 	consumedSent := make(map[observationPostComparisonKey]struct{}, len(sentKeys))
-	for _, auxKey := range order {
-		group := groups[auxKey]
+	for _, auxKey := range groups.order {
+		group := groups.groups[auxKey]
 		if len(group.baselines) == 0 || len(group.sent) == 0 {
 			continue
 		}
