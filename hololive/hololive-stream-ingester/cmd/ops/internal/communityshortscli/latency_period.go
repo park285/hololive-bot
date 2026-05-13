@@ -28,7 +28,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("Failed to load community/shorts latency-period config: %w", err)
+		return fmt.Errorf("failed to load community/shorts latency-period config: %w", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(ctx.stderr, nil))
@@ -38,7 +38,7 @@ func runLatencyPeriodSummaryCommand(ctx commandContext, args []string) error {
 
 	report, err := opsapp.CollectCommunityShortsLatencyPeriodReport(reqCtx, cfg, logger, now, specs)
 	if err != nil {
-		return fmt.Errorf("Failed to collect community/shorts latency period report: %w", err)
+		return fmt.Errorf("failed to collect community/shorts latency period report: %w", err)
 	}
 
 	return writeLatencyPeriodReport(ctx, *format, report)
