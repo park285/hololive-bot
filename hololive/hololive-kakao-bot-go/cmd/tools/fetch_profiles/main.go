@@ -147,9 +147,8 @@ func fetchProfileResponse(ctx context.Context, client *http.Client, url string) 
 		return nil, fmt.Errorf("failed to fetch URL: %w", err)
 	}
 
-	defer func() { _ = resp.Body.Close() }()
-
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 	return resp, nil
@@ -181,7 +180,9 @@ func applyProfileHeader(profile *domain.TalentProfile, header *goquery.Selection
 		return
 	}
 
-	japanese := stringutil.TrimSpace(header.Clone().Children().Remove().Text())
+	headerClone := header.Clone()
+	headerClone.Children().Remove()
+	japanese := stringutil.TrimSpace(headerClone.Text())
 	english := stringutil.TrimSpace(header.Find("span").First().Text())
 	if english != "" {
 		profile.EnglishName = english
