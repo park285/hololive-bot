@@ -43,19 +43,32 @@ func NewClient(timeout time.Duration) *http.Client {
 
 // 기본 keep-alive, proxy, TLS 기본 동작은 유지하고 timeout/pool/HTTP2 정책만 profile로 주입합니다.
 func NewProfiledClient(profile TransportProfile) *http.Client {
-	baseTransport, ok := http.DefaultTransport.(*http.Transport)
-	if !ok || baseTransport == nil {
-		baseTransport = &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: time.Second,
-		}
-	}
-	transport := baseTransport.Clone()
+	transport := baseProfiledTransport().Clone()
+	applyTransportProfile(transport, profile)
 
+	return &http.Client{
+		Timeout:   profile.Timeout,
+		Transport: transport,
+	}
+}
+
+func baseProfiledTransport() *http.Transport {
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if ok && baseTransport != nil {
+		return baseTransport
+	}
+
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: time.Second,
+	}
+}
+
+func applyTransportProfile(transport *http.Transport, profile TransportProfile) {
 	if profile.DialTimeout > 0 {
 		transport.DialContext = (&net.Dialer{
 			Timeout: profile.DialTimeout,
@@ -78,11 +91,6 @@ func NewProfiledClient(profile TransportProfile) *http.Client {
 	}
 	if profile.DisableHTTP2 {
 		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
-	}
-
-	return &http.Client{
-		Timeout:   profile.Timeout,
-		Transport: transport,
 	}
 }
 

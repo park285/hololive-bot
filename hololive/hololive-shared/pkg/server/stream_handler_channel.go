@@ -29,45 +29,46 @@ import (
 )
 
 func (h *StreamHandler) GetChannel(c *gin.Context) {
-	ctx := c.Request.Context()
-
 	channelIDs := c.Query("channelIds")
 	if channelIDs != "" {
-		ids := SplitChannelIDs(channelIDs)
-		if len(ids) == 0 {
-			h.respondError(c, 400, "channelIds parameter is empty or invalid", nil)
-			return
-		}
-
-		if len(ids) > 100 {
-			h.respondError(c, 400, "channelIds supports at most 100 values", gin.H{
-				"limit":    100,
-				"received": len(ids),
-			})
-			return
-		}
-
-		channelsMap, err := h.MemberRepo.GetMembersWithPhoto(ctx, ids)
-		if err != nil {
-			h.respondInternalError(
-				c,
-				"Failed to get channels",
-				"Failed to get channels from DB",
-				err,
-				slog.Int("count", len(ids)),
-			)
-			return
-		}
-
-		channels := make([]*ChannelResponse, 0, len(channelsMap))
-		for _, member := range channelsMap {
-			channels = append(channels, MemberToChannelResponse(member))
-		}
-
-		c.JSON(200, gin.H{"status": "ok", "channels": channels})
+		h.getChannelsByIDs(c, channelIDs)
 		return
 	}
 
+	h.respondChannelQueryError(c)
+}
+
+func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
+	ids := SplitChannelIDs(channelIDs)
+	if len(ids) == 0 {
+		h.respondError(c, 400, "channelIds parameter is empty or invalid", nil)
+		return
+	}
+
+	if len(ids) > 100 {
+		h.respondError(c, 400, "channelIds supports at most 100 values", gin.H{
+			"limit":    100,
+			"received": len(ids),
+		})
+		return
+	}
+
+	channelsMap, err := h.MemberRepo.GetMembersWithPhoto(c.Request.Context(), ids)
+	if err != nil {
+		h.respondInternalError(
+			c,
+			"Failed to get channels",
+			"Failed to get channels from DB",
+			err,
+			slog.Int("count", len(ids)),
+		)
+		return
+	}
+
+	c.JSON(200, gin.H{"status": "ok", "channels": channelResponses(channelsMap)})
+}
+
+func (h *StreamHandler) respondChannelQueryError(c *gin.Context) {
 	channelID := c.Query("channelId")
 	if channelID != "" {
 		h.respondError(c, 410, "Legacy channelId query is no longer supported", gin.H{
@@ -76,6 +77,14 @@ func (h *StreamHandler) GetChannel(c *gin.Context) {
 		return
 	}
 	h.respondError(c, 400, "channelIds parameter required", nil)
+}
+
+func channelResponses(channelsMap map[string]*domain.Member) []*ChannelResponse {
+	channels := make([]*ChannelResponse, 0, len(channelsMap))
+	for _, member := range channelsMap {
+		channels = append(channels, MemberToChannelResponse(member))
+	}
+	return channels
 }
 
 type ChannelResponse struct {

@@ -91,33 +91,44 @@ func (r *TemplateRepository) Upsert(ctx context.Context, key domain.TemplateKey,
 	}
 
 	if existing == nil {
-		newTmpl := domain.NotificationTemplate{
-			TemplateKey: key,
-			ChannelID:   channelID,
-			Body:        body,
-		}
-		if err := r.db.WithContext(ctx).Create(&newTmpl).Error; err != nil {
-			if !isDuplicateKeyError(err) {
-				return nil, fmt.Errorf("create template: %w", err)
-			}
-
-			retryTarget, findErr := r.FindByKeyAndChannel(ctx, key, channelID)
-			if findErr != nil {
-				return nil, fmt.Errorf("find template after duplicate key: %w", findErr)
-			}
-			if retryTarget == nil {
-				return nil, fmt.Errorf("create template: %w", err)
-			}
-
-			retryTarget.Body = body
-			if saveErr := r.db.WithContext(ctx).Save(retryTarget).Error; saveErr != nil {
-				return nil, fmt.Errorf("update template after duplicate key: %w", saveErr)
-			}
-			return retryTarget, nil
-		}
-		return &newTmpl, nil
+		return r.createTemplate(ctx, key, channelID, body)
 	}
 
+	return r.updateTemplate(ctx, existing, body)
+}
+
+func (r *TemplateRepository) createTemplate(ctx context.Context, key domain.TemplateKey, channelID *string, body string) (*domain.NotificationTemplate, error) {
+	newTmpl := domain.NotificationTemplate{
+		TemplateKey: key,
+		ChannelID:   channelID,
+		Body:        body,
+	}
+	if err := r.db.WithContext(ctx).Create(&newTmpl).Error; err != nil {
+		return r.handleCreateTemplateError(ctx, key, channelID, body, err)
+	}
+	return &newTmpl, nil
+}
+
+func (r *TemplateRepository) handleCreateTemplateError(ctx context.Context, key domain.TemplateKey, channelID *string, body string, err error) (*domain.NotificationTemplate, error) {
+	if !isDuplicateKeyError(err) {
+		return nil, fmt.Errorf("create template: %w", err)
+	}
+
+	retryTarget, findErr := r.FindByKeyAndChannel(ctx, key, channelID)
+	if findErr != nil {
+		return nil, fmt.Errorf("find template after duplicate key: %w", findErr)
+	}
+	if retryTarget == nil {
+		return nil, fmt.Errorf("create template: %w", err)
+	}
+
+	if _, saveErr := r.updateTemplate(ctx, retryTarget, body); saveErr != nil {
+		return nil, fmt.Errorf("update template after duplicate key: %w", saveErr)
+	}
+	return retryTarget, nil
+}
+
+func (r *TemplateRepository) updateTemplate(ctx context.Context, existing *domain.NotificationTemplate, body string) (*domain.NotificationTemplate, error) {
 	existing.Body = body
 	if err := r.db.WithContext(ctx).Save(existing).Error; err != nil {
 		return nil, fmt.Errorf("update template: %w", err)

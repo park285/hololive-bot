@@ -64,18 +64,23 @@ func ObserveExecution(service, operation string, trigger Trigger, outcome string
 }
 
 func primaryOutcome(attempted, succeeded, failed int) string {
-	switch {
-	case attempted == 0:
+	if attempted == 0 {
 		return "skipped"
-	case succeeded > 0 && failed == 0:
-		return "success"
-	case succeeded > 0 && failed > 0:
-		return "partial"
-	case succeeded == 0 && failed == 0:
-		return "empty"
-	default:
-		return "failed"
 	}
+	return attemptedPrimaryOutcome(succeeded, failed)
+}
+
+func attemptedPrimaryOutcome(succeeded, failed int) string {
+	if succeeded > 0 && failed == 0 {
+		return "success"
+	}
+	if succeeded > 0 && failed > 0 {
+		return "partial"
+	}
+	if succeeded == 0 && failed == 0 {
+		return "empty"
+	}
+	return "failed"
 }
 
 func normalizeTrigger(trigger Trigger) string {

@@ -141,31 +141,50 @@ func pruneArchivedCompressedBackups(archiveDir, baseName string, maxBackups, max
 	}
 
 	removeByPath := make(map[string]struct{})
-	if maxAgeDays > 0 {
-		cutoff := time.Now().Add(-time.Duration(maxAgeDays) * 24 * time.Hour)
-		for _, file := range files {
-			if file.timestamp.Before(cutoff) {
-				removeByPath[file.path] = struct{}{}
-			}
-		}
-	}
+	collectArchivedBackupsOlderThan(files, maxAgeDays, removeByPath)
 
 	slices.SortFunc(files, func(a, b archivedLogFile) int {
-		switch {
-		case a.timestamp.After(b.timestamp):
-			return -1
-		case a.timestamp.Before(b.timestamp):
-			return 1
-		default:
-			return 0
-		}
+		return compareArchivedLogFileNewestFirst(a, b)
 	})
-	if maxBackups > 0 && len(files) > maxBackups {
-		for _, file := range files[maxBackups:] {
+	collectArchivedBackupsBeyondLimit(files, maxBackups, removeByPath)
+
+	return removeArchivedCompressedBackupPaths(removeByPath)
+}
+
+func collectArchivedBackupsOlderThan(files []archivedLogFile, maxAgeDays int, removeByPath map[string]struct{}) {
+	if maxAgeDays <= 0 {
+		return
+	}
+
+	cutoff := time.Now().Add(-time.Duration(maxAgeDays) * 24 * time.Hour)
+	for _, file := range files {
+		if file.timestamp.Before(cutoff) {
 			removeByPath[file.path] = struct{}{}
 		}
 	}
+}
 
+func compareArchivedLogFileNewestFirst(a, b archivedLogFile) int {
+	if a.timestamp.After(b.timestamp) {
+		return -1
+	}
+	if a.timestamp.Before(b.timestamp) {
+		return 1
+	}
+	return 0
+}
+
+func collectArchivedBackupsBeyondLimit(files []archivedLogFile, maxBackups int, removeByPath map[string]struct{}) {
+	if maxBackups <= 0 || len(files) <= maxBackups {
+		return
+	}
+
+	for _, file := range files[maxBackups:] {
+		removeByPath[file.path] = struct{}{}
+	}
+}
+
+func removeArchivedCompressedBackupPaths(removeByPath map[string]struct{}) error {
 	for path := range removeByPath {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove archived backup %s: %w", filepath.Base(path), err)
@@ -188,27 +207,37 @@ func archivedCompressedBackups(archiveDir, baseName string) ([]archivedLogFile, 
 	suffix := ext + compressSuffix
 	files := make([]archivedLogFile, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
-			continue
-		}
-
-		timestamp, err := backupTimestampFromName(name, prefix, suffix)
-		if err != nil {
-			continue
-		}
-
-		files = append(files, archivedLogFile{
-			path:      filepath.Join(archiveDir, name),
-			timestamp: timestamp,
-		})
+		files = appendArchivedCompressedBackup(files, archiveDir, prefix, suffix, entry)
 	}
 
 	return files, nil
+}
+
+func appendArchivedCompressedBackup(
+	files []archivedLogFile,
+	archiveDir string,
+	prefix string,
+	suffix string,
+	entry os.DirEntry,
+) []archivedLogFile {
+	if entry.IsDir() {
+		return files
+	}
+
+	name := entry.Name()
+	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+		return files
+	}
+
+	timestamp, err := backupTimestampFromName(name, prefix, suffix)
+	if err != nil {
+		return files
+	}
+
+	return append(files, archivedLogFile{
+		path:      filepath.Join(archiveDir, name),
+		timestamp: timestamp,
+	})
 }
 
 func backupPrefixAndExt(baseName string) (string, string) {
@@ -236,17 +265,7 @@ func backupTimestampFromName(name, prefix, suffix string) (time.Time, error) {
 func ensureLogFilePerm(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("stat log file failed: %w", err)
-		}
-		file, createErr := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, logFilePerm)
-		if createErr != nil {
-			return fmt.Errorf("create log file failed: %w", createErr)
-		}
-		if closeErr := file.Close(); closeErr != nil {
-			return fmt.Errorf("close log file failed: %w", closeErr)
-		}
-		return nil
+		return ensureMissingLogFile(path, err)
 	}
 
 	if info.IsDir() {
@@ -259,6 +278,21 @@ func ensureLogFilePerm(path string) error {
 
 	if chmodErr := os.Chmod(path, logFilePerm); chmodErr != nil {
 		return fmt.Errorf("chmod log file failed: %w", chmodErr)
+	}
+	return nil
+}
+
+func ensureMissingLogFile(path string, statErr error) error {
+	if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("stat log file failed: %w", statErr)
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, logFilePerm)
+	if err != nil {
+		return fmt.Errorf("create log file failed: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close log file failed: %w", err)
 	}
 	return nil
 }

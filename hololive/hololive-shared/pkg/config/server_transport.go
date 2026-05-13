@@ -6,22 +6,33 @@ import (
 )
 
 func (c *Config) validateServerTransports() error {
+	if err := c.validateServerHTTPTransportNames(); err != nil {
+		return err
+	}
+	if !c.ServerTransportEnabled("h3") {
+		return nil
+	}
+	return c.validateH3TransportFiles()
+}
+
+func (c *Config) validateServerHTTPTransportNames() error {
 	for _, rawTransport := range c.Server.HTTPTransports {
 		if _, ok := normalizeServerHTTPTransport(rawTransport); !ok {
 			return fmt.Errorf("unsupported HOLOLIVE_HTTP_TRANSPORTS value: %s", rawTransport)
 		}
 	}
+	return nil
+}
 
-	if c.ServerTransportEnabled("h3") {
-		if strings.TrimSpace(c.Server.H3Addr) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_ADDR is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3CertFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_CERT_FILE is required when h3 transport is enabled")
-		}
-		if strings.TrimSpace(c.Server.H3KeyFile) == "" {
-			return fmt.Errorf("HOLOLIVE_H3_KEY_FILE is required when h3 transport is enabled")
-		}
+func (c *Config) validateH3TransportFiles() error {
+	if strings.TrimSpace(c.Server.H3Addr) == "" {
+		return fmt.Errorf("HOLOLIVE_H3_ADDR is required when h3 transport is enabled")
+	}
+	if strings.TrimSpace(c.Server.H3CertFile) == "" {
+		return fmt.Errorf("HOLOLIVE_H3_CERT_FILE is required when h3 transport is enabled")
+	}
+	if strings.TrimSpace(c.Server.H3KeyFile) == "" {
+		return fmt.Errorf("HOLOLIVE_H3_KEY_FILE is required when h3 transport is enabled")
 	}
 	return nil
 }

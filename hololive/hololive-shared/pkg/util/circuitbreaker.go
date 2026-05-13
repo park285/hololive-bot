@@ -83,16 +83,20 @@ func (cb *CircuitBreaker) GetState() CircuitState {
 	defer cb.mu.Unlock()
 
 	if cb.state == CircuitStateOpen {
-		now := time.Now()
-
-		if cb.healthCheckFn != nil && now.After(cb.nextHealthCheckTime) && !cb.isHealthChecking {
-			go cb.tryHealthCheck()
-		} else if cb.healthCheckFn == nil && now.After(cb.nextRetryTime) {
-			cb.transitionTo(CircuitStateHalfOpen)
-		}
+		cb.refreshOpenState(time.Now())
 	}
 
 	return cb.state
+}
+
+func (cb *CircuitBreaker) refreshOpenState(now time.Time) {
+	if cb.healthCheckFn != nil && now.After(cb.nextHealthCheckTime) && !cb.isHealthChecking {
+		go cb.tryHealthCheck()
+		return
+	}
+	if cb.healthCheckFn == nil && now.After(cb.nextRetryTime) {
+		cb.transitionTo(CircuitStateHalfOpen)
+	}
 }
 
 func (cb *CircuitBreaker) CanExecute() bool {

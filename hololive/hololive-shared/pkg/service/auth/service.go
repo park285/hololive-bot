@@ -129,33 +129,17 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 		return nil, nil, newError(CodeInvalidInput, "invalid email/password", nil)
 	}
 
-	if s.cacheSvc != nil {
-		if limited, err := s.isLoginRateLimited(ctx, clientIP); err != nil {
-			return nil, nil, newError(CodeInternal, "rate limit check failed", err)
-		} else if limited {
-			return nil, nil, newError(CodeRateLimited, "rate limited", nil)
-		}
-
-		if locked, err := s.isAccountLocked(ctx, email); err != nil {
-			return nil, nil, newError(CodeInternal, "lock check failed", err)
-		} else if locked {
-			return nil, nil, newError(CodeAccountLocked, "account locked", nil)
-		}
+	if err := s.validateLoginGuards(ctx, email, clientIP); err != nil {
+		return nil, nil, err
 	}
 
-	var user userModel
-	err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	user, err := s.findLoginUser(ctx, email)
 	if err != nil {
-		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
-			s.onLoginFailed(ctx, email)
-			return nil, nil, newError(CodeInvalidCredentials, "invalid credentials", nil)
-		}
-		return nil, nil, newError(CodeInternal, "failed to query user", err)
+		return nil, nil, err
 	}
 
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
-		s.onLoginFailed(ctx, email)
-		return nil, nil, newError(CodeInvalidCredentials, "invalid credentials", nil)
+	if err := s.validateLoginPassword(ctx, email, user.PasswordHash, password); err != nil {
+		return nil, nil, err
 	}
 
 	s.onLoginSucceeded(ctx, email)
@@ -166,6 +150,60 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 	}
 
 	return session, toUser(&user), nil
+}
+
+func (s *Service) validateLoginGuards(ctx context.Context, email, clientIP string) error {
+	if s.cacheSvc == nil {
+		return nil
+	}
+
+	if err := s.validateLoginRateLimit(ctx, clientIP); err != nil {
+		return err
+	}
+	return s.validateAccountLock(ctx, email)
+}
+
+func (s *Service) validateLoginRateLimit(ctx context.Context, clientIP string) error {
+	limited, err := s.isLoginRateLimited(ctx, clientIP)
+	if err != nil {
+		return newError(CodeInternal, "rate limit check failed", err)
+	}
+	if limited {
+		return newError(CodeRateLimited, "rate limited", nil)
+	}
+	return nil
+}
+
+func (s *Service) validateAccountLock(ctx context.Context, email string) error {
+	locked, err := s.isAccountLocked(ctx, email)
+	if err != nil {
+		return newError(CodeInternal, "lock check failed", err)
+	}
+	if locked {
+		return newError(CodeAccountLocked, "account locked", nil)
+	}
+	return nil
+}
+
+func (s *Service) findLoginUser(ctx context.Context, email string) (userModel, error) {
+	var user userModel
+	err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	if err == nil {
+		return user, nil
+	}
+	if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+		s.onLoginFailed(ctx, email)
+		return user, newError(CodeInvalidCredentials, "invalid credentials", nil)
+	}
+	return user, newError(CodeInternal, "failed to query user", err)
+}
+
+func (s *Service) validateLoginPassword(ctx context.Context, email, passwordHash, password string) error {
+	if bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)) == nil {
+		return nil
+	}
+	s.onLoginFailed(ctx, email)
+	return newError(CodeInvalidCredentials, "invalid credentials", nil)
 }
 
 func normalizeDisplayName(name string) string {

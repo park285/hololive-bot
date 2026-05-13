@@ -33,7 +33,33 @@ func OpenWithRetry(
 	cfg Config,
 	opt OpenOptions,
 ) (*Client, error) {
-	retry := opt.Retry
+	retry := normalizeOpenRetryConfig(opt.Retry)
+	logger := openRetryLogger(opt.Logger)
+
+	var lastErr error
+	for attempt := range retry.MaxAttempts {
+		client, err := Open(ctx, cfg, opt)
+		if err == nil {
+			logOpenRetrySuccess(logger, attempt)
+			return client, nil
+		}
+
+		lastErr = err
+		if attempt >= retry.MaxAttempts-1 {
+			break
+		}
+
+		delay := min(retry.BaseDelay*time.Duration(1<<uint(attempt)), retry.MaxDelay)
+		logOpenRetryAttempt(logger, retry, attempt, delay, err)
+		if waitErr := waitOpenRetryDelay(ctx, delay); waitErr != nil {
+			return nil, waitErr
+		}
+	}
+
+	return nil, fmt.Errorf("postgres connect failed after %d attempts: %w", retry.MaxAttempts, lastErr)
+}
+
+func normalizeOpenRetryConfig(retry RetryConfig) RetryConfig {
 	if retry.MaxAttempts <= 0 {
 		retry.MaxAttempts = 5
 	}
@@ -43,48 +69,39 @@ func OpenWithRetry(
 	if retry.MaxDelay <= 0 {
 		retry.MaxDelay = 30 * time.Second
 	}
+	return retry
+}
 
-	logger := opt.Logger
+func openRetryLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
-		logger = slog.Default()
+		return slog.Default()
 	}
+	return logger
+}
 
-	var lastErr error
-	for attempt := range retry.MaxAttempts {
-		client, err := Open(ctx, cfg, opt)
-		if err == nil {
-			if attempt > 0 {
-				logger.Info("postgres_connect_success_after_retry",
-					slog.Int("attempts", attempt+1),
-				)
-			}
-			return client, nil
-		}
-
-		lastErr = err
-
-		// 마지막 시도면 재시도하지 않음
-		if attempt >= retry.MaxAttempts-1 {
-			break
-		}
-
-		// Exponential backoff: 2s, 4s, 8s, 16s, ... (최대 MaxDelay)
-		delay := min(retry.BaseDelay*time.Duration(1<<uint(attempt)), retry.MaxDelay)
-
-		logger.Warn("postgres_connect_retry",
-			slog.Int("attempt", attempt+1),
-			slog.Int("max_attempts", retry.MaxAttempts),
-			slog.Duration("delay", delay),
-			slog.Any("error", err),
-		)
-
-		// context 취소 확인 후 대기
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("postgres connect canceled: %w", ctx.Err())
-		case <-time.After(delay):
-		}
+func logOpenRetrySuccess(logger *slog.Logger, attempt int) {
+	if attempt == 0 {
+		return
 	}
+	logger.Info("postgres_connect_success_after_retry",
+		slog.Int("attempts", attempt+1),
+	)
+}
 
-	return nil, fmt.Errorf("postgres connect failed after %d attempts: %w", retry.MaxAttempts, lastErr)
+func logOpenRetryAttempt(logger *slog.Logger, retry RetryConfig, attempt int, delay time.Duration, err error) {
+	logger.Warn("postgres_connect_retry",
+		slog.Int("attempt", attempt+1),
+		slog.Int("max_attempts", retry.MaxAttempts),
+		slog.Duration("delay", delay),
+		slog.Any("error", err),
+	)
+}
+
+func waitOpenRetryDelay(ctx context.Context, delay time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("postgres connect canceled: %w", ctx.Err())
+	case <-time.After(delay):
+		return nil
+	}
 }

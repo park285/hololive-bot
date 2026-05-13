@@ -21,80 +21,70 @@
 package domain
 
 func templateSampleMemberNewsData() map[TemplateKey]any {
-	return map[TemplateKey]any{
-		TemplateKeyCmdMemberNewsDigest: map[string]any{
-			"Emoji": map[string]string{
-				"Brand": "🌸",
-				"Link":  "🔗",
-			},
-			"Headline": "🗞️ 이번주 구독 멤버 뉴스",
-			"TopItems": []map[string]any{
-				{
-					"Member":    "사쿠라 미코",
-					"Category":  "birthday_live",
-					"Title":     "さくらみこ生誕ライブ2026",
-					"DateText":  "2026-02-20",
-					"Summary":   "생일 기념 라이브 진행 예정",
-					"SourceURL": "https://hololive.hololivepro.com/news/",
-				},
-				{
-					"Member":    "시라카미 후부키",
-					"Category":  "event",
-					"Title":     "hololive SUPER EXPO 2026",
-					"DateText":  "2026-03-07",
-					"Summary":   "엑스포 참여 소식",
-					"SourceURL": "https://hololive.hololivepro.com/events/",
-				},
-			},
-			"MoreSummary": "외 3건",
-			"TotalCount":  5,
-		},
+	data := map[TemplateKey]any{
+		TemplateKeyCmdMemberNewsDigest: templateMemberNewsDigestSample(),
+	}
+	addTemplateMemberNewsSubscriptionSamples(data)
+	return data
+}
 
-		TemplateKeyCmdMemberNewsNoMembers: map[string]any{
-			"Emoji": map[string]string{
-				"Brand": "🌸",
-			},
-			"Prefix": "!",
-		},
+func templateMemberNewsDigestSample() map[string]any {
+	return map[string]any{
+		"Emoji":       map[string]string{"Brand": "🌸", "Link": "🔗"},
+		"Headline":    "🗞️ 이번주 구독 멤버 뉴스",
+		"TopItems":    templateMemberNewsDigestItems(),
+		"MoreSummary": "외 3건",
+		"TotalCount":  5,
+	}
+}
 
-		TemplateKeyCmdMemberNewsSubscribed: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm":   "🔔",
-				"Success": "✅",
-			},
-			"Prefix": "!",
+func templateMemberNewsDigestItems() []map[string]any {
+	return []map[string]any{
+		{
+			"Member":    "사쿠라 미코",
+			"Category":  "birthday_live",
+			"Title":     "さくらみこ生誕ライブ2026",
+			"DateText":  "2026-02-20",
+			"Summary":   "생일 기념 라이브 진행 예정",
+			"SourceURL": "https://hololive.hololivepro.com/news/",
 		},
+		{
+			"Member":    "시라카미 후부키",
+			"Category":  "event",
+			"Title":     "hololive SUPER EXPO 2026",
+			"DateText":  "2026-03-07",
+			"Summary":   "엑스포 참여 소식",
+			"SourceURL": "https://hololive.hololivepro.com/events/",
+		},
+	}
+}
 
-		TemplateKeyCmdMemberNewsUnsubscribed: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm":   "🔔",
-				"Success": "✅",
-			},
-			"Prefix": "!",
-		},
+func addTemplateMemberNewsSubscriptionSamples(data map[TemplateKey]any) {
+	data[TemplateKeyCmdMemberNewsNoMembers] = map[string]any{
+		"Emoji":  map[string]string{"Brand": "🌸"},
+		"Prefix": "!",
+	}
+	data[TemplateKeyCmdMemberNewsSubscribed] = templateMemberNewsAlarmSuccessSample()
+	data[TemplateKeyCmdMemberNewsUnsubscribed] = templateMemberNewsAlarmSuccessSample()
+	data[TemplateKeyCmdMemberNewsAlreadySub] = templateMemberNewsAlarmInfoSample("🔔")
+	data[TemplateKeyCmdMemberNewsNotSub] = templateMemberNewsAlarmInfoSample("🔕")
+	data[TemplateKeyCmdMemberNewsStatus] = map[string]any{
+		"Emoji":        map[string]string{"Alarm": "🔔"},
+		"Prefix":       "!",
+		"IsSubscribed": true,
+	}
+}
 
-		TemplateKeyCmdMemberNewsAlreadySub: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm": "🔔",
-				"Info":  "ℹ️",
-			},
-			"Prefix": "!",
-		},
+func templateMemberNewsAlarmSuccessSample() map[string]any {
+	return map[string]any{
+		"Emoji":  map[string]string{"Alarm": "🔔", "Success": "✅"},
+		"Prefix": "!",
+	}
+}
 
-		TemplateKeyCmdMemberNewsNotSub: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm": "🔕",
-				"Info":  "ℹ️",
-			},
-			"Prefix": "!",
-		},
-
-		TemplateKeyCmdMemberNewsStatus: map[string]any{
-			"Emoji": map[string]string{
-				"Alarm": "🔔",
-			},
-			"Prefix":       "!",
-			"IsSubscribed": true,
-		},
+func templateMemberNewsAlarmInfoSample(alarmEmoji string) map[string]any {
+	return map[string]any{
+		"Emoji":  map[string]string{"Alarm": alarmEmoji, "Info": "ℹ️"},
+		"Prefix": "!",
 	}
 }
