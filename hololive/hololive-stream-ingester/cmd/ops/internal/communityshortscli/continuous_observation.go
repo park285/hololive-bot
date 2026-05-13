@@ -37,7 +37,7 @@ func runContinuousObservationCommand(ctx commandContext, args []string) error {
 
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("Failed to load community/shorts continuous observation config: %w", err)
+		return fmt.Errorf("failed to load community/shorts continuous observation config: %w", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(ctx.stderr, nil))
