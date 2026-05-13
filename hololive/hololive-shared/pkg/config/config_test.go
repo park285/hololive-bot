@@ -480,8 +480,14 @@ func TestLoad_ScraperSnapshotAndChannelHealthDefaults(t *testing.T) {
 	if !cfg.Scraper.ChannelHealth.Enabled {
 		t.Fatal("Scraper.ChannelHealth.Enabled = false, want default true")
 	}
+	if cfg.Scraper.ChannelHealth.Enforce {
+		t.Fatal("Scraper.ChannelHealth.Enforce = true, want default false")
+	}
 	if cfg.Scraper.Snapshot.MaxBodyBytes != 512<<10 {
 		t.Fatalf("Scraper.Snapshot.MaxBodyBytes = %d, want %d", cfg.Scraper.Snapshot.MaxBodyBytes, 512<<10)
+	}
+	if cfg.Scraper.PollTiering.Enabled {
+		t.Fatal("Scraper.PollTiering.Enabled = true, want default false")
 	}
 }
 
@@ -492,9 +498,11 @@ func TestLoad_ScraperSnapshotAndChannelHealthEnvOverride(t *testing.T) {
 	t.Setenv("SCRAPER_SNAPSHOT_MAX_BODY_BYTES", "1024")
 	t.Setenv("SCRAPER_SNAPSHOT_MIN_INTERVAL_SECONDS", "60")
 	t.Setenv("SCRAPER_CHANNEL_HEALTH_ENABLED", "false")
+	t.Setenv("SCRAPER_CHANNEL_HEALTH_ENFORCE", "true")
 	t.Setenv("SCRAPER_CHANNEL_HEALTH_PARSER_DRIFT_BASE_SECONDS", "120")
 	t.Setenv("SCRAPER_BROWSER_DIAGNOSTIC_ENABLED", "true")
 	t.Setenv("SCRAPER_BROWSER_DIAGNOSTIC_ENDPOINT", "http://browser:9222/snapshot")
+	t.Setenv("SCRAPER_POLL_TIERING_ENABLED", "true")
 
 	cfg, err := Load()
 	if err != nil {
@@ -516,11 +524,17 @@ func TestLoad_ScraperSnapshotAndChannelHealthEnvOverride(t *testing.T) {
 	if cfg.Scraper.ChannelHealth.Enabled {
 		t.Fatal("Scraper.ChannelHealth.Enabled = true, want false")
 	}
+	if !cfg.Scraper.ChannelHealth.Enforce {
+		t.Fatal("Scraper.ChannelHealth.Enforce = false, want true")
+	}
 	if cfg.Scraper.ChannelHealth.ParserDriftBase != 2*time.Minute {
 		t.Fatalf("Scraper.ChannelHealth.ParserDriftBase = %s, want 2m", cfg.Scraper.ChannelHealth.ParserDriftBase)
 	}
 	if !cfg.Scraper.BrowserDiagnostic.Enabled {
 		t.Fatal("Scraper.BrowserDiagnostic.Enabled = false, want true")
+	}
+	if !cfg.Scraper.PollTiering.Enabled {
+		t.Fatal("Scraper.PollTiering.Enabled = false, want true")
 	}
 }
 

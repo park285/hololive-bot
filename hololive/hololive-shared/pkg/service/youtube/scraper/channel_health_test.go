@@ -52,6 +52,7 @@ func TestChannelHealthStoreRecordsParserDriftCooldownPerSource(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
 	store := NewChannelHealthStore(newChannelHealthTestStore(), ChannelHealthPolicy{
+		Enforce:         true,
 		TTL:             time.Hour,
 		ParserDriftBase: 10 * time.Minute,
 		ParserDriftMax:  time.Hour,
@@ -69,6 +70,25 @@ func TestChannelHealthStoreRecordsParserDriftCooldownPerSource(t *testing.T) {
 	rssWait, rssSkip := store.ShouldSkip(ctx, "UC_TEST", FailureSourceRSS, now.Add(time.Minute))
 	require.False(t, rssSkip)
 	require.Zero(t, rssWait)
+}
+
+func TestChannelHealthStoreDryRunRecordsWithoutSkipping(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	store := NewChannelHealthStore(newChannelHealthTestStore(), ChannelHealthPolicy{
+		ParserDriftBase: 10 * time.Minute,
+		ParserDriftMax:  time.Hour,
+	})
+
+	delay := store.RecordFailure(ctx, "UC_TEST", FailureDetail{Reason: FailureReasonParserDrift, Source: FailureSourceHTML}, now)
+	wait, skip := store.ShouldSkip(ctx, "UC_TEST", FailureSourceHTML, now.Add(time.Minute))
+	health, ok := store.Get(ctx, "UC_TEST", FailureSourceHTML)
+
+	require.Equal(t, 10*time.Minute, delay)
+	require.False(t, skip)
+	require.Zero(t, wait)
+	require.True(t, ok)
+	require.Equal(t, 1, health.ConsecutiveFailures)
 }
 
 func TestChannelHealthStoreIgnoresRateLimitedGlobalFailures(t *testing.T) {
@@ -91,6 +111,7 @@ func TestChannelHealthStoreSuccessClearsCooldown(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
 	store := NewChannelHealthStore(newChannelHealthTestStore(), ChannelHealthPolicy{
+		Enforce:         true,
 		TTL:             time.Hour,
 		ParserDriftBase: 10 * time.Minute,
 		ParserDriftMax:  time.Hour,

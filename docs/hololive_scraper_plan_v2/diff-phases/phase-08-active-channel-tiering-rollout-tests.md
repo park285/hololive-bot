@@ -16,6 +16,7 @@ tier:
 2. target list를 active/warm/cold로 분리한 registration을 만드는 방식으로 시작합니다.
 3. budget 계산은 tier별 registration을 그대로 합산하게 둡니다.
 4. tier 계산은 DB/state 기반으로 하고, 실패 health와 독립시킵니다.
+5. `SCRAPER_POLL_TIERING_ENABLED=true`일 때만 tiered registration을 적용합니다.
 
 ## 구현 방향
 
@@ -118,6 +119,7 @@ func buildTieredLivePollerRegistrations(
 4. 배포 4: browser diagnostic 수동 호출만 허용
 
 5. 배포 5: active/warm/cold tiering 적용
+   - `SCRAPER_POLL_TIERING_ENABLED=true`
 
 ## 테스트 명령
 
@@ -147,3 +149,4 @@ go test ./hololive/hololive-stream-ingester/internal/runtime
 - channel/source별 backoff가 scheduler next run에 반영됩니다.
 - browser diagnostic은 기본 수집 경로로 들어가지 않습니다.
 - active/warm/cold tiering 후 전체 RPM이 줄어듭니다.
+- registry version이 변하지 않아도 tier가 주기적으로 재분류됩니다.
