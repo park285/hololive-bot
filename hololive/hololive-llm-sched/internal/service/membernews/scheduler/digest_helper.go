@@ -122,6 +122,25 @@ func runDigestDispatch(
 		return nil
 	}
 
+	result := dispatchDigestRooms(ctx, rooms, cfg)
+
+	logger.Info(cfg.resultMessage,
+		slog.String(cfg.periodFieldName, cfg.periodKey),
+		slog.Int("attempted", result.Attempted),
+		slog.Int("sent", result.Sent),
+		slog.Int("skipped", result.Skipped),
+		slog.Int("failed", result.Failed),
+		slog.Any("failed_rooms", result.FailedRooms),
+	)
+
+	if result.Sent == 0 && result.Failed > 0 {
+		return fmt.Errorf(cfg.allFailedMessage, result.Failed)
+	}
+
+	return nil
+}
+
+func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, cfg digestDispatchConfig) delivery.SendResult {
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
@@ -144,20 +163,7 @@ func runDigestDispatch(
 	}
 	wg.Wait()
 
-	logger.Info(cfg.resultMessage,
-		slog.String(cfg.periodFieldName, cfg.periodKey),
-		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
-		slog.Int("skipped", result.Skipped),
-		slog.Int("failed", result.Failed),
-		slog.Any("failed_rooms", result.FailedRooms),
-	)
-
-	if result.Sent == 0 && result.Failed > 0 {
-		return fmt.Errorf(cfg.allFailedMessage, result.Failed)
-	}
-
-	return nil
+	return result
 }
 
 // renderDigestMessage: 다이제스트 메시지 포맷팅 (weekly/monthly 공용).

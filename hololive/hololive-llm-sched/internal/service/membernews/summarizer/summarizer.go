@@ -38,6 +38,22 @@ var (
 	kst = model.KST
 )
 
+var categoryLabels = map[model.Category]string{
+	model.CategoryBirthdayLive: "생일 라이브",
+	model.CategorySoloLive:     "솔로 라이브",
+	model.CategoryCollab:       "콜라보",
+	model.CategoryEvent:        "이벤트",
+	model.CategoryGoods:        "굿즈",
+}
+
+var normalizedCategories = map[string]model.Category{
+	string(model.CategoryBirthdayLive): model.CategoryBirthdayLive,
+	string(model.CategorySoloLive):     model.CategorySoloLive,
+	string(model.CategoryCollab):       model.CategoryCollab,
+	string(model.CategoryEvent):        model.CategoryEvent,
+	string(model.CategoryGoods):        model.CategoryGoods,
+}
+
 type LLMClient interface {
 	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
 }
@@ -75,16 +91,7 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input model.SummarizeInp
 		return BuildDeterministicFallback(input.Period, input.Candidates), nil
 	}
 
-	searchContext := ""
-	if s.searcher != nil {
-		query := buildSearchQuery(input.Period, input.RoomMembers, input.Now)
-		results, err := s.searcher.Search(ctx, query)
-		if err != nil {
-			s.logger.Warn("MemberNews Exa search failed (graceful)", slog.Any("error", err))
-		} else {
-			searchContext = formatSearchContext(results)
-		}
-	}
+	searchContext := s.searchContext(ctx, input)
 
 	raw, err := s.llm.GenerateJSON(ctx, memberNewsSystemPrompt(), buildMemberNewsUserPrompt(input, searchContext), memberNewsSummarySchema())
 	if err != nil {
@@ -105,6 +112,20 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input model.SummarizeInp
 	}
 
 	return digest, nil
+}
+
+func (s *SummarizerImpl) searchContext(ctx context.Context, input model.SummarizeInput) string {
+	if s.searcher == nil {
+		return ""
+	}
+
+	query := buildSearchQuery(input.Period, input.RoomMembers, input.Now)
+	results, err := s.searcher.Search(ctx, query)
+	if err != nil {
+		s.logger.Warn("MemberNews Exa search failed (graceful)", slog.Any("error", err))
+		return ""
+	}
+	return formatSearchContext(results)
 }
 
 func newEmptyDigest(period model.Period, totalCount int) *model.Digest {
@@ -136,38 +157,7 @@ func validateAndBuildDigestFromResponse(
 	validatedItems := make([]model.SummaryItem, 0, len(response.TopItems))
 
 	for i := range response.TopItems {
-		item := &response.TopItems[i]
-		if strings.TrimSpace(item.Member) == "" ||
-			strings.TrimSpace(item.Category) == "" ||
-			strings.TrimSpace(item.Title) == "" ||
-			strings.TrimSpace(item.DateText) == "" ||
-			strings.TrimSpace(item.Summary) == "" ||
-			strings.TrimSpace(item.SourceURL) == "" {
-			continue
-		}
-
-		normalizedCategory := normalizeCategory(item.Category)
-		normalizedURL := strings.TrimSpace(item.SourceURL)
-
-		if validator != nil {
-			validatedTier, validatedSourceURL, err := validator.ValidateSourceURL(item.SourceURL)
-			if err != nil {
-				continue
-			}
-			normalizedURL = validatedSourceURL
-			if validatedTier == model.SourceTierCommunity && !validator.HasCorroboration(item.Summary) {
-				continue
-			}
-		}
-
-		validatedItems = append(validatedItems, model.SummaryItem{
-			Member:    strings.TrimSpace(item.Member),
-			Category:  string(normalizedCategory),
-			Title:     strings.TrimSpace(item.Title),
-			DateText:  strings.TrimSpace(item.DateText),
-			Summary:   strings.TrimSpace(item.Summary),
-			SourceURL: normalizedURL,
-		})
+		appendValidatedSummaryItem(&validatedItems, response.TopItems[i], validator)
 	}
 
 	if len(validatedItems) > 5 {
@@ -199,25 +189,60 @@ func validateAndBuildDigestFromResponse(
 	}
 }
 
+func appendValidatedSummaryItem(items *[]model.SummaryItem, item summaryResponseItem, validator model.SourceURLValidator) {
+	if !summaryResponseItemHasRequiredFields(item) {
+		return
+	}
+
+	normalizedURL, ok := validateSummaryResponseItemSource(item, validator)
+	if !ok {
+		return
+	}
+
+	*items = append(*items, model.SummaryItem{
+		Member:    strings.TrimSpace(item.Member),
+		Category:  string(normalizeCategory(item.Category)),
+		Title:     strings.TrimSpace(item.Title),
+		DateText:  strings.TrimSpace(item.DateText),
+		Summary:   strings.TrimSpace(item.Summary),
+		SourceURL: normalizedURL,
+	})
+}
+
+func summaryResponseItemHasRequiredFields(item summaryResponseItem) bool {
+	return strings.TrimSpace(item.Member) != "" &&
+		strings.TrimSpace(item.Category) != "" &&
+		strings.TrimSpace(item.Title) != "" &&
+		strings.TrimSpace(item.DateText) != "" &&
+		strings.TrimSpace(item.Summary) != "" &&
+		strings.TrimSpace(item.SourceURL) != ""
+}
+
+func validateSummaryResponseItemSource(item summaryResponseItem, validator model.SourceURLValidator) (string, bool) {
+	normalizedURL := strings.TrimSpace(item.SourceURL)
+	if validator == nil {
+		return normalizedURL, true
+	}
+
+	tier, sourceURL, err := validator.ValidateSourceURL(item.SourceURL)
+	if err != nil {
+		return "", false
+	}
+	if tier == model.SourceTierCommunity && !validator.HasCorroboration(item.Summary) {
+		return "", false
+	}
+	return sourceURL, true
+}
+
 // weekdayKR: 요일 한국어 레이블 (0=일요일 기준).
 var weekdayKR = [...]string{"일", "월", "화", "수", "목", "금", "토"}
 
 // categoryLabel: Category를 한국어 레이블로 변환.
 func categoryLabel(cat model.Category) string {
-	switch cat {
-	case model.CategoryBirthdayLive:
-		return "생일 라이브"
-	case model.CategorySoloLive:
-		return "솔로 라이브"
-	case model.CategoryCollab:
-		return "콜라보"
-	case model.CategoryEvent:
-		return "이벤트"
-	case model.CategoryGoods:
-		return "굿즈"
-	default:
-		return "기타"
+	if label, ok := categoryLabels[cat]; ok {
+		return label
 	}
+	return "기타"
 }
 
 func BuildDeterministicFallback(period model.Period, candidates []model.FilteredCandidate) *model.Digest {
@@ -264,20 +289,10 @@ func BuildDeterministicFallback(period model.Period, candidates []model.Filtered
 
 func normalizeCategory(raw string) model.Category {
 	normalized := strings.TrimSpace(strings.ToLower(raw))
-	switch normalized {
-	case string(model.CategoryBirthdayLive):
-		return model.CategoryBirthdayLive
-	case string(model.CategorySoloLive):
-		return model.CategorySoloLive
-	case string(model.CategoryCollab):
-		return model.CategoryCollab
-	case string(model.CategoryEvent):
-		return model.CategoryEvent
-	case string(model.CategoryGoods):
-		return model.CategoryGoods
-	default:
-		return model.CategoryOther
+	if category, ok := normalizedCategories[normalized]; ok {
+		return category
 	}
+	return model.CategoryOther
 }
 
 type promptCandidate struct {
@@ -311,36 +326,45 @@ func memberNewsSummarySchema() map[string]any {
 	return map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"properties": map[string]any{
-			"period": map[string]any{
-				"type": "string",
-				"enum": []string{"weekly", "monthly"},
-			},
-			"headline": map[string]any{"type": "string"},
-			"top_items": map[string]any{
-				"type":     "array",
-				"maxItems": 5,
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"member":     map[string]any{"type": "string"},
-						"category":   map[string]any{"type": "string"},
-						"title":      map[string]any{"type": "string"},
-						"date_text":  map[string]any{"type": "string"},
-						"summary":    map[string]any{"type": "string"},
-						"source_url": map[string]any{"type": "string"},
-					},
-					"required": []string{"member", "category", "title", "date_text", "summary", "source_url"},
-				},
-			},
-			"more_summary": map[string]any{"type": "string"},
-			"omitted_count": map[string]any{
-				"type":    "integer",
-				"minimum": 0,
-			},
+		"properties":           memberNewsSummarySchemaProperties(),
+		"required":             []string{"period", "headline", "top_items", "more_summary", "omitted_count"},
+	}
+}
+
+func memberNewsSummarySchemaProperties() map[string]any {
+	return map[string]any{
+		"period": map[string]any{
+			"type": "string",
+			"enum": []string{"weekly", "monthly"},
 		},
-		"required": []string{"period", "headline", "top_items", "more_summary", "omitted_count"},
+		"headline":      map[string]any{"type": "string"},
+		"top_items":     memberNewsSummaryTopItemsSchema(),
+		"more_summary":  map[string]any{"type": "string"},
+		"omitted_count": map[string]any{"type": "integer", "minimum": 0},
+	}
+}
+
+func memberNewsSummaryTopItemsSchema() map[string]any {
+	return map[string]any{
+		"type":     "array",
+		"maxItems": 5,
+		"items":    memberNewsSummaryItemSchema(),
+	}
+}
+
+func memberNewsSummaryItemSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"member":     map[string]any{"type": "string"},
+			"category":   map[string]any{"type": "string"},
+			"title":      map[string]any{"type": "string"},
+			"date_text":  map[string]any{"type": "string"},
+			"summary":    map[string]any{"type": "string"},
+			"source_url": map[string]any{"type": "string"},
+		},
+		"required": []string{"member", "category", "title", "date_text", "summary", "source_url"},
 	}
 }
 
@@ -454,19 +478,24 @@ func formatSearchContext(results []sharedmodel.SearchResult) string {
 		if i > 0 {
 			builder.WriteString("\n\n")
 		}
-		fmt.Fprintf(&builder, "[%d] %s", i+1, strings.TrimSpace(item.Title))
-		if strings.TrimSpace(item.URL) != "" {
-			builder.WriteString("\nURL: ")
-			builder.WriteString(strings.TrimSpace(item.URL))
-		}
-		if strings.TrimSpace(item.PublishedDate) != "" {
-			builder.WriteString("\nPublished: ")
-			builder.WriteString(strings.TrimSpace(item.PublishedDate))
-		}
-		if strings.TrimSpace(item.Content) != "" {
-			builder.WriteString("\n")
-			builder.WriteString(strings.TrimSpace(item.Content))
-		}
+		writeSearchContextItem(&builder, i, item)
 	}
 	return builder.String()
+}
+
+func writeSearchContextItem(builder *strings.Builder, index int, item sharedmodel.SearchResult) {
+	fmt.Fprintf(builder, "[%d] %s", index+1, strings.TrimSpace(item.Title))
+	writeSearchContextField(builder, "URL: ", item.URL)
+	writeSearchContextField(builder, "Published: ", item.PublishedDate)
+	writeSearchContextField(builder, "", item.Content)
+}
+
+func writeSearchContextField(builder *strings.Builder, label string, value string) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return
+	}
+	builder.WriteString("\n")
+	builder.WriteString(label)
+	builder.WriteString(trimmed)
 }
