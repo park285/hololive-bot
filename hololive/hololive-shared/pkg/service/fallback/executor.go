@@ -80,61 +80,78 @@ func Execute[K any, V any](
 	ctx context.Context,
 	plan FetchPlan[K, V],
 ) Summary[K] {
-	summary := Summary[K]{
-		FailedTargets: make([]K, 0, len(plan.Targets)),
-	}
 	if len(plan.Targets) == 0 {
-		return summary
+		return Summary[K]{FailedTargets: []K{}}
 	}
 
 	failed := make([]bool, len(plan.Targets))
-	var mu sync.Mutex
-
-	parallelism := plan.Parallelism
-	if parallelism <= 1 {
-		for i := range plan.Targets {
-			value, err := plan.Fetch(ctx, plan.Targets[i])
-			if err != nil {
-				failed[i] = true
-				continue
-			}
-			summary.SuccessCount++
-			if plan.OnSuccess != nil {
-				plan.OnSuccess(plan.Targets[i], value)
-			}
-		}
+	successCount := 0
+	if plan.Parallelism <= 1 {
+		successCount = executeSequential(ctx, plan, failed)
 	} else {
-		eg, egCtx := errgroup.WithContext(ctx)
-		eg.SetLimit(parallelism)
-
-		for i := range plan.Targets {
-			key := plan.Targets[i]
-			eg.Go(func() error {
-				value, err := plan.Fetch(egCtx, key)
-				if err != nil {
-					mu.Lock()
-					failed[i] = true
-					mu.Unlock()
-					return nil
-				}
-
-				if plan.OnSuccess != nil {
-					plan.OnSuccess(key, value)
-				}
-				mu.Lock()
-				summary.SuccessCount++
-				mu.Unlock()
-				return nil
-			})
-		}
-		_ = eg.Wait()
+		successCount = executeParallel(ctx, plan, failed)
 	}
 
+	return summarizeFailures(plan.Targets, failed, successCount)
+}
+
+func executeSequential[K any, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
+	successCount := 0
 	for i := range plan.Targets {
-		if failed[i] {
-			summary.FailedCount++
-			summary.FailedTargets = append(summary.FailedTargets, plan.Targets[i])
+		value, err := plan.Fetch(ctx, plan.Targets[i])
+		if err != nil {
+			failed[i] = true
+			continue
 		}
+		successCount++
+		if plan.OnSuccess != nil {
+			plan.OnSuccess(plan.Targets[i], value)
+		}
+	}
+	return successCount
+}
+
+func executeParallel[K any, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(plan.Parallelism)
+
+	var mu sync.Mutex
+	successCount := 0
+	for i := range plan.Targets {
+		index := i
+		key := plan.Targets[i]
+		eg.Go(func() error {
+			value, err := plan.Fetch(egCtx, key)
+			if err != nil {
+				mu.Lock()
+				failed[index] = true
+				mu.Unlock()
+				return nil
+			}
+			if plan.OnSuccess != nil {
+				plan.OnSuccess(key, value)
+			}
+			mu.Lock()
+			successCount++
+			mu.Unlock()
+			return nil
+		})
+	}
+	_ = eg.Wait()
+	return successCount
+}
+
+func summarizeFailures[K any](targets []K, failed []bool, successCount int) Summary[K] {
+	summary := Summary[K]{
+		SuccessCount:  successCount,
+		FailedTargets: make([]K, 0, len(targets)),
+	}
+	for i := range targets {
+		if !failed[i] {
+			continue
+		}
+		summary.FailedCount++
+		summary.FailedTargets = append(summary.FailedTargets, targets[i])
 	}
 
 	return summary
