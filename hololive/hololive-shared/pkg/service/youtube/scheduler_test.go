@@ -1016,7 +1016,10 @@ func TestSendMilestoneAlerts_SendsAndMarksBothKinds(t *testing.T) {
 	}
 
 	var sent []string
+	var sentMu sync.Mutex
 	sendMessage := func(room, message string) error {
+		sentMu.Lock()
+		defer sentMu.Unlock()
 		sent = append(sent, room+"|"+message)
 		return nil
 	}

@@ -30,6 +30,8 @@ GO_MODULES=(
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}"
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
+STATICCHECK_VERSION="${STATICCHECK_VERSION:-2026.1}"
+GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.3.0}"
 
 go_bin_tool() {
     local tool="$1"
@@ -56,6 +58,86 @@ go_bin_tool() {
     return 1
 }
 
+go_tool_install_path() {
+    local tool="$1"
+    local gobin
+    gobin="$(go env GOBIN)"
+    if [[ -n "${gobin}" ]]; then
+        printf '%s/%s\n' "${gobin}" "${tool}"
+        return 0
+    fi
+
+    local gopath
+    gopath="$(go env GOPATH)"
+    if [[ -z "${gopath}" ]]; then
+        echo "GOPATH is empty; cannot locate installed Go tool ${tool}" >&2
+        exit 1
+    fi
+    printf '%s/bin/%s\n' "${gopath}" "${tool}"
+}
+
+ensure_staticcheck() {
+    local bin
+    bin="$(go_bin_tool staticcheck || true)"
+    if [[ -z "${bin}" ]] || [[ "$("${bin}" -version 2>/dev/null || true)" != *"staticcheck ${STATICCHECK_VERSION}"* ]]; then
+        echo "[LOCAL CI] Installing staticcheck@${STATICCHECK_VERSION}" >&2
+        go install "honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}"
+        bin="$(go_tool_install_path staticcheck)"
+        echo >&2
+    fi
+
+    local version_output
+    version_output="$("${bin}" -version 2>/dev/null || true)"
+    if [[ "${version_output}" != *"staticcheck ${STATICCHECK_VERSION}"* ]]; then
+        echo "expected staticcheck ${STATICCHECK_VERSION}, got: ${version_output}" >&2
+        exit 1
+    fi
+
+    printf '%s\n' "${bin}"
+}
+
+ensure_govulncheck() {
+    local bin
+    bin="$(go_bin_tool govulncheck || true)"
+    if [[ -z "${bin}" ]] || [[ "$("${bin}" -version 2>/dev/null || true)" != *"govulncheck@${GOVULNCHECK_VERSION}"* ]]; then
+        echo "[LOCAL CI] Installing govulncheck@${GOVULNCHECK_VERSION}" >&2
+        go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+        bin="$(go_tool_install_path govulncheck)"
+        echo >&2
+    fi
+
+    local version_output
+    version_output="$("${bin}" -version 2>/dev/null || true)"
+    if [[ "${version_output}" != *"govulncheck@${GOVULNCHECK_VERSION}"* ]]; then
+        echo "expected govulncheck ${GOVULNCHECK_VERSION}, got: ${version_output}" >&2
+        exit 1
+    fi
+
+    printf '%s\n' "${bin}"
+}
+
+go_source_files() {
+    git ls-files --cached --others --exclude-standard '*.go'
+}
+
+workspace_metadata_files() {
+    git ls-files --cached --others --exclude-standard \
+        go.work go.work.sum \
+        'go.mod' 'go.sum' \
+        '*/go.mod' '*/go.sum'
+}
+
+snapshot_files() {
+    local file
+    while IFS= read -r file; do
+        if [[ -f "${file}" ]]; then
+            sha256sum "${file}"
+        else
+            printf 'missing  %s\n' "${file}"
+        fi
+    done | sort
+}
+
 run_step() {
     local name="$1"
     shift
@@ -78,23 +160,30 @@ check_go_toolchain() {
 check_go_work_sync() {
     local before
     local after
-    local tracked_sync_files=()
+    local sync_files=()
 
-    mapfile -t tracked_sync_files < <(git ls-files go.work go.work.sum 'go.mod' 'go.sum' '*/go.mod' '*/go.sum')
+    mapfile -t sync_files < <(workspace_metadata_files)
 
-    before="$(git status --porcelain=v1 -- "${tracked_sync_files[@]}")"
+    before="$(workspace_metadata_files | snapshot_files)"
     go work sync
-    after="$(git status --porcelain=v1 -- "${tracked_sync_files[@]}")"
+    after="$(workspace_metadata_files | snapshot_files)"
     if [[ "${before}" != "${after}" ]]; then
         echo "go work sync changed workspace or module metadata; commit the sync result" >&2
-        git diff -- "${tracked_sync_files[@]}" >&2
+        git diff -- "${sync_files[@]}" >&2
+        git status --short -- "${sync_files[@]}" >&2
         exit 1
     fi
 }
 
 check_gofmt() {
+    local go_files=()
     local files
-    files="$(git ls-files '*.go' | xargs -r gofmt -l)"
+    mapfile -t go_files < <(go_source_files)
+    if (( ${#go_files[@]} == 0 )); then
+        return 0
+    fi
+
+    files="$(gofmt -l "${go_files[@]}")"
     if [[ -n "${files}" ]]; then
         echo "gofmt required for:" >&2
         echo "${files}" >&2
@@ -126,7 +215,7 @@ check_go_fix() {
         if [[ -f "${tmp_dir}/repo/${file}" ]] && ! cmp -s "${ROOT_DIR}/${file}" "${tmp_dir}/repo/${file}"; then
             changed+=("${file}")
         fi
-    done < <(git ls-files '*.go')
+    done < <(go_source_files)
 
     if (( ${#changed[@]} > 0 )); then
         echo "go fix would update modern Go compatibility rewrites:" >&2
@@ -154,12 +243,7 @@ check_staticcheck() {
     fi
 
     local staticcheck_bin
-    if ! staticcheck_bin="$(go_bin_tool staticcheck)"; then
-        echo "[LOCAL CI] Installing staticcheck"
-        go install honnef.co/go/tools/cmd/staticcheck@latest
-        staticcheck_bin="$(go_bin_tool staticcheck)"
-        echo
-    fi
+    staticcheck_bin="$(ensure_staticcheck)"
 
     run_step "staticcheck" "${staticcheck_bin}" "${GO_PACKAGES[@]}"
 }
@@ -195,13 +279,7 @@ else
 fi
 
 if [[ "${RUN_DEPENDENCY_HYGIENE}" == "true" ]]; then
-    govulncheck_bin=""
-    if ! govulncheck_bin="$(go_bin_tool govulncheck)"; then
-        echo "[LOCAL CI] Installing govulncheck"
-        go install golang.org/x/vuln/cmd/govulncheck@latest
-        govulncheck_bin="$(go_bin_tool govulncheck)"
-        echo
-    fi
+    govulncheck_bin="$(ensure_govulncheck)"
 
     for module in "${GO_MODULES[@]}"; do
         run_step "Dependency hygiene: ${module}" \
