@@ -186,27 +186,32 @@ func (d *Dispatcher) dispatchGroup(ctx context.Context, group NotificationGroup)
 	}
 
 	if err := d.sender.SendMessage(ctx, group.RoomID, message); err != nil {
-		if d.sendFailurePolicy == SendFailurePolicyQuarantine {
-			reason := formatDispatchFailure("send", err)
-			if quarantineErr := d.consumer.Quarantine(ctx, group.Envelopes, reason); quarantineErr != nil {
-				return fmt.Errorf("dispatch group: quarantine ambiguous send failure: %w", quarantineErr)
-			}
-			d.logger.Warn("Dispatch send outcome ambiguous; quarantined envelopes",
-				slog.String("room_id", group.RoomID),
-				slog.Int("envelopes", len(group.Envelopes)),
-			)
-			return nil
-		}
-		if handleErr := d.handleDispatchFailure(ctx, group.RoomID, group.Envelopes, "send", err); handleErr != nil {
-			return fmt.Errorf("dispatch group: persist send failure: %w", handleErr)
-		}
-		return nil
+		return d.handleSendFailure(ctx, group, err)
 	}
 
 	if err := d.consumer.MarkDispatched(ctx, group.Envelopes); err != nil {
 		return fmt.Errorf("dispatch group: mark dispatched after successful send: %w", err)
 	}
 
+	return nil
+}
+
+func (d *Dispatcher) handleSendFailure(ctx context.Context, group NotificationGroup, sendErr error) error {
+	if d.sendFailurePolicy == SendFailurePolicyQuarantine {
+		reason := formatDispatchFailure("send", sendErr)
+		if err := d.consumer.Quarantine(ctx, group.Envelopes, reason); err != nil {
+			return fmt.Errorf("dispatch group: quarantine ambiguous send failure: %w", err)
+		}
+		d.logger.Warn("Dispatch send outcome ambiguous; quarantined envelopes",
+			slog.String("room_id", group.RoomID),
+			slog.Int("envelopes", len(group.Envelopes)),
+		)
+		return nil
+	}
+
+	if err := d.handleDispatchFailure(ctx, group.RoomID, group.Envelopes, "send", sendErr); err != nil {
+		return fmt.Errorf("dispatch group: persist send failure: %w", err)
+	}
 	return nil
 }
 
@@ -255,11 +260,30 @@ func (d *Dispatcher) handleDispatchFailure(
 		return nil
 	}
 
-	retryEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
-	dlqEnvelopes := make([]domain.AlarmQueueEnvelope, 0, len(envelopes))
-	retryBackoffs := make([]time.Duration, 0, len(envelopes))
 	failureMessage := formatDispatchFailure(failureKind, dispatchErr)
+	batches := d.dispatchFailureBatches(envelopes, failureMessage)
 
+	if err := d.persistDispatchRetries(ctx, roomID, failureKind, batches.retryEnvelopes, batches.retryBackoffs); err != nil {
+		return err
+	}
+	return d.persistDispatchDLQ(ctx, roomID, failureKind, batches.dlqEnvelopes)
+}
+
+type dispatchFailureBatches struct {
+	retryEnvelopes []domain.AlarmQueueEnvelope
+	dlqEnvelopes   []domain.AlarmQueueEnvelope
+	retryBackoffs  []time.Duration
+}
+
+func (d *Dispatcher) dispatchFailureBatches(
+	envelopes []domain.AlarmQueueEnvelope,
+	failureMessage string,
+) dispatchFailureBatches {
+	batches := dispatchFailureBatches{
+		retryEnvelopes: make([]domain.AlarmQueueEnvelope, 0, len(envelopes)),
+		dlqEnvelopes:   make([]domain.AlarmQueueEnvelope, 0, len(envelopes)),
+		retryBackoffs:  make([]time.Duration, 0, len(envelopes)),
+	}
 	for _, envelope := range envelopes {
 		updated := envelope
 		retryMetadata := &domain.AlarmQueueRetryMetadata{}
@@ -274,7 +298,7 @@ func (d *Dispatcher) handleDispatchFailure(
 			retryMetadata.RetryAfterMS = 0
 			retryMetadata.NextVisibleAt = ""
 			updated.Retry = retryMetadata
-			dlqEnvelopes = append(dlqEnvelopes, updated)
+			batches.dlqEnvelopes = append(batches.dlqEnvelopes, updated)
 			continue
 		}
 
@@ -282,10 +306,19 @@ func (d *Dispatcher) handleDispatchFailure(
 		retryMetadata.RetryAfterMS = backoff.Milliseconds()
 		retryMetadata.NextVisibleAt = d.now().UTC().Add(backoff).Format(time.RFC3339Nano)
 		updated.Retry = retryMetadata
-		retryEnvelopes = append(retryEnvelopes, updated)
-		retryBackoffs = append(retryBackoffs, backoff)
+		batches.retryEnvelopes = append(batches.retryEnvelopes, updated)
+		batches.retryBackoffs = append(batches.retryBackoffs, backoff)
 	}
+	return batches
+}
 
+func (d *Dispatcher) persistDispatchRetries(
+	ctx context.Context,
+	roomID string,
+	failureKind string,
+	retryEnvelopes []domain.AlarmQueueEnvelope,
+	retryBackoffs []time.Duration,
+) error {
 	if len(retryEnvelopes) > 0 {
 		if err := d.consumer.ScheduleRetry(ctx, retryEnvelopes); err != nil {
 			d.logger.Warn("Dispatch failed; schedule retry failed",
@@ -313,7 +346,15 @@ func (d *Dispatcher) handleDispatchFailure(
 			slog.Int("retry_envelopes", len(retryEnvelopes)),
 		)
 	}
+	return nil
+}
 
+func (d *Dispatcher) persistDispatchDLQ(
+	ctx context.Context,
+	roomID string,
+	failureKind string,
+	dlqEnvelopes []domain.AlarmQueueEnvelope,
+) error {
 	if len(dlqEnvelopes) > 0 {
 		if err := d.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
 			d.logger.Warn("Dispatch retries exhausted; move to DLQ failed",
@@ -333,11 +374,7 @@ func (d *Dispatcher) handleDispatchFailure(
 		dispatcherRetryDLQMoved.WithLabelValues(failureKind + "_retry_budget_exhausted").Add(float64(len(dlqEnvelopes)))
 		dispatcherRetryBudgetExhausted.Add(float64(len(dlqEnvelopes)))
 
-		releaseClaimKeys := make([]string, 0, len(dlqEnvelopes))
-		for _, envelope := range dlqEnvelopes {
-			releaseClaimKeys = append(releaseClaimKeys, envelope.ClaimKeys...)
-		}
-		d.releaseClaimKeys(ctx, roomID, releaseClaimKeys, failureKind+" retries exhausted")
+		d.releaseClaimKeys(ctx, roomID, claimKeysForEnvelopes(dlqEnvelopes), failureKind+" retries exhausted")
 		d.logger.Warn("Dispatch retries exhausted; moved envelopes to DLQ",
 			slog.String("room_id", roomID),
 			slog.String("failure_kind", failureKind),
@@ -345,6 +382,14 @@ func (d *Dispatcher) handleDispatchFailure(
 		)
 	}
 	return nil
+}
+
+func claimKeysForEnvelopes(envelopes []domain.AlarmQueueEnvelope) []string {
+	claimKeys := make([]string, 0, len(envelopes))
+	for _, envelope := range envelopes {
+		claimKeys = append(claimKeys, envelope.ClaimKeys...)
+	}
+	return claimKeys
 }
 
 func formatDispatchFailure(failureKind string, err error) string {
@@ -405,18 +450,26 @@ func (d *Dispatcher) retryBackoffForAttempt(attempt int) time.Duration {
 		attempt = 1
 	}
 
-	backoff := d.retryPolicy.BaseBackoff
-	for i := 1; i < attempt && backoff < d.retryPolicy.MaxBackoff; i++ {
-		if backoff > d.retryPolicy.MaxBackoff/2 {
-			backoff = d.retryPolicy.MaxBackoff
+	backoff := cappedExponentialBackoff(d.retryPolicy.BaseBackoff, d.retryPolicy.MaxBackoff, attempt)
+	return d.applyRetryJitter(backoff)
+}
+
+func cappedExponentialBackoff(baseBackoff, maxBackoff time.Duration, attempt int) time.Duration {
+	backoff := baseBackoff
+	for i := 1; i < attempt && backoff < maxBackoff; i++ {
+		if backoff > maxBackoff/2 {
+			backoff = maxBackoff
 			break
 		}
 		backoff *= 2
 	}
-	if backoff > d.retryPolicy.MaxBackoff {
-		backoff = d.retryPolicy.MaxBackoff
+	if backoff > maxBackoff {
+		backoff = maxBackoff
 	}
+	return backoff
+}
 
+func (d *Dispatcher) applyRetryJitter(backoff time.Duration) time.Duration {
 	if d.retryPolicy.JitterPercent <= 0 {
 		return backoff
 	}
