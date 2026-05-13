@@ -13,7 +13,7 @@
 01-manager/03-shard-order.md
 01-manager/04-handoff-format.md
 02-patches/A00-check-function-budget-py-target.md
-02-patches/A00-check-function-budget-sh.diff
+02-patches/A00-check-function-budget-sh.md
 02-patches/A01-delete-baseline-and-doc-policy.md
 03-prompts/reviewer-prompt.md
 03-prompts/validator-prompt.md
