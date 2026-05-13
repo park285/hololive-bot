@@ -119,19 +119,8 @@ func generateSparkline(values []int64, width int) string {
 
 	values = downsampleSparklineValues(values, width)
 
-	minVal, maxVal := values[0], values[0]
-	for _, value := range values {
-		if value < minVal {
-			minVal = value
-		}
-
-		if value > maxVal {
-			maxVal = value
-		}
-	}
-
+	minVal, maxVal := sparklineMinMax(values)
 	sparkChars := []rune(" ▁▂▃▄▅▆▇█")
-
 	rangeVal := maxVal - minVal
 	if rangeVal == 0 {
 		rangeVal = 1
@@ -140,17 +129,28 @@ func generateSparkline(values []int64, width int) string {
 	var result strings.Builder
 
 	for _, value := range values {
-		normalized := float64(value-minVal) / float64(rangeVal)
-
-		idx := int(normalized * float64(len(sparkChars)-1))
-		if idx >= len(sparkChars) {
-			idx = len(sparkChars) - 1
-		}
-
-		result.WriteRune(sparkChars[idx])
+		result.WriteRune(sparkChars[sparklineCharIndex(value, minVal, rangeVal, len(sparkChars))])
 	}
 
 	return result.String()
+}
+
+func sparklineMinMax(values []int64) (int64, int64) {
+	minVal, maxVal := values[0], values[0]
+	for _, value := range values {
+		minVal = min(minVal, value)
+		maxVal = max(maxVal, value)
+	}
+	return minVal, maxVal
+}
+
+func sparklineCharIndex(value, minVal, rangeVal int64, charCount int) int {
+	normalized := float64(value-minVal) / float64(rangeVal)
+	idx := int(normalized * float64(charCount-1))
+	if idx >= charCount {
+		return charCount - 1
+	}
+	return idx
 }
 
 func downsampleSparklineValues(values []int64, width int) []int64 {

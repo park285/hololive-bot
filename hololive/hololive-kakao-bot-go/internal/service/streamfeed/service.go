@@ -136,56 +136,70 @@ func activeStelliveMembers(members []*domain.Member) []*domain.Member {
 
 func mergeLiveStreams(base []*domain.Stream, members []*domain.Member, lives []chzzk.LiveData) []*domain.Stream {
 	merged := slices.Clone(base)
+	memberByChzzk := membersByChzzkChannelID(members)
+
+	for _, live := range lives {
+		merged = mergeLiveStream(merged, memberByChzzk[live.ChannelID], live)
+	}
+
+	return merged
+}
+
+func membersByChzzkChannelID(members []*domain.Member) map[string]*domain.Member {
 	memberByChzzk := make(map[string]*domain.Member, len(members))
 	for _, member := range members {
 		memberByChzzk[member.ChzzkChannelID] = member
 	}
+	return memberByChzzk
+}
 
-	for _, live := range lives {
-		member := memberByChzzk[live.ChannelID]
-		if member == nil {
-			continue
-		}
-
-		if existing := findLiveStreamByChannel(merged, member.ChannelID); existing != nil {
-			existing.ChzzkChannelID = member.ChzzkChannelID
-			existing.ChzzkLiveURL = fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
-			existing.IsIntegrated = existing.HasYouTubeInfo()
-			if !existing.HasYouTubeInfo() {
-				existing.IsChzzkOnly = true
-				link := existing.ChzzkLiveURL
-				existing.Link = &link
-			}
-			continue
-		}
-
-		liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
-		thumbnail := live.LiveThumbnailImageURL
-		link := liveURL
-		now := time.Now().UTC().Truncate(time.Minute)
-		org := member.GetOrg()
-		merged = append(merged, &domain.Stream{
-			ID:             buildChzzkStreamID(member.ChzzkChannelID, "live", live.LiveTitle, now),
-			Title:          live.LiveTitle,
-			ChannelID:      member.ChannelID,
-			ChannelName:    member.Name,
-			Status:         domain.StreamStatusLive,
-			StartScheduled: &now,
-			StartActual:    &now,
-			Thumbnail:      &thumbnail,
-			Link:           &link,
-			Channel: &domain.Channel{
-				ID:   member.ChannelID,
-				Name: member.Name,
-				Org:  &org,
-			},
-			ChzzkChannelID: member.ChzzkChannelID,
-			ChzzkLiveURL:   liveURL,
-			IsChzzkOnly:    true,
-		})
+func mergeLiveStream(merged []*domain.Stream, member *domain.Member, live chzzk.LiveData) []*domain.Stream {
+	if member == nil {
+		return merged
 	}
+	if existing := findLiveStreamByChannel(merged, member.ChannelID); existing != nil {
+		updateExistingLiveStream(existing, member)
+		return merged
+	}
+	return append(merged, buildChzzkLiveStream(member, live))
+}
 
-	return merged
+func updateExistingLiveStream(existing *domain.Stream, member *domain.Member) {
+	existing.ChzzkChannelID = member.ChzzkChannelID
+	existing.ChzzkLiveURL = fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	existing.IsIntegrated = existing.HasYouTubeInfo()
+	if !existing.HasYouTubeInfo() {
+		existing.IsChzzkOnly = true
+		link := existing.ChzzkLiveURL
+		existing.Link = &link
+	}
+}
+
+func buildChzzkLiveStream(member *domain.Member, live chzzk.LiveData) *domain.Stream {
+	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", member.ChzzkChannelID)
+	thumbnail := live.LiveThumbnailImageURL
+	link := liveURL
+	now := time.Now().UTC().Truncate(time.Minute)
+	org := member.GetOrg()
+	return &domain.Stream{
+		ID:             buildChzzkStreamID(member.ChzzkChannelID, "live", live.LiveTitle, now),
+		Title:          live.LiveTitle,
+		ChannelID:      member.ChannelID,
+		ChannelName:    member.Name,
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &now,
+		StartActual:    &now,
+		Thumbnail:      &thumbnail,
+		Link:           &link,
+		Channel: &domain.Channel{
+			ID:   member.ChannelID,
+			Name: member.Name,
+			Org:  &org,
+		},
+		ChzzkChannelID: member.ChzzkChannelID,
+		ChzzkLiveURL:   liveURL,
+		IsChzzkOnly:    true,
+	}
 }
 
 func buildUpcomingStreams(member *domain.Member, scheduledLives []chzzk.ScheduledLive, hours int) []*domain.Stream {
@@ -235,50 +249,73 @@ func mergeUpcomingStreams(base []*domain.Stream, additions []*domain.Stream) []*
 	merged := slices.Clone(base)
 
 	for _, addition := range additions {
-		if addition == nil {
-			continue
-		}
-
-		if existing := streamcommon.FindByChannelAndScheduledMinute(merged, addition); existing != nil {
-			existing.ChzzkChannelID = addition.ChzzkChannelID
-			existing.ChzzkLiveURL = addition.ChzzkLiveURL
-			if existing.HasYouTubeInfo() {
-				existing.IsIntegrated = true
-				existing.IsChzzkOnly = false
-			} else {
-				existing.IsChzzkOnly = true
-				existing.Link = addition.Link
-			}
-			continue
-		}
-
-		merged = append(merged, addition)
+		merged = mergeUpcomingStream(merged, addition)
 	}
 
-	slices.SortStableFunc(merged, func(a, b *domain.Stream) int {
-		switch {
-		case a == nil && b == nil:
-			return 0
-		case a == nil:
-			return 1
-		case b == nil:
-			return -1
-		case a.StartScheduled == nil && b.StartScheduled == nil:
-			return 0
-		case a.StartScheduled == nil:
-			return 1
-		case b.StartScheduled == nil:
-			return -1
-		case a.StartScheduled.Before(*b.StartScheduled):
-			return -1
-		case a.StartScheduled.After(*b.StartScheduled):
-			return 1
-		default:
-			return 0
-		}
-	})
-
+	slices.SortStableFunc(merged, compareUpcomingStreams)
 	return merged
+}
+
+func mergeUpcomingStream(merged []*domain.Stream, addition *domain.Stream) []*domain.Stream {
+	if addition == nil {
+		return merged
+	}
+	if existing := streamcommon.FindByChannelAndScheduledMinute(merged, addition); existing != nil {
+		updateExistingUpcomingStream(existing, addition)
+		return merged
+	}
+	return append(merged, addition)
+}
+
+func updateExistingUpcomingStream(existing *domain.Stream, addition *domain.Stream) {
+	existing.ChzzkChannelID = addition.ChzzkChannelID
+	existing.ChzzkLiveURL = addition.ChzzkLiveURL
+	if existing.HasYouTubeInfo() {
+		existing.IsIntegrated = true
+		existing.IsChzzkOnly = false
+		return
+	}
+	existing.IsChzzkOnly = true
+	existing.Link = addition.Link
+}
+
+func compareUpcomingStreams(a, b *domain.Stream) int {
+	if result, ok := compareNilStreams(a, b); ok {
+		return result
+	}
+	return compareOptionalTime(a.StartScheduled, b.StartScheduled)
+}
+
+func compareNilStreams(a, b *domain.Stream) (int, bool) {
+	if a == nil && b == nil {
+		return 0, true
+	}
+	if a == nil {
+		return 1, true
+	}
+	if b == nil {
+		return -1, true
+	}
+	return 0, false
+}
+
+func compareOptionalTime(a, b *time.Time) int {
+	if a == nil && b == nil {
+		return 0
+	}
+	if a == nil {
+		return 1
+	}
+	if b == nil {
+		return -1
+	}
+	if a.Before(*b) {
+		return -1
+	}
+	if a.After(*b) {
+		return 1
+	}
+	return 0
 }
 
 func findLiveStreamByChannel(streams []*domain.Stream, channelID string) *domain.Stream {

@@ -50,13 +50,22 @@ func (s *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 		return nil, err
 	}
 
-	if s.chzzk == nil || s.members == nil {
+	chzzkStreams := s.getChzzkScheduleStreams(ctx, channelID, hours)
+	if len(chzzkStreams) == 0 {
 		return streams, nil
 	}
 
+	return mergeScheduleStreams(streams, chzzkStreams), nil
+}
+
+func (s *Service) getChzzkScheduleStreams(ctx context.Context, channelID string, hours int) []*domain.Stream {
+	if s.chzzk == nil || s.members == nil {
+		return nil
+	}
+
 	member := s.members.FindMemberByChannelID(channelID)
-	if member == nil || member.ChzzkChannelID == "" || member.IsGraduated {
-		return streams, nil
+	if !canLoadChzzkSchedule(member) {
+		return nil
 	}
 
 	scheduledLives, err := s.chzzk.GetScheduledLives(ctx, member.ChzzkChannelID)
@@ -66,15 +75,14 @@ func (s *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 			slog.String("chzzk_channel_id", member.ChzzkChannelID),
 			slog.Any("error", err),
 		)
-		return streams, nil
+		return nil
 	}
 
-	chzzkStreams := buildChzzkScheduleStreams(member, scheduledLives, hours)
-	if len(chzzkStreams) == 0 {
-		return streams, nil
-	}
+	return buildChzzkScheduleStreams(member, scheduledLives, hours)
+}
 
-	return mergeScheduleStreams(streams, chzzkStreams), nil
+func canLoadChzzkSchedule(member *domain.Member) bool {
+	return member != nil && member.ChzzkChannelID != "" && !member.IsGraduated
 }
 
 func buildChzzkScheduleStreams(member *domain.Member, scheduledLives []chzzk.ScheduledLive, hours int) []*domain.Stream {
@@ -89,35 +97,45 @@ func buildChzzkScheduleStreams(member *domain.Member, scheduledLives []chzzk.Sch
 
 	for _, scheduledLive := range scheduledLives {
 		startAt, err := chzzk.ParseScheduledStartAt(scheduledLive.ScheduledStartAt)
-		if err != nil {
-			continue
-		}
-		if !startAt.After(now) || startAt.After(cutoff) {
+		if err != nil || !isChzzkScheduleInWindow(startAt, now, cutoff) {
 			continue
 		}
 
-		link := liveURL
-		org := member.GetOrg()
-		streams = append(streams, &domain.Stream{
-			ID:             buildChzzkScheduleStreamID(member.ChzzkChannelID, scheduledLive.LiveTitle, startAt),
-			Title:          scheduledLive.LiveTitle,
-			ChannelID:      member.ChannelID,
-			ChannelName:    member.Name,
-			Status:         domain.StreamStatusUpcoming,
-			StartScheduled: &startAt,
-			Link:           &link,
-			Channel: &domain.Channel{
-				ID:   member.ChannelID,
-				Name: member.Name,
-				Org:  &org,
-			},
-			ChzzkChannelID: member.ChzzkChannelID,
-			ChzzkLiveURL:   liveURL,
-			IsChzzkOnly:    true,
-		})
+		streams = append(streams, buildChzzkScheduleStream(member, scheduledLive, startAt, liveURL))
 	}
 
 	return streams
+}
+
+func isChzzkScheduleInWindow(startAt, now, cutoff time.Time) bool {
+	return startAt.After(now) && !startAt.After(cutoff)
+}
+
+func buildChzzkScheduleStream(
+	member *domain.Member,
+	scheduledLive chzzk.ScheduledLive,
+	startAt time.Time,
+	liveURL string,
+) *domain.Stream {
+	link := liveURL
+	org := member.GetOrg()
+	return &domain.Stream{
+		ID:             buildChzzkScheduleStreamID(member.ChzzkChannelID, scheduledLive.LiveTitle, startAt),
+		Title:          scheduledLive.LiveTitle,
+		ChannelID:      member.ChannelID,
+		ChannelName:    member.Name,
+		Status:         domain.StreamStatusUpcoming,
+		StartScheduled: &startAt,
+		Link:           &link,
+		Channel: &domain.Channel{
+			ID:   member.ChannelID,
+			Name: member.Name,
+			Org:  &org,
+		},
+		ChzzkChannelID: member.ChzzkChannelID,
+		ChzzkLiveURL:   liveURL,
+		IsChzzkOnly:    true,
+	}
 }
 
 func mergeScheduleStreams(baseStreams, chzzkStreams []*domain.Stream) []*domain.Stream {
@@ -152,37 +170,71 @@ func mergeScheduleStreams(baseStreams, chzzkStreams []*domain.Stream) []*domain.
 }
 
 func compareScheduleStreams(a, b *domain.Stream) int {
+	if result, ok := compareNilScheduleStreams(a, b); ok {
+		return result
+	}
+	if result, ok := compareLiveScheduleStreams(a, b); ok {
+		return result
+	}
+
+	return compareScheduledStart(a.StartScheduled, b.StartScheduled)
+}
+
+func compareNilScheduleStreams(a, b *domain.Stream) (int, bool) {
 	if a == nil && b == nil {
-		return 0
+		return 0, true
 	}
 	if a == nil {
-		return 1
+		return 1, true
 	}
 	if b == nil {
-		return -1
+		return -1, true
 	}
 
+	return 0, false
+}
+
+func compareLiveScheduleStreams(a, b *domain.Stream) (int, bool) {
 	if a.IsLive() != b.IsLive() {
 		if a.IsLive() {
-			return -1
+			return -1, true
 		}
-		return 1
+		return 1, true
 	}
 
-	switch {
-	case a.StartScheduled == nil && b.StartScheduled == nil:
-		return 0
-	case a.StartScheduled == nil:
-		return 1
-	case b.StartScheduled == nil:
-		return -1
-	case a.StartScheduled.Before(*b.StartScheduled):
-		return -1
-	case a.StartScheduled.After(*b.StartScheduled):
-		return 1
-	default:
-		return 0
+	return 0, false
+}
+
+func compareScheduledStart(a, b *time.Time) int {
+	if result, ok := compareNilScheduledStart(a, b); ok {
+		return result
 	}
+
+	return compareScheduledStartTime(*a, *b)
+}
+
+func compareNilScheduledStart(a, b *time.Time) (int, bool) {
+	if a == nil && b == nil {
+		return 0, true
+	}
+	if a == nil {
+		return 1, true
+	}
+	if b == nil {
+		return -1, true
+	}
+
+	return 0, false
+}
+
+func compareScheduledStartTime(a, b time.Time) int {
+	if a.Before(b) {
+		return -1
+	}
+	if a.After(b) {
+		return 1
+	}
+	return 0
 }
 
 func buildChzzkScheduleStreamID(chzzkChannelID, title string, startAt time.Time) string {

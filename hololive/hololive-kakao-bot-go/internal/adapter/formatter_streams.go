@@ -73,25 +73,7 @@ type channelScheduleTemplateData struct {
 }
 
 func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*domain.Stream) string {
-	data := liveStreamsTemplateData{Emoji: DefaultEmoji, Count: len(streams)}
-	if len(streams) > 0 {
-		data.Streams = make([]liveStreamView, len(streams))
-		for i, stream := range streams {
-			viewerCount := 0
-
-			if stream.ViewerCount != nil {
-				viewerCount = *stream.ViewerCount
-			}
-
-			data.Streams[i] = liveStreamView{
-				ChannelName: f.formatChannelName(stream),
-				Title:       f.truncateTitle(stream.Title),
-				URL:         stream.GetYouTubeURL(),
-				ViewerCount: viewerCount,
-			}
-		}
-	}
-
+	data := f.liveStreamsTemplateData(streams)
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, data)
 	if err != nil {
 		return ErrorMessage(ErrDisplayLiveStreamsFailed)
@@ -107,6 +89,40 @@ func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*do
 	}
 
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
+}
+
+func (f *ResponseFormatter) liveStreamsTemplateData(streams []*domain.Stream) liveStreamsTemplateData {
+	return liveStreamsTemplateData{
+		Emoji:   DefaultEmoji,
+		Count:   len(streams),
+		Streams: f.liveStreamViews(streams),
+	}
+}
+
+func (f *ResponseFormatter) liveStreamViews(streams []*domain.Stream) []liveStreamView {
+	if len(streams) == 0 {
+		return nil
+	}
+
+	views := make([]liveStreamView, len(streams))
+	for i, stream := range streams {
+		views[i] = f.liveStreamView(stream)
+	}
+	return views
+}
+
+func (f *ResponseFormatter) liveStreamView(stream *domain.Stream) liveStreamView {
+	viewerCount := 0
+	if stream.ViewerCount != nil {
+		viewerCount = *stream.ViewerCount
+	}
+
+	return liveStreamView{
+		ChannelName: f.formatChannelName(stream),
+		Title:       f.truncateTitle(stream.Title),
+		URL:         stream.GetYouTubeURL(),
+		ViewerCount: viewerCount,
+	}
 }
 
 func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*domain.Stream, hours int) string {
@@ -141,30 +157,7 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 }
 
 func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) string {
-	data := channelScheduleTemplateData{Emoji: DefaultEmoji, Days: days, Count: len(streams)}
-
-	if channel != nil {
-		data.ChannelName = channel.GetDisplayName()
-	}
-
-	if len(streams) > 0 {
-		data.Streams = make([]scheduleEntryView, len(streams))
-		for i, stream := range streams {
-			entry := scheduleEntryView{
-				Title: f.truncateTitle(stream.Title),
-				URL:   stream.GetYouTubeURL(),
-			}
-
-			if stream.IsLive() {
-				entry.IsLive = true
-			} else {
-				entry.TimeInfo = f.streamTimeInfo(stream)
-			}
-
-			data.Streams[i] = entry
-		}
-	}
-
+	data := f.channelScheduleTemplateData(channel, streams, days)
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdChannelSchedule, data)
 	if err != nil {
 		return ErrorMessage(ErrDisplayScheduleFailed)
@@ -180,6 +173,49 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 	}
 
 	return util.ApplyKakaoSeeMorePadding(body, instruction)
+}
+
+func (f *ResponseFormatter) channelScheduleTemplateData(channel *domain.Channel, streams []*domain.Stream, days int) channelScheduleTemplateData {
+	return channelScheduleTemplateData{
+		Emoji:       DefaultEmoji,
+		ChannelName: channelScheduleName(channel),
+		Days:        days,
+		Count:       len(streams),
+		Streams:     f.scheduleEntryViews(streams),
+	}
+}
+
+func channelScheduleName(channel *domain.Channel) string {
+	if channel == nil {
+		return ""
+	}
+	return channel.GetDisplayName()
+}
+
+func (f *ResponseFormatter) scheduleEntryViews(streams []*domain.Stream) []scheduleEntryView {
+	if len(streams) == 0 {
+		return nil
+	}
+
+	entries := make([]scheduleEntryView, len(streams))
+	for i, stream := range streams {
+		entries[i] = f.scheduleEntryView(stream)
+	}
+	return entries
+}
+
+func (f *ResponseFormatter) scheduleEntryView(stream *domain.Stream) scheduleEntryView {
+	entry := scheduleEntryView{
+		Title: f.truncateTitle(stream.Title),
+		URL:   stream.GetYouTubeURL(),
+	}
+	if stream.IsLive() {
+		entry.IsLive = true
+		return entry
+	}
+
+	entry.TimeInfo = f.streamTimeInfo(stream)
+	return entry
 }
 
 func (f *ResponseFormatter) truncateTitle(title string) string {
@@ -217,29 +253,36 @@ func (f *ResponseFormatter) formatChannelName(stream *domain.Stream) string {
 	}
 
 	name := stream.ChannelName
-
-	if stream.Channel != nil && stream.Channel.Org != nil {
-		org := *stream.Channel.Org
-		if org != "" {
-			displayOrg := org
-			switch org {
-			case "Hololive":
-				displayOrg = "Holo"
-			case "Nijisanji":
-				displayOrg = "니지산지"
-			case "VSPO":
-				displayOrg = "VSPO"
-			case "Independents":
-				displayOrg = "개인세"
-			case "Stellive":
-				displayOrg = "스텔라이브"
-			}
-
-			name = fmt.Sprintf("[%s] %s", displayOrg, name)
-		}
+	displayOrg := streamDisplayOrg(stream)
+	if displayOrg == "" {
+		return name
 	}
 
-	return name
+	return fmt.Sprintf("[%s] %s", displayOrg, name)
+}
+
+func streamDisplayOrg(stream *domain.Stream) string {
+	if stream.Channel == nil || stream.Channel.Org == nil {
+		return ""
+	}
+	return formatStreamOrg(*stream.Channel.Org)
+}
+
+func formatStreamOrg(org string) string {
+	if org == "" {
+		return ""
+	}
+
+	labels := map[string]string{
+		"Hololive":     "Holo",
+		"Nijisanji":    "니지산지",
+		"Independents": "개인세",
+		"Stellive":     "스텔라이브",
+	}
+	if label, ok := labels[org]; ok {
+		return label
+	}
+	return org
 }
 
 func (f *ResponseFormatter) FormatMemberNotLive(memberName string) string {

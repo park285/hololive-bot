@@ -88,24 +88,37 @@ func (t *CommandTransport) sendMessage(ctx context.Context, room, message string
 
 	var lastErr error
 	for attempt := 0; attempt < replySendMaxAttempts; attempt++ {
-		accepted, err := acceptedSender.SendMessageAccepted(ctx, room, message, opts...)
-		if err != nil {
+		done, err := sendAcceptedMessageAttempt(ctx, acceptedSender, room, message, opts...)
+		if err != nil && !isReplyStatusFailed(err) {
 			return err
 		}
-		if accepted == nil || strings.TrimSpace(accepted.RequestID) == "" {
+		if done {
 			return nil
 		}
-		err = waitForReplyHandoff(ctx, acceptedSender, accepted.RequestID)
-		if err == nil {
-			return nil
-		}
+
 		lastErr = err
-		if !isReplyStatusFailed(err) {
-			return nil
-		}
 	}
 
 	return lastErr
+}
+
+func sendAcceptedMessageAttempt(ctx context.Context, sender acceptedMessageSender, room string, message string, opts ...iris.SendOption) (bool, error) {
+	accepted, err := sender.SendMessageAccepted(ctx, room, message, opts...)
+	if err != nil {
+		return false, err
+	}
+	if accepted == nil || strings.TrimSpace(accepted.RequestID) == "" {
+		return true, nil
+	}
+
+	err = waitForReplyHandoff(ctx, sender, accepted.RequestID)
+	if err == nil {
+		return true, nil
+	}
+	if isReplyStatusFailed(err) {
+		return false, err
+	}
+	return true, nil
 }
 
 type replyStatusFailedError struct {
@@ -130,28 +143,52 @@ func waitForReplyHandoff(ctx context.Context, client acceptedMessageSender, requ
 	defer ticker.Stop()
 
 	for {
-		status, err := client.GetReplyStatus(ctx, requestID)
+		done, err := checkReplyHandoffStatus(ctx, client, requestID)
 		if err != nil {
-			return nil
+			return err
 		}
-		if status != nil {
-			switch strings.ToLower(strings.TrimSpace(status.State)) {
-			case "handoff_completed", "delivered", "sent":
-				return nil
-			case "failed":
-				detail := ""
-				if status.Detail != nil {
-					detail = *status.Detail
-				}
-				return replyStatusFailedError{requestID: requestID, detail: detail}
-			}
+		if done {
+			return nil
 		}
 
-		select {
-		case <-ctx.Done():
+		if waitReplyStatusPoll(ctx, ticker.C) {
 			return nil
-		case <-ticker.C:
 		}
+	}
+}
+
+func checkReplyHandoffStatus(ctx context.Context, client acceptedMessageSender, requestID string) (bool, error) {
+	status, err := client.GetReplyStatus(ctx, requestID)
+	if err != nil || status == nil {
+		return err != nil, nil
+	}
+	return replyHandoffStatusResult(requestID, status)
+}
+
+func replyHandoffStatusResult(requestID string, status *iris.ReplyStatusSnapshot) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(status.State)) {
+	case "handoff_completed", "delivered", "sent":
+		return true, nil
+	case "failed":
+		return true, replyStatusFailedError{requestID: requestID, detail: replyStatusDetail(status)}
+	default:
+		return false, nil
+	}
+}
+
+func replyStatusDetail(status *iris.ReplyStatusSnapshot) string {
+	if status.Detail == nil {
+		return ""
+	}
+	return *status.Detail
+}
+
+func waitReplyStatusPoll(ctx context.Context, tick <-chan time.Time) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case <-tick:
+		return false
 	}
 }
 

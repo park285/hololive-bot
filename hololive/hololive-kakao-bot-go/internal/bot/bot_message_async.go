@@ -44,32 +44,7 @@ func (b *Bot) executeCommandAsync(
 ) {
 	base := context.WithoutCancel(ctx)
 	asyncCtx, cancel := context.WithTimeout(base, constants.RequestTimeout.WebhookProcessing)
-
-	task := func() {
-		defer cancel()
-
-		defer func() {
-			if r := recover(); r != nil && b.logger != nil {
-				b.logger.Error(
-					"Panic in async command handler",
-					slog.Any("panic", r),
-					slog.String("command", commandType),
-				)
-			}
-		}()
-
-		if err := b.executeCommand(asyncCtx, cmdCtx, cmdType, params); err != nil {
-			b.logger.Error("Failed to execute command", slog.Any("error", err))
-
-			errorMsg := b.getErrorMessage(err, commandType)
-
-			if chatID != "" {
-				if sendErr := b.sendError(asyncCtx, chatID, errorMsg); sendErr != nil {
-					b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", chatID))
-				}
-			}
-		}
-	}
+	task := b.asyncCommandTask(asyncCtx, cancel, cmdCtx, cmdType, params, commandType, chatID)
 
 	if b.workerPool == nil {
 		if b.logger != nil {
@@ -88,6 +63,57 @@ func (b *Bot) executeCommandAsync(
 		return
 	}
 
+	b.handleAsyncCommandSubmitError(cancel, submitErr, commandType, chatID)
+}
+
+func (b *Bot) asyncCommandTask(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	cmdCtx *domain.CommandContext,
+	cmdType domain.CommandType,
+	params map[string]any,
+	commandType string,
+	chatID string,
+) func() {
+	return func() {
+		defer cancel()
+		defer b.recoverAsyncCommandPanic(commandType)
+
+		if err := b.executeCommand(ctx, cmdCtx, cmdType, params); err != nil {
+			b.handleAsyncCommandError(ctx, err, commandType, chatID)
+		}
+	}
+}
+
+func (b *Bot) recoverAsyncCommandPanic(commandType string) {
+	if r := recover(); r != nil && b.logger != nil {
+		b.logger.Error(
+			"Panic in async command handler",
+			slog.Any("panic", r),
+			slog.String("command", commandType),
+		)
+	}
+}
+
+func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandType string, chatID string) {
+	b.logger.Error("Failed to execute command", slog.Any("error", err))
+
+	errorMsg := b.getErrorMessage(err, commandType)
+	if chatID == "" {
+		return
+	}
+
+	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
+		b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", chatID))
+	}
+}
+
+func (b *Bot) handleAsyncCommandSubmitError(
+	cancel context.CancelFunc,
+	submitErr error,
+	commandType string,
+	chatID string,
+) {
 	if b.logger != nil {
 		b.logger.Warn(
 			"Async command rejected by worker pool",
@@ -101,6 +127,7 @@ func (b *Bot) executeCommandAsync(
 	if chatID == "" {
 		return
 	}
+
 	notifyCtx, notifyCancel := context.WithTimeout(context.Background(), constants.RequestTimeout.WebhookProcessing)
 	defer notifyCancel()
 

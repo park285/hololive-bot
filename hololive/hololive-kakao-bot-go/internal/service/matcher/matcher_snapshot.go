@@ -85,7 +85,17 @@ func (mm *MemberMatcher) buildSnapshot(ctx context.Context) (*memberMatcherSnaps
 	}
 
 	entriesByChannel := make(map[string]*snapshotEntry)
+	mm.storeSnapshotMembers(snapshot, entriesByChannel, members)
+	mm.storeDynamicSnapshotMembers(ctx, provider, snapshot, entriesByChannel)
 
+	return snapshot, nil
+}
+
+func (mm *MemberMatcher) storeSnapshotMembers(
+	snapshot *memberMatcherSnapshot,
+	entriesByChannel map[string]*snapshotEntry,
+	members []*domain.Member,
+) {
 	for _, member := range members {
 		entry := mm.snapshotEntryFromMember(member)
 		if entry == nil {
@@ -94,24 +104,32 @@ func (mm *MemberMatcher) buildSnapshot(ctx context.Context) (*memberMatcherSnaps
 
 		mm.storeSnapshotEntry(snapshot, entriesByChannel, entry)
 	}
+}
 
-	if mm.cache != nil {
-		dynamicMembers, err := mm.cache.GetAllMembers(ctx)
-		if err != nil {
-			snapshot.dynamicLoadErr = fmt.Errorf("get all members: %w", err)
-		} else {
-			for key, channelID := range dynamicMembers {
-				entry := mm.snapshotEntryFromDynamic(provider, key, channelID)
-				if entry == nil {
-					continue
-				}
-
-				mm.storeSnapshotEntry(snapshot, entriesByChannel, entry)
-			}
-		}
+func (mm *MemberMatcher) storeDynamicSnapshotMembers(
+	ctx context.Context,
+	provider domain.MemberDataProvider,
+	snapshot *memberMatcherSnapshot,
+	entriesByChannel map[string]*snapshotEntry,
+) {
+	if mm.cache == nil {
+		return
 	}
 
-	return snapshot, nil
+	dynamicMembers, err := mm.cache.GetAllMembers(ctx)
+	if err != nil {
+		snapshot.dynamicLoadErr = fmt.Errorf("get all members: %w", err)
+		return
+	}
+
+	for key, channelID := range dynamicMembers {
+		entry := mm.snapshotEntryFromDynamic(provider, key, channelID)
+		if entry == nil {
+			continue
+		}
+
+		mm.storeSnapshotEntry(snapshot, entriesByChannel, entry)
+	}
 }
 
 func (mm *MemberMatcher) snapshotEntryFromMember(member *domain.Member) *snapshotEntry {
@@ -351,22 +369,29 @@ func (mm *MemberMatcher) exactNameMembers(snapshot *memberMatcherSnapshot, nameN
 
 	candidates := make([]*domain.Member, 0, len(snapshot.exactNames[nameNorm]))
 	for _, entry := range snapshot.exactNames[nameNorm] {
-		if entry == nil || entry.candidate == nil {
-			continue
+		member := snapshotMemberForEntry(entry, org)
+		if member != nil {
+			candidates = append(candidates, member)
 		}
-
-		if org != "" && entry.candidate.org != org {
-			continue
-		}
-
-		candidates = append(candidates, &domain.Member{
-			Name:      entry.candidate.memberName,
-			ChannelID: entry.candidate.channelID,
-			Org:       entry.candidate.org,
-		})
 	}
 
 	return candidates
+}
+
+func snapshotMemberForEntry(entry *snapshotEntry, org string) *domain.Member {
+	if entry == nil || entry.candidate == nil {
+		return nil
+	}
+
+	if org != "" && entry.candidate.org != org {
+		return nil
+	}
+
+	return &domain.Member{
+		Name:      entry.candidate.memberName,
+		ChannelID: entry.candidate.channelID,
+		Org:       entry.candidate.org,
+	}
 }
 
 func (mm *MemberMatcher) findSnapshotCandidates(snapshot *memberMatcherSnapshot, queryNorm string) []*snapshotEntry {
@@ -402,12 +427,20 @@ func (mm *MemberMatcher) trySnapshotPartialAliasMatch(snapshot *memberMatcherSna
 			continue
 		}
 
-		for _, aliasNorm := range entry.aliasNorms {
-			if strings.Contains(aliasNorm, queryNorm) || strings.Contains(queryNorm, aliasNorm) {
-				return entry.candidate
-			}
+		if snapshotAliasesContain(entry.aliasNorms, queryNorm) {
+			return entry.candidate
 		}
 	}
 
 	return nil
+}
+
+func snapshotAliasesContain(aliasNorms []string, queryNorm string) bool {
+	for _, aliasNorm := range aliasNorms {
+		if strings.Contains(aliasNorm, queryNorm) || strings.Contains(queryNorm, aliasNorm) {
+			return true
+		}
+	}
+
+	return false
 }
