@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
+	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
 
 type continuousObservationCLIOptions struct {
@@ -25,7 +25,7 @@ type continuousObservationCLIOptions struct {
 func main() {
 	options, err := parseContinuousObservationCLIOptions()
 	if err != nil {
-		exitContinuousObservation(err.Error())
+		exitContinuousObservation("%s", err.Error())
 	}
 
 	cfg, err := config.Load()
@@ -35,7 +35,7 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	if err := runContinuousObservationReport(cfg, logger, options); err != nil {
-		exitContinuousObservation(err.Error())
+		exitContinuousObservation("%s", err.Error())
 	}
 }
 
@@ -100,7 +100,7 @@ func runContinuousObservationOnce(
 ) error {
 	report, err := collectContinuousObservationWithWait(cfg, logger, options, cliOptions.waitTimeout)
 	if err != nil {
-		return fmt.Errorf("Failed to collect continuous observation report: %w", err)
+		return fmt.Errorf("failed to collect continuous observation report: %w", err)
 	}
 	return writeContinuousObservationReport(cliOptions.outputDir, cliOptions.format, report)
 }
@@ -118,7 +118,7 @@ func runContinuousObservationWatch(
 
 	report, err := collectContinuousObservationWithWait(cfg, logger, options, cliOptions.waitTimeout)
 	if err != nil {
-		return fmt.Errorf("Failed to collect continuous observation report: %w", err)
+		return fmt.Errorf("failed to collect continuous observation report: %w", err)
 	}
 
 	return runContinuousObservationWatchLoop(cfg, logger, options, cliOptions, dir, report)
@@ -143,7 +143,7 @@ func runContinuousObservationWatchLoop(
 		time.Sleep(nextContinuousObservationInterval(report))
 		refreshedReport, err := collectContinuousObservationOnce(cfg, logger, options)
 		if err != nil {
-			return fmt.Errorf("Failed to refresh continuous observation report: %w", err)
+			return fmt.Errorf("failed to refresh continuous observation report: %w", err)
 		}
 		report = refreshedReport
 	}
@@ -155,7 +155,7 @@ func prepareContinuousObservationWatchDir(dir string, options opsapp.CommunitySh
 		dir = defaultContinuousObservationOutputDir(options.ObservationRuntimeName, options.ObservationBigBangCutoverAt)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("Failed to create output directory: %w", err)
+		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 	return dir, nil
 }
@@ -163,23 +163,23 @@ func prepareContinuousObservationWatchDir(dir string, options opsapp.CommunitySh
 func writeContinuousObservationReport(outputDir string, format string, report opsapp.CommunityShortsContinuousObservationReport) error {
 	payload, ext, err := renderContinuousObservationOutput(report, format)
 	if err != nil {
-		return fmt.Errorf("Failed to render continuous observation report: %w", err)
+		return fmt.Errorf("failed to render continuous observation report: %w", err)
 	}
 	if outputDir == "" {
 		return writeContinuousObservationStdout(payload)
 	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("Failed to create output directory: %w", err)
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 	if _, err := writeContinuousObservationSnapshot(outputDir, ext, report, payload); err != nil {
-		return fmt.Errorf("Failed to write continuous observation report files: %w", err)
+		return fmt.Errorf("failed to write continuous observation report files: %w", err)
 	}
 	return nil
 }
 
 func writeContinuousObservationStdout(payload []byte) error {
 	if _, err := os.Stdout.Write(payload); err != nil {
-		return fmt.Errorf("Failed to write continuous observation report: %w", err)
+		return fmt.Errorf("failed to write continuous observation report: %w", err)
 	}
 	return nil
 }
@@ -187,11 +187,11 @@ func writeContinuousObservationStdout(payload []byte) error {
 func writeContinuousObservationWatchSnapshot(logger *slog.Logger, dir string, format string, report opsapp.CommunityShortsContinuousObservationReport) error {
 	payload, ext, err := renderContinuousObservationOutput(report, format)
 	if err != nil {
-		return fmt.Errorf("Failed to render continuous observation report: %w", err)
+		return fmt.Errorf("failed to render continuous observation report: %w", err)
 	}
 	paths, err := writeContinuousObservationSnapshot(dir, ext, report, payload)
 	if err != nil {
-		return fmt.Errorf("Failed to write continuous observation report files: %w", err)
+		return fmt.Errorf("failed to write continuous observation report files: %w", err)
 	}
 	logger.Info("YouTube community/shorts continuous observation snapshot written",
 		slog.String("latest_path", paths.latest),

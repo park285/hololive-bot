@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
+	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
 
 func renderContinuousObservationOutput(

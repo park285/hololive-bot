@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/reportcli"
-	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
+	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
 
 func main() {
