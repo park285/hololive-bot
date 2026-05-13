@@ -21,8 +21,8 @@
 package command
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -62,14 +62,8 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrSubscriberNeedMemberName)
 	}
 
-	// 멤버 매칭
-	matchedChannel, err := c.Deps().Matcher.FindBestMatch(ctx, memberQuery)
+	matchedChannel, err := c.matchSubscriberChannel(ctx, memberQuery)
 	if err != nil {
-		c.log().Warn("Member match failed",
-			slog.String("query", memberQuery),
-			slog.Any("error", err),
-		)
-
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberQuery))
 	}
 
@@ -77,36 +71,62 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return c.Deps().SendError(ctx, cmdCtx.Room, c.Deps().Formatter.MemberNotFound(memberQuery))
 	}
 
-	// Holodex API로 실시간 구독자 수 조회
-	channel, err := c.Deps().Holodex.GetChannel(ctx, matchedChannel.ID)
+	channel, err := c.getSubscriberChannel(ctx, matchedChannel.ID)
 	if err != nil {
-		c.log().Error("Failed to get channel from Holodex",
-			slog.String("channel_id", matchedChannel.ID),
-			slog.Any("error", err),
-		)
-
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrSubscriberQueryFailed)
 	}
 
-	if channel == nil || channel.SubscriberCount == nil || *channel.SubscriberCount == 0 {
+	if !hasSubscriberCount(channel) {
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.MsgNoSubscriberData)
 	}
 
-	// 멤버 정보 조회 (한글 이름 등)
-	provider := c.Deps().MembersData.WithContext(ctx)
-	member := provider.FindMemberByChannelID(channel.ID)
-
-	memberName := channel.Name
-	if member != nil && member.NameKo != "" {
-		memberName = member.NameKo
-	} else if channel.EnglishName != nil && *channel.EnglishName != "" {
-		memberName = *channel.EnglishName
-	}
-
-	// 응답 메시지 생성
+	memberName := c.subscriberMemberName(ctx, channel)
 	message := c.Deps().Formatter.FormatSubscriberCount(memberName, uint64(*channel.SubscriberCount))
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+}
+
+func (c *SubscriberCommand) matchSubscriberChannel(ctx context.Context, memberQuery string) (*domain.Channel, error) {
+	matchedChannel, err := c.Deps().Matcher.FindBestMatch(ctx, memberQuery)
+	if err != nil {
+		c.log().Warn("Member match failed",
+			slog.String("query", memberQuery),
+			slog.Any("error", err),
+		)
+	}
+
+	return matchedChannel, err
+}
+
+func (c *SubscriberCommand) getSubscriberChannel(ctx context.Context, channelID string) (*domain.Channel, error) {
+	channel, err := c.Deps().Holodex.GetChannel(ctx, channelID)
+	if err != nil {
+		c.log().Error("Failed to get channel from Holodex",
+			slog.String("channel_id", channelID),
+			slog.Any("error", err),
+		)
+	}
+
+	return channel, err
+}
+
+func hasSubscriberCount(channel *domain.Channel) bool {
+	return channel != nil && channel.SubscriberCount != nil && *channel.SubscriberCount != 0
+}
+
+func (c *SubscriberCommand) subscriberMemberName(ctx context.Context, channel *domain.Channel) string {
+	provider := c.Deps().MembersData.WithContext(ctx)
+	member := provider.FindMemberByChannelID(channel.ID)
+
+	if member != nil && member.NameKo != "" {
+		return member.NameKo
+	}
+
+	if channel.EnglishName != nil && *channel.EnglishName != "" {
+		return *channel.EnglishName
+	}
+
+	return channel.Name
 }
 
 func (c *SubscriberCommand) ensureDeps() error {

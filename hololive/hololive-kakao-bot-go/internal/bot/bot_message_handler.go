@@ -49,26 +49,9 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 
 	commandType = envelope.CommandType
 
-	cmdCtx := domain.NewCommandContext(
-		envelope.ChatID,
-		envelope.RoomName,
-		envelope.UserID,
-		envelope.UserName,
-		envelope.Parsed.RawMessage,
-		false,
-	)
-
-	if message != nil && message.JSON != nil && message.JSON.ThreadID != nil {
-		if trimmed := strings.TrimSpace(*message.JSON.ThreadID); trimmed != "" {
-			cmdCtx.ThreadID = &trimmed
-		}
-	}
-
-	reqCtx := ctx
-
-	if cmdCtx.ThreadID != nil {
-		reqCtx = withThreadID(ctx, *cmdCtx.ThreadID)
-	}
+	cmdCtx := newCommandContextFromIngress(envelope)
+	cmdCtx.ThreadID = messageThreadID(message)
+	reqCtx := commandRequestContext(ctx, cmdCtx)
 
 	if shouldExecuteAsync(envelope.Parsed.Type) {
 		b.executeCommandAsync(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params, commandType, envelope.ChatID)
@@ -76,14 +59,48 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 	}
 
 	if err := b.executeCommand(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
-		b.logger.Error("Failed to execute command", slog.Any("error", err))
+		b.handleCommandExecutionError(reqCtx, envelope.ChatID, commandType, err)
+	}
+}
 
-		errorMsg := b.getErrorMessage(err, commandType)
+func newCommandContextFromIngress(envelope *ingressEnvelope) *domain.CommandContext {
+	return domain.NewCommandContext(
+		envelope.ChatID,
+		envelope.RoomName,
+		envelope.UserID,
+		envelope.UserName,
+		envelope.Parsed.RawMessage,
+		false,
+	)
+}
 
-		if envelope.ChatID != "" {
-			if sendErr := b.sendError(reqCtx, envelope.ChatID, errorMsg); sendErr != nil {
-				b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", envelope.ChatID))
-			}
-		}
+func messageThreadID(message *iris.Message) *string {
+	if message == nil || message.JSON == nil || message.JSON.ThreadID == nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(*message.JSON.ThreadID)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext) context.Context {
+	if cmdCtx.ThreadID == nil {
+		return ctx
+	}
+	return withThreadID(ctx, *cmdCtx.ThreadID)
+}
+
+func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) {
+	b.logger.Error("Failed to execute command", slog.Any("error", err))
+
+	errorMsg := b.getErrorMessage(err, commandType)
+	if chatID == "" {
+		return
+	}
+	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
+		b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", chatID))
 	}
 }

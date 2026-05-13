@@ -40,43 +40,89 @@ func BuildBotDependencyModules(
 	logger *slog.Logger,
 ) BotDependencyModules {
 	return BotDependencyModules{
-		Core: BotCoreModule{
-			BotSelfUser:  cfg.Bot.SelfUser,
-			IrisBaseURL:  cfg.Iris.BaseURL,
-			Notification: cfg.Notification,
-			Logger:       logger,
-		},
-		Messaging: BotMessagingModule{
-			Client:         irisClient,
-			MessageAdapter: messageAdapter,
-			Formatter:      formatter,
-		},
-		Data: BotDataModule{
-			CacheSvc:    infra.Cache,
-			Postgres:    infra.Postgres,
-			MemberRepo:  infra.MemberRepo,
-			MemberCache: infra.MemberCache,
-			Profiles:    profileService,
-			MembersData: alarmMode.MemberDataSource,
-		},
-		Stream: BotStreamModule{
-			HolodexSvc:   holodexService,
-			ChzzkClient:  alarmMode.ChzzkClient,
-			TwitchClient: alarmMode.TwitchClient,
-			AlarmSvc:     alarmMode.AlarmCRUD,
-			MemberMatch:  memberMatcher,
-			YTStack:      youTubeStack,
-		},
-		Support: BotSupportModule{
-			ActivityLogger: activityLogger,
-			SettingsSvc:    settingsService,
-			ACLSvc:         aclService,
-			WorkerPool:     workerPool,
-		},
-		Feature: BotFeatureModule{
-			MajorEventRepo:  majorEventRepo,
-			MemberNewsSvc:   memberNewsService,
-			CommandBuilders: bot.CloneCommandBuilders(commandBuilders),
-		},
+		Core:      buildBotCoreModule(cfg, logger),
+		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter),
+		Data:      buildBotDataModule(infra, alarmMode, profileService),
+		Stream:    buildBotStreamModule(alarmMode, holodexService, memberMatcher, youTubeStack),
+		Support:   buildBotSupportModule(activityLogger, settingsService, aclService, workerPool),
+		Feature:   buildBotFeatureModule(majorEventRepo, memberNewsService, commandBuilders),
+	}
+}
+
+func buildBotCoreModule(cfg *config.Config, logger *slog.Logger) BotCoreModule {
+	return BotCoreModule{
+		BotSelfUser:  cfg.Bot.SelfUser,
+		IrisBaseURL:  cfg.Iris.BaseURL,
+		Notification: cfg.Notification,
+		Logger:       logger,
+	}
+}
+
+func buildBotMessagingModule(
+	irisClient BotIrisClient,
+	messageAdapter *adapter.MessageAdapter,
+	formatter *adapter.ResponseFormatter,
+) BotMessagingModule {
+	return BotMessagingModule{
+		Client:         irisClient,
+		MessageAdapter: messageAdapter,
+		Formatter:      formatter,
+	}
+}
+
+func buildBotDataModule(
+	infra *sharedmodules.InfraModule,
+	alarmMode *AlarmModeComponents,
+	profileService *member.ProfileService,
+) BotDataModule {
+	return BotDataModule{
+		CacheSvc:    infra.Cache,
+		Postgres:    infra.Postgres,
+		MemberRepo:  infra.MemberRepo,
+		MemberCache: infra.MemberCache,
+		Profiles:    profileService,
+		MembersData: alarmMode.MemberDataSource,
+	}
+}
+
+func buildBotStreamModule(
+	alarmMode *AlarmModeComponents,
+	holodexService *holodex.Service,
+	memberMatcher *matcher.MemberMatcher,
+	youTubeStack *providers.YouTubeStack,
+) BotStreamModule {
+	return BotStreamModule{
+		HolodexSvc:   holodexService,
+		ChzzkClient:  alarmMode.ChzzkClient,
+		TwitchClient: alarmMode.TwitchClient,
+		AlarmSvc:     alarmMode.AlarmCRUD,
+		MemberMatch:  memberMatcher,
+		YTStack:      youTubeStack,
+	}
+}
+
+func buildBotSupportModule(
+	activityLogger *activity.Logger,
+	settingsService settings.ReadWriter,
+	aclService *acl.Service,
+	workerPool *workerpool.Pool,
+) BotSupportModule {
+	return BotSupportModule{
+		ActivityLogger: activityLogger,
+		SettingsSvc:    settingsService,
+		ACLSvc:         aclService,
+		WorkerPool:     workerPool,
+	}
+}
+
+func buildBotFeatureModule(
+	majorEventRepo command.MajorEventRepository,
+	memberNewsService command.MemberNewsService,
+	commandBuilders []bot.CommandBuilder,
+) BotFeatureModule {
+	return BotFeatureModule{
+		MajorEventRepo:  majorEventRepo,
+		MemberNewsSvc:   memberNewsService,
+		CommandBuilders: bot.CloneCommandBuilders(commandBuilders),
 	}
 }

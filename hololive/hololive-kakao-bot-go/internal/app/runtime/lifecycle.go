@@ -73,34 +73,7 @@ func Start(ctx context.Context, errCh chan<- error, hooks StartHooks) {
 }
 
 func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) {
-	if err := lifecycle.Run(lifecycle.Options{
-		ShutdownTimeout: constants.AppTimeout.Shutdown,
-		Start: func(ctx context.Context, errCh chan<- error) {
-			start(ctx, errCh)
-			if logger != nil {
-				logger.Info("Runtime started, waiting for signals...")
-			}
-		},
-		OnSignal: func(sig os.Signal) {
-			if logger != nil {
-				logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
-			}
-		},
-		OnError: func(err error) {
-			if logger != nil {
-				logger.Error("Server error", slog.Any("error", err))
-			}
-		},
-		BeforeShutdown: func() {
-			if logger != nil {
-				logger.Info("Shutting down gracefully...")
-			}
-		},
-		Shutdown: func(ctx context.Context) error {
-			shutdown(ctx)
-			return nil
-		},
-	}); err != nil {
+	if err := lifecycle.Run(runtimeOptions(logger, start, shutdown)); err != nil {
 		logError(logger, "Shutdown error", err)
 	}
 
@@ -109,17 +82,64 @@ func Run(logger *slog.Logger, start func(context.Context, chan<- error), shutdow
 	}
 }
 
+func runtimeOptions(logger *slog.Logger, start func(context.Context, chan<- error), shutdown func(context.Context)) lifecycle.Options {
+	return lifecycle.Options{
+		ShutdownTimeout: constants.AppTimeout.Shutdown,
+		Start: func(ctx context.Context, errCh chan<- error) {
+			startRuntime(ctx, errCh, logger, start)
+		},
+		OnSignal: func(sig os.Signal) {
+			logSignal(logger, sig)
+		},
+		OnError: func(err error) {
+			logError(logger, "Server error", err)
+		},
+		BeforeShutdown: func() {
+			logInfo(logger, "Shutting down gracefully...")
+		},
+		Shutdown: func(ctx context.Context) error {
+			shutdown(ctx)
+			return nil
+		},
+	}
+}
+
+func startRuntime(ctx context.Context, errCh chan<- error, logger *slog.Logger, start func(context.Context, chan<- error)) {
+	start(ctx, errCh)
+	if logger != nil {
+		logger.Info("Runtime started, waiting for signals...")
+	}
+}
+
+func logSignal(logger *slog.Logger, sig os.Signal) {
+	if logger != nil {
+		logger.Info("Received shutdown signal", slog.String("signal", sig.String()))
+	}
+}
+
 func Shutdown(ctx context.Context, hooks ShutdownHooks) {
+	shutdownAlarmScheduler(hooks)
+	shutdownHTTPServer(ctx, hooks)
+	closeWebhookHandler(hooks)
+	shutdownAlarmServices(ctx, hooks)
+	shutdownBot(ctx, hooks)
+}
+
+func shutdownAlarmScheduler(hooks ShutdownHooks) {
 	if hooks.ClearAlarmScheduler != nil && hooks.ClearAlarmScheduler() {
 		logInfo(hooks.Logger, "Alarm runtime scheduler cancellation signaled")
 	}
+}
 
+func shutdownHTTPServer(ctx context.Context, hooks ShutdownHooks) {
 	if hooks.ShutdownHTTPServer != nil {
 		if err := hooks.ShutdownHTTPServer(ctx); err != nil {
 			logError(hooks.Logger, "HTTP server shutdown error", err)
 		}
 	}
+}
 
+func closeWebhookHandler(hooks ShutdownHooks) {
 	if hooks.WebhookHandlerClose != nil {
 		if err := hooks.WebhookHandlerClose(); err != nil {
 			logError(hooks.Logger, "Iris webhook handler shutdown error", err)
@@ -127,7 +147,9 @@ func Shutdown(ctx context.Context, hooks ShutdownHooks) {
 			logInfo(hooks.Logger, "Iris webhook handler stopped")
 		}
 	}
+}
 
+func shutdownAlarmServices(ctx context.Context, hooks ShutdownHooks) {
 	if hooks.ShutdownAlarmServices != nil {
 		if err := hooks.ShutdownAlarmServices(ctx); err != nil {
 			logError(hooks.Logger, "Alarm service shutdown error", err)
@@ -135,7 +157,9 @@ func Shutdown(ctx context.Context, hooks ShutdownHooks) {
 			logInfo(hooks.Logger, "Alarm services stopped")
 		}
 	}
+}
 
+func shutdownBot(ctx context.Context, hooks ShutdownHooks) {
 	if hooks.ShutdownBot != nil {
 		if err := hooks.ShutdownBot(ctx); err != nil {
 			logError(hooks.Logger, "Error during shutdown", err)

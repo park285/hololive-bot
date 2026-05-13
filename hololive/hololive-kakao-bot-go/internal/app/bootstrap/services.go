@@ -6,10 +6,12 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/iris"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
+	"github.com/kapu/hololive-kakao-bot-go/internal/bot"
 )
 
 func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *BotInfrastructure, retErr error) {
@@ -53,6 +55,29 @@ func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog
 		return nil, err
 	}
 
+	deps := provideBotDependenciesFromStacks(
+		cfg, infra, foundation, alarmYouTubeStack, integrationServices, messageAdapter, formatter, irisClient, logger,
+	)
+
+	return &BotInfrastructure{
+		Deps:           deps,
+		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
+		HolodexService: foundation.HolodexService,
+		Cleanup:        infra.Cleanup,
+	}, nil
+}
+
+func provideBotDependenciesFromStacks(
+	cfg *config.Config,
+	infra *sharedmodules.InfraModule,
+	foundation *ScraperHolodexProfileFoundation,
+	alarmYouTubeStack *AlarmYouTubeStackComponents,
+	integrationServices *CoreIntegrationServices,
+	messageAdapter *adapter.MessageAdapter,
+	formatter *adapter.ResponseFormatter,
+	irisClient BotIrisClient,
+	logger *slog.Logger,
+) *bot.Dependencies {
 	modules := BuildBotDependencyModules(
 		cfg,
 		infra,
@@ -73,12 +98,6 @@ func InitBotInfrastructure(ctx context.Context, cfg *config.Config, logger *slog
 		integrationServices.WorkerPool,
 		logger,
 	)
-	deps := ProvideBotDependencies(modules)
 
-	return &BotInfrastructure{
-		Deps:           deps,
-		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
-		HolodexService: foundation.HolodexService,
-		Cleanup:        infra.Cleanup,
-	}, nil
+	return ProvideBotDependencies(modules)
 }

@@ -51,21 +51,7 @@ func (ma *MessageAdapter) tryMemberNewsSubscriptionCommand(command string, args 
 		return nil, false
 	}
 
-	action := memberNewsActionStatus
-
-	if len(args) > 0 {
-		switch stringutil.Normalize(args[0]) {
-		case "켜기", "on", "구독":
-			action = memberNewsActionOn
-		case "끄기", "off", "해제":
-			action = memberNewsActionOff
-		case "상태", "목록", "list", memberNewsActionStatus:
-			action = memberNewsActionStatus
-		default:
-			action = memberNewsActionStatus
-		}
-	}
-
+	action := memberNewsSubscriptionAction(args)
 	return &ParsedCommand{
 		Type:       domain.CommandMemberNewsSubscription,
 		Params:     map[string]any{"action": action},
@@ -77,31 +63,60 @@ func (ma *MessageAdapter) isMemberNewsSubscriptionCommand(cmd string) bool {
 	return stringutil.ContainsString([]string{"뉴스알림", "뉴스구독", "newsalert", "newsalerts", "newssubscription"}, cmd)
 }
 
+func memberNewsSubscriptionAction(args []string) string {
+	if len(args) == 0 {
+		return memberNewsActionStatus
+	}
+
+	actions := map[string]string{
+		"켜기":                   memberNewsActionOn,
+		"on":                   memberNewsActionOn,
+		"구독":                   memberNewsActionOn,
+		"끄기":                   memberNewsActionOff,
+		"off":                  memberNewsActionOff,
+		"해제":                   memberNewsActionOff,
+		"상태":                   memberNewsActionStatus,
+		"목록":                   memberNewsActionStatus,
+		"list":                 memberNewsActionStatus,
+		memberNewsActionStatus: memberNewsActionStatus,
+	}
+	if action, ok := actions[stringutil.Normalize(args[0])]; ok {
+		return action
+	}
+	return memberNewsActionStatus
+}
+
 func (ma *MessageAdapter) tryMemberNewsCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
 	if !ma.isMemberNewsCommand(command) {
 		return nil, false
 	}
 
-	period := "weekly"
-
-	if len(args) > 0 {
-		// 공백 포함 입력("이번 달") 대응: args 전체를 결합 후 정규화
-		token := stringutil.Normalize(strings.Join(args, ""))
-		switch token {
-		case "이번주", "주간", "weekly":
-			period = "weekly"
-		case "이번달", "월간", "monthly":
-			period = "monthly"
-		}
-	}
-
 	return &ParsedCommand{
 		Type:       domain.CommandMemberNews,
-		Params:     map[string]any{"period": period},
+		Params:     map[string]any{"period": memberNewsPeriod(args)},
 		RawMessage: raw,
 	}, true
 }
 
 func (ma *MessageAdapter) isMemberNewsCommand(cmd string) bool {
 	return stringutil.ContainsString([]string{"뉴스", "news"}, cmd)
+}
+
+func memberNewsPeriod(args []string) string {
+	if len(args) == 0 {
+		return "weekly"
+	}
+
+	periods := map[string]string{
+		"이번주":     "weekly",
+		"주간":      "weekly",
+		"weekly":  "weekly",
+		"이번달":     "monthly",
+		"월간":      "monthly",
+		"monthly": "monthly",
+	}
+	if period, ok := periods[stringutil.Normalize(strings.Join(args, ""))]; ok {
+		return period
+	}
+	return "weekly"
 }

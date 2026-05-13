@@ -106,39 +106,57 @@ type ParsedCommand struct {
 }
 
 func (ma *MessageAdapter) ParseMessage(message *iris.Message) *ParsedCommand {
-	if message == nil || message.Msg == "" {
-		return ma.createUnknownCommand("")
-	}
-
-	text, commandText, ok := ma.extractCommandText(message.Msg)
+	text, commandText, ok := ma.commandTextFromMessage(message)
 	if !ok {
 		return ma.createUnknownCommand(text)
 	}
 
-	parts := strings.Fields(commandText)
-	if len(parts) == 0 {
+	command, args, ok := parseCommandParts(commandText)
+	if !ok {
 		return ma.createUnknownCommand(text)
 	}
-
-	command := stringutil.Normalize(parts[0])
-	args := parts[1:]
 
 	if normalizedCmd, normalizedArgs, ok := normalizeCompactAlarmTokens(command, args); ok {
 		command = normalizedCmd
 		args = normalizedArgs
 	}
 
+	if parsed, ok := ma.parseKnownCommand(command, args, text); ok {
+		return parsed
+	}
+
+	return ma.createUnknownCommand(text)
+}
+
+func (ma *MessageAdapter) commandTextFromMessage(message *iris.Message) (string, string, bool) {
+	if message == nil || message.Msg == "" {
+		return "", "", false
+	}
+
+	return ma.extractCommandText(message.Msg)
+}
+
+func parseCommandParts(commandText string) (string, []string, bool) {
+	parts := strings.Fields(commandText)
+	if len(parts) == 0 {
+		return "", nil, false
+	}
+
+	return stringutil.Normalize(parts[0]), parts[1:], true
+}
+
+func (ma *MessageAdapter) parseKnownCommand(command string, args []string, text string) (*ParsedCommand, bool) {
 	for _, parser := range ma.parsers {
 		if parser == nil {
 			continue
 		}
 
 		if parsed, ok := parser.Parse(command, args, text); ok {
-			return parsed
+			return parsed, true
 		}
 	}
 
-	return ma.createUnknownCommand(text)
+	return nil, false
 }
 
 func (ma *MessageAdapter) createUnknownCommand(text string) *ParsedCommand {

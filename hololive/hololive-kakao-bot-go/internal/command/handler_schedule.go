@@ -53,11 +53,9 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
-	rawCommandToken, _ := params["_raw_command"].(string)
-	delete(params, "_raw_command")
-
-	memberName, hasMember := params["member"].(string)
-	if !hasMember || memberName == "" {
+	rawCommandToken := popRawScheduleCommandToken(params)
+	memberName, ok := scheduleMemberName(params)
+	if !ok {
 		if shouldSuppressSchedulePrompt(cmdCtx, rawCommandToken) {
 			return nil
 		}
@@ -65,25 +63,7 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 		return c.Deps().SendError(ctx, cmdCtx.Room, adapter.ErrScheduleNeedMemberName)
 	}
 
-	days := 7
-
-	if d, ok := params["days"]; ok {
-		switch v := d.(type) {
-		case float64:
-			days = int(v)
-		case int:
-			days = v
-		}
-	}
-
-	if days < 1 {
-		days = 7
-	}
-
-	if days > 30 {
-		days = 30
-	}
-
+	days := scheduleDays(params)
 	channel, err := FindActiveMemberOrError(ctx, c.Deps(), cmdCtx.Room, memberName)
 	if err != nil {
 		return fmt.Errorf("failed to find member %q: %w", memberName, err)
@@ -99,6 +79,54 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 	message := c.Deps().Formatter.ChannelSchedule(ctx, channel, streams, days)
 
 	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+}
+
+func popRawScheduleCommandToken(params map[string]any) string {
+	rawCommandToken, _ := params["_raw_command"].(string)
+	delete(params, "_raw_command")
+
+	return rawCommandToken
+}
+
+func scheduleMemberName(params map[string]any) (string, bool) {
+	memberName, ok := params["member"].(string)
+	if !ok || memberName == "" {
+		return "", false
+	}
+
+	return memberName, true
+}
+
+func scheduleDays(params map[string]any) int {
+	return clampScheduleDays(rawScheduleDays(params))
+}
+
+func rawScheduleDays(params map[string]any) int {
+	d, ok := params["days"]
+	if !ok {
+		return 7
+	}
+
+	switch v := d.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 7
+	}
+}
+
+func clampScheduleDays(days int) int {
+	if days < 1 {
+		return 7
+	}
+
+	if days > 30 {
+		return 30
+	}
+
+	return days
 }
 
 func (c *ScheduleCommand) ensureDeps() error {
