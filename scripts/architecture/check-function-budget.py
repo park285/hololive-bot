@@ -93,9 +93,11 @@ def iter_go_files(root: Path) -> list[Path]:
 
     if result is not None:
         return sorted(
-            root / line
+            path
             for line in result.stdout.splitlines()
             if line.endswith(".go") and not line.endswith("_test.go")
+            for path in [root / line]
+            if path.exists()
         )
 
     result_paths: list[Path] = []
