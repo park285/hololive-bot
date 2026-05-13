@@ -31,7 +31,11 @@ remote 'cd ~/hololive-bot && find . -maxdepth 1 -mindepth 1 -printf "%f\n" | sor
 
 echo
 echo "== Recent youtube-scraper signals =="
-signals hololive-youtube-scraper 'Cache store connected|postgres_pool_connected|ingestion_lease_acquired|YouTube outbox dispatcher started|ERR|pre-send claim|ingestion_lease_lost|panic|permission denied'
+signals hololive-youtube-scraper 'Cache store connected|postgres_pool_connected|ingestion_lease_acquired|ERR|pre-send claim|ingestion_lease_lost|panic|permission denied'
+
+echo
+echo "== Recent alarm-worker egress signals =="
+signals hololive-alarm-worker 'YouTube outbox dispatcher started by alarm-worker|Outbox dispatcher started|Outbox per-room enqueue completed|Outbox per-room dispatch completed|ERR|panic|permission denied'
 
 echo
 echo "== Recent stream-ingester signals =="

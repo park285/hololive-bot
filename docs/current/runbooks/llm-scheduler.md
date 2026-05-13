@@ -11,7 +11,7 @@
 | Health | `http://127.0.0.1:30003/health` returns success |
 | Ready | `http://127.0.0.1:30003/ready` returns success |
 | Logs | no repeated DB/cache/LLM/trigger errors |
-| Queue | delivery outbox state is not stuck |
+| Queue | `notification_delivery_outbox` rows are produced; alarm-worker drains them |
 
 ## Dependencies
 
@@ -19,7 +19,6 @@
 |---|---|---|
 | PostgreSQL | yes | subscriptions, summaries, outbox fail |
 | Valkey | yes | cache and Pub/Sub behavior degrades |
-| Iris | partial | delivery path may fail where configured |
 | CLIPROXY | partial | LLM generation fails where enabled |
 
 ## Key environment variables
@@ -29,6 +28,7 @@
 | `LLM_SCHEDULER_PORT` | HTTP port | yes |
 | `CLIPROXY_*` | LLM proxy | partial |
 | `MAJOREVENT_*` | major event scrape/schedule config | partial |
+| `DELIVERY_DISPATCHER_ENABLED=false` | producer-only egress boundary | yes |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 
 ## Logs

@@ -351,8 +351,12 @@ services:
         VERSION: ${HOLO_ALARM_WORKER_VERSION:-${HOLO_BOT_VERSION:-2.0.0}}
     container_name: hololive-alarm-worker
     environment:
-      <<: [*app-file-log-env, *cache-env, *postgres-env]
+      <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env]
+      NOTIFICATION_EGRESS_ROLE: "owner"
       NOTIFICATION_SCHEDULER_ROLE: "worker"
+      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: ${YOUTUBE_OUTBOX_DISPATCHER_ENABLED:-true}
+      DELIVERY_DISPATCHER_ENABLED: ${DELIVERY_DISPATCHER_ENABLED:-true}
+      ALARM_WORKER_EGRESS_LEASE_ENABLED: ${ALARM_WORKER_EGRESS_LEASE_ENABLED:-true}
       SERVER_PORT: 30007
       ALARM_DISPATCH_PUBLISH_MODE: ${ALARM_DISPATCH_PUBLISH_MODE:-valkey_only}
       ALARM_DISPATCH_CONSUMER_MODE: ${ALARM_DISPATCH_CONSUMER_MODE:-valkey}
@@ -365,8 +369,8 @@ services:
       APP_ENV: "production"
     ports:
       - "127.0.0.1:30007:30007"
-    volumes: *go-basic-volumes
-    extra_hosts: *host-extra-hosts
+    volumes: *go-volumes
+    extra_hosts: *iris-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
     healthcheck:
@@ -377,9 +381,10 @@ services:
         aliases:
           - hololive-alarm-worker
 
-  # dispatcher-go: alarm:dispatch:queue 소비 + Iris 발송
+  # dispatcher-go: legacy standalone dispatch consumer, disabled by default.
   dispatcher-go:
     <<: *app-service
+    profiles: ["legacy-dispatcher-go"]
     image: hololive-dispatcher-go:prod
     build:
       <<: *go-build-base
@@ -439,7 +444,8 @@ services:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: hololive-stream-ingester
     environment:
-      <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
+      NOTIFICATION_EGRESS_ROLE: "producer"
       SERVER_PORT: 30004
       YOUTUBE_INGESTION_ENABLED: "false"
       PHOTO_SYNC_ENABLED: "true"
@@ -452,7 +458,7 @@ services:
     ports:
       - "127.0.0.1:30004:30004"
     volumes: *go-volumes
-    extra_hosts: *iris-extra-hosts
+    extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
     healthcheck:
@@ -474,7 +480,9 @@ services:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: hololive-youtube-scraper
     environment:
-      <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
+      NOTIFICATION_EGRESS_ROLE: "producer"
+      YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
       SERVER_PORT: 30005
       YOUTUBE_INGESTION_ENABLED: "true"
       PHOTO_SYNC_ENABLED: "false"
@@ -487,7 +495,7 @@ services:
     ports:
       - "127.0.0.1:30005:30005"
     volumes: *go-volumes
-    extra_hosts: *iris-extra-hosts
+    extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-384m
     healthcheck:
@@ -508,7 +516,9 @@ services:
         VERSION: ${HOLO_BOT_VERSION:-2.0.0}
     container_name: hololive-llm-scheduler
     environment:
-      <<: [*app-file-log-env, *iris-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      <<: [*app-file-log-env, *cache-env, *postgres-env, *majorevent-env, *cliproxy-env]
+      NOTIFICATION_EGRESS_ROLE: "producer"
+      DELIVERY_DISPATCHER_ENABLED: "false"
       LLM_SCHEDULER_PORT: 30003
       GOGC: "100"
       # Dockerfile 기본값은 GOMEMLIMIT=192MiB이지만 운영 deploy limit에 맞춰 256MiB로 올립니다.
@@ -519,7 +529,7 @@ services:
     ports:
       - "127.0.0.1:30003:30003"
     volumes: *go-volumes
-    extra_hosts: *iris-extra-hosts
+    extra_hosts: *host-extra-hosts
     depends_on: *db-cache-depends
     deploy: *deploy-320m
     healthcheck:

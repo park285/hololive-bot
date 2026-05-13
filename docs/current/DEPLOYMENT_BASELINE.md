@@ -16,11 +16,11 @@
 |---|---|---:|---|---|---|
 | `bot` | `hololive-bot` | 30001 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey, docker-proxy |
 | `admin-api` | `hololive-admin-api` | 30006 | app file log, cache, PostgreSQL | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
-| `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, cache, PostgreSQL | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
-| `dispatcher-go` | `dispatcher-go` | 30020 | app file log, cache, Iris | `logs`, `runtime-config`, certs, Valkey socket | Valkey, `hololive-bot` health |
-| `llm-scheduler` | `llm-scheduler` | 30003 | app file log, Iris, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `stream-ingester` | `stream-ingester` | 30004 | app file log, Iris, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
-| `youtube-scraper` | `youtube-scraper` | 30005 | app file log, Iris, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
+| `alarm-worker` | `hololive-alarm-worker` | 30007 | app file log, Iris, cache, PostgreSQL | `data`, `logs`, `runtime-config`, certs, Valkey socket | PostgreSQL, migration, Valkey |
+| `dispatcher-go` | `dispatcher-go` | 30020 | legacy profile only, app file log, cache, Iris | `logs`, `runtime-config`, certs, Valkey socket | Valkey, `hololive-bot` health |
+| `llm-scheduler` | `llm-scheduler` | 30003 | app file log, cache, PostgreSQL, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
+| `stream-ingester` | `stream-ingester` | 30004 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
+| `youtube-scraper` | `youtube-scraper` | 30005 | app file log, cache, PostgreSQL, scraper, major event, cliproxy | `data`, `logs`, Valkey socket | PostgreSQL, migration, Valkey |
 
 ## Infra Services
 
@@ -37,7 +37,7 @@
 
 | Boundary | Used by | Contract doc |
 |---|---|---|
-| Iris / Redroid KakaoTalk automation | `bot`, `dispatcher-go`, ingestion runtimes where configured | `contracts/iris-boundary.md` |
+| Iris / Redroid KakaoTalk automation | `bot`, `alarm-worker`; `dispatcher-go` only in legacy profile | `contracts/iris-boundary.md` |
 | PostgreSQL | Most runtime services | schema/migration files under `hololive/hololive-kakao-bot-go/scripts/migrations` |
 | Valkey | cache, alarm queue, config Pub/Sub | `QUEUE_AND_PUBSUB_CONTRACTS.md` |
 | CLIPROXY/OpenAI-compatible LLM proxy | `bot`, `llm-scheduler`, ingestion runtimes where configured | 검토 필요 |

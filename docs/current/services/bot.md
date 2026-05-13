@@ -40,7 +40,7 @@ Kakao/Iris webhook ingress와 사용자 명령 routing을 담당하는 main bot 
 ## Must not own
 
 - Alarm checker/scheduler loops owned by `alarm-worker`
-- Alarm dispatch queue consumption owned by `dispatcher-go`
+- Proactive alarm dispatch queue consumption owned by `alarm-worker`
 - Dashboard control plane owned by `admin-api`
 
 ## Startup requirements
