@@ -198,4 +198,9 @@ func (c *Client) initStateManagers() {
 	}
 	c.communityMissing = newCacheState(c.stateStore, constants.YouTubeConfig.CommunityMissingTTL, "community missing")
 	c.videoRSSBackoff = newCacheState(c.stateStore, constants.YouTubeConfig.VideoRSSBackoffTTL, "video rss backoff")
+	if c.channelHealthDisabled {
+		c.channelHealth = nil
+		return
+	}
+	c.channelHealth = NewChannelHealthStore(c.stateStore, c.channelHealthPolicy)
 }

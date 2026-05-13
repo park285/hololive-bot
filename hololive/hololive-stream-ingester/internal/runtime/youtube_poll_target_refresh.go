@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"gorm.io/gorm"
 )
 
 const youtubePollTargetRefreshInterval = 5 * time.Second
@@ -73,6 +74,14 @@ func newYouTubePollTargetRefresher(
 		timeNow:                 time.Now,
 		logger:                  logger,
 	}
+}
+
+func (r *youTubePollTargetRefresher) withTieringDB(db *gorm.DB) *youTubePollTargetRefresher {
+	if r == nil || r.schedulerSyncer == nil {
+		return r
+	}
+	r.schedulerSyncer.tieringDB = db
+	return r
 }
 
 func (r *youTubePollTargetRefresher) withOperationalChannelLoader(
