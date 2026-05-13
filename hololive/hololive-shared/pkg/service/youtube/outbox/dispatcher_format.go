@@ -178,11 +178,12 @@ func (mf *MessageFormatter) formatMessageFallback(memberName string, item domain
 
 // videoPayload: 영상 payload 구조
 type videoPayload struct {
-	CanonicalPostID string     `json:"canonical_post_id,omitempty"`
-	VideoID         string     `json:"video_id"`
-	Title           string     `json:"title"`
-	PublishedText   string     `json:"published_text,omitempty"`
-	PublishedAt     *time.Time `json:"published_at,omitempty"`
+	CanonicalPostID  string     `json:"canonical_post_id,omitempty"`
+	VideoID          string     `json:"video_id"`
+	Title            string     `json:"title"`
+	PublishedText    string     `json:"published_text,omitempty"`
+	PublishedAt      *time.Time `json:"published_at,omitempty"`
+	ScheduledStartAt *time.Time `json:"scheduled_start_at,omitempty"`
 }
 
 // communityPayload: 커뮤니티 payload 구조

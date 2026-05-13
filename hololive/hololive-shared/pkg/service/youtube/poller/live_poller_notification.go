@@ -78,14 +78,25 @@ func insertLiveNotification(ctx context.Context, tx *gorm.DB, channelID string, 
 }
 
 func buildLiveNotificationPayload(channelID string, stream *domain.Stream) string {
-	return mustMarshalJSON(&domain.YouTubeVideo{
-		VideoID:     stream.ID,
-		ChannelID:   firstNonEmpty(stream.ChannelID, channelID),
-		Title:       stream.Title,
-		Thumbnail:   thumbnailFromStream(stream),
-		PublishedAt: livePayloadPublishedAt(stream),
-		IsShort:     false,
+	return mustMarshalJSON(&liveNotificationPayload{
+		VideoID:          stream.ID,
+		ChannelID:        firstNonEmpty(stream.ChannelID, channelID),
+		Title:            stream.Title,
+		Thumbnail:        thumbnailFromStream(stream),
+		PublishedAt:      livePayloadPublishedAt(stream),
+		ScheduledStartAt: livePayloadScheduledStart(stream),
+		IsShort:          false,
 	})
+}
+
+type liveNotificationPayload struct {
+	VideoID          string                `json:"video_id"`
+	ChannelID        string                `json:"channel_id"`
+	Title            string                `json:"title"`
+	Thumbnail        domain.ThumbnailsJSON `json:"thumbnail,omitempty"`
+	PublishedAt      *time.Time            `json:"published_at,omitempty"`
+	ScheduledStartAt *time.Time            `json:"scheduled_start_at,omitempty"`
+	IsShort          bool                  `json:"is_short"`
 }
 
 func thumbnailFromStream(stream *domain.Stream) domain.ThumbnailsJSON {
@@ -108,4 +119,12 @@ func livePayloadPublishedAt(stream *domain.Stream) *time.Time {
 		return &scheduledAt
 	}
 	return nil
+}
+
+func livePayloadScheduledStart(stream *domain.Stream) *time.Time {
+	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
+		return nil
+	}
+	scheduledAt := stream.StartScheduled.UTC()
+	return &scheduledAt
 }
