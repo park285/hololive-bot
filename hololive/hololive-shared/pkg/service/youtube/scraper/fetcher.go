@@ -13,8 +13,9 @@ import (
 type FetcherEngine string
 
 const (
-	FetcherEngineNetHTTP  FetcherEngine = "nethttp"
-	FetcherEngineGoScrapy FetcherEngine = "goscrapy"
+	FetcherEngineNetHTTP         FetcherEngine = "nethttp"
+	FetcherEngineGoScrapy        FetcherEngine = "goscrapy"
+	FetcherEngineBrowserSnapshot FetcherEngine = "browser_snapshot"
 )
 
 type pageFetcher interface {
@@ -37,10 +38,14 @@ type netHTTPPageFetcher struct {
 }
 
 func normalizeFetcherEngine(engine FetcherEngine) FetcherEngine {
-	if engine == FetcherEngineGoScrapy {
+	switch engine {
+	case FetcherEngineGoScrapy:
 		return FetcherEngineGoScrapy
+	case FetcherEngineBrowserSnapshot:
+		return FetcherEngineBrowserSnapshot
+	default:
+		return FetcherEngineNetHTTP
 	}
-	return FetcherEngineNetHTTP
 }
 
 func (f netHTTPPageFetcher) FetchPage(ctx context.Context, fetchReq pageFetchRequest) (pageFetchResponse, error) {

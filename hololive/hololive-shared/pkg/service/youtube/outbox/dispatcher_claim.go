@@ -194,6 +194,12 @@ func (d *Dispatcher) enqueueDelivery(
 		return outboxEnqueueStats{noSubscriberOutboxes: 1}
 	}
 
+	rooms = d.filterLiveCatchupSuppressedRooms(ctx, *item, rooms)
+	if len(rooms) == 0 {
+		d.markSent(ctx, item.ID)
+		return outboxEnqueueStats{noSubscriberOutboxes: 1}
+	}
+
 	roomIDs := deliveryRoomIDs(rooms)
 	if err := d.delivery.EnqueueBatch(ctx, item.ID, roomIDs); err != nil {
 		d.logger.Warn("Failed to enqueue room deliveries",

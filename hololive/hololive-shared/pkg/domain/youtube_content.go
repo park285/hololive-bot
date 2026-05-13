@@ -245,6 +245,7 @@ type OutboxKind string
 const (
 	OutboxKindNewVideo      OutboxKind = "NEW_VIDEO"
 	OutboxKindNewShort      OutboxKind = "NEW_SHORT"
+	OutboxKindLiveStream    OutboxKind = "LIVE_STREAM"
 	OutboxKindCommunityPost OutboxKind = "COMMUNITY_POST"
 	OutboxKindMilestone     OutboxKind = "MILESTONE"
 )
@@ -254,6 +255,7 @@ const youtubeNotificationDedupeKeyPrefix = "youtube-notification"
 var outboxKindTemplateKeys = map[OutboxKind]TemplateKey{
 	OutboxKindNewVideo:      TemplateKeyOutboxVideo,
 	OutboxKindNewShort:      TemplateKeyOutboxShorts,
+	OutboxKindLiveStream:    TemplateKeyOutboxVideo,
 	OutboxKindCommunityPost: TemplateKeyOutboxCommunity,
 	OutboxKindMilestone:     TemplateKeyOutboxMilestone,
 }

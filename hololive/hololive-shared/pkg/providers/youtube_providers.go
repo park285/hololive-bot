@@ -55,6 +55,15 @@ func ProvideScraperService(
 	return holodex.NewScraperService(cacheSvc, members, proxyConfig, sharedRL, logger)
 }
 
+func ProvideScraperServiceWithYouTubeScraper(
+	cacheSvc cache.Client,
+	members member.DataProvider,
+	youtubeScraper *scraper.Client,
+	logger *slog.Logger,
+) *holodex.ScraperService {
+	return holodex.NewScraperServiceWithYouTubeScraper(cacheSvc, members, youtubeScraper, logger)
+}
+
 // ProvideHolodexService - Holodex API 서비스 생성
 func ProvideHolodexService(
 	baseURL string,

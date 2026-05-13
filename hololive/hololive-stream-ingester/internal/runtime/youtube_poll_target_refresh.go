@@ -9,11 +9,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"gorm.io/gorm"
 )
 
 const youtubePollTargetRefreshInterval = 5 * time.Second
 const youtubePollTargetEmptyCacheGracePeriod = 30 * time.Second
 const youtubePollTargetCacheOnlyAdditionGracePeriod = 30 * time.Second
+const youtubePollTargetTieringRefreshInterval = time.Minute
 
 type youTubePollTargetRefresher struct {
 	cacheService               cache.Client
@@ -29,6 +31,7 @@ type youTubePollTargetRefresher struct {
 	lastNonEmptyCacheAt        time.Time
 	lastResolvedTargets        youtubePollTargets
 	lastChannelRegistryVersion int64
+	lastTieringRefreshAt       time.Time
 	cacheOnlyFirstSeen         map[string]time.Time
 	timeNow                    func() time.Time
 	logger                     *slog.Logger
@@ -73,6 +76,14 @@ func newYouTubePollTargetRefresher(
 		timeNow:                 time.Now,
 		logger:                  logger,
 	}
+}
+
+func (r *youTubePollTargetRefresher) withTieringDB(db *gorm.DB) *youTubePollTargetRefresher {
+	if r == nil || r.schedulerSyncer == nil {
+		return r
+	}
+	r.schedulerSyncer.tieringDB = db
+	return r
 }
 
 func (r *youTubePollTargetRefresher) withOperationalChannelLoader(
@@ -213,7 +224,16 @@ func (r *youTubePollTargetRefresher) reuseTargetsIfRegistryUnchanged(
 	if !registry.trusted || r.lastChannelRegistryVersion != registry.version || !hasYouTubePollTargets(r.lastResolvedTargets) {
 		return false
 	}
-	r.applyStatsTargetRefreshIfChanged(operational)
+	targets := r.lastResolvedTargets
+	targetsChanged := false
+	if operational.changed {
+		targets.StatsChannelIDs = communityshorts.EnabledChannelIDs(operational.channels)
+		targetsChanged = !equalYouTubePollTargets(r.lastResolvedTargets, targets)
+	}
+	if targetsChanged || r.shouldRefreshTieredTargets() {
+		r.applyResolvedTargets(targets)
+		return true
+	}
 	return true
 }
 
@@ -227,6 +247,18 @@ func (r *youTubePollTargetRefresher) applyStatsTargetRefreshIfChanged(operationa
 	if !equalYouTubePollTargets(r.lastResolvedTargets, targets) {
 		r.applyResolvedTargets(targets)
 	}
+}
+
+func (r *youTubePollTargetRefresher) shouldRefreshTieredTargets() bool {
+	if r == nil || r.schedulerSyncer == nil || !r.schedulerSyncer.hasTieredRegistrations() {
+		return false
+	}
+	now := r.now()
+	if !r.lastTieringRefreshAt.IsZero() && now.Sub(r.lastTieringRefreshAt) < youtubePollTargetTieringRefreshInterval {
+		return false
+	}
+	r.lastTieringRefreshAt = now
+	return true
 }
 
 type alarmTargetCandidate struct {
@@ -264,6 +296,7 @@ func (r *youTubePollTargetRefresher) finishRefresh(
 		r.lastChannelRegistryVersion = registry.version
 	}
 	targetsChanged := !equalYouTubePollTargets(r.lastResolvedTargets, targets)
+	tieringRefreshDue := r.shouldRefreshTieredTargets()
 	if r.logger != nil && (operational.changed || targetsChanged) {
 		r.logger.Info("youtube_poll_target_operational_channels_refreshed",
 			slog.Int("operational_channel_count", len(operational.channels)),
@@ -272,7 +305,7 @@ func (r *youTubePollTargetRefresher) finishRefresh(
 			slog.Bool("fallback_used", operational.fallbackUsed),
 		)
 	}
-	if targetsChanged {
+	if targetsChanged || tieringRefreshDue {
 		r.applyResolvedTargets(targets)
 	}
 }
@@ -281,6 +314,9 @@ func (r *youTubePollTargetRefresher) applyResolvedTargets(targets youtubePollTar
 	if r == nil || r.schedulerSyncer == nil {
 		return
 	}
-	r.schedulerSyncer.Sync(targets)
+	r.schedulerSyncer.SyncAt(targets, r.now())
+	if r.schedulerSyncer.hasTieredRegistrations() {
+		r.lastTieringRefreshAt = r.now()
+	}
 	r.lastResolvedTargets = targets
 }

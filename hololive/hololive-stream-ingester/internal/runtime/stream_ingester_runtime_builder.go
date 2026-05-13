@@ -51,6 +51,7 @@ type streamIngesterInfrastructure struct {
 	photoSync        *holodex.PhotoSyncService
 	templateRenderer *template.Renderer
 	sharedRL         *scraper.RateLimiter
+	scraperClient    *scraper.Client
 	cleanup          func()
 }
 
@@ -59,6 +60,7 @@ type streamIngesterYouTubeResources struct {
 	ytStack        *sharedproviders.YouTubeStack
 	photoSync      *holodex.PhotoSyncService
 	sharedRL       *scraper.RateLimiter
+	scraperClient  *scraper.Client
 }
 
 // initStreamIngesterInfrastructure: stream-ingester에 필요한 최소 인프라만 초기화한다.
@@ -100,23 +102,20 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		photoSync:        youTube.photoSync,
 		templateRenderer: templateRenderer,
 		sharedRL:         youTube.sharedRL,
+		scraperClient:    youTube.scraperClient,
 		cleanup:          infra.Cleanup,
 	}, nil
 }
 
 func buildStreamIngesterYouTubeResources(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule, irisClient iris.Sender) (*streamIngesterYouTubeResources, error) {
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
-	scraperProxyConfig := scraper.ProxyConfig{
-		Enabled: cfg.Scraper.ProxyEnabled,
-		URL:     cfg.Scraper.ProxyURL,
-	}
-
 	sharedRL, err := sharedproviders.ProvideYouTubeScraperRateLimiter(infra.Cache, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
 	}
 
-	scraperService := sharedproviders.ProvideScraperService(infra.Cache, memberServiceAdapter, scraperProxyConfig, sharedRL, logger)
+	scraperClient := buildSharedYouTubeScraperClient(cfg.Scraper, infra.Cache, sharedRL)
+	scraperService := sharedproviders.ProvideScraperServiceWithYouTubeScraper(infra.Cache, memberServiceAdapter, scraperClient, logger)
 	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, cfg.Holodex.APIKey, infra.Cache, scraperService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide holodex service: %w", err)
@@ -141,5 +140,6 @@ func buildStreamIngesterYouTubeResources(ctx context.Context, cfg *config.Config
 		ytStack:        youTubeStack,
 		photoSync:      holodex.NewPhotoSyncService(holodexService, infra.MemberRepo, logger),
 		sharedRL:       sharedRL,
+		scraperClient:  scraperClient,
 	}, nil
 }

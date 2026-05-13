@@ -84,7 +84,7 @@ func (mf *MessageFormatter) buildTemplateData(memberName string, item domain.You
 	data := templateData{MemberName: memberName}
 
 	switch item.Kind {
-	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
 		return buildVideoTemplateData(data, item)
 	case domain.OutboxKindCommunityPost:
 		return buildCommunityTemplateData(data, item.Payload)
@@ -137,6 +137,7 @@ var singleMessageHeaderFormats = map[domain.OutboxKind]string{
 	domain.OutboxKindCommunityPost: "📝 %s 커뮤니티 알림",
 	domain.OutboxKindNewShort:      "📱 %s 쇼츠 알림",
 	domain.OutboxKindNewVideo:      "📺 %s 새 영상",
+	domain.OutboxKindLiveStream:    "📺 %s 방송 알림",
 	domain.OutboxKindMilestone:     "🎉 %s 마일스톤 알림",
 }
 
@@ -163,8 +164,8 @@ func singleMessageHeader(kind domain.OutboxKind, memberName string) (string, boo
 }
 
 func (mf *MessageFormatter) formatMessageFallback(memberName string, item domain.YouTubeNotificationOutbox) (string, error) {
-	if item.Kind == domain.OutboxKindNewVideo || item.Kind == domain.OutboxKindNewShort {
-		return mf.formatVideoMessage(memberName, item.Payload, item.Kind == domain.OutboxKindNewShort)
+	if item.Kind == domain.OutboxKindNewVideo || item.Kind == domain.OutboxKindNewShort || item.Kind == domain.OutboxKindLiveStream {
+		return mf.formatVideoMessage(memberName, item.Payload, item.Kind)
 	}
 	if item.Kind == domain.OutboxKindCommunityPost {
 		return mf.formatCommunityMessage(memberName, item.Payload)
@@ -177,11 +178,12 @@ func (mf *MessageFormatter) formatMessageFallback(memberName string, item domain
 
 // videoPayload: 영상 payload 구조
 type videoPayload struct {
-	CanonicalPostID string     `json:"canonical_post_id,omitempty"`
-	VideoID         string     `json:"video_id"`
-	Title           string     `json:"title"`
-	PublishedText   string     `json:"published_text,omitempty"`
-	PublishedAt     *time.Time `json:"published_at,omitempty"`
+	CanonicalPostID  string     `json:"canonical_post_id,omitempty"`
+	VideoID          string     `json:"video_id"`
+	Title            string     `json:"title"`
+	PublishedText    string     `json:"published_text,omitempty"`
+	PublishedAt      *time.Time `json:"published_at,omitempty"`
+	ScheduledStartAt *time.Time `json:"scheduled_start_at,omitempty"`
 }
 
 // communityPayload: 커뮤니티 payload 구조
@@ -199,14 +201,14 @@ type milestonePayload struct {
 }
 
 // formatVideoMessage: 영상 알림 메시지
-func (mf *MessageFormatter) formatVideoMessage(memberName, payload string, isShort bool) (string, error) {
+func (mf *MessageFormatter) formatVideoMessage(memberName, payload string, kind domain.OutboxKind) (string, error) {
 	var p videoPayload
 	if err := json.Unmarshal([]byte(payload), &p); err != nil {
 		return "", fmt.Errorf("failed to unmarshal video payload: %w", err)
 	}
 
 	title := truncateString(p.Title, 50)
-	if isShort {
+	if kind == domain.OutboxKindNewShort {
 		url := fmt.Sprintf("https://www.youtube.com/shorts/%s", p.VideoID)
 		header := fmt.Sprintf("📱 %s 쇼츠 알림", memberName)
 		body := fmt.Sprintf("%s\n%s", title, url)
@@ -215,6 +217,9 @@ func (mf *MessageFormatter) formatVideoMessage(memberName, payload string, isSho
 
 	url := fmt.Sprintf("https://youtu.be/%s", p.VideoID)
 	header := fmt.Sprintf("📺 %s 새 영상", memberName)
+	if kind == domain.OutboxKindLiveStream {
+		header = fmt.Sprintf("📺 %s 방송 알림", memberName)
+	}
 	body := fmt.Sprintf("%s\n%s", title, url)
 	return header + "\n" + body, nil
 }
@@ -284,16 +289,28 @@ func (mf *MessageFormatter) formatGroupedMessage(ctx context.Context, memberName
 }
 
 func (mf *MessageFormatter) getGroupedTemplateKeyAndHeader(memberName string, kind domain.OutboxKind, count int) (domain.TemplateKey, string) {
-	switch kind {
-	case domain.OutboxKindNewVideo:
-		return domain.TemplateKeyOutboxVideoGroup, fmt.Sprintf("📺 %s 새 영상 (%d개)", memberName, count)
-	case domain.OutboxKindNewShort:
-		return domain.TemplateKeyOutboxShortsGroup, fmt.Sprintf("📱 %s 쇼츠 알림 (%d개)", memberName, count)
-	case domain.OutboxKindCommunityPost:
-		return domain.TemplateKeyOutboxCommunityGroup, fmt.Sprintf("📝 %s 커뮤니티 알림 (%d개)", memberName, count)
-	default:
-		return domain.TemplateKeyOutboxVideoGroup, fmt.Sprintf("🔔 %s 알림 (%d개)", memberName, count)
+	cfg, ok := groupedTemplateConfigs[kind]
+	if !ok {
+		cfg = defaultGroupedTemplateConfig
 	}
+	return cfg.templateKey, fmt.Sprintf(cfg.headerFormat, memberName, count)
+}
+
+type groupedTemplateConfig struct {
+	templateKey  domain.TemplateKey
+	headerFormat string
+}
+
+var groupedTemplateConfigs = map[domain.OutboxKind]groupedTemplateConfig{
+	domain.OutboxKindNewVideo:      {templateKey: domain.TemplateKeyOutboxVideoGroup, headerFormat: "📺 %s 새 영상 (%d개)"},
+	domain.OutboxKindLiveStream:    {templateKey: domain.TemplateKeyOutboxVideoGroup, headerFormat: "📺 %s 방송 알림 (%d개)"},
+	domain.OutboxKindNewShort:      {templateKey: domain.TemplateKeyOutboxShortsGroup, headerFormat: "📱 %s 쇼츠 알림 (%d개)"},
+	domain.OutboxKindCommunityPost: {templateKey: domain.TemplateKeyOutboxCommunityGroup, headerFormat: "📝 %s 커뮤니티 알림 (%d개)"},
+}
+
+var defaultGroupedTemplateConfig = groupedTemplateConfig{
+	templateKey:  domain.TemplateKeyOutboxVideoGroup,
+	headerFormat: "🔔 %s 알림 (%d개)",
 }
 
 func (mf *MessageFormatter) buildGroupedTemplateData(memberName string, kind domain.OutboxKind, items []domain.YouTubeNotificationOutbox) groupedTemplateData {
@@ -312,7 +329,7 @@ func (mf *MessageFormatter) buildGroupedTemplateData(memberName string, kind dom
 
 func buildGroupedItemData(item domain.YouTubeNotificationOutbox) groupedItemData {
 	switch item.Kind {
-	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
 		return buildGroupedVideoItemData(item)
 	case domain.OutboxKindCommunityPost:
 		return buildGroupedCommunityItemData(item.Payload)
