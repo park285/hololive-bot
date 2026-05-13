@@ -134,24 +134,14 @@ func collectObservationAlarmSentHistoryReport[Report any](
 ) (Report, error) {
 	var zero Report
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if cfg == nil {
-		return zero, fmt.Errorf("collect %s: config is nil", reportName)
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	now = normalizeCommunityShortsSendCountTime(now)
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
+	ctx, logger, now = normalizeObservationAlarmSentHistoryInputs(ctx, logger, now)
 
 	query, err := normalizeObservationAlarmSentHistoryCollectQuery(options.ObservationRuntimeName, options.ObservationBigBangCutoverAt)
 	if err != nil {
 		return zero, fmt.Errorf("collect %s: %w", reportName, err)
+	}
+	if cfg == nil {
+		return zero, fmt.Errorf("collect %s: config is nil", reportName)
 	}
 
 	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
@@ -165,22 +155,9 @@ func collectObservationAlarmSentHistoryReport[Report any](
 		return zero, fmt.Errorf("collect %s: session is nil", reportName)
 	}
 
-	window, err := session.trackingRepository.FindClosedCommunityShortsObservationWindow(
-		ctx,
-		query.ObservationRuntimeName,
-		*query.ObservationBigBangCutoverAt,
-		now,
-	)
+	window, err := findObservationAlarmSentHistoryWindow(ctx, session, query, now)
 	if err != nil {
-		return zero, fmt.Errorf("collect %s: find observation window: %w", reportName, err)
-	}
-	if window == nil {
-		return zero, fmt.Errorf(
-			"collect %s: observation window not found: runtime=%s cutover=%s",
-			reportName,
-			query.ObservationRuntimeName,
-			formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
-		)
+		return zero, fmt.Errorf("collect %s: %w", reportName, err)
 	}
 	query.WindowStart = cloneCommunityShortsSendCountTime(&window.ObservationStartedAt)
 	query.WindowEnd = cloneCommunityShortsSendCountTime(&window.ObservationEndedAt)
@@ -190,13 +167,11 @@ func collectObservationAlarmSentHistoryReport[Report any](
 		return zero, fmt.Errorf("collect %s: list sent histories: %w", reportName, err)
 	}
 
-	comparison, err := buildObservationAlarmSentHistoryComparison(
+	comparison, err := buildObservationAlarmSentHistoryComparisonForWindow(
 		ctx,
-		session.trackingRepository,
-		query.ObservationRuntimeName,
-		window.BigBangCutoverAt,
-		window.ObservationStartedAt,
-		window.ObservationEndedAt,
+		session,
+		query,
+		window,
 		outboxKind,
 	)
 	if err != nil {

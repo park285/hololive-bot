@@ -35,33 +35,17 @@ type Options[Config any, Runtime runtime] struct {
 }
 
 func Run[Config any, Runtime runtime](opts Options[Config, Runtime]) int {
-	initialize := opts.Initialize
-	if initialize == nil {
-		initialize = func(version string) {
-			automaxprocs.Init(nil)
-		}
-	}
-	initialize(opts.Version)
-
-	stderr := opts.Stderr
-	if stderr == nil {
-		stderr = os.Stderr
-	}
+	initializeRuntime(opts.Initialize, opts.Version)
+	stderr := runtimeStderr(opts.Stderr)
 
 	cfg, err := opts.LoadConfig()
 	if err != nil {
-		if _, writeErr := fmt.Fprintf(stderr, "%s: %v\n", fallback(opts.LoadConfigErrorMessage, "Failed to load config"), err); writeErr != nil {
-			return 1
-		}
-		return 1
+		return printBootstrapError(stderr, fallback(opts.LoadConfigErrorMessage, "Failed to load config"), err)
 	}
 
 	logger, err := newLogger(opts, cfg)
 	if err != nil {
-		if _, writeErr := fmt.Fprintf(stderr, "Failed to initialize logger: %v\n", err); writeErr != nil {
-			return 1
-		}
-		return 1
+		return printBootstrapError(stderr, "Failed to initialize logger", err)
 	}
 
 	if message := opts.StartupMessage; message != "" {
@@ -80,6 +64,29 @@ func Run[Config any, Runtime runtime](opts Options[Config, Runtime]) int {
 
 	rt.Run()
 	return 0
+}
+
+func initializeRuntime(initialize func(version string), version string) {
+	if initialize == nil {
+		initialize = func(version string) {
+			automaxprocs.Init(nil)
+		}
+	}
+	initialize(version)
+}
+
+func runtimeStderr(stderr io.Writer) io.Writer {
+	if stderr == nil {
+		return os.Stderr
+	}
+	return stderr
+}
+
+func printBootstrapError(stderr io.Writer, message string, err error) int {
+	if _, writeErr := fmt.Fprintf(stderr, "%s: %v\n", message, err); writeErr != nil {
+		return 1
+	}
+	return 1
 }
 
 func newLogger[Config any, Runtime runtime](opts Options[Config, Runtime], cfg Config) (*slog.Logger, error) {
