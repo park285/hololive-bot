@@ -183,6 +183,7 @@ SCRAPER_BROWSER_DIAGNOSTIC_ENABLED=false
 
 - active/warm/cold registration
 - cold interval 확대
+- `SCRAPER_POLL_TIERING_ENABLED=true`
 
 ### 성공 기준
 
@@ -192,7 +193,7 @@ SCRAPER_BROWSER_DIAGNOSTIC_ENABLED=false
 
 ### rollback
 
-- tiering env off
+- `SCRAPER_POLL_TIERING_ENABLED=false`
 - 기존 registration builder로 복귀
 
 ## 11. Rollback 빠른 판단표

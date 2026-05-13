@@ -70,9 +70,10 @@ func buildStreamIngesterChannelPollerRegistrationsWithClient(
 	communityKeywords := []string{}
 	db := postgres.GetGormDB()
 	maxResults := defaultChannelPollerMaxResults
+	tieringEnabled := scraperCfg.PollTiering.Enabled
 	pollers := newStreamIngesterPollerSet(scraperClient, liveStatusProvider, db, maxResults, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
 
-	if registrations, ok := tryBuildTieredChannelPollerRegistrations(db, pollers, poll, youtubePollTargets{
+	if registrations, ok := tryBuildTieredChannelPollerRegistrations(tieringEnabled, db, pollers, poll, youtubePollTargets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
 	}, inlineResolveMissingPublishedAt, maxResults); ok {
@@ -145,6 +146,7 @@ func buildFlatStreamIngesterChannelPollerRegistrations(
 }
 
 func tryBuildTieredChannelPollerRegistrations(
+	enabled bool,
 	db *gorm.DB,
 	pollers streamIngesterPollerSet,
 	poll config.ScraperPoll,
@@ -152,6 +154,9 @@ func tryBuildTieredChannelPollerRegistrations(
 	inlineResolveMissingPublishedAt bool,
 	maxResults int,
 ) ([]providers.ChannelPollerRegistration, bool) {
+	if !enabled {
+		return nil, false
+	}
 	tieredTargets, tierErr := classifyYouTubePollTargetsByActivity(context.Background(), db, targets, time.Now())
 	if tierErr != nil || !shouldUseTieredPollTargets(tieredTargets) {
 		return nil, false
@@ -192,19 +197,13 @@ func appendTieredNotificationRegistration(
 	worstCaseAttempts int,
 	worstCaseRequestUnits float64,
 ) []providers.ChannelPollerRegistration {
-	if len(targets.ActiveNotificationChannelIDs) > 0 {
-		registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupActive, basePriority, baseInterval, targets.ActiveNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
+	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupActive, basePriority, baseInterval, targets.ActiveNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
+	priority := poller.PriorityNormal
+	if basePriority == poller.PriorityLow {
+		priority = poller.PriorityLow
 	}
-	if len(targets.WarmNotificationChannelIDs) > 0 {
-		priority := poller.PriorityNormal
-		if basePriority == poller.PriorityLow {
-			priority = poller.PriorityLow
-		}
-		registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupWarm, priority, baseInterval*2, targets.WarmNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
-	}
-	if len(targets.ColdNotificationChannelIDs) > 0 {
-		registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupCold, poller.PriorityLow, baseInterval*6, targets.ColdNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
-	}
+	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupWarm, priority, baseInterval*2, targets.WarmNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
+	registrations = append(registrations, newTieredNotificationRegistration(pollerInstance, providers.ChannelTargetGroupCold, poller.PriorityLow, baseInterval*6, targets.ColdNotificationChannelIDs, worstCaseAttempts, worstCaseRequestUnits))
 	return registrations
 }
 

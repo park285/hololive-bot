@@ -102,6 +102,7 @@ func buildSharedYouTubeScraperClient(
 	}
 	if channelHealthCfg.Enabled {
 		opts = append(opts, scraper.WithChannelHealthPolicy(scraper.ChannelHealthPolicy{
+			Enforce:           channelHealthCfg.Enforce,
 			TTL:               channelHealthCfg.TTL,
 			ParserDriftBase:   channelHealthCfg.ParserDriftBase,
 			ParserDriftMax:    channelHealthCfg.ParserDriftMax,

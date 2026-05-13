@@ -38,7 +38,7 @@ func (s *youTubePollSchedulerSyncer) Sync(targets youtubePollTargets) {
 }
 
 func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(targets youtubePollTargets) (youtubeTieredPollTargets, bool) {
-	if !hasTieredNotificationRegistration(s.registrations) {
+	if !s.hasTieredRegistrations() {
 		return youtubeTieredPollTargets{}, false
 	}
 	tieredTargets, err := classifyYouTubePollTargetsByActivity(context.Background(), s.tieringDB, targets, time.Now())
@@ -46,6 +46,10 @@ func (s *youTubePollSchedulerSyncer) classifyTargetsForTieredRegistrations(targe
 		return youtubeTieredPollTargets{}, false
 	}
 	return tieredTargets, true
+}
+
+func (s *youTubePollSchedulerSyncer) hasTieredRegistrations() bool {
+	return s != nil && hasTieredNotificationRegistration(s.registrations)
 }
 
 func shouldSyncYouTubePollRegistration(registration providers.ChannelPollerRegistration) bool {
