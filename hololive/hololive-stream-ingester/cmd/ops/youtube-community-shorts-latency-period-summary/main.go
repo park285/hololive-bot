@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
-	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
+	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
 
 type periodFlagValues []string
@@ -82,7 +82,7 @@ func writeLatencyPeriodReport(format string, report opsapp.CommunityShortsLatenc
 
 func writeLatencyPeriodMarkdown(report opsapp.CommunityShortsLatencyPeriodReport) error {
 	if _, err := fmt.Print(opsapp.RenderCommunityShortsLatencyPeriodMarkdown(report)); err != nil {
-		return fmt.Errorf("Failed to write community/shorts latency period markdown: %w", err)
+		return fmt.Errorf("failed to write community/shorts latency period markdown: %w", err)
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func writeLatencyPeriodJSON(report opsapp.CommunityShortsLatencyPeriodReport) er
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(report); err != nil {
-		return fmt.Errorf("Failed to write community/shorts latency period JSON: %w", err)
+		return fmt.Errorf("failed to write community/shorts latency period JSON: %w", err)
 	}
 	return nil
 }

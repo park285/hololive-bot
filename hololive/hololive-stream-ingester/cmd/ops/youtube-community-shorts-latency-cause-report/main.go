@@ -10,7 +10,7 @@ import (
 
 	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
 	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/reportcli"
-	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops"
+	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
 
 type periodFlagValues []string
