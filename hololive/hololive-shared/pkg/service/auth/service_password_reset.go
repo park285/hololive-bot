@@ -35,24 +35,18 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 	if !validateEmail(email) {
 		return "", newError(CodeInvalidInput, "invalid email", nil)
 	}
-	if s.cacheSvc != nil {
-		if limited, err := s.isPasswordResetRequestRateLimited(ctx, clientIP); err != nil {
-			return "", newError(CodeInternal, "password reset rate limit check failed", err)
-		} else if limited {
-			return "", newError(CodeRateLimited, "rate limited", nil)
-		}
+	if err := s.checkPasswordResetRequestRateLimit(ctx, clientIP); err != nil {
+		return "", err
 	}
 
-	var user userModel
-	err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	user, found, err := s.findPasswordResetUser(ctx, email)
 	if err != nil {
-		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
-			return "", nil // 사용자 존재 여부를 노출하지 않음
-		}
-		return "", newError(CodeInternal, "failed to query user", err)
+		return "", err
+	}
+	if !found {
+		return "", nil
 	}
 
-	// 이전 토큰 정리 (미사용 토큰만)
 	_ = s.db.WithContext(ctx).
 		Where("user_id = ? AND used_at IS NULL", user.ID).
 		Delete(&passwordResetTokenModel{}).Error
@@ -78,23 +72,41 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 	return rawToken, nil
 }
 
+func (s *Service) checkPasswordResetRequestRateLimit(ctx context.Context, clientIP string) error {
+	if s.cacheSvc == nil {
+		return nil
+	}
+	limited, err := s.isPasswordResetRequestRateLimited(ctx, clientIP)
+	if err != nil {
+		return newError(CodeInternal, "password reset rate limit check failed", err)
+	}
+	if limited {
+		return newError(CodeRateLimited, "rate limited", nil)
+	}
+	return nil
+}
+
+func (s *Service) findPasswordResetUser(ctx context.Context, email string) (userModel, bool, error) {
+	var user userModel
+	err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	if err == nil {
+		return user, true, nil
+	}
+	if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+		return userModel{}, false, nil
+	}
+	return userModel{}, false, newError(CodeInternal, "failed to query user", err)
+}
+
 func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) error {
 	if token == "" || !validatePassword(newPassword) {
 		return newError(CodeInvalidInput, "invalid token/password", nil)
 	}
 
-	tokenHash := sha256Hex(token)
 	now := time.Now().UTC()
-
-	var reset passwordResetTokenModel
-	err := s.db.WithContext(ctx).
-		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, now).
-		First(&reset).Error
+	reset, err := s.findValidPasswordResetToken(ctx, sha256Hex(token), now)
 	if err != nil {
-		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
-			return newError(CodeInvalidInput, "invalid reset token", nil)
-		}
-		return newError(CodeInternal, "failed to query reset token", err)
+		return err
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
@@ -102,6 +114,33 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 		return newError(CodeInternal, "password hash failed", err)
 	}
 
+	if err := s.applyPasswordReset(ctx, reset, string(passwordHash), now); err != nil {
+		return err
+	}
+	s.warnIfPasswordResetSessionRevokeFails(ctx, reset.UserID)
+	return nil
+}
+
+func (s *Service) findValidPasswordResetToken(ctx context.Context, tokenHash string, now time.Time) (passwordResetTokenModel, error) {
+	var reset passwordResetTokenModel
+	err := s.db.WithContext(ctx).
+		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, now).
+		First(&reset).Error
+	if err == nil {
+		return reset, nil
+	}
+	if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+		return passwordResetTokenModel{}, newError(CodeInvalidInput, "invalid reset token", nil)
+	}
+	return passwordResetTokenModel{}, newError(CodeInternal, "failed to query reset token", err)
+}
+
+func (s *Service) applyPasswordReset(
+	ctx context.Context,
+	reset passwordResetTokenModel,
+	passwordHash string,
+	now time.Time,
+) error {
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return newError(CodeInternal, "failed to begin transaction", tx.Error)
@@ -109,7 +148,7 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 
 	if err := tx.Model(&userModel{}).
 		Where("id = ?", reset.UserID).
-		Update("password_hash", string(passwordHash)).Error; err != nil {
+		Update("password_hash", passwordHash).Error; err != nil {
 		tx.Rollback()
 		return newError(CodeInternal, "failed to update password", err)
 	}
@@ -125,16 +164,19 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 	if err := tx.Commit().Error; err != nil {
 		return newError(CodeInternal, "failed to commit transaction", err)
 	}
-
-	if err := s.revokeAllSessions(ctx, reset.UserID); err != nil {
-		if s.logger != nil {
-			s.logger.Warn(
-				"Failed to revoke existing sessions after password reset",
-				slog.String("user_id", reset.UserID),
-				slog.Any("error", err),
-			)
-		}
-	}
-
 	return nil
+}
+
+func (s *Service) warnIfPasswordResetSessionRevokeFails(ctx context.Context, userID string) {
+	if s.logger == nil {
+		_ = s.revokeAllSessions(ctx, userID)
+		return
+	}
+	if err := s.revokeAllSessions(ctx, userID); err != nil {
+		s.logger.Warn(
+			"Failed to revoke existing sessions after password reset",
+			slog.String("user_id", userID),
+			slog.Any("error", err),
+		)
+	}
 }

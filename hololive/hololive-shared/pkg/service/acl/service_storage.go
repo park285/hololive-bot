@@ -56,6 +56,12 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 		}
 	}
 
+	s.syncLoadedACLToValkey(ctx)
+
+	return nil
+}
+
+func (s *Service) syncLoadedACLToValkey(ctx context.Context) {
 	if err := s.syncSettingsToValkey(ctx); err != nil {
 		s.logger.Warn("Failed to sync ACL settings to cache", slog.Any("error", err))
 	}
@@ -71,8 +77,6 @@ func (s *Service) loadFromDatabase(ctx context.Context, defaultEnabled bool, def
 	if err := s.syncRoomsToValkey(ctx, ACLModeBlacklist); err != nil {
 		s.logger.Warn("Failed to sync ACL rooms to cache", slog.String("mode", string(ACLModeBlacklist)), slog.Any("error", err))
 	}
-
-	return nil
 }
 
 func (s *Service) loadEnabledSetting(defaultEnabled bool) (bool, error) {
@@ -104,25 +108,35 @@ func (s *Service) loadModeSetting(defaultMode ACLMode) error {
 
 	switch {
 	case modeFirstInit:
-		normalizedMode, err := normalizeACLModeStrict(defaultMode)
-		if err != nil {
-			return err
-		}
-
-		s.mode = normalizedMode
-		if err := s.db.Create(&Settings{Key: dbKeyMode, Value: string(normalizedMode)}).Error; err != nil {
-			return fmt.Errorf("failed to initialize ACL mode setting: %w", err)
-		}
+		return s.initializeModeSetting(defaultMode)
 	case modeResult.Error != nil:
 		return fmt.Errorf("failed to load ACL mode setting: %w", modeResult.Error)
 	default:
-		mode, err := parseACLModeStrict(modeSetting.Value)
-		if err != nil {
-			return err
-		}
-		s.mode = mode
+		return s.applyModeSetting(modeSetting.Value)
+	}
+}
+
+func (s *Service) initializeModeSetting(defaultMode ACLMode) error {
+	normalizedMode, err := normalizeACLModeStrict(defaultMode)
+	if err != nil {
+		return err
 	}
 
+	s.mode = normalizedMode
+	if err := s.db.Create(&Settings{Key: dbKeyMode, Value: string(normalizedMode)}).Error; err != nil {
+		return fmt.Errorf("failed to initialize ACL mode setting: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) applyModeSetting(value string) error {
+	mode, err := parseACLModeStrict(value)
+	if err != nil {
+		return err
+	}
+
+	s.mode = mode
 	return nil
 }
 

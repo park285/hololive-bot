@@ -37,34 +37,24 @@ func (r ScraperProxyApplyResult) AsMap() map[string]any {
 	out := map[string]any{
 		"requested": r.Requested,
 	}
-	if r.Applied != nil {
-		out["applied"] = *r.Applied
-	}
+	putOptionalPtr(out, "applied", r.Applied)
 	if r.Reason != "" {
 		out["reason"] = r.Reason
 	}
-	if r.YoutubeApplied != nil {
-		out["youtube_applied"] = *r.YoutubeApplied
-	}
-	if r.YoutubeEnabled != nil {
-		out["youtube_enabled"] = *r.YoutubeEnabled
-	}
-	if r.HolodexApplied != nil {
-		out["holodex_applied"] = *r.HolodexApplied
-	}
-	if r.HolodexEnabled != nil {
-		out["holodex_enabled"] = *r.HolodexEnabled
-	}
-	if r.SchedulerPollersApplied != nil {
-		out["scheduler_pollers_applied"] = *r.SchedulerPollersApplied
-	}
-	if r.SchedulerEnabled != nil {
-		out["scheduler_enabled"] = *r.SchedulerEnabled
-	}
-	if r.SchedulerKnown != nil {
-		out["scheduler_known"] = *r.SchedulerKnown
-	}
+	putOptionalPtr(out, "youtube_applied", r.YoutubeApplied)
+	putOptionalPtr(out, "youtube_enabled", r.YoutubeEnabled)
+	putOptionalPtr(out, "holodex_applied", r.HolodexApplied)
+	putOptionalPtr(out, "holodex_enabled", r.HolodexEnabled)
+	putOptionalPtr(out, "scheduler_pollers_applied", r.SchedulerPollersApplied)
+	putOptionalPtr(out, "scheduler_enabled", r.SchedulerEnabled)
+	putOptionalPtr(out, "scheduler_known", r.SchedulerKnown)
 	return out
+}
+
+func putOptionalPtr[T any](out map[string]any, key string, value *T) {
+	if value != nil {
+		out[key] = *value
+	}
 }
 
 type AlarmAdvanceMinutesApplyResult struct {

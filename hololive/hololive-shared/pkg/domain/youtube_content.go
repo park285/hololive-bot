@@ -251,6 +251,13 @@ const (
 
 const youtubeNotificationDedupeKeyPrefix = "youtube-notification"
 
+var outboxKindTemplateKeys = map[OutboxKind]TemplateKey{
+	OutboxKindNewVideo:      TemplateKeyOutboxVideo,
+	OutboxKindNewShort:      TemplateKeyOutboxShorts,
+	OutboxKindCommunityPost: TemplateKeyOutboxCommunity,
+	OutboxKindMilestone:     TemplateKeyOutboxMilestone,
+}
+
 func (k OutboxKind) ToAlarmType() AlarmType {
 	switch k {
 	case OutboxKindNewShort:
@@ -263,18 +270,10 @@ func (k OutboxKind) ToAlarmType() AlarmType {
 }
 
 func (k OutboxKind) ToTemplateKey() TemplateKey {
-	switch k {
-	case OutboxKindNewVideo:
-		return TemplateKeyOutboxVideo
-	case OutboxKindNewShort:
-		return TemplateKeyOutboxShorts
-	case OutboxKindCommunityPost:
-		return TemplateKeyOutboxCommunity
-	case OutboxKindMilestone:
-		return TemplateKeyOutboxMilestone
-	default:
-		return TemplateKeyOutboxVideo
+	if templateKey, ok := outboxKindTemplateKeys[k]; ok {
+		return templateKey
 	}
+	return TemplateKeyOutboxVideo
 }
 
 type OutboxStatus string

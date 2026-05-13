@@ -220,16 +220,8 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 
 // 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.
 func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
-	if c.cacheEnabled() {
-		cacheKey := memberAliasKeyPrefix + alias
-		var member domain.Member
-		if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-			if member.ChannelID != "" {
-				c.byChannelID.Store(member.ChannelID, &member)
-			}
-			c.byName.Store(member.Name, &member)
-			return &member, nil
-		}
+	if member := c.getAliasFromCache(ctx, alias); member != nil {
+		return member, nil
 	}
 
 	dbMember, err := c.repo.FindByAlias(ctx, alias)
@@ -248,6 +240,22 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 	}
 
 	return dbMember, nil
+}
+
+func (c *Cache) getAliasFromCache(ctx context.Context, alias string) *domain.Member {
+	if !c.cacheEnabled() {
+		return nil
+	}
+	cacheKey := memberAliasKeyPrefix + alias
+	var member domain.Member
+	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
+		return nil
+	}
+	if member.ChannelID != "" {
+		c.byChannelID.Store(member.ChannelID, &member)
+	}
+	c.byName.Store(member.Name, &member)
+	return &member
 }
 
 func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {

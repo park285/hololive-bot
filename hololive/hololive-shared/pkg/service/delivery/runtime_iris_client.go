@@ -191,22 +191,27 @@ func validateRuntimeIrisBaseURL(raw string) (string, error) {
 		return "", err
 	}
 
-	switch normalizeRuntimeIrisTransport(os.Getenv("IRIS_TRANSPORT")) {
-	case "h3":
-		if parsed.Scheme != "https" {
-			return "", fmt.Errorf("IRIS_TRANSPORT=h3 requires https IRIS_BASE_URL, got %s", parsed.Scheme)
-		}
-	case "h2c":
-		if parsed.Scheme != "http" {
-			return "", fmt.Errorf("IRIS_TRANSPORT=h2c requires http IRIS_BASE_URL, got %s", parsed.Scheme)
-		}
-	case "http2":
-		if parsed.Scheme != "https" {
-			return "", fmt.Errorf("IRIS_TRANSPORT=http2 requires https IRIS_BASE_URL, got %s", parsed.Scheme)
-		}
+	if err := validateRuntimeIrisTransportScheme(normalizeRuntimeIrisTransport(os.Getenv("IRIS_TRANSPORT")), parsed.Scheme); err != nil {
+		return "", err
 	}
 
 	return baseURL, nil
+}
+
+func validateRuntimeIrisTransportScheme(transport, scheme string) error {
+	requiredScheme, ok := runtimeIrisTransportRequiredSchemes()[transport]
+	if !ok || scheme == requiredScheme {
+		return nil
+	}
+	return fmt.Errorf("IRIS_TRANSPORT=%s requires %s IRIS_BASE_URL, got %s", transport, requiredScheme, scheme)
+}
+
+func runtimeIrisTransportRequiredSchemes() map[string]string {
+	return map[string]string{
+		"h3":    "https",
+		"h2c":   "http",
+		"http2": "https",
+	}
 }
 
 func validateHTTPBaseURL(raw string) (string, error) {
@@ -232,18 +237,24 @@ func validateHTTPBaseURL(raw string) (string, error) {
 }
 
 func normalizeRuntimeIrisTransport(raw string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "h3", "http3", "http/3", "quic":
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	if isRuntimeIrisHTTP3Transport(normalized) {
 		return "h3"
-	case "h2c":
-		return "h2c"
-	case "h2", "http2":
-		return "http2"
-	case "http1", "http", "http/1.1":
-		return "http1"
-	default:
-		return strings.ToLower(strings.TrimSpace(raw))
 	}
+	if normalized == "h2c" {
+		return normalized
+	}
+	if normalized == "h2" || normalized == "http2" {
+		return "http2"
+	}
+	if normalized == "http1" || normalized == "http" || normalized == "http/1.1" {
+		return "http1"
+	}
+	return normalized
+}
+
+func isRuntimeIrisHTTP3Transport(normalized string) bool {
+	return normalized == "h3" || normalized == "http3" || normalized == "http/3" || normalized == "quic"
 }
 
 func (c *RuntimeIrisClient) logBaseURLFileFallback(reason string) {

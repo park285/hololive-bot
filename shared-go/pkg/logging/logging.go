@@ -102,18 +102,7 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 	level := ParseLevel(cfg.Level)
 	logDir := strings.TrimSpace(cfg.Dir)
 	if logDir == "" {
-		var handler slog.Handler
-		handler = tint.NewHandler(os.Stdout, &tint.Options{
-			Level:      level,
-			TimeFormat: time.RFC3339,
-			AddSource:  true,
-			NoColor:    shouldDisableColor(os.Stdout),
-		})
-		handler = NewSanitizeHandler(handler)
-		if enableOTel {
-			handler = NewOTelHandler(handler)
-		}
-		logger := slog.New(handler)
+		logger := slog.New(newConsoleHandler(level, os.Stdout, enableOTel))
 		slog.SetDefault(logger)
 		return logger, nil
 	}
@@ -162,6 +151,21 @@ func EnableFileLoggingWithOTel(cfg Config, fileName string, enableOTel bool) (*s
 	)
 	logArchiver.Trigger()
 	return logger, nil
+}
+
+func newConsoleHandler(level slog.Level, w io.Writer, enableOTel bool) slog.Handler {
+	var handler slog.Handler
+	handler = tint.NewHandler(w, &tint.Options{
+		Level:      level,
+		TimeFormat: time.RFC3339,
+		AddSource:  true,
+		NoColor:    shouldDisableColor(w),
+	})
+	handler = NewSanitizeHandler(handler)
+	if enableOTel {
+		handler = NewOTelHandler(handler)
+	}
+	return handler
 }
 
 func shouldDisableColor(w io.Writer) bool {

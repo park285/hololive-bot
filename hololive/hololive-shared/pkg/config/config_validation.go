@@ -21,6 +21,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -43,6 +44,22 @@ func (c *Config) Validate() error {
 	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return err
 	}
+	if err := c.validateRequiredConfig(); err != nil {
+		return err
+	}
+	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+		return err
+	}
+	if err := validateScraperConfig(c.Scraper); err != nil {
+		return err
+	}
+	if err := validateCORSConfig(c.Environment, c.CORS); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Config) validateRequiredConfig() error {
 	if len(c.Kakao.Rooms) == 0 {
 		return fmt.Errorf("KAKAO_ROOMS is required")
 	}
@@ -61,20 +78,24 @@ func (c *Config) Validate() error {
 	if isPlaceholderAPIKey(c.YouTube.APIKey) {
 		return fmt.Errorf("YOUTUBE_API_KEY uses placeholder value; set a real API key")
 	}
-	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+	return nil
+}
+
+func validateScraperConfig(cfg ScraperConfig) error {
+	if err := validateScraperSchedulerConfig(cfg.Scheduler); err != nil {
 		return err
 	}
-	if err := validateScraperSchedulerConfig(c.Scraper.Scheduler); err != nil {
+	if err := validateScraperFetcherEngine(cfg.FetcherEngine); err != nil {
 		return err
 	}
-	if err := validateScraperFetcherEngine(c.Scraper.FetcherEngine); err != nil {
+	if err := validateScraperPublishedAtResolverConfig(cfg.PublishedAtResolver); err != nil {
 		return err
 	}
-	if err := validateScraperPublishedAtResolverConfig(c.Scraper.PublishedAtResolver); err != nil {
-		return err
-	}
-	isProduction := strings.EqualFold(strings.TrimSpace(c.Environment), "production")
-	if isProduction && c.CORS.Enforce && len(c.CORS.AllowedOrigins) == 0 {
+	return nil
+}
+
+func validateCORSConfig(environment string, cfg CORSConfig) error {
+	if isProductionEnvironment(environment) && cfg.Enforce && len(cfg.AllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 	return nil
@@ -112,29 +133,36 @@ func validateScraperPublishedAtResolverConfig(cfg ScraperPublishedAtResolverConf
 	if !cfg.Enabled {
 		return nil
 	}
-	if cfg.Interval <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS must be positive when resolver is enabled")
+
+	checks := []struct {
+		valid   bool
+		message string
+	}{
+		{cfg.Interval > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_INTERVAL_SECONDS must be positive when resolver is enabled"},
+		{cfg.BatchSize > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE must be positive when resolver is enabled"},
+		{cfg.MaxResolvePerRun > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN must be positive when resolver is enabled"},
+		{cfg.MaxRunDuration > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be positive when resolver is enabled"},
+		{cfg.ResolveTimeout > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS must be positive when resolver is enabled"},
 	}
-	if cfg.BatchSize <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_BATCH_SIZE must be positive when resolver is enabled")
-	}
-	if cfg.MaxResolvePerRun <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RESOLVE_PER_RUN must be positive when resolver is enabled")
-	}
-	if cfg.MaxRunDuration <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be positive when resolver is enabled")
-	}
-	if cfg.ResolveTimeout <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS must be positive when resolver is enabled")
+	for _, check := range checks {
+		if !check.valid {
+			return errors.New(check.message)
+		}
 	}
 	if cfg.MaxRunDuration < cfg.ResolveTimeout {
 		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MAX_RUN_DURATION_SECONDS must be >= SCRAPER_PUBLISHED_AT_RESOLVER_RESOLVE_TIMEOUT_SECONDS")
 	}
-	if cfg.MinDetectedAge <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS must be positive when resolver is enabled")
+	tailChecks := []struct {
+		valid   bool
+		message string
+	}{
+		{cfg.MinDetectedAge > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_MIN_DETECTED_AGE_SECONDS must be positive when resolver is enabled"},
+		{cfg.FailureBackoffTTL > 0, "SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS must be positive when resolver is enabled"},
 	}
-	if cfg.FailureBackoffTTL <= 0 {
-		return fmt.Errorf("SCRAPER_PUBLISHED_AT_RESOLVER_FAILURE_BACKOFF_SECONDS must be positive when resolver is enabled")
+	for _, check := range tailChecks {
+		if !check.valid {
+			return errors.New(check.message)
+		}
 	}
 	return nil
 }
@@ -215,31 +243,42 @@ func validatePostgresSSLMode(environment, sslMode string) error {
 	if mode == "" {
 		return fmt.Errorf("POSTGRES_SSLMODE is required")
 	}
-
-	valid := map[string]struct{}{
-		"disable":     {},
-		"allow":       {},
-		"prefer":      {},
-		"require":     {},
-		"verify-ca":   {},
-		"verify-full": {},
-	}
-	if _, ok := valid[mode]; !ok {
+	if !isValidPostgresSSLMode(mode) {
 		return fmt.Errorf("invalid POSTGRES_SSLMODE: %s", sslMode)
 	}
-
-	if strings.EqualFold(strings.TrimSpace(environment), "production") {
-		if sharedenv.Bool("POSTGRES_SSLMODE_ALLOW_INSECURE", false) {
-			return nil
-		}
-
-		switch mode {
-		case "disable", "allow", "prefer":
-			return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use require, verify-ca, or verify-full", sslMode)
-		}
+	if !isProductionEnvironment(environment) {
+		return nil
+	}
+	if sharedenv.Bool("POSTGRES_SSLMODE_ALLOW_INSECURE", false) {
+		return nil
+	}
+	if isInsecurePostgresSSLMode(mode) {
+		return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use require, verify-ca, or verify-full", sslMode)
 	}
 
 	return nil
+}
+
+func isValidPostgresSSLMode(mode string) bool {
+	switch mode {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInsecurePostgresSSLMode(mode string) bool {
+	switch mode {
+	case "disable", "allow", "prefer":
+		return true
+	default:
+		return false
+	}
+}
+
+func isProductionEnvironment(environment string) bool {
+	return strings.EqualFold(strings.TrimSpace(environment), "production")
 }
 
 func validateAPISecretKey(environment, apiKey string) error {

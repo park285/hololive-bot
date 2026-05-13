@@ -79,30 +79,42 @@ func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms
 
 func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms []string) error {
 	if s.renameRoomsKeyFunc != nil {
-		if err := s.renameRoomsKeyFunc(ctx, tempKey, key, rooms); err != nil {
-			return fmt.Errorf("custom rename %s from %s: %w", key, tempKey, err)
-		}
-
-		return nil
+		return s.renameRoomsKeyCustom(ctx, tempKey, key, rooms)
 	}
 
 	client, builder, ok := s.rawCacheEvalClient()
 	if !ok {
-		if err := s.cache.Del(ctx, key); err != nil {
-			return fmt.Errorf("fallback clear %s: %w", key, err)
-		}
+		return s.renameRoomsKeyFallback(ctx, key, rooms)
+	}
 
-		if len(rooms) == 0 {
-			return nil
-		}
+	return s.renameRoomsKeyEval(ctx, client, builder, tempKey, key)
+}
 
-		if _, err := s.cache.SAdd(ctx, key, rooms); err != nil {
-			return fmt.Errorf("fallback write %s: %w", key, err)
-		}
+func (s *Service) renameRoomsKeyCustom(ctx context.Context, tempKey, key string, rooms []string) error {
+	if err := s.renameRoomsKeyFunc(ctx, tempKey, key, rooms); err != nil {
+		return fmt.Errorf("custom rename %s from %s: %w", key, tempKey, err)
+	}
 
+	return nil
+}
+
+func (s *Service) renameRoomsKeyFallback(ctx context.Context, key string, rooms []string) error {
+	if err := s.cache.Del(ctx, key); err != nil {
+		return fmt.Errorf("fallback clear %s: %w", key, err)
+	}
+
+	if len(rooms) == 0 {
 		return nil
 	}
 
+	if _, err := s.cache.SAdd(ctx, key, rooms); err != nil {
+		return fmt.Errorf("fallback write %s: %w", key, err)
+	}
+
+	return nil
+}
+
+func (s *Service) renameRoomsKeyEval(ctx context.Context, client valkey.Client, builder valkey.Builder, tempKey, key string) error {
 	resp := client.Do(ctx, builder.Eval().
 		Script(renameRoomsKeyScript).
 		Numkeys(0).

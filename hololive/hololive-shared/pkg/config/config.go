@@ -84,21 +84,9 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 	}
 
 	return &Config{
-		Iris: IrisConfig{
-			BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
-			BaseURLFile:               sharedenv.String("IRIS_BASE_URL_FILE", ""),
-			WebhookToken:              webhookToken,
-			BotToken:                  botToken,
-			HTTPTimeout:               time.Duration(sharedenv.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
-			HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
-			HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
-		},
+		Iris:   loadIrisConfig(webhookToken, botToken),
 		Server: loadServerConfig(),
-		Kakao: KakaoConfig{
-			Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
-			ACLEnabled: sharedenv.Bool("KAKAO_ACL_ENABLED", true),
-			ACLMode:    sharedenv.String("KAKAO_ACL_MODE", "whitelist"),
-		},
+		Kakao:  loadKakaoConfig(),
 		Holodex: HolodexConfig{
 			BaseURL: sharedenv.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
 			APIKey:  resolveHolodexAPIKey(),
@@ -116,35 +104,18 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		Valkey:       loadValkeyConfig(),
 		Postgres:     loadPostgresConfig(),
 		Notification: loadNotificationConfig(),
-		Logging: LoggingConfig{
-			Level:      sharedenv.String("LOG_LEVEL", "info"),
-			Dir:        sharedenv.String("LOG_DIR", ""),
-			MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 100),
-			MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
-			Compress:   sharedenv.Bool("LOG_COMPRESS", true),
-		},
-		Bot: BotConfig{
-			Prefix:        sharedenv.String("BOT_PREFIX", "!"),
-			SelfUser:      sharedenv.String("BOT_SELF_USER", "iris"),
-			MentionPrefix: sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
-		},
+		Logging:      loadLoggingConfig(),
+		Bot:          loadBotConfig(),
 		Services: ServicesConfig{
 			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
 			GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
 			GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
 		},
-		Environment: loadAppEnvironment(),
-		Scraper:     loadScraperConfig(),
-		Webhook:     loadWebhookConfig(),
-		Chzzk: ChzzkConfig{
-			ClientID:     sharedenv.String("CHZZK_CLIENT_ID", ""),
-			ClientSecret: sharedenv.String("CHZZK_CLIENT_SECRET", ""),
-		},
-		Twitch: TwitchConfig{
-			ClientID:     sharedenv.String("TWITCH_CLIENT_ID", ""),
-			ClientSecret: sharedenv.String("TWITCH_CLIENT_SECRET", ""),
-		},
+		Environment:     loadAppEnvironment(),
+		Scraper:         loadScraperConfig(),
+		Webhook:         loadWebhookConfig(),
+		Chzzk:           loadChzzkConfig(),
+		Twitch:          loadTwitchConfig(),
 		Cliproxy:        loadCliproxyConfig(),
 		LLM:             loadLLMConfig(),
 		Exa:             loadExaConfig(),
@@ -156,4 +127,57 @@ func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, cor
 		},
 		Version: sharedenv.String("APP_VERSION", "1.1.0-go"),
 	}, nil
+}
+
+func loadIrisConfig(webhookToken, botToken string) IrisConfig {
+	return IrisConfig{
+		BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
+		BaseURLFile:               sharedenv.String("IRIS_BASE_URL_FILE", ""),
+		WebhookToken:              webhookToken,
+		BotToken:                  botToken,
+		HTTPTimeout:               time.Duration(sharedenv.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
+		HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
+		HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
+	}
+}
+
+func loadKakaoConfig() KakaoConfig {
+	return KakaoConfig{
+		Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
+		ACLEnabled: sharedenv.Bool("KAKAO_ACL_ENABLED", true),
+		ACLMode:    sharedenv.String("KAKAO_ACL_MODE", "whitelist"),
+	}
+}
+
+func loadLoggingConfig() LoggingConfig {
+	return LoggingConfig{
+		Level:      sharedenv.String("LOG_LEVEL", "info"),
+		Dir:        sharedenv.String("LOG_DIR", ""),
+		MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 100),
+		MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
+		MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
+		Compress:   sharedenv.Bool("LOG_COMPRESS", true),
+	}
+}
+
+func loadBotConfig() BotConfig {
+	return BotConfig{
+		Prefix:        sharedenv.String("BOT_PREFIX", "!"),
+		SelfUser:      sharedenv.String("BOT_SELF_USER", "iris"),
+		MentionPrefix: sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
+	}
+}
+
+func loadChzzkConfig() ChzzkConfig {
+	return ChzzkConfig{
+		ClientID:     sharedenv.String("CHZZK_CLIENT_ID", ""),
+		ClientSecret: sharedenv.String("CHZZK_CLIENT_SECRET", ""),
+	}
+}
+
+func loadTwitchConfig() TwitchConfig {
+	return TwitchConfig{
+		ClientID:     sharedenv.String("TWITCH_CLIENT_ID", ""),
+		ClientSecret: sharedenv.String("TWITCH_CLIENT_SECRET", ""),
+	}
 }

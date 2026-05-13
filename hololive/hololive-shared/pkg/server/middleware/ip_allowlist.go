@@ -37,13 +37,7 @@ func NewIPAllowList(allowed []string) ([]*net.IPNet, error) {
 		if trimmed == "" {
 			continue
 		}
-		if !strings.Contains(trimmed, "/") {
-			if strings.Contains(trimmed, ":") {
-				trimmed += "/128"
-			} else {
-				trimmed += "/32"
-			}
-		}
+		trimmed = normalizeIPAllowListCIDR(trimmed)
 		_, cidr, err := net.ParseCIDR(trimmed)
 		if err != nil {
 			return nil, fmt.Errorf("invalid CIDR %s: %w", trimmed, err)
@@ -51,6 +45,16 @@ func NewIPAllowList(allowed []string) ([]*net.IPNet, error) {
 		nets = append(nets, cidr)
 	}
 	return nets, nil
+}
+
+func normalizeIPAllowListCIDR(raw string) string {
+	if strings.Contains(raw, "/") {
+		return raw
+	}
+	if strings.Contains(raw, ":") {
+		return raw + "/128"
+	}
+	return raw + "/32"
 }
 
 // allowlist가 비어있으면 모든 IP를 허용합니다 (개발/테스트용).
@@ -73,13 +77,23 @@ func AdminIPAllowMiddleware(allowed []*net.IPNet, logger *slog.Logger) gin.Handl
 			abortWithError(c, 403, "forbidden", "")
 			return
 		}
-		for _, cidr := range allowed {
-			if cidr != nil && cidr.Contains(clientIP) {
-				c.Next()
-				return
-			}
+		if !adminIPAllowed(clientIP, allowed) {
+			log.Warn("Admin IP blocked", slog.String("ip", clientIP.String()))
+			abortWithError(c, 403, "forbidden", "")
+			return
 		}
-		log.Warn("Admin IP blocked", slog.String("ip", clientIP.String()))
-		abortWithError(c, 403, "forbidden", "")
+		c.Next()
 	}
+}
+
+func adminIPAllowed(clientIP net.IP, allowed []*net.IPNet) bool {
+	if clientIP == nil {
+		return false
+	}
+	for _, cidr := range allowed {
+		if cidr != nil && cidr.Contains(clientIP) {
+			return true
+		}
+	}
+	return false
 }
