@@ -453,6 +453,19 @@ func TestLoad_ScraperFetcherEngineValidation(t *testing.T) {
 	}
 }
 
+func TestLoad_ScraperFetcherEngineRejectsBrowserSnapshot(t *testing.T) {
+	setRequiredLoadEnv(t)
+	t.Setenv("SCRAPER_FETCHER_ENGINE", "browser_snapshot")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want invalid scraper fetcher engine error")
+	}
+	if !strings.Contains(err.Error(), "SCRAPER_FETCHER_ENGINE must be one of: nethttp, goscrapy") {
+		t.Fatalf("Load() error = %v, want SCRAPER_FETCHER_ENGINE validation error", err)
+	}
+}
+
 func TestLoad_ScraperSnapshotAndChannelHealthDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
