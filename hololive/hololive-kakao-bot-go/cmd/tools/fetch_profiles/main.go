@@ -41,65 +41,99 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	if err := run(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
 
+func run(ctx context.Context) error {
 	runtime, err := app.BuildFetchProfilesRuntime(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to initialize runtime: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize runtime: %w", err)
 	}
 	defer runtime.Close()
 
 	logger := runtime.Logger
-
 	talents, err := domain.LoadTalents()
 	if err != nil {
-		logger.Error("failed to load official talents list", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to load official talents list: %w", err)
 	}
 
-	httpClient := runtime.HTTPClient
-
-	profiles := make(map[string]*domain.TalentProfile, len(talents.Talents))
-	for idx, talent := range talents.Talents {
-		if talent == nil || stringutil.TrimSpace(talent.English) == "" {
-			continue
-		}
-
-		slug := talent.Slug()
-		english := stringutil.TrimSpace(talent.English)
-
-		profileURL := fmt.Sprintf("%s/%s/", constants.OfficialProfileConfig.BaseURL, slug)
-		logger.Info("Fetching profile", slog.Int("index", idx+1), slog.String("slug", slug), slog.String("url", profileURL))
-
-		profile, err := fetchProfile(ctx, httpClient, profileURL, english, slug)
-		if err != nil {
-			logger.Error("failed to fetch profile", slog.String("slug", slug), slog.Any("error", err))
-			continue
-		}
-
-		profiles[slug] = profile
-
-		time.Sleep(constants.OfficialProfileConfig.DelayBetween)
-	}
-
+	profiles := fetchProfiles(ctx, runtime.HTTPClient, logger, talents.Talents)
 	if len(profiles) == 0 {
-		logger.Error("no profiles fetched")
-		os.Exit(1)
+		return errors.New("no profiles fetched")
 	}
 
 	if err := writeProfiles(profiles); err != nil {
-		logger.Error("failed to write profiles", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to write profiles: %w", err)
 	}
 
 	logger.Info("Profile fetch completed",
 		slog.Int("count", len(profiles)),
 		slog.String("output", constants.OfficialProfileConfig.OutputFile),
 	)
+	return nil
+}
+
+func fetchProfiles(
+	ctx context.Context,
+	client *http.Client,
+	logger *slog.Logger,
+	talents []*domain.OfficialTalent,
+) map[string]*domain.TalentProfile {
+	profiles := make(map[string]*domain.TalentProfile, len(talents))
+	for idx, talent := range talents {
+		profile := fetchTalentProfile(ctx, client, logger, idx, talent)
+		if profile == nil {
+			continue
+		}
+		profiles[profile.Slug] = profile
+		time.Sleep(constants.OfficialProfileConfig.DelayBetween)
+	}
+	return profiles
+}
+
+func fetchTalentProfile(
+	ctx context.Context,
+	client *http.Client,
+	logger *slog.Logger,
+	idx int,
+	talent *domain.OfficialTalent,
+) *domain.TalentProfile {
+	if talent == nil || stringutil.TrimSpace(talent.English) == "" {
+		return nil
+	}
+
+	slug := talent.Slug()
+	english := stringutil.TrimSpace(talent.English)
+	profileURL := fmt.Sprintf("%s/%s/", constants.OfficialProfileConfig.BaseURL, slug)
+	logger.Info("Fetching profile", slog.Int("index", idx+1), slog.String("slug", slug), slog.String("url", profileURL))
+
+	profile, err := fetchProfile(ctx, client, profileURL, english, slug)
+	if err != nil {
+		logger.Error("failed to fetch profile", slog.String("slug", slug), slog.Any("error", err))
+		return nil
+	}
+	return profile
 }
 
 func fetchProfile(ctx context.Context, client *http.Client, url, englishName, slug string) (*domain.TalentProfile, error) {
+	resp, err := fetchProfileResponse(ctx, client, url)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	return buildTalentProfile(doc, url, englishName, slug)
+}
+
+func fetchProfileResponse(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -118,12 +152,10 @@ func fetchProfile(ctx context.Context, client *http.Client, url, englishName, sl
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
+	return resp, nil
+}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
+func buildTalentProfile(doc *goquery.Document, url, englishName, slug string) (*domain.TalentProfile, error) {
 	profile := &domain.TalentProfile{
 		Slug:        slug,
 		OfficialURL: url,
@@ -134,36 +166,29 @@ func fetchProfile(ctx context.Context, client *http.Client, url, englishName, sl
 		return nil, errors.New("profile container not found")
 	}
 
-	header := rightBox.Find("h1").First()
-	if header.Length() > 0 {
-		japanese := stringutil.TrimSpace(header.Clone().Children().Remove().Text())
-		english := stringutil.TrimSpace(header.Find("span").First().Text())
-
-		if english != "" {
-			profile.EnglishName = english
-		} else {
-			profile.EnglishName = englishName
-		}
-
-		if japanese != "" {
-			profile.JapaneseName = japanese
-		}
-	} else {
-		profile.EnglishName = englishName
-	}
-
-	catchText := normalizeText(rightBox.Find("p.catch").First().Text())
-
-	profile.Catchphrase = catchText
-
-	descText := normalizeText(rightBox.Find("p.txt").First().Text())
-
-	profile.Description = descText
-
+	applyProfileHeader(profile, rightBox.Find("h1").First(), englishName)
+	profile.Catchphrase = normalizeText(rightBox.Find("p.catch").First().Text())
+	profile.Description = normalizeText(rightBox.Find("p.txt").First().Text())
 	profile.SocialLinks = extractSocialLinks(rightBox.Find(".t_sns a"))
 	profile.DataEntries = extractDataEntries(doc.Find(".talent_data .table_box dl"))
 
 	return profile, nil
+}
+
+func applyProfileHeader(profile *domain.TalentProfile, header *goquery.Selection, fallbackEnglish string) {
+	profile.EnglishName = fallbackEnglish
+	if header.Length() == 0 {
+		return
+	}
+
+	japanese := stringutil.TrimSpace(header.Clone().Children().Remove().Text())
+	english := stringutil.TrimSpace(header.Find("span").First().Text())
+	if english != "" {
+		profile.EnglishName = english
+	}
+	if japanese != "" {
+		profile.JapaneseName = japanese
+	}
 }
 
 func extractSocialLinks(selection *goquery.Selection) []domain.TalentSocialLink {
@@ -219,47 +244,45 @@ func normalizeText(input string) string {
 
 func writeProfiles(profiles map[string]*domain.TalentProfile) error {
 	outputFile := constants.OfficialProfileConfig.OutputFile
-
-	if err := os.MkdirAll(filepath.Dir(outputFile), 0o750); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+	if err := writeJSONFile(outputFile, profiles); err != nil {
+		return err
 	}
-
-	data, err := json.MarshalIndent(profiles, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal profiles: %w", err)
-	}
-
-	tmpFile := outputFile + ".tmp"
-	if err := os.WriteFile(tmpFile, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpFile, outputFile); err != nil {
-		return fmt.Errorf("failed to rename output file: %w", err)
-	}
-
 	splitDir := filepath.Join(filepath.Dir(outputFile), "official_profiles_raw")
+
+	return writeSplitProfiles(splitDir, profiles)
+}
+
+func writeSplitProfiles(splitDir string, profiles map[string]*domain.TalentProfile) error {
 	if err := os.MkdirAll(splitDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create split directory: %w", err)
 	}
 
 	for slug, profile := range profiles {
-		bytes, err := json.MarshalIndent(profile, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal profile %s: %w", slug, err)
-		}
-
-		tmp := filepath.Join(splitDir, slug+".json.tmp")
 		target := filepath.Join(splitDir, slug+".json")
-
-		if err := os.WriteFile(tmp, bytes, 0o600); err != nil {
+		if err := writeJSONFile(target, profile); err != nil {
 			return fmt.Errorf("failed to write profile %s: %w", slug, err)
-		}
-
-		if err := os.Rename(tmp, target); err != nil {
-			return fmt.Errorf("failed to finalize profile %s: %w", slug, err)
 		}
 	}
 
+	return nil
+}
+
+func writeJSONFile(path string, value any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("failed to rename output file: %w", err)
+	}
 	return nil
 }
