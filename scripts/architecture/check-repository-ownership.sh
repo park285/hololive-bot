@@ -113,6 +113,10 @@ check_no_imports "shared-go module" \
   "shared-go" \
   'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'
 
+check_no_imports "youtube-scraper direct YouTube dispatch" \
+  "hololive/hololive-stream-ingester" \
+  'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started'
+
 major_event_hits="$(
   rg -n 'majorevent.*repository|repository.*majorevent' \
     "${ROOT_DIR}/hololive/hololive-kakao-bot-go" \

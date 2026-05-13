@@ -2,7 +2,8 @@
 
 ## Role
 
-`hololive-alarm-worker`는 alarm checker/scheduler와 dispatch queue publishing을 담당합니다.
+`hololive-alarm-worker`는 alarm checker/scheduler, dispatch queue publishing, dispatch queue consumption, generic notification delivery outbox consumption, YouTube outbox egress를 담당합니다.
+또한 `ALARM_WORKER_EGRESS_LEASE_ENABLED=true`일 때 `notification:egress-owner:alarm-worker` lease를 잡은 인스턴스만 proactive notification egress를 시작합니다.
 
 ## Normal status
 
@@ -11,7 +12,9 @@
 | Health | `http://127.0.0.1:30007/health` returns success |
 | Ready | 검토 필요 |
 | Logs | scheduler/checker loops run without repeated DB/cache errors |
-| Queue | publishes to `alarm:dispatch:queue` when alarm events are due |
+| Queue | publishes to and consumes from `alarm:dispatch:queue` when alarm events are due |
+| Delivery outbox | consumes `notification_delivery_outbox` rows for major event/member news proactive sends |
+| Egress lease | `notification:egress-owner:alarm-worker` is held by the active alarm-worker when proactive egress is enabled |
 
 ## Dependencies
 
@@ -19,7 +22,7 @@
 |---|---|---|
 | PostgreSQL | yes | alarm state lookup fails |
 | Valkey | yes | dispatch queue/cache/PubSub fail |
-| Iris | no | send is owned by `dispatcher-go` |
+| Iris | yes | proactive notification egress |
 
 ## Key environment variables
 
@@ -27,6 +30,9 @@
 |---|---|---|
 | `SERVER_PORT` | HTTP health port | yes |
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
+| `YOUTUBE_OUTBOX_DISPATCHER_ENABLED` | YouTube outbox egress enablement | production yes |
+| `DELIVERY_DISPATCHER_ENABLED` | generic notification delivery outbox egress enablement | production yes |
+| `ALARM_WORKER_EGRESS_LEASE_ENABLED` | single-owner proactive egress lease | production yes |
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
@@ -46,7 +52,7 @@ docker compose -f docker-compose.prod.yml logs -f hololive-alarm-worker
 
 Symptoms:
 - Expected alarms are not dispatched.
-- `dispatcher-go` has no new queue entries.
+- YouTube outbox dispatcher has no new send errors.
 
 Diagnosis:
 ```bash
@@ -56,6 +62,7 @@ docker compose -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/r
 
 Mitigation:
 - Check PostgreSQL, Valkey, scheduler role, and alarm state.
+- Verify the egress lease is held by the active alarm-worker and not by a stale owner.
 
 Rollback:
 - Roll back the alarm-worker image/config that changed checker or queue publishing behavior.

@@ -33,13 +33,14 @@ Photo sync와 ingestion-adjacent runtime 기능을 담당합니다.
 |---|---|---|
 | PostgreSQL | sync and ingestion-adjacent state | sync operations fail |
 | Valkey | cache/config | stale or degraded ingestion behavior |
-| Iris/cliproxy | configured external interactions | degraded external operations |
+| cliproxy | configured external ingestion interactions where enabled | degraded external operations |
 
 ## Must not own
 
 - Dedicated YouTube scraping when `youtube-scraper` owns it
 - Kakao command routing
 - Alarm queue consumption
+- Proactive Iris/Kakao notification egress
 
 ## Startup requirements
 

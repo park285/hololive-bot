@@ -8,13 +8,13 @@
 
 | Runtime | Owns | Provides | Consumes | Must not own | Detail |
 |---|---|---|---|---|---|
-| `bot` | Kakao/Iris webhook ingress, command routing, user-facing replies | Kakao webhook/H3 ingress | PostgreSQL, Valkey, Iris, `llm-scheduler`, alarm API | alarm checking worker, dispatch queue consumer, admin control plane | `services/bot.md` |
+| `bot` | Kakao/Iris webhook ingress, command routing, user-facing replies | Kakao webhook/H3 ingress | PostgreSQL, Valkey, Iris, `llm-scheduler`, alarm API | alarm checking worker, proactive dispatch queue consumer, admin control plane | `services/bot.md` |
 | `admin-api` | Dashboard-facing admin HTTP control plane | Admin API, trigger client facade | PostgreSQL, Valkey, `llm-scheduler`, alarm API | bot webhook ingress, alarm scheduling loops | `services/admin-api.md` |
-| `alarm-worker` | Alarm checker, alarm scheduler, dispatch queue publishing | Alarm queue publisher, internal alarm HTTP surface where configured | PostgreSQL, Valkey, settings Pub/Sub | Iris sending, Kakao command routing | `services/alarm-worker.md` |
-| `dispatcher-go` | Alarm dispatch queue draining and Iris send | Queue consumer lifecycle, `/ready` | Valkey alarm queue, Iris | alarm ownership mutation, LLM/news scheduling | `services/dispatcher-go.md` |
-| `llm-scheduler` | Major event/member news scheduling, LLM summaries, internal subscription APIs | `membernews`, `majorevent`, `trigger` internal HTTP contracts | PostgreSQL, Valkey, Iris/cliproxy where configured | Kakao webhook ingress, alarm checker loop | `services/llm-scheduler.md` |
-| `stream-ingester` | Photo sync and ingestion-adjacent runtime | stream ingestion health/runtime | PostgreSQL, Valkey, Iris/cliproxy where configured | dedicated YouTube scraping runtime when `youtube-scraper` owns it | `services/stream-ingester.md` |
-| `youtube-scraper` | YouTube scraping/polling and outbox runtime | YouTube poller/outbox production | PostgreSQL, Valkey, Iris/cliproxy where configured | bot command routing, dispatcher queue consume | `services/youtube-scraper.md` |
+| `alarm-worker` | Alarm checker, alarm scheduler, dispatch queue publishing, proactive notification egress | Alarm queue publisher, YouTube outbox dispatcher, internal alarm HTTP surface where configured | PostgreSQL, Valkey, settings Pub/Sub, Iris | Kakao command routing | `services/alarm-worker.md` |
+| `dispatcher-go` | Legacy standalone alarm dispatch consumer, disabled from default production compose | Queue consumer lifecycle, `/ready` when explicitly profiled | Valkey alarm queue, Iris | default production proactive egress, alarm ownership mutation, LLM/news scheduling | `services/dispatcher-go.md` |
+| `llm-scheduler` | Major event/member news scheduling, LLM summaries, internal subscription APIs | `membernews`, `majorevent`, `trigger` internal HTTP contracts | PostgreSQL, Valkey, cliproxy/LLM where configured | Kakao webhook ingress, alarm checker loop, proactive notification egress | `services/llm-scheduler.md` |
+| `stream-ingester` | Photo sync and ingestion-adjacent runtime | stream ingestion health/runtime | PostgreSQL, Valkey, cliproxy where configured | dedicated YouTube scraping runtime when `youtube-scraper` owns it, proactive notification egress | `services/stream-ingester.md` |
+| `youtube-scraper` | YouTube scraping/polling and outbox runtime | YouTube poller/outbox production | PostgreSQL, Valkey | bot command routing, dispatcher queue consume, proactive notification egress | `services/youtube-scraper.md` |
 
 ## Split Rules
 

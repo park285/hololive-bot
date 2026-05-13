@@ -9,7 +9,7 @@ Alarm dispatch queue와 settings/config Pub/Sub의 current contract를 기록합
 | Field | Value |
 |---|---|
 | Producer | `alarm-worker` |
-| Consumer | `dispatcher-go` |
+| Consumer | legacy `dispatcher-go` where enabled; production proactive egress owner is `alarm-worker` |
 | Active queue | `alarm:dispatch:queue` |
 | Delayed retry queue | `alarm:dispatch:retry` |
 | DLQ | `alarm:dispatch:dlq` |
@@ -21,18 +21,21 @@ Current envelope:
 
 ```go
 type AlarmQueueEnvelope struct {
-    Notification  domain.AlarmNotification `json:"notification"`
-    ClaimKeys     []string                 `json:"claim_keys"`
-    EnqueuedAt    string                   `json:"enqueued_at"`
-    Version       uint8                    `json:"version"`
-    Retry         *AlarmQueueRetryMetadata `json:"retry,omitempty"`
-    SourcePayload string                   `json:"source_payload,omitempty"`
+    Notification  domain.AlarmNotification             `json:"notification"`
+    ClaimKeys     []string                             `json:"claim_keys"`
+    EnqueuedAt    string                               `json:"enqueued_at"`
+    Version       uint8                                `json:"version"`
+    Retry         *AlarmQueueRetryMetadata             `json:"retry,omitempty"`
+    SourcePayload string                               `json:"source_payload,omitempty"`
+    SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
+    YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
 }
 ```
 
 Consumer behavior:
 
 - Accepts version `0` and `QueueEnvelopeVersionV1`.
+- YouTube live/video/community/shorts proactive notifications do not use this Valkey queue in the current production split; `alarm-worker` consumes `youtube_notification_outbox` directly.
 - Rejects unsupported version payloads and preserves raw payloads in `alarm:dispatch:dlq`.
 - Invalid JSON from the active queue is preserved raw in `alarm:dispatch:dlq`.
 - Invalid delayed retry wrapper payload is preserved raw in `alarm:dispatch:dlq`.

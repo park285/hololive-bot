@@ -13,14 +13,14 @@
 
 ## Role
 
-Major event, member news, LLM scheduling, digest generation, and delivery orchestration을 담당합니다.
+Major event, member news, LLM scheduling, digest generation, and notification intent production을 담당합니다. Proactive send is handed off through `notification_delivery_outbox` and drained by `alarm-worker`.
 
 ## Owns
 
-- Major event subscription and notification scheduling
+- Major event subscription and notification intent scheduling
 - Member news subscription and digest generation
 - Internal trigger endpoints for scheduled notifications
-- LLM summary cache and delivery orchestration
+- LLM summary cache and notification intent production
 
 ## Provides
 
@@ -36,13 +36,14 @@ Major event, member news, LLM scheduling, digest generation, and delivery orches
 |---|---|---|
 | PostgreSQL | subscriptions, summaries, outbox | scheduling and digest operations fail |
 | Valkey | cache/config PubSub | stale settings or cache misses |
-| Iris/cliproxy | external delivery/LLM where configured | delivery or summary generation degradation |
+| cliproxy/LLM | external summary generation where configured | summary generation degradation |
 
 ## Must not own
 
 - Kakao webhook ingress
 - Alarm checker runtime
 - Dispatch queue consumption
+- Proactive Iris/Kakao notification egress
 
 ## Startup requirements
 

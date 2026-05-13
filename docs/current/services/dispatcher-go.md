@@ -13,13 +13,13 @@
 
 ## Role
 
-Alarm dispatch queue를 소비하고 Iris로 KakaoTalk 발송을 수행합니다.
+Legacy standalone alarm dispatch queue consumer입니다. Default production compose에서는 `legacy-dispatcher-go` profile 뒤에 있으며 proactive notification egress owner는 `alarm-worker`입니다.
 
 ## Owns
 
 - `alarm:dispatch:queue` drain lifecycle
 - delayed retry queue and DLQ movement
-- Iris send attempt and retry/claim release behavior
+- Legacy Iris send attempt and retry/claim release behavior when explicitly enabled
 
 ## Provides
 
@@ -40,6 +40,7 @@ Alarm dispatch queue를 소비하고 Iris로 KakaoTalk 발송을 수행합니다
 - Alarm rule mutation
 - Alarm checking and queue publishing
 - User command orchestration
+- Default production proactive notification egress
 
 ## Startup requirements
 
