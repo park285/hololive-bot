@@ -18,9 +18,9 @@
 recent periods:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-cause-report
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-cause-report -format json
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-cause-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-cause-report
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-cause-report -format json
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-cause-report \
   -period last_15m=15m \
   -period last_2h=2h \
   -period last_24h=24h
@@ -29,11 +29,11 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-
 observation window:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-cause-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-cause-report \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-cause-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-cause-report \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z \
   -format json

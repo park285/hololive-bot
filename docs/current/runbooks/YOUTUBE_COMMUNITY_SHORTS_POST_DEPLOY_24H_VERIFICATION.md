@@ -7,7 +7,7 @@
 | 항목 | 명시 내용 |
 | --- | --- |
 | 수행 기간 | 같은 `observation key` 로 고정한 `youtube_community_shorts_observation_windows` 1개 row의 `[observation_started_at, observation_ended_at)` 전체 24시간 구간을 대조 검증 대상으로 사용합니다. 관찰 창이 열려 있는 동안에는 같은 key로 누적 관찰치를 계속 수집하고, 창이 닫히면 finalized baseline 기준으로 동일한 24시간 구간 전체를 다시 대조합니다. |
-| 데이터 원천 | 기준 집합은 `youtube-community-shorts-target-baseline`, `youtube_community_shorts_observation_post_baselines`, `youtube-community-shorts-alarm-sent-history-dataset` 을 사용합니다. 게시물별 exact-once 및 누락 판정은 `youtube-community-shorts-send-counts`, `youtube-community-shorts-delivery-logs`, `youtube_content_alarm_tracking`, `youtube_notification_delivery_telemetry` 를 사용하고, 운영 요약은 `youtube-community-shorts-continuous-observation-report`, `youtube-community-shorts-channel-summary` 로 확인합니다. SLA 대조는 `youtube-community-shorts-latency-period-summary`, `youtube-community-shorts-latency-cause-report` 를 함께 사용하고, `route-report`, `route-usage` 는 상호 검증용 보조 증적으로만 사용합니다. |
+| 데이터 원천 | 기준 집합은 `youtube-community-shorts target-baseline`, `youtube_community_shorts_observation_post_baselines`, `youtube-community-shorts alarm-sent-history-dataset` 을 사용합니다. 게시물별 exact-once 및 누락 판정은 `youtube-community-shorts send-counts`, `youtube-community-shorts delivery-logs`, `youtube_content_alarm_tracking`, `youtube_notification_delivery_telemetry` 를 사용하고, 운영 요약은 `youtube-community-shorts continuous-observation-report`, `youtube-community-shorts channel-summary` 로 확인합니다. SLA 대조는 `youtube-community-shorts latency-period-summary`, `youtube-community-shorts latency-cause-report` 를 함께 사용하고, `route-report`, `route-usage` 는 상호 검증용 보조 증적으로만 사용합니다. |
 | 비교 범위 | 비교 대상은 `COMMUNITY_POST`, `NEW_SHORT` 두 알람 유형뿐입니다. 같은 observation key 안에서 `alarm_enabled = true` 인 운영 채널의 `channel_id + alarm_type` route subset만 포함하고, 게시물 대조 단위는 canonical key `alarm_type + channel_id + post_id` 로 고정합니다. 다른 알람 유형, 비대상 route, UI 변경 여부는 이 대조 검증 범위에 포함하지 않습니다. |
 | 판정 기준 | SLA 시작점은 `actual_published_at` 이며 값이 없을 때만 `detected_at` 을 fallback 으로 사용합니다. exact-once 합격선은 각 canonical post key마다 final success 증적이 정확히 1회 존재하고 `duplicate_success_posts = 0`, `no_success = 0`, `outbox_missing = 0` 인 상태입니다. 내부 원인 기준 `actual_published_at -> alarm_sent_at` 지연이 2분을 넘기면 SLA 실패로 기록하되 알람은 늦더라도 정확히 1회 발송돼야 하며, 외부 수집 지연(`delay_source = external_collection`)은 기록 대상이지만 실패 판정에는 넣지 않습니다. |
 
@@ -22,7 +22,7 @@
 
 ## Verification Rhythm
 
-- 배포 직후 `0h-1h`: `youtube-community-shorts-continuous-observation-report -watch` 는 같은 observation key로 즉시 시작하고, 운영자는 `latest.md` 또는 `latest.json` 의 channel summary / send counts 섹션을 `5분` 간격으로 다시 확인합니다. 수동 재판독이 필요할 때는 `send-counts` 와 `latency-period-summary` 를 같은 observation key로 재수집합니다.
+- 배포 직후 `0h-1h`: `youtube-community-shorts continuous-observation-report -watch` 는 같은 observation key로 즉시 시작하고, 운영자는 `latest.md` 또는 `latest.json` 의 channel summary / send counts 섹션을 `5분` 간격으로 다시 확인합니다. 수동 재판독이 필요할 때는 `send-counts` 와 `latency-period-summary` 를 같은 observation key로 재수집합니다.
 - 배포 후 `1h-24h`: continuous observation snapshot은 계속 누적하되 운영자 판독은 `15분` 간격으로 수행합니다.
 - `route-report` 와 `route-usage` 확인은 배포 직후 즉시 1회 수행하고, 최근 게시물이 실제로 잡히기 전까지 `15분` 간격으로 다시 확인합니다.
 - `delivery-logs` 는 `detectedUnsent`, `pending`, `duplicate`, `over_2m_posts` 같은 이상 징후가 보일 때 즉시 조회합니다.
@@ -34,13 +34,13 @@
 ### 1. 배포 직후 observation key를 고정합니다
 
 1. 배포 완료 시각을 `CUTOVER_AT` 으로 기록합니다.
-2. 이후 `send-counts`, `delivery-logs`, `latency-cause-report` 등 observation query는 모두 같은 `-observation-runtime youtube-scraper -observation-cutover "$CUTOVER_AT"` 조합으로 실행합니다. 운영자는 가능하면 `youtube-community-shorts-continuous-observation-report -watch` 를 먼저 켜서 같은 observation key의 baseline, channel summary, send counts, delivery logs, latency report snapshot을 계속 파일로 남깁니다.
-3. `youtube-community-shorts-continuous-observation-report -watch` 가 첫 snapshot을 썼는지 확인하고, `latest.md` 또는 `latest.json` 에 channel summary / send counts / latency report 섹션이 모두 보이는지 확인합니다.
+2. 이후 `send-counts`, `delivery-logs`, `latency-cause-report` 등 observation query는 모두 같은 `-observation-runtime youtube-scraper -observation-cutover "$CUTOVER_AT"` 조합으로 실행합니다. 운영자는 가능하면 `youtube-community-shorts continuous-observation-report -watch` 를 먼저 켜서 같은 observation key의 baseline, channel summary, send counts, delivery logs, latency report snapshot을 계속 파일로 남깁니다.
+3. `youtube-community-shorts continuous-observation-report -watch` 가 첫 snapshot을 썼는지 확인하고, `latest.md` 또는 `latest.json` 에 channel summary / send counts / latency report 섹션이 모두 보이는지 확인합니다.
 4. `route-report` 를 먼저 1회 실행해 `runtime final owner = youtube-scraper`, `big-bang enabled = true` 를 확인합니다.
 
 ### 2. 배포 직후 기준 스냅샷을 채집합니다
 
-1. 같은 observation key로 `youtube-community-shorts-continuous-observation-report` 를 1회 실행하거나 `-watch` 로 계속 수집합니다. 필요 시 `send-counts`, `delivery-logs`, `latency-period-summary`, `latency-cause-report` 를 개별 명령으로 재실행합니다.
+1. 같은 observation key로 `youtube-community-shorts continuous-observation-report` 를 1회 실행하거나 `-watch` 로 계속 수집합니다. 필요 시 `send-counts`, `delivery-logs`, `latency-period-summary`, `latency-cause-report` 를 개별 명령으로 재실행합니다.
 2. `YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md` 의 route usage 조회를 1회 수행합니다.
 3. 아래 다섯 가지 증적이 모두 준비된 상태에서만 누락 여부 판정을 시작합니다.
 
@@ -167,37 +167,37 @@
 배포 시점의 observation key를 이미 기록해 두었다면 아래 명령을 기준 절차로 사용합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-continuous-observation-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
   -observation-runtime youtube-scraper \
   -observation-cutover <CUTOVER_AT> \
   -watch
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-send-counts \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts send-counts \
   -observation-runtime youtube-scraper \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-delivery-logs \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs \
   -observation-runtime youtube-scraper \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-cause-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-cause-report \
   -observation-runtime youtube-scraper \
   -observation-cutover <CUTOVER_AT>
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-route-report -window=24h
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report -window=24h
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-period-summary \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-period-summary \
   -period last_15m=15m \
   -period last_1h=1h \
   -period last_24h=24h
 ```
 
-운영 요약은 `youtube-community-shorts-continuous-observation-report` snapshot과 `youtube-community-shorts-channel-summary` 결과를 사용합니다.
+운영 요약은 `youtube-community-shorts continuous-observation-report` snapshot과 `youtube-community-shorts channel-summary` 결과를 사용합니다.
 route usage 상세 SQL은 `YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md` 절차를 그대로 사용합니다.
 
 ## Audit Trail
 
-사후 감사에서 같은 판정을 재현하려면 운영자는 같은 observation key마다 검증 실행 기록과 증적 위치를 함께 남겨야 합니다. 감사 추적은 `youtube-community-shorts-continuous-observation-report` 의 산출물 루트를 기준 보관 경로로 삼고, KST 운영 기록이 필요하더라도 observation key와 재조인을 위해 UTC 원문(`RFC3339`)을 함께 남깁니다.
+사후 감사에서 같은 판정을 재현하려면 운영자는 같은 observation key마다 검증 실행 기록과 증적 위치를 함께 남겨야 합니다. 감사 추적은 `youtube-community-shorts continuous-observation-report` 의 산출물 루트를 기준 보관 경로로 삼고, KST 운영 기록이 필요하더라도 observation key와 재조인을 위해 UTC 원문(`RFC3339`)을 함께 남깁니다.
 
 | Audit field | Required record |
 | --- | --- |

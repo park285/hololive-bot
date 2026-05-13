@@ -1,4 +1,4 @@
-package main
+package communityshortscli
 
 import (
 	"testing"

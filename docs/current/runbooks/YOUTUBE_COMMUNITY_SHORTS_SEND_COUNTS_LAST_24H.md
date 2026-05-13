@@ -15,18 +15,18 @@
 recent window:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-send-counts -window 24h
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-send-counts -window 24h -format json
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts send-counts -window 24h
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts send-counts -window 24h -format json
 ```
 
 observation window:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-send-counts \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts send-counts \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-send-counts \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts send-counts \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z \
   -format json

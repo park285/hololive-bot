@@ -1,10 +1,8 @@
-package main
+package communityshortscli
 
 import (
 	"errors"
 	"flag"
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/observationquery"
@@ -20,33 +18,39 @@ type sendCountsFlags struct {
 	windowExplicit     bool
 }
 
-func main() {
-	flags := parseSendCountsFlags()
-
-	err := reportcli.RunOptionalObservationReport(
-		sendCountsReportParams(flags),
-		sendCountsReportCommand(flags),
-	)
+func runSendCountsCommand(ctx commandContext, args []string) error {
+	flags, err := parseSendCountsFlags(ctx, args)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+		return err
 	}
+
+	return reportcli.RunOptionalObservationReport(
+		sendCountsReportParams(flags),
+		sendCountsReportCommand(ctx, flags),
+	)
 }
 
-func parseSendCountsFlags() sendCountsFlags {
+func parseSendCountsFlags(ctx commandContext, args []string) (sendCountsFlags, error) {
+	fs := newFlagSet(ctx, "send-counts")
 	flags := sendCountsFlags{
-		window:             flag.Duration("window", 24*time.Hour, "lookback window for recent community/shorts per-post send counts"),
-		observationRuntime: flag.String("observation-runtime", "", "runtime name for a specific observation window"),
-		observationCutover: flag.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
-		format:             flag.String("format", "markdown", "output format: markdown or json"),
+		window:             fs.Duration("window", 24*time.Hour, "lookback window for recent community/shorts per-post send counts"),
+		observationRuntime: fs.String("observation-runtime", "", "runtime name for a specific observation window"),
+		observationCutover: fs.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
+		format:             fs.String("format", "markdown", "output format: markdown or json"),
 	}
-	flag.Parse()
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "window" {
-			flags.windowExplicit = true
-		}
+	if err := fs.Parse(args); err != nil {
+		return sendCountsFlags{}, err
+	}
+	flags.windowExplicit = flagSetContains(fs, "window")
+	return flags, nil
+}
+
+func flagSetContains(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		found = found || f.Name == name
 	})
-	return flags
+	return found
 }
 
 func sendCountsReportParams(flags sendCountsFlags) reportcli.OptionalObservationParams {
@@ -57,7 +61,7 @@ func sendCountsReportParams(flags sendCountsFlags) reportcli.OptionalObservation
 	}
 }
 
-func sendCountsReportCommand(flags sendCountsFlags) reportcli.OptionalObservationCommand[
+func sendCountsReportCommand(ctx commandContext, flags sendCountsFlags) reportcli.OptionalObservationCommand[
 	opsapp.CommunityShortsSendCountCollectOptions,
 	opsapp.CommunityShortsSendCountReport,
 ] {
@@ -65,6 +69,8 @@ func sendCountsReportCommand(flags sendCountsFlags) reportcli.OptionalObservatio
 		opsapp.CommunityShortsSendCountCollectOptions,
 		opsapp.CommunityShortsSendCountReport,
 	]{
+		Stdout:             ctx.stdout,
+		Stderr:             ctx.stderr,
 		BuildOptions:       buildSendCountsOptions(flags),
 		Collect:            opsapp.CollectCommunityShortsSendCountReportWithOptions,
 		RenderMarkdown:     opsapp.RenderCommunityShortsSendCountMarkdown,
