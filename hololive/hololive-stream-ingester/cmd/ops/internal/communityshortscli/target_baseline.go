@@ -19,7 +19,7 @@ func runTargetBaselineCommand(ctx commandContext, args []string) error {
 
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("Failed to load community/shorts baseline config: %w", err)
+		return fmt.Errorf("failed to load community/shorts baseline config: %w", err)
 	}
 
 	logger := slog.New(slog.NewTextHandler(ctx.stderr, nil))
@@ -28,14 +28,14 @@ func runTargetBaselineCommand(ctx commandContext, args []string) error {
 
 	baseline, err := communityshorts.CollectTargetBaseline(reqCtx, cfg, logger)
 	if err != nil {
-		return fmt.Errorf("Failed to collect community/shorts target baseline: %w", err)
+		return fmt.Errorf("failed to collect community/shorts target baseline: %w", err)
 	}
 
 	encoder := json.NewEncoder(ctx.stdout)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(baseline); err != nil {
-		return fmt.Errorf("Failed to write community/shorts target baseline JSON: %w", err)
+		return fmt.Errorf("failed to write community/shorts target baseline JSON: %w", err)
 	}
 	return nil
 }
