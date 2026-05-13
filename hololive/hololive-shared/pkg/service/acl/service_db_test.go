@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,10 +55,12 @@ type aclLoadFromDatabaseInitCreateErrorCase struct {
 	wantErr string
 }
 
+var aclSQLiteDBCounter atomic.Uint64
+
 func newACLServiceWithSQLite(t *testing.T) (*gorm.DB, *cachemocks.Client, *aclCacheCallCounter) {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:acl_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	dsn := fmt.Sprintf("file:acl_%d_%d?mode=memory&cache=shared", time.Now().UnixNano(), aclSQLiteDBCounter.Add(1))
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {

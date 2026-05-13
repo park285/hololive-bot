@@ -73,7 +73,16 @@ class FunctionMetric:
 def iter_go_files(root: Path) -> list[Path]:
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "*.go"],
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "*.go",
+            ],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
