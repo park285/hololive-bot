@@ -127,6 +127,7 @@ type ScraperSnapshotConfig struct {
 
 type ScraperChannelHealthConfig struct {
 	Enabled           bool
+	Enforce           bool
 	TTL               time.Duration
 	ParserDriftBase   time.Duration
 	ParserDriftMax    time.Duration
@@ -145,6 +146,10 @@ type ScraperBrowserDiagnosticConfig struct {
 	Timeout  time.Duration
 }
 
+type ScraperPollTieringConfig struct {
+	Enabled bool
+}
+
 type ScraperConfig struct {
 	ProxyEnabled        bool
 	ProxyURL            string // SOCKS5 프록시 URL (예: socks5://user:pass@host:1080)
@@ -156,6 +161,7 @@ type ScraperConfig struct {
 	Snapshot            ScraperSnapshotConfig
 	ChannelHealth       ScraperChannelHealthConfig
 	BrowserDiagnostic   ScraperBrowserDiagnosticConfig
+	PollTiering         ScraperPollTieringConfig
 }
 
 type ScraperSchedulerConfig struct {
@@ -207,6 +213,7 @@ func DefaultScraperSnapshotConfig() ScraperSnapshotConfig {
 func DefaultScraperChannelHealthConfig() ScraperChannelHealthConfig {
 	return ScraperChannelHealthConfig{
 		Enabled:           true,
+		Enforce:           false,
 		TTL:               24 * time.Hour,
 		ParserDriftBase:   10 * time.Minute,
 		ParserDriftMax:    6 * time.Hour,
@@ -218,6 +225,10 @@ func DefaultScraperChannelHealthConfig() ScraperChannelHealthConfig {
 		HTTPStatusMax:     time.Hour,
 		SuccessDecaySteps: 1,
 	}
+}
+
+func DefaultScraperPollTieringConfig() ScraperPollTieringConfig {
+	return ScraperPollTieringConfig{Enabled: false}
 }
 
 func DefaultScraperBrowserDiagnosticConfig() ScraperBrowserDiagnosticConfig {

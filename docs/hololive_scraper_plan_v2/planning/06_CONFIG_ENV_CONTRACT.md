@@ -22,7 +22,7 @@ SCRAPER_CHANNEL_HEALTH_SUCCESS_DECAY_STEPS=1
 ### 권장 default
 
 - Enabled: true
-- Enforce: false로 시작 권장
+- Enforce: false
 - Parser drift base: 10분
 - Parser drift max: 6시간
 - Timeout/transport base: 2분
@@ -80,7 +80,21 @@ SCRAPER_FETCHER_ENGINE=nethttp
 
 `browser_snapshot`은 `SCRAPER_FETCHER_ENGINE` 값으로 허용하지 않습니다. browser snapshot은 `SCRAPER_BROWSER_DIAGNOSTIC_*` 설정과 명시적 diagnostic path에서만 사용합니다.
 
-## 5. Rollback env set
+## 5. Poll tiering
+
+### Env
+
+```bash
+SCRAPER_POLL_TIERING_ENABLED=false
+```
+
+### 권장 default
+
+- Enabled: false
+- 첫 rollout은 flat registration 유지
+- enabled 상태에서는 registry version이 변하지 않아도 주기적으로 active/warm/cold를 재분류
+
+## 6. Rollback env set
 
 ### Snapshot off
 
@@ -92,6 +106,13 @@ SCRAPER_SNAPSHOT_ENABLED=false
 
 ```bash
 SCRAPER_CHANNEL_HEALTH_ENABLED=false
+SCRAPER_CHANNEL_HEALTH_ENFORCE=false
+```
+
+### Poll tiering off
+
+```bash
+SCRAPER_POLL_TIERING_ENABLED=false
 ```
 
 ### Channel health dry-run
@@ -107,7 +128,7 @@ SCRAPER_CHANNEL_HEALTH_ENFORCE=false
 SCRAPER_BROWSER_DIAGNOSTIC_ENABLED=false
 ```
 
-## 6. State key namespace
+## 7. State key namespace
 
 권장 state keys:
 

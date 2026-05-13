@@ -19,6 +19,7 @@ type ChannelSourceHealth struct {
 }
 
 type ChannelHealthPolicy struct {
+	Enforce           bool
 	TTL               time.Duration
 	ParserDriftBase   time.Duration
 	ParserDriftMax    time.Duration
@@ -33,6 +34,7 @@ type ChannelHealthPolicy struct {
 
 func DefaultChannelHealthPolicy() ChannelHealthPolicy {
 	return ChannelHealthPolicy{
+		Enforce:           false,
 		TTL:               24 * time.Hour,
 		ParserDriftBase:   10 * time.Minute,
 		ParserDriftMax:    6 * time.Hour,
@@ -80,7 +82,7 @@ func fillPolicyDuration(value *time.Duration, fallback time.Duration) {
 }
 
 func (s *ChannelHealthStore) ShouldSkip(ctx context.Context, channelID string, source FailureSource, now time.Time) (time.Duration, bool) {
-	if s == nil || s.store == nil {
+	if s == nil || s.store == nil || !s.policy.Enforce {
 		return 0, false
 	}
 	health, ok := s.Get(ctx, channelID, source)
