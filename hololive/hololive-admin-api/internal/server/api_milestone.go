@@ -40,28 +40,9 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 		return
 	}
 
-	// 기본값
-	limit := 50
-	offset := 0
-
-	if l := c.Query("limit"); l != "" {
-		parsed, err := parseInt(l)
-		if err != nil || parsed <= 0 || parsed > 100 {
-			sharedserver.RespondError(c, 400, "limit must be an integer between 1 and 100", nil)
-			return
-		}
-
-		limit = parsed
-	}
-
-	if o := c.Query("offset"); o != "" {
-		parsed, err := parseInt(o)
-		if err != nil || parsed < 0 {
-			sharedserver.RespondError(c, 400, "offset must be an integer greater than or equal to 0", nil)
-			return
-		}
-
-		offset = parsed
+	limit, offset, ok := parseMilestonePagination(c)
+	if !ok {
+		return
 	}
 
 	filter := stats.MilestoneFilter{
@@ -86,6 +67,50 @@ func (h *MilestoneAPIHandler) GetMilestones(c *gin.Context) {
 		"limit":      result.Limit,
 		"offset":     result.Offset,
 	})
+}
+
+func parseMilestonePagination(c *gin.Context) (int, int, bool) {
+	limit, ok := parseMilestoneLimit(c)
+	if !ok {
+		return 0, 0, false
+	}
+
+	offset, ok := parseMilestoneOffset(c)
+	if !ok {
+		return 0, 0, false
+	}
+
+	return limit, offset, true
+}
+
+func parseMilestoneLimit(c *gin.Context) (int, bool) {
+	value := c.Query("limit")
+	if value == "" {
+		return 50, true
+	}
+
+	limit, err := parseInt(value)
+	if err != nil || limit <= 0 || limit > 100 {
+		sharedserver.RespondError(c, 400, "limit must be an integer between 1 and 100", nil)
+		return 0, false
+	}
+
+	return limit, true
+}
+
+func parseMilestoneOffset(c *gin.Context) (int, bool) {
+	value := c.Query("offset")
+	if value == "" {
+		return 0, true
+	}
+
+	offset, err := parseInt(value)
+	if err != nil || offset < 0 {
+		sharedserver.RespondError(c, 400, "offset must be an integer greater than or equal to 0", nil)
+		return 0, false
+	}
+
+	return offset, true
 }
 
 // GET /api/milestones/near?threshold=0.9
