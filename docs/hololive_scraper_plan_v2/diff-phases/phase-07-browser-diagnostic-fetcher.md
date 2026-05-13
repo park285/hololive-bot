@@ -37,22 +37,22 @@ index c49ac97..1117777 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/fetcher.go
 @@
  const (
- 	FetcherEngineNetHTTP  FetcherEngine = "nethttp"
- 	FetcherEngineGoScrapy FetcherEngine = "goscrapy"
-+	FetcherEngineBrowserSnapshot FetcherEngine = "browser_snapshot"
+     FetcherEngineNetHTTP  FetcherEngine = "nethttp"
+     FetcherEngineGoScrapy FetcherEngine = "goscrapy"
++    FetcherEngineBrowserSnapshot FetcherEngine = "browser_snapshot"
  )
 @@
  func normalizeFetcherEngine(engine FetcherEngine) FetcherEngine {
--	if engine == FetcherEngineGoScrapy {
-+	switch engine {
-+	case FetcherEngineGoScrapy:
- 		return FetcherEngineGoScrapy
-+	case FetcherEngineBrowserSnapshot:
-+		return FetcherEngineBrowserSnapshot
-+	default:
-+		return FetcherEngineNetHTTP
- 	}
--	return FetcherEngineNetHTTP
+-    if engine == FetcherEngineGoScrapy {
++    switch engine {
++    case FetcherEngineGoScrapy:
+         return FetcherEngineGoScrapy
++    case FetcherEngineBrowserSnapshot:
++        return FetcherEngineBrowserSnapshot
++    default:
++        return FetcherEngineNetHTTP
+     }
+-    return FetcherEngineNetHTTP
  }
 ```
 
@@ -63,19 +63,19 @@ index aaaaaaa..2227777 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/client_http.go
 @@
  func (c *Client) currentPageFetcher() pageFetcher {
- 	netHTTPFetcher := netHTTPPageFetcher{client: c}
--	if normalizeFetcherEngine(c.fetcherEngine) == FetcherEngineGoScrapy {
-+	switch normalizeFetcherEngine(c.fetcherEngine) {
-+	case FetcherEngineGoScrapy:
- 		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}
-+	case FetcherEngineBrowserSnapshot:
-+		// Browser는 운영 기본 fetcher로 사용하지 않는다.
-+		// parser drift 진단 path에서만 명시적으로 호출한다.
-+		return netHTTPFetcher
-+	default:
-+		return netHTTPFetcher
- 	}
--	return netHTTPFetcher
+     netHTTPFetcher := netHTTPPageFetcher{client: c}
+-    if normalizeFetcherEngine(c.fetcherEngine) == FetcherEngineGoScrapy {
++    switch normalizeFetcherEngine(c.fetcherEngine) {
++    case FetcherEngineGoScrapy:
+         return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}
++    case FetcherEngineBrowserSnapshot:
++        // Browser는 운영 기본 fetcher로 사용하지 않는다.
++        // parser drift 진단 path에서만 명시적으로 호출한다.
++        return netHTTPFetcher
++    default:
++        return netHTTPFetcher
+     }
+-    return netHTTPFetcher
  }
 ```
 
@@ -91,100 +91,100 @@ index 0000000..3337777
 +package scraper
 +
 +import (
-+	"bytes"
-+	"context"
-+	"encoding/json"
-+	"fmt"
-+	"net/http"
-+	"time"
++    "bytes"
++    "context"
++    "encoding/json"
++    "fmt"
++    "net/http"
++    "time"
 +
-+	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
++    "github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
 +)
 +
 +type BrowserSnapshotConfig struct {
-+	Enabled  bool
-+	Endpoint string
-+	Timeout  time.Duration
++    Enabled  bool
++    Endpoint string
++    Timeout  time.Duration
 +}
 +
 +type BrowserSnapshotFetcher struct {
-+	client   *http.Client
-+	endpoint string
-+	timeout  time.Duration
++    client   *http.Client
++    endpoint string
++    timeout  time.Duration
 +}
 +
 +type browserSnapshotRequest struct {
-+	URL        string      `json:"url"`
-+	Headers    http.Header `json:"headers,omitempty"`
-+	Screenshot bool        `json:"screenshot"`
++    URL        string      `json:"url"`
++    Headers    http.Header `json:"headers,omitempty"`
++    Screenshot bool        `json:"screenshot"`
 +}
 +
 +type browserSnapshotResponse struct {
-+	StatusCode int         `json:"status_code"`
-+	HTML       string      `json:"html"`
-+	Screenshot []byte      `json:"screenshot,omitempty"`
-+	Header     http.Header `json:"header,omitempty"`
++    StatusCode int         `json:"status_code"`
++    HTML       string      `json:"html"`
++    Screenshot []byte      `json:"screenshot,omitempty"`
++    Header     http.Header `json:"header,omitempty"`
 +}
 +
 +func NewBrowserSnapshotFetcher(endpoint string, timeout time.Duration) *BrowserSnapshotFetcher {
-+	if timeout <= 0 {
-+		timeout = 20 * time.Second
-+	}
-+	return &BrowserSnapshotFetcher{
-+		client:   &http.Client{Timeout: timeout},
-+		endpoint: endpoint,
-+		timeout:  timeout,
-+	}
++    if timeout <= 0 {
++        timeout = 20 * time.Second
++    }
++    return &BrowserSnapshotFetcher{
++        client:   &http.Client{Timeout: timeout},
++        endpoint: endpoint,
++        timeout:  timeout,
++    }
 +}
 +
 +func (f *BrowserSnapshotFetcher) FetchPage(ctx context.Context, req pageFetchRequest) (pageFetchResponse, error) {
-+	if f == nil || f.endpoint == "" {
-+		return pageFetchResponse{}, fmt.Errorf("browser snapshot endpoint is not configured")
-+	}
-+	payload, err := json.Marshal(browserSnapshotRequest{
-+		URL:        req.URL,
-+		Headers:    req.Header,
-+		Screenshot: true,
-+	})
-+	if err != nil {
-+		return pageFetchResponse{}, fmt.Errorf("marshal browser snapshot request: %w", err)
-+	}
++    if f == nil || f.endpoint == "" {
++        return pageFetchResponse{}, fmt.Errorf("browser snapshot endpoint is not configured")
++    }
++    payload, err := json.Marshal(browserSnapshotRequest{
++        URL:        req.URL,
++        Headers:    req.Header,
++        Screenshot: true,
++    })
++    if err != nil {
++        return pageFetchResponse{}, fmt.Errorf("marshal browser snapshot request: %w", err)
++    }
 +
-+	ctx, cancel := context.WithTimeout(ctx, f.timeout)
-+	defer cancel()
++    ctx, cancel := context.WithTimeout(ctx, f.timeout)
++    defer cancel()
 +
-+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, f.endpoint, bytes.NewReader(payload))
-+	if err != nil {
-+		return pageFetchResponse{}, fmt.Errorf("create browser snapshot request: %w", err)
-+	}
-+	httpReq.Header.Set("Content-Type", "application/json")
++    httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, f.endpoint, bytes.NewReader(payload))
++    if err != nil {
++        return pageFetchResponse{}, fmt.Errorf("create browser snapshot request: %w", err)
++    }
++    httpReq.Header.Set("Content-Type", "application/json")
 +
-+	resp, err := f.client.Do(httpReq)
-+	if err != nil {
-+		return pageFetchResponse{}, fmt.Errorf("browser snapshot request failed: %w", err)
-+	}
-+	defer func() { _ = resp.Body.Close() }()
++    resp, err := f.client.Do(httpReq)
++    if err != nil {
++        return pageFetchResponse{}, fmt.Errorf("browser snapshot request failed: %w", err)
++    }
++    defer func() { _ = resp.Body.Close() }()
 +
-+	body, err := jsonutil.ReadAllLimit(resp.Body, 4<<20)
-+	if err != nil {
-+		return pageFetchResponse{}, fmt.Errorf("read browser snapshot response: %w", err)
-+	}
-+	if resp.StatusCode != http.StatusOK {
-+		return pageFetchResponse{
-+			StatusCode: resp.StatusCode,
-+			Header:     resp.Header.Clone(),
-+		}, fmt.Errorf("browser snapshot unexpected status: %d", resp.StatusCode)
-+	}
++    body, err := jsonutil.ReadAllLimit(resp.Body, 4<<20)
++    if err != nil {
++        return pageFetchResponse{}, fmt.Errorf("read browser snapshot response: %w", err)
++    }
++    if resp.StatusCode != http.StatusOK {
++        return pageFetchResponse{
++            StatusCode: resp.StatusCode,
++            Header:     resp.Header.Clone(),
++        }, fmt.Errorf("browser snapshot unexpected status: %d", resp.StatusCode)
++    }
 +
-+	var parsed browserSnapshotResponse
-+	if err := json.Unmarshal(body, &parsed); err != nil {
-+		return pageFetchResponse{}, fmt.Errorf("decode browser snapshot response: %w", err)
-+	}
-+	return pageFetchResponse{
-+		StatusCode: parsed.StatusCode,
-+		Header:     parsed.Header,
-+		Body:       []byte(parsed.HTML),
-+	}, nil
++    var parsed browserSnapshotResponse
++    if err := json.Unmarshal(body, &parsed); err != nil {
++        return pageFetchResponse{}, fmt.Errorf("decode browser snapshot response: %w", err)
++    }
++    return pageFetchResponse{
++        StatusCode: parsed.StatusCode,
++        Header:     parsed.Header,
++        Body:       []byte(parsed.HTML),
++    }, nil
 +}
 ```
 
@@ -200,63 +200,63 @@ index 0000000..4447777
 +package scraper
 +
 +import (
-+	"context"
-+	"fmt"
-+	"log/slog"
-+	"net/http"
-+	"time"
++    "context"
++    "fmt"
++    "log/slog"
++    "net/http"
++    "time"
 +)
 +
 +const browserDiagnosticMinParserDriftFailures = 3
 +
 +func (c *Client) CaptureBrowserDiagnosticSnapshot(ctx context.Context, channelID string, pageURL string) error {
-+	if c == nil || c.browserSnapshotFetcher == nil {
-+		return nil
-+	}
-+	if c.channelHealth == nil {
-+		return nil
-+	}
-+	health, ok := c.channelHealth.Get(ctx, channelID, FailureSourceHTML)
-+	if !ok {
-+		return nil
-+	}
-+	if health.LastFailureReason != FailureReasonParserDrift {
-+		return nil
-+	}
-+	if health.ConsecutiveFailures < browserDiagnosticMinParserDriftFailures {
-+		return nil
-+	}
++    if c == nil || c.browserSnapshotFetcher == nil {
++        return nil
++    }
++    if c.channelHealth == nil {
++        return nil
++    }
++    health, ok := c.channelHealth.Get(ctx, channelID, FailureSourceHTML)
++    if !ok {
++        return nil
++    }
++    if health.LastFailureReason != FailureReasonParserDrift {
++        return nil
++    }
++    if health.ConsecutiveFailures < browserDiagnosticMinParserDriftFailures {
++        return nil
++    }
 +
-+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
-+	if err != nil {
-+		return fmt.Errorf("create browser diagnostic request: %w", err)
-+	}
-+	applyScraperHeaders(req, c.uaProvider.Headers(ctx))
++    req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
++    if err != nil {
++        return fmt.Errorf("create browser diagnostic request: %w", err)
++    }
++    applyScraperHeaders(req, c.uaProvider.Headers(ctx))
 +
-+	resp, err := c.browserSnapshotFetcher.FetchPage(ctx, pageFetchRequest{
-+		URL:    pageURL,
-+		Header: req.Header,
-+	})
-+	if err != nil {
-+		slog.Warn("browser diagnostic snapshot failed",
-+			"channel_id", channelID,
-+			"url", pageURL,
-+			"error", err)
-+		return err
-+	}
++    resp, err := c.browserSnapshotFetcher.FetchPage(ctx, pageFetchRequest{
++        URL:    pageURL,
++        Header: req.Header,
++    })
++    if err != nil {
++        slog.Warn("browser diagnostic snapshot failed",
++            "channel_id", channelID,
++            "url", pageURL,
++            "error", err)
++        return err
++    }
 +
-+	c.captureSnapshot(ctx, Snapshot{
-+		Operation:  "browser_diagnostic",
-+		ChannelID:  channelID,
-+		URL:        pageURL,
-+		Source:     FailureSourceBrowserSnapshot,
-+		Reason:     FailureReasonParserDrift,
-+		Stage:      "rendered_html",
-+		StatusCode: resp.StatusCode,
-+		Body:       resp.Body,
-+		CapturedAt: time.Now().UTC(),
-+	})
-+	return nil
++    c.captureSnapshot(ctx, Snapshot{
++        Operation:  "browser_diagnostic",
++        ChannelID:  channelID,
++        URL:        pageURL,
++        Source:     FailureSourceBrowserSnapshot,
++        Reason:     FailureReasonParserDrift,
++        Stage:      "rendered_html",
++        StatusCode: resp.StatusCode,
++        Body:       resp.Body,
++        CapturedAt: time.Now().UTC(),
++    })
++    return nil
 +}
 ```
 
@@ -268,18 +268,18 @@ index aaa4444..5557777 100644
 --- a/hololive/hololive-shared/pkg/service/youtube/scraper/client_options.go
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/client_options.go
 @@
- 	snapshotSink     SnapshotSink
- 	snapshotPolicy   SnapshotPolicy
-+	browserSnapshotFetcher *BrowserSnapshotFetcher
+     snapshotSink     SnapshotSink
+     snapshotPolicy   SnapshotPolicy
++    browserSnapshotFetcher *BrowserSnapshotFetcher
 @@
  func WithSnapshotPolicy(policy SnapshotPolicy) ClientOption {
 @@
  }
 +
 +func WithBrowserSnapshotFetcher(fetcher *BrowserSnapshotFetcher) ClientOption {
-+	return func(c *Client) {
-+		c.browserSnapshotFetcher = fetcher
-+	}
++    return func(c *Client) {
++        c.browserSnapshotFetcher = fetcher
++    }
 +}
 ```
 
