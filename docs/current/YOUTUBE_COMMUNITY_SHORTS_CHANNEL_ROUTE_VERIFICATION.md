@@ -15,13 +15,13 @@
 리포지토리 루트에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-route-report
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report
 ```
 
 더 긴 관측 창이 필요하면 `-window` 를 지정합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-route-report -window=72h
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts route-report -window=72h
 ```
 
 필요 조건:

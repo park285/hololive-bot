@@ -135,18 +135,18 @@
 repo root에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-delivery-logs -window 24h
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-delivery-logs -window 30m -limit 500 -format json
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs -window 24h
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs -window 30m -limit 500 -format json
 ```
 
 특정 관찰 구간만 보려면 observation key를 함께 지정합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-delivery-logs \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z
 
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-delivery-logs \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts delivery-logs \
   -observation-runtime youtube-scraper \
   -observation-cutover 2026-04-10T00:00:00Z \
   -limit 1000 \

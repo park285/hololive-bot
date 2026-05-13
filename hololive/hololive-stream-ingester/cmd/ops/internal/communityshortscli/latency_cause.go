@@ -1,10 +1,8 @@
-package main
+package communityshortscli
 
 import (
 	"errors"
-	"flag"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -13,34 +11,6 @@ import (
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
 
-type periodFlagValues []string
-
-func (p *periodFlagValues) String() string {
-	return strings.Join(*p, ",")
-}
-
-func (p *periodFlagValues) Set(value string) error {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return fmt.Errorf("period value is empty")
-	}
-	*p = append(*p, trimmed)
-	return nil
-}
-
-func main() {
-	flags := parseLatencyCauseFlags()
-
-	err := reportcli.RunOptionalObservationReport(
-		latencyCauseReportParams(flags),
-		latencyCauseReportCommand(flags),
-	)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-}
-
 type latencyCauseFlags struct {
 	periods            periodFlagValues
 	observationRuntime *string
@@ -48,18 +18,33 @@ type latencyCauseFlags struct {
 	format             *string
 }
 
-func parseLatencyCauseFlags() latencyCauseFlags {
+func runLatencyCauseCommand(ctx commandContext, args []string) error {
+	flags, err := parseLatencyCauseFlags(ctx, args)
+	if err != nil {
+		return err
+	}
+
+	return reportcli.RunOptionalObservationReport(
+		latencyCauseReportParams(flags),
+		latencyCauseReportCommand(ctx, flags),
+	)
+}
+
+func parseLatencyCauseFlags(ctx commandContext, args []string) (latencyCauseFlags, error) {
+	fs := newFlagSet(ctx, "latency-cause-report")
 	var periods periodFlagValues
-	flag.Var(&periods, "period", "period spec in label=duration form; repeatable, defaults to last_1h=1h,last_24h=24h,last_7d=168h")
+	fs.Var(&periods, "period", "period spec in label=duration form; repeatable, defaults to last_1h=1h,last_24h=24h,last_7d=168h")
 	flags := latencyCauseFlags{
 		periods:            periods,
-		observationRuntime: flag.String("observation-runtime", "", "runtime name for a specific observation window"),
-		observationCutover: flag.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
-		format:             flag.String("format", "markdown", "output format: markdown or json"),
+		observationRuntime: fs.String("observation-runtime", "", "runtime name for a specific observation window"),
+		observationCutover: fs.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
+		format:             fs.String("format", "markdown", "output format: markdown or json"),
 	}
-	flag.Parse()
+	if err := fs.Parse(args); err != nil {
+		return latencyCauseFlags{}, err
+	}
 	flags.periods = periods
-	return flags
+	return flags, nil
 }
 
 func latencyCauseReportParams(flags latencyCauseFlags) reportcli.OptionalObservationParams {
@@ -70,7 +55,7 @@ func latencyCauseReportParams(flags latencyCauseFlags) reportcli.OptionalObserva
 	}
 }
 
-func latencyCauseReportCommand(flags latencyCauseFlags) reportcli.OptionalObservationCommand[
+func latencyCauseReportCommand(ctx commandContext, flags latencyCauseFlags) reportcli.OptionalObservationCommand[
 	opsapp.CommunityShortsLatencyCauseCollectOptions,
 	opsapp.CommunityShortsLatencyCauseReport,
 ] {
@@ -78,6 +63,8 @@ func latencyCauseReportCommand(flags latencyCauseFlags) reportcli.OptionalObserv
 		opsapp.CommunityShortsLatencyCauseCollectOptions,
 		opsapp.CommunityShortsLatencyCauseReport,
 	]{
+		Stdout:             ctx.stdout,
+		Stderr:             ctx.stderr,
 		BuildOptions:       buildLatencyCauseOptions(flags),
 		Collect:            opsapp.CollectCommunityShortsLatencyCauseReportWithOptions,
 		RenderMarkdown:     opsapp.RenderCommunityShortsLatencyCauseMarkdown,
@@ -127,7 +114,7 @@ func parseLatencyCausePeriodSpecs(values []string) ([]opsapp.CommunityShortsLate
 
 	specs := make([]opsapp.CommunityShortsLatencyPeriodSpec, 0, len(values))
 	for i := range values {
-		spec, err := parseLatencyCausePeriodSpec(values[i])
+		spec, err := parseLatencyPeriodSpec(values[i])
 		if err != nil {
 			return nil, err
 		}
@@ -135,25 +122,6 @@ func parseLatencyCausePeriodSpecs(values []string) ([]opsapp.CommunityShortsLate
 	}
 
 	return specs, nil
-}
-
-func parseLatencyCausePeriodSpec(value string) (opsapp.CommunityShortsLatencyPeriodSpec, error) {
-	label, rawDuration, ok := strings.Cut(value, "=")
-	if !ok {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q must use label=duration", value)
-	}
-	label = strings.TrimSpace(label)
-	if label == "" {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q has empty label", value)
-	}
-	duration, err := time.ParseDuration(strings.TrimSpace(rawDuration))
-	if err != nil {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q has invalid duration: %w", value, err)
-	}
-	if duration <= 0 {
-		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q must be greater than zero", value)
-	}
-	return opsapp.CommunityShortsLatencyPeriodSpec{Label: label, Window: duration}, nil
 }
 
 func validateCommunityShortsLatencyCauseCLIArgs(
@@ -172,4 +140,40 @@ func validateCommunityShortsLatencyCauseCLIArgs(
 		return errors.New("period and observation query flags are mutually exclusive")
 	}
 	return nil
+}
+
+func parseLatencyPeriodSpecs(values []string) ([]opsapp.CommunityShortsLatencyPeriodSpec, error) {
+	if len(values) == 0 {
+		return opsapp.DefaultCommunityShortsLatencyPeriodSpecs(), nil
+	}
+
+	specs := make([]opsapp.CommunityShortsLatencyPeriodSpec, 0, len(values))
+	for i := range values {
+		spec, err := parseLatencyPeriodSpec(values[i])
+		if err != nil {
+			return nil, err
+		}
+		specs = append(specs, spec)
+	}
+
+	return specs, nil
+}
+
+func parseLatencyPeriodSpec(value string) (opsapp.CommunityShortsLatencyPeriodSpec, error) {
+	label, rawDuration, ok := strings.Cut(value, "=")
+	if !ok {
+		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q must use label=duration", value)
+	}
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q has empty label", value)
+	}
+	duration, err := time.ParseDuration(strings.TrimSpace(rawDuration))
+	if err != nil {
+		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q has invalid duration: %w", value, err)
+	}
+	if duration <= 0 {
+		return opsapp.CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("%q must be greater than zero", value)
+	}
+	return opsapp.CommunityShortsLatencyPeriodSpec{Label: label, Window: duration}, nil
 }
