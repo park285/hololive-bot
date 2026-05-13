@@ -249,6 +249,13 @@ func describeResponsesOutput(resp *responses.Response) string {
 	}
 
 	parts := make([]string, 0, 4)
+	parts = appendResponseStatusDetails(parts, resp)
+	parts = appendResponseOutputDiagnostics(parts, resp.Output)
+
+	return strings.Join(parts, " ")
+}
+
+func appendResponseStatusDetails(parts []string, resp *responses.Response) []string {
 	if resp.Status != "" {
 		parts = append(parts, fmt.Sprintf("status=%s", resp.Status))
 	}
@@ -256,26 +263,15 @@ func describeResponsesOutput(resp *responses.Response) string {
 		parts = append(parts, fmt.Sprintf("incomplete_reason=%s", resp.IncompleteDetails.Reason))
 	}
 
-	outputTypes := make([]string, 0, len(resp.Output))
-	for _, item := range resp.Output {
-		itemType := strings.TrimSpace(item.Type)
-		if itemType == "" {
-			itemType = "unknown"
-		}
-		if item.Status != "" {
-			outputTypes = append(outputTypes, fmt.Sprintf("%s/%s", itemType, item.Status))
-		} else {
-			outputTypes = append(outputTypes, itemType)
-		}
+	return parts
+}
 
-		if item.Type != "message" {
-			continue
-		}
-		for _, content := range item.Content {
-			if content.Type == "refusal" && strings.TrimSpace(content.Refusal) != "" {
-				parts = append(parts, fmt.Sprintf("refusal=%s", strings.TrimSpace(content.Refusal)))
-				break
-			}
+func appendResponseOutputDiagnostics(parts []string, output []responses.ResponseOutputItemUnion) []string {
+	outputTypes := make([]string, 0, len(output))
+	for _, item := range output {
+		outputTypes = append(outputTypes, describeResponseOutputItemType(item))
+		if refusal := responseOutputItemRefusal(item); refusal != "" {
+			parts = append(parts, fmt.Sprintf("refusal=%s", refusal))
 		}
 	}
 
@@ -283,7 +279,30 @@ func describeResponsesOutput(resp *responses.Response) string {
 		parts = append(parts, fmt.Sprintf("output=%s", strings.Join(outputTypes, ",")))
 	}
 
-	return strings.Join(parts, " ")
+	return parts
+}
+
+func describeResponseOutputItemType(item responses.ResponseOutputItemUnion) string {
+	itemType := strings.TrimSpace(item.Type)
+	if itemType == "" {
+		itemType = "unknown"
+	}
+	if item.Status != "" {
+		return fmt.Sprintf("%s/%s", itemType, item.Status)
+	}
+	return itemType
+}
+
+func responseOutputItemRefusal(item responses.ResponseOutputItemUnion) string {
+	if item.Type != "message" {
+		return ""
+	}
+	for _, content := range item.Content {
+		if content.Type == "refusal" && strings.TrimSpace(content.Refusal) != "" {
+			return strings.TrimSpace(content.Refusal)
+		}
+	}
+	return ""
 }
 
 // generateJSONChatCompletions: Chat Completions API로 구조화 JSON 출력을 생성합니다.
@@ -352,20 +371,36 @@ func shouldFallbackToChat(err error) bool {
 		return true
 	}
 
+	if shouldFallbackOpenAIError(err) {
+		return true
+	}
+
+	return shouldFallbackNetworkError(err)
+}
+
+func shouldFallbackOpenAIError(err error) bool {
 	var apiErr *openai.Error
 	if errors.As(err, &apiErr) {
 		if shouldFallbackOpenAIStatus(apiErr.StatusCode) {
 			return true
 		}
 
-		switch strings.ToLower(apiErr.Code) {
-		case "unsupported", "unsupported_endpoint", "unsupported_api", "not_implemented":
-			return true
-		default:
-			return false
-		}
+		return shouldFallbackOpenAICode(apiErr.Code)
 	}
 
+	return false
+}
+
+func shouldFallbackOpenAICode(code string) bool {
+	switch strings.ToLower(code) {
+	case "unsupported", "unsupported_endpoint", "unsupported_api", "not_implemented":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldFallbackNetworkError(err error) bool {
 	// 최소 허용 네트워크 오류:
 	// - dial refused (일시적 라우팅/프록시 장애 가능성)
 	// - 명시적 timeout 계열

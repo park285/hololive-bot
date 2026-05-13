@@ -119,24 +119,12 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
-	cacheKey, cacheKeyErr := buildSummaryCacheKey(events, summaryType, periodKey)
-	if cacheKeyErr != nil {
-		s.logger.Warn("LLM 요약 캐시 키 생성 실패", slog.String("error", cacheKeyErr.Error()))
-	}
-
-	// 캐시 조회
-	if s.cache != nil && cacheKey != "" {
-		var cached string
-		if err := s.cache.Get(ctx, cacheKey, &cached); err == nil && cached != "" {
-			s.logger.Info("LLM 요약 캐시 히트",
-				slog.String("type", string(summaryType)),
-				slog.String("period", periodKey))
-			return SummaryResult{Text: cached, ResultType: sharedmodel.SummaryResultPrimary}
-		}
+	cacheKey := s.summaryCacheKey(events, summaryType, periodKey)
+	if cached, ok := s.cachedSummaryResult(ctx, cacheKey, summaryType, periodKey); ok {
+		return cached
 	}
 
 	searchContext := s.runDualSearch(ctx, summaryType, periodKey)
-
 	resp, err := s.buildSummaryResponse(ctx, events, summaryType, periodKey, searchContext)
 	if err != nil {
 		s.logger.Error("LLM 요약 실패 (fallback 사용)",
@@ -145,19 +133,8 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
-	// post validation: trusted source 기반 discovered_events 정리
 	resp.DiscoveredEvents = filterTrustedDiscoveredEvents(resp.DiscoveredEvents)
-
-	// consensus: primary -> reviewer -> adjudicator(조건부)
-	if s.consensus.Enabled && shouldRunConsensusReview(resp) {
-		consensusResp, consensusUsed := s.runConsensus(ctx, events, summaryType, periodKey, searchContext, resp)
-		if consensusResp != nil {
-			resp = consensusResp
-			if consensusUsed {
-				resp.DiscoveredEvents = filterTrustedDiscoveredEvents(resp.DiscoveredEvents)
-			}
-		}
-	}
+	resp = s.applyConsensusReview(ctx, events, summaryType, periodKey, searchContext, resp)
 
 	result := assembleSummaryText(resp)
 	if result == "" {
@@ -166,31 +143,93 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
-	// 최종 출력 취합 리뷰: 단순 출력은 건너뛰고, 다중 섹션/복합 출력일 때만 보정
-	if s.reviewer != nil && shouldRunFinalOutputReview(resp, result) {
-		if reviewed, applied := s.runFinalOutputReview(ctx, events, summaryType, periodKey, result); applied {
-			result = reviewed
-		}
-	}
+	result = s.reviewFinalSummaryOutput(ctx, events, summaryType, periodKey, resp, result)
+	s.storeSummaryResult(ctx, cacheKey, result)
+	s.logSummaryResultGenerated(summaryType, events, resp, result)
 
-	// 캐시 저장
-	if s.cache != nil && cacheKey != "" {
-		if err := s.cache.Set(ctx, cacheKey, result, summaryCacheTTL); err != nil {
-			s.logger.Warn("LLM 요약 캐시 저장 실패", slog.String("error", err.Error()))
-		}
+	return SummaryResult{
+		Text:       result,
+		ResultType: sharedmodel.SummaryResultPrimary,
 	}
+}
 
+func (s *EventSummarizer) summaryCacheKey(events []domain.MajorEvent, summaryType SummaryType, periodKey string) string {
+	cacheKey, err := buildSummaryCacheKey(events, summaryType, periodKey)
+	if err != nil {
+		s.logger.Warn("LLM 요약 캐시 키 생성 실패", slog.String("error", err.Error()))
+	}
+	return cacheKey
+}
+
+func (s *EventSummarizer) cachedSummaryResult(ctx context.Context, cacheKey string, summaryType SummaryType, periodKey string) (SummaryResult, bool) {
+	if s.cache == nil || cacheKey == "" {
+		return SummaryResult{}, false
+	}
+	var cached string
+	if err := s.cache.Get(ctx, cacheKey, &cached); err != nil || cached == "" {
+		return SummaryResult{}, false
+	}
+	s.logger.Info("LLM 요약 캐시 히트",
+		slog.String("type", string(summaryType)),
+		slog.String("period", periodKey))
+	return SummaryResult{Text: cached, ResultType: sharedmodel.SummaryResultPrimary}, true
+}
+
+func (s *EventSummarizer) applyConsensusReview(
+	ctx context.Context,
+	events []domain.MajorEvent,
+	summaryType SummaryType,
+	periodKey string,
+	searchContext string,
+	resp *summaryResponse,
+) *summaryResponse {
+	if !s.consensus.Enabled || !shouldRunConsensusReview(resp) {
+		return resp
+	}
+	consensusResp, consensusUsed := s.runConsensus(ctx, events, summaryType, periodKey, searchContext, resp)
+	if consensusResp == nil {
+		return resp
+	}
+	if consensusUsed {
+		consensusResp.DiscoveredEvents = filterTrustedDiscoveredEvents(consensusResp.DiscoveredEvents)
+	}
+	return consensusResp
+}
+
+func (s *EventSummarizer) reviewFinalSummaryOutput(
+	ctx context.Context,
+	events []domain.MajorEvent,
+	summaryType SummaryType,
+	periodKey string,
+	resp *summaryResponse,
+	result string,
+) string {
+	if s.reviewer == nil || !shouldRunFinalOutputReview(resp, result) {
+		return result
+	}
+	reviewed, applied := s.runFinalOutputReview(ctx, events, summaryType, periodKey, result)
+	if !applied {
+		return result
+	}
+	return reviewed
+}
+
+func (s *EventSummarizer) storeSummaryResult(ctx context.Context, cacheKey string, result string) {
+	if s.cache == nil || cacheKey == "" {
+		return
+	}
+	if err := s.cache.Set(ctx, cacheKey, result, summaryCacheTTL); err != nil {
+		s.logger.Warn("LLM 요약 캐시 저장 실패", slog.String("error", err.Error()))
+	}
+}
+
+func (s *EventSummarizer) logSummaryResultGenerated(summaryType SummaryType, events []domain.MajorEvent, resp *summaryResponse, result string) {
 	s.logger.Info("LLM 요약 생성 완료",
 		slog.String("type", string(summaryType)),
 		slog.Int("event_count", len(events)),
 		slog.Int("highlight_count", len(resp.Highlights)),
 		slog.Int("discovered_count", len(resp.DiscoveredEvents)),
 		slog.Int("summary_length", len(result)))
-
-	return SummaryResult{
-		Text:       result,
-		ResultType: sharedmodel.SummaryResultPrimary,
-	}
 }
 
 func shouldRunConsensusReview(resp *summaryResponse) bool {
@@ -344,19 +383,27 @@ func isTrustedURLSource(source string) (trusted bool, handled bool) {
 		return false, true
 	}
 
-	account := extractSocialAccount(parsed.Path)
+	return isTrustedURLSocialAccount(parsed.Path), true
+}
+
+func isTrustedURLSocialAccount(path string) bool {
+	account := extractSocialAccount(path)
 	if account == "" {
-		return false, true
+		return false
 	}
 	for _, trustedAccount := range constants.MajorEventConfig.TrustedSocialAccounts {
 		if account == strings.ToLower(strings.TrimSpace(trustedAccount)) {
-			return true, true
+			return true
 		}
 	}
-	return false, true
+	return false
 }
 
 func isTrustedTextSource(source string) bool {
+	return isTrustedTextDomainSource(source) || isTrustedTextSocialSource(source)
+}
+
+func isTrustedTextDomainSource(source string) bool {
 	for _, domain := range constants.MajorEventConfig.TrustedSourceDomains {
 		token := normalizeHost(domain)
 		if token == "" {
@@ -366,22 +413,30 @@ func isTrustedTextSource(source string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func isTrustedTextSocialSource(source string) bool {
 	for _, account := range constants.MajorEventConfig.TrustedSocialAccounts {
 		token := strings.ToLower(strings.TrimSpace(account))
 		if token == "" {
 			continue
 		}
-		if source == "@"+token ||
-			source == "x.com/"+token ||
-			source == "twitter.com/"+token ||
-			source == "https://x.com/"+token ||
-			source == "https://twitter.com/"+token ||
-			source == "http://x.com/"+token ||
-			source == "http://twitter.com/"+token {
+		if isTrustedTextSocialToken(source, token) {
 			return true
 		}
 	}
 	return false
+}
+
+func isTrustedTextSocialToken(source string, token string) bool {
+	return source == "@"+token ||
+		source == "x.com/"+token ||
+		source == "twitter.com/"+token ||
+		source == "https://x.com/"+token ||
+		source == "https://twitter.com/"+token ||
+		source == "http://x.com/"+token ||
+		source == "http://twitter.com/"+token
 }
 
 func parseSourceURL(raw string) (*url.URL, error) {

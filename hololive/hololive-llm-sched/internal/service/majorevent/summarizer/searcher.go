@@ -105,25 +105,29 @@ func formatSearchResults(results []model.SearchResult) string {
 			sb.WriteString("\n\n")
 		}
 
-		if result.Title != "" {
-			fmt.Fprintf(&sb, "[%d] %s", i+1, result.Title)
-		} else {
-			fmt.Fprintf(&sb, "[%d]", i+1)
-		}
-
-		if result.URL != "" {
-			sb.WriteString("\n출처: ")
-			sb.WriteString(result.URL)
-		}
-		if result.PublishedDate != "" {
-			sb.WriteString("\n기간: ")
-			sb.WriteString(result.PublishedDate)
-		}
-		if result.Content != "" {
-			sb.WriteString("\n내용: ")
-			sb.WriteString(result.Content)
-		}
+		writeSearchResultHeader(&sb, i+1, result.Title)
+		writeSearchResultField(&sb, "출처", result.URL)
+		writeSearchResultField(&sb, "기간", result.PublishedDate)
+		writeSearchResultField(&sb, "내용", result.Content)
 	}
 
 	return sb.String()
+}
+
+func writeSearchResultHeader(sb *strings.Builder, index int, title string) {
+	if title != "" {
+		fmt.Fprintf(sb, "[%d] %s", index, title)
+		return
+	}
+	fmt.Fprintf(sb, "[%d]", index)
+}
+
+func writeSearchResultField(sb *strings.Builder, label, value string) {
+	if value == "" {
+		return
+	}
+	sb.WriteString("\n")
+	sb.WriteString(label)
+	sb.WriteString(": ")
+	sb.WriteString(value)
 }

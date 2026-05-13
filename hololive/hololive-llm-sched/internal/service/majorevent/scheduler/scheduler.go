@@ -160,84 +160,130 @@ func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
 func (s *Scheduler) SendWeeklyNotification(ctx context.Context) error {
 	weekStart, weekEnd := GetWeekRange(s.clock())
 	weekKey := weekStart.Format("2006-01-02")
-	lockKey := fmt.Sprintf("majorevent:lock:weekly:%s", weekKey)
-
-	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
+	releaseLock, err := s.acquireWeeklyNotificationLock(ctx, weekKey)
 	if err != nil {
-		return fmt.Errorf("acquire lock: %w", err)
+		return err
 	}
-	if !acquired {
-		return triggercontracts.ErrNotificationInProgress
-	}
-	defer func() { _ = s.locker.Release(ctx, lockKey, token) }()
+	defer releaseLock()
 
+	rooms, events, ok, err := s.weeklyNotificationInputs(ctx, weekStart, weekEnd, weekKey)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+
+	eventIDs, shouldMark, err := s.enqueueWeeklyNotification(ctx, rooms, events, weekKey)
+	if err != nil || !shouldMark {
+		return err
+	}
+	if err := s.repository.MarkEventsAsNotified(ctx, eventIDs, weekKey); err != nil {
+		s.logger.Error("Failed to mark events as notified", slog.String("error", err.Error()))
+	}
+
+	return nil
+}
+
+func (s *Scheduler) weeklyNotificationInputs(
+	ctx context.Context,
+	weekStart time.Time,
+	weekEnd time.Time,
+	weekKey string,
+) ([]*domain.EventRoomSubscription, []*domain.MajorEvent, bool, error) {
 	rooms, err := s.repository.GetSubscribedRooms(ctx)
 	if err != nil {
-		return fmt.Errorf("get subscribed rooms: %w", err)
+		return nil, nil, false, fmt.Errorf("get subscribed rooms: %w", err)
 	}
-
 	if len(rooms) == 0 {
 		s.logger.Info("No subscribed rooms, skipping notification")
-		return nil
+		return nil, nil, false, nil
 	}
 
 	events, err := s.repository.GetEventsByDateRange(ctx, weekStart, weekEnd, weekKey)
 	if err != nil {
-		return fmt.Errorf("get events from db: %w", err)
+		return nil, nil, false, fmt.Errorf("get events from db: %w", err)
 	}
-
 	if len(events) == 0 {
 		s.logger.Info("No events for this week, skipping notification",
 			slog.Time("week_start", weekStart),
 			slog.Time("week_end", weekEnd))
-		return nil
+		return nil, nil, false, nil
 	}
+	return rooms, events, true, nil
+}
 
+func (s *Scheduler) enqueueWeeklyNotification(
+	ctx context.Context,
+	rooms []*domain.EventRoomSubscription,
+	events []*domain.MajorEvent,
+	weekKey string,
+) ([]int, bool, error) {
+	domainEvents, eventIDs := weeklyDomainEvents(events)
+	message := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
+	result := enqueueToRooms(ctx, s.outboxRepo, roomTargets(rooms), domain.DeliveryKindMajorEventWeekly, weekKey, message, s.logger)
+	s.logWeeklyNotificationEnqueueResult(result, len(events))
+	shouldMark, err := s.shouldMarkWeeklyEvents(result)
+	return eventIDs, shouldMark, err
+}
+
+func (s *Scheduler) logWeeklyNotificationEnqueueResult(result delivery.SendResult, eventCount int) {
+	s.logger.Info("Weekly notification enqueue result",
+		slog.Int("attempted", result.Attempted),
+		slog.Int("sent", result.Sent),
+		slog.Int("failed", result.Failed),
+		slog.Int("event_count", eventCount))
+}
+
+func (s *Scheduler) acquireWeeklyNotificationLock(ctx context.Context, weekKey string) (func(), error) {
+	lockKey := fmt.Sprintf("majorevent:lock:weekly:%s", weekKey)
+	token, acquired, err := s.locker.TryAcquire(ctx, lockKey, delivery.DefaultExecutionLockTTL)
+	if err != nil {
+		return nil, fmt.Errorf("acquire lock: %w", err)
+	}
+	if !acquired {
+		return nil, triggercontracts.ErrNotificationInProgress
+	}
+	return func() { _ = s.locker.Release(ctx, lockKey, token) }, nil
+}
+
+func weeklyDomainEvents(events []*domain.MajorEvent) ([]domain.MajorEvent, []int) {
 	domainEvents := make([]domain.MajorEvent, len(events))
 	eventIDs := make([]int, len(events))
 	for i, e := range events {
 		domainEvents[i] = *e
 		eventIDs[i] = e.ID
 	}
+	return domainEvents, eventIDs
+}
 
-	// LLM 요약 시도 (실패 시 빈 문자열 → template fallback)
+func (s *Scheduler) weeklyNotificationMessage(ctx context.Context, events []domain.MajorEvent, weekKey string) string {
 	var llmSummary string
 	if s.summarizer != nil {
-		llmSummary = s.summarizer.Summarize(ctx, domainEvents, mesummarizer.SummaryTypeWeekly, weekKey)
+		llmSummary = s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeWeekly, weekKey)
 	}
+	return s.formatter.FormatMajorEventWeeklySummary(ctx, events, llmSummary)
+}
 
-	message := s.formatter.FormatMajorEventWeeklySummary(ctx, domainEvents, llmSummary)
-
-	// Room별 outbox enqueue
+func roomTargets(rooms []*domain.EventRoomSubscription) []roomTarget {
 	targets := make([]roomTarget, len(rooms))
 	for i, room := range rooms {
 		targets[i] = roomTarget{roomID: room.RoomID}
 	}
+	return targets
+}
 
-	result := enqueueToRooms(ctx, s.outboxRepo, targets, domain.DeliveryKindMajorEventWeekly, weekKey, message, s.logger)
-
-	s.logger.Info("Weekly notification enqueue result",
-		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
-		slog.Int("failed", result.Failed),
-		slog.Int("event_count", len(events)))
-
-	// 마킹 결정표: 전체 성공 → mark, 부분 실패 → no mark, 전체 실패 → error
+func (s *Scheduler) shouldMarkWeeklyEvents(result delivery.SendResult) (bool, error) {
 	switch {
 	case result.Sent == 0 && result.Failed > 0:
-		return fmt.Errorf("all %d room(s) failed to enqueue notification", result.Failed)
+		return false, fmt.Errorf("all %d room(s) failed to enqueue notification", result.Failed)
 	case result.Failed > 0:
-		// 부분 실패 → 마킹 안 함 (다음 실행에서 재시도)
 		s.logger.Warn("Partial room enqueue failure, deferring event marking",
 			slog.Int("sent", result.Sent),
 			slog.Int("failed", result.Failed),
 			slog.Any("failed_rooms", result.FailedRooms))
-		return nil
+		return false, nil
+	default:
+		return true, nil
 	}
-
-	if err := s.repository.MarkEventsAsNotified(ctx, eventIDs, weekKey); err != nil {
-		s.logger.Error("Failed to mark events as notified", slog.String("error", err.Error()))
-	}
-
-	return nil
 }

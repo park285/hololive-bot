@@ -257,7 +257,6 @@ func (c *ConsensusSummarizer) adjudicate(
 	return &response, nil
 }
 
-
 func reviewSystemPrompt() string {
 	return `You are a fact-checking reviewer for hololive member-news summaries.
 Your task is to verify the PRIMARY summary against the original candidate data.
@@ -312,32 +311,60 @@ func buildPromptCandidates(input model.SummarizeInput) []promptCandidate {
 }
 
 func reviewVerdictSchema() map[string]any {
+	return objectSchema(
+		map[string]any{
+			"approved":   typeSchema("boolean"),
+			"issues":     arraySchema(reviewVerdictIssueSchema()),
+			"confidence": numberRangeSchema(0.0, 1.0),
+		},
+		[]string{"approved", "issues", "confidence"},
+	)
+}
+
+func reviewVerdictIssueSchema() map[string]any {
+	return objectSchema(
+		map[string]any{
+			"field":       typeSchema("string"),
+			"item_index":  typeSchema("integer"),
+			"severity":    enumSchema("string", []string{"critical", "warning", "info"}),
+			"description": typeSchema("string"),
+		},
+		[]string{"field", "item_index", "severity", "description"},
+	)
+}
+
+func objectSchema(properties map[string]any, required []string) map[string]any {
 	return map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"properties": map[string]any{
-			"approved": map[string]any{"type": "boolean"},
-			"issues": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"field":       map[string]any{"type": "string"},
-						"item_index":  map[string]any{"type": "integer"},
-						"severity":    map[string]any{"type": "string", "enum": []string{"critical", "warning", "info"}},
-						"description": map[string]any{"type": "string"},
-					},
-					"required": []string{"field", "item_index", "severity", "description"},
-				},
-			},
-			"confidence": map[string]any{
-				"type":    "number",
-				"minimum": 0.0,
-				"maximum": 1.0,
-			},
-		},
-		"required": []string{"approved", "issues", "confidence"},
+		"properties":           properties,
+		"required":             required,
+	}
+}
+
+func arraySchema(items map[string]any) map[string]any {
+	return map[string]any{
+		"type":  "array",
+		"items": items,
+	}
+}
+
+func typeSchema(schemaType string) map[string]any {
+	return map[string]any{"type": schemaType}
+}
+
+func enumSchema(schemaType string, values []string) map[string]any {
+	return map[string]any{
+		"type": schemaType,
+		"enum": values,
+	}
+}
+
+func numberRangeSchema(minimum, maximum float64) map[string]any {
+	return map[string]any{
+		"type":    "number",
+		"minimum": minimum,
+		"maximum": maximum,
 	}
 }
 
