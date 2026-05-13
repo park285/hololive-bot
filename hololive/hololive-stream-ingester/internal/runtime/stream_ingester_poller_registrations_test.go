@@ -215,10 +215,12 @@ func TestBuildStreamIngesterChannelPollerRegistrations_TieredTargetsReduceRPM(t 
 		Stats:     6 * time.Hour,
 		Live:      10 * time.Minute,
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
+	flatCfg := cfg
+	flatCfg.PollTiering.Enabled = false
 	nilDB := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }}
 	activityDB := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
 
-	flat := buildStreamIngesterChannelPollerRegistrations(nilDB, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	flat := buildStreamIngesterChannelPollerRegistrations(nilDB, flatCfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 	tiered := buildStreamIngesterChannelPollerRegistrations(activityDB, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 
 	require.Greater(t, len(tiered), len(flat))
@@ -244,6 +246,30 @@ func TestBuildStreamIngesterChannelPollerRegistrations_TieringDisabledByDefault(
 	registrations := buildStreamIngesterChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE", "UC_COLD"}, []string{"UC_STATS"})
 
 	require.False(t, hasTieredNotificationRegistration(registrations))
+}
+
+func TestBuildStreamIngesterChannelPollerRegistrations_TieringEnabledWithAllActiveTargets(t *testing.T) {
+	now := time.Now().UTC()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}))
+	activeAt := now.Add(-2 * time.Hour)
+	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
+
+	cfg := config.ScraperConfig{
+		Poll: config.ScraperPoll{
+			Videos:    10 * time.Minute,
+			Shorts:    10 * time.Minute,
+			Community: 10 * time.Minute,
+			Stats:     6 * time.Hour,
+			Live:      10 * time.Minute,
+		},
+		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
+	}
+	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	registrations := buildStreamIngesterChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE"}, []string{"UC_STATS"})
+
+	require.True(t, hasTieredNotificationRegistration(registrations))
 }
 
 func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {

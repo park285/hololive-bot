@@ -158,7 +158,7 @@ func tryBuildTieredChannelPollerRegistrations(
 		return nil, false
 	}
 	tieredTargets, tierErr := classifyYouTubePollTargetsByActivity(context.Background(), db, targets, time.Now())
-	if tierErr != nil || !shouldUseTieredPollTargets(tieredTargets) {
+	if tierErr != nil {
 		return nil, false
 	}
 	return buildTieredStreamIngesterChannelPollerRegistrations(pollers, poll, tieredTargets, inlineResolveMissingPublishedAt, maxResults), true
