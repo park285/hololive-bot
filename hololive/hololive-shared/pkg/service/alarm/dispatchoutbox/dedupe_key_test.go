@@ -134,3 +134,51 @@ func TestBuildLedgerRowsEventPayloadHashIgnoresEnqueuedAt(t *testing.T) {
 		t.Fatalf("payload hashes differ by enqueued_at: %q != %q", event1.PayloadHash, event2.PayloadHash)
 	}
 }
+
+func TestBuildLedgerRowsYouTubeOutboxUsesSourceIdentity(t *testing.T) {
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeCommunity,
+			RoomID:    "room-1",
+		},
+		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
+		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+			OutboxIDs:         []int64{10, 11},
+			Kind:              domain.OutboxKindCommunityPost,
+			AlarmType:         domain.AlarmTypeCommunity,
+			ChannelID:         "UC_test",
+			RenderTemplateKey: domain.TemplateKeyOutboxCommunityGroup,
+			Items: []domain.YouTubeOutboxItem{
+				{OutboxID: 11, ContentID: "post-b", Payload: `{"post_id":"post-b","content_text":"b"}`},
+				{OutboxID: 10, ContentID: "post-a", Payload: `{"post_id":"post-a","content_text":"a"}`},
+			},
+		},
+		ClaimKeys: []string{
+			"youtube-notification:COMMUNITY_POST:post-a:room-1",
+			"youtube-notification:COMMUNITY_POST:post-b:room-1",
+		},
+		Version: 1,
+	}
+
+	event, delivery, err := buildLedgerRows(envelope, StatusPending)
+	if err != nil {
+		t.Fatalf("buildLedgerRows() error = %v", err)
+	}
+
+	wantEventKey := "youtube-outbox:COMMUNITY_POST:post-a,post-b"
+	if event.EventKey != wantEventKey {
+		t.Fatalf("event key = %q, want %q", event.EventKey, wantEventKey)
+	}
+	if event.AlarmType != domain.AlarmTypeCommunity {
+		t.Fatalf("event alarm type = %q, want %q", event.AlarmType, domain.AlarmTypeCommunity)
+	}
+	if event.ChannelID != "UC_test" {
+		t.Fatalf("event channel id = %q, want UC_test", event.ChannelID)
+	}
+	if !strings.Contains(delivery.DedupeKey, "room-1") {
+		t.Fatalf("delivery dedupe key = %q, want room-specific key", delivery.DedupeKey)
+	}
+	if err := validateEventPayloadRoomAgnostic(event.Payload); err != nil {
+		t.Fatalf("validateEventPayloadRoomAgnostic() error = %v", err)
+	}
+}

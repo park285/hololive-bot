@@ -12,8 +12,10 @@ import (
 )
 
 type eventPayloadEnvelope struct {
-	Notification eventPayloadNotification `json:"notification"`
-	Version      uint8                    `json:"version"`
+	Notification  eventPayloadNotification             `json:"notification"`
+	SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
+	YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
+	Version       uint8                                `json:"version"`
 }
 
 type eventPayloadNotification struct {
@@ -26,6 +28,9 @@ type eventPayloadNotification struct {
 }
 
 func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventInsert, deliveryInsert, error) {
+	if err := envelope.ValidateCanonicalDispatch(); err != nil {
+		return eventInsert{}, deliveryInsert{}, fmt.Errorf("build dispatch ledger rows: validate envelope: %w", err)
+	}
 	input := EnvelopeDedupeInput(envelope)
 	alarmType := input.AlarmType
 	if alarmType == "" {
@@ -67,6 +72,9 @@ func buildLedgerRows(envelope domain.AlarmQueueEnvelope, status Status) (eventIn
 }
 
 func eventCategory(input DedupeInput) string {
+	if input.SourceKind != "" {
+		return string(input.SourceKind)
+	}
 	category := strings.TrimSpace(input.Category)
 	if category != "" {
 		return category
@@ -84,7 +92,9 @@ func marshalEventPayload(envelope domain.AlarmQueueEnvelope) ([]byte, error) {
 			ScheduleChangeMessage:       envelope.Notification.ScheduleChangeMessage,
 			ScheduleChangePreviousStart: envelope.Notification.ScheduleChangePreviousStart,
 		},
-		Version: envelope.Version,
+		SourceKind:    envelope.SourceKind,
+		YouTubeOutbox: envelope.YouTubeOutbox,
+		Version:       envelope.Version,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
