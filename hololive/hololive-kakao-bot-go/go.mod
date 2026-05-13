@@ -5,7 +5,6 @@ go 1.26.3
 // Gin uses goccy/go-json instead of sonic with -tags=go_json.
 
 require (
-	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
@@ -38,6 +37,7 @@ require (
 	github.com/Noooste/uquic-go v1.0.5 // indirect
 	github.com/Noooste/utls v1.3.20 // indirect
 	github.com/Noooste/websocket v1.0.3 // indirect
+	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/antchfx/htmlquery v1.3.6 // indirect
