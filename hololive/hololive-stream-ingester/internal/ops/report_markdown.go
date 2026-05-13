@@ -40,6 +40,16 @@ func writeCommunityShortsMarkdownTable(
 		return
 	}
 
+	writeCommunityShortsMarkdownTableHeader(builder, columns)
+	for rowIndex := range rows {
+		writeCommunityShortsMarkdownTableRow(builder, columns, rows[rowIndex])
+	}
+}
+
+func writeCommunityShortsMarkdownTableHeader(
+	builder *strings.Builder,
+	columns []communityShortsMarkdownColumn,
+) {
 	builder.WriteString("\n| ")
 	for i := range columns {
 		if i > 0 {
@@ -59,20 +69,23 @@ func writeCommunityShortsMarkdownTable(
 		builder.WriteString("---")
 	}
 	builder.WriteString(" |\n")
+}
 
-	for rowIndex := range rows {
-		row := rows[rowIndex]
-		builder.WriteString("| ")
-		for columnIndex := range columns {
-			if columnIndex > 0 {
-				builder.WriteString(" | ")
-			}
-			if columnIndex < len(row) {
-				builder.WriteString(row[columnIndex])
-			}
+func writeCommunityShortsMarkdownTableRow(
+	builder *strings.Builder,
+	columns []communityShortsMarkdownColumn,
+	row []string,
+) {
+	builder.WriteString("| ")
+	for columnIndex := range columns {
+		if columnIndex > 0 {
+			builder.WriteString(" | ")
 		}
-		builder.WriteString(" |\n")
+		if columnIndex < len(row) {
+			builder.WriteString(row[columnIndex])
+		}
 	}
+	builder.WriteString(" |\n")
 }
 
 func writeCommunityShortsMarkdownMessage(builder *strings.Builder, message string) {
@@ -111,22 +124,35 @@ func promoteCommunityShortsMarkdownHeadings(markdown string, depth int) string {
 	lines := strings.Split(markdown, "\n")
 	prefix := strings.Repeat("#", depth)
 	for i := range lines {
-		trimmed := strings.TrimLeft(lines[i], " ")
-		if !strings.HasPrefix(trimmed, "#") {
+		indent, heading, ok := splitCommunityShortsMarkdownHeading(lines[i])
+		if !ok {
 			continue
 		}
 
-		heading := trimmed
-		count := 0
-		for count < len(heading) && heading[count] == '#' {
-			count++
-		}
-		if count == 0 || count >= len(heading) || heading[count] != ' ' {
-			continue
-		}
-
-		indent := lines[i][:len(lines[i])-len(trimmed)]
 		lines[i] = indent + prefix + heading
 	}
 	return strings.Join(lines, "\n")
+}
+
+func splitCommunityShortsMarkdownHeading(line string) (string, string, bool) {
+	trimmed := strings.TrimLeft(line, " ")
+	if !strings.HasPrefix(trimmed, "#") {
+		return "", "", false
+	}
+
+	count := countCommunityShortsMarkdownHeadingMarks(trimmed)
+	if count == 0 || count >= len(trimmed) || trimmed[count] != ' ' {
+		return "", "", false
+	}
+
+	indent := line[:len(line)-len(trimmed)]
+	return indent, trimmed, true
+}
+
+func countCommunityShortsMarkdownHeadingMarks(heading string) int {
+	count := 0
+	for count < len(heading) && heading[count] == '#' {
+		count++
+	}
+	return count
 }

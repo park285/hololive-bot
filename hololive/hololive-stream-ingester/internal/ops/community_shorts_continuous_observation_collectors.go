@@ -72,12 +72,7 @@ func collectCommunityShortsContinuousObservationArtifacts(
 		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("target baseline: %w", err)
 	}
 
-	sendCountQuery := CommunityShortsSendCountQuery{
-		Mode:                        communityShortsSendCountQueryModeObservation,
-		ObservationRuntimeName:      options.ObservationRuntimeName,
-		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
-	}
-	sendCountReport, err := wiring.collectSendCounts(ctx, session, sendCountQuery, now)
+	sendCountReport, err := collectCommunityShortsContinuousObservationSendCounts(ctx, session, now, options, wiring)
 	if err != nil {
 		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("send counts: %w", err)
 	}
@@ -87,50 +82,24 @@ func collectCommunityShortsContinuousObservationArtifacts(
 		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("channel summary: %w", err)
 	}
 
-	deliveryLogQuery := CommunityShortsDeliveryLogQuery{
-		Mode:                        communityShortsDeliveryLogQueryModeObservation,
-		ObservationRuntimeName:      options.ObservationRuntimeName,
-		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
-		Limit:                       options.DeliveryLogLimit,
-	}
-	deliveryLogs, err := wiring.collectDeliveryLogs(ctx, session, deliveryLogQuery, now)
+	deliveryLogs, err := collectCommunityShortsContinuousObservationDeliveryLogs(ctx, session, now, options, wiring)
 	if err != nil {
 		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("delivery logs: %w", err)
 	}
 
-	latencyCauseQuery := CommunityShortsLatencyCauseQuery{
-		Mode:                        communityShortsLatencyCauseQueryModeObservation,
-		ObservationRuntimeName:      options.ObservationRuntimeName,
-		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
-	}
-	latencyCause, err := wiring.collectLatencyCause(ctx, session, latencyCauseQuery, now, nil)
+	latencyCause, err := collectCommunityShortsContinuousObservationLatencyCause(ctx, session, now, options, wiring)
 	if err != nil {
 		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("latency cause: %w", err)
 	}
 
-	latencyPeriods, err := wiring.buildLatencyPeriods(now, options.LatencyPeriodSpecs)
-	if err != nil {
-		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("latency periods: %w", err)
-	}
-	latencyPeriodReport, err := wiring.collectLatencyPeriods(ctx, session, now, latencyPeriods)
+	latencyPeriodReport, err := collectCommunityShortsContinuousObservationLatencyPeriods(ctx, session, now, options, wiring)
 	if err != nil {
 		return communityShortsContinuousObservationArtifacts{}, fmt.Errorf("latency periods: %w", err)
 	}
 
-	var alarmSentHistoryDataset *CommunityShortsAlarmSentHistoryDatasetReport
-	var alarmSentHistoryDatasetErr error
-	if observation.Status == CommunityShortsContinuousObservationStatusFinalized {
-		datasetQuery := CommunityShortsAlarmSentHistoryDatasetQuery{
-			ObservationRuntimeName:      options.ObservationRuntimeName,
-			ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
-		}
-		dataset, datasetErr := wiring.collectAlarmSentHistoryDataset(ctx, session, now, datasetQuery)
-		if datasetErr != nil {
-			alarmSentHistoryDatasetErr = datasetErr
-		} else {
-			alarmSentHistoryDataset = &dataset
-		}
-	}
+	alarmSentHistoryDataset, alarmSentHistoryDatasetErr := collectCommunityShortsContinuousObservationAlarmSentHistoryDataset(
+		ctx, session, now, options, observation, wiring,
+	)
 
 	return communityShortsContinuousObservationArtifacts{
 		Observation:                observation,
@@ -143,6 +112,89 @@ func collectCommunityShortsContinuousObservationArtifacts(
 		LatencyPeriods:             latencyPeriodReport,
 		LatencyCause:               latencyCause,
 	}, nil
+}
+
+func collectCommunityShortsContinuousObservationSendCounts(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	now time.Time,
+	options CommunityShortsContinuousObservationCollectOptions,
+	wiring communityShortsContinuousObservationCollectorWiring,
+) (CommunityShortsSendCountReport, error) {
+	query := CommunityShortsSendCountQuery{
+		Mode:                        communityShortsSendCountQueryModeObservation,
+		ObservationRuntimeName:      options.ObservationRuntimeName,
+		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
+	}
+	return wiring.collectSendCounts(ctx, session, query, now)
+}
+
+func collectCommunityShortsContinuousObservationDeliveryLogs(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	now time.Time,
+	options CommunityShortsContinuousObservationCollectOptions,
+	wiring communityShortsContinuousObservationCollectorWiring,
+) (CommunityShortsDeliveryLogReport, error) {
+	query := CommunityShortsDeliveryLogQuery{
+		Mode:                        communityShortsDeliveryLogQueryModeObservation,
+		ObservationRuntimeName:      options.ObservationRuntimeName,
+		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
+		Limit:                       options.DeliveryLogLimit,
+	}
+	return wiring.collectDeliveryLogs(ctx, session, query, now)
+}
+
+func collectCommunityShortsContinuousObservationLatencyCause(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	now time.Time,
+	options CommunityShortsContinuousObservationCollectOptions,
+	wiring communityShortsContinuousObservationCollectorWiring,
+) (CommunityShortsLatencyCauseReport, error) {
+	query := CommunityShortsLatencyCauseQuery{
+		Mode:                        communityShortsLatencyCauseQueryModeObservation,
+		ObservationRuntimeName:      options.ObservationRuntimeName,
+		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
+	}
+	return wiring.collectLatencyCause(ctx, session, query, now, nil)
+}
+
+func collectCommunityShortsContinuousObservationLatencyPeriods(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	now time.Time,
+	options CommunityShortsContinuousObservationCollectOptions,
+	wiring communityShortsContinuousObservationCollectorWiring,
+) (CommunityShortsLatencyPeriodReport, error) {
+	latencyPeriods, err := wiring.buildLatencyPeriods(now, options.LatencyPeriodSpecs)
+	if err != nil {
+		return CommunityShortsLatencyPeriodReport{}, err
+	}
+	return wiring.collectLatencyPeriods(ctx, session, now, latencyPeriods)
+}
+
+func collectCommunityShortsContinuousObservationAlarmSentHistoryDataset(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	now time.Time,
+	options CommunityShortsContinuousObservationCollectOptions,
+	observation CommunityShortsContinuousObservationWindow,
+	wiring communityShortsContinuousObservationCollectorWiring,
+) (*CommunityShortsAlarmSentHistoryDatasetReport, error) {
+	if observation.Status != CommunityShortsContinuousObservationStatusFinalized {
+		return nil, nil
+	}
+
+	query := CommunityShortsAlarmSentHistoryDatasetQuery{
+		ObservationRuntimeName:      options.ObservationRuntimeName,
+		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(&options.ObservationBigBangCutoverAt),
+	}
+	dataset, err := wiring.collectAlarmSentHistoryDataset(ctx, session, now, query)
+	if err != nil {
+		return nil, err
+	}
+	return &dataset, nil
 }
 
 func collectCommunityShortsTargetBaselineWithSession(

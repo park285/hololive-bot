@@ -105,52 +105,98 @@ func collectCommunityShortsDeliveryLogReportWithSession(
 		return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: session is nil")
 	}
 
-	var err error
 	var rows []domain.YouTubeNotificationDeliveryTelemetry
+	var err error
 	if query.Mode == communityShortsDeliveryLogQueryModeObservation {
-		state, stateErr := resolveCommunityShortsObservationQueryState(
-			ctx,
-			session.trackingRepository,
-			query.ObservationRuntimeName,
-			*query.ObservationBigBangCutoverAt,
-			now,
-		)
-		if stateErr != nil {
-			return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: find observation window: %w", stateErr)
-		}
-		if state.Window == nil {
-			return CommunityShortsDeliveryLogReport{}, fmt.Errorf(
-				"collect community shorts delivery log report: observation window not found: runtime=%s cutover=%s",
-				query.ObservationRuntimeName,
-				formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
-			)
-		}
-		query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
-		query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
-
-		if state.Finalized {
-			rows, err = session.telemetryRepo.ListByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-			if err != nil {
-				return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: list finalized observation-window logs: %w", err)
-			}
-		} else {
-			rows, err = session.telemetryRepo.ListByObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-			if err != nil {
-				return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: list active observation-window logs: %w", err)
-			}
-		}
+		query, rows, err = listCommunityShortsDeliveryObservationLogs(ctx, session, query, now)
 	} else {
-		fetchLimit := query.Limit + 1
-		rows, err = session.telemetryRepo.ListCommunityShortsDeliveryLogsSince(ctx, *query.WindowStart, fetchLimit)
-		if err != nil {
-			return CommunityShortsDeliveryLogReport{}, fmt.Errorf("collect community shorts delivery log report: list recent logs: %w", err)
-		}
+		rows, err = listCommunityShortsDeliveryRecentLogs(ctx, session, query)
+	}
+	if err != nil {
+		return CommunityShortsDeliveryLogReport{}, err
 	}
 
 	trimmedRows, truncated := trimCommunityShortsDeliveryLogRows(rows, query.Limit)
 	query.Truncated = truncated
 
 	return BuildCommunityShortsDeliveryLogReport(query, trimmedRows, now), nil
+}
+
+func listCommunityShortsDeliveryObservationLogs(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsDeliveryLogQuery,
+	now time.Time,
+) (CommunityShortsDeliveryLogQuery, []domain.YouTubeNotificationDeliveryTelemetry, error) {
+	state, err := resolveCommunityShortsDeliveryLogObservationState(ctx, session, query, now)
+	if err != nil {
+		return query, nil, err
+	}
+	query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
+	query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
+
+	rows, err := listCommunityShortsDeliveryLogsForObservationState(ctx, session, query, state)
+	return query, rows, err
+}
+
+func resolveCommunityShortsDeliveryLogObservationState(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsDeliveryLogQuery,
+	now time.Time,
+) (communityShortsObservationQueryState, error) {
+	state, err := resolveCommunityShortsObservationQueryState(
+		ctx,
+		session.trackingRepository,
+		query.ObservationRuntimeName,
+		*query.ObservationBigBangCutoverAt,
+		now,
+	)
+	if err != nil {
+		return communityShortsObservationQueryState{}, fmt.Errorf("collect community shorts delivery log report: find observation window: %w", err)
+	}
+	if state.Window == nil {
+		return communityShortsObservationQueryState{}, fmt.Errorf(
+			"collect community shorts delivery log report: observation window not found: runtime=%s cutover=%s",
+			query.ObservationRuntimeName,
+			formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
+		)
+	}
+	return state, nil
+}
+
+func listCommunityShortsDeliveryLogsForObservationState(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsDeliveryLogQuery,
+	state communityShortsObservationQueryState,
+) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
+	if state.Finalized {
+		rows, err := session.telemetryRepo.ListByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+		if err != nil {
+			return nil, fmt.Errorf("collect community shorts delivery log report: list finalized observation-window logs: %w", err)
+		}
+		return rows, nil
+	}
+
+	rows, err := session.telemetryRepo.ListByObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
+	if err != nil {
+		return nil, fmt.Errorf("collect community shorts delivery log report: list active observation-window logs: %w", err)
+	}
+	return rows, nil
+}
+
+func listCommunityShortsDeliveryRecentLogs(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsDeliveryLogQuery,
+) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
+	fetchLimit := query.Limit + 1
+	rows, err := session.telemetryRepo.ListCommunityShortsDeliveryLogsSince(ctx, *query.WindowStart, fetchLimit)
+	if err != nil {
+		return nil, fmt.Errorf("collect community shorts delivery log report: list recent logs: %w", err)
+	}
+	return rows, nil
 }
 
 func normalizeCommunityShortsDeliveryLogCollectOptions(
@@ -164,29 +210,42 @@ func normalizeCommunityShortsDeliveryLogCollectOptions(
 	hasRecentQuery := options.Since != nil && !options.Since.IsZero()
 
 	if hasObservationQuery {
-		if hasRecentQuery {
-			return CommunityShortsDeliveryLogQuery{}, fmt.Errorf("recent window and observation window are mutually exclusive")
-		}
-		if observationRuntimeName == "" || !hasObservationCutover {
-			return CommunityShortsDeliveryLogQuery{}, fmt.Errorf("observation runtime name and cutover must both be set")
-		}
-		return CommunityShortsDeliveryLogQuery{
-			Mode:                        communityShortsDeliveryLogQueryModeObservation,
-			ObservationRuntimeName:      observationRuntimeName,
-			ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt),
-			Limit:                       limit,
-		}, nil
+		return normalizeCommunityShortsDeliveryLogObservationOptions(options, observationRuntimeName, hasObservationCutover, hasRecentQuery, limit)
 	}
 
-	if !hasRecentQuery {
-		return CommunityShortsDeliveryLogQuery{}, fmt.Errorf("recent window since is empty")
+	return normalizeCommunityShortsDeliveryLogRecentOptions(options, hasRecentQuery, limit, now)
+}
+
+func normalizeCommunityShortsDeliveryLogObservationOptions(
+	options CommunityShortsDeliveryLogCollectOptions,
+	observationRuntimeName string,
+	hasObservationCutover bool,
+	hasRecentQuery bool,
+	limit int,
+) (CommunityShortsDeliveryLogQuery, error) {
+	if hasRecentQuery {
+		return CommunityShortsDeliveryLogQuery{}, fmt.Errorf("recent window and observation window are mutually exclusive")
 	}
-	since := normalizeCommunityShortsSendCountTime(*options.Since)
-	if since.IsZero() {
-		return CommunityShortsDeliveryLogQuery{}, fmt.Errorf("recent window since is empty")
+	if observationRuntimeName == "" || !hasObservationCutover {
+		return CommunityShortsDeliveryLogQuery{}, fmt.Errorf("observation runtime name and cutover must both be set")
 	}
-	if since.After(now) {
-		return CommunityShortsDeliveryLogQuery{}, fmt.Errorf("recent window since is after now")
+	return CommunityShortsDeliveryLogQuery{
+		Mode:                        communityShortsDeliveryLogQueryModeObservation,
+		ObservationRuntimeName:      observationRuntimeName,
+		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt),
+		Limit:                       limit,
+	}, nil
+}
+
+func normalizeCommunityShortsDeliveryLogRecentOptions(
+	options CommunityShortsDeliveryLogCollectOptions,
+	hasRecentQuery bool,
+	limit int,
+	now time.Time,
+) (CommunityShortsDeliveryLogQuery, error) {
+	since, err := normalizeCommunityShortsDeliveryLogRecentSince(options.Since, hasRecentQuery, now)
+	if err != nil {
+		return CommunityShortsDeliveryLogQuery{}, err
 	}
 
 	return CommunityShortsDeliveryLogQuery{
@@ -195,6 +254,20 @@ func normalizeCommunityShortsDeliveryLogCollectOptions(
 		WindowEnd:   cloneCommunityShortsSendCountTime(&now),
 		Limit:       limit,
 	}, nil
+}
+
+func normalizeCommunityShortsDeliveryLogRecentSince(sinceValue *time.Time, hasRecentQuery bool, now time.Time) (time.Time, error) {
+	if !hasRecentQuery {
+		return time.Time{}, fmt.Errorf("recent window since is empty")
+	}
+	since := normalizeCommunityShortsSendCountTime(*sinceValue)
+	if since.IsZero() {
+		return time.Time{}, fmt.Errorf("recent window since is empty")
+	}
+	if since.After(now) {
+		return time.Time{}, fmt.Errorf("recent window since is after now")
+	}
+	return since, nil
 }
 
 func normalizeCommunityShortsDeliveryLogRequestedLimit(limit int) int {

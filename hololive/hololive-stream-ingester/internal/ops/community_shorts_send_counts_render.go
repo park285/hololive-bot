@@ -137,16 +137,24 @@ func buildCommunityShortsSendCountVerification(summary CommunityShortsSendCountS
 }
 
 func resolveCommunityShortsSendCountStatus(row CommunityShortsSendCountRow) string {
-	switch {
-	case row.OutboxCount == 0:
-		return "outbox_missing"
-	case row.DuplicateSuccessCount > 0:
-		return "duplicate_success"
-	case row.SuccessSendCount == 0:
-		return "no_success"
-	case row.FailedAttemptCount > 0:
-		return "failed_attempts"
-	default:
-		return "ok"
+	for _, status := range communityShortsSendCountStatuses(row) {
+		if status.match {
+			return status.value
+		}
+	}
+	return "ok"
+}
+
+type communityShortsSendCountStatus struct {
+	match bool
+	value string
+}
+
+func communityShortsSendCountStatuses(row CommunityShortsSendCountRow) []communityShortsSendCountStatus {
+	return []communityShortsSendCountStatus{
+		{match: row.OutboxCount == 0, value: "outbox_missing"},
+		{match: row.DuplicateSuccessCount > 0, value: "duplicate_success"},
+		{match: row.SuccessSendCount == 0, value: "no_success"},
+		{match: row.FailedAttemptCount > 0, value: "failed_attempts"},
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
@@ -80,13 +81,46 @@ func collectCommunityShortsAlarmSentHistoryDatasetReportWithSession(
 	query.WindowStart = cloneCommunityShortsSendCountTime(&window.ObservationStartedAt)
 	query.WindowEnd = cloneCommunityShortsSendCountTime(&window.ObservationEndedAt)
 
+	collected, err := collectCommunityShortsAlarmSentHistoryDatasetRows(ctx, session, query, window)
+	if err != nil {
+		return CommunityShortsAlarmSentHistoryDatasetReport{}, err
+	}
+
+	comparison, err := buildCommunityShortsAlarmSentHistoryDatasetComparison(
+		ctx,
+		session.trackingRepository,
+		collected.Baselines,
+		collected.CommunityRows,
+		collected.ShortsRows,
+	)
+	if err != nil {
+		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: build comparison: %w", err)
+	}
+
+	report := BuildCommunityShortsAlarmSentHistoryDatasetReport(collected.CommunityRows, collected.ShortsRows, comparison, query, now)
+	return attachCommunityShortsAlarmSentHistoryDatasetMissingAlarmRows(report, collected.SendStateRows), nil
+}
+
+type communityShortsAlarmSentHistoryDatasetRows struct {
+	Baselines     []domain.YouTubeCommunityShortsObservationPostBaseline
+	CommunityRows []trackingrepo.CommunityAlarmSentHistoryRow
+	ShortsRows    []trackingrepo.ShortsAlarmSentHistoryRow
+	SendStateRows []outbox.PostSendCount
+}
+
+func collectCommunityShortsAlarmSentHistoryDatasetRows(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsAlarmSentHistoryDatasetQuery,
+	window *domain.YouTubeCommunityShortsObservationWindow,
+) (communityShortsAlarmSentHistoryDatasetRows, error) {
 	baselines, err := session.trackingRepository.ListCommunityShortsObservationPostBaselines(
 		ctx,
 		query.ObservationRuntimeName,
 		window.BigBangCutoverAt,
 	)
 	if err != nil {
-		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: list observation baselines: %w", err)
+		return communityShortsAlarmSentHistoryDatasetRows{}, fmt.Errorf("collect community shorts alarm sent history dataset: list observation baselines: %w", err)
 	}
 
 	communityRows, err := session.trackingRepository.ListCommunityAlarmSentHistoriesWithinObservationWindow(
@@ -96,7 +130,7 @@ func collectCommunityShortsAlarmSentHistoryDatasetReportWithSession(
 		window.ObservationEndedAt,
 	)
 	if err != nil {
-		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: list community sent histories: %w", err)
+		return communityShortsAlarmSentHistoryDatasetRows{}, fmt.Errorf("collect community shorts alarm sent history dataset: list community sent histories: %w", err)
 	}
 
 	shortsRows, err := session.trackingRepository.ListShortsAlarmSentHistoriesWithinObservationWindow(
@@ -106,7 +140,7 @@ func collectCommunityShortsAlarmSentHistoryDatasetReportWithSession(
 		window.ObservationEndedAt,
 	)
 	if err != nil {
-		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: list shorts sent histories: %w", err)
+		return communityShortsAlarmSentHistoryDatasetRows{}, fmt.Errorf("collect community shorts alarm sent history dataset: list shorts sent histories: %w", err)
 	}
 
 	sendStateRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(
@@ -115,22 +149,15 @@ func collectCommunityShortsAlarmSentHistoryDatasetReportWithSession(
 		window.BigBangCutoverAt,
 	)
 	if err != nil {
-		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: list finalized send states: %w", err)
+		return communityShortsAlarmSentHistoryDatasetRows{}, fmt.Errorf("collect community shorts alarm sent history dataset: list finalized send states: %w", err)
 	}
 
-	comparison, err := buildCommunityShortsAlarmSentHistoryDatasetComparison(
-		ctx,
-		session.trackingRepository,
-		baselines,
-		communityRows,
-		shortsRows,
-	)
-	if err != nil {
-		return CommunityShortsAlarmSentHistoryDatasetReport{}, fmt.Errorf("collect community shorts alarm sent history dataset: build comparison: %w", err)
-	}
-
-	report := BuildCommunityShortsAlarmSentHistoryDatasetReport(communityRows, shortsRows, comparison, query, now)
-	return attachCommunityShortsAlarmSentHistoryDatasetMissingAlarmRows(report, sendStateRows), nil
+	return communityShortsAlarmSentHistoryDatasetRows{
+		Baselines:     baselines,
+		CommunityRows: communityRows,
+		ShortsRows:    shortsRows,
+		SendStateRows: sendStateRows,
+	}, nil
 }
 
 func BuildCommunityShortsAlarmSentHistoryDatasetReport(
@@ -148,7 +175,35 @@ func BuildCommunityShortsAlarmSentHistoryDatasetReport(
 
 	finalizedCommunity := finalizeCommunityAlarmSentHistoryRows(communityRows)
 	finalizedShorts := finalizeShortsAlarmSentHistoryRows(shortsRows)
-	rows := make([]CommunityShortsAlarmSentHistoryDatasetRow, 0, len(finalizedCommunity.Rows)+len(finalizedShorts.Rows))
+	rows := buildCommunityShortsAlarmSentHistoryDatasetRows(finalizedCommunity.Rows, finalizedShorts.Rows)
+	verificationRows := buildCommunityShortsAlarmSentHistoryDatasetVerificationRows(comparison.VerdictRows)
+	referenceRows := buildCommunityShortsAlarmSentHistoryDatasetReferenceRows(comparison.VerdictRows)
+	summary := buildCommunityShortsAlarmSentHistoryDatasetSummary(
+		finalizedCommunity,
+		finalizedShorts,
+		rows,
+		verificationRows,
+		referenceRows,
+		comparison.Summary,
+	)
+
+	return CommunityShortsAlarmSentHistoryDatasetReport{
+		GeneratedAt:      generatedAt,
+		Query:            query,
+		Summary:          summary,
+		Results:          buildCommunityShortsAlarmSentHistoryDatasetResults(rows, verificationRows, referenceRows, nil, summary, false),
+		Comparison:       comparison,
+		Rows:             rows,
+		VerificationRows: verificationRows,
+		ReferenceRows:    referenceRows,
+	}
+}
+
+func buildCommunityShortsAlarmSentHistoryDatasetRows(
+	communityRows []trackingrepo.ObservationAlarmSentHistoryRow,
+	shortsRows []trackingrepo.ObservationAlarmSentHistoryRow,
+) []CommunityShortsAlarmSentHistoryDatasetRow {
+	rows := make([]CommunityShortsAlarmSentHistoryDatasetRow, 0, len(communityRows)+len(shortsRows))
 
 	appendRows := func(alarmType domain.AlarmType, inputs []trackingrepo.ObservationAlarmSentHistoryRow) {
 		for i := range inputs {
@@ -167,9 +222,14 @@ func BuildCommunityShortsAlarmSentHistoryDatasetReport(
 			})
 		}
 	}
-	appendRows(domain.AlarmTypeCommunity, finalizedCommunity.Rows)
-	appendRows(domain.AlarmTypeShorts, finalizedShorts.Rows)
+	appendRows(domain.AlarmTypeCommunity, communityRows)
+	appendRows(domain.AlarmTypeShorts, shortsRows)
 
+	sortCommunityShortsAlarmSentHistoryDatasetRows(rows)
+	return rows
+}
+
+func sortCommunityShortsAlarmSentHistoryDatasetRows(rows []CommunityShortsAlarmSentHistoryDatasetRow) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		if !rows[i].AlarmSentAt.Equal(rows[j].AlarmSentAt) {
 			return rows[i].AlarmSentAt.Before(rows[j].AlarmSentAt)
@@ -185,21 +245,28 @@ func BuildCommunityShortsAlarmSentHistoryDatasetReport(
 		}
 		return rows[i].ContentID < rows[j].ContentID
 	})
+}
 
-	verificationRows := buildCommunityShortsAlarmSentHistoryDatasetVerificationRows(comparison.VerdictRows)
-	referenceRows := buildCommunityShortsAlarmSentHistoryDatasetReferenceRows(comparison.VerdictRows)
+func buildCommunityShortsAlarmSentHistoryDatasetSummary(
+	finalizedCommunity observationAlarmSentHistoryFinalizationResult,
+	finalizedShorts observationAlarmSentHistoryFinalizationResult,
+	rows []CommunityShortsAlarmSentHistoryDatasetRow,
+	verificationRows []CommunityShortsAlarmSentHistoryDatasetVerificationRow,
+	referenceRows []CommunityShortsAlarmSentHistoryDatasetReferenceRow,
+	comparison trackingrepo.ObservationPostComparisonSummary,
+) CommunityShortsAlarmSentHistoryDatasetSummary {
 	summary := CommunityShortsAlarmSentHistoryDatasetSummary{
 		CollectedRowCount:                finalizedCommunity.CollectedRowCount + finalizedShorts.CollectedRowCount,
 		DuplicateRowCount:                finalizedCommunity.DuplicateRowCount + finalizedShorts.DuplicateRowCount,
 		SentPostCount:                    len(rows),
 		CommunitySentPostCount:           len(finalizedCommunity.Rows),
 		ShortsSentPostCount:              len(finalizedShorts.Rows),
-		BaselinePostCount:                comparison.Summary.BaselineUniquePostCount,
-		MatchedPostCount:                 comparison.Summary.MatchedPostCount,
-		UnsentPostCount:                  comparison.Summary.UnsentPostCount,
-		DuplicateSentPostCount:           comparison.Summary.DuplicateSentPostCount,
-		UnexpectedSentPostCount:          comparison.Summary.UnexpectedSentPostCount,
-		IdentifierMismatchCandidateCount: comparison.Summary.IdentifierMismatchCandidateCount,
+		BaselinePostCount:                comparison.BaselineUniquePostCount,
+		MatchedPostCount:                 comparison.MatchedPostCount,
+		UnsentPostCount:                  comparison.UnsentPostCount,
+		DuplicateSentPostCount:           comparison.DuplicateSentPostCount,
+		UnexpectedSentPostCount:          comparison.UnexpectedSentPostCount,
+		IdentifierMismatchCandidateCount: comparison.IdentifierMismatchCandidateCount,
 		VerificationRowCount:             len(verificationRows),
 		ReferenceRowCount:                len(referenceRows),
 	}
@@ -212,17 +279,7 @@ func BuildCommunityShortsAlarmSentHistoryDatasetReport(
 			summary.LatestAlarmSentAt = cloneCommunityShortsSendCountTime(&row.AlarmSentAt)
 		}
 	}
-
-	return CommunityShortsAlarmSentHistoryDatasetReport{
-		GeneratedAt:      generatedAt,
-		Query:            query,
-		Summary:          summary,
-		Results:          buildCommunityShortsAlarmSentHistoryDatasetResults(rows, verificationRows, referenceRows, nil, summary, false),
-		Comparison:       comparison,
-		Rows:             rows,
-		VerificationRows: verificationRows,
-		ReferenceRows:    referenceRows,
-	}
+	return summary
 }
 
 func buildCommunityShortsAlarmSentHistoryDatasetComparison(

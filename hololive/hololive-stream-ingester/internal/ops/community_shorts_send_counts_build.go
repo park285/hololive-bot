@@ -41,6 +41,11 @@ func BuildCommunityShortsSendCountReportWithQuery(
 		accumulateCommunityShortsSendCountSummary(&summary, row)
 	}
 
+	sortCommunityShortsSendCountRows(normalizedRows)
+	return buildCommunityShortsSendCountReport(generatedAt, query, summary, normalizedRows)
+}
+
+func sortCommunityShortsSendCountRows(normalizedRows []CommunityShortsSendCountRow) {
 	sort.SliceStable(normalizedRows, func(i, j int) bool {
 		left := communityShortsSendCountSortTime(normalizedRows[i])
 		right := communityShortsSendCountSortTime(normalizedRows[j])
@@ -58,7 +63,14 @@ func BuildCommunityShortsSendCountReportWithQuery(
 		}
 		return normalizedRows[i].ContentID < normalizedRows[j].ContentID
 	})
+}
 
+func buildCommunityShortsSendCountReport(
+	generatedAt time.Time,
+	query CommunityShortsSendCountQuery,
+	summary CommunityShortsSendCountSummary,
+	normalizedRows []CommunityShortsSendCountRow,
+) CommunityShortsSendCountReport {
 	windowStart := normalizeCommunityShortsSendCountTimePtrValue(query.WindowStart)
 	windowEnd := normalizeCommunityShortsSendCountTimePtrValue(query.WindowEnd)
 	return CommunityShortsSendCountReport{
@@ -139,6 +151,15 @@ func accumulateCommunityShortsSendCountSummary(
 		return
 	}
 	summary.PostCount++
+	accumulateCommunityShortsSendOutcome(summary, row)
+	accumulateCommunityShortsDelaySource(summary, row.DelaySource)
+	accumulateCommunityShortsInternalDelayCause(summary, row.InternalDelayCause)
+}
+
+func accumulateCommunityShortsSendOutcome(
+	summary *CommunityShortsSendCountSummary,
+	row CommunityShortsSendCountRow,
+) {
 	if row.SuccessSendCount > 0 {
 		summary.SuccessfulPostCount++
 	} else {
@@ -153,7 +174,10 @@ func accumulateCommunityShortsSendCountSummary(
 	if row.OutboxCount == 0 {
 		summary.OutboxMissingPostCount++
 	}
-	switch row.DelaySource {
+}
+
+func accumulateCommunityShortsDelaySource(summary *CommunityShortsSendCountSummary, delaySource outbox.PostDelaySource) {
+	switch delaySource {
 	case outbox.PostDelaySourceExternalCollection:
 		summary.ExternalCollectionSourcePostCount++
 	case outbox.PostDelaySourceInternalDelivery:
@@ -161,7 +185,10 @@ func accumulateCommunityShortsSendCountSummary(
 	case outbox.PostDelaySourceMixed:
 		summary.MixedDelaySourcePostCount++
 	}
-	switch row.InternalDelayCause {
+}
+
+func accumulateCommunityShortsInternalDelayCause(summary *CommunityShortsSendCountSummary, internalDelayCause outbox.PostInternalDelayCause) {
+	switch internalDelayCause {
 	case outbox.PostInternalDelayCauseQueueWait:
 		summary.QueueWaitCausePostCount++
 	case outbox.PostInternalDelayCauseRetryAccumulation:

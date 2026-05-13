@@ -38,12 +38,26 @@ func (r *youTubePollTargetRefresher) resolveTargetsWithCacheValidation(
 		youtubePollTargetCacheOnlyAdditionGracePeriod,
 	)
 	if !needsDBValidation {
-		targets := candidateTargets
-		targets.NotificationChannelIDs = diffChannelIDs(targets.NotificationChannelIDs, expiredCacheOnly)
+		targets := targetsWithoutExpiredCacheOnly(candidateTargets, expiredCacheOnly)
 		observeYouTubePollTargetValidation("skipped")
 		return targets, true
 	}
 
+	return r.validateTargetsAgainstDB(ctx, now, operationalChannels, candidateTargets, removed)
+}
+
+func targetsWithoutExpiredCacheOnly(targets youtubePollTargets, expired []string) youtubePollTargets {
+	targets.NotificationChannelIDs = diffChannelIDs(targets.NotificationChannelIDs, expired)
+	return targets
+}
+
+func (r *youTubePollTargetRefresher) validateTargetsAgainstDB(
+	ctx context.Context,
+	now time.Time,
+	operationalChannels []communityShortsOperationalChannel,
+	candidateTargets youtubePollTargets,
+	removed []string,
+) (youtubePollTargets, bool) {
 	dbAlarmChannelIDs, dbErr := r.loadAlarmChannelIDs(ctx)
 	if dbErr != nil {
 		observeYouTubePollTargetValidation("failed")
@@ -115,27 +129,11 @@ func clearExpiredOrResolvedCacheOnly(
 		return
 	}
 
-	authoritativeSet := make(map[string]struct{}, len(authoritative))
-	for _, channelID := range authoritative {
-		if channelID == "" {
-			continue
-		}
-		authoritativeSet[channelID] = struct{}{}
-	}
-	candidateSet := make(map[string]struct{}, len(candidate))
-	for _, channelID := range candidate {
-		if channelID == "" {
-			continue
-		}
-		candidateSet[channelID] = struct{}{}
-	}
+	authoritativeSet := channelIDSet(authoritative)
+	candidateSet := channelIDSet(candidate)
 
 	for channelID := range state {
-		if _, stillCandidate := candidateSet[channelID]; !stillCandidate {
-			delete(state, channelID)
-			continue
-		}
-		if _, nowAuthoritative := authoritativeSet[channelID]; nowAuthoritative {
+		if !hasChannelID(candidateSet, channelID) || hasChannelID(authoritativeSet, channelID) {
 			delete(state, channelID)
 		}
 	}
@@ -175,24 +173,30 @@ func hasPendingCacheOnlyValidation(
 		return false
 	}
 
-	candidateSet := make(map[string]struct{}, len(candidate))
-	for _, channelID := range candidate {
-		if channelID == "" {
-			continue
-		}
-		candidateSet[channelID] = struct{}{}
-	}
+	candidateSet := channelIDSet(candidate)
 
 	for channelID, firstSeenAt := range state {
-		if _, stillCandidate := candidateSet[channelID]; !stillCandidate {
-			continue
-		}
-		if now.Sub(firstSeenAt) <= grace {
+		if hasChannelID(candidateSet, channelID) && now.Sub(firstSeenAt) <= grace {
 			return true
 		}
 	}
 
 	return false
+}
+
+func channelIDSet(channelIDs []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		if channelID != "" {
+			set[channelID] = struct{}{}
+		}
+	}
+	return set
+}
+
+func hasChannelID(set map[string]struct{}, channelID string) bool {
+	_, ok := set[channelID]
+	return ok
 }
 
 func equalYouTubePollTargets(a, b youtubePollTargets) bool {

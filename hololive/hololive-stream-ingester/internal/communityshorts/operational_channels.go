@@ -44,15 +44,12 @@ func BuildOperationalChannelsFromMembers(members []*domain.Member) []Operational
 	seenChannelIDs := make(map[string]struct{}, len(members))
 	for i := range members {
 		member := members[i]
-		if member == nil || member.IsGraduated {
+		if skipOperationalMember(member) {
 			continue
 		}
 		channelID := strings.TrimSpace(member.ChannelID)
-		if channelID != "" {
-			if _, exists := seenChannelIDs[channelID]; exists {
-				continue
-			}
-			seenChannelIDs[channelID] = struct{}{}
+		if !registerOperationalChannelID(channelID, seenChannelIDs) {
+			continue
 		}
 		channels = append(channels, OperationalChannel{
 			OwnerLabel: targetOwnerLabel(member),
@@ -62,6 +59,21 @@ func BuildOperationalChannelsFromMembers(members []*domain.Member) []Operational
 	}
 
 	return channels
+}
+
+func skipOperationalMember(member *domain.Member) bool {
+	return member == nil || member.IsGraduated
+}
+
+func registerOperationalChannelID(channelID string, seenChannelIDs map[string]struct{}) bool {
+	if channelID == "" {
+		return true
+	}
+	if _, exists := seenChannelIDs[channelID]; exists {
+		return false
+	}
+	seenChannelIDs[channelID] = struct{}{}
+	return true
 }
 
 func EnabledChannelIDs(channels []OperationalChannel) []string {
