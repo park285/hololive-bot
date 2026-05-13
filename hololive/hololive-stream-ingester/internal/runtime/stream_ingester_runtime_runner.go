@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
@@ -48,7 +47,6 @@ type StreamIngesterRuntime struct {
 	ScraperScheduler    *poller.Scheduler
 	PublishedAtResolver *poller.PendingPublishedAtResolver
 	PhotoSync           *holodex.PhotoSyncService
-	OutboxDispatcher    *outbox.Dispatcher
 	ConfigSubscriber    *configsub.Subscriber
 	PollTargetRefresher *youTubePollTargetRefresher
 

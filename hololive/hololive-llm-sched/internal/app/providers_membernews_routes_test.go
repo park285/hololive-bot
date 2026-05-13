@@ -72,10 +72,9 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	var postgres database.Client = &fakePostgresClient{db: db}
 	logger := newTestLogger()
 
-	module := BuildDeliveryModule(nil, postgres, fakeSender{}, logger)
+	module := BuildDeliveryModule(nil, postgres, logger)
 	require.NotNil(t, module)
 	require.NotNil(t, module.Repository)
-	require.NotNil(t, module.Dispatcher)
 	locker := module.Locker
 	require.NotNil(t, locker)
 	token, acquired, err := locker.TryAcquire(context.Background(), "test-lock", time.Second)

@@ -166,7 +166,6 @@ func newStreamIngesterRuntime(
 		ScraperScheduler:                       youtubeDeps.scraperScheduler,
 		PublishedAtResolver:                    youtubeDeps.publishedAtResolver,
 		PhotoSync:                              selectPhotoSyncService(features.photoSyncEnabled, infra.photoSync),
-		OutboxDispatcher:                       youtubeDeps.outboxDispatcher,
 		ConfigSubscriber:                       configSubscriber,
 		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
 		ServerAddr:                             fmt.Sprintf(":%d", cfg.Server.Port),
