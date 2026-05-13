@@ -16,9 +16,9 @@
 우선 경로는 저장소의 집계 로직을 그대로 사용하는 전용 명령입니다. repo root에서 실행합니다.
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-period-summary
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-period-summary -format json
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-latency-period-summary \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-period-summary
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-period-summary -format json
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts latency-period-summary \
   -period last_15m=15m \
   -period last_2h=2h \
   -period last_24h=24h

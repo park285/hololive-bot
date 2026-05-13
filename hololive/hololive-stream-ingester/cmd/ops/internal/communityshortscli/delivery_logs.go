@@ -1,9 +1,7 @@
-package main
+package communityshortscli
 
 import (
-	"flag"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/kapu/hololive-stream-ingester/cmd/ops/internal/reportcli"
@@ -18,26 +16,28 @@ type deliveryLogsFlags struct {
 	format             *string
 }
 
-func main() {
-	flags := parseDeliveryLogsFlags()
-
-	err := reportcli.RunOptionalObservationReport(deliveryLogsReportParams(flags), deliveryLogsReportCommand(flags))
+func runDeliveryLogsCommand(ctx commandContext, args []string) error {
+	flags, err := parseDeliveryLogsFlags(ctx, args)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+		return err
 	}
+
+	return reportcli.RunOptionalObservationReport(deliveryLogsReportParams(flags), deliveryLogsReportCommand(ctx, flags))
 }
 
-func parseDeliveryLogsFlags() deliveryLogsFlags {
+func parseDeliveryLogsFlags(ctx commandContext, args []string) (deliveryLogsFlags, error) {
+	fs := newFlagSet(ctx, "delivery-logs")
 	flags := deliveryLogsFlags{
-		window:             flag.Duration("window", 24*time.Hour, "lookback window for recent community/shorts delivery logs"),
-		observationRuntime: flag.String("observation-runtime", "", "runtime name for a specific observation window"),
-		observationCutover: flag.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
-		limit:              flag.Int("limit", 200, "maximum number of delivery log rows to return"),
-		format:             flag.String("format", "markdown", "output format: markdown or json"),
+		window:             fs.Duration("window", 24*time.Hour, "lookback window for recent community/shorts delivery logs"),
+		observationRuntime: fs.String("observation-runtime", "", "runtime name for a specific observation window"),
+		observationCutover: fs.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window"),
+		limit:              fs.Int("limit", 200, "maximum number of delivery log rows to return"),
+		format:             fs.String("format", "markdown", "output format: markdown or json"),
 	}
-	flag.Parse()
-	return flags
+	if err := fs.Parse(args); err != nil {
+		return deliveryLogsFlags{}, err
+	}
+	return flags, nil
 }
 
 func deliveryLogsReportParams(flags deliveryLogsFlags) reportcli.OptionalObservationParams {
@@ -48,7 +48,7 @@ func deliveryLogsReportParams(flags deliveryLogsFlags) reportcli.OptionalObserva
 	}
 }
 
-func deliveryLogsReportCommand(flags deliveryLogsFlags) reportcli.OptionalObservationCommand[
+func deliveryLogsReportCommand(ctx commandContext, flags deliveryLogsFlags) reportcli.OptionalObservationCommand[
 	opsapp.CommunityShortsDeliveryLogCollectOptions,
 	opsapp.CommunityShortsDeliveryLogReport,
 ] {
@@ -56,6 +56,8 @@ func deliveryLogsReportCommand(flags deliveryLogsFlags) reportcli.OptionalObserv
 		opsapp.CommunityShortsDeliveryLogCollectOptions,
 		opsapp.CommunityShortsDeliveryLogReport,
 	]{
+		Stdout:             ctx.stdout,
+		Stderr:             ctx.stderr,
 		BuildOptions:       buildDeliveryLogsOptions(flags),
 		Collect:            opsapp.CollectCommunityShortsDeliveryLogReport,
 		RenderMarkdown:     opsapp.RenderCommunityShortsDeliveryLogMarkdown,

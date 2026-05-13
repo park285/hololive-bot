@@ -1,7 +1,7 @@
-package main
+package communityshortscli
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +11,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config"
 	opsapp "github.com/kapu/hololive-stream-ingester/internal/ops/communityshorts"
 )
+
+const continuousObservationRetryInterval = 5 * time.Second
 
 type continuousObservationCLIOptions struct {
 	observationRuntime string
@@ -22,32 +24,38 @@ type continuousObservationCLIOptions struct {
 	waitTimeout        time.Duration
 }
 
-func main() {
-	options, err := parseContinuousObservationCLIOptions()
+type continuousObservationOutputPaths struct {
+	latest   string
+	snapshot string
+}
+
+func runContinuousObservationCommand(ctx commandContext, args []string) error {
+	options, err := parseContinuousObservationCLIOptions(ctx, args)
 	if err != nil {
-		exitContinuousObservation("%s", err.Error())
+		return err
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		exitContinuousObservation("Failed to load community/shorts continuous observation config: %v", err)
+		return fmt.Errorf("Failed to load community/shorts continuous observation config: %w", err)
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := runContinuousObservationReport(cfg, logger, options); err != nil {
-		exitContinuousObservation("%s", err.Error())
-	}
+	logger := slog.New(slog.NewTextHandler(ctx.stderr, nil))
+	return runContinuousObservationReport(ctx, cfg, logger, options)
 }
 
-func parseContinuousObservationCLIOptions() (continuousObservationCLIOptions, error) {
-	observationRuntime := flag.String("observation-runtime", "youtube-scraper", "runtime name for a specific observation window")
-	observationCutover := flag.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window")
-	format := flag.String("format", "markdown", "output format: markdown or json")
-	outputDir := flag.String("output-dir", "", "directory to write latest and snapshot files; defaults to artifacts/... in watch mode")
-	watch := flag.Bool("watch", false, "keep collecting snapshots until the observation window is finalized")
-	deliveryLogLimit := flag.Int("delivery-log-limit", 200, "maximum delivery log rows per snapshot")
-	waitTimeout := flag.Duration("wait-timeout", 2*time.Minute, "how long to wait for the observation window to appear before failing")
-	flag.Parse()
+func parseContinuousObservationCLIOptions(ctx commandContext, args []string) (continuousObservationCLIOptions, error) {
+	fs := newFlagSet(ctx, "continuous-observation-report")
+	observationRuntime := fs.String("observation-runtime", "youtube-scraper", "runtime name for a specific observation window")
+	observationCutover := fs.String("observation-cutover", "", "RFC3339 cutover timestamp for a specific observation window")
+	format := fs.String("format", "markdown", "output format: markdown or json")
+	outputDir := fs.String("output-dir", "", "directory to write latest and snapshot files; defaults to artifacts/... in watch mode")
+	watch := fs.Bool("watch", false, "keep collecting snapshots until the observation window is finalized")
+	deliveryLogLimit := fs.Int("delivery-log-limit", 200, "maximum delivery log rows per snapshot")
+	waitTimeout := fs.Duration("wait-timeout", 2*time.Minute, "how long to wait for the observation window to appear before failing")
+	if err := fs.Parse(args); err != nil {
+		return continuousObservationCLIOptions{}, err
+	}
 
 	parsedCutoverAt, err := parseContinuousObservationCutover(*observationCutover)
 	if err != nil {
@@ -79,7 +87,12 @@ func validateContinuousObservationCLIOptions(options continuousObservationCLIOpt
 	return nil
 }
 
-func runContinuousObservationReport(cfg *config.Config, logger *slog.Logger, cliOptions continuousObservationCLIOptions) error {
+func runContinuousObservationReport(
+	ctx commandContext,
+	cfg *config.Config,
+	logger *slog.Logger,
+	cliOptions continuousObservationCLIOptions,
+) error {
 	options := opsapp.CommunityShortsContinuousObservationCollectOptions{
 		ObservationRuntimeName:      cliOptions.observationRuntime,
 		ObservationBigBangCutoverAt: cliOptions.parsedCutoverAt,
@@ -89,10 +102,11 @@ func runContinuousObservationReport(cfg *config.Config, logger *slog.Logger, cli
 	if cliOptions.watch {
 		return runContinuousObservationWatch(cfg, logger, options, cliOptions)
 	}
-	return runContinuousObservationOnce(cfg, logger, options, cliOptions)
+	return runContinuousObservationOnce(ctx, cfg, logger, options, cliOptions)
 }
 
 func runContinuousObservationOnce(
+	ctx commandContext,
 	cfg *config.Config,
 	logger *slog.Logger,
 	options opsapp.CommunityShortsContinuousObservationCollectOptions,
@@ -102,7 +116,7 @@ func runContinuousObservationOnce(
 	if err != nil {
 		return fmt.Errorf("failed to collect continuous observation report: %w", err)
 	}
-	return writeContinuousObservationReport(cliOptions.outputDir, cliOptions.format, report)
+	return writeContinuousObservationReport(ctx, cliOptions.outputDir, cliOptions.format, report)
 }
 
 func runContinuousObservationWatch(
@@ -160,13 +174,13 @@ func prepareContinuousObservationWatchDir(dir string, options opsapp.CommunitySh
 	return dir, nil
 }
 
-func writeContinuousObservationReport(outputDir string, format string, report opsapp.CommunityShortsContinuousObservationReport) error {
+func writeContinuousObservationReport(ctx commandContext, outputDir string, format string, report opsapp.CommunityShortsContinuousObservationReport) error {
 	payload, ext, err := renderContinuousObservationOutput(report, format)
 	if err != nil {
 		return fmt.Errorf("failed to render continuous observation report: %w", err)
 	}
 	if outputDir == "" {
-		return writeContinuousObservationStdout(payload)
+		return writeContinuousObservationStdout(ctx, payload)
 	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -177,8 +191,8 @@ func writeContinuousObservationReport(outputDir string, format string, report op
 	return nil
 }
 
-func writeContinuousObservationStdout(payload []byte) error {
-	if _, err := os.Stdout.Write(payload); err != nil {
+func writeContinuousObservationStdout(ctx commandContext, payload []byte) error {
+	if _, err := ctx.stdout.Write(payload); err != nil {
 		return fmt.Errorf("failed to write continuous observation report: %w", err)
 	}
 	return nil
@@ -202,7 +216,51 @@ func writeContinuousObservationWatchSnapshot(logger *slog.Logger, dir string, fo
 	return nil
 }
 
-func exitContinuousObservation(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-	os.Exit(1)
+func collectContinuousObservationWithWait(
+	cfg *config.Config,
+	logger *slog.Logger,
+	options opsapp.CommunityShortsContinuousObservationCollectOptions,
+	waitTimeout time.Duration,
+) (opsapp.CommunityShortsContinuousObservationReport, error) {
+	deadline := time.Now().Add(waitTimeout)
+	for {
+		report, err := collectContinuousObservationOnce(cfg, logger, options)
+		if err == nil {
+			return report, nil
+		}
+		if time.Now().After(deadline) || !isObservationWindowNotFoundError(err) {
+			return opsapp.CommunityShortsContinuousObservationReport{}, err
+		}
+		time.Sleep(continuousObservationRetryInterval)
+	}
+}
+
+func collectContinuousObservationOnce(
+	cfg *config.Config,
+	logger *slog.Logger,
+	options opsapp.CommunityShortsContinuousObservationCollectOptions,
+) (opsapp.CommunityShortsContinuousObservationReport, error) {
+	now := time.Now().UTC()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	return opsapp.CollectCommunityShortsContinuousObservationReport(ctx, cfg, logger, now, options)
+}
+
+func nextContinuousObservationInterval(report opsapp.CommunityShortsContinuousObservationReport) time.Duration {
+	interval := 15 * time.Minute
+	if report.Observation.ObservedUntil.Sub(report.Observation.ObservationStartedAt) < time.Hour {
+		interval = 5 * time.Minute
+	}
+	remaining := report.Observation.ObservationEndsAt.Sub(report.GeneratedAt.UTC())
+	if remaining > 0 && remaining < interval {
+		return remaining
+	}
+	if remaining <= 0 {
+		return continuousObservationRetryInterval
+	}
+	return interval
+}
+
+func isObservationWindowNotFoundError(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "observation window not found")
 }
