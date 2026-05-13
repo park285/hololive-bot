@@ -54,18 +54,29 @@ func (s *RuntimeScheduler) runAlarmCacheRecoveryLoop(ctx context.Context) error 
 	defer ticker.Stop()
 
 	for {
-		select {
-		case <-ctx.Done():
+		if !waitAlarmCacheRecoveryTick(ctx, ticker.C) {
 			s.logger.Info("Alarm cache recovery loop stopped")
 			return ctx.Err()
-		case <-ticker.C:
-			recoveryCtx, cancel := context.WithTimeout(ctx, alarmCacheRecoveryTimeout)
-			err := s.recoverAlarmCacheIfRegistryEmpty(recoveryCtx, "periodic")
-			cancel()
-			if err != nil {
-				s.logger.Warn("Alarm cache recovery check failed", slog.Any("error", err))
-			}
 		}
+		s.runAlarmCacheRecoveryCheck(ctx)
+	}
+}
+
+func waitAlarmCacheRecoveryTick(ctx context.Context, ticks <-chan time.Time) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-ticks:
+		return true
+	}
+}
+
+func (s *RuntimeScheduler) runAlarmCacheRecoveryCheck(ctx context.Context) {
+	recoveryCtx, cancel := context.WithTimeout(ctx, alarmCacheRecoveryTimeout)
+	err := s.recoverAlarmCacheIfRegistryEmpty(recoveryCtx, "periodic")
+	cancel()
+	if err != nil {
+		s.logger.Warn("Alarm cache recovery check failed", slog.Any("error", err))
 	}
 }
 
@@ -90,14 +101,16 @@ func (s *RuntimeScheduler) recoverAlarmCacheIfRegistryEmpty(ctx context.Context,
 		return nil
 	}
 
+	return s.recoverAlarmCacheFromDB(ctx, reason)
+}
+
+func (s *RuntimeScheduler) recoverAlarmCacheFromDB(ctx context.Context, reason string) error {
 	if err := s.alarmCacheWarmer.WarmCacheFromDB(ctx); err != nil {
 		return fmt.Errorf("recover alarm cache: warm cache from DB: %w", err)
 	}
 
-	if s.platformMappingSyncer != nil {
-		if err := s.platformMappingSyncer.SyncPlatformMappings(ctx); err != nil {
-			return fmt.Errorf("recover alarm cache: sync platform mappings: %w", err)
-		}
+	if err := s.syncPlatformMappings(ctx); err != nil {
+		return err
 	}
 
 	s.logger.Info("Alarm cache recovered from DB",
@@ -108,43 +121,75 @@ func (s *RuntimeScheduler) recoverAlarmCacheIfRegistryEmpty(ctx context.Context,
 	return nil
 }
 
+func (s *RuntimeScheduler) syncPlatformMappings(ctx context.Context) error {
+	if s.platformMappingSyncer == nil {
+		return nil
+	}
+	if err := s.platformMappingSyncer.SyncPlatformMappings(ctx); err != nil {
+		return fmt.Errorf("recover alarm cache: sync platform mappings: %w", err)
+	}
+	return nil
+}
+
 func (s *RuntimeScheduler) syncPlatformMappingsIfMissing(ctx context.Context) error {
-	if s == nil || s.cacheSvc == nil || s.platformMappingSyncer == nil {
+	if !s.canSyncPlatformMappings() {
 		return nil
 	}
 
-	for _, mapping := range []struct {
-		key            string
-		emptyMarkerKey string
-	}{
-		{key: sharedalarmkeys.ChzzkChannelMapKey, emptyMarkerKey: sharedalarmkeys.ChzzkChannelMapEmptyKey},
-		{key: sharedalarmkeys.TwitchLoginMapKey, emptyMarkerKey: sharedalarmkeys.TwitchLoginMapEmptyKey},
-		{key: sharedalarmkeys.TwitchChannelLoginMapKey, emptyMarkerKey: sharedalarmkeys.TwitchChannelLoginMapEmptyKey},
-	} {
-		exists, err := s.cacheSvc.Exists(ctx, mapping.key)
-		if err != nil {
-			return fmt.Errorf("recover alarm cache: check platform mapping %s: %w", mapping.key, err)
+	for _, mapping := range alarmPlatformMappings() {
+		synced, err := s.syncPlatformMappingIfMissing(ctx, mapping)
+		if synced || err != nil {
+			return err
 		}
-		if exists {
-			continue
-		}
-
-		empty, err := s.cacheSvc.Exists(ctx, mapping.emptyMarkerKey)
-		if err != nil {
-			return fmt.Errorf("recover alarm cache: check platform mapping empty marker %s: %w", mapping.emptyMarkerKey, err)
-		}
-		if empty {
-			continue
-		}
-
-		if err := s.platformMappingSyncer.SyncPlatformMappings(ctx); err != nil {
-			return fmt.Errorf("recover alarm cache: sync platform mappings: %w", err)
-		}
-
-		return nil
 	}
 
 	return nil
+}
+
+func (s *RuntimeScheduler) canSyncPlatformMappings() bool {
+	return s != nil && s.cacheSvc != nil && s.platformMappingSyncer != nil
+}
+
+func (s *RuntimeScheduler) syncPlatformMappingIfMissing(ctx context.Context, mapping alarmPlatformMappingKeys) (bool, error) {
+	missing, err := s.platformMappingMissing(ctx, mapping)
+	if err != nil {
+		return false, err
+	}
+	if !missing {
+		return false, nil
+	}
+
+	return true, s.syncPlatformMappings(ctx)
+}
+
+type alarmPlatformMappingKeys struct {
+	key            string
+	emptyMarkerKey string
+}
+
+func alarmPlatformMappings() []alarmPlatformMappingKeys {
+	return []alarmPlatformMappingKeys{
+		{key: sharedalarmkeys.ChzzkChannelMapKey, emptyMarkerKey: sharedalarmkeys.ChzzkChannelMapEmptyKey},
+		{key: sharedalarmkeys.TwitchLoginMapKey, emptyMarkerKey: sharedalarmkeys.TwitchLoginMapEmptyKey},
+		{key: sharedalarmkeys.TwitchChannelLoginMapKey, emptyMarkerKey: sharedalarmkeys.TwitchChannelLoginMapEmptyKey},
+	}
+}
+
+func (s *RuntimeScheduler) platformMappingMissing(ctx context.Context, mapping alarmPlatformMappingKeys) (bool, error) {
+	exists, err := s.cacheSvc.Exists(ctx, mapping.key)
+	if err != nil {
+		return false, fmt.Errorf("recover alarm cache: check platform mapping %s: %w", mapping.key, err)
+	}
+	if exists {
+		return false, nil
+	}
+
+	empty, err := s.cacheSvc.Exists(ctx, mapping.emptyMarkerKey)
+	if err != nil {
+		return false, fmt.Errorf("recover alarm cache: check platform mapping empty marker %s: %w", mapping.emptyMarkerKey, err)
+	}
+
+	return !empty, nil
 }
 
 func (s *RuntimeScheduler) recoverAlarmCacheAfterCheckFailure(ctx context.Context, checkErr error) error {
