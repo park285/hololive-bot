@@ -20,35 +20,14 @@ func buildCommunityShortsContinuousObservation24HCloseout(
 	sendCounts CommunityShortsSendCountReport,
 	latencyCause CommunityShortsLatencyCauseReport,
 ) CommunityShortsContinuousObservation24HCloseout {
-	closeout := CommunityShortsContinuousObservation24HCloseout{
-		Status:             CommunityShortsContinuousObservationCloseoutStatusPending,
-		AggregationScope:   communityShortsContinuousObservationCloseoutScope,
-		TargetChannelCount: observation.TargetChannelCount,
-		ObservedPostCount:  sendCounts.Summary.PostCount,
-		Rule:               communityShortsContinuousObservationCloseoutRule,
-		Statement:          "24h closeout is pending until the observation window is finalized.",
-	}
-	if baseline.Runtime.TargetChannelCount > 0 {
-		closeout.TargetChannelCount = baseline.Runtime.TargetChannelCount
-	}
+	closeout := newCommunityShortsContinuousObservation24HCloseout(observation, baseline, sendCounts)
 
 	period, ok := findCommunityShortsObservationLatencyCausePeriod(latencyCause)
 	if !ok {
-		if observation.Status == CommunityShortsContinuousObservationStatusFinalized {
-			closeout.Status = CommunityShortsContinuousObservationCloseoutStatusInsufficientEvidence
-			closeout.Statement = "Finalized 24h closeout is blocked because the observation_window latency cause summary is missing."
-		}
-		return closeout
+		return withCommunityShortsContinuousObservationMissingLatencyCause(closeout, observation.Status)
 	}
 
-	closeout.ObservationPeriodLabel = strings.TrimSpace(period.Summary.Label)
-	closeout.TotalExceededPostCount = period.CauseSummary.ExceededPostCount
-	closeout.InternalExceededPostCount = period.CauseSummary.InternalSystemCausePostCount
-	closeout.NonInternalExceededPostCount = period.CauseSummary.NonInternalSystemCausePostCount
-	closeout.ExcludedExternalExceededPostCount = period.CauseSummary.ExcludedExternalDelayPostCount
-	if closeout.ExcludedExternalExceededPostCount == 0 && period.CauseSummary.ExternalCollectionSourcePostCount > 0 {
-		closeout.ExcludedExternalExceededPostCount = period.CauseSummary.ExternalCollectionSourcePostCount
-	}
+	applyCommunityShortsContinuousObservationLatencyCausePeriod(&closeout, period)
 
 	if observation.Status != CommunityShortsContinuousObservationStatusFinalized {
 		closeout.Statement = fmt.Sprintf(
@@ -77,30 +56,58 @@ func buildCommunityShortsContinuousObservation24HCloseout(
 	return closeout
 }
 
+func newCommunityShortsContinuousObservation24HCloseout(
+	observation CommunityShortsContinuousObservationWindow,
+	baseline communityshorts.TargetBaseline,
+	sendCounts CommunityShortsSendCountReport,
+) CommunityShortsContinuousObservation24HCloseout {
+	closeout := CommunityShortsContinuousObservation24HCloseout{
+		Status:             CommunityShortsContinuousObservationCloseoutStatusPending,
+		AggregationScope:   communityShortsContinuousObservationCloseoutScope,
+		TargetChannelCount: observation.TargetChannelCount,
+		ObservedPostCount:  sendCounts.Summary.PostCount,
+		Rule:               communityShortsContinuousObservationCloseoutRule,
+		Statement:          "24h closeout is pending until the observation window is finalized.",
+	}
+	if baseline.Runtime.TargetChannelCount > 0 {
+		closeout.TargetChannelCount = baseline.Runtime.TargetChannelCount
+	}
+	return closeout
+}
+
+func withCommunityShortsContinuousObservationMissingLatencyCause(
+	closeout CommunityShortsContinuousObservation24HCloseout,
+	status CommunityShortsContinuousObservationStatus,
+) CommunityShortsContinuousObservation24HCloseout {
+	if status == CommunityShortsContinuousObservationStatusFinalized {
+		closeout.Status = CommunityShortsContinuousObservationCloseoutStatusInsufficientEvidence
+		closeout.Statement = "Finalized 24h closeout is blocked because the observation_window latency cause summary is missing."
+	}
+	return closeout
+}
+
+func applyCommunityShortsContinuousObservationLatencyCausePeriod(
+	closeout *CommunityShortsContinuousObservation24HCloseout,
+	period CommunityShortsLatencyCausePeriodView,
+) {
+	closeout.ObservationPeriodLabel = strings.TrimSpace(period.Summary.Label)
+	closeout.TotalExceededPostCount = period.CauseSummary.ExceededPostCount
+	closeout.InternalExceededPostCount = period.CauseSummary.InternalSystemCausePostCount
+	closeout.NonInternalExceededPostCount = period.CauseSummary.NonInternalSystemCausePostCount
+	closeout.ExcludedExternalExceededPostCount = period.CauseSummary.ExcludedExternalDelayPostCount
+	if closeout.ExcludedExternalExceededPostCount == 0 && period.CauseSummary.ExternalCollectionSourcePostCount > 0 {
+		closeout.ExcludedExternalExceededPostCount = period.CauseSummary.ExternalCollectionSourcePostCount
+	}
+}
+
 func buildCommunityShortsContinuousObservationMissingAlarmCloseout(
 	observation CommunityShortsContinuousObservationWindow,
 	baseline communityshorts.TargetBaseline,
 	dataset *CommunityShortsAlarmSentHistoryDatasetReport,
 	datasetErr error,
 ) CommunityShortsContinuousObservationMissingAlarmCloseout {
-	closeout := CommunityShortsContinuousObservationMissingAlarmCloseout{
-		Status:             CommunityShortsContinuousObservationCloseoutStatusPending,
-		AggregationScope:   communityShortsContinuousObservationCloseoutScope,
-		TargetChannelCount: observation.TargetChannelCount,
-		Rule:               communityShortsContinuousObservationMissingAlarmRule,
-		Statement:          "24h missing-alarm closeout is pending until the observation window is finalized.",
-	}
-	if baseline.Runtime.TargetChannelCount > 0 {
-		closeout.TargetChannelCount = baseline.Runtime.TargetChannelCount
-	}
-	if dataset != nil {
-		closeout.ReferencePostCount = dataset.Summary.ReferenceRowCount
-		closeout.SendStatePostCount = dataset.Summary.SendStatePostCount
-		closeout.MissingAlarmPostCount = dataset.Summary.MissingAlarmPostCount
-		closeout.MissingSendStatePostCount = dataset.Summary.MissingSendStatePostCount
-		closeout.AttemptedMissingPostCount = dataset.Summary.AttemptedMissingPostCount
-		closeout.NotSentMissingPostCount = dataset.Summary.NotSentMissingPostCount
-	}
+	closeout := newCommunityShortsContinuousObservationMissingAlarmCloseout(observation, baseline)
+	applyCommunityShortsContinuousObservationMissingAlarmDataset(&closeout, dataset)
 
 	if observation.Status != CommunityShortsContinuousObservationStatusFinalized {
 		closeout.Statement = fmt.Sprintf(
@@ -111,16 +118,7 @@ func buildCommunityShortsContinuousObservationMissingAlarmCloseout(
 	}
 
 	if dataset == nil {
-		closeout.Status = CommunityShortsContinuousObservationCloseoutStatusInsufficientEvidence
-		if datasetErr != nil {
-			closeout.Statement = fmt.Sprintf(
-				"Finalized 24h missing-alarm closeout is blocked because the sent-history dataset could not be collected: %v.",
-				datasetErr,
-			)
-		} else {
-			closeout.Statement = "Finalized 24h missing-alarm closeout is blocked because the sent-history dataset is missing."
-		}
-		return closeout
+		return withCommunityShortsContinuousObservationMissingAlarmDatasetMissing(closeout, datasetErr)
 	}
 
 	if closeout.MissingAlarmPostCount == 0 {
@@ -141,31 +139,62 @@ func buildCommunityShortsContinuousObservationMissingAlarmCloseout(
 	return closeout
 }
 
+func newCommunityShortsContinuousObservationMissingAlarmCloseout(
+	observation CommunityShortsContinuousObservationWindow,
+	baseline communityshorts.TargetBaseline,
+) CommunityShortsContinuousObservationMissingAlarmCloseout {
+	closeout := CommunityShortsContinuousObservationMissingAlarmCloseout{
+		Status:             CommunityShortsContinuousObservationCloseoutStatusPending,
+		AggregationScope:   communityShortsContinuousObservationCloseoutScope,
+		TargetChannelCount: observation.TargetChannelCount,
+		Rule:               communityShortsContinuousObservationMissingAlarmRule,
+		Statement:          "24h missing-alarm closeout is pending until the observation window is finalized.",
+	}
+	if baseline.Runtime.TargetChannelCount > 0 {
+		closeout.TargetChannelCount = baseline.Runtime.TargetChannelCount
+	}
+	return closeout
+}
+
+func applyCommunityShortsContinuousObservationMissingAlarmDataset(
+	closeout *CommunityShortsContinuousObservationMissingAlarmCloseout,
+	dataset *CommunityShortsAlarmSentHistoryDatasetReport,
+) {
+	if dataset == nil {
+		return
+	}
+	closeout.ReferencePostCount = dataset.Summary.ReferenceRowCount
+	closeout.SendStatePostCount = dataset.Summary.SendStatePostCount
+	closeout.MissingAlarmPostCount = dataset.Summary.MissingAlarmPostCount
+	closeout.MissingSendStatePostCount = dataset.Summary.MissingSendStatePostCount
+	closeout.AttemptedMissingPostCount = dataset.Summary.AttemptedMissingPostCount
+	closeout.NotSentMissingPostCount = dataset.Summary.NotSentMissingPostCount
+}
+
+func withCommunityShortsContinuousObservationMissingAlarmDatasetMissing(
+	closeout CommunityShortsContinuousObservationMissingAlarmCloseout,
+	datasetErr error,
+) CommunityShortsContinuousObservationMissingAlarmCloseout {
+	closeout.Status = CommunityShortsContinuousObservationCloseoutStatusInsufficientEvidence
+	if datasetErr != nil {
+		closeout.Statement = fmt.Sprintf(
+			"Finalized 24h missing-alarm closeout is blocked because the sent-history dataset could not be collected: %v.",
+			datasetErr,
+		)
+	} else {
+		closeout.Statement = "Finalized 24h missing-alarm closeout is blocked because the sent-history dataset is missing."
+	}
+	return closeout
+}
+
 func buildCommunityShortsContinuousObservationStateConsistencyCloseout(
 	observation CommunityShortsContinuousObservationWindow,
 	baseline communityshorts.TargetBaseline,
 	dataset *CommunityShortsAlarmSentHistoryDatasetReport,
 	datasetErr error,
 ) CommunityShortsContinuousObservationStateConsistencyCloseout {
-	closeout := CommunityShortsContinuousObservationStateConsistencyCloseout{
-		Status:             CommunityShortsContinuousObservationCloseoutStatusPending,
-		AggregationScope:   communityShortsContinuousObservationCloseoutScope,
-		TargetChannelCount: observation.TargetChannelCount,
-		Rule:               communityShortsContinuousObservationStateConsistencyRule,
-		Statement:          "24h state-consistency closeout is pending until the observation window is finalized.",
-	}
-	if baseline.Runtime.TargetChannelCount > 0 {
-		closeout.TargetChannelCount = baseline.Runtime.TargetChannelCount
-	}
-	if dataset != nil {
-		closeout.ReferencePostCount = dataset.Summary.ReferenceRowCount
-		closeout.SendStatePostCount = dataset.Summary.SendStatePostCount
-		closeout.DuplicateSentPostCount = dataset.Summary.DuplicateSentPostCount
-		closeout.MissingAlarmPostCount = dataset.Summary.MissingAlarmPostCount
-		closeout.MissingSendStatePostCount = dataset.Summary.MissingSendStatePostCount
-		closeout.AttemptedMissingPostCount = dataset.Summary.AttemptedMissingPostCount
-		closeout.NotSentMissingPostCount = dataset.Summary.NotSentMissingPostCount
-	}
+	closeout := newCommunityShortsContinuousObservationStateConsistencyCloseout(observation, baseline)
+	applyCommunityShortsContinuousObservationStateConsistencyDataset(&closeout, dataset)
 
 	if observation.Status != CommunityShortsContinuousObservationStatusFinalized {
 		closeout.Statement = fmt.Sprintf(
@@ -177,16 +206,7 @@ func buildCommunityShortsContinuousObservationStateConsistencyCloseout(
 	}
 
 	if dataset == nil {
-		closeout.Status = CommunityShortsContinuousObservationCloseoutStatusInsufficientEvidence
-		if datasetErr != nil {
-			closeout.Statement = fmt.Sprintf(
-				"Finalized 24h state-consistency closeout is blocked because the sent-history dataset could not be collected: %v.",
-				datasetErr,
-			)
-		} else {
-			closeout.Statement = "Finalized 24h state-consistency closeout is blocked because the sent-history dataset is missing."
-		}
-		return closeout
+		return withCommunityShortsContinuousObservationStateConsistencyDatasetMissing(closeout, datasetErr)
 	}
 
 	if closeout.DuplicateSentPostCount == 0 && closeout.MissingAlarmPostCount == 0 {
@@ -201,6 +221,55 @@ func buildCommunityShortsContinuousObservationStateConsistencyCloseout(
 		closeout.DuplicateSentPostCount,
 		closeout.MissingAlarmPostCount,
 	)
+	return closeout
+}
+
+func newCommunityShortsContinuousObservationStateConsistencyCloseout(
+	observation CommunityShortsContinuousObservationWindow,
+	baseline communityshorts.TargetBaseline,
+) CommunityShortsContinuousObservationStateConsistencyCloseout {
+	closeout := CommunityShortsContinuousObservationStateConsistencyCloseout{
+		Status:             CommunityShortsContinuousObservationCloseoutStatusPending,
+		AggregationScope:   communityShortsContinuousObservationCloseoutScope,
+		TargetChannelCount: observation.TargetChannelCount,
+		Rule:               communityShortsContinuousObservationStateConsistencyRule,
+		Statement:          "24h state-consistency closeout is pending until the observation window is finalized.",
+	}
+	if baseline.Runtime.TargetChannelCount > 0 {
+		closeout.TargetChannelCount = baseline.Runtime.TargetChannelCount
+	}
+	return closeout
+}
+
+func applyCommunityShortsContinuousObservationStateConsistencyDataset(
+	closeout *CommunityShortsContinuousObservationStateConsistencyCloseout,
+	dataset *CommunityShortsAlarmSentHistoryDatasetReport,
+) {
+	if dataset == nil {
+		return
+	}
+	closeout.ReferencePostCount = dataset.Summary.ReferenceRowCount
+	closeout.SendStatePostCount = dataset.Summary.SendStatePostCount
+	closeout.DuplicateSentPostCount = dataset.Summary.DuplicateSentPostCount
+	closeout.MissingAlarmPostCount = dataset.Summary.MissingAlarmPostCount
+	closeout.MissingSendStatePostCount = dataset.Summary.MissingSendStatePostCount
+	closeout.AttemptedMissingPostCount = dataset.Summary.AttemptedMissingPostCount
+	closeout.NotSentMissingPostCount = dataset.Summary.NotSentMissingPostCount
+}
+
+func withCommunityShortsContinuousObservationStateConsistencyDatasetMissing(
+	closeout CommunityShortsContinuousObservationStateConsistencyCloseout,
+	datasetErr error,
+) CommunityShortsContinuousObservationStateConsistencyCloseout {
+	closeout.Status = CommunityShortsContinuousObservationCloseoutStatusInsufficientEvidence
+	if datasetErr != nil {
+		closeout.Statement = fmt.Sprintf(
+			"Finalized 24h state-consistency closeout is blocked because the sent-history dataset could not be collected: %v.",
+			datasetErr,
+		)
+	} else {
+		closeout.Statement = "Finalized 24h state-consistency closeout is blocked because the sent-history dataset is missing."
+	}
 	return closeout
 }
 

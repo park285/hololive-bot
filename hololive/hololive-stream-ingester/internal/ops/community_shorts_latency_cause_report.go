@@ -133,6 +133,13 @@ type CommunityShortsLatencyCauseRow struct {
 	LatencyClassification   outbox.PostLatencyClassificationResult `json:"latency_classification"`
 }
 
+type communityShortsLatencyCauseRows struct {
+	sendCountRows []outbox.PostSendCount
+	timelineRows  []outbox.PostDeliveryTimeline
+	query         CommunityShortsLatencyCauseQuery
+	periods       []outbox.PostLatencyPeriod
+}
+
 func CollectCommunityShortsLatencyCauseReport(
 	ctx context.Context,
 	cfg *config.Config,
@@ -198,79 +205,114 @@ func collectCommunityShortsLatencyCauseReportWithSession(
 		return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: session is nil")
 	}
 
-	var err error
-	var sendCountRows []outbox.PostSendCount
-	var timelineRows []outbox.PostDeliveryTimeline
-	switch query.Mode {
-	case communityShortsLatencyCauseQueryModeObservation:
-		state, stateErr := resolveCommunityShortsObservationQueryState(
-			ctx,
-			session.trackingRepository,
-			query.ObservationRuntimeName,
-			*query.ObservationBigBangCutoverAt,
-			now,
-		)
-		if stateErr != nil {
-			return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: find observation window: %w", stateErr)
-		}
-		if state.Window == nil {
-			return CommunityShortsLatencyCauseReport{}, fmt.Errorf(
-				"collect community shorts latency cause report: observation window not found: runtime=%s cutover=%s",
-				query.ObservationRuntimeName,
-				formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
-			)
-		}
-		query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
-		query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
-		if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
-			periods = []outbox.PostLatencyPeriod{{
-				Label:   communityShortsLatencyCauseObservationPeriodLabel,
-				StartAt: state.Window.ObservationStartedAt,
-				EndAt:   state.EffectiveWindowEnd,
-			}}
-		} else {
-			periods = nil
-		}
-
-		if state.Finalized {
-			sendCountRows, err = session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-			if err != nil {
-				return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window send counts: %w", err)
-			}
-			timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-			if err != nil {
-				return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window delivery timelines: %w", err)
-			}
-			break
-		}
-
-		if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
-			sendCountRows, err = session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-			if err != nil {
-				return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window send counts: %w", err)
-			}
-			timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-			if err != nil {
-				return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window delivery timelines: %w", err)
-			}
-		}
-	default:
-		since := earliestCommunityShortsLatencyCausePeriodStart(periods)
-		sendCountRows, err = session.telemetryRepo.ListPostSendCountsSince(ctx, since)
-		if err != nil {
-			return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: list post send counts: %w", err)
-		}
-		timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesSince(ctx, since)
-		if err != nil {
-			return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: list post delivery timelines: %w", err)
-		}
+	rows, err := collectCommunityShortsLatencyCauseRows(ctx, session, query, now, periods)
+	if err != nil {
+		return CommunityShortsLatencyCauseReport{}, err
 	}
-
-	report, err := BuildCommunityShortsLatencyCauseReportWithQuery(sendCountRows, timelineRows, query, now, periods)
+	report, err := BuildCommunityShortsLatencyCauseReportWithQuery(rows.sendCountRows, rows.timelineRows, rows.query, now, rows.periods)
 	if err != nil {
 		return CommunityShortsLatencyCauseReport{}, fmt.Errorf("collect community shorts latency cause report: %w", err)
 	}
 	return report, nil
+}
+
+func collectCommunityShortsLatencyCauseRows(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsLatencyCauseQuery,
+	now time.Time,
+	periods []outbox.PostLatencyPeriod,
+) (communityShortsLatencyCauseRows, error) {
+	switch query.Mode {
+	case communityShortsLatencyCauseQueryModeObservation:
+		return collectObservationLatencyCauseRows(ctx, session, query, now)
+	default:
+		return collectRecentLatencyCauseRows(ctx, session, query, periods)
+	}
+}
+
+func collectObservationLatencyCauseRows(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsLatencyCauseQuery,
+	now time.Time,
+) (communityShortsLatencyCauseRows, error) {
+	state, err := resolveCommunityShortsObservationQueryState(
+		ctx,
+		session.trackingRepository,
+		query.ObservationRuntimeName,
+		*query.ObservationBigBangCutoverAt,
+		now,
+	)
+	if err != nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: find observation window: %w", err)
+	}
+	if state.Window == nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf(
+			"collect community shorts latency cause report: observation window not found: runtime=%s cutover=%s",
+			query.ObservationRuntimeName,
+			formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
+		)
+	}
+
+	query, periods := withLatencyCauseObservationWindow(query, state)
+	if state.Finalized {
+		return collectFinalizedObservationLatencyCauseRows(ctx, session, query, periods, state.Window.BigBangCutoverAt)
+	}
+	if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
+		return collectActiveObservationLatencyCauseRows(ctx, session, query, periods, state)
+	}
+	return communityShortsLatencyCauseRows{query: query, periods: periods}, nil
+}
+
+func withLatencyCauseObservationWindow(query CommunityShortsLatencyCauseQuery, state communityShortsObservationQueryState) (CommunityShortsLatencyCauseQuery, []outbox.PostLatencyPeriod) {
+	query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
+	query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
+	if !state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
+		return query, nil
+	}
+	return query, []outbox.PostLatencyPeriod{{
+		Label:   communityShortsLatencyCauseObservationPeriodLabel,
+		StartAt: state.Window.ObservationStartedAt,
+		EndAt:   state.EffectiveWindowEnd,
+	}}
+}
+
+func collectFinalizedObservationLatencyCauseRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, periods []outbox.PostLatencyPeriod, cutoverAt time.Time) (communityShortsLatencyCauseRows, error) {
+	sendCountRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	if err != nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window send counts: %w", err)
+	}
+	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	if err != nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list finalized observation-window delivery timelines: %w", err)
+	}
+	return communityShortsLatencyCauseRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query, periods: periods}, nil
+}
+
+func collectActiveObservationLatencyCauseRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, periods []outbox.PostLatencyPeriod, state communityShortsObservationQueryState) (communityShortsLatencyCauseRows, error) {
+	sendCountRows, err := session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	if err != nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window send counts: %w", err)
+	}
+	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	if err != nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list active observation-window delivery timelines: %w", err)
+	}
+	return communityShortsLatencyCauseRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query, periods: periods}, nil
+}
+
+func collectRecentLatencyCauseRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsLatencyCauseQuery, periods []outbox.PostLatencyPeriod) (communityShortsLatencyCauseRows, error) {
+	since := earliestCommunityShortsLatencyCausePeriodStart(periods)
+	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, since)
+	if err != nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list post send counts: %w", err)
+	}
+	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesSince(ctx, since)
+	if err != nil {
+		return communityShortsLatencyCauseRows{}, fmt.Errorf("collect community shorts latency cause report: list post delivery timelines: %w", err)
+	}
+	return communityShortsLatencyCauseRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query, periods: periods}, nil
 }
 
 func normalizeCommunityShortsLatencyCauseCollectOptions(
@@ -278,21 +320,9 @@ func normalizeCommunityShortsLatencyCauseCollectOptions(
 	now time.Time,
 ) (CommunityShortsLatencyCauseQuery, []outbox.PostLatencyPeriod, error) {
 	observationRuntimeName := strings.TrimSpace(options.ObservationRuntimeName)
-	hasObservationCutover := options.ObservationBigBangCutoverAt != nil && !options.ObservationBigBangCutoverAt.IsZero()
-	hasObservationQuery := observationRuntimeName != "" || hasObservationCutover
 
-	if hasObservationQuery {
-		if len(options.PeriodSpecs) > 0 {
-			return CommunityShortsLatencyCauseQuery{}, nil, fmt.Errorf("period specs and observation window are mutually exclusive")
-		}
-		if observationRuntimeName == "" || !hasObservationCutover {
-			return CommunityShortsLatencyCauseQuery{}, nil, fmt.Errorf("observation runtime name and cutover must both be set")
-		}
-		return CommunityShortsLatencyCauseQuery{
-			Mode:                        communityShortsLatencyCauseQueryModeObservation,
-			ObservationRuntimeName:      observationRuntimeName,
-			ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt),
-		}, nil, nil
+	if hasCommunityShortsLatencyCauseObservationQuery(observationRuntimeName, options.ObservationBigBangCutoverAt) {
+		return normalizeCommunityShortsLatencyCauseObservationOptions(options, observationRuntimeName)
 	}
 
 	periods, err := buildCommunityShortsLatencyPeriods(now, options.PeriodSpecs)
@@ -301,4 +331,25 @@ func normalizeCommunityShortsLatencyCauseCollectOptions(
 	}
 
 	return withCommunityShortsLatencyCauseQueryWindow(CommunityShortsLatencyCauseQuery{Mode: communityShortsLatencyCauseQueryModeRecent}, periods), periods, nil
+}
+
+func hasCommunityShortsLatencyCauseObservationQuery(runtimeName string, cutoverAt *time.Time) bool {
+	return runtimeName != "" || cutoverAt != nil && !cutoverAt.IsZero()
+}
+
+func normalizeCommunityShortsLatencyCauseObservationOptions(
+	options CommunityShortsLatencyCauseCollectOptions,
+	observationRuntimeName string,
+) (CommunityShortsLatencyCauseQuery, []outbox.PostLatencyPeriod, error) {
+	if len(options.PeriodSpecs) > 0 {
+		return CommunityShortsLatencyCauseQuery{}, nil, fmt.Errorf("period specs and observation window are mutually exclusive")
+	}
+	if observationRuntimeName == "" || options.ObservationBigBangCutoverAt == nil || options.ObservationBigBangCutoverAt.IsZero() {
+		return CommunityShortsLatencyCauseQuery{}, nil, fmt.Errorf("observation runtime name and cutover must both be set")
+	}
+	return CommunityShortsLatencyCauseQuery{
+		Mode:                        communityShortsLatencyCauseQueryModeObservation,
+		ObservationRuntimeName:      observationRuntimeName,
+		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt),
+	}, nil, nil
 }

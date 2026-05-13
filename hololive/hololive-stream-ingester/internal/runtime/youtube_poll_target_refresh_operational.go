@@ -71,20 +71,33 @@ func resolveYouTubePollTargetsFromRegistrations(registrations []providers.Channe
 	var statsChannelIDs []string
 
 	for _, registration := range registrations {
-		switch registration.TargetGroup {
-		case providers.ChannelTargetGroupStats:
-			statsChannelIDs = mergeUniqueChannelIDs(statsChannelIDs, registration.ChannelIDs)
-		case providers.ChannelTargetGroupGlobal:
-			continue
-		default:
-			notificationChannelIDs = mergeUniqueChannelIDs(notificationChannelIDs, registration.ChannelIDs)
-		}
+		notificationChannelIDs, statsChannelIDs = addYouTubePollTargetRegistration(
+			notificationChannelIDs,
+			statsChannelIDs,
+			registration,
+		)
 	}
 
 	return youtubePollTargets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
 	}
+}
+
+func addYouTubePollTargetRegistration(
+	notificationChannelIDs []string,
+	statsChannelIDs []string,
+	registration providers.ChannelPollerRegistration,
+) ([]string, []string) {
+	switch registration.TargetGroup {
+	case providers.ChannelTargetGroupStats:
+		statsChannelIDs = mergeUniqueChannelIDs(statsChannelIDs, registration.ChannelIDs)
+	case providers.ChannelTargetGroupGlobal:
+		return notificationChannelIDs, statsChannelIDs
+	default:
+		notificationChannelIDs = mergeUniqueChannelIDs(notificationChannelIDs, registration.ChannelIDs)
+	}
+	return notificationChannelIDs, statsChannelIDs
 }
 
 func hasYouTubePollTargets(targets youtubePollTargets) bool {

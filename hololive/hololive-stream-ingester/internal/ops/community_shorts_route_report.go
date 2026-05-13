@@ -98,26 +98,9 @@ func CollectCommunityShortsRouteVerificationReport(
 	now time.Time,
 	since time.Time,
 ) (CommunityShortsRouteVerificationReport, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if cfg == nil {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: config is nil")
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	now = now.UTC()
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	if since.IsZero() {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: since is empty")
-	}
-	since = since.UTC()
-	if since.After(now) {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: since is after now")
+	ctx, logger, now, since, err := normalizeCommunityShortsRouteReportInputs(ctx, cfg, logger, now, since)
+	if err != nil {
+		return CommunityShortsRouteVerificationReport{}, err
 	}
 
 	session, cleanupDB, err := openCommunityShortsOpsSession(ctx, cfg, logger)
@@ -132,35 +115,95 @@ func CollectCommunityShortsRouteVerificationReport(
 		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: session is nil")
 	}
 
+	baseline, err := buildCommunityShortsRouteReportBaseline(ctx, cfg, logger, session, now)
+	if err != nil {
+		return CommunityShortsRouteVerificationReport{}, err
+	}
+
+	pathUsageRows, sendCountRows, err := loadCommunityShortsRouteReportRows(ctx, session, since)
+	if err != nil {
+		return CommunityShortsRouteVerificationReport{}, err
+	}
+
+	return BuildCommunityShortsRouteVerificationReport(baseline, pathUsageRows, sendCountRows, now, since), nil
+}
+
+func normalizeCommunityShortsRouteReportInputs(
+	ctx context.Context,
+	cfg *config.Config,
+	logger *slog.Logger,
+	now time.Time,
+	since time.Time,
+) (context.Context, *slog.Logger, time.Time, time.Time, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if cfg == nil {
+		return ctx, logger, now, since, fmt.Errorf("collect community shorts route verification report: config is nil")
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	now = now.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if since.IsZero() {
+		return ctx, logger, now, since, fmt.Errorf("collect community shorts route verification report: since is empty")
+	}
+	since = since.UTC()
+	if since.After(now) {
+		return ctx, logger, now, since, fmt.Errorf("collect community shorts route verification report: since is after now")
+	}
+
+	return ctx, logger, now, since, nil
+}
+
+func buildCommunityShortsRouteReportBaseline(
+	ctx context.Context,
+	cfg *config.Config,
+	logger *slog.Logger,
+	session *communityShortsOpsSession,
+	now time.Time,
+) (communityshorts.TargetBaseline, error) {
 	memberRepository := sharedproviders.ProvideMemberRepository(session.postgres, logger)
 	members, err := memberRepository.GetAllMembers(ctx)
 	if err != nil {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: load members: %w", err)
+		return communityshorts.TargetBaseline{}, fmt.Errorf("collect community shorts route verification report: load members: %w", err)
 	}
 
 	alarmRepository := sharedalarm.NewRepository(session.postgres, logger)
 	alarms, err := alarmRepository.LoadAll(ctx)
 	if err != nil {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: load alarms: %w", err)
+		return communityshorts.TargetBaseline{}, fmt.Errorf("collect community shorts route verification report: load alarms: %w", err)
 	}
 
 	channels := communityshorts.BuildOperationalChannelsFromMembers(members)
 	baseline, err := communityshorts.BuildTargetBaseline(channels, alarms, cfg.Ingestion, now)
 	if err != nil {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: build baseline: %w", err)
+		return communityshorts.TargetBaseline{}, fmt.Errorf("collect community shorts route verification report: build baseline: %w", err)
 	}
 
+	return baseline, nil
+}
+
+func loadCommunityShortsRouteReportRows(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	since time.Time,
+) ([]outbox.PostDeliveryPathUsage, []outbox.PostSendCount, error) {
 	pathUsageRows, err := session.telemetryRepo.ListPostDeliveryPathUsageSince(ctx, since)
 	if err != nil {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: list delivery path usage: %w", err)
+		return nil, nil, fmt.Errorf("collect community shorts route verification report: list delivery path usage: %w", err)
 	}
 
 	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, since)
 	if err != nil {
-		return CommunityShortsRouteVerificationReport{}, fmt.Errorf("collect community shorts route verification report: list send counts: %w", err)
+		return nil, nil, fmt.Errorf("collect community shorts route verification report: list send counts: %w", err)
 	}
 
-	return BuildCommunityShortsRouteVerificationReport(baseline, pathUsageRows, sendCountRows, now, since), nil
+	return pathUsageRows, sendCountRows, nil
 }
 
 type communityShortsPostPathClassification struct {
@@ -169,6 +212,14 @@ type communityShortsPostPathClassification struct {
 }
 
 func classifyCommunityShortsPostPaths(rows []outbox.PostDeliveryPathUsage) communityShortsPostPathClassification {
+	paths := sortedRouteReportPaths(collectCommunityShortsPostPathSet(rows))
+	return communityShortsPostPathClassification{
+		State:         resolveCommunityShortsPostPathState(paths),
+		ObservedPaths: paths,
+	}
+}
+
+func collectCommunityShortsPostPathSet(rows []outbox.PostDeliveryPathUsage) map[string]struct{} {
 	pathSet := make(map[string]struct{})
 	for i := range rows {
 		path := strings.TrimSpace(rows[i].DeliveryPath)
@@ -177,18 +228,20 @@ func classifyCommunityShortsPostPaths(rows []outbox.PostDeliveryPathUsage) commu
 		}
 		pathSet[path] = struct{}{}
 	}
+	return pathSet
+}
 
-	paths := sortedRouteReportPaths(pathSet)
+func resolveCommunityShortsPostPathState(paths []string) string {
 	switch len(paths) {
 	case 0:
-		return communityShortsPostPathClassification{State: communityShortsRouteUsageNoPathObserved, ObservedPaths: paths}
+		return communityShortsRouteUsageNoPathObserved
 	case 1:
 		if paths[0] == communityshorts.NewDeliveryPath {
-			return communityShortsPostPathClassification{State: communityShortsRouteUsageNewOnlyVerified, ObservedPaths: paths}
+			return communityShortsRouteUsageNewOnlyVerified
 		}
-		return communityShortsPostPathClassification{State: communityShortsRouteUsageUnexpectedPathDetected, ObservedPaths: paths}
+		return communityShortsRouteUsageUnexpectedPathDetected
 	default:
-		return communityShortsPostPathClassification{State: communityShortsRouteUsageMixedPathsDetected, ObservedPaths: paths}
+		return communityShortsRouteUsageMixedPathsDetected
 	}
 }
 

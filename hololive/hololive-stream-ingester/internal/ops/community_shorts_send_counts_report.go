@@ -92,6 +92,12 @@ type communityShortsSendCountKey struct {
 	contentID string
 }
 
+type communityShortsSendCountRows struct {
+	sendCountRows []outbox.PostSendCount
+	timelineRows  []outbox.PostDeliveryTimeline
+	query         CommunityShortsSendCountQuery
+}
+
 func CollectCommunityShortsSendCountReport(
 	ctx context.Context,
 	cfg *config.Config,
@@ -156,65 +162,96 @@ func collectCommunityShortsSendCountReportWithSession(
 		return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: session is nil")
 	}
 
-	var err error
-	var sendCountRows []outbox.PostSendCount
-	var timelineRows []outbox.PostDeliveryTimeline
+	rows, err := collectCommunityShortsSendCountRows(ctx, session, query, now)
+	if err != nil {
+		return CommunityShortsSendCountReport{}, err
+	}
+	return BuildCommunityShortsSendCountReportWithQuery(rows.sendCountRows, rows.timelineRows, rows.query, now), nil
+}
+
+func collectCommunityShortsSendCountRows(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsSendCountQuery,
+	now time.Time,
+) (communityShortsSendCountRows, error) {
 	switch query.Mode {
 	case communityShortsSendCountQueryModeObservation:
-		state, stateErr := resolveCommunityShortsObservationQueryState(
-			ctx,
-			session.trackingRepository,
-			query.ObservationRuntimeName,
-			*query.ObservationBigBangCutoverAt,
-			now,
-		)
-		if stateErr != nil {
-			return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: find observation window: %w", stateErr)
-		}
-		if state.Window == nil {
-			return CommunityShortsSendCountReport{}, fmt.Errorf(
-				"collect community shorts send count report: observation window not found: runtime=%s cutover=%s",
-				query.ObservationRuntimeName,
-				formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
-			)
-		}
-		query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
-		query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
-
-		if state.Finalized {
-			sendCountRows, err = session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-			if err != nil {
-				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window send counts: %w", err)
-			}
-			timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, state.Window.BigBangCutoverAt)
-			if err != nil {
-				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window delivery timelines: %w", err)
-			}
-			break
-		}
-
-		if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
-			sendCountRows, err = session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-			if err != nil {
-				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list active observation-window send counts: %w", err)
-			}
-			timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
-			if err != nil {
-				return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list active observation-window delivery timelines: %w", err)
-			}
-		}
+		return collectObservationSendCountRows(ctx, session, query, now)
 	default:
-		sendCountRows, err = session.telemetryRepo.ListPostSendCountsSince(ctx, *query.WindowStart)
-		if err != nil {
-			return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list post send counts: %w", err)
-		}
-		timelineRows, err = session.telemetryRepo.ListPostDeliveryTimelinesSince(ctx, *query.WindowStart)
-		if err != nil {
-			return CommunityShortsSendCountReport{}, fmt.Errorf("collect community shorts send count report: list post delivery timelines: %w", err)
-		}
+		return collectRecentSendCountRows(ctx, session, query)
+	}
+}
+
+func collectObservationSendCountRows(
+	ctx context.Context,
+	session *communityShortsOpsSession,
+	query CommunityShortsSendCountQuery,
+	now time.Time,
+) (communityShortsSendCountRows, error) {
+	state, err := resolveCommunityShortsObservationQueryState(
+		ctx,
+		session.trackingRepository,
+		query.ObservationRuntimeName,
+		*query.ObservationBigBangCutoverAt,
+		now,
+	)
+	if err != nil {
+		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: find observation window: %w", err)
+	}
+	if state.Window == nil {
+		return communityShortsSendCountRows{}, fmt.Errorf(
+			"collect community shorts send count report: observation window not found: runtime=%s cutover=%s",
+			query.ObservationRuntimeName,
+			formatCommunityShortsSendCountTime(*query.ObservationBigBangCutoverAt),
+		)
 	}
 
-	return BuildCommunityShortsSendCountReportWithQuery(sendCountRows, timelineRows, query, now), nil
+	query.WindowStart = cloneCommunityShortsSendCountTime(&state.Window.ObservationStartedAt)
+	query.WindowEnd = cloneCommunityShortsSendCountTime(&state.EffectiveWindowEnd)
+	if state.Finalized {
+		return collectFinalizedObservationSendCountRows(ctx, session, query, state.Window.BigBangCutoverAt)
+	}
+	if state.EffectiveWindowEnd.After(state.Window.ObservationStartedAt) {
+		return collectActiveObservationSendCountRows(ctx, session, query, state)
+	}
+	return communityShortsSendCountRows{query: query}, nil
+}
+
+func collectFinalizedObservationSendCountRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery, cutoverAt time.Time) (communityShortsSendCountRows, error) {
+	sendCountRows, err := session.telemetryRepo.ListPostSendCountsByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	if err != nil {
+		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window send counts: %w", err)
+	}
+	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesByFinalizedObservationWindow(ctx, query.ObservationRuntimeName, cutoverAt)
+	if err != nil {
+		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list finalized observation-window delivery timelines: %w", err)
+	}
+	return communityShortsSendCountRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query}, nil
+}
+
+func collectActiveObservationSendCountRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery, state communityShortsObservationQueryState) (communityShortsSendCountRows, error) {
+	sendCountRows, err := session.telemetryRepo.ListPostSendCountsWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	if err != nil {
+		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list active observation-window send counts: %w", err)
+	}
+	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesWithinObservationWindow(ctx, state.Window.ObservationStartedAt, state.EffectiveWindowEnd, state.EffectiveWindowEnd)
+	if err != nil {
+		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list active observation-window delivery timelines: %w", err)
+	}
+	return communityShortsSendCountRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query}, nil
+}
+
+func collectRecentSendCountRows(ctx context.Context, session *communityShortsOpsSession, query CommunityShortsSendCountQuery) (communityShortsSendCountRows, error) {
+	sendCountRows, err := session.telemetryRepo.ListPostSendCountsSince(ctx, *query.WindowStart)
+	if err != nil {
+		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list post send counts: %w", err)
+	}
+	timelineRows, err := session.telemetryRepo.ListPostDeliveryTimelinesSince(ctx, *query.WindowStart)
+	if err != nil {
+		return communityShortsSendCountRows{}, fmt.Errorf("collect community shorts send count report: list post delivery timelines: %w", err)
+	}
+	return communityShortsSendCountRows{sendCountRows: sendCountRows, timelineRows: timelineRows, query: query}, nil
 }
 
 func normalizeCommunityShortsSendCountCollectOptions(
@@ -222,25 +259,40 @@ func normalizeCommunityShortsSendCountCollectOptions(
 	now time.Time,
 ) (CommunityShortsSendCountQuery, error) {
 	observationRuntimeName := strings.TrimSpace(options.ObservationRuntimeName)
-	hasObservationCutover := options.ObservationBigBangCutoverAt != nil && !options.ObservationBigBangCutoverAt.IsZero()
-	hasObservationQuery := observationRuntimeName != "" || hasObservationCutover
-	hasRecentQuery := options.Since != nil && !options.Since.IsZero()
 
-	if hasObservationQuery {
-		if hasRecentQuery {
-			return CommunityShortsSendCountQuery{}, fmt.Errorf("recent window and observation window are mutually exclusive")
-		}
-		if observationRuntimeName == "" || !hasObservationCutover {
-			return CommunityShortsSendCountQuery{}, fmt.Errorf("observation runtime name and cutover must both be set")
-		}
-		return CommunityShortsSendCountQuery{
-			Mode:                        communityShortsSendCountQueryModeObservation,
-			ObservationRuntimeName:      observationRuntimeName,
-			ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt),
-		}, nil
+	if hasCommunityShortsSendCountObservationQuery(observationRuntimeName, options.ObservationBigBangCutoverAt) {
+		return normalizeCommunityShortsSendCountObservationOptions(options, observationRuntimeName)
 	}
 
-	if !hasRecentQuery {
+	return normalizeCommunityShortsSendCountRecentOptions(options, now)
+}
+
+func hasCommunityShortsSendCountObservationQuery(runtimeName string, cutoverAt *time.Time) bool {
+	return runtimeName != "" || cutoverAt != nil && !cutoverAt.IsZero()
+}
+
+func normalizeCommunityShortsSendCountObservationOptions(
+	options CommunityShortsSendCountCollectOptions,
+	observationRuntimeName string,
+) (CommunityShortsSendCountQuery, error) {
+	if options.Since != nil && !options.Since.IsZero() {
+		return CommunityShortsSendCountQuery{}, fmt.Errorf("recent window and observation window are mutually exclusive")
+	}
+	if observationRuntimeName == "" || options.ObservationBigBangCutoverAt == nil || options.ObservationBigBangCutoverAt.IsZero() {
+		return CommunityShortsSendCountQuery{}, fmt.Errorf("observation runtime name and cutover must both be set")
+	}
+	return CommunityShortsSendCountQuery{
+		Mode:                        communityShortsSendCountQueryModeObservation,
+		ObservationRuntimeName:      observationRuntimeName,
+		ObservationBigBangCutoverAt: cloneCommunityShortsSendCountTime(options.ObservationBigBangCutoverAt),
+	}, nil
+}
+
+func normalizeCommunityShortsSendCountRecentOptions(
+	options CommunityShortsSendCountCollectOptions,
+	now time.Time,
+) (CommunityShortsSendCountQuery, error) {
+	if options.Since == nil || options.Since.IsZero() {
 		return CommunityShortsSendCountQuery{}, fmt.Errorf("recent window since is empty")
 	}
 	since := normalizeCommunityShortsSendCountTime(*options.Since)

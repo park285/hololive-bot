@@ -33,6 +33,18 @@ func finalizeObservationAlarmSentHistoryRows(
 	}
 
 	inputs := trackingrepo.BuildObservationPostComparisonInputsFromSentHistories(kind, rows)
+	finalInputs, duplicateRowCount := finalizeObservationAlarmSentHistoryInputs(inputs)
+
+	return observationAlarmSentHistoryFinalizationResult{
+		Rows:              buildObservationAlarmSentHistoryRows(finalInputs),
+		CollectedRowCount: len(rows),
+		DuplicateRowCount: duplicateRowCount,
+	}
+}
+
+func finalizeObservationAlarmSentHistoryInputs(
+	inputs []trackingrepo.ObservationPostComparisonInput,
+) ([]trackingrepo.ObservationPostComparisonInput, int) {
 	rowsByPostID := make(map[string]trackingrepo.ObservationPostComparisonInput, len(inputs))
 	orderedKeys := make([]string, 0, len(inputs))
 	duplicateRowCount := 0
@@ -54,11 +66,12 @@ func finalizeObservationAlarmSentHistoryRows(
 		orderedKeys = append(orderedKeys, key)
 	}
 
-	finalInputs := make([]trackingrepo.ObservationPostComparisonInput, 0, len(orderedKeys))
-	for _, key := range orderedKeys {
-		finalInputs = append(finalInputs, rowsByPostID[key])
-	}
+	finalInputs := orderedObservationAlarmSentHistoryInputs(rowsByPostID, orderedKeys)
+	sortObservationAlarmSentHistoryInputs(finalInputs)
+	return finalInputs, duplicateRowCount
+}
 
+func sortObservationAlarmSentHistoryInputs(finalInputs []trackingrepo.ObservationPostComparisonInput) {
 	sort.SliceStable(finalInputs, func(i, j int) bool {
 		leftAlarmSentAt := observationAlarmSentHistoryTimeValue(finalInputs[i].AlarmSentAt)
 		rightAlarmSentAt := observationAlarmSentHistoryTimeValue(finalInputs[j].AlarmSentAt)
@@ -70,17 +83,27 @@ func finalizeObservationAlarmSentHistoryRows(
 		}
 		return finalInputs[i].ContentID < finalInputs[j].ContentID
 	})
+}
 
+func orderedObservationAlarmSentHistoryInputs(
+	rowsByPostID map[string]trackingrepo.ObservationPostComparisonInput,
+	orderedKeys []string,
+) []trackingrepo.ObservationPostComparisonInput {
+	finalInputs := make([]trackingrepo.ObservationPostComparisonInput, 0, len(orderedKeys))
+	for _, key := range orderedKeys {
+		finalInputs = append(finalInputs, rowsByPostID[key])
+	}
+	return finalInputs
+}
+
+func buildObservationAlarmSentHistoryRows(
+	finalInputs []trackingrepo.ObservationPostComparisonInput,
+) []trackingrepo.ObservationAlarmSentHistoryRow {
 	finalRows := make([]trackingrepo.ObservationAlarmSentHistoryRow, 0, len(finalInputs))
 	for i := range finalInputs {
 		finalRows = append(finalRows, finalInputs[i].ToObservationAlarmSentHistoryRow())
 	}
-
-	return observationAlarmSentHistoryFinalizationResult{
-		Rows:              finalRows,
-		CollectedRowCount: len(rows),
-		DuplicateRowCount: duplicateRowCount,
-	}
+	return finalRows
 }
 
 func mergeObservationAlarmSentHistoryInputs(
@@ -94,19 +117,20 @@ func mergeObservationAlarmSentHistoryInputs(
 	if merged.AlarmType == "" && next.AlarmType != "" {
 		merged.AlarmType = next.AlarmType
 	}
-	if strings.TrimSpace(merged.CanonicalPostID) == "" && strings.TrimSpace(next.CanonicalPostID) != "" {
-		merged.CanonicalPostID = next.CanonicalPostID
-	}
-	if strings.TrimSpace(merged.ContentID) == "" && strings.TrimSpace(next.ContentID) != "" {
-		merged.ContentID = next.ContentID
-	}
-	if strings.TrimSpace(merged.ChannelID) == "" && strings.TrimSpace(next.ChannelID) != "" {
-		merged.ChannelID = next.ChannelID
-	}
+	merged.CanonicalPostID = mergeObservationAlarmSentHistoryString(merged.CanonicalPostID, next.CanonicalPostID)
+	merged.ContentID = mergeObservationAlarmSentHistoryString(merged.ContentID, next.ContentID)
+	merged.ChannelID = mergeObservationAlarmSentHistoryString(merged.ChannelID, next.ChannelID)
 	merged.ActualPublishedAt = earliestObservationAlarmSentHistoryTime(merged.ActualPublishedAt, next.ActualPublishedAt)
 	merged.DetectedAt = earliestObservationAlarmSentHistoryTime(merged.DetectedAt, next.DetectedAt)
 	merged.AlarmSentAt = earliestObservationAlarmSentHistoryTime(merged.AlarmSentAt, next.AlarmSentAt)
 	return merged
+}
+
+func mergeObservationAlarmSentHistoryString(existing string, next string) string {
+	if strings.TrimSpace(existing) == "" && strings.TrimSpace(next) != "" {
+		return next
+	}
+	return existing
 }
 
 func earliestObservationAlarmSentHistoryTime(left *time.Time, right *time.Time) *time.Time {

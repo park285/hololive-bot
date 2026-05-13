@@ -6,6 +6,34 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 )
 
+var (
+	communityShortsInternalDelaySourceBasis = map[outbox.PostDelaySource]string{
+		outbox.PostDelaySourceInternalDelivery: "delay_source=internal_delivery",
+		outbox.PostDelaySourceMixed:            "delay_source=mixed",
+	}
+
+	communityShortsLatencyCauseDelaySourceFields = map[outbox.PostDelaySource][]string{
+		outbox.PostDelaySourceExternalCollection: {"publish_to_detect_millis"},
+		outbox.PostDelaySourceInternalDelivery:   {"internal_latency_millis"},
+		outbox.PostDelaySourceMixed:              {"publish_to_detect_millis", "internal_latency_millis"},
+	}
+
+	communityShortsLatencyCauseInternalCauseFields = map[outbox.PostInternalDelayCause]string{
+		outbox.PostInternalDelayCauseQueueWait:         "queue_wait_millis",
+		outbox.PostInternalDelayCauseRetryAccumulation: "retry_accumulation_millis",
+		outbox.PostInternalDelayCauseJobFailure:        "job_failure_detected",
+	}
+
+	communityShortsLatencyCauseEvidenceKeyFields = map[outbox.PostLatencyClassificationEvidenceKey]string{
+		outbox.PostLatencyClassificationEvidenceKeyAlarmLatency:      "alarm_latency_millis",
+		outbox.PostLatencyClassificationEvidenceKeyPublishToDetect:   "publish_to_detect_millis",
+		outbox.PostLatencyClassificationEvidenceKeyInternalLatency:   "internal_latency_millis",
+		outbox.PostLatencyClassificationEvidenceKeyQueueWait:         "queue_wait_millis",
+		outbox.PostLatencyClassificationEvidenceKeyRetryAccumulation: "retry_accumulation_millis",
+		outbox.PostLatencyClassificationEvidenceKeyJobFailure:        "job_failure_detected",
+	}
+)
+
 func classifyCommunityShortsLatencyCauseInternalJudgment(
 	row CommunityShortsLatencyCauseRow,
 ) (CommunityShortsInternalCauseJudgment, string) {
@@ -13,15 +41,12 @@ func classifyCommunityShortsLatencyCauseInternalJudgment(
 		return CommunityShortsInternalCauseJudgmentNonInternal, "delay_source=external_collection"
 	}
 
-	if row.InternalDelayCause != "" && row.InternalDelayCause != outbox.PostInternalDelayCauseNone {
+	if hasCommunityShortsInternalDelayCause(row.InternalDelayCause) {
 		return CommunityShortsInternalCauseJudgmentInternalSystem, buildCommunityShortsInternalCauseBasis(row.DelaySource, row.InternalDelayCause)
 	}
 
-	switch row.DelaySource {
-	case outbox.PostDelaySourceInternalDelivery:
-		return CommunityShortsInternalCauseJudgmentInternalSystem, "delay_source=internal_delivery"
-	case outbox.PostDelaySourceMixed:
-		return CommunityShortsInternalCauseJudgmentInternalSystem, "delay_source=mixed"
+	if basis, ok := communityShortsInternalDelaySourceBasis[row.DelaySource]; ok {
+		return CommunityShortsInternalCauseJudgmentInternalSystem, basis
 	}
 
 	if row.LatencyClassification.Status == outbox.PostLatencyClassificationStatusInsufficientEvidence {
@@ -29,6 +54,10 @@ func classifyCommunityShortsLatencyCauseInternalJudgment(
 	}
 
 	return CommunityShortsInternalCauseJudgmentNonInternal, "delay_source=none"
+}
+
+func hasCommunityShortsInternalDelayCause(cause outbox.PostInternalDelayCause) bool {
+	return cause != "" && cause != outbox.PostInternalDelayCauseNone
 }
 
 func buildCommunityShortsInternalCauseBasis(
@@ -51,73 +80,64 @@ func buildCommunityShortsInternalCauseBasis(
 func buildCommunityShortsLatencyCauseEvidence(row CommunityShortsLatencyCauseRow) CommunityShortsLatencyCauseEvidence {
 	evidence := CommunityShortsLatencyCauseEvidence{}
 	seenFields := make(map[string]struct{}, 6)
-	addField := func(field string) {
-		if field == "" {
-			return
-		}
-		if _, exists := seenFields[field]; exists {
-			return
-		}
-		seenFields[field] = struct{}{}
-		evidence.Fields = append(evidence.Fields, field)
-	}
 
-	addField("delay_source")
-	addField("internal_delay_cause")
-
-	switch row.DelaySource {
-	case outbox.PostDelaySourceExternalCollection:
-		addField("publish_to_detect_millis")
-	case outbox.PostDelaySourceInternalDelivery:
-		addField("internal_latency_millis")
-	case outbox.PostDelaySourceMixed:
-		addField("publish_to_detect_millis")
-		addField("internal_latency_millis")
-	}
-
-	switch row.InternalDelayCause {
-	case outbox.PostInternalDelayCauseQueueWait:
-		addField("queue_wait_millis")
-	case outbox.PostInternalDelayCauseRetryAccumulation:
-		addField("retry_accumulation_millis")
-	case outbox.PostInternalDelayCauseJobFailure:
-		addField("job_failure_detected")
-	}
+	addCommunityShortsLatencyCauseEvidenceField(&evidence, seenFields, "delay_source")
+	addCommunityShortsLatencyCauseEvidenceField(&evidence, seenFields, "internal_delay_cause")
+	addCommunityShortsLatencyCauseEvidenceFields(&evidence, seenFields, communityShortsLatencyCauseDelaySourceFields[row.DelaySource])
+	addCommunityShortsLatencyCauseEvidenceField(&evidence, seenFields, communityShortsLatencyCauseInternalCauseFields[row.InternalDelayCause])
 
 	if row.LatencyClassification.Status == outbox.PostLatencyClassificationStatusInsufficientEvidence {
-		addField("latency_classification.status")
+		addCommunityShortsLatencyCauseEvidenceField(&evidence, seenFields, "latency_classification.status")
 	}
 
-	for i := range row.LatencyClassification.Evidence {
-		item := row.LatencyClassification.Evidence[i]
-		if !item.Selected {
-			continue
-		}
-		evidence.SelectedClassificationKeys = append(evidence.SelectedClassificationKeys, item.Key)
-		addField(communityShortsLatencyCauseEvidenceFieldForKey(item.Key))
-	}
-	if len(evidence.SelectedClassificationKeys) > 0 {
-		addField("latency_classification.evidence")
+	if addCommunityShortsLatencyCauseSelectedEvidenceFields(&evidence, seenFields, row.LatencyClassification.Evidence) {
+		addCommunityShortsLatencyCauseEvidenceField(&evidence, seenFields, "latency_classification.evidence")
 	}
 
 	return evidence
 }
 
-func communityShortsLatencyCauseEvidenceFieldForKey(key outbox.PostLatencyClassificationEvidenceKey) string {
-	switch key {
-	case outbox.PostLatencyClassificationEvidenceKeyAlarmLatency:
-		return "alarm_latency_millis"
-	case outbox.PostLatencyClassificationEvidenceKeyPublishToDetect:
-		return "publish_to_detect_millis"
-	case outbox.PostLatencyClassificationEvidenceKeyInternalLatency:
-		return "internal_latency_millis"
-	case outbox.PostLatencyClassificationEvidenceKeyQueueWait:
-		return "queue_wait_millis"
-	case outbox.PostLatencyClassificationEvidenceKeyRetryAccumulation:
-		return "retry_accumulation_millis"
-	case outbox.PostLatencyClassificationEvidenceKeyJobFailure:
-		return "job_failure_detected"
-	default:
-		return ""
+func addCommunityShortsLatencyCauseEvidenceField(
+	evidence *CommunityShortsLatencyCauseEvidence,
+	seenFields map[string]struct{},
+	field string,
+) {
+	if field == "" {
+		return
 	}
+	if _, exists := seenFields[field]; exists {
+		return
+	}
+	seenFields[field] = struct{}{}
+	evidence.Fields = append(evidence.Fields, field)
+}
+
+func addCommunityShortsLatencyCauseEvidenceFields(
+	evidence *CommunityShortsLatencyCauseEvidence,
+	seenFields map[string]struct{},
+	fields []string,
+) {
+	for _, field := range fields {
+		addCommunityShortsLatencyCauseEvidenceField(evidence, seenFields, field)
+	}
+}
+
+func addCommunityShortsLatencyCauseSelectedEvidenceFields(
+	evidence *CommunityShortsLatencyCauseEvidence,
+	seenFields map[string]struct{},
+	items []outbox.PostLatencyClassificationEvidence,
+) bool {
+	for i := range items {
+		item := items[i]
+		if !item.Selected {
+			continue
+		}
+		evidence.SelectedClassificationKeys = append(evidence.SelectedClassificationKeys, item.Key)
+		addCommunityShortsLatencyCauseEvidenceField(evidence, seenFields, communityShortsLatencyCauseEvidenceFieldForKey(item.Key))
+	}
+	return len(evidence.SelectedClassificationKeys) > 0
+}
+
+func communityShortsLatencyCauseEvidenceFieldForKey(key outbox.PostLatencyClassificationEvidenceKey) string {
+	return communityShortsLatencyCauseEvidenceKeyFields[key]
 }

@@ -9,6 +9,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 )
 
+type communityShortsLatencyCauseBuildContext struct {
+	generatedAt       time.Time
+	query             CommunityShortsLatencyCauseQuery
+	normalizedPeriods []outbox.PostLatencyPeriod
+	requestedPeriods  []CommunityShortsLatencyPeriodSpec
+	summaries         []outbox.PostLatencyPeriodSummary
+	periodRows        [][]CommunityShortsLatencyCauseRow
+}
+
 func BuildCommunityShortsLatencyCauseReport(
 	sendCountRows []outbox.PostSendCount,
 	timelineRows []outbox.PostDeliveryTimeline,
@@ -31,6 +40,25 @@ func BuildCommunityShortsLatencyCauseReportWithQuery(
 	generatedAt time.Time,
 	periods []outbox.PostLatencyPeriod,
 ) (CommunityShortsLatencyCauseReport, error) {
+	buildCtx, err := newCommunityShortsLatencyCauseBuildContext(sendCountRows, query, generatedAt, periods)
+	if err != nil {
+		return CommunityShortsLatencyCauseReport{}, err
+	}
+
+	timelineIndex := buildCommunityShortsDeliveryTimelineIndex(timelineRows)
+	if err := buildCtx.addLatencyCauseRows(sendCountRows, timelineIndex); err != nil {
+		return CommunityShortsLatencyCauseReport{}, err
+	}
+
+	return buildCtx.report(), nil
+}
+
+func newCommunityShortsLatencyCauseBuildContext(
+	sendCountRows []outbox.PostSendCount,
+	query CommunityShortsLatencyCauseQuery,
+	generatedAt time.Time,
+	periods []outbox.PostLatencyPeriod,
+) (communityShortsLatencyCauseBuildContext, error) {
 	generatedAt = normalizeCommunityShortsSendCountTime(generatedAt)
 	if generatedAt.IsZero() {
 		generatedAt = time.Now().UTC()
@@ -38,7 +66,7 @@ func BuildCommunityShortsLatencyCauseReportWithQuery(
 
 	normalizedPeriods, requestedPeriods, err := normalizeCommunityShortsLatencyCausePeriods(periods)
 	if err != nil {
-		return CommunityShortsLatencyCauseReport{}, fmt.Errorf("build community shorts latency cause report: %w", err)
+		return communityShortsLatencyCauseBuildContext{}, fmt.Errorf("build community shorts latency cause report: %w", err)
 	}
 	query = withCommunityShortsLatencyCauseQueryWindow(normalizeCommunityShortsLatencyCauseQuery(query), normalizedPeriods)
 	if query.Mode == "" {
@@ -47,70 +75,117 @@ func BuildCommunityShortsLatencyCauseReportWithQuery(
 
 	summaries, err := outbox.BuildPostLatencyPeriodSummaries(sendCountRows, normalizedPeriods)
 	if err != nil {
-		return CommunityShortsLatencyCauseReport{}, fmt.Errorf("build community shorts latency cause report: build post latency period summaries: %w", err)
+		return communityShortsLatencyCauseBuildContext{}, fmt.Errorf("build community shorts latency cause report: build post latency period summaries: %w", err)
 	}
 
-	periodRows := make([][]CommunityShortsLatencyCauseRow, len(normalizedPeriods))
-	timelineIndex := buildCommunityShortsDeliveryTimelineIndex(timelineRows)
+	return communityShortsLatencyCauseBuildContext{
+		generatedAt:       generatedAt,
+		query:             query,
+		normalizedPeriods: normalizedPeriods,
+		requestedPeriods:  requestedPeriods,
+		summaries:         summaries,
+		periodRows:        make([][]CommunityShortsLatencyCauseRow, len(normalizedPeriods)),
+	}, nil
+}
 
+func (buildCtx *communityShortsLatencyCauseBuildContext) addLatencyCauseRows(
+	sendCountRows []outbox.PostSendCount,
+	timelineIndex map[communityShortsSendCountKey]outbox.PostDeliveryTimeline,
+) error {
 	for i := range sendCountRows {
-		sendCount := normalizeCommunityShortsPostSendCount(sendCountRows[i])
-		if !isCommunityShortsLatencyCauseExceeded(sendCount) {
-			continue
-		}
-
-		observedAt, err := resolveCommunityShortsLatencyCauseObservedAt(sendCount)
-		if err != nil {
-			return CommunityShortsLatencyCauseReport{}, fmt.Errorf("build community shorts latency cause report: post[%d] %s: %w", i, strings.TrimSpace(sendCount.ContentID), err)
-		}
-
-		key := buildCommunityShortsSendCountKey(sendCount.ChannelID, sendCount.AlarmType, sendCount.ContentID)
-		timeline, hasTimeline := timelineIndex[key]
-		row := buildCommunityShortsLatencyCauseRow(sendCount, observedAt, timeline, hasTimeline)
-		for periodIndex := range normalizedPeriods {
-			if observedAt.Before(normalizedPeriods[periodIndex].StartAt) || !observedAt.Before(normalizedPeriods[periodIndex].EndAt) {
-				continue
-			}
-			periodRows[periodIndex] = append(periodRows[periodIndex], row)
+		if err := buildCtx.addLatencyCauseRow(i, sendCountRows[i], timelineIndex); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	periodViews := make([]CommunityShortsLatencyCausePeriodView, 0, len(summaries))
-	for i := range summaries {
-		rows := append([]CommunityShortsLatencyCauseRow(nil), periodRows[i]...)
-		sort.SliceStable(rows, func(left, right int) bool {
-			leftTime := communityShortsLatencyCauseSortTime(rows[left])
-			rightTime := communityShortsLatencyCauseSortTime(rows[right])
-			if !leftTime.Equal(rightTime) {
-				return leftTime.After(rightTime)
-			}
-			if rows[left].AlarmType != rows[right].AlarmType {
-				return rows[left].AlarmType < rows[right].AlarmType
-			}
-			if rows[left].ChannelID != rows[right].ChannelID {
-				return rows[left].ChannelID < rows[right].ChannelID
-			}
-			if rows[left].PostID != rows[right].PostID {
-				return rows[left].PostID < rows[right].PostID
-			}
-			return rows[left].ContentID < rows[right].ContentID
-		})
+func (buildCtx *communityShortsLatencyCauseBuildContext) addLatencyCauseRow(
+	index int,
+	rawSendCount outbox.PostSendCount,
+	timelineIndex map[communityShortsSendCountKey]outbox.PostDeliveryTimeline,
+) error {
+	sendCount := normalizeCommunityShortsPostSendCount(rawSendCount)
+	if !isCommunityShortsLatencyCauseExceeded(sendCount) {
+		return nil
+	}
+
+	observedAt, err := resolveCommunityShortsLatencyCauseObservedAt(sendCount)
+	if err != nil {
+		return fmt.Errorf("build community shorts latency cause report: post[%d] %s: %w", index, strings.TrimSpace(sendCount.ContentID), err)
+	}
+
+	key := buildCommunityShortsSendCountKey(sendCount.ChannelID, sendCount.AlarmType, sendCount.ContentID)
+	timeline, hasTimeline := timelineIndex[key]
+	row := buildCommunityShortsLatencyCauseRow(sendCount, observedAt, timeline, hasTimeline)
+	buildCtx.addLatencyCauseRowToPeriods(observedAt, row)
+	return nil
+}
+
+func (buildCtx *communityShortsLatencyCauseBuildContext) addLatencyCauseRowToPeriods(
+	observedAt time.Time,
+	row CommunityShortsLatencyCauseRow,
+) {
+	for periodIndex := range buildCtx.normalizedPeriods {
+		if isWithinLatencyCausePeriod(observedAt, buildCtx.normalizedPeriods[periodIndex]) {
+			buildCtx.periodRows[periodIndex] = append(buildCtx.periodRows[periodIndex], row)
+		}
+	}
+}
+
+func isWithinLatencyCausePeriod(observedAt time.Time, period outbox.PostLatencyPeriod) bool {
+	return !observedAt.Before(period.StartAt) && observedAt.Before(period.EndAt)
+}
+
+func (buildCtx communityShortsLatencyCauseBuildContext) report() CommunityShortsLatencyCauseReport {
+	return CommunityShortsLatencyCauseReport{
+		GeneratedAt:      buildCtx.generatedAt,
+		Query:            buildCtx.query,
+		ObservedAtBasis:  communityShortsLatencyCauseObservedAtBasis,
+		ThresholdMillis:  int64((2 * time.Minute) / time.Millisecond),
+		Verification:     buildCommunityShortsLatencyCauseVerification(),
+		RequestedPeriods: buildCtx.requestedPeriods,
+		Periods:          buildCtx.periodViews(),
+	}
+}
+
+func (buildCtx communityShortsLatencyCauseBuildContext) periodViews() []CommunityShortsLatencyCausePeriodView {
+	periodViews := make([]CommunityShortsLatencyCausePeriodView, 0, len(buildCtx.summaries))
+	for i := range buildCtx.summaries {
+		rows := sortedCommunityShortsLatencyCauseRows(buildCtx.periodRows[i])
 		periodViews = append(periodViews, CommunityShortsLatencyCausePeriodView{
-			Summary:      cloneCommunityShortsLatencyPeriodSummary(summaries[i]),
+			Summary:      cloneCommunityShortsLatencyPeriodSummary(buildCtx.summaries[i]),
 			CauseSummary: buildCommunityShortsLatencyCauseSummary(rows),
 			Rows:         rows,
 		})
 	}
+	return periodViews
+}
 
-	return CommunityShortsLatencyCauseReport{
-		GeneratedAt:      generatedAt,
-		Query:            query,
-		ObservedAtBasis:  communityShortsLatencyCauseObservedAtBasis,
-		ThresholdMillis:  int64((2 * time.Minute) / time.Millisecond),
-		Verification:     buildCommunityShortsLatencyCauseVerification(),
-		RequestedPeriods: requestedPeriods,
-		Periods:          periodViews,
-	}, nil
+func sortedCommunityShortsLatencyCauseRows(rows []CommunityShortsLatencyCauseRow) []CommunityShortsLatencyCauseRow {
+	sortedRows := append([]CommunityShortsLatencyCauseRow(nil), rows...)
+	sort.SliceStable(sortedRows, func(left, right int) bool {
+		return compareCommunityShortsLatencyCauseRows(sortedRows[left], sortedRows[right])
+	})
+	return sortedRows
+}
+
+func compareCommunityShortsLatencyCauseRows(left, right CommunityShortsLatencyCauseRow) bool {
+	leftTime := communityShortsLatencyCauseSortTime(left)
+	rightTime := communityShortsLatencyCauseSortTime(right)
+	if !leftTime.Equal(rightTime) {
+		return leftTime.After(rightTime)
+	}
+	if left.AlarmType != right.AlarmType {
+		return left.AlarmType < right.AlarmType
+	}
+	if left.ChannelID != right.ChannelID {
+		return left.ChannelID < right.ChannelID
+	}
+	if left.PostID != right.PostID {
+		return left.PostID < right.PostID
+	}
+	return left.ContentID < right.ContentID
 }
 
 func normalizeCommunityShortsLatencyCauseQuery(query CommunityShortsLatencyCauseQuery) CommunityShortsLatencyCauseQuery {
@@ -150,29 +225,51 @@ func normalizeCommunityShortsLatencyCausePeriods(
 	requestedPeriods := make([]CommunityShortsLatencyPeriodSpec, 0, len(periods))
 	seenLabels := make(map[string]struct{}, len(periods))
 	for i := range periods {
-		label := strings.TrimSpace(periods[i].Label)
-		if label == "" {
-			return nil, nil, fmt.Errorf("period at index %d: label is empty", i)
+		period, requestedPeriod, err := normalizeCommunityShortsLatencyCausePeriod(i, periods[i], seenLabels)
+		if err != nil {
+			return nil, nil, err
 		}
-		if periods[i].StartAt.IsZero() {
-			return nil, nil, fmt.Errorf("period %q: start at is empty", label)
-		}
-		if periods[i].EndAt.IsZero() {
-			return nil, nil, fmt.Errorf("period %q: end at is empty", label)
-		}
-		startAt := periods[i].StartAt.UTC()
-		endAt := periods[i].EndAt.UTC()
-		if !endAt.After(startAt) {
-			return nil, nil, fmt.Errorf("period %q: end at must be after start at", label)
-		}
-		if _, exists := seenLabels[label]; exists {
-			return nil, nil, fmt.Errorf("period %q: duplicate label", label)
-		}
-		seenLabels[label] = struct{}{}
-		normalized = append(normalized, outbox.PostLatencyPeriod{Label: label, StartAt: startAt, EndAt: endAt})
-		requestedPeriods = append(requestedPeriods, CommunityShortsLatencyPeriodSpec{Label: label, Window: endAt.Sub(startAt)})
+		normalized = append(normalized, period)
+		requestedPeriods = append(requestedPeriods, requestedPeriod)
 	}
 	return normalized, requestedPeriods, nil
+}
+
+func normalizeCommunityShortsLatencyCausePeriod(
+	index int,
+	period outbox.PostLatencyPeriod,
+	seenLabels map[string]struct{},
+) (outbox.PostLatencyPeriod, CommunityShortsLatencyPeriodSpec, error) {
+	label := strings.TrimSpace(period.Label)
+	if label == "" {
+		return outbox.PostLatencyPeriod{}, CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("period at index %d: label is empty", index)
+	}
+	if err := validateCommunityShortsLatencyCausePeriodBounds(label, period); err != nil {
+		return outbox.PostLatencyPeriod{}, CommunityShortsLatencyPeriodSpec{}, err
+	}
+	if _, exists := seenLabels[label]; exists {
+		return outbox.PostLatencyPeriod{}, CommunityShortsLatencyPeriodSpec{}, fmt.Errorf("period %q: duplicate label", label)
+	}
+	seenLabels[label] = struct{}{}
+
+	startAt := period.StartAt.UTC()
+	endAt := period.EndAt.UTC()
+	return outbox.PostLatencyPeriod{Label: label, StartAt: startAt, EndAt: endAt},
+		CommunityShortsLatencyPeriodSpec{Label: label, Window: endAt.Sub(startAt)},
+		nil
+}
+
+func validateCommunityShortsLatencyCausePeriodBounds(label string, period outbox.PostLatencyPeriod) error {
+	if period.StartAt.IsZero() {
+		return fmt.Errorf("period %q: start at is empty", label)
+	}
+	if period.EndAt.IsZero() {
+		return fmt.Errorf("period %q: end at is empty", label)
+	}
+	if !period.EndAt.UTC().After(period.StartAt.UTC()) {
+		return fmt.Errorf("period %q: end at must be after start at", label)
+	}
+	return nil
 }
 
 func earliestCommunityShortsLatencyCausePeriodStart(periods []outbox.PostLatencyPeriod) time.Time {
@@ -221,14 +318,17 @@ func buildCommunityShortsLatencyCauseRow(
 	timeline outbox.PostDeliveryTimeline,
 	hasTimeline bool,
 ) CommunityShortsLatencyCauseRow {
-	classification := outbox.PostLatencyClassificationResult{
-		Status:             outbox.PostLatencyClassificationStatusInsufficientEvidence,
-		ThresholdMillis:    int64((2 * time.Minute) / time.Millisecond),
-		DelaySource:        outbox.PostDelaySourceNone,
-		InternalDelayCause: outbox.PostInternalDelayCauseNone,
+	row := newCommunityShortsLatencyCauseRow(sendCount, observedAt)
+
+	if !hasTimeline {
+		return finalizeCommunityShortsLatencyCauseRow(row)
 	}
 
-	row := CommunityShortsLatencyCauseRow{
+	return applyCommunityShortsLatencyCauseTimeline(row, timeline)
+}
+
+func newCommunityShortsLatencyCauseRow(sendCount outbox.PostSendCount, observedAt time.Time) CommunityShortsLatencyCauseRow {
+	return CommunityShortsLatencyCauseRow{
 		AlarmType:             sendCount.AlarmType,
 		ChannelID:             strings.TrimSpace(sendCount.ChannelID),
 		PostID:                resolveCommunityShortsSendCountPostID(CommunityShortsSendCountRow{PostSendCount: sendCount}),
@@ -241,29 +341,21 @@ func buildCommunityShortsLatencyCauseRow(
 		DelaySource:           outbox.PostDelaySourceNone,
 		InternalDelayCause:    outbox.PostInternalDelayCauseNone,
 		InternalCauseJudgment: CommunityShortsInternalCauseJudgmentNonInternal,
-		LatencyClassification: classification,
+		LatencyClassification: defaultCommunityShortsLatencyClassification(),
 	}
+}
 
-	if !hasTimeline {
-		row.InternalCauseJudgment, row.InternalCauseBasis = classifyCommunityShortsLatencyCauseInternalJudgment(row)
-		row.CauseEvidence = buildCommunityShortsLatencyCauseEvidence(row)
-		return row
+func defaultCommunityShortsLatencyClassification() outbox.PostLatencyClassificationResult {
+	return outbox.PostLatencyClassificationResult{
+		Status:             outbox.PostLatencyClassificationStatusInsufficientEvidence,
+		ThresholdMillis:    int64((2 * time.Minute) / time.Millisecond),
+		DelaySource:        outbox.PostDelaySourceNone,
+		InternalDelayCause: outbox.PostInternalDelayCauseNone,
 	}
+}
 
-	classification = cloneCommunityShortsLatencyClassification(timeline.LatencyClassification)
-	if classification.Status == "" {
-		classification.Status = outbox.PostLatencyClassificationStatusInsufficientEvidence
-	}
-	if classification.ThresholdMillis <= 0 {
-		classification.ThresholdMillis = int64((2 * time.Minute) / time.Millisecond)
-	}
-	if classification.DelaySource == "" {
-		classification.DelaySource = outbox.PostDelaySourceNone
-	}
-	if classification.InternalDelayCause == "" {
-		classification.InternalDelayCause = outbox.PostInternalDelayCauseNone
-	}
-
+func applyCommunityShortsLatencyCauseTimeline(row CommunityShortsLatencyCauseRow, timeline outbox.PostDeliveryTimeline) CommunityShortsLatencyCauseRow {
+	classification := normalizeCommunityShortsLatencyClassification(timeline.LatencyClassification)
 	row.PublishToDetectMillis = cloneCommunityShortsSendCountInt64(timeline.PublishToDetectMillis)
 	row.InternalLatencyMillis = cloneCommunityShortsSendCountInt64(timeline.InternalLatencyMillis)
 	row.QueueWaitMillis = cloneCommunityShortsSendCountInt64(timeline.QueueWaitMillis)
@@ -286,6 +378,29 @@ func buildCommunityShortsLatencyCauseRow(
 	classification.DelaySource = row.DelaySource
 	classification.InternalDelayCause = row.InternalDelayCause
 	row.LatencyClassification = classification
+	return finalizeCommunityShortsLatencyCauseRow(row)
+}
+
+func normalizeCommunityShortsLatencyClassification(
+	classification outbox.PostLatencyClassificationResult,
+) outbox.PostLatencyClassificationResult {
+	classification = cloneCommunityShortsLatencyClassification(classification)
+	if classification.Status == "" {
+		classification.Status = outbox.PostLatencyClassificationStatusInsufficientEvidence
+	}
+	if classification.ThresholdMillis <= 0 {
+		classification.ThresholdMillis = int64((2 * time.Minute) / time.Millisecond)
+	}
+	if classification.DelaySource == "" {
+		classification.DelaySource = outbox.PostDelaySourceNone
+	}
+	if classification.InternalDelayCause == "" {
+		classification.InternalDelayCause = outbox.PostInternalDelayCauseNone
+	}
+	return classification
+}
+
+func finalizeCommunityShortsLatencyCauseRow(row CommunityShortsLatencyCauseRow) CommunityShortsLatencyCauseRow {
 	row.InternalCauseJudgment, row.InternalCauseBasis = classifyCommunityShortsLatencyCauseInternalJudgment(row)
 	row.CauseEvidence = buildCommunityShortsLatencyCauseEvidence(row)
 	return row
