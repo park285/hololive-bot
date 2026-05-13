@@ -43,6 +43,9 @@ type ChannelTargetGroup string
 const (
 	ChannelTargetGroupDefault      ChannelTargetGroup = "default"
 	ChannelTargetGroupNotification ChannelTargetGroup = "notification"
+	ChannelTargetGroupActive       ChannelTargetGroup = "notification_active"
+	ChannelTargetGroupWarm         ChannelTargetGroup = "notification_warm"
+	ChannelTargetGroupCold         ChannelTargetGroup = "notification_cold"
 	ChannelTargetGroupStats        ChannelTargetGroup = "stats"
 	ChannelTargetGroupGlobal       ChannelTargetGroup = "global"
 

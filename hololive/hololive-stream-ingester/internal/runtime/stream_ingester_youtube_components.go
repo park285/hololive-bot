@@ -21,6 +21,7 @@ func buildStreamIngesterYouTubeComponents(
 	notificationChannelIDs []string,
 	statsChannelIDs []string,
 	scraperClient *scraper.Client,
+	liveStatusProvider poller.LiveStatusProvider,
 	cacheService cache.Client,
 	irisClient iris.Sender,
 	templateRenderer *template.Renderer,
@@ -32,6 +33,7 @@ func buildStreamIngesterYouTubeComponents(
 		postgresService,
 		scraperCfg,
 		scraperClient,
+		liveStatusProvider,
 		routeDecider,
 		notificationChannelIDs,
 		statsChannelIDs,
@@ -79,11 +81,47 @@ func buildSharedYouTubeScraperClient(
 		Enabled: scraperCfg.ProxyEnabled,
 		URL:     scraperCfg.ProxyURL,
 	}
+	snapshotCfg := scraperCfg.SnapshotOrDefault()
+	channelHealthCfg := scraperCfg.ChannelHealthOrDefault()
+	browserCfg := scraperCfg.BrowserDiagnosticOrDefault()
 
-	return scraper.NewClient(
+	opts := []scraper.ClientOption{
 		scraper.WithProxy(proxyConfig),
 		scraper.WithRateLimiter(sharedRL),
 		scraper.WithStateStore(cacheService),
 		scraper.WithFetcherEngine(scraper.FetcherEngine(scraperCfg.FetcherEngine)),
-	)
+		scraper.WithSnapshotPolicy(scraper.SnapshotPolicy{
+			Enabled:      snapshotCfg.Enabled,
+			MaxBodyBytes: snapshotCfg.MaxBodyBytes,
+			MinInterval:  snapshotCfg.MinInterval,
+			AllowedReasons: map[scraper.FailureReason]bool{
+				scraper.FailureReasonParserDrift:   true,
+				scraper.FailureReasonEmptyResponse: true,
+			},
+		}),
+	}
+	if channelHealthCfg.Enabled {
+		opts = append(opts, scraper.WithChannelHealthPolicy(scraper.ChannelHealthPolicy{
+			TTL:               channelHealthCfg.TTL,
+			ParserDriftBase:   channelHealthCfg.ParserDriftBase,
+			ParserDriftMax:    channelHealthCfg.ParserDriftMax,
+			TransportBase:     channelHealthCfg.TransportBase,
+			TransportMax:      channelHealthCfg.TransportMax,
+			TimeoutBase:       channelHealthCfg.TimeoutBase,
+			TimeoutMax:        channelHealthCfg.TimeoutMax,
+			HTTPStatusBase:    channelHealthCfg.HTTPStatusBase,
+			HTTPStatusMax:     channelHealthCfg.HTTPStatusMax,
+			SuccessDecaySteps: channelHealthCfg.SuccessDecaySteps,
+		}))
+	} else {
+		opts = append(opts, scraper.WithChannelHealthDisabled())
+	}
+	if snapshotCfg.Enabled {
+		opts = append(opts, scraper.WithSnapshotSink(scraper.NewFileSnapshotSink(snapshotCfg.Dir)))
+	}
+	if browserCfg.Enabled && browserCfg.Endpoint != "" {
+		opts = append(opts, scraper.WithBrowserSnapshotFetcher(scraper.NewBrowserSnapshotFetcher(browserCfg.Endpoint, browserCfg.Timeout)))
+	}
+
+	return scraper.NewClient(opts...)
 }

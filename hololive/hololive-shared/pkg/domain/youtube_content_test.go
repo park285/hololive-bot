@@ -47,6 +47,11 @@ func TestOutboxKind_ToAlarmType(t *testing.T) {
 			want: domain.AlarmTypeShorts,
 		},
 		{
+			name: "LIVE_STREAM → AlarmTypeLive",
+			kind: domain.OutboxKindLiveStream,
+			want: domain.AlarmTypeLive,
+		},
+		{
 			// COMMUNITY_POST → AlarmTypeCommunity
 			name: "COMMUNITY_POST → AlarmTypeCommunity",
 			kind: domain.OutboxKindCommunityPost,
@@ -90,6 +95,11 @@ func TestOutboxKind_ToTemplateKey(t *testing.T) {
 			name: "NEW_SHORT → TemplateKeyOutboxShorts",
 			kind: domain.OutboxKindNewShort,
 			want: domain.TemplateKeyOutboxShorts,
+		},
+		{
+			name: "LIVE_STREAM → TemplateKeyOutboxVideo",
+			kind: domain.OutboxKindLiveStream,
+			want: domain.TemplateKeyOutboxVideo,
 		},
 		{
 			// COMMUNITY_POST → TemplateKeyOutboxCommunity

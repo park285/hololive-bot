@@ -442,6 +442,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 		cfg,
 		sharedClient,
 		nil,
+		nil,
 		[]string{"UC_NOTIFY_A"},
 		[]string{"UC_STATS_A"},
 	)
@@ -502,6 +503,7 @@ func TestBuildStreamIngesterChannelPollerRegistrationsWithClient_NilRouteDecider
 		cfg,
 		buildSharedYouTubeScraperClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
+		nil,
 		[]string{"UC_NOTIFY_A"},
 		[]string{"UC_STATS_A"},
 	)
@@ -531,6 +533,7 @@ func TestBuildStreamIngesterChannelPollerRegistrationsWithClient_DisabledResolve
 		&databasemocks.Client{},
 		cfg,
 		buildSharedYouTubeScraperClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
+		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		[]string{"UC_NOTIFY_A"},
 		[]string{"UC_STATS_A"},
@@ -672,6 +675,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		testLogger(),
 	)
 	require.NoError(t, err)
@@ -722,6 +726,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlob
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS"},
 		scraper.NewClient(),
+		nil,
 		nil,
 		nil,
 		nil,
