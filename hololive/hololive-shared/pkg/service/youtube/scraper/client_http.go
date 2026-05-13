@@ -35,10 +35,17 @@ import (
 
 func (c *Client) currentPageFetcher() pageFetcher {
 	netHTTPFetcher := netHTTPPageFetcher{client: c}
-	if normalizeFetcherEngine(c.fetcherEngine) == FetcherEngineGoScrapy {
+	switch normalizeFetcherEngine(c.fetcherEngine) {
+	case FetcherEngineGoScrapy:
 		return goscrapyPageFetcher{client: c, fallback: netHTTPFetcher}
+	case FetcherEngineBrowserSnapshot:
+		if c.browserSnapshotFetcher != nil {
+			return c.browserSnapshotFetcher
+		}
+		return netHTTPFetcher
+	default:
+		return netHTTPFetcher
 	}
-	return netHTTPFetcher
 }
 
 // fetchPageOnce: 단일 HTTP 요청 수행 (재시도 없음)
@@ -96,7 +103,7 @@ func (c *Client) handleRateLimitedFetch(pageURL string, statusCode int, retryAft
 		"url", pageURL,
 		"cooldown", cooldown.Round(time.Second),
 		"retry_after", retryAfter.Round(time.Second))
-	return fmt.Errorf("status %d: %w", statusCode, ErrRateLimited)
+	return &httpStatusError{code: statusCode, retryAfter: retryAfter, cause: ErrRateLimited}
 }
 
 func (c *Client) handleForbiddenFetch(pageURL string, statusCode int, retryAfter time.Duration) error {
@@ -104,7 +111,7 @@ func (c *Client) handleForbiddenFetch(pageURL string, statusCode int, retryAfter
 	slog.Warn("YouTube access forbidden",
 		"url", pageURL,
 		"retry_after", retryAfter.Round(time.Second))
-	return fmt.Errorf("status %d: %w", statusCode, ErrForbidden)
+	return &httpStatusError{code: statusCode, retryAfter: retryAfter, cause: ErrForbidden}
 }
 
 func parseRetryAfter(value string, now time.Time) time.Duration {

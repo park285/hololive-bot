@@ -308,6 +308,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL),
+				nil,
 				infra.cacheService,
 				infra.irisClient,
 				infra.templateRenderer,

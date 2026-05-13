@@ -22,6 +22,7 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -34,14 +35,24 @@ import (
 )
 
 type LivePoller struct {
-	client *scraper.Client
-	db     *gorm.DB
+	client             *scraper.Client
+	liveStatusProvider LiveStatusProvider
+	db                 *gorm.DB
+}
+
+type LiveStatusProvider interface {
+	GetChannelsLiveStatus(ctx context.Context, channelIDs []string) ([]*domain.Stream, error)
 }
 
 func NewLivePoller(scraperClient *scraper.Client, db *gorm.DB) *LivePoller {
+	return NewLivePollerWithStatusProvider(nil, scraperClient, db)
+}
+
+func NewLivePollerWithStatusProvider(provider LiveStatusProvider, scraperClient *scraper.Client, db *gorm.DB) *LivePoller {
 	return &LivePoller{
-		client: scraperClient,
-		db:     db,
+		client:             scraperClient,
+		liveStatusProvider: provider,
+		db:                 db,
 	}
 }
 
@@ -64,86 +75,164 @@ func (p *LivePoller) ProxyEnabled() bool {
 }
 
 func (p *LivePoller) Poll(ctx context.Context, channelID string) error {
-	events, err := p.client.GetUpcomingEvents(ctx, channelID)
+	streams, err := p.fetchLiveStreams(ctx, channelID)
 	if err != nil {
-		return fmt.Errorf("failed to get upcoming events: %w", err)
+		return fmt.Errorf("failed to get live streams: %w", err)
 	}
 
 	now := time.Now()
 
-	for _, event := range events {
-		p.pollEvent(ctx, channelID, event, now)
+	for _, stream := range streams {
+		if err := p.pollStream(ctx, channelID, stream, now); err != nil {
+			return err
+		}
 	}
 
-	// 더 이상 보이지 않는 LIVE 세션을 ENDED로 전환
-	p.markEndedSessions(ctx, channelID, events)
+	p.markEndedSessions(ctx, channelID, streams)
 
 	return nil
 }
 
-func (p *LivePoller) pollEvent(ctx context.Context, channelID string, event *scraper.UpcomingEvent, now time.Time) {
-	status, ok := liveStatusFromEvent(event.Status)
-	if !ok {
-		return
+func (p *LivePoller) fetchLiveStreams(ctx context.Context, channelID string) ([]*domain.Stream, error) {
+	if p.liveStatusProvider != nil {
+		return p.liveStatusProvider.GetChannelsLiveStatus(ctx, []string{channelID})
+	}
+	if p.client == nil {
+		return nil, errors.New("live poller has no status provider or scraper client")
 	}
 
-	p.saveLiveSession(ctx, channelID, event, status, now)
-
-	if status == domain.LiveStatusLive {
-		p.saveLiveViewerSample(ctx, channelID, event, now)
+	events, err := p.client.GetUpcomingEvents(ctx, channelID)
+	if err != nil {
+		return nil, err
 	}
+	return streamsFromUpcomingEvents(channelID, events), nil
 }
 
-func liveStatusFromEvent(eventStatus string) (domain.LiveStatus, bool) {
-	switch eventStatus {
-	case "LIVE":
+func (p *LivePoller) pollStream(ctx context.Context, channelID string, stream *domain.Stream, now time.Time) error {
+	status, ok := liveStatusFromStream(stream)
+	if !ok {
+		return nil
+	}
+
+	if err := p.saveLiveSessionAndNotification(ctx, channelID, stream, status, now); err != nil {
+		return fmt.Errorf("poll live stream %s: %w", stream.ID, err)
+	}
+
+	if status == domain.LiveStatusLive {
+		p.saveLiveViewerSample(ctx, channelID, stream, now)
+	}
+
+	return nil
+}
+
+func liveStatusFromStream(stream *domain.Stream) (domain.LiveStatus, bool) {
+	if stream == nil {
+		return "", false
+	}
+	switch stream.Status {
+	case domain.StreamStatusLive:
 		return domain.LiveStatusLive, true
-	case "UPCOMING":
+	case domain.StreamStatusUpcoming:
 		return domain.LiveStatusUpcoming, true
 	default:
 		return "", false
 	}
 }
 
-func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, event *scraper.UpcomingEvent, status domain.LiveStatus, now time.Time) {
+func (p *LivePoller) saveLiveSessionAndNotification(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time) error {
+	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		existing, exists, err := loadExistingLiveSession(ctx, tx, stream.ID)
+		if err != nil {
+			return err
+		}
+
+		session := buildLiveSession(channelID, stream, status, now, existing)
+		if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "video_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"status", "title", "scheduled_start_time", "started_at", "last_seen_at"}),
+		}).Create(session).Error; err != nil {
+			return fmt.Errorf("save live session: %w", err)
+		}
+
+		if !shouldEnqueueLiveNotification(status, existing, exists) {
+			return nil
+		}
+		if err := insertLiveNotification(ctx, tx, channelID, stream, now); err != nil {
+			return fmt.Errorf("insert live notification: %w", err)
+		}
+		return nil
+	})
+}
+
+func loadExistingLiveSession(ctx context.Context, tx *gorm.DB, videoID string) (domain.YouTubeLiveSession, bool, error) {
+	var existing domain.YouTubeLiveSession
+	err := tx.WithContext(ctx).Where("video_id = ?", videoID).First(&existing).Error
+	if err == nil {
+		return existing, true, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.YouTubeLiveSession{}, false, nil
+	}
+	return domain.YouTubeLiveSession{}, false, fmt.Errorf("load existing live session: %w", err)
+}
+
+func buildLiveSession(channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, existing domain.YouTubeLiveSession) *domain.YouTubeLiveSession {
 	session := &domain.YouTubeLiveSession{
-		VideoID:            event.VideoID,
-		ChannelID:          channelID,
+		VideoID:            stream.ID,
+		ChannelID:          firstNonEmpty(stream.ChannelID, channelID),
 		Status:             status,
-		Title:              event.Title,
-		ScheduledStartTime: scheduledStartTime(event),
+		Title:              stream.Title,
+		ScheduledStartTime: stream.StartScheduled,
 	}
 
 	if status == domain.LiveStatusLive {
-		session.StartedAt = &now
+		session.StartedAt = liveStartedAt(stream, now, existing)
 	}
 
-	p.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "video_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"status", "title", "scheduled_start_time", "started_at", "last_seen_at"}),
-	}).Create(session)
+	return session
 }
 
-func scheduledStartTime(event *scraper.UpcomingEvent) *time.Time {
-	if event.StartTime == nil {
-		return nil
+func firstNonEmpty(primary string, fallback string) string {
+	if primary != "" {
+		return primary
 	}
-
-	t := time.Unix(*event.StartTime, 0)
-	return &t
+	return fallback
 }
 
-func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string, event *scraper.UpcomingEvent, now time.Time) {
-	viewerCount := parseViewerCount(event.ViewCountText)
-	if viewerCount <= 0 {
+func liveStartedAt(stream *domain.Stream, now time.Time, existing domain.YouTubeLiveSession) *time.Time {
+	if existing.StartedAt != nil && !existing.StartedAt.IsZero() {
+		startedAt := existing.StartedAt.UTC()
+		return &startedAt
+	}
+	if stream.StartActual != nil && !stream.StartActual.IsZero() {
+		startedAt := stream.StartActual.UTC()
+		return &startedAt
+	}
+	if stream.StartScheduled != nil && !stream.StartScheduled.IsZero() {
+		startedAt := stream.StartScheduled.UTC()
+		return &startedAt
+	}
+	startedAt := now.UTC()
+	return &startedAt
+}
+
+func shouldEnqueueLiveNotification(status domain.LiveStatus, existing domain.YouTubeLiveSession, exists bool) bool {
+	if status != domain.LiveStatusLive {
+		return false
+	}
+	return !exists || existing.Status != domain.LiveStatusLive
+}
+
+func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string, stream *domain.Stream, now time.Time) {
+	if stream == nil || stream.ViewerCount == nil || *stream.ViewerCount <= 0 {
 		return
 	}
 
 	sample := &domain.YouTubeLiveViewerSample{
-		VideoID:           event.VideoID,
+		VideoID:           stream.ID,
 		CapturedAt:        now,
-		ChannelID:         channelID,
-		ConcurrentViewers: viewerCount,
+		ChannelID:         firstNonEmpty(stream.ChannelID, channelID),
+		ConcurrentViewers: *stream.ViewerCount,
 	}
 
 	p.db.WithContext(ctx).Clauses(clause.OnConflict{
@@ -151,21 +240,13 @@ func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string,
 	}).Create(sample)
 
 	slog.Debug("Live viewer sample saved",
-		"video_id", event.VideoID,
-		"viewers", viewerCount)
+		"video_id", stream.ID,
+		"viewers", *stream.ViewerCount)
 }
 
-// markEndedSessions: 종료된 세션 마킹
-func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, currentEvents []*scraper.UpcomingEvent) {
-	// 현재 활성 비디오 ID 수집
-	activeIDs := make(map[string]bool)
-	for _, e := range currentEvents {
-		if e.Status == "LIVE" || e.Status == "UPCOMING" {
-			activeIDs[e.VideoID] = true
-		}
-	}
+func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, currentStreams []*domain.Stream) {
+	activeIDs := activeLiveStreamIDs(currentStreams)
 
-	// DB에서 해당 채널의 LIVE 세션 조회
 	var liveSessions []domain.YouTubeLiveSession
 	p.db.WithContext(ctx).Where(
 		"channel_id = ? AND status = ?",
@@ -175,16 +256,28 @@ func (p *LivePoller) markEndedSessions(ctx context.Context, channelID string, cu
 	now := time.Now()
 	for _, session := range liveSessions {
 		if !activeIDs[session.VideoID] {
-			// 더 이상 LIVE가 아님 - ENDED로 전환
 			p.db.WithContext(ctx).Model(&session).Updates(map[string]any{
 				"status":   domain.LiveStatusEnded,
 				"ended_at": now,
 			})
 
-			// 스트림 통계 집계
 			p.finalizeStreamStats(ctx, session.VideoID, channelID)
 		}
 	}
+}
+
+func activeLiveStreamIDs(currentStreams []*domain.Stream) map[string]bool {
+	activeIDs := make(map[string]bool)
+	for _, stream := range currentStreams {
+		if isActiveLiveStream(stream) {
+			activeIDs[stream.ID] = true
+		}
+	}
+	return activeIDs
+}
+
+func isActiveLiveStream(stream *domain.Stream) bool {
+	return stream != nil && (stream.Status == domain.StreamStatusLive || stream.Status == domain.StreamStatusUpcoming)
 }
 
 // finalizeStreamStats: 스트림 통계 집계

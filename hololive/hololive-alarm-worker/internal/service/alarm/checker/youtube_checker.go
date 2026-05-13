@@ -275,12 +275,6 @@ func (c *YouTubeChecker) buildChannelNotifications(
 
 		notifications = append(notifications, upcomingNotifications...)
 
-		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, subscriberRooms, now)
-		if err != nil {
-			return nil, fmt.Errorf("build channel notifications: build live catchup notifications: %w", err)
-		}
-
-		notifications = append(notifications, liveCatchupNotifications...)
 	}
 
 	return notifications, nil

@@ -23,6 +23,7 @@ package youtube
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -32,12 +33,25 @@ type upcomingAPIFallbackResult struct {
 	streams            []*domain.Stream
 	quotaCost          int
 	successfulChannels int
+	successfulIDs      []string
+	failedIDs          []string
+	failures           []upcomingScrapeFailure
 }
 
 type upcomingScrapeResult struct {
 	streams   []*domain.Stream
 	failedIDs []string
 	scraped   int
+	failures  []upcomingScrapeFailure
+}
+
+type upcomingScrapeFailure struct {
+	ChannelID  string
+	Source     string
+	Reason     string
+	StatusCode int
+	RetryAfter time.Duration
+	Message    string
 }
 
 // 스크래퍼를 우선 사용하고, 실패한 채널만 YouTube API로 폴백합니다.

@@ -11,11 +11,14 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/glebarez/sqlite"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/kapu/hololive-shared/pkg/config"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -204,6 +207,68 @@ func TestYouTubePollTargetRefresherSkipsRegistryReadWhenPositiveVersionUnchanged
 	refresher.refresh(context.Background())
 
 	require.Equal(t, 1, smembersCalls)
+}
+
+func TestYouTubePollTargetRefresherRetiersWhenRegistryUnchanged(t *testing.T) {
+	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.YouTubeVideo{}))
+
+	cacheSvc := cachemocks.NewStrictClient()
+	cacheSvc.ExistsFunc = func(_ context.Context, key string) (bool, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
+		return true, nil
+	}
+	cacheSvc.GetFunc = func(_ context.Context, key string, dest any) error {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryVersionKey, key)
+		version, ok := dest.(*int64)
+		require.True(t, ok)
+		*version = 123
+		return nil
+	}
+	cacheSvc.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+		require.Equal(t, sharedalarmkeys.AlarmChannelRegistryKey, key)
+		return []string{"UC_TIER"}, nil
+	}
+
+	cfg := config.ScraperConfig{
+		Poll: config.ScraperPoll{
+			Videos:    10 * time.Minute,
+			Shorts:    10 * time.Minute,
+			Community: 10 * time.Minute,
+			Stats:     6 * time.Hour,
+			Live:      10 * time.Minute,
+		},
+		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
+	}
+	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
+	registrations := buildStreamIngesterChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), cacheSvc, nil, []string{"UC_TIER"}, []string{"UC_TIER"})
+	scheduler := providers.ProvideScraperScheduler(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		providers.WithChannelPollerRegistrations(registrations),
+		providers.WithSchedulerChannelIDs([]string{"UC_TIER"}),
+	)
+	refresher := newYouTubePollTargetRefresher(
+		cacheSvc,
+		scheduler,
+		registrations,
+		[]communityShortsOperationalChannel{{ChannelID: "UC_TIER", Enabled: true}},
+		func(context.Context) ([]string, error) { return []string{"UC_TIER"}, nil },
+		newYouTubePollTargetTestLogger(),
+	).withTieringDB(db)
+	refresher.timeNow = func() time.Time { return now }
+
+	refresher.refresh(context.Background())
+	require.Equal(t, time.Hour, schedulerJobInterval(t, scheduler, "UC_TIER:videos"))
+
+	activeAt := now.Add(-2 * time.Hour)
+	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_TIER", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
+	now = now.Add(youtubePollTargetTieringRefreshInterval + time.Second)
+
+	refresher.refresh(context.Background())
+	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_TIER:videos"))
 }
 
 func TestYouTubePollTargetRefresherDoesNotTrustZeroRegistryVersion(t *testing.T) {

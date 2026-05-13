@@ -188,6 +188,59 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	}
 }
 
+func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
+	t.Parallel()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+
+	notifier, err := NewNotifier(
+		dedupSvc,
+		queue.NewPublisher(cacheSvc, newCheckerTestLogger()),
+		tier.NewTieredScheduler(newCheckerTestLogger()),
+		newCheckerTestLogger(),
+	)
+	require.NoError(t, err)
+
+	start := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Minute)
+	chzzkStream := &domain.Stream{
+		ID:             "chzzk-live",
+		Title:          "치지직 라이브",
+		ChannelID:      "UC_CHZZK",
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &start,
+		StartActual:    &start,
+		Channel:        &domain.Channel{ID: "UC_CHZZK", Name: "치지직 채널"},
+		ChzzkChannelID: "chzzk-channel",
+		ChzzkLiveURL:   "https://chzzk.naver.com/live/chzzk-channel",
+		IsChzzkOnly:    true,
+	}
+	twitchStream := &domain.Stream{
+		ID:              "twitch-live",
+		Title:           "트위치 라이브",
+		ChannelID:       "UC_TWITCH",
+		Status:          domain.StreamStatusLive,
+		StartScheduled:  &start,
+		StartActual:     &start,
+		Channel:         &domain.Channel{ID: "UC_TWITCH", Name: "트위치 채널"},
+		TwitchUserLogin: "twitch-login",
+		TwitchLiveURL:   "https://www.twitch.tv/twitch-login",
+		IsTwitchOnly:    true,
+	}
+	notifications := []*domain.AlarmNotification{
+		domain.NewAlarmNotification("room-chzzk", chzzkStream.Channel, chzzkStream, 0, []string{}, ""),
+		domain.NewAlarmNotification("room-twitch", twitchStream.Channel, twitchStream, 0, []string{}, ""),
+	}
+
+	result, sendErr := notifier.Send(t.Context(), notifications)
+	require.NoError(t, sendErr)
+	assert.Equal(t, SendResult{Sent: 2}, result)
+
+	if queueSize := readDispatchQueueSize(t, cacheSvc); queueSize != 2 {
+		t.Fatalf("expected non-youtube live streams to publish, got queue size %d", queueSize)
+	}
+}
+
 func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T) {
 	t.Parallel()
 

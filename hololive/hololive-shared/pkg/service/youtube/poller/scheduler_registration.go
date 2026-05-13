@@ -124,6 +124,48 @@ func (s *Scheduler) SyncPollerTargets(targetSync PollerTargetSync) {
 	s.notifyDispatcher()
 }
 
+func (s *Scheduler) SyncPollerTargetGroups(targetSyncs []PollerTargetSync) {
+	pollerName, desired := buildGroupedPollerTargetSyncs(targetSyncs)
+	if pollerName == "" {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.syncExistingGroupedPollerTargetJobs(pollerName, desired)
+	s.addMissingGroupedPollerTargetJobs(pollerName, desired)
+	schedulerRegisteredJobs.Set(float64(len(s.jobMap)))
+	s.notifyDispatcher()
+}
+
+func buildGroupedPollerTargetSyncs(targetSyncs []PollerTargetSync) (string, map[string]PollerTargetSync) {
+	desired := make(map[string]PollerTargetSync)
+	var pollerName string
+	for _, targetSync := range targetSyncs {
+		name, ok := validPollerTargetSyncName(targetSync, pollerName)
+		if !ok {
+			continue
+		}
+		pollerName = name
+		for _, channelID := range targetSync.ChannelIDs {
+			channelID = strings.TrimSpace(channelID)
+			if channelID != "" {
+				desired[channelID] = targetSync
+			}
+		}
+	}
+	return pollerName, desired
+}
+
+func validPollerTargetSyncName(targetSync PollerTargetSync, expected string) (string, bool) {
+	if targetSync.Poller == nil || targetSync.Interval <= 0 {
+		return "", false
+	}
+	name := strings.TrimSpace(targetSync.Poller.Name())
+	return name, name != "" && (expected == "" || expected == name)
+}
+
 func desiredPollerTargetChannels(channelIDs []string) map[string]struct{} {
 	desired := make(map[string]struct{}, len(channelIDs))
 	for _, channelID := range channelIDs {
@@ -146,6 +188,30 @@ func (s *Scheduler) syncExistingPollerTargetJobs(pollerName string, targetSync P
 		}
 		s.updatePollerTargetJob(job, targetSync)
 		delete(desired, job.ChannelID)
+	}
+}
+
+func (s *Scheduler) syncExistingGroupedPollerTargetJobs(pollerName string, desired map[string]PollerTargetSync) {
+	for key, job := range s.jobMap {
+		if !pollerTargetJobMatches(job, pollerName) {
+			continue
+		}
+		targetSync, keep := desired[job.ChannelID]
+		if !keep {
+			s.removePollerTargetJob(key, job)
+			continue
+		}
+		s.updatePollerTargetJob(job, targetSync)
+		delete(desired, job.ChannelID)
+	}
+}
+
+func (s *Scheduler) addMissingGroupedPollerTargetJobs(pollerName string, desired map[string]PollerTargetSync) {
+	now := time.Now()
+	for channelID, targetSync := range desired {
+		job := newPollerTargetJob(channelID, pollerName, targetSync, now)
+		heap.Push(&s.jobs, job)
+		s.jobMap[job.key] = job
 	}
 }
 
