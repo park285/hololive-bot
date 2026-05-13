@@ -35,14 +35,14 @@ const shortsPublishedAtLookupWindow = 30
 
 func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*Short, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
-	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
+	html, err := c.fetchChannelSourcePage(ctx, "shorts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
 	if err != nil {
 		return nil, err
 	}
 
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
+		return nil, c.recordParserDrift(ctx, "shorts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -51,7 +51,9 @@ func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int
 	}
 
 	shortItems := extractShortsLockupViewModels(data)
-	return c.parseShortsLockupViewModels(shortItems, maxResults), nil
+	shorts := c.parseShortsLockupViewModels(shortItems, maxResults)
+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+	return shorts, nil
 }
 
 func (c *Client) EnrichShortsPublishedAtFromRSS(ctx context.Context, channelID string, shorts []*Short) {

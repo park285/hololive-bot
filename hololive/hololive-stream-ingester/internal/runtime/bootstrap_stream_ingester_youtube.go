@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
 )
@@ -110,7 +111,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 	}
 
 	routeDecider := communityshorts.BuildRouteDecider(state.communityShortsPolicy)
-	sharedScraperClient := buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL)
+	sharedScraperClient := resolveIngestionSharedScraperClient(cfg.Scraper, infra)
 	if err := validatePublishedAtResolverSchemaIfEnabled(ctx, cfg.Scraper, infra.postgresService, logger); err != nil {
 		return deps, fmt.Errorf("validate published_at resolver schema: %w", err)
 	}
@@ -128,6 +129,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		state.pollTargets.NotificationChannelIDs,
 		state.pollTargets.StatsChannelIDs,
 		sharedScraperClient,
+		infra.holodexService,
 		infra.cacheService,
 		infra.irisClient,
 		infra.templateRenderer,
@@ -147,11 +149,18 @@ func buildIngestionRuntimeYouTubeDependencies(
 			return loadAlarmChannelIDs(ctx, infra.postgresService)
 		},
 		logger,
-	).withOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
+	).withTieringDB(infra.postgresService.GetGormDB()).withOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
 		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
 	})
 	deps.youtubeScheduler = infra.ytStack.Scheduler
 	return deps, nil
+}
+
+func resolveIngestionSharedScraperClient(scraperCfg config.ScraperConfig, infra *streamIngesterInfrastructure) *scraper.Client {
+	if infra.scraperClient != nil {
+		return infra.scraperClient
+	}
+	return buildSharedYouTubeScraperClient(scraperCfg, infra.cacheService, infra.sharedRL)
 }
 
 func buildIngestionRuntimeObservationWindowWriter(

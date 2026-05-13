@@ -30,7 +30,7 @@ import (
 func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*ChannelStats, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/about", channelID)
 
-	html, err := c.fetchPage(ctx, url)
+	html, err := c.fetchChannelSourcePage(ctx, "channel_stats", channelID, url, FailureSourceHTML)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channel page: %w", err)
 	}
@@ -38,7 +38,7 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*Channe
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
 		logStructureWarning("channel_stats", channelID, "ytInitialData extraction failed", "error", err)
-		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
+		return nil, c.recordParserDrift(ctx, "channel_stats", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -51,13 +51,14 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*Channe
 		logStructureWarning("channel_stats", channelID, "parsed stats are empty")
 	}
 
+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 	return stats, nil
 }
 
 func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*ChannelSnippet, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 
-	html, err := c.fetchPage(ctx, url)
+	html, err := c.fetchChannelSourcePage(ctx, "channel_snippet", channelID, url, FailureSourceHTML)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch channel page: %w", err)
 	}
@@ -65,7 +66,7 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*Chan
 	jsonStr, err := extractYtInitialData(html)
 	if err != nil {
 		logStructureWarning("channel_snippet", channelID, "ytInitialData extraction failed", "error", err)
-		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
+		return nil, c.recordParserDrift(ctx, "channel_snippet", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -80,5 +81,6 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*Chan
 			"banner_count", len(snippet.Banner))
 	}
 
+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
 	return snippet, nil
 }

@@ -95,7 +95,9 @@ func addYouTubePollTargetRegistration(
 	case providers.ChannelTargetGroupGlobal:
 		return notificationChannelIDs, statsChannelIDs
 	default:
-		notificationChannelIDs = mergeUniqueChannelIDs(notificationChannelIDs, registration.ChannelIDs)
+		if isNotificationTargetGroup(registration.TargetGroup) {
+			notificationChannelIDs = mergeUniqueChannelIDs(notificationChannelIDs, registration.ChannelIDs)
+		}
 	}
 	return notificationChannelIDs, statsChannelIDs
 }

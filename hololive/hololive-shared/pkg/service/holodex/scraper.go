@@ -71,6 +71,20 @@ func NewScraperService(
 	sharedRL *scraper.RateLimiter,
 	logger *slog.Logger,
 ) *ScraperService {
+	return NewScraperServiceWithYouTubeScraper(
+		cacheSvc,
+		membersData,
+		scraper.NewClient(scraper.WithProxy(youtubeProxyConfig), scraper.WithRateLimiter(sharedRL)),
+		logger,
+	)
+}
+
+func NewScraperServiceWithYouTubeScraper(
+	cacheSvc cache.Client,
+	membersData domain.MemberDataProvider,
+	youtubeScraper *scraper.Client,
+	logger *slog.Logger,
+) *ScraperService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -91,7 +105,7 @@ func NewScraperService(
 		memberNameMap:  nameMap,
 		logger:         logger,
 		baseURL:        constants.OfficialScheduleConfig.BaseURL,
-		youtubeScraper: scraper.NewClient(scraper.WithProxy(youtubeProxyConfig), scraper.WithRateLimiter(sharedRL)),
+		youtubeScraper: youtubeScraper,
 	}
 }
 

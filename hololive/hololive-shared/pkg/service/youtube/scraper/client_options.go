@@ -29,19 +29,25 @@ import (
 )
 
 type Client struct {
-	httpClient       *http.Client // 테스트/특수 경로용 고정 클라이언트
-	directHTTPClient *http.Client
-	proxyHTTPClient  *http.Client
-	directTransport  *http.Transport
-	proxyTransport   *http.Transport
-	activeHTTPClient atomic.Pointer[http.Client]
-	proxyEnabled     atomic.Bool
-	uaProvider       ua.Provider
-	rateLimiter      *RateLimiter
-	backoffState     *BackoffState
-	proxyConfig      ProxyConfig
-	stateStore       stateStore
-	fetcherEngine    FetcherEngine
+	httpClient             *http.Client // 테스트/특수 경로용 고정 클라이언트
+	directHTTPClient       *http.Client
+	proxyHTTPClient        *http.Client
+	directTransport        *http.Transport
+	proxyTransport         *http.Transport
+	activeHTTPClient       atomic.Pointer[http.Client]
+	proxyEnabled           atomic.Bool
+	uaProvider             ua.Provider
+	rateLimiter            *RateLimiter
+	backoffState           *BackoffState
+	proxyConfig            ProxyConfig
+	stateStore             stateStore
+	fetcherEngine          FetcherEngine
+	channelHealthPolicy    ChannelHealthPolicy
+	channelHealthDisabled  bool
+	channelHealth          *ChannelHealthStore
+	snapshotSink           SnapshotSink
+	snapshotPolicy         SnapshotPolicy
+	browserSnapshotFetcher *BrowserSnapshotFetcher
 
 	communityMissing *cacheState
 	videoRSSBackoff  *cacheState
@@ -79,12 +85,43 @@ func WithFetcherEngine(engine FetcherEngine) ClientOption {
 	}
 }
 
+func WithChannelHealthPolicy(policy ChannelHealthPolicy) ClientOption {
+	return func(c *Client) {
+		c.channelHealthPolicy = policy
+	}
+}
+
+func WithChannelHealthDisabled() ClientOption {
+	return func(c *Client) {
+		c.channelHealthDisabled = true
+	}
+}
+
+func WithSnapshotSink(sink SnapshotSink) ClientOption {
+	return func(c *Client) {
+		c.snapshotSink = sink
+	}
+}
+
+func WithSnapshotPolicy(policy SnapshotPolicy) ClientOption {
+	return func(c *Client) {
+		c.snapshotPolicy = policy
+	}
+}
+
+func WithBrowserSnapshotFetcher(fetcher *BrowserSnapshotFetcher) ClientOption {
+	return func(c *Client) {
+		c.browserSnapshotFetcher = fetcher
+	}
+}
+
 func NewClient(opts ...ClientOption) *Client {
 	c := &Client{
-		uaProvider:    ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
-		rateLimiter:   NewRateLimiter(3 * time.Second),
-		backoffState:  NewBackoffState(),
-		fetcherEngine: FetcherEngineNetHTTP,
+		uaProvider:     ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
+		rateLimiter:    NewRateLimiter(3 * time.Second),
+		backoffState:   NewBackoffState(),
+		fetcherEngine:  FetcherEngineNetHTTP,
+		snapshotPolicy: DefaultSnapshotPolicy(),
 	}
 
 	// 옵션 적용 (프록시 설정 포함)
