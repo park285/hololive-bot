@@ -638,7 +638,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		},
 	})
 
-	scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			ProxyEnabled: true,
 			ProxyURL:     "socks5://proxy.internal:1080",
@@ -673,15 +673,11 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
-		nil,
-		nil,
 		testLogger(),
 	)
 	require.NoError(t, err)
 
 	require.NotNil(t, scraperScheduler)
-	require.NotNil(t, outboxDispatcher)
 	require.Len(t, registrations, 5)
 
 	// active 멤버 1명 * 기본 poller 5종
@@ -711,7 +707,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlob
 	)
 	require.NotNil(t, resolver)
 
-	scraperScheduler, _, registrations, err := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
@@ -726,9 +722,6 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlob
 		[]string{"UC_NOTIFY"},
 		[]string{"UC_STATS"},
 		scraper.NewClient(),
-		nil,
-		nil,
-		nil,
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		resolver,

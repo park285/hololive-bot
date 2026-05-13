@@ -42,9 +42,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/iris-client-go/iris"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -52,7 +50,6 @@ type LLMSchedulerRuntime struct {
 	Config *config.LLMSchedulerConfig
 	Logger *slog.Logger
 
-	DeliveryDispatcher         *delivery.Dispatcher
 	MajorEventScheduler        *mescheduler.Scheduler
 	MajorEventMonthlyScheduler *mescheduler.MonthlyScheduler
 	MajorEventScraperScheduler *mescraper.RuntimeScheduler
@@ -110,11 +107,6 @@ func (r *LLMSchedulerRuntime) startHTTPServer(errCh chan<- error) {
 }
 
 func (r *LLMSchedulerRuntime) startSchedulers(ctx context.Context) {
-	if r.DeliveryDispatcher != nil {
-		r.DeliveryDispatcher.Start(ctx)
-		r.Logger.Info("Delivery outbox dispatcher started")
-	}
-
 	if r.MajorEventScheduler != nil {
 		r.MajorEventScheduler.Start(ctx)
 		r.Logger.Info("Major event weekly scheduler started",
@@ -242,10 +234,7 @@ func buildLLMSchedulerComponents(
 	majorEventRepo := buildMajorEventRepository(ctx, postgresService, logger, cfg.Postgres.AutoPrepareSchema)
 	memberNewsService := initMemberNewsService(ctx, cfg.Cliproxy, cfg.LLM, cfg.Exa, postgresService, cacheService, memberDataProvider, logger)
 
-	deliveryModule, err := buildLLMSchedulerDeliveryModule(cfg, cacheService, postgresService, logger)
-	if err != nil {
-		return nil, fmt.Errorf("init iris client: %w", err)
-	}
+	deliveryModule := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
 
 	summarizer := buildMajorEventSummarizer(cfg, cacheService, logger)
 
@@ -297,7 +286,6 @@ func newLLMSchedulerRuntime(
 	return &LLMSchedulerRuntime{
 		Config:                     cfg,
 		Logger:                     logger,
-		DeliveryDispatcher:         deliveryModule.Dispatcher,
 		MajorEventScheduler:        majorEventScheduler,
 		MajorEventMonthlyScheduler: majorEventMonthlyScheduler,
 		MajorEventScraperScheduler: majorEventScraperScheduler,
@@ -324,21 +312,11 @@ func buildMajorEventRepository(
 }
 
 func buildLLMSchedulerDeliveryModule(
-	cfg *config.LLMSchedulerConfig,
 	cacheService cache.Client,
 	postgresService database.Client,
 	logger *slog.Logger,
-) (*DeliveryModule, error) {
-	irisClient, err := providers.ProvideIrisClient(
-		logger,
-		iris.WithBaseURL(cfg.Iris.BaseURL),
-		iris.WithBotToken(cfg.Iris.BotToken),
-	)
-	if err != nil {
-		return nil, err
-	}
-	deliverySender := delivery.NewIrisMessageSender(irisClient)
-	return BuildDeliveryModule(cacheService, postgresService, deliverySender, logger), nil
+) *DeliveryModule {
+	return BuildDeliveryModule(cacheService, postgresService, logger)
 }
 
 func buildLLMSchedulerHTTPServer(

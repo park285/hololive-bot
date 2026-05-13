@@ -302,23 +302,19 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 
 			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, memberData)
 
-			scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
+			scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
 				cfg.Scraper,
 				infra.postgresService,
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL),
 				nil,
-				infra.cacheService,
-				infra.irisClient,
-				infra.templateRenderer,
 				nil,
 				nil,
 				testLogger(),
 			)
 			require.NoError(t, err)
 			require.NotNil(t, scraperScheduler)
-			require.NotNil(t, outboxDispatcher)
 			require.Len(t, registrations, 5)
 			assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
 
@@ -370,7 +366,6 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 				Scheduler:        youtubeScheduler,
 				ScraperScheduler: scraperScheduler,
 				PhotoSync:        infra.photoSync,
-				OutboxDispatcher: outboxDispatcher,
 				ConfigSubscriber: configSubscriber,
 				ServerAddr:       fmt.Sprintf(":%d", cfg.Server.Port),
 				HttpServer:       httpServer,
@@ -382,7 +377,6 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			assert.Equal(t, ":30123", runtime.ServerAddr)
 			assert.NotNil(t, runtime.Scheduler)
 			assert.NotNil(t, runtime.ScraperScheduler)
-			assert.NotNil(t, runtime.OutboxDispatcher)
 			assert.NotNil(t, runtime.ConfigSubscriber)
 			assert.NotNil(t, runtime.PhotoSync)
 			assert.NotNil(t, runtime.HttpServer)

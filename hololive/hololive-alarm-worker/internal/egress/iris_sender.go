@@ -1,4 +1,4 @@
-package delivery
+package egress
 
 import (
 	"context"
@@ -11,16 +11,16 @@ type IrisSender interface {
 	SendMessage(ctx context.Context, roomID, message string, opts ...iris.SendOption) error
 }
 
-type irisMessageSender struct {
+type IrisMessageSender struct {
 	client IrisSender
 }
 
-func NewIrisMessageSender(client IrisSender) MessageSender {
-	return irisMessageSender{client: client}
+func NewIrisMessageSender(client IrisSender) *IrisMessageSender {
+	return &IrisMessageSender{client: client}
 }
 
-func (s irisMessageSender) SendMessage(ctx context.Context, roomID, message string) error {
-	if s.client == nil {
+func (s *IrisMessageSender) SendMessage(ctx context.Context, roomID, message string) error {
+	if s == nil || s.client == nil {
 		return fmt.Errorf("iris message sender: client is nil")
 	}
 	if err := s.client.SendMessage(ctx, roomID, message); err != nil {

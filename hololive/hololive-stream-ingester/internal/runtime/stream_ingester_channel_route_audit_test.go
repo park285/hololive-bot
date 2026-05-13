@@ -28,7 +28,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersCommunityAndShortsForEver
 		},
 	})
 
-	scraperScheduler, outboxDispatcher, registrations, err := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
 		config.ScraperConfig{
 			WorkerCount: 2,
 			Poll: config.ScraperPoll{
@@ -46,15 +46,11 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersCommunityAndShortsForEver
 		nil,
 		nil,
 		nil,
-		nil,
-		nil,
-		nil,
 		testLogger(),
 	)
 	require.NoError(t, err)
 
 	require.NotNil(t, scraperScheduler)
-	require.NotNil(t, outboxDispatcher)
 	require.Len(t, registrations, 5)
 	require.ElementsMatch(t,
 		[]string{

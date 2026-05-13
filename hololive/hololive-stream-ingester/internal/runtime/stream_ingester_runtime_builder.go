@@ -36,7 +36,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
-	"github.com/park285/iris-client-go/iris"
 )
 
 // streamIngesterInfrastructure: stream-ingester 전용 인프라 (alarm/ACL/activity 미포함).
@@ -44,7 +43,6 @@ type streamIngesterInfrastructure struct {
 	cacheService     cache.Client
 	postgresService  database.Client
 	memberRepo       *member.Repository
-	irisClient       iris.Sender
 	settingsService  settings.ReadWriter
 	holodexService   *holodex.Service
 	ytStack          *sharedproviders.YouTubeStack
@@ -76,17 +74,9 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		}
 	}()
 
-	irisClient, err := sharedproviders.ProvideIrisClient(
-		logger,
-		iris.WithBaseURL(cfg.Iris.BaseURL),
-		iris.WithBotToken(cfg.Iris.BotToken),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("provide iris client: %w", err)
-	}
 	templateRenderer := template.NewRenderer(infra.Postgres.GetGormDB(), logger)
 
-	youTube, err := buildStreamIngesterYouTubeResources(ctx, cfg, logger, infra, irisClient)
+	youTube, err := buildStreamIngesterYouTubeResources(ctx, cfg, logger, infra)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +85,6 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 		cacheService:     infra.Cache,
 		postgresService:  infra.Postgres,
 		memberRepo:       infra.MemberRepo,
-		irisClient:       irisClient,
 		settingsService:  sharedmodules.BuildSettingsService(cfg.Notification.AdvanceMinutes, cfg.Scraper.ProxyEnabled, logger),
 		holodexService:   youTube.holodexService,
 		ytStack:          youTube.ytStack,
@@ -107,7 +96,7 @@ func initStreamIngesterInfrastructure(ctx context.Context, cfg *config.Config, l
 	}, nil
 }
 
-func buildStreamIngesterYouTubeResources(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule, irisClient iris.Sender) (*streamIngesterYouTubeResources, error) {
+func buildStreamIngesterYouTubeResources(ctx context.Context, cfg *config.Config, logger *slog.Logger, infra *sharedmodules.InfraModule) (*streamIngesterYouTubeResources, error) {
 	memberServiceAdapter := sharedproviders.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 	sharedRL, err := sharedproviders.ProvideYouTubeScraperRateLimiter(infra.Cache, logger)
 	if err != nil {
@@ -129,7 +118,6 @@ func buildStreamIngesterYouTubeResources(ctx context.Context, cfg *config.Config
 		Members:         memberServiceAdapter,
 		StatsRepo:       ytstats.NewYouTubeStatsRepository(infra.Postgres, logger),
 		AlarmState:      nil,
-		IrisClient:      irisClient,
 		Formatter:       nil,
 		SharedRateLimit: sharedRL,
 		Logger:          logger,
