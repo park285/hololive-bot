@@ -314,7 +314,7 @@ func (r *youTubePollTargetRefresher) applyResolvedTargets(targets youtubePollTar
 	if r == nil || r.schedulerSyncer == nil {
 		return
 	}
-	r.schedulerSyncer.Sync(targets)
+	r.schedulerSyncer.SyncAt(targets, r.now())
 	if r.schedulerSyncer.hasTieredRegistrations() {
 		r.lastTieringRefreshAt = r.now()
 	}
