@@ -30,7 +30,6 @@ import (
 	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
-
 type mockOutboxRepo struct {
 	enqueuedItems []enqueueRecord
 	enqueueErr    map[string]error // roomID → error
@@ -62,7 +61,6 @@ func (m *mockOutboxRepo) Enqueue(_ context.Context, kind domain.DeliveryOutboxKi
 	return nil
 }
 
-
 type mockNotificationLocker struct {
 	acquireToken    string
 	acquireAcquired bool
@@ -89,7 +87,6 @@ func (m *mockNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string
 }
 
 var testLogger = sharedlogging.NewLogger
-
 
 func TestEnqueueToRooms_AllSuccess(t *testing.T) {
 	repo := newMockOutboxRepo()

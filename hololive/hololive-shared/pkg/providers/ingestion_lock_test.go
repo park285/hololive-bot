@@ -115,8 +115,7 @@ func TestIngestionLeaseRenewLoop(t *testing.T) {
 		t.Fatalf("shorten ttl: %v", err)
 	}
 
-	renewCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	renewCtx := t.Context()
 	go lease.StartRenewLoop(renewCtx, nil)
 
 	// ttl(1s)보다 길게 대기하여 renew 미동작이면 키가 만료되도록 한다.
@@ -224,8 +223,7 @@ func TestIngestionLeaseRenewLoopReportsOwnershipLost(t *testing.T) {
 	lease.renewInterval = 20 * time.Millisecond
 
 	errCh := make(chan error, 1)
-	renewCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	renewCtx := t.Context()
 	go lease.StartRenewLoop(renewCtx, errCh)
 
 	// 다른 프로세스가 락을 강제로 덮어쓴 상황을 시뮬레이션

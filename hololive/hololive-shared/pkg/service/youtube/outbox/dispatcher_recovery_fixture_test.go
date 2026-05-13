@@ -84,7 +84,6 @@ func TestSeedCommunityShortsRecoveryInputFixtureCreatesSentAndPendingPosts(t *te
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -196,9 +195,9 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *gorm.DB, spec rec
 		ContentID:          sentItem.ContentID,
 		CanonicalContentID: sentPostID,
 		ChannelID:          sentItem.ChannelID,
-		ActualPublishedAt:  timePtr(spec.sentPublishedAt),
+		ActualPublishedAt:  new(spec.sentPublishedAt),
 		DetectedAt:         spec.sentDetectedAt,
-		AlarmSentAt:        timePtr(spec.alreadySentAt),
+		AlarmSentAt:        new(spec.alreadySentAt),
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusSent),
 	}).Error)
 	require.NoError(t, db.Create(&sqliteTrackingModel{
@@ -206,7 +205,7 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *gorm.DB, spec rec
 		ContentID:          pendingItem.ContentID,
 		CanonicalContentID: pendingPostID,
 		ChannelID:          pendingItem.ChannelID,
-		ActualPublishedAt:  timePtr(spec.pendingPublishedAt),
+		ActualPublishedAt:  new(spec.pendingPublishedAt),
 		DetectedAt:         spec.pendingDetectedAt,
 		DeliveryStatus:     string(domain.YouTubeContentAlarmDeliveryStatusPending),
 	}).Error)
@@ -217,9 +216,9 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *gorm.DB, spec rec
 			PostID:            sentPostID,
 			ContentID:         sentItem.ContentID,
 			ChannelID:         sentItem.ChannelID,
-			ActualPublishedAt: timePtr(spec.sentPublishedAt),
+			ActualPublishedAt: new(spec.sentPublishedAt),
 			DetectedAt:        spec.sentDetectedAt,
-			AlarmSentAt:       timePtr(spec.alreadySentAt),
+			AlarmSentAt:       new(spec.alreadySentAt),
 			DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusSent,
 		},
 		{
@@ -227,7 +226,7 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *gorm.DB, spec rec
 			PostID:            pendingPostID,
 			ContentID:         pendingItem.ContentID,
 			ChannelID:         pendingItem.ChannelID,
-			ActualPublishedAt: timePtr(spec.pendingPublishedAt),
+			ActualPublishedAt: new(spec.pendingPublishedAt),
 			DetectedAt:        spec.pendingDetectedAt,
 			DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusDetected,
 		},

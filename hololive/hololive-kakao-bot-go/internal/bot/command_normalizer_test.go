@@ -108,13 +108,13 @@ func TestNormalizeCommandKey(t *testing.T) {
 			params:  map[string]any{"foo": "bar"},
 			wantKey: "live",
 		},
-			{
-				name:    "help → 변환 없이 help 키 반환",
-				cmdType: domain.CommandHelp,
-				params:  map[string]any{},
-				wantKey: "help",
-			},
-		}
+		{
+			name:    "help → 변환 없이 help 키 반환",
+			cmdType: domain.CommandHelp,
+			params:  map[string]any{},
+			wantKey: "help",
+		},
+	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

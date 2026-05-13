@@ -23,6 +23,7 @@ package command
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"testing"
 
@@ -78,10 +79,8 @@ func (s *trackedContextState) assertContains(t *testing.T, want context.Context)
 
 	require.NotEmpty(t, s.seen)
 
-	for _, got := range s.seen {
-		if got == want {
-			return
-		}
+	if slices.Contains(s.seen, want) {
+		return
 	}
 
 	t.Fatalf("request context not observed in tracked contexts")
@@ -312,7 +311,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 			Logger:       newCommandTestLogger(),
 		}),
 		MembersData: provider,
-		//nolint:staticcheck // nil context path is the behavior under test
+		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply reqCtx.
 		Matcher:   matcher.NewMemberMatcher(nil, provider, nil, nil, nil, newCommandTestLogger()),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {

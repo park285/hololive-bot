@@ -1,5 +1,7 @@
 package outbox
 
+import "slices"
+
 import "time"
 
 var postLatencyDelaySourceReasonCodes = map[PostDelaySource]PostLatencyReasonCode{
@@ -300,12 +302,7 @@ func postLatencyDerivedMetricsExceeded(row *PostDeliveryTimeline) bool {
 	if boolPtrTrue(row.InternalLatencyExceeded) {
 		return true
 	}
-	for _, value := range []*int64{row.PublishToDetectMillis, row.QueueWaitMillis, row.RetryAccumulationMillis} {
-		if postLatencyMillisExceeded(value) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc([]*int64{row.PublishToDetectMillis, row.QueueWaitMillis, row.RetryAccumulationMillis}, postLatencyMillisExceeded)
 }
 
 func boolPtrTrue(value *bool) bool {

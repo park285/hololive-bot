@@ -39,10 +39,7 @@ func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff
 	}
 
 	delay := exponentialRetryBackoff(minBackoff, maxBackoff, consecutiveFailures)
-	delay = capRetryDelayByInterval(delay, interval)
-	if delay > maxBackoff {
-		delay = maxBackoff
-	}
+	delay = min(capRetryDelayByInterval(delay, interval), maxBackoff)
 	return delay
 }
 

@@ -7,30 +7,6 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-func (r *PgxRepository) terminal(ctx context.Context, ids []int64, status Status, reason string, workerID string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	column, statusFilter := terminalStatusSQL(status)
-	query := fmt.Sprintf(`
-		UPDATE alarm_dispatch_deliveries
-		SET status=$2,
-			%s=NOW(),
-			locked_by=NULL,
-			locked_at=NULL,
-			lock_expires_at=NULL,
-			last_error=CASE WHEN $3 = '' THEN last_error ELSE $3 END,
-			updated_at=NOW()
-		WHERE id = ANY($1)
-		  AND locked_by = $4
-		  AND %s`, column, statusFilter)
-	tag, err := r.pool.Exec(ctx, query, ids, string(status), reason, workerID)
-	if err != nil {
-		return fmt.Errorf("mark dispatch deliveries terminal: %w", err)
-	}
-	return expectRowsAffected(tag.RowsAffected(), len(ids), "mark dispatch deliveries terminal")
-}
-
 func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalUpdate, status Status, workerID string) error {
 	if len(updates) == 0 {
 		return nil

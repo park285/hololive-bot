@@ -88,7 +88,6 @@ func TestBuildTemplateData(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := mf.buildTemplateData("멤버", tt.item)
@@ -139,7 +138,6 @@ func TestTruncateString(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			if got := truncateString(tt.in, tt.maxLen); got != tt.want {
@@ -166,7 +164,6 @@ func TestGetGroupedTemplateKeyAndHeader(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			gotKey, gotHeader := mf.getGroupedTemplateKeyAndHeader("멤버", tt.kind, 2)

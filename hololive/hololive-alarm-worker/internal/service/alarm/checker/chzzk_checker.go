@@ -131,24 +131,6 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 	return notifications, nil
 }
 
-type chzzkLookupJob struct {
-	youtubeChannelID string
-	chzzkChannelID   string
-	subscriberRooms  []string
-}
-
-func newChzzkLookupJob(youtubeChannelID string, chzzkChannelID string, subscriberMap map[string][]string) (chzzkLookupJob, bool) {
-	job := chzzkLookupJob{
-		youtubeChannelID: strings.TrimSpace(youtubeChannelID),
-		chzzkChannelID:   strings.TrimSpace(chzzkChannelID),
-	}
-	if job.youtubeChannelID == "" || job.chzzkChannelID == "" {
-		return chzzkLookupJob{}, false
-	}
-	job.subscriberRooms = subscriberMap[job.youtubeChannelID]
-	return job, len(job.subscriberRooms) > 0
-}
-
 func (c *ChzzkChecker) lookupChzzkNotifications(ctx context.Context, job chzzkLookupJob, now time.Time) []*domain.AlarmNotification {
 	liveStatus, liveErr := c.chzzkClient.GetLiveStatus(ctx, job.chzzkChannelID)
 	if liveErr != nil {
@@ -313,7 +295,7 @@ func reflectTimeField(v any, name string) time.Time {
 
 func reflectStructField(v any, name string) (reflect.Value, bool) {
 	rv := reflect.ValueOf(v)
-	if !rv.IsValid() || rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if !rv.IsValid() || rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return reflect.Value{}, false
 	}
 
@@ -330,7 +312,7 @@ func reflectStructField(v any, name string) (reflect.Value, bool) {
 }
 
 func reflectTimeValue(field reflect.Value) time.Time {
-	if field.Type() == reflect.TypeOf(time.Time{}) {
+	if field.Type() == reflect.TypeFor[time.Time]() {
 		parsed, _ := field.Interface().(time.Time)
 		return parsed
 	}

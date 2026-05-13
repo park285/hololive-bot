@@ -23,6 +23,7 @@ package command
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -80,13 +81,7 @@ type memberProviderContextCapture struct {
 type testContextKey string
 
 func (c *memberProviderContextCapture) saw(expected context.Context) bool {
-	for _, observed := range c.contexts {
-		if observed == expected {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(c.contexts, expected)
 }
 
 type contextAwareMemberProvider struct {
@@ -263,7 +258,7 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 					Status:         domain.NextStreamStatusUpcoming,
 					Title:          "테스트 방송",
 					VideoID:        "vid1",
-					StartScheduled: ptrTime(time.Date(2026, time.March, 6, 12, 0, 0, 0, time.UTC)),
+					StartScheduled: new(time.Date(2026, time.March, 6, 12, 0, 0, 0, time.UTC)),
 				},
 			},
 		},
@@ -305,7 +300,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	alarm := &alarmAddRecorder{}
 	deps := &Dependencies{
 		Alarm: alarm,
-		//nolint:staticcheck // nil context path is the behavior under test
+		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
 		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
 		SendMessage: func(context.Context, string, string) error {
@@ -342,7 +337,47 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	}
 }
 
-func ptrTime(v time.Time) *time.Time { return &v }
+func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
+	memberProvider := newContextAwareMemberProvider(nil)
+	alarm := &alarmAddRecorder{}
+	sendErrorCalled := false
+	deps := &Dependencies{
+		Alarm: alarm,
+		//lint:ignore SA1012 nil base context is the behavior under test; Execute must supply ctx.
+		Matcher:   matcher.NewMemberMatcher(nil, memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Formatter: adapter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		SendMessage: func(context.Context, string, string) error {
+			return nil
+		},
+		SendError: func(context.Context, string, string) error {
+			sendErrorCalled = true
+			return nil
+		},
+		Logger: slog.New(slog.DiscardHandler),
+	}
+
+	err := NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{
+		Room:     "room-1",
+		RoomName: "room-name",
+		UserID:   "user-1",
+		UserName: "tester",
+	}, map[string]any{
+		"action": "add",
+		"member": "NoSuchMember",
+	})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	if !sendErrorCalled {
+		t.Fatal("expected no-match error message")
+	}
+	if alarm.addCtx != nil {
+		t.Fatal("expected AddAlarm not to be called after no-match member resolution")
+	}
+}
+
+//go:fix inline
 
 func setupAlarmCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	t.Helper()

@@ -177,7 +177,7 @@ const (
 	ErrNoMemberInfoFound        = "등록된 멤버 정보를 찾을 수 없습니다."
 	ErrCannotDisplayMemberInfo  = "멤버 정보를 표시할 수 없습니다."
 	MsgGraduatedMemberWarning   = "⚠️ 졸업한 멤버입니다.\n\n"
-	ErrGraduatedMemberBlocked = "⚠️ 졸업한 멤버입니다."
+	ErrGraduatedMemberBlocked   = "⚠️ 졸업한 멤버입니다."
 
 	ErrAlarmServiceNotInitialized = "알람 서비스가 초기화되지 않았습니다."
 	ErrAlarmAddFailed             = "알람 설정 중 오류가 발생했습니다."

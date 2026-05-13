@@ -95,8 +95,8 @@ func deriveRetryQueueKey(queueKey string) string {
 	if base == "" {
 		base = contractsalarm.DispatchQueueKey
 	}
-	if strings.HasSuffix(base, ":queue") {
-		return strings.TrimSuffix(base, ":queue") + ":retry"
+	if before, ok := strings.CutSuffix(base, ":queue"); ok {
+		return before + ":retry"
 	}
 	return base + ":retry"
 }
@@ -106,8 +106,8 @@ func deriveDLQKey(queueKey string) string {
 	if base == "" {
 		base = contractsalarm.DispatchQueueKey
 	}
-	if strings.HasSuffix(base, ":queue") {
-		return strings.TrimSuffix(base, ":queue") + ":dlq"
+	if before, ok := strings.CutSuffix(base, ":queue"); ok {
+		return before + ":dlq"
 	}
 	return base + ":dlq"
 }

@@ -27,8 +27,7 @@ func TestRuntimeSetClockIgnoresNil(t *testing.T) {
 
 func TestRuntimeStartIsGuarded(t *testing.T) {
 	rt := NewRuntime()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	release := make(chan struct{})
 	secondRun := make(chan struct{}, 1)

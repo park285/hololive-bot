@@ -26,10 +26,7 @@ import (
 	"log/slog"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
-	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 )
 
 func (d *Dispatcher) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
@@ -318,56 +315,6 @@ func (d *Dispatcher) recordOutboxDispatchResult(
 		slog.Int("delivery_failed", result.failedDeliveries),
 		slog.Int("outbox_touched", len(touchedOutboxIDs)),
 		slog.Int("aggregate_failures", aggregateFailures))
-}
-
-func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
-	uniqueIDs := uniqueInt64s(deliveryIDs)
-	if d == nil || d.db == nil || len(uniqueIDs) == 0 {
-		return nil
-	}
-
-	sentAt := canonicalSentAtNow()
-	if err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
-	}); err != nil {
-		return fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)
-	}
-
-	return nil
-}
-
-func recoverSuccessfulCommunityShortsSentStateTx(
-	ctx context.Context,
-	tx *gorm.DB,
-	uniqueIDs []int64,
-	sentAt time.Time,
-) error {
-	marks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
-	if err != nil {
-		return fmt.Errorf("load sent-state recovery marks: %w", err)
-	}
-	if len(marks) == 0 {
-		return nil
-	}
-
-	if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, marks); err != nil {
-		return fmt.Errorf("persist sent-state recovery marks: %w", err)
-	}
-
-	identities := alarmSentMarkIdentities(marks)
-	if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-		return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
-	}
-
-	return nil
-}
-
-func alarmSentMarkIdentities(marks []trackingrepo.AlarmSentMark) []PostTrackingIdentity {
-	identities := make([]PostTrackingIdentity, 0, len(marks))
-	for i := range marks {
-		identities = append(identities, PostTrackingIdentity{Kind: marks[i].Kind, ContentID: marks[i].ContentID})
-	}
-	return identities
 }
 
 func collectDeliveryOutboxIDs(rows []domain.YouTubeNotificationDelivery) []int64 {
