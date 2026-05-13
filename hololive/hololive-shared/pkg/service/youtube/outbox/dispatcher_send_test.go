@@ -1208,17 +1208,19 @@ func (s *blockingSender) SendMessage(ctx context.Context, _, _ string) error {
 	return ctx.Err()
 }
 
-type delayedReturnSender struct {
-	delay     time.Duration
-	afterDone func()
+type parentDeadlineBeforeReturnSender struct {
+	parentCtx             context.Context
+	parentDoneBeforeChild atomic.Bool
 }
 
-func (s *delayedReturnSender) SendMessage(ctx context.Context, _, _ string) error {
+func (s *parentDeadlineBeforeReturnSender) SendMessage(ctx context.Context, _, _ string) error {
 	<-ctx.Done()
-	if s.afterDone != nil {
-		s.afterDone()
+	select {
+	case <-s.parentCtx.Done():
+		s.parentDoneBeforeChild.Store(true)
+	default:
 	}
-	time.Sleep(s.delay)
+	<-s.parentCtx.Done()
 	return ctx.Err()
 }
 
@@ -1284,17 +1286,13 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t *testing.T) {
 	t.Parallel()
 
-	parentCtx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
+	parentCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	sender := &parentDeadlineBeforeReturnSender{parentCtx: parentCtx}
 
 	dispatcher := NewDispatcher(nil,
 		cachemocks.NewLenientClient(),
-		&delayedReturnSender{
-			delay: 30 * time.Millisecond,
-			afterDone: func() {
-				cancel(context.DeadlineExceeded)
-			},
-		},
+		sender,
 		nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Config{DeliverySendTimeout: 5 * time.Millisecond},
@@ -1308,6 +1306,9 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want configured timeout")
+	}
+	if sender.parentDoneBeforeChild.Load() {
+		t.Fatal("parent deadline expired before configured delivery timeout")
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
