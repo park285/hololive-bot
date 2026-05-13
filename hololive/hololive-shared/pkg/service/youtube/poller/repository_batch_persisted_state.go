@@ -169,27 +169,39 @@ func applyPersistedSentStateToTrackingRows(
 	sentAtByIdentity map[string]time.Time,
 ) {
 	for i := range trackingRows {
-		row := trackingRows[i]
-		if row == nil || !isCommunityShortsOutboxKind(row.Kind) {
-			continue
-		}
-		contentID := strings.TrimSpace(row.ContentID)
-		if contentID == "" {
-			continue
-		}
-		sentAt, ok := sentAtByIdentity[notificationIdentityKey(row.Kind, contentID)]
-		if !ok {
-			continue
-		}
-		switch {
-		case row.AlarmSentAt == nil:
-			sentAtCopy := sentAt
-			row.AlarmSentAt = &sentAtCopy
-		case sentAt.Before(*row.AlarmSentAt):
-			sentAtCopy := sentAt
-			row.AlarmSentAt = &sentAtCopy
-		}
+		applyPersistedSentStateToTrackingRow(trackingRows[i], sentAtByIdentity)
 	}
+}
+
+func applyPersistedSentStateToTrackingRow(
+	row *domain.YouTubeContentAlarmTracking,
+	sentAtByIdentity map[string]time.Time,
+) {
+	contentID, ok := persistedSentStateContentID(row)
+	if !ok {
+		return
+	}
+	sentAt, ok := sentAtByIdentity[notificationIdentityKey(row.Kind, contentID)]
+	if !ok {
+		return
+	}
+	applyTrackingAlarmSentAt(row, sentAt)
+}
+
+func persistedSentStateContentID(row *domain.YouTubeContentAlarmTracking) (string, bool) {
+	if row == nil || !isCommunityShortsOutboxKind(row.Kind) {
+		return "", false
+	}
+	contentID := strings.TrimSpace(row.ContentID)
+	return contentID, contentID != ""
+}
+
+func applyTrackingAlarmSentAt(row *domain.YouTubeContentAlarmTracking, sentAt time.Time) {
+	if row.AlarmSentAt != nil && !sentAt.Before(*row.AlarmSentAt) {
+		return
+	}
+	sentAtCopy := sentAt
+	row.AlarmSentAt = &sentAtCopy
 }
 
 func updateIdentitySentAtMin(sentAtByIdentity map[string]time.Time, identityKey string, candidate time.Time) {

@@ -75,30 +75,36 @@ func filterChannelsByQuery(channels []*domain.Channel, query string, filter *Str
 	normalizedQuery := strings.ToLower(stringutil.TrimSpace(query))
 
 	for _, ch := range channels {
-		if ch == nil {
-			continue
-		}
-		if ch.Org == nil || *ch.Org != constants.HolodexAPIParams.OrgHololive || filter.IsHolostarsChannel(ch) {
+		if !isSearchableHololiveChannel(ch, filter) {
 			continue
 		}
 		if normalizedQuery == "" {
 			filtered = append(filtered, ch)
 			continue
 		}
-		if strings.Contains(strings.ToLower(ch.Name), normalizedQuery) {
-			filtered = append(filtered, ch)
-			continue
-		}
-		if ch.EnglishName != nil && strings.Contains(strings.ToLower(*ch.EnglishName), normalizedQuery) {
-			filtered = append(filtered, ch)
-			continue
-		}
-		if strings.Contains(strings.ToLower(ch.ID), normalizedQuery) {
+		if channelMatchesSearchQuery(ch, normalizedQuery) {
 			filtered = append(filtered, ch)
 		}
 	}
 
 	return filtered
+}
+
+func isSearchableHololiveChannel(ch *domain.Channel, filter *StreamFilter) bool {
+	if ch == nil {
+		return false
+	}
+	return ch.Org != nil && *ch.Org == constants.HolodexAPIParams.OrgHololive && !filter.IsHolostarsChannel(ch)
+}
+
+func channelMatchesSearchQuery(ch *domain.Channel, normalizedQuery string) bool {
+	if strings.Contains(strings.ToLower(ch.Name), normalizedQuery) {
+		return true
+	}
+	if ch.EnglishName != nil && strings.Contains(strings.ToLower(*ch.EnglishName), normalizedQuery) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(ch.ID), normalizedQuery)
 }
 
 // retryable Holodex 오류(5xx/timeout/circuit/key rotation)에서만 YouTube 스크래퍼로 폴백하고,

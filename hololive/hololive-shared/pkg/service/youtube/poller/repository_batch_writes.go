@@ -177,23 +177,9 @@ func (r *gormBatchRepository) batchInsertNotifications(ctx context.Context, tx *
 }
 
 func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *gorm.DB, notifications []*domain.YouTubeNotificationOutbox) error {
-	for i, notification := range notifications {
-		if _, err := notification.DedupeKey(); err != nil {
-			return fmt.Errorf("validate notification dedupe key at index %d: %w", i, err)
-		}
-	}
-
-	completedSentAtByIdentity, err := loadCompletedNotificationSentAtByIdentity(ctx, tx, notifications)
+	completedSentAtByIdentity, reactivationRows, err := prepareNotificationInsertChunk(ctx, tx, notifications)
 	if err != nil {
-		return fmt.Errorf("load completed notification sent state: %w", err)
-	}
-	failedRows, err := loadFailedNotificationOutboxRows(ctx, tx, notifications)
-	if err != nil {
-		return fmt.Errorf("load failed outbox rows: %w", err)
-	}
-	completedFailedRows, reactivationRows := partitionFailedNotificationOutboxRows(failedRows, completedSentAtByIdentity)
-	if err := finalizeCompletedFailedNotificationRows(ctx, tx, completedFailedRows, completedSentAtByIdentity); err != nil {
-		return fmt.Errorf("finalize completed failed notification rows: %w", err)
+		return err
 	}
 
 	activeNotifications := filterCompletedNotifications(notifications, completedSentAtByIdentity)
@@ -211,35 +197,7 @@ func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *
 	`)
 
 	for i, notification := range activeNotifications {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-
-		status := notification.Status
-		if status == "" {
-			status = domain.OutboxStatusPending
-		}
-		nextAttemptAt := notification.NextAttemptAt
-		if nextAttemptAt.IsZero() {
-			nextAttemptAt = now
-		}
-		createdAt := notification.CreatedAt
-		if createdAt.IsZero() {
-			createdAt = now
-		}
-
-		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?)")
-		args = append(
-			args,
-			notification.Kind,
-			notification.ChannelID,
-			notification.ContentID,
-			notification.Payload,
-			status,
-			notification.AttemptCount,
-			nextAttemptAt,
-			createdAt,
-		)
+		appendNotificationInsertArgs(&sb, &args, i, notification, now)
 	}
 
 	sb.WriteString(`
@@ -264,6 +222,78 @@ func (r *gormBatchRepository) insertNotificationsChunk(ctx context.Context, tx *
 	}
 
 	return nil
+}
+
+func prepareNotificationInsertChunk(
+	ctx context.Context,
+	tx *gorm.DB,
+	notifications []*domain.YouTubeNotificationOutbox,
+) (map[string]time.Time, []failedNotificationOutboxRow, error) {
+	if err := validateNotificationDedupeKeys(notifications); err != nil {
+		return nil, nil, err
+	}
+
+	completedSentAtByIdentity, err := loadCompletedNotificationSentAtByIdentity(ctx, tx, notifications)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load completed notification sent state: %w", err)
+	}
+	failedRows, err := loadFailedNotificationOutboxRows(ctx, tx, notifications)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load failed outbox rows: %w", err)
+	}
+
+	completedFailedRows, reactivationRows := partitionFailedNotificationOutboxRows(failedRows, completedSentAtByIdentity)
+	if err := finalizeCompletedFailedNotificationRows(ctx, tx, completedFailedRows, completedSentAtByIdentity); err != nil {
+		return nil, nil, fmt.Errorf("finalize completed failed notification rows: %w", err)
+	}
+	return completedSentAtByIdentity, reactivationRows, nil
+}
+
+func validateNotificationDedupeKeys(notifications []*domain.YouTubeNotificationOutbox) error {
+	for i, notification := range notifications {
+		if _, err := notification.DedupeKey(); err != nil {
+			return fmt.Errorf("validate notification dedupe key at index %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func appendNotificationInsertArgs(
+	sb *strings.Builder,
+	args *[]any,
+	index int,
+	notification *domain.YouTubeNotificationOutbox,
+	now time.Time,
+) {
+	if index > 0 {
+		sb.WriteByte(',')
+	}
+
+	status := notification.Status
+	if status == "" {
+		status = domain.OutboxStatusPending
+	}
+	nextAttemptAt := notification.NextAttemptAt
+	if nextAttemptAt.IsZero() {
+		nextAttemptAt = now
+	}
+	createdAt := notification.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = now
+	}
+
+	sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?)")
+	*args = append(
+		*args,
+		notification.Kind,
+		notification.ChannelID,
+		notification.ContentID,
+		notification.Payload,
+		status,
+		notification.AttemptCount,
+		nextAttemptAt,
+		createdAt,
+	)
 }
 
 func (r *gormBatchRepository) upsertWatermark(ctx context.Context, tx *gorm.DB, watermark *domain.YouTubeContentWatermark) error {

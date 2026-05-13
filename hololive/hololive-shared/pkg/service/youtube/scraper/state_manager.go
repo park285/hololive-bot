@@ -56,25 +56,35 @@ func newCacheState(store stateStore, ttl time.Duration, label string) *cacheStat
 
 func (cs *cacheState) isSet(ctx context.Context, key, stateKey string) bool {
 	now := time.Now()
-	cs.mu.RLock()
-	until, ok := cs.until[key]
-	cs.mu.RUnlock()
-	if ok {
-		if now.Before(until) {
-			return true
-		}
-		cs.mu.Lock()
-		latest, exists := cs.until[key]
-		if exists && !time.Now().Before(latest) {
-			delete(cs.until, key)
-		}
-		cs.mu.Unlock()
+	if cs.memoryStateIsSet(key, now) {
+		return true
 	}
+	cs.clearExpiredMemoryState(key, now)
 
 	if cs.store == nil {
 		return false
 	}
 
+	return cs.hydrateFromStore(ctx, key, stateKey)
+}
+
+func (cs *cacheState) memoryStateIsSet(key string, now time.Time) bool {
+	cs.mu.RLock()
+	until, ok := cs.until[key]
+	cs.mu.RUnlock()
+	return ok && now.Before(until)
+}
+
+func (cs *cacheState) clearExpiredMemoryState(key string, now time.Time) {
+	cs.mu.Lock()
+	latest, exists := cs.until[key]
+	if exists && !now.Before(latest) {
+		delete(cs.until, key)
+	}
+	cs.mu.Unlock()
+}
+
+func (cs *cacheState) hydrateFromStore(ctx context.Context, key, stateKey string) bool {
 	var marker bool
 	if err := cs.store.Get(ctx, stateKey, &marker); err != nil {
 		slog.Warn("failed to read "+cs.label+" state",

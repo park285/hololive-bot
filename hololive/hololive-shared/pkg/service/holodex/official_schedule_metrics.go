@@ -73,32 +73,50 @@ func wrapOfficialScheduleError(reason officialScheduleFallbackReason, err error)
 
 func classifyOfficialScheduleFallbackReason(err error, matchedStreams int) officialScheduleFallbackReason {
 	if err == nil {
-		if matchedStreams > 0 {
-			return officialScheduleFallbackReasonMatched
-		}
-		return officialScheduleFallbackReasonEmpty
+		return classifyOfficialScheduleMatchedReason(matchedStreams)
 	}
 
 	if IsStructureError(err) {
 		return officialScheduleFallbackReasonStructureDrift
 	}
 
-	var reasonErr *officialScheduleReasonError
-	if errors.As(err, &reasonErr) && reasonErr.reason != "" {
-		return reasonErr.reason
+	if reason, ok := officialScheduleWrappedReason(err); ok {
+		return reason
 	}
 
+	if isOfficialScheduleNetworkError(err) {
+		return officialScheduleFallbackReasonNetwork
+	}
+
+	return classifyOfficialScheduleErrorMessage(err.Error())
+}
+
+func classifyOfficialScheduleMatchedReason(matchedStreams int) officialScheduleFallbackReason {
+	if matchedStreams > 0 {
+		return officialScheduleFallbackReasonMatched
+	}
+	return officialScheduleFallbackReasonEmpty
+}
+
+func officialScheduleWrappedReason(err error) (officialScheduleFallbackReason, bool) {
+	var reasonErr *officialScheduleReasonError
+	if errors.As(err, &reasonErr) && reasonErr.reason != "" {
+		return reasonErr.reason, true
+	}
+	return "", false
+}
+
+func isOfficialScheduleNetworkError(err error) bool {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
-		return officialScheduleFallbackReasonNetwork
+		return true
 	}
 
 	var netErr net.Error
-	if errors.As(err, &netErr) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return officialScheduleFallbackReasonNetwork
-	}
+	return errors.As(err, &netErr) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
 
-	message := err.Error()
+func classifyOfficialScheduleErrorMessage(message string) officialScheduleFallbackReason {
 	switch {
 	case strings.Contains(message, "HTML parse failed"):
 		return officialScheduleFallbackReasonParse

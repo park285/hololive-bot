@@ -156,62 +156,85 @@ func (d *Dispatcher) enqueueDeliveries(ctx context.Context, outboxItems []domain
 		outboxEnqueueDuration.Observe(time.Since(startedAt).Seconds())
 	}()
 
-	enqueuedOutboxes := 0
-	noSubscriberOutboxes := 0
-	subscriberLookupFailures := 0
-	enqueueFailures := 0
-	totalTargetRooms := 0
+	stats := outboxEnqueueStats{}
 
 	for i := range outboxItems {
-		item := &outboxItems[i]
-		rooms, ok := roomsForItem(roomsByChannel, *item)
-		if !ok {
-			subscriberLookupFailures++
-			d.markFailed(ctx, item.ID, "subscriber lookup failed")
-			continue
-		}
-
-		if len(rooms) == 0 {
-			noSubscriberOutboxes++
-			d.markSent(ctx, item.ID)
-			continue
-		}
-
-		roomIDs := make([]string, 0, len(rooms))
-		for roomID := range rooms {
-			roomIDs = append(roomIDs, roomID)
-		}
-
-		if err := d.delivery.EnqueueBatch(ctx, item.ID, roomIDs); err != nil {
-			enqueueFailures++
-			d.logger.Warn("Failed to enqueue room deliveries",
-				slog.Int64("outbox_id", item.ID),
-				slog.Any("error", err))
-			d.markFailed(ctx, item.ID, fmt.Sprintf("enqueue delivery rows: %v", err))
-			continue
-		}
-
-		enqueuedOutboxes++
-		totalTargetRooms += len(roomIDs)
-		d.releaseOutboxLock(ctx, item.ID)
+		stats.add(d.enqueueDelivery(ctx, &outboxItems[i], roomsByChannel))
 	}
 
-	if len(outboxItems) > 0 || enqueuedOutboxes > 0 || noSubscriberOutboxes > 0 || subscriberLookupFailures > 0 || enqueueFailures > 0 || totalTargetRooms > 0 {
+	d.recordOutboxEnqueueStats(len(outboxItems), stats)
+}
+
+type outboxEnqueueStats struct {
+	enqueuedOutboxes         int
+	noSubscriberOutboxes     int
+	subscriberLookupFailures int
+	enqueueFailures          int
+	totalTargetRooms         int
+}
+
+func (s *outboxEnqueueStats) add(next outboxEnqueueStats) {
+	s.enqueuedOutboxes += next.enqueuedOutboxes
+	s.noSubscriberOutboxes += next.noSubscriberOutboxes
+	s.subscriberLookupFailures += next.subscriberLookupFailures
+	s.enqueueFailures += next.enqueueFailures
+	s.totalTargetRooms += next.totalTargetRooms
+}
+
+func (d *Dispatcher) enqueueDelivery(
+	ctx context.Context,
+	item *domain.YouTubeNotificationOutbox,
+	roomsByChannel map[string]channelAlarmRoomTargets,
+) outboxEnqueueStats {
+	rooms, ok := roomsForItem(roomsByChannel, *item)
+	if !ok {
+		d.markFailed(ctx, item.ID, "subscriber lookup failed")
+		return outboxEnqueueStats{subscriberLookupFailures: 1}
+	}
+
+	if len(rooms) == 0 {
+		d.markSent(ctx, item.ID)
+		return outboxEnqueueStats{noSubscriberOutboxes: 1}
+	}
+
+	roomIDs := deliveryRoomIDs(rooms)
+	if err := d.delivery.EnqueueBatch(ctx, item.ID, roomIDs); err != nil {
+		d.logger.Warn("Failed to enqueue room deliveries",
+			slog.Int64("outbox_id", item.ID),
+			slog.Any("error", err))
+		d.markFailed(ctx, item.ID, fmt.Sprintf("enqueue delivery rows: %v", err))
+		return outboxEnqueueStats{enqueueFailures: 1}
+	}
+
+	d.releaseOutboxLock(ctx, item.ID)
+	return outboxEnqueueStats{enqueuedOutboxes: 1, totalTargetRooms: len(roomIDs)}
+}
+
+func deliveryRoomIDs(rooms map[string]bool) []string {
+	roomIDs := make([]string, 0, len(rooms))
+	for roomID := range rooms {
+		roomIDs = append(roomIDs, roomID)
+	}
+	return roomIDs
+}
+
+func (d *Dispatcher) recordOutboxEnqueueStats(claimed int, stats outboxEnqueueStats) {
+	if claimed > 0 || stats.enqueuedOutboxes > 0 || stats.noSubscriberOutboxes > 0 || stats.subscriberLookupFailures > 0 || stats.enqueueFailures > 0 || stats.totalTargetRooms > 0 {
 		d.logger.Info("Outbox per-room enqueue completed",
-			slog.Int("outbox_claimed", len(outboxItems)),
-			slog.Int("outbox_enqueued", enqueuedOutboxes),
-			slog.Int("outbox_no_subscribers", noSubscriberOutboxes),
-			slog.Int("subscriber_lookup_failures", subscriberLookupFailures),
-			slog.Int("enqueue_failures", enqueueFailures),
-			slog.Int("target_rooms", totalTargetRooms))
+			slog.Int("outbox_claimed", claimed),
+			slog.Int("outbox_enqueued", stats.enqueuedOutboxes),
+			slog.Int("outbox_no_subscribers", stats.noSubscriberOutboxes),
+			slog.Int("subscriber_lookup_failures", stats.subscriberLookupFailures),
+			slog.Int("enqueue_failures", stats.enqueueFailures),
+			slog.Int("target_rooms", stats.totalTargetRooms))
 	}
 
-	outboxEnqueueOutboxesTotal.WithLabelValues("claimed").Add(float64(len(outboxItems)))
-	outboxEnqueueOutboxesTotal.WithLabelValues("enqueued").Add(float64(enqueuedOutboxes))
-	outboxEnqueueOutboxesTotal.WithLabelValues("no_subscribers").Add(float64(noSubscriberOutboxes))
-	outboxEnqueueOutboxesTotal.WithLabelValues("subscriber_lookup_failures").Add(float64(subscriberLookupFailures))
-	outboxEnqueueOutboxesTotal.WithLabelValues("enqueue_failures").Add(float64(enqueueFailures))
-	outboxEnqueueTargetRoomsTotal.Add(float64(totalTargetRooms))
+	outboxEnqueueOutboxesTotal.WithLabelValues("claimed").Add(float64(claimed))
+	outboxEnqueueOutboxesTotal.WithLabelValues("enqueued").Add(float64(stats.enqueuedOutboxes))
+	outboxEnqueueOutboxesTotal.WithLabelValues("no_subscribers").Add(float64(stats.noSubscriberOutboxes))
+	outboxEnqueueOutboxesTotal.WithLabelValues("subscriber_lookup_failures").Add(float64(stats.subscriberLookupFailures))
+	outboxEnqueueOutboxesTotal.WithLabelValues("enqueue_failures").Add(float64(stats.enqueueFailures))
+	outboxEnqueueTargetRoomsTotal.Add(float64(stats.totalTargetRooms))
 }
 
 func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
@@ -241,7 +264,16 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
 	}
 
 	result := d.dispatchDeliveryRows(ctx, rows, outboxByID)
+	d.markDispatchResult(ctx, result)
 
+	touchedOutboxIDs := uniqueInt64s(result.touchedOutboxIDs)
+	aggregateFailures := d.reconcileTouchedOutboxes(ctx, touchedOutboxIDs)
+	d.recordOutboxDispatchResult(len(rows), result, touchedOutboxIDs, aggregateFailures)
+
+	return len(rows)
+}
+
+func (d *Dispatcher) markDispatchResult(ctx context.Context, result deliveryDispatchResult) {
 	if err := d.delivery.MarkSentBatch(ctx, result.successDeliveryIDs, result.successClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
 		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.successDeliveryIDs); recoverErr != nil {
@@ -257,28 +289,35 @@ func (d *Dispatcher) processPendingDeliveries(ctx context.Context) int {
 				slog.Any("error", err))
 		}
 	}
+}
 
-	touchedOutboxIDs := uniqueInt64s(result.touchedOutboxIDs)
-	aggregateFailures := 0
+func (d *Dispatcher) reconcileTouchedOutboxes(ctx context.Context, touchedOutboxIDs []int64) int {
 	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, touchedOutboxIDs); err != nil {
-		aggregateFailures++
 		d.logger.Warn("Failed to update outbox aggregate statuses", slog.Any("error", err))
+		return 1
 	} else if err := d.logFinalizedCommunityShortsOutboxResults(ctx, touchedOutboxIDs); err != nil {
 		d.logger.Warn("Failed to log finalized community/shorts outbox results", slog.Any("error", err))
 	}
 
+	return 0
+}
+
+func (d *Dispatcher) recordOutboxDispatchResult(
+	claimed int,
+	result deliveryDispatchResult,
+	touchedOutboxIDs []int64,
+	aggregateFailures int,
+) {
 	outboxDeliveryProcessedTotal.WithLabelValues("sent").Add(float64(len(result.successDeliveryIDs)))
 	outboxDeliveryProcessedTotal.WithLabelValues("failed").Add(float64(result.failedDeliveries))
 	outboxDispatchTouchedOutboxes.Observe(float64(len(touchedOutboxIDs)))
 
 	d.logger.Info("Outbox per-room dispatch completed",
-		slog.Int("delivery_claimed", len(rows)),
+		slog.Int("delivery_claimed", claimed),
 		slog.Int("delivery_sent", len(result.successDeliveryIDs)),
 		slog.Int("delivery_failed", result.failedDeliveries),
 		slog.Int("outbox_touched", len(touchedOutboxIDs)),
 		slog.Int("aggregate_failures", aggregateFailures))
-
-	return len(rows)
 }
 
 func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
@@ -289,32 +328,46 @@ func (d *Dispatcher) recoverSuccessfulCommunityShortsSentState(ctx context.Conte
 
 	sentAt := canonicalSentAtNow()
 	if err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		marks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
-		if err != nil {
-			return fmt.Errorf("load sent-state recovery marks: %w", err)
-		}
-		if len(marks) == 0 {
-			return nil
-		}
-
-		if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, marks); err != nil {
-			return fmt.Errorf("persist sent-state recovery marks: %w", err)
-		}
-
-		identities := make([]PostTrackingIdentity, 0, len(marks))
-		for i := range marks {
-			identities = append(identities, PostTrackingIdentity{Kind: marks[i].Kind, ContentID: marks[i].ContentID})
-		}
-		if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-			return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
-		}
-
-		return nil
+		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
 	}); err != nil {
 		return fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)
 	}
 
 	return nil
+}
+
+func recoverSuccessfulCommunityShortsSentStateTx(
+	ctx context.Context,
+	tx *gorm.DB,
+	uniqueIDs []int64,
+	sentAt time.Time,
+) error {
+	marks, err := loadAlarmSentMarksForPendingDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
+	if err != nil {
+		return fmt.Errorf("load sent-state recovery marks: %w", err)
+	}
+	if len(marks) == 0 {
+		return nil
+	}
+
+	if err := trackingrepo.NewRepository(tx).MarkAlarmSentBatch(ctx, marks); err != nil {
+		return fmt.Errorf("persist sent-state recovery marks: %w", err)
+	}
+
+	identities := alarmSentMarkIdentities(marks)
+	if err := NewDeliveryTelemetryRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+		return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
+	}
+
+	return nil
+}
+
+func alarmSentMarkIdentities(marks []trackingrepo.AlarmSentMark) []PostTrackingIdentity {
+	identities := make([]PostTrackingIdentity, 0, len(marks))
+	for i := range marks {
+		identities = append(identities, PostTrackingIdentity{Kind: marks[i].Kind, ContentID: marks[i].ContentID})
+	}
+	return identities
 }
 
 func collectDeliveryOutboxIDs(rows []domain.YouTubeNotificationDelivery) []int64 {

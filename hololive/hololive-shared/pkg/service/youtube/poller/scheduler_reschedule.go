@@ -51,36 +51,49 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	}
 
 	now := time.Now()
-	if pollErr != nil && !errors.Is(pollErr, context.Canceled) {
-		job.consecutiveFailures++
+	s.updateJobNextRunAfterPoll(job, pollErr, now)
 
-		var delayed retryDelayError
-		if errors.As(pollErr, &delayed) && delayed.RetryDelay() > 0 {
-			job.NextRunAt = now.Add(delayed.RetryDelay())
-		} else {
-			job.NextRunAt = nextErrorRetryAt(now, job.Interval, job.consecutiveFailures, s.errorBackoffMin, s.errorBackoffMax)
-		}
-
-		slog.Debug("Poll job rescheduled after failure",
-			"poller", job.Poller.Name(),
-			"channel_id", job.ChannelID,
-			"consecutive_failures", job.consecutiveFailures,
-			"next_run_at", job.NextRunAt)
-	} else {
-		hadFailures := job.consecutiveFailures > 0
-		job.consecutiveFailures = 0
-
-		if job.immediateFirstRun || hadFailures {
-			job.NextRunAt = nextPollAt(now, job.Interval, job.Offset)
-			job.immediateFirstRun = false
-		} else {
-			job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, now)
-		}
-	}
 	if job.index >= 0 {
 		heap.Fix(&s.jobs, job.index)
 	} else {
 		heap.Push(&s.jobs, job)
 	}
 	s.notifyDispatcher()
+}
+
+func (s *Scheduler) updateJobNextRunAfterPoll(job *Job, pollErr error, now time.Time) {
+	if pollErr != nil && !errors.Is(pollErr, context.Canceled) {
+		s.updateJobNextRunAfterFailure(job, pollErr, now)
+		return
+	}
+	s.updateJobNextRunAfterSuccess(job, now)
+}
+
+func (s *Scheduler) updateJobNextRunAfterFailure(job *Job, pollErr error, now time.Time) {
+	job.consecutiveFailures++
+
+	var delayed retryDelayError
+	if errors.As(pollErr, &delayed) && delayed.RetryDelay() > 0 {
+		job.NextRunAt = now.Add(delayed.RetryDelay())
+	} else {
+		job.NextRunAt = nextErrorRetryAt(now, job.Interval, job.consecutiveFailures, s.errorBackoffMin, s.errorBackoffMax)
+	}
+
+	slog.Debug("Poll job rescheduled after failure",
+		"poller", job.Poller.Name(),
+		"channel_id", job.ChannelID,
+		"consecutive_failures", job.consecutiveFailures,
+		"next_run_at", job.NextRunAt)
+}
+
+func (s *Scheduler) updateJobNextRunAfterSuccess(job *Job, now time.Time) {
+	hadFailures := job.consecutiveFailures > 0
+	job.consecutiveFailures = 0
+
+	if job.immediateFirstRun || hadFailures {
+		job.NextRunAt = nextPollAt(now, job.Interval, job.Offset)
+		job.immediateFirstRun = false
+		return
+	}
+	job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, now)
 }

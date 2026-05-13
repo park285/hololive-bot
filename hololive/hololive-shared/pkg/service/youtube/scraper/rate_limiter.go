@@ -48,6 +48,11 @@ type RateLimiter struct {
 	distributedWindow time.Duration
 }
 
+type localWaitReservation struct {
+	prevLastTime time.Time
+	seq          uint64
+}
+
 func NewRateLimiter(interval time.Duration) *RateLimiter {
 	return &RateLimiter{interval: interval}
 }
@@ -87,46 +92,60 @@ func (r *RateLimiter) waitLocal(ctx context.Context) error {
 		return fmt.Errorf("rate limiter wait canceled: %w", err)
 	}
 
+	waitTime, reservation, reserved, err := r.reserveLocalWait(ctx)
+	if err != nil || !reserved {
+		return err
+	}
+	return r.waitForLocalReservation(ctx, waitTime, reservation)
+}
+
+func (r *RateLimiter) reserveLocalWait(ctx context.Context) (time.Duration, localWaitReservation, bool, error) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	if err := ctx.Err(); err != nil {
-		r.mu.Unlock()
-		return fmt.Errorf("rate limiter wait canceled: %w", err)
+		return 0, localWaitReservation{}, false, fmt.Errorf("rate limiter wait canceled: %w", err)
 	}
 
 	now := time.Now()
 	if r.lastTime.IsZero() {
-		r.lastTime = now
-		r.seq++
-		r.mu.Unlock()
-		return nil
+		r.commitLocalWait(now)
+		return 0, localWaitReservation{}, false, nil
 	}
 	nextAllowed := r.lastTime.Add(r.interval)
 	if now.After(nextAllowed) || now.Equal(nextAllowed) {
-		r.lastTime = now
-		r.seq++
-		r.mu.Unlock()
-		return nil
+		r.commitLocalWait(now)
+		return 0, localWaitReservation{}, false, nil
 	}
 	prevLastTime := r.lastTime
-	r.lastTime = nextAllowed
-	r.seq++
-	reservedSeq := r.seq
+	r.commitLocalWait(nextAllowed)
 	waitTime := nextAllowed.Sub(now)
-	r.mu.Unlock()
+	reservation := localWaitReservation{prevLastTime: prevLastTime, seq: r.seq}
+	return waitTime, reservation, true, nil
+}
 
+func (r *RateLimiter) commitLocalWait(next time.Time) {
+	r.lastTime = next
+	r.seq++
+}
+
+func (r *RateLimiter) waitForLocalReservation(ctx context.Context, waitTime time.Duration, reservation localWaitReservation) error {
 	timer := time.NewTimer(waitTime)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		r.mu.Lock()
-		if r.seq == reservedSeq {
-			r.lastTime = prevLastTime
-			r.seq++
-		}
-		r.mu.Unlock()
+		r.rollbackLocalReservation(reservation)
 		return fmt.Errorf("rate limiter wait canceled: %w", ctx.Err())
 	case <-timer.C:
 		return nil
+	}
+}
+
+func (r *RateLimiter) rollbackLocalReservation(reservation localWaitReservation) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.seq == reservation.seq {
+		r.lastTime = reservation.prevLastTime
+		r.seq++
 	}
 }
 
@@ -136,20 +155,31 @@ func (r *RateLimiter) waitDistributed(ctx context.Context, bucket string) error 
 	}
 
 	for {
-		decision, err := r.distributed.Allow(ctx, bucket, r.distributedLimit, r.distributedWindow)
+		retryAfter, allowed, err := r.nextDistributedWait(ctx, bucket)
 		if err != nil {
-			return fmt.Errorf("distributed rate limiter allow failed: %w", err)
+			return err
 		}
-		if decision.Allowed {
+		if allowed {
 			return nil
 		}
-		if decision.RetryAfter <= 0 {
-			return fmt.Errorf("distributed rate limiter denied without retry_after")
-		}
-		if !ctxutil.SleepWithContext(ctx, decision.RetryAfter) {
+		if !ctxutil.SleepWithContext(ctx, retryAfter) {
 			return fmt.Errorf("distributed rate limiter wait canceled: %w", ctx.Err())
 		}
 	}
+}
+
+func (r *RateLimiter) nextDistributedWait(ctx context.Context, bucket string) (time.Duration, bool, error) {
+	decision, err := r.distributed.Allow(ctx, bucket, r.distributedLimit, r.distributedWindow)
+	if err != nil {
+		return 0, false, fmt.Errorf("distributed rate limiter allow failed: %w", err)
+	}
+	if decision.Allowed {
+		return 0, true, nil
+	}
+	if decision.RetryAfter <= 0 {
+		return 0, false, fmt.Errorf("distributed rate limiter denied without retry_after")
+	}
+	return decision.RetryAfter, false, nil
 }
 
 func distributedBucketFromURL(pageURL string) string {

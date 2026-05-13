@@ -109,28 +109,47 @@ func NewPendingPublishedAtResolverWithControls(
 }
 
 func (r *PendingPublishedAtResolver) Start(ctx context.Context) {
-	if r == nil || r.db == nil || r.client == nil {
+	if !r.canStart() {
 		return
 	}
 
 	for {
-		if err := r.RunOnce(ctx); err != nil && ctx.Err() == nil {
-			r.logger.Warn("Pending published_at resolver iteration failed",
-				slog.Any("error", err),
-			)
-		}
-
-		timer := time.NewTimer(r.resolverInterval())
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
+		r.runResolverIteration(ctx)
+		if !r.waitResolverInterval(ctx) {
 			return
-		case <-timer.C:
 		}
+	}
+}
+
+func (r *PendingPublishedAtResolver) canStart() bool {
+	return r != nil && r.db != nil && r.client != nil
+}
+
+func (r *PendingPublishedAtResolver) runResolverIteration(ctx context.Context) {
+	if err := r.RunOnce(ctx); err != nil && ctx.Err() == nil {
+		r.logger.Warn("Pending published_at resolver iteration failed",
+			slog.Any("error", err),
+		)
+	}
+}
+
+func (r *PendingPublishedAtResolver) waitResolverInterval(ctx context.Context) bool {
+	timer := time.NewTimer(r.resolverInterval())
+	select {
+	case <-ctx.Done():
+		stopAndDrainTimer(timer)
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func stopAndDrainTimer(timer *time.Timer) {
+	if timer.Stop() {
+		return
+	}
+	select {
+	case <-timer.C:
+	default:
 	}
 }

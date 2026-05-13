@@ -42,34 +42,48 @@ func (f *StreamFilter) FilterHololiveStreams(streams []*domain.Stream) []*domain
 	filtered := make([]*domain.Stream, 0, len(streams))
 
 	for _, stream := range streams {
-		if stream.Channel == nil {
-			f.logger.Debug("Filtered out stream without channel info", slog.String("id", stream.ID))
-			continue
-		}
-
-		channel := stream.Channel
-
-		if channel.Org == nil || !isAllowedOrg(*channel.Org) {
-			org := ""
-			if channel.Org != nil {
-				org = *channel.Org
-			}
-			f.logger.Debug("Filtered out stream from non-allowed org",
-				slog.String("channel", stream.ChannelName),
-				slog.String("org", org),
-			)
-			continue
-		}
-
-		if f.IsHolostarsChannel(channel) {
-			f.logger.Debug("Filtered out HOLOSTARS stream", slog.String("channel", stream.ChannelName))
-			continue
-		}
-
-		filtered = append(filtered, stream)
+		filtered = appendIfHololiveStream(filtered, stream, f)
 	}
 
 	return filtered
+}
+
+func appendIfHololiveStream(filtered []*domain.Stream, stream *domain.Stream, filter *StreamFilter) []*domain.Stream {
+	if !filter.isHololiveStream(stream) {
+		return filtered
+	}
+	return append(filtered, stream)
+}
+
+func (f *StreamFilter) isHololiveStream(stream *domain.Stream) bool {
+	if stream.Channel == nil {
+		f.logger.Debug("Filtered out stream without channel info", slog.String("id", stream.ID))
+		return false
+	}
+	if !f.isAllowedOrgStream(stream) {
+		return false
+	}
+	if f.IsHolostarsChannel(stream.Channel) {
+		f.logger.Debug("Filtered out HOLOSTARS stream", slog.String("channel", stream.ChannelName))
+		return false
+	}
+	return true
+}
+
+func (f *StreamFilter) isAllowedOrgStream(stream *domain.Stream) bool {
+	channel := stream.Channel
+	if channel.Org != nil && isAllowedOrg(*channel.Org) {
+		return true
+	}
+	org := ""
+	if channel.Org != nil {
+		org = *channel.Org
+	}
+	f.logger.Debug("Filtered out stream from non-allowed org",
+		slog.String("channel", stream.ChannelName),
+		slog.String("org", org),
+	)
+	return false
 }
 
 func (f *StreamFilter) FilterUpcomingStreams(streams []*domain.Stream) []*domain.Stream {
@@ -77,18 +91,19 @@ func (f *StreamFilter) FilterUpcomingStreams(streams []*domain.Stream) []*domain
 	filtered := make([]*domain.Stream, 0, len(streams))
 
 	for _, stream := range streams {
-		if stream.StartActual != nil {
-			continue
-		}
-
-		if stream.StartScheduled != nil && stream.StartScheduled.After(now) {
-			filtered = append(filtered, stream)
-		} else if stream.StartScheduled == nil {
+		if isUpcomingStream(stream, now) {
 			filtered = append(filtered, stream)
 		}
 	}
 
 	return filtered
+}
+
+func isUpcomingStream(stream *domain.Stream, now time.Time) bool {
+	if stream.StartActual != nil {
+		return false
+	}
+	return stream.StartScheduled == nil || stream.StartScheduled.After(now)
 }
 
 func (f *StreamFilter) IsHolostarsChannel(channel *domain.Channel) bool {

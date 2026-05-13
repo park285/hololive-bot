@@ -1,9 +1,22 @@
 package tracking
 
 import (
+	"cmp"
 	"sort"
 	"strings"
 )
+
+type observationPostComparisonRowComparator func(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int
+
+var observationPostComparisonRowComparators = []observationPostComparisonRowComparator{
+	compareObservationPostComparisonRowKind,
+	compareObservationPostComparisonRowChannelID,
+	compareObservationPostComparisonRowCanonicalPostID,
+	compareObservationPostComparisonRowDetectedAt,
+	compareObservationPostComparisonRowAlarmSentAt,
+	compareObservationPostComparisonRowContentID,
+	compareObservationPostComparisonRowTitleHint,
+}
 
 func sortObservationIdentifierMismatchCandidates(candidates []ObservationIdentifierMismatchCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -27,28 +40,43 @@ func sortObservationIdentifierMismatchCandidates(candidates []ObservationIdentif
 
 func sortObservationPostComparisonRows(rows []ObservationPostComparisonRow) {
 	sort.SliceStable(rows, func(i, j int) bool {
-		if rows[i].Kind != rows[j].Kind {
-			return rows[i].Kind < rows[j].Kind
-		}
-		if rows[i].ChannelID != rows[j].ChannelID {
-			return rows[i].ChannelID < rows[j].ChannelID
-		}
-		if rows[i].CanonicalPostID != rows[j].CanonicalPostID {
-			return rows[i].CanonicalPostID < rows[j].CanonicalPostID
-		}
-		leftDetectedAt := timeValueForObservationPostComparison(rows[i].DetectedAt)
-		rightDetectedAt := timeValueForObservationPostComparison(rows[j].DetectedAt)
-		if !leftDetectedAt.Equal(rightDetectedAt) {
-			return leftDetectedAt.Before(rightDetectedAt)
-		}
-		leftAlarmSentAt := timeValueForObservationPostComparison(rows[i].AlarmSentAt)
-		rightAlarmSentAt := timeValueForObservationPostComparison(rows[j].AlarmSentAt)
-		if !leftAlarmSentAt.Equal(rightAlarmSentAt) {
-			return leftAlarmSentAt.Before(rightAlarmSentAt)
-		}
-		if strings.TrimSpace(rows[i].ContentID) != strings.TrimSpace(rows[j].ContentID) {
-			return strings.TrimSpace(rows[i].ContentID) < strings.TrimSpace(rows[j].ContentID)
-		}
-		return observationComparisonTitleHintKey(rows[i].TitleHint) < observationComparisonTitleHintKey(rows[j].TitleHint)
+		return compareObservationPostComparisonRows(rows[i], rows[j]) < 0
 	})
+}
+
+func compareObservationPostComparisonRows(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	for _, comparator := range observationPostComparisonRowComparators {
+		if result := comparator(left, right); result != 0 {
+			return result
+		}
+	}
+	return 0
+}
+
+func compareObservationPostComparisonRowKind(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	return cmp.Compare(left.Kind, right.Kind)
+}
+
+func compareObservationPostComparisonRowChannelID(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	return cmp.Compare(left.ChannelID, right.ChannelID)
+}
+
+func compareObservationPostComparisonRowCanonicalPostID(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	return cmp.Compare(left.CanonicalPostID, right.CanonicalPostID)
+}
+
+func compareObservationPostComparisonRowDetectedAt(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	return timeValueForObservationPostComparison(left.DetectedAt).Compare(timeValueForObservationPostComparison(right.DetectedAt))
+}
+
+func compareObservationPostComparisonRowAlarmSentAt(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	return timeValueForObservationPostComparison(left.AlarmSentAt).Compare(timeValueForObservationPostComparison(right.AlarmSentAt))
+}
+
+func compareObservationPostComparisonRowContentID(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	return cmp.Compare(strings.TrimSpace(left.ContentID), strings.TrimSpace(right.ContentID))
+}
+
+func compareObservationPostComparisonRowTitleHint(left ObservationPostComparisonRow, right ObservationPostComparisonRow) int {
+	return cmp.Compare(observationComparisonTitleHintKey(left.TitleHint), observationComparisonTitleHintKey(right.TitleHint))
 }

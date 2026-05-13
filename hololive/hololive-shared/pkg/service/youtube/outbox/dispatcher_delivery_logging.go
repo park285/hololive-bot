@@ -174,26 +174,33 @@ func summarizeCommunityShortsDeliveryResult(
 	}
 
 	for i := range outboxes {
-		outbox := outboxes[i]
-		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
-			continue
-		}
-
-		summary.alarmCount++
-		if summary.channelID == "" {
-			summary.channelID = strings.TrimSpace(outbox.ChannelID)
-		}
-		if summary.alarmType == "" {
-			summary.alarmType = outbox.Kind.ToAlarmType()
-		}
-
-		roomID := strings.TrimSpace(rows[i].RoomID)
-		if roomID != "" {
-			summary.uniqueRooms[roomID] = struct{}{}
-		}
+		collectCommunityShortsDeliveryResultSummary(&summary, rows[i], outboxes[i])
 	}
 
 	return summary
+}
+
+func collectCommunityShortsDeliveryResultSummary(
+	summary *communityShortsDeliveryResultSummary,
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+) {
+	if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
+		return
+	}
+
+	summary.alarmCount++
+	if summary.channelID == "" {
+		summary.channelID = strings.TrimSpace(outbox.ChannelID)
+	}
+	if summary.alarmType == "" {
+		summary.alarmType = outbox.Kind.ToAlarmType()
+	}
+
+	roomID := strings.TrimSpace(row.RoomID)
+	if roomID != "" {
+		summary.uniqueRooms[roomID] = struct{}{}
+	}
 }
 
 func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (int, int, int, int) {
@@ -224,64 +231,128 @@ func (d *Dispatcher) logCommunityShortsDeliveryAudit(
 
 	sentAt = sentAt.UTC()
 	deliveryPath := normalizeCommunityShortsDeliveryPath(communityShortsDeliveryPath)
-	events := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, limit)
-	limitedRows := rows[:limit]
-	limitedOutboxes := outboxes[:limit]
-	for i := range limitedOutboxes {
-		outbox := limitedOutboxes[i]
-		if !isCommunityShortsDeliveryAuditKind(outbox.Kind) {
-			continue
-		}
-
-		attemptFinishedAt := sentAt.UTC()
-		events = append(events, domain.YouTubeNotificationDeliveryTelemetry{
-			DeliveryID:        limitedRows[i].ID,
-			AttemptOrdinal:    deliveryAttemptOrdinal(limitedRows[i]),
-			OutboxID:          outbox.ID,
-			ChannelID:         outbox.ChannelID,
-			ContentID:         strings.TrimSpace(outbox.ContentID),
-			PostID:            resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload),
-			RoomID:            limitedRows[i].RoomID,
-			AlarmType:         outbox.Kind.ToAlarmType(),
-			DedupeKey:         dedupeKeyLogValue(outbox),
-			DeliveryPath:      deliveryPath,
-			DeliveryMode:      deliveryMode,
-			SendResult:        sendResult,
-			FailureReason:     truncateString(strings.TrimSpace(failureReason), 100),
-			AttemptStartedAt:  deliveryAttemptStartedAt(limitedRows[i]),
-			AttemptFinishedAt: &attemptFinishedAt,
-			EventAt:           attemptFinishedAt,
-			NextAttemptAt:     time.Now().UTC(),
-		})
-	}
+	events := buildCommunityShortsDeliveryAuditEvents(
+		rows[:limit],
+		outboxes[:limit],
+		sentAt,
+		deliveryPath,
+		deliveryMode,
+		sendResult,
+		failureReason,
+	)
 	if len(events) == 0 {
 		return
 	}
 
-	preparedEvents := events
-	if d.telemetry != nil {
-		prepared, err := d.telemetry.prepareRows(ctx, events)
-		if err != nil {
-			d.logger.Warn("Failed to enrich persistent delivery audit",
-				slog.Int("events", len(events)),
-				slog.Any("error", err))
-		} else {
-			preparedEvents = prepared
-			enqueueErr := d.telemetry.enqueuePrepared(ctx, preparedEvents)
-			if enqueueErr == nil {
-				if err := d.telemetry.PersistPostLatencyClassificationsByOutboxIDs(ctx, collectTelemetryOutboxIDs(preparedEvents)); err != nil {
-					d.logger.Warn("Failed to persist post latency classifications",
-						slog.Int("events", len(preparedEvents)),
-						slog.Any("error", err))
-				}
-				return
-			}
-			d.logger.Warn("Failed to enqueue persistent delivery audit",
-				slog.Int("events", len(preparedEvents)),
-				slog.Any("error", enqueueErr))
-		}
+	preparedEvents, telemetryAvailable := d.prepareCommunityShortsDeliveryAuditEvents(ctx, events)
+	if telemetryAvailable && d.enqueueCommunityShortsDeliveryAuditEvents(ctx, preparedEvents) {
+		return
 	}
 
+	d.logCommunityShortsDeliveryAuditFallback(ctx, preparedEvents, sendErr)
+}
+
+func buildCommunityShortsDeliveryAuditEvents(
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	sentAt time.Time,
+	deliveryPath string,
+	deliveryMode string,
+	sendResult string,
+	failureReason string,
+) []domain.YouTubeNotificationDeliveryTelemetry {
+	events := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(outboxes))
+	for i := range outboxes {
+		if !isCommunityShortsDeliveryAuditKind(outboxes[i].Kind) {
+			continue
+		}
+		events = append(events, buildCommunityShortsDeliveryAuditEvent(
+			rows[i],
+			outboxes[i],
+			sentAt,
+			deliveryPath,
+			deliveryMode,
+			sendResult,
+			failureReason,
+		))
+	}
+	return events
+}
+
+func buildCommunityShortsDeliveryAuditEvent(
+	row domain.YouTubeNotificationDelivery,
+	outbox domain.YouTubeNotificationOutbox,
+	sentAt time.Time,
+	deliveryPath string,
+	deliveryMode string,
+	sendResult string,
+	failureReason string,
+) domain.YouTubeNotificationDeliveryTelemetry {
+	attemptFinishedAt := sentAt.UTC()
+	return domain.YouTubeNotificationDeliveryTelemetry{
+		DeliveryID:        row.ID,
+		AttemptOrdinal:    deliveryAttemptOrdinal(row),
+		OutboxID:          outbox.ID,
+		ChannelID:         outbox.ChannelID,
+		ContentID:         strings.TrimSpace(outbox.ContentID),
+		PostID:            resolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload),
+		RoomID:            row.RoomID,
+		AlarmType:         outbox.Kind.ToAlarmType(),
+		DedupeKey:         dedupeKeyLogValue(outbox),
+		DeliveryPath:      deliveryPath,
+		DeliveryMode:      deliveryMode,
+		SendResult:        sendResult,
+		FailureReason:     truncateString(strings.TrimSpace(failureReason), 100),
+		AttemptStartedAt:  deliveryAttemptStartedAt(row),
+		AttemptFinishedAt: &attemptFinishedAt,
+		EventAt:           attemptFinishedAt,
+		NextAttemptAt:     time.Now().UTC(),
+	}
+}
+
+func (d *Dispatcher) prepareCommunityShortsDeliveryAuditEvents(
+	ctx context.Context,
+	events []domain.YouTubeNotificationDeliveryTelemetry,
+) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
+	if d.telemetry == nil {
+		return events, false
+	}
+
+	prepared, err := d.telemetry.prepareRows(ctx, events)
+	if err != nil {
+		d.logger.Warn("Failed to enrich persistent delivery audit",
+			slog.Int("events", len(events)),
+			slog.Any("error", err))
+		return events, false
+	}
+	return prepared, true
+}
+
+func (d *Dispatcher) enqueueCommunityShortsDeliveryAuditEvents(
+	ctx context.Context,
+	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
+) bool {
+	enqueueErr := d.telemetry.enqueuePrepared(ctx, preparedEvents)
+	if enqueueErr != nil {
+		d.logger.Warn("Failed to enqueue persistent delivery audit",
+			slog.Int("events", len(preparedEvents)),
+			slog.Any("error", enqueueErr))
+		return false
+	}
+
+	if err := d.telemetry.PersistPostLatencyClassificationsByOutboxIDs(ctx, collectTelemetryOutboxIDs(preparedEvents)); err != nil {
+		d.logger.Warn("Failed to persist post latency classifications",
+			slog.Int("events", len(preparedEvents)),
+			slog.Any("error", err))
+	}
+	return true
+}
+
+func (d *Dispatcher) logCommunityShortsDeliveryAuditFallback(
+	ctx context.Context,
+	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
+	sendErr error,
+) {
 	fallbackClassificationsByOutboxID, err := d.loadDeliveryTelemetryLatencyClassifications(ctx, preparedEvents)
 	if err != nil {
 		d.logger.Warn("Failed to load fallback delivery telemetry latency classifications",

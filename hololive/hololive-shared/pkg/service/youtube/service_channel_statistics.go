@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/api/youtube/v3"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/fallback"
@@ -122,28 +123,47 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 func (ys *serviceImpl) completeChannelStatisticsAPIFallback(ctx context.Context, scrapeResult channelStatsScrapeResult) (map[string]*ChannelStats, error) {
 	result := scrapeResult.stats
 	if len(scrapeResult.failedIDs) == 0 {
-		_, _ = fallback.RunSecondary(ctx, fallback.SecondaryPlan{
-			Service:   "youtube",
-			Operation: "channel_statistics",
-			Trigger:   fallback.TriggerOnFailures,
-			ShouldRun: false,
-		})
+		recordChannelStatisticsFallbackSkipped(ctx)
 		return result, nil
 	}
 
+	secondary, err := ys.runChannelStatisticsAPIFallback(ctx, scrapeResult.failedIDs, result)
+	if err != nil {
+		return ys.handleChannelStatisticsFallbackError(scrapeResult, result, err)
+	}
+	if shouldReturnFallbackError(len(result), len(scrapeResult.failedIDs), secondary.Result.Successes) {
+		return nil, fmt.Errorf("get channel statistics: scraper and api fallback failed for %d channels", len(scrapeResult.failedIDs))
+	}
+	return result, nil
+}
+
+func recordChannelStatisticsFallbackSkipped(ctx context.Context) {
+	_, _ = fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+		Service:   "youtube",
+		Operation: "channel_statistics",
+		Trigger:   fallback.TriggerOnFailures,
+		ShouldRun: false,
+	})
+}
+
+func (ys *serviceImpl) runChannelStatisticsAPIFallback(
+	ctx context.Context,
+	failedIDs []string,
+	result map[string]*ChannelStats,
+) (fallback.SecondaryExecution, error) {
 	apiCtx, apiCancel := context.WithTimeout(
 		context.WithoutCancel(ctx),
 		constants.YouTubeConfig.APIFallbackTimeout,
 	)
 	defer apiCancel()
 
-	secondary, err := fallback.RunSecondary(apiCtx, fallback.SecondaryPlan{
+	return fallback.RunSecondary(apiCtx, fallback.SecondaryPlan{
 		Service:   "youtube",
 		Operation: "channel_statistics",
 		Trigger:   fallback.TriggerOnFailures,
 		ShouldRun: true,
 		Run: func(runCtx context.Context) (fallback.SecondaryResult, error) {
-			apiResult, apiErr := ys.getChannelStatsFromAPI(runCtx, scrapeResult.failedIDs)
+			apiResult, apiErr := ys.getChannelStatsFromAPI(runCtx, failedIDs)
 			if apiErr != nil {
 				return fallback.SecondaryResult{}, apiErr
 			}
@@ -154,17 +174,18 @@ func (ys *serviceImpl) completeChannelStatisticsAPIFallback(ctx context.Context,
 			}, nil
 		},
 	})
-	if err != nil {
-		ys.logger.Warn("API fallback failed",
-			slog.Int("channels", len(scrapeResult.failedIDs)),
-			slog.Any("error", err))
-		if shouldReturnFallbackError(len(result), len(scrapeResult.failedIDs), 0) {
-			return nil, fmt.Errorf("get channel statistics: api fallback unavailable after scraper failures: %w", err)
-		}
-		return result, nil
-	}
-	if shouldReturnFallbackError(len(result), len(scrapeResult.failedIDs), secondary.Result.Successes) {
-		return nil, fmt.Errorf("get channel statistics: scraper and api fallback failed for %d channels", len(scrapeResult.failedIDs))
+}
+
+func (ys *serviceImpl) handleChannelStatisticsFallbackError(
+	scrapeResult channelStatsScrapeResult,
+	result map[string]*ChannelStats,
+	err error,
+) (map[string]*ChannelStats, error) {
+	ys.logger.Warn("API fallback failed",
+		slog.Int("channels", len(scrapeResult.failedIDs)),
+		slog.Any("error", err))
+	if shouldReturnFallbackError(len(result), len(scrapeResult.failedIDs), 0) {
+		return nil, fmt.Errorf("get channel statistics: api fallback unavailable after scraper failures: %w", err)
 	}
 	return result, nil
 }
@@ -187,58 +208,7 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 		return channelStatsAPIFallbackResult{}, err
 	}
 
-	batchSize := 50
-	var batches [][]string
-	for i := 0; i < len(channelIDs); i += batchSize {
-		end := min(i+batchSize, len(channelIDs))
-		batches = append(batches, channelIDs[i:end])
-	}
-
-	result := make(map[string]*ChannelStats)
-	var mu sync.Mutex
-	successfulBatches := 0
-	var firstErr error
-	var errMu sync.Mutex
-
-	g, gctx := errgroup.WithContext(ctx)
-
-	for _, batch := range batches {
-		g.Go(func() error {
-			call := ys.service.Channels.List([]string{"statistics", "snippet"}).
-				Id(batch...)
-
-			response, err := call.Context(gctx).Do()
-			if err != nil {
-				ys.logger.Error("Failed to fetch channel statistics from API",
-					slog.Int("batch_size", len(batch)),
-					slog.Any("error", err))
-				errMu.Lock()
-				if firstErr == nil {
-					firstErr = err
-				}
-				errMu.Unlock()
-				return nil
-			}
-
-			now := time.Now()
-			mu.Lock()
-			successfulBatches++
-			for _, channel := range response.Items {
-				result[channel.Id] = &ChannelStats{
-					ChannelID:       channel.Id,
-					ChannelTitle:    channel.Snippet.Title,
-					SubscriberCount: channel.Statistics.SubscriberCount,
-					VideoCount:      channel.Statistics.VideoCount,
-					ViewCount:       channel.Statistics.ViewCount,
-					Timestamp:       now,
-				}
-			}
-			mu.Unlock()
-			return nil
-		})
-	}
-
-	_ = g.Wait()
+	result, successfulBatches, firstErr := ys.fetchChannelStatsAPIBatches(ctx, channelIDs)
 	if successfulBatches == 0 && firstErr != nil {
 		return channelStatsAPIFallbackResult{}, fmt.Errorf("fetch channel statistics from API: %w", firstErr)
 	}
@@ -253,4 +223,74 @@ func (ys *serviceImpl) getChannelStatsFromAPI(ctx context.Context, channelIDs []
 		stats:             result,
 		successfulBatches: successfulBatches,
 	}, nil
+}
+
+func (ys *serviceImpl) fetchChannelStatsAPIBatches(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, int, error) {
+	batches := channelStatsAPIBatches(channelIDs)
+	result := make(map[string]*ChannelStats)
+	var resultMu sync.Mutex
+	successfulBatches := 0
+	var firstErr error
+	var errMu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+
+	for _, batch := range batches {
+		g.Go(func() error {
+			response, err := ys.fetchChannelStatsAPIBatch(gctx, batch)
+			if err != nil {
+				recordChannelStatsAPIError(ys.logger, &errMu, &firstErr, batch, err)
+				return nil
+			}
+
+			now := time.Now()
+			resultMu.Lock()
+			successfulBatches++
+			addChannelStatsAPIResults(result, response, now)
+			resultMu.Unlock()
+			return nil
+		})
+	}
+
+	_ = g.Wait()
+	return result, successfulBatches, firstErr
+}
+
+func channelStatsAPIBatches(channelIDs []string) [][]string {
+	const batchSize = 50
+	batches := make([][]string, 0, (len(channelIDs)+batchSize-1)/batchSize)
+	for i := 0; i < len(channelIDs); i += batchSize {
+		end := min(i+batchSize, len(channelIDs))
+		batches = append(batches, channelIDs[i:end])
+	}
+	return batches
+}
+
+func (ys *serviceImpl) fetchChannelStatsAPIBatch(ctx context.Context, batch []string) (*youtube.ChannelListResponse, error) {
+	call := ys.service.Channels.List([]string{"statistics", "snippet"}).
+		Id(batch...)
+	return call.Context(ctx).Do()
+}
+
+func recordChannelStatsAPIError(logger *slog.Logger, mu *sync.Mutex, firstErr *error, batch []string, err error) {
+	logger.Error("Failed to fetch channel statistics from API",
+		slog.Int("batch_size", len(batch)),
+		slog.Any("error", err))
+	mu.Lock()
+	defer mu.Unlock()
+	if *firstErr == nil {
+		*firstErr = err
+	}
+}
+
+func addChannelStatsAPIResults(result map[string]*ChannelStats, response *youtube.ChannelListResponse, now time.Time) {
+	for _, channel := range response.Items {
+		result[channel.Id] = &ChannelStats{
+			ChannelID:       channel.Id,
+			ChannelTitle:    channel.Snippet.Title,
+			SubscriberCount: channel.Statistics.SubscriberCount,
+			VideoCount:      channel.Statistics.VideoCount,
+			ViewCount:       channel.Statistics.ViewCount,
+			Timestamp:       now,
+		}
+	}
 }

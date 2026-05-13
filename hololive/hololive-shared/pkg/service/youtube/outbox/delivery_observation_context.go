@@ -71,13 +71,7 @@ func (r *DeliveryTelemetryRepository) enrichRows(ctx context.Context, rows []dom
 		return fmt.Errorf("enrich delivery telemetry context: db is nil")
 	}
 
-	identities := make(map[deliveryTelemetryIdentity]struct{}, len(rows))
-	for i := range rows {
-		rows[i].ObservationStatus = normalizeDeliveryTelemetryObservationStatus(rows[i].ObservationStatus)
-		if identity, ok := deliveryTelemetryIdentityForRow(rows[i]); ok {
-			identities[identity] = struct{}{}
-		}
-	}
+	identities := normalizeRowsAndCollectDeliveryTelemetryIdentities(rows)
 	if len(identities) == 0 {
 		return nil
 	}
@@ -92,24 +86,42 @@ func (r *DeliveryTelemetryRepository) enrichRows(ctx context.Context, rows []dom
 		return err
 	}
 
+	applyDeliveryTelemetryObservationContexts(rows, trackingByIdentity, observationWindows)
+	return nil
+}
+
+func normalizeRowsAndCollectDeliveryTelemetryIdentities(
+	rows []domain.YouTubeNotificationDeliveryTelemetry,
+) map[deliveryTelemetryIdentity]struct{} {
+	identities := make(map[deliveryTelemetryIdentity]struct{}, len(rows))
+	for i := range rows {
+		rows[i].ObservationStatus = normalizeDeliveryTelemetryObservationStatus(rows[i].ObservationStatus)
+		if identity, ok := deliveryTelemetryIdentityForRow(rows[i]); ok {
+			identities[identity] = struct{}{}
+		}
+	}
+	return identities
+}
+
+func applyDeliveryTelemetryObservationContexts(
+	rows []domain.YouTubeNotificationDeliveryTelemetry,
+	trackingByIdentity map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot,
+	observationWindows []domain.YouTubeCommunityShortsObservationWindow,
+) {
 	for i := range rows {
 		identity, ok := deliveryTelemetryIdentityForRow(rows[i])
 		if !ok {
 			rows[i].ObservationStatus = normalizeDeliveryTelemetryObservationStatus(rows[i].ObservationStatus)
 			continue
 		}
-
 		snapshot, found := trackingByIdentity[identity]
 		if !found {
 			applyDeliveryTelemetryObservationContext(&rows[i], nil, observationWindows)
 			continue
 		}
-
 		snapshotCopy := snapshot
 		applyDeliveryTelemetryObservationContext(&rows[i], &snapshotCopy, observationWindows)
 	}
-
-	return nil
 }
 
 func (r *DeliveryTelemetryRepository) loadTrackingSnapshots(
@@ -161,24 +173,48 @@ func (r *DeliveryTelemetryRepository) loadObservationWindows(
 		return nil, nil
 	}
 
-	var earliest time.Time
-	var latest time.Time
-	for _, snapshot := range trackingByIdentity {
-		if snapshot.actualPublishedAt == nil || snapshot.actualPublishedAt.IsZero() {
-			continue
-		}
-		publishedAt := snapshot.actualPublishedAt.UTC()
-		if earliest.IsZero() || publishedAt.Before(earliest) {
-			earliest = publishedAt
-		}
-		if latest.IsZero() || publishedAt.After(latest) {
-			latest = publishedAt
-		}
-	}
-	if earliest.IsZero() || latest.IsZero() {
+	earliest, latest, ok := observationWindowPublishedRange(trackingByIdentity)
+	if !ok {
 		return nil, nil
 	}
 
+	windows, err := r.queryObservationWindows(ctx, earliest, latest)
+	if err != nil {
+		return nil, err
+	}
+	return windows, nil
+}
+
+func observationWindowPublishedRange(
+	trackingByIdentity map[deliveryTelemetryIdentity]deliveryTelemetryTrackingSnapshot,
+) (time.Time, time.Time, bool) {
+	var earliest time.Time
+	var latest time.Time
+	for _, snapshot := range trackingByIdentity {
+		earliest, latest = includePublishedAtInRange(snapshot.actualPublishedAt, earliest, latest)
+	}
+	return earliest, latest, !earliest.IsZero() && !latest.IsZero()
+}
+
+func includePublishedAtInRange(actualPublishedAt *time.Time, earliest time.Time, latest time.Time) (time.Time, time.Time) {
+	if actualPublishedAt == nil || actualPublishedAt.IsZero() {
+		return earliest, latest
+	}
+	publishedAt := actualPublishedAt.UTC()
+	if earliest.IsZero() || publishedAt.Before(earliest) {
+		earliest = publishedAt
+	}
+	if latest.IsZero() || publishedAt.After(latest) {
+		latest = publishedAt
+	}
+	return earliest, latest
+}
+
+func (r *DeliveryTelemetryRepository) queryObservationWindows(
+	ctx context.Context,
+	earliest time.Time,
+	latest time.Time,
+) ([]domain.YouTubeCommunityShortsObservationWindow, error) {
 	var windows []domain.YouTubeCommunityShortsObservationWindow
 	if err := r.db.WithContext(ctx).
 		Where("observation_ended_at > ?", earliest).
@@ -263,29 +299,43 @@ func findMatchingObservationWindow(
 	snapshot deliveryTelemetryTrackingSnapshot,
 	windows []domain.YouTubeCommunityShortsObservationWindow,
 ) (domain.YouTubeCommunityShortsObservationWindow, bool) {
-	if snapshot.actualPublishedAt == nil || snapshot.actualPublishedAt.IsZero() {
-		return domain.YouTubeCommunityShortsObservationWindow{}, false
-	}
-	if snapshot.detectedAt == nil || snapshot.detectedAt.IsZero() {
+	publishedAt, detectedAt, ok := snapshotObservationTimes(snapshot)
+	if !ok {
 		return domain.YouTubeCommunityShortsObservationWindow{}, false
 	}
 
-	publishedAt := snapshot.actualPublishedAt.UTC()
-	detectedAt := snapshot.detectedAt.UTC()
 	for i := range windows {
 		window := windows[i]
-		if publishedAt.Before(window.ObservationStartedAt.UTC()) {
-			continue
-		}
-		if !publishedAt.Before(window.ObservationEndedAt.UTC()) {
-			continue
-		}
-		if !detectedAt.Before(observationWindowDetectionCutoff(window)) {
+		if !observationWindowMatches(publishedAt, detectedAt, window) {
 			continue
 		}
 		return window, true
 	}
 	return domain.YouTubeCommunityShortsObservationWindow{}, false
+}
+
+func snapshotObservationTimes(snapshot deliveryTelemetryTrackingSnapshot) (time.Time, time.Time, bool) {
+	if snapshot.actualPublishedAt == nil || snapshot.actualPublishedAt.IsZero() {
+		return time.Time{}, time.Time{}, false
+	}
+	if snapshot.detectedAt == nil || snapshot.detectedAt.IsZero() {
+		return time.Time{}, time.Time{}, false
+	}
+	return snapshot.actualPublishedAt.UTC(), snapshot.detectedAt.UTC(), true
+}
+
+func observationWindowMatches(
+	publishedAt time.Time,
+	detectedAt time.Time,
+	window domain.YouTubeCommunityShortsObservationWindow,
+) bool {
+	if publishedAt.Before(window.ObservationStartedAt.UTC()) {
+		return false
+	}
+	if !publishedAt.Before(window.ObservationEndedAt.UTC()) {
+		return false
+	}
+	return detectedAt.Before(observationWindowDetectionCutoff(window))
 }
 
 func observationWindowDetectionCutoff(window domain.YouTubeCommunityShortsObservationWindow) time.Time {
@@ -321,6 +371,14 @@ func deliveryTelemetryObservationContextChanged(
 	left domain.YouTubeNotificationDeliveryTelemetry,
 	right domain.YouTubeNotificationDeliveryTelemetry,
 ) bool {
+	return deliveryTelemetryObservationTimingChanged(left, right) ||
+		deliveryTelemetryObservationWindowChanged(left, right)
+}
+
+func deliveryTelemetryObservationTimingChanged(
+	left domain.YouTubeNotificationDeliveryTelemetry,
+	right domain.YouTubeNotificationDeliveryTelemetry,
+) bool {
 	if !sameUTCTimePtr(left.ActualPublishedAt, right.ActualPublishedAt) {
 		return true
 	}
@@ -333,6 +391,13 @@ func deliveryTelemetryObservationContextChanged(
 	if !sameUTCTimePtr(left.DetectedAt, right.DetectedAt) {
 		return true
 	}
+	return false
+}
+
+func deliveryTelemetryObservationWindowChanged(
+	left domain.YouTubeNotificationDeliveryTelemetry,
+	right domain.YouTubeNotificationDeliveryTelemetry,
+) bool {
 	if normalizeDeliveryTelemetryObservationStatus(left.ObservationStatus) != normalizeDeliveryTelemetryObservationStatus(right.ObservationStatus) {
 		return true
 	}

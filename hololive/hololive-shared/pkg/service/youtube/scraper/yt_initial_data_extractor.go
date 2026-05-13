@@ -30,6 +30,14 @@ import (
 
 const maxYtInitialDataCandidates = 8
 
+const (
+	ytJSONObjectOpen  byte = 123
+	ytJSONObjectClose byte = 125
+	ytDoubleQuote     byte = 34
+	ytSingleQuote     byte = 39
+	ytEscape          byte = 92
+)
+
 // ytInitialData 추출용 정규식 (패턴별 우선순위)
 var ytInitialDataPatterns = []*regexp.Regexp{
 	// 패턴 1: 기본 패턴 (가장 일반적)
@@ -54,7 +62,6 @@ var ytInitialDataDOMFallbackAnchors = []string{
 var ErrYtInitialDataNotFound = errors.New("ytInitialData not found in HTML")
 
 // extractYtInitialData: YouTube HTML에서 ytInitialData JSON을 추출
-// 여러 패턴을 시도하여 YouTube 구조 변경에 유연하게 대응
 func extractYtInitialData(html string) (string, error) {
 	candidates := collectYtInitialDataCandidates(html)
 	if best, ok := pickBestYtInitialDataCandidate(candidates); ok {
@@ -145,7 +152,7 @@ func findNextAnchorCandidate(html, anchor string, searchFrom int) (string, int, 
 		return "", len(html), false
 	}
 
-	objOffset := strings.Index(html[eqIdx+1:], "{")
+	objOffset := strings.IndexByte(html[eqIdx+1:], ytJSONObjectOpen)
 	if objOffset < 0 {
 		return "", eqIdx + 1, false
 	}
@@ -218,49 +225,63 @@ func collectGenericDOMAnchorCandidates(scriptBody string, collector *ytInitialDa
 }
 
 func findJSONObjectEnd(src string, start int) (int, bool) {
-	if start < 0 || start >= len(src) || src[start] != '{' {
+	if start < 0 || start >= len(src) || src[start] != ytJSONObjectOpen {
 		return 0, false
 	}
 
-	depth := 0
-	inString := false
-	escaped := false
-	var quote byte
-
+	scanner := ytJSONObjectEndScanner{}
 	for i := start; i < len(src); i++ {
-		ch := src[i]
-
-		if inString {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if ch == '\\' {
-				escaped = true
-				continue
-			}
-			if ch == quote {
-				inString = false
-			}
-			continue
-		}
-
-		if ch == '"' || ch == '\'' {
-			inString = true
-			quote = ch
-			continue
-		}
-
-		switch ch {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return i, true
-			}
+		if scanner.consume(src[i]) {
+			return i, true
 		}
 	}
 
 	return 0, false
+}
+
+type ytJSONObjectEndScanner struct {
+	depth    int
+	inString bool
+	escaped  bool
+	quote    byte
+}
+
+func (s *ytJSONObjectEndScanner) consume(ch byte) bool {
+	if s.inString {
+		s.consumeStringByte(ch)
+		return false
+	}
+	return s.consumeStructuralByte(ch)
+}
+
+func (s *ytJSONObjectEndScanner) consumeStringByte(ch byte) {
+	if s.escaped {
+		s.escaped = false
+		return
+	}
+	if ch == ytEscape {
+		s.escaped = true
+		return
+	}
+	if ch == s.quote {
+		s.inString = false
+	}
+}
+
+func (s *ytJSONObjectEndScanner) consumeStructuralByte(ch byte) bool {
+	if ch == ytDoubleQuote || ch == ytSingleQuote {
+		s.inString = true
+		s.quote = ch
+		return false
+	}
+	if ch == ytJSONObjectOpen {
+		s.depth++
+		return false
+	}
+	if ch != ytJSONObjectClose {
+		return false
+	}
+
+	s.depth--
+	return s.depth == 0
 }

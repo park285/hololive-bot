@@ -11,22 +11,30 @@ import (
 func validateOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort:
-		raw, ok := decodeOutboxPayloadMap(item.Payload)
-		return ok &&
-			payloadString(raw, "title") != "" &&
-			(payloadString(raw, "video_id") != "" ||
-				payloadString(raw, "url") != "" ||
-				strings.TrimSpace(item.ContentID) != "")
+		return validateVideoOutboxPayload(item)
 	case domain.OutboxKindCommunityPost:
-		raw, ok := decodeOutboxPayloadMap(item.Payload)
-		return ok &&
-			(payloadString(raw, "content_text") != "" || payloadString(raw, "url") != "") &&
-			(payloadString(raw, "canonical_post_id") != "" ||
-				payloadString(raw, "post_id") != "" ||
-				strings.TrimSpace(item.ContentID) != "")
+		return validateCommunityOutboxPayload(item)
 	default:
 		return true
 	}
+}
+
+func validateVideoOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
+	raw, ok := decodeOutboxPayloadMap(item.Payload)
+	return ok &&
+		payloadString(raw, "title") != "" &&
+		(payloadString(raw, "video_id") != "" ||
+			payloadString(raw, "url") != "" ||
+			strings.TrimSpace(item.ContentID) != "")
+}
+
+func validateCommunityOutboxPayload(item domain.YouTubeNotificationOutbox) bool {
+	raw, ok := decodeOutboxPayloadMap(item.Payload)
+	return ok &&
+		(payloadString(raw, "content_text") != "" || payloadString(raw, "url") != "") &&
+		(payloadString(raw, "canonical_post_id") != "" ||
+			payloadString(raw, "post_id") != "" ||
+			strings.TrimSpace(item.ContentID) != "")
 }
 
 func decodeOutboxPayloadMap(payload string) (map[string]any, bool) {

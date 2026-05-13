@@ -60,27 +60,43 @@ func (ps *PhotoSyncService) Start(ctx context.Context) {
 		slog.Duration("stale_threshold", ps.staleThreshold),
 	)
 
-	// 앱 시작 시 다른 서비스들과의 API 경합을 피하기 위해 10초 딜레이
-	ps.logger.Debug("Waiting 10 seconds before initial sync to avoid API contention")
-	select {
-	case <-ctx.Done():
+	if !ps.waitBeforeInitialSync(ctx) {
 		return
-	case <-time.After(10 * time.Second):
 	}
 
 	ps.syncWithRetry(ctx, 3)
+	ps.runPeriodicSync(ctx)
+}
 
+func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
+	ps.logger.Debug("Waiting 10 seconds before initial sync to avoid API contention")
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(10 * time.Second):
+		return true
+	}
+}
+
+func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
 	ticker := time.NewTicker(ps.syncInterval)
 	defer ticker.Stop()
 
 	for {
-		select {
-		case <-ctx.Done():
-			ps.logger.Info("Photo sync service stopped")
+		if !ps.waitForNextPeriodicSync(ctx, ticker) {
 			return
-		case <-ticker.C:
-			ps.syncWithRetry(ctx, 3)
 		}
+		ps.syncWithRetry(ctx, 3)
+	}
+}
+
+func (ps *PhotoSyncService) waitForNextPeriodicSync(ctx context.Context, ticker *time.Ticker) bool {
+	select {
+	case <-ctx.Done():
+		ps.logger.Info("Photo sync service stopped")
+		return false
+	case <-ticker.C:
+		return true
 	}
 }
 
@@ -114,15 +130,7 @@ func (ps *PhotoSyncService) SyncAll(ctx context.Context) error {
 }
 
 func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
-	var channelIDs []string
-	var err error
-
-	if forceAll {
-		channelIDs, err = ps.memberRepo.GetAllChannelIDs(ctx)
-	} else {
-		channelIDs, err = ps.memberRepo.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
-	}
-
+	channelIDs, err := ps.photoSyncChannelIDs(ctx, forceAll)
 	if err != nil {
 		return fmt.Errorf("get members needing photo sync: %w", err)
 	}
@@ -137,30 +145,50 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 		slog.Bool("force_all", forceAll),
 	)
 
-	// Holodex에서 전체 채널 리스트 조회 (최적화된 단일 API 호출)
-	allChannels, err := ps.holodex.fetchHololiveChannelList(ctx)
+	photoMap, err := ps.fetchPhotoMap(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch Hololive channel list: %w", err)
+		return err
 	}
 
+	successCount, failCount := ps.updateMemberPhotos(ctx, channelIDs, photoMap)
+	ps.logger.Info("Photo sync completed",
+		slog.Int("success", successCount),
+		slog.Int("failed", failCount),
+		slog.Int("total", len(channelIDs)),
+	)
+
+	return nil
+}
+
+func (ps *PhotoSyncService) photoSyncChannelIDs(ctx context.Context, forceAll bool) ([]string, error) {
+	if forceAll {
+		return ps.memberRepo.GetAllChannelIDs(ctx)
+	}
+	return ps.memberRepo.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
+}
+
+func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]string, error) {
+	allChannels, err := ps.holodex.fetchHololiveChannelList(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Hololive channel list: %w", err)
+	}
 	photoMap := make(map[string]string, len(allChannels))
 	for _, ch := range allChannels {
 		if ch.Photo != nil && *ch.Photo != "" {
-			// 고화질로 업그레이드 (=s800 → =s1024)
 			highResPhoto := member.UpgradePhotoResolution(*ch.Photo)
 			photoMap[ch.ID] = highResPhoto
 		}
 	}
+	return photoMap, nil
+}
 
+func (ps *PhotoSyncService) updateMemberPhotos(ctx context.Context, channelIDs []string, photoMap map[string]string) (int, int) {
 	successCount := 0
 	failCount := 0
 
 	for _, channelID := range channelIDs {
 		photo, exists := photoMap[channelID]
-		if !exists || photo == "" {
-			ps.logger.Debug("No photo found for channel",
-				slog.String("channel_id", channelID),
-			)
+		if !ps.hasPhotoForChannel(channelID, exists, photo) {
 			continue
 		}
 
@@ -176,13 +204,17 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 		successCount++
 	}
 
-	ps.logger.Info("Photo sync completed",
-		slog.Int("success", successCount),
-		slog.Int("failed", failCount),
-		slog.Int("total", len(channelIDs)),
-	)
+	return successCount, failCount
+}
 
-	return nil
+func (ps *PhotoSyncService) hasPhotoForChannel(channelID string, exists bool, photo string) bool {
+	if exists && photo != "" {
+		return true
+	}
+	ps.logger.Debug("No photo found for channel",
+		slog.String("channel_id", channelID),
+	)
+	return false
 }
 
 func (ps *PhotoSyncService) SetSyncInterval(d time.Duration) {

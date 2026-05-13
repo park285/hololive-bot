@@ -37,56 +37,13 @@ import (
 // includeLive가 true이면 현재 진행 중인 방송도 포함한다.
 func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, error) {
 	if cached, found := h.cacheManager.GetChannelSchedule(ctx, channelID, hours, includeLive); found {
-		copied := make([]*domain.Stream, len(cached))
-		for i, stream := range cached {
-			streamCopy := *stream
-			if stream.StartScheduled != nil {
-				t := *stream.StartScheduled
-				streamCopy.StartScheduled = &t
-			}
-			if stream.StartActual != nil {
-				t := *stream.StartActual
-				streamCopy.StartActual = &t
-			}
-			copied[i] = &streamCopy
-		}
-
-		if includeLive {
-			return copied, nil
-		}
-		return h.filter.FilterUpcomingStreams(copied), nil
+		return h.channelScheduleFromCache(cached, includeLive), nil
 	}
 
-	var statusStr string
-	if includeLive {
-		statusStr = string(domain.StreamStatusLive) + "," + string(domain.StreamStatusUpcoming)
-	} else {
-		statusStr = string(domain.StreamStatusUpcoming)
-	}
-
-	params := url.Values{}
-	params.Set("channel_id", channelID)
-	params.Set("status", statusStr)
-	params.Set("type", "stream")
-	params.Set("max_upcoming_hours", fmt.Sprintf("%d", hours))
-
-	body, err := h.requester.DoRequest(ctx, "GET", "/live", params)
+	statusStr := channelScheduleStatus(includeLive)
+	body, err := h.requester.DoRequest(ctx, "GET", "/live", channelScheduleParams(channelID, hours, statusStr))
 	if err != nil {
-		h.logger.Error("Failed to get channel schedule",
-			slog.String("channel_id", channelID),
-			slog.String("status", statusStr),
-			slog.Any("error", err),
-		)
-
-		if h.shouldUseFallback(ctx, err) && h.scraper != nil {
-			h.logger.Warn("Using scraper fallback for channel schedule",
-				slog.String("channel_id", channelID),
-				slog.Any("error", err))
-
-			return h.scraper.FetchChannel(ctx, channelID)
-		}
-
-		return nil, fmt.Errorf("get channel schedule: %w", err)
+		return h.handleChannelScheduleRequestError(ctx, channelID, statusStr, err)
 	}
 
 	var rawStreams []StreamRaw
@@ -94,27 +51,91 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 		return nil, fmt.Errorf("failed to unmarshal channel schedule: %w", err)
 	}
 
-	allStreams := h.mapper.MapStreamsResponse(rawStreams)
-	hololiveOnly := h.filter.FilterHololiveStreams(allStreams)
-
-	slices.SortFunc(hololiveOnly, func(a, b *domain.Stream) int {
-		aTime := int64(0)
-		if a.StartScheduled != nil {
-			aTime = a.StartScheduled.Unix()
-		}
-		bTime := int64(0)
-		if b.StartScheduled != nil {
-			bTime = b.StartScheduled.Unix()
-		}
-		return cmp.Compare(aTime, bTime)
-	})
-
-	result := hololiveOnly
-	if !includeLive {
-		result = h.filter.FilterUpcomingStreams(hololiveOnly)
-	}
+	result := h.buildChannelSchedule(rawStreams, includeLive)
 
 	h.cacheManager.SetChannelSchedule(ctx, channelID, hours, includeLive, result, constants.CacheTTL.ChannelSchedule)
 
 	return result, nil
+}
+
+func (h *Service) channelScheduleFromCache(cached []*domain.Stream, includeLive bool) []*domain.Stream {
+	copied := copyChannelScheduleStreams(cached)
+	if includeLive {
+		return copied
+	}
+	return h.filter.FilterUpcomingStreams(copied)
+}
+
+func copyChannelScheduleStreams(streams []*domain.Stream) []*domain.Stream {
+	copied := make([]*domain.Stream, len(streams))
+	for i, stream := range streams {
+		streamCopy := *stream
+		if stream.StartScheduled != nil {
+			t := *stream.StartScheduled
+			streamCopy.StartScheduled = &t
+		}
+		if stream.StartActual != nil {
+			t := *stream.StartActual
+			streamCopy.StartActual = &t
+		}
+		copied[i] = &streamCopy
+	}
+	return copied
+}
+
+func channelScheduleStatus(includeLive bool) string {
+	if includeLive {
+		return string(domain.StreamStatusLive) + "," + string(domain.StreamStatusUpcoming)
+	}
+	return string(domain.StreamStatusUpcoming)
+}
+
+func channelScheduleParams(channelID string, hours int, statusStr string) url.Values {
+	params := url.Values{}
+	params.Set("channel_id", channelID)
+	params.Set("status", statusStr)
+	params.Set("type", "stream")
+	params.Set("max_upcoming_hours", fmt.Sprintf("%d", hours))
+	return params
+}
+
+func (h *Service) handleChannelScheduleRequestError(ctx context.Context, channelID string, statusStr string, err error) ([]*domain.Stream, error) {
+	h.logger.Error("Failed to get channel schedule",
+		slog.String("channel_id", channelID),
+		slog.String("status", statusStr),
+		slog.Any("error", err),
+	)
+
+	if h.shouldUseFallback(ctx, err) && h.scraper != nil {
+		h.logger.Warn("Using scraper fallback for channel schedule",
+			slog.String("channel_id", channelID),
+			slog.Any("error", err))
+
+		return h.scraper.FetchChannel(ctx, channelID)
+	}
+
+	return nil, fmt.Errorf("get channel schedule: %w", err)
+}
+
+func (h *Service) buildChannelSchedule(rawStreams []StreamRaw, includeLive bool) []*domain.Stream {
+	allStreams := h.mapper.MapStreamsResponse(rawStreams)
+	hololiveOnly := h.filter.FilterHololiveStreams(allStreams)
+	sortStreamsByScheduledTime(hololiveOnly)
+	if includeLive {
+		return hololiveOnly
+	}
+	return h.filter.FilterUpcomingStreams(hololiveOnly)
+}
+
+func sortStreamsByScheduledTime(streams []*domain.Stream) {
+	slices.SortFunc(streams, func(a, b *domain.Stream) int {
+		return cmp.Compare(streamScheduledUnix(a), streamScheduledUnix(b))
+	})
+}
+
+func streamScheduledUnix(stream *domain.Stream) int64 {
+	if stream.StartScheduled == nil {
+		return 0
+	}
+	return stream.StartScheduled.Unix()
 }
