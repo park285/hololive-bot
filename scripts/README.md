@@ -1,6 +1,6 @@
 # Scripts
 
-루트 `scripts/`는 현재 5개 영역만 운영합니다.
+루트 `scripts/`는 현재 7개 영역만 운영합니다.
 
 ## 1. ci/
 로컬 CI gate 진입점입니다. `build-all.sh`는 Docker build 전에 이 gate를 실행합니다.
@@ -52,6 +52,22 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/review/export-full-bundle.sh [output_dir]`
 - `INCLUDE_UNTRACKED=true ./scripts/review/export-full-bundle.sh [output_dir]`
 - `./scripts/review/verify-full-bundle.sh <bundle.tar.gz>`
+
+## 6. runtime/
+운영 중 런타임 상태 조회와 안전한 보정 작업용 스크립트입니다.
+
+- `./scripts/runtime/alarm-dispatch-outbox-status.sh`
+- `./scripts/runtime/alarm-dispatch-outbox-requeue.sh`
+- `./scripts/runtime/alarm-dispatch-outbox-retention.sh`
+- `./scripts/runtime/requeue-alarm-dlq.sh`
+- `./scripts/runtime/set-iris-base-url.sh`
+
+## 7. smoke/
+Compose 설정과 런타임 readiness/health smoke test 스크립트입니다.
+
+- `./scripts/smoke/smoke-compose-config.sh`
+- `./scripts/smoke/smoke-dispatcher-ready.sh`
+- `./scripts/smoke/smoke-runtime-health.sh`
 
 정리 원칙:
 - retired/no-op 스크립트는 유지하지 않습니다.
