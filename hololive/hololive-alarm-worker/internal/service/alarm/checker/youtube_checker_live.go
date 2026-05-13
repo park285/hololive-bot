@@ -37,23 +37,8 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	subscriberRooms []string,
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
-	if stream == nil || !stream.IsLive() {
-		return nil, nil
-	}
-
-	startAt := resolveLiveStart(stream)
+	startAt := resolveLiveCatchupStart(stream, now)
 	if startAt == nil {
-		observeYouTubeLiveCatchup("missing_start")
-		return nil, nil
-	}
-	if startAt.After(now) {
-		observeYouTubeLiveCatchup("future_start")
-		return nil, nil
-	}
-
-	catchupWindow := sharedconstants.FullRefreshInterval + time.Minute
-	if now.Sub(*startAt) > catchupWindow {
-		observeYouTubeLiveCatchup("outside_window")
 		return nil, nil
 	}
 
@@ -69,26 +54,9 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 
 	resolvedStream := ensureScheduledTime(stream, *startAt)
 
-	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
-	suppressedRooms := 0
-	for _, roomID := range subscriberRooms {
-		recentlyUpcoming, err := c.dedupSvc.WasUpcomingEventNotifiedRecently(
-			ctx,
-			roomID,
-			channelID,
-			resolvedStream,
-			sharedconstants.LiveCatchupSuppressWindow,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("build live catchup notifications: check upcoming suppress window: %w", err)
-		}
-
-		if recentlyUpcoming {
-			suppressedRooms++
-			continue
-		}
-
-		notifications = append(notifications, roomNotifications([]string{roomID}, resolvedStream.Channel, resolvedStream, 0, "")...)
+	notifications, suppressedRooms, err := c.buildUnsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms)
+	if err != nil {
+		return nil, err
 	}
 
 	if suppressedRooms > 0 {
@@ -109,6 +77,61 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	)
 
 	return notifications, nil
+}
+
+func resolveLiveCatchupStart(stream *domain.Stream, now time.Time) *time.Time {
+	if stream == nil || !stream.IsLive() {
+		return nil
+	}
+
+	startAt := resolveLiveStart(stream)
+	if startAt == nil {
+		observeYouTubeLiveCatchup("missing_start")
+		return nil
+	}
+	if startAt.After(now) {
+		observeYouTubeLiveCatchup("future_start")
+		return nil
+	}
+
+	catchupWindow := sharedconstants.FullRefreshInterval + time.Minute
+	if now.Sub(*startAt) > catchupWindow {
+		observeYouTubeLiveCatchup("outside_window")
+		return nil
+	}
+
+	return startAt
+}
+
+func (c *YouTubeChecker) buildUnsuppressedLiveCatchupNotifications(
+	ctx context.Context,
+	channelID string,
+	resolvedStream *domain.Stream,
+	subscriberRooms []string,
+) ([]*domain.AlarmNotification, int, error) {
+	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
+	suppressedRooms := 0
+	for _, roomID := range subscriberRooms {
+		recentlyUpcoming, err := c.dedupSvc.WasUpcomingEventNotifiedRecently(
+			ctx,
+			roomID,
+			channelID,
+			resolvedStream,
+			sharedconstants.LiveCatchupSuppressWindow,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("build live catchup notifications: check upcoming suppress window: %w", err)
+		}
+
+		if recentlyUpcoming {
+			suppressedRooms++
+			continue
+		}
+
+		notifications = append(notifications, roomNotifications([]string{roomID}, resolvedStream.Channel, resolvedStream, 0, "")...)
+	}
+
+	return notifications, suppressedRooms, nil
 }
 
 func resolveLiveStart(stream *domain.Stream) *time.Time {
