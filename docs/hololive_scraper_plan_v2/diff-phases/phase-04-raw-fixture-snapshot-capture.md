@@ -40,73 +40,73 @@ index 0000000..7777777
 +package scraper
 +
 +import (
-+	"context"
-+	"crypto/sha256"
-+	"encoding/hex"
-+	"strings"
-+	"time"
++    "context"
++    "crypto/sha256"
++    "encoding/hex"
++    "strings"
++    "time"
 +)
 +
 +type Snapshot struct {
-+	Operation  string
-+	ChannelID  string
-+	URL        string
-+	Source     FailureSource
-+	Reason     FailureReason
-+	Stage      string
-+	StatusCode int
-+	Body       []byte
-+	CapturedAt time.Time
++    Operation  string
++    ChannelID  string
++    URL        string
++    Source     FailureSource
++    Reason     FailureReason
++    Stage      string
++    StatusCode int
++    Body       []byte
++    CapturedAt time.Time
 +}
 +
 +type SnapshotSink interface {
-+	Capture(ctx context.Context, snapshot Snapshot) error
++    Capture(ctx context.Context, snapshot Snapshot) error
 +}
 +
 +type SnapshotPolicy struct {
-+	Enabled        bool
-+	MaxBodyBytes   int
-+	MinInterval    time.Duration
-+	AllowedReasons map[FailureReason]bool
++    Enabled        bool
++    MaxBodyBytes   int
++    MinInterval    time.Duration
++    AllowedReasons map[FailureReason]bool
 +}
 +
 +func DefaultSnapshotPolicy() SnapshotPolicy {
-+	return SnapshotPolicy{
-+		Enabled:      false,
-+		MaxBodyBytes: 512 << 10,
-+		MinInterval:  30 * time.Minute,
-+		AllowedReasons: map[FailureReason]bool{
-+			FailureReasonParserDrift:   true,
-+			FailureReasonEmptyResponse: true,
-+		},
-+	}
++    return SnapshotPolicy{
++        Enabled:      false,
++        MaxBodyBytes: 512 << 10,
++        MinInterval:  30 * time.Minute,
++        AllowedReasons: map[FailureReason]bool{
++            FailureReasonParserDrift:   true,
++            FailureReasonEmptyResponse: true,
++        },
++    }
 +}
 +
 +func (p SnapshotPolicy) allows(reason FailureReason) bool {
-+	if !p.Enabled {
-+		return false
-+	}
-+	if len(p.AllowedReasons) == 0 {
-+		return true
-+	}
-+	return p.AllowedReasons[reason]
++    if !p.Enabled {
++        return false
++    }
++    if len(p.AllowedReasons) == 0 {
++        return true
++    }
++    return p.AllowedReasons[reason]
 +}
 +
 +func trimSnapshotBody(body string, maxBytes int) []byte {
-+	body = strings.TrimSpace(body)
-+	if body == "" {
-+		return nil
-+	}
-+	raw := []byte(body)
-+	if maxBytes > 0 && len(raw) > maxBytes {
-+		return raw[:maxBytes]
-+	}
-+	return raw
++    body = strings.TrimSpace(body)
++    if body == "" {
++        return nil
++    }
++    raw := []byte(body)
++    if maxBytes > 0 && len(raw) > maxBytes {
++        return raw[:maxBytes]
++    }
++    return raw
 +}
 +
 +func SnapshotID(snapshot Snapshot) string {
-+	sum := sha256.Sum256([]byte(snapshot.Operation + "\n" + snapshot.ChannelID + "\n" + snapshot.Stage + "\n" + string(snapshot.Body)))
-+	return hex.EncodeToString(sum[:])
++    sum := sha256.Sum256([]byte(snapshot.Operation + "\n" + snapshot.ChannelID + "\n" + snapshot.Stage + "\n" + string(snapshot.Body)))
++    return hex.EncodeToString(sum[:])
 +}
 ```
 
@@ -120,60 +120,60 @@ index 0000000..8888888
 +package scraper
 +
 +import (
-+	"context"
-+	"fmt"
-+	"os"
-+	"path/filepath"
-+	"strings"
++    "context"
++    "fmt"
++    "os"
++    "path/filepath"
++    "strings"
 +)
 +
 +type FileSnapshotSink struct {
-+	Dir string
++    Dir string
 +}
 +
 +func NewFileSnapshotSink(dir string) FileSnapshotSink {
-+	return FileSnapshotSink{Dir: dir}
++    return FileSnapshotSink{Dir: dir}
 +}
 +
 +func (s FileSnapshotSink) Capture(ctx context.Context, snapshot Snapshot) error {
-+	if strings.TrimSpace(s.Dir) == "" {
-+		return nil
-+	}
-+	select {
-+	case <-ctx.Done():
-+		return ctx.Err()
-+	default:
-+	}
++    if strings.TrimSpace(s.Dir) == "" {
++        return nil
++    }
++    select {
++    case <-ctx.Done():
++        return ctx.Err()
++    default:
++    }
 +
-+	if snapshot.CapturedAt.IsZero() {
-+		return nil
-+	}
++    if snapshot.CapturedAt.IsZero() {
++        return nil
++    }
 +
-+	id := SnapshotID(snapshot)
-+	date := snapshot.CapturedAt.UTC().Format("20060102")
-+	name := fmt.Sprintf(
-+		"%s_%s_%s_%s_%s.html",
-+		date,
-+		safeFilePart(snapshot.Operation),
-+		safeFilePart(snapshot.ChannelID),
-+		safeFilePart(snapshot.Stage),
-+		id[:12],
-+	)
++    id := SnapshotID(snapshot)
++    date := snapshot.CapturedAt.UTC().Format("20060102")
++    name := fmt.Sprintf(
++        "%s_%s_%s_%s_%s.html",
++        date,
++        safeFilePart(snapshot.Operation),
++        safeFilePart(snapshot.ChannelID),
++        safeFilePart(snapshot.Stage),
++        id[:12],
++    )
 +
-+	dir := filepath.Join(s.Dir, date)
-+	if err := os.MkdirAll(dir, 0o755); err != nil {
-+		return err
-+	}
-+	return os.WriteFile(filepath.Join(dir, name), snapshot.Body, 0o644)
++    dir := filepath.Join(s.Dir, date)
++    if err := os.MkdirAll(dir, 0o755); err != nil {
++        return err
++    }
++    return os.WriteFile(filepath.Join(dir, name), snapshot.Body, 0o644)
 +}
 +
 +func safeFilePart(value string) string {
-+	value = strings.TrimSpace(value)
-+	if value == "" {
-+		return "unknown"
-+	}
-+	replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_", " ", "_")
-+	return replacer.Replace(value)
++    value = strings.TrimSpace(value)
++    if value == "" {
++        return "unknown"
++    }
++    replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_", " ", "_")
++    return replacer.Replace(value)
 +}
 ```
 
@@ -187,69 +187,69 @@ index 0000000..9999999
 +package scraper
 +
 +import (
-+	"context"
-+	"fmt"
-+	"log/slog"
-+	"strings"
-+	"time"
++    "context"
++    "fmt"
++    "log/slog"
++    "strings"
++    "time"
 +)
 +
 +func (c *Client) captureSnapshot(ctx context.Context, snapshot Snapshot) {
-+	if c == nil || c.snapshotSink == nil {
-+		return
-+	}
-+	policy := c.snapshotPolicy
-+	if !policy.allows(snapshot.Reason) {
-+		return
-+	}
-+	if snapshot.CapturedAt.IsZero() {
-+		snapshot.CapturedAt = time.Now().UTC()
-+	}
-+	if policy.MaxBodyBytes > 0 && len(snapshot.Body) > policy.MaxBodyBytes {
-+		snapshot.Body = snapshot.Body[:policy.MaxBodyBytes]
-+	}
-+	if len(snapshot.Body) == 0 {
-+		return
-+	}
-+	if !c.allowSnapshotInterval(ctx, snapshot, policy.MinInterval) {
-+		return
-+	}
-+	if err := c.snapshotSink.Capture(ctx, snapshot); err != nil {
-+		slog.Warn("failed to capture youtube scraper snapshot",
-+			"operation", snapshot.Operation,
-+			"channel_id", snapshot.ChannelID,
-+			"source", snapshot.Source,
-+			"reason", snapshot.Reason,
-+			"stage", snapshot.Stage,
-+			"error", err)
-+	}
++    if c == nil || c.snapshotSink == nil {
++        return
++    }
++    policy := c.snapshotPolicy
++    if !policy.allows(snapshot.Reason) {
++        return
++    }
++    if snapshot.CapturedAt.IsZero() {
++        snapshot.CapturedAt = time.Now().UTC()
++    }
++    if policy.MaxBodyBytes > 0 && len(snapshot.Body) > policy.MaxBodyBytes {
++        snapshot.Body = snapshot.Body[:policy.MaxBodyBytes]
++    }
++    if len(snapshot.Body) == 0 {
++        return
++    }
++    if !c.allowSnapshotInterval(ctx, snapshot, policy.MinInterval) {
++        return
++    }
++    if err := c.snapshotSink.Capture(ctx, snapshot); err != nil {
++        slog.Warn("failed to capture youtube scraper snapshot",
++            "operation", snapshot.Operation,
++            "channel_id", snapshot.ChannelID,
++            "source", snapshot.Source,
++            "reason", snapshot.Reason,
++            "stage", snapshot.Stage,
++            "error", err)
++    }
 +}
 +
 +func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot Snapshot, interval time.Duration) bool {
-+	if interval <= 0 || c == nil || c.stateStore == nil {
-+		return true
-+	}
-+	key := snapshotIntervalStateKey(snapshot)
-+	var marker bool
-+	if err := c.stateStore.Get(ctx, key, &marker); err == nil && marker {
-+		return false
-+	}
-+	if err := c.stateStore.Set(ctx, key, true, interval); err != nil {
-+		slog.Warn("failed to persist youtube scraper snapshot interval marker",
-+			"key", key,
-+			"error", err)
-+	}
-+	return true
++    if interval <= 0 || c == nil || c.stateStore == nil {
++        return true
++    }
++    key := snapshotIntervalStateKey(snapshot)
++    var marker bool
++    if err := c.stateStore.Get(ctx, key, &marker); err == nil && marker {
++        return false
++    }
++    if err := c.stateStore.Set(ctx, key, true, interval); err != nil {
++        slog.Warn("failed to persist youtube scraper snapshot interval marker",
++            "key", key,
++            "error", err)
++    }
++    return true
 +}
 +
 +func snapshotIntervalStateKey(snapshot Snapshot) string {
-+	return fmt.Sprintf(
-+		"youtube:scraper:snapshot-interval:%s:%s:%s:%s",
-+		strings.TrimSpace(snapshot.Operation),
-+		strings.TrimSpace(snapshot.ChannelID),
-+		strings.TrimSpace(snapshot.Stage),
-+		strings.TrimSpace(string(snapshot.Reason)),
-+	)
++    return fmt.Sprintf(
++        "youtube:scraper:snapshot-interval:%s:%s:%s:%s",
++        strings.TrimSpace(snapshot.Operation),
++        strings.TrimSpace(snapshot.ChannelID),
++        strings.TrimSpace(snapshot.Stage),
++        strings.TrimSpace(string(snapshot.Reason)),
++    )
 +}
 ```
 
@@ -259,36 +259,36 @@ index ccccccc..aaa4444 100644
 --- a/hololive/hololive-shared/pkg/service/youtube/scraper/client_options.go
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/client_options.go
 @@
- 	fetcherEngine    FetcherEngine
- 	channelHealthPolicy ChannelHealthPolicy
- 	channelHealth    *ChannelHealthStore
-+	snapshotSink     SnapshotSink
-+	snapshotPolicy   SnapshotPolicy
+     fetcherEngine    FetcherEngine
+     channelHealthPolicy ChannelHealthPolicy
+     channelHealth    *ChannelHealthStore
++    snapshotSink     SnapshotSink
++    snapshotPolicy   SnapshotPolicy
 @@
  func WithChannelHealthPolicy(policy ChannelHealthPolicy) ClientOption {
- 	return func(c *Client) {
- 		c.channelHealthPolicy = policy
- 	}
+     return func(c *Client) {
+         c.channelHealthPolicy = policy
+     }
  }
 +
 +func WithSnapshotSink(sink SnapshotSink) ClientOption {
-+	return func(c *Client) {
-+		c.snapshotSink = sink
-+	}
++    return func(c *Client) {
++        c.snapshotSink = sink
++    }
 +}
 +
 +func WithSnapshotPolicy(policy SnapshotPolicy) ClientOption {
-+	return func(c *Client) {
-+		c.snapshotPolicy = policy
-+	}
++    return func(c *Client) {
++        c.snapshotPolicy = policy
++    }
 +}
 @@
- 		uaProvider:    ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
- 		rateLimiter:   NewRateLimiter(3 * time.Second),
- 		backoffState:  NewBackoffState(),
- 		fetcherEngine: FetcherEngineNetHTTP,
-+		snapshotPolicy: DefaultSnapshotPolicy(),
- 	}
+         uaProvider:    ua.NewRotatingProvider(ua.StrategySessionTTL, 45*time.Minute),
+         rateLimiter:   NewRateLimiter(3 * time.Second),
+         backoffState:  NewBackoffState(),
+         fetcherEngine: FetcherEngineNetHTTP,
++        snapshotPolicy: DefaultSnapshotPolicy(),
+     }
 ```
 
 ```diff
@@ -298,25 +298,25 @@ index 5555555..bbb4444 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/client_operation_guard.go
 @@
  func (c *Client) recordParserDrift(
- 	ctx context.Context,
- 	operation string,
+     ctx context.Context,
+     operation string,
 @@
  ) error {
- 	err := NewParserDriftError(operation, stage, cause)
- 	detail := ClassifyFailure(err, source)
-+	c.captureSnapshot(ctx, Snapshot{
-+		Operation:  operation,
-+		ChannelID:  channelID,
-+		URL:        pageURL,
-+		Source:     source,
-+		Reason:     detail.Reason,
-+		Stage:      stage,
-+		StatusCode: detail.StatusCode,
-+		Body:       trimSnapshotBody(html, c.snapshotPolicy.MaxBodyBytes),
-+		CapturedAt: time.Now().UTC(),
-+	})
- 	c.recordChannelSourceFailure(ctx, channelID, detail)
- 	return err
+     err := NewParserDriftError(operation, stage, cause)
+     detail := ClassifyFailure(err, source)
++    c.captureSnapshot(ctx, Snapshot{
++        Operation:  operation,
++        ChannelID:  channelID,
++        URL:        pageURL,
++        Source:     source,
++        Reason:     detail.Reason,
++        Stage:      stage,
++        StatusCode: detail.StatusCode,
++        Body:       trimSnapshotBody(html, c.snapshotPolicy.MaxBodyBytes),
++        CapturedAt: time.Now().UTC(),
++    })
+     c.recordChannelSourceFailure(ctx, channelID, detail)
+     return err
  }
 ```
 
@@ -332,37 +332,37 @@ index 0000000..ccc4444
 +package scraper
 +
 +import (
-+	"strings"
-+	"testing"
++    "strings"
++    "testing"
 +
-+	"github.com/stretchr/testify/require"
++    "github.com/stretchr/testify/require"
 +)
 +
 +func TestTrimSnapshotBody(t *testing.T) {
-+	body := strings.Repeat("a", 1024)
-+	got := trimSnapshotBody(body, 128)
-+	require.Len(t, got, 128)
++    body := strings.Repeat("a", 1024)
++    got := trimSnapshotBody(body, 128)
++    require.Len(t, got, 128)
 +}
 +
 +func TestSnapshotPolicyAllowsOnlyConfiguredReason(t *testing.T) {
-+	policy := SnapshotPolicy{
-+		Enabled: true,
-+		AllowedReasons: map[FailureReason]bool{
-+			FailureReasonParserDrift: true,
-+		},
-+	}
-+	require.True(t, policy.allows(FailureReasonParserDrift))
-+	require.False(t, policy.allows(FailureReasonTransport))
++    policy := SnapshotPolicy{
++        Enabled: true,
++        AllowedReasons: map[FailureReason]bool{
++            FailureReasonParserDrift: true,
++        },
++    }
++    require.True(t, policy.allows(FailureReasonParserDrift))
++    require.False(t, policy.allows(FailureReasonTransport))
 +}
 +
 +func TestSnapshotIDStable(t *testing.T) {
-+	snapshot := Snapshot{
-+		Operation: "upcoming_events",
-+		ChannelID: "UCxxx",
-+		Stage: "extract_yt_initial_data",
-+		Body: []byte("<html></html>"),
-+	}
-+	require.Equal(t, SnapshotID(snapshot), SnapshotID(snapshot))
++    snapshot := Snapshot{
++        Operation: "upcoming_events",
++        ChannelID: "UCxxx",
++        Stage: "extract_yt_initial_data",
++        Body: []byte("<html></html>"),
++    }
++    require.Equal(t, SnapshotID(snapshot), SnapshotID(snapshot))
 +}
 ```
 

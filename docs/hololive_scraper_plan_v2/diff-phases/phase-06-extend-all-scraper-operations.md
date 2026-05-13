@@ -45,69 +45,69 @@ index eeeeeee..1116666 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/videos.go
 @@
  func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID string, maxResults int) ([]*Video, error) {
--	html, err := c.fetchPage(ctx, pageURL)
-+	html, err := c.fetchChannelSourcePage(ctx, "recent_videos", channelID, pageURL, FailureSourceHTML)
- 	if err != nil {
- 		return nil, err
- 	}
+-    html, err := c.fetchPage(ctx, pageURL)
++    html, err := c.fetchChannelSourcePage(ctx, "recent_videos", channelID, pageURL, FailureSourceHTML)
+     if err != nil {
+         return nil, err
+     }
 
- 	jsonStr, err := extractYtInitialData(html)
- 	if err != nil {
- 		logStructureWarning("recent_videos", channelID, "ytInitialData extraction failed", "error", err)
--		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
-+		return nil, c.recordParserDrift(ctx, "recent_videos", "extract_yt_initial_data", channelID, pageURL, FailureSourceHTML, html, err)
- 	}
+     jsonStr, err := extractYtInitialData(html)
+     if err != nil {
+         logStructureWarning("recent_videos", channelID, "ytInitialData extraction failed", "error", err)
+-        return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
++        return nil, c.recordParserDrift(ctx, "recent_videos", "extract_yt_initial_data", channelID, pageURL, FailureSourceHTML, html, err)
+     }
 
- 	data := gjson.Parse(jsonStr)
- 	videos, err := parseVideosFromInitialData(data, channelID, maxResults, c.parseVideoRenderer)
- 	if err != nil {
- 		logStructureWarning("recent_videos", channelID, "failed to parse initial data", "error", err)
--		return nil, err
-+		return nil, c.recordParserDrift(ctx, "recent_videos", "parse_initial_data", channelID, pageURL, FailureSourceHTML, html, err)
- 	}
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
- 	return videos, nil
+     data := gjson.Parse(jsonStr)
+     videos, err := parseVideosFromInitialData(data, channelID, maxResults, c.parseVideoRenderer)
+     if err != nil {
+         logStructureWarning("recent_videos", channelID, "failed to parse initial data", "error", err)
+-        return nil, err
++        return nil, c.recordParserDrift(ctx, "recent_videos", "parse_initial_data", channelID, pageURL, FailureSourceHTML, html, err)
+     }
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+     return videos, nil
  }
 @@
  func (c *Client) getRecentVideosFromRSS(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {
 @@
- 	rssURL := fmt.Sprintf("https://www.youtube.com/feeds/videos.xml?channel_id=%s", channelID)
--	html, err := c.fetchPage(ctx, rssURL)
-+	html, err := c.fetchChannelSourcePage(ctx, "recent_videos_rss", channelID, rssURL, FailureSourceRSS)
- 	if err != nil {
- 		return nil, err
- 	}
- 	videos, err := parseVideosFromRSSFeed(html, channelID, maxResults)
- 	if err != nil {
--		return nil, err
-+		return nil, c.recordParserDrift(ctx, "recent_videos_rss", "parse_rss_feed", channelID, rssURL, FailureSourceRSS, html, err)
- 	}
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceRSS)
- 	return videos, nil
+     rssURL := fmt.Sprintf("https://www.youtube.com/feeds/videos.xml?channel_id=%s", channelID)
+-    html, err := c.fetchPage(ctx, rssURL)
++    html, err := c.fetchChannelSourcePage(ctx, "recent_videos_rss", channelID, rssURL, FailureSourceRSS)
+     if err != nil {
+         return nil, err
+     }
+     videos, err := parseVideosFromRSSFeed(html, channelID, maxResults)
+     if err != nil {
+-        return nil, err
++        return nil, c.recordParserDrift(ctx, "recent_videos_rss", "parse_rss_feed", channelID, rssURL, FailureSourceRSS, html, err)
+     }
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceRSS)
+     return videos, nil
  }
 @@
  func (c *Client) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*Video, error) {
- 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
--	html, err := c.fetchPage(ctx, url)
-+	html, err := c.fetchChannelSourcePage(ctx, "popular_videos", channelID, url, FailureSourceHTML)
- 	if err != nil {
- 		return nil, err
- 	}
+     url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
+-    html, err := c.fetchPage(ctx, url)
++    html, err := c.fetchChannelSourcePage(ctx, "popular_videos", channelID, url, FailureSourceHTML)
+     if err != nil {
+         return nil, err
+     }
 
- 	jsonStr, err := extractYtInitialData(html)
- 	if err != nil {
--		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
-+		return nil, c.recordParserDrift(ctx, "popular_videos", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
- 	}
+     jsonStr, err := extractYtInitialData(html)
+     if err != nil {
+-        return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
++        return nil, c.recordParserDrift(ctx, "popular_videos", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+     }
 
- 	data := gjson.Parse(jsonStr)
- 	if err := checkAlerts(data); err != nil {
- 		return nil, err
+     data := gjson.Parse(jsonStr)
+     if err := checkAlerts(data); err != nil {
+         return nil, err
 @@
- 	}
+     }
 
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
- 	return videos, nil
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+     return videos, nil
  }
 ```
 
@@ -120,29 +120,29 @@ index 7e2cbb2..2226666 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/shorts.go
 @@
  func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*Short, error) {
- 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
--	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
-+	html, err := c.fetchChannelSourcePage(ctx, "shorts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
- 	if err != nil {
- 		return nil, err
- 	}
+     url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
+-    html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
++    html, err := c.fetchChannelSourcePage(ctx, "shorts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
+     if err != nil {
+         return nil, err
+     }
 
- 	jsonStr, err := extractYtInitialData(html)
- 	if err != nil {
--		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
-+		return nil, c.recordParserDrift(ctx, "shorts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
- 	}
+     jsonStr, err := extractYtInitialData(html)
+     if err != nil {
+-        return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
++        return nil, c.recordParserDrift(ctx, "shorts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+     }
 
- 	data := gjson.Parse(jsonStr)
- 	if err := checkAlerts(data); err != nil {
- 		return nil, err
- 	}
+     data := gjson.Parse(jsonStr)
+     if err := checkAlerts(data); err != nil {
+         return nil, err
+     }
 
- 	shortItems := extractShortsLockupViewModels(data)
--	return c.parseShortsLockupViewModels(shortItems, maxResults), nil
-+	shorts := c.parseShortsLockupViewModels(shortItems, maxResults)
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
-+	return shorts, nil
+     shortItems := extractShortsLockupViewModels(data)
+-    return c.parseShortsLockupViewModels(shortItems, maxResults), nil
++    shorts := c.parseShortsLockupViewModels(shortItems, maxResults)
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
++    return shorts, nil
  }
 ```
 
@@ -155,39 +155,39 @@ index 3e18c0e..3336666 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/community.go
 @@
  func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxResults int) ([]*CommunityPost, error) {
-+	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
-+		return nil, err
-+	}
- 	if c.isCommunityMissing(ctx, channelID) {
- 		return []*CommunityPost{}, nil
- 	}
++    if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
++        return nil, err
++    }
+     if c.isCommunityMissing(ctx, channelID) {
+         return []*CommunityPost{}, nil
+     }
 @@
- 	jsonStr, err := extractYtInitialData(html)
- 	if err != nil {
- 		logStructureWarning("community_posts", channelID, "ytInitialData extraction failed", "error", err)
--		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
-+		url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
-+		return nil, c.recordParserDrift(ctx, "community_posts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
- 	}
+     jsonStr, err := extractYtInitialData(html)
+     if err != nil {
+         logStructureWarning("community_posts", channelID, "ytInitialData extraction failed", "error", err)
+-        return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
++        url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
++        return nil, c.recordParserDrift(ctx, "community_posts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+     }
 @@
- 	if !postsContent.Exists() {
- 		c.markCommunityMissing(ctx, channelID)
- 		return nil, nil
- 	}
+     if !postsContent.Exists() {
+         c.markCommunityMissing(ctx, channelID)
+         return nil, nil
+     }
 
--	return c.parseCommunityPosts(postsContent, maxResults), nil
-+	posts := c.parseCommunityPosts(postsContent, maxResults)
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
-+	return posts, nil
+-    return c.parseCommunityPosts(postsContent, maxResults), nil
++    posts := c.parseCommunityPosts(postsContent, maxResults)
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
++    return posts, nil
  }
 @@
  func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) (string, bool, error) {
- 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
--	html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
-+	html, err := c.fetchChannelSourcePage(ctx, "community_posts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
- 	if err == nil {
- 		return html, false, nil
- 	}
+     url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
+-    html, err := c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
++    html, err := c.fetchChannelSourcePage(ctx, "community_posts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
+     if err == nil {
+         return html, false, nil
+     }
 ```
 
 주의: `GetCommunityPosts`에서 `ensureChannelSourceAllowed`를 추가하고, `fetchCommunityPostsPage`에서도 `fetchChannelSourcePage`가 다시 호출합니다. 중복 guard가 싫다면 `GetCommunityPosts`의 첫 guard는 제거해도 됩니다. 추천은 `fetchCommunityPostsPage`에만 두는 것입니다.
@@ -201,51 +201,51 @@ index 1c0de59..4446666 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/channel.go
 @@
  func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*ChannelStats, error) {
- 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/about", channelID)
+     url := fmt.Sprintf("https://www.youtube.com/channel/%s/about", channelID)
 
--	html, err := c.fetchPage(ctx, url)
-+	html, err := c.fetchChannelSourcePage(ctx, "channel_stats", channelID, url, FailureSourceHTML)
- 	if err != nil {
- 		return nil, fmt.Errorf("failed to fetch channel page: %w", err)
- 	}
+-    html, err := c.fetchPage(ctx, url)
++    html, err := c.fetchChannelSourcePage(ctx, "channel_stats", channelID, url, FailureSourceHTML)
+     if err != nil {
+         return nil, fmt.Errorf("failed to fetch channel page: %w", err)
+     }
 
- 	jsonStr, err := extractYtInitialData(html)
- 	if err != nil {
- 		logStructureWarning("channel_stats", channelID, "ytInitialData extraction failed", "error", err)
--		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
-+		return nil, c.recordParserDrift(ctx, "channel_stats", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
- 	}
+     jsonStr, err := extractYtInitialData(html)
+     if err != nil {
+         logStructureWarning("channel_stats", channelID, "ytInitialData extraction failed", "error", err)
+-        return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
++        return nil, c.recordParserDrift(ctx, "channel_stats", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+     }
 @@
- 	if looksEmptyChannelStats(stats) {
- 		logStructureWarning("channel_stats", channelID, "parsed stats are empty")
- 	}
+     if looksEmptyChannelStats(stats) {
+         logStructureWarning("channel_stats", channelID, "parsed stats are empty")
+     }
 
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
- 	return stats, nil
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+     return stats, nil
  }
 @@
  func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*ChannelSnippet, error) {
- 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
+     url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 
--	html, err := c.fetchPage(ctx, url)
-+	html, err := c.fetchChannelSourcePage(ctx, "channel_snippet", channelID, url, FailureSourceHTML)
- 	if err != nil {
- 		return nil, fmt.Errorf("failed to fetch channel page: %w", err)
- 	}
+-    html, err := c.fetchPage(ctx, url)
++    html, err := c.fetchChannelSourcePage(ctx, "channel_snippet", channelID, url, FailureSourceHTML)
+     if err != nil {
+         return nil, fmt.Errorf("failed to fetch channel page: %w", err)
+     }
 
- 	jsonStr, err := extractYtInitialData(html)
- 	if err != nil {
- 		logStructureWarning("channel_snippet", channelID, "ytInitialData extraction failed", "error", err)
--		return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
-+		return nil, c.recordParserDrift(ctx, "channel_snippet", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
- 	}
+     jsonStr, err := extractYtInitialData(html)
+     if err != nil {
+         logStructureWarning("channel_snippet", channelID, "ytInitialData extraction failed", "error", err)
+-        return nil, fmt.Errorf("failed to extract ytInitialData: %w", err)
++        return nil, c.recordParserDrift(ctx, "channel_snippet", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+     }
 @@
- 	if len(snippet.Avatar) == 0 || len(snippet.Banner) == 0 {
+     if len(snippet.Avatar) == 0 || len(snippet.Banner) == 0 {
 @@
- 	}
+     }
 
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
- 	return snippet, nil
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+     return snippet, nil
  }
 ```
 

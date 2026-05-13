@@ -36,31 +36,31 @@ tier:
 type youtubePollTier string
 
 const (
-	youtubePollTierActive youtubePollTier = "active"
-	youtubePollTierWarm   youtubePollTier = "warm"
-	youtubePollTierCold   youtubePollTier = "cold"
+    youtubePollTierActive youtubePollTier = "active"
+    youtubePollTierWarm   youtubePollTier = "warm"
+    youtubePollTierCold   youtubePollTier = "cold"
 )
 
 type youtubeTieredPollTargets struct {
-	ActiveNotificationChannelIDs []string
-	WarmNotificationChannelIDs   []string
-	ColdNotificationChannelIDs   []string
-	StatsChannelIDs              []string
+    ActiveNotificationChannelIDs []string
+    WarmNotificationChannelIDs   []string
+    ColdNotificationChannelIDs   []string
+    StatsChannelIDs              []string
 }
 
 func classifyYouTubePollTargetsByActivity(
-	ctx context.Context,
-	db *gorm.DB,
-	targets youtubePollTargets,
-	now time.Time,
+    ctx context.Context,
+    db *gorm.DB,
+    targets youtubePollTargets,
+    now time.Time,
 ) (youtubeTieredPollTargets, error) {
-	// 기준:
-	// active: streams table 또는 outbox/event table에서 24h 이내 활동
-	// warm: 7d 이내 활동
-	// cold: 나머지
-	//
-	// 실제 테이블명은 repo schema 기준으로 LLM 작업자가 확인해야 합니다.
-	return youtubeTieredPollTargets{}, nil
+    // 기준:
+    // active: streams table 또는 outbox/event table에서 24h 이내 활동
+    // warm: 7d 이내 활동
+    // cold: 나머지
+    //
+    // 실제 테이블명은 repo schema 기준으로 LLM 작업자가 확인해야 합니다.
+    return youtubeTieredPollTargets{}, nil
 }
 ```
 
@@ -68,29 +68,29 @@ registration 예시:
 
 ```go
 func buildTieredLivePollerRegistrations(
-	livePoller poller.Poller,
-	poll config.ScraperPoll,
-	targets youtubeTieredPollTargets,
+    livePoller poller.Poller,
+    poll config.ScraperPoll,
+    targets youtubeTieredPollTargets,
 ) []providers.ChannelPollerRegistration {
-	return []providers.ChannelPollerRegistration{
-		providers.NewChannelPollerRegistration(livePoller, poller.PriorityHigh, poll.Live).
-			WithChannelIDs(targets.ActiveNotificationChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupNotification).
-			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
+    return []providers.ChannelPollerRegistration{
+        providers.NewChannelPollerRegistration(livePoller, poller.PriorityHigh, poll.Live).
+            WithChannelIDs(targets.ActiveNotificationChannelIDs).
+            WithTargetGroup(providers.ChannelTargetGroupNotification).
+            WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+            WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
 
-		providers.NewChannelPollerRegistration(livePoller, poller.PriorityNormal, poll.Live*2).
-			WithChannelIDs(targets.WarmNotificationChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupNotification).
-			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
+        providers.NewChannelPollerRegistration(livePoller, poller.PriorityNormal, poll.Live*2).
+            WithChannelIDs(targets.WarmNotificationChannelIDs).
+            WithTargetGroup(providers.ChannelTargetGroupNotification).
+            WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+            WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
 
-		providers.NewChannelPollerRegistration(livePoller, poller.PriorityLow, poll.Live*6).
-			WithChannelIDs(targets.ColdNotificationChannelIDs).
-			WithTargetGroup(providers.ChannelTargetGroupNotification).
-			WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
-			WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
-	}
+        providers.NewChannelPollerRegistration(livePoller, poller.PriorityLow, poll.Live*6).
+            WithChannelIDs(targets.ColdNotificationChannelIDs).
+            WithTargetGroup(providers.ChannelTargetGroupNotification).
+            WithWorstCaseAttempts(scraper.FetchPageMaxAttempts).
+            WithWorstCaseRequestUnitsPerRun(float64(scraper.FetchPageMaxAttempts)),
+    }
 }
 ```
 

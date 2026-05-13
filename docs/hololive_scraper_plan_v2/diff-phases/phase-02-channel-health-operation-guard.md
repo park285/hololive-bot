@@ -39,188 +39,188 @@ index 0000000..4444444
 +package scraper
 +
 +import (
-+	"context"
-+	"fmt"
-+	"log/slog"
-+	"strings"
-+	"time"
++    "context"
++    "fmt"
++    "log/slog"
++    "strings"
++    "time"
 +)
 +
 +type ChannelSourceHealth struct {
-+	ChannelID           string        `json:"channel_id"`
-+	Source              FailureSource `json:"source"`
-+	ConsecutiveFailures int           `json:"consecutive_failures"`
-+	LastFailureReason   FailureReason `json:"last_failure_reason"`
-+	LastFailureAt       time.Time     `json:"last_failure_at"`
-+	LastSuccessAt       time.Time     `json:"last_success_at"`
-+	NextAllowedAt       time.Time     `json:"next_allowed_at"`
++    ChannelID           string        `json:"channel_id"`
++    Source              FailureSource `json:"source"`
++    ConsecutiveFailures int           `json:"consecutive_failures"`
++    LastFailureReason   FailureReason `json:"last_failure_reason"`
++    LastFailureAt       time.Time     `json:"last_failure_at"`
++    LastSuccessAt       time.Time     `json:"last_success_at"`
++    NextAllowedAt       time.Time     `json:"next_allowed_at"`
 +}
 +
 +type ChannelHealthPolicy struct {
-+	TTL               time.Duration
-+	ParserDriftBase   time.Duration
-+	ParserDriftMax    time.Duration
-+	TransportBase     time.Duration
-+	TransportMax      time.Duration
-+	TimeoutBase       time.Duration
-+	TimeoutMax        time.Duration
-+	HTTPStatusBase    time.Duration
-+	HTTPStatusMax     time.Duration
-+	SuccessDecaySteps int
++    TTL               time.Duration
++    ParserDriftBase   time.Duration
++    ParserDriftMax    time.Duration
++    TransportBase     time.Duration
++    TransportMax      time.Duration
++    TimeoutBase       time.Duration
++    TimeoutMax        time.Duration
++    HTTPStatusBase    time.Duration
++    HTTPStatusMax     time.Duration
++    SuccessDecaySteps int
 +}
 +
 +func DefaultChannelHealthPolicy() ChannelHealthPolicy {
-+	return ChannelHealthPolicy{
-+		TTL:               24 * time.Hour,
-+		ParserDriftBase:   10 * time.Minute,
-+		ParserDriftMax:    6 * time.Hour,
-+		TransportBase:     2 * time.Minute,
-+		TransportMax:      30 * time.Minute,
-+		TimeoutBase:       2 * time.Minute,
-+		TimeoutMax:        30 * time.Minute,
-+		HTTPStatusBase:    5 * time.Minute,
-+		HTTPStatusMax:     1 * time.Hour,
-+		SuccessDecaySteps: 1,
-+	}
++    return ChannelHealthPolicy{
++        TTL:               24 * time.Hour,
++        ParserDriftBase:   10 * time.Minute,
++        ParserDriftMax:    6 * time.Hour,
++        TransportBase:     2 * time.Minute,
++        TransportMax:      30 * time.Minute,
++        TimeoutBase:       2 * time.Minute,
++        TimeoutMax:        30 * time.Minute,
++        HTTPStatusBase:    5 * time.Minute,
++        HTTPStatusMax:     1 * time.Hour,
++        SuccessDecaySteps: 1,
++    }
 +}
 +
 +type ChannelHealthStore struct {
-+	store  stateStore
-+	policy ChannelHealthPolicy
++    store  stateStore
++    policy ChannelHealthPolicy
 +}
 +
 +func NewChannelHealthStore(store stateStore, policy ChannelHealthPolicy) *ChannelHealthStore {
-+	if policy.TTL <= 0 {
-+		policy = DefaultChannelHealthPolicy()
-+	}
-+	if policy.SuccessDecaySteps <= 0 {
-+		policy.SuccessDecaySteps = 1
-+	}
-+	return &ChannelHealthStore{store: store, policy: policy}
++    if policy.TTL <= 0 {
++        policy = DefaultChannelHealthPolicy()
++    }
++    if policy.SuccessDecaySteps <= 0 {
++        policy.SuccessDecaySteps = 1
++    }
++    return &ChannelHealthStore{store: store, policy: policy}
 +}
 +
 +func (s *ChannelHealthStore) ShouldSkip(ctx context.Context, channelID string, source FailureSource, now time.Time) (time.Duration, bool) {
-+	if s == nil || s.store == nil {
-+		return 0, false
-+	}
-+	health, ok := s.Get(ctx, channelID, source)
-+	if !ok || health.NextAllowedAt.IsZero() {
-+		return 0, false
-+	}
-+	remaining := health.NextAllowedAt.Sub(now)
-+	if remaining <= 0 {
-+		return 0, false
-+	}
-+	return remaining, true
++    if s == nil || s.store == nil {
++        return 0, false
++    }
++    health, ok := s.Get(ctx, channelID, source)
++    if !ok || health.NextAllowedAt.IsZero() {
++        return 0, false
++    }
++    remaining := health.NextAllowedAt.Sub(now)
++    if remaining <= 0 {
++        return 0, false
++    }
++    return remaining, true
 +}
 +
 +func (s *ChannelHealthStore) RecordSuccess(ctx context.Context, channelID string, source FailureSource, now time.Time) {
-+	if s == nil || s.store == nil {
-+		return
-+	}
-+	health, _ := s.Get(ctx, channelID, source)
-+	health.ChannelID = strings.TrimSpace(channelID)
-+	health.Source = source
-+	health.LastSuccessAt = now
-+	health.NextAllowedAt = time.Time{}
++    if s == nil || s.store == nil {
++        return
++    }
++    health, _ := s.Get(ctx, channelID, source)
++    health.ChannelID = strings.TrimSpace(channelID)
++    health.Source = source
++    health.LastSuccessAt = now
++    health.NextAllowedAt = time.Time{}
 +
-+	if health.ConsecutiveFailures > 0 {
-+		health.ConsecutiveFailures -= s.policy.SuccessDecaySteps
-+		if health.ConsecutiveFailures < 0 {
-+			health.ConsecutiveFailures = 0
-+		}
-+	}
-+	if health.ConsecutiveFailures == 0 {
-+		health.LastFailureReason = FailureReasonNone
-+	}
++    if health.ConsecutiveFailures > 0 {
++        health.ConsecutiveFailures -= s.policy.SuccessDecaySteps
++        if health.ConsecutiveFailures < 0 {
++            health.ConsecutiveFailures = 0
++        }
++    }
++    if health.ConsecutiveFailures == 0 {
++        health.LastFailureReason = FailureReasonNone
++    }
 +
-+	if err := s.store.Set(ctx, channelHealthStateKey(channelID, source), health, s.policy.TTL); err != nil {
-+		slog.Warn("failed to persist youtube scraper channel health success",
-+			"channel_id", channelID,
-+			"source", source,
-+			"error", err)
-+	}
++    if err := s.store.Set(ctx, channelHealthStateKey(channelID, source), health, s.policy.TTL); err != nil {
++        slog.Warn("failed to persist youtube scraper channel health success",
++            "channel_id", channelID,
++            "source", source,
++            "error", err)
++    }
 +}
 +
 +func (s *ChannelHealthStore) RecordFailure(ctx context.Context, channelID string, detail FailureDetail, now time.Time) time.Duration {
-+	if s == nil || s.store == nil {
-+		return 0
-+	}
++    if s == nil || s.store == nil {
++        return 0
++    }
 +
-+	source := detail.Source
-+	if source == "" {
-+		source = FailureSourceHTML
-+	}
++    source := detail.Source
++    if source == "" {
++        source = FailureSourceHTML
++    }
 +
-+	health, _ := s.Get(ctx, channelID, source)
-+	health.ChannelID = strings.TrimSpace(channelID)
-+	health.Source = source
-+	health.ConsecutiveFailures++
-+	health.LastFailureReason = detail.Reason
-+	health.LastFailureAt = now
++    health, _ := s.Get(ctx, channelID, source)
++    health.ChannelID = strings.TrimSpace(channelID)
++    health.Source = source
++    health.ConsecutiveFailures++
++    health.LastFailureReason = detail.Reason
++    health.LastFailureAt = now
 +
-+	delay := s.delayFor(detail.Reason, health.ConsecutiveFailures)
-+	if detail.RetryAfter > delay {
-+		delay = detail.RetryAfter
-+	}
-+	if delay > 0 {
-+		health.NextAllowedAt = now.Add(delay)
-+	}
++    delay := s.delayFor(detail.Reason, health.ConsecutiveFailures)
++    if detail.RetryAfter > delay {
++        delay = detail.RetryAfter
++    }
++    if delay > 0 {
++        health.NextAllowedAt = now.Add(delay)
++    }
 +
-+	if err := s.store.Set(ctx, channelHealthStateKey(channelID, source), health, s.policy.TTL); err != nil {
-+		slog.Warn("failed to persist youtube scraper channel health failure",
-+			"channel_id", channelID,
-+			"source", source,
-+			"reason", detail.Reason,
-+			"error", err)
-+	}
-+	return delay
++    if err := s.store.Set(ctx, channelHealthStateKey(channelID, source), health, s.policy.TTL); err != nil {
++        slog.Warn("failed to persist youtube scraper channel health failure",
++            "channel_id", channelID,
++            "source", source,
++            "reason", detail.Reason,
++            "error", err)
++    }
++    return delay
 +}
 +
 +func (s *ChannelHealthStore) Get(ctx context.Context, channelID string, source FailureSource) (ChannelSourceHealth, bool) {
-+	var health ChannelSourceHealth
-+	if s == nil || s.store == nil {
-+		return health, false
-+	}
-+	if err := s.store.Get(ctx, channelHealthStateKey(channelID, source), &health); err != nil {
-+		return health, false
-+	}
-+	return health, strings.TrimSpace(health.ChannelID) != ""
++    var health ChannelSourceHealth
++    if s == nil || s.store == nil {
++        return health, false
++    }
++    if err := s.store.Get(ctx, channelHealthStateKey(channelID, source), &health); err != nil {
++        return health, false
++    }
++    return health, strings.TrimSpace(health.ChannelID) != ""
 +}
 +
 +func (s *ChannelHealthStore) delayFor(reason FailureReason, failures int) time.Duration {
-+	if failures <= 0 {
-+		return 0
-+	}
-+	var base, maxDelay time.Duration
-+	switch reason {
-+	case FailureReasonParserDrift:
-+		base, maxDelay = s.policy.ParserDriftBase, s.policy.ParserDriftMax
-+	case FailureReasonTransport:
-+		base, maxDelay = s.policy.TransportBase, s.policy.TransportMax
-+	case FailureReasonTimeout:
-+		base, maxDelay = s.policy.TimeoutBase, s.policy.TimeoutMax
-+	case FailureReasonHTTPStatus:
-+		base, maxDelay = s.policy.HTTPStatusBase, s.policy.HTTPStatusMax
-+	default:
-+		return 0
-+	}
-+	delay := base
-+	for i := 1; i < failures; i++ {
-+		delay *= 2
-+		if delay >= maxDelay {
-+			return maxDelay
-+		}
-+	}
-+	return delay
++    if failures <= 0 {
++        return 0
++    }
++    var base, maxDelay time.Duration
++    switch reason {
++    case FailureReasonParserDrift:
++        base, maxDelay = s.policy.ParserDriftBase, s.policy.ParserDriftMax
++    case FailureReasonTransport:
++        base, maxDelay = s.policy.TransportBase, s.policy.TransportMax
++    case FailureReasonTimeout:
++        base, maxDelay = s.policy.TimeoutBase, s.policy.TimeoutMax
++    case FailureReasonHTTPStatus:
++        base, maxDelay = s.policy.HTTPStatusBase, s.policy.HTTPStatusMax
++    default:
++        return 0
++    }
++    delay := base
++    for i := 1; i < failures; i++ {
++        delay *= 2
++        if delay >= maxDelay {
++            return maxDelay
++        }
++    }
++    return delay
 +}
 +
 +func channelHealthStateKey(channelID string, source FailureSource) string {
-+	return fmt.Sprintf(
-+		"youtube:scraper:channel-health:%s:%s",
-+		strings.TrimSpace(string(source)),
-+		strings.TrimSpace(channelID),
-+	)
++    return fmt.Sprintf(
++        "youtube:scraper:channel-health:%s:%s",
++        strings.TrimSpace(string(source)),
++        strings.TrimSpace(channelID),
++    )
 +}
 ```
 
@@ -234,84 +234,84 @@ index 0000000..5555555
 +package scraper
 +
 +import (
-+	"context"
-+	"fmt"
-+	"strings"
-+	"time"
++    "context"
++    "fmt"
++    "strings"
++    "time"
 +)
 +
 +func (c *Client) ensureChannelSourceAllowed(ctx context.Context, channelID string, source FailureSource) error {
-+	if c == nil || c.channelHealth == nil {
-+		return nil
-+	}
-+	wait, ok := c.channelHealth.ShouldSkip(ctx, channelID, source, time.Now())
-+	if !ok {
-+		return nil
-+	}
-+	return &CooldownError{
-+		Kind:  fmt.Sprintf("youtube channel-source %s", source),
-+		Delay: wait,
-+		Err:   ErrTransientCooldown,
-+	}
++    if c == nil || c.channelHealth == nil {
++        return nil
++    }
++    wait, ok := c.channelHealth.ShouldSkip(ctx, channelID, source, time.Now())
++    if !ok {
++        return nil
++    }
++    return &CooldownError{
++        Kind:  fmt.Sprintf("youtube channel-source %s", source),
++        Delay: wait,
++        Err:   ErrTransientCooldown,
++    }
 +}
 +
 +func (c *Client) fetchChannelSourcePage(
-+	ctx context.Context,
-+	operation string,
-+	channelID string,
-+	pageURL string,
-+	source FailureSource,
-+	policy ...FetchPolicy,
++    ctx context.Context,
++    operation string,
++    channelID string,
++    pageURL string,
++    source FailureSource,
++    policy ...FetchPolicy,
 +) (string, error) {
-+	if err := c.ensureChannelSourceAllowed(ctx, channelID, source); err != nil {
-+		return "", err
-+	}
++    if err := c.ensureChannelSourceAllowed(ctx, channelID, source); err != nil {
++        return "", err
++    }
 +
-+	html, err := c.fetchPage(ctx, pageURL, policy...)
-+	if err != nil {
-+		detail := ClassifyFailure(err, source)
-+		c.recordChannelSourceFailure(ctx, channelID, detail)
-+		return "", err
-+	}
++    html, err := c.fetchPage(ctx, pageURL, policy...)
++    if err != nil {
++        detail := ClassifyFailure(err, source)
++        c.recordChannelSourceFailure(ctx, channelID, detail)
++        return "", err
++    }
 +
-+	if strings.TrimSpace(html) == "" {
-+		err := fmt.Errorf("%s empty response from %s", operation, pageURL)
-+		detail := ClassifyFailure(err, source)
-+		c.recordChannelSourceFailure(ctx, channelID, detail)
-+		return "", err
-+	}
++    if strings.TrimSpace(html) == "" {
++        err := fmt.Errorf("%s empty response from %s", operation, pageURL)
++        detail := ClassifyFailure(err, source)
++        c.recordChannelSourceFailure(ctx, channelID, detail)
++        return "", err
++    }
 +
-+	return html, nil
++    return html, nil
 +}
 +
 +func (c *Client) recordChannelSourceSuccess(ctx context.Context, channelID string, source FailureSource) {
-+	if c == nil || c.channelHealth == nil {
-+		return
-+	}
-+	c.channelHealth.RecordSuccess(ctx, channelID, source, time.Now())
++    if c == nil || c.channelHealth == nil {
++        return
++    }
++    c.channelHealth.RecordSuccess(ctx, channelID, source, time.Now())
 +}
 +
 +func (c *Client) recordChannelSourceFailure(ctx context.Context, channelID string, detail FailureDetail) time.Duration {
-+	if c == nil || c.channelHealth == nil {
-+		return 0
-+	}
-+	return c.channelHealth.RecordFailure(ctx, channelID, detail, time.Now())
++    if c == nil || c.channelHealth == nil {
++        return 0
++    }
++    return c.channelHealth.RecordFailure(ctx, channelID, detail, time.Now())
 +}
 +
 +func (c *Client) recordParserDrift(
-+	ctx context.Context,
-+	operation string,
-+	stage string,
-+	channelID string,
-+	pageURL string,
-+	source FailureSource,
-+	html string,
-+	cause error,
++    ctx context.Context,
++    operation string,
++    stage string,
++    channelID string,
++    pageURL string,
++    source FailureSource,
++    html string,
++    cause error,
 +) error {
-+	err := NewParserDriftError(operation, stage, cause)
-+	detail := ClassifyFailure(err, source)
-+	c.recordChannelSourceFailure(ctx, channelID, detail)
-+	return err
++    err := NewParserDriftError(operation, stage, cause)
++    detail := ClassifyFailure(err, source)
++    c.recordChannelSourceFailure(ctx, channelID, detail)
++    return err
 +}
 ```
 
@@ -321,24 +321,24 @@ index 8b96f25..ccccccc 100644
 --- a/hololive/hololive-shared/pkg/service/youtube/scraper/client_options.go
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/client_options.go
 @@
- 	stateStore       stateStore
- 	fetcherEngine    FetcherEngine
-+	channelHealthPolicy ChannelHealthPolicy
-+	channelHealth    *ChannelHealthStore
+     stateStore       stateStore
+     fetcherEngine    FetcherEngine
++    channelHealthPolicy ChannelHealthPolicy
++    channelHealth    *ChannelHealthStore
 
- 	communityMissing *cacheState
- 	videoRSSBackoff  *cacheState
+     communityMissing *cacheState
+     videoRSSBackoff  *cacheState
 @@
  func WithFetcherEngine(engine FetcherEngine) ClientOption {
- 	return func(c *Client) {
- 		c.fetcherEngine = normalizeFetcherEngine(engine)
- 	}
+     return func(c *Client) {
+         c.fetcherEngine = normalizeFetcherEngine(engine)
+     }
  }
 +
 +func WithChannelHealthPolicy(policy ChannelHealthPolicy) ClientOption {
-+	return func(c *Client) {
-+		c.channelHealthPolicy = policy
-+	}
++    return func(c *Client) {
++        c.channelHealthPolicy = policy
++    }
 +}
 ```
 
@@ -349,12 +349,12 @@ index ab1a8f7..ddddddd 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/state_manager.go
 @@
  func (c *Client) initStateManagers() {
- 	if c == nil {
- 		return
- 	}
- 	c.communityMissing = newCacheState(c.stateStore, constants.YouTubeConfig.CommunityMissingTTL, "community missing")
- 	c.videoRSSBackoff = newCacheState(c.stateStore, constants.YouTubeConfig.VideoRSSBackoffTTL, "video rss backoff")
-+	c.channelHealth = NewChannelHealthStore(c.stateStore, c.channelHealthPolicy)
+     if c == nil {
+         return
+     }
+     c.communityMissing = newCacheState(c.stateStore, constants.YouTubeConfig.CommunityMissingTTL, "community missing")
+     c.videoRSSBackoff = newCacheState(c.stateStore, constants.YouTubeConfig.VideoRSSBackoffTTL, "video rss backoff")
++    c.channelHealth = NewChannelHealthStore(c.stateStore, c.channelHealthPolicy)
  }
 ```
 
@@ -365,33 +365,33 @@ index bbbbbbb..eeeeeee 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/scraper/videos.go
 @@
  func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*UpcomingEvent, error) {
- 	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
+     url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
 
--	html, err := c.fetchPage(ctx, url)
-+	html, err := c.fetchChannelSourcePage(ctx, "upcoming_events", channelID, url, FailureSourceHTML)
- 	if err != nil {
- 		return nil, fmt.Errorf("failed to fetch channel page: %w", err)
- 	}
--	if strings.TrimSpace(html) == "" {
--		return nil, fmt.Errorf("empty response from channel page")
--	}
+-    html, err := c.fetchPage(ctx, url)
++    html, err := c.fetchChannelSourcePage(ctx, "upcoming_events", channelID, url, FailureSourceHTML)
+     if err != nil {
+         return nil, fmt.Errorf("failed to fetch channel page: %w", err)
+     }
+-    if strings.TrimSpace(html) == "" {
+-        return nil, fmt.Errorf("empty response from channel page")
+-    }
 
- 	jsonStr, err := extractYtInitialData(html)
- 	if err != nil {
- 		logStructureWarning("upcoming_events", channelID, "ytInitialData extraction failed", "error", err)
--		return nil, NewParserDriftError("upcoming_events", "extract_yt_initial_data", err)
-+		return nil, c.recordParserDrift(ctx, "upcoming_events", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
- 	}
+     jsonStr, err := extractYtInitialData(html)
+     if err != nil {
+         logStructureWarning("upcoming_events", channelID, "ytInitialData extraction failed", "error", err)
+-        return nil, NewParserDriftError("upcoming_events", "extract_yt_initial_data", err)
++        return nil, c.recordParserDrift(ctx, "upcoming_events", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+     }
 
- 	data := gjson.Parse(jsonStr)
- 	events, err := parseUpcomingEventsFromInitialData(data)
- 	if err != nil {
- 		logStructureWarning("upcoming_events", channelID, "failed to parse initial data", "error", err)
--		return nil, NewParserDriftError("upcoming_events", "parse_initial_data", err)
-+		return nil, c.recordParserDrift(ctx, "upcoming_events", "parse_initial_data", channelID, url, FailureSourceHTML, html, err)
- 	}
-+	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
- 	return events, nil
+     data := gjson.Parse(jsonStr)
+     events, err := parseUpcomingEventsFromInitialData(data)
+     if err != nil {
+         logStructureWarning("upcoming_events", channelID, "failed to parse initial data", "error", err)
+-        return nil, NewParserDriftError("upcoming_events", "parse_initial_data", err)
++        return nil, c.recordParserDrift(ctx, "upcoming_events", "parse_initial_data", channelID, url, FailureSourceHTML, html, err)
+     }
++    c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+     return events, nil
  }
 ```
 
@@ -407,92 +407,92 @@ index 0000000..6666666
 +package scraper
 +
 +import (
-+	"context"
-+	"testing"
-+	"time"
++    "context"
++    "testing"
++    "time"
 +
-+	"github.com/stretchr/testify/require"
++    "github.com/stretchr/testify/require"
 +)
 +
 +type memoryStateStore struct {
-+	values map[string]any
++    values map[string]any
 +}
 +
 +func newMemoryStateStore() *memoryStateStore {
-+	return &memoryStateStore{values: map[string]any{}}
++    return &memoryStateStore{values: map[string]any{}}
 +}
 +
 +func (s *memoryStateStore) Get(_ context.Context, key string, dest any) error {
-+	value, ok := s.values[key]
-+	if !ok {
-+		return context.Canceled // cacheState도 error를 not found처럼 취급하므로 테스트에서는 false 기대용
-+	}
-+	switch typed := dest.(type) {
-+	case *ChannelSourceHealth:
-+		*typed = value.(ChannelSourceHealth)
-+	case *bool:
-+		*typed = value.(bool)
-+	}
-+	return nil
++    value, ok := s.values[key]
++    if !ok {
++        return context.Canceled // cacheState도 error를 not found처럼 취급하므로 테스트에서는 false 기대용
++    }
++    switch typed := dest.(type) {
++    case *ChannelSourceHealth:
++        *typed = value.(ChannelSourceHealth)
++    case *bool:
++        *typed = value.(bool)
++    }
++    return nil
 +}
 +
 +func (s *memoryStateStore) Set(_ context.Context, key string, value any, _ time.Duration) error {
-+	s.values[key] = value
-+	return nil
++    s.values[key] = value
++    return nil
 +}
 +
 +func (s *memoryStateStore) Del(_ context.Context, key string) error {
-+	delete(s.values, key)
-+	return nil
++    delete(s.values, key)
++    return nil
 +}
 +
 +func TestChannelHealthRecordFailureBackoff(t *testing.T) {
-+	store := newMemoryStateStore()
-+	health := NewChannelHealthStore(store, ChannelHealthPolicy{
-+		TTL:               time.Hour,
-+		ParserDriftBase:   10 * time.Minute,
-+		ParserDriftMax:    time.Hour,
-+		SuccessDecaySteps: 1,
-+	})
-+	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
++    store := newMemoryStateStore()
++    health := NewChannelHealthStore(store, ChannelHealthPolicy{
++        TTL:               time.Hour,
++        ParserDriftBase:   10 * time.Minute,
++        ParserDriftMax:    time.Hour,
++        SuccessDecaySteps: 1,
++    })
++    now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
 +
-+	delay1 := health.RecordFailure(context.Background(), "UCxxx", FailureDetail{
-+		Source: FailureSourceHTML,
-+		Reason: FailureReasonParserDrift,
-+	}, now)
-+	delay2 := health.RecordFailure(context.Background(), "UCxxx", FailureDetail{
-+		Source: FailureSourceHTML,
-+		Reason: FailureReasonParserDrift,
-+	}, now)
++    delay1 := health.RecordFailure(context.Background(), "UCxxx", FailureDetail{
++        Source: FailureSourceHTML,
++        Reason: FailureReasonParserDrift,
++    }, now)
++    delay2 := health.RecordFailure(context.Background(), "UCxxx", FailureDetail{
++        Source: FailureSourceHTML,
++        Reason: FailureReasonParserDrift,
++    }, now)
 +
-+	require.Equal(t, 10*time.Minute, delay1)
-+	require.Equal(t, 20*time.Minute, delay2)
++    require.Equal(t, 10*time.Minute, delay1)
++    require.Equal(t, 20*time.Minute, delay2)
 +
-+	remaining, skip := health.ShouldSkip(context.Background(), "UCxxx", FailureSourceHTML, now.Add(time.Minute))
-+	require.True(t, skip)
-+	require.Greater(t, remaining, 0)
++    remaining, skip := health.ShouldSkip(context.Background(), "UCxxx", FailureSourceHTML, now.Add(time.Minute))
++    require.True(t, skip)
++    require.Greater(t, remaining, 0)
 +}
 +
 +func TestChannelHealthSuccessDecaysFailureCount(t *testing.T) {
-+	store := newMemoryStateStore()
-+	health := NewChannelHealthStore(store, ChannelHealthPolicy{
-+		TTL:               time.Hour,
-+		ParserDriftBase:   10 * time.Minute,
-+		ParserDriftMax:    time.Hour,
-+		SuccessDecaySteps: 1,
-+	})
-+	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
++    store := newMemoryStateStore()
++    health := NewChannelHealthStore(store, ChannelHealthPolicy{
++        TTL:               time.Hour,
++        ParserDriftBase:   10 * time.Minute,
++        ParserDriftMax:    time.Hour,
++        SuccessDecaySteps: 1,
++    })
++    now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
 +
-+	_ = health.RecordFailure(context.Background(), "UCxxx", FailureDetail{
-+		Source: FailureSourceHTML,
-+		Reason: FailureReasonParserDrift,
-+	}, now)
-+	health.RecordSuccess(context.Background(), "UCxxx", FailureSourceHTML, now.Add(time.Minute))
++    _ = health.RecordFailure(context.Background(), "UCxxx", FailureDetail{
++        Source: FailureSourceHTML,
++        Reason: FailureReasonParserDrift,
++    }, now)
++    health.RecordSuccess(context.Background(), "UCxxx", FailureSourceHTML, now.Add(time.Minute))
 +
-+	got, ok := health.Get(context.Background(), "UCxxx", FailureSourceHTML)
-+	require.True(t, ok)
-+	require.Equal(t, 0, got.ConsecutiveFailures)
-+	require.True(t, got.NextAllowedAt.IsZero())
++    got, ok := health.Get(context.Background(), "UCxxx", FailureSourceHTML)
++    require.True(t, ok)
++    require.Equal(t, 0, got.ConsecutiveFailures)
++    require.True(t, got.NextAllowedAt.IsZero())
 +}
 ```
 

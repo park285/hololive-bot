@@ -41,37 +41,37 @@ index f395778..111aaaa 100644
 +++ b/hololive/hololive-shared/pkg/service/youtube/service_upcoming.go
 @@
  import (
- 	"context"
- 	"log/slog"
-+	"time"
+     "context"
+     "log/slog"
++    "time"
 
- 	"github.com/kapu/hololive-shared/pkg/constants"
- 	"github.com/kapu/hololive-shared/pkg/domain"
+     "github.com/kapu/hololive-shared/pkg/constants"
+     "github.com/kapu/hololive-shared/pkg/domain"
  )
 @@
  type upcomingAPIFallbackResult struct {
- 	streams            []*domain.Stream
- 	quotaCost          int
- 	successfulChannels int
-+	successfulIDs      []string
-+	failedIDs          []string
-+	failures           []upcomingScrapeFailure
+     streams            []*domain.Stream
+     quotaCost          int
+     successfulChannels int
++    successfulIDs      []string
++    failedIDs          []string
++    failures           []upcomingScrapeFailure
  }
 
  type upcomingScrapeResult struct {
- 	streams   []*domain.Stream
- 	failedIDs []string
- 	scraped   int
-+	failures  []upcomingScrapeFailure
+     streams   []*domain.Stream
+     failedIDs []string
+     scraped   int
++    failures  []upcomingScrapeFailure
  }
 +
 +type upcomingScrapeFailure struct {
-+	ChannelID  string
-+	Source     string
-+	Reason     string
-+	StatusCode int
-+	RetryAfter time.Duration
-+	Message    string
++    ChannelID  string
++    Source     string
++    Reason     string
++    StatusCode int
++    RetryAfter time.Duration
++    Message    string
 +}
 ```
 
@@ -85,63 +85,63 @@ index 0000000..222aaaa
 +package youtube
 +
 +import (
-+	"errors"
-+	"net/http"
++    "errors"
++    "net/http"
 +
-+	"google.golang.org/api/googleapi"
++    "google.golang.org/api/googleapi"
 +
-+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
++    "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 +)
 +
 +func summarizeUpcomingScrapeFailures(failures []upcomingScrapeFailure) map[string]int {
-+	summary := make(map[string]int)
-+	for _, failure := range failures {
-+		key := failure.Source + ":" + failure.Reason
-+		summary[key]++
-+	}
-+	return summary
++    summary := make(map[string]int)
++    for _, failure := range failures {
++        key := failure.Source + ":" + failure.Reason
++        summary[key]++
++    }
++    return summary
 +}
 +
 +func upcomingFailureByChannel(failures []upcomingScrapeFailure) map[string]upcomingScrapeFailure {
-+	out := make(map[string]upcomingScrapeFailure, len(failures))
-+	for _, failure := range failures {
-+		if failure.ChannelID == "" {
-+			continue
-+		}
-+		out[failure.ChannelID] = failure
-+	}
-+	return out
++    out := make(map[string]upcomingScrapeFailure, len(failures))
++    for _, failure := range failures {
++        if failure.ChannelID == "" {
++            continue
++        }
++        out[failure.ChannelID] = failure
++    }
++    return out
 +}
 +
 +func classifyYouTubeAPIFailure(err error) scraper.FailureDetail {
-+	detail := scraper.FailureDetail{
-+		Reason:  scraper.FailureReasonUnknown,
-+		Source:  scraper.FailureSourceAPI,
-+		Message: errString(err),
-+	}
-+	var apiErr *googleapi.Error
-+	if errors.As(err, &apiErr) {
-+		detail.StatusCode = apiErr.Code
-+		switch apiErr.Code {
-+		case http.StatusForbidden:
-+			detail.Reason = scraper.FailureReasonForbidden
-+		case http.StatusTooManyRequests:
-+			detail.Reason = scraper.FailureReasonRateLimited
-+		case http.StatusRequestTimeout:
-+			detail.Reason = scraper.FailureReasonTimeout
-+		default:
-+			detail.Reason = scraper.FailureReasonHTTPStatus
-+		}
-+		return detail
-+	}
-+	return scraper.ClassifyFailure(err, scraper.FailureSourceAPI)
++    detail := scraper.FailureDetail{
++        Reason:  scraper.FailureReasonUnknown,
++        Source:  scraper.FailureSourceAPI,
++        Message: errString(err),
++    }
++    var apiErr *googleapi.Error
++    if errors.As(err, &apiErr) {
++        detail.StatusCode = apiErr.Code
++        switch apiErr.Code {
++        case http.StatusForbidden:
++            detail.Reason = scraper.FailureReasonForbidden
++        case http.StatusTooManyRequests:
++            detail.Reason = scraper.FailureReasonRateLimited
++        case http.StatusRequestTimeout:
++            detail.Reason = scraper.FailureReasonTimeout
++        default:
++            detail.Reason = scraper.FailureReasonHTTPStatus
++        }
++        return detail
++    }
++    return scraper.ClassifyFailure(err, scraper.FailureSourceAPI)
 +}
 +
 +func errString(err error) string {
-+	if err == nil {
-+		return ""
-+	}
-+	return err.Error()
++    if err == nil {
++        return ""
++    }
++    return err.Error()
 +}
 ```
 
@@ -155,40 +155,40 @@ index 0000000..333aaaa
 +package youtube
 +
 +import (
-+	"sync"
++    "sync"
 +
-+	"github.com/prometheus/client_golang/prometheus"
-+	"github.com/prometheus/client_golang/prometheus/promauto"
++    "github.com/prometheus/client_golang/prometheus"
++    "github.com/prometheus/client_golang/prometheus/promauto"
 +)
 +
 +var (
-+	youtubeScraperMetricsOnce sync.Once
-+	youtubeScraperFailures    *prometheus.CounterVec
-+	youtubeScraperRecoveries  *prometheus.CounterVec
++    youtubeScraperMetricsOnce sync.Once
++    youtubeScraperFailures    *prometheus.CounterVec
++    youtubeScraperRecoveries  *prometheus.CounterVec
 +)
 +
 +func initYouTubeScraperMetrics() {
-+	youtubeScraperMetricsOnce.Do(func() {
-+		youtubeScraperFailures = promauto.NewCounterVec(prometheus.CounterOpts{
-+			Name: "youtube_scraper_channel_failures_total",
-+			Help: "YouTube scraper channel failures by operation, source, and reason.",
-+		}, []string{"operation", "source", "reason"})
++    youtubeScraperMetricsOnce.Do(func() {
++        youtubeScraperFailures = promauto.NewCounterVec(prometheus.CounterOpts{
++            Name: "youtube_scraper_channel_failures_total",
++            Help: "YouTube scraper channel failures by operation, source, and reason.",
++        }, []string{"operation", "source", "reason"})
 +
-+		youtubeScraperRecoveries = promauto.NewCounterVec(prometheus.CounterOpts{
-+			Name: "youtube_scraper_channel_recoveries_total",
-+			Help: "YouTube scraper fallback recoveries by operation, failed_source, failed_reason, recovery_source.",
-+		}, []string{"operation", "failed_source", "failed_reason", "recovery_source"})
-+	})
++        youtubeScraperRecoveries = promauto.NewCounterVec(prometheus.CounterOpts{
++            Name: "youtube_scraper_channel_recoveries_total",
++            Help: "YouTube scraper fallback recoveries by operation, failed_source, failed_reason, recovery_source.",
++        }, []string{"operation", "failed_source", "failed_reason", "recovery_source"})
++    })
 +}
 +
 +func observeYouTubeScraperFailure(operation, source, reason string) {
-+	initYouTubeScraperMetrics()
-+	youtubeScraperFailures.WithLabelValues(operation, source, reason).Inc()
++    initYouTubeScraperMetrics()
++    youtubeScraperFailures.WithLabelValues(operation, source, reason).Inc()
 +}
 +
 +func observeYouTubeScraperRecovery(operation, failedSource, failedReason, recoverySource string) {
-+	initYouTubeScraperMetrics()
-+	youtubeScraperRecoveries.WithLabelValues(operation, failedSource, failedReason, recoverySource).Inc()
++    initYouTubeScraperMetrics()
++    youtubeScraperRecoveries.WithLabelValues(operation, failedSource, failedReason, recoverySource).Inc()
 +}
 ```
 
@@ -198,45 +198,45 @@ index fa4f217..444aaaa 100644
 --- a/hololive/hololive-shared/pkg/service/youtube/service_upcoming_scrape.go
 +++ b/hololive/hololive-shared/pkg/service/youtube/service_upcoming_scrape.go
 @@
- 	primary := fallback.RunPrimary(ctx, channelIDs, fallback.FetchPlan[string, struct{}]{Parallelism: 5}, func(gctx context.Context, channelID string) error {
- 		events, err := ys.scraper.GetUpcomingEvents(gctx, channelID)
- 		if err != nil {
-+			detail := scraper.ClassifyFailure(err, scraper.FailureSourceHTML)
-+			mu.Lock()
-+			result.failures = append(result.failures, upcomingScrapeFailure{
-+				ChannelID:  channelID,
-+				Source:     string(detail.Source),
-+				Reason:     string(detail.Reason),
-+				StatusCode: detail.StatusCode,
-+				RetryAfter: detail.RetryAfter,
-+				Message:    detail.Message,
-+			})
-+			mu.Unlock()
-+			observeYouTubeScraperFailure("upcoming_streams", string(detail.Source), string(detail.Reason))
-+			ys.logger.Warn("youtube_upcoming_scraper_channel_failed",
-+				slog.String("channelID", channelID),
-+				slog.String("source", string(detail.Source)),
-+				slog.String("reason", string(detail.Reason)),
-+				slog.Int("statusCode", detail.StatusCode),
-+				slog.Duration("retryAfter", detail.RetryAfter),
-+				slog.Any("error", err))
- 			return fmt.Errorf("scraper upcoming events for %s: %w", channelID, err)
- 		}
--		if len(events) == 0 {
--			return nil
--		}
+     primary := fallback.RunPrimary(ctx, channelIDs, fallback.FetchPlan[string, struct{}]{Parallelism: 5}, func(gctx context.Context, channelID string) error {
+         events, err := ys.scraper.GetUpcomingEvents(gctx, channelID)
+         if err != nil {
++            detail := scraper.ClassifyFailure(err, scraper.FailureSourceHTML)
++            mu.Lock()
++            result.failures = append(result.failures, upcomingScrapeFailure{
++                ChannelID:  channelID,
++                Source:     string(detail.Source),
++                Reason:     string(detail.Reason),
++                StatusCode: detail.StatusCode,
++                RetryAfter: detail.RetryAfter,
++                Message:    detail.Message,
++            })
++            mu.Unlock()
++            observeYouTubeScraperFailure("upcoming_streams", string(detail.Source), string(detail.Reason))
++            ys.logger.Warn("youtube_upcoming_scraper_channel_failed",
++                slog.String("channelID", channelID),
++                slog.String("source", string(detail.Source)),
++                slog.String("reason", string(detail.Reason)),
++                slog.Int("statusCode", detail.StatusCode),
++                slog.Duration("retryAfter", detail.RetryAfter),
++                slog.Any("error", err))
+             return fmt.Errorf("scraper upcoming events for %s: %w", channelID, err)
+         }
+-        if len(events) == 0 {
+-            return nil
+-        }
 
- 		streams := ys.convertScrapedEvents(events, channelID)
- 		mu.Lock()
- 		result.streams = append(result.streams, streams...)
+         streams := ys.convertScrapedEvents(events, channelID)
+         mu.Lock()
+         result.streams = append(result.streams, streams...)
 @@
- 	ys.logger.Info("Scraper phase completed (upcoming streams)",
- 		slog.Int("total", len(channelIDs)),
- 		slog.Int("scraped", result.scraped),
--		slog.Int("failed", len(result.failedIDs)))
-+		slog.Int("failed", len(result.failedIDs)),
-+		slog.Any("failureSummary", summarizeUpcomingScrapeFailures(result.failures)))
- 	return result
+     ys.logger.Info("Scraper phase completed (upcoming streams)",
+         slog.Int("total", len(channelIDs)),
+         slog.Int("scraped", result.scraped),
+-        slog.Int("failed", len(result.failedIDs)))
++        slog.Int("failed", len(result.failedIDs)),
++        slog.Any("failureSummary", summarizeUpcomingScrapeFailures(result.failures)))
+     return result
  }
 ```
 
@@ -246,89 +246,89 @@ index 51646be..555aaaa 100644
 --- a/hololive/hololive-shared/pkg/service/youtube/service_upcoming_fallback.go
 +++ b/hololive/hololive-shared/pkg/service/youtube/service_upcoming_fallback.go
 @@
- 	"golang.org/x/sync/errgroup"
- 	"google.golang.org/api/googleapi"
- 	"google.golang.org/api/youtube/v3"
+     "golang.org/x/sync/errgroup"
+     "google.golang.org/api/googleapi"
+     "google.golang.org/api/youtube/v3"
 
- 	"github.com/kapu/hololive-shared/pkg/constants"
- 	"github.com/kapu/hololive-shared/pkg/domain"
- 	"github.com/kapu/hololive-shared/pkg/service/fallback"
-+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+     "github.com/kapu/hololive-shared/pkg/constants"
+     "github.com/kapu/hololive-shared/pkg/domain"
+     "github.com/kapu/hololive-shared/pkg/service/fallback"
++    "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
  )
 @@
- 			apiResult := ys.fetchUpcomingFromAPI(runCtx, scrapeResult.failedIDs)
- 			allStreams = append(allStreams, apiResult.streams...)
- 			ys.consumeQuota(apiResult.quotaCost)
-+			ys.observeUpcomingFallbackRecoveries(scrapeResult, apiResult)
+             apiResult := ys.fetchUpcomingFromAPI(runCtx, scrapeResult.failedIDs)
+             allStreams = append(allStreams, apiResult.streams...)
+             ys.consumeQuota(apiResult.quotaCost)
++            ys.observeUpcomingFallbackRecoveries(scrapeResult, apiResult)
 
- 			return fallback.SecondaryResult{
- 				Items:     len(apiResult.streams),
+             return fallback.SecondaryResult{
+                 Items:     len(apiResult.streams),
 @@
  func (ys *serviceImpl) fetchUpcomingFromAPI(ctx context.Context, channelIDs []string) upcomingAPIFallbackResult {
- 	result := upcomingAPIFallbackResult{
- 		streams: make([]*domain.Stream, 0, len(channelIDs)),
+     result := upcomingAPIFallbackResult{
+         streams: make([]*domain.Stream, 0, len(channelIDs)),
 @@
- 	for _, channelID := range channelIDs {
-+		channelID := channelID
- 		g.Go(func() error {
- 			streams, err := ys.getChannelUpcomingStreams(gctx, channelID)
- 			if err != nil {
-+				detail := classifyYouTubeAPIFailure(err)
- 				ys.logger.Warn("Failed to fetch channel from API",
- 					slog.String("channelID", channelID),
-+					slog.String("source", string(scraper.FailureSourceAPI)),
-+					slog.String("reason", string(detail.Reason)),
-+					slog.Int("statusCode", detail.StatusCode),
- 					slog.Any("error", err))
-+				mu.Lock()
-+				result.failedIDs = append(result.failedIDs, channelID)
-+				result.failures = append(result.failures, upcomingScrapeFailure{
-+					ChannelID:  channelID,
-+					Source:     string(scraper.FailureSourceAPI),
-+					Reason:     string(detail.Reason),
-+					StatusCode: detail.StatusCode,
-+					RetryAfter: detail.RetryAfter,
-+					Message:    detail.Message,
-+				})
-+				mu.Unlock()
- 				return nil
- 			}
+     for _, channelID := range channelIDs {
++        channelID := channelID
+         g.Go(func() error {
+             streams, err := ys.getChannelUpcomingStreams(gctx, channelID)
+             if err != nil {
++                detail := classifyYouTubeAPIFailure(err)
+                 ys.logger.Warn("Failed to fetch channel from API",
+                     slog.String("channelID", channelID),
++                    slog.String("source", string(scraper.FailureSourceAPI)),
++                    slog.String("reason", string(detail.Reason)),
++                    slog.Int("statusCode", detail.StatusCode),
+                     slog.Any("error", err))
++                mu.Lock()
++                result.failedIDs = append(result.failedIDs, channelID)
++                result.failures = append(result.failures, upcomingScrapeFailure{
++                    ChannelID:  channelID,
++                    Source:     string(scraper.FailureSourceAPI),
++                    Reason:     string(detail.Reason),
++                    StatusCode: detail.StatusCode,
++                    RetryAfter: detail.RetryAfter,
++                    Message:    detail.Message,
++                })
++                mu.Unlock()
+                 return nil
+             }
 
- 			mu.Lock()
- 			result.streams = append(result.streams, streams...)
- 			result.successfulChannels++
-+			result.successfulIDs = append(result.successfulIDs, channelID)
- 			mu.Unlock()
+             mu.Lock()
+             result.streams = append(result.streams, streams...)
+             result.successfulChannels++
++            result.successfulIDs = append(result.successfulIDs, channelID)
+             mu.Unlock()
 @@
- 	return result
+     return result
  }
 +
 +func (ys *serviceImpl) observeUpcomingFallbackRecoveries(scrapeResult upcomingScrapeResult, apiResult upcomingAPIFallbackResult) {
-+	failuresByChannel := upcomingFailureByChannel(scrapeResult.failures)
-+	for _, channelID := range apiResult.successfulIDs {
-+		failure, ok := failuresByChannel[channelID]
-+		if !ok {
-+			continue
-+		}
-+		observeYouTubeScraperRecovery(
-+			"upcoming_streams",
-+			failure.Source,
-+			failure.Reason,
-+			string(scraper.FailureSourceAPI),
-+		)
-+		ys.logger.Info("youtube_upcoming_api_fallback_recovered_channel",
-+			slog.String("channelID", channelID),
-+			slog.String("failedSource", failure.Source),
-+			slog.String("failedReason", failure.Reason),
-+			slog.String("recoverySource", string(scraper.FailureSourceAPI)))
-+	}
-+	for _, failure := range apiResult.failures {
-+		ys.logger.Warn("youtube_upcoming_api_fallback_unrecovered_channel",
-+			slog.String("channelID", failure.ChannelID),
-+			slog.String("source", failure.Source),
-+			slog.String("reason", failure.Reason),
-+			slog.Int("statusCode", failure.StatusCode))
-+	}
++    failuresByChannel := upcomingFailureByChannel(scrapeResult.failures)
++    for _, channelID := range apiResult.successfulIDs {
++        failure, ok := failuresByChannel[channelID]
++        if !ok {
++            continue
++        }
++        observeYouTubeScraperRecovery(
++            "upcoming_streams",
++            failure.Source,
++            failure.Reason,
++            string(scraper.FailureSourceAPI),
++        )
++        ys.logger.Info("youtube_upcoming_api_fallback_recovered_channel",
++            slog.String("channelID", channelID),
++            slog.String("failedSource", failure.Source),
++            slog.String("failedReason", failure.Reason),
++            slog.String("recoverySource", string(scraper.FailureSourceAPI)))
++    }
++    for _, failure := range apiResult.failures {
++        ys.logger.Warn("youtube_upcoming_api_fallback_unrecovered_channel",
++            slog.String("channelID", failure.ChannelID),
++            slog.String("source", failure.Source),
++            slog.String("reason", failure.Reason),
++            slog.Int("statusCode", failure.StatusCode))
++    }
 +}
 ```
 
