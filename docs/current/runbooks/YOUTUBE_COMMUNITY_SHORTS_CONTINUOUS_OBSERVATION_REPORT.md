@@ -16,7 +16,7 @@
 one-shot snapshot:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-continuous-observation-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
   -observation-runtime youtube-scraper \
   -observation-cutover <CUTOVER_AT>
 ```
@@ -24,7 +24,7 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-continuo
 continuous 24h snapshot loop:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-continuous-observation-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
   -observation-runtime youtube-scraper \
   -observation-cutover <CUTOVER_AT> \
   -watch
@@ -33,7 +33,7 @@ go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-continuo
 JSON output with an explicit directory:
 
 ```bash
-go run ./hololive/hololive-stream-ingester/cmd/youtube-community-shorts-continuous-observation-report \
+go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts continuous-observation-report \
   -observation-runtime youtube-scraper \
   -observation-cutover <CUTOVER_AT> \
   -watch \
