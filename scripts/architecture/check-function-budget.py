@@ -32,7 +32,7 @@ EXCLUDED_DIR_NAMES = {
     "vendor",
 }
 
-FUNC_RE = re.compile(r"^func\s+(?:\([^)]*\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+FUNC_RE = re.compile(r"^func\s+(?:\([^)]*\)\s*)?([A-Za-z_][A-Za-z0-9_]*)(?:\[[^\]]+\])?\s*\(")
 CONTROL_RE = re.compile(r"\b(if|for|switch|select|case)\b")
 
 
@@ -284,12 +284,13 @@ def main() -> int:
         )
         return 1
 
-    print(
-        "OK: Go function budgets are within limits "
-        f"(defaults: lines<={DEFAULT_MAX_FUNCTION_LINES}, "
-        f"complexity<={DEFAULT_MAX_COGNITIVE_COMPLEXITY}, "
-        f"nesting<={DEFAULT_MAX_NESTING_DEPTH})"
-    )
+    if args.output == "text":
+        print(
+            "OK: Go function budgets are within limits "
+            f"(defaults: lines<={DEFAULT_MAX_FUNCTION_LINES}, "
+            f"complexity<={DEFAULT_MAX_COGNITIVE_COMPLEXITY}, "
+            f"nesting<={DEFAULT_MAX_NESTING_DEPTH})"
+        )
     return 0
 
 

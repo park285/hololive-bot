@@ -84,15 +84,9 @@ func readEmbeddedProfiles[T any](
 	allowEmpty bool,
 	after func(slug string, profile *T),
 ) (map[string]*T, error) {
-	files, err := fs.ReadDir(fsys, dir)
+	files, err := readEmbeddedProfileEntries(fsys, dir, collectionLabel, allowEmpty)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read embedded %s: %w", collectionLabel, err)
-	}
-	if len(files) == 0 {
-		if allowEmpty {
-			return map[string]*T{}, nil
-		}
-		return nil, fmt.Errorf("no embedded %s found", collectionLabel)
+		return nil, err
 	}
 
 	profiles := make(map[string]*T, len(files))
@@ -101,22 +95,48 @@ func readEmbeddedProfiles[T any](
 			continue
 		}
 
-		slug := strings.TrimSuffix(file.Name(), path.Ext(file.Name()))
-		data, err := fs.ReadFile(fsys, path.Join(dir, file.Name()))
+		slug, profile, err := readEmbeddedProfile(fsys, dir, itemLabel, file.Name(), after)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read %s %s: %w", itemLabel, file.Name(), err)
-		}
-
-		var profile T
-		if err := json.Unmarshal(data, &profile); err != nil {
-			return nil, fmt.Errorf("failed to parse %s %s: %w", itemLabel, file.Name(), err)
-		}
-
-		if after != nil {
-			after(slug, &profile)
+			return nil, err
 		}
 		profiles[slug] = &profile
 	}
 
 	return profiles, nil
+}
+
+func readEmbeddedProfileEntries(fsys fs.FS, dir string, collectionLabel string, allowEmpty bool) ([]fs.DirEntry, error) {
+	files, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded %s: %w", collectionLabel, err)
+	}
+	if len(files) == 0 && !allowEmpty {
+		return nil, fmt.Errorf("no embedded %s found", collectionLabel)
+	}
+	return files, nil
+}
+
+func readEmbeddedProfile[T any](
+	fsys fs.FS,
+	dir string,
+	itemLabel string,
+	filename string,
+	after func(slug string, profile *T),
+) (string, T, error) {
+	slug := strings.TrimSuffix(filename, path.Ext(filename))
+	data, err := fs.ReadFile(fsys, path.Join(dir, filename))
+	if err != nil {
+		var zero T
+		return "", zero, fmt.Errorf("failed to read %s %s: %w", itemLabel, filename, err)
+	}
+
+	var profile T
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return "", profile, fmt.Errorf("failed to parse %s %s: %w", itemLabel, filename, err)
+	}
+
+	if after != nil {
+		after(slug, &profile)
+	}
+	return slug, profile, nil
 }
