@@ -28,14 +28,6 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	}
 
 	minutesUntil := c.targetPolicySnapshot().PrimaryAdvanceMinute()
-	alreadyNotified, err := c.liveCatchupAlreadyNotified(ctx, stream, *startAt, minutesUntil)
-	if err != nil {
-		return nil, err
-	}
-	if alreadyNotified {
-		return nil, nil
-	}
-
 	resolvedStream := ensureScheduledTime(stream, *startAt)
 	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, minutesUntil)
 	if err != nil {
@@ -63,17 +55,6 @@ func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time) (*tim
 		return nil, false
 	}
 	return startAt, true
-}
-
-func (c *YouTubeChecker) liveCatchupAlreadyNotified(ctx context.Context, stream *domain.Stream, startAt time.Time, minutesUntil int) (bool, error) {
-	alreadyNotified, err := c.dedupSvc.IsAlreadyNotifiedForSchedule(ctx, stream.ID, startAt, minutesUntil)
-	if err != nil {
-		return false, fmt.Errorf("build live catchup notifications: check already notified: %w", err)
-	}
-	if alreadyNotified {
-		observeYouTubeLiveCatchup("already_notified")
-	}
-	return alreadyNotified, nil
 }
 
 func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
