@@ -5,10 +5,13 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/root/work/hololive-bot
+User=kapu
+Group=docker
+WorkingDirectory=/home/kapu/gemini/hololive-bot
+EnvironmentFile=-/etc/hololive/log-mirror.env
 Environment=LOG_ROOT=/logs
-Environment=HOL_LOG_OSAKA_SSH_KEY=/root/work/hololive-bot/KR.key
-ExecStart=/root/work/hololive-bot/scripts/logs/remote-sync-main-logs.sh once %i
+ExecStart=/home/kapu/gemini/hololive-bot/scripts/logs/remote-sync-main-logs.sh once %i
+UMask=0027
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=6

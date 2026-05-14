@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+BASE_REF="${BASE_REF:-origin/main}"
+HEAD_REF="${HEAD_REF:-HEAD}"
+
+range_changed=""
+if ! range_changed="$(git diff --name-only "${BASE_REF}...${HEAD_REF}" 2>&1)"; then
+  echo "failed to compare admin scope against ${BASE_REF}...${HEAD_REF}" >&2
+  echo "${range_changed}" >&2
+  exit 2
+fi
+
 changed="$(
   {
-    git diff --name-only HEAD 2>/dev/null || git diff --name-only
+    printf '%s\n' "${range_changed}"
+    git diff --name-only --cached 2>/dev/null || true
+    git diff --name-only 2>/dev/null || true
     git ls-files --others --exclude-standard 2>/dev/null || true
   } | sort -u
 )"
@@ -12,4 +24,4 @@ if echo "$changed" | grep -E '^(hololive/hololive-admin-api/|admin-dashboard/)';
   exit 1
 fi
 
-echo "ok: no admin scope changes"
+echo "ok: no admin scope changes against ${BASE_REF}...${HEAD_REF}"

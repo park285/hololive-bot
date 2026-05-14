@@ -99,6 +99,16 @@ ensure_log_root() {
   mkdir -p "${LOG_ROOT}" "${REMOTE_MIRROR_ROOT}"
 }
 
+normalize_mirror_permissions() {
+  local dst="$1"
+
+  if getent group docker >/dev/null 2>&1; then
+    chgrp -R docker "${dst}" || true
+  fi
+  find "${dst}" -type d -exec chmod 2750 {} +
+  find "${dst}" -type f -exec chmod 0640 {} +
+}
+
 sync_once_osaka() {
   ensure_log_root
 
@@ -125,6 +135,7 @@ sync_once_osaka() {
     "${dst}/"
 
   date -Is > "${dst}/.last_sync"
+  normalize_mirror_permissions "${dst}"
   ensure_main_links osaka
   echo "synced: ${OSAKA_USER_HOST}:${OSAKA_REMOTE_LOG_DIR} -> ${dst}" >&2
 }

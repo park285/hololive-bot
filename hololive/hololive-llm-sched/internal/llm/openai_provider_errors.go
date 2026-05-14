@@ -52,7 +52,7 @@ func safeLLMProviderError(err error) error {
 	if apiErr, ok := openAIError(err); ok {
 		return safeOpenAIProviderError(apiErr)
 	}
-	return err
+	return safeProviderError{errType: llmErrorType(err)}
 }
 
 func safeOpenAIProviderError(apiErr *openai.Error) safeProviderError {

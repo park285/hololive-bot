@@ -211,14 +211,6 @@ func (i *MessageIngress) logDebug(msg string, attrs ...slog.Attr) {
 	i.logger.LogAttrs(context.Background(), slog.LevelDebug, msg, attrs...)
 }
 
-func (i *MessageIngress) logInfo(msg string, attrs ...slog.Attr) {
-	if i.logger == nil {
-		return
-	}
-
-	i.logger.LogAttrs(context.Background(), slog.LevelInfo, msg, attrs...)
-}
-
 func (i *MessageIngress) logWarn(msg string, attrs ...slog.Attr) {
 	if i.logger == nil {
 		return

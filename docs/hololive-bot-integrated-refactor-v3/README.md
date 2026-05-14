@@ -49,7 +49,14 @@
 
 ```bash
 # PR-01
-cp -R code/shared-go/pkg/logging/* shared-go/pkg/logging/
+find code/shared-go/pkg/logging -type f -name '*.go.txt' -exec sh -c '
+  for src do
+    dst="${src#code/}"
+    dst="${dst%.txt}"
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+  done
+' sh {} +
 gofmt -w shared-go/pkg/logging
 go test ./shared-go/pkg/logging
 

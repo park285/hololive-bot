@@ -21,7 +21,7 @@
 
 ## 적용
 
-`code/shared-go/pkg/logging/*`를 복사한다.
+`code/shared-go/pkg/logging/*.go.txt`를 `.txt` suffix 제거 후 복사한다.
 
 ## 검증
 

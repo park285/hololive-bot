@@ -32,15 +32,6 @@ import (
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 )
 
-func truncateForOpenAIError(value string, maxBytes int) string {
-	value = strings.TrimSpace(value)
-	if maxBytes <= 0 || len(value) <= maxBytes {
-		return value
-	}
-
-	return value[:maxBytes] + "...(truncated)"
-}
-
 func shouldFallbackToChatCompletions(err error) bool {
 	if err == nil {
 		return false
