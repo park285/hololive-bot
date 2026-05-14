@@ -14,8 +14,8 @@ Osaka 등 원격 서버의 `youtube-scraper`, `stream-ingester` 로그를 메인
 
 ```bash
 sudo mkdir -p /logs
-sudo chown -R "$USER":docker /logs
-chmod 2770 /logs
+sudo chown -R kapu:docker /logs
+sudo chmod 2770 /logs
 
 chmod +x scripts/logs/remote-sync-main-logs.sh
 LOG_ROOT=/logs ./scripts/logs/remote-sync-main-logs.sh once osaka

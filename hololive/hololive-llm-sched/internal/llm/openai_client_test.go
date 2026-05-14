@@ -99,6 +99,24 @@ func TestSafeLLMProviderError_RedactsOpenAIRawJSON(t *testing.T) {
 	}
 }
 
+func TestSafeLLMProviderError_RedactsGenericProviderError(t *testing.T) {
+	rawErr := errors.New("proxy leaked private raw provider response token=secret")
+
+	safeErr := safeLLMProviderError(rawErr)
+	if safeErr == nil {
+		t.Fatal("safeLLMProviderError() = nil")
+	}
+	if strings.Contains(safeErr.Error(), "private raw provider response") {
+		t.Fatalf("safeLLMProviderError leaked generic provider response: %s", safeErr.Error())
+	}
+	if strings.Contains(safeErr.Error(), "token=secret") {
+		t.Fatalf("safeLLMProviderError leaked generic provider token: %s", safeErr.Error())
+	}
+	if !strings.Contains(safeErr.Error(), "error_type=errors.errorString") {
+		t.Fatalf("safeLLMProviderError missing generic error type, got: %s", safeErr.Error())
+	}
+}
+
 func testOpenAIAPIError(t *testing.T) *openai.Error {
 	t.Helper()
 

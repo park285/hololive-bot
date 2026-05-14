@@ -21,9 +21,11 @@
 package dispatch
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,6 +33,46 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
 )
+
+func TestDispatcherRunOnceProcessed_EmptyBatchDoesNotLogInfoDrainEvents(t *testing.T) {
+	t.Parallel()
+
+	fakeConsumer := &testQueueConsumer{
+		drainBatchFunc: func(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
+			return nil, nil
+		},
+	}
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	dispatcher, err := NewDispatcher(
+		fakeConsumer,
+		&testMessageSender{},
+		NewSimpleRenderer(),
+		50,
+		1,
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+
+	processed, err := dispatcher.RunOnceProcessed(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnceProcessed() error = %v", err)
+	}
+	if processed {
+		t.Fatal("RunOnceProcessed() processed = true, want false")
+	}
+
+	output := buf.String()
+	if strings.Contains(output, EventDispatchBatchDrainStarted) {
+		t.Fatalf("empty batch logged started event at info level: %s", output)
+	}
+	if strings.Contains(output, EventDispatchBatchDrainSucceeded) {
+		t.Fatalf("empty batch logged succeeded event at info level: %s", output)
+	}
+}
 
 func TestDispatcherRunOnce_RenderFailureSchedulesDurableRetryWithMetadata(t *testing.T) {
 	t.Parallel()

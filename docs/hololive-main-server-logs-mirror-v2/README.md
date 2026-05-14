@@ -32,7 +32,8 @@
 적용:
 ```bash
 sudo mkdir -p /logs
-sudo chown -R "$USER":docker /logs
+sudo chown -R kapu:docker /logs
+sudo chmod 2770 /logs
 chmod +x scripts/logs/remote-sync-main-logs.sh
 
 ./scripts/logs/remote-sync-main-logs.sh once osaka
@@ -42,6 +43,13 @@ tail -f /logs/stream-ingester.log
 
 systemd:
 ```bash
+sudo install -d -m 0750 /etc/hololive
+sudo tee /etc/hololive/log-mirror.env >/dev/null <<'EOF'
+HOL_LOG_OSAKA_USER_HOST=ubuntu@kapu-iris-osaka-1
+HOL_LOG_OSAKA_SSH_KEY=/home/kapu/gemini/hololive-bot/KR.key
+HOL_LOG_OSAKA_LOG_DIR=/home/ubuntu/hololive-bot/logs
+EOF
+sudo chmod 0640 /etc/hololive/log-mirror.env
 sudo cp scripts/systemd/hololive-main-log-mirror@.service /etc/systemd/system/
 sudo cp scripts/systemd/hololive-main-log-mirror@.timer /etc/systemd/system/
 sudo systemctl daemon-reload
