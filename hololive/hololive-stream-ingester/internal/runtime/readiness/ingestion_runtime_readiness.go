@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package runtime
+package readiness
 
 import (
 	"net/http"
@@ -28,7 +28,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/health"
 )
 
-type ingestionReadinessState struct {
+const defaultRuntimeName = "stream-ingester"
+
+type Features struct {
+	YouTubeEnabled   bool
+	PhotoSyncEnabled bool
+}
+
+type State struct {
 	runtimeName       string
 	youtubeEnabled    bool
 	photoSyncEnabled  bool
@@ -37,25 +44,25 @@ type ingestionReadinessState struct {
 	lastError         atomic.Value // string
 }
 
-func newIngestionReadinessState(runtimeName string, features ingestionRuntimeFeatures) *ingestionReadinessState {
-	state := &ingestionReadinessState{
+func New(runtimeName string, features Features) *State {
+	state := &State{
 		runtimeName:      strings.TrimSpace(runtimeName),
-		youtubeEnabled:   features.youtubeEnabled,
-		photoSyncEnabled: features.photoSyncEnabled,
+		youtubeEnabled:   features.YouTubeEnabled,
+		photoSyncEnabled: features.PhotoSyncEnabled,
 	}
 	state.lastError.Store("")
 	return state
 }
 
-func runtimeHTTPServerOperationName(runtimeName string) string {
+func HTTPServerOperationName(runtimeName string) string {
 	name := strings.TrimSpace(runtimeName)
 	if name == "" {
-		name = streamIngesterRuntimeName
+		name = defaultRuntimeName
 	}
 	return name + "-http"
 }
 
-func (s *ingestionReadinessState) markRunning() {
+func (s *State) MarkRunning() {
 	if s == nil {
 		return
 	}
@@ -64,7 +71,7 @@ func (s *ingestionReadinessState) markRunning() {
 	s.lastError.Store("")
 }
 
-func (s *ingestionReadinessState) markStopping(message string) {
+func (s *State) MarkStopping(message string) {
 	if s == nil {
 		return
 	}
@@ -74,7 +81,7 @@ func (s *ingestionReadinessState) markStopping(message string) {
 	}
 }
 
-func (s *ingestionReadinessState) response() (int, map[string]any) {
+func (s *State) Response() (int, map[string]any) {
 	base := health.Get()
 	if s == nil {
 		return http.StatusServiceUnavailable, map[string]any{

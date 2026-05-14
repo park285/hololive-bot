@@ -14,6 +14,7 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
 )
 
 func TestBuildStreamIngesterYouTubeComponents_RegistersCommunityAndShortsForEveryActiveChannel(t *testing.T) {
@@ -28,7 +29,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersCommunityAndShortsForEver
 		},
 	})
 
-	scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, registrations, err := polling.BuildComponents(
 		config.ScraperConfig{
 			WorkerCount: 2,
 			Poll: config.ScraperPoll{
@@ -42,7 +43,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersCommunityAndShortsForEver
 		&databasemocks.Client{},
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		communityshorts.EnabledChannelIDs(operationalChannels),
-		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
 		nil,
 		nil,
 		nil,

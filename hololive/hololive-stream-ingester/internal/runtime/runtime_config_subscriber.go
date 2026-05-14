@@ -7,6 +7,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/configupdates"
 )
 
 func selectPhotoSyncService(enabled bool, service *holodex.PhotoSyncService) *holodex.PhotoSyncService {
@@ -26,7 +27,7 @@ func buildRuntimeConfigSubscriber(
 		return nil
 	}
 
-	configSubscriber := buildStreamIngesterConfigSubscriber(
+	configSubscriber := configupdates.BuildSubscriber(
 		infra.cacheService,
 		infra.settingsService,
 		infra.holodexService,

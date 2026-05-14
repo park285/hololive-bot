@@ -1,4 +1,4 @@
-package runtime
+package polling
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polltarget"
 )
 
 type youtubeScraperBudgetSummary struct {
@@ -137,7 +138,7 @@ func estimateRegistrationWorstCaseRPM(registration providers.ChannelPollerRegist
 }
 
 func resolvedRegistrationChannelCount(registration providers.ChannelPollerRegistration) int {
-	return len(mergeUniqueChannelIDs(registration.ChannelIDs))
+	return len(polltarget.MergeUniqueChannelIDs(registration.ChannelIDs))
 }
 
 func resolvedRegistrationRequestsPerRun(registration providers.ChannelPollerRegistration) int {

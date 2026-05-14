@@ -114,14 +114,14 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 
 	ctx := t.Context()
 
-	readiness := newIngestionReadinessState(youtubeScraperRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(youtubeScraperRuntimeName, ingestionRuntimeFeatures{
 		youtubeEnabled:   true,
 		photoSyncEnabled: false,
 	})
 	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, testLogger(), "", func(opts *sharedserver.RuntimeRouterOptions) {
 		opts.EnableGzip = true
 		opts.ReadyResponder = func(c *gin.Context) {
-			statusCode, payload := readiness.response()
+			statusCode, payload := readiness.Response()
 			c.JSON(statusCode, payload)
 		}
 	})
@@ -177,7 +177,7 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 		protectedRouter, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, testLogger(), "test-key", func(opts *sharedserver.RuntimeRouterOptions) {
 			opts.EnableGzip = true
 			opts.ReadyResponder = func(c *gin.Context) {
-				statusCode, payload := readiness.response()
+				statusCode, payload := readiness.Response()
 				c.JSON(statusCode, payload)
 			}
 		})
@@ -227,7 +227,7 @@ func TestProvideHealthOnlyRouter(t *testing.T) {
 	})
 
 	t.Run("ready endpoint after runtime start", func(t *testing.T) {
-		readiness.markRunning()
+		readiness.MarkRunning()
 
 		req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 		rr := httptest.NewRecorder()
@@ -273,7 +273,7 @@ func TestBuildStreamIngesterHTTPServer(t *testing.T) {
 		},
 	}
 
-	readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
