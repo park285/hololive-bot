@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -267,6 +268,43 @@ func (s *Service) IsAlreadyNotified(ctx context.Context, streamID string) (bool,
 		return false, nil
 	}
 	return len(data.SentAt) > 0, nil
+}
+
+func (s *Service) RecentlyNotifiedStreamIDs(ctx context.Context, streamIDs []string) (map[string]struct{}, error) {
+	result := make(map[string]struct{})
+	if s == nil || len(streamIDs) == 0 {
+		return result, nil
+	}
+
+	for _, streamID := range uniqueNonEmptyStrings(streamIDs) {
+		data, err := s.readNotifiedData(ctx, keys.NotifiedKey(streamID))
+		if err != nil {
+			return nil, fmt.Errorf("recently notified stream ids: read %s: %w", streamID, err)
+		}
+		if data == nil || len(data.SentAt) == 0 {
+			continue
+		}
+		result[streamID] = struct{}{}
+	}
+
+	return result, nil
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func (s *Service) MarkUpcomingEventNotified(ctx context.Context, roomID, channelID string, stream *domain.Stream) error {
