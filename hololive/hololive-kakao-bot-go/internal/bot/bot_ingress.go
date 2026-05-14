@@ -23,9 +23,11 @@ package bot
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/stringutil"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
@@ -126,7 +128,7 @@ func (i *MessageIngress) shouldSkipSender(message *iris.Message, chatID, userNam
 		"Skipping self-issued message",
 		slog.String("user", userName),
 		slog.String("room", chatID),
-		slog.String("payload", message.Msg),
+		slog.Int("message_len", len(strings.TrimSpace(message.Msg))),
 	)
 
 	return true
@@ -155,11 +157,14 @@ func (i *MessageIngress) parseCommand(message *iris.Message, chatID, userName st
 	}
 
 	if parsed.Type == domain.CommandUnknown {
-		i.logDebug(
-			"Unknown command ignored",
-			slog.String("msg", message.Msg),
+		attrs := []slog.Attr{
 			slog.String("room", chatID),
 			slog.String("user_name", userName),
+		}
+		attrs = append(attrs, messageSummaryAttrs(message.Msg)...)
+		i.logDebug(
+			"Unknown command ignored",
+			attrs...,
 		)
 
 		return nil
@@ -176,14 +181,16 @@ func (i *MessageIngress) logCommandReceived(
 	chatID string,
 	roomName string,
 ) {
-	i.logInfo(
-		"Command received",
-		slog.String("raw", parsed.RawMessage),
-		slog.String("type", commandType),
-		slog.String("user_id", userID),
-		slog.String("user_name", userName),
-		slog.String("room", chatID),
-		slog.String("room_name", roomName),
+	if i.logger == nil || parsed == nil {
+		return
+	}
+	ctx := sharedlog.WithComponent(sharedlog.WithRuntime(context.Background(), "bot"), "ingress")
+	sharedlog.Info(
+		ctx,
+		i.logger,
+		EventBotCommandReceived,
+		"bot command received",
+		ingressAttrs(commandType, userID, userName, chatID, roomName, parsed.RawMessage)...,
 	)
 }
 

@@ -21,7 +21,9 @@
 package llm
 
 import (
+	"bytes"
 	"context"
+	stdjson "encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -50,6 +52,72 @@ func TestNewClient_DefaultOptions(t *testing.T) {
 	if client.model != "gpt-test" {
 		t.Errorf("model = %q, want %q", client.model, "gpt-test")
 	}
+}
+
+func TestLLMProviderErrorAttrs_RedactsOpenAIRawJSON(t *testing.T) {
+	apiErr := testOpenAIAPIError(t)
+	wrappedErr := fmt.Errorf("provider failed: %w", apiErr)
+	if !strings.Contains(wrappedErr.Error(), "private raw provider response") {
+		t.Fatalf("test setup expected raw provider response in wrapped error, got: %s", wrappedErr.Error())
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	logger.LogAttrs(context.Background(), slog.LevelError, "test", llmProviderErrorAttrs(wrappedErr)...)
+	output := buf.String()
+
+	if strings.Contains(output, "private raw provider response") {
+		t.Fatalf("llmProviderErrorAttrs leaked raw provider response: %s", output)
+	}
+	if !strings.Contains(output, "status_code=429") {
+		t.Fatalf("llmProviderErrorAttrs missing status_code, got: %s", output)
+	}
+	if !strings.Contains(output, "error_code=rate_limit") {
+		t.Fatalf("llmProviderErrorAttrs missing error_code, got: %s", output)
+	}
+	if !strings.Contains(output, "provider_error_type=rate_limit_error") {
+		t.Fatalf("llmProviderErrorAttrs missing provider error type, got: %s", output)
+	}
+}
+
+func TestSafeLLMProviderError_RedactsOpenAIRawJSON(t *testing.T) {
+	apiErr := testOpenAIAPIError(t)
+	wrappedErr := fmt.Errorf("provider failed: %w", apiErr)
+
+	safeErr := safeLLMProviderError(wrappedErr)
+	if safeErr == nil {
+		t.Fatal("safeLLMProviderError() = nil")
+	}
+	if strings.Contains(safeErr.Error(), "private raw provider response") {
+		t.Fatalf("safeLLMProviderError leaked raw provider response: %s", safeErr.Error())
+	}
+	if !strings.Contains(safeErr.Error(), "status_code=429") {
+		t.Fatalf("safeLLMProviderError missing status_code, got: %s", safeErr.Error())
+	}
+	if !strings.Contains(safeErr.Error(), "code=rate_limit") {
+		t.Fatalf("safeLLMProviderError missing code, got: %s", safeErr.Error())
+	}
+}
+
+func testOpenAIAPIError(t *testing.T) *openai.Error {
+	t.Helper()
+
+	apiErr := &openai.Error{}
+	raw := `{"code":"rate_limit","message":"private raw provider response","param":"messages","type":"rate_limit_error"}`
+	if err := stdjson.Unmarshal([]byte(raw), apiErr); err != nil {
+		t.Fatalf("unmarshal openai error: %v", err)
+	}
+	apiErr.StatusCode = http.StatusTooManyRequests
+	apiErr.Request = &http.Request{
+		Method: http.MethodPost,
+		URL: &url.URL{
+			Scheme: "https",
+			Host:   "api.openai.com",
+			Path:   "/v1/responses",
+		},
+	}
+	apiErr.Response = &http.Response{StatusCode: http.StatusTooManyRequests}
+	return apiErr
 }
 
 func TestNewClient_WithSchemaName(t *testing.T) {
@@ -336,8 +404,26 @@ func TestExtractResponsesOutputText_EmptyOutputIncludesDiagnostic(t *testing.T) 
 	if !strings.Contains(err.Error(), "status=completed") {
 		t.Fatalf("error = %q, want status diagnostic", err.Error())
 	}
-	if !strings.Contains(err.Error(), "refusal=safety refusal") {
-		t.Fatalf("error = %q, want refusal diagnostic", err.Error())
+	if strings.Contains(err.Error(), "safety refusal") {
+		t.Fatalf("error = %q, want refusal text redacted", err.Error())
+	}
+	if !strings.Contains(err.Error(), "refusal=true") {
+		t.Fatalf("error = %q, want refusal presence diagnostic", err.Error())
+	}
+}
+
+func TestSafeLLMProviderError_RedactsEmptyOutputDiagnostics(t *testing.T) {
+	rawErr := fmt.Errorf("%w: status=completed refusal=private raw provider response output=message/completed", errOpenAIEmptyOutput)
+
+	safeErr := safeLLMProviderError(rawErr)
+	if safeErr == nil {
+		t.Fatal("safeLLMProviderError() = nil")
+	}
+	if strings.Contains(safeErr.Error(), "private raw provider response") {
+		t.Fatalf("safeLLMProviderError leaked empty-output diagnostic: %s", safeErr.Error())
+	}
+	if !strings.Contains(safeErr.Error(), "error_type=openai_empty_output") {
+		t.Fatalf("safeLLMProviderError missing empty-output type, got: %s", safeErr.Error())
 	}
 }
 

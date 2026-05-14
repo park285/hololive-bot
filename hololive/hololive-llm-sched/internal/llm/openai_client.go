@@ -22,10 +22,13 @@ package llm
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -34,6 +37,7 @@ import (
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
 	json "github.com/park285/llm-kakao-bots/shared-go/pkg/json"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -115,10 +119,42 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 		return "", errors.New("json schema is nil")
 	}
 
+	attrs := llmPromptSummaryAttrs("openai", c.model, systemPrompt, userPrompt)
+	sharedlog.Info(ctx, c.logger, "llm.prompt.built", "llm prompt built", attrs...)
+	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
+	started := time.Now()
+
+	var (
+		text errorString
+		err  error
+	)
 	if c.chatCompletions {
-		return c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
+		text.value, err = c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
+	} else {
+		text.value, err = c.generateJSON(ctx, systemPrompt, userPrompt, schema)
+	}
+	if err != nil {
+		safeErr := safeLLMProviderError(err)
+		failedAttrs := append([]slog.Attr{}, attrs...)
+		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
+		failedAttrs = append(failedAttrs, llmProviderErrorAttrs(err)...)
+		sharedlog.Error(ctx, c.logger, "llm.provider.request.failed", "llm provider request failed", failedAttrs...)
+		return "", safeErr
 	}
 
+	successAttrs := append([]slog.Attr{}, attrs...)
+	successAttrs = append(successAttrs, sharedlog.SinceMS(started), slog.Int("result_count", 1))
+	sharedlog.Info(ctx, c.logger, "llm.provider.request.succeeded", "llm provider request succeeded", successAttrs...)
+	sharedlog.Info(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
+
+	return text.value, nil
+}
+
+type errorString struct {
+	value string
+}
+
+func (c *OpenAIClient) generateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
 	text, usedFallback, err := c.generateJSONWithTransportFallback(ctx, systemPrompt, userPrompt, schema)
 	if err != nil {
 		return "", err
@@ -145,19 +181,21 @@ func (c *OpenAIClient) generateJSONWithTransportFallback(ctx context.Context, sy
 
 	if ctx != nil && ctx.Err() != nil {
 		if c.logger != nil {
-			c.logger.Warn("responses API failed and context already done; skipping fallback",
-				slog.String("error", err.Error()),
+			attrs := []slog.Attr{
 				slog.String("context_error", ctx.Err().Error()),
-				slog.String("model", c.model))
+				slog.String("model", c.model),
+			}
+			attrs = append(attrs, llmProviderErrorAttrs(err)...)
+			c.logger.LogAttrs(ctx, slog.LevelWarn, "responses API failed and context already done; skipping fallback", attrs...)
 		}
 		return "", false, err
 	}
 
 	// 조건부 fallback: Responses API 미지원/일시 오류 시 Chat Completions 재시도
 	if c.logger != nil {
-		c.logger.Warn("responses API failed; conditional fallback to chat completions",
-			slog.String("error", err.Error()),
-			slog.String("model", c.model))
+		attrs := []slog.Attr{slog.String("model", c.model)}
+		attrs = append(attrs, llmProviderErrorAttrs(err)...)
+		c.logger.LogAttrs(ctx, slog.LevelWarn, "responses API failed; conditional fallback to chat completions", attrs...)
 	}
 
 	fallbackText, fallbackErr := c.generateJSONChatCompletions(ctx, systemPrompt, userPrompt, schema)
@@ -180,7 +218,7 @@ func (c *OpenAIClient) applyFallbackPostProcess(text string, usedFallback bool) 
 	if err != nil {
 		if c.logger != nil {
 			c.logger.Warn("failed to sanitize discovered_events on fallback",
-				slog.String("error", err.Error()))
+				slog.String("error_type", llmErrorType(err)))
 		}
 		return text, nil
 	}
@@ -269,14 +307,10 @@ Do not include any text before or after the JSON. Only output the JSON object.`,
 	// 마크다운 펜스 제거 + JSON 추출
 	extracted, err := jsonutil.Extract(text)
 	if err != nil {
-		return "", fmt.Errorf("chat completions JSON 추출 실패: %w raw=%q", err, truncateForError(text, 2048))
+		return "", fmt.Errorf("chat completions JSON extract failed: %w", err)
 	}
 
 	return string(extracted), nil
-}
-
-func truncateForError(value string, maxBytes int) string {
-	return truncateForOpenAIError(value, maxBytes)
 }
 
 func shouldFallbackToChat(err error) bool {
@@ -285,4 +319,109 @@ func shouldFallbackToChat(err error) bool {
 
 func suppressDiscoveredEvents(rawJSON string) (string, error) {
 	return suppressFallbackDiscoveredEvents(rawJSON)
+}
+
+func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []slog.Attr {
+	prompt := strings.TrimSpace(systemPrompt + "\n" + userPrompt)
+	attrs := []slog.Attr{
+		slog.String("provider", strings.TrimSpace(provider)),
+		slog.String("model", strings.TrimSpace(model)),
+		slog.Int("prompt_len", len(prompt)),
+	}
+	if prompt != "" {
+		sum := sha256.Sum256([]byte(prompt))
+		attrs = append(attrs, slog.String("prompt_sha256_8", hex.EncodeToString(sum[:8])))
+	}
+	return attrs
+}
+
+type safeProviderError struct {
+	statusCode int
+	code       string
+	param      string
+	apiType    string
+	errType    string
+}
+
+func (e safeProviderError) Error() string {
+	parts := []string{"llm provider request failed"}
+	if e.statusCode > 0 {
+		parts = append(parts, fmt.Sprintf("status_code=%d", e.statusCode))
+	}
+	if e.code != "" {
+		parts = append(parts, "code="+e.code)
+	}
+	if e.apiType != "" {
+		parts = append(parts, "api_type="+e.apiType)
+	}
+	if e.param != "" {
+		parts = append(parts, "param="+e.param)
+	}
+	if e.errType != "" {
+		parts = append(parts, "error_type="+e.errType)
+	}
+	return strings.Join(parts, " ")
+}
+
+func safeLLMProviderError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errOpenAIEmptyOutput) {
+		return safeProviderError{errType: "openai_empty_output"}
+	}
+	if apiErr, ok := openAIError(err); ok {
+		return safeProviderError{
+			statusCode: apiErr.StatusCode,
+			code:       strings.TrimSpace(apiErr.Code),
+			param:      strings.TrimSpace(apiErr.Param),
+			apiType:    strings.TrimSpace(apiErr.Type),
+			errType:    llmErrorType(apiErr),
+		}
+	}
+	return err
+}
+
+func llmProviderErrorAttrs(err error) []slog.Attr {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errOpenAIEmptyOutput) {
+		return []slog.Attr{slog.String("error_type", "openai_empty_output")}
+	}
+	if apiErr, ok := openAIError(err); ok {
+		attrs := []slog.Attr{
+			slog.String("error_type", llmErrorType(apiErr)),
+			slog.Bool("provider_error", true),
+		}
+		if apiErr.StatusCode > 0 {
+			attrs = append(attrs, slog.Int("status_code", apiErr.StatusCode))
+		}
+		if value := strings.TrimSpace(apiErr.Code); value != "" {
+			attrs = append(attrs, slog.String("error_code", value))
+		}
+		if value := strings.TrimSpace(apiErr.Type); value != "" {
+			attrs = append(attrs, slog.String("provider_error_type", value))
+		}
+		if value := strings.TrimSpace(apiErr.Param); value != "" {
+			attrs = append(attrs, slog.String("provider_error_param", value))
+		}
+		return attrs
+	}
+	return []slog.Attr{slog.String("error_type", llmErrorType(err))}
+}
+
+func openAIError(err error) (*openai.Error, bool) {
+	var apiErr *openai.Error
+	if errors.As(err, &apiErr) && apiErr != nil {
+		return apiErr, true
+	}
+	return nil, false
+}
+
+func llmErrorType(err error) string {
+	if err == nil {
+		return ""
+	}
+	return strings.TrimPrefix(fmt.Sprintf("%T", err), "*")
 }

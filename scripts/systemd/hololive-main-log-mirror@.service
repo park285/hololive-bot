@@ -1,0 +1,14 @@
+[Unit]
+Description=Hololive remote logs into main /logs (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/work/hololive-bot
+Environment=LOG_ROOT=/logs
+Environment=HOL_LOG_OSAKA_SSH_KEY=/root/work/hololive-bot/KR.key
+ExecStart=/root/work/hololive-bot/scripts/logs/remote-sync-main-logs.sh once %i
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6

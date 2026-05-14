@@ -31,6 +31,7 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -112,9 +113,8 @@ func validateIngestionRuntimeInputs(cfg *config.Config, logger *slog.Logger) err
 }
 
 func logIngestionRuntimeConfigured(logger *slog.Logger, runtimeName string, features ingestionRuntimeFeatures) {
-	logger.Info("Ingestion runtime configured",
-		slog.String("runtime", runtimeName),
-		slog.String("event", "ingestion_runtime_configured"),
+	sharedlog.Info(context.Background(), logger, EventIngestionRuntimeConfigured, "ingestion runtime configured",
+		sharedlog.Runtime(runtimeName),
 		slog.Bool("youtube_enabled", features.youtubeEnabled),
 		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
 		slog.Bool("community_shorts_bigbang_enabled", features.communityShortsBigBangEnabled),

@@ -25,6 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
@@ -52,6 +53,7 @@ func RequestIDMiddleware() gin.HandlerFunc {
 			reqID = uuid.NewString()
 		}
 		c.Set("request_id", reqID)
+		c.Request = c.Request.WithContext(sharedlog.WithRequestID(c.Request.Context(), reqID))
 		c.Header(headerKey, reqID)
 		c.Next()
 	}

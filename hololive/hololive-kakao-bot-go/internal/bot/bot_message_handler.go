@@ -27,6 +27,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 // HTTP webhook 핸들러에서 호출하기 위해 public으로 노출됩니다.
@@ -35,7 +36,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			b.logger.Error("Panic in handleMessage",
+			sharedlog.Error(ctx, b.logger, EventBotCommandPanic, "panic in command handler",
 				slog.Any("panic", r),
 				slog.String("command", commandType),
 			)
@@ -94,13 +95,16 @@ func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext) c
 }
 
 func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) {
-	b.logger.Error("Failed to execute command", slog.Any("error", err))
-
 	errorMsg := b.getErrorMessage(err, commandType)
 	if chatID == "" {
 		return
 	}
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
-		b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", chatID))
+		attrs := []slog.Attr{
+			slog.String("chat_id", chatID),
+			slog.String("command", commandType),
+		}
+		attrs = append(attrs, sharedlog.ErrorAttrs(sendErr)...)
+		sharedlog.Error(ctx, b.logger, EventBotCommandErrorResponseFailed, "failed to send command error response", attrs...)
 	}
 }

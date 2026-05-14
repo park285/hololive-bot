@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 // skipPaths는 다음 형식을 지원합니다:
@@ -87,12 +88,16 @@ func (m *skipPathMatcher) add(pattern string) {
 func logHTTPRequest(ctx context.Context, logger *slog.Logger, c *gin.Context, path string, latency time.Duration) {
 	status := c.Writer.Status()
 	level := httpLogLevel(status)
-	if !logger.Enabled(ctx, level) {
+	reqCtx := c.Request.Context()
+	if reqCtx == nil {
+		reqCtx = ctx
+	}
+	if !logger.Enabled(reqCtx, level) {
 		return
 	}
 
 	attrs := httpLogAttrs(c, path, status, latency)
-	logger.LogAttrs(ctx, level, "HTTP", attrs...)
+	sharedlog.Log(reqCtx, logger, level, "http.request.completed", "HTTP", attrs...)
 }
 
 func httpLogLevel(status int) slog.Level {
@@ -113,12 +118,10 @@ func httpLogAttrs(c *gin.Context, path string, status int, latency time.Duration
 		slog.String("ip", c.ClientIP()),
 		slog.String("remote_addr", strings.TrimSpace(c.Request.RemoteAddr)),
 		slog.String("ua", requestDeviceInfo(c)),
+		sharedlog.DurationMS(latency),
 	}
 	attrs = appendOptionalHeaderAttr(attrs, "x_forwarded_for", c.GetHeader("X-Forwarded-For"))
 	attrs = appendOptionalHeaderAttr(attrs, "x_real_ip", c.GetHeader("X-Real-IP"))
-	if latency >= 100*time.Millisecond {
-		attrs = append(attrs, slog.Duration("latency", latency))
-	}
 	return attrs
 }
 
