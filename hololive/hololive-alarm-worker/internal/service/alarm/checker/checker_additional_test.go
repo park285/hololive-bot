@@ -610,7 +610,9 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 		require.NoError(t, err)
-		assert.Empty(t, notifications)
+		require.Len(t, notifications, 1)
+		assert.Equal(t, "room2", notifications[0].RoomID)
+		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
 		oldStart := now.Add(-10 * time.Minute)
 		oldStream := &domain.Stream{ID: "live-old", Status: domain.StreamStatusLive, StartScheduled: &oldStart}
@@ -683,7 +685,7 @@ func TestResolveEligibleLiveCatchupStartUsesLiveCatchupWindow(t *testing.T) {
 	require.Nil(t, got)
 }
 
-func TestLiveCatchupDedupAfterMarkAsNotified(t *testing.T) {
+func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -708,10 +710,13 @@ func TestLiveCatchupDedupAfterMarkAsNotified(t *testing.T) {
 	assert.Equal(t, 5, first[0].MinutesUntil)
 
 	require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
+	require.NoError(t, dedupSvc.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
 
 	second, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 	require.NoError(t, err)
-	require.Empty(t, second)
+	require.Len(t, second, 1)
+	assert.Equal(t, "room2", second[0].RoomID)
+	assert.Equal(t, 5, second[0].MinutesUntil)
 }
 
 func TestLiveCatchupAllowsRescheduledStreamAfterPreviousScheduleNotified(t *testing.T) {
