@@ -20,7 +20,7 @@
 
 `docker-compose.prod.yml` 기준:
 - `stream-ingester`: `YOUTUBE_INGESTION_ENABLED=false`, `PHOTO_SYNC_ENABLED=true`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=false`, `SERVER_PORT=30004`
-- `youtube-scraper`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`, `SERVER_PORT=30005`
+- `youtube-scraper`: `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`, `YOUTUBE_SCRAPER_RUNTIME_ALLOWED=false`, `SERVER_PORT=30005`
 - `shared_go_workspace`: 기본값 `./shared-go` (필요 시 `SHARED_GO_WORKSPACE_PATH`로 override 가능)
 
 운영 기준:
@@ -32,6 +32,7 @@ Osaka split-host 운영 기준:
 - shared state/control 호스트: `kapu` (`100.100.1.3`)
 - Osaka에서는 `holo-postgres`, `hololive-db-migrate`, `valkey-cache`를 올리지 않고 `100.100.1.3:5433`, `100.100.1.3:6379`, `http://100.100.1.3:8787/v1`을 사용합니다.
 - Osaka start는 항상 `docker-compose.prod.yml`에 `docker-compose.osaka.yml`을 overlay하고 `--no-deps`를 붙입니다.
+- Osaka overlay에서만 `YOUTUBE_SCRAPER_RUNTIME_ALLOWED=true`를 설정합니다. 중앙 host `kapu`에서는 이 값이 false라서 `youtube-scraper`가 락 획득 전에 종료되어야 합니다.
 - Osaka `.env.osaka`의 `CACHE_PASSWORD`는 중앙 `.env`와 동일해야 합니다. 중앙 Valkey는 Tailscale IP에 publish되지만 password 인증을 필수로 사용합니다.
 - `CACHE_PASSWORD`는 admin-dashboard Redis URL에도 들어가므로 URL-safe hex 값을 권장합니다.
 
@@ -42,12 +43,6 @@ Osaka split-host 운영 기준:
 - `SCRAPER_COMMUNITY_SECONDS` 기본값 `60`
 - `SCRAPER_STATS_SECONDS` 기본값 `21600`
 - `SCRAPER_LIVE_SECONDS` 기본값 `300`
-
-재배포:
-
-```bash
-./scripts/deploy/compose-redeploy-service.sh youtube-scraper
-```
 
 Osaka 재배포:
 
