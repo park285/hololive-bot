@@ -9,12 +9,14 @@
 # writer 충돌을 피하고 원격 원본 위치를 계속 드러냅니다.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 LOG_ROOT="${LOG_ROOT:-/logs}"
 REMOTE_MIRROR_ROOT="${REMOTE_MIRROR_ROOT:-${LOG_ROOT}/remote}"
 FORCE_MAIN_LOG_LINKS="${FORCE_MAIN_LOG_LINKS:-0}"
 
 OSAKA_USER_HOST="${HOL_LOG_OSAKA_USER_HOST:-ubuntu@kapu-iris-osaka-1}"
-OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-/home/kapu/gemini/hololive-bot/KR.key}"
+OSAKA_SSH_KEY="${HOL_LOG_OSAKA_SSH_KEY:-${REPO_ROOT}/KR.key}"
 OSAKA_REMOTE_LOG_DIR="${HOL_LOG_OSAKA_LOG_DIR:-/home/ubuntu/hololive-bot/logs}"
 OSAKA_SERVICES="${HOL_LOG_OSAKA_SERVICES:-youtube-scraper stream-ingester}"
 
@@ -31,7 +33,7 @@ Usage:
 Environment:
   LOG_ROOT=/logs
   HOL_LOG_OSAKA_USER_HOST=ubuntu@kapu-iris-osaka-1
-  HOL_LOG_OSAKA_SSH_KEY=/home/kapu/gemini/hololive-bot/KR.key
+  HOL_LOG_OSAKA_SSH_KEY=./KR.key
   HOL_LOG_OSAKA_LOG_DIR=/home/ubuntu/hololive-bot/logs
   FORCE_MAIN_LOG_LINKS=1  # replace existing regular /logs/<service>.log after backup
 
