@@ -25,6 +25,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
@@ -40,6 +43,8 @@ import (
 const (
 	streamIngesterRuntimeName = "stream-ingester"
 	youtubeScraperRuntimeName = "youtube-scraper"
+
+	youtubeScraperRuntimeAllowedEnv = "YOUTUBE_SCRAPER_RUNTIME_ALLOWED"
 )
 
 var initStreamIngesterInfrastructureFn = initStreamIngesterInfrastructure
@@ -49,7 +54,15 @@ func BuildStreamIngesterRuntime(ctx context.Context, cfg *config.Config, logger 
 }
 
 func BuildYouTubeScraperRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*StreamIngesterRuntime, error) {
+	if !youtubeScraperRuntimeAllowed() {
+		return nil, fmt.Errorf("youtube scraper runtime disabled: set %s=true on the owning host", youtubeScraperRuntimeAllowedEnv)
+	}
 	return buildIngestionRuntime(ctx, cfg, logger, youtubeScraperSpec(cfg))
+}
+
+func youtubeScraperRuntimeAllowed() bool {
+	allowed, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(youtubeScraperRuntimeAllowedEnv)))
+	return err == nil && allowed
 }
 
 func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger, spec ingestionRuntimeSpec) (*StreamIngesterRuntime, error) {

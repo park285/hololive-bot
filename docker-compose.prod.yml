@@ -483,6 +483,7 @@ services:
       <<: [*app-file-log-env, *cache-env, *postgres-env, *scraper-env, *majorevent-env, *cliproxy-env]
       NOTIFICATION_EGRESS_ROLE: "producer"
       YOUTUBE_OUTBOX_DISPATCHER_ENABLED: "false"
+      YOUTUBE_SCRAPER_RUNTIME_ALLOWED: "false"
       SERVER_PORT: 30005
       YOUTUBE_INGESTION_ENABLED: "true"
       PHOTO_SYNC_ENABLED: "false"

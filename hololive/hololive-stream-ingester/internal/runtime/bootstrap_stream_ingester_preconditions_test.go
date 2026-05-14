@@ -52,3 +52,15 @@ func TestBuildStreamIngesterRuntime_Preconditions(t *testing.T) {
 		assert.Equal(t, "logger must not be nil", err.Error())
 	})
 }
+
+func TestBuildYouTubeScraperRuntimeRequiresRuntimeAllowEnv(t *testing.T) {
+	t.Setenv("YOUTUBE_SCRAPER_RUNTIME_ALLOWED", "")
+
+	cfg := buildInfraFailureConfig()
+	cfg.Ingestion.CommunityShortsBigBangEnabled = true
+
+	runtime, err := BuildYouTubeScraperRuntime(context.Background(), cfg, newStreamIngesterTestLogger())
+	require.Error(t, err)
+	assert.Nil(t, runtime)
+	assert.Equal(t, "youtube scraper runtime disabled: set YOUTUBE_SCRAPER_RUNTIME_ALLOWED=true on the owning host", err.Error())
+}

@@ -29,6 +29,7 @@
 | `YOUTUBE_INGESTION_ENABLED` | must be true for this service | yes |
 | `PHOTO_SYNC_ENABLED` | must be false for this service | yes |
 | `YOUTUBE_OUTBOX_DISPATCHER_ENABLED=false` | producer-only egress boundary | yes |
+| `YOUTUBE_SCRAPER_RUNTIME_ALLOWED=true` | must be true only on the owning Osaka host | yes |
 | `SCRAPER_*` | poller intervals/workers | yes |
 
 ## Logs
