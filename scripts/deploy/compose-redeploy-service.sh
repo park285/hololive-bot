@@ -127,6 +127,15 @@ case "$SERVICE" in
         ;;
 esac
 
+if [ "$TARGET" = "youtube-scraper" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_SCRAPER:-}" != "true" ]; then
+    echo "[ERROR] youtube-scraper is Osaka-owned. Refusing central redeploy without ALLOW_CENTRAL_YOUTUBE_SCRAPER=true."
+    exit 1
+fi
+if [ -z "$TARGET" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_SCRAPER:-}" != "true" ]; then
+    echo "[ERROR] COMPOSE_PROFILES=oracle would include youtube-scraper, which is Osaka-owned. Refusing central all-service deploy."
+    exit 1
+fi
+
 export HOLO_BOT_VERSION="$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo dev)"
 
 echo "[INFO] COMPOSE_MODE=$COMPOSE_MODE"
