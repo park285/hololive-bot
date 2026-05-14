@@ -153,7 +153,7 @@ func loadLoggingConfig() LoggingConfig {
 	return LoggingConfig{
 		Level:      sharedenv.String("LOG_LEVEL", "info"),
 		Dir:        sharedenv.String("LOG_DIR", ""),
-		MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 100),
+		MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 5),
 		MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
 		MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
 		Compress:   sharedenv.Bool("LOG_COMPRESS", true),

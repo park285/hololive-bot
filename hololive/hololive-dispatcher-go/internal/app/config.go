@@ -189,7 +189,7 @@ func loadLoggingConfig() sharedlogging.Config {
 	return sharedlogging.Config{
 		Level:      lookupString("LOG_LEVEL", "info"),
 		Dir:        lookupString("LOG_DIR", ""),
-		MaxSizeMB:  lookupInt("LOG_MAX_SIZE_MB", 100),
+		MaxSizeMB:  lookupInt("LOG_MAX_SIZE_MB", 5),
 		MaxBackups: lookupInt("LOG_MAX_BACKUPS", 5),
 		MaxAgeDays: lookupInt("LOG_MAX_AGE_DAYS", 30),
 		Compress:   lookupBool("LOG_COMPRESS", true),
