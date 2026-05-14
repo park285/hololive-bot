@@ -20,35 +20,9 @@ type OperationOptions struct {
 }
 
 func RunOperation(ctx context.Context, logger *slog.Logger, opts OperationOptions, fn func(context.Context) error) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	name := strings.TrimSpace(opts.Name)
-	if name == "" {
-		name = "operation"
-	}
-
-	jobID := JobIDFromContext(ctx)
-	if jobID == "" {
-		prefix := opts.IDPrefix
-		if strings.TrimSpace(prefix) == "" {
-			prefix = name
-		}
-		jobID = NewID(prefix)
-		ctx = WithJobID(ctx, jobID)
-	}
-
-	if opts.Runtime != "" {
-		ctx = WithRuntime(ctx, opts.Runtime)
-	}
-	if opts.Component != "" {
-		ctx = WithComponent(ctx, opts.Component)
-	}
-
-	baseAttrs := make([]slog.Attr, 0, 2+len(opts.Attrs))
-	baseAttrs = append(baseAttrs, Operation(name))
-	baseAttrs = append(baseAttrs, opts.Attrs...)
+	ctx = operationContext(ctx, opts)
+	name := operationName(opts.Name)
+	baseAttrs := operationAttrs(name, opts.Attrs)
 
 	start := time.Now()
 	if !opts.SkipStartLog {
@@ -67,6 +41,49 @@ func RunOperation(ctx context.Context, logger *slog.Logger, opts OperationOption
 
 	Info(ctx, logger, eventOrDefault(opts.SuccessEvent, name+".succeeded"), "operation succeeded", attrs...)
 	return nil
+}
+
+func operationContext(ctx context.Context, opts OperationOptions) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx = operationContextWithJobID(ctx, opts)
+	return operationContextWithRuntime(ctx, opts)
+}
+
+func operationContextWithJobID(ctx context.Context, opts OperationOptions) context.Context {
+	if JobIDFromContext(ctx) != "" {
+		return ctx
+	}
+	prefix := strings.TrimSpace(opts.IDPrefix)
+	if prefix == "" {
+		prefix = operationName(opts.Name)
+	}
+	return WithJobID(ctx, NewID(prefix))
+}
+
+func operationContextWithRuntime(ctx context.Context, opts OperationOptions) context.Context {
+	if opts.Runtime != "" {
+		ctx = WithRuntime(ctx, opts.Runtime)
+	}
+	if opts.Component != "" {
+		ctx = WithComponent(ctx, opts.Component)
+	}
+	return ctx
+}
+
+func operationName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "operation"
+	}
+	return name
+}
+
+func operationAttrs(name string, attrs []slog.Attr) []slog.Attr {
+	baseAttrs := make([]slog.Attr, 0, 1+len(attrs))
+	baseAttrs = append(baseAttrs, Operation(name))
+	return append(baseAttrs, attrs...)
 }
 
 func eventOrDefault(value, fallback string) string {
