@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -82,16 +83,21 @@ func (s *RuntimeScheduler) runLoopIteration(
 	run func(context.Context) error,
 ) {
 	loopCtx, cancel := context.WithTimeout(ctx, timeout)
-	err := run(loopCtx)
+	defer cancel()
 
-	cancel()
-
-	if err != nil {
-		s.logger.Warn("Alarm loop iteration failed",
+	_ = sharedlog.RunOperation(loopCtx, s.logger, sharedlog.OperationOptions{
+		Name:         "alarm.scheduler.loop.iteration",
+		IDPrefix:     "alarm_" + name,
+		Runtime:      "alarm-worker",
+		Component:    "scheduler",
+		StartEvent:   EventAlarmSchedulerLoopIterationStarted,
+		SuccessEvent: EventAlarmSchedulerLoopIterationSucceeded,
+		FailureEvent: EventAlarmSchedulerLoopIterationFailed,
+		Attrs: []slog.Attr{
 			slog.String("loop", name),
-			slog.Any("error", err),
-		)
-	}
+			slog.Duration("timeout", timeout),
+		},
+	}, run)
 }
 
 func nextLoopDelay(now time.Time, interval time.Duration) time.Duration {
@@ -209,16 +215,26 @@ func (s *RuntimeScheduler) dispatchNotifications(
 
 	sendResult, err := s.notifier.Send(ctx, notifications)
 
-	s.logger.Debug("Alarm notifications dispatched",
+	if err != nil {
+		attrs := []slog.Attr{
+			slog.String("loop", loopName),
+			slog.Int("notifications", len(notifications)),
+			slog.Int("sent", sendResult.Sent),
+			slog.Int("skipped", sendResult.Skipped),
+			slog.Int("failed", sendResult.Failed),
+		}
+		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
+		sharedlog.Warn(ctx, s.logger, EventAlarmNotificationDispatchFailed, "alarm notification dispatch failed", attrs...)
+		return fmt.Errorf("dispatch notifications: send notifications partially failed: %w", err)
+	}
+
+	sharedlog.Info(ctx, s.logger, EventAlarmNotificationDispatchSucceeded, "alarm notifications dispatched",
 		slog.String("loop", loopName),
+		slog.Int("notifications", len(notifications)),
 		slog.Int("sent", sendResult.Sent),
 		slog.Int("skipped", sendResult.Skipped),
 		slog.Int("failed", sendResult.Failed),
 	)
-
-	if err != nil {
-		return fmt.Errorf("dispatch notifications: send notifications partially failed: %w", err)
-	}
 
 	return nil
 }

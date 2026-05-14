@@ -25,8 +25,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 
 	"github.com/kapu/hololive-kakao-bot-go/internal/adapter"
 	"github.com/kapu/hololive-kakao-bot-go/internal/command"
@@ -52,10 +54,18 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 	}
 
 	key, normalizedParams := r.normalizeCommand(cmdType, params)
+	ctx = sharedlog.WithRuntime(ctx, "bot")
+	ctx = sharedlog.WithComponent(ctx, "command")
+
+	started := time.Now()
+	attrs := commandExecutionAttrs(cmdCtx, key, cmdType)
+	sharedlog.Info(ctx, r.logger, EventBotCommandExecuteStarted, "command execution started", attrs...)
 
 	if err := r.registry.Execute(ctx, cmdCtx, key, normalizedParams); err != nil {
 		if errors.Is(err, command.ErrUnknownCommand) {
-			r.logger.Warn("Unknown command", slog.String("type", cmdType.String()))
+			warnAttrs := append([]slog.Attr{}, attrs...)
+			warnAttrs = append(warnAttrs, sharedlog.SinceMS(started))
+			sharedlog.Warn(ctx, r.logger, EventBotCommandUnknown, "unknown command", warnAttrs...)
 
 			if sendErr := r.sendMessage(ctx, cmdCtx.Room, adapter.ErrUnknownCommand); sendErr != nil {
 				return fmt.Errorf("failed to send unknown command message: %w", sendErr)
@@ -64,8 +74,17 @@ func (r *CommandRouter) Execute(ctx context.Context, cmdCtx *domain.CommandConte
 			return nil
 		}
 
+		failedAttrs := append([]slog.Attr{}, attrs...)
+		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
+		failedAttrs = append(failedAttrs, sharedlog.ErrorAttrs(err)...)
+		sharedlog.Error(ctx, r.logger, EventBotCommandExecuteFailed, "command execution failed", failedAttrs...)
+
 		return fmt.Errorf("execute command: %w", err)
 	}
+
+	successAttrs := append([]slog.Attr{}, attrs...)
+	successAttrs = append(successAttrs, sharedlog.SinceMS(started))
+	sharedlog.Info(ctx, r.logger, EventBotCommandExecuteSucceeded, "command execution succeeded", successAttrs...)
 
 	return nil
 }

@@ -26,6 +26,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 const asyncCommandBackpressureMessage = "요청이 많아 잠시 후 다시 시도해주세요."
@@ -47,12 +48,9 @@ func (b *Bot) executeCommandAsync(
 	task := b.asyncCommandTask(asyncCtx, cancel, cmdCtx, cmdType, params, commandType, chatID)
 
 	if b.workerPool == nil {
-		if b.logger != nil {
-			b.logger.Warn(
-				"Async command worker pool missing; running synchronously",
-				slog.String("command", commandType),
-			)
-		}
+		sharedlog.Warn(ctx, b.logger, EventBotCommandAsyncRejected, "async command worker pool missing; running synchronously",
+			slog.String("command", commandType),
+		)
 
 		task()
 		return
@@ -86,9 +84,12 @@ func (b *Bot) asyncCommandTask(
 }
 
 func (b *Bot) recoverAsyncCommandPanic(commandType string) {
-	if r := recover(); r != nil && b.logger != nil {
-		b.logger.Error(
-			"Panic in async command handler",
+	if r := recover(); r != nil {
+		sharedlog.Error(
+			context.Background(),
+			b.logger,
+			EventBotCommandPanic,
+			"panic in async command handler",
 			slog.Any("panic", r),
 			slog.String("command", commandType),
 		)
@@ -96,15 +97,18 @@ func (b *Bot) recoverAsyncCommandPanic(commandType string) {
 }
 
 func (b *Bot) handleAsyncCommandError(ctx context.Context, err error, commandType string, chatID string) {
-	b.logger.Error("Failed to execute command", slog.Any("error", err))
-
 	errorMsg := b.getErrorMessage(err, commandType)
 	if chatID == "" {
 		return
 	}
 
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
-		b.logger.Error("Failed to send command error message", slog.Any("error", sendErr), slog.String("chat_id", chatID))
+		attrs := []slog.Attr{
+			slog.String("chat_id", chatID),
+			slog.String("command", commandType),
+		}
+		attrs = append(attrs, sharedlog.ErrorAttrs(sendErr)...)
+		sharedlog.Error(ctx, b.logger, EventBotCommandErrorResponseFailed, "failed to send command error response", attrs...)
 	}
 }
 
@@ -114,13 +118,11 @@ func (b *Bot) handleAsyncCommandSubmitError(
 	commandType string,
 	chatID string,
 ) {
-	if b.logger != nil {
-		b.logger.Warn(
-			"Async command rejected by worker pool",
-			slog.String("command", commandType),
-			slog.Any("error", submitErr),
-		)
+	attrs := []slog.Attr{
+		slog.String("command", commandType),
 	}
+	attrs = append(attrs, sharedlog.ErrorAttrs(submitErr)...)
+	sharedlog.Warn(context.Background(), b.logger, EventBotCommandAsyncRejected, "async command rejected by worker pool", attrs...)
 
 	cancel()
 
@@ -132,6 +134,11 @@ func (b *Bot) handleAsyncCommandSubmitError(
 	defer notifyCancel()
 
 	if err := b.sendError(notifyCtx, chatID, asyncCommandBackpressureMessage); err != nil && b.logger != nil {
-		b.logger.Error("Failed to send async backpressure message", slog.Any("error", err), slog.String("chat_id", chatID))
+		attrs := []slog.Attr{
+			slog.String("chat_id", chatID),
+			slog.String("command", commandType),
+		}
+		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
+		sharedlog.Error(notifyCtx, b.logger, EventBotCommandErrorResponseFailed, "failed to send async backpressure message", attrs...)
 	}
 }

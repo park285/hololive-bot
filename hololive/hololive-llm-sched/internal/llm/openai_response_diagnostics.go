@@ -73,7 +73,7 @@ func appendResponseOutputDiagnostics(parts []string, output []responses.Response
 	for _, item := range output {
 		outputTypes = append(outputTypes, describeResponseOutputItemType(item))
 		if refusal := responseOutputItemRefusal(item); refusal != "" {
-			parts = append(parts, fmt.Sprintf("refusal=%s", refusal))
+			parts = append(parts, "refusal=true")
 		}
 	}
 

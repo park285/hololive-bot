@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 func (d *Dispatcher) handleDispatchFailure(
@@ -81,12 +82,13 @@ func (d *Dispatcher) persistDispatchRetries(
 ) error {
 	if len(retryEnvelopes) > 0 {
 		if err := d.consumer.ScheduleRetry(ctx, retryEnvelopes); err != nil {
-			d.logger.Warn("Dispatch failed; schedule retry failed",
+			attrs := []slog.Attr{
 				slog.String("room_id", roomID),
 				slog.String("failure_kind", failureKind),
 				slog.Int("retry_envelopes", len(retryEnvelopes)),
-				slog.Any("error", err),
-			)
+			}
+			attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
+			sharedlog.Warn(ctx, d.logger, EventDispatchRetryScheduleFailed, "dispatch failed; schedule retry failed", attrs...)
 			return d.preserveEnvelopesAfterPersistenceFailure(
 				ctx,
 				roomID,
@@ -100,7 +102,7 @@ func (d *Dispatcher) persistDispatchRetries(
 		for _, backoff := range retryBackoffs {
 			dispatcherRetryBackoff.Observe(backoff.Seconds())
 		}
-		d.logger.Warn("Dispatch failed; scheduled durable retries",
+		sharedlog.Warn(ctx, d.logger, EventDispatchRetryScheduled, "dispatch failed; scheduled durable retries",
 			slog.String("room_id", roomID),
 			slog.String("failure_kind", failureKind),
 			slog.Int("retry_envelopes", len(retryEnvelopes)),
@@ -117,12 +119,13 @@ func (d *Dispatcher) persistDispatchDLQ(
 ) error {
 	if len(dlqEnvelopes) > 0 {
 		if err := d.consumer.MoveToDLQ(ctx, dlqEnvelopes); err != nil {
-			d.logger.Warn("Dispatch retries exhausted; move to DLQ failed",
+			attrs := []slog.Attr{
 				slog.String("room_id", roomID),
 				slog.String("failure_kind", failureKind),
 				slog.Int("dlq_envelopes", len(dlqEnvelopes)),
-				slog.Any("error", err),
-			)
+			}
+			attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
+			sharedlog.Warn(ctx, d.logger, EventDispatchDLQMoveFailed, "dispatch retries exhausted; move to DLQ failed", attrs...)
 			return d.preserveEnvelopesAfterPersistenceFailure(
 				ctx,
 				roomID,
@@ -135,7 +138,7 @@ func (d *Dispatcher) persistDispatchDLQ(
 		dispatcherRetryBudgetExhausted.Add(float64(len(dlqEnvelopes)))
 
 		d.releaseClaimKeys(ctx, roomID, claimKeysForEnvelopes(dlqEnvelopes), failureKind+" retries exhausted")
-		d.logger.Warn("Dispatch retries exhausted; moved envelopes to DLQ",
+		sharedlog.Warn(ctx, d.logger, EventDispatchDLQMoved, "dispatch retries exhausted; moved envelopes to DLQ",
 			slog.String("room_id", roomID),
 			slog.String("failure_kind", failureKind),
 			slog.Int("dlq_envelopes", len(dlqEnvelopes)),
@@ -175,16 +178,17 @@ func (d *Dispatcher) preserveEnvelopesAfterPersistenceFailure(
 	}
 
 	if err := d.consumer.Requeue(ctx, envelopes); err != nil {
-		d.logger.Warn("Dispatch persistence fallback requeue failed",
+		attrs := []slog.Attr{
 			slog.String("room_id", roomID),
 			slog.String("reason", reason),
 			slog.Int("envelopes", len(envelopes)),
-			slog.Any("error", err),
-		)
+		}
+		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
+		sharedlog.Warn(ctx, d.logger, EventDispatchPersistenceFallbackFailed, "dispatch persistence fallback requeue failed", attrs...)
 		return fmt.Errorf("%w: fallback requeue: %w", persistErr, err)
 	}
 
-	d.logger.Warn("Dispatch persistence fallback requeued envelopes",
+	sharedlog.Warn(ctx, d.logger, EventDispatchPersistenceFallbackRequeued, "dispatch persistence fallback requeued envelopes",
 		slog.String("room_id", roomID),
 		slog.String("reason", reason),
 		slog.Int("envelopes", len(envelopes)),
