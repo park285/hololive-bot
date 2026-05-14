@@ -2,8 +2,6 @@ package polltarget
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -139,8 +137,4 @@ func schedulerJobInterval(t *testing.T, scheduler any, key string) time.Duration
 	require.True(t, jobValue.IsValid(), "job %s must exist", key)
 	job := jobValue.Interface().(*poller.Job)
 	return job.Interval
-}
-
-func newPollerRegistrationTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
