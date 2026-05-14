@@ -524,6 +524,18 @@ func TestIsAlreadyNotified_PropagatesCacheError(t *testing.T) {
 	}
 }
 
+func TestService_RecentlyNotifiedStreamIDs(t *testing.T) {
+	cacheMock, _ := newMockDedupCache(t)
+	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())
+
+	start := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, svc.MarkAsNotified(t.Context(), "stream-1", start, 5))
+
+	recent, err := svc.RecentlyNotifiedStreamIDs(t.Context(), []string{"stream-1", "stream-2", "stream-1", ""})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]struct{}{"stream-1": {}}, recent)
+}
+
 func TestService_LegacyStringNotifiedData_MigratesToHash(t *testing.T) {
 	cacheMock, state := newMockDedupCache(t)
 	svc := NewService(cacheMock, []int{5, 3, 1}, newTestLogger())

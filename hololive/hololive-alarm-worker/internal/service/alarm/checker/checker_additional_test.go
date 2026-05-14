@@ -746,6 +746,93 @@ func TestMergePersistedLiveSessionStreamsKeepsHolodexPrimaryFields(t *testing.T)
 	assert.Equal(t, lastSeenAt, observed[streamID])
 }
 
+func TestMergePersistedLiveSessionStreamsPromotesHolodexUpcomingToPersistedLive(t *testing.T) {
+	t.Parallel()
+
+	channelID := "ch-promote"
+	streamID := "stream-promote"
+	holodexScheduled := time.Date(2026, 5, 14, 10, 5, 0, 0, time.UTC)
+	persistedStart := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	lastSeenAt := time.Date(2026, 5, 14, 10, 1, 0, 0, time.UTC)
+	streamsByChannel := map[string][]*domain.Stream{
+		channelID: {{
+			ID:             streamID,
+			Title:          "Holodex stale upcoming",
+			ChannelID:      channelID,
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &holodexScheduled,
+			Channel:        &domain.Channel{ID: channelID, Name: "Holodex Channel"},
+		}},
+	}
+
+	mergePersistedLiveSessionStreams(streamsByChannel, []PersistedYouTubeLiveSession{{
+		Stream: &domain.Stream{
+			ID:             streamID,
+			Title:          "DB live",
+			ChannelID:      channelID,
+			Status:         domain.StreamStatusLive,
+			StartScheduled: &persistedStart,
+			StartActual:    &persistedStart,
+			Channel:        &domain.Channel{ID: channelID, Name: "DB Channel"},
+		},
+		LastSeenAt: lastSeenAt,
+	}})
+
+	require.Len(t, streamsByChannel[channelID], 1)
+	got := streamsByChannel[channelID][0]
+	assert.Equal(t, domain.StreamStatusLive, got.Status)
+	assert.Equal(t, holodexScheduled, *got.StartScheduled)
+	require.NotNil(t, got.StartActual)
+	assert.Equal(t, persistedStart, *got.StartActual)
+	assert.Equal(t, "Holodex stale upcoming", got.Title)
+}
+
+func TestPersistedLiveGuardrailMetasSkipFreshObservationGrace(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	session := PersistedYouTubeLiveSession{
+		Stream: &domain.Stream{
+			ID:        "live-fresh",
+			ChannelID: "ch-live",
+			Status:    domain.StreamStatusLive,
+		},
+		LastSeenAt: now.Add(-30 * time.Second),
+	}
+
+	metas := persistedLiveGuardrailMetas([]PersistedYouTubeLiveSession{session}, map[string][]string{
+		"ch-live": {"room-1"},
+	}, now)
+	assert.Empty(t, metas)
+
+	session.LastSeenAt = now.Add(-3 * time.Minute)
+	metas = persistedLiveGuardrailMetas([]PersistedYouTubeLiveSession{session}, map[string][]string{
+		"ch-live": {"room-1"},
+	}, now)
+	require.Len(t, metas, 1)
+	assert.Equal(t, "live-fresh", metas[0].streamID)
+}
+
+func TestYouTubeCheckerUsesDedupEvidenceWhenPgDispatchMissing(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	source := &fakeYouTubeLiveSessionSource{}
+	checker.persistedLiveSource = source
+
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, dedupSvc.MarkAsNotified(ctx, "stream-dedup-evidence", start, 5))
+
+	dispatched, err := checker.recentlyDispatchedOrNotifiedLiveStreamIDs(
+		ctx,
+		[]string{"stream-dedup-evidence"},
+		start.Add(-24*time.Hour),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, dispatched, "stream-dedup-evidence")
+}
+
 func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {
 	t.Parallel()
 

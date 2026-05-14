@@ -33,7 +33,7 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	liveStart := now.Add(-30 * time.Minute)
 	upcomingStart := now.Add(4 * time.Minute)
-	oldSeen := now.Add(-(sharedconstants.LiveCatchupWindow + time.Second))
+	oldSeen := now.Add(-(defaultPersistedLiveSessionRecentWindow + time.Second))
 	recentSeen := now.Add(-time.Minute)
 
 	require.NoError(t, db.Create([]domain.YouTubeLiveSession{
@@ -92,6 +92,56 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	assert.Contains(t, dispatched, "live-included")
 	assert.NotContains(t, dispatched, "upcoming-included")
 	assert.NotContains(t, dispatched, "old-dispatch")
+}
+
+func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
+	t.Parallel()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}))
+
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	recentSeen := now.Add(-time.Minute)
+	oldSeen := now.Add(-20 * time.Minute)
+
+	require.NoError(t, db.Create([]domain.YouTubeLiveSession{
+		{VideoID: "live-recent", ChannelID: "ch-1", Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
+		{VideoID: "live-old", ChannelID: "ch-2", Status: domain.LiveStatusLive, LastSeenAt: oldSeen},
+		{VideoID: "ended-recent", ChannelID: "ch-3", Status: domain.LiveStatusEnded, LastSeenAt: recentSeen},
+		{VideoID: "outside-request", ChannelID: "ch-4", Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
+	}).Error)
+
+	source := &PgYouTubeLiveSessionSource{db: db}
+	channels, err := source.LoadRecentLiveChannelIDs(t.Context(), []string{"ch-1", "ch-2", "ch-3"}, now)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ch-1"}, channels)
+}
+
+func TestPgYouTubeLiveSessionSourceLiveRecentWindowIndependentFromCatchupWindow(t *testing.T) {
+	t.Parallel()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}))
+
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	start := now.Add(-30 * time.Minute)
+	lastSeenOutsideCatchup := now.Add(-(sharedconstants.LiveCatchupWindow + time.Minute))
+
+	require.NoError(t, db.Create(domain.YouTubeLiveSession{
+		VideoID:    "live-window-independent",
+		ChannelID:  "ch-1",
+		Status:     domain.LiveStatusLive,
+		StartedAt:  &start,
+		LastSeenAt: lastSeenOutsideCatchup,
+	}).Error)
+
+	source := &PgYouTubeLiveSessionSource{db: db}
+	sessions, err := source.LoadRecentSessions(t.Context(), []string{"ch-1"}, now)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	assert.Equal(t, "live-window-independent", sessions[0].Stream.ID)
 }
 
 func sessionsByID(sessions []PersistedYouTubeLiveSession) map[string]PersistedYouTubeLiveSession {
