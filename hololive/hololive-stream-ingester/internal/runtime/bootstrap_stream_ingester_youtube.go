@@ -12,11 +12,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polltarget"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/publishedat"
 )
 
 type ingestionRuntimeYouTubeState struct {
 	operationalChannels   []communityShortsOperationalChannel
-	pollTargets           youtubePollTargets
+	pollTargets           polltarget.Targets
 	communityShortsPolicy communityShortsBigBangPolicy
 	ingestionLease        *providers.IngestionLease
 }
@@ -25,7 +28,7 @@ type ingestionRuntimeYouTubeDependencies struct {
 	scraperScheduler    *poller.Scheduler
 	publishedAtResolver *poller.PendingPublishedAtResolver
 	pollerRegistrations []providers.ChannelPollerRegistration
-	pollTargetRefresher *youTubePollTargetRefresher
+	pollTargetRefresher *polltarget.Refresher
 	youtubeScheduler    youtube.Scheduler
 }
 
@@ -46,7 +49,7 @@ func resolveIngestionRuntimeYouTubeState(
 	if err != nil {
 		return state, fmt.Errorf("resolve community shorts operational channels: %w", err)
 	}
-	pollTargets, err := resolveYouTubePollTargets(ctx, infra.cacheService, infra.postgresService, operationalChannels, logger)
+	pollTargets, err := polltarget.Resolve(ctx, infra.cacheService, infra.postgresService, operationalChannels, logger)
 	if err != nil {
 		return state, err
 	}
@@ -110,10 +113,10 @@ func buildIngestionRuntimeYouTubeDependencies(
 
 	routeDecider := communityshorts.BuildRouteDecider(state.communityShortsPolicy)
 	sharedScraperClient := resolveIngestionSharedScraperClient(cfg.Scraper, infra)
-	if err := validatePublishedAtResolverSchemaIfEnabled(ctx, cfg.Scraper, infra.postgresService, logger); err != nil {
+	if err := publishedat.ValidateSchemaIfEnabled(ctx, cfg.Scraper, infra.postgresService, logger); err != nil {
 		return deps, fmt.Errorf("validate published_at resolver schema: %w", err)
 	}
-	deps.publishedAtResolver = buildPendingPublishedAtResolver(
+	deps.publishedAtResolver = publishedat.BuildPendingResolver(
 		cfg.Scraper,
 		infra.postgresService,
 		sharedScraperClient,
@@ -121,7 +124,7 @@ func buildIngestionRuntimeYouTubeDependencies(
 		logger,
 	)
 	var err error
-	deps.scraperScheduler, deps.pollerRegistrations, err = buildStreamIngesterYouTubeComponents(
+	deps.scraperScheduler, deps.pollerRegistrations, err = polling.BuildComponents(
 		cfg.Scraper,
 		infra.postgresService,
 		state.pollTargets.NotificationChannelIDs,
@@ -135,16 +138,16 @@ func buildIngestionRuntimeYouTubeDependencies(
 	if err != nil {
 		return deps, err
 	}
-	deps.pollTargetRefresher = newYouTubePollTargetRefresher(
+	deps.pollTargetRefresher = polltarget.NewRefresher(
 		infra.cacheService,
 		deps.scraperScheduler,
 		deps.pollerRegistrations,
 		state.operationalChannels,
 		func(ctx context.Context) ([]string, error) {
-			return loadAlarmChannelIDs(ctx, infra.postgresService)
+			return polltarget.LoadAlarmChannelIDs(ctx, infra.postgresService)
 		},
 		logger,
-	).withTieringDB(infra.postgresService.GetGormDB()).withOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
+	).WithTieringDB(infra.postgresService.GetGormDB()).WithOperationalChannelLoader(func(ctx context.Context) ([]communityShortsOperationalChannel, error) {
 		return communityshorts.ResolveOperationalChannelsFromRepository(ctx, infra.memberRepo)
 	})
 	deps.youtubeScheduler = infra.ytStack.Scheduler
@@ -155,7 +158,7 @@ func resolveIngestionSharedScraperClient(scraperCfg config.ScraperConfig, infra 
 	if infra.scraperClient != nil {
 		return infra.scraperClient
 	}
-	return buildSharedYouTubeScraperClient(scraperCfg, infra.cacheService, infra.sharedRL)
+	return polling.BuildSharedClient(scraperCfg, infra.cacheService, infra.sharedRL)
 }
 
 func buildIngestionRuntimeObservationWindowWriter(

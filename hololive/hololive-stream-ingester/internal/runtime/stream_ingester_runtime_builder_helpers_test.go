@@ -16,12 +16,14 @@ import (
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/publishedat"
 )
 
 func TestEstimateResolvedPollerRPM_UsesExplicitChannelCounts(t *testing.T) {
 	t.Parallel()
 
-	rpm := estimateResolvedPollerRPM([]providers.ChannelPollerRegistration{
+	rpm := polling.EstimateResolvedPollerRPM([]providers.ChannelPollerRegistration{
 		providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, time.Minute).
 			WithChannelIDs([]string{"UC_A", "UC_A", "UC_B"}),
 		providers.NewChannelPollerRegistration(fakeTestPoller{name: "stats"}, poller.PriorityLow, 2*time.Minute).
@@ -37,8 +39,8 @@ func TestLogYouTubeScraperBudgetSummary_ReportsPollerAndResolverRPM(t *testing.T
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	logYouTubeScraperBudgetSummary(
-		summarizeYouTubeScraperBudget(
+	polling.LogBudgetSummary(
+		polling.SummarizeBudget(
 			[]providers.ChannelPollerRegistration{
 				providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, time.Second).
 					WithChannelIDs([]string{"UC_A", "UC_B"}).
@@ -67,7 +69,7 @@ func TestLogYouTubeScraperBudgetSummary_ReportsPollerAndResolverRPM(t *testing.T
 func TestSummarizeYouTubeScraperBudget_UsesRegistrationRequestsAndAttempts(t *testing.T) {
 	t.Parallel()
 
-	summary := summarizeYouTubeScraperBudget([]providers.ChannelPollerRegistration{
+	summary := polling.SummarizeBudget([]providers.ChannelPollerRegistration{
 		providers.NewChannelPollerRegistration(fakeTestPoller{name: "shorts"}, poller.PriorityLow, 2*time.Minute).
 			WithChannelIDs([]string{"UC_A", "UC_B"}).
 			WithWorstCaseAttempts(1).
@@ -96,8 +98,8 @@ func TestLogYouTubeScraperBudgetSummary_FaultEnvelopeCanExceedSteadyBudgetViaRec
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	logYouTubeScraperBudgetSummary(
-		summarizeYouTubeScraperBudget([]providers.ChannelPollerRegistration{
+	polling.LogBudgetSummary(
+		polling.SummarizeBudget([]providers.ChannelPollerRegistration{
 			providers.NewChannelPollerRegistration(fakeTestPoller{name: "shorts"}, poller.PriorityLow, 2*time.Minute).
 				WithChannelIDs(repeatChannelIDs("UC_NOTIFY_", 39)).
 				WithWorstCaseAttempts(scraper.HighFrequencyChannelFetchPolicy.MaxAttempts).
@@ -115,7 +117,7 @@ func TestLogYouTubeScraperBudgetSummary_FaultEnvelopeCanExceedSteadyBudgetViaRec
 func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRateLimit(t *testing.T) {
 	t.Parallel()
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:          true,
@@ -130,7 +132,7 @@ func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRate
 	)
 	require.NotNil(t, resolver)
 
-	_, _, err := buildStreamIngesterYouTubeComponents(
+	_, _, err := polling.BuildComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    15 * time.Minute,
@@ -150,7 +152,7 @@ func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRate
 		},
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
-		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		resolver,
@@ -165,14 +167,14 @@ func TestBuildStreamIngesterYouTubeComponents_FailsWhenCombinedBudgetExceedsRate
 func TestBuildStreamIngesterYouTubeComponents_AllowsBudgetSafeDefaultPollConfig(t *testing.T) {
 	t.Parallel()
 
-	scheduler, registrations, err := buildStreamIngesterYouTubeComponents(
+	scheduler, registrations, err := polling.BuildComponents(
 		config.ScraperConfig{},
 		&databasemocks.Client{
 			GetGormDBFunc: func() *gorm.DB { return nil },
 		},
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
-		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
 		nil,
 		nil,
 		nil,
@@ -190,7 +192,7 @@ func TestBuildStreamIngesterYouTubeComponents_ProductionShortsIntervalKeepsRecov
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		config.ScraperConfig{
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
@@ -201,7 +203,7 @@ func TestBuildStreamIngesterYouTubeComponents_ProductionShortsIntervalKeepsRecov
 	)
 	require.NotNil(t, resolver)
 
-	_, _, err := buildStreamIngesterYouTubeComponents(
+	_, _, err := polling.BuildComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    15 * time.Minute,
@@ -217,7 +219,7 @@ func TestBuildStreamIngesterYouTubeComponents_ProductionShortsIntervalKeepsRecov
 		},
 		repeatChannelIDs("UC_NOTIFY_", 12),
 		repeatChannelIDs("UC_STATS_", 111),
-		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, nil),
+		polling.BuildSharedClient(config.ScraperConfig{}, nil, nil),
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		resolver,
@@ -236,7 +238,7 @@ func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:           true,
@@ -263,7 +265,7 @@ func TestBuildPendingPublishedAtResolver_LogsResolveTimeout(t *testing.T) {
 func TestSummarizeYouTubeScraperBudget_ExcludesInactiveResolver(t *testing.T) {
 	t.Parallel()
 
-	summary := summarizeYouTubeScraperBudget(
+	summary := polling.SummarizeBudget(
 		[]providers.ChannelPollerRegistration{
 			providers.NewChannelPollerRegistration(fakeTestPoller{name: "videos"}, poller.PriorityNormal, 10*time.Minute).
 				WithChannelIDs([]string{"UC_A"}).

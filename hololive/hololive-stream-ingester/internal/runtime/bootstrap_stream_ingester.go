@@ -31,6 +31,8 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/alarmcache"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/readiness"
 	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
@@ -58,7 +60,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 	logFeatureOverride(logger, spec)
 
 	features := spec.features
-	readiness := newIngestionReadinessState(spec.name, features)
+	readiness := newReadinessState(spec.name, features)
 
 	logIngestionRuntimeConfigured(logger, spec.name, features)
 
@@ -73,7 +75,7 @@ func buildIngestionRuntime(ctx context.Context, cfg *config.Config, logger *slog
 		return nil, err
 	}
 
-	if warnErr := observeSubscriberCacheOnYouTubeStartup(ctx, spec.name, features.youtubeEnabled, infra.cacheService, logger); warnErr != nil {
+	if warnErr := alarmcache.ObserveSubscriberCacheOnYouTubeStartup(ctx, spec.name, features.youtubeEnabled, infra.cacheService, logger); warnErr != nil {
 		logger.Warn("Failed to observe subscriber cache on startup",
 			slog.String("runtime", spec.name),
 			slog.Any("error", warnErr),
@@ -146,7 +148,7 @@ func newStreamIngesterRuntime(
 	logger *slog.Logger,
 	runtimeName string,
 	features ingestionRuntimeFeatures,
-	readiness *ingestionReadinessState,
+	readinessState *readiness.State,
 	infra *streamIngesterInfrastructure,
 	youtubeState ingestionRuntimeYouTubeState,
 	youtubeDeps ingestionRuntimeYouTubeDependencies,
@@ -170,7 +172,7 @@ func newStreamIngesterRuntime(
 		PollTargetRefresher:                    youtubeDeps.pollTargetRefresher,
 		ServerAddr:                             fmt.Sprintf(":%d", cfg.Server.Port),
 		HttpServer:                             httpServer,
-		Readiness:                              readiness,
+		Readiness:                              readinessState,
 		CommunityShortsBigBangPolicy:           youtubeState.communityShortsPolicy,
 		communityShortsObservationWindowWriter: observationWindowWriter,
 		ingestionLease:                         youtubeState.ingestionLease,
@@ -183,12 +185,12 @@ func buildStreamIngesterHTTPServer(
 	cfg *config.Config,
 	logger *slog.Logger,
 	runtimeName string,
-	readiness *ingestionReadinessState,
+	readinessState *readiness.State,
 ) (*http.Server, error) {
 	router, err := sharedserver.NewHealthOnlyRuntimeRouter(ctx, logger, cfg.Server.APIKey, func(opts *sharedserver.RuntimeRouterOptions) {
 		opts.EnableGzip = true
 		opts.ReadyResponder = func(c *gin.Context) {
-			statusCode, payload := readiness.response()
+			statusCode, payload := readinessState.Response()
 			c.JSON(statusCode, payload)
 		}
 	})
@@ -198,6 +200,6 @@ func buildStreamIngesterHTTPServer(
 	return sharedserver.NewH2CServer(
 		fmt.Sprintf(":%d", cfg.Server.Port),
 		router,
-		runtimeHTTPServerOperationName(runtimeName),
+		readiness.HTTPServerOperationName(runtimeName),
 	), nil
 }

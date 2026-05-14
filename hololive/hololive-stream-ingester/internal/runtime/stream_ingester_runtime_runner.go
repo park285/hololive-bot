@@ -35,6 +35,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polltarget"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/readiness"
 	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
@@ -49,12 +51,12 @@ type StreamIngesterRuntime struct {
 	PublishedAtResolver *poller.PendingPublishedAtResolver
 	PhotoSync           *holodex.PhotoSyncService
 	ConfigSubscriber    *configsub.Subscriber
-	PollTargetRefresher *youTubePollTargetRefresher
+	PollTargetRefresher *polltarget.Refresher
 
 	ServerAddr string
 	HttpServer *http.Server
 
-	Readiness *ingestionReadinessState
+	Readiness *readiness.State
 
 	CommunityShortsBigBangPolicy           communityShortsBigBangPolicy
 	communityShortsObservationWindowWriter communityShortsObservationWindowWriter
@@ -93,7 +95,7 @@ func (r *StreamIngesterRuntime) startRuntime(ctx context.Context, errCh chan<- e
 		return
 	}
 	if r.Readiness != nil {
-		r.Readiness.markRunning()
+		r.Readiness.MarkRunning()
 	}
 	sharedlog.Info(ctx, r.Logger, EventIngestionRuntimeStarted, "ingestion runtime started",
 		sharedlog.Runtime(r.runtimeName()),
@@ -104,7 +106,7 @@ func (r *StreamIngesterRuntime) startRuntime(ctx context.Context, errCh chan<- e
 
 func (r *StreamIngesterRuntime) handleShutdownSignal(sig os.Signal) {
 	if r.Readiness != nil {
-		r.Readiness.markStopping("")
+		r.Readiness.MarkStopping("")
 	}
 	r.Logger.Info("Received shutdown signal",
 		slog.String("runtime", r.runtimeName()),
@@ -114,7 +116,7 @@ func (r *StreamIngesterRuntime) handleShutdownSignal(sig os.Signal) {
 
 func (r *StreamIngesterRuntime) handleRuntimeError(err error) {
 	if r.Readiness != nil {
-		r.Readiness.markStopping(err.Error())
+		r.Readiness.MarkStopping(err.Error())
 	}
 	r.Logger.Error("Server error",
 		slog.String("runtime", r.runtimeName()),

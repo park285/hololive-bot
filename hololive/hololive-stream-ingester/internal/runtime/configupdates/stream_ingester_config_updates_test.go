@@ -18,14 +18,50 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package runtime
+package configupdates
 
 import (
+	"context"
+	"sync"
 	"testing"
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
+	sharedlogging "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/stretchr/testify/assert"
 )
+
+var testLogger = sharedlogging.NewLogger
+
+type fakeYouTubeService struct {
+	mu           sync.Mutex
+	setCalls     int
+	lastEnabled  bool
+	proxyEnabled bool
+}
+
+func (f *fakeYouTubeService) SetScraperProxyEnabled(enabled bool) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.setCalls++
+	f.lastEnabled = enabled
+	f.proxyEnabled = enabled
+	return true
+}
+
+func (f *fakeYouTubeService) ScraperProxyEnabled() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.proxyEnabled
+}
+
+func (f *fakeYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
+	return map[string]*youtube.ChannelStats{}, nil
+}
+
+func (f *fakeYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
+	return []string{}, nil
+}
 
 func TestApplyScraperProxyToggle_NilDeps(t *testing.T) {
 	t.Parallel()

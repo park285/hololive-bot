@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package runtime
+package polling
 
 import (
 	"context"
@@ -30,6 +30,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polltarget"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/publishedat"
 	"gorm.io/gorm"
 )
 
@@ -65,7 +67,7 @@ func buildStreamIngesterChannelPollerRegistrationsWithClient(
 	statsChannelIDs []string,
 ) []providers.ChannelPollerRegistration {
 	poll := scraperCfg.PollOrDefault()
-	resolverCfg := effectivePublishedAtResolverConfig(scraperCfg)
+	resolverCfg := publishedat.EffectiveConfig(scraperCfg)
 	inlineResolveMissingPublishedAt := routeDecider != nil && !resolverCfg.Enabled
 	communityKeywords := []string{}
 	db := postgres.GetGormDB()
@@ -73,7 +75,7 @@ func buildStreamIngesterChannelPollerRegistrationsWithClient(
 	tieringEnabled := scraperCfg.PollTiering.Enabled
 	pollers := newStreamIngesterPollerSet(scraperClient, liveStatusProvider, db, maxResults, communityKeywords, routeDecider, inlineResolveMissingPublishedAt)
 
-	if registrations, ok := tryBuildTieredChannelPollerRegistrations(tieringEnabled, db, pollers, poll, youtubePollTargets{
+	if registrations, ok := tryBuildTieredChannelPollerRegistrations(tieringEnabled, db, pollers, poll, polltarget.Targets{
 		NotificationChannelIDs: notificationChannelIDs,
 		StatsChannelIDs:        statsChannelIDs,
 	}, inlineResolveMissingPublishedAt, maxResults); ok {
@@ -150,14 +152,14 @@ func tryBuildTieredChannelPollerRegistrations(
 	db *gorm.DB,
 	pollers streamIngesterPollerSet,
 	poll config.ScraperPoll,
-	targets youtubePollTargets,
+	targets polltarget.Targets,
 	inlineResolveMissingPublishedAt bool,
 	maxResults int,
 ) ([]providers.ChannelPollerRegistration, bool) {
 	if !enabled {
 		return nil, false
 	}
-	tieredTargets, tierErr := classifyYouTubePollTargetsByActivity(context.Background(), db, targets, time.Now())
+	tieredTargets, tierErr := polltarget.ClassifyByActivity(context.Background(), db, targets, time.Now())
 	if tierErr != nil {
 		return nil, false
 	}
@@ -167,7 +169,7 @@ func tryBuildTieredChannelPollerRegistrations(
 func buildTieredStreamIngesterChannelPollerRegistrations(
 	pollers streamIngesterPollerSet,
 	poll config.ScraperPoll,
-	targets youtubeTieredPollTargets,
+	targets polltarget.TieredTargets,
 	inlineResolveMissingPublishedAt bool,
 	maxResults int,
 ) []providers.ChannelPollerRegistration {
@@ -191,7 +193,7 @@ func buildTieredStreamIngesterChannelPollerRegistrations(
 func appendTieredNotificationRegistration(
 	registrations []providers.ChannelPollerRegistration,
 	pollerInstance poller.Poller,
-	targets youtubeTieredPollTargets,
+	targets polltarget.TieredTargets,
 	baseInterval time.Duration,
 	basePriority poller.Priority,
 	worstCaseAttempts int,

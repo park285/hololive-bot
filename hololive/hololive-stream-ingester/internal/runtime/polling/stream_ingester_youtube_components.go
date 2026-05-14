@@ -1,4 +1,4 @@
-package runtime
+package polling
 
 import (
 	"log/slog"
@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/publishedat"
 )
 
 func buildStreamIngesterYouTubeComponents(
@@ -31,7 +32,7 @@ func buildStreamIngesterYouTubeComponents(
 		notificationChannelIDs,
 		statsChannelIDs,
 	)
-	if resolverRegistration := buildPublishedAtResolverRegistration(publishedAtResolver, scraperCfg, logger); resolverRegistration != nil {
+	if resolverRegistration := publishedat.BuildRegistration(publishedAtResolver, scraperCfg, logger); resolverRegistration != nil {
 		pollerRegistrations = append(pollerRegistrations, *resolverRegistration)
 	}
 	if err := validateExplicitPollerRegistrations(pollerRegistrations); err != nil {

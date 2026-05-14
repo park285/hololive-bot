@@ -23,8 +23,10 @@ package runtime
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"sync"
 	"testing"
+	"unsafe"
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
@@ -71,6 +73,24 @@ func (f *fakeScheduler) Start(context.Context) { f.startCalls++ }
 func (f *fakeScheduler) Stop()                 { f.stopCalls++ }
 
 var testLogger = sharedlogging.NewLogger
+
+func schedulerJobKeys(t *testing.T, scheduler any) []string {
+	t.Helper()
+
+	field := reflect.ValueOf(scheduler).Elem().FieldByName("jobMap")
+	if !field.IsValid() {
+		t.Fatal("jobMap field must exist")
+	}
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+
+	keys := make([]string, 0, field.Len())
+	iterator := field.MapRange()
+	for iterator.Next() {
+		keys = append(keys, iterator.Key().String())
+	}
+
+	return keys
+}
 
 func TestApplyScraperProxyToggle(t *testing.T) {
 	t.Parallel()
@@ -139,7 +159,7 @@ func TestStreamIngesterRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 	t.Parallel()
 
 	scheduler := &fakeScheduler{}
-	readiness := newIngestionReadinessState(youtubeScraperRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(youtubeScraperRuntimeName, ingestionRuntimeFeatures{
 		youtubeEnabled:   true,
 		photoSyncEnabled: false,
 	})
@@ -163,7 +183,7 @@ func TestStreamIngesterRuntimeRunStopsSchedulerOnServerError(t *testing.T) {
 		t.Fatalf("scheduler Stop calls = %d, want 1", scheduler.stopCalls)
 	}
 
-	statusCode, payload := readiness.response()
+	statusCode, payload := readiness.Response()
 	if statusCode != http.StatusServiceUnavailable {
 		t.Fatalf("readiness status code = %d, want %d", statusCode, http.StatusServiceUnavailable)
 	}
