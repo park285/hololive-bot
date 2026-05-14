@@ -223,18 +223,24 @@ func renderAlarmDispatchNotificationGroup(group alarmDispatchGroup) string {
 	}
 	for _, notification := range group.notifications {
 		builder.WriteString("\n\n")
-		builder.WriteString(renderAlarmDispatchNotification(notification))
+		builder.WriteString(renderAlarmDispatchNotificationInGroup(notification, group.minutesUntil))
 	}
 	return builder.String()
 }
 
 func renderAlarmDispatchNotification(notification domain.AlarmNotification) string {
+	return renderAlarmDispatchNotificationInGroup(notification, -1)
+}
+
+func renderAlarmDispatchNotificationInGroup(notification domain.AlarmNotification, groupMinutesUntil int) string {
 	memberName := resolveAlarmDispatchMemberName(notification)
 	title := resolveAlarmDispatchTitle(notification)
 	url := resolveAlarmDispatchURL(notification)
 	var builder strings.Builder
 	if notification.MinutesUntil <= 0 {
 		fmt.Fprintf(&builder, "🔔 %s 방송 시작!\n", memberName)
+	} else if groupMinutesUntil > 0 && notification.MinutesUntil == groupMinutesUntil {
+		fmt.Fprintf(&builder, "⏰ %s 방송 예정\n", memberName)
 	} else {
 		fmt.Fprintf(&builder, "⏰ %s 방송 %d분 전\n", memberName, notification.MinutesUntil)
 	}
@@ -273,23 +279,34 @@ func resolveAlarmDispatchURL(notification domain.AlarmNotification) string {
 		return ""
 	}
 	stream := notification.Stream
-	if stream.IsTwitchOnly {
-		return stream.GetTwitchLiveURL()
-	}
-	if stream.IsChzzkOnly {
-		return stream.GetChzzkLiveURL()
+	if url, ok := resolveAlarmDispatchDirectPlatformURL(stream); ok {
+		return url
 	}
 	if stream.IsIntegrated {
-		youtubeURL := stream.GetYouTubeURL()
-		if youtubeURL == "" {
-			return ""
-		}
-		if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
-			return fmt.Sprintf("%s | %s", youtubeURL, chzzkURL)
-		}
-		return youtubeURL
+		return resolveAlarmDispatchIntegratedURL(stream)
 	}
 	return stream.GetYouTubeURL()
+}
+
+func resolveAlarmDispatchDirectPlatformURL(stream *domain.Stream) (string, bool) {
+	if stream.IsTwitchOnly && stream.GetTwitchLiveURL() != "" {
+		return stream.GetTwitchLiveURL(), true
+	}
+	if stream.IsChzzkOnly && stream.GetChzzkLiveURL() != "" {
+		return stream.GetChzzkLiveURL(), true
+	}
+	return "", false
+}
+
+func resolveAlarmDispatchIntegratedURL(stream *domain.Stream) string {
+	youtubeURL := stream.GetYouTubeURL()
+	if youtubeURL == "" {
+		return ""
+	}
+	if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
+		return fmt.Sprintf("%s | %s", youtubeURL, chzzkURL)
+	}
+	return youtubeURL
 }
 
 func claimKeysForAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) []string {

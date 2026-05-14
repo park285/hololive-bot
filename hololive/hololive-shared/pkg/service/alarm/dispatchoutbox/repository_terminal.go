@@ -33,7 +33,7 @@ func (r *PgxRepository) terminalUpdates(ctx context.Context, updates []TerminalU
 		WHERE d.id = input.id
 		  AND d.locked_by = $3
 		  AND %s`, column, statusFilter)
-	tag, err := r.pool.Exec(ctx, query, raw, string(status), workerID)
+	tag, err := r.pool.Exec(ctx, query, jsonbRecordsetParam(raw), string(status), workerID)
 	if err != nil {
 		return fmt.Errorf("mark dispatch deliveries terminal: %w", err)
 	}
