@@ -52,6 +52,7 @@ sudo find data logs -type f -exec chmod 660 {} +
 운영 라우팅 고정:
 - YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-scraper`의 outbox dispatcher 경로로만 발송합니다.
 - compose 기준 rollout key는 `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED` 하나만 사용하고, canary fallback은 두지 않습니다. 운영 compose에서는 `youtube-scraper=true`, `stream-ingester=false`로 고정합니다.
+- `youtube-scraper` 실행 권한은 `YOUTUBE_SCRAPER_RUNTIME_ALLOWED`로 한 번 더 제한합니다. 중앙 host 기본값은 `false`이고 Osaka overlay에서만 `true`입니다.
 
 ## Osaka split-host 운영
 
@@ -62,6 +63,7 @@ Osaka split-host 구성에서는 runtime container만 `kapu-iris-osaka-1` (`100.
 - Osaka compose overlay: `docker-compose.prod.yml` + `docker-compose.osaka.yml`
 - Osaka env file: `.env.osaka` (`COMPOSE_ENV_FILE=./.env.osaka`)
 - Osaka `.env.osaka`의 `CACHE_PASSWORD`는 중앙 host `.env`의 `CACHE_PASSWORD`와 동일해야 합니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
+- 중앙 host의 `./scripts/deploy/compose-redeploy-service.sh youtube-scraper`는 기본적으로 차단됩니다. Osaka overlay 또는 명시적 emergency override 없이 중앙에서 재기동하지 않습니다.
 
 Osaka에서는 local infra dependency를 만들지 않도록 service start에 `--no-deps`를 붙입니다.
 
@@ -230,10 +232,11 @@ docker compose -f docker-compose.prod.yml logs -f dispatcher-go
 ```
 
 - compose 런타임에서는 `LOG_DIR=/app/logs`로 설정해 host `./logs/bot.log`, `./logs/admin-api.log`, `./logs/alarm-worker.log`, `./logs/dispatcher-go.log`, `./logs/llm-scheduler.log`, `./logs/stream-ingester.log`, `./logs/youtube-scraper.log`에 파일 미러링합니다.
-- 앱 파일 로그 로테이션 기본값은 `100MB`, `5 backups`, `30일`, `gzip 압축`입니다.
+- 앱 파일 로그 로테이션 기본값은 `5MB`, `5 backups`, `30일`, `gzip 압축`입니다.
 - 압축 백업은 `./logs/archive/*.gz`로 이동해 보관합니다.
-- Docker Compose `json-file` 드라이버 로테이션 기본값은 `10MB`, `3 files`입니다.
+- Docker Compose `json-file` 드라이버 로테이션 기본값은 짧은 stdout/stderr 안전 버퍼용 `5MB`, `3 files`입니다.
 - 기본 운영 경로는 `logs/*.log`와 `logs/archive/*.gz`입니다.
+- Osaka split-host에서도 같은 앱 파일 로그 로테이션 정책을 사용합니다. 별도 일일 log rollup/truncate를 사용하지 않으며, `hololive-osaka-log-rollup.timer`는 masked 상태가 정상입니다.
 - `logs/mirror/*.log`는 `ENABLE_LOG_MIRROR=1`일 때만 생성되는 선택적 로컬 미러링이며 운영 SSOT가 아닙니다.
 - `logs/backfill/*.log`, `logs/canary/`, `logs/cron/`, `logs/runtime/pids/`는 `ENABLE_LOG_AUX_FILES=1`일 때만 사용하는 보조 운영 산출물입니다.
 - 보조 로그 정리는 `./scripts/logs/logs.sh prune` 기준으로 수행합니다.
