@@ -849,6 +849,30 @@ func TestPersistedLiveGuardrailMetasSkipFreshObservationGrace(t *testing.T) {
 	assert.Equal(t, "live-fresh", metas[0].streamID)
 }
 
+func TestPersistedLiveGuardrailDoesNotStayInGraceWhenLastSeenKeepsRefreshing(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 14, 10, 10, 0, 0, time.UTC)
+	session := PersistedYouTubeLiveSession{
+		Stream: &domain.Stream{
+			ID:        "live-no-dispatch",
+			ChannelID: "ch-1",
+			Status:    domain.StreamStatusLive,
+		},
+		LastSeenAt:      now.Add(-30 * time.Second),
+		LiveFirstSeenAt: now.Add(-5 * time.Minute),
+	}
+
+	metas := persistedLiveGuardrailMetas(
+		[]PersistedYouTubeLiveSession{session},
+		map[string][]string{"ch-1": {"room-1"}},
+		now,
+	)
+
+	require.Len(t, metas, 1)
+	assert.Equal(t, "live-no-dispatch", metas[0].streamID)
+}
+
 func TestYouTubeCheckerUsesDedupEvidenceWhenPgDispatchMissing(t *testing.T) {
 	t.Parallel()
 
@@ -891,7 +915,7 @@ func TestRecentLiveDispatchEvidenceIncludesSentRooms(t *testing.T) {
 	assert.Equal(t, []string{"room-2"}, missingLiveDeliveryRooms([]string{"room-1", "room-2"}, evidence.sentRoomsByStreamID["stream-delivery"]))
 }
 
-func TestRecentLiveDispatchEvidenceReturnsSentDeliveryErrorEvenWithDispatchEvidence(t *testing.T) {
+func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButDispatchEvidenceExists(t *testing.T) {
 	t.Parallel()
 
 	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
@@ -904,10 +928,48 @@ func TestRecentLiveDispatchEvidenceReturnsSentDeliveryErrorEvenWithDispatchEvide
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "stream-delivery-error", start, 5))
 
-	_, err := checker.recentLiveDispatchEvidence(
+	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
 		[]string{"stream-delivery-error"},
 		start.Add(-24*time.Hour),
+	)
+	require.NoError(t, err)
+	assert.True(t, evidence.deliveryCheckFailed)
+	assert.Contains(t, evidence.pgDispatchedStreamIDs, "stream-delivery-error")
+}
+
+func TestRecentLiveDispatchEvidenceContinuesWhenDeliveryLookupFailsButValkeyEvidenceExists(t *testing.T) {
+	t.Parallel()
+
+	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	checker.persistedLiveSource = &fakeYouTubeLiveSessionSource{
+		recentSentRoomsErr: errors.New("sent delivery lookup failed"),
+	}
+
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "stream-valkey-evidence", start, 5))
+
+	evidence, err := checker.recentLiveDispatchEvidence(
+		t.Context(),
+		[]string{"stream-valkey-evidence"},
+		start.Add(-24*time.Hour),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, evidence.valkeyNotifiedStreamIDs, "stream-valkey-evidence")
+}
+
+func TestRecentLiveDispatchEvidenceReturnsDeliveryLookupErrorWithoutEvidence(t *testing.T) {
+	t.Parallel()
+
+	checker, _ := newTestYouTubeCheckerWithDedup(t)
+	checker.persistedLiveSource = &fakeYouTubeLiveSessionSource{
+		recentSentRoomsErr: errors.New("sent delivery lookup failed"),
+	}
+
+	_, err := checker.recentLiveDispatchEvidence(
+		t.Context(),
+		[]string{"stream-without-evidence"},
+		time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC).Add(-24*time.Hour),
 	)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "pg sent delivery evidence")
