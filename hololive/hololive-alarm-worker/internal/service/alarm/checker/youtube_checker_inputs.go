@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -25,6 +26,12 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 	}
 
 	dueChannels := c.tierScheduler.SelectDueChannels(channelIDs)
+	persistedLiveChannels, persistedLiveChannelErr := c.loadPersistedLiveChannelIDs(ctx, channelIDs, now)
+	if persistedLiveChannelErr != nil {
+		c.logPersistedLiveSourceError(persistedLiveChannelErr)
+	} else {
+		dueChannels = mergeSortedUniqueStrings(dueChannels, persistedLiveChannels)
+	}
 	if len(dueChannels) == 0 {
 		return nil, nil, nil, nil, nil
 	}
@@ -47,6 +54,44 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 	c.observePersistedLiveGuardrails(ctx, persistedSessions, subscriberMap, now)
 
 	return dueChannels, streamsByChannel, liveObservedAtByStreamID, subscriberMap, nil
+}
+
+func (c *YouTubeChecker) loadPersistedLiveChannelIDs(
+	ctx context.Context,
+	channelIDs []string,
+	now time.Time,
+) ([]string, error) {
+	if c.persistedLiveSource == nil {
+		return nil, nil
+	}
+
+	channels, err := c.persistedLiveSource.LoadRecentLiveChannelIDs(ctx, channelIDs, now)
+	if err != nil {
+		observeYouTubePersistedLiveSessions("channel_load_error", "live", 1)
+		return nil, fmt.Errorf("load persisted live channel ids: %w", err)
+	}
+	if len(channels) > 0 {
+		observeYouTubePersistedLiveSessions("channel_due_forced", "live", len(channels))
+	}
+	return channels, nil
+}
+
+func mergeSortedUniqueStrings(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	result := make([]string, 0, len(a)+len(b))
+	for _, value := range append(a, b...) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (c *YouTubeChecker) loadHolodexStreamsByChannel(

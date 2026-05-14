@@ -42,16 +42,27 @@ import (
 )
 
 type fakeYouTubeLiveSessionSource struct {
-	sessions       []PersistedYouTubeLiveSession
-	recentDispatch map[string]bool
+	sessions              []PersistedYouTubeLiveSession
+	recentLiveChannelIDs  []string
+	recentDispatch        map[string]bool
+	loadRecentChannelArgs [][]string
 }
 
 func (s *fakeYouTubeLiveSessionSource) LoadRecentSessions(
-	context.Context,
-	[]string,
-	time.Time,
+	_ context.Context,
+	ids []string,
+	_ time.Time,
 ) ([]PersistedYouTubeLiveSession, error) {
+	s.loadRecentChannelArgs = append(s.loadRecentChannelArgs, append([]string(nil), ids...))
 	return s.sessions, nil
+}
+
+func (s *fakeYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
+	_ context.Context,
+	_ []string,
+	_ time.Time,
+) ([]string, error) {
+	return s.recentLiveChannelIDs, nil
 }
 
 func (s *fakeYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
@@ -405,6 +416,72 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 	assert.Equal(t, roomID, notifications[0].RoomID)
 	assert.Equal(t, streamID, notifications[0].Stream.ID)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
+}
+
+func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *testing.T) {
+	t.Parallel()
+
+	const (
+		channelID = "UC_TEST_CHANNEL"
+		roomID    = "room-1"
+		streamID  = "stream-force-due"
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/live" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService(server.URL, "test-key", cacheSvc, nil, logger)
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	liveStart := now.Add(-2 * time.Minute)
+	persistedSource := &fakeYouTubeLiveSessionSource{}
+
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, persistedSource, logger)
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	_, err = cacheSvc.SAdd(ctx, notification.AlarmChannelRegistryKey, []string{channelID})
+	require.NoError(t, err)
+	_, err = cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	require.NoError(t, err)
+
+	first, err := checker.Check(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, first)
+
+	persistedSource.recentLiveChannelIDs = []string{channelID}
+	persistedSource.sessions = []PersistedYouTubeLiveSession{{
+		Stream: &domain.Stream{
+			ID:             streamID,
+			Title:          "Persisted live",
+			ChannelID:      channelID,
+			Status:         domain.StreamStatusLive,
+			StartScheduled: &liveStart,
+			StartActual:    &liveStart,
+			Channel:        &domain.Channel{ID: channelID, Name: "Persisted Channel"},
+		},
+		LastSeenAt: now,
+	}}
+	persistedSource.recentDispatch = map[string]bool{streamID: true}
+
+	second, err := checker.Check(ctx)
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+	assert.Equal(t, streamID, second[0].Stream.ID)
+	require.NotEmpty(t, persistedSource.loadRecentChannelArgs)
+	assert.Contains(t, persistedSource.loadRecentChannelArgs[len(persistedSource.loadRecentChannelArgs)-1], channelID)
 }
 
 func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing.T) {
