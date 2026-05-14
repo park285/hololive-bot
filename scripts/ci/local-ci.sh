@@ -257,6 +257,8 @@ go_mod_readonly() {
 }
 
 run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
+run_step "Refactor admin guardrail" ./scripts/refactor/validate-no-admin-touch.sh
+run_step "Refactor admin guardrail tests" ./scripts/refactor/test-validate-no-admin-touch.sh
 run_step "Go toolchain" check_go_toolchain
 run_step "go work sync drift" check_go_work_sync
 run_step "gofmt" check_gofmt
