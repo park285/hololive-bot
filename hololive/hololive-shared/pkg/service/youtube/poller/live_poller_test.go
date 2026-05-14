@@ -25,7 +25,7 @@ func (p *fakeLiveStatusProvider) GetChannelsLiveStatus(_ context.Context, channe
 	return p.streams, nil
 }
 
-func TestLivePollerPollUsesLiveStatusProviderAndEnqueuesLiveOutboxAfterBaseline(t *testing.T) {
+func TestLivePollerPollUsesLiveStatusProviderWithoutEnqueuingLiveOutbox(t *testing.T) {
 	db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
 
@@ -67,13 +67,7 @@ func TestLivePollerPollUsesLiveStatusProviderAndEnqueuesLiveOutboxAfterBaseline(
 	require.Equal(t, startedAt, session.StartedAt.UTC())
 
 	require.NoError(t, db.Find(&outboxes).Error)
-	require.Len(t, outboxes, 1)
-	require.Equal(t, domain.OutboxKindLiveStream, outboxes[0].Kind)
-	require.Equal(t, domain.OutboxStatusPending, outboxes[0].Status)
-	require.Equal(t, "UC_LIVE", outboxes[0].ChannelID)
-	require.Equal(t, "live-1", outboxes[0].ContentID)
-	require.Contains(t, outboxes[0].Payload, `"video_id":"live-1"`)
-	require.Contains(t, outboxes[0].Payload, `"title":"Live One"`)
+	require.Empty(t, outboxes)
 
 	var sample domain.YouTubeLiveViewerSample
 	require.NoError(t, db.First(&sample, "video_id = ?", "live-1").Error)
@@ -81,7 +75,7 @@ func TestLivePollerPollUsesLiveStatusProviderAndEnqueuesLiveOutboxAfterBaseline(
 
 	require.NoError(t, poller.Poll(context.Background(), "UC_LIVE"))
 	require.NoError(t, db.Find(&outboxes).Error)
-	require.Len(t, outboxes, 1)
+	require.Empty(t, outboxes)
 }
 
 func TestLivePollerPollBaselineLiveDoesNotEnqueueOutbox(t *testing.T) {
@@ -111,7 +105,7 @@ func TestLivePollerPollBaselineLiveDoesNotEnqueueOutbox(t *testing.T) {
 	require.Empty(t, outboxes)
 }
 
-func TestLivePollerPollBaselineLiveEnqueuesWhenPersistedSessionWasUpcoming(t *testing.T) {
+func TestLivePollerPollBaselineLiveUpdatesPersistedSessionWithoutOutbox(t *testing.T) {
 	db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
 
@@ -141,12 +135,10 @@ func TestLivePollerPollBaselineLiveEnqueuesWhenPersistedSessionWasUpcoming(t *te
 
 	var outboxes []domain.YouTubeNotificationOutbox
 	require.NoError(t, db.Find(&outboxes).Error)
-	require.Len(t, outboxes, 1)
-	require.Equal(t, domain.OutboxKindLiveStream, outboxes[0].Kind)
-	require.Equal(t, "live-after-restart", outboxes[0].ContentID)
+	require.Empty(t, outboxes)
 }
 
-func TestLivePollerPollUnseenLiveAfterBaselineEnqueuesOutbox(t *testing.T) {
+func TestLivePollerPollUnseenLiveAfterBaselineDoesNotEnqueueOutbox(t *testing.T) {
 	db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
 	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
 
@@ -168,8 +160,7 @@ func TestLivePollerPollUnseenLiveAfterBaselineEnqueuesOutbox(t *testing.T) {
 
 	var outboxes []domain.YouTubeNotificationOutbox
 	require.NoError(t, db.Find(&outboxes).Error)
-	require.Len(t, outboxes, 1)
-	require.Equal(t, "live-after-baseline", outboxes[0].ContentID)
+	require.Empty(t, outboxes)
 }
 
 func TestLivePollerPollPropagatesLiveStatusProviderError(t *testing.T) {

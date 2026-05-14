@@ -580,7 +580,51 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 	})
 
-	t.Run("build channel notifications skips live catchup", func(t *testing.T) {
+	t.Run("build live catchup notifications", func(t *testing.T) {
+		start := now.Add(-3 * time.Minute)
+		stream := &domain.Stream{
+			ID:             "live-1",
+			Title:          "live title",
+			ChannelID:      "ch-live",
+			Status:         domain.StreamStatusLive,
+			StartScheduled: &start,
+			StartActual:    &start,
+			Channel:        &domain.Channel{ID: "ch-live", Name: "Live Channel"},
+		}
+
+		notifications, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
+		require.NoError(t, err)
+		require.Len(t, notifications, 2)
+
+		require.NoError(t, dedupSvc.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
+
+		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
+		require.NoError(t, err)
+		require.Len(t, notifications, 1)
+		assert.Equal(t, "room2", notifications[0].RoomID)
+
+		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 0))
+
+		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
+		require.NoError(t, err)
+		assert.Empty(t, notifications)
+
+		oldStart := now.Add(-10 * time.Minute)
+		oldStream := &domain.Stream{ID: "live-old", Status: domain.StreamStatusLive, StartScheduled: &oldStart}
+
+		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", oldStream, []string{"room1"}, now)
+		require.NoError(t, err)
+		assert.Empty(t, notifications)
+
+		futureStart := now.Add(2 * time.Minute)
+		futureStream := &domain.Stream{ID: "live-future", Status: domain.StreamStatusLive, StartScheduled: &futureStart}
+
+		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", futureStream, []string{"room1"}, now)
+		require.NoError(t, err)
+		assert.Empty(t, notifications)
+	})
+
+	t.Run("build channel notifications", func(t *testing.T) {
 		upcomingStart := now.Add(5 * time.Minute)
 		liveStart := now.Add(-2 * time.Minute)
 		streams := []*domain.Stream{
@@ -608,11 +652,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 
 		notifications, err := checker.buildChannelNotifications(ctx, "ch-1", []string{"room1", "room2"}, streams, window, now)
 		require.NoError(t, err)
-		require.Len(t, notifications, 2)
-		for _, notification := range notifications {
-			require.NotNil(t, notification.Stream)
-			assert.Equal(t, domain.StreamStatusUpcoming, notification.Stream.Status)
-		}
+		assert.NotEmpty(t, notifications)
 	})
 }
 

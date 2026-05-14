@@ -364,7 +364,7 @@ func (r *PgxRepository) ScheduleRetry(ctx context.Context, updates []RetryUpdate
 			WHERE alarm_dispatch_deliveries.id=input.id
 			  AND status='leased'
 			  AND locked_by=$2
-			  AND lock_expires_at > NOW()`, raw, workerID)
+			  AND lock_expires_at > NOW()`, jsonbRecordsetParam(raw), workerID)
 	if err != nil {
 		return fmt.Errorf("schedule dispatch delivery retries: %w", err)
 	}

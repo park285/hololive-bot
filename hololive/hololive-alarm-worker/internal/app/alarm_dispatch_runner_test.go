@@ -145,6 +145,41 @@ func TestGroupAlarmDispatchEnvelopesSeparatesScheduledMinuteBuckets(t *testing.T
 	assert.Len(t, groups, 2)
 }
 
+func TestRenderAlarmDispatchNotificationGroupMatchesLegacyValkeyRenderer(t *testing.T) {
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	first := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	second := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	first.Notification.MinutesUntil = 3
+	second.Notification.MinutesUntil = 1
+	first.Notification.Channel.Name = "Member1"
+	second.Notification.Channel.Name = "Member2"
+	first.Notification.Stream.ID = "abc"
+	second.Notification.Stream.ID = "def"
+	first.Notification.Stream.Title = "Title1"
+	second.Notification.Stream.Title = "Title2"
+	first.Notification.Stream.StartScheduled = &start
+	second.Notification.Stream.StartScheduled = &start
+	group := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{first, second})[0]
+
+	message, err := renderAlarmDispatchGroup(t.Context(), group)
+
+	require.NoError(t, err)
+	assert.Equal(t, "⏰ 방송 1분 전 알림\n\n"+
+		"⏰ Member1 방송 3분 전\n📺 Title1\n🔗 https://youtube.com/watch?v=abc\n\n"+
+		"⏰ Member2 방송 예정\n📺 Title2\n🔗 https://youtube.com/watch?v=def", message)
+}
+
+func TestResolveAlarmDispatchURLFallsBackLikeLegacyValkeyRenderer(t *testing.T) {
+	twitchOnlyWithoutURL := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	twitchOnlyWithoutURL.Stream.IsTwitchOnly = true
+
+	chzzkOnlyWithoutURL := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	chzzkOnlyWithoutURL.Stream.IsChzzkOnly = true
+
+	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(twitchOnlyWithoutURL))
+	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(chzzkOnlyWithoutURL))
+}
+
 func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
 	return domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{

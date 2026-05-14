@@ -13,6 +13,7 @@ var (
 	checkerMetricsInitOnce sync.Once
 
 	youtubeUpcomingDecisionTotal *prometheus.CounterVec
+	youtubeLiveCatchupTotal      *prometheus.CounterVec
 )
 
 func initCheckerMetrics() {
@@ -25,6 +26,13 @@ func initCheckerMetrics() {
 			[]string{"result", "minute", "selection", "window_capped", "initial_observation"},
 		)
 
+		youtubeLiveCatchupTotal = promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_youtube_live_catchup_decisions_total",
+				Help: "Total YouTube live catchup alarm decisions by result.",
+			},
+			[]string{"result"},
+		)
 	})
 }
 
@@ -48,6 +56,11 @@ func observeYouTubeUpcomingNoMinuteDecision(result string, window sharedchecker.
 		strconv.FormatBool(window.Capped),
 		strconv.FormatBool(window.InitialObservation),
 	).Inc()
+}
+
+func observeYouTubeLiveCatchup(result string) {
+	initCheckerMetrics()
+	youtubeLiveCatchupTotal.WithLabelValues(result).Inc()
 }
 
 func alarmMinuteLabel(minute int) string {

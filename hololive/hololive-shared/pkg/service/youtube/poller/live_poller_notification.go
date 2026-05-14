@@ -1,12 +1,8 @@
 package poller
 
 import (
-	"context"
 	"fmt"
 	"time"
-
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
@@ -60,71 +56,4 @@ func streamStatusFromEvent(eventStatus string) domain.StreamStatus {
 	default:
 		return ""
 	}
-}
-
-func insertLiveNotification(ctx context.Context, tx *gorm.DB, channelID string, stream *domain.Stream, now time.Time) error {
-	notification := &domain.YouTubeNotificationOutbox{
-		Kind:          domain.OutboxKindLiveStream,
-		ChannelID:     firstNonEmpty(stream.ChannelID, channelID),
-		ContentID:     stream.ID,
-		Payload:       buildLiveNotificationPayload(channelID, stream),
-		Status:        domain.OutboxStatusPending,
-		NextAttemptAt: now.UTC(),
-	}
-	return tx.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "kind"}, {Name: "content_id"}},
-		DoNothing: true,
-	}).Create(notification).Error
-}
-
-func buildLiveNotificationPayload(channelID string, stream *domain.Stream) string {
-	return mustMarshalJSON(&liveNotificationPayload{
-		VideoID:          stream.ID,
-		ChannelID:        firstNonEmpty(stream.ChannelID, channelID),
-		Title:            stream.Title,
-		Thumbnail:        thumbnailFromStream(stream),
-		PublishedAt:      livePayloadPublishedAt(stream),
-		ScheduledStartAt: livePayloadScheduledStart(stream),
-		IsShort:          false,
-	})
-}
-
-type liveNotificationPayload struct {
-	VideoID          string                `json:"video_id"`
-	ChannelID        string                `json:"channel_id"`
-	Title            string                `json:"title"`
-	Thumbnail        domain.ThumbnailsJSON `json:"thumbnail,omitempty"`
-	PublishedAt      *time.Time            `json:"published_at,omitempty"`
-	ScheduledStartAt *time.Time            `json:"scheduled_start_at,omitempty"`
-	IsShort          bool                  `json:"is_short"`
-}
-
-func thumbnailFromStream(stream *domain.Stream) domain.ThumbnailsJSON {
-	if stream == nil || stream.Thumbnail == nil || *stream.Thumbnail == "" {
-		return nil
-	}
-	return domain.ThumbnailsJSON{{URL: *stream.Thumbnail}}
-}
-
-func livePayloadPublishedAt(stream *domain.Stream) *time.Time {
-	if stream == nil {
-		return nil
-	}
-	if stream.StartActual != nil && !stream.StartActual.IsZero() {
-		startedAt := stream.StartActual.UTC()
-		return &startedAt
-	}
-	if stream.StartScheduled != nil && !stream.StartScheduled.IsZero() {
-		scheduledAt := stream.StartScheduled.UTC()
-		return &scheduledAt
-	}
-	return nil
-}
-
-func livePayloadScheduledStart(stream *domain.Stream) *time.Time {
-	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
-		return nil
-	}
-	scheduledAt := stream.StartScheduled.UTC()
-	return &scheduledAt
 }

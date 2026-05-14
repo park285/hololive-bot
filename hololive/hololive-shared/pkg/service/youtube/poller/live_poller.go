@@ -135,7 +135,7 @@ func (p *LivePoller) pollStream(ctx context.Context, channelID string, stream *d
 		return nil
 	}
 
-	if err := p.saveLiveSessionAndNotification(ctx, channelID, stream, status, now, baselinePoll); err != nil {
+	if err := p.saveLiveSession(ctx, channelID, stream, status, now, baselinePoll); err != nil {
 		return fmt.Errorf("poll live stream %s: %w", stream.ID, err)
 	}
 
@@ -160,9 +160,9 @@ func liveStatusFromStream(stream *domain.Stream) (domain.LiveStatus, bool) {
 	}
 }
 
-func (p *LivePoller) saveLiveSessionAndNotification(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, baselinePoll bool) error {
+func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stream *domain.Stream, status domain.LiveStatus, now time.Time, baselinePoll bool) error {
 	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		existing, exists, err := loadExistingLiveSession(ctx, tx, stream.ID)
+		existing, _, err := loadExistingLiveSession(ctx, tx, stream.ID)
 		if err != nil {
 			return err
 		}
@@ -175,12 +175,6 @@ func (p *LivePoller) saveLiveSessionAndNotification(ctx context.Context, channel
 			return fmt.Errorf("save live session: %w", err)
 		}
 
-		if !shouldEnqueueLiveNotification(status, existing, exists, baselinePoll) {
-			return nil
-		}
-		if err := insertLiveNotification(ctx, tx, channelID, stream, now); err != nil {
-			return fmt.Errorf("insert live notification: %w", err)
-		}
 		return nil
 	})
 }
@@ -235,16 +229,6 @@ func liveStartedAt(stream *domain.Stream, now time.Time, existing domain.YouTube
 	}
 	startedAt := now.UTC()
 	return &startedAt
-}
-
-func shouldEnqueueLiveNotification(status domain.LiveStatus, existing domain.YouTubeLiveSession, exists bool, baselinePoll bool) bool {
-	if status != domain.LiveStatusLive {
-		return false
-	}
-	if baselinePoll && (!exists || existing.Status == domain.LiveStatusLive) {
-		return false
-	}
-	return !exists || existing.Status != domain.LiveStatusLive
 }
 
 func (p *LivePoller) saveLiveViewerSample(ctx context.Context, channelID string, stream *domain.Stream, now time.Time) {
