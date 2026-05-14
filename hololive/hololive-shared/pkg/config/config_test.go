@@ -337,7 +337,7 @@ func TestLoad_ScraperPollDefaults(t *testing.T) {
 		Shorts:    6 * time.Minute,
 		Community: 15 * time.Minute,
 		Stats:     6 * time.Hour,
-		Live:      1 * time.Minute,
+		Live:      2 * time.Minute,
 	})
 }
 
