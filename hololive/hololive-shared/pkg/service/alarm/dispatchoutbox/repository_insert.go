@@ -113,7 +113,7 @@ func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, error) {
 		SELECT event_key, payload_hash, alarm_type::alarm_type, channel_id, stream_id, category, 1, payload
 		FROM input
 		ON CONFLICT (event_key) DO NOTHING
-		RETURNING event_key`, raw)
+		RETURNING event_key`, jsonbRecordsetParam(raw))
 	if err != nil {
 		return 0, fmt.Errorf("insert dispatch events: %w", err)
 	}
@@ -239,7 +239,7 @@ func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (int, int, 
 			ON CONFLICT (dedupe_key) DO NOTHING
 			RETURNING dedupe_key
 		)
-		SELECT (SELECT count(*) FROM normalized), (SELECT count(*) FROM inserted)`, raw).Scan(&selected, &inserted)
+		SELECT (SELECT count(*) FROM normalized), (SELECT count(*) FROM inserted)`, jsonbRecordsetParam(raw)).Scan(&selected, &inserted)
 	if err != nil {
 		return 0, 0, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}
