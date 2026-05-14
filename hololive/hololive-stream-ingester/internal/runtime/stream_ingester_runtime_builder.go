@@ -36,6 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	ytstats "github.com/kapu/hololive-shared/pkg/service/youtube/stats"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
 )
 
 // streamIngesterInfrastructure: stream-ingester 전용 인프라 (alarm/ACL/activity 미포함).
@@ -103,7 +104,7 @@ func buildStreamIngesterYouTubeResources(ctx context.Context, cfg *config.Config
 		return nil, fmt.Errorf("provide youtube scraper rate limiter: %w", err)
 	}
 
-	scraperClient := buildSharedYouTubeScraperClient(cfg.Scraper, infra.Cache, sharedRL)
+	scraperClient := polling.BuildSharedClient(cfg.Scraper, infra.Cache, sharedRL)
 	scraperService := sharedproviders.ProvideScraperServiceWithYouTubeScraper(infra.Cache, memberServiceAdapter, scraperClient, logger)
 	holodexService, err := sharedproviders.ProvideHolodexService(cfg.Holodex.BaseURL, cfg.Holodex.APIKey, infra.Cache, scraperService, logger)
 	if err != nil {

@@ -50,6 +50,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/configupdates"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/publishedat"
 )
 
 type fakeMemberDataProvider struct {
@@ -366,7 +369,7 @@ func newTestValkeyClient(t *testing.T) (valkey.Client, string) {
 func TestBuildSharedYouTubeScraperClient_UsesConfiguredFetcherEngine(t *testing.T) {
 	t.Parallel()
 
-	client := buildSharedYouTubeScraperClient(config.ScraperConfig{
+	client := polling.BuildSharedClient(config.ScraperConfig{
 		FetcherEngine: config.ScraperFetcherEngineGoScrapy,
 	}, nil, scraper.NewRateLimiter(time.Second))
 
@@ -378,7 +381,7 @@ func TestBuildStreamIngesterChannelPollerRegistrations(t *testing.T) {
 	t.Parallel()
 
 	postgres := &databasemocks.Client{}
-	registrations := buildStreamIngesterChannelPollerRegistrations(
+	registrations := polling.BuildRegistrations(
 		postgres,
 		config.ScraperConfig{
 			ProxyEnabled: true,
@@ -436,8 +439,8 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 			Live:      3 * time.Minute,
 		},
 	}
-	sharedClient := buildSharedYouTubeScraperClient(cfg, cacheSvc, sharedRL)
-	registrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+	sharedClient := polling.BuildSharedClient(cfg, cacheSvc, sharedRL)
+	registrations := polling.BuildRegistrationsWithClient(
 		&databasemocks.Client{},
 		cfg,
 		sharedClient,
@@ -446,7 +449,7 @@ func TestPendingPublishedAtResolver_UsesSharedScraperClientProxyState(t *testing
 		[]string{"UC_NOTIFY_A"},
 		[]string{"UC_STATS_A"},
 	)
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		cfg,
 		&databasemocks.Client{},
 		sharedClient,
@@ -498,10 +501,10 @@ func TestBuildStreamIngesterChannelPollerRegistrationsWithClient_NilRouteDecider
 		},
 	}
 
-	registrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+	registrations := polling.BuildRegistrationsWithClient(
 		&databasemocks.Client{},
 		cfg,
-		buildSharedYouTubeScraperClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
+		polling.BuildSharedClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		nil,
 		[]string{"UC_NOTIFY_A"},
@@ -529,10 +532,10 @@ func TestBuildStreamIngesterChannelPollerRegistrationsWithClient_DisabledResolve
 		},
 	}
 
-	registrations := buildStreamIngesterChannelPollerRegistrationsWithClient(
+	registrations := polling.BuildRegistrationsWithClient(
 		&databasemocks.Client{},
 		cfg,
-		buildSharedYouTubeScraperClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
+		polling.BuildSharedClient(cfg, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		func(poller.NotificationRouteRequest) bool { return true },
 		[]string{"UC_NOTIFY_A"},
@@ -560,7 +563,7 @@ func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 		},
 	}
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		cfg,
 		&databasemocks.Client{},
 		scraper.NewClient(),
@@ -581,7 +584,7 @@ func TestBuildPendingPublishedAtResolver_UsesConfiguredControls(t *testing.T) {
 func TestBuildPendingPublishedAtResolver_DisabledReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		config.ScraperConfig{
 			PublishedAtResolver: config.ScraperPublishedAtResolverConfig{
 				Enabled:  false,
@@ -600,7 +603,7 @@ func TestBuildPendingPublishedAtResolver_DisabledReturnsNil(t *testing.T) {
 func TestBuildPendingPublishedAtResolver_ZeroValueConfigReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		config.ScraperConfig{},
 		&databasemocks.Client{},
 		scraper.NewClient(),
@@ -614,7 +617,7 @@ func TestBuildPendingPublishedAtResolver_ZeroValueConfigReturnsNil(t *testing.T)
 func TestBuildPendingPublishedAtResolver_NilRouteDeciderReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		config.ScraperConfig{
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 		},
@@ -638,7 +641,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		},
 	})
 
-	scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, registrations, err := polling.BuildComponents(
 		config.ScraperConfig{
 			ProxyEnabled: true,
 			ProxyURL:     "socks5://proxy.internal:1080",
@@ -654,7 +657,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 		&databasemocks.Client{},
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		communityshorts.EnabledChannelIDs(operationalChannels),
-		buildSharedYouTubeScraperClient(
+		polling.BuildSharedClient(
 			config.ScraperConfig{
 				ProxyEnabled: true,
 				ProxyURL:     "socks5://proxy.internal:1080",
@@ -689,7 +692,7 @@ func TestBuildStreamIngesterYouTubeComponents(t *testing.T) {
 func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlobalJob(t *testing.T) {
 	t.Parallel()
 
-	resolver := buildPendingPublishedAtResolver(
+	resolver := publishedat.BuildPendingResolver(
 		config.ScraperConfig{
 			PublishedAtResolver: config.DefaultScraperPublishedAtResolverConfig(),
 			Poll: config.ScraperPoll{
@@ -707,7 +710,7 @@ func TestBuildStreamIngesterYouTubeComponents_RegistersPublishedAtResolverAsGlob
 	)
 	require.NotNil(t, resolver)
 
-	scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
+	scraperScheduler, registrations, err := polling.BuildComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
@@ -770,7 +773,7 @@ func TestBuildStreamIngesterConfigSubscriber_ApplyScraperProxyToggle(t *testing.
 		GetClientFunc: func() valkey.Client { return nil },
 	}
 
-	subscriber := buildStreamIngesterConfigSubscriber(
+	subscriber := configupdates.BuildSubscriber(
 		cacheService,
 		settingsService,
 		nil,
@@ -812,7 +815,7 @@ func TestBuildStreamIngesterConfigSubscriber_InvalidAndIgnoredUpdates(t *testing
 		GetClientFunc: func() valkey.Client { return nil },
 	}
 
-	applyFn := extractSubscriberApplyFn(t, buildStreamIngesterConfigSubscriber(
+	applyFn := extractSubscriberApplyFn(t, configupdates.BuildSubscriber(
 		cacheService,
 		settingsService,
 		nil,
@@ -878,7 +881,7 @@ func TestBuildStreamIngesterConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	trackingPoller := &trackingProxyTogglePoller{}
 	scheduler.Register("channel-1", trackingPoller, poller.PriorityNormal, time.Minute)
 
-	subscriber := buildStreamIngesterConfigSubscriber(
+	subscriber := configupdates.BuildSubscriber(
 		cacheService,
 		settingsService,
 		nil,

@@ -36,6 +36,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polltarget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -62,7 +64,7 @@ func TestBuildStreamIngesterChannelPollerRegistrations_DefaultOrdering(t *testin
 		},
 	}
 
-	registrations := buildStreamIngesterChannelPollerRegistrations(
+	registrations := polling.BuildRegistrations(
 		postgres,
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
@@ -146,7 +148,7 @@ func TestBuildStreamIngesterChannelPollerRegistrations_AllExplicit(t *testing.T)
 		},
 	}
 
-	registrations := buildStreamIngesterChannelPollerRegistrations(
+	registrations := polling.BuildRegistrations(
 		postgres,
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
@@ -185,7 +187,7 @@ func TestClassifyYouTubePollTargetsByActivity(t *testing.T) {
 	require.NoError(t, db.Create(&domain.YouTubeVideo{VideoID: "active-video", ChannelID: "UC_ACTIVE", PublishedAt: &activeAt, FirstSeenAt: activeAt}).Error)
 	require.NoError(t, db.Create(&domain.YouTubeCommunityPost{PostID: "warm-post", ChannelID: "UC_WARM", PublishedAt: &warmAt, FirstSeenAt: warmAt}).Error)
 
-	targets, err := classifyYouTubePollTargetsByActivity(context.Background(), db, youtubePollTargets{
+	targets, err := polltarget.ClassifyByActivity(context.Background(), db, polltarget.Targets{
 		NotificationChannelIDs: []string{"UC_LIVE", "UC_ACTIVE", "UC_WARM", "UC_COLD"},
 		StatsChannelIDs:        []string{"UC_STATS"},
 	}, now)
@@ -220,11 +222,11 @@ func TestBuildStreamIngesterChannelPollerRegistrations_TieredTargetsReduceRPM(t 
 	nilDB := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return nil }}
 	activityDB := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
 
-	flat := buildStreamIngesterChannelPollerRegistrations(nilDB, flatCfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
-	tiered := buildStreamIngesterChannelPollerRegistrations(activityDB, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	flat := polling.BuildRegistrations(nilDB, flatCfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	tiered := polling.BuildRegistrations(activityDB, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 
 	require.Greater(t, len(tiered), len(flat))
-	require.Less(t, estimateResolvedPollerRPM(tiered), estimateResolvedPollerRPM(flat))
+	require.Less(t, polling.EstimateResolvedPollerRPM(tiered), polling.EstimateResolvedPollerRPM(flat))
 }
 
 func TestBuildStreamIngesterChannelPollerRegistrations_TieringDisabledByDefault(t *testing.T) {
@@ -243,9 +245,9 @@ func TestBuildStreamIngesterChannelPollerRegistrations_TieringDisabledByDefault(
 		Live:      10 * time.Minute,
 	}}
 	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
-	registrations := buildStreamIngesterChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE", "UC_COLD"}, []string{"UC_STATS"})
+	registrations := polling.BuildRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE", "UC_COLD"}, []string{"UC_STATS"})
 
-	require.False(t, hasTieredNotificationRegistration(registrations))
+	require.False(t, polltarget.HasTieredNotificationRegistration(registrations))
 }
 
 func TestBuildStreamIngesterChannelPollerRegistrations_TieringEnabledWithAllActiveTargets(t *testing.T) {
@@ -267,9 +269,9 @@ func TestBuildStreamIngesterChannelPollerRegistrations_TieringEnabledWithAllActi
 		PollTiering: config.ScraperPollTieringConfig{Enabled: true},
 	}
 	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
-	registrations := buildStreamIngesterChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE"}, []string{"UC_STATS"})
+	registrations := polling.BuildRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, []string{"UC_ACTIVE"}, []string{"UC_STATS"})
 
-	require.True(t, hasTieredNotificationRegistration(registrations))
+	require.True(t, polltarget.HasTieredNotificationRegistration(registrations))
 }
 
 func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
@@ -291,15 +293,15 @@ func TestTieredPollerRefreshPreservesTierIntervals(t *testing.T) {
 		Live:      10 * time.Minute,
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
 	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
-	registrations := buildStreamIngesterChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	registrations := polling.BuildRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		newPollerRegistrationTestLogger(),
 		providers.WithChannelPollerRegistrations(registrations),
 	)
-	syncer := &youTubePollSchedulerSyncer{scheduler: scheduler, registrations: registrations, tieringDB: db}
+	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, db)
 
-	syncer.Sync(youtubePollTargets{NotificationChannelIDs: notificationIDs, StatsChannelIDs: statsIDs})
+	syncer.Sync(polltarget.Targets{NotificationChannelIDs: notificationIDs, StatsChannelIDs: statsIDs})
 
 	require.Equal(t, 10*time.Minute, schedulerJobInterval(t, scheduler, "UC_ACTIVE:videos"))
 	require.Equal(t, 20*time.Minute, schedulerJobInterval(t, scheduler, "UC_WARM:videos"))
@@ -326,15 +328,15 @@ func TestTieredPollerRefreshRemovesEmptyNotificationTargets(t *testing.T) {
 		Live:      10 * time.Minute,
 	}, PollTiering: config.ScraperPollTieringConfig{Enabled: true}}
 	postgres := &databasemocks.Client{GetGormDBFunc: func() *gorm.DB { return db }}
-	registrations := buildStreamIngesterChannelPollerRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
+	registrations := polling.BuildRegistrations(postgres, cfg, scraper.NewRateLimiter(time.Second), nil, nil, notificationIDs, statsIDs)
 	scheduler := providers.ProvideScraperScheduler(
 		nil,
 		newPollerRegistrationTestLogger(),
 		providers.WithChannelPollerRegistrations(registrations),
 	)
-	syncer := &youTubePollSchedulerSyncer{scheduler: scheduler, registrations: registrations, tieringDB: db}
+	syncer := polltarget.NewSchedulerSyncer(scheduler, registrations, db)
 
-	syncer.Sync(youtubePollTargets{NotificationChannelIDs: nil, StatsChannelIDs: statsIDs})
+	syncer.Sync(polltarget.Targets{NotificationChannelIDs: nil, StatsChannelIDs: statsIDs})
 
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_ACTIVE:videos")
 	require.NotContains(t, schedulerJobKeys(t, scheduler), "UC_COLD:videos")
@@ -354,7 +356,7 @@ func schedulerJobInterval(t *testing.T, scheduler any, key string) time.Duration
 func TestValidateExplicitPollerRegistrations_ReturnsErrorOnActiveNonExplicitRegistration(t *testing.T) {
 	t.Parallel()
 
-	err := validateExplicitPollerRegistrations([]providers.ChannelPollerRegistration{
+	err := polling.ValidateExplicitPollerRegistrations([]providers.ChannelPollerRegistration{
 		providers.NewChannelPollerRegistration(
 			fakeTestPoller{name: "videos"},
 			poller.PriorityNormal,
@@ -382,7 +384,7 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		},
 	})
 
-	scheduler, registrations, err := buildStreamIngesterYouTubeComponents(
+	scheduler, registrations, err := polling.BuildComponents(
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{
 				Videos:    5 * time.Minute,
@@ -395,7 +397,7 @@ func TestBuildStreamIngesterYouTubeComponents_GraduatedMembersFiltered(t *testin
 		postgres,
 		communityshorts.EnabledChannelIDs(operationalChannels),
 		communityshorts.EnabledChannelIDs(operationalChannels),
-		buildSharedYouTubeScraperClient(config.ScraperConfig{}, nil, scraper.NewRateLimiter(time.Second)),
+		polling.BuildSharedClient(config.ScraperConfig{}, nil, scraper.NewRateLimiter(time.Second)),
 		nil,
 		nil,
 		nil,
@@ -425,7 +427,7 @@ func TestBuildStreamIngesterChannelPollerRegistrations_RouteAwareWorstCaseReques
 		},
 	}
 
-	registrations := buildStreamIngesterChannelPollerRegistrations(
+	registrations := polling.BuildRegistrations(
 		postgres,
 		config.ScraperConfig{
 			Poll: config.ScraperPoll{

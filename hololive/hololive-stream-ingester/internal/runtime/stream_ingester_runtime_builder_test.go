@@ -43,6 +43,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/configupdates"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -53,7 +55,7 @@ func TestBuildStreamIngesterHTTPServer_Success(t *testing.T) {
 		},
 	}
 
-	readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
@@ -77,7 +79,7 @@ func TestBuildStreamIngesterHTTPServer_ReturnsErrorWhenTrustedProxyConfigInvalid
 		},
 	}
 
-	readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+	readiness := newReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
 		youtubeEnabled:   false,
 		photoSyncEnabled: true,
 	})
@@ -302,12 +304,12 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 
 			operationalChannels := mustResolveCommunityShortsOperationalChannels(t, memberData)
 
-			scraperScheduler, registrations, err := buildStreamIngesterYouTubeComponents(
+			scraperScheduler, registrations, err := polling.BuildComponents(
 				cfg.Scraper,
 				infra.postgresService,
 				communityshorts.EnabledChannelIDs(operationalChannels),
 				communityshorts.EnabledChannelIDs(operationalChannels),
-				buildSharedYouTubeScraperClient(cfg.Scraper, infra.cacheService, infra.sharedRL),
+				polling.BuildSharedClient(cfg.Scraper, infra.cacheService, infra.sharedRL),
 				nil,
 				nil,
 				nil,
@@ -318,7 +320,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			require.Len(t, registrations, 5)
 			assert.Equal(t, 5, schedulerJobCount(t, scraperScheduler))
 
-			configSubscriber := buildStreamIngesterConfigSubscriber(
+			configSubscriber := configupdates.BuildSubscriber(
 				infra.cacheService,
 				infra.settingsService,
 				infra.holodexService,
@@ -352,7 +354,7 @@ func TestBuildStreamIngesterRuntime_NormalBuildWithAllDependencies(t *testing.T)
 			assert.Equal(t, tc.updatedProxyEnabled, currentSettings.ScraperProxyEnabled)
 			assert.Equal(t, tc.updatedProxyEnabled, youtubeService.ScraperProxyEnabled())
 
-			readiness := newIngestionReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
+			readiness := newReadinessState(streamIngesterRuntimeName, ingestionRuntimeFeatures{
 				youtubeEnabled:   true,
 				photoSyncEnabled: true,
 			})
@@ -409,7 +411,7 @@ func TestBuildStreamIngesterConfigSubscriber_ScraperProxyUpdateFailure(t *testin
 	}
 	youtubeService := &fakeYouTubeService{}
 
-	subscriber := buildStreamIngesterConfigSubscriber(
+	subscriber := configupdates.BuildSubscriber(
 		cacheService,
 		settingsService,
 		nil,

@@ -70,7 +70,7 @@ func (r *StreamIngesterRuntime) startHTTPServer(errCh chan<- error) {
 
 func (r *StreamIngesterRuntime) shutdown(ctx context.Context) {
 	if r.Readiness != nil {
-		r.Readiness.markStopping("")
+		r.Readiness.MarkStopping("")
 	}
 
 	r.stopSchedulers()
