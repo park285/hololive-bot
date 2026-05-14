@@ -14,6 +14,8 @@ var (
 
 	youtubeUpcomingDecisionTotal *prometheus.CounterVec
 	youtubeLiveCatchupTotal      *prometheus.CounterVec
+	youtubePersistedLiveTotal    *prometheus.CounterVec
+	youtubeLiveGuardrailTotal    *prometheus.CounterVec
 )
 
 func initCheckerMetrics() {
@@ -30,6 +32,22 @@ func initCheckerMetrics() {
 			prometheus.CounterOpts{
 				Name: "hololive_alarm_youtube_live_catchup_decisions_total",
 				Help: "Total YouTube live catchup alarm decisions by result.",
+			},
+			[]string{"result"},
+		)
+
+		youtubePersistedLiveTotal = promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_youtube_persisted_live_sessions_total",
+				Help: "Total YouTube persisted live session fallback observations by result and stream status.",
+			},
+			[]string{"result", "status"},
+		)
+
+		youtubeLiveGuardrailTotal = promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "hololive_alarm_youtube_live_guardrail_total",
+				Help: "Total YouTube live dispatch guardrail observations by result.",
 			},
 			[]string{"result"},
 		)
@@ -61,6 +79,19 @@ func observeYouTubeUpcomingNoMinuteDecision(result string, window sharedchecker.
 func observeYouTubeLiveCatchup(result string) {
 	initCheckerMetrics()
 	youtubeLiveCatchupTotal.WithLabelValues(result).Inc()
+}
+
+func observeYouTubePersistedLiveSessions(result, status string, count int) {
+	if count <= 0 {
+		return
+	}
+	initCheckerMetrics()
+	youtubePersistedLiveTotal.WithLabelValues(result, status).Add(float64(count))
+}
+
+func observeYouTubeLiveGuardrail(result string) {
+	initCheckerMetrics()
+	youtubeLiveGuardrailTotal.WithLabelValues(result).Inc()
 }
 
 func alarmMinuteLabel(minute int) string {

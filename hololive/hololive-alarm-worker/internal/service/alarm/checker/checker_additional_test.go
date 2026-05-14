@@ -685,6 +685,67 @@ func TestResolveEligibleLiveCatchupStartUsesLiveCatchupWindow(t *testing.T) {
 	require.Nil(t, got)
 }
 
+func TestResolveEligibleLiveCatchupStartUsesRecentObservedAt(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	oldStart := now.Add(-(sharedconstants.LiveCatchupWindow + time.Hour))
+	recentObserved := now.Add(-time.Minute)
+	stream := &domain.Stream{
+		ID:             "live-observed-recently",
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &oldStart,
+		StartActual:    &oldStart,
+	}
+
+	got, ok := resolveEligibleLiveCatchupStart(stream, now, &recentObserved)
+	require.True(t, ok)
+	require.NotNil(t, got)
+	assert.Equal(t, oldStart, *got)
+}
+
+func TestMergePersistedLiveSessionStreamsKeepsHolodexPrimaryFields(t *testing.T) {
+	t.Parallel()
+
+	channelID := "ch-merge"
+	streamID := "stream-merge"
+	holodexStart := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	persistedStart := time.Date(2026, 5, 14, 9, 59, 0, 0, time.UTC)
+	lastSeenAt := time.Date(2026, 5, 14, 10, 4, 0, 0, time.UTC)
+	streamsByChannel := map[string][]*domain.Stream{
+		channelID: {{
+			ID:             streamID,
+			Title:          "Holodex title",
+			ChannelID:      channelID,
+			Status:         domain.StreamStatusLive,
+			StartScheduled: &holodexStart,
+			Channel:        &domain.Channel{ID: channelID, Name: "Holodex Channel"},
+		}},
+	}
+
+	observed := mergePersistedLiveSessionStreams(streamsByChannel, []PersistedYouTubeLiveSession{{
+		Stream: &domain.Stream{
+			ID:             streamID,
+			Title:          "DB title",
+			ChannelID:      channelID,
+			Status:         domain.StreamStatusLive,
+			StartScheduled: &persistedStart,
+			StartActual:    &persistedStart,
+			Channel:        &domain.Channel{ID: channelID, Name: "DB Channel"},
+		},
+		LastSeenAt: lastSeenAt,
+	}})
+
+	require.Len(t, streamsByChannel[channelID], 1)
+	got := streamsByChannel[channelID][0]
+	assert.Equal(t, "Holodex title", got.Title)
+	assert.Equal(t, holodexStart, *got.StartScheduled)
+	assert.Equal(t, "Holodex Channel", got.Channel.Name)
+	require.NotNil(t, got.StartActual)
+	assert.Equal(t, persistedStart, *got.StartActual)
+	assert.Equal(t, lastSeenAt, observed[streamID])
+}
+
 func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {
 	t.Parallel()
 

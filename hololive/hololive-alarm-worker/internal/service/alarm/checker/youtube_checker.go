@@ -25,14 +25,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
 	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
@@ -49,6 +47,7 @@ type YouTubeChecker struct {
 	holodexSvc          *holodex.Service
 	tierScheduler       *tier.TieredScheduler
 	dedupSvc            *dedup.Service
+	persistedLiveSource YouTubeLiveSessionSource
 	targetPolicy        sharedchecker.TargetMinutePolicy
 	targetMinutesMu     sync.RWMutex
 	evaluationWindowCap time.Duration
@@ -63,6 +62,28 @@ func NewYouTubeChecker(
 	dedupSvc *dedup.Service,
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
+	logger *slog.Logger,
+) (*YouTubeChecker, error) {
+	return NewYouTubeCheckerWithPersistedLiveSource(
+		cacheSvc,
+		holodexSvc,
+		tierScheduler,
+		dedupSvc,
+		targetMinutes,
+		evaluationWindowCap,
+		nil,
+		logger,
+	)
+}
+
+func NewYouTubeCheckerWithPersistedLiveSource(
+	cacheSvc cache.Client,
+	holodexSvc *holodex.Service,
+	tierScheduler *tier.TieredScheduler,
+	dedupSvc *dedup.Service,
+	targetMinutes []int,
+	evaluationWindowCap time.Duration,
+	persistedLiveSource YouTubeLiveSessionSource,
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
 	if cacheSvc == nil {
@@ -92,6 +113,7 @@ func NewYouTubeChecker(
 		holodexSvc:          holodexSvc,
 		tierScheduler:       tierScheduler,
 		dedupSvc:            dedupSvc,
+		persistedLiveSource: persistedLiveSource,
 		targetPolicy:        sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,
 		logger:              safeLogger(logger),
@@ -108,7 +130,8 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
 func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
-	dueChannels, streamsByChannel, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx)
+	now := time.Now().UTC()
+	dueChannels, streamsByChannel, liveObservedAtByStreamID, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx, now)
 	if err != nil {
 		return nil, err
 	}
@@ -117,49 +140,17 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 		return []*domain.AlarmNotification{}, nil
 	}
 
-	return c.collectDueYouTubeNotifications(ctx, dueChannels, streamsByChannel, subscriberMap)
-}
-
-func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
-	ctx context.Context,
-) ([]string, map[string][]*domain.Stream, map[string][]string, error) {
-	channelIDs, err := c.cacheSvc.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("check youtube streams: read channel registry: %w", err)
-	}
-
-	if len(channelIDs) == 0 {
-		return nil, nil, nil, nil
-	}
-
-	dueChannels := c.tierScheduler.SelectDueChannels(channelIDs)
-	if len(dueChannels) == 0 {
-		return nil, nil, nil, nil
-	}
-	sort.Strings(dueChannels)
-
-	streams, err := c.holodexSvc.GetChannelsLiveStatus(ctx, dueChannels)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("check youtube streams: fetch channels live status: %w", err)
-	}
-
-	streamsByChannel := groupStreamsByChannel(streams)
-
-	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, dueChannels)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("check youtube streams: load subscriber rooms: %w", err)
-	}
-
-	return dueChannels, streamsByChannel, subscriberMap, nil
+	return c.collectDueYouTubeNotifications(ctx, dueChannels, streamsByChannel, liveObservedAtByStreamID, subscriberMap, now)
 }
 
 func (c *YouTubeChecker) collectDueYouTubeNotifications(
 	ctx context.Context,
 	dueChannels []string,
 	streamsByChannel map[string][]*domain.Stream,
+	liveObservedAtByStreamID map[string]time.Time,
 	subscriberMap map[string][]string,
+	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
-	now := time.Now().UTC()
 	notifications := make([]*domain.AlarmNotification, 0, len(dueChannels)*5)
 	var mu sync.Mutex
 
@@ -171,7 +162,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 		if !ok {
 			continue
 		}
-		c.startYouTubeChannelWorker(eg, egCtx, work, now, &mu, &notifications)
+		c.startYouTubeChannelWorker(eg, egCtx, work, liveObservedAtByStreamID, now, &mu, &notifications)
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -185,6 +176,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 	eg *errgroup.Group,
 	ctx context.Context,
 	work youtubeChannelCheckWork,
+	liveObservedAtByStreamID map[string]time.Time,
 	now time.Time,
 	mu *sync.Mutex,
 	notifications *[]*domain.AlarmNotification,
@@ -197,6 +189,7 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 			work.streams,
 			work.window,
 			now,
+			liveObservedAtByStreamID,
 		)
 		if err != nil {
 			return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", work.channelID, err)
@@ -261,6 +254,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 	streams []*domain.Stream,
 	window sharedchecker.EvaluationWindow,
 	now time.Time,
+	liveObservedAtByStreamID ...map[string]time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(streams)*len(subscriberRooms))
 	for _, stream := range streams {
@@ -275,7 +269,7 @@ func (c *YouTubeChecker) buildChannelNotifications(
 
 		notifications = append(notifications, upcomingNotifications...)
 
-		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, subscriberRooms, now)
+		liveCatchupNotifications, err := c.buildLiveCatchupNotifications(ctx, channelID, stream, subscriberRooms, now, liveObservedAt(stream, liveObservedAtByStreamID...))
 		if err != nil {
 			return nil, fmt.Errorf("build channel notifications: build live catchup notifications: %w", err)
 		}
