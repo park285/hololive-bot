@@ -35,6 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
 )
 
@@ -94,6 +95,11 @@ func (r *StreamIngesterRuntime) startRuntime(ctx context.Context, errCh chan<- e
 	if r.Readiness != nil {
 		r.Readiness.markRunning()
 	}
+	sharedlog.Info(ctx, r.Logger, EventIngestionRuntimeStarted, "ingestion runtime started",
+		sharedlog.Runtime(r.runtimeName()),
+		slog.Bool("youtube_scheduler_enabled", r.Scheduler != nil || r.ScraperScheduler != nil),
+		slog.Bool("photo_sync_enabled", r.PhotoSync != nil),
+	)
 }
 
 func (r *StreamIngesterRuntime) handleShutdownSignal(sig os.Signal) {

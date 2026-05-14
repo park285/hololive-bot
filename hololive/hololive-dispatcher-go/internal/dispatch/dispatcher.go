@@ -29,6 +29,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/iris"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -127,10 +128,21 @@ func (d *Dispatcher) RunOnce(ctx context.Context) error {
 }
 
 func (d *Dispatcher) RunOnceProcessed(ctx context.Context) (bool, error) {
+	sharedlog.Info(ctx, d.logger, EventDispatchBatchDrainStarted, "dispatch batch drain started",
+		slog.Int("max_batch", d.maxBatch),
+	)
+
 	envelopes, err := d.nextBatch(ctx)
 	if err != nil {
+		attrs := []slog.Attr{slog.Int("max_batch", d.maxBatch)}
+		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
+		sharedlog.Error(ctx, d.logger, EventDispatchBatchDrainFailed, "dispatch batch drain failed", attrs...)
 		return false, fmt.Errorf("run dispatch once: drain batch: %w", err)
 	}
+	sharedlog.Info(ctx, d.logger, EventDispatchBatchDrainSucceeded, "dispatch batch drain succeeded",
+		slog.Int("max_batch", d.maxBatch),
+		slog.Int("envelopes", len(envelopes)),
+	)
 	if len(envelopes) == 0 {
 		return false, nil
 	}
@@ -172,23 +184,35 @@ func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGr
 }
 
 func (d *Dispatcher) dispatchGroup(ctx context.Context, group NotificationGroup) error {
+	sharedlog.Info(ctx, d.logger, EventDispatchGroupRenderStarted, "dispatch group render started", groupAttrs(group)...)
 	message, err := d.renderer.RenderGroup(ctx, group)
 	if err != nil {
+		attrs := append(groupAttrs(group), sharedlog.ErrorAttrs(err)...)
+		sharedlog.Warn(ctx, d.logger, EventDispatchGroupRenderFailed, "dispatch group render failed", attrs...)
 		if handleErr := d.handleDispatchFailure(ctx, group.RoomID, group.Envelopes, "render", err); handleErr != nil {
 			return fmt.Errorf("dispatch group: persist render failure: %w", handleErr)
 		}
 		return nil
 	}
+	sharedlog.Info(ctx, d.logger, EventDispatchGroupRenderSucceeded, "dispatch group render succeeded", groupAttrs(group)...)
 
 	if err := d.consumer.MarkSending(ctx, group.Envelopes); err != nil {
+		attrs := append(groupAttrs(group), sharedlog.ErrorAttrs(err)...)
+		sharedlog.Error(ctx, d.logger, EventDispatchGroupMarkSendingFailed, "dispatch group mark sending failed", attrs...)
 		return fmt.Errorf("dispatch group: mark sending before external send: %w", err)
 	}
 
+	sharedlog.Info(ctx, d.logger, EventDispatchGroupSendStarted, "dispatch group send started", groupAttrs(group)...)
 	if err := d.sender.SendMessage(ctx, group.RoomID, message); err != nil {
+		attrs := append(groupAttrs(group), sharedlog.ErrorAttrs(err)...)
+		sharedlog.Warn(ctx, d.logger, EventDispatchGroupSendFailed, "dispatch group send failed", attrs...)
 		return d.handleSendFailure(ctx, group, err)
 	}
+	sharedlog.Info(ctx, d.logger, EventDispatchGroupSendSucceeded, "dispatch group send succeeded", groupAttrs(group)...)
 
 	if err := d.consumer.MarkDispatched(ctx, group.Envelopes); err != nil {
+		attrs := append(groupAttrs(group), sharedlog.ErrorAttrs(err)...)
+		sharedlog.Error(ctx, d.logger, EventDispatchGroupMarkDispatchedFailed, "dispatch group mark dispatched failed", attrs...)
 		return fmt.Errorf("dispatch group: mark dispatched after successful send: %w", err)
 	}
 
@@ -201,7 +225,7 @@ func (d *Dispatcher) handleSendFailure(ctx context.Context, group NotificationGr
 		if err := d.consumer.Quarantine(ctx, group.Envelopes, reason); err != nil {
 			return fmt.Errorf("dispatch group: quarantine ambiguous send failure: %w", err)
 		}
-		d.logger.Warn("Dispatch send outcome ambiguous; quarantined envelopes",
+		sharedlog.Warn(ctx, d.logger, EventDispatchQuarantined, "dispatch send outcome ambiguous; quarantined envelopes",
 			slog.String("room_id", group.RoomID),
 			slog.Int("envelopes", len(group.Envelopes)),
 		)

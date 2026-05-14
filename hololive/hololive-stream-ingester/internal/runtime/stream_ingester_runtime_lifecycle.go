@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 func (r *StreamIngesterRuntime) startBackgroundServices(ctx context.Context, errCh chan<- error) {
@@ -74,6 +76,9 @@ func (r *StreamIngesterRuntime) shutdown(ctx context.Context) {
 	r.stopSchedulers()
 	r.shutdownHTTPServer(ctx)
 	r.releaseIngestionLease(ctx)
+	sharedlog.Info(ctx, r.Logger, EventIngestionRuntimeStopped, "ingestion runtime stopped",
+		sharedlog.Runtime(r.runtimeName()),
+	)
 }
 
 func (r *StreamIngesterRuntime) stopSchedulers() {
