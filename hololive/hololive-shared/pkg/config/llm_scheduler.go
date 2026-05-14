@@ -68,14 +68,7 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 		},
 		Valkey:   loadValkeyConfig(),
 		Postgres: loadPostgresConfig(),
-		Logging: LoggingConfig{
-			Level:      sharedenv.String("LOG_LEVEL", "info"),
-			Dir:        sharedenv.String("LOG_DIR", ""),
-			MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 5),
-			MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
-			MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
-			Compress:   sharedenv.Bool("LOG_COMPRESS", true),
-		},
+		Logging:  loadLoggingConfig(),
 		Bot: BotConfig{
 			Prefix:   sharedenv.String("BOT_PREFIX", "!"),
 			SelfUser: sharedenv.String("BOT_SELF_USER", "iris"),
