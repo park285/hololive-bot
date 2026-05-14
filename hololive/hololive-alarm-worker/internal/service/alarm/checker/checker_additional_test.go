@@ -746,6 +746,42 @@ func TestMergePersistedLiveSessionStreamsKeepsHolodexPrimaryFields(t *testing.T)
 	assert.Equal(t, lastSeenAt, observed[streamID])
 }
 
+func TestMergePersistedLiveSessionStreamsDoesNotUseUpcomingObservedAtForLiveCatchup(t *testing.T) {
+	t.Parallel()
+
+	channelID := "ch-observed"
+	streamID := "stream-observed"
+	holodexStart := time.Date(2026, 5, 14, 9, 0, 0, 0, time.UTC)
+	persistedScheduled := time.Date(2026, 5, 14, 10, 5, 0, 0, time.UTC)
+	lastSeenAt := time.Date(2026, 5, 14, 10, 1, 0, 0, time.UTC)
+	streamsByChannel := map[string][]*domain.Stream{
+		channelID: {{
+			ID:             streamID,
+			Title:          "Holodex live",
+			ChannelID:      channelID,
+			Status:         domain.StreamStatusLive,
+			StartScheduled: &holodexStart,
+			Channel:        &domain.Channel{ID: channelID, Name: "Holodex Channel"},
+		}},
+	}
+
+	observed := mergePersistedLiveSessionStreams(streamsByChannel, []PersistedYouTubeLiveSession{{
+		Stream: &domain.Stream{
+			ID:             streamID,
+			Title:          "DB upcoming",
+			ChannelID:      channelID,
+			Status:         domain.StreamStatusUpcoming,
+			StartScheduled: &persistedScheduled,
+			Channel:        &domain.Channel{ID: channelID, Name: "DB Channel"},
+		},
+		LastSeenAt: lastSeenAt,
+	}})
+
+	require.Len(t, streamsByChannel[channelID], 1)
+	assert.Empty(t, observed)
+	assert.Nil(t, liveObservedAt(streamsByChannel[channelID][0], observed))
+}
+
 func TestMergePersistedLiveSessionStreamsPromotesHolodexUpcomingToPersistedLive(t *testing.T) {
 	t.Parallel()
 
@@ -831,6 +867,51 @@ func TestYouTubeCheckerUsesDedupEvidenceWhenPgDispatchMissing(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.Contains(t, dispatched, "stream-dedup-evidence")
+}
+
+func TestRecentLiveDispatchEvidenceIncludesSentRooms(t *testing.T) {
+	t.Parallel()
+
+	checker, _ := newTestYouTubeCheckerWithDedup(t)
+	checker.persistedLiveSource = &fakeYouTubeLiveSessionSource{
+		recentDispatch: map[string]bool{"stream-delivery": true},
+		recentSentRooms: map[string][]string{
+			"stream-delivery": {"room-1"},
+		},
+	}
+
+	evidence, err := checker.recentLiveDispatchEvidence(
+		t.Context(),
+		[]string{"stream-delivery"},
+		time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC).Add(-24*time.Hour),
+	)
+	require.NoError(t, err)
+	assert.Contains(t, evidence.pgDispatchedStreamIDs, "stream-delivery")
+	assert.Contains(t, evidence.sentRoomsByStreamID["stream-delivery"], "room-1")
+	assert.Equal(t, []string{"room-2"}, missingLiveDeliveryRooms([]string{"room-1", "room-2"}, evidence.sentRoomsByStreamID["stream-delivery"]))
+}
+
+func TestRecentLiveDispatchEvidenceReturnsSentDeliveryErrorEvenWithDispatchEvidence(t *testing.T) {
+	t.Parallel()
+
+	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	source := &fakeYouTubeLiveSessionSource{
+		recentDispatch:     map[string]bool{"stream-delivery-error": true},
+		recentSentRoomsErr: errors.New("sent delivery lookup failed"),
+	}
+	checker.persistedLiveSource = source
+
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, dedupSvc.MarkAsNotified(t.Context(), "stream-delivery-error", start, 5))
+
+	_, err := checker.recentLiveDispatchEvidence(
+		t.Context(),
+		[]string{"stream-delivery-error"},
+		start.Add(-24*time.Hour),
+	)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "pg sent delivery evidence")
+	assert.ErrorContains(t, err, "sent delivery lookup failed")
 }
 
 func TestLiveCatchupSuppressesRoomsAfterPublishedMarker(t *testing.T) {

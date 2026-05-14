@@ -2,10 +2,8 @@ package checker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -25,6 +23,7 @@ type YouTubeLiveSessionSource interface {
 	LoadRecentSessions(ctx context.Context, channelIDs []string, now time.Time) ([]PersistedYouTubeLiveSession, error)
 	LoadRecentLiveChannelIDs(ctx context.Context, channelIDs []string, now time.Time) ([]string, error)
 	RecentlyDispatchedStreamIDs(ctx context.Context, streamIDs []string, since time.Time) (map[string]struct{}, error)
+	RecentlySentLiveStreamRooms(ctx context.Context, streamIDs []string, since time.Time) (map[string]map[string]struct{}, error)
 }
 
 func (c *YouTubeChecker) loadPersistedLiveSessions(
@@ -76,7 +75,9 @@ func mergePersistedLiveSessionStreams(
 		if !ok {
 			continue
 		}
-		recordLiveObservedAt(liveObservedAtByStreamID, stream.ID, session.LastSeenAt)
+		if stream.IsLive() {
+			recordLiveObservedAt(liveObservedAtByStreamID, stream.ID, session.LastSeenAt)
+		}
 		mergePersistedLiveSessionStream(streamsByChannel, channelID, stream)
 	}
 	return liveObservedAtByStreamID
@@ -195,149 +196,4 @@ func liveObservedAt(stream *domain.Stream, observedMaps ...map[string]time.Time)
 	}
 	observedAt = observedAt.UTC()
 	return &observedAt
-}
-
-func (c *YouTubeChecker) observePersistedLiveGuardrails(
-	ctx context.Context,
-	sessions []PersistedYouTubeLiveSession,
-	subscriberMap map[string][]string,
-	now time.Time,
-) {
-	if c.persistedLiveSource == nil {
-		return
-	}
-
-	since := now.Add(-persistedLiveDispatchRecentWindow)
-	metas := persistedLiveGuardrailMetas(sessions, subscriberMap, now)
-	if len(metas) == 0 {
-		return
-	}
-
-	streamIDs := make([]string, 0, len(metas))
-	for _, meta := range metas {
-		streamIDs = append(streamIDs, meta.streamID)
-	}
-
-	dispatched, err := c.recentlyDispatchedOrNotifiedLiveStreamIDs(ctx, streamIDs, since)
-	if err != nil {
-		observeYouTubeLiveGuardrail("dispatch_check_error")
-		c.logger.Warn("YouTube live guardrail dispatch check failed",
-			slog.Any("error", err),
-		)
-		return
-	}
-
-	for _, meta := range metas {
-		if _, ok := dispatched[meta.streamID]; ok {
-			observeYouTubeLiveGuardrail("has_recent_dispatch")
-			continue
-		}
-
-		observeYouTubeLiveGuardrail("missing_recent_dispatch")
-		c.logger.Warn("alarm.youtube.live_guardrail.missing_dispatch",
-			slog.String("stream_id", meta.streamID),
-			slog.String("channel_id", meta.channelID),
-			slog.Time("last_seen_at", meta.lastSeenAt.UTC()),
-			slog.Time("dispatch_since", since.UTC()),
-			slog.Int("subscriber_rooms", meta.roomCount),
-		)
-	}
-}
-
-func (c *YouTubeChecker) recentlyDispatchedOrNotifiedLiveStreamIDs(
-	ctx context.Context,
-	streamIDs []string,
-	since time.Time,
-) (map[string]struct{}, error) {
-	result := make(map[string]struct{})
-	var errs []error
-
-	if c.persistedLiveSource != nil {
-		dispatched, err := c.persistedLiveSource.RecentlyDispatchedStreamIDs(ctx, streamIDs, since)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("pg dispatch evidence: %w", err))
-		} else {
-			mergeStringSet(result, dispatched)
-		}
-	}
-
-	if c.dedupSvc != nil {
-		notified, err := c.dedupSvc.RecentlyNotifiedStreamIDs(ctx, streamIDs)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("valkey notified evidence: %w", err))
-		} else {
-			mergeStringSet(result, notified)
-		}
-	}
-
-	if len(result) > 0 {
-		return result, nil
-	}
-	return result, errors.Join(errs...)
-}
-
-func mergeStringSet(dst map[string]struct{}, src map[string]struct{}) {
-	for key := range src {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		dst[key] = struct{}{}
-	}
-}
-
-type persistedLiveGuardrailMeta struct {
-	streamID   string
-	channelID  string
-	lastSeenAt time.Time
-	roomCount  int
-}
-
-func persistedLiveGuardrailMetas(
-	sessions []PersistedYouTubeLiveSession,
-	subscriberMap map[string][]string,
-	now time.Time,
-) []persistedLiveGuardrailMeta {
-	metas := make([]persistedLiveGuardrailMeta, 0, len(sessions))
-	seen := make(map[string]struct{}, len(sessions))
-	for _, session := range sessions {
-		meta, ok := persistedLiveGuardrailMetaFromSession(session, subscriberMap, seen, now)
-		if !ok {
-			continue
-		}
-		metas = append(metas, meta)
-	}
-	return metas
-}
-
-func persistedLiveGuardrailMetaFromSession(
-	session PersistedYouTubeLiveSession,
-	subscriberMap map[string][]string,
-	seen map[string]struct{},
-	now time.Time,
-) (persistedLiveGuardrailMeta, bool) {
-	stream := session.Stream
-	if stream == nil || !stream.IsLive() || stream.ID == "" {
-		return persistedLiveGuardrailMeta{}, false
-	}
-	if session.LastSeenAt.IsZero() || now.Sub(session.LastSeenAt.UTC()) < persistedLiveGuardrailGraceWindow {
-		observeYouTubeLiveGuardrail("pending_grace")
-		return persistedLiveGuardrailMeta{}, false
-	}
-	if _, ok := seen[stream.ID]; ok {
-		return persistedLiveGuardrailMeta{}, false
-	}
-	channelID := youtubeStreamChannelID(stream)
-	rooms := subscriberMap[channelID]
-	if channelID == "" || len(rooms) == 0 {
-		return persistedLiveGuardrailMeta{}, false
-	}
-
-	seen[stream.ID] = struct{}{}
-	return persistedLiveGuardrailMeta{
-		streamID:   stream.ID,
-		channelID:  channelID,
-		lastSeenAt: session.LastSeenAt,
-		roomCount:  len(rooms),
-	}, true
 }
