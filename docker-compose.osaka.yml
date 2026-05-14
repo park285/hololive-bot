@@ -1,52 +1,46 @@
+x-osaka-ap-env-file: &osaka-ap-env-file !override
+  - /run/hololive-bot/env
+
+x-osaka-ap-env: &osaka-ap-env
+  CACHE_SOCKET_PATH: ""
+  CACHE_HOST: ${OSAKA_CACHE_HOST:-100.100.1.3}
+  CACHE_PORT: ${OSAKA_CACHE_PORT:-6379}
+  POSTGRES_SOCKET_PATH: ""
+  POSTGRES_HOST: ${OSAKA_POSTGRES_HOST:-100.100.1.3}
+  POSTGRES_PORT: ${OSAKA_POSTGRES_PORT:-5433}
+  CLIPROXY_BASE_URL: ${OSAKA_CLIPROXY_BASE_URL:-http://100.100.1.3:8787/v1}
+
+x-osaka-ap-volumes: &osaka-ap-volumes !override
+  - ./data:/app/data
+  - ./logs:/app/logs
+  - ./runtime-config:/app/runtime-config:ro
+  - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
+
+x-osaka-ap-logging: &osaka-ap-logging
+  driver: "json-file"
+  options:
+    max-size: "5m"
+    max-file: "3"
+
 services:
   stream-ingester:
-    env_file: !override
-      - /run/hololive-bot/env
+    env_file: *osaka-ap-env-file
     environment:
-      CACHE_SOCKET_PATH: ""
-      CACHE_HOST: ${OSAKA_CACHE_HOST:-100.100.1.3}
-      CACHE_PORT: ${OSAKA_CACHE_PORT:-6379}
-      POSTGRES_SOCKET_PATH: ""
-      POSTGRES_HOST: ${OSAKA_POSTGRES_HOST:-100.100.1.3}
-      POSTGRES_PORT: ${OSAKA_POSTGRES_PORT:-5433}
-      CLIPROXY_BASE_URL: ${OSAKA_CLIPROXY_BASE_URL:-http://100.100.1.3:8787/v1}
-    volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
+      <<: *osaka-ap-env
+    volumes: *osaka-ap-volumes
+    logging: *osaka-ap-logging
     deploy:
       resources:
         limits:
           memory: 512m
 
   youtube-scraper:
-    env_file: !override
-      - /run/hololive-bot/env
+    env_file: *osaka-ap-env-file
     environment:
-      CACHE_SOCKET_PATH: ""
-      CACHE_HOST: ${OSAKA_CACHE_HOST:-100.100.1.3}
-      CACHE_PORT: ${OSAKA_CACHE_PORT:-6379}
-      POSTGRES_SOCKET_PATH: ""
-      POSTGRES_HOST: ${OSAKA_POSTGRES_HOST:-100.100.1.3}
-      POSTGRES_PORT: ${OSAKA_POSTGRES_PORT:-5433}
-      CLIPROXY_BASE_URL: ${OSAKA_CLIPROXY_BASE_URL:-http://100.100.1.3:8787/v1}
+      <<: *osaka-ap-env
       YOUTUBE_SCRAPER_RUNTIME_ALLOWED: "true"
-    volumes: !override
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./runtime-config:/app/runtime-config:ro
-      - /run/hololive-bot/certs:/run/hololive-bot/certs:ro
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
+    volumes: *osaka-ap-volumes
+    logging: *osaka-ap-logging
     deploy:
       resources:
         limits:
