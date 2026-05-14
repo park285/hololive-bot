@@ -17,12 +17,13 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	stream *domain.Stream,
 	subscriberRooms []string,
 	now time.Time,
+	observedAt ...*time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	if !isLiveCatchupCandidate(stream) {
 		return nil, nil
 	}
 
-	startAt, ok := resolveEligibleLiveCatchupStart(stream, now)
+	startAt, ok := resolveEligibleLiveCatchupStart(stream, now, observedAt...)
 	if !ok {
 		return nil, nil
 	}
@@ -40,7 +41,7 @@ func isLiveCatchupCandidate(stream *domain.Stream) bool {
 	return stream != nil && stream.IsLive()
 }
 
-func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time) (*time.Time, bool) {
+func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time, observedAt ...*time.Time) (*time.Time, bool) {
 	startAt := resolveLiveStart(stream)
 	if startAt == nil {
 		observeYouTubeLiveCatchup("missing_start")
@@ -51,10 +52,21 @@ func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time) (*tim
 		return nil, false
 	}
 	if now.Sub(*startAt) > sharedconstants.LiveCatchupWindow {
+		if liveObservedRecently(observedAt, now) {
+			return startAt, true
+		}
 		observeYouTubeLiveCatchup("outside_window")
 		return nil, false
 	}
 	return startAt, true
+}
+
+func liveObservedRecently(observedAt []*time.Time, now time.Time) bool {
+	if len(observedAt) == 0 || observedAt[0] == nil || observedAt[0].IsZero() {
+		return false
+	}
+	observed := observedAt[0].UTC()
+	return !observed.After(now) && now.Sub(observed) <= sharedconstants.LiveCatchupWindow
 }
 
 func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(

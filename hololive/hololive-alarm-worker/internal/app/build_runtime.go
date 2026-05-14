@@ -20,6 +20,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/notification"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
@@ -42,6 +43,7 @@ type alarmFoundation struct {
 	TwitchClient   *twitch.Client
 	AlarmCRUD      domain.AlarmCRUD
 	Outbox         dispatchoutbox.Writer
+	Postgres       database.Client
 }
 
 func BuildAlarmWorkerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*AlarmWorkerRuntime, error) {
@@ -165,6 +167,7 @@ func buildRuntimeScheduler(
 		foundation.ChzzkClient,
 		foundation.TwitchClient,
 		foundation.AlarmCRUD,
+		foundation.Postgres,
 		cfg.Notification,
 		foundation.Outbox,
 		publishConfig,
@@ -231,6 +234,7 @@ func buildAlarmFoundation(
 		TwitchClient:   twitchClient,
 		AlarmCRUD:      alarmService,
 		Outbox:         outboxRepo,
+		Postgres:       infra.Postgres,
 	}, nil
 }
 

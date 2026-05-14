@@ -53,3 +53,4 @@
 053 057_add_ycsas_published_at_retry_after.sql
 054 058_create_alarm_dispatch_outbox.sql
 055 059_harden_alarm_dispatch_outbox.sql
+056 060_add_alarm_dispatch_events_live_stream_index.sql

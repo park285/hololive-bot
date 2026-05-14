@@ -34,6 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker"
@@ -90,6 +91,7 @@ func NewRuntimeScheduler(
 	chzzkClient *chzzk.Client,
 	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
+	postgres database.Client,
 	notifCfg config.NotificationConfig,
 	outbox dispatchoutbox.Writer,
 	publishCfg queue.PublishConfig,
@@ -115,6 +117,7 @@ func NewRuntimeScheduler(
 		dedupSvc,
 		targetMinutes,
 		youtubeEvaluationWindowCap,
+		checker.NewPgYouTubeLiveSessionSource(postgres),
 		logger,
 	)
 	if err != nil {
@@ -145,15 +148,17 @@ func newRuntimeSchedulerYouTubeChecker(
 	dedupSvc *dedup.Service,
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
+	persistedLiveSource checker.YouTubeLiveSessionSource,
 	logger *slog.Logger,
 ) (*checker.YouTubeChecker, error) {
-	youtubeChecker, err := checker.NewYouTubeChecker(
+	youtubeChecker, err := checker.NewYouTubeCheckerWithPersistedLiveSource(
 		cacheSvc,
 		holodexSvc,
 		tierScheduler,
 		dedupSvc,
 		targetMinutes,
 		evaluationWindowCap,
+		persistedLiveSource,
 		logger,
 	)
 	if err != nil {

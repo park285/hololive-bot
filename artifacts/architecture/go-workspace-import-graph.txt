@@ -98,6 +98,7 @@ github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-s
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/chzzk
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/configsub
+github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-alarm-worker/internal/app -> github.com/kapu/hololive-shared/pkg/service/notification
@@ -121,6 +122,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.c
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/chzzk
+github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/notification
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker -> github.com/kapu/hololive-shared/pkg/service/twitch
@@ -138,6 +140,7 @@ github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/chzzk
+github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/holodex
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/notification
 github.com/kapu/hololive-alarm-worker/internal/service/alarm/scheduler -> github.com/kapu/hololive-shared/pkg/service/twitch
