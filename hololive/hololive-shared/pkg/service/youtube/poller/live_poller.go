@@ -170,7 +170,7 @@ func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stre
 		session := buildLiveSession(channelID, stream, status, now, existing)
 		if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "video_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"status", "title", "scheduled_start_time", "started_at", "last_seen_at"}),
+			DoUpdates: clause.AssignmentColumns([]string{"status", "title", "scheduled_start_time", "started_at", "live_first_seen_at", "last_seen_at"}),
 		}).Create(session).Error; err != nil {
 			return fmt.Errorf("save live session: %w", err)
 		}
@@ -198,6 +198,7 @@ func buildLiveSession(channelID string, stream *domain.Stream, status domain.Liv
 		Status:             status,
 		Title:              stream.Title,
 		ScheduledStartTime: stream.StartScheduled,
+		LiveFirstSeenAt:    liveFirstSeenAt(status, now, existing),
 	}
 
 	if status == domain.LiveStatusLive {
@@ -205,6 +206,18 @@ func buildLiveSession(channelID string, stream *domain.Stream, status domain.Liv
 	}
 
 	return session
+}
+
+func liveFirstSeenAt(status domain.LiveStatus, now time.Time, existing domain.YouTubeLiveSession) *time.Time {
+	if existing.LiveFirstSeenAt != nil && !existing.LiveFirstSeenAt.IsZero() {
+		value := existing.LiveFirstSeenAt.UTC()
+		return &value
+	}
+	if status != domain.LiveStatusLive {
+		return nil
+	}
+	value := now.UTC()
+	return &value
 }
 
 func firstNonEmpty(primary string, fallback string) string {

@@ -15,8 +15,9 @@ const (
 )
 
 type PersistedYouTubeLiveSession struct {
-	Stream     *domain.Stream
-	LastSeenAt time.Time
+	Stream          *domain.Stream
+	LastSeenAt      time.Time
+	LiveFirstSeenAt time.Time
 }
 
 type YouTubeLiveSessionSource interface {

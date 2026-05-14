@@ -56,11 +56,19 @@ func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 		require.Equal(t, domain.LiveStatusLive, session.Status)
 		require.NotNil(t, session.StartedAt)
 		require.Equal(t, startedAt, session.StartedAt.UTC())
+		require.NotNil(t, session.LiveFirstSeenAt)
+		firstSeenAt := session.LiveFirstSeenAt.UTC()
 
 		var sample domain.YouTubeLiveViewerSample
 		require.NoError(t, db.First(&sample, "video_id = ?", "live-after-baseline").Error)
 		require.Equal(t, viewers, sample.ConcurrentViewers)
 		requireLiveOutboxEmpty(t, db)
+
+		provider.streams[0].Title = "Updated Live"
+		require.NoError(t, poller.Poll(context.Background(), "UC_LIVE"))
+		require.NoError(t, db.First(&session, "video_id = ?", "live-after-baseline").Error)
+		require.NotNil(t, session.LiveFirstSeenAt)
+		require.Equal(t, firstSeenAt, session.LiveFirstSeenAt.UTC())
 	})
 
 	t.Run("baseline 중 이미 live", func(t *testing.T) {
@@ -114,6 +122,9 @@ func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 		poller := NewLivePollerWithStatusProvider(provider, nil, db)
 
 		require.NoError(t, poller.Poll(context.Background(), "UC_LIVE"))
+		var session domain.YouTubeLiveSession
+		require.NoError(t, db.First(&session, "video_id = ?", "live-after-restart").Error)
+		require.NotNil(t, session.LiveFirstSeenAt)
 		requireLiveOutboxEmpty(t, db)
 	})
 }
