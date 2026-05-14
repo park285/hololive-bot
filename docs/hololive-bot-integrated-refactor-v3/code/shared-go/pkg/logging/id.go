@@ -25,13 +25,8 @@ func sanitizeIDPrefix(prefix string) string {
 
 	var b strings.Builder
 	for _, r := range prefix {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == '-' || r == '_' || r == '.':
-			b.WriteRune('_')
+		if replacement, ok := sanitizedIDPrefixRune(r); ok {
+			b.WriteRune(replacement)
 		}
 	}
 	out := strings.Trim(b.String(), "_")
@@ -39,4 +34,22 @@ func sanitizeIDPrefix(prefix string) string {
 		return "id"
 	}
 	return out
+}
+
+func sanitizedIDPrefixRune(r rune) (rune, bool) {
+	if isIDPrefixAlphaNumeric(r) {
+		return r, true
+	}
+	if isIDPrefixSeparator(r) {
+		return '_', true
+	}
+	return 0, false
+}
+
+func isIDPrefixAlphaNumeric(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+}
+
+func isIDPrefixSeparator(r rune) bool {
+	return r == '-' || r == '_' || r == '.'
 }
