@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -127,6 +128,50 @@ func TestLivePollerNeverEnqueuesLiveStreamOutbox(t *testing.T) {
 		require.NotNil(t, session.LiveFirstSeenAt)
 		requireLiveOutboxEmpty(t, db)
 	})
+}
+
+func TestLivePollerSaveLiveSessionPreservesExistingLiveFirstSeenAtOnConflict(t *testing.T) {
+	db := newBatchTestDB(t, &domain.YouTubeNotificationOutbox{})
+	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &domain.YouTubeLiveViewerSample{}))
+
+	firstSeenAt := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	laterSeenAt := firstSeenAt.Add(45 * time.Second)
+	require.NoError(t, db.Exec(fmt.Sprintf(`
+CREATE TRIGGER insert_racing_live_session
+BEFORE INSERT ON youtube_live_sessions
+WHEN NEW.video_id = 'race-live'
+BEGIN
+	INSERT OR IGNORE INTO youtube_live_sessions (
+		video_id,
+		channel_id,
+		status,
+		title,
+		live_first_seen_at,
+		last_seen_at
+	) VALUES (
+		'race-live',
+		'UC_LIVE',
+		'LIVE',
+		'Racing Live',
+		'%s',
+		'%s'
+	);
+END;`, firstSeenAt.Format(time.RFC3339Nano), firstSeenAt.Format(time.RFC3339Nano))).Error)
+
+	poller := NewLivePollerWithStatusProvider(nil, nil, db)
+	stream := &domain.Stream{
+		ID:        "race-live",
+		ChannelID: "UC_LIVE",
+		Title:     "Racing Live Updated",
+		Status:    domain.StreamStatusLive,
+	}
+
+	require.NoError(t, poller.saveLiveSession(context.Background(), "UC_LIVE", stream, domain.LiveStatusLive, laterSeenAt, false))
+
+	var session domain.YouTubeLiveSession
+	require.NoError(t, db.First(&session, "video_id = ?", "race-live").Error)
+	require.NotNil(t, session.LiveFirstSeenAt)
+	require.Equal(t, firstSeenAt, session.LiveFirstSeenAt.UTC())
 }
 
 func requireLiveOutboxEmpty(t *testing.T, db *gorm.DB) {
