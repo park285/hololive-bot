@@ -23,12 +23,25 @@ func (testAlarmDispatchEvent) TableName() string {
 	return "alarm_dispatch_events"
 }
 
+type testAlarmDispatchDelivery struct {
+	ID        int64 `gorm:"primaryKey"`
+	EventID   int64
+	RoomID    string
+	Status    string
+	SentAt    *time.Time
+	CreatedAt time.Time
+}
+
+func (testAlarmDispatchDelivery) TableName() string {
+	return "alarm_dispatch_deliveries"
+}
+
 func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testing.T) {
 	t.Parallel()
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &testAlarmDispatchEvent{}))
+	require.NoError(t, db.AutoMigrate(&domain.YouTubeLiveSession{}, &testAlarmDispatchEvent{}, &testAlarmDispatchDelivery{}))
 
 	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	liveStart := now.Add(-30 * time.Minute)
@@ -82,9 +95,10 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	assert.Equal(t, "https://youtube.com/watch?v=live-included", *sessionsByID(sessions)["live-included"].Stream.Link)
 
 	require.NoError(t, db.Create([]testAlarmDispatchEvent{
-		{AlarmType: string(domain.AlarmTypeLive), StreamID: "live-included", CreatedAt: now.Add(-time.Hour)},
-		{AlarmType: string(domain.AlarmTypeCommunity), StreamID: "upcoming-included", CreatedAt: now.Add(-time.Hour)},
-		{AlarmType: string(domain.AlarmTypeLive), StreamID: "old-dispatch", CreatedAt: now.Add(-25 * time.Hour)},
+		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: "live-included", CreatedAt: now.Add(-time.Hour)},
+		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: "upcoming-included", CreatedAt: now.Add(-time.Hour)},
+		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: "old-dispatch", CreatedAt: now.Add(-25 * time.Hour)},
+		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", CreatedAt: now.Add(-time.Hour)},
 	}).Error)
 
 	dispatched, err := source.RecentlyDispatchedStreamIDs(t.Context(), []string{"live-included", "upcoming-included", "old-dispatch"}, now.Add(-24*time.Hour))
@@ -92,6 +106,24 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	assert.Contains(t, dispatched, "live-included")
 	assert.NotContains(t, dispatched, "upcoming-included")
 	assert.NotContains(t, dispatched, "old-dispatch")
+
+	sentAt := now.Add(-30 * time.Minute)
+	oldSentAt := now.Add(-25 * time.Hour)
+	require.NoError(t, db.Create([]testAlarmDispatchDelivery{
+		{EventID: 1, RoomID: "room-1", Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 1, RoomID: "room-2", Status: "retry", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 2, RoomID: "room-3", Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 3, RoomID: "room-4", Status: "sent", SentAt: &oldSentAt, CreatedAt: now.Add(-25 * time.Hour)},
+		{EventID: 4, RoomID: "room-5", Status: "pending", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
+	}).Error)
+
+	sentRooms, err := source.RecentlySentLiveStreamRooms(t.Context(), []string{"live-included", "upcoming-included", "old-dispatch", "pending-live"}, now.Add(-24*time.Hour))
+	require.NoError(t, err)
+	assert.Contains(t, sentRooms["live-included"], "room-1")
+	assert.NotContains(t, sentRooms["live-included"], "room-2")
+	assert.NotContains(t, sentRooms, "upcoming-included")
+	assert.NotContains(t, sentRooms, "old-dispatch")
+	assert.NotContains(t, sentRooms, "pending-live")
 }
 
 func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
