@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/stretchr/testify/require"
 )
 
 func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool) {
@@ -338,6 +339,152 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 	if status != string(StatusRetry) || expiresAt != nil {
 		t.Fatalf("released row status=%q lock_expires_at=%v, want retry/nil", status, expiresAt)
 	}
+}
+
+func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.T) {
+	repo, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-jsonb"
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	envelopes := []domain.AlarmQueueEnvelope{
+		{
+			Notification: domain.AlarmNotification{
+				AlarmType: domain.AlarmTypeLive,
+				RoomID:    "room-retry",
+				Channel:   &domain.Channel{ID: "channel-1"},
+				Stream:    &domain.Stream{ID: "stream-retry", ChannelID: "channel-1", StartScheduled: &start},
+			},
+			ClaimKeys: []string{"claim-retry"},
+			Version:   1,
+		},
+		{
+			Notification: domain.AlarmNotification{
+				AlarmType: domain.AlarmTypeLive,
+				RoomID:    "room-dlq",
+				Channel:   &domain.Channel{ID: "channel-1"},
+				Stream:    &domain.Stream{ID: "stream-dlq", ChannelID: "channel-1", StartScheduled: &start},
+			},
+			ClaimKeys: []string{"claim-dlq"},
+			Version:   1,
+		},
+	}
+
+	result, err := repo.InsertBatch(ctx, PublishBatchInput{
+		Envelopes: envelopes,
+		Status:    StatusPending,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, result.InsertedDeliveries)
+
+	claimed, err := repo.ClaimDue(ctx, workerID, 2, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 2)
+
+	var retryID, dlqID int64
+	for _, record := range claimed {
+		switch record.RoomID {
+		case "room-retry":
+			retryID = record.ID
+		case "room-dlq":
+			dlqID = record.ID
+		}
+	}
+	require.NotZero(t, retryID)
+	require.NotZero(t, dlqID)
+
+	nextAttemptAt := time.Now().UTC().Add(3 * time.Minute)
+	require.NoError(t, repo.ScheduleRetry(ctx, []RetryUpdate{
+		{
+			ID:            retryID,
+			AttemptCount:  1,
+			NextAttemptAt: nextAttemptAt,
+			Error:         "jsonb retry test",
+		},
+	}, workerID))
+
+	require.NoError(t, repo.MoveToDLQ(ctx, []TerminalUpdate{
+		{
+			ID:    dlqID,
+			Error: "jsonb dlq test",
+		},
+	}, workerID))
+
+	var retryStatus string
+	var retryAttempt int
+	var retryError string
+	err = pool.QueryRow(ctx, `
+		SELECT status, attempt_count, last_error
+		FROM alarm_dispatch_deliveries
+		WHERE id=$1
+	`, retryID).Scan(&retryStatus, &retryAttempt, &retryError)
+	require.NoError(t, err)
+	require.Equal(t, string(StatusRetry), retryStatus)
+	require.Equal(t, 1, retryAttempt)
+	require.Equal(t, "jsonb retry test", retryError)
+
+	var dlqStatus string
+	var dlqError string
+	var dlqAt *time.Time
+	err = pool.QueryRow(ctx, `
+		SELECT status, last_error, dlq_at
+		FROM alarm_dispatch_deliveries
+		WHERE id=$1
+	`, dlqID).Scan(&dlqStatus, &dlqError, &dlqAt)
+	require.NoError(t, err)
+	require.Equal(t, string(StatusDLQ), dlqStatus)
+	require.Equal(t, "jsonb dlq test", dlqError)
+	require.NotNil(t, dlqAt)
+}
+
+func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
+	repo, pool := setupDispatchOutboxIntegration(t)
+	ctx := context.Background()
+	workerID := "worker-jsonb-quarantine"
+	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	envelope := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    "room-quarantine",
+			Channel:   &domain.Channel{ID: "channel-1"},
+			Stream:    &domain.Stream{ID: "stream-quarantine", ChannelID: "channel-1", StartScheduled: &start},
+		},
+		ClaimKeys: []string{"claim-quarantine"},
+		Version:   1,
+	}
+
+	_, err := repo.InsertBatch(ctx, PublishBatchInput{
+		Envelopes: []domain.AlarmQueueEnvelope{envelope},
+		Status:    StatusPending,
+	})
+	require.NoError(t, err)
+
+	claimed, err := repo.ClaimDue(ctx, workerID, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	id := claimed[0].ID
+	require.NoError(t, repo.MarkSending(ctx, []int64{id}, workerID, time.Minute))
+	require.NoError(t, repo.Quarantine(ctx, []TerminalUpdate{
+		{
+			ID:    id,
+			Error: "jsonb quarantine test",
+		},
+	}, workerID))
+
+	var status string
+	var lastError string
+	var quarantinedAt *time.Time
+	err = pool.QueryRow(ctx, `
+		SELECT status, last_error, quarantined_at
+		FROM alarm_dispatch_deliveries
+		WHERE id=$1
+	`, id).Scan(&status, &lastError, &quarantinedAt)
+	require.NoError(t, err)
+	require.Equal(t, string(StatusQuarantined), status)
+	require.Equal(t, "jsonb quarantine test", lastError)
+	require.NotNil(t, quarantinedAt)
 }
 
 func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {

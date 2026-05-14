@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -654,6 +655,74 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEmpty(t, notifications)
 	})
+}
+
+func TestResolveEligibleLiveCatchupStartUsesLiveCatchupWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	inWindow := now.Add(-sharedconstants.LiveCatchupWindow)
+	stream := &domain.Stream{
+		ID:             "live-in-window",
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &inWindow,
+	}
+
+	got, ok := resolveEligibleLiveCatchupStart(stream, now)
+	require.True(t, ok)
+	require.NotNil(t, got)
+
+	outside := now.Add(-(sharedconstants.LiveCatchupWindow + time.Second))
+	stream.StartScheduled = &outside
+
+	got, ok = resolveEligibleLiveCatchupStart(stream, now)
+	require.False(t, ok)
+	require.Nil(t, got)
+}
+
+func TestLiveCatchupDedupAfterMarkAsNotified(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	start := now.Add(-2 * time.Minute)
+
+	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+
+	stream := &domain.Stream{
+		ID:             "live-dedup",
+		Title:          "live title",
+		ChannelID:      "ch-live",
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &start,
+		StartActual:    &start,
+		Channel:        &domain.Channel{ID: "ch-live", Name: "Live Channel"},
+	}
+
+	first, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+
+	require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 0))
+
+	second, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
+	require.NoError(t, err)
+	require.Empty(t, second)
+}
+
+func newTestYouTubeCheckerWithDedup(t *testing.T) (*YouTubeChecker, *dedup.Service) {
+	t.Helper()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, newCheckerTestLogger())
+	checker := &YouTubeChecker{
+		dedupSvc:            dedupSvc,
+		targetPolicy:        sharedchecker.NewTargetMinutePolicy([]int{5, 3, 1}),
+		evaluationWindowCap: 75 * time.Second,
+		logger:              newCheckerTestLogger(),
+	}
+	return checker, dedupSvc
 }
 
 func TestNotifierReleaseClaimsBestEffort(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 )
 
 func (c *YouTubeChecker) buildLiveCatchupNotifications(
@@ -39,7 +40,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	if err != nil {
 		return nil, err
 	}
-	return c.finalizeLiveCatchupNotifications(stream, startAt, now, notifications, suppressedRooms), nil
+	return c.finalizeLiveCatchupNotifications(ctx, stream, startAt, now, notifications, suppressedRooms), nil
 }
 
 func isLiveCatchupCandidate(stream *domain.Stream) bool {
@@ -56,7 +57,7 @@ func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time) (*tim
 		observeYouTubeLiveCatchup("future_start")
 		return nil, false
 	}
-	if now.Sub(*startAt) > sharedconstants.FullRefreshInterval+time.Minute {
+	if now.Sub(*startAt) > sharedconstants.LiveCatchupWindow {
 		observeYouTubeLiveCatchup("outside_window")
 		return nil, false
 	}
@@ -111,6 +112,7 @@ func (c *YouTubeChecker) roomHasRecentUpcomingNotification(ctx context.Context, 
 }
 
 func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
+	ctx context.Context,
 	stream *domain.Stream,
 	startAt *time.Time,
 	now time.Time,
@@ -121,11 +123,19 @@ func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
 		observeYouTubeLiveCatchup("suppressed_recent_upcoming")
 	}
 	if len(notifications) == 0 {
+		if suppressedRooms > 0 {
+			sharedlog.Info(ctx, c.logger, "alarm.youtube.live_catchup.suppressed", "youtube live catchup alarm suppressed",
+				slog.String("stream_id", stream.ID),
+				slog.String("channel_id", youtubeStreamChannelID(stream)),
+				slog.Time("start_at", startAt.UTC()),
+				slog.Int("suppressed_rooms", suppressedRooms),
+			)
+		}
 		return notifications
 	}
 
 	observeYouTubeLiveCatchup("selected")
-	c.logger.Info("YouTube live catchup alarm selected",
+	sharedlog.Info(ctx, c.logger, "alarm.youtube.live_catchup.selected", "youtube live catchup alarm selected",
 		slog.String("stream_id", stream.ID),
 		slog.String("channel_id", youtubeStreamChannelID(stream)),
 		slog.Time("start_at", startAt.UTC()),
