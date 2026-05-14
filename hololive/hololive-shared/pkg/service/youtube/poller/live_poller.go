@@ -169,8 +169,15 @@ func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stre
 
 		session := buildLiveSession(channelID, stream, status, now, existing)
 		if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "video_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"status", "title", "scheduled_start_time", "started_at", "live_first_seen_at", "last_seen_at"}),
+			Columns: []clause.Column{{Name: "video_id"}},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"status":               gorm.Expr("excluded.status"),
+				"title":                gorm.Expr("excluded.title"),
+				"scheduled_start_time": gorm.Expr("excluded.scheduled_start_time"),
+				"started_at":           gorm.Expr("excluded.started_at"),
+				"live_first_seen_at":   gorm.Expr("COALESCE(youtube_live_sessions.live_first_seen_at, excluded.live_first_seen_at)"),
+				"last_seen_at":         gorm.Expr("excluded.last_seen_at"),
+			}),
 		}).Create(session).Error; err != nil {
 			return fmt.Errorf("save live session: %w", err)
 		}
