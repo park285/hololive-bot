@@ -169,10 +169,10 @@ func TestRenderAlarmDispatchNotificationGroupMatchesLegacyValkeyRenderer(t *test
 		"⏰ Member2 방송 예정\n📺 Title2\n🔗 https://youtube.com/watch?v=def", message)
 }
 
-func TestRenderAlarmDispatchNotificationLiveCatchupUsesStartedMessage(t *testing.T) {
+func TestRenderAlarmDispatchNotificationLiveCatchupUsesRecoveredUpcomingMessage(t *testing.T) {
 	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	notification := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
-	notification.MinutesUntil = 0
+	notification.MinutesUntil = 5
 	notification.Channel.Name = "Member"
 	notification.Stream.ID = "live-1"
 	notification.Stream.Title = "Live Title"
@@ -182,7 +182,7 @@ func TestRenderAlarmDispatchNotificationLiveCatchupUsesStartedMessage(t *testing
 	got := renderAlarmDispatchNotification(notification)
 
 	assert.Equal(t,
-		"🔔 Member 방송 시작!\n📺 Live Title\n🔗 https://youtube.com/watch?v=live-1",
+		"⏰ Member 방송 5분 전\n📺 Live Title\n🔗 https://youtube.com/watch?v=live-1",
 		got,
 	)
 }

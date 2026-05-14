@@ -83,6 +83,7 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 ) ([]*domain.AlarmNotification, int, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
 	suppressedRooms := 0
+	minutesUntil := c.targetPolicySnapshot().PrimaryAdvanceMinute()
 	for _, roomID := range subscriberRooms {
 		recentlyUpcoming, err := c.roomHasRecentUpcomingNotification(ctx, roomID, channelID, stream)
 		if err != nil {
@@ -92,7 +93,7 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 			suppressedRooms++
 			continue
 		}
-		notifications = append(notifications, roomNotifications([]string{roomID}, stream.Channel, stream, 0, "")...)
+		notifications = append(notifications, roomNotifications([]string{roomID}, stream.Channel, stream, minutesUntil, "")...)
 	}
 	return notifications, suppressedRooms, nil
 }
@@ -140,6 +141,7 @@ func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
 		slog.String("channel_id", youtubeStreamChannelID(stream)),
 		slog.Time("start_at", startAt.UTC()),
 		slog.Int64("elapsed_seconds", int64(now.Sub(*startAt)/time.Second)),
+		slog.Int("minutes_until", notifications[0].MinutesUntil),
 		slog.Int("rooms", len(notifications)),
 		slog.Int("suppressed_rooms", suppressedRooms),
 	)

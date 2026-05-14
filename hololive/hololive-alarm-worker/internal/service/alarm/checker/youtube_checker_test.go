@@ -261,6 +261,60 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 	}
 }
 
+func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *testing.T) {
+	t.Parallel()
+
+	const (
+		channelID = "UC_TEST_CHANNEL"
+		roomID    = "room-1"
+		streamID  = "stream-live-after-start"
+	)
+
+	startActual := time.Now().UTC().Truncate(time.Second).Add(-5 * time.Minute)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/live" {
+			http.NotFound(w, r)
+			return
+		}
+		if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
+			http.Error(w, "missing channels query", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fmt.Appendf(nil,
+			`[{"id":"%s","title":"테스트 방송","channel_id":"%s","status":"live","start_scheduled":"%s","start_actual":"%s","channel":{"id":"%s","name":"테스트 채널","org":"Hololive"}}]`,
+			streamID,
+			channelID,
+			startActual.UTC().Format(time.RFC3339),
+			startActual.UTC().Format(time.RFC3339),
+			channelID,
+		))
+	}))
+	defer server.Close()
+
+	cacheSvc := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupSvc := dedup.NewService(cacheSvc, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexSvc, err := holodex.NewHolodexService(server.URL, "test-key", cacheSvc, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeChecker(cacheSvc, holodexSvc, tierSched, dedupSvc, []int{5, 3, 1}, 0, logger)
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	_, err = cacheSvc.SAdd(ctx, notification.AlarmChannelRegistryKey, []string{channelID})
+	require.NoError(t, err)
+	_, err = cacheSvc.SAdd(ctx, notification.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	require.NoError(t, err)
+
+	notifications, err := checker.Check(ctx)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 5, notifications[0].MinutesUntil)
+}
+
 func TestYouTubeChecker_RecoversRecentCappedFiveMinuteAlarm(t *testing.T) {
 	t.Parallel()
 

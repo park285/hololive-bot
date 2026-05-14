@@ -581,7 +581,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		assert.Equal(t, 5, notifications[0].MinutesUntil)
 	})
 
-	t.Run("build live catchup notifications", func(t *testing.T) {
+	t.Run("build live catchup notifications as missed primary reminder", func(t *testing.T) {
 		start := now.Add(-3 * time.Minute)
 		stream := &domain.Stream{
 			ID:             "live-1",
@@ -596,6 +596,7 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		notifications, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 		require.NoError(t, err)
 		require.Len(t, notifications, 2)
+		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
 		require.NoError(t, dedupSvc.MarkUpcomingEventNotified(ctx, "room1", "ch-live", stream))
 
@@ -603,8 +604,9 @@ func TestYouTubeNotificationBuilders(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, notifications, 1)
 		assert.Equal(t, "room2", notifications[0].RoomID)
+		assert.Equal(t, 5, notifications[0].MinutesUntil)
 
-		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 0))
+		require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
 
 		notifications, err = checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 		require.NoError(t, err)
@@ -703,8 +705,9 @@ func TestLiveCatchupDedupAfterMarkAsNotified(t *testing.T) {
 	first, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 	require.NoError(t, err)
 	require.Len(t, first, 2)
+	assert.Equal(t, 5, first[0].MinutesUntil)
 
-	require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 0))
+	require.NoError(t, dedupSvc.MarkAsNotified(ctx, stream.ID, start, 5))
 
 	second, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1", "room2"}, now)
 	require.NoError(t, err)
