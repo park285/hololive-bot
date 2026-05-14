@@ -45,6 +45,8 @@ type fakeYouTubeLiveSessionSource struct {
 	sessions              []PersistedYouTubeLiveSession
 	recentLiveChannelIDs  []string
 	recentDispatch        map[string]bool
+	recentSentRooms       map[string][]string
+	recentSentRoomsErr    error
 	loadRecentChannelArgs [][]string
 }
 
@@ -77,6 +79,26 @@ func (s *fakeYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 		}
 	}
 	return dispatched, nil
+}
+
+func (s *fakeYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
+	_ context.Context,
+	streamIDs []string,
+	_ time.Time,
+) (map[string]map[string]struct{}, error) {
+	if s.recentSentRoomsErr != nil {
+		return nil, s.recentSentRoomsErr
+	}
+	sentRoomsByStreamID := make(map[string]map[string]struct{})
+	for _, streamID := range streamIDs {
+		for _, roomID := range s.recentSentRooms[streamID] {
+			if sentRoomsByStreamID[streamID] == nil {
+				sentRoomsByStreamID[streamID] = make(map[string]struct{})
+			}
+			sentRoomsByStreamID[streamID][roomID] = struct{}{}
+		}
+	}
+	return sentRoomsByStreamID, nil
 }
 
 func TestNewYouTubeChecker_NilDependencies(t *testing.T) {

@@ -196,6 +196,77 @@ func (s *PgYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	return result, nil
 }
 
+func (s *PgYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
+	ctx context.Context,
+	streamIDs []string,
+	since time.Time,
+) (map[string]map[string]struct{}, error) {
+	result := make(map[string]map[string]struct{})
+	streamIDs, ok := s.normalizedStreamIDs(streamIDs)
+	if !ok {
+		return result, nil
+	}
+
+	rows, err := s.queryRecentlySentLiveStreamRooms(ctx, streamIDs, since)
+	if err != nil {
+		return nil, err
+	}
+	return sentLiveStreamRoomsByStreamID(rows), nil
+}
+
+func (s *PgYouTubeLiveSessionSource) normalizedStreamIDs(streamIDs []string) ([]string, bool) {
+	if s == nil || s.db == nil || len(streamIDs) == 0 {
+		return nil, false
+	}
+	streamIDs = uniqueStrings(streamIDs)
+	return streamIDs, len(streamIDs) > 0
+}
+
+type sentLiveStreamRoomRow struct {
+	StreamID string
+	RoomID   string
+}
+
+func (s *PgYouTubeLiveSessionSource) queryRecentlySentLiveStreamRooms(
+	ctx context.Context,
+	streamIDs []string,
+	since time.Time,
+) ([]sentLiveStreamRoomRow, error) {
+	var rows []sentLiveStreamRoomRow
+	err := s.db.WithContext(ctx).
+		Table("alarm_dispatch_events AS e").
+		Select("e.stream_id, d.room_id").
+		Joins("JOIN alarm_dispatch_deliveries AS d ON d.event_id = e.id").
+		Where(
+			"e.alarm_type = ? AND e.stream_id IN ? AND d.status = ? AND d.sent_at >= ?",
+			persistedAlarmDispatchEventLiveType,
+			streamIDs,
+			"sent",
+			since.UTC(),
+		).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func sentLiveStreamRoomsByStreamID(rows []sentLiveStreamRoomRow) map[string]map[string]struct{} {
+	result := make(map[string]map[string]struct{})
+	for _, row := range rows {
+		streamID := strings.TrimSpace(row.StreamID)
+		roomID := strings.TrimSpace(row.RoomID)
+		if streamID == "" || roomID == "" {
+			continue
+		}
+		if result[streamID] == nil {
+			result[streamID] = make(map[string]struct{})
+		}
+		result[streamID][roomID] = struct{}{}
+	}
+	return result
+}
+
 func streamFromYouTubeLiveSession(row domain.YouTubeLiveSession) *domain.Stream {
 	videoID := strings.TrimSpace(row.VideoID)
 	channelID := strings.TrimSpace(row.ChannelID)
