@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"gorm.io/gorm"
 )
@@ -107,8 +108,9 @@ func (s *PgYouTubeLiveSessionSource) LoadRecentSessions(
 			continue
 		}
 		sessions = append(sessions, PersistedYouTubeLiveSession{
-			Stream:     stream,
-			LastSeenAt: row.LastSeenAt.UTC(),
+			Stream:          stream,
+			LastSeenAt:      row.LastSeenAt.UTC(),
+			LiveFirstSeenAt: utcTimeValue(row.LiveFirstSeenAt),
 		})
 	}
 	return sessions, nil
@@ -241,7 +243,7 @@ func (s *PgYouTubeLiveSessionSource) queryRecentlySentLiveStreamRooms(
 			"e.alarm_type = ? AND e.stream_id IN ? AND d.status = ? AND d.sent_at >= ?",
 			persistedAlarmDispatchEventLiveType,
 			streamIDs,
-			"sent",
+			string(dispatchoutbox.StatusSent),
 			since.UTC(),
 		).
 		Scan(&rows).Error
@@ -315,4 +317,11 @@ func utcTimePtr(value *time.Time) *time.Time {
 	}
 	utc := value.UTC()
 	return &utc
+}
+
+func utcTimeValue(value *time.Time) time.Time {
+	if value == nil || value.IsZero() {
+		return time.Time{}
+	}
+	return value.UTC()
 }

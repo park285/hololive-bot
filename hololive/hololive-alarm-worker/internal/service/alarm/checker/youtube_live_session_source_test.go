@@ -45,18 +45,20 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 
 	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	liveStart := now.Add(-30 * time.Minute)
+	liveFirstSeen := now.Add(-10 * time.Minute)
 	upcomingStart := now.Add(4 * time.Minute)
 	oldSeen := now.Add(-(defaultPersistedLiveSessionRecentWindow + time.Second))
 	recentSeen := now.Add(-time.Minute)
 
 	require.NoError(t, db.Create([]domain.YouTubeLiveSession{
 		{
-			VideoID:    "live-included",
-			ChannelID:  "ch-1",
-			Status:     domain.LiveStatusLive,
-			Title:      " live title ",
-			StartedAt:  &liveStart,
-			LastSeenAt: recentSeen,
+			VideoID:         "live-included",
+			ChannelID:       "ch-1",
+			Status:          domain.LiveStatusLive,
+			Title:           " live title ",
+			StartedAt:       &liveStart,
+			LiveFirstSeenAt: &liveFirstSeen,
+			LastSeenAt:      recentSeen,
 		},
 		{
 			VideoID:            "upcoming-included",
@@ -91,6 +93,7 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 	}
 	assert.ElementsMatch(t, []string{"live-included", "upcoming-included"}, gotIDs)
 	assert.Equal(t, "live title", sessionsByID(sessions)["live-included"].Stream.Title)
+	assert.Equal(t, liveFirstSeen, sessionsByID(sessions)["live-included"].LiveFirstSeenAt)
 	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.Link)
 	assert.Equal(t, "https://youtube.com/watch?v=live-included", *sessionsByID(sessions)["live-included"].Stream.Link)
 

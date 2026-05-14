@@ -341,6 +341,7 @@ type YouTubeLiveSession struct {
 	ScheduledStartTime *time.Time `json:"scheduled_start_time,omitempty"`
 	StartedAt          *time.Time `json:"started_at,omitempty"`
 	EndedAt            *time.Time `json:"ended_at,omitempty"`
+	LiveFirstSeenAt    *time.Time `gorm:"column:live_first_seen_at" json:"live_first_seen_at,omitempty"`
 	LastSeenAt         time.Time  `gorm:"autoUpdateTime;index:idx_yls_status_last_seen,idx_yls_channel_last_seen" json:"last_seen_at"`
 }
 
