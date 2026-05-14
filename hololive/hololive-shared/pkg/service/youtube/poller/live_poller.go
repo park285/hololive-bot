@@ -170,7 +170,7 @@ func (p *LivePoller) saveLiveSession(ctx context.Context, channelID string, stre
 		session := buildLiveSession(channelID, stream, status, now, existing)
 		if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "video_id"}},
-			DoUpdates: clause.Assignments(map[string]interface{}{
+			DoUpdates: clause.Assignments(map[string]any{
 				"status":               gorm.Expr("excluded.status"),
 				"title":                gorm.Expr("excluded.title"),
 				"scheduled_start_time": gorm.Expr("excluded.scheduled_start_time"),
