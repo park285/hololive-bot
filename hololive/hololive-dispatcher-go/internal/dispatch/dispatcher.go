@@ -128,10 +128,6 @@ func (d *Dispatcher) RunOnce(ctx context.Context) error {
 }
 
 func (d *Dispatcher) RunOnceProcessed(ctx context.Context) (bool, error) {
-	sharedlog.Info(ctx, d.logger, EventDispatchBatchDrainStarted, "dispatch batch drain started",
-		slog.Int("max_batch", d.maxBatch),
-	)
-
 	envelopes, err := d.nextBatch(ctx)
 	if err != nil {
 		attrs := []slog.Attr{slog.Int("max_batch", d.maxBatch)}
@@ -139,13 +135,18 @@ func (d *Dispatcher) RunOnceProcessed(ctx context.Context) (bool, error) {
 		sharedlog.Error(ctx, d.logger, EventDispatchBatchDrainFailed, "dispatch batch drain failed", attrs...)
 		return false, fmt.Errorf("run dispatch once: drain batch: %w", err)
 	}
+	if len(envelopes) == 0 {
+		sharedlog.Debug(ctx, d.logger, EventDispatchBatchDrainSucceeded, "dispatch batch drain empty",
+			slog.Int("max_batch", d.maxBatch),
+			slog.Int("envelopes", 0),
+		)
+		return false, nil
+	}
+
 	sharedlog.Info(ctx, d.logger, EventDispatchBatchDrainSucceeded, "dispatch batch drain succeeded",
 		slog.Int("max_batch", d.maxBatch),
 		slog.Int("envelopes", len(envelopes)),
 	)
-	if len(envelopes) == 0 {
-		return false, nil
-	}
 
 	groups := GroupEnvelopes(envelopes)
 	if err := d.dispatchGroups(ctx, groups); err != nil {
@@ -166,11 +167,6 @@ func (d *Dispatcher) dispatchGroups(ctx context.Context, groups []NotificationGr
 	for _, group := range groups {
 		eg.Go(func() error {
 			if err := d.dispatchGroup(ctx, group); err != nil {
-				d.logger.Warn("Dispatch group failed",
-					slog.String("room_id", group.RoomID),
-					slog.Int("notifications", len(group.Notifications)),
-					slog.Any("error", err),
-				)
 				return err
 			}
 			return nil

@@ -8,19 +8,23 @@ sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 
 ## RunOnceProcessed
 
-`nextBatch` 전후에 batch drain 이벤트를 추가합니다.
+`nextBatch` 이후 batch drain 결과를 남깁니다. idle loop에서는 Info 로그를 남기지 않습니다.
 
 ```go
-sharedlog.Info(ctx, d.logger, EventDispatchBatchDrainStarted, "dispatch batch drain started",
-    slog.Int("max_batch", d.maxBatch),
-)
-
 envelopes, err := d.nextBatch(ctx)
 if err != nil {
     attrs := []slog.Attr{slog.Int("max_batch", d.maxBatch)}
     attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
     sharedlog.Error(ctx, d.logger, EventDispatchBatchDrainFailed, "dispatch batch drain failed", attrs...)
     return false, fmt.Errorf("run dispatch once: drain batch: %w", err)
+}
+
+if len(envelopes) == 0 {
+    sharedlog.Debug(ctx, d.logger, EventDispatchBatchDrainSucceeded, "dispatch batch drain empty",
+        slog.Int("max_batch", d.maxBatch),
+        slog.Int("envelopes", 0),
+    )
+    return false, nil
 }
 
 sharedlog.Info(ctx, d.logger, EventDispatchBatchDrainSucceeded, "dispatch batch drain succeeded",
