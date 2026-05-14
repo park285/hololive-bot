@@ -714,6 +714,33 @@ func TestLiveCatchupDedupAfterMarkAsNotified(t *testing.T) {
 	require.Empty(t, second)
 }
 
+func TestLiveCatchupAllowsRescheduledStreamAfterPreviousScheduleNotified(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	oldStart := now.Add(-30 * time.Minute)
+	newStart := now.Add(-2 * time.Minute)
+
+	checker, dedupSvc := newTestYouTubeCheckerWithDedup(t)
+	require.NoError(t, dedupSvc.MarkAsNotified(ctx, "live-rescheduled", oldStart, 5))
+
+	stream := &domain.Stream{
+		ID:             "live-rescheduled",
+		Title:          "rescheduled title",
+		ChannelID:      "ch-live",
+		Status:         domain.StreamStatusLive,
+		StartScheduled: &newStart,
+		StartActual:    &newStart,
+		Channel:        &domain.Channel{ID: "ch-live", Name: "Live Channel"},
+	}
+
+	notifications, err := checker.buildLiveCatchupNotifications(ctx, "ch-live", stream, []string{"room1"}, now)
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 5, notifications[0].MinutesUntil)
+}
+
 func newTestYouTubeCheckerWithDedup(t *testing.T) (*YouTubeChecker, *dedup.Service) {
 	t.Helper()
 

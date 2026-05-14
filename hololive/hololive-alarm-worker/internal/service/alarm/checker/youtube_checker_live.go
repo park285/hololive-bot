@@ -27,7 +27,8 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 		return nil, nil
 	}
 
-	alreadyNotified, err := c.liveCatchupAlreadyNotified(ctx, stream)
+	minutesUntil := c.targetPolicySnapshot().PrimaryAdvanceMinute()
+	alreadyNotified, err := c.liveCatchupAlreadyNotified(ctx, stream, *startAt, minutesUntil)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +37,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	}
 
 	resolvedStream := ensureScheduledTime(stream, *startAt)
-	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms)
+	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, minutesUntil)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +65,8 @@ func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time) (*tim
 	return startAt, true
 }
 
-func (c *YouTubeChecker) liveCatchupAlreadyNotified(ctx context.Context, stream *domain.Stream) (bool, error) {
-	alreadyNotified, err := c.dedupSvc.IsAlreadyNotified(ctx, stream.ID)
+func (c *YouTubeChecker) liveCatchupAlreadyNotified(ctx context.Context, stream *domain.Stream, startAt time.Time, minutesUntil int) (bool, error) {
+	alreadyNotified, err := c.dedupSvc.IsAlreadyNotifiedForSchedule(ctx, stream.ID, startAt, minutesUntil)
 	if err != nil {
 		return false, fmt.Errorf("build live catchup notifications: check already notified: %w", err)
 	}
@@ -80,10 +81,10 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 	channelID string,
 	stream *domain.Stream,
 	subscriberRooms []string,
+	minutesUntil int,
 ) ([]*domain.AlarmNotification, int, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
 	suppressedRooms := 0
-	minutesUntil := c.targetPolicySnapshot().PrimaryAdvanceMinute()
 	for _, roomID := range subscriberRooms {
 		recentlyUpcoming, err := c.roomHasRecentUpcomingNotification(ctx, roomID, channelID, stream)
 		if err != nil {
