@@ -7,6 +7,7 @@ This directory keeps old plan-kit bundles that are useful as implementation hist
 ## Index
 
 - `holobot-pg-valkey-hybrid-hardening-plan-v4/`
+- `holobot-pg-first-logic-hardening-plan-v2/`
 - `holobot-valkey-plan/`
 - `hololive-bot-baseline-bigbang-llm-docs-v8/`
 - `hololive-bot-integrated-refactor-v3/`

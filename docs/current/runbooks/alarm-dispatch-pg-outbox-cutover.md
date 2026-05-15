@@ -15,10 +15,19 @@ Dispatcher:
 
 ```text
 ALARM_DISPATCH_CONSUMER_MODE=valkey|pg
+ALARM_DISPATCH_MAX_BATCH=50
 ALARM_DISPATCH_LEASE_SECONDS=60
 ALARM_DISPATCH_POLL_INTERVAL_MS=1000
 ALARM_DISPATCH_MAX_BATCHES_PER_WAKE=20
+ALARM_DISPATCH_IDLE_BACKOFF_MIN_MS=250
+ALARM_DISPATCH_IDLE_BACKOFF_MAX_MS=5000
+ALARM_DISPATCH_RECOVERY_INTERVAL_MS=30000
+ALARM_DISPATCH_RECOVERY_BATCH_SIZE=100
 ALARM_DISPATCH_WAKEUP_ENABLED=true|false
+ALARM_DISPATCH_RETENTION_ENABLED=true
+ALARM_DISPATCH_RETENTION_INTERVAL_MS=3600000
+ALARM_DISPATCH_RETENTION_QUERY_TIMEOUT_MS=30000
+ALARM_DISPATCH_RETENTION_LIMIT=1000
 ```
 
 Allowed steady-state pairs:
@@ -57,6 +66,29 @@ Do not perform full rollout until the P1-P4 hardening gates are complete: set-ba
 Do not run `publisher=pg_first, consumer=valkey` or `publisher=valkey_only/shadow, consumer=pg` as a steady state.
 Unknown publisher modes are startup errors. Treat a failed alarm-worker start during cutover as safer than silently falling back to the wrong producer mode.
 
+## Logic Hardening Gate
+
+Before deploying alarm-worker logic hardening, verify these checks:
+
+```bash
+go test ./hololive/hololive-alarm-worker/internal/app -count=1
+go test ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox -count=1
+go test ./hololive/hololive-dispatcher-go/internal/app -count=1
+```
+
+```bash
+docker compose -f docker-compose.prod.yml config \
+  | grep -E 'ALARM_DISPATCH_(PUBLISH_MODE|CONSUMER_MODE|WAKEUP|MAX_BATCH|POLL|LEASE|RECOVERY|RETENTION|IDLE)'
+```
+
+Required hardening conditions:
+
+- PG consumer post-send `SendMessage` failures quarantine instead of retrying.
+- `MarkDispatched`/mark-sent failures after external send do not schedule retry.
+- alarm-worker PG consumer waits on `alarm:dispatch:wakeup` when idle and falls back to bounded polling.
+- `ALARM_DISPATCH_MAX_BATCHES_PER_WAKE` bounds continuous batch processing.
+- retention is chunked, query-time-limited, and protected by a PostgreSQL advisory lock.
+
 ## Checks
 
 ```bash
@@ -72,6 +104,20 @@ SELECT status, count(*)
 FROM alarm_dispatch_deliveries
 GROUP BY status
 ORDER BY status;
+
+SELECT COALESCE(EXTRACT(EPOCH FROM NOW() - MIN(next_attempt_at)), 0) AS oldest_pending_age_seconds
+FROM alarm_dispatch_deliveries
+WHERE status = 'pending'
+  AND next_attempt_at <= NOW();
+
+SELECT COALESCE(EXTRACT(EPOCH FROM NOW() - MIN(next_attempt_at)), 0) AS oldest_retry_age_seconds
+FROM alarm_dispatch_deliveries
+WHERE status = 'retry'
+  AND next_attempt_at <= NOW();
+
+SELECT COALESCE(EXTRACT(EPOCH FROM NOW() - MIN(sending_started_at)), 0) AS oldest_sending_age_seconds
+FROM alarm_dispatch_deliveries
+WHERE status = 'sending';
 
 SELECT status, count(*)
 FROM alarm_dispatch_deliveries
@@ -102,3 +148,17 @@ DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh sent 90 10
 DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh dlq 180 500
 DATABASE_URL=... ./scripts/runtime/alarm-dispatch-outbox-retention.sh quarantined 180 500
 ```
+
+The alarm-worker maintenance runner performs the same cleanup automatically when `ALARM_DISPATCH_RETENTION_ENABLED=true`. Keep the manual script as an emergency fallback.
+
+## Rollback Matrix
+
+| rollback path | allowed | required accounting |
+|---|---|---|
+| stop producer, keep `consumer=pg`, drain PG | yes | record active status counts and oldest ages before and after drain |
+| `pg_first/pg` to `valkey_only/valkey` | only with operator approval | record stranded PG `pending/retry/leased/sending` rows and legacy Valkey residue |
+| `pg_first/valkey` | no | creates stranded PG rows |
+| `shadow/pg` | no | `shadowed` rows are observation-only |
+| `valkey_only/pg` | no | PG consumer has no durable producer |
+
+Never replay legacy Valkey residue into PG. Never promote `shadowed` rows to `pending`. Never automatically retry `sending` rows. Never replay `quarantined` rows without explicit duplicate-risk acknowledgement.

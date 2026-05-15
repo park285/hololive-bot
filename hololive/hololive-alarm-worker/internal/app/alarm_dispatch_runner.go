@@ -21,40 +21,30 @@ type alarmDispatchConsumer interface {
 	Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error
 }
 
+type alarmDispatchQuarantineConsumer interface {
+	Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, reason string) error
+}
+
+type alarmDispatchIdleWaiter interface {
+	Wait(ctx context.Context) bool
+	Reset()
+}
+
 type alarmDispatchSender interface {
 	SendMessage(ctx context.Context, roomID, message string) error
 }
 
 type alarmDispatchRunner struct {
-	consumer alarmDispatchConsumer
-	sender   alarmDispatchSender
-	maxBatch int
-	logger   *slog.Logger
-}
-
-func (r alarmDispatchRunner) Start(ctx context.Context) error {
-	if r.consumer == nil || r.sender == nil {
-		return nil
-	}
-	for {
-		if !r.runStep(ctx) {
-			return nil
-		}
-	}
-}
-
-func (r alarmDispatchRunner) runStep(ctx context.Context) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	processed, err := r.runOnce(ctx)
-	if err != nil {
-		return r.handleStepError(ctx, err)
-	}
-	if !processed {
-		return sleepContext(ctx, 25*time.Millisecond)
-	}
-	return true
+	consumer           alarmDispatchConsumer
+	sender             alarmDispatchSender
+	idleWaiter         alarmDispatchIdleWaiter
+	consumerMode       string
+	postSendQuarantine bool
+	maxBatch           int
+	maxBatchesPerWake  int
+	batchesSinceWake   int
+	yield              func(context.Context) bool
+	logger             *slog.Logger
 }
 
 func (r alarmDispatchRunner) runOnce(ctx context.Context) (bool, error) {
@@ -80,13 +70,13 @@ func (r alarmDispatchRunner) dispatchGroups(ctx context.Context, groups []alarmD
 func (r alarmDispatchRunner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
 	message, err := renderAlarmDispatchGroup(ctx, group)
 	if err != nil {
-		return r.persistDispatchFailure(ctx, group.envelopes, err)
+		return r.persistPreSendFailure(ctx, group.envelopes, err)
 	}
 	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
 		return fmt.Errorf("mark alarm dispatch sending: %w", err)
 	}
 	if err := r.sender.SendMessage(ctx, group.roomID, message); err != nil {
-		return r.persistDispatchFailure(ctx, group.envelopes, err)
+		return r.persistPostSendingFailure(ctx, group.envelopes, err)
 	}
 	if err := r.consumer.MarkDispatched(ctx, group.envelopes); err != nil {
 		return fmt.Errorf("mark alarm dispatch sent: %w", err)
@@ -94,7 +84,7 @@ func (r alarmDispatchRunner) dispatchGroup(ctx context.Context, group alarmDispa
 	return nil
 }
 
-func (r alarmDispatchRunner) persistDispatchFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r alarmDispatchRunner) persistPreSendFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	retryEnvelopes, dlqEnvelopes := prepareDispatchFailure(envelopes, cause)
 	if err := r.consumer.ScheduleRetry(ctx, retryEnvelopes); err != nil {
 		return r.preserveAfterPersistenceFailure(ctx, retryEnvelopes, fmt.Errorf("schedule alarm dispatch retry: %w", err))
@@ -105,6 +95,22 @@ func (r alarmDispatchRunner) persistDispatchFailure(ctx context.Context, envelop
 	if err := r.consumer.ReleaseClaimKeys(ctx, claimKeysForAlarmDispatchEnvelopes(dlqEnvelopes)); err != nil {
 		return fmt.Errorf("release alarm dispatch dlq claim keys: %w", err)
 	}
+	return nil
+}
+
+func (r alarmDispatchRunner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+	if !r.postSendQuarantine {
+		return r.persistPreSendFailure(ctx, envelopes, cause)
+	}
+	consumer, ok := r.consumer.(alarmDispatchQuarantineConsumer)
+	if !ok {
+		return r.persistPreSendFailure(ctx, envelopes, cause)
+	}
+	reason := cause.Error()
+	if err := consumer.Quarantine(ctx, envelopes, reason); err != nil {
+		return fmt.Errorf("quarantine alarm dispatch after send failure: %w", err)
+	}
+	observeAlarmDispatchRunnerPostSendQuarantined(len(envelopes))
 	return nil
 }
 
@@ -120,16 +126,6 @@ func (r alarmDispatchRunner) preserveAfterPersistenceFailure(
 		return fmt.Errorf("%w: fallback requeue: %w", persistErr, err)
 	}
 	return persistErr
-}
-
-func (r alarmDispatchRunner) handleStepError(ctx context.Context, err error) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	if r.logger != nil {
-		r.logger.Warn("Alarm dispatch loop iteration failed", slog.Any("error", err))
-	}
-	return sleepContext(ctx, time.Second)
 }
 
 type alarmDispatchGroup struct {
