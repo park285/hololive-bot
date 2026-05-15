@@ -55,7 +55,7 @@ Admin dashboard와 운영자용 HTTP control plane을 담당합니다.
 
 ## Observability
 
-- Logs: `COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f hololive-admin-api`
+- Logs: `./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f hololive-admin-api`
 - Health: `http://127.0.0.1:30006/health`
 - Metrics: 검토 필요
 

@@ -54,7 +54,7 @@ YouTube scraping/polling과 `youtube_notification_outbox` production을 담당�
 
 ## Observability
 
-- Logs: `COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f youtube-scraper`
+- Logs: `./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f youtube-scraper`
 - Health: `http://127.0.0.1:30005/health`
 - Metrics: 검토 필요
 

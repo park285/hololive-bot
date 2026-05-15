@@ -8,6 +8,7 @@ cd "$ROOT_DIR"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_FILE_PATHS=("${COMPOSE_FILE}")
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 
 resolve_shared_go_workspace_path() {
@@ -117,17 +118,8 @@ if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then
 fi
 export COMPOSE_ENV_FILE
 compose_env_validate_file_format "$COMPOSE_ENV_FILE"
-COMPOSE_ENV_CRITICAL_KEYS=(
-    DB_PASSWORD
-    CACHE_PASSWORD
-    IRIS_BOT_TOKEN
-    IRIS_WEBHOOK_TOKEN
-    ADMIN_PASS_BCRYPT
-    SESSION_SECRET
-    IRIS_BASE_URL
-    IRIS_BASE_URL_FILE
-)
-compose_env_assert_shell_matches_file "$COMPOSE_ENV_FILE" "${COMPOSE_ENV_CRITICAL_KEYS[@]}"
+compose_env_assert_shell_matches_all_file_keys "$COMPOSE_ENV_FILE"
+compose_env_assert_no_shell_shadow_for_compose_files "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_PATHS[@]}"
 
 export HOLO_BOT_VERSION="$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo dev)"
 

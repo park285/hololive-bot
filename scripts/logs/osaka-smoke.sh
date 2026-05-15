@@ -12,7 +12,7 @@ cd ~/hololive-bot
 sudo -n test -r /run/hololive-bot/env
 test -w /var/run/docker.sock || groups | grep -qw docker
 
-sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester
+sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester
 
 docker exec hololive-youtube-scraper ./bin/healthcheck http://127.0.0.1:30005/health
 docker exec hololive-stream-ingester ./bin/healthcheck http://127.0.0.1:30004/health

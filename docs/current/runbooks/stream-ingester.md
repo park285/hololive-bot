@@ -34,7 +34,7 @@
 ## Logs
 
 ```bash
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f stream-ingester
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f stream-ingester
 ```
 
 ## Metrics
@@ -51,7 +51,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs --tail=300 stream-ingester
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 stream-ingester
 curl http://127.0.0.1:30004/health
 ```
 

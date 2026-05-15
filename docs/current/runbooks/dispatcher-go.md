@@ -34,7 +34,7 @@
 ## Logs
 
 ```bash
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f dispatcher-go
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f dispatcher-go
 ```
 
 ## Metrics
@@ -51,10 +51,10 @@ Symptoms:
 
 Diagnosis:
 ```bash
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs --tail=300 dispatcher-go
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:queue
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock ZCARD alarm:dispatch:retry
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:dlq
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 dispatcher-go
+./scripts/deploy/compose.sh -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:queue
+./scripts/deploy/compose.sh -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock ZCARD alarm:dispatch:retry
+./scripts/deploy/compose.sh -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:dlq
 ```
 
 Mitigation:
@@ -71,7 +71,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LRANGE alarm:dispatch:dlq 0 10
+./scripts/deploy/compose.sh -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LRANGE alarm:dispatch:dlq 0 10
 ```
 
 Mitigation:
