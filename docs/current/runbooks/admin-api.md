@@ -33,7 +33,7 @@
 ## Logs
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f hololive-admin-api
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f hololive-admin-api
 ```
 
 ## Metrics
@@ -50,8 +50,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml ps hololive-admin-api
-docker compose -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml ps hololive-admin-api
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
 curl http://127.0.0.1:30006/health
 ```
 
@@ -68,8 +68,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
-docker compose -f docker-compose.prod.yml logs --tail=200 llm-scheduler
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs --tail=200 hololive-admin-api
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs --tail=200 llm-scheduler
 ```
 
 Mitigation:

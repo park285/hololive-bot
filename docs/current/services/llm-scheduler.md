@@ -58,7 +58,7 @@ Major event, member news, LLM scheduling, digest generation, and notification in
 
 ## Observability
 
-- Logs: `docker compose -f docker-compose.prod.yml logs -f llm-scheduler`
+- Logs: `COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f llm-scheduler`
 - Health: `http://127.0.0.1:30003/health`
 - Ready: `http://127.0.0.1:30003/ready`
 - Metrics: 검토 필요

@@ -12,19 +12,22 @@ CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/shared-go}"
     if [ ! -d "$candidate" ]; then
-        echo "[ERROR] Active shared-go workspace not found: $candidate"
+        echo "[ERROR] Active shared-go workspace not found: $candidate" >&2
         exit 1
     fi
 
     printf '%s\n' "$candidate"
 }
 
-export SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
+if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then
+    exit 1
+fi
+export SHARED_GO_WORKSPACE_PATH
 
 resolve_compose_env_file() {
     if [ -n "${COMPOSE_ENV_FILE:-}" ]; then
-        if [ ! -f "${COMPOSE_ENV_FILE}" ]; then
-            echo "[ERROR] COMPOSE_ENV_FILE not found: ${COMPOSE_ENV_FILE}"
+        if [ ! -r "${COMPOSE_ENV_FILE}" ]; then
+            echo "[ERROR] COMPOSE_ENV_FILE not readable: ${COMPOSE_ENV_FILE}" >&2
             exit 1
         fi
         printf '%s\n' "${COMPOSE_ENV_FILE}"
@@ -32,17 +35,15 @@ resolve_compose_env_file() {
     fi
 
     local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/env}"
-    if [ -f "$openbao_env" ]; then
+    if [ -r "$openbao_env" ]; then
         printf '%s\n' "$openbao_env"
         return
     fi
 
-    echo "[ERROR] Compose env file not found. Checked: $openbao_env"
-    echo "        Set COMPOSE_ENV_FILE explicitly for non-OpenBao or test deployments."
+    echo "[ERROR] Compose env file not readable. Checked: $openbao_env" >&2
+    echo "        Set COMPOSE_ENV_FILE explicitly for non-OpenBao or test deployments." >&2
     exit 1
 }
-
-export COMPOSE_ENV_FILE="$(resolve_compose_env_file)"
 
 usage() {
     echo "Usage: $0 <service|all>"
@@ -128,6 +129,17 @@ if [ "$TARGET" = "youtube-scraper" ] && [[ ",${COMPOSE_FILE}," != *"docker-compo
 fi
 if [ -z "$TARGET" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [[ ",${COMPOSE_PROFILES:-}," == *",oracle,"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_SCRAPER:-}" != "true" ]; then
     echo "[ERROR] COMPOSE_PROFILES=oracle would include youtube-scraper, which is Osaka-owned. Refusing central all-service deploy."
+    exit 1
+fi
+
+if ! COMPOSE_ENV_FILE="$(resolve_compose_env_file)"; then
+    exit 1
+fi
+export COMPOSE_ENV_FILE
+
+export_line="$(awk '/^[[:space:]]*export[[:space:]]+/ { print NR; exit }' "$COMPOSE_ENV_FILE")"
+if [ -n "$export_line" ]; then
+    echo "[ERROR] Compose env file must not contain leading export: $COMPOSE_ENV_FILE:$export_line" >&2
     exit 1
 fi
 

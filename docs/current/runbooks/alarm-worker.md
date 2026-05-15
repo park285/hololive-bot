@@ -39,7 +39,7 @@
 ## Logs
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f hololive-alarm-worker
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f hololive-alarm-worker
 ```
 
 ## Metrics
@@ -56,8 +56,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
-docker compose -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:queue
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml exec valkey-cache valkey-cli -s /var/run/valkey/valkey-cache.sock LLEN alarm:dispatch:queue
 ```
 
 Mitigation:
@@ -74,7 +74,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=200 hololive-alarm-worker
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs --tail=200 hololive-alarm-worker
 ```
 
 Mitigation:

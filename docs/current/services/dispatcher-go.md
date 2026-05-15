@@ -55,7 +55,7 @@ Legacy standalone alarm dispatch queue consumer입니다. Default production com
 
 ## Observability
 
-- Logs: `docker compose -f docker-compose.prod.yml logs -f dispatcher-go`
+- Logs: `COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f dispatcher-go`
 - Ready: `http://127.0.0.1:30020/ready`
 - Metrics: queue drain/retry/DLQ counters in `hololive-shared/pkg/service/alarm/queue/metrics.go`
 

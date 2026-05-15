@@ -88,7 +88,7 @@ x-cache-env: &cache-env
   CACHE_SOCKET_PATH: /var/run/valkey/valkey-cache.sock
   CACHE_HOST: valkey-cache
   CACHE_PORT: 6379
-  CACHE_PASSWORD: ${CACHE_PASSWORD:?set CACHE_PASSWORD in .env}
+  CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
 
 x-postgres-env: &postgres-env
   POSTGRES_HOST: host.docker.internal
@@ -96,7 +96,7 @@ x-postgres-env: &postgres-env
   POSTGRES_SOCKET_PATH: ""
   POSTGRES_DB: hololive
   POSTGRES_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
-  POSTGRES_PASSWORD: ${DB_PASSWORD}
+  POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
   POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}
   POSTGRES_QUERY_EXEC_MODE: ${POSTGRES_QUERY_EXEC_MODE:-exec}
   POSTGRES_AUTO_PREPARE_SCHEMA: "false"
@@ -174,9 +174,9 @@ services:
     environment:
       POSTGRES_DB: hololive
       POSTGRES_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
-      POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       HOLOLIVE_DB_USER: ${HOLOLIVE_DB_USER:-hololive_runtime}
       HOLOLIVE_MIGRATOR_USER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
@@ -204,7 +204,7 @@ services:
     image: valkey/valkey:9.0.2-alpine3.23
     container_name: valkey-cache
     environment:
-      CACHE_PASSWORD: ${CACHE_PASSWORD:?set CACHE_PASSWORD in .env}
+      CACHE_PASSWORD: ${CACHE_PASSWORD:?CACHE_PASSWORD is required}
     ports:
       - "127.0.0.1:6379:6379"
       - "${VALKEY_PORT_BIND_IP:-100.100.1.3}:6379:6379"
@@ -235,9 +235,9 @@ services:
       PGPORT: "5433"
       PGDATABASE: hololive
       PGUSER: ${HOLOLIVE_MIGRATOR_USER:-hololive_migrator}
-      PGPASSWORD: ${DB_PASSWORD}
+      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:-postgres_admin}
-      POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       HOLOLIVE_SCRAPER_USER: ${HOLOLIVE_SCRAPER_USER:-hololive_scraper}
       HOLOLIVE_SCRAPER_PASSWORD: ${HOLOLIVE_SCRAPER_PASSWORD:-}
     command:
@@ -575,10 +575,10 @@ services:
       FORCE_HTTPS: "true"
       LOG_LEVEL: "info"
       ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASS_HASH: ${ADMIN_PASS_BCRYPT:?set ADMIN_PASS_BCRYPT in .env}
-      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      ADMIN_PASS_HASH: ${ADMIN_PASS_BCRYPT:?ADMIN_PASS_BCRYPT is required}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       SESSION_TOKEN_ROTATION: "true"
-      VALKEY_URL: :${CACHE_PASSWORD:?set CACHE_PASSWORD in .env}@valkey-cache:6379
+      VALKEY_URL: :${CACHE_PASSWORD:?CACHE_PASSWORD is required}@valkey-cache:6379
       DOCKER_HOST: tcp://docker-proxy:2375
       HOLO_ADMIN_API_URL: http://hololive-admin-api:30006
       HOLO_BOT_URL: http://hololive-admin-api:30006

@@ -38,8 +38,14 @@ resolve_iris_client_go_workspace_path() {
     (cd "${candidate}" && pwd)
 }
 
-export SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
-export IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_iris_client_go_workspace_path)"
+if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then
+    exit 1
+fi
+export SHARED_GO_WORKSPACE_PATH
+if ! IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_iris_client_go_workspace_path)"; then
+    exit 1
+fi
+export IRIS_CLIENT_GO_WORKSPACE_PATH
 
 # 컨테이너 런타임 CLI (docker / podman)
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
@@ -73,6 +79,38 @@ elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
         exit 1
     fi
 fi
+
+resolve_compose_env_file() {
+    if [[ -n "${COMPOSE_ENV_FILE:-}" ]]; then
+        if [[ ! -r "${COMPOSE_ENV_FILE}" ]]; then
+            echo "[ERROR] COMPOSE_ENV_FILE not readable: ${COMPOSE_ENV_FILE}" >&2
+            exit 1
+        fi
+        printf '%s\n' "${COMPOSE_ENV_FILE}"
+        return
+    fi
+
+    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/env}"
+    if [[ -r "${openbao_env}" ]]; then
+        printf '%s\n' "${openbao_env}"
+        return
+    fi
+
+    echo "[ERROR] Compose env file not readable: ${openbao_env}" >&2
+    echo "        Set COMPOSE_ENV_FILE explicitly for non-OpenBao or test deployments." >&2
+    exit 1
+}
+
+validate_compose_env_file_format() {
+    local env_file="$1"
+    local export_line=""
+
+    export_line="$(awk '/^[[:space:]]*export[[:space:]]+/ { print NR; exit }' "${env_file}")"
+    if [[ -n "${export_line}" ]]; then
+        echo "[ERROR] Compose env file must not contain leading export: ${env_file}:${export_line}" >&2
+        exit 1
+    fi
+}
 
 # 버전 관리 대상 디렉토리
 VERSION_DIRS=(
@@ -159,6 +197,12 @@ if [[ "${REMOTE_CACHE}" == true ]]; then
     COMPOSE_FILES+=(-f docker-compose.remote-cache.yml)
 fi
 
+if ! COMPOSE_ENV_FILE="$(resolve_compose_env_file)"; then
+    exit 1
+fi
+export COMPOSE_ENV_FILE
+validate_compose_env_file_format "${COMPOSE_ENV_FILE}"
+
 read_version() {
     local dir_path="$1"
     local fallback="$2"
@@ -193,7 +237,7 @@ should_bump() {
 
 read_compose_env_value() {
     local key="$1"
-    local env_file="${COMPOSE_ENV_FILE:-./.env}"
+    local env_file="${COMPOSE_ENV_FILE}"
     local value=""
 
     value="${!key:-}"
@@ -202,7 +246,7 @@ read_compose_env_value() {
         return 0
     fi
 
-    if [[ -f "${env_file}" ]]; then
+    if [[ -r "${env_file}" ]]; then
         value="$(awk -F= -v k="${key}" '
             $0 !~ /^[[:space:]]*#/ && $1 == k {
               v = substr($0, index($0, "=") + 1)
@@ -250,7 +294,7 @@ validate_runtime_config_for_deploy() {
             echo "[INFO] Using file-based IRIS_BASE_URL: ${IRIS_BASE_URL_FILE}"
         else
             echo "[ERROR] IRIS_BASE_URL and IRIS_BASE_URL_FILE are both empty, and ${host_iris_base_url_file} does not exist or is empty" >&2
-            echo "        Either set IRIS_BASE_URL in ${COMPOSE_ENV_FILE:-./.env}, set IRIS_BASE_URL_FILE, or create runtime-config/iris_base_url" >&2
+            echo "        Either set IRIS_BASE_URL in ${COMPOSE_ENV_FILE}, set IRIS_BASE_URL_FILE, or create runtime-config/iris_base_url" >&2
             exit 1
         fi
     fi
@@ -312,6 +356,7 @@ echo "  COMPOSE_MODE=${COMPOSE_MODE}"
 echo "  REMOTE_CACHE=${REMOTE_CACHE}"
 echo "  SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
 echo "  IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
+echo "  COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 # VERSION 파일에서 환경변수 설정 (docker-compose build args로 전달)
 export HOLO_BOT_VERSION="$(read_version hololive/hololive-kakao-bot-go dev)"
@@ -329,17 +374,17 @@ echo ""
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
     # 지정 타겟 빌드
     echo "  [Docker] Targets: ${TARGET_SERVICES[*]}"
-    "${COMPOSE_CMD[@]}" "${COMPOSE_FILES[@]}" build "${TARGET_SERVICES[@]}"
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build "${TARGET_SERVICES[@]}"
 elif [[ "${BUILD_ONLY}" == true ]]; then
     # 전체 빌드만 수행
     echo "  Target: All Services (build only)"
     printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
-    "${COMPOSE_CMD[@]}" "${COMPOSE_FILES[@]}" build
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build
 else
     # 전체 빌드 + 배포
     echo "  Target: All Services (build + deploy)"
     printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
-    "${COMPOSE_CMD[@]}" "${COMPOSE_FILES[@]}" up -d --build
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --build
     stop_legacy_dispatcher_after_default_deploy
 fi
 

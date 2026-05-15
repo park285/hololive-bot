@@ -77,7 +77,7 @@ go test ./hololive/hololive-dispatcher-go/internal/app -count=1
 ```
 
 ```bash
-docker compose -f docker-compose.prod.yml config \
+COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml config \
   | grep -E 'ALARM_DISPATCH_(PUBLISH_MODE|CONSUMER_MODE|WAKEUP|MAX_BATCH|POLL|LEASE|RECOVERY|RETENTION|IDLE)'
 ```
 

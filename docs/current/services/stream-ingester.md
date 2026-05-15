@@ -55,7 +55,7 @@ Photo sync와 ingestion-adjacent runtime 기능을 담당합니다.
 
 ## Observability
 
-- Logs: `docker compose -f docker-compose.prod.yml logs -f stream-ingester`
+- Logs: `COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f stream-ingester`
 - Health: `http://127.0.0.1:30004/health`
 - Metrics: 검토 필요
 

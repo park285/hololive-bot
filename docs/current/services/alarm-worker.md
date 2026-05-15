@@ -65,7 +65,7 @@ Alarm checker/scheduler, alarm dispatch queue publishing/consumption, generic no
 
 ## Observability
 
-- Logs: `docker compose -f docker-compose.prod.yml logs -f hololive-alarm-worker`
+- Logs: `COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml logs -f hololive-alarm-worker`
 - Health: `http://127.0.0.1:30007/health`
 - Queue: `alarm:dispatch:queue`
 - Metrics: 검토 필요
