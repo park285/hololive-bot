@@ -24,6 +24,18 @@ expect_fail() {
     fi
 }
 
+expect_fail_with_stderr() {
+    local pattern="$1"
+    shift
+
+    expect_fail "$@"
+    if ! grep -q -- "${pattern}" "$tmpdir/err"; then
+        cat "$tmpdir/out"
+        cat "$tmpdir/err" >&2
+        fail "expected stderr to contain: ${pattern}"
+    fi
+}
+
 env_file="$tmpdir/env"
 compose_file="$tmpdir/docker-compose.yml"
 
@@ -108,3 +120,6 @@ pass "shell-only compose key fails"
 
 SHARED_GO_WORKSPACE_PATH=/tmp/shared compose_env_assert_no_shell_shadow_for_compose_files "$env_file" "$compose_file"
 pass "allowed shell control key passes"
+
+COMPOSE_ENV_FILE="$env_file" expect_fail_with_stderr "Use COMPOSE_ENV_FILE" env CONTAINER_CLI=not-installed "${ROOT_DIR}/scripts/deploy/compose.sh" --env-file "$env_file" -f "$compose_file" config
+pass "compose wrapper rejects direct --env-file before CLI probing"

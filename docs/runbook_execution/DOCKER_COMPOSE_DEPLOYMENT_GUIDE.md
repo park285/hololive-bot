@@ -21,6 +21,7 @@
 
 - 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
 - 직접 Compose 명령이 필요하면 raw `docker compose` 대신 `./scripts/deploy/compose.sh`를 사용합니다. 이 wrapper는 OpenBao env preflight와 shell shadowing 차단을 먼저 수행합니다.
+- OpenBao env 전환 후 운영 호스트의 local `.env` 파일과 shell profile export 잔재는 [OpenBao Env Cleanup Runbook](./OPENBAO_ENV_CLEANUP_RUNBOOK.md) 기준으로 정리합니다.
 - 상태/장애 1차 확인은 `./scripts/deploy/compose.sh -f docker-compose.prod.yml ps`, `./scripts/deploy/compose.sh ... logs`, `/health`, `/ready` 기준으로 수행합니다.
 - k8s/k3s 시절 절차나 매니페스트가 저장소에 남아 있더라도, 현재 운영 SSOT로 간주하지 않습니다.
 - 앱 이미지는 distroless에서 UID/GID `1000:1000`으로 실행하고 `/etc/passwd`의 `app` 사용자와 `USER=app`, `HOME=/tmp`를 함께 제공합니다.
