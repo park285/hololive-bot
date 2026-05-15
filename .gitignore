@@ -12,8 +12,9 @@ k8s/base/secret-*.yaml
 # Secrets & Credentials (CRITICAL)
 # ============================================
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
 *.key
 *.pem
 *.p12

@@ -15,7 +15,7 @@
 
 ```bash
 set -a
-source .env
+source "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/env}"
 set +a
 
 PGPASSWORD="$DB_PASSWORD" \

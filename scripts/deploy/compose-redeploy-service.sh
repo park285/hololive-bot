@@ -4,50 +4,27 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+. "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_FILE_PATHS=("${COMPOSE_FILE}")
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_CANONICAL_ROOT}/shared-go}"
     if [ ! -d "$candidate" ]; then
-        echo "[ERROR] Active shared-go workspace not found: $candidate"
+        echo "[ERROR] Active shared-go workspace not found: $candidate" >&2
         exit 1
     fi
 
     printf '%s\n' "$candidate"
 }
 
-export SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"
-
-resolve_compose_env_file() {
-    if [ -n "${COMPOSE_ENV_FILE:-}" ]; then
-        if [ ! -f "${COMPOSE_ENV_FILE}" ]; then
-            echo "[ERROR] COMPOSE_ENV_FILE not found: ${COMPOSE_ENV_FILE}"
-            exit 1
-        fi
-        printf '%s\n' "${COMPOSE_ENV_FILE}"
-        return
-    fi
-
-    local worktree_env="${ROOT_DIR}/.env"
-    if [ -f "$worktree_env" ]; then
-        printf '%s\n' "$worktree_env"
-        return
-    fi
-
-    local canonical_env="${REPO_CANONICAL_ROOT}/.env"
-    if [ -f "$canonical_env" ]; then
-        printf '%s\n' "$canonical_env"
-        return
-    fi
-
-    echo "[ERROR] Compose env file not found. Checked: $worktree_env, $canonical_env"
+if ! SHARED_GO_WORKSPACE_PATH="$(resolve_shared_go_workspace_path)"; then
     exit 1
-}
-
-export COMPOSE_ENV_FILE="$(resolve_compose_env_file)"
+fi
+export SHARED_GO_WORKSPACE_PATH
 
 usage() {
     echo "Usage: $0 <service|all>"
@@ -135,6 +112,14 @@ if [ -z "$TARGET" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]]
     echo "[ERROR] COMPOSE_PROFILES=oracle would include youtube-scraper, which is Osaka-owned. Refusing central all-service deploy."
     exit 1
 fi
+
+if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then
+    exit 1
+fi
+export COMPOSE_ENV_FILE
+compose_env_validate_file_format "$COMPOSE_ENV_FILE"
+compose_env_assert_shell_matches_all_file_keys "$COMPOSE_ENV_FILE"
+compose_env_assert_no_shell_shadow_for_compose_files "$COMPOSE_ENV_FILE" "${COMPOSE_FILE_PATHS[@]}"
 
 export HOLO_BOT_VERSION="$(cat hololive/hololive-kakao-bot-go/VERSION 2>/dev/null | xargs || echo dev)"
 

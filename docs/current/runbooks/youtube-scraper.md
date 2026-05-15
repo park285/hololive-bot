@@ -35,7 +35,7 @@
 ## Logs
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f youtube-scraper
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f youtube-scraper
 ```
 
 ## Metrics
@@ -52,7 +52,7 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=300 youtube-scraper
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 youtube-scraper
 curl http://127.0.0.1:30005/health
 ```
 
@@ -69,9 +69,9 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=300 youtube-scraper
-docker compose -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
-docker compose -f docker-compose.prod.yml logs --tail=300 dispatcher-go
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 youtube-scraper
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 dispatcher-go
 ```
 
 Mitigation:
