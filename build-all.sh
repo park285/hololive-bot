@@ -17,6 +17,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
+. "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
 
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_ROOT}/shared-go}"
@@ -79,38 +80,6 @@ elif ! "${CONTAINER_CLI}" compose version >/dev/null 2>&1; then
         exit 1
     fi
 fi
-
-resolve_compose_env_file() {
-    if [[ -n "${COMPOSE_ENV_FILE:-}" ]]; then
-        if [[ ! -r "${COMPOSE_ENV_FILE}" ]]; then
-            echo "[ERROR] COMPOSE_ENV_FILE not readable: ${COMPOSE_ENV_FILE}" >&2
-            exit 1
-        fi
-        printf '%s\n' "${COMPOSE_ENV_FILE}"
-        return
-    fi
-
-    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/env}"
-    if [[ -r "${openbao_env}" ]]; then
-        printf '%s\n' "${openbao_env}"
-        return
-    fi
-
-    echo "[ERROR] Compose env file not readable: ${openbao_env}" >&2
-    echo "        Set COMPOSE_ENV_FILE explicitly for non-OpenBao or test deployments." >&2
-    exit 1
-}
-
-validate_compose_env_file_format() {
-    local env_file="$1"
-    local export_line=""
-
-    export_line="$(awk '/^[[:space:]]*export[[:space:]]+/ { print NR; exit }' "${env_file}")"
-    if [[ -n "${export_line}" ]]; then
-        echo "[ERROR] Compose env file must not contain leading export: ${env_file}:${export_line}" >&2
-        exit 1
-    fi
-}
 
 # 버전 관리 대상 디렉토리
 VERSION_DIRS=(
@@ -197,11 +166,22 @@ if [[ "${REMOTE_CACHE}" == true ]]; then
     COMPOSE_FILES+=(-f docker-compose.remote-cache.yml)
 fi
 
-if ! COMPOSE_ENV_FILE="$(resolve_compose_env_file)"; then
+if ! COMPOSE_ENV_FILE="$(compose_env_resolve_file)"; then
     exit 1
 fi
 export COMPOSE_ENV_FILE
-validate_compose_env_file_format "${COMPOSE_ENV_FILE}"
+compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
+COMPOSE_ENV_CRITICAL_KEYS=(
+    DB_PASSWORD
+    CACHE_PASSWORD
+    IRIS_BOT_TOKEN
+    IRIS_WEBHOOK_TOKEN
+    ADMIN_PASS_BCRYPT
+    SESSION_SECRET
+    IRIS_BASE_URL
+    IRIS_BASE_URL_FILE
+)
+compose_env_assert_shell_matches_file "${COMPOSE_ENV_FILE}" "${COMPOSE_ENV_CRITICAL_KEYS[@]}"
 
 read_version() {
     local dir_path="$1"
@@ -236,37 +216,7 @@ should_bump() {
 }
 
 read_compose_env_value() {
-    local key="$1"
-    local env_file="${COMPOSE_ENV_FILE}"
-    local value=""
-
-    value="${!key:-}"
-    if [[ -n "${value}" ]]; then
-        printf '%s\n' "${value}"
-        return 0
-    fi
-
-    if [[ -r "${env_file}" ]]; then
-        value="$(awk -F= -v k="${key}" '
-            $0 !~ /^[[:space:]]*#/ && $1 == k {
-              v = substr($0, index($0, "=") + 1)
-            }
-            END { print v }
-        ' "${env_file}")"
-        value="${value%$'\r'}"
-        case "${value}" in
-            \"*\")
-                value="${value#\"}"
-                value="${value%\"}"
-                ;;
-            \'*\')
-                value="${value#\'}"
-                value="${value%\'}"
-                ;;
-        esac
-    fi
-
-    printf '%s\n' "${value}"
+    compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "$1"
 }
 
 validate_runtime_config_for_deploy() {

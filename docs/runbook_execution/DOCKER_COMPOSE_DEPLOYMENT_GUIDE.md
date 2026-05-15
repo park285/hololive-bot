@@ -97,6 +97,7 @@ $SSH_OSAKA 'cd ~/hololive-bot && mkdir -p data logs && sudo chown -R 1000:docker
 
 ```bash
 COMPOSE_ENV_FILE=./.env.local docker compose --env-file ./.env.local -f docker-compose.prod.yml config --quiet
+COMPOSE_ENV_FILE=./.env.local ./build-all.sh --no-bump --build-only --skip-local-ci
 ```
 
 ## 사전 준비
@@ -108,6 +109,11 @@ COMPOSE_ENV_FILE=./.env.local docker compose --env-file ./.env.local -f docker-c
    export_line="$(awk '/^[[:space:]]*export[[:space:]]+/ { print NR; exit }' /run/hololive-bot/env)"
    if [ -n "$export_line" ]; then
      echo "env file must not contain leading export: /run/hololive-bot/env:$export_line"
+     exit 1
+   fi
+   command_sub_line="$(awk '/[`]|[$][(]/ { print NR; exit }' /run/hololive-bot/env)"
+   if [ -n "$command_sub_line" ]; then
+     echo "env file must not contain command substitution: /run/hololive-bot/env:$command_sub_line"
      exit 1
    fi
    ```
