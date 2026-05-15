@@ -61,21 +61,21 @@ Osaka split-host 구성에서는 runtime container만 `kapu-iris-osaka-1` (`100.
 - Osaka runtime: `youtube-scraper`, `stream-ingester`
 - 기존 state/control: `holo-postgres` (`100.100.1.3:5433`), `valkey-cache` (`100.100.1.3:6379`), CLIProxy (`http://100.100.1.3:8787/v1`), `hololive-bot`, admin 계열 서비스
 - Osaka compose overlay: `docker-compose.prod.yml` + `docker-compose.osaka.yml`
-- Osaka env file: `.env.osaka` (`COMPOSE_ENV_FILE=./.env.osaka`)
-- Osaka `.env.osaka`의 `CACHE_PASSWORD`는 중앙 host `.env`의 `CACHE_PASSWORD`와 동일해야 합니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
+- Osaka env file: OpenBao Agent가 렌더링한 `/run/hololive-bot/env` (`COMPOSE_ENV_FILE=/run/hololive-bot/env`)
+- env 정본은 OpenBao KV입니다. 중앙 Valkey는 Tailscale IP에 publish되므로 password 없이 운영하지 않습니다.
 - 중앙 host의 `./scripts/deploy/compose-redeploy-service.sh youtube-scraper`는 기본적으로 차단됩니다. Osaka overlay 또는 명시적 emergency override 없이 중앙에서 재기동하지 않습니다.
 
 Osaka에서는 local infra dependency를 만들지 않도록 service start에 `--no-deps`를 붙입니다.
 
 ```bash
 SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
-$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps youtube-scraper'
-$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps stream-ingester'
+$SSH_OSAKA 'cd ~/hololive-bot && sudo env COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps youtube-scraper'
+$SSH_OSAKA 'cd ~/hololive-bot && sudo env COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps stream-ingester'
 ```
 
 컷오버는 build를 먼저 완료한 뒤 기존 호스트 service를 stop하고 Osaka service를 start합니다. `youtube-scraper`는 outbox dispatcher를 포함하므로 두 호스트에서 장시간 동시에 실행하지 않습니다.
 
-Osaka에는 source tree를 상시 보관하지 않습니다. 운영 디렉터리에는 compose 파일, `.env.osaka`, `runtime-config/`, `data/`, `logs/`만 둡니다. image는 source host에서 arm64로 build/load하거나, Osaka에 임시 build context를 만들고 image 생성 후 제거합니다.
+Osaka에는 source tree를 상시 보관하지 않습니다. 운영 디렉터리에는 compose 파일, `runtime-config/`, `data/`, `logs/`만 두고 secret env는 `/run/hololive-bot/env`에서만 읽습니다. image는 source host에서 arm64로 build/load하거나, Osaka에 임시 build context를 만들고 image 생성 후 제거합니다.
 
 Osaka의 bind-mounted `data/`, `logs/`는 컨테이너 `app`이 쓰고 `ubuntu`가 읽을 수 있어야 합니다. 현재 Osaka에서 컨테이너 UID `1000`은 host 사용자 `opc`로 보이고, `ubuntu`는 `docker` group에 속합니다.
 
@@ -85,11 +85,11 @@ $SSH_OSAKA 'cd ~/hololive-bot && mkdir -p data logs && sudo chown -R 1000:docker
 
 ## 사전 준비
 
-1. `.env` 작성
+1. OpenBao Agent 렌더링 확인
    ```bash
-   cp .env.example .env
+   sudo find /run/hololive-bot -maxdepth 2 -printf "%M %u %g %s %p\n" | sort
    ```
-2. 필수 시크릿/접속값 채우기
+2. 필수 시크릿/접속값은 OpenBao KV `kv/prod/hololive-bot/env`에 있어야 합니다.
    - `DB_PASSWORD`
    - `CACHE_PASSWORD`
      - `valkey-cache`는 `--requirepass`로 실행되며 모든 앱 컨테이너와 Osaka AP가 같은 값을 사용해야 합니다.
@@ -141,7 +141,7 @@ runtime split 이후 역할:
 - `hololive-admin-api` → 운영/control plane (`/api/holo/*`, `/api/auth/*`, `/oauth/callback`, `/internal/alarm/*`)
 - `hololive-alarm-worker` → alarm scheduler / checker / queue publish
 
-- worktree에서 재배포할 때도 deploy 스크립트가 현재 worktree의 `.env`를 우선 사용하고, 없으면 canonical repo root의 `.env`를 fallback으로 사용합니다.
+- worktree에서 재배포할 때도 deploy 스크립트는 기본적으로 `/run/hololive-bot/env`만 사용합니다. 비운영 또는 테스트 배포는 `COMPOSE_ENV_FILE`을 명시해야 합니다.
 
 ## 상태 확인
 
@@ -160,7 +160,7 @@ Osaka split-host 상태 확인:
 
 ```bash
 SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
-$SSH_OSAKA 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester'
+$SSH_OSAKA 'cd ~/hololive-bot && sudo env COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester'
 $SSH_OSAKA 'curl -fsS http://127.0.0.1:30005/health && curl -fsS http://127.0.0.1:30004/health'
 $SSH_OSAKA 'docker logs --since 15m hololive-youtube-scraper | grep -E "ingestion_lease|outbox|ERR|WRN" | tail -n 120'
 $SSH_OSAKA 'docker logs --since 15m hololive-stream-ingester | grep -E "photo|runtime|ingestion_lease|ERR|WRN" | tail -n 120'
@@ -169,7 +169,7 @@ $SSH_OSAKA 'docker logs --since 15m hololive-stream-ingester | grep -E "photo|ru
 Tailscale/redroid 연동이 필요한 경우에는 배포 전에 다음을 함께 확인하세요.
 
 ```bash
-# .env
+# OpenBao env key
 HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.3
 
 # 재배포 후, 같은 tailnet peer에서 확인

@@ -9,7 +9,7 @@ SSH_OSAKA=(ssh -F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o SetEnv=LC_ALL
 "${SSH_OSAKA[@]}" 'set -euo pipefail
 cd ~/hololive-bot
 
-COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester
+sudo env COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester
 
 docker exec hololive-youtube-scraper ./bin/healthcheck http://127.0.0.1:30005/health
 docker exec hololive-stream-ingester ./bin/healthcheck http://127.0.0.1:30004/health
