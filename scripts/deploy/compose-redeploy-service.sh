@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
 . "$ROOT_DIR/scripts/deploy/lib/compose-services.sh"
+. "$ROOT_DIR/scripts/deploy/lib/removed-runtimes.sh"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
@@ -104,11 +105,13 @@ echo "[INFO] COMPOSE_ENV_FILE=$COMPOSE_ENV_FILE"
 if [ -n "$TARGET" ]; then
     echo "[UP] $TARGET"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build "$TARGET"
+    removed_runtime_cleanup_standalone_dispatcher
     echo "[PS] $TARGET"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps "$TARGET"
 else
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+    removed_runtime_cleanup_standalone_dispatcher
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps
 fi

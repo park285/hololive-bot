@@ -9,4 +9,5 @@ const (
 	DeliveryModePending        = "pending_cutover"
 	RuntimeOwnerStreamIngester = "stream-ingester"
 	RuntimeOwnerYouTubeScraper = "youtube-scraper"
+	RuntimeOwnerAlarmWorker    = "alarm-worker"
 )

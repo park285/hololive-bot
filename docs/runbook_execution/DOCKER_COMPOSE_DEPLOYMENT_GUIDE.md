@@ -47,11 +47,11 @@ sudo find data logs -type f -exec chmod 660 {} +
 - `youtube-scraper` (`30005`): `YOUTUBE_INGESTION_ENABLED=true`, `PHOTO_SYNC_ENABLED=false`, `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED=true`
   - YouTube ingestion scheduler
   - YouTube scraper scheduler
-  - YouTube outbox dispatcher
+  - YouTube outbox row production; final send is owned by `alarm-worker`
   - `config:update` 구독 (`scraper_proxy` 반영)
 
 운영 라우팅 고정:
-- YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-scraper`의 outbox dispatcher 경로로만 발송합니다.
+- YouTube 커뮤니티/쇼츠 알람은 전체 운영 채널에서 `youtube-scraper`가 outbox row를 만들고 `alarm-worker`가 claim/render/final send를 수행합니다.
 - compose 기준 rollout key는 `YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED` 하나만 사용하고, canary fallback은 두지 않습니다. 운영 compose에서는 `youtube-scraper=true`, `stream-ingester=false`로 고정합니다.
 - `youtube-scraper` 실행 권한은 `YOUTUBE_SCRAPER_RUNTIME_ALLOWED`로 한 번 더 제한합니다. 중앙 host 기본값은 `false`이고 Osaka overlay에서만 `true`입니다.
 
@@ -74,7 +74,7 @@ $SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/
 $SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml up -d --no-deps stream-ingester'
 ```
 
-컷오버는 build를 먼저 완료한 뒤 기존 호스트 service를 stop하고 Osaka service를 start합니다. `youtube-scraper`는 outbox dispatcher를 포함하므로 두 호스트에서 장시간 동시에 실행하지 않습니다.
+컷오버는 build를 먼저 완료한 뒤 기존 호스트 service를 stop하고 Osaka service를 start합니다. `youtube-scraper`는 outbox row producer이므로 두 호스트에서 장시간 동시에 실행하지 않습니다.
 
 Osaka에는 source tree를 상시 보관하지 않습니다. 운영 디렉터리에는 compose 파일, `runtime-config/`, `data/`, `logs/`만 두고 secret env는 `/run/hololive-bot/env`에서만 읽습니다. image는 source host에서 arm64로 build/load하거나, Osaka에 임시 build context를 만들고 image 생성 후 제거합니다.
 
@@ -191,7 +191,7 @@ Osaka split-host 상태 확인:
 SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
 $SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper stream-ingester'
 $SSH_OSAKA 'curl -fsS http://127.0.0.1:30005/health && curl -fsS http://127.0.0.1:30004/health'
-$SSH_OSAKA 'docker logs --since 15m hololive-youtube-scraper | grep -E "ingestion_lease|outbox|ERR|WRN" | tail -n 120'
+$SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml logs --since 15m youtube-scraper | grep -E "ingestion_lease|outbox|ERR|WRN" | tail -n 120'
 $SSH_OSAKA 'docker logs --since 15m hololive-stream-ingester | grep -E "photo|runtime|ingestion_lease|ERR|WRN" | tail -n 120'
 ```
 

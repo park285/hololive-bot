@@ -19,6 +19,7 @@ REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
+. "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"
 
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_ROOT}/shared-go}"
@@ -297,6 +298,7 @@ else
     echo "  Target: All Services (build + deploy)"
     printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --build
+    removed_runtime_cleanup_standalone_dispatcher
 fi
 
 echo ""
