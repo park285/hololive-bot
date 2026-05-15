@@ -22,6 +22,7 @@
 `docs/history`는 완료된 migration, 과거 장애 대응, 더 이상 현재 기준이 아닌 handoff/closeout 문서를 둡니다.
 
 - `history/README.md` - historical 문서 규칙과 인덱스
+- `history/plan-kits/` - 더 이상 top-level entrypoint가 아닌 legacy plan-kit bundle
 
 ## Design
 
@@ -29,7 +30,7 @@
 
 - `design/README.md` - 설계 문서 규칙
 - `design/2026-05-15-repo-structure-refactor-worklog.md` - repo structure refactor worklog
-- `design/repo-tree-classification.md` - top-level docs directory classification before moves
+- `design/repo-tree-classification.md` - completed top-level docs directory classification and move record
 - `superpowers/specs/` - 승인된 design spec 보관 위치
 - `superpowers/plans/` - 구현 plan 보관 위치
 

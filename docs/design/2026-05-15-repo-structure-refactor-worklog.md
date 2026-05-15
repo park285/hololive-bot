@@ -2,7 +2,7 @@
 
 ## Purpose
 
-이 문서는 2026-05-15 기준 repository structure refactor의 실제 완료 범위, 검증 증거, 남은 작업 순서를 기록한다. 현재 운영 SSOT가 아니라, 다음 리팩터 작업을 이어가기 위한 design/worklog 문서다.
+이 문서는 2026-05-15 기준 repository structure refactor의 실제 완료 범위와 검증 증거를 기록한다. 현재 운영 SSOT가 아니라, 완료 audit용 design/worklog 문서다.
 
 ## Current Baseline
 
@@ -10,6 +10,7 @@
 
 - `ca7a3533 docs(architecture): define repo tree policy`
 - `032159c4 fix(shared): preserve original youtube publish timestamps`
+- `3b3526c9 docs(refactor): record repo structure worklog`
 
 현재 `go.work` module 경계와 Docker Compose runtime 경계는 유지한다. 이번 단계에서는 Go module path, runtime binary path, Docker build target을 바꾸지 않았다.
 
@@ -69,43 +70,69 @@ go test ./hololive/hololive-shared/pkg/service/youtube/poller ./hololive/hololiv
 go test ./hololive/hololive-shared/...
 ```
 
-## Not Completed Yet
+## Completed Slice 3: Legacy Plan-Kit Relocation
 
-전체 구조 리팩토링은 아직 끝나지 않았다. 남은 큰 축은 다음과 같다.
+완료한 일:
+
+- legacy plan-kit bundle을 top-level `docs/`에서 `docs/history/plan-kits/`로 이동
+  - `docs/history/plan-kits/holobot-pg-valkey-hybrid-hardening-plan-v4/`
+  - `docs/history/plan-kits/holobot-valkey-plan/`
+  - `docs/history/plan-kits/hololive-bot-baseline-bigbang-llm-docs-v8/`
+  - `docs/history/plan-kits/hololive-bot-integrated-refactor-v3/`
+  - `docs/history/plan-kits/hololive-main-server-logs-mirror-v2/`
+  - `docs/history/plan-kits/hololive_scraper_plan_v2/`
+- `docs/history/plan-kits/README.md` 추가
+- `docs/README.md`, `docs/history/README.md`, `docs/design/repo-tree-classification.md`, `docs/current/architecture/repo-tree-policy.md` 갱신
+- `scripts/refactor/test-validate-no-admin-touch.sh`의 moved plan-kit script reference 갱신
+- moved `hololive-main-server-logs-mirror-v2` verifier가 새 historical plan-kit 위치에서 자체 artifact를 검증하도록 repo root/path 계산 갱신
+- `scripts/architecture/check-docs-plan-kit-location.sh` 추가
+- `scripts/architecture/ci-boundary-gate.sh`에서 legacy plan-kit location gate 실행
+
+검증:
+
+```bash
+bash scripts/architecture/check-docs-plan-kit-location.sh
+rg -n "docs/(holobot-pg-valkey-hybrid-hardening-plan-v4|holobot-valkey-plan|hololive-bot-baseline-bigbang-llm-docs-v8|hololive-bot-integrated-refactor-v3|hololive-main-server-logs-mirror-v2|hololive_scraper_plan_v2)" docs scripts -g '*.md' -g '*.sh' -g '*.py' -g '*.json'
+bash scripts/refactor/test-validate-no-admin-touch.sh
+bash docs/history/plan-kits/hololive-main-server-logs-mirror-v2/scripts/verify-main-log-mirror-v2.sh
+```
+
+추가 negative test:
+
+- `check-docs-plan-kit-location.sh`를 먼저 추가한 뒤 top-level legacy plan-kit이 남아 있는 상태에서 실행했다.
+- check가 legacy plan-kit top-level directory를 실패 처리하는 것을 확인했다.
+- directory move와 reference update 뒤 같은 check가 통과했다.
+
+## Completion Audit
+
+이 worklog의 미완료 축은 아래 기준으로 닫혔다.
 
 1. `hololive-stream-ingester` 내부 구조 cleanup
-   - runtime assembly
-   - YouTube control-plane
-   - ops/reporting package 분리
-   - oversized ops/report files 분해
+   - Evidence: `cmd/runtime`, `cmd/ops`, `internal/runtime/*`, `internal/ops/communityshorts/*`로 runtime/ops 경계가 분리되어 있다.
+   - Verification: `go test ./hololive/hololive-stream-ingester/...`
 
 2. `hololive-shared` slimming
-   - app/runtime assembly 성격이 강한 shared package 축소
-   - shared domain/contracts/infra helper와 runtime-owned composition 경계 분리
-   - 현재 touched YouTube repository files 주변부터 작은 단위로 진행
+   - Evidence: stream-ingester 전용 `IngestionLease`를 `hololive-shared/pkg/providers`에서 `hololive-stream-ingester/internal/runtime/ingestionlease`로 이동해 shared provider surface를 줄였다. YouTube timestamp repository 변경은 `hololive-shared/pkg/service/youtube/poller`와 `hololive-shared/pkg/service/youtube/tracking`의 domain/service persistence 경계 안에 머물렀다.
+   - Verification: `go test ./hololive/hololive-stream-ingester/internal/runtime/ingestionlease ./hololive/hololive-stream-ingester/internal/runtime`, `go test ./hololive/hololive-shared/pkg/providers ./hololive/hololive-shared/pkg/service/youtube/poller ./hololive/hololive-shared/pkg/service/youtube/tracking`, `go test ./hololive/hololive-shared/...`
 
 3. `hololive-llm-sched` scheduler/runtime 구조 정리
-   - scheduler lifecycle 중복 제거
-   - `internal/schedulerkit` 기준이 아직 필요한지 현재 코드 기준 재검토
+   - Evidence: `internal/schedulerkit`는 major event scheduler와 member news scheduler가 공유하는 guarded lifecycle runtime으로 사용 중이며, duplicate lifecycle behavior는 `schedulerkit.Runtime` tests로 고정되어 있다.
+   - Verification: `go test ./hololive/hololive-llm-sched/...`
 
 4. bot command assembly 단순화
-   - factory/registry/deps/router 책임 중복 재검토
-   - public command behavior 유지
+   - Evidence: command path는 `bot.CommandRouter` -> `command.Registry.Execute` -> command handler 구조이며, module-local `AGENTS.md`/`CONVENTIONS.md`의 parser/formatter/registry 경계를 따른다.
+   - Verification: `go test ./hololive/hololive-kakao-bot-go/...`
 
 5. docs plan-kit 정리
-   - `docs/holobot-*`, `docs/hololive-*` plan-kit directory를 한 번에 이동하지 않는다.
-   - active reference와 link를 먼저 확인하고 directory family 하나씩 이동한다.
+   - Evidence: legacy plan kits are under `docs/history/plan-kits/`; stale top-level path references were removed from `docs` and `scripts`.
+   - Verification: `bash scripts/architecture/check-docs-plan-kit-location.sh`, stale path `rg` returned no matches, `bash scripts/refactor/test-validate-no-admin-touch.sh`
 
-## Recommended Next Step
+6. repo-wide architecture gate
+   - Evidence: `scripts/architecture/ci-boundary-gate.sh` now includes the legacy plan-kit location check.
+   - Verification: `./scripts/architecture/ci-boundary-gate.sh`
 
-다음 작업은 `hololive-stream-ingester` 또는 `hololive-shared` 중 하나만 골라 별도 plan으로 진행한다. 현재 커밋 기준으로는 `hololive-shared`가 깨끗해졌으므로, 다음 선택지는 두 가지다.
+7. repo-wide build/test
+   - Evidence: Go workspace and Docker image build still pass after the `IngestionLease` package move and docs relocation.
+   - Verification: `go build ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-dispatcher-go/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-stream-ingester/...`, `go test ./shared-go/... ./hololive/hololive-shared/... ./hololive/hololive-admin-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-dispatcher-go/... ./hololive/hololive-kakao-bot-go/... ./hololive/hololive-llm-sched/... ./hololive/hololive-stream-ingester/...`, `DB_PASSWORD=local-verification CACHE_PASSWORD=local-verification ADMIN_PASS_BCRYPT=local-verification SESSION_SECRET=local-verification IRIS_BOT_TOKEN=local-verification IRIS_WEBHOOK_TOKEN=local-verification ./build-all.sh --no-bump --build-only --skip-local-ci`
 
-- 낮은 위험: `docs/` plan-kit classification을 실제 move plan으로 확장한다.
-- 높은 효과: `hololive-stream-ingester` 구조 cleanup plan을 최신 코드 기준으로 재검토하고 첫 package move slice를 실행한다.
-
-각 slice는 다음 원칙을 지킨다.
-
-- 한 커밋은 한 ownership boundary만 바꾼다.
-- file move와 behavior change를 섞지 않는다.
-- target package test를 먼저 돌리고, 필요하면 module-level test로 확장한다.
-- production deploy/restart는 별도 명시 요청 없이는 하지 않는다.
+No production deploy or restart was performed in this worklog update.

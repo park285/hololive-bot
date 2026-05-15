@@ -16,17 +16,17 @@ This document classifies existing top-level `docs/` directories before any move.
 - `docs/superpowers/specs/` - agent-driven design specs
 - `docs/superpowers/plans/` - executable plans
 
-## Historical Or Plan-Kit Candidates
+## Historical Plan Kits
 
-- `docs/holobot-pg-valkey-hybrid-hardening-plan-v4/`
-- `docs/holobot-valkey-plan/`
-- `docs/hololive-bot-baseline-bigbang-llm-docs-v8/`
-- `docs/hololive-bot-integrated-refactor-v3/`
-- `docs/hololive-main-server-logs-mirror-v2/`
-- `docs/hololive_scraper_plan_v2/`
+- `docs/history/plan-kits/holobot-pg-valkey-hybrid-hardening-plan-v4/`
+- `docs/history/plan-kits/holobot-valkey-plan/`
+- `docs/history/plan-kits/hololive-bot-baseline-bigbang-llm-docs-v8/`
+- `docs/history/plan-kits/hololive-bot-integrated-refactor-v3/`
+- `docs/history/plan-kits/hololive-main-server-logs-mirror-v2/`
+- `docs/history/plan-kits/hololive_scraper_plan_v2/`
 
-These directories must not be moved until links, active references, and current operational relevance are checked.
+These directories were moved out of the top-level `docs/` entrypoint after checking active references and current operational relevance. They remain historical implementation records, not current SSOT.
 
 ## Move Rule
 
-Move one directory family at a time. Each move must include link updates, bridge files when needed, and architecture doc checks.
+Future plan-kit moves must happen one directory family at a time. Each move must include link updates, bridge files when needed, and architecture doc checks.

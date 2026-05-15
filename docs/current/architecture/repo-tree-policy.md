@@ -23,7 +23,7 @@ Root must not accumulate local logs, backups, data dumps, generated review bundl
 - `docs/history/` contains completed or non-current records.
 - `docs/design/` and `docs/superpowers/specs/` contain proposals before they become current.
 - `docs/superpowers/plans/` contains executable implementation plans.
-- Large old plan kits under `docs/holobot-*` or similar names must be classified before being moved.
+- Large old plan kits under `docs/holobot-*` or similar names belong under `docs/history/plan-kits/` after classification.
 
 ## Artifacts
 

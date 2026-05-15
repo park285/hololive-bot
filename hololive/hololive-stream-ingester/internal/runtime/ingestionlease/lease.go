@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package providers
+package ingestionlease
 
 import (
 	"context"
@@ -28,21 +28,18 @@ import (
 	"os"
 	"time"
 
-	"github.com/kapu/hololive-shared/internal/retry"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 const (
-	// IngestionLeaseKey - 분산 락 키 (외부 서비스에서 로그 참조용)
-	IngestionLeaseKey      = "lock:ingestion:runtime"
+	Key                    = "lock:ingestion:runtime"
 	ingestionLeaseTTL      = 2 * time.Minute
 	ingestionLeaseRenewGap = 40 * time.Second
 )
 
 var errIngestionLeaseOwnershipLost = errors.New("ingestion lease ownership lost")
 
-// IngestionLease - 분산 락 기반 ingestion 리스 (단일 인스턴스 보장)
-type IngestionLease struct {
+type Lease struct {
 	cacheSvc      cache.Client
 	key           string
 	owner         string
@@ -50,17 +47,15 @@ type IngestionLease struct {
 	ttl           time.Duration
 	renewInterval time.Duration
 	logger        *slog.Logger
-	// retrySleep: 테스트용 sleep 주입 (nil이면 기본 ctxutil.SleepWithContext 사용)
-	retrySleep func(ctx context.Context, d time.Duration) bool
+	retrySleep    func(ctx context.Context, d time.Duration) bool
 }
 
-// AcquireIngestionLease - ingestion 리스를 획득한다. 이미 다른 프로세스가 소유 중이면 에러 반환.
-func AcquireIngestionLease(
+func Acquire(
 	ctx context.Context,
 	cacheSvc cache.Client,
 	role string,
 	logger *slog.Logger,
-) (*IngestionLease, error) {
+) (*Lease, error) {
 	if cacheSvc == nil {
 		return nil, fmt.Errorf("acquire ingestion lease: cache service must not be nil")
 	}
@@ -72,24 +67,24 @@ func AcquireIngestionLease(
 	}
 
 	owner := fmt.Sprintf("%s:%d:%d", role, os.Getpid(), time.Now().UnixNano())
-	acquired, err := cacheSvc.SetNX(ctx, IngestionLeaseKey, owner, ingestionLeaseTTL)
+	acquired, err := cacheSvc.SetNX(ctx, Key, owner, ingestionLeaseTTL)
 	if err != nil {
 		return nil, fmt.Errorf("acquire ingestion lease: setnx failed: %w", err)
 	}
 	if !acquired {
-		return nil, fmt.Errorf("acquire ingestion lease: lock already held: key=%s", IngestionLeaseKey)
+		return nil, fmt.Errorf("acquire ingestion lease: lock already held: key=%s", Key)
 	}
 
 	logger.Info("Ingestion lease acquired",
 		slog.String("event", "ingestion_lease_acquired"),
 		slog.String("role", role),
-		slog.String("key", IngestionLeaseKey),
+		slog.String("key", Key),
 		slog.String("owner", owner),
 	)
 
-	return &IngestionLease{
+	return &Lease{
 		cacheSvc:      cacheSvc,
-		key:           IngestionLeaseKey,
+		key:           Key,
 		owner:         owner,
 		role:          role,
 		ttl:           ingestionLeaseTTL,
@@ -98,8 +93,7 @@ func AcquireIngestionLease(
 	}, nil
 }
 
-// StartRenewLoop - 갱신 루프를 시작한다. ctx 취소 시 종료, 소유권 상실/갱신 실패 시 errCh로 전달.
-func (l *IngestionLease) StartRenewLoop(ctx context.Context, errCh chan<- error) {
+func (l *Lease) StartRenewLoop(ctx context.Context, errCh chan<- error) {
 	if l == nil {
 		return
 	}
@@ -119,7 +113,7 @@ func (l *IngestionLease) StartRenewLoop(ctx context.Context, errCh chan<- error)
 	}
 }
 
-func (l *IngestionLease) waitAndRenew(ctx context.Context, ticks <-chan time.Time, errCh chan<- error) bool {
+func (l *Lease) waitAndRenew(ctx context.Context, ticks <-chan time.Time, errCh chan<- error) bool {
 	select {
 	case <-ctx.Done():
 		return true
@@ -128,14 +122,14 @@ func (l *IngestionLease) waitAndRenew(ctx context.Context, ticks <-chan time.Tim
 	}
 }
 
-func (l *IngestionLease) renewOnce(ctx context.Context, errCh chan<- error) bool {
+func (l *Lease) renewOnce(ctx context.Context, errCh chan<- error) bool {
 	if err := l.renew(ctx); err != nil {
 		return l.handleRenewError(errCh, err)
 	}
 	return false
 }
 
-func (l *IngestionLease) handleRenewError(errCh chan<- error, err error) bool {
+func (l *Lease) handleRenewError(errCh chan<- error, err error) bool {
 	if errors.Is(err, errIngestionLeaseOwnershipLost) {
 		l.logger.Error("Ingestion lease ownership lost",
 			slog.String("event", "ingestion_lease_lost"),
@@ -158,7 +152,7 @@ func (l *IngestionLease) handleRenewError(errCh chan<- error, err error) bool {
 	return true
 }
 
-func (l *IngestionLease) reportRenewLoopError(errCh chan<- error, err error) {
+func (l *Lease) reportRenewLoopError(errCh chan<- error, err error) {
 	if errCh == nil {
 		return
 	}
@@ -169,14 +163,13 @@ func (l *IngestionLease) reportRenewLoopError(errCh chan<- error, err error) {
 	}
 }
 
-func (l *IngestionLease) renew(ctx context.Context) error {
-	err := retry.WithRetry(ctx, retry.RetryOptions{
+func (l *Lease) renew(ctx context.Context) error {
+	err := withRetry(ctx, leaseRetryOptions{
 		MaxAttempts: 3,
 		BaseDelay:   1 * time.Second,
 		Jitter:      500 * time.Millisecond,
 		Sleep:       l.retrySleep,
 		ShouldRetry: func(err error) bool {
-			// 소유권 상실은 재시도 무의미
 			return !errors.Is(err, errIngestionLeaseOwnershipLost)
 		},
 		OnRetry: func(attempt int, err error, delay time.Duration) {
@@ -205,8 +198,111 @@ func (l *IngestionLease) renew(ctx context.Context) error {
 	return nil
 }
 
-// Release - ingestion 리스를 해제한다.
-func (l *IngestionLease) Release(ctx context.Context) error {
+type leaseRetryOptions struct {
+	MaxAttempts int
+	BaseDelay   time.Duration
+	Jitter      time.Duration
+	ShouldRetry func(error) bool
+	OnRetry     func(int, error, time.Duration)
+	Sleep       func(context.Context, time.Duration) bool
+}
+
+func withRetry(ctx context.Context, opts leaseRetryOptions, fn func(context.Context) error) error {
+	opts = normalizeLeaseRetryOptions(opts)
+
+	var lastErr error
+	for attempt := range opts.MaxAttempts {
+		err, done := leaseRetryAttempt(ctx, opts, attempt, lastErr, fn)
+		if done {
+			return err
+		}
+		lastErr = err
+	}
+	return lastErr
+}
+
+func leaseRetryAttempt(
+	ctx context.Context,
+	opts leaseRetryOptions,
+	attempt int,
+	lastErr error,
+	fn func(context.Context) error,
+) (error, bool) {
+	if err := leaseRetryContextError(ctx, lastErr); err != nil {
+		return err, true
+	}
+	err := fn(ctx)
+	if err == nil {
+		return nil, true
+	}
+	if leaseRetryFinished(opts, attempt, err) {
+		return err, true
+	}
+	if !leaseSleepBeforeRetry(ctx, opts, attempt, err) {
+		return err, true
+	}
+	return err, false
+}
+
+func leaseRetryFinished(opts leaseRetryOptions, attempt int, err error) bool {
+	return !leaseRetryShouldContinue(opts, err) || attempt >= opts.MaxAttempts-1
+}
+
+func normalizeLeaseRetryOptions(opts leaseRetryOptions) leaseRetryOptions {
+	if opts.MaxAttempts < 1 {
+		opts.MaxAttempts = 1
+	}
+	if opts.Sleep == nil {
+		opts.Sleep = sleepWithContext
+	}
+	return opts
+}
+
+func leaseRetryContextError(ctx context.Context, lastErr error) error {
+	if ctx.Err() == nil {
+		return nil
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("context error: %w", ctx.Err())
+}
+
+func leaseRetryShouldContinue(opts leaseRetryOptions, err error) bool {
+	return opts.ShouldRetry == nil || opts.ShouldRetry(err)
+}
+
+func leaseSleepBeforeRetry(ctx context.Context, opts leaseRetryOptions, attempt int, err error) bool {
+	delay := leaseBackoffDelay(attempt, opts.BaseDelay, opts.Jitter)
+	if opts.OnRetry != nil {
+		opts.OnRetry(attempt+1, err, delay)
+	}
+	return opts.Sleep(ctx, delay)
+}
+
+func leaseBackoffDelay(attempt int, baseDelay, jitter time.Duration) time.Duration {
+	delay := baseDelay
+	for range attempt {
+		delay *= 2
+	}
+	if jitter > 0 {
+		delay += time.Duration(time.Now().UnixNano() % int64(jitter))
+	}
+	return delay
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func (l *Lease) Release(ctx context.Context) error {
 	if l == nil {
 		return nil
 	}
