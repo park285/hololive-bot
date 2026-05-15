@@ -22,6 +22,12 @@ set -euo pipefail
 
 echo "$*" >>"${MOCK_DOCKER_LOG}"
 case "$1" in
+  compose)
+    if [[ "${2:-}" == "version" ]]; then
+      exit 0
+    fi
+    exit "${MOCK_DOCKER_COMPOSE_EXIT:-0}"
+    ;;
   ps)
     if [[ "${MOCK_DOCKER_HAS_DISPATCHER:-0}" == "1" ]]; then
       printf '%s\n' "mock-container-id"
@@ -59,3 +65,28 @@ if ! rg -q '^rm -f hololive-dispatcher-go$' "${MOCK_DOCKER_LOG}"; then
     fail "cleanup did not remove dispatcher container"
 fi
 pass "present dispatcher cleanup stops and removes container"
+
+env_file="${tmpdir}/env"
+compose_file="${tmpdir}/docker-compose.yml"
+cat >"${env_file}" <<'EOF'
+TEST_VALUE=ok
+EOF
+cat >"${compose_file}" <<'EOF'
+services:
+  app:
+    image: example
+EOF
+
+: >"${MOCK_DOCKER_LOG}"
+MOCK_DOCKER_HAS_DISPATCHER=1 COMPOSE_ENV_FILE="${env_file}" "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d --build app
+
+if ! rg -q '^compose --env-file .* up -d --build app$' "${MOCK_DOCKER_LOG}"; then
+    fail "compose wrapper did not run docker compose up"
+fi
+if ! rg -q '^stop hololive-dispatcher-go$' "${MOCK_DOCKER_LOG}"; then
+    fail "compose wrapper up did not stop dispatcher container"
+fi
+if ! rg -q '^rm -f hololive-dispatcher-go$' "${MOCK_DOCKER_LOG}"; then
+    fail "compose wrapper up did not remove dispatcher container"
+fi
+pass "compose wrapper up performs removed dispatcher cleanup"

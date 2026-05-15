@@ -6,8 +6,10 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 matches="$(
   rg -n \
+    --hidden \
     "(settlement-go|CommandSettlementStatus|CommandSettlementPaid|CommandSettlementRegister|settlement_status|settlement_paid|settlement_register|SETTLEMENT_ROOM_ID|dispatcher-go|hololive-dispatcher-go|legacy-dispatcher-go|smoke-dispatcher|DISPATCHER_PORT|30020)" \
     "${ROOT_DIR}" \
+    --glob '!.git/**' \
     --glob '!docs/history/settlement/**' \
     --glob '!docs/history/**' \
     --glob '!docs/superpowers/**' \
