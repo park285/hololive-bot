@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
+. "$ROOT_DIR/scripts/deploy/lib/compose-services.sh"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
@@ -30,19 +31,7 @@ usage() {
     echo "Usage: $0 <service|all>"
     echo
     echo "Supported services:"
-    echo "  hololive-bot | bot"
-    echo "  hololive-admin-api | admin-api"
-    echo "  hololive-alarm-worker | alarm-worker"
-    echo "  llm-scheduler | llm"
-    echo "  stream-ingester | ingester"
-    echo "  youtube-scraper | yt-scraper"
-    echo "  holo-postgres | postgres"
-    echo "  valkey-cache | valkey"
-    echo "  hololive-db-migrate | migrate"
-    echo "  docker-proxy"
-    echo "  admin-dashboard | admin"
-    echo "  deunhealth"
-    echo "  all"
+    compose_service_redeploy_usage_lines
 }
 
 if [ $# -ne 1 ]; then
@@ -80,27 +69,12 @@ elif ! "$CONTAINER_CLI" compose version >/dev/null 2>&1; then
 fi
 
 SERVICE="$1"
-case "$SERVICE" in
-    hololive-bot|bot) TARGET="hololive-bot" ;;
-    hololive-admin-api|admin-api) TARGET="hololive-admin-api" ;;
-    hololive-alarm-worker|alarm-worker) TARGET="hololive-alarm-worker" ;;
-    llm-scheduler|llm) TARGET="llm-scheduler" ;;
-    stream-ingester|ingester) TARGET="stream-ingester" ;;
-    youtube-scraper|yt-scraper) TARGET="youtube-scraper" ;;
-    holo-postgres|postgres) TARGET="holo-postgres" ;;
-    valkey-cache|valkey) TARGET="valkey-cache" ;;
-    hololive-db-migrate|migrate) TARGET="hololive-db-migrate" ;;
-    docker-proxy) TARGET="docker-proxy" ;;
-    admin-dashboard|admin) TARGET="admin-dashboard" ;;
-    deunhealth) TARGET="deunhealth" ;;
-    all) TARGET="" ;;
-    *)
-        echo "[ERROR] Unsupported service: $SERVICE"
-        echo
-        usage
-        exit 1
-        ;;
-esac
+if ! TARGET="$(compose_service_resolve_redeploy_target "$SERVICE")"; then
+    echo "[ERROR] Unsupported service: $SERVICE"
+    echo
+    usage
+    exit 1
+fi
 
 if [ "$TARGET" = "youtube-scraper" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_SCRAPER:-}" != "true" ]; then
     echo "[ERROR] youtube-scraper is Osaka-owned. Refusing central redeploy without ALLOW_CENTRAL_YOUTUBE_SCRAPER=true."

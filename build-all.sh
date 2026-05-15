@@ -18,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
+. "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
 
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_ROOT}/shared-go}"
@@ -88,20 +89,6 @@ VERSION_DIRS=(
     "hololive/hololive-alarm-worker"
 )
 
-declare -A COMPOSE_SERVICE_BY_ALIAS=(
-    [bot]="hololive-bot"
-    [hololive-bot]="hololive-bot"
-    [hololive-kakao-bot-go]="hololive-bot"
-    [admin-api]="hololive-admin-api"
-    [hololive-admin-api]="hololive-admin-api"
-    [alarm-worker]="hololive-alarm-worker"
-    [hololive-alarm-worker]="hololive-alarm-worker"
-    [stream-ingester]="stream-ingester"
-    [youtube-scraper]="youtube-scraper"
-    [llm-scheduler]="llm-scheduler"
-    [admin-dashboard]="admin-dashboard"
-)
-
 declare -A VERSION_DIR_BY_SERVICE=(
     [hololive-bot]="hololive/hololive-kakao-bot-go"
     [hololive-admin-api]="hololive/hololive-admin-api"
@@ -142,10 +129,10 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            service="${COMPOSE_SERVICE_BY_ALIAS[$1]:-}"
-            if [[ -z "${service}" ]]; then
+            if ! service="$(compose_service_resolve_build_target "$1")"; then
                 echo "[ERROR] Unknown build target: $1" >&2
-                echo "        Known targets: ${!COMPOSE_SERVICE_BY_ALIAS[*]}" >&2
+                echo "        Known targets:" >&2
+                compose_service_build_targets_text | sed 's/^/        - /' >&2
                 exit 1
             fi
             TARGET_SERVICES+=("${service}")

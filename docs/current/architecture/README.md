@@ -7,6 +7,7 @@
 - `ci-gates.md` - architecture/doc gate 목적, 실패 조건, 실행 순서
 - `llm-work-rules.md` - LLM 문서/계약 작업 규칙
 - `repo-tree-policy.md` - repository tree classification and cleanup policy
+- `repo-refactor-audit.md` - active refactor findings, completed cleanup, and deferred risk register
 
 ## Gate Assets
 
