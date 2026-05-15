@@ -177,9 +177,30 @@ done
 파일을 삭제해도 shell profile에 runtime env가 export되어 있으면 wrapper preflight가 실패합니다. 아래 명령은 값이 아니라 line 위치만 찾습니다.
 
 ```bash
-grep -RInE \
-  '(^|[[:space:]])(export[[:space:]]+)?(DB_PASSWORD|CACHE_PASSWORD|IRIS_BOT_TOKEN|IRIS_WEBHOOK_TOKEN|ADMIN_PASS_BCRYPT|SESSION_SECRET|ALARM_DISPATCH_|POSTGRES_|CACHE_|YOUTUBE_SCRAPER_RUNTIME_ALLOWED|YOUTUBE_OUTBOX_DISPATCHER_ENABLED|DELIVERY_DISPATCHER_ENABLED|NOTIFICATION_EGRESS_ROLE|NOTIFICATION_SCHEDULER_ROLE)=' \
-  ~/.bashrc ~/.bash_profile ~/.profile ~/.zshrc ~/.config 2>/dev/null || true
+profile_files=(
+  "$HOME/.bashrc"
+  "$HOME/.bash_profile"
+  "$HOME/.profile"
+  "$HOME/.zshrc"
+)
+
+for f in "${profile_files[@]}"; do
+  [ -f "$f" ] || continue
+  awk '
+    /(^|[[:space:]])(export[[:space:]]+)?(DB_PASSWORD|CACHE_PASSWORD|IRIS_BOT_TOKEN|IRIS_WEBHOOK_TOKEN|ADMIN_PASS_BCRYPT|SESSION_SECRET|ALARM_DISPATCH_|POSTGRES_|CACHE_|YOUTUBE_SCRAPER_RUNTIME_ALLOWED|YOUTUBE_OUTBOX_DISPATCHER_ENABLED|DELIVERY_DISPATCHER_ENABLED|NOTIFICATION_EGRESS_ROLE|NOTIFICATION_SCHEDULER_ROLE)=/ {
+      print FILENAME ":" FNR
+    }
+  ' "$f"
+done
+
+if [ -d "$HOME/.config" ]; then
+  find "$HOME/.config" -maxdepth 3 -type f -print0 2>/dev/null \
+    | xargs -0 -r awk '
+      /(^|[[:space:]])(export[[:space:]]+)?(DB_PASSWORD|CACHE_PASSWORD|IRIS_BOT_TOKEN|IRIS_WEBHOOK_TOKEN|ADMIN_PASS_BCRYPT|SESSION_SECRET|ALARM_DISPATCH_|POSTGRES_|CACHE_|YOUTUBE_SCRAPER_RUNTIME_ALLOWED|YOUTUBE_OUTBOX_DISPATCHER_ENABLED|DELIVERY_DISPATCHER_ENABLED|NOTIFICATION_EGRESS_ROLE|NOTIFICATION_SCHEDULER_ROLE)=/ {
+        print FILENAME ":" FNR
+      }
+    ' 2>/dev/null
+fi
 ```
 
 나온 줄에서 운영 secret 또는 runtime policy export를 제거합니다. 편집 후 현재 shell에서도 제거합니다.
