@@ -164,10 +164,7 @@ func buildTrackingUpsertQuery(
 	sb.WriteString(`
 		ON CONFLICT (kind, canonical_content_id) DO UPDATE
 		SET channel_id = EXCLUDED.channel_id,
-		    actual_published_at = CASE
-		        WHEN EXCLUDED.actual_published_at IS NULL THEN youtube_content_alarm_tracking.actual_published_at
-		        ELSE EXCLUDED.actual_published_at
-		    END,
+		    actual_published_at = COALESCE(youtube_content_alarm_tracking.actual_published_at, EXCLUDED.actual_published_at),
 		    detected_at = CASE
 		        WHEN EXCLUDED.detected_at < youtube_content_alarm_tracking.detected_at THEN EXCLUDED.detected_at
 		        ELSE youtube_content_alarm_tracking.detected_at

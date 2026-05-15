@@ -211,6 +211,51 @@ func TestGormBatchRepositoryPersistVideosPersistsShortPublishedAt(t *testing.T) 
 	require.Equal(t, "short:short-1", watermark.LastContentID)
 }
 
+func TestGormBatchRepositoryPersistVideosPreservesExistingPublishedAt(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeVideo{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	repo := newBatchRepository(db)
+	ctx := context.Background()
+	firstPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	laterPublishedAt := firstPublishedAt.Add(5 * time.Minute)
+
+	require.NoError(t, persistVideos(repo, ctx, []*domain.YouTubeVideo{{
+		VideoID:     "short-stable",
+		ChannelID:   "channel-1",
+		Title:       "title-short-stable",
+		IsShort:     true,
+		PublishedAt: &firstPublishedAt,
+		ViewCount:   42,
+	}}, nil, &domain.YouTubeContentWatermark{
+		ChannelID:     "channel-1",
+		WatermarkType: domain.WatermarkTypeShort,
+		Initialized:   true,
+		LastContentID: "short:short-stable",
+	}))
+	require.NoError(t, persistVideos(repo, ctx, []*domain.YouTubeVideo{{
+		VideoID:     "short-stable",
+		ChannelID:   "channel-1",
+		Title:       "title-short-stable",
+		IsShort:     true,
+		PublishedAt: &laterPublishedAt,
+		ViewCount:   43,
+	}}, nil, &domain.YouTubeContentWatermark{
+		ChannelID:     "channel-1",
+		WatermarkType: domain.WatermarkTypeShort,
+		Initialized:   true,
+		LastContentID: "short:short-stable",
+	}))
+
+	var stored domain.YouTubeVideo
+	require.NoError(t, db.First(&stored, "video_id = ?", "short-stable").Error)
+	require.NotNil(t, stored.PublishedAt)
+	require.Equal(t, firstPublishedAt, stored.PublishedAt.UTC())
+	require.EqualValues(t, 43, stored.ViewCount)
+}
+
 func TestGormBatchRepositoryPersistVideosRejectsShortPublishedAtStorageRuleMismatch(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
@@ -286,6 +331,56 @@ func TestGormBatchRepositoryPersistCommunityPosts(t *testing.T) {
 	var watermark domain.YouTubeContentWatermark
 	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", "channel-1", domain.WatermarkTypeCommunityPost).First(&watermark).Error)
 	require.Equal(t, "post-1", watermark.LastContentID)
+}
+
+func TestGormBatchRepositoryPersistCommunityPostsPreservesExistingPublishedAt(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	repo := newBatchRepository(db)
+	ctx := context.Background()
+	firstPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	laterPublishedAt := firstPublishedAt.Add(5 * time.Minute)
+
+	require.NoError(t, persistCommunityPosts(repo, ctx, []*domain.YouTubeCommunityPost{{
+		PostID:        "post-stable",
+		ChannelID:     "channel-1",
+		AuthorName:    "author",
+		ContentText:   "hello",
+		PublishedText: "1 hour ago",
+		PublishedAt:   &firstPublishedAt,
+		LikeCount:     10,
+		CommentCount:  2,
+	}}, nil, &domain.YouTubeContentWatermark{
+		ChannelID:     "channel-1",
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: "post-stable",
+	}))
+	require.NoError(t, persistCommunityPosts(repo, ctx, []*domain.YouTubeCommunityPost{{
+		PostID:        "post-stable",
+		ChannelID:     "channel-1",
+		AuthorName:    "author",
+		ContentText:   "hello",
+		PublishedText: "1 hour ago",
+		PublishedAt:   &laterPublishedAt,
+		LikeCount:     11,
+		CommentCount:  3,
+	}}, nil, &domain.YouTubeContentWatermark{
+		ChannelID:     "channel-1",
+		WatermarkType: domain.WatermarkTypeCommunityPost,
+		Initialized:   true,
+		LastContentID: "post-stable",
+	}))
+
+	var post domain.YouTubeCommunityPost
+	require.NoError(t, db.First(&post, "post_id = ?", "post-stable").Error)
+	require.NotNil(t, post.PublishedAt)
+	require.Equal(t, firstPublishedAt, post.PublishedAt.UTC())
+	require.EqualValues(t, 11, post.LikeCount)
+	require.EqualValues(t, 3, post.CommentCount)
 }
 
 func TestGormBatchRepositoryPersistCommunityPostsUpsertsAlarmState(t *testing.T) {
