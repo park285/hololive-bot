@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -38,6 +39,7 @@ func buildNotificationEgress(
 
 	runners := []namedRuntimeScheduler{
 		{name: "alarm-dispatch", scheduler: buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(irisClient), logger)},
+		{name: "alarm-dispatch-maintenance", scheduler: buildAlarmDispatchMaintenanceRunner(infra, logger)},
 		{name: "youtube-outbox", scheduler: buildYouTubeOutboxDispatcher(infra, egress.NewIrisMessageSender(irisClient), logger)},
 		{name: "notification-delivery-outbox", scheduler: buildDeliveryOutboxDispatcher(infra, egress.NewIrisMessageSender(irisClient), logger)},
 	}
@@ -85,19 +87,32 @@ func buildAlarmDispatchRunner(
 	}
 
 	consumerMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")))
+	maxBatch := parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50)
 	if consumerMode == "pg" {
-		return alarmDispatchRunner{
-			consumer: dispatchoutbox.NewConsumer(dispatchoutbox.NewPgxRepository(infra.Postgres), logger),
-			sender:   sender,
-			maxBatch: parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50),
-			logger:   logger,
+		lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
+		return &alarmDispatchRunner{
+			consumer: dispatchoutbox.NewConsumer(
+				dispatchoutbox.NewPgxRepository(infra.Postgres),
+				logger,
+				dispatchoutbox.WithLease(lease),
+				dispatchoutbox.WithRecoveryInterval(parsePositiveDurationMSEnv("ALARM_DISPATCH_RECOVERY_INTERVAL_MS", 30*time.Second)),
+				dispatchoutbox.WithRecoveryBatchSize(parsePositiveIntEnv("ALARM_DISPATCH_RECOVERY_BATCH_SIZE", 100)),
+			),
+			sender:             sender,
+			idleWaiter:         newAlarmDispatchWakeupWaiter(infra.Cache, logger),
+			consumerMode:       "pg",
+			postSendQuarantine: true,
+			maxBatch:           maxBatch,
+			maxBatchesPerWake:  parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCHES_PER_WAKE", 20),
+			logger:             logger,
 		}
 	}
-	return alarmDispatchRunner{
-		consumer: queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50))),
-		sender:   sender,
-		maxBatch: parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50),
-		logger:   logger,
+	return &alarmDispatchRunner{
+		consumer:     queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(maxBatch)),
+		sender:       sender,
+		consumerMode: "valkey",
+		maxBatch:     maxBatch,
+		logger:       logger,
 	}
 }
 

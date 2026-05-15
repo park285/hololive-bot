@@ -76,6 +76,7 @@ go test ./hololive/hololive-shared/...
 
 - legacy plan-kit bundle을 top-level `docs/`에서 `docs/history/plan-kits/`로 이동
   - `docs/history/plan-kits/holobot-pg-valkey-hybrid-hardening-plan-v4/`
+  - `docs/history/plan-kits/holobot-pg-first-logic-hardening-plan-v2/`
   - `docs/history/plan-kits/holobot-valkey-plan/`
   - `docs/history/plan-kits/hololive-bot-baseline-bigbang-llm-docs-v8/`
   - `docs/history/plan-kits/hololive-bot-integrated-refactor-v3/`

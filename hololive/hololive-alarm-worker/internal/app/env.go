@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func parseBoolEnv(key string, def bool) bool {
@@ -31,4 +32,28 @@ func parsePositiveIntEnv(key string, def int) int {
 		return def
 	}
 	return value
+}
+
+func parsePositiveDurationMSEnv(key string, def time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return def
+	}
+	return time.Duration(value) * time.Millisecond
+}
+
+func parsePositiveDurationSecondsEnv(key string, def time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return def
+	}
+	return time.Duration(value) * time.Second
 }
