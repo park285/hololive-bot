@@ -17,7 +17,6 @@ Current Go runtime services:
 - `hololive-bot`
 - `hololive-admin-api`
 - `hololive-alarm-worker`
-- `dispatcher-go`
 - `llm-scheduler`
 - `stream-ingester`
 - `youtube-scraper`
@@ -57,12 +56,11 @@ Use:
 
 ## Smoke Tests
 
-These scripts do not rebuild, redeploy, or recreate Docker Compose services. `smoke-runtime-health.sh` and `smoke-dispatcher-ready.sh` expect local services to already be running.
+These scripts do not rebuild, redeploy, or recreate Docker Compose services. `smoke-runtime-health.sh` expects local services to already be running.
 
 ```bash
 ./scripts/smoke/smoke-compose-config.sh
 ./scripts/smoke/smoke-runtime-health.sh
-./scripts/smoke/smoke-dispatcher-ready.sh
 ```
 
 Equivalent manual checks:
@@ -71,7 +69,6 @@ Equivalent manual checks:
 curl -k https://127.0.0.1:30001/health
 curl http://127.0.0.1:30006/health
 curl http://127.0.0.1:30007/health
-curl http://127.0.0.1:30020/ready
 curl http://127.0.0.1:30003/health
 curl http://127.0.0.1:30004/health
 curl http://127.0.0.1:30005/health

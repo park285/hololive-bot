@@ -9,7 +9,7 @@ Alarm dispatch queue와 settings/config Pub/Sub의 current contract를 기록합
 | Field | Value |
 |---|---|
 | Producer | `alarm-worker` |
-| Consumer | legacy `dispatcher-go` where enabled; production proactive egress owner is `alarm-worker` |
+| Consumer | `alarm-worker` |
 | Active queue | `alarm:dispatch:queue` |
 | Delayed retry queue | `alarm:dispatch:retry` |
 | DLQ | `alarm:dispatch:dlq` |

@@ -42,11 +42,6 @@ build-bin:
 	mkdir -p bin
 	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -ldflags="-X main.Version=$(VERSION)" -o bin/bot ./cmd/bot
 
-.PHONY: build-dispatcher-go
-build-dispatcher-go:
-	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -tags go_json -trimpath -ldflags="-X main.Version=$(VERSION)" -o bin/dispatcher-go ../hololive-dispatcher-go/cmd/dispatcher
-
 .PHONY: build-llm-scheduler
 build-llm-scheduler:
 	mkdir -p bin

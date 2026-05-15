@@ -107,7 +107,6 @@ func TestSettlementRuntimeArtifactsAreRemovedOrArchived(t *testing.T) {
 	}
 
 	copyChecks := []string{
-		"hololive/hololive-dispatcher-go/Dockerfile",
 		"hololive/hololive-kakao-bot-go/Dockerfile",
 		"hololive/hololive-llm-sched/Dockerfile",
 		"hololive/hololive-stream-ingester/Dockerfile",

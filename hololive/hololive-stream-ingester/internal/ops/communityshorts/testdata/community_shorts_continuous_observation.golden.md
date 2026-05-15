@@ -18,7 +18,7 @@
 ## Target Baseline
 
 - generated at: `2026-04-15T12:34:56Z`
-- final delivery owner: `youtube-scraper`, big-bang enabled: `true`
+- final delivery owner: `alarm-worker`, big-bang enabled: `true`
 - runtime target channels: `1`, channel rows: `1`
 
 | channel_id | owner | community_enabled | community_rooms | community_mode | shorts_enabled | shorts_rooms | shorts_mode |

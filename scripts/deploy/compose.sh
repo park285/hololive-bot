@@ -4,9 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 
 compose_args=("$@")
 compose_files=()
+compose_invokes_up=false
 previous=""
 for arg in "$@"; do
     if [[ "${previous}" == "-f" || "${previous}" == "--file" ]]; then
@@ -27,6 +29,10 @@ for arg in "$@"; do
             exit 1
             ;;
     esac
+
+    if [[ "${arg}" == "up" ]]; then
+        compose_invokes_up=true
+    fi
 done
 
 if [[ -n "${previous}" ]]; then
@@ -74,5 +80,11 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
+
+if [[ "${compose_invokes_up}" == true ]]; then
+    "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"
+    removed_runtime_cleanup_standalone_dispatcher
+    exit 0
+fi
 
 exec "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"

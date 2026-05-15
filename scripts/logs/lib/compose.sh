@@ -34,11 +34,13 @@ resolve_compose_cmd() {
 
 resolve_service() {
   local key="$1"
-  local resolved="${SERVICE_MAP[${key}]:-}"
-  if [[ -z "${resolved}" ]]; then
+  local resolved
+
+  if ! resolved="$(compose_service_resolve_log_target "${key}")"; then
     echo "ERROR: unknown service: ${key}" >&2
-    echo "Available: ${!SERVICE_MAP[*]}" >&2
+    echo "Available: $(compose_service_log_targets_text)" >&2
     exit 1
   fi
+
   printf '%s\n' "${resolved}"
 }

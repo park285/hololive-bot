@@ -105,10 +105,6 @@ check_no_imports "bot runtime" \
   "hololive/hololive-kakao-bot-go" \
   'hololive-(alarm-worker|admin-api|llm-sched)/internal'
 
-check_no_imports "dispatcher-go runtime" \
-  "hololive/hololive-dispatcher-go" \
-  'hololive-(llm-sched|admin-api|kakao-bot-go)/internal'
-
 check_no_imports "shared-go module" \
   "shared-go" \
   'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'

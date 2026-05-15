@@ -18,6 +18,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
+. "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
+. "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"
 
 resolve_shared_go_workspace_path() {
     local candidate="${SHARED_GO_WORKSPACE_PATH:-${REPO_ROOT}/shared-go}"
@@ -88,22 +90,6 @@ VERSION_DIRS=(
     "hololive/hololive-alarm-worker"
 )
 
-declare -A COMPOSE_SERVICE_BY_ALIAS=(
-    [bot]="hololive-bot"
-    [hololive-bot]="hololive-bot"
-    [hololive-kakao-bot-go]="hololive-bot"
-    [admin-api]="hololive-admin-api"
-    [hololive-admin-api]="hololive-admin-api"
-    [alarm-worker]="hololive-alarm-worker"
-    [hololive-alarm-worker]="hololive-alarm-worker"
-    [dispatcher]="dispatcher-go"
-    [dispatcher-go]="dispatcher-go"
-    [stream-ingester]="stream-ingester"
-    [youtube-scraper]="youtube-scraper"
-    [llm-scheduler]="llm-scheduler"
-    [admin-dashboard]="admin-dashboard"
-)
-
 declare -A VERSION_DIR_BY_SERVICE=(
     [hololive-bot]="hololive/hololive-kakao-bot-go"
     [hololive-admin-api]="hololive/hololive-admin-api"
@@ -144,10 +130,10 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            service="${COMPOSE_SERVICE_BY_ALIAS[$1]:-}"
-            if [[ -z "${service}" ]]; then
+            if ! service="$(compose_service_resolve_build_target "$1")"; then
                 echo "[ERROR] Unknown build target: $1" >&2
-                echo "        Known targets: ${!COMPOSE_SERVICE_BY_ALIAS[*]}" >&2
+                echo "        Known targets:" >&2
+                compose_service_build_targets_text | sed 's/^/        - /' >&2
                 exit 1
             fi
             TARGET_SERVICES+=("${service}")
@@ -243,22 +229,6 @@ validate_runtime_config_for_deploy() {
     fi
 }
 
-stop_legacy_dispatcher_after_default_deploy() {
-    if [[ ",${COMPOSE_PROFILES:-}," == *",legacy-dispatcher-go,"* ]]; then
-        return 0
-    fi
-
-    local container_id
-    container_id="$("${CONTAINER_CLI}" ps -aq --filter "name=^hololive-dispatcher-go$" 2>/dev/null || true)"
-    if [[ -z "${container_id}" ]]; then
-        return 0
-    fi
-
-    echo "[CLEANUP] Stopping legacy dispatcher-go outside the default production profile"
-    "${CONTAINER_CLI}" stop hololive-dispatcher-go >/dev/null 2>&1 || true
-    "${CONTAINER_CLI}" rm -f hololive-dispatcher-go >/dev/null
-}
-
 # Step 0: 로컬 CI gate
 if [[ "${SKIP_LOCAL_CI}" == false ]]; then
     echo "[CHECK] Running local CI gate before build..."
@@ -328,7 +298,7 @@ else
     echo "  Target: All Services (build + deploy)"
     printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --build
-    stop_legacy_dispatcher_after_default_deploy
+    removed_runtime_cleanup_standalone_dispatcher
 fi
 
 echo ""

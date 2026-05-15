@@ -50,16 +50,17 @@
 
 ## 📂 프로젝트 구조
 
-현재 `hololive-kakao-bot-go`는 **같은 Go module 안에서 3개 런타임**을 제공합니다.
-runtime split 1차 컷 기준으로 ingress / control plane / alarm worker를 분리합니다.
+현재 `hololive-kakao-bot-go`는 bot ingress 런타임을 제공합니다.
+runtime split 기준으로 control plane, alarm worker, scheduler, ingestion 런타임은 별도 module에서 운영합니다.
 
 ```
 hololive/
-├── hololive-kakao-bot-go/       # bot + admin-api + alarm-worker
-│   ├── cmd/{bot,admin-api,alarm-worker}
+├── hololive-kakao-bot-go/       # bot
+│   ├── cmd/bot
 │   ├── cmd/tools
 │   └── internal/{app,bot,command,server,service/{acl,activity,auth,system}}
-├── hololive-dispatcher-go/      # dispatcher-go
+├── hololive-admin-api/          # admin-api
+├── hololive-alarm-worker/       # alarm-worker
 ├── hololive-llm-sched/          # llm-scheduler
 ├── hololive-stream-ingester/    # stream-ingester
 ├── hololive-shared/             # 공통 domain/service/providers/server
@@ -69,11 +70,10 @@ hololive/
 ### 런타임 분리 상태
 
 - `cmd/bot` → webhook ingress + command routing
-- `cmd/admin-api` → `/api/holo/*`, `/api/auth/*`, `/oauth/callback`, `/internal/alarm/*`
-- `cmd/alarm-worker` → alarm scheduler / checker / queue publisher
+- `hololive-admin-api/cmd/admin-api` → `/api/holo/*`, `/api/auth/*`, `/oauth/callback`, `/internal/alarm/*`
+- `hololive-alarm-worker/cmd/alarm-worker` → alarm scheduler / checker / queue publisher/consumer/proactive egress
 - `cmd/llm-scheduler` → `hololive-llm-sched/cmd/llm-scheduler`
 - `cmd/stream-ingester` → `hololive-stream-ingester/cmd/stream-ingester`
-- `cmd/alarm-dispatcher` → `hololive-dispatcher-go/cmd/dispatcher`로 전환 (Phase 6)
 - 서비스별 Dockerfile → 각 모듈 루트 `Dockerfile`
 
 ## 📂 (레거시) 단일 모듈 구조 스냅샷
