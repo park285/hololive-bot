@@ -31,8 +31,9 @@
 - queue publish: `hololive/hololive-shared/pkg/service/alarm/queue/publisher.go`
 - queue consume/requeue: `hololive/hololive-shared/pkg/service/alarm/queue/consumer.go`
 
-### dispatcher seam
-- `hololive/hololive-dispatcher-go/internal/dispatch/dispatcher.go`
+### alarm-worker egress seam
+- `hololive/hololive-alarm-worker/internal/app/alarm_dispatch_runner.go`
+- `hololive/hololive-alarm-worker/internal/app/build_egress.go`
   - 큐에서 envelope 배치 drain
   - delayed retry queue 우선 drain
   - room 기준 그룹핑
@@ -55,9 +56,9 @@
    - `queue.Publisher.Publish`
    - `dedup.MarkAsNotified`
    - `AlarmService.MarkUpcomingEventNotified`
-5. `dispatcher-go`가 큐 envelope를 소비해 room별로 묶어 렌더링 후 Iris로 전송한다.
+5. `alarm-worker` egress runner가 큐 envelope를 소비해 room별로 묶어 렌더링 후 Iris로 전송한다.
 
-즉, 현재 구조의 핵심 경계는 `runtime scheduler -> checker -> notifier -> queue -> dispatcher` 이다.
+즉, 현재 구조의 핵심 경계는 `runtime scheduler -> checker -> notifier -> queue -> alarm-worker egress` 이다.
 
 ## 3. YouTube 알람 의미론
 
@@ -85,23 +86,23 @@ live catch-up 도 같은 checker 안에서 별도로 계산되지만, 발송 경
 - queue에는 `domain.AlarmQueueEnvelope` 가 적재된다.
 - envelope 안에는 notification payload, claim key, additive retry metadata가 함께 들어갈 수 있다.
 - consumer는 `alarm:dispatch:retry` delayed retry queue를 먼저 drain하고, 이후 active queue를 이어서 읽는다.
-- dispatcher에서 render/send 실패는 같은 durable retry 경로를 탄다.
+- alarm-worker egress에서 render/send 실패는 같은 durable retry 경로를 탄다.
   - 실패 시 retry metadata(`attempt`, `retry_after_ms`, `next_visible_at`, `last_error`)를 갱신한다.
   - retry budget 안이면 delayed retry queue에 schedule 한다.
   - retry budget 소진 시 `alarm:dispatch:dlq` 로 이동하고 claim key를 해제한다.
-- retry/DLQ 저장 자체가 실패하면 dispatcher는 envelope를 active queue로 requeue 해서 무소음 유실을 피한다.
+- retry/DLQ 저장 자체가 실패하면 alarm-worker egress는 envelope를 active queue로 requeue 해서 무소음 유실을 피한다.
 - queue consumer는 invalid JSON payload나 손상된 delayed retry member를 raw payload 그대로 DLQ로 보존한다.
 
-이 계약 덕분에 checker와 dispatcher는 다음 책임으로 분리된다.
+이 계약 덕분에 checker와 alarm-worker egress는 다음 책임으로 분리된다.
 
 - checker/notifier: “보내도 되는가”
-- dispatcher: “어떻게 묶어서 실제로 보낼 것인가”
+- alarm-worker egress: “어떻게 묶어서 실제로 보낼 것인가”
 
 ## 5. 현재 문서를 읽을 때의 주의점
 
 - 예전 bot ticker 중심 설명은 현재 구조와 맞지 않는다.
 - `AlarmService` 는 지금도 구독 저장과 일부 발송 상태 보조 마킹을 담당하지만, 플랫폼 알람 후보 계산의 주 루프는 `RuntimeScheduler` 와 각 checker가 소유한다.
-- 최종 발송은 bot 프로세스가 직접 하지 않고 queue + `dispatcher-go` 를 거친다.
+- 최종 발송은 bot 프로세스가 직접 하지 않고 queue + `alarm-worker` egress runner를 거친다.
 - 더 오래된 단순 실패 처리 설명은 현재 기준이 아니다. 현재는 render/send 모두 durable retry/DLQ 경로를 공유한다.
 
 ## 6. 빠른 코드 진입점
@@ -110,4 +111,4 @@ live catch-up 도 같은 checker 안에서 별도로 계산되지만, 발송 경
 - YouTube 후보 계산: `internal/service/alarm/checker/youtube_checker.go`
 - 발행 경계: `internal/service/alarm/checker/notifier.go`
 - 큐 publish/consume: `hololive-shared/pkg/service/alarm/queue/`
-- 최종 발송: `hololive-dispatcher-go/internal/dispatch/dispatcher.go`
+- 최종 발송: `hololive-alarm-worker/internal/app/alarm_dispatch_runner.go`

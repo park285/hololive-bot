@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGETS=(
-  "shared-go"
-  "hololive/hololive-shared"
-  "hololive/hololive-kakao-bot-go"
-  "hololive/hololive-alarm-worker"
-  "hololive/hololive-dispatcher-go"
-  "hololive/hololive-llm-sched"
-  "hololive/hololive-stream-ingester"
-)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${ROOT_DIR}/scripts/ci/go-workspace-modules.sh"
+
+mapfile -t TARGETS < <(go_workspace_runtime_log_scan_targets)
 
 pattern='logger\.(Info|Warn|Error|Debug)|sharedlog\.(Info|Warn|Error|Debug)|slog\.'
 

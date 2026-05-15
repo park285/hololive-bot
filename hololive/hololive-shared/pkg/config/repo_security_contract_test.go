@@ -62,8 +62,8 @@ func TestRepoCompose_PostgresUsesHostGatewayWithSecureDefaultTLSMode(t *testing.
 	if got := strings.Count(content, "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-require}"); got != 1 {
 		t.Fatalf("docker-compose.prod.yml POSTGRES_SSLMODE secure default anchor count = %d, want 1", got)
 	}
-	if got := strings.Count(content, "*postgres-env"); got != 7 {
-		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 7", got)
+	if got := strings.Count(content, "*postgres-env"); got != 6 {
+		t.Fatalf("docker-compose.prod.yml postgres env anchor usage count = %d, want 6", got)
 	}
 
 	required := []string{
@@ -79,29 +79,19 @@ func TestRepoCompose_PostgresUsesHostGatewayWithSecureDefaultTLSMode(t *testing.
 	}
 }
 
-func TestRepoCompose_DispatcherPGStartupDoesNotRequireValkeyHealth(t *testing.T) {
+func TestRepoCompose_StandaloneDispatcherServiceIsRemoved(t *testing.T) {
 	content := readRepoFile(t, "docker-compose.prod.yml")
-	dispatcherStart := strings.Index(content, "\n  dispatcher-go:")
-	if dispatcherStart < 0 {
-		t.Fatal("docker-compose.prod.yml missing dispatcher-go service")
-	}
-	rest := content[dispatcherStart:]
-	nextService := strings.Index(rest[len("\n  dispatcher-go:"):], "\n  stream-ingester:")
-	if nextService < 0 {
-		t.Fatal("docker-compose.prod.yml missing stream-ingester service after dispatcher-go")
-	}
-	dispatcherBlock := rest[:len("\n  dispatcher-go:")+nextService]
 
 	disallowed := []string{
-		"<<: *db-cache-depends",
-		"valkey-cache:",
+		"\n  dispatcher-go:",
+		"hololive-dispatcher-go",
+		"legacy-dispatcher-go",
+		"DISPATCHER_PORT",
+		"30020",
 	}
 	for _, pattern := range disallowed {
-		if strings.Contains(dispatcherBlock, pattern) {
-			t.Fatalf("dispatcher-go depends_on still requires Valkey health through %q", pattern)
+		if strings.Contains(content, pattern) {
+			t.Fatalf("docker-compose.prod.yml still contains standalone dispatcher pattern %q", pattern)
 		}
-	}
-	if !strings.Contains(dispatcherBlock, "<<: *db-depends") {
-		t.Fatal("dispatcher-go depends_on missing db-only dependency anchor")
 	}
 }

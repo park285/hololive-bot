@@ -6,13 +6,6 @@ services:
       cache_to:
         - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-kakao-bot-go-buildcache:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
 
-  dispatcher-go:
-    build:
-      cache_from:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-dispatcher-go-buildcache:buildcache
-      cache_to:
-        - type=registry,ref=${REMOTE_CACHE_PREFIX:?set REMOTE_CACHE_PREFIX}/hololive-dispatcher-go-buildcache:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
-
   stream-ingester:
     build:
       cache_from:

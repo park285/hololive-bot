@@ -96,8 +96,6 @@ declare -A COMPOSE_SERVICE_BY_ALIAS=(
     [hololive-admin-api]="hololive-admin-api"
     [alarm-worker]="hololive-alarm-worker"
     [hololive-alarm-worker]="hololive-alarm-worker"
-    [dispatcher]="dispatcher-go"
-    [dispatcher-go]="dispatcher-go"
     [stream-ingester]="stream-ingester"
     [youtube-scraper]="youtube-scraper"
     [llm-scheduler]="llm-scheduler"
@@ -243,22 +241,6 @@ validate_runtime_config_for_deploy() {
     fi
 }
 
-stop_legacy_dispatcher_after_default_deploy() {
-    if [[ ",${COMPOSE_PROFILES:-}," == *",legacy-dispatcher-go,"* ]]; then
-        return 0
-    fi
-
-    local container_id
-    container_id="$("${CONTAINER_CLI}" ps -aq --filter "name=^hololive-dispatcher-go$" 2>/dev/null || true)"
-    if [[ -z "${container_id}" ]]; then
-        return 0
-    fi
-
-    echo "[CLEANUP] Stopping legacy dispatcher-go outside the default production profile"
-    "${CONTAINER_CLI}" stop hololive-dispatcher-go >/dev/null 2>&1 || true
-    "${CONTAINER_CLI}" rm -f hololive-dispatcher-go >/dev/null
-}
-
 # Step 0: 로컬 CI gate
 if [[ "${SKIP_LOCAL_CI}" == false ]]; then
     echo "[CHECK] Running local CI gate before build..."
@@ -328,7 +310,6 @@ else
     echo "  Target: All Services (build + deploy)"
     printf '  [Docker]'; printf ' %q' "${COMPOSE_FILES[@]}"; echo ""
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --build
-    stop_legacy_dispatcher_after_default_deploy
 fi
 
 echo ""

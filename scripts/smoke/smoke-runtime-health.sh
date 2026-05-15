@@ -5,7 +5,6 @@ checks=(
   "bot|https://127.0.0.1:30001/health|-k"
   "admin-api|http://127.0.0.1:30006/health|"
   "alarm-worker|http://127.0.0.1:30007/health|"
-  "dispatcher-go|http://127.0.0.1:30020/health|"
   "llm-scheduler|http://127.0.0.1:30003/health|"
   "stream-ingester|http://127.0.0.1:30004/health|"
   "youtube-scraper|http://127.0.0.1:30005/health|"

@@ -66,7 +66,6 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 Compose 설정과 런타임 readiness/health smoke test 스크립트입니다.
 
 - `./scripts/smoke/smoke-compose-config.sh`
-- `./scripts/smoke/smoke-dispatcher-ready.sh`
 - `./scripts/smoke/smoke-runtime-health.sh`
 
 정리 원칙:

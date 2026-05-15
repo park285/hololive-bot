@@ -33,7 +33,6 @@ usage() {
     echo "  hololive-bot | bot"
     echo "  hololive-admin-api | admin-api"
     echo "  hololive-alarm-worker | alarm-worker"
-    echo "  dispatcher-go | dispatcher"
     echo "  llm-scheduler | llm"
     echo "  stream-ingester | ingester"
     echo "  youtube-scraper | yt-scraper"
@@ -85,7 +84,6 @@ case "$SERVICE" in
     hololive-bot|bot) TARGET="hololive-bot" ;;
     hololive-admin-api|admin-api) TARGET="hololive-admin-api" ;;
     hololive-alarm-worker|alarm-worker) TARGET="hololive-alarm-worker" ;;
-    dispatcher-go|dispatcher) TARGET="dispatcher-go" ;;
     llm-scheduler|llm) TARGET="llm-scheduler" ;;
     stream-ingester|ingester) TARGET="stream-ingester" ;;
     youtube-scraper|yt-scraper) TARGET="youtube-scraper" ;;
@@ -129,22 +127,6 @@ echo "[INFO] HOLO_BOT_VERSION=$HOLO_BOT_VERSION"
 echo "[INFO] SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
 echo "[INFO] COMPOSE_ENV_FILE=$COMPOSE_ENV_FILE"
 
-stop_legacy_dispatcher_after_default_deploy() {
-    if [[ ",${COMPOSE_PROFILES:-}," == *",legacy-dispatcher-go,"* ]]; then
-        return 0
-    fi
-
-    local container_id
-    container_id="$("$CONTAINER_CLI" ps -aq --filter "name=^hololive-dispatcher-go$" 2>/dev/null || true)"
-    if [[ -z "$container_id" ]]; then
-        return 0
-    fi
-
-    echo "[CLEANUP] Stopping legacy dispatcher-go outside the default production profile"
-    "$CONTAINER_CLI" stop hololive-dispatcher-go >/dev/null 2>&1 || true
-    "$CONTAINER_CLI" rm -f hololive-dispatcher-go >/dev/null
-}
-
 if [ -n "$TARGET" ]; then
     echo "[UP] $TARGET"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build "$TARGET"
@@ -153,7 +135,6 @@ if [ -n "$TARGET" ]; then
 else
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build
-    stop_legacy_dispatcher_after_default_deploy
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps
 fi

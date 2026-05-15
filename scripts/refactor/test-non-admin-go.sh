@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-go test ./shared-go/... \
-  ./hololive/hololive-shared/... \
-  ./hololive/hololive-alarm-worker/... \
-  ./hololive/hololive-dispatcher-go/... \
-  ./hololive/hololive-kakao-bot-go/... \
-  ./hololive/hololive-llm-sched/... \
-  ./hololive/hololive-stream-ingester/...
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${ROOT_DIR}/scripts/ci/go-workspace-modules.sh"
+
+mapfile -t packages < <(go_workspace_non_admin_package_patterns)
+go test "${packages[@]}"

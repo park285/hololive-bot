@@ -71,11 +71,10 @@ Diagnosis:
 ```bash
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 youtube-scraper
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
-./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=300 dispatcher-go
 ```
 
 Mitigation:
-- Identify whether backlog is scraper, alarm-worker, or dispatcher/Iris side.
+- Identify whether backlog is scraper, alarm-worker, or Iris side.
 
 Rollback:
 - Roll back the runtime that introduced the backlog.

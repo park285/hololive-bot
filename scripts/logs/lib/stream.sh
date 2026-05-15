@@ -35,7 +35,7 @@ cmd_stream() {
   local name=""
   local pid=""
   local svc=""
-  local services=(bot dispatcher-go stream-ingester llm-scheduler)
+  local services=(bot stream-ingester llm-scheduler)
 
   case "${command}" in
     start)
@@ -97,4 +97,3 @@ cmd_stream() {
       ;;
   esac
 }
-

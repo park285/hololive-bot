@@ -26,5 +26,5 @@
 
 - Route constants and client paths remain centralized.
 - `bot`, `admin-api`, and dashboard callers keep backward-compatible behavior during rollout.
-- Queue ownership remains `alarm-worker -> alarm:dispatch:* -> dispatcher-go`.
+- Queue ownership remains within `alarm-worker` for publish, consume, and proactive egress.
 - No RPC/gRPC transport is introduced.

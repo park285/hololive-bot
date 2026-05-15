@@ -38,26 +38,9 @@ jobs:
             hololive/hololive-alarm-worker/go.sum
             hololive/hololive-llm-sched/go.sum
             hololive/hololive-stream-ingester/go.sum
-            hololive/hololive-dispatcher-go/go.sum
 
       - name: Normalize go.mod replace directives
-        run: |
-          set -euo pipefail
-          modules=(
-            shared-go
-            hololive/hololive-shared
-            hololive/hololive-kakao-bot-go
-            hololive/hololive-admin-api
-            hololive/hololive-alarm-worker
-            hololive/hololive-llm-sched
-            hololive/hololive-stream-ingester
-            hololive/hololive-dispatcher-go
-          )
-          for mod in "${modules[@]}"; do
-            if [ -f "$mod/go.mod" ] && grep -q 'github.com/park285/iris-client-go =>' "$mod/go.mod"; then
-              (cd "$mod" && go mod edit -dropreplace github.com/park285/iris-client-go)
-            fi
-          done
+        run: ./scripts/ci/normalize-iris-client-replaces.sh
 
       - name: Guard committed go.work paths
         run: |
@@ -137,26 +120,9 @@ jobs:
             hololive/hololive-alarm-worker/go.sum
             hololive/hololive-llm-sched/go.sum
             hololive/hololive-stream-ingester/go.sum
-            hololive/hololive-dispatcher-go/go.sum
 
       - name: Normalize go.mod replace directives
-        run: |
-          set -euo pipefail
-          modules=(
-            shared-go
-            hololive/hololive-shared
-            hololive/hololive-kakao-bot-go
-            hololive/hololive-admin-api
-            hololive/hololive-alarm-worker
-            hololive/hololive-llm-sched
-            hololive/hololive-stream-ingester
-            hololive/hololive-dispatcher-go
-          )
-          for mod in "${modules[@]}"; do
-            if [ -f "$mod/go.mod" ] && grep -q 'github.com/park285/iris-client-go =>' "$mod/go.mod"; then
-              (cd "$mod" && go mod edit -dropreplace github.com/park285/iris-client-go)
-            fi
-          done
+        run: ./scripts/ci/normalize-iris-client-replaces.sh
 
       - name: Run alarm dispatch PostgreSQL integration tests
         env:
