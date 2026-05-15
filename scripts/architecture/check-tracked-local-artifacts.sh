@@ -8,11 +8,47 @@ source "${SCRIPT_DIR}/lib/git_guard.sh"
 require_git_checkout "${ROOT_DIR}"
 
 violations=()
+forbidden_patterns=(
+  '^logs/'
+  '^data/'
+  '^backups/'
+  '^\.review-bundles/'
+  '^runtime-config/'
+  '^\.env$'
+  '^\.env\.local$'
+  '^\.env\..*\.local$'
+  '^.*\.key$'
+  '^.*\.pem$'
+  '^.*\.tar\.gz$'
+)
+
+is_allowed_exception() {
+  local path="$1"
+  case "${path}" in
+    artifacts/architecture/go-workspace-import-graph.txt|\
+    logs/.gitkeep|\
+    runtime-config/.gitkeep|\
+    runtime-config/README.md|\
+    runtime-config/*.example)
+      return 0
+      ;;
+  esac
+  return 1
+}
 
 while IFS= read -r path; do
   if [[ ! -e "${ROOT_DIR}/${path}" ]]; then
     continue
   fi
+  if is_allowed_exception "${path}"; then
+    continue
+  fi
+  for pattern in "${forbidden_patterns[@]}"; do
+    if [[ "${path}" =~ ${pattern} ]]; then
+      violations+=("${path}")
+      continue 2
+    fi
+  done
   case "${path}" in
     .worktrees/*|\
     .tasklists/*|\
