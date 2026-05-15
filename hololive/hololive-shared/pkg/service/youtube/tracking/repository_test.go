@@ -96,6 +96,35 @@ func TestRepositoryUpsertPreservesEarliestDetectionAndSentAt(t *testing.T) {
 	require.True(t, *record.AlarmLatencyExceeded)
 }
 
+func TestRepositoryUpsertPreservesExistingActualPublishedAt(t *testing.T) {
+	repo := NewRepository(newTrackingTestDB(t))
+	ctx := context.Background()
+	firstActualPublishedAt := time.Date(2026, 4, 10, 1, 1, 0, 0, time.UTC)
+	laterActualPublishedAt := firstActualPublishedAt.Add(5 * time.Minute)
+	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+
+	require.NoError(t, repo.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+		Kind:              domain.OutboxKindNewShort,
+		ContentID:         "short-stable-published-at",
+		ChannelID:         "UC_SHORT",
+		ActualPublishedAt: &firstActualPublishedAt,
+		DetectedAt:        detectedAt,
+	}))
+	require.NoError(t, repo.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
+		Kind:              domain.OutboxKindNewShort,
+		ContentID:         "short-stable-published-at",
+		ChannelID:         "UC_SHORT",
+		ActualPublishedAt: &laterActualPublishedAt,
+		DetectedAt:        detectedAt.Add(time.Minute),
+	}))
+
+	record, err := repo.FindByIdentity(ctx, domain.OutboxKindNewShort, "short-stable-published-at")
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	require.NotNil(t, record.ActualPublishedAt)
+	require.Equal(t, firstActualPublishedAt, record.ActualPublishedAt.UTC())
+}
+
 func TestRepositoryFindByIdentitySupportsShortCanonicalAlias(t *testing.T) {
 	repo := NewRepository(newTrackingTestDB(t))
 	ctx := context.Background()
@@ -590,6 +619,37 @@ func TestRepositoryUpsertAndFindAlarmStateByPostID(t *testing.T) {
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, record.DeliveryStatus)
 }
 
+func TestRepositoryUpsertAlarmStatePreservesExistingActualPublishedAt(t *testing.T) {
+	repo := NewRepository(newTrackingTestDB(t))
+	ctx := context.Background()
+	firstActualPublishedAt := time.Date(2026, 4, 10, 1, 2, 3, 0, time.UTC)
+	laterActualPublishedAt := firstActualPublishedAt.Add(5 * time.Minute)
+	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+
+	require.NoError(t, repo.UpsertAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
+		Kind:              domain.OutboxKindCommunityPost,
+		PostID:            "post-stable-published-at",
+		ContentID:         "post-stable-published-at",
+		ChannelID:         "UC_TEST",
+		ActualPublishedAt: &firstActualPublishedAt,
+		DetectedAt:        detectedAt,
+	}))
+	require.NoError(t, repo.UpsertAlarmState(ctx, &domain.YouTubeCommunityShortsAlarmState{
+		Kind:              domain.OutboxKindCommunityPost,
+		PostID:            "post-stable-published-at",
+		ContentID:         "post-stable-published-at",
+		ChannelID:         "UC_TEST",
+		ActualPublishedAt: &laterActualPublishedAt,
+		DetectedAt:        detectedAt.Add(time.Minute),
+	}))
+
+	record, err := repo.FindAlarmStateByPostID(ctx, domain.OutboxKindCommunityPost, "community:post-stable-published-at")
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	require.NotNil(t, record.ActualPublishedAt)
+	require.Equal(t, firstActualPublishedAt, record.ActualPublishedAt.UTC())
+}
+
 func TestRepositoryMarkAlarmSentBatchUpdatesAlarmState(t *testing.T) {
 	repo := NewRepository(newTrackingTestDB(t))
 	ctx := context.Background()
@@ -994,6 +1054,39 @@ func TestRepositoryUpsertAndListSourcePostsWithinDetectedWindow(t *testing.T) {
 	require.Equal(t, "UC_COMMUNITY", communityRow.ChannelID)
 	require.Nil(t, communityRow.ActualPublishedAt)
 	require.Equal(t, communityDetectedAt, communityRow.DetectedAt.UTC())
+}
+
+func TestRepositoryUpsertSourcePostsPreservesExistingActualPublishedAt(t *testing.T) {
+	repo := NewRepository(newTrackingTestDB(t))
+	ctx := context.Background()
+	firstActualPublishedAt := time.Date(2026, 4, 10, 1, 2, 30, 0, time.UTC)
+	laterActualPublishedAt := firstActualPublishedAt.Add(5 * time.Minute)
+	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
+
+	require.NoError(t, repo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{
+		{
+			Kind:              domain.OutboxKindNewShort,
+			PostID:            "short:short-stable-source",
+			ChannelID:         "UC_SHORT",
+			ActualPublishedAt: &firstActualPublishedAt,
+			DetectedAt:        detectedAt,
+		},
+	}))
+	require.NoError(t, repo.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{
+		{
+			Kind:              domain.OutboxKindNewShort,
+			PostID:            "short:short-stable-source",
+			ChannelID:         "UC_SHORT",
+			ActualPublishedAt: &laterActualPublishedAt,
+			DetectedAt:        detectedAt.Add(time.Minute),
+		},
+	}))
+
+	rows, err := repo.ListSourcePostsDetectedWithinWindow(ctx, detectedAt.Add(-time.Minute), detectedAt.Add(10*time.Minute))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].ActualPublishedAt)
+	require.Equal(t, firstActualPublishedAt, rows[0].ActualPublishedAt.UTC())
 }
 
 func TestRepositoryListSourcePostsWithinObservationWindowUsesPublishedAtAndDetectionCutoff(t *testing.T) {
