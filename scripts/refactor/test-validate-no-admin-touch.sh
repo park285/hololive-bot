@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 scripts=(
   "${repo_root}/scripts/refactor/validate-no-admin-touch.sh"
-  "${repo_root}/docs/hololive-bot-integrated-refactor-v3/scripts/refactor/validate-no-admin-touch.sh"
+  "${repo_root}/docs/history/plan-kits/hololive-bot-integrated-refactor-v3/scripts/refactor/validate-no-admin-touch.sh"
 )
 
 tmpdir="$(mktemp -d)"

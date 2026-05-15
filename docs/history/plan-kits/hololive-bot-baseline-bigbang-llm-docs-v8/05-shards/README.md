@@ -1,6 +1,6 @@
 # Shard index
 
-아래 shard 문서 중 하나를 Worker에게 배정합니다. 정적 shard가 너무 크면 `docs/hololive-bot-baseline-bigbang-llm-docs-v8/tools/generate-function-budget-shards.py`로 만든 `AUTO-###` card를 우선합니다.
+아래 shard 문서 중 하나를 Worker에게 배정합니다. 정적 shard가 너무 크면 `docs/history/plan-kits/hololive-bot-baseline-bigbang-llm-docs-v8/tools/generate-function-budget-shards.py`로 만든 `AUTO-###` card를 우선합니다.
 
 | ID | Title | Risk | File |
 |---|---|---|---|

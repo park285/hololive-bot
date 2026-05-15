@@ -26,7 +26,7 @@
 
 검증:
 ```bash
-./docs/hololive-main-server-logs-mirror-v2/scripts/verify-main-log-mirror-v2.sh
+./docs/history/plan-kits/hololive-main-server-logs-mirror-v2/scripts/verify-main-log-mirror-v2.sh
 ```
 
 적용:

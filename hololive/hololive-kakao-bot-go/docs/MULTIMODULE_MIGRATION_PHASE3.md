@@ -90,7 +90,7 @@ llm/
 | 파일 | 귀속 | 이유 |
 |------|------|------|
 | `api_router.go` | shared | ProvideHealthOnlyRouter/TriggerRouter는 다수 서비스 사용 |
-| `ingestion_lock.go` | shared | stream-ingester 단독 ingestion ownership 보호 |
+| `ingestion_lock.go` | stream-ingester | stream-ingester 단독 ingestion ownership 보호 |
 | `iris_sender_adapter.go` | shared | iris 관련 |
 | `bootstrap_dispatcher.go` | hololive-alarm | alarm-dispatcher 전용 |
 | `bootstrap_admin.go` | hololive-admin | admin-api 전용 |
@@ -127,7 +127,7 @@ llm/
 ### P3-0: providers.go 분할 + app/ 공유 파일 shared 이동
 1. `hololive-shared/pkg/providers/` 생성
 2. providers.go → 공유 함수 이동 (bot 전용 3개만 잔류)
-3. `api_router.go`, `ingestion_lock.go`, `iris_sender_adapter.go` → shared 이동
+3. `api_router.go`, `iris_sender_adapter.go` → shared 이동, `ingestion_lock.go` → stream-ingester runtime 이동
 4. `hololive-shared/pkg/server/` 생성 — 공통 미들웨어 + trigger 이동
 5. 빌드 검증
 

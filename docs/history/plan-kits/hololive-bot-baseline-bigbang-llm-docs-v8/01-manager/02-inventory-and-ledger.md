@@ -11,7 +11,7 @@ python3 scripts/architecture/check-function-budget.py \
   --sort-by score \
   > artifacts/function-budget-baseline-removal/over-budget.json
 
-python3 docs/hololive-bot-baseline-bigbang-llm-docs-v8/tools/generate-function-budget-shards.py \
+python3 docs/history/plan-kits/hololive-bot-baseline-bigbang-llm-docs-v8/tools/generate-function-budget-shards.py \
   --input artifacts/function-budget-baseline-removal/over-budget.json \
   --output-dir artifacts/function-budget-baseline-removal
 ```
