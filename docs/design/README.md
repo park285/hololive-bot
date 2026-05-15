@@ -14,3 +14,6 @@
 
 ## 현재 설계 문서 위치
 - `docs/superpowers/specs/` — 현재 agent-driven design spec 저장 위치
+
+## Active Worklogs
+- `2026-05-15-repo-structure-refactor-worklog.md` — repo structure refactor 완료 범위, 검증, 다음 작업 기준
