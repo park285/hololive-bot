@@ -30,7 +30,7 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts chan
 
 ```bash
 set -a
-source .env
+source "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/env}"
 set +a
 
 PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5433 -U "${HOLOLIVE_DB_USER:-hololive_runtime}" -d hololive <<'SQL'
