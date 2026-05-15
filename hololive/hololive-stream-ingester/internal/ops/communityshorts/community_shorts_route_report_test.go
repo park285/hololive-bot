@@ -20,7 +20,7 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 	baseline := communityshorts.TargetBaseline{
 		GeneratedAt: generatedAt,
 		Runtime: communityshorts.TargetBaselineRuntime{
-			FinalDeliveryOwner:            communityshorts.RuntimeOwnerYouTubeScraper,
+			FinalDeliveryOwner:            communityshorts.RuntimeOwnerAlarmWorker,
 			CommunityShortsBigBangEnabled: true,
 			TargetChannelCount:            3,
 		},
@@ -36,8 +36,8 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						SubscriberRoomCount:   2,
 						NewPathConfigured:     true,
 						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
-						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
-						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerAlarmWorker,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.NewDeliveryPath,
 					},
 					{
 						AlarmType:             domain.AlarmTypeShorts,
@@ -46,8 +46,8 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						SubscriberRoomCount:   1,
 						NewPathConfigured:     true,
 						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
-						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
-						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerAlarmWorker,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.NewDeliveryPath,
 					},
 				},
 			},
@@ -61,8 +61,8 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						AlarmEnabled:          false,
 						NewPathConfigured:     true,
 						EffectiveDeliveryMode: communityshorts.DeliveryModeOff,
-						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
-						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerAlarmWorker,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.NewDeliveryPath,
 					},
 					{
 						AlarmType:             domain.AlarmTypeShorts,
@@ -71,8 +71,8 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						SubscriberRoomCount:   1,
 						NewPathConfigured:     true,
 						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
-						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
-						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerAlarmWorker,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.NewDeliveryPath,
 					},
 				},
 			},
@@ -87,8 +87,8 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						SubscriberRoomCount:   1,
 						NewPathConfigured:     true,
 						EffectiveDeliveryMode: communityshorts.DeliveryModeNew,
-						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
-						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerAlarmWorker,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.NewDeliveryPath,
 					},
 					{
 						AlarmType:             domain.AlarmTypeShorts,
@@ -96,8 +96,8 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 						AlarmEnabled:          false,
 						NewPathConfigured:     true,
 						EffectiveDeliveryMode: communityshorts.DeliveryModeOff,
-						FinalDeliveryOwner:    communityshorts.RuntimeOwnerYouTubeScraper,
-						FinalDeliveryPath:     communityshorts.RuntimeOwnerYouTubeScraper + "." + communityshorts.NewDeliveryPath,
+						FinalDeliveryOwner:    communityshorts.RuntimeOwnerAlarmWorker,
+						FinalDeliveryPath:     communityshorts.RuntimeOwnerAlarmWorker + "." + communityshorts.NewDeliveryPath,
 					},
 				},
 			},
@@ -194,10 +194,10 @@ func TestBuildCommunityShortsRouteVerificationReport(t *testing.T) {
 
 	markdown := RenderCommunityShortsRouteVerificationMarkdown(report)
 	require.Contains(t, markdown, "# YouTube Community/Shorts Channel Route Verification Report")
-	require.Contains(t, markdown, "runtime final owner: `youtube-scraper`")
+	require.Contains(t, markdown, "runtime final owner: `alarm-worker`")
 	require.Contains(t, markdown, "A (`UC_A`)")
 	require.Contains(t, markdown, "actual=`mixed_paths_detected`")
-	require.Contains(t, markdown, "deployment=`youtube-scraper.youtube_outbox_dispatcher`")
+	require.Contains(t, markdown, "deployment=`alarm-worker.youtube_outbox_dispatcher`")
 }
 
 func reportRouteFor(

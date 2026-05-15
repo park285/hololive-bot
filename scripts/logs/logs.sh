@@ -6,17 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SCRIPT_PATH="${BASH_SOURCE[0]}"
 
-declare -Ag SERVICE_MAP=(
-  [bot]="hololive-bot"
-  [hololive-bot]="hololive-bot"
-  [dispatcher]="dispatcher-go"
-  [dispatcher-go]="dispatcher-go"
-  [ingester]="stream-ingester"
-  [stream-ingester]="stream-ingester"
-  [llm]="llm-scheduler"
-  [llm-scheduler]="llm-scheduler"
-)
-
 usage() {
   cat <<USAGE
 Usage: ./scripts/logs/logs.sh <command> [args]
@@ -34,6 +23,7 @@ Commands:
 USAGE
 }
 
+source "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
 source "${SCRIPT_DIR}/lib/compose.sh"
 source "${SCRIPT_DIR}/lib/query.sh"
 source "${SCRIPT_DIR}/lib/stream.sh"

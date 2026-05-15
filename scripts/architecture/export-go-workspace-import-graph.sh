@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OUTPUT_FILE="${1:-${ROOT_DIR}/artifacts/architecture/go-workspace-import-graph.txt}"
 
 source "${SCRIPT_DIR}/lib/git_guard.sh"
+source "${ROOT_DIR}/scripts/ci/go-workspace-modules.sh"
 require_git_checkout "${ROOT_DIR}"
 
 resolve_shared_go_dir() {
@@ -20,17 +21,7 @@ resolve_shared_go_dir() {
 
 SHARED_GO_DIR="$(resolve_shared_go_dir)"
 
-MODULE_DIRS=(
-  "${ROOT_DIR}"
-  "${SHARED_GO_DIR}"
-  "${ROOT_DIR}/hololive/hololive-shared"
-  "${ROOT_DIR}/hololive/hololive-kakao-bot-go"
-  "${ROOT_DIR}/hololive/hololive-admin-api"
-  "${ROOT_DIR}/hololive/hololive-alarm-worker"
-  "${ROOT_DIR}/hololive/hololive-dispatcher-go"
-  "${ROOT_DIR}/hololive/hololive-llm-sched"
-  "${ROOT_DIR}/hololive/hololive-stream-ingester"
-)
+mapfile -t MODULE_DIRS < <(go_workspace_module_dirs "${ROOT_DIR}" "${SHARED_GO_DIR}")
 
 for module_dir in "${MODULE_DIRS[@]}"; do
   if [[ ! -f "${module_dir}/go.mod" ]]; then

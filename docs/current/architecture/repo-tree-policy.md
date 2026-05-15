@@ -42,7 +42,6 @@ Go module directories stay stable:
 - `hololive/hololive-shared/`
 - `hololive/hololive-admin-api/`
 - `hololive/hololive-alarm-worker/`
-- `hololive/hololive-dispatcher-go/`
 - `hololive/hololive-kakao-bot-go/`
 - `hololive/hololive-llm-sched/`
 - `hololive/hololive-stream-ingester/`

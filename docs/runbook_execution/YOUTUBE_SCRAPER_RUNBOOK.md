@@ -10,11 +10,12 @@
 포함 책임:
 - YouTube ingestion scheduler
 - YouTube scraper scheduler
-- YouTube outbox dispatcher
+- YouTube outbox row production
 - `config:update` 구독 (`scraper_proxy` 적용, `alarm_advance_minutes` 무시)
 
 제외 책임:
 - Holodex photo sync (`stream-ingester`, `30004`)
+- Iris final send and delivery terminal state (`alarm-worker`)
 
 ## 2) 배포 구성
 
@@ -24,7 +25,7 @@
 - `shared_go_workspace`: 기본값 `./shared-go` (필요 시 `SHARED_GO_WORKSPACE_PATH`로 override 가능)
 
 운영 기준:
-- YouTube 커뮤니티/쇼츠 알람 라우팅은 `youtube-scraper` outbox dispatcher로 고정합니다.
+- YouTube 커뮤니티/쇼츠 알람 라우팅은 `youtube-scraper` outbox row production과 `alarm-worker` final egress로 고정합니다.
 - canary/legacy 선택 플래그 없이 전체 운영 채널에 동일 경로를 적용합니다.
 
 Osaka split-host 운영 기준:
@@ -66,7 +67,7 @@ Osaka 확인:
 SSH_OSAKA='ssh -i /home/kapu/gemini/hololive-bot/KR.key -o IdentitiesOnly=yes ubuntu@kapu-iris-osaka-1'
 $SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml ps youtube-scraper'
 $SSH_OSAKA 'curl -fsS http://127.0.0.1:30005/health'
-$SSH_OSAKA 'docker logs --since 15m hololive-youtube-scraper | grep -E "ingestion_lease|outbox|ERR|WRN" | tail -n 120'
+$SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/env ./scripts/deploy/compose.sh -f docker-compose.prod.yml -f docker-compose.osaka.yml logs --since 15m youtube-scraper | grep -E "ingestion_lease|outbox|ERR|WRN" | tail -n 120'
 ```
 
 정상 기준:
@@ -74,7 +75,7 @@ $SSH_OSAKA 'docker logs --since 15m hololive-youtube-scraper | grep -E "ingestio
 - `/health` 200
 - `YouTube ingestion scheduler started`
 - `Scraper scheduler started`
-- `YouTube outbox dispatcher started`
+- `YouTube outbox dispatcher disabled`
 - 분산 락 획득 로그 확인 (`event=ingestion_lease_acquired`, `role=youtube-scraper`)
 
 ## 4) 컷오버 체크리스트
@@ -117,7 +118,7 @@ curl -fsS http://127.0.0.1:30005/health
 예시 확인 명령:
 
 ```bash
-docker logs --since 15m hololive-youtube-scraper | grep "ingestion_lease"
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --since 15m youtube-scraper | grep "ingestion_lease"
 ```
 
 Osaka rollback:
@@ -128,7 +129,7 @@ $SSH_OSAKA 'cd ~/hololive-bot && sudo -n env COMPOSE_ENV_FILE=/run/hololive-bot/
 ./scripts/deploy/compose.sh -f docker-compose.prod.yml up -d --no-deps youtube-scraper
 ```
 
-rollback도 한 번에 한 서비스만 수행합니다. `youtube-scraper`는 outbox dispatcher를 포함하므로 Osaka와 기존 호스트에 장시간 동시 기동하지 않습니다.
+rollback도 한 번에 한 서비스만 수행합니다. `youtube-scraper`는 outbox row producer이므로 Osaka와 기존 호스트에 장시간 동시 기동하지 않습니다.
 
 ## 6) 장애 대응 원칙
 

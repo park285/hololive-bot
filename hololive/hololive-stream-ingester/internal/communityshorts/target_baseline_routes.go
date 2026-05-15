@@ -156,7 +156,7 @@ func isCutoverPending(ingestionCfg config.IngestionConfig, generatedAt time.Time
 
 func resolveFinalDeliveryOwner(ingestionCfg config.IngestionConfig) string {
 	if ingestionCfg.CommunityShortsBigBangEnabled {
-		return RuntimeOwnerYouTubeScraper
+		return RuntimeOwnerAlarmWorker
 	}
 	return RuntimeOwnerStreamIngester
 }

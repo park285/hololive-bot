@@ -12,12 +12,6 @@
     ]
   },
   {
-    "path": "hololive/hololive-dispatcher-go/cmd/dispatcher/main.go",
-    "must_contain": [
-      "bootstrap.Run("
-    ]
-  },
-  {
     "path": "hololive/hololive-kakao-bot-go/cmd/bot/main.go",
     "must_contain": [
       "bootstrap.Run("

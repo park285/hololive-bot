@@ -39,7 +39,7 @@ func TestRenderCommunityShortsContinuousObservationMarkdownIncludes24HCloseout(t
 		TargetBaseline: communityshorts.TargetBaseline{
 			GeneratedAt: generatedAt,
 			Runtime: communityshorts.TargetBaselineRuntime{
-				FinalDeliveryOwner:            "youtube-scraper",
+				FinalDeliveryOwner:            "alarm-worker",
 				CommunityShortsBigBangEnabled: true,
 				TargetChannelCount:            2,
 			},
@@ -158,7 +158,7 @@ func TestRenderCommunityShortsContinuousObservationMarkdownPromotesEmbeddedDatas
 		TargetBaseline: communityshorts.TargetBaseline{
 			GeneratedAt: generatedAt,
 			Runtime: communityshorts.TargetBaselineRuntime{
-				FinalDeliveryOwner:            "youtube-scraper",
+				FinalDeliveryOwner:            "alarm-worker",
 				CommunityShortsBigBangEnabled: true,
 				TargetChannelCount:            1,
 			},

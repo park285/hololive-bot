@@ -44,14 +44,14 @@ func TestBuildTargetBaseline(t *testing.T) {
 		}, cutoverAt.Add(time.Minute))
 		require.NoError(t, err)
 
-		require.Equal(t, RuntimeOwnerYouTubeScraper, baseline.Runtime.FinalDeliveryOwner)
+		require.Equal(t, RuntimeOwnerAlarmWorker, baseline.Runtime.FinalDeliveryOwner)
 		require.Equal(t, 2, baseline.Runtime.TargetChannelCount)
 		require.NotNil(t, baseline.Runtime.CommunityShortsBigBangCutoverAt)
 		require.Equal(t, cutoverAt, *baseline.Runtime.CommunityShortsBigBangCutoverAt)
 
 		communityPath := baselinePathForType(t, baseline.PathMappings, domain.AlarmTypeCommunity)
 		require.Equal(t, sharedalarmkeys.ChannelSubscribersCommunityPrefix, communityPath.SubscriberKeyPrefix)
-		require.Equal(t, RuntimeOwnerYouTubeScraper+"."+NewDeliveryPath, communityPath.FinalDeliveryPath)
+		require.Equal(t, RuntimeOwnerAlarmWorker+"."+NewDeliveryPath, communityPath.FinalDeliveryPath)
 		require.False(t, communityPath.LegacyPathActive)
 		require.True(t, communityPath.NewPathConfigured)
 		require.False(t, communityPath.CutoverPending)

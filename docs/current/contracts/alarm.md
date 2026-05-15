@@ -21,7 +21,7 @@ Alarm domain currently has HTTP JSON APIs, the Valkey dispatch queue, generic no
 ## Consumers
 
 - HTTP consumers: `bot`, `admin-api` facade paths
-- Queue consumer: legacy `dispatcher-go` where enabled; production proactive egress owner is `alarm-worker`.
+- Queue consumer: `alarm-worker`.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery, YouTube outbox handoff
 
 ## Transport

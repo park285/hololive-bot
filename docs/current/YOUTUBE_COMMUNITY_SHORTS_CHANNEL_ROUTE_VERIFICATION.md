@@ -34,7 +34,7 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts rout
 
 헤더는 전체 운영 상태를 요약합니다.
 
-- `runtime final owner`: 현재 배포 대상 owner입니다. 운영 목표값은 `youtube-scraper` 입니다.
+- `runtime final owner`: 현재 최종 발송 owner입니다. 운영 목표값은 `alarm-worker` 입니다.
 - `big-bang enabled`: 운영 목표값은 `true` 입니다.
 - `telemetry path expectation`: 실제 전송 텔레메트리에서 기대하는 신규 경로 값입니다. 현재 기준값은 `youtube_outbox_dispatcher` 입니다.
 - `summary`: 채널/라우트 수를 보여 주고, 실제 사용 상태 집계는 현재 활성 라우트 기준으로 계산합니다.
@@ -45,7 +45,7 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts rout
   - `new_only`: 해당 타입 알람이 켜져 있고 신규 경로가 최종 경로입니다.
   - `disabled`: 현재 typed 알람 구독이 없습니다.
   - `pending_cutover`: 컷오버 시각 전이라 신규 경로 단일 활성로 판정하면 안 됩니다.
-- `deployment`: 현재 런타임이 최종 owner로 해석한 경로입니다. 운영 목표값은 `youtube-scraper.youtube_outbox_dispatcher` 입니다.
+- `deployment`: 현재 런타임이 최종 owner로 해석한 경로입니다. 운영 목표값은 `alarm-worker.youtube_outbox_dispatcher` 입니다.
 - `actual`: 최근 관측 창에서 실제 게시물의 텔레메트리 경로를 요약한 상태입니다.
   - `new_only_verified`: 최근 게시물들이 모두 `youtube_outbox_dispatcher` 로만 관측됐습니다.
   - `no_recent_posts`: 최근 창에 해당 채널/타입 게시물이 없어 실제 경로를 관측하지 못했습니다.
@@ -58,10 +58,10 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts rout
 
 다음 조건이면 “현재 운영 경로는 신규 경로만 사용 중” 근거로 사용할 수 있습니다.
 
-- 헤더에서 `runtime final owner = youtube-scraper`
+- 헤더에서 `runtime final owner = alarm-worker`
 - 헤더에서 `big-bang enabled = true`
 - 대상 라우트의 `activation = new_only`
-- 대상 라우트의 `deployment = youtube-scraper.youtube_outbox_dispatcher`
+- 대상 라우트의 `deployment = alarm-worker.youtube_outbox_dispatcher`
 - 대상 라우트의 `actual = new_only_verified`
 - 대상 라우트의 `observed_paths` 에 `youtube_outbox_dispatcher` 외 값이 없음
 

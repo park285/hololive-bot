@@ -6,7 +6,7 @@
 
 ## Architecture
 
-현재 운영 기준은 Go runtime 7개를 단일 호스트 Docker Compose로 실행하는 구조입니다.
+현재 운영 기준은 Go runtime 6개를 단일 호스트 Docker Compose로 실행하는 구조입니다.
 
 > 운영 기준: 2026-03-07 k8s/k3s 배포에서 단일 호스트 Docker Compose 기준으로 롤백했습니다. 현재 배포, 로그 조회, 장애 대응 절차의 기준은 Compose 문서와 `docs/current` 문서군입니다.
 
@@ -14,8 +14,7 @@
 |---|---|---|---:|---|
 | `bot` | `hololive-kakao-bot-go` | `hololive-bot` | 30001 | Kakao/Iris webhook ingress, command routing |
 | `admin-api` | `hololive-admin-api` | `hololive-admin-api` | 30006 | Admin HTTP control plane |
-| `alarm-worker` | `hololive-alarm-worker` | `hololive-alarm-worker` | 30007 | Alarm checker and queue publisher |
-| `dispatcher-go` | `hololive-dispatcher-go` | `dispatcher-go` | 30020 | Alarm dispatch queue consumer and Iris sender |
+| `alarm-worker` | `hololive-alarm-worker` | `hololive-alarm-worker` | 30007 | Alarm checker, dispatch queue consumer, and Iris/Kakao proactive egress |
 | `llm-scheduler` | `hololive-llm-sched` | `llm-scheduler` | 30003 | Major event, member news, LLM scheduling and delivery |
 | `stream-ingester` | `hololive-stream-ingester` | `stream-ingester` | 30004 | Photo sync and ingestion-adjacent runtime |
 | `youtube-scraper` | `hololive-stream-ingester` | `youtube-scraper` | 30005 | YouTube scraping/polling and outbox runtime |
@@ -30,9 +29,9 @@ Shared libraries:
 기본 흐름:
 
 - Kakao/Iris ingress: `Iris -> bot -> command/service/repository -> PostgreSQL/Valkey`
-- Alarm dispatch: `alarm-worker -> Valkey alarm:dispatch:queue -> dispatcher-go -> Iris -> KakaoTalk`
+- Alarm dispatch: `alarm-worker -> Valkey alarm:dispatch:queue -> alarm-worker egress -> Iris -> KakaoTalk`
 - LLM/member news: `admin-api` 또는 `bot` 내부 client -> `llm-scheduler` internal HTTP API
-- YouTube ingestion: `youtube-scraper -> shared outbox/tracking -> alarm-worker/dispatcher-go`
+- YouTube ingestion: `youtube-scraper -> shared outbox/tracking -> alarm-worker`
 
 ## Development
 
@@ -51,7 +50,6 @@ go build ./shared-go/... \
   ./hololive/hololive-shared/... \
   ./hololive/hololive-admin-api/... \
   ./hololive/hololive-alarm-worker/... \
-  ./hololive/hololive-dispatcher-go/... \
   ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/...
@@ -64,7 +62,6 @@ go test ./shared-go/... \
   ./hololive/hololive-shared/... \
   ./hololive/hololive-admin-api/... \
   ./hololive/hololive-alarm-worker/... \
-  ./hololive/hololive-dispatcher-go/... \
   ./hololive/hololive-kakao-bot-go/... \
   ./hololive/hololive-llm-sched/... \
   ./hololive/hololive-stream-ingester/...
@@ -100,7 +97,6 @@ Local CI gate:
 ./scripts/deploy/compose-redeploy-service.sh hololive-bot
 ./scripts/deploy/compose-redeploy-service.sh hololive-admin-api
 ./scripts/deploy/compose-redeploy-service.sh hololive-alarm-worker
-./scripts/deploy/compose-redeploy-service.sh dispatcher-go
 ./scripts/deploy/compose-redeploy-service.sh llm-scheduler
 ./scripts/deploy/compose-redeploy-service.sh stream-ingester
 ./scripts/deploy/compose-redeploy-service.sh youtube-scraper
@@ -114,21 +110,20 @@ Local CI gate:
 
 ## Logs And Health
 
-SSOT는 application stdout/stderr와 `docker compose logs`입니다. 파일 로그는 보조 미러입니다.
+SSOT는 application stdout/stderr와 `./scripts/deploy/compose.sh ... logs`입니다. 파일 로그는 보조 미러입니다.
 
 | Runtime | Health |
 |---|---|
 | `bot` | `https://127.0.0.1:30001/health` |
 | `admin-api` | `http://127.0.0.1:30006/health` |
 | `alarm-worker` | `http://127.0.0.1:30007/health` |
-| `dispatcher-go` | `http://127.0.0.1:30020/ready` |
 | `llm-scheduler` | `http://127.0.0.1:30003/health` |
 | `stream-ingester` | `http://127.0.0.1:30004/health` |
 | `youtube-scraper` | `http://127.0.0.1:30005/health` |
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f <service>
+./scripts/deploy/compose.sh -f docker-compose.prod.yml ps
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f <service>
 ./scripts/logs/logs.sh query <service> --since 1h --limit 1000
 ```
 
