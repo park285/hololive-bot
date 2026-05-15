@@ -34,7 +34,7 @@ llm/
 ├── shared-go/                       # 범용 유틸 (httpclient, workerpool, json, retry 등)
 ├── hololive-shared/                 # 공유 도메인+서비스+providers (959+ tests)
 │   └── pkg/
-│       ├── providers/               # ← P3-0에서 생성 (44 Provide* 함수, IngestionLease 등)
+│       ├── providers/               # ← P3-0에서 생성 (44 Provide* 함수)
 │       ├── domain/ constants/ errors/ util/ iris/ health/ config/ llm/
 │       ├── platform/bootstrap/ adapter/ repository/
 │       └── service/{cache,database,member,holodex,template,configsub,
@@ -285,7 +285,7 @@ llm/hololive-stream-ingester/
 2. cmd/stream-ingester/ 이동
 3. bootstrap_stream_ingester.go 이동
    - 이미 providers.* 직접 참조 사용 (P3-0에서 전환 완료)
-   - providers.AcquireIngestionLease, providers.IngestionLease 직접 사용
+   - stream-ingester internal ingestionlease package 직접 사용
 4. Dockerfile.stream-ingester: 빌드 컨텍스트 변경
 5. go.work 업데이트
 6. hololive-kakao-bot-go에서 stream-ingester 관련 코드 삭제

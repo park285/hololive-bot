@@ -27,3 +27,6 @@
 - `repo-review/CRITICAL_REVIEW_RESIDUAL_ISSUES_20260415.md` - critical review residual issue closeout
 - `repo-review/REMAINING_RISKS_EXECUTION_GUIDE_20260415.md` - repo-wide remaining risk closeout
 - `repo-review/LEGACY_LINT_RESUME_20260415.md` - legacy lint cleanup closeout
+
+### Plan kits
+- `plan-kits/README.md` - legacy plan-kit bundle index

@@ -31,10 +31,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kapu/hololive-shared/pkg/config"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-stream-ingester/internal/runtime/alarmcache"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-stream-ingester/internal/runtime/readiness"
 	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
 	"github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle"
@@ -133,7 +133,7 @@ func logIngestionRuntimeConfigured(logger *slog.Logger, runtimeName string, feat
 		slog.Bool("youtube_enabled", features.youtubeEnabled),
 		slog.Bool("photo_sync_enabled", features.photoSyncEnabled),
 		slog.Bool("community_shorts_bigbang_enabled", features.communityShortsBigBangEnabled),
-		slog.String("lock_key", providers.IngestionLeaseKey),
+		slog.String("lock_key", ingestionlease.Key),
 	)
 }
 
@@ -148,7 +148,7 @@ func acquireIngestionLeaseIfEnabled(
 	if !enabled {
 		return nil
 	}
-	lease, err := providers.AcquireIngestionLease(ctx, infra.cacheService, runtimeName, logger)
+	lease, err := ingestionlease.Acquire(ctx, infra.cacheService, runtimeName, logger)
 	if err != nil {
 		return fmt.Errorf("acquire ingestion lease: %w", err)
 	}

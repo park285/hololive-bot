@@ -59,6 +59,10 @@ echo "[M2] markdown local path check"
 "${SCRIPT_DIR}/check-doc-links-no-local-paths.sh"
 echo
 
+echo "[M2] legacy docs plan-kit location check"
+"${SCRIPT_DIR}/check-docs-plan-kit-location.sh"
+echo
+
 echo "[M2] runtime runbook coverage check"
 "${SCRIPT_DIR}/check-runbook-coverage.sh"
 echo

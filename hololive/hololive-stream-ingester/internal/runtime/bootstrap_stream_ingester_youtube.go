@@ -12,6 +12,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
 	trackingrepo "github.com/kapu/hololive-shared/pkg/service/youtube/tracking"
 	communityshorts "github.com/kapu/hololive-stream-ingester/internal/communityshorts"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-stream-ingester/internal/runtime/polling"
 	"github.com/kapu/hololive-stream-ingester/internal/runtime/polltarget"
 	"github.com/kapu/hololive-stream-ingester/internal/runtime/publishedat"
@@ -21,7 +22,7 @@ type ingestionRuntimeYouTubeState struct {
 	operationalChannels   []communityShortsOperationalChannel
 	pollTargets           polltarget.Targets
 	communityShortsPolicy communityShortsBigBangPolicy
-	ingestionLease        *providers.IngestionLease
+	ingestionLease        *ingestionlease.Lease
 }
 
 type ingestionRuntimeYouTubeDependencies struct {

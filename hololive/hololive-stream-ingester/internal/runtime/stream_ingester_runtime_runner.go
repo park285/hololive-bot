@@ -30,11 +30,11 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/holodex"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller"
+	"github.com/kapu/hololive-stream-ingester/internal/runtime/ingestionlease"
 	"github.com/kapu/hololive-stream-ingester/internal/runtime/polltarget"
 	"github.com/kapu/hololive-stream-ingester/internal/runtime/readiness"
 	sharedlog "github.com/park285/llm-kakao-bots/shared-go/pkg/logging"
@@ -62,7 +62,7 @@ type StreamIngesterRuntime struct {
 	communityShortsObservationWindowWriter communityShortsObservationWindowWriter
 	timeNow                                func() time.Time
 
-	ingestionLease *providers.IngestionLease
+	ingestionLease *ingestionlease.Lease
 	lifecycle.Managed
 }
 
