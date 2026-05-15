@@ -34,7 +34,7 @@
 ## Logs
 
 ```bash
-docker compose -f docker-compose.prod.yml logs -f hololive-bot
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs -f hololive-bot
 ```
 
 ## Metrics
@@ -51,8 +51,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml ps hololive-bot
-docker compose -f docker-compose.prod.yml logs --tail=200 hololive-bot
+./scripts/deploy/compose.sh -f docker-compose.prod.yml ps hololive-bot
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-bot
 curl -k https://127.0.0.1:30001/health
 ```
 
@@ -70,8 +70,8 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker compose -f docker-compose.prod.yml logs --tail=200 hololive-bot
-docker compose -f docker-compose.prod.yml logs --tail=200 llm-scheduler
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 hololive-bot
+./scripts/deploy/compose.sh -f docker-compose.prod.yml logs --tail=200 llm-scheduler
 curl http://127.0.0.1:30003/health
 ```
 

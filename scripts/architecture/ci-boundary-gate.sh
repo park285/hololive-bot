@@ -87,6 +87,13 @@ echo "[M2] error contract coverage check"
 "${SCRIPT_DIR}/check-error-contracts.sh"
 echo
 
+echo "[CI] Run M4 compose env helper gate"
+bash -n "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" \
+    "${ROOT_DIR}/scripts/deploy/test-compose-env.sh"
+"${ROOT_DIR}/scripts/deploy/test-compose-env.sh"
+echo
+
 echo "[CI] Run M4 Go module LOC gate"
 "${SCRIPT_DIR}/check-go-module-loc.sh"
 echo
