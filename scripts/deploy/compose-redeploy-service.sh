@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/deploy/lib/compose-env.sh"
+. "$ROOT_DIR/scripts/deploy/lib/compose-services.sh"
+. "$ROOT_DIR/scripts/deploy/lib/removed-runtimes.sh"
 REPO_CANONICAL_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
@@ -30,20 +32,7 @@ usage() {
     echo "Usage: $0 <service|all>"
     echo
     echo "Supported services:"
-    echo "  hololive-bot | bot"
-    echo "  hololive-admin-api | admin-api"
-    echo "  hololive-alarm-worker | alarm-worker"
-    echo "  dispatcher-go | dispatcher"
-    echo "  llm-scheduler | llm"
-    echo "  stream-ingester | ingester"
-    echo "  youtube-scraper | yt-scraper"
-    echo "  holo-postgres | postgres"
-    echo "  valkey-cache | valkey"
-    echo "  hololive-db-migrate | migrate"
-    echo "  docker-proxy"
-    echo "  admin-dashboard | admin"
-    echo "  deunhealth"
-    echo "  all"
+    compose_service_redeploy_usage_lines
 }
 
 if [ $# -ne 1 ]; then
@@ -81,28 +70,12 @@ elif ! "$CONTAINER_CLI" compose version >/dev/null 2>&1; then
 fi
 
 SERVICE="$1"
-case "$SERVICE" in
-    hololive-bot|bot) TARGET="hololive-bot" ;;
-    hololive-admin-api|admin-api) TARGET="hololive-admin-api" ;;
-    hololive-alarm-worker|alarm-worker) TARGET="hololive-alarm-worker" ;;
-    dispatcher-go|dispatcher) TARGET="dispatcher-go" ;;
-    llm-scheduler|llm) TARGET="llm-scheduler" ;;
-    stream-ingester|ingester) TARGET="stream-ingester" ;;
-    youtube-scraper|yt-scraper) TARGET="youtube-scraper" ;;
-    holo-postgres|postgres) TARGET="holo-postgres" ;;
-    valkey-cache|valkey) TARGET="valkey-cache" ;;
-    hololive-db-migrate|migrate) TARGET="hololive-db-migrate" ;;
-    docker-proxy) TARGET="docker-proxy" ;;
-    admin-dashboard|admin) TARGET="admin-dashboard" ;;
-    deunhealth) TARGET="deunhealth" ;;
-    all) TARGET="" ;;
-    *)
-        echo "[ERROR] Unsupported service: $SERVICE"
-        echo
-        usage
-        exit 1
-        ;;
-esac
+if ! TARGET="$(compose_service_resolve_redeploy_target "$SERVICE")"; then
+    echo "[ERROR] Unsupported service: $SERVICE"
+    echo
+    usage
+    exit 1
+fi
 
 if [ "$TARGET" = "youtube-scraper" ] && [[ ",${COMPOSE_FILE}," != *"docker-compose.osaka.yml"* ]] && [ "${ALLOW_CENTRAL_YOUTUBE_SCRAPER:-}" != "true" ]; then
     echo "[ERROR] youtube-scraper is Osaka-owned. Refusing central redeploy without ALLOW_CENTRAL_YOUTUBE_SCRAPER=true."
@@ -129,31 +102,16 @@ echo "[INFO] HOLO_BOT_VERSION=$HOLO_BOT_VERSION"
 echo "[INFO] SHARED_GO_WORKSPACE_PATH=$SHARED_GO_WORKSPACE_PATH"
 echo "[INFO] COMPOSE_ENV_FILE=$COMPOSE_ENV_FILE"
 
-stop_legacy_dispatcher_after_default_deploy() {
-    if [[ ",${COMPOSE_PROFILES:-}," == *",legacy-dispatcher-go,"* ]]; then
-        return 0
-    fi
-
-    local container_id
-    container_id="$("$CONTAINER_CLI" ps -aq --filter "name=^hololive-dispatcher-go$" 2>/dev/null || true)"
-    if [[ -z "$container_id" ]]; then
-        return 0
-    fi
-
-    echo "[CLEANUP] Stopping legacy dispatcher-go outside the default production profile"
-    "$CONTAINER_CLI" stop hololive-dispatcher-go >/dev/null 2>&1 || true
-    "$CONTAINER_CLI" rm -f hololive-dispatcher-go >/dev/null
-}
-
 if [ -n "$TARGET" ]; then
     echo "[UP] $TARGET"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build "$TARGET"
+    removed_runtime_cleanup_standalone_dispatcher
     echo "[PS] $TARGET"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps "$TARGET"
 else
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" up -d --build
-    stop_legacy_dispatcher_after_default_deploy
+    removed_runtime_cleanup_standalone_dispatcher
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" ps
 fi

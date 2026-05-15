@@ -9,7 +9,6 @@
 | `bot` | `bot.md` |
 | `admin-api` | `admin-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
-| `dispatcher-go` | `dispatcher-go.md` |
 | `llm-scheduler` | `llm-scheduler.md` |
 | `stream-ingester` | `stream-ingester.md` |
 | `youtube-scraper` | `youtube-scraper.md` |

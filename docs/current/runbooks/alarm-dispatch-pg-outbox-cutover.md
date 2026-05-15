@@ -73,7 +73,6 @@ Before deploying alarm-worker logic hardening, verify these checks:
 ```bash
 go test ./hololive/hololive-alarm-worker/internal/app -count=1
 go test ./hololive/hololive-shared/pkg/service/alarm/dispatchoutbox -count=1
-go test ./hololive/hololive-dispatcher-go/internal/app -count=1
 ```
 
 ```bash

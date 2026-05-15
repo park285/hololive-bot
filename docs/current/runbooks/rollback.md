@@ -25,7 +25,6 @@ Runtime service names:
 - `hololive-bot`
 - `hololive-admin-api`
 - `hololive-alarm-worker`
-- `dispatcher-go`
 - `llm-scheduler`
 - `stream-ingester`
 - `youtube-scraper`
@@ -44,7 +43,6 @@ Runtime service names:
 ./scripts/architecture/check-runbook-coverage.sh
 ./scripts/smoke/smoke-compose-config.sh
 ./scripts/smoke/smoke-runtime-health.sh
-./scripts/smoke/smoke-dispatcher-ready.sh
 ```
 
 ## Related documents

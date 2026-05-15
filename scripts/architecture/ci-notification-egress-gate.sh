@@ -77,16 +77,13 @@ for service in stream-ingester youtube-scraper llm-scheduler; do
   fi
 done
 
-dispatcher_block="$(awk '
-  $0 == "  dispatcher-go:" {in_block=1; print; next}
-  in_block && $0 ~ /^  [A-Za-z0-9_-]+:/ {exit}
-  in_block {print}
-' "${compose}")"
-if ! grep -Fq 'profiles: ["legacy-dispatcher-go"]' <<< "${dispatcher_block}"; then
-  echo "[FAIL] dispatcher-go must be behind the legacy-dispatcher-go profile" >&2
+dispatcher_hits="$(rg -n 'dispatcher-go|hololive-dispatcher-go|legacy-dispatcher-go' "${compose}" || true)"
+if [[ -n "${dispatcher_hits}" ]]; then
+  echo "[FAIL] standalone dispatcher-go must be absent from docker-compose.prod.yml" >&2
+  echo "${dispatcher_hits}" >&2
   fail=1
 else
-  echo "[PASS] dispatcher-go is not in the default compose profile"
+  echo "[PASS] standalone dispatcher-go is absent from docker-compose.prod.yml"
 fi
 
 alarm_worker_block="$(awk '

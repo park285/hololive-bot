@@ -36,7 +36,7 @@
 1. 배포 완료 시각을 `CUTOVER_AT` 으로 기록합니다.
 2. 이후 `send-counts`, `delivery-logs`, `latency-cause-report` 등 observation query는 모두 같은 `-observation-runtime youtube-scraper -observation-cutover "$CUTOVER_AT"` 조합으로 실행합니다. 운영자는 가능하면 `youtube-community-shorts continuous-observation-report -watch` 를 먼저 켜서 같은 observation key의 baseline, channel summary, send counts, delivery logs, latency report snapshot을 계속 파일로 남깁니다.
 3. `youtube-community-shorts continuous-observation-report -watch` 가 첫 snapshot을 썼는지 확인하고, `latest.md` 또는 `latest.json` 에 channel summary / send counts / latency report 섹션이 모두 보이는지 확인합니다.
-4. `route-report` 를 먼저 1회 실행해 `runtime final owner = youtube-scraper`, `big-bang enabled = true` 를 확인합니다.
+4. `route-report` 를 먼저 1회 실행해 `runtime final owner = alarm-worker`, `big-bang enabled = true` 를 확인합니다.
 
 ### 2. 배포 직후 기준 스냅샷을 채집합니다
 

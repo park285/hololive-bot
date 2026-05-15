@@ -187,7 +187,7 @@ func buildContinuousObservationGoldenFixture() CommunityShortsContinuousObservat
 		TargetBaseline: communityshorts.TargetBaseline{
 			GeneratedAt: generatedAt,
 			Runtime: communityshorts.TargetBaselineRuntime{
-				FinalDeliveryOwner:            "youtube-scraper",
+				FinalDeliveryOwner:            "alarm-worker",
 				CommunityShortsBigBangEnabled: true,
 				TargetChannelCount:            1,
 			},

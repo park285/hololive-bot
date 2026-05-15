@@ -18,7 +18,6 @@ func TestMonorepoModuleSuites(t *testing.T) {
 		"test",
 		"./shared-go/...",
 		"./hololive/hololive-shared/...",
-		"./hololive/hololive-dispatcher-go/...",
 		"./hololive/hololive-kakao-bot-go/...",
 		"./hololive/hololive-llm-sched/...",
 		"./hololive/hololive-stream-ingester/...",

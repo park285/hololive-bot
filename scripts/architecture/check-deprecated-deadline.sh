@@ -8,7 +8,6 @@ TODAY="${1:-$(date -u +%F)}"
 python3 - "$TODAY" \
     "${ROOT_DIR}/hololive/hololive-shared/pkg" \
     "${ROOT_DIR}/hololive/hololive-kakao-bot-go/internal" \
-    "${ROOT_DIR}/hololive/hololive-dispatcher-go/internal" \
     "${ROOT_DIR}/hololive/hololive-llm-sched/internal" \
     "${ROOT_DIR}/hololive/hololive-stream-ingester/internal" <<'PY'
 import datetime

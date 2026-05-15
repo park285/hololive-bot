@@ -3,30 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${SCRIPT_DIR}/go-workspace-modules.sh"
 cd "${ROOT_DIR}"
 
-GO_PACKAGES=(
-    ./...
-    ./shared-go/...
-    ./hololive/hololive-shared/...
-    ./hololive/hololive-admin-api/...
-    ./hololive/hololive-alarm-worker/...
-    ./hololive/hololive-dispatcher-go/...
-    ./hololive/hololive-kakao-bot-go/...
-    ./hololive/hololive-llm-sched/...
-    ./hololive/hololive-stream-ingester/...
-)
-
-GO_MODULES=(
-    shared-go
-    hololive/hololive-shared
-    hololive/hololive-admin-api
-    hololive/hololive-alarm-worker
-    hololive/hololive-dispatcher-go
-    hololive/hololive-kakao-bot-go
-    hololive/hololive-llm-sched
-    hololive/hololive-stream-ingester
-)
+GO_PACKAGES=(./...)
+mapfile -t workspace_packages < <(go_workspace_package_patterns)
+GO_PACKAGES+=("${workspace_packages[@]}")
+GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
 
 RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-false}"

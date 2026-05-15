@@ -12,7 +12,6 @@ required_runtimes=(
   bot
   admin-api
   alarm-worker
-  dispatcher-go
   llm-scheduler
   stream-ingester
   youtube-scraper

@@ -29,7 +29,7 @@ Alarm checker/scheduler, alarm dispatch queue publishing/consumption, generic no
 
 | Contract | Type | Path/Event/Queue | Consumers |
 |---|---|---|---|
-| Alarm dispatch egress | Valkey list | `alarm:dispatch:queue` | Iris/Kakao via alarm-worker egress; legacy `dispatcher-go` only when explicitly profiled |
+| Alarm dispatch egress | Valkey list | `alarm:dispatch:queue` | Iris/Kakao via alarm-worker egress |
 | Notification delivery outbox | PostgreSQL table | `notification_delivery_outbox` | Iris/Kakao via alarm-worker egress |
 | YouTube outbox dispatch | PostgreSQL table | `youtube_notification_outbox` | Iris/Kakao via alarm-worker egress |
 | Alarm service state | in-process domain service | `domain.AlarmCRUD` | local scheduler/checker |
