@@ -35,7 +35,7 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts late
 
 ```bash
 set -a
-source .env
+source "${HOLOLIVE_BOT_ENV_FILE:-/run/hololive-bot/env}"
 set +a
 
 PGPASSWORD="$DB_PASSWORD" \

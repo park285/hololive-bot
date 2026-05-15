@@ -31,19 +31,14 @@ resolve_compose_env_file() {
         return
     fi
 
-    local worktree_env="${ROOT_DIR}/.env"
-    if [ -f "$worktree_env" ]; then
-        printf '%s\n' "$worktree_env"
+    local openbao_env="${OPENBAO_HOLOLIVE_ENV_FILE:-/run/hololive-bot/env}"
+    if [ -f "$openbao_env" ]; then
+        printf '%s\n' "$openbao_env"
         return
     fi
 
-    local canonical_env="${REPO_CANONICAL_ROOT}/.env"
-    if [ -f "$canonical_env" ]; then
-        printf '%s\n' "$canonical_env"
-        return
-    fi
-
-    echo "[ERROR] Compose env file not found. Checked: $worktree_env, $canonical_env"
+    echo "[ERROR] Compose env file not found. Checked: $openbao_env"
+    echo "        Set COMPOSE_ENV_FILE explicitly for non-OpenBao or test deployments."
     exit 1
 }
 

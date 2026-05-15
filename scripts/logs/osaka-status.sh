@@ -19,7 +19,7 @@ signals() {
 }
 
 echo "== Osaka compose services =="
-remote 'cd ~/hololive-bot && COMPOSE_ENV_FILE=./.env.osaka docker compose --env-file .env.osaka -f docker-compose.prod.yml -f docker-compose.osaka.yml ps --format "table {{.Name}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}"'
+remote 'cd ~/hololive-bot && sudo env COMPOSE_ENV_FILE=/run/hololive-bot/env docker compose --env-file /run/hololive-bot/env -f docker-compose.prod.yml -f docker-compose.osaka.yml ps --format "table {{.Name}}\t{{.Service}}\t{{.Status}}\t{{.Ports}}"'
 
 echo
 echo "== Health =="
