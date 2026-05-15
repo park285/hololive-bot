@@ -15,6 +15,7 @@ fi
 
 legacy_names=(
   "holobot-pg-valkey-hybrid-hardening-plan-v4"
+  "holobot-pg-first-logic-hardening-plan-v2"
   "holobot-valkey-plan"
   "hololive-bot-baseline-bigbang-llm-docs-v8"
   "hololive-bot-integrated-refactor-v3"
