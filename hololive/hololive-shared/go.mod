@@ -36,7 +36,7 @@ replace github.com/park285/llm-kakao-bots/shared-go => ../../shared-go
 
 require (
 	github.com/gin-contrib/gzip v1.2.6
-	github.com/park285/iris-client-go v0.12.4
+	github.com/park285/iris-client-go v0.12.5
 	github.com/prometheus/client_model v0.6.2
 	github.com/tech-engine/goscrapy v0.25.0
 	gorm.io/driver/sqlite v1.6.0

@@ -28,7 +28,7 @@ func buildNotificationEgress(
 	if infra == nil || infra.Postgres == nil {
 		return nil, fmt.Errorf("postgres is required")
 	}
-	irisClient, err := providers.ProvideIrisClient(
+	irisClient, err := providers.ProvideIrisKaringClient(
 		logger,
 		iris.WithBaseURL(cfg.Iris.BaseURL),
 		iris.WithBotToken(cfg.Iris.BotToken),
@@ -88,6 +88,7 @@ func buildAlarmDispatchRunner(
 
 	consumerMode := strings.ToLower(strings.TrimSpace(os.Getenv("ALARM_DISPATCH_CONSUMER_MODE")))
 	maxBatch := parsePositiveIntEnv("ALARM_DISPATCH_MAX_BATCH", 50)
+	karingEnabled := parseAlarmDispatchKaringEnabled()
 	if consumerMode == "pg" {
 		lease := parsePositiveDurationSecondsEnv("ALARM_DISPATCH_LEASE_SECONDS", 60*time.Second)
 		return &alarmDispatchRunner{
@@ -100,6 +101,7 @@ func buildAlarmDispatchRunner(
 			),
 			sender:             sender,
 			idleWaiter:         newAlarmDispatchWakeupWaiter(infra.Cache, logger),
+			karingEnabled:      karingEnabled,
 			consumerMode:       "pg",
 			postSendQuarantine: true,
 			maxBatch:           maxBatch,
@@ -108,12 +110,17 @@ func buildAlarmDispatchRunner(
 		}
 	}
 	return &alarmDispatchRunner{
-		consumer:     queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(maxBatch)),
-		sender:       sender,
-		consumerMode: "valkey",
-		maxBatch:     maxBatch,
-		logger:       logger,
+		consumer:      queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(maxBatch)),
+		sender:        sender,
+		karingEnabled: karingEnabled,
+		consumerMode:  "valkey",
+		maxBatch:      maxBatch,
+		logger:        logger,
 	}
+}
+
+func parseAlarmDispatchKaringEnabled() bool {
+	return parseBoolEnv("ALARM_DISPATCH_KARING_ENABLED", false)
 }
 
 func buildYouTubeOutboxDispatcher(

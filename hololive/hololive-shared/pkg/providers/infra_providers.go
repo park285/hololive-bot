@@ -99,6 +99,19 @@ const irisBaseURLFileEnv = "IRIS_BASE_URL_FILE"
 
 // ProvideIrisClient - Iris 발송 클라이언트 생성
 func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (iris.Client, error) {
+	return provideRuntimeIrisClient(logger, opts...)
+}
+
+type IrisKaringClient interface {
+	iris.Client
+	iris.KaringClient
+}
+
+func ProvideIrisKaringClient(logger *slog.Logger, opts ...iris.ClientOption) (IrisKaringClient, error) {
+	return provideRuntimeIrisClient(logger, opts...)
+}
+
+func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*delivery.RuntimeIrisClient, error) {
 	cfg := iris.ResolveClientSDKConfig(opts)
 	fallbackBaseURL := strings.TrimSpace(cfg.BaseURL)
 	if fallbackBaseURL == "" {
