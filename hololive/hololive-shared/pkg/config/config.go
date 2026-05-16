@@ -1,183 +1,59 @@
-// Copyright (c) 2025 Kapu
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-
 package config
 
-import (
-	"fmt"
-	"time"
+import settings "github.com/kapu/hololive-shared/pkg/config/internal/settings"
 
-	"github.com/joho/godotenv"
-	sharedenv "github.com/park285/llm-kakao-bots/shared-go/pkg/envutil"
+//lint:ignore SA1019 legacy compatibility facade.
+type AdminAPIConfig = settings.AdminAPIConfig
+type BotConfig = settings.BotConfig
+type CORSConfig = settings.CORSConfig
+type ChzzkConfig = settings.ChzzkConfig
+type CliproxyConfig = settings.CliproxyConfig
+type Config = settings.Config
+type ConsensusLLMConfig = settings.ConsensusLLMConfig
+type ExaConfig = settings.ExaConfig
+type HolodexConfig = settings.HolodexConfig
+type IngestionConfig = settings.IngestionConfig
+type IrisConfig = settings.IrisConfig
+type KakaoConfig = settings.KakaoConfig
+type LLMConfig = settings.LLMConfig
+type LLMSchedulerConfig = settings.LLMSchedulerConfig
+type LoggingConfig = settings.LoggingConfig
+type NotificationConfig = settings.NotificationConfig
+type PostgresConfig = settings.PostgresConfig
+type ScraperBrowserDiagnosticConfig = settings.ScraperBrowserDiagnosticConfig
+type ScraperChannelHealthConfig = settings.ScraperChannelHealthConfig
+type ScraperConfig = settings.ScraperConfig
+type ScraperPoll = settings.ScraperPoll
+type ScraperPollTieringConfig = settings.ScraperPollTieringConfig
+type ScraperPublishedAtResolverConfig = settings.ScraperPublishedAtResolverConfig
+type ScraperSchedulerConfig = settings.ScraperSchedulerConfig
+type ScraperSnapshotConfig = settings.ScraperSnapshotConfig
+type ServerConfig = settings.ServerConfig
+type ServicesConfig = settings.ServicesConfig
+type TwitchConfig = settings.TwitchConfig
+type ValkeyConfig = settings.ValkeyConfig
+type WebhookConfig = settings.WebhookConfig
+type YouTubeConfig = settings.YouTubeConfig
 
-	"github.com/kapu/hololive-shared/pkg/constants"
+const (
+	ScraperFetcherEngineNetHTTP         = settings.ScraperFetcherEngineNetHTTP
+	ScraperFetcherEngineGoScrapy        = settings.ScraperFetcherEngineGoScrapy
+	ScraperFetcherEngineBrowserSnapshot = settings.ScraperFetcherEngineBrowserSnapshot
 )
 
-type Config struct {
-	Iris            IrisConfig
-	Server          ServerConfig
-	Kakao           KakaoConfig
-	Holodex         HolodexConfig
-	YouTube         YouTubeConfig
-	Ingestion       IngestionConfig
-	Chzzk           ChzzkConfig // 치지직 Open API 설정
-	Twitch          TwitchConfig
-	Valkey          ValkeyConfig
-	Postgres        PostgresConfig
-	Notification    NotificationConfig
-	Logging         LoggingConfig
-	Bot             BotConfig
-	Services        ServicesConfig
-	Environment     string
-	Scraper         ScraperConfig // YouTube 스크래퍼 프록시 설정
-	Webhook         WebhookConfig
-	CORS            CORSConfig // CORS 설정
-	Cliproxy        CliproxyConfig
-	LLM             LLMConfig
-	Exa             ExaConfig
-	LLMSchedulerURL string // llm-scheduler 내부 API URL (bot이 구독/다이제스트 요청 시 사용)
-	Version         string
-}
+var Load = settings.Load
 
-func Load() (*Config, error) {
-	_ = godotenv.Load()
+//lint:ignore SA1019 legacy compatibility facade.
+var LoadAdminAPI = settings.LoadAdminAPI
+var LoadLLMScheduler = settings.LoadLLMScheduler
 
-	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
-	cfg, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
-	}
-
-	return cfg, nil
-}
-
-//nolint:funlen // central environment-to-config assembly is intentionally kept in one place
-func buildConfig(webhookToken, botToken string, corsAllowedOrigins []string, corsMissingInProduction bool) (*Config, error) {
-	llmSchedulerHealthURL := sharedenv.StringAny(
-		"SERVICES_LLM_SCHEDULER_HEALTH_URL",
-		"SERVICES_LLM_SERVER_HEALTH_URL",
-	)
-	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
-	if err != nil {
-		return nil, err
-	}
-
-	return &Config{
-		Iris:   loadIrisConfig(webhookToken, botToken),
-		Server: loadServerConfig(),
-		Kakao:  loadKakaoConfig(),
-		Holodex: HolodexConfig{
-			BaseURL: sharedenv.String("HOLODEX_BASE_URL", constants.APIConfig.HolodexBaseURL),
-			APIKey:  resolveHolodexAPIKey(),
-		},
-		YouTube: YouTubeConfig{
-			APIKey:              sharedenv.String("YOUTUBE_API_KEY", ""),
-			EnableQuotaBuilding: sharedenv.Bool("YOUTUBE_ENABLE_QUOTA_BUILDING", false),
-		},
-		Ingestion: IngestionConfig{
-			YouTubeEnabled:                  sharedenv.Bool("YOUTUBE_INGESTION_ENABLED", true),
-			PhotoSyncEnabled:                sharedenv.Bool("PHOTO_SYNC_ENABLED", true),
-			CommunityShortsBigBangEnabled:   sharedenv.Bool("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_ENABLED", false),
-			CommunityShortsBigBangCutoverAt: communityShortsBigBangCutoverAt,
-		},
-		Valkey:       loadValkeyConfig(),
-		Postgres:     loadPostgresConfig(),
-		Notification: loadNotificationConfig(),
-		Logging:      loadLoggingConfig(),
-		Bot:          loadBotConfig(),
-		Services: ServicesConfig{
-			LLMSchedulerHealthURL:   llmSchedulerHealthURL,
-			GameBotTwentyQHealthURL: sharedenv.String("SERVICES_GAME_BOT_TWENTYQ_HEALTH_URL", ""),
-			GameBotTurtleHealthURL:  sharedenv.String("SERVICES_GAME_BOT_TURTLE_HEALTH_URL", ""),
-		},
-		Environment:     loadAppEnvironment(),
-		Scraper:         loadScraperConfig(),
-		Webhook:         loadWebhookConfig(),
-		Chzzk:           loadChzzkConfig(),
-		Twitch:          loadTwitchConfig(),
-		Cliproxy:        loadCliproxyConfig(),
-		LLM:             loadLLMConfig(),
-		Exa:             loadExaConfig(),
-		LLMSchedulerURL: sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
-		CORS: CORSConfig{
-			AllowedOrigins:      corsAllowedOrigins,
-			Enforce:             sharedenv.Bool("CORS_ENFORCE", false),
-			MissingInProduction: corsMissingInProduction,
-		},
-		Version: sharedenv.String("APP_VERSION", "1.1.0-go"),
-	}, nil
-}
-
-func loadIrisConfig(webhookToken, botToken string) IrisConfig {
-	return IrisConfig{
-		BaseURL:                   sharedenv.String("IRIS_BASE_URL", ""),
-		BaseURLFile:               sharedenv.String("IRIS_BASE_URL_FILE", ""),
-		WebhookToken:              webhookToken,
-		BotToken:                  botToken,
-		HTTPTimeout:               time.Duration(sharedenv.Int("IRIS_HTTP_TIMEOUT_SECONDS", 10)) * time.Second,
-		HTTPDialTimeout:           time.Duration(sharedenv.Int("IRIS_HTTP_DIAL_TIMEOUT_SECONDS", 3)) * time.Second,
-		HTTPResponseHeaderTimeout: time.Duration(sharedenv.Int("IRIS_HTTP_RESP_HEADER_TIMEOUT_SECONDS", 5)) * time.Second,
-	}
-}
-
-func loadKakaoConfig() KakaoConfig {
-	return KakaoConfig{
-		Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
-		ACLEnabled: sharedenv.Bool("KAKAO_ACL_ENABLED", true),
-		ACLMode:    sharedenv.String("KAKAO_ACL_MODE", "whitelist"),
-	}
-}
-
-func loadLoggingConfig() LoggingConfig {
-	return LoggingConfig{
-		Level:      sharedenv.String("LOG_LEVEL", "info"),
-		Dir:        sharedenv.String("LOG_DIR", ""),
-		MaxSizeMB:  sharedenv.Int("LOG_MAX_SIZE_MB", 5),
-		MaxBackups: sharedenv.Int("LOG_MAX_BACKUPS", 5),
-		MaxAgeDays: sharedenv.Int("LOG_MAX_AGE_DAYS", 30),
-		Compress:   sharedenv.Bool("LOG_COMPRESS", true),
-	}
-}
-
-func loadBotConfig() BotConfig {
-	return BotConfig{
-		Prefix:        sharedenv.String("BOT_PREFIX", "!"),
-		SelfUser:      sharedenv.String("BOT_SELF_USER", "iris"),
-		MentionPrefix: sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
-	}
-}
-
-func loadChzzkConfig() ChzzkConfig {
-	return ChzzkConfig{
-		ClientID:     sharedenv.String("CHZZK_CLIENT_ID", ""),
-		ClientSecret: sharedenv.String("CHZZK_CLIENT_SECRET", ""),
-	}
-}
-
-func loadTwitchConfig() TwitchConfig {
-	return TwitchConfig{
-		ClientID:     sharedenv.String("TWITCH_CLIENT_ID", ""),
-		ClientSecret: sharedenv.String("TWITCH_CLIENT_SECRET", ""),
-	}
-}
+var DefaultScraperWorkerCount = settings.DefaultScraperWorkerCount
+var DefaultScraperFetcherEngine = settings.DefaultScraperFetcherEngine
+var NormalizeScraperFetcherEngine = settings.NormalizeScraperFetcherEngine
+var DefaultScraperPoll = settings.DefaultScraperPoll
+var DefaultScraperSchedulerConfig = settings.DefaultScraperSchedulerConfig
+var DefaultScraperPublishedAtResolverConfig = settings.DefaultScraperPublishedAtResolverConfig
+var DefaultScraperSnapshotConfig = settings.DefaultScraperSnapshotConfig
+var DefaultScraperChannelHealthConfig = settings.DefaultScraperChannelHealthConfig
+var DefaultScraperPollTieringConfig = settings.DefaultScraperPollTieringConfig
+var DefaultScraperBrowserDiagnosticConfig = settings.DefaultScraperBrowserDiagnosticConfig

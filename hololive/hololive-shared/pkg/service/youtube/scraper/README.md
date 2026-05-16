@@ -160,8 +160,9 @@ scraper/
 ├── client.go      # HTTP 클라이언트 (Client 구조체, fetchPage)
 ├── channel.go     # GetChannelStats, GetChannelSnippet
 ├── videos.go      # GetUpcomingEvents, GetRecentVideos, GetPopularVideos
-├── yt_initial_data_extractor.go # ytInitialData 추출
-├── yt_initial_data_scorer.go    # ytInitialData 후보 점수화
+├── yt_initial_data.go # ytInitialData root package wrapper
+├── internal/initialdata/ # ytInitialData 추출/후보 점수화
+├── internal/browserfetcher/ # browser snapshot HTTP client 구현
 ├── alerts.go      # alertRenderer 처리
 ├── stats_parser.go # 채널 통계/스니펫 파서
 ├── upcoming_parser.go # 예정/라이브 이벤트 파서

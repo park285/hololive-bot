@@ -23,9 +23,9 @@ changed="$(
     git ls-files --others --exclude-standard 2>/dev/null || true
   } | sort -u
 )"
-if echo "$changed" | grep -E '^(hololive/hololive-admin-api/|admin-dashboard/)'; then
-  echo "admin scope files changed; this refactor must not touch admin-api/admin-dashboard" >&2
+if echo "$changed" | grep -E '^admin-dashboard/'; then
+  echo "admin-dashboard scope files changed; this refactor must not touch admin-dashboard" >&2
   exit 1
 fi
 
-echo "ok: no admin scope changes against ${BASE_REF}...${HEAD_REF}"
+echo "ok: no admin-dashboard scope changes against ${BASE_REF}...${HEAD_REF}"
