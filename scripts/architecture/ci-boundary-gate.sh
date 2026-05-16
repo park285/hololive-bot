@@ -21,6 +21,10 @@ echo "[M0] go compatibility adapter check"
 "${SCRIPT_DIR}/check-go-compat-adapters.sh"
 echo
 
+echo "[M0] generic Go internal package name check"
+"${SCRIPT_DIR}/check-go-generic-internal-package-names.sh"
+echo
+
 echo "[M0] removed runtime reference check"
 "${SCRIPT_DIR}/check-removed-runtime-references.sh"
 echo
@@ -53,6 +57,10 @@ echo
 echo "[CI] Run M2 document contract gate"
 echo "[M2] current docs historical body check"
 "${SCRIPT_DIR}/check-current-docs-no-historical-body.sh"
+echo
+
+echo "[M2] current docs root allowlist check"
+"${SCRIPT_DIR}/check-current-docs-root-allowlist.sh"
 echo
 
 echo "[M2] markdown local path check"

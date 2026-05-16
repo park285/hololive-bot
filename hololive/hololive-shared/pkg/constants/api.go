@@ -186,7 +186,7 @@ var OfficialProfileConfig = struct {
 	AcceptLanguage: "ja,en;q=0.8,ko;q=0.6",
 	RequestTimeout: 15 * time.Second,
 	DelayBetween:   350 * time.Millisecond,
-	OutputFile:     "internal/domain/data/official_profiles_raw.json",
+	OutputFile:     "../hololive-shared/pkg/domain/internal/model/data/official_profiles_raw.json",
 }
 
 var TwitchConfig = struct {

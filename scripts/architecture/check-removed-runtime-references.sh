@@ -22,6 +22,7 @@ matches="$(
     --glob '!scripts/deploy/test-removed-runtimes.sh' \
     --glob '!docs/current/architecture/repo-refactor-audit.md' \
     --glob '!hololive/hololive-shared/pkg/config/repo_security_contract_test.go' \
+    --glob '!hololive/hololive-shared/pkg/config/internal/settings/repo_security_contract_test.go' \
     --glob '!.tasklists/**' \
     --glob '!repo_full_scope_diff_blueprint*.md' \
     --glob '!.worktrees/**' \

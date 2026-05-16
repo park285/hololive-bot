@@ -152,7 +152,7 @@ rollback도 한 번에 한 서비스만 수행합니다. `youtube-scraper`는 ou
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md`
-- `docs/current/YOUTUBE_COMMUNITY_SHORTS_CHANNEL_ROUTE_VERIFICATION.md`
+- `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_CHANNEL_ROUTE_VERIFICATION.md`
 - `hololive/hololive-kakao-bot-go/docs/STREAM_INGESTER_RUNBOOK.md`
 - `docs/SERVICE_DECOMPOSITION_ROADMAP.md`
 - `docs/DISTRIBUTED_RATE_LIMITING.md`

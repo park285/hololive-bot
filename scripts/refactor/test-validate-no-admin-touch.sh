@@ -4,7 +4,6 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 scripts=(
   "${repo_root}/scripts/refactor/validate-no-admin-touch.sh"
-  "${repo_root}/docs/history/plan-kits/hololive-bot-integrated-refactor-v3/scripts/refactor/validate-no-admin-touch.sh"
 )
 
 tmpdir="$(mktemp -d)"
@@ -57,7 +56,7 @@ run_guardrail() {
 }
 
 for script in "${scripts[@]}"; do
-  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-rename-out"
+  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-api-rename"
   setup_repo "${workdir}"
   mkdir -p "${workdir}/hololive/hololive-admin-api" "${workdir}/other"
   printf 'x\n' >"${workdir}/hololive/hololive-admin-api/a.txt"
@@ -65,35 +64,36 @@ for script in "${scripts[@]}"; do
   base_ref="$(git -C "${workdir}" rev-parse HEAD)"
   git -C "${workdir}" mv hololive/hololive-admin-api/a.txt other/a.txt
   commit_all "${workdir}" "rename admin out"
-  expect_fail "$(basename "${script}")-rename-out" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
+  expect_pass "$(basename "${script}")-admin-api-rename" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
 
-  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-staged-rename-out"
+  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-dashboard-staged-change"
   setup_repo "${workdir}"
-  mkdir -p "${workdir}/hololive/hololive-admin-api" "${workdir}/other"
-  printf 'x\n' >"${workdir}/hololive/hololive-admin-api/a.txt"
+  mkdir -p "${workdir}/admin-dashboard" "${workdir}/other"
+  printf 'x\n' >"${workdir}/admin-dashboard/a.txt"
   commit_all "${workdir}" "base"
   base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-  git -C "${workdir}" mv hololive/hololive-admin-api/a.txt other/a.txt
-  expect_fail "$(basename "${script}")-staged-rename-out" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
+  printf 'y\n' >>"${workdir}/admin-dashboard/a.txt"
+  git -C "${workdir}" add admin-dashboard/a.txt
+  expect_fail "$(basename "${script}")-admin-dashboard-staged-change" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
 
-  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-unstaged-rename-out"
+  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-dashboard-unstaged-change"
   setup_repo "${workdir}"
-  mkdir -p "${workdir}/hololive/hololive-admin-api" "${workdir}/other"
-  printf 'x\n' >"${workdir}/hololive/hololive-admin-api/a.txt"
+  mkdir -p "${workdir}/admin-dashboard" "${workdir}/other"
+  printf 'x\n' >"${workdir}/admin-dashboard/a.txt"
   commit_all "${workdir}" "base"
   base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-  mv "${workdir}/hololive/hololive-admin-api/a.txt" "${workdir}/other/a.txt"
-  expect_fail "$(basename "${script}")-unstaged-rename-out" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
+  printf 'y\n' >>"${workdir}/admin-dashboard/a.txt"
+  expect_fail "$(basename "${script}")-admin-dashboard-unstaged-change" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
 
-  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-rename-in"
+  workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-admin-dashboard-rename-in"
   setup_repo "${workdir}"
-  mkdir -p "${workdir}/other" "${workdir}/hololive/hololive-admin-api"
+  mkdir -p "${workdir}/other" "${workdir}/admin-dashboard"
   printf 'x\n' >"${workdir}/other/a.txt"
   commit_all "${workdir}" "base"
   base_ref="$(git -C "${workdir}" rev-parse HEAD)"
-  git -C "${workdir}" mv other/a.txt hololive/hololive-admin-api/a.txt
-  commit_all "${workdir}" "rename admin in"
-  expect_fail "$(basename "${script}")-rename-in" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
+  git -C "${workdir}" mv other/a.txt admin-dashboard/a.txt
+  commit_all "${workdir}" "rename dashboard in"
+  expect_fail "$(basename "${script}")-admin-dashboard-rename-in" run_guardrail "${workdir}" "${script}" "${base_ref}" HEAD
 
   workdir="${tmpdir}/$(basename "$(dirname "$(dirname "$(dirname "${script}")")")")-clean"
   setup_repo "${workdir}"

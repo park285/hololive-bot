@@ -20,6 +20,7 @@ Root must not accumulate local logs, backups, data dumps, generated review bundl
 ## Docs
 
 - `docs/current/` contains current operational source-of-truth documents.
+- `docs/current/` root is limited to core current docs and short compatibility bridges. Runbooks, service docs, contracts, architecture guidance, and review bundle policy belong in their purpose-specific subdirectories.
 - `docs/history/` contains completed or non-current records.
 - `docs/design/` and `docs/superpowers/specs/` contain proposals before they become current.
 - `docs/superpowers/plans/` contains executable implementation plans.
@@ -48,10 +49,19 @@ Go module directories stay stable:
 
 Package refactors must preserve `go.work`, Docker Compose build targets, runtime binary names, and architecture import boundary gates.
 
+## Go Package Tree Depth
+
+- Root packages that are part of an existing import contract should remain small facades or entrypoint wiring when their implementation grows beyond a single responsibility.
+- Implementation files belong under role-specific internal packages such as `delivery`, `polling`, `scraping`, `model`, `settings`, `httpserver`, `botruntime`, `workerapp`, or `reports`.
+- Generic buckets are not allowed for new or moved Go code: do not use `internal/core`, `servicecore`, `package core`, or `import core "..."`.
+- Further nested packages should be created by behavior family only when the new package has a stable contract and package-local tests.
+
 ## Validation
 
 ```bash
 ./scripts/architecture/check-project-map.sh
+./scripts/architecture/check-current-docs-root-allowlist.sh
+./scripts/architecture/check-go-generic-internal-package-names.sh
 ./scripts/architecture/check-current-docs-no-historical-body.sh
 ./scripts/architecture/check-doc-links-no-local-paths.sh
 ./scripts/architecture/check-tracked-local-artifacts.sh

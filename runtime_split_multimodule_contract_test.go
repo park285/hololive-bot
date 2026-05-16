@@ -15,7 +15,8 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 		"hololive/hololive-admin-api/cmd/admin-api/main.go",
 		"hololive/hololive-alarm-worker/go.mod",
 		"hololive/hololive-alarm-worker/cmd/alarm-worker/main.go",
-		"hololive/hololive-shared/pkg/service/notification/alarm_service.go",
+		"hololive/hololive-shared/pkg/service/notification/notification.go",
+		"hololive/hololive-shared/pkg/service/notification/internal/alarmservice/alarm_service.go",
 	}
 	for _, path := range mustExist {
 		if _, err := os.Stat(path); err != nil {

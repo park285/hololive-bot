@@ -28,5 +28,9 @@
 - `repo-review/REMAINING_RISKS_EXECUTION_GUIDE_20260415.md` - repo-wide remaining risk closeout
 - `repo-review/LEGACY_LINT_RESUME_20260415.md` - legacy lint cleanup closeout
 
+### YouTube
+- `youtube/YOUTUBE_SCRAPER_ALARM_HARDENING_20260421.md` - YouTube scraper and alarm delivery hardening record
+- `youtube/YOUTUBE_SCRAPER_DELAY_REVIEW.md` - YouTube scraper delay review and applied-change record
+
 ### Plan kits
 - `plan-kits/README.md` - legacy plan-kit bundle index

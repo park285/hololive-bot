@@ -1,0 +1,485 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// Holodex API Integration
+//
+// 본 코드는 Holodex API (https://holodex.net)를 사용하며, Holodex API Terms of Service를 준수합니다.
+//
+// Attribution (Holodex API Terms Section 6):
+//   - API Provider: Holodex (https://holodex.net)
+//   - License: https://holodex.net/api/terms
+//   - Disclaimer: THE HOLODEX API IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
+//
+// See: https://holodex.net/api/terms for full terms.
+
+package holodexprovider
+
+import (
+	"context"
+	stdErrors "errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/httputil"
+	"github.com/park285/llm-kakao-bots/shared-go/pkg/jsonutil"
+	"golang.org/x/time/rate"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
+	"github.com/kapu/hololive-shared/pkg/util"
+)
+
+type Requester interface {
+	DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error)
+	IsCircuitOpen() bool
+}
+
+type APIClient struct {
+	httpClient       *http.Client
+	baseURL          string
+	apiKey           string
+	logger           *slog.Logger
+	failureCount     int
+	circuitOpenUntil *time.Time
+	circuitMu        sync.RWMutex
+	rateLimiter      *rate.Limiter // Rate limiter: 초당 10 요청
+	semaphore        chan struct{} // Semaphore: 동시 API 요청 수 제한
+	distributed      distributedRateLimiter
+}
+
+type holodexRequestRetryState struct {
+	maxAttempts       int
+	maxTimeoutRetries int
+	timeoutCount      int
+	lastErr           error
+}
+
+type distributedRateLimiter interface {
+	Allow(ctx context.Context, bucket string, limit int, window time.Duration) (ratelimit.Decision, error)
+}
+
+var errNoAPIKeys = stdErrors.New("no Holodex API keys configured")
+
+func NewHolodexAPIClient(
+	httpClient *http.Client,
+	baseURL string,
+	apiKey string,
+	logger *slog.Logger,
+	distributed distributedRateLimiter,
+) *APIClient {
+	if httpClient == nil {
+		httpClient = httputil.NewExternalAPIClient(constants.APIConfig.HolodexTimeout)
+	}
+	return &APIClient{
+		httpClient:  httpClient,
+		baseURL:     baseURL,
+		apiKey:      apiKey,
+		logger:      logger,
+		rateLimiter: rate.NewLimiter(rate.Every(100*time.Millisecond), 1), // 초당 10 요청
+		semaphore:   make(chan struct{}, constants.HolodexConcurrencyConfig.MaxConcurrentRequests),
+		distributed: distributed,
+	}
+}
+
+func (c *APIClient) DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
+	if err := c.rejectIfCircuitOpen(); err != nil {
+		return nil, err
+	}
+
+	if c.apiKey == "" {
+		return nil, errNoAPIKeys
+	}
+
+	state := holodexRequestRetryState{
+		maxAttempts:       util.Min(1+constants.RetryConfig.MaxAttempts, 10),
+		maxTimeoutRetries: 3,
+	}
+
+	return c.doRequestWithRetry(ctx, method, path, params, state)
+}
+
+func (c *APIClient) doRequestWithRetry(ctx context.Context, method string, path string, params url.Values, state holodexRequestRetryState) ([]byte, error) {
+	for attempt := range state.maxAttempts {
+		body, done, err := c.runHolodexRequestAttempt(ctx, method, path, params, attempt, state.maxAttempts)
+		if done {
+			return c.finishHolodexRequestAttempt(body, err)
+		}
+
+		if state.recordAttemptError(c.logger, path, err) {
+			break
+		}
+		if err := c.waitHolodexRequestBackoff(ctx, attempt, state.maxAttempts); err != nil {
+			return nil, err
+		}
+	}
+
+	if state.lastErr != nil {
+		return nil, state.lastErr
+	}
+
+	return nil, fmt.Errorf("holodex request failed after %d attempts", state.maxAttempts)
+}
+
+func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method string, path string, params url.Values, attempt int, maxAttempts int) ([]byte, bool, error) {
+	if err := c.waitForRateLimiter(ctx, path); err != nil {
+		return nil, true, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, true, fmt.Errorf("context canceled before request: %w", err)
+	}
+	if err := c.acquireSemaphore(ctx); err != nil {
+		return nil, true, err
+	}
+	defer c.releaseSemaphore()
+	return c.tryHolodexRequest(ctx, method, path, params, attempt, maxAttempts)
+}
+
+func (c *APIClient) finishHolodexRequestAttempt(body []byte, err error) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	c.resetCircuit()
+	return body, nil
+}
+
+func (state *holodexRequestRetryState) recordAttemptError(logger *slog.Logger, path string, err error) bool {
+	if err == nil {
+		return false
+	}
+	state.lastErr = err
+	if !isTimeoutError(err) {
+		return false
+	}
+	state.timeoutCount++
+	if state.timeoutCount < state.maxTimeoutRetries {
+		return false
+	}
+	logger.Warn("Timeout retry limit reached",
+		slog.Int("timeout_count", state.timeoutCount),
+		slog.String("path", path),
+	)
+	return true
+}
+
+func (c *APIClient) waitHolodexRequestBackoff(ctx context.Context, attempt int, maxAttempts int) error {
+	if attempt >= maxAttempts-1 {
+		return nil
+	}
+	return c.waitBackoff(ctx, attempt)
+}
+
+func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
+	if err := c.rateLimiter.Wait(ctx); err != nil {
+		return fmt.Errorf("rate limiter wait failed: %w", err)
+	}
+	return c.waitForDistributedRateLimiter(ctx, path)
+}
+
+func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path string) error {
+	if c.distributed == nil || !constants.HolodexDistributedRateLimitConfig.Enabled {
+		return nil
+	}
+
+	return c.waitForDistributedRateLimitBucket(ctx, distributedRateLimitBucket(path))
+}
+
+func (c *APIClient) waitForDistributedRateLimitBucket(ctx context.Context, bucket string) error {
+	for {
+		decision, err := c.allowDistributedRateLimit(ctx, bucket)
+		if err != nil {
+			return err
+		}
+		done, err := waitDistributedRateLimitDecision(ctx, bucket, decision)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
+func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string) (ratelimit.Decision, error) {
+	decision, err := c.distributed.Allow(
+		ctx,
+		bucket,
+		constants.HolodexDistributedRateLimitConfig.Limit,
+		constants.HolodexDistributedRateLimitConfig.Window,
+	)
+	if err != nil {
+		return ratelimit.Decision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
+	}
+	return decision, nil
+}
+
+func (c *APIClient) rejectIfCircuitOpen() error {
+	if !c.IsCircuitOpen() {
+		return nil
+	}
+
+	c.circuitMu.RLock()
+	var remainingMs int64
+	if c.circuitOpenUntil != nil {
+		remainingMs = time.Until(*c.circuitOpenUntil).Milliseconds()
+	}
+	c.circuitMu.RUnlock()
+
+	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remainingMs))
+	return NewAPIError("Circuit breaker open", 503, map[string]any{
+		"retry_after_ms": remainingMs,
+	})
+}
+
+func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) ([]byte, bool, error) {
+	attemptCtx, cancel := context.WithTimeout(ctx, constants.APIConfig.PerAttemptTimeout)
+	defer cancel()
+
+	reqURL := c.buildRequestURL(path, params)
+	req, err := c.newRequest(attemptCtx, method, reqURL, c.getNextAPIKey())
+	if err != nil {
+		return nil, true, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		if c.retryAfterNetworkFailure(ctx, err, attempt, maxAttempts) {
+			return nil, false, fmt.Errorf("HTTP request failed (retrying): %w", err)
+		}
+		return nil, true, fmt.Errorf("HTTP request failed: %w", err)
+	}
+
+	body, readErr := jsonutil.ReadAllLimit(resp.Body, constants.APIConfig.MaxResponseBodyBytes)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return nil, false, fmt.Errorf("failed to read response: %w", readErr)
+	}
+
+	return c.processHolodexResponse(ctx, resp.StatusCode, body, reqURL, attempt, maxAttempts)
+}
+
+func (c *APIClient) buildRequestURL(path string, params url.Values) string {
+	reqURL := c.baseURL + path
+	if params != nil {
+		reqURL += "?" + params.Encode()
+	}
+	return reqURL
+}
+
+func (c *APIClient) newRequest(ctx context.Context, method, reqURL string, apiKey string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-APIKEY", apiKey)
+	// Holodex API Terms 준수를 위해 정직한 User-Agent 사용 (Section 6: Attribution)
+	req.Header.Set("User-Agent", "api.capu.blog/hololive-bot (Linux; +https://api.capu.blog; Holodex API client)")
+	return req, nil
+}
+
+func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, attempt, maxAttempts int) bool {
+	// 부모 ctx 취소 시 불필요한 재시도 방지
+	if ctx.Err() != nil {
+		return false
+	}
+
+	errorType := "network"
+	if isTimeoutError(err) {
+		errorType = "timeout"
+	}
+
+	count := c.incrementFailureCount()
+	if count >= constants.CircuitBreakerConfig.FailureThreshold {
+		c.openCircuit()
+		return false
+	}
+
+	if attempt < maxAttempts-1 {
+		c.logger.Warn("Request failed, retrying",
+			slog.Any("error", err),
+			slog.String("error_type", errorType),
+			slog.Int("attempt", attempt+1),
+		)
+		return true
+	}
+
+	return false
+}
+
+func isTimeoutError(err error) bool {
+	if stdErrors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if stdErrors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
+func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body []byte, reqURL string, attempt, maxAttempts int) ([]byte, bool, error) {
+	if status == http.StatusTooManyRequests {
+		return c.handleRateLimitedResponse(status, reqURL, attempt, maxAttempts)
+	}
+	if status == http.StatusForbidden {
+		return c.handleForbiddenResponse(status, body, reqURL, attempt)
+	}
+	if status >= 500 {
+		return c.handleServerError(ctx, status, attempt, maxAttempts)
+	}
+	if status >= 400 {
+		return nil, true, holodexClientError(status, reqURL)
+	}
+	return body, true, nil
+}
+
+func (c *APIClient) handleRateLimitedResponse(status int, reqURL string, attempt int, maxAttempts int) ([]byte, bool, error) {
+	c.logger.Warn("Holodex rate limited, retrying",
+		slog.Int("status", status),
+		slog.Int("attempt", attempt+1),
+		slog.String("url", reqURL),
+	)
+	if attempt < maxAttempts-1 {
+		return nil, false, nil
+	}
+	return nil, true, NewKeyRotationError("Holodex rate limit exhausted", status, map[string]any{
+		"url": reqURL,
+	})
+}
+
+func (c *APIClient) handleForbiddenResponse(status int, body []byte, reqURL string, attempt int) ([]byte, bool, error) {
+	c.logger.Error("Holodex forbidden response",
+		slog.Int("status", status),
+		slog.Int("attempt", attempt+1),
+		slog.String("url", reqURL),
+		slog.String("body_preview", summarizeHolodexErrorBody(body)),
+	)
+	return nil, true, NewAPIError("Holodex forbidden", status, map[string]any{
+		"operation": reqURL,
+	})
+}
+
+func holodexClientError(status int, reqURL string) error {
+	return NewAPIError(fmt.Sprintf("Client error: %d", status), status, map[string]any{
+		"operation": reqURL,
+	})
+}
+
+func (c *APIClient) handleServerError(_ context.Context, status, attempt, maxAttempts int) ([]byte, bool, error) {
+	count := c.incrementFailureCount()
+	c.logger.Warn("Server error",
+		slog.Int("status", status),
+		slog.Int("failure_count", count),
+	)
+
+	if count >= constants.CircuitBreakerConfig.FailureThreshold {
+		c.openCircuit()
+		return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
+	}
+
+	if attempt < maxAttempts-1 {
+		return nil, false, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
+	}
+
+	return nil, true, NewAPIError(fmt.Sprintf("Server error: %d", status), status, nil)
+}
+
+func (c *APIClient) IsCircuitOpen() bool {
+	c.circuitMu.RLock()
+	defer c.circuitMu.RUnlock()
+
+	if c.circuitOpenUntil == nil {
+		return false
+	}
+
+	if time.Now().After(*c.circuitOpenUntil) {
+		return false
+	}
+
+	return true
+}
+
+func (c *APIClient) getNextAPIKey() string {
+	return c.apiKey
+}
+
+func (c *APIClient) openCircuit() {
+	c.circuitMu.Lock()
+	defer c.circuitMu.Unlock()
+
+	resetTime := time.Now().Add(constants.CircuitBreakerConfig.ResetTimeout)
+	c.circuitOpenUntil = &resetTime
+	c.failureCount = 0
+
+	c.logger.Error("Holodex circuit breaker opened",
+		slog.Duration("reset_timeout", constants.CircuitBreakerConfig.ResetTimeout),
+	)
+}
+
+func (c *APIClient) resetCircuit() {
+	c.circuitMu.Lock()
+	defer c.circuitMu.Unlock()
+
+	c.failureCount = 0
+	c.circuitOpenUntil = nil
+}
+
+func (c *APIClient) incrementFailureCount() int {
+	c.circuitMu.Lock()
+	defer c.circuitMu.Unlock()
+
+	c.failureCount++
+	return c.failureCount
+}
+
+func (c *APIClient) acquireSemaphore(ctx context.Context) error {
+	select {
+	case c.semaphore <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("semaphore acquisition canceled: %w", ctx.Err())
+	}
+}
+
+func (c *APIClient) releaseSemaphore() {
+	select {
+	case <-c.semaphore:
+	default:
+	}
+}
+
+func summarizeHolodexErrorBody(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return ""
+	}
+	const maxPreviewLen = 256
+	if len(trimmed) <= maxPreviewLen {
+		return trimmed
+	}
+	return trimmed[:maxPreviewLen] + "..."
+}

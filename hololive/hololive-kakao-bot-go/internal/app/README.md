@@ -10,5 +10,5 @@
 
 참조:
 
-- `docs/current/APP_BOOTSTRAP_BOUNDARY_GUIDE.md`
+- `docs/current/architecture/app-bootstrap-boundary-guide.md`
 - `docs/current/ALARM_DISPATCH_REMEDIATION_20260414.md`
