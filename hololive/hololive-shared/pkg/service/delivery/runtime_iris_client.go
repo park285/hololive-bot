@@ -120,6 +120,22 @@ func (c *RuntimeIrisClient) GetBridgeHealth(ctx context.Context) (*iris.BridgeHe
 	return client.GetBridgeHealth(ctx)
 }
 
+func (c *RuntimeIrisClient) SendKaring(ctx context.Context, req iris.KaringSendRequest) (*iris.KaringDryRunResponse, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.SendKaring(ctx, req)
+}
+
+func (c *RuntimeIrisClient) SendKaringContentList(ctx context.Context, req iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.SendKaringContentList(ctx, req)
+}
+
 func (c *RuntimeIrisClient) currentClient() (*iris.H2CClient, error) {
 	if c == nil {
 		return nil, fmt.Errorf("runtime iris client: client is nil")
