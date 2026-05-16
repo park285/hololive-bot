@@ -32,20 +32,21 @@ import (
 )
 
 type memberRow struct {
-	id           int
-	slug         string
-	channelID    *string
-	englishName  string
-	japaneseName *string
-	koreanName   *string
-	status       string
-	isGraduated  bool
-	aliasesJSON  []byte
-	photo        *string
-	org          string
-	suborg       *string
-	syncSource   string
-	twitchUserID *string
+	id              int
+	slug            string
+	channelID       *string
+	englishName     string
+	japaneseName    *string
+	koreanName      *string
+	shortKoreanName *string
+	status          string
+	isGraduated     bool
+	aliasesJSON     []byte
+	photo           *string
+	org             string
+	suborg          *string
+	syncSource      string
+	twitchUserID    *string
 }
 
 type memberRowScanner interface {
@@ -61,6 +62,7 @@ func scanMemberQueryRow(scanner memberRowScanner) (memberRow, error) {
 		&row.englishName,
 		&row.japaneseName,
 		&row.koreanName,
+		&row.shortKoreanName,
 		&row.status,
 		&row.isGraduated,
 		&row.aliasesJSON,
@@ -81,6 +83,7 @@ func scanMemberFullRow(scanner memberRowScanner) (memberRow, error) {
 		&row.englishName,
 		&row.japaneseName,
 		&row.koreanName,
+		&row.shortKoreanName,
 		&row.status,
 		&row.isGraduated,
 		&row.aliasesJSON,
@@ -101,6 +104,7 @@ func scanMemberPhotoQueryRow(scanner memberRowScanner) (memberRow, error) {
 		&row.englishName,
 		&row.japaneseName,
 		&row.koreanName,
+		&row.shortKoreanName,
 		&row.isGraduated,
 		&row.aliasesJSON,
 		&row.photo,
@@ -120,6 +124,7 @@ func (r *Repository) parseMemberRow(row memberRow) (*domain.Member, error) {
 		row.englishName,
 		row.japaneseName,
 		row.koreanName,
+		row.shortKoreanName,
 		row.status,
 		row.isGraduated,
 		row.aliasesJSON,
@@ -138,6 +143,7 @@ func (r *Repository) parseMemberPhotoRow(row memberRow) (*domain.Member, error) 
 		row.englishName,
 		row.japaneseName,
 		row.koreanName,
+		row.shortKoreanName,
 		row.isGraduated,
 		row.aliasesJSON,
 		row.photo,
@@ -254,6 +260,7 @@ func (r *Repository) scanMember(
 	englishName string,
 	japaneseName *string,
 	koreanName *string,
+	shortKoreanName *string,
 	_ string,
 	isGraduated bool,
 	aliasesJSON []byte,
@@ -263,7 +270,7 @@ func (r *Repository) scanMember(
 	syncSource string,
 	twitchUserID *string,
 ) (*domain.Member, error) {
-	return r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
+	return r.scanMemberWithPhoto(id, channelID, englishName, japaneseName, koreanName, shortKoreanName, isGraduated, aliasesJSON, photo, org, suborg, syncSource, twitchUserID)
 }
 
 // scanMemberWithPhoto: DB 조회 결과를 domain.Member로 변환 (photo 포함)
@@ -273,6 +280,7 @@ func (r *Repository) scanMemberWithPhoto(
 	englishName string,
 	japaneseName *string,
 	koreanName *string,
+	shortKoreanName *string,
 	isGraduated bool,
 	aliasesJSON []byte,
 	photo *string,
@@ -303,6 +311,9 @@ func (r *Repository) scanMemberWithPhoto(
 	}
 	if koreanName != nil {
 		member.NameKo = *koreanName
+	}
+	if shortKoreanName != nil {
+		member.ShortKoreanName = *shortKoreanName
 	}
 	if photo != nil {
 		member.Photo = *photo

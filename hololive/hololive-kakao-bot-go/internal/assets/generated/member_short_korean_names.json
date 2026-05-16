@@ -1,0 +1,2472 @@
+{
+    "rules": [
+        "Use short_korean_name for Karing member_name/itemN_desc.",
+        "Do not use aliases.ko directly for rendering because it contains search aliases and memes.",
+        "Default proposal is the last token of korean_name.",
+        "Manual overrides handle collisions, shared channels, official channels, and missing korean_name."
+    ],
+    "counts": {
+        "total": 124,
+        "manual_overrides": 13,
+        "active_non_graduated": 112,
+        "remaining_active_collisions": 0
+    },
+    "entries": [
+        {
+            "id": 190,
+            "org": "Hololive",
+            "slug": "gawr-gura",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "구라",
+                "가우르구라",
+                "상어",
+                "사바"
+            ],
+            "channel_id": "UCoSrY_IQQVpmIRZ9Xf-y93g",
+            "korean_name": "가우르 구라",
+            "english_name": "Gawr Gura",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 がうる・ぐら",
+            "short_korean_name": "구라",
+            "auto_short_korean_name": "구라"
+        },
+        {
+            "id": 145,
+            "org": "Hololive",
+            "slug": "momosuzu-nene",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "네네",
+                "모모스즈네네"
+            ],
+            "channel_id": "UCAWSyEs_Io8MtpY3m-zqILA",
+            "korean_name": "모모스즈 네네",
+            "english_name": "Momosuzu Nene",
+            "is_graduated": false,
+            "japanese_name": "桃鈴ねね",
+            "short_korean_name": "네네",
+            "auto_short_korean_name": "네네"
+        },
+        {
+            "id": 138,
+            "org": "Hololive",
+            "slug": "shirogane-noel",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "노엘",
+                "단장"
+            ],
+            "channel_id": "UCdyqAaZDKHXg4Ahi7VENThQ",
+            "korean_name": "시로가네 노엘",
+            "english_name": "Shirogane Noel",
+            "is_graduated": false,
+            "japanese_name": "白銀ノエル",
+            "short_korean_name": "노엘",
+            "auto_short_korean_name": "노엘"
+        },
+        {
+            "id": 183,
+            "org": "Hololive",
+            "slug": "koganei-niko",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "개그맨",
+                "니코",
+                "키다리",
+                "코가네니코"
+            ],
+            "channel_id": "UCuI_opAVX6qbxZY-a-AxFuQ",
+            "korean_name": "코가네이 니코",
+            "english_name": "Koganei Niko",
+            "is_graduated": false,
+            "japanese_name": "虎金妃笑虎",
+            "short_korean_name": "니코",
+            "auto_short_korean_name": "니코"
+        },
+        {
+            "id": 180,
+            "org": "Hololive",
+            "slug": "juufuutei-raden",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "라덴",
+                "쥬후테이라덴"
+            ],
+            "channel_id": "UCdXAk5MpyLD8594lm_OvtGQ",
+            "korean_name": "주후테이 라덴",
+            "english_name": "Juufuutei Raden",
+            "is_graduated": false,
+            "japanese_name": "儒烏風亭らでん",
+            "short_korean_name": "라덴",
+            "auto_short_korean_name": "라덴"
+        },
+        {
+            "id": 144,
+            "org": "Hololive",
+            "slug": "yukihana-lamy",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "유키하나라미",
+                "꽐라미",
+                "라미"
+            ],
+            "channel_id": "UCFKOVgVbGmX65RxO3EtH3iw",
+            "korean_name": "유키하나 라미",
+            "english_name": "Yukihana Lamy",
+            "is_graduated": false,
+            "japanese_name": "雪花ラミィ",
+            "short_korean_name": "라미",
+            "auto_short_korean_name": "라미"
+        },
+        {
+            "id": 143,
+            "org": "Hololive",
+            "slug": "himemori-luna",
+            "source": "collision_prefer_common_hololive_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "루나",
+                "루나이트"
+            ],
+            "channel_id": "UCa9Y57gfeY0Zro_noHRVrnw",
+            "korean_name": "히메모리 루나",
+            "english_name": "Himemori Luna",
+            "is_graduated": false,
+            "japanese_name": "姫森ルーナ",
+            "short_korean_name": "루나",
+            "auto_short_korean_name": "루나"
+        },
+        {
+            "id": 149,
+            "org": "Hololive",
+            "slug": "takane-lui",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "루이",
+                "루이모"
+            ],
+            "channel_id": "UCs9_O1tRPMQTHQ-N_L6FU2g",
+            "korean_name": "타카네 루이",
+            "english_name": "Takane Lui",
+            "is_graduated": false,
+            "japanese_name": "鷹嶺ルイ",
+            "short_korean_name": "루이",
+            "auto_short_korean_name": "루이"
+        },
+        {
+            "id": 153,
+            "org": "Hololive",
+            "slug": "ayunda-risu",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "리스",
+                "아윤다리스",
+                "아윤다"
+            ],
+            "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+            "korean_name": "아윤다 리스",
+            "english_name": "Ayunda Risu",
+            "is_graduated": false,
+            "japanese_name": "アユンダ・リス",
+            "short_korean_name": "리스",
+            "auto_short_korean_name": "리스"
+        },
+        {
+            "id": 139,
+            "org": "Hololive",
+            "slug": "houshou-marine",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "마리링",
+                "마린",
+                "아줌마",
+                "할망구"
+            ],
+            "channel_id": "UCCzUftO8KOVkV4wQG1vkUvg",
+            "korean_name": "호쇼 마린",
+            "english_name": "Houshou Marine",
+            "is_graduated": false,
+            "japanese_name": "宝鐘マリン",
+            "short_korean_name": "마린",
+            "auto_short_korean_name": "마린"
+        },
+        {
+            "id": 175,
+            "org": "Hololive",
+            "slug": "gigi-murin",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "지지"
+            ],
+            "channel_id": "UCDHABijvPBnJm7F-KlNME3w",
+            "korean_name": "지지 무린",
+            "english_name": "Gigi Murin",
+            "is_graduated": false,
+            "japanese_name": "ジジ・ムリン",
+            "short_korean_name": "지지",
+            "auto_short_korean_name": "지지"
+        },
+        {
+            "id": 131,
+            "org": "Hololive",
+            "slug": "ookami-mio",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "미오",
+                "미오샤",
+                "미옹"
+            ],
+            "channel_id": "UCp-5t9SrOQwXMU7iIjQfARg",
+            "korean_name": "오오카미 미오",
+            "english_name": "Ookami Mio",
+            "is_graduated": false,
+            "japanese_name": "大神ミオ",
+            "short_korean_name": "미오",
+            "auto_short_korean_name": "미오"
+        },
+        {
+            "id": 132,
+            "org": "Hololive",
+            "slug": "sakuramiko",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "미코",
+                "미코치",
+                "엘리트"
+            ],
+            "channel_id": "UC-hM6YJuNYVAmUWxeIr9FeA",
+            "korean_name": "사쿠라 미코",
+            "english_name": "Sakura Miko",
+            "is_graduated": false,
+            "japanese_name": "さくらみこ",
+            "short_korean_name": "미코",
+            "auto_short_korean_name": "미코"
+        },
+        {
+            "id": 168,
+            "org": "Hololive",
+            "slug": "hakos-baelz",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "벨즈",
+                "베이",
+                "땃쥐",
+                "카오스"
+            ],
+            "channel_id": "UCgmPnx-EEeOrZSg5Tiw7ZRQ",
+            "korean_name": "하코스 벨즈",
+            "english_name": "Hakos Baelz",
+            "is_graduated": false,
+            "japanese_name": "ハコス・ベールズ",
+            "short_korean_name": "벨즈",
+            "auto_short_korean_name": "벨즈"
+        },
+        {
+            "id": 146,
+            "org": "Hololive",
+            "slug": "shishiro-botan",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "라라이온",
+                "시시롱",
+                "보탄"
+            ],
+            "channel_id": "UCUKD-uaobj9jiqB-VXt71mA",
+            "korean_name": "시시로 보탄",
+            "english_name": "Shishiro Botan",
+            "is_graduated": false,
+            "japanese_name": "獅白ぼたん",
+            "short_korean_name": "보탄",
+            "auto_short_korean_name": "보탄"
+        },
+        {
+            "id": 186,
+            "org": "Hololive",
+            "slug": "kikirara-vivi",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "비비",
+                "키키라라비비"
+            ],
+            "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+            "korean_name": "키키라라 비비",
+            "english_name": "Kikirara Vivi",
+            "is_graduated": false,
+            "japanese_name": "綺々羅々ヴィヴィ",
+            "short_korean_name": "비비",
+            "auto_short_korean_name": "비비"
+        },
+        {
+            "id": 170,
+            "org": "Hololive",
+            "slug": "koseki-bijou",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "비주",
+                "비쥬"
+            ],
+            "channel_id": "UC9p_lqQ0FEDz327Vgf5JwqA",
+            "korean_name": "코세키 비쥬",
+            "english_name": "Koseki Bijou",
+            "is_graduated": false,
+            "japanese_name": "古石ビジュー",
+            "short_korean_name": "비쥬",
+            "auto_short_korean_name": "비쥬"
+        },
+        {
+            "id": 191,
+            "org": "Hololive",
+            "slug": "tsukumo-sana",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "사나",
+                "츠쿠모사나"
+            ],
+            "channel_id": "UCsUj0dszADCGbF3gNrQEuSQ",
+            "korean_name": "츠쿠모 사나",
+            "english_name": "Tsukumo Sana",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 九十九佐命",
+            "short_korean_name": "사나",
+            "auto_short_korean_name": "사나"
+        },
+        {
+            "id": 121,
+            "org": "Hololive",
+            "slug": "tokino-sora",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "사단장",
+                "소라",
+                "소라토모",
+                "토키노소라"
+            ],
+            "channel_id": "UCp6993wxpyDPHUpavwDFqgg",
+            "korean_name": "토키노 소라",
+            "english_name": "Tokino Sora",
+            "is_graduated": false,
+            "japanese_name": "ときのそら",
+            "short_korean_name": "소라",
+            "auto_short_korean_name": "소라"
+        },
+        {
+            "id": 184,
+            "org": "Hololive",
+            "slug": "mizumiya-su",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "스우",
+                "미즈미야"
+            ],
+            "channel_id": "UCjk2nKmHzgH5Xy-C5qYRd5A",
+            "korean_name": "미즈미야 스우",
+            "english_name": "Mizumiya Su",
+            "is_graduated": false,
+            "japanese_name": "水宮枢",
+            "short_korean_name": "스우",
+            "auto_short_korean_name": "스우"
+        },
+        {
+            "id": 188,
+            "org": "Hololive",
+            "slug": "murasaki-shion",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "시온",
+                "무라사키시온",
+                "쿠소가키",
+                "쿠라게우 로아",
+                "로아"
+            ],
+            "channel_id": "UCXTpFs_3PqI41qX2d9tL2Rw",
+            "korean_name": "무라사키 시온",
+            "english_name": "Murasaki Shion",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 紫咲シオン",
+            "short_korean_name": "시온",
+            "auto_short_korean_name": "시온"
+        },
+        {
+            "id": 194,
+            "org": "Hololive",
+            "slug": "hiodoshi-ao",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "아오",
+                "히오도시아오"
+            ],
+            "channel_id": "UCMGfV7TVTmHhEErVJg1oHBQ",
+            "korean_name": "히오도시 아오",
+            "english_name": "Hiodoshi Ao",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 火威青",
+            "short_korean_name": "아오",
+            "auto_short_korean_name": "아오"
+        },
+        {
+            "id": 156,
+            "org": "Hololive",
+            "slug": "kureiji-ollie",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "올리",
+                "쿠레이지올리"
+            ],
+            "channel_id": "UCYz_5n-uDuChHtLo7My1HnQ",
+            "korean_name": "쿠레이지 올리",
+            "english_name": "Kureiji Ollie",
+            "is_graduated": false,
+            "japanese_name": "クレイジー・オリー",
+            "short_korean_name": "올리",
+            "auto_short_korean_name": "올리"
+        },
+        {
+            "id": 159,
+            "org": "Hololive",
+            "slug": "vestia-zeta",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "제타"
+            ],
+            "channel_id": "UCTvHWSfBZgtxE4sILOaurIQ",
+            "korean_name": "베스티아 제타",
+            "english_name": "Vestia Zeta",
+            "is_graduated": false,
+            "japanese_name": "ベスティア・ゼータ",
+            "short_korean_name": "제타",
+            "auto_short_korean_name": "제타"
+        },
+        {
+            "id": 128,
+            "org": "Hololive",
+            "slug": "yuzuki-choco",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "유즈키초코",
+                "유즈키",
+                "초코",
+                "초코선생",
+                "초코센"
+            ],
+            "channel_id": "UC1suqwovbL1kzsoaZgFZLKg",
+            "korean_name": "유즈키 초코",
+            "english_name": "Yuzuki Choco",
+            "is_graduated": false,
+            "japanese_name": "癒月ちょこ",
+            "short_korean_name": "초코",
+            "auto_short_korean_name": "초코"
+        },
+        {
+            "id": 189,
+            "org": "Hololive",
+            "slug": "kiryu-coco",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "코코",
+                "키류코코",
+                "회장"
+            ],
+            "channel_id": "UCS9uQI-jC3DE0L4IpXyvr6w",
+            "korean_name": "키류 코코",
+            "english_name": "Kiryu Coco",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 桐生ココ",
+            "short_korean_name": "코코",
+            "auto_short_korean_name": "코코"
+        },
+        {
+            "id": 142,
+            "org": "Hololive",
+            "slug": "tokoyami-towa",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "TMT",
+                "토와",
+                "토와마지텐시",
+                "tmt",
+                "토코야미",
+                "톼삼"
+            ],
+            "channel_id": "UC1uv2Oq6kNxgATlCiez59hw",
+            "korean_name": "토코야미 토와",
+            "english_name": "Tokoyami Towa",
+            "is_graduated": false,
+            "japanese_name": "常闇トワ",
+            "short_korean_name": "토와",
+            "auto_short_korean_name": "토와"
+        },
+        {
+            "id": 147,
+            "org": "Hololive",
+            "slug": "omaru-polka",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "포루카_오루카",
+                "폴카"
+            ],
+            "channel_id": "UCK9V2B22uJYu3N7eR_BT9QA",
+            "korean_name": "오마루 폴카",
+            "english_name": "Omaru Polka",
+            "is_graduated": false,
+            "japanese_name": "尾丸ポルカ",
+            "short_korean_name": "폴카",
+            "auto_short_korean_name": "폴카"
+        },
+        {
+            "id": 169,
+            "org": "Hololive",
+            "slug": "shiori-novella",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "시오리",
+                "책벌레"
+            ],
+            "channel_id": "UCgnfPPb9JI3e9A4cXHnWbyg",
+            "korean_name": "시오리 노벨라",
+            "english_name": "Shiori Novella",
+            "is_graduated": false,
+            "japanese_name": "シオリ・ノヴェラ",
+            "short_korean_name": "노벨라",
+            "auto_short_korean_name": "노벨라"
+        },
+        {
+            "id": 158,
+            "org": "Hololive",
+            "slug": "pavolia-reine",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "레이네"
+            ],
+            "channel_id": "UChgTyjG-pdNvxxhdsXfHQ5Q",
+            "korean_name": "파볼리아 레이네",
+            "english_name": "Pavolia Reine",
+            "is_graduated": false,
+            "japanese_name": "パヴォリア・レイネ",
+            "short_korean_name": "레이네",
+            "auto_short_korean_name": "레이네"
+        },
+        {
+            "id": 123,
+            "org": "Hololive",
+            "slug": "aki-rosenthal",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "아키로젠탈",
+                "아키",
+                "아키로제",
+                "아키아키"
+            ],
+            "channel_id": "UCFTLzh12_nrtzqBPsTCqenA",
+            "korean_name": "아키 로젠탈",
+            "english_name": "Aki Rosenthal",
+            "is_graduated": false,
+            "japanese_name": "アキ・ローゼンタール",
+            "short_korean_name": "로젠탈",
+            "auto_short_korean_name": "로젠탈"
+        },
+        {
+            "id": 179,
+            "org": "Hololive",
+            "slug": "ichijou-ririka",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "CEO",
+                "사장님",
+                "리리카",
+                "사업가"
+            ],
+            "channel_id": "UCtyWhCj3AqKh2dXctLkDtng",
+            "korean_name": "이치죠 리리카",
+            "english_name": "Ichijou Ririka",
+            "is_graduated": false,
+            "japanese_name": "一条莉々華",
+            "short_korean_name": "리리카",
+            "auto_short_korean_name": "리리카"
+        },
+        {
+            "id": 182,
+            "org": "Hololive",
+            "slug": "isaki-riona",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "리오나",
+                "이사키리오나"
+            ],
+            "channel_id": "UC9LSiN9hXI55svYEBrrK-tw",
+            "korean_name": "이사키 리오나",
+            "english_name": "Isaki Riona",
+            "is_graduated": false,
+            "japanese_name": "響咲リオナ",
+            "short_korean_name": "리오나",
+            "auto_short_korean_name": "리오나"
+        },
+        {
+            "id": 126,
+            "org": "Hololive",
+            "slug": "natsuiro-matsuri",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "마츠리",
+                "마츠리스"
+            ],
+            "channel_id": "UCQ0UDLQCjY0rmuxCDE38FGg",
+            "korean_name": "나츠이로 마츠리",
+            "english_name": "Natsuiro Matsuri",
+            "is_graduated": false,
+            "japanese_name": "夏色まつり",
+            "short_korean_name": "마츠리",
+            "auto_short_korean_name": "마츠리"
+        },
+        {
+            "id": 157,
+            "org": "Hololive",
+            "slug": "anya-melfissa",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "아냐",
+                "아냐멜피샤"
+            ],
+            "channel_id": "UC727SQYUvx5pDDGQpTICNWg",
+            "korean_name": "아냐 멜피사",
+            "english_name": "Anya Melfissa",
+            "is_graduated": false,
+            "japanese_name": "アーニャ・メルフィッサ",
+            "short_korean_name": "멜피사",
+            "auto_short_korean_name": "멜피사"
+        },
+        {
+            "id": 173,
+            "org": "Hololive",
+            "slug": "mococo-abyssgard",
+            "source": "shared_channel_disambiguation",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "바우바우",
+                "모코코",
+                "후와모코"
+            ],
+            "channel_id": "UCt9H_RpQzhxzlyBxFqrdHqA",
+            "korean_name": "모코코 어비스가드",
+            "english_name": "Mococo Abyssgard",
+            "is_graduated": false,
+            "japanese_name": "モココ・アビスガード",
+            "short_korean_name": "모코코",
+            "auto_short_korean_name": "어비스가드"
+        },
+        {
+            "id": 193,
+            "org": "Hololive",
+            "slug": "nanashi-mumei",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "무메이",
+                "나나시무메이",
+                "부엉이"
+            ],
+            "channel_id": "UC3n5uGu18FoCy23ggWWp8tA",
+            "korean_name": "나나시 무메이",
+            "english_name": "Nanashi Mumei",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 七詩ムメイ",
+            "short_korean_name": "무메이",
+            "auto_short_korean_name": "무메이"
+        },
+        {
+            "id": 129,
+            "org": "Hololive",
+            "slug": "oozora-subaru",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "메스바루",
+                "스바루",
+                "오오조라스바루"
+            ],
+            "channel_id": "UCvzGlP9oQwU--Y0r9id_jnA",
+            "korean_name": "오오조라 스바루",
+            "english_name": "Oozora Subaru",
+            "is_graduated": false,
+            "japanese_name": "大空スバル",
+            "short_korean_name": "스바루",
+            "auto_short_korean_name": "스바루"
+        },
+        {
+            "id": 127,
+            "org": "Hololive",
+            "slug": "nakiri-ayame",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "나키리아야메",
+                "나키리",
+                "아야메",
+                "오니"
+            ],
+            "channel_id": "UC7fk0CB07ly8oSl0aqKkqFg",
+            "korean_name": "나키리 아야메",
+            "english_name": "Nakiri Ayame",
+            "is_graduated": false,
+            "japanese_name": "百鬼あやめ",
+            "short_korean_name": "아야메",
+            "auto_short_korean_name": "아야메"
+        },
+        {
+            "id": 130,
+            "org": "Hololive",
+            "slug": "azki",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "아즈짱",
+                "아즈키치",
+                "아즈키"
+            ],
+            "channel_id": "UC0TXe_LYZ4scaW2XMyi5_kw",
+            "korean_name": "아즈키",
+            "english_name": "AZKi",
+            "is_graduated": false,
+            "japanese_name": "AZKi",
+            "short_korean_name": "아즈키",
+            "auto_short_korean_name": "아즈키"
+        },
+        {
+            "id": 187,
+            "org": "Hololive",
+            "slug": "minato-aqua",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "아쿠아",
+                "미나토아쿠아"
+            ],
+            "channel_id": "UC1opHUrw8rvnsadT-iGp7Cg",
+            "korean_name": "미나토 아쿠아",
+            "english_name": "Minato Aqua",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 湊あくあ",
+            "short_korean_name": "아쿠아",
+            "auto_short_korean_name": "아쿠아"
+        },
+        {
+            "id": 133,
+            "org": "Hololive",
+            "slug": "nekomata-okayu",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "오카융",
+                "오카유"
+            ],
+            "channel_id": "UCvaTdHTWBGv3MKj3KVqJVCw",
+            "korean_name": "네코마타 오카유",
+            "english_name": "Nekomata Okayu",
+            "is_graduated": false,
+            "japanese_name": "猫又おかゆ",
+            "short_korean_name": "오카유",
+            "auto_short_korean_name": "오카유"
+        },
+        {
+            "id": 141,
+            "org": "Hololive",
+            "slug": "tsunomaki-watame",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "양이모",
+                "와타메",
+                "와타오지"
+            ],
+            "channel_id": "UCqm3BQLlJfvkTsX_hvm0UmA",
+            "korean_name": "츠노마키 와타메",
+            "english_name": "Tsunomaki Watame",
+            "is_graduated": false,
+            "japanese_name": "角巻わため",
+            "short_korean_name": "와타메",
+            "auto_short_korean_name": "와타메"
+        },
+        {
+            "id": 152,
+            "org": "Hololive",
+            "slug": "kazama-iroha",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "고자루",
+                "닌자",
+                "이로하"
+            ],
+            "channel_id": "UC_vMYWcDjmfdpH6r4TTn1MQ",
+            "korean_name": "카자마 이로하",
+            "english_name": "Kazama Iroha",
+            "is_graduated": false,
+            "japanese_name": "風真いろは",
+            "short_korean_name": "이로하",
+            "auto_short_korean_name": "이로하"
+        },
+        {
+            "id": 185,
+            "org": "Hololive",
+            "slug": "rindo-chihaya",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "드라이버",
+                "치하야",
+                "린도 치하야"
+            ],
+            "channel_id": "UCKMWFR6lAstLa7Vbf5dH7ig",
+            "korean_name": "린도 치하야",
+            "english_name": "Rindo Chihaya",
+            "is_graduated": false,
+            "japanese_name": "輪堂千速",
+            "short_korean_name": "치하야",
+            "auto_short_korean_name": "치하야"
+        },
+        {
+            "id": 178,
+            "org": "Hololive",
+            "slug": "otonose-kanade",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "조선우노",
+                "연주",
+                "카나데",
+                "오토노세",
+                "오토노세카나데"
+            ],
+            "channel_id": "UCWQtYtq9EOB4-I5P-3fh8lA",
+            "korean_name": "오토노세 카나데",
+            "english_name": "Otonose Kanade",
+            "is_graduated": false,
+            "japanese_name": "音乃瀬奏",
+            "short_korean_name": "카나데",
+            "auto_short_korean_name": "카나데"
+        },
+        {
+            "id": 140,
+            "org": "Hololive",
+            "slug": "amane-kanata",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "PP천사",
+                "고릴라",
+                "카나타",
+                "카나땅",
+                "아마네",
+                "아마네카나타"
+            ],
+            "channel_id": "UCZlDXzGoo7d44bwdNObFacg",
+            "korean_name": "아마네 카나타",
+            "english_name": "Amane Kanata",
+            "is_graduated": true,
+            "japanese_name": "天音かなた",
+            "short_korean_name": "카나타",
+            "auto_short_korean_name": "카나타"
+        },
+        {
+            "id": 134,
+            "org": "Hololive",
+            "slug": "inugami-korone",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "개이모",
+                "코로네",
+                "코로네스키"
+            ],
+            "channel_id": "UChAnqc_AY5_I3Px5dig3X1Q",
+            "korean_name": "이누가미 코로네",
+            "english_name": "Inugami Korone",
+            "is_graduated": false,
+            "japanese_name": "戌神ころね",
+            "short_korean_name": "코로네",
+            "auto_short_korean_name": "코로네"
+        },
+        {
+            "id": 150,
+            "org": "Hololive",
+            "slug": "hakui-koyori",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "방송_괴물",
+                "코요",
+                "코요리",
+                "코요링"
+            ],
+            "channel_id": "UC6eWCld0KwmyHFbAqK3V-Rw",
+            "korean_name": "하쿠이 코요리",
+            "english_name": "Hakui Koyori",
+            "is_graduated": false,
+            "japanese_name": "博衣こより",
+            "short_korean_name": "코요리",
+            "auto_short_korean_name": "코요리"
+        },
+        {
+            "id": 167,
+            "org": "Hololive",
+            "slug": "ouro-kronii",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "곽로니",
+                "구론희",
+                "빙구",
+                "크로니",
+                "오노크로니"
+            ],
+            "channel_id": "UCmbs8T6MWqUHP1tIQvSgKrg",
+            "korean_name": "오로 크로니",
+            "english_name": "Ouro Kronii",
+            "is_graduated": false,
+            "japanese_name": "オーロ・クロニー",
+            "short_korean_name": "크로니",
+            "auto_short_korean_name": "크로니"
+        },
+        {
+            "id": 151,
+            "org": "Hololive",
+            "slug": "sakamata-chloe",
+            "source": "auto_last_korean_token",
+            "status": "ended",
+            "suborg": "",
+            "aliases_ko": [
+                "클로에",
+                "사카마타클로에",
+                "범고래"
+            ],
+            "channel_id": "UCIBY1ollUsauvVi4hW4cumw",
+            "korean_name": "사카마타 클로에",
+            "english_name": "Sakamata Chloe",
+            "is_graduated": true,
+            "japanese_name": "【配信活動終了】 沙花叉クロヱ",
+            "short_korean_name": "클로에",
+            "auto_short_korean_name": "클로에"
+        },
+        {
+            "id": 163,
+            "org": "Hololive",
+            "slug": "takanashi-kiara",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "새대가리",
+                "치킨",
+                "키아라",
+                "타카나시키아라"
+            ],
+            "channel_id": "UCHsx4Hqa-1ORjQTh9TYDhww",
+            "korean_name": "타카나시 키아라",
+            "english_name": "Takanashi Kiara",
+            "is_graduated": false,
+            "japanese_name": "小鳥遊キアラ",
+            "short_korean_name": "키아라",
+            "auto_short_korean_name": "키아라"
+        },
+        {
+            "id": 192,
+            "org": "Hololive",
+            "slug": "ceres-fauna",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "파우나",
+                "세레스파우나",
+                "사슴",
+                "니미",
+                "니미나이트메어"
+            ],
+            "channel_id": "UCO_aKKYxn4tvrqPjcTzZ6EQ",
+            "korean_name": "세레스 파우나",
+            "english_name": "Ceres Fauna",
+            "is_graduated": true,
+            "japanese_name": "【卒業生】 セレス・ファウナ",
+            "short_korean_name": "파우나",
+            "auto_short_korean_name": "파우나"
+        },
+        {
+            "id": 177,
+            "org": "Hololive",
+            "slug": "raora-panthera",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "라오라"
+            ],
+            "channel_id": "UCl69AEx4MdqMZH7Jtsm7Tig",
+            "korean_name": "라오라 판테라",
+            "english_name": "Raora Panthera",
+            "is_graduated": false,
+            "japanese_name": "ラオーラ・パンテーラ",
+            "short_korean_name": "판테라",
+            "auto_short_korean_name": "판테라"
+        },
+        {
+            "id": 136,
+            "org": "Hololive",
+            "slug": "usada-pekora",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "페코",
+                "아몬드",
+                "페코라"
+            ],
+            "channel_id": "UC1DCedRgGHBdm81E1llLhOQ",
+            "korean_name": "우사다 페코라",
+            "english_name": "Usada Pekora",
+            "is_graduated": false,
+            "japanese_name": "兎田ぺこら",
+            "short_korean_name": "페코라",
+            "auto_short_korean_name": "페코라"
+        },
+        {
+            "id": 124,
+            "org": "Hololive",
+            "slug": "akai-haato",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "아카이하아토",
+                "하쨔마",
+                "하챠마"
+            ],
+            "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+            "korean_name": "아카이 하아토",
+            "english_name": "Akai Haato",
+            "is_graduated": false,
+            "japanese_name": "赤井はあと",
+            "short_korean_name": "하아토",
+            "auto_short_korean_name": "하아토"
+        },
+        {
+            "id": 181,
+            "org": "Hololive",
+            "slug": "todoroki-hajime",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "하듸메",
+                "하지메"
+            ],
+            "channel_id": "UC1iA6_NT4mtAcIII6ygrvCw",
+            "korean_name": "토도로키 하지메",
+            "english_name": "Todoroki Hajime",
+            "is_graduated": false,
+            "japanese_name": "轟はじめ",
+            "short_korean_name": "하지메",
+            "auto_short_korean_name": "하지메"
+        },
+        {
+            "id": 137,
+            "org": "Hololive",
+            "slug": "shiranui-flare",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "플레어",
+                "후땅",
+                "후레아_쨩"
+            ],
+            "channel_id": "UCvInZx9h3jC2JzsIzoOebWg",
+            "korean_name": "시라누이 후레아",
+            "english_name": "Shiranui Flare",
+            "is_graduated": false,
+            "japanese_name": "不知火フレア",
+            "short_korean_name": "후레아",
+            "auto_short_korean_name": "후레아"
+        },
+        {
+            "id": 125,
+            "org": "Hololive",
+            "slug": "shirakami-fubuki",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "쿠로카미_후부키",
+                "후부키",
+                "국왕님"
+            ],
+            "channel_id": "UCdn5BQ06XqgXoAxIhbqw5Rg",
+            "korean_name": "시라카미 후부키",
+            "english_name": "Shirakami Fubuki",
+            "is_graduated": false,
+            "japanese_name": "白上フブキ",
+            "short_korean_name": "후부키",
+            "auto_short_korean_name": "후부키"
+        },
+        {
+            "id": 172,
+            "org": "Hololive",
+            "slug": "fuwawa-abyssgard",
+            "source": "shared_channel_disambiguation",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "바우바우",
+                "후와와",
+                "후와모코"
+            ],
+            "channel_id": "UCt9H_RpQzhxzlyBxFqrdHqA",
+            "korean_name": "후와와 어비스가드",
+            "english_name": "Fuwawa Abyssgard",
+            "is_graduated": false,
+            "japanese_name": "フワワ・アビスガード",
+            "short_korean_name": "후와와",
+            "auto_short_korean_name": "어비스가드"
+        },
+        {
+            "id": 148,
+            "org": "Hololive",
+            "slug": "la-darknesss",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "동구리",
+                "라프",
+                "라플라스",
+                "다크니스",
+                "야마다",
+                "쿠소가키"
+            ],
+            "channel_id": "UCENwRMx5Yh42zWpzURebzTw",
+            "korean_name": "라플라스 다크니스",
+            "english_name": "La+ Darknesss",
+            "is_graduated": false,
+            "japanese_name": "ラプラス・ダークネス",
+            "short_korean_name": "다크니스",
+            "auto_short_korean_name": "다크니스"
+        },
+        {
+            "id": 122,
+            "org": "Hololive",
+            "slug": "roboco-san",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "로보코",
+                "로보코상"
+            ],
+            "channel_id": "UCDqI2jOz0weumE8s7paEk6g",
+            "korean_name": "로보코상",
+            "english_name": "Robocosan",
+            "is_graduated": false,
+            "japanese_name": "ロボ子さん",
+            "short_korean_name": "로보코상",
+            "auto_short_korean_name": "로보코상"
+        },
+        {
+            "id": 203,
+            "org": "Hololive",
+            "slug": "devis-regloss",
+            "source": "official_channel_short_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "리글로스",
+                "ReGLOSS",
+                "데비스리글로스",
+                "리글로스공식",
+                "데바이스"
+            ],
+            "channel_id": "UC10wVt6hoQiwySRhz7RdOUA",
+            "korean_name": "리글로스 공식",
+            "english_name": "DEV_IS ReGLOSS",
+            "is_graduated": false,
+            "japanese_name": "hololive DEV_IS ReGLOSS",
+            "short_korean_name": "리글로스",
+            "auto_short_korean_name": "공식"
+        },
+        {
+            "id": 135,
+            "org": "Hololive",
+            "slug": "hoshimachi-suisei",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "스이짱",
+                "스이",
+                "스이세이",
+                "스이코패스"
+            ],
+            "channel_id": "UC5CwaMl1eIgY8h02uZw7u8A",
+            "korean_name": "호시마치 스이세이",
+            "english_name": "Hoshimachi Suisei",
+            "is_graduated": false,
+            "japanese_name": "星街すいせい",
+            "short_korean_name": "스이세이",
+            "auto_short_korean_name": "스이세이"
+        },
+        {
+            "id": 165,
+            "org": "Hololive",
+            "slug": "watson-amelia",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "왓슨",
+                "아멜리아",
+                "아멜리아 왓슨",
+                "아메",
+                "두비"
+            ],
+            "channel_id": "UCyl1z3jo3XHR1riLFKG5UAg",
+            "korean_name": "왓슨 아멜리아",
+            "english_name": "Watson Amelia",
+            "is_graduated": true,
+            "japanese_name": "ワトソン・アメリア",
+            "short_korean_name": "아멜리아",
+            "auto_short_korean_name": "아멜리아"
+        },
+        {
+            "id": 166,
+            "org": "Hololive",
+            "slug": "irys",
+            "source": "korean_name_missing_alias_override",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "아이리스"
+            ],
+            "channel_id": "UC8rcEBzJSleTkf_-agPM20g",
+            "korean_name": "",
+            "english_name": "IRyS",
+            "is_graduated": false,
+            "japanese_name": "IRyS",
+            "short_korean_name": "아이리스",
+            "auto_short_korean_name": "아이리스"
+        },
+        {
+            "id": 164,
+            "org": "Hololive",
+            "slug": "ninomae-inanis",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "이나",
+                "타코다치",
+                "포옹_수집가"
+            ],
+            "channel_id": "UCMwGHR0BTZuLsmjY_NT5Pwg",
+            "korean_name": "니노마에 이나니스",
+            "english_name": "Ninomae Ina'nis",
+            "is_graduated": false,
+            "japanese_name": "一伊那尓栖",
+            "short_korean_name": "이나니스",
+            "auto_short_korean_name": "이나니스"
+        },
+        {
+            "id": 176,
+            "org": "Hololive",
+            "slug": "cecilia-immergreen",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+            ],
+            "channel_id": "UCvN5h1ShZtc7nly3pezRayg",
+            "korean_name": "세실리아 이머그린",
+            "english_name": "Cecilia Immergreen",
+            "is_graduated": false,
+            "japanese_name": "セシリア・イマーグリーン",
+            "short_korean_name": "이머그린",
+            "auto_short_korean_name": "이머그린"
+        },
+        {
+            "id": 161,
+            "org": "Hololive",
+            "slug": "kobo-kanaeru",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "코보",
+                "코보짱"
+            ],
+            "channel_id": "UCjLEmnpCNeisMxy134KPwWw",
+            "korean_name": "코보 카나에루",
+            "english_name": "Kobo Kanaeru",
+            "is_graduated": false,
+            "japanese_name": "こぼ・かなえる",
+            "short_korean_name": "카나에루",
+            "auto_short_korean_name": "카나에루"
+        },
+        {
+            "id": 162,
+            "org": "Hololive",
+            "slug": "mori-calliope",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "칼버지",
+                "칼리"
+            ],
+            "channel_id": "UCL_qhgtOy0dy1Agp8vkySQg",
+            "korean_name": "모리 칼리오페",
+            "english_name": "Mori Calliope",
+            "is_graduated": false,
+            "japanese_name": "森カリオペ",
+            "short_korean_name": "칼리오페",
+            "auto_short_korean_name": "칼리오페"
+        },
+        {
+            "id": 200,
+            "org": "Hololive",
+            "slug": "holoan-room",
+            "source": "official_channel_short_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "호로아나",
+                "홀로아나",
+                "아나",
+                "이히히"
+            ],
+            "channel_id": "UCozx5csNhCx1wsVq3SZVkBQ",
+            "korean_name": "호로아나",
+            "english_name": "holoAN",
+            "is_graduated": false,
+            "japanese_name": "holoAN room (ホロアナ)",
+            "short_korean_name": "호로아나",
+            "auto_short_korean_name": "호로아나"
+        },
+        {
+            "id": 154,
+            "org": "Hololive",
+            "slug": "moona-hoshinova",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "건축왕",
+                "달토끼",
+                "무나"
+            ],
+            "channel_id": "UCP0BspO_AMEe3aQqqpo89Dg",
+            "korean_name": "무나 호시노바",
+            "english_name": "Moona Hoshinova",
+            "is_graduated": false,
+            "japanese_name": "ムーナ・ホシノヴァ",
+            "short_korean_name": "호시노바",
+            "auto_short_korean_name": "호시노바"
+        },
+        {
+            "id": 155,
+            "org": "Hololive",
+            "slug": "airani-iofifteen",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "이오피"
+            ],
+            "channel_id": "UCAoy6rzhSf4ydcYjJw3WoVg",
+            "korean_name": "아이라니 이오피프틴",
+            "english_name": "Airani Iofifteen",
+            "is_graduated": false,
+            "japanese_name": "アイラニ・イオフィフティーン",
+            "short_korean_name": "이오피프틴",
+            "auto_short_korean_name": "이오피프틴"
+        },
+        {
+            "id": 160,
+            "org": "Hololive",
+            "slug": "kaela-kovalskia",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "카엘라"
+            ],
+            "channel_id": "UCZLZ8Jjx_RN2CXloOmgTHVg",
+            "korean_name": "카엘라 코발스키아",
+            "english_name": "Kaela Kovalskia",
+            "is_graduated": false,
+            "japanese_name": "カエラ・コヴァルスキア",
+            "short_korean_name": "코발스키아",
+            "auto_short_korean_name": "코발스키아"
+        },
+        {
+            "id": 199,
+            "org": "Hololive",
+            "slug": "hololive-official",
+            "source": "official_channel_short_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "홀로라이브",
+                "공식채널",
+                "홀로그라"
+            ],
+            "channel_id": "UCJFZiqLMntJufDCHc6bQixg",
+            "korean_name": "홀로라이브 공식",
+            "english_name": "Hololive Official",
+            "is_graduated": false,
+            "japanese_name": "hololive ホロライブ",
+            "short_korean_name": "홀로라이브",
+            "auto_short_korean_name": "공식"
+        },
+        {
+            "id": 174,
+            "org": "Hololive",
+            "slug": "elizabeth-rose-bloodflame",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "블러드플레임",
+                "엘리자베스",
+                "엘리",
+                "엘리자베스로즈블러드플레임"
+            ],
+            "channel_id": "UCW5uhrG1eCBYditmhL0Ykjw",
+            "korean_name": "엘리자베스 로즈 블러드플레임",
+            "english_name": "Elizabeth Rose Bloodflame",
+            "is_graduated": false,
+            "japanese_name": "エリザベス・ローズ・ブラッドフレイム",
+            "short_korean_name": "블러드플레임",
+            "auto_short_korean_name": "블러드플레임"
+        },
+        {
+            "id": 204,
+            "org": "Hololive",
+            "slug": "devis-flowglow",
+            "source": "official_channel_short_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "플로우글로우",
+                "FLOW GLOW",
+                "데비스플로우글로우",
+                "플글",
+                "후로그로",
+                "플로글로"
+            ],
+            "channel_id": "UCu2n3qHuOuQIygREMnWeQWg",
+            "korean_name": "플로우글로우 공식",
+            "english_name": "DEV_IS FLOW GLOW",
+            "is_graduated": false,
+            "japanese_name": "hololive DEV_IS FLOW GLOW",
+            "short_korean_name": "플로우글로우",
+            "auto_short_korean_name": "공식"
+        },
+        {
+            "id": 171,
+            "org": "Hololive",
+            "slug": "nerissa-ravencroft",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "네리사"
+            ],
+            "channel_id": "UC_sFNM0z0MWm9A6WlKPuMMg",
+            "korean_name": "네리사 레이븐크로프트",
+            "english_name": "Nerissa Ravencroft",
+            "is_graduated": false,
+            "japanese_name": "ネリッサ・レイヴンクロフト",
+            "short_korean_name": "레이븐크로프트",
+            "auto_short_korean_name": "레이븐크로프트"
+        },
+        {
+            "id": 201,
+            "org": "Hololive",
+            "slug": "hololive-en-official",
+            "source": "official_channel_short_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "홀로EN",
+                "홀로라이브영어",
+                "홀로EN공식"
+            ],
+            "channel_id": "UCotXwY6s8pWmuWd_snKYjhg",
+            "korean_name": "홀로라이브 EN 공식",
+            "english_name": "Hololive EN Official",
+            "is_graduated": false,
+            "japanese_name": "hololive English",
+            "short_korean_name": "홀로EN",
+            "auto_short_korean_name": "공식"
+        },
+        {
+            "id": 202,
+            "org": "Hololive",
+            "slug": "hololive-id-official",
+            "source": "official_channel_short_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "홀로ID",
+                "홀로인도네시아",
+                "홀로ID공식"
+            ],
+            "channel_id": "UCfrWoRGlawPQDQxxeIDRP0Q",
+            "korean_name": "홀로라이브 ID 공식",
+            "english_name": "Hololive ID Official",
+            "is_graduated": false,
+            "japanese_name": "hololive Indonesia",
+            "short_korean_name": "홀로ID",
+            "auto_short_korean_name": "공식"
+        },
+        {
+            "id": 206,
+            "org": "Independents",
+            "slug": "sameko-saba",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "사바",
+                "사메코",
+                "사메코사바"
+            ],
+            "channel_id": "UCxsZ6NCzjU_t4YSxQLBcM5A",
+            "korean_name": "사메코 사바",
+            "english_name": "Sameko Saba",
+            "is_graduated": false,
+            "japanese_name": "鮫子サバ",
+            "short_korean_name": "사바",
+            "auto_short_korean_name": "사바"
+        },
+        {
+            "id": 205,
+            "org": "Independents",
+            "slug": "yuuki-sakuna",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "사쿠나",
+                "사쿠탄"
+            ],
+            "channel_id": "UCrV1Hf5r8P148idjoSfrGEQ",
+            "korean_name": "유우키 사쿠나",
+            "english_name": "Yuuki Sakuna",
+            "is_graduated": false,
+            "japanese_name": "結城さくな",
+            "short_korean_name": "사쿠나",
+            "auto_short_korean_name": "사쿠나"
+        },
+        {
+            "id": 246,
+            "org": "Stellive",
+            "slug": "aokumo-rin",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "린",
+                "린린"
+            ],
+            "channel_id": "UCQmcltnre6aG9SkDRYZqFIg",
+            "korean_name": "아오쿠모 린",
+            "english_name": "Aokumo Rin",
+            "is_graduated": false,
+            "japanese_name": "蒼雲りん",
+            "short_korean_name": "린",
+            "auto_short_korean_name": "린"
+        },
+        {
+            "id": 245,
+            "org": "Stellive",
+            "slug": "hanako-nana",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "나나",
+                "나교수님",
+                "77년생",
+                "쌍칠아재",
+                "굴리트"
+            ],
+            "channel_id": "UCcA21_PzN1EhNe7xS4MJGsQ",
+            "korean_name": "하나코 나나",
+            "english_name": "Hanako Nana",
+            "is_graduated": false,
+            "japanese_name": "華子ナナ",
+            "short_korean_name": "나나",
+            "auto_short_korean_name": "나나"
+        },
+        {
+            "id": 243,
+            "org": "Stellive",
+            "slug": "akane-lize",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "리제",
+                "리제황녀",
+                "피엔나",
+                "저챗퀸",
+                "천마"
+            ],
+            "channel_id": "UC7-m6jQLinZQWIbwm9W-1iw",
+            "korean_name": "아카네 리제",
+            "english_name": "Akane Lize",
+            "is_graduated": false,
+            "japanese_name": "朱音リゼ",
+            "short_korean_name": "리제",
+            "auto_short_korean_name": "리제"
+        },
+        {
+            "id": 247,
+            "org": "Stellive",
+            "slug": "yuzuha-riko",
+            "source": "collision_prefer_stellive_name",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "리코"
+            ],
+            "channel_id": "UCj0c1jUr91dTetIQP2pFeLA",
+            "korean_name": "유즈하 리코",
+            "english_name": "Yuzuha Riko",
+            "is_graduated": false,
+            "japanese_name": "柚葉リコ",
+            "short_korean_name": "리코",
+            "auto_short_korean_name": "리코"
+        },
+        {
+            "id": 239,
+            "org": "Stellive",
+            "slug": "ayatsuno-yuni",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "유니",
+                "유니링",
+                "유니찌",
+                "정윤희",
+                "정유니"
+            ],
+            "channel_id": "UClbYIn9LDbbFZ9w2shX3K0g",
+            "korean_name": "아야츠노 유니",
+            "english_name": "Ayatsuno Yuni",
+            "is_graduated": false,
+            "japanese_name": "純角ユニ",
+            "short_korean_name": "유니",
+            "auto_short_korean_name": "유니"
+        },
+        {
+            "id": 238,
+            "org": "Stellive",
+            "slug": "airi-kanna",
+            "source": "auto_last_korean_token",
+            "status": "graduated",
+            "suborg": "",
+            "aliases_ko": [
+                "칸나",
+                "대장용",
+                "락용",
+                "간나"
+            ],
+            "channel_id": "UC6YnTqZidFg4WUiXpiCtSSQ",
+            "korean_name": "아이리 칸나",
+            "english_name": "Airi Kanna",
+            "is_graduated": true,
+            "japanese_name": "藍里かんな",
+            "short_korean_name": "칸나",
+            "auto_short_korean_name": "칸나"
+        },
+        {
+            "id": 240,
+            "org": "Stellive",
+            "slug": "arahashi-tabi",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "타비",
+                "뿡댕이",
+                "댕댕이",
+                "닌자타비"
+            ],
+            "channel_id": "UCAHVQ44O81aehLWfy9O6Elw",
+            "korean_name": "아라하시 타비",
+            "english_name": "Arahashi Tabi",
+            "is_graduated": false,
+            "japanese_name": "荒橋タビ",
+            "short_korean_name": "타비",
+            "auto_short_korean_name": "타비"
+        },
+        {
+            "id": 248,
+            "org": "Stellive",
+            "slug": "sakihane-fuya",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "후야"
+            ],
+            "channel_id": "UC0YQnenKBCu5sGb7H61n6HA",
+            "korean_name": "사키하네 후야",
+            "english_name": "Sakihane Fuya",
+            "is_graduated": false,
+            "japanese_name": "咲羽ふうや",
+            "short_korean_name": "후야",
+            "auto_short_korean_name": "후야"
+        },
+        {
+            "id": 241,
+            "org": "Stellive",
+            "slug": "shirayuki-hina",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "히나",
+                "히나피",
+                "공주",
+                "흰눈곰",
+                "존 히나"
+            ],
+            "channel_id": "UC1afpiIuBDcjYlmruAa0HiA",
+            "korean_name": "시라유키 히나",
+            "english_name": "Shirayuki Hina",
+            "is_graduated": false,
+            "japanese_name": "白雪ひな",
+            "short_korean_name": "히나",
+            "auto_short_korean_name": "히나"
+        },
+        {
+            "id": 242,
+            "org": "Stellive",
+            "slug": "neneko-mashiro",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "마시로",
+                "시로",
+                "밍대장",
+                "밍"
+            ],
+            "channel_id": "UC_eeSpMBz8PG4ssdBPnP07g",
+            "korean_name": "네네코 마시로",
+            "english_name": "Neneko Mashiro",
+            "is_graduated": false,
+            "japanese_name": "音々子ましろ",
+            "short_korean_name": "마시로",
+            "auto_short_korean_name": "마시로"
+        },
+        {
+            "id": 244,
+            "org": "Stellive",
+            "slug": "tenko-shibuki",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "",
+            "aliases_ko": [
+                "시부키",
+                "부키",
+                "북대장",
+                "땡코 시부키"
+            ],
+            "channel_id": "UCYxLMfeX1CbMBll9MsGlzmw",
+            "korean_name": "텐코 시부키",
+            "english_name": "Tenko Shibuki",
+            "is_graduated": false,
+            "japanese_name": "天鼓紫吹",
+            "short_korean_name": "시부키",
+            "auto_short_korean_name": "시부키"
+        },
+        {
+            "id": 232,
+            "org": "VSpo",
+            "slug": "hanabusa-lisa",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Cattleya Regina Games",
+            "aliases_ko": [
+                "리사",
+                "리사짱",
+                "하나부사"
+            ],
+            "channel_id": "UCurEA8YoqFwimJcAuSHU0MQ",
+            "korean_name": "하나부사 리사",
+            "english_name": "Hanabusa Lisa",
+            "is_graduated": false,
+            "japanese_name": "英リサ",
+            "short_korean_name": "리사",
+            "auto_short_korean_name": "리사"
+        },
+        {
+            "id": 226,
+            "org": "VSpo",
+            "slug": "tosaki-mimi",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Cattleya Regina Games",
+            "aliases_ko": [
+                "미미",
+                "미미타야",
+                "타야"
+            ],
+            "channel_id": "UCnvVG9RbOW3J6Ifqo-zKLiw",
+            "korean_name": "토사키 미미",
+            "english_name": "Tosaki Mimi",
+            "is_graduated": false,
+            "japanese_name": "兎咲ミミ",
+            "short_korean_name": "미미",
+            "auto_short_korean_name": "미미"
+        },
+        {
+            "id": 215,
+            "org": "VSpo",
+            "slug": "asumi-sena",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Cattleya Regina Games",
+            "aliases_ko": [
+                "세나",
+                "아스미"
+            ],
+            "channel_id": "UCF_U2GCKHvDz52jWdizppIA",
+            "korean_name": "아스미 세나",
+            "english_name": "Asumi Sena",
+            "is_graduated": false,
+            "japanese_name": "空澄セナ",
+            "short_korean_name": "세나",
+            "auto_short_korean_name": "세나"
+        },
+        {
+            "id": 211,
+            "org": "VSpo",
+            "slug": "amayui-moka",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Choumusubi",
+            "aliases_ko": [
+                "모카",
+                "아마유이"
+            ],
+            "channel_id": "UC8vKBjGY2HVfbW9GAmgikWw",
+            "korean_name": "아마유이 모카",
+            "english_name": "Amayui Moka",
+            "is_graduated": false,
+            "japanese_name": "甘結もか",
+            "short_korean_name": "모카",
+            "auto_short_korean_name": "모카"
+        },
+        {
+            "id": 223,
+            "org": "VSpo",
+            "slug": "choya-hanabi",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Choumusubi",
+            "aliases_ko": [
+                "하나비",
+                "초야"
+            ],
+            "channel_id": "UCL9hJsdk9eQa0IlWbFB2oRg",
+            "korean_name": "초야 하나비",
+            "english_name": "Choya Hanabi",
+            "is_graduated": false,
+            "japanese_name": "蝶屋はなび",
+            "short_korean_name": "하나비",
+            "auto_short_korean_name": "하나비"
+        },
+        {
+            "id": 222,
+            "org": "VSpo",
+            "slug": "narin-mikure",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "English",
+            "aliases_ko": [
+                "나린"
+            ],
+            "channel_id": "UCKSpM183c85d5V2cW5qaUjA",
+            "korean_name": "미쿠레 나린",
+            "english_name": "Narin Mikure",
+            "is_graduated": false,
+            "japanese_name": "Narin Mikure",
+            "short_korean_name": "나린",
+            "auto_short_korean_name": "나린"
+        },
+        {
+            "id": 214,
+            "org": "VSpo",
+            "slug": "jira-jisaki",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "English",
+            "aliases_ko": [
+                "지라"
+            ],
+            "channel_id": "UCeCWj-SiJG9SWN6wGORiLmw",
+            "korean_name": "지사키 지라",
+            "english_name": "Jira Jisaki",
+            "is_graduated": false,
+            "japanese_name": "Jira Jisaki",
+            "short_korean_name": "지라",
+            "auto_short_korean_name": "지라"
+        },
+        {
+            "id": 212,
+            "org": "VSpo",
+            "slug": "remia-aotsuki",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "English",
+            "aliases_ko": [
+                "레미아"
+            ],
+            "channel_id": "UCCra1t-eIlO3ULyXQQMD9Xw",
+            "korean_name": "아오츠키 레미아",
+            "english_name": "Remia Aotsuki",
+            "is_graduated": false,
+            "japanese_name": "Remia Aotsuki",
+            "short_korean_name": "레미아",
+            "auto_short_korean_name": "레미아"
+        },
+        {
+            "id": 210,
+            "org": "VSpo",
+            "slug": "riko-solari",
+            "source": "collision_disambiguate_vspo_riko",
+            "status": "active",
+            "suborg": "English",
+            "aliases_ko": [
+                "리코"
+            ],
+            "channel_id": "UC7Xglp1fske9zmRe7Oj8YyA",
+            "korean_name": "솔라리 리코",
+            "english_name": "Riko Solari",
+            "is_graduated": false,
+            "japanese_name": "Riko Solari",
+            "short_korean_name": "솔라리",
+            "auto_short_korean_name": "리코"
+        },
+        {
+            "id": 224,
+            "org": "VSpo",
+            "slug": "arya-kuroha",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "English",
+            "aliases_ko": [
+                "아리야"
+            ],
+            "channel_id": "UCLlJpxXt6L5d-XQ0cDdIyDQ",
+            "korean_name": "쿠로하 아리야",
+            "english_name": "Arya Kuroha",
+            "is_graduated": false,
+            "japanese_name": "Arya Kuroha",
+            "short_korean_name": "아리야",
+            "auto_short_korean_name": "아리야"
+        },
+        {
+            "id": 228,
+            "org": "VSpo",
+            "slug": "eris-suzukami",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "English",
+            "aliases_ko": [
+                "에리스"
+            ],
+            "channel_id": "UCp_3ej2br9l9L1DSoHVDZGw",
+            "korean_name": "스즈카미 에리스",
+            "english_name": "Eris Suzukami",
+            "is_graduated": false,
+            "japanese_name": "Eris Suzukami",
+            "short_korean_name": "에리스",
+            "auto_short_korean_name": "에리스"
+        },
+        {
+            "id": 231,
+            "org": "VSpo",
+            "slug": "sendo-yuuhi",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Hinemosu",
+            "aliases_ko": [
+                "유우히",
+                "센도"
+            ],
+            "channel_id": "UCuDY3ibSP2MFRgf7eo3cojg",
+            "korean_name": "센도 유우히",
+            "english_name": "Sendo Yuuhi",
+            "is_graduated": false,
+            "japanese_name": "千燈ゆうひ",
+            "short_korean_name": "유우히",
+            "auto_short_korean_name": "유우히"
+        },
+        {
+            "id": 234,
+            "org": "VSpo",
+            "slug": "tsumugi-kokage",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Hinemosu",
+            "aliases_ko": [
+                "코카게",
+                "츠무기"
+            ],
+            "channel_id": "UC-WX1CXssCtCtc2TNIRnJzg",
+            "korean_name": "츠무기 코카게",
+            "english_name": "Tsumugi Kokage",
+            "is_graduated": false,
+            "japanese_name": "紡木こかげ",
+            "short_korean_name": "코카게",
+            "auto_short_korean_name": "코카게"
+        },
+        {
+            "id": 235,
+            "org": "VSpo",
+            "slug": "yano-kuromu",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Hinemosu",
+            "aliases_ko": [
+                "쿠로무",
+                "쿠로뭉"
+            ],
+            "channel_id": "UCX4WL24YEOUYd7qDsFSLDOw",
+            "korean_name": "야노 쿠로무",
+            "english_name": "Yano Kuromu",
+            "is_graduated": false,
+            "japanese_name": "夜乃くろむ",
+            "short_korean_name": "쿠로무",
+            "auto_short_korean_name": "쿠로무"
+        },
+        {
+            "id": 217,
+            "org": "VSpo",
+            "slug": "kisaragi-ren",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Iris Black Games",
+            "aliases_ko": [
+                "렌",
+                "렌쿤",
+                "렌짱"
+            ],
+            "channel_id": "UCGWa1dMU_sDCaRQjdabsVgg",
+            "korean_name": "키사라기 렌",
+            "english_name": "Kisaragi Ren",
+            "is_graduated": false,
+            "japanese_name": "如月れん",
+            "short_korean_name": "렌",
+            "auto_short_korean_name": "렌"
+        },
+        {
+            "id": 218,
+            "org": "VSpo",
+            "slug": "kurumi-noah",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Iris Black Games",
+            "aliases_ko": [
+                "노아",
+                "노아짱"
+            ],
+            "channel_id": "UCIcAj6WkJ8vZ7DeJVgmeqKw",
+            "korean_name": "쿠루미 노아",
+            "english_name": "Kurumi Noah",
+            "is_graduated": false,
+            "japanese_name": "胡桃のあ",
+            "short_korean_name": "노아",
+            "auto_short_korean_name": "노아"
+        },
+        {
+            "id": 233,
+            "org": "VSpo",
+            "slug": "tachibana-hinano",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Iris Black Games",
+            "aliases_ko": [
+                "히나노",
+                "히나-노"
+            ],
+            "channel_id": "UCvUc0m317LWTTPZoBQV479A",
+            "korean_name": "타치바나 히나노",
+            "english_name": "Tachibana Hinano",
+            "is_graduated": false,
+            "japanese_name": "橘ひなの",
+            "short_korean_name": "히나노",
+            "auto_short_korean_name": "히나노"
+        },
+        {
+            "id": 216,
+            "org": "VSpo",
+            "slug": "kogara-toto",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Lupinus Virtual Games",
+            "aliases_ko": [
+                "토토",
+                "토토치"
+            ],
+            "channel_id": "UCgTzsBI0DIRopMylJEDqnog",
+            "korean_name": "코가라 토토",
+            "english_name": "Kogara Toto",
+            "is_graduated": false,
+            "japanese_name": "小雀とと",
+            "short_korean_name": "토토",
+            "auto_short_korean_name": "토토"
+        },
+        {
+            "id": 220,
+            "org": "VSpo",
+            "slug": "kaga-nazuna",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Lupinus Virtual Games",
+            "aliases_ko": [
+                "나즈나",
+                "나즈짱"
+            ],
+            "channel_id": "UCiMG6VdScBabPhJ1ZtaVmbw",
+            "korean_name": "카가 나즈나",
+            "english_name": "Kaga Nazuna",
+            "is_graduated": false,
+            "japanese_name": "花芽なずな",
+            "short_korean_name": "나즈나",
+            "auto_short_korean_name": "나즈나"
+        },
+        {
+            "id": 236,
+            "org": "VSpo",
+            "slug": "kaga-sumire",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Lupinus Virtual Games",
+            "aliases_ko": [
+                "스미레",
+                "스-",
+                "스짱"
+            ],
+            "channel_id": "UCyLGcqYs7RsBb3L0SJfzGYA",
+            "korean_name": "카가 스미레",
+            "english_name": "Kaga Sumire",
+            "is_graduated": false,
+            "japanese_name": "花芽すみれ",
+            "short_korean_name": "스미레",
+            "auto_short_korean_name": "스미레"
+        },
+        {
+            "id": 208,
+            "org": "VSpo",
+            "slug": "ichinose-uruha",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Lupinus Virtual Games",
+            "aliases_ko": [
+                "우루하",
+                "노세",
+                "노세짱"
+            ],
+            "channel_id": "UC5LyYg6cCA4yHEYvtUsir3g",
+            "korean_name": "이치노세 우루하",
+            "english_name": "Ichinose Uruha",
+            "is_graduated": false,
+            "japanese_name": "一ノ瀬うるは",
+            "short_korean_name": "우루하",
+            "auto_short_korean_name": "우루하"
+        },
+        {
+            "id": 237,
+            "org": "VSpo",
+            "slug": "komori-met",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "메토",
+                "멧상"
+            ],
+            "channel_id": "UCzUNASdzI4PV5SlqtYwAkKQ",
+            "korean_name": "코모리 메토",
+            "english_name": "Komori Met",
+            "is_graduated": false,
+            "japanese_name": "小森めと",
+            "short_korean_name": "메토",
+            "auto_short_korean_name": "메토"
+        },
+        {
+            "id": 221,
+            "org": "VSpo",
+            "slug": "yakumo-beni",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "베니",
+                "야쿠모"
+            ],
+            "channel_id": "UCjXBuHmWkieBApgBhDuJMMQ",
+            "korean_name": "야쿠모 베니",
+            "english_name": "Yakumo Beni",
+            "is_graduated": false,
+            "japanese_name": "八雲べに",
+            "short_korean_name": "베니",
+            "auto_short_korean_name": "베니"
+        },
+        {
+            "id": 229,
+            "org": "VSpo",
+            "slug": "aizawa-ema",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "에마",
+                "에마타소"
+            ],
+            "channel_id": "UCPkKpOHxEDcwmUAnRpIu-Ng",
+            "korean_name": "아이자와 에마",
+            "english_name": "Aizawa Ema",
+            "is_graduated": false,
+            "japanese_name": "藍沢エマ",
+            "short_korean_name": "에마",
+            "auto_short_korean_name": "에마"
+        },
+        {
+            "id": 219,
+            "org": "VSpo",
+            "slug": "nekota-tsuna",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "츠나",
+                "네코타츠나",
+                "눈보라"
+            ],
+            "channel_id": "UCIjdfjcSaEgdjwbgjxC3ZWg",
+            "korean_name": "네코타 츠나",
+            "english_name": "Nekota Tsuna",
+            "is_graduated": false,
+            "japanese_name": "猫汰つな",
+            "short_korean_name": "츠나",
+            "auto_short_korean_name": "츠나"
+        },
+        {
+            "id": 227,
+            "org": "VSpo",
+            "slug": "tatsumaki-chise",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "치세",
+                "타츠마키"
+            ],
+            "channel_id": "UCoW8qQy80mKH0RJTKAK-nNA",
+            "korean_name": "타츠마키 치세",
+            "english_name": "Tatsumaki Chise",
+            "is_graduated": false,
+            "japanese_name": "龍巻ちせ",
+            "short_korean_name": "치세",
+            "auto_short_korean_name": "치세"
+        },
+        {
+            "id": 225,
+            "org": "VSpo",
+            "slug": "kaminari-qpi",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "큐피",
+                "큐짱"
+            ],
+            "channel_id": "UCMp55EbT_ZlqiMS3lCj01BQ",
+            "korean_name": "카미나리 큐피",
+            "english_name": "Kaminari Qpi",
+            "is_graduated": false,
+            "japanese_name": "神成きゅぴ",
+            "short_korean_name": "큐피",
+            "auto_short_korean_name": "큐피"
+        },
+        {
+            "id": 209,
+            "org": "VSpo",
+            "slug": "shiranami-ramune",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "라무네",
+                "라무치"
+            ],
+            "channel_id": "UC61OwuYOVuKkpKnid-43Twg",
+            "korean_name": "시라나미 라무네",
+            "english_name": "Shiranami Ramune",
+            "is_graduated": false,
+            "japanese_name": "白波らむね",
+            "short_korean_name": "라무네",
+            "auto_short_korean_name": "라무네"
+        },
+        {
+            "id": 207,
+            "org": "VSpo",
+            "slug": "ginjo-saine",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "사이네",
+                "긴조"
+            ],
+            "channel_id": "UC2xXx1m1jeL0W84_0jTg-Yw",
+            "korean_name": "긴조 사이네",
+            "english_name": "Ginjo Saine",
+            "is_graduated": false,
+            "japanese_name": "銀城サイネ",
+            "short_korean_name": "사이네",
+            "auto_short_korean_name": "사이네"
+        },
+        {
+            "id": 230,
+            "org": "VSpo",
+            "slug": "yumeno-akari",
+            "source": "auto_last_korean_token",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "아카리",
+                "아카링"
+            ],
+            "channel_id": "UCS5l_Y0oMVTjEos2LuyeSZQ",
+            "korean_name": "유메노 아카리",
+            "english_name": "Yumeno Akari",
+            "is_graduated": false,
+            "japanese_name": "夢野あかり",
+            "short_korean_name": "아카리",
+            "auto_short_korean_name": "아카리"
+        },
+        {
+            "id": 213,
+            "org": "VSpo",
+            "slug": "shinomiya-runa",
+            "source": "collision_disambiguate_vspo_runa",
+            "status": "active",
+            "suborg": "Solo",
+            "aliases_ko": [
+                "루나",
+                "시노미야"
+            ],
+            "channel_id": "UCD5W21JqNMv_tV9nfjvF9sw",
+            "korean_name": "시노미야 루나",
+            "english_name": "Shinomiya Runa",
+            "is_graduated": false,
+            "japanese_name": "紫宮るな",
+            "short_korean_name": "시노미야",
+            "auto_short_korean_name": "루나"
+        }
+    ],
+    "intended_use": "KakaoLink item description member_name rendering",
+    "source_table": "members",
+    "generated_at_kst": "2026-05-16T11:42:41"
+}

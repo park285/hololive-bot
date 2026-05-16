@@ -30,7 +30,7 @@ import (
 
 func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	query := `
-		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
+		SELECT id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 		       status, is_graduated, aliases, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE channel_id = $1
@@ -46,7 +46,7 @@ func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*do
 
 func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Member, error) {
 	query := `
-		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
+		SELECT id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 		       status, is_graduated, aliases, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE english_name = $1
@@ -62,7 +62,7 @@ func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Membe
 
 func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
 	query := `
-		SELECT m.id, m.slug, m.channel_id, m.english_name, m.japanese_name, m.korean_name,
+		SELECT m.id, m.slug, m.channel_id, m.english_name, m.japanese_name, m.korean_name, m.short_korean_name,
 		       m.status, m.is_graduated, m.aliases, m.org, m.suborg, m.sync_source, m.twitch_user_id
 		FROM members m
 		WHERE m.aliases->'ko' ? $1
@@ -113,7 +113,7 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 
 func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	query := `
-		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
+		SELECT id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 		       status, is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id
 		FROM members
 		ORDER BY english_name
@@ -134,7 +134,7 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 	}
 
 	query := `
-		SELECT id, channel_id, english_name, japanese_name, korean_name,
+		SELECT id, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 		       is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE channel_id = ANY($1::text[])
@@ -151,7 +151,7 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 
 func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	query := `
-		SELECT id, channel_id, english_name, japanese_name, korean_name,
+		SELECT id, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 		       is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE channel_id = $1
@@ -168,7 +168,7 @@ func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelI
 // 검색 대상: english_name, korean_name, aliases->>'ko', aliases->>'ja'
 func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.Member, error) {
 	query := `
-		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
+		SELECT id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 		       status, is_graduated, aliases, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE LOWER(english_name) = LOWER($1)
@@ -188,7 +188,7 @@ func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.
 
 func (r *Repository) FindByNameAndOrg(ctx context.Context, name, org string) (*domain.Member, error) {
 	query := `
-		SELECT id, slug, channel_id, english_name, japanese_name, korean_name,
+		SELECT id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 		       status, is_graduated, aliases, org, suborg, sync_source, twitch_user_id
 		FROM members
 		WHERE (LOWER(english_name) = LOWER($1)

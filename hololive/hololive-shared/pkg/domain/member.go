@@ -31,19 +31,20 @@ type Aliases struct {
 }
 
 type Member struct {
-	ID             int      `json:"id,omitempty"`
-	ChannelID      string   `json:"channelId"`
-	Name           string   `json:"name"`
-	Aliases        *Aliases `json:"aliases,omitempty"`
-	NameJa         string   `json:"nameJa,omitempty"`
-	NameKo         string   `json:"nameKo,omitempty"`
-	IsGraduated    bool     `json:"isGraduated,omitempty"`
-	Photo          string   `json:"photo,omitempty"`          // YouTube 프로필 이미지 URL (고화질)
-	Org            string   `json:"org,omitempty"`            // 그룹명 (Hololive, Nijisanji, VSPO, Independents)
-	Suborg         string   `json:"suborg,omitempty"`         // 서브그룹 (예: EN, JP, KR)
-	SyncSource     string   `json:"sync_source,omitempty"`    // 동기화 소스 (holodex, manual)
-	ChzzkChannelID string   `json:"chzzkChannelId,omitempty"` // Chzzk 채널 ID
-	TwitchUserID   string   `json:"twitchUserId,omitempty"`   // Twitch User ID (immutable)
+	ID              int      `json:"id,omitempty"`
+	ChannelID       string   `json:"channelId"`
+	Name            string   `json:"name"`
+	Aliases         *Aliases `json:"aliases,omitempty"`
+	NameJa          string   `json:"nameJa,omitempty"`
+	NameKo          string   `json:"nameKo,omitempty"`
+	ShortKoreanName string   `json:"shortKoreanName,omitempty"`
+	IsGraduated     bool     `json:"isGraduated,omitempty"`
+	Photo           string   `json:"photo,omitempty"`          // YouTube 프로필 이미지 URL (고화질)
+	Org             string   `json:"org,omitempty"`            // 그룹명 (Hololive, Nijisanji, VSPO, Independents)
+	Suborg          string   `json:"suborg,omitempty"`         // 서브그룹 (예: EN, JP, KR)
+	SyncSource      string   `json:"sync_source,omitempty"`    // 동기화 소스 (holodex, manual)
+	ChzzkChannelID  string   `json:"chzzkChannelId,omitempty"` // Chzzk 채널 ID
+	TwitchUserID    string   `json:"twitchUserId,omitempty"`   // Twitch User ID (immutable)
 }
 
 func (m *Member) GetAllAliases() []string {
