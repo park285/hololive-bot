@@ -1,6 +1,8 @@
 module github.com/kapu/hololive-llm-sched
 
-go 1.26.3
+go 1.26.2
+
+toolchain go1.26.3
 
 require (
 	github.com/gin-gonic/gin v1.12.0

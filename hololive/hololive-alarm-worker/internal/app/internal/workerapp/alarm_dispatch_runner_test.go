@@ -128,7 +128,7 @@ func TestAlarmDispatchRunnerRunOnceSendsKaringContentListRequest(t *testing.T) {
 	assert.Equal(t, "https://youtube.com/watch?v=stream-1", item.URL)
 	assert.Equal(t, "Test Member", item.MemberName)
 	assert.Equal(t, "Test Channel", item.ChannelName)
-	assert.Equal(t, string(iris.KaringStreamStatusLive), item.Status)
+	assert.Equal(t, iris.KaringStreamStatusLive, item.Status)
 	assert.Equal(t, start.Format(time.RFC3339), item.StartAt)
 	assert.Equal(t, thumbnail, item.ThumbnailURL)
 	assert.Equal(t, "youtube", item.Platform)
@@ -154,7 +154,7 @@ func TestAlarmDispatchRunnerUpcomingKaringRequestPreservesMinuteWindow(t *testin
 	assert.Equal(t, "10분 후 시작", req.ExtraArgs["time_left"])
 	require.Len(t, req.Items, 1)
 	item := req.Items[0]
-	assert.Equal(t, string(iris.KaringStreamStatusUpcoming), item.Status)
+	assert.Equal(t, iris.KaringStreamStatusUpcoming, item.Status)
 	assert.Equal(t, start.Format(time.RFC3339), item.StartAt)
 }
 
@@ -194,7 +194,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.
 	assert.Equal(t, "https://www.youtube.com/post/UgkxPost", item.URL)
 	assert.Equal(t, "Community Member", item.MemberName)
 	assert.Equal(t, "Community Member", item.ChannelName)
-	assert.Equal(t, "커뮤니티", item.Status)
+	assert.Equal(t, "커뮤니티", string(item.Status))
 	assert.Equal(t, publishedAt.Format(time.RFC3339), item.StartAt)
 	assert.Equal(t, "youtube", item.Platform)
 }
@@ -261,7 +261,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T
 			require.Len(t, req.Items, 1)
 			item := req.Items[0]
 			assert.Equal(t, tc.wantTitle, item.Title)
-			assert.Equal(t, tc.wantStatus, item.Status)
+			assert.Equal(t, tc.wantStatus, string(item.Status))
 			assert.Equal(t, tc.wantURL, item.URL)
 		})
 	}

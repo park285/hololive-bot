@@ -110,16 +110,16 @@ func resolveAlarmDispatchKaringChannelName(notification domain.AlarmNotification
 	return fallback
 }
 
-func resolveAlarmDispatchKaringStatus(notification domain.AlarmNotification) string {
+func resolveAlarmDispatchKaringStatus(notification domain.AlarmNotification) iris.KaringStreamStatus {
 	if notification.Stream != nil {
 		if notification.Stream.Status == domain.StreamStatusLive || notification.Stream.StartActual != nil {
-			return string(iris.KaringStreamStatusLive)
+			return iris.KaringStreamStatusLive
 		}
 	}
 	if notification.MinutesUntil > 0 {
-		return string(iris.KaringStreamStatusUpcoming)
+		return iris.KaringStreamStatusUpcoming
 	}
-	return string(iris.KaringStreamStatusLive)
+	return iris.KaringStreamStatusLive
 }
 
 func resolveAlarmDispatchKaringStartAt(stream *domain.Stream) string {
@@ -238,7 +238,7 @@ func buildAlarmDispatchCommunityOutboxKaringContentItem(
 		URL:         fmt.Sprintf("https://www.youtube.com/post/%s", postID),
 		MemberName:  memberName,
 		ChannelName: memberName,
-		Status:      "커뮤니티",
+		Status:      iris.KaringStreamStatus("커뮤니티"),
 		StartAt:     alarmDispatchKaringTimeString(data.PublishedAt),
 		Platform:    "youtube",
 	}, nil
@@ -258,26 +258,26 @@ func alarmDispatchVideoOutboxURL(kind domain.OutboxKind, videoID string) string 
 	return fmt.Sprintf("https://youtu.be/%s", videoID)
 }
 
-var alarmDispatchVideoOutboxStatusByKind = map[domain.OutboxKind]string{
-	domain.OutboxKindNewShort: "쇼츠",
-	domain.OutboxKindNewVideo: "새 영상",
+var alarmDispatchVideoOutboxStatusByKind = map[domain.OutboxKind]iris.KaringStreamStatus{
+	domain.OutboxKindNewShort: iris.KaringStreamStatus("쇼츠"),
+	domain.OutboxKindNewVideo: iris.KaringStreamStatus("새 영상"),
 }
 
-func alarmDispatchVideoOutboxStatus(kind domain.OutboxKind, data alarmDispatchKaringVideoPayload) string {
+func alarmDispatchVideoOutboxStatus(kind domain.OutboxKind, data alarmDispatchKaringVideoPayload) iris.KaringStreamStatus {
 	if status, ok := alarmDispatchVideoOutboxStatusByKind[kind]; ok {
 		return status
 	}
 	if kind != domain.OutboxKindLiveStream {
-		return "알림"
+		return iris.KaringStreamStatus("알림")
 	}
 	return alarmDispatchLiveOutboxStatus(data.PublishedAt)
 }
 
-func alarmDispatchLiveOutboxStatus(publishedAt *time.Time) string {
+func alarmDispatchLiveOutboxStatus(publishedAt *time.Time) iris.KaringStreamStatus {
 	if publishedAt == nil {
-		return string(iris.KaringStreamStatusUpcoming)
+		return iris.KaringStreamStatusUpcoming
 	}
-	return string(iris.KaringStreamStatusLive)
+	return iris.KaringStreamStatusLive
 }
 
 func alarmDispatchKaringTimeString(value *time.Time) string {

@@ -144,6 +144,16 @@ check_go_toolchain() {
     fi
 }
 
+ensure_go_mod_toolchains() {
+    local required="${GO_REQUIRED_VERSION:-go1.26.3}"
+    local module
+
+    go mod edit -toolchain="${required}"
+    for module in "${GO_MODULES[@]}"; do
+        (cd "${module}" && go mod edit -toolchain="${required}")
+    done
+}
+
 check_go_work_sync() {
     local before
     local after
@@ -153,6 +163,7 @@ check_go_work_sync() {
 
     before="$(workspace_metadata_files | snapshot_files)"
     go work sync
+    ensure_go_mod_toolchains
     after="$(workspace_metadata_files | snapshot_files)"
     if [[ "${before}" != "${after}" ]]; then
         echo "go work sync changed workspace or module metadata; commit the sync result" >&2
@@ -181,6 +192,8 @@ check_gofmt() {
 check_go_fix() {
     local tmp_dir
     tmp_dir="$(mktemp -d)"
+    local iris_client_go_dir
+    iris_client_go_dir="${IRIS_CLIENT_GO_WORKSPACE_PATH:-${ROOT_DIR}/../iris-client-go}"
 
     mkdir -p "${tmp_dir}/repo"
     tar \
@@ -193,6 +206,18 @@ check_go_fix() {
         --exclude=.serena \
         --exclude=.gemini \
         -C "${ROOT_DIR}" -cf - . | tar -C "${tmp_dir}/repo" -xf -
+
+    if grep -q '../iris-client-go' "${ROOT_DIR}/go.work"; then
+        if [[ ! -d "${iris_client_go_dir}" ]]; then
+            echo "active iris-client-go workspace not found: ${iris_client_go_dir}" >&2
+            rm -rf "${tmp_dir}"
+            exit 1
+        fi
+        mkdir -p "${tmp_dir}/iris-client-go"
+        tar \
+            --exclude=.git \
+            -C "${iris_client_go_dir}" -cf - . | tar -C "${tmp_dir}/iris-client-go" -xf -
+    fi
 
     (cd "${tmp_dir}/repo" && go fix "${GO_PACKAGES[@]}")
 
@@ -216,10 +241,26 @@ check_go_fix() {
 }
 
 check_go_mod_tidy() {
+    local before
+    local after
     local module
+    local sync_files=()
+
+    mapfile -t sync_files < <(workspace_metadata_files)
+    before="$(workspace_metadata_files | snapshot_files)"
+
     for module in "${GO_MODULES[@]}"; do
-        run_step "go mod tidy -diff: ${module}" bash -c "cd '$module' && go mod tidy -diff"
+        run_step "go mod tidy: ${module}" bash -c "cd '$module' && go mod tidy"
     done
+
+    ensure_go_mod_toolchains
+    after="$(workspace_metadata_files | snapshot_files)"
+    if [[ "${before}" != "${after}" ]]; then
+        echo "go mod tidy changed workspace or module metadata; commit the tidy result" >&2
+        git diff -- "${sync_files[@]}" >&2
+        git status --short -- "${sync_files[@]}" >&2
+        exit 1
+    fi
 }
 
 check_staticcheck() {

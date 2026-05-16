@@ -300,3 +300,63 @@ func TestRuntimeIrisClient_SendMessageAccepted_ReturnsRequestID(t *testing.T) {
 		t.Fatalf("response = %+v, want queued reply-123", resp)
 	}
 }
+
+func TestRuntimeIrisClient_SendKaringHololive_ForwardsRequest(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotRequest iris.KaringHololiveRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.Header.Get(iris.HeaderIrisSignature) == "" {
+			t.Fatal("missing iris signature")
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		streamCount := 1
+		if err := json.NewEncoder(w).Encode(iris.KaringDryRunResponse{
+			OK:          true,
+			DryRun:      true,
+			TemplateID:  133220,
+			StreamCount: &streamCount,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewRuntimeIrisClient(
+		server.URL,
+		"bot-token",
+		"",
+		nil,
+		iris.WithBotControlToken("bot-control-secret"),
+		iris.WithHTTPClient(server.Client()),
+	)
+	resp, err := client.SendKaringHololive(context.Background(), iris.KaringHololiveRequest{
+		Streams: []iris.KaringHololiveStream{{
+			Title:  "test stream",
+			URL:    "https://www.youtube.com/watch?v=video000001",
+			Status: iris.KaringStreamStatusUpcoming,
+		}},
+		ExtraArgs: iris.KaringTemplateArgs{"time_left": "10 minutes"},
+		DryRun:    true,
+	})
+	if err != nil {
+		t.Fatalf("SendKaringHololive() error = %v", err)
+	}
+
+	if gotPath != iris.PathKaringHololive {
+		t.Fatalf("path = %q, want %q", gotPath, iris.PathKaringHololive)
+	}
+	if len(gotRequest.Streams) != 1 || gotRequest.Streams[0].Status != iris.KaringStreamStatusUpcoming {
+		t.Fatalf("Streams = %+v", gotRequest.Streams)
+	}
+	if gotRequest.ExtraArgs["time_left"] != "10 minutes" {
+		t.Fatalf("ExtraArgs[time_left] = %q, want 10 minutes", gotRequest.ExtraArgs["time_left"])
+	}
+	if resp == nil || !resp.OK || resp.StreamCount == nil || *resp.StreamCount != 1 {
+		t.Fatalf("response = %+v, want stream count 1", resp)
+	}
+}
