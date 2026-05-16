@@ -1,8 +1,9 @@
-go 1.26.3
+go 1.26.2
 
 toolchain go1.26.3
 
 use (
+	../iris-client-go
 	./
 	./hololive/hololive-admin-api
 	./hololive/hololive-alarm-worker

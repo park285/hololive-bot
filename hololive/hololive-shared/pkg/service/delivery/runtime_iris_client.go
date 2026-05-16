@@ -136,6 +136,14 @@ func (c *RuntimeIrisClient) SendKaringContentList(ctx context.Context, req iris.
 	return client.SendKaringContentList(ctx, req)
 }
 
+func (c *RuntimeIrisClient) SendKaringHololive(ctx context.Context, req iris.KaringHololiveRequest) (*iris.KaringDryRunResponse, error) {
+	client, err := c.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return client.SendKaringHololive(ctx, req)
+}
+
 func (c *RuntimeIrisClient) currentClient() (*iris.H2CClient, error) {
 	if c == nil {
 		return nil, fmt.Errorf("runtime iris client: client is nil")

@@ -1,6 +1,8 @@
 module github.com/kapu/hololive-stream-ingester
 
-go 1.26.3
+go 1.26.2
+
+toolchain go1.26.3
 
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
