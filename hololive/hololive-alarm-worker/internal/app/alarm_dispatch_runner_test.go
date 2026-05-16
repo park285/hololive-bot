@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/park285/iris-client-go/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,9 +76,11 @@ func (c *alarmDispatchRunnerTestConsumer) Requeue(_ context.Context, envelopes [
 }
 
 type alarmDispatchRunnerTestSender struct {
-	fail     bool
-	roomID   string
-	messages []string
+	fail           bool
+	roomID         string
+	messages       []string
+	karingRoomID   string
+	karingRequests []iris.KaringContentListRequest
 }
 
 func (s *alarmDispatchRunnerTestSender) SendMessage(_ context.Context, roomID, message string) error {
@@ -87,6 +90,181 @@ func (s *alarmDispatchRunnerTestSender) SendMessage(_ context.Context, roomID, m
 		return errAlarmDispatchRunnerTestSend
 	}
 	return nil
+}
+
+func (s *alarmDispatchRunnerTestSender) SendKaringContentList(_ context.Context, roomID string, req iris.KaringContentListRequest) error {
+	s.karingRoomID = roomID
+	s.karingRequests = append(s.karingRequests, req)
+	if s.fail {
+		return errAlarmDispatchRunnerTestSend
+	}
+	return nil
+}
+
+func TestAlarmDispatchRunnerRunOnceSendsKaringContentListRequest(t *testing.T) {
+	start := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	thumbnail := "https://i.ytimg.com/vi/stream-1/maxresdefault.jpg"
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.Notification.Stream.ChannelName = "Test Channel"
+	envelope.Notification.Stream.StartActual = &start
+	envelope.Notification.Stream.Thumbnail = &thumbnail
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Equal(t, "room-1", sender.karingRoomID)
+	require.Len(t, sender.karingRequests, 1)
+	req := sender.karingRequests[0]
+	assert.Equal(t, "room-1", req.ReceiverName)
+	assert.Equal(t, "라이브 시작", req.ExtraArgs["alarm_title"])
+	assert.Equal(t, "지금 시작", req.ExtraArgs["time_left"])
+	require.Len(t, req.Items, 1)
+	item := req.Items[0]
+	assert.Equal(t, "Test Stream", item.Title)
+	assert.Equal(t, "https://youtube.com/watch?v=stream-1", item.URL)
+	assert.Equal(t, "Test Member", item.MemberName)
+	assert.Equal(t, "Test Channel", item.ChannelName)
+	assert.Equal(t, string(iris.KaringStreamStatusLive), item.Status)
+	assert.Equal(t, start.Format(time.RFC3339), item.StartAt)
+	assert.Equal(t, thumbnail, item.ThumbnailURL)
+	assert.Equal(t, "youtube", item.Platform)
+}
+
+func TestAlarmDispatchRunnerUpcomingKaringRequestPreservesMinuteWindow(t *testing.T) {
+	start := time.Date(2026, 5, 16, 12, 10, 0, 0, time.UTC)
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.Notification.MinutesUntil = 10
+	envelope.Notification.Stream.Status = domain.StreamStatusUpcoming
+	envelope.Notification.Stream.StartScheduled = &start
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, sender.karingRequests, 1)
+	req := sender.karingRequests[0]
+	assert.Equal(t, "방송 10분 전 알림", req.ExtraArgs["alarm_title"])
+	assert.Equal(t, "10분 후 시작", req.ExtraArgs["time_left"])
+	require.Len(t, req.Items, 1)
+	item := req.Items[0]
+	assert.Equal(t, string(iris.KaringStreamStatusUpcoming), item.Status)
+	assert.Equal(t, start.Format(time.RFC3339), item.StartAt)
+}
+
+func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.T) {
+	publishedAt := time.Date(2026, 5, 16, 10, 30, 0, 0, time.UTC)
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
+	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
+		Kind:       domain.OutboxKindCommunityPost,
+		AlarmType:  domain.AlarmTypeCommunity,
+		ChannelID:  "UCtest",
+		MemberName: "Community Member",
+		Items: []domain.YouTubeOutboxItem{{
+			OutboxID:  1,
+			ContentID: "UgkxPost",
+			Payload:   `{"post_id":"UgkxPost","content_text":"새 커뮤니티 공지입니다\n두번째줄","published_at":"` + publishedAt.Format(time.RFC3339Nano) + `"}`,
+		}},
+	}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	assert.Equal(t, "room-1", sender.karingRoomID)
+	require.Len(t, sender.karingRequests, 1)
+	req := sender.karingRequests[0]
+	assert.Equal(t, "room-1", req.ReceiverName)
+	assert.Equal(t, "커뮤니티 알림", req.ExtraArgs["alarm_title"])
+	assert.Equal(t, "새 커뮤니티", req.ExtraArgs["time_left"])
+	require.Len(t, req.Items, 1)
+	item := req.Items[0]
+	assert.Equal(t, "새 커뮤니티 공지입니다", item.Title)
+	assert.Equal(t, "https://www.youtube.com/post/UgkxPost", item.URL)
+	assert.Equal(t, "Community Member", item.MemberName)
+	assert.Equal(t, "Community Member", item.ChannelName)
+	assert.Equal(t, "커뮤니티", item.Status)
+	assert.Equal(t, publishedAt.Format(time.RFC3339), item.StartAt)
+	assert.Equal(t, "youtube", item.Platform)
+}
+
+func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T) {
+	testCases := []struct {
+		name         string
+		kind         domain.OutboxKind
+		payload      string
+		wantTitle    string
+		wantStatus   string
+		wantAlarm    string
+		wantTimeLeft string
+		wantURL      string
+	}{
+		{
+			name:         "new video",
+			kind:         domain.OutboxKindNewVideo,
+			payload:      `{"video_id":"video000001","title":"새 영상 제목"}`,
+			wantTitle:    "새 영상 제목",
+			wantStatus:   "새 영상",
+			wantAlarm:    "새 영상",
+			wantTimeLeft: "새 영상",
+			wantURL:      "https://youtu.be/video000001",
+		},
+		{
+			name:         "new short",
+			kind:         domain.OutboxKindNewShort,
+			payload:      `{"video_id":"short000001","title":"쇼츠 제목"}`,
+			wantTitle:    "쇼츠 제목",
+			wantStatus:   "쇼츠",
+			wantAlarm:    "쇼츠 알림",
+			wantTimeLeft: "새 쇼츠",
+			wantURL:      "https://www.youtube.com/shorts/short000001",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+			envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
+			envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
+				Kind:       tc.kind,
+				AlarmType:  tc.kind.ToAlarmType(),
+				ChannelID:  "UCtest",
+				MemberName: "Content Member",
+				Items: []domain.YouTubeOutboxItem{{
+					OutboxID:  1,
+					ContentID: "content-1",
+					Payload:   tc.payload,
+				}},
+			}
+			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
+			sender := &alarmDispatchRunnerTestSender{}
+			runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+			processed, err := runner.runOnce(t.Context())
+
+			require.NoError(t, err)
+			assert.True(t, processed)
+			require.Len(t, sender.karingRequests, 1)
+			req := sender.karingRequests[0]
+			assert.Equal(t, tc.wantAlarm, req.ExtraArgs["alarm_title"])
+			assert.Equal(t, tc.wantTimeLeft, req.ExtraArgs["time_left"])
+			require.Len(t, req.Items, 1)
+			item := req.Items[0]
+			assert.Equal(t, tc.wantTitle, item.Title)
+			assert.Equal(t, tc.wantStatus, item.Status)
+			assert.Equal(t, tc.wantURL, item.URL)
+		})
+	}
 }
 
 func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
@@ -101,10 +279,22 @@ func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	assert.Equal(t, "room-1", sender.roomID)
 	require.Len(t, sender.messages, 1)
 	assert.Contains(t, sender.messages[0], "방송 시작")
+	assert.Empty(t, sender.karingRequests)
 	assert.Len(t, consumer.markSending, 1)
 	assert.Len(t, consumer.markDispatched, 1)
 	assert.Empty(t, consumer.scheduledRetry)
 	assert.Empty(t, consumer.movedDLQ)
+}
+
+func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
+	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "")
+	assert.False(t, parseAlarmDispatchKaringEnabled())
+
+	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
+	assert.True(t, parseAlarmDispatchKaringEnabled())
+
+	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
+	assert.False(t, parseAlarmDispatchKaringEnabled())
 }
 
 func TestAlarmDispatchRunnerRunOnceSchedulesRetryOnSendFailure(t *testing.T) {
@@ -174,6 +364,7 @@ func TestAlarmDispatchRunnerRetriesRenderFailureBeforeMarkSending(t *testing.T) 
 	assert.Empty(t, consumer.markSending)
 	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, sender.messages)
+	assert.Empty(t, sender.karingRequests)
 }
 
 func TestAlarmDispatchRunnerDoesNotRetryMarkDispatchedFailureAfterSend(t *testing.T) {
