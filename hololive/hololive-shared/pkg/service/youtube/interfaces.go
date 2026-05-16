@@ -20,18 +20,11 @@
 
 package youtube
 
-import "context"
+import (
+	apiservice "github.com/kapu/hololive-shared/pkg/service/youtube/internal/apiservice"
+	milestonescheduler "github.com/kapu/hololive-shared/pkg/service/youtube/internal/milestonescheduler"
+)
 
-// 외부 모듈은 구체 구현(serviceImpl)에 직접 의존하지 않고 이 인터페이스를 통해 주입받는다.
-// 필요한 메서드만 남겨 이동·테스트·모킹 비용을 낮춘다.
-type Service interface {
-	SetScraperProxyEnabled(enabled bool) bool
-	ScraperProxyEnabled() bool
-	GetChannelStatistics(ctx context.Context, channelIDs []string) (map[string]*ChannelStats, error)
-	GetRecentVideos(ctx context.Context, channelID string, maxResults int64) ([]string, error)
-}
+type Service = apiservice.Service
 
-type Scheduler interface {
-	Start(ctx context.Context)
-	Stop()
-}
+type Scheduler = milestonescheduler.Scheduler

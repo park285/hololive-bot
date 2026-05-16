@@ -1,0 +1,94 @@
+package scraper
+
+import scraping "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/scraping"
+
+type BackoffState = scraping.BackoffState
+type BrowserSnapshotConfig = scraping.BrowserSnapshotConfig
+type BrowserSnapshotFetcher = scraping.BrowserSnapshotFetcher
+type ChannelSourceHealth = scraping.ChannelSourceHealth
+type ChannelHealthPolicy = scraping.ChannelHealthPolicy
+type ChannelHealthStore = scraping.ChannelHealthStore
+type FetchPolicy = scraping.FetchPolicy
+type CooldownError = scraping.CooldownError
+type Client = scraping.Client
+type ClientOption = scraping.ClientOption
+type FailureReason = scraping.FailureReason
+type FailureSource = scraping.FailureSource
+type FailureDetail = scraping.FailureDetail
+type FetcherEngine = scraping.FetcherEngine
+type ParserDriftError = scraping.ParserDriftError
+type ProxyConfig = scraping.ProxyConfig
+type RateLimiter = scraping.RateLimiter
+type Snapshot = scraping.Snapshot
+type SnapshotSink = scraping.SnapshotSink
+type SnapshotPolicy = scraping.SnapshotPolicy
+type FileSnapshotSink = scraping.FileSnapshotSink
+type ChannelStats = scraping.ChannelStats
+type ChannelSnippet = scraping.ChannelSnippet
+type Thumbnail = scraping.Thumbnail
+type UpcomingEvent = scraping.UpcomingEvent
+type Video = scraping.Video
+type CommunityPost = scraping.CommunityPost
+type Playlist = scraping.Playlist
+type Short = scraping.Short
+
+const (
+	FetchPageMaxAttempts            = scraping.FetchPageMaxAttempts
+	FailureReasonNone               = scraping.FailureReasonNone
+	FailureReasonRateLimited        = scraping.FailureReasonRateLimited
+	FailureReasonForbidden          = scraping.FailureReasonForbidden
+	FailureReasonCooldown           = scraping.FailureReasonCooldown
+	FailureReasonTimeout            = scraping.FailureReasonTimeout
+	FailureReasonTransport          = scraping.FailureReasonTransport
+	FailureReasonHTTPStatus         = scraping.FailureReasonHTTPStatus
+	FailureReasonParserDrift        = scraping.FailureReasonParserDrift
+	FailureReasonEmptyResponse      = scraping.FailureReasonEmptyResponse
+	FailureReasonChannelNotFound    = scraping.FailureReasonChannelNotFound
+	FailureReasonChannelUnavailable = scraping.FailureReasonChannelUnavailable
+	FailureReasonContextCanceled    = scraping.FailureReasonContextCanceled
+	FailureReasonUnknown            = scraping.FailureReasonUnknown
+	FailureSourceHTML               = scraping.FailureSourceHTML
+	FailureSourceRSS                = scraping.FailureSourceRSS
+	FailureSourceAPI                = scraping.FailureSourceAPI
+	FailureSourceBrowserSnapshot    = scraping.FailureSourceBrowserSnapshot
+	FetcherEngineNetHTTP            = scraping.FetcherEngineNetHTTP
+	FetcherEngineGoScrapy           = scraping.FetcherEngineGoScrapy
+	FetcherEngineBrowserSnapshot    = scraping.FetcherEngineBrowserSnapshot
+)
+
+var DefaultFetchPolicy = scraping.DefaultFetchPolicy
+var HighFrequencyChannelFetchPolicy = scraping.HighFrequencyChannelFetchPolicy
+var MetadataResolveFetchPolicy = scraping.MetadataResolveFetchPolicy
+var ErrRateLimited = scraping.ErrRateLimited
+var ErrForbidden = scraping.ErrForbidden
+var ErrTransientCooldown = scraping.ErrTransientCooldown
+var ErrChannelNotFound = scraping.ErrChannelNotFound
+var ErrChannelUnavailable = scraping.ErrChannelUnavailable
+var ErrPublishedAtNotFound = scraping.ErrPublishedAtNotFound
+var ErrCommunityPublishedAtNotFound = scraping.ErrCommunityPublishedAtNotFound
+var ErrParserDrift = scraping.ErrParserDrift
+var ErrYtInitialDataNotFound = scraping.ErrYtInitialDataNotFound
+
+var NewBackoffState = scraping.NewBackoffState
+var NewBrowserSnapshotFetcher = scraping.NewBrowserSnapshotFetcher
+var DefaultChannelHealthPolicy = scraping.DefaultChannelHealthPolicy
+var NewChannelHealthStore = scraping.NewChannelHealthStore
+var WithHTTPClient = scraping.WithHTTPClient
+var WithUAProvider = scraping.WithUAProvider
+var WithRateLimiter = scraping.WithRateLimiter
+var WithStateStore = scraping.WithStateStore
+var WithFetcherEngine = scraping.WithFetcherEngine
+var WithChannelHealthPolicy = scraping.WithChannelHealthPolicy
+var WithChannelHealthDisabled = scraping.WithChannelHealthDisabled
+var WithSnapshotSink = scraping.WithSnapshotSink
+var WithSnapshotPolicy = scraping.WithSnapshotPolicy
+var WithBrowserSnapshotFetcher = scraping.WithBrowserSnapshotFetcher
+var NewClient = scraping.NewClient
+var ClassifyFailure = scraping.ClassifyFailure
+var NewParserDriftError = scraping.NewParserDriftError
+var IsParserDriftError = scraping.IsParserDriftError
+var WithProxy = scraping.WithProxy
+var NewRateLimiter = scraping.NewRateLimiter
+var DefaultSnapshotPolicy = scraping.DefaultSnapshotPolicy
+var SnapshotID = scraping.SnapshotID
+var NewFileSnapshotSink = scraping.NewFileSnapshotSink

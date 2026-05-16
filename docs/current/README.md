@@ -40,6 +40,8 @@
 - `architecture/README.md`
 - `architecture/ci-gates.md`
 - `architecture/llm-work-rules.md`
+- `architecture/app-bootstrap-boundary-guide.md`
+- `architecture/review-bundles.md`
 
 ## Compatibility Bridges
 

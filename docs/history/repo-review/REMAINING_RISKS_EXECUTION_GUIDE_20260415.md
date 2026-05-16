@@ -87,7 +87,7 @@
 ### R2-2. current docs SSOT sync
 닫힘.
 
-- `docs/current/APP_BOOTSTRAP_BOUNDARY_GUIDE.md` 는 현재 경계 상태를 반영한다.
+- `docs/current/architecture/app-bootstrap-boundary-guide.md` 는 현재 경계 상태를 반영한다.
 - `docs/current/README.md` 는 종료 기록 문서를 현재 SSOT 목록으로 유지한다.
 
 ## 3. 검증 증거

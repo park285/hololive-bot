@@ -76,7 +76,7 @@ Subscribe/unsubscribe success currently returns `{"status":"subscribed"}` or `{"
 
 ## Tests
 
-- Provider route tests: `hololive/hololive-llm-sched/internal/app/providers_major_event_routes_test.go`
+- Provider route tests: `hololive/hololive-llm-sched/internal/app/internal/runtime/providers_major_event_routes_test.go`
 - Consumer client tests: `hololive/hololive-kakao-bot-go/internal/service/majoreventclient/client_test.go`
 
 ## Known gaps

@@ -218,15 +218,15 @@ go run ./hololive/hololive-stream-ingester/cmd/ops/youtube-community-shorts shor
 
 ## Source Of Truth
 
-- 운영 채널 계산: `hololive/hololive-stream-ingester/internal/app/channel_target_validation.go`
-- baseline 수집: `hololive/hololive-stream-ingester/internal/app/community_shorts_target_baseline_build.go`
-- repo-known official roster data: `hololive/hololive-shared/pkg/domain/data/official_talents.json`
-- repo-known official channel profile data: `hololive/hololive-shared/pkg/domain/data/official_profiles_raw.json`
+- 운영 채널 계산: `hololive/hololive-stream-ingester/internal/communityshorts/target_baseline.go`
+- baseline 수집: `hololive/hololive-stream-ingester/internal/communityshorts/target_baseline.go`
+- repo-known official roster data: `hololive/hololive-shared/pkg/domain/internal/model/data/official_talents.json`
+- repo-known official channel profile data: `hololive/hololive-shared/pkg/domain/internal/model/data/official_profiles_raw.json`
 - manual non-Hololive member roster seed: `hololive/hololive-kakao-bot-go/scripts/migrations/016-add-multi-group-support.sql`, `017-add-stellive-chzzk-support.sql`, `018-add-twitch-user-id-and-vspo-members.sql`, `040_unify_indie_org.sql`
 - typed subscriber key: `hololive/hololive-shared/pkg/service/alarm/keys/keys.go`
 - canonical post ID 정규화: `hololive/hololive-shared/pkg/service/youtube/contentid/canonical.go`
-- send-count / observation 조인: `hololive/hololive-shared/pkg/service/youtube/outbox/delivery_post_send_counts.go`
-- sent-history dataset collection: `hololive/hololive-stream-ingester/internal/app/community_shorts_alarm_sent_history_dataset.go`
+- send-count / observation 조인: `hololive/hololive-shared/pkg/service/youtube/outbox/internal/delivery/delivery_post_send_counts.go`
+- sent-history dataset collection: `hololive/hololive-stream-ingester/internal/ops/communityshorts/internal/reports/community_shorts_alarm_sent_history_dataset.go`
 - observation frozen baseline schema: `hololive/hololive-kakao-bot-go/scripts/migrations/054_create_youtube_community_shorts_observation_post_baselines.sql`
 - single-send state schema: `hololive/hololive-kakao-bot-go/scripts/migrations/055_create_youtube_community_shorts_alarm_states.sql`
 - channel summary time-basis note: `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_CHANNEL_SUMMARY_LAST_24H.md`

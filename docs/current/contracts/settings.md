@@ -86,7 +86,7 @@ Known update types:
 
 - Contract constants: `hololive/hololive-shared/pkg/contracts/settings/contracts_test.go`
 - Dispatcher behavior: `hololive/hololive-shared/pkg/service/configsub/dispatcher_test.go`
-- Runtime subscriber wiring: `hololive/hololive-llm-sched/internal/app/bootstrap_llm_scheduler_config_subscriber_test.go`
+- Runtime subscriber wiring: `hololive/hololive-llm-sched/internal/app/internal/runtime/bootstrap_llm_scheduler_config_subscriber_test.go`
 
 ## Known gaps
 

@@ -8,6 +8,8 @@
 - `llm-work-rules.md` - LLM 문서/계약 작업 규칙
 - `repo-tree-policy.md` - repository tree classification and cleanup policy
 - `repo-refactor-audit.md` - active refactor findings, completed cleanup, and deferred risk register
+- `app-bootstrap-boundary-guide.md` - Kakao bot bootstrap boundary guide
+- `review-bundles.md` - review source/full bundle export policy
 
 ## Gate Assets
 

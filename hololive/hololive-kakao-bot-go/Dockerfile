@@ -57,7 +57,7 @@ RUN \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ../hololive-stream-ingester/cmd/runtime/healthcheck && \
     mkdir -p /dist/internal/domain && \
-    cp -r ../hololive-shared/pkg/domain/data /dist/internal/domain/ && \
+    cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/ && \
     cp config.example.json official_japanese_names.json /dist/
 
 FROM gcr.io/distroless/static-debian12@sha256:20bc6c0bc4d625a22a8fde3e55f6515709b32055ef8fb9cfbddaa06d1760f838

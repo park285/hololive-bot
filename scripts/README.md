@@ -17,7 +17,9 @@ PR/릴리스 전 경계 게이트와 릴리스 노트 렌더링 도구입니다.
   - `check-shared-go-boundary.sh`
   - `check-shared-go-packages.sh`
   - `check-go-compat-adapters.sh`
+  - `check-go-generic-internal-package-names.sh`
   - `export-go-workspace-import-graph.sh`
+  - `check-current-docs-root-allowlist.sh`
   - `check-go-alarm-contracts.sh`
   - `check-go-trigger-route-hardcoding.sh`
   - `check-go-module-loc.sh`
