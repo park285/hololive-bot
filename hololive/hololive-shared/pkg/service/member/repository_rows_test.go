@@ -59,6 +59,47 @@ func newTestMemberRepository() *Repository {
 	return &Repository{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 }
 
+func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
+	repo := newTestMemberRepository()
+	rows := &fakeMemberRows{rows: []fakeMemberRow{
+		{scan: func(dest ...any) error {
+			if len(dest) != 15 {
+				return errors.New("scan destination count mismatch")
+			}
+			*dest[0].(*int) = 1
+			*dest[1].(*string) = "ookami-mio"
+			channelID := "UC_MIO"
+			*dest[2].(**string) = &channelID
+			*dest[3].(*string) = "Ookami Mio"
+			*dest[4].(**string) = nil
+			koreanName := "오오카미 미오"
+			*dest[5].(**string) = &koreanName
+			shortKoreanName := "미오"
+			*dest[6].(**string) = &shortKoreanName
+			*dest[7].(*string) = "active"
+			*dest[8].(*bool) = false
+			*dest[9].(*[]byte) = []byte(`{"ko":["미오"]}`)
+			*dest[10].(**string) = nil
+			*dest[11].(*string) = "hololive"
+			*dest[12].(**string) = nil
+			*dest[13].(*string) = "holodex"
+			*dest[14].(**string) = nil
+			return nil
+		}},
+	}}
+
+	members, err := repo.collectAllMembersFromRows(rows)
+	if err != nil {
+		t.Fatalf("collectAllMembersFromRows error = %v, want nil", err)
+	}
+	if len(members) != 1 || members[0] == nil {
+		t.Fatalf("members = %#v, want one member", members)
+	}
+	if members[0].ShortKoreanName != "미오" {
+		t.Fatalf("ShortKoreanName = %q, want 미오", members[0].ShortKoreanName)
+	}
+}
+
 func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	repo := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
@@ -70,14 +111,15 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 			*dest[3].(*string) = "Suisei"
 			*dest[4].(**string) = nil
 			*dest[5].(**string) = nil
-			*dest[6].(*string) = "active"
-			*dest[7].(*bool) = false
-			*dest[8].(*[]byte) = []byte("not-json")
-			*dest[9].(**string) = nil
-			*dest[10].(*string) = "hololive"
-			*dest[11].(**string) = nil
-			*dest[12].(*string) = "holodex"
-			*dest[13].(**string) = nil
+			*dest[6].(**string) = nil
+			*dest[7].(*string) = "active"
+			*dest[8].(*bool) = false
+			*dest[9].(*[]byte) = []byte("not-json")
+			*dest[10].(**string) = nil
+			*dest[11].(*string) = "hololive"
+			*dest[12].(**string) = nil
+			*dest[13].(*string) = "holodex"
+			*dest[14].(**string) = nil
 			return nil
 		}},
 		{scan: func(dest ...any) error {
@@ -88,14 +130,15 @@ func TestCollectAllMembersFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 			*dest[3].(*string) = "Miko"
 			*dest[4].(**string) = nil
 			*dest[5].(**string) = nil
-			*dest[6].(*string) = "active"
-			*dest[7].(*bool) = false
-			*dest[8].(*[]byte) = []byte(`{"ko":["미코"]}`)
-			*dest[9].(**string) = nil
-			*dest[10].(*string) = "hololive"
-			*dest[11].(**string) = nil
-			*dest[12].(*string) = "holodex"
-			*dest[13].(**string) = nil
+			*dest[6].(**string) = nil
+			*dest[7].(*string) = "active"
+			*dest[8].(*bool) = false
+			*dest[9].(*[]byte) = []byte(`{"ko":["미코"]}`)
+			*dest[10].(**string) = nil
+			*dest[11].(*string) = "hololive"
+			*dest[12].(**string) = nil
+			*dest[13].(*string) = "holodex"
+			*dest[14].(**string) = nil
 			return nil
 		}},
 	}}
@@ -125,14 +168,15 @@ func TestCollectMembersWithPhotoFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 			*dest[2].(*string) = "Miko"
 			*dest[3].(**string) = nil
 			*dest[4].(**string) = nil
-			*dest[5].(*bool) = false
-			*dest[6].(*[]byte) = []byte(`{"ko":["미코"]}`)
+			*dest[5].(**string) = nil
+			*dest[6].(*bool) = false
+			*dest[7].(*[]byte) = []byte(`{"ko":["미코"]}`)
 			photo := "https://example.com/miko.jpg"
-			*dest[7].(**string) = &photo
-			*dest[8].(*string) = "hololive"
-			*dest[9].(**string) = nil
-			*dest[10].(*string) = "holodex"
-			*dest[11].(**string) = nil
+			*dest[8].(**string) = &photo
+			*dest[9].(*string) = "hololive"
+			*dest[10].(**string) = nil
+			*dest[11].(*string) = "holodex"
+			*dest[12].(**string) = nil
 			return nil
 		}},
 	}}
@@ -161,13 +205,14 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 			*dest[3].(*string) = "Suisei"
 			*dest[4].(**string) = nil
 			*dest[5].(**string) = nil
-			*dest[6].(*string) = "active"
-			*dest[7].(*bool) = false
-			*dest[8].(*[]byte) = []byte(`{"ko":["스이세이"]}`)
-			*dest[9].(*string) = "hololive"
-			*dest[10].(**string) = nil
-			*dest[11].(*string) = "holodex"
-			*dest[12].(**string) = nil
+			*dest[6].(**string) = nil
+			*dest[7].(*string) = "active"
+			*dest[8].(*bool) = false
+			*dest[9].(*[]byte) = []byte(`{"ko":["스이세이"]}`)
+			*dest[10].(*string) = "hololive"
+			*dest[11].(**string) = nil
+			*dest[12].(*string) = "holodex"
+			*dest[13].(**string) = nil
 			return nil
 		}},
 		{scan: func(dest ...any) error {
@@ -178,13 +223,14 @@ func TestCollectMembersByNameFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 			*dest[3].(*string) = "Miko"
 			*dest[4].(**string) = nil
 			*dest[5].(**string) = nil
-			*dest[6].(*string) = "active"
-			*dest[7].(*bool) = false
-			*dest[8].(*[]byte) = []byte("not-json")
-			*dest[9].(*string) = "hololive"
-			*dest[10].(**string) = nil
-			*dest[11].(*string) = "holodex"
-			*dest[12].(**string) = nil
+			*dest[6].(**string) = nil
+			*dest[7].(*string) = "active"
+			*dest[8].(*bool) = false
+			*dest[9].(*[]byte) = []byte("not-json")
+			*dest[10].(*string) = "hololive"
+			*dest[11].(**string) = nil
+			*dest[12].(*string) = "holodex"
+			*dest[13].(**string) = nil
 			return nil
 		}},
 	}}
