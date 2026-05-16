@@ -192,6 +192,27 @@ func TestRepositorySource_GetAllMembersQuerySelectsPhoto(t *testing.T) {
 	}
 }
 
+func TestRepositorySource_MemberQueriesSelectShortKoreanName(t *testing.T) {
+	t.Parallel()
+
+	file := loadRepositoryAST(t)
+	for _, funcName := range []string{
+		"FindByChannelID",
+		"FindByName",
+		"FindByAlias",
+		"GetAllMembers",
+		"GetMembersWithPhoto",
+		"GetMemberWithPhotoByChannelID",
+		"FindAllByName",
+		"FindByNameAndOrg",
+	} {
+		query := queryLiteralFromFunc(t, findRepositoryFunc(t, file, funcName))
+		if !strings.Contains(query, "short_korean_name") {
+			t.Fatalf("%s query must select short_korean_name column, query=%q", funcName, query)
+		}
+	}
+}
+
 func TestRepositorySource_ScanMemberCarriesMetadataAndPhoto(t *testing.T) {
 	t.Parallel()
 
@@ -199,14 +220,14 @@ func TestRepositorySource_ScanMemberCarriesMetadataAndPhoto(t *testing.T) {
 	fn := findRepositoryFunc(t, file, "scanMember")
 
 	params := paramNames(fn)
-	for _, want := range []string{"org", "suborg", "syncSource", "photo"} {
+	for _, want := range []string{"org", "suborg", "syncSource", "photo", "shortKoreanName"} {
 		if !slices.Contains(params, want) {
 			t.Fatalf("scanMember must accept %s parameter, params=%v", want, params)
 		}
 	}
 
 	args := scanMemberForwardedArgs(t, fn)
-	for _, want := range []string{"photo", "org", "suborg", "syncSource"} {
+	for _, want := range []string{"photo", "org", "suborg", "syncSource", "shortKoreanName"} {
 		if !slices.Contains(args, want) {
 			t.Fatalf("scanMember must forward %s to scanMemberWithPhoto, args=%v", want, args)
 		}
@@ -219,7 +240,7 @@ func TestRepositorySource_ScanMemberWithPhotoSetsMetadataFields(t *testing.T) {
 	file := loadRepositoryAST(t)
 	fields := assignedMemberFields(findRepositoryFunc(t, file, "scanMemberWithPhoto"))
 
-	for _, want := range []string{"Org", "Suborg", "SyncSource"} {
+	for _, want := range []string{"Org", "Suborg", "SyncSource", "ShortKoreanName"} {
 		if !fields[want] {
 			t.Fatalf("scanMemberWithPhoto must assign %s field, assigned=%v", want, fields)
 		}
