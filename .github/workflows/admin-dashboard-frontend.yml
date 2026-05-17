@@ -31,7 +31,7 @@ env:
 
 jobs:
   frontend-quality:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 20
     defaults:
       run:

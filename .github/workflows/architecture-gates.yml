@@ -20,7 +20,7 @@ concurrency:
 jobs:
   architecture-gates:
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -60,8 +60,10 @@ jobs:
 
       - name: Install architecture gate tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ripgrep
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ripgrep
+          fi
 
       - name: Run architecture boundary gates (M0 + M1 + M2 + M4 + M6)
         run: ./scripts/architecture/ci-boundary-gate.sh
@@ -88,7 +90,7 @@ jobs:
 
   alarm-dispatch-postgres-integration:
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     services:
       postgres:
         image: postgres:16

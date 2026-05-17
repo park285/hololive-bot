@@ -10,7 +10,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/valkey-io/valkey-go"
 )
 
 type CacheWarmSummary struct {
@@ -18,8 +17,6 @@ type CacheWarmSummary struct {
 	RoomCount    int
 	ChannelCount int
 }
-
-type alarmLoader func(context.Context) ([]*domain.Alarm, error)
 
 var loadAllAlarmsFromRepository = func(ctx context.Context, repo *Repository) ([]*domain.Alarm, error) {
 	return repo.LoadAll(ctx)
@@ -48,28 +45,10 @@ func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Cl
 }
 
 func warmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository, rebuild bool) (CacheWarmSummary, error) {
-	operation := "warm"
-	if rebuild {
-		operation = "rebuild"
-	}
-
-	alarms, err := loadAllAlarmsFromRepository(ctx, repo)
+	operation := subscriberCacheWarmOperation(rebuild)
+	warmData, err := loadSubscriberCacheWarmData(ctx, repo, operation)
 	if err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("%s subscriber cache from repository: load alarms: %w", operation, err)
-	}
-
-	warmData := newSubscriberCacheWarmData(alarms)
-	for _, alarmRecord := range alarms {
-		warmData.addAlarm(alarmRecord)
-	}
-	warmData.summary = warmData.finish()
-
-	memberNames, err := loadMemberNamesFromRepository(ctx, repo)
-	if err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("%s subscriber cache from repository: load member names: %w", operation, err)
-	}
-	if len(memberNames) > 0 {
-		warmData.memberNames = memberNames
+		return CacheWarmSummary{}, err
 	}
 
 	if rebuild {
@@ -85,26 +64,34 @@ func warmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Clien
 	return warmData.summary, nil
 }
 
-func warmSubscriberCacheFromLoader(ctx context.Context, cacheSvc cache.Client, load alarmLoader) (CacheWarmSummary, error) {
-	alarms, err := load(ctx)
-	if err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("warm subscriber cache from repository: load alarms: %w", err)
+func subscriberCacheWarmOperation(rebuild bool) string {
+	if rebuild {
+		return "rebuild"
 	}
-
-	return WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
+	return "warm"
 }
 
-func rebuildSubscriberCacheFromLoader(ctx context.Context, cacheSvc cache.Client, load alarmLoader) (CacheWarmSummary, error) {
-	alarms, err := load(ctx)
+func loadSubscriberCacheWarmData(ctx context.Context, repo *Repository, operation string) (*subscriberCacheWarmData, error) {
+	alarms, err := loadAllAlarmsFromRepository(ctx, repo)
 	if err != nil {
-		return CacheWarmSummary{}, fmt.Errorf("rebuild subscriber cache from repository: load alarms: %w", err)
+		return nil, fmt.Errorf("%s subscriber cache from repository: load alarms: %w", operation, err)
 	}
 
-	if err := clearSubscriberCacheNamespace(ctx, cacheSvc); err != nil {
-		return CacheWarmSummary{}, err
+	warmData := newSubscriberCacheWarmData(alarms)
+	for _, alarmRecord := range alarms {
+		warmData.addAlarm(alarmRecord)
+	}
+	warmData.summary = warmData.finish()
+
+	memberNames, err := loadMemberNamesFromRepository(ctx, repo)
+	if err != nil {
+		return nil, fmt.Errorf("%s subscriber cache from repository: load member names: %w", operation, err)
+	}
+	if len(memberNames) > 0 {
+		warmData.memberNames = memberNames
 	}
 
-	return WarmSubscriberCacheFromAlarms(ctx, cacheSvc, alarms)
+	return warmData, nil
 }
 
 func clearSubscriberCacheNamespace(ctx context.Context, cacheSvc cache.Client) error {
@@ -312,106 +299,4 @@ func markSubscriberCacheEmptyState(ctx context.Context, cacheSvc cache.Client, e
 	}
 
 	return cacheSvc.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
-}
-
-func writeWarmSet(ctx context.Context, cacheSvc cache.Client, key string, members []string, scope string) error {
-	return writeWarmSetMap(ctx, cacheSvc, map[string][]string{key: members}, scope)
-}
-
-func writeWarmSetMap(ctx context.Context, cacheSvc cache.Client, setMembers map[string][]string, scope string) error {
-	if len(setMembers) == 0 {
-		return nil
-	}
-
-	if !supportsWarmSetBatch(cacheSvc) {
-		return writeWarmSetMapSequential(ctx, cacheSvc, setMembers, scope)
-	}
-
-	return writeWarmSetMapBatch(ctx, cacheSvc, setMembers, scope)
-}
-
-func writeWarmSetMapSequential(ctx context.Context, cacheSvc cache.Client, setMembers map[string][]string, scope string) error {
-	for key, members := range setMembers {
-		dedupedMembers := compactUniqueStrings(members)
-		if len(dedupedMembers) == 0 {
-			continue
-		}
-		if _, err := cacheSvc.SAdd(ctx, key, dedupedMembers); err != nil {
-			return fmt.Errorf("add %s for key %s: %w", scope, key, err)
-		}
-	}
-	return nil
-}
-
-func writeWarmSetMapBatch(ctx context.Context, cacheSvc cache.Client, setMembers map[string][]string, scope string) error {
-	keys := make([]string, 0, len(setMembers))
-	cmds := make([]valkey.Completed, 0, len(setMembers))
-	for key, members := range setMembers {
-		dedupedMembers := compactUniqueStrings(members)
-		if len(dedupedMembers) == 0 {
-			continue
-		}
-		keys = append(keys, key)
-		cmds = append(cmds, cacheSvc.Builder().Sadd().Key(key).Member(dedupedMembers...).Build())
-	}
-	if len(cmds) == 0 {
-		return nil
-	}
-
-	results := cacheSvc.DoMulti(ctx, cmds...)
-	if len(results) != len(cmds) {
-		return fmt.Errorf("add %s: unexpected result count: %d", scope, len(results))
-	}
-	return verifyWarmSetBatchResults(results, keys, scope)
-}
-
-func verifyWarmSetBatchResults(results []valkey.ValkeyResult, keys []string, scope string) error {
-	for i, result := range results {
-		if err := result.Error(); err != nil {
-			return fmt.Errorf("add %s for key %s: %w", scope, keys[i], err)
-		}
-	}
-	return nil
-}
-
-func supportsWarmSetBatch(cacheSvc cache.Client) (ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-
-	builder := cacheSvc.Builder()
-	return builder != (valkey.Builder{})
-}
-
-func writeWarmHash(ctx context.Context, cacheSvc cache.Client, key string, values map[string]string) (err error) {
-	if len(values) == 0 {
-		return nil
-	}
-
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			err = writeWarmHashFields(ctx, cacheSvc, key, values)
-		}
-	}()
-
-	fields := make(map[string]any, len(values))
-	for field, value := range values {
-		fields[field] = value
-	}
-	if err := cacheSvc.HMSet(ctx, key, fields); err == nil {
-		return nil
-	}
-
-	return writeWarmHashFields(ctx, cacheSvc, key, values)
-}
-
-func writeWarmHashFields(ctx context.Context, cacheSvc cache.Client, key string, values map[string]string) error {
-	for field, value := range values {
-		if setErr := cacheSvc.HSet(ctx, key, field, value); setErr != nil {
-			return setErr
-		}
-	}
-	return nil
 }
