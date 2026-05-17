@@ -10,19 +10,39 @@ import (
 	"github.com/park285/iris-client-go/iris"
 )
 
-func buildAlarmDispatchKaringContentListRequest(group alarmDispatchGroup) (iris.KaringContentListRequest, error) {
+const alarmDispatchKaringMaxItemsPerRequest = 4
+
+var alarmDispatchKaringTemplateIDByItemCount = map[int]int64{
+	1: 133220,
+	2: 133223,
+	3: 133222,
+	4: 133218,
+}
+
+func buildAlarmDispatchKaringContentListRequests(group alarmDispatchGroup) ([]iris.KaringContentListRequest, error) {
 	items, err := buildAlarmDispatchKaringContentItems(group)
 	if err != nil {
-		return iris.KaringContentListRequest{}, err
+		return nil, err
 	}
 	if len(items) == 0 {
-		return iris.KaringContentListRequest{}, fmt.Errorf("build alarm dispatch karing content list request: items are empty")
+		return nil, fmt.Errorf("build alarm dispatch karing content list request: items are empty")
 	}
-	return iris.KaringContentListRequest{
-		ReceiverName: group.roomID,
-		Items:        items,
-		ExtraArgs:    buildAlarmDispatchKaringExtraArgs(group, len(items)),
-	}, nil
+	requests := make([]iris.KaringContentListRequest, 0, (len(items)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)
+	for start := 0; start < len(items); start += alarmDispatchKaringMaxItemsPerRequest {
+		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(items))
+		chunk := items[start:end]
+		requests = append(requests, iris.KaringContentListRequest{
+			ReceiverName: group.roomID,
+			Items:        chunk,
+			ExtraArgs:    buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
+			TemplateID:   alarmDispatchKaringTemplateID(len(chunk)),
+		})
+	}
+	return requests, nil
+}
+
+func alarmDispatchKaringTemplateID(itemCount int) int64 {
+	return alarmDispatchKaringTemplateIDByItemCount[itemCount]
 }
 
 func buildAlarmDispatchKaringContentItems(group alarmDispatchGroup) ([]iris.KaringContentItem, error) {

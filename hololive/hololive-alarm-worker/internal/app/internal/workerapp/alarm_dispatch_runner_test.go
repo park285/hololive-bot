@@ -3,6 +3,7 @@ package workerapp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -120,6 +121,7 @@ func TestAlarmDispatchRunnerRunOnceSendsKaringContentListRequest(t *testing.T) {
 	require.Len(t, sender.karingRequests, 1)
 	req := sender.karingRequests[0]
 	assert.Equal(t, "room-1", req.ReceiverName)
+	assert.Equal(t, int64(133220), req.TemplateID)
 	assert.Equal(t, "라이브 시작", req.ExtraArgs["alarm_title"])
 	assert.Equal(t, "지금 시작", req.ExtraArgs["time_left"])
 	require.Len(t, req.Items, 1)
@@ -150,6 +152,7 @@ func TestAlarmDispatchRunnerUpcomingKaringRequestPreservesMinuteWindow(t *testin
 	assert.True(t, processed)
 	require.Len(t, sender.karingRequests, 1)
 	req := sender.karingRequests[0]
+	assert.Equal(t, int64(133220), req.TemplateID)
 	assert.Equal(t, "방송 10분 전 알림", req.ExtraArgs["alarm_title"])
 	assert.Equal(t, "10분 후 시작", req.ExtraArgs["time_left"])
 	require.Len(t, req.Items, 1)
@@ -186,6 +189,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.
 	require.Len(t, sender.karingRequests, 1)
 	req := sender.karingRequests[0]
 	assert.Equal(t, "room-1", req.ReceiverName)
+	assert.Equal(t, int64(133220), req.TemplateID)
 	assert.Equal(t, "커뮤니티 알림", req.ExtraArgs["alarm_title"])
 	assert.Equal(t, "새 커뮤니티", req.ExtraArgs["time_left"])
 	require.Len(t, req.Items, 1)
@@ -256,6 +260,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T
 			assert.True(t, processed)
 			require.Len(t, sender.karingRequests, 1)
 			req := sender.karingRequests[0]
+			assert.Equal(t, int64(133220), req.TemplateID)
 			assert.Equal(t, tc.wantAlarm, req.ExtraArgs["alarm_title"])
 			assert.Equal(t, tc.wantTimeLeft, req.ExtraArgs["time_left"])
 			require.Len(t, req.Items, 1)
@@ -265,6 +270,43 @@ func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T
 			assert.Equal(t, tc.wantURL, item.URL)
 		})
 	}
+}
+
+func TestAlarmDispatchRunnerKaringChunksRequestsByFour(t *testing.T) {
+	envelopes := make([]domain.AlarmQueueEnvelope, 0, 5)
+	for i := range 5 {
+		envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+		envelope.Notification.Channel.Name = fmt.Sprintf("Member %d", i+1)
+		envelope.Notification.Stream.ID = fmt.Sprintf("stream-%d", i+1)
+		envelope.Notification.Stream.Title = fmt.Sprintf("Stream %d", i+1)
+		envelopes = append(envelopes, envelope)
+	}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
+	sender := &alarmDispatchRunnerTestSender{}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, sender.karingRequests, 2)
+	assert.Equal(t, int64(133218), sender.karingRequests[0].TemplateID)
+	assert.Len(t, sender.karingRequests[0].Items, 4)
+	assert.Equal(t, "Stream 1", sender.karingRequests[0].Items[0].Title)
+	assert.Equal(t, "Stream 4", sender.karingRequests[0].Items[3].Title)
+	assert.Equal(t, int64(133220), sender.karingRequests[1].TemplateID)
+	require.Len(t, sender.karingRequests[1].Items, 1)
+	assert.Equal(t, "Stream 5", sender.karingRequests[1].Items[0].Title)
+	assert.Len(t, consumer.markSending, 5)
+	assert.Len(t, consumer.markDispatched, 5)
+}
+
+func TestAlarmDispatchKaringTemplateIDByItemCount(t *testing.T) {
+	assert.Equal(t, int64(133220), alarmDispatchKaringTemplateID(1))
+	assert.Equal(t, int64(133223), alarmDispatchKaringTemplateID(2))
+	assert.Equal(t, int64(133222), alarmDispatchKaringTemplateID(3))
+	assert.Equal(t, int64(133218), alarmDispatchKaringTemplateID(4))
+	assert.Zero(t, alarmDispatchKaringTemplateID(5))
 }
 
 func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
