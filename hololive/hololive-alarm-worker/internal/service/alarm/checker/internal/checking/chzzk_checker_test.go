@@ -145,6 +145,9 @@ func TestChzzkCheckerCheck_DoesNotPreclaimDedup(t *testing.T) {
 		SMembersFunc: func(context.Context, string) ([]string, error) {
 			return []string{"room-1"}, nil
 		},
+		BatchHGetFunc: func(context.Context, string, []string) (map[string]string, error) {
+			return map[string]string{"yt-1": "라덴"}, nil
+		},
 		SetNXFunc: func(context.Context, string, string, time.Duration) (bool, error) {
 			setNXCalls++
 			return false, errors.New("checker must not preclaim dedup")

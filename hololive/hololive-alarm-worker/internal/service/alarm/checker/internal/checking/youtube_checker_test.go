@@ -1096,11 +1096,12 @@ func TestBuildChzzkLiveStream(t *testing.T) {
 	}
 	detectedAt := time.Date(2026, time.March, 2, 10, 35, 0, 0, time.UTC)
 
-	stream := buildChzzkLiveStream("UC_YT", "chzzk123", status, detectedAt)
+	stream := buildChzzkLiveStream("UC_YT", "chzzk123", "라덴", status, detectedAt)
 	require.NotNil(t, stream)
 	assert.Equal(t, domain.StreamStatusLive, stream.Status)
 	assert.Equal(t, "테스트 라이브", stream.Title)
 	assert.Equal(t, "UC_YT", stream.ChannelID)
+	assert.Equal(t, "라덴", stream.ChannelName)
 	assert.True(t, stream.IsChzzkOnly)
 	assert.Contains(t, stream.ChzzkLiveURL, "chzzk123")
 	require.NotNil(t, stream.ViewerCount)
@@ -1112,7 +1113,7 @@ func TestBuildChzzkLiveStream_EmptyTitle(t *testing.T) {
 
 	status := &chzzk.LiveStatusContent{Status: "OPEN"}
 	now := time.Now().UTC()
-	stream := buildChzzkLiveStream("UC_YT", "ch1", status, now)
+	stream := buildChzzkLiveStream("UC_YT", "ch1", "", status, now)
 
 	assert.Contains(t, stream.Title, "치지직 라이브")
 }
