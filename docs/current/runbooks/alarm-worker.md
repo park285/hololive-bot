@@ -33,6 +33,7 @@
 | `YOUTUBE_OUTBOX_DISPATCHER_ENABLED` | YouTube outbox egress enablement | production yes |
 | `DELIVERY_DISPATCHER_ENABLED` | generic notification delivery outbox egress enablement | production yes |
 | `ALARM_WORKER_EGRESS_LEASE_ENABLED` | single-owner proactive egress lease | production yes |
+| `ALARM_DISPATCH_KARING_ENABLED` | alarm dispatch queue egress uses Karing content-list templates | production yes |
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
