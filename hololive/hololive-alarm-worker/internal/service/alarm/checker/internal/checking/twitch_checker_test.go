@@ -236,6 +236,7 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 				t.Context(),
 				tc.loginMappings,
 				tc.subscriberMap,
+				map[string]string{"ch1": "아쿠아"},
 				tc.streamsResponse,
 			)
 			require.NoError(t, err)

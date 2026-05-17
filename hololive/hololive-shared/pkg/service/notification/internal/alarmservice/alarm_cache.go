@@ -51,6 +51,23 @@ func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (st
 	return name, nil
 }
 
+func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID, fallback string) string {
+	provider := as.memberData
+	if provider != nil {
+		if scoped := provider.WithContext(ctx); scoped != nil {
+			provider = scoped
+		}
+		if member := provider.FindMemberByChannelID(channelID); member != nil {
+			for _, candidate := range []string{member.ShortKoreanName, member.NameKo, member.Name} {
+				if name := stringutil.TrimSpace(candidate); name != "" {
+					return name
+				}
+			}
+		}
+	}
+	return stringutil.TrimSpace(fallback)
+}
+
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
 	subscribers, err := sharedalarm.LookupChannelSubscribersByType(ctx, as.cache, channelID, alarmType)
 	if err != nil {

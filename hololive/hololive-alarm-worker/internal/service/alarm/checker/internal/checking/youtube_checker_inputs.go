@@ -46,6 +46,11 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: fetch channels live status: %w", holodexErr)
 	}
 	liveObservedAtByStreamID := mergePersistedLiveSessionStreams(streamsByChannel, persistedSessions)
+	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, dueChannels)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("check youtube streams: load member names: %w", err)
+	}
+	applyMemberNamesToStreams(streamsByChannel, memberNames)
 
 	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, dueChannels)
 	if err != nil {

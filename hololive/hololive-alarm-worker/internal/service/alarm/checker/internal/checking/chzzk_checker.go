@@ -89,13 +89,19 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 		return nil, fmt.Errorf("check chzzk streams: load subscriber rooms: %w", err)
 	}
 
-	return c.collectChzzkNotifications(ctx, channelMappings, subscriberMap, time.Now().UTC())
+	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("check chzzk streams: load member names: %w", err)
+	}
+
+	return c.collectChzzkNotifications(ctx, channelMappings, subscriberMap, memberNames, time.Now().UTC())
 }
 
 func (c *ChzzkChecker) collectChzzkNotifications(
 	ctx context.Context,
 	channelMappings map[string]string,
 	subscriberMap map[string][]string,
+	memberNames map[string]string,
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0)
@@ -111,7 +117,7 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 		}
 
 		eg.Go(func() error {
-			channelNotifications := c.lookupChzzkNotifications(egCtx, job, now)
+			channelNotifications := c.lookupChzzkNotifications(egCtx, job, memberNames, now)
 			if len(channelNotifications) == 0 {
 				return nil
 			}
@@ -131,7 +137,7 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 	return notifications, nil
 }
 
-func (c *ChzzkChecker) lookupChzzkNotifications(ctx context.Context, job chzzkLookupJob, now time.Time) []*domain.AlarmNotification {
+func (c *ChzzkChecker) lookupChzzkNotifications(ctx context.Context, job chzzkLookupJob, memberNames map[string]string, now time.Time) []*domain.AlarmNotification {
 	liveStatus, liveErr := c.chzzkClient.GetLiveStatus(ctx, job.chzzkChannelID)
 	if liveErr != nil {
 		c.logger.Warn("Chzzk live status lookup failed",
@@ -146,7 +152,7 @@ func (c *ChzzkChecker) lookupChzzkNotifications(ctx context.Context, job chzzkLo
 		return nil
 	}
 
-	stream := buildChzzkLiveStream(job.youtubeChannelID, job.chzzkChannelID, liveStatus, now)
+	stream := buildChzzkLiveStream(job.youtubeChannelID, job.chzzkChannelID, memberNames[job.youtubeChannelID], liveStatus, now)
 	if stream == nil {
 		return nil
 	}
@@ -172,6 +178,7 @@ func buildChzzkLiveDedupKey(chzzkChannelID string, detectedAt time.Time) string 
 func buildChzzkLiveStream(
 	youtubeChannelID string,
 	chzzkChannelID string,
+	memberName string,
 	status *chzzk.LiveStatusContent,
 	detectedAt time.Time,
 ) *domain.Stream {
@@ -190,7 +197,7 @@ func buildChzzkLiveStream(
 	streamIdentity := chzzkStableLiveIdentity(chzzkChannelID, status, startAt, title)
 	streamID := fmt.Sprintf("chzzk:%s", streamIdentity)
 
-	channelName := youtubeChannelID
+	channelName := channelNameForMember(youtubeChannelID, memberName, youtubeChannelID)
 	liveURL := fmt.Sprintf("https://chzzk.naver.com/live/%s", chzzkChannelID)
 	link := liveURL
 
