@@ -35,7 +35,7 @@ func (s *IrisMessageSender) SendKaringContentList(ctx context.Context, roomID st
 	if s == nil || s.client == nil {
 		return fmt.Errorf("iris message sender: client is nil")
 	}
-	if strings.TrimSpace(req.ReceiverName) == "" {
+	if strings.TrimSpace(req.ReceiverName) == "" && req.ReceiverRoomID == 0 {
 		req.ReceiverName = roomID
 	}
 	if _, err := s.client.SendKaringContentList(ctx, req); err != nil {
