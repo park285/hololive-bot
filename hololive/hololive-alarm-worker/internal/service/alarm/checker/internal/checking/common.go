@@ -136,19 +136,23 @@ func applyMemberNamesToStreams(streamsByChannel map[string][]*domain.Stream, mem
 			continue
 		}
 		for _, stream := range streams {
-			if stream == nil {
-				continue
-			}
-			stream.ChannelName = memberName
-			if stream.Channel == nil {
-				stream.Channel = &domain.Channel{ID: channelID}
-			}
-			if strings.TrimSpace(stream.Channel.ID) == "" {
-				stream.Channel.ID = channelID
-			}
-			stream.Channel.Name = memberName
+			applyMemberNameToStream(stream, channelID, memberName)
 		}
 	}
+}
+
+func applyMemberNameToStream(stream *domain.Stream, channelID string, memberName string) {
+	if stream == nil {
+		return
+	}
+	stream.ChannelName = memberName
+	if stream.Channel == nil {
+		stream.Channel = &domain.Channel{ID: channelID}
+	}
+	if strings.TrimSpace(stream.Channel.ID) == "" {
+		stream.Channel.ID = channelID
+	}
+	stream.Channel.Name = memberName
 }
 
 func channelNameForMember(channelID string, memberName string, fallback string) string {
