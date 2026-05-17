@@ -301,6 +301,61 @@ func TestAlarmDispatchRunnerKaringChunksRequestsByFour(t *testing.T) {
 	assert.Len(t, consumer.markDispatched, 5)
 }
 
+func TestAlarmDispatchKaringRequestChunkTemplatesByItemCount(t *testing.T) {
+	testCases := []struct {
+		name          string
+		itemCount     int
+		wantTemplates []int64
+		wantItemCount []int
+	}{
+		{name: "one", itemCount: 1, wantTemplates: []int64{133220}, wantItemCount: []int{1}},
+		{name: "two", itemCount: 2, wantTemplates: []int64{133223}, wantItemCount: []int{2}},
+		{name: "three", itemCount: 3, wantTemplates: []int64{133222}, wantItemCount: []int{3}},
+		{name: "four", itemCount: 4, wantTemplates: []int64{133218}, wantItemCount: []int{4}},
+		{name: "five", itemCount: 5, wantTemplates: []int64{133218, 133220}, wantItemCount: []int{4, 1}},
+		{name: "six", itemCount: 6, wantTemplates: []int64{133218, 133223}, wantItemCount: []int{4, 2}},
+		{name: "seven", itemCount: 7, wantTemplates: []int64{133218, 133222}, wantItemCount: []int{4, 3}},
+		{name: "eight", itemCount: 8, wantTemplates: []int64{133218, 133218}, wantItemCount: []int{4, 4}},
+		{name: "nine", itemCount: 9, wantTemplates: []int64{133218, 133218, 133220}, wantItemCount: []int{4, 4, 1}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			envelopes := make([]domain.AlarmQueueEnvelope, 0, tc.itemCount)
+			for i := range tc.itemCount {
+				envelope := alarmDispatchRunnerTestEnvelope("464252100463241", nil)
+				envelope.Notification.Channel.Name = fmt.Sprintf("Member %d", i+1)
+				envelope.Notification.Stream.ID = fmt.Sprintf("stream-%d", i+1)
+				envelope.Notification.Stream.Title = fmt.Sprintf("Stream %d", i+1)
+				envelopes = append(envelopes, envelope)
+			}
+			groups := groupAlarmDispatchEnvelopes(envelopes)
+			require.Len(t, groups, 1)
+
+			requests, err := buildAlarmDispatchKaringContentListRequests(groups[0])
+
+			require.NoError(t, err)
+			require.Len(t, requests, len(tc.wantTemplates))
+			for i, request := range requests {
+				assert.Equal(t, tc.wantTemplates[i], request.TemplateID)
+				assert.Len(t, request.Items, tc.wantItemCount[i])
+				assert.Equal(t, int64(464252100463241), request.ReceiverRoomID)
+				assert.Zero(t, request.ReceiverName)
+			}
+		})
+	}
+}
+
+func TestAlarmDispatchKaringRequestUsesReceiverRoomID(t *testing.T) {
+	group := newAlarmDispatchGroup(alarmDispatchRunnerTestEnvelope("464252100463241", nil))
+
+	requests, err := buildAlarmDispatchKaringContentListRequests(group)
+
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	assert.Zero(t, requests[0].ReceiverName)
+	assert.Equal(t, int64(464252100463241), requests[0].ReceiverRoomID)
+}
+
 func TestAlarmDispatchKaringTemplateIDByItemCount(t *testing.T) {
 	assert.Equal(t, int64(133220), alarmDispatchKaringTemplateID(1))
 	assert.Equal(t, int64(133223), alarmDispatchKaringTemplateID(2))
