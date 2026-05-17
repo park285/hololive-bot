@@ -144,12 +144,18 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 	return r.scanAlarms(rows)
 }
 
-// 해당 채널에 알람을 설정한 적이 있는 레코드에서 member_name을 가져온다.
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
 	query := `
-		SELECT member_name FROM alarms
-		WHERE channel_id = $1 AND member_name IS NOT NULL AND member_name != ''
-		ORDER BY created_at DESC
+		WITH latest_alarm_name AS (
+			SELECT channel_id, member_name
+			FROM alarms
+			WHERE channel_id = $1
+			ORDER BY created_at DESC
+			LIMIT 1
+		)
+		SELECT COALESCE(NULLIF(m.short_korean_name, ''), NULLIF(m.korean_name, ''), NULLIF(a.member_name, ''), '')
+		FROM latest_alarm_name a
+		LEFT JOIN members m ON m.channel_id = a.channel_id
 		LIMIT 1
 	`
 
@@ -206,10 +212,18 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 
 func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, error) {
 	query := `
-		SELECT DISTINCT ON (channel_id) channel_id, member_name
-		FROM alarms
-		WHERE member_name IS NOT NULL AND member_name != ''
-		ORDER BY channel_id, created_at DESC
+		WITH latest_alarm_names AS (
+			SELECT DISTINCT ON (channel_id) channel_id, member_name
+			FROM alarms
+			WHERE channel_id IS NOT NULL AND channel_id != ''
+			ORDER BY channel_id, created_at DESC
+		)
+		SELECT a.channel_id,
+		       COALESCE(NULLIF(m.short_korean_name, ''), NULLIF(m.korean_name, ''), NULLIF(a.member_name, ''), '') AS member_name
+		FROM latest_alarm_names a
+		LEFT JOIN members m ON m.channel_id = a.channel_id
+		WHERE COALESCE(NULLIF(m.short_korean_name, ''), NULLIF(m.korean_name, ''), NULLIF(a.member_name, ''), '') != ''
+		ORDER BY a.channel_id
 	`
 
 	rows, err := r.pool.Query(ctx, query)

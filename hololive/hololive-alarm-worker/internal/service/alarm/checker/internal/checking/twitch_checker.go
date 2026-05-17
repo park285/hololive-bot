@@ -78,6 +78,11 @@ func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification,
 		return nil, fmt.Errorf("check twitch streams: load subscriber rooms: %w", err)
 	}
 
+	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("check twitch streams: load member names: %w", err)
+	}
+
 	loginsToLookup := buildTwitchLookupLogins(loginMappings, subscriberMap)
 	if len(loginsToLookup) == 0 {
 		return []*domain.AlarmNotification{}, nil
@@ -92,7 +97,7 @@ func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification,
 		return []*domain.AlarmNotification{}, nil
 	}
 
-	notifications, err := c.buildLiveNotifications(ctx, loginMappings, subscriberMap, streamsResponse)
+	notifications, err := c.buildLiveNotifications(ctx, loginMappings, subscriberMap, memberNames, streamsResponse)
 	if err != nil {
 		return nil, fmt.Errorf("check twitch streams: build live notifications: %w", err)
 	}
@@ -140,6 +145,7 @@ func (c *TwitchChecker) buildLiveNotifications(
 	_ context.Context,
 	loginMappings map[string]string,
 	subscriberMap map[string][]string,
+	memberNames map[string]string,
 	streamsResponse *twitch.StreamsResponse,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0)
@@ -150,7 +156,7 @@ func (c *TwitchChecker) buildLiveNotifications(
 			continue
 		}
 
-		notifications = append(notifications, buildTwitchStreamNotifications(streamData, loginMappings, subscriberMap)...)
+		notifications = append(notifications, buildTwitchStreamNotifications(streamData, loginMappings, subscriberMap, memberNames)...)
 	}
 
 	return notifications, nil
@@ -160,6 +166,7 @@ func buildTwitchStreamNotifications(
 	streamData *twitch.StreamData,
 	loginMappings map[string]string,
 	subscriberMap map[string][]string,
+	memberNames map[string]string,
 ) []*domain.AlarmNotification {
 	normalizedLogin := stringutil.Normalize(streamData.UserLogin)
 
@@ -173,7 +180,7 @@ func buildTwitchStreamNotifications(
 		return nil
 	}
 
-	stream := buildTwitchLiveStream(youtubeChannelID, streamData)
+	stream := buildTwitchLiveStream(youtubeChannelID, memberNames[youtubeChannelID], streamData)
 	if stream == nil {
 		return nil
 	}
@@ -187,7 +194,7 @@ func buildTwitchLiveDedupKey(userID, streamID string) string {
 	return fmt.Sprintf("%s%s:%s", twitchLiveNotifiedKeyPrefix, userID, streamID)
 }
 
-func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamData) *domain.Stream {
+func buildTwitchLiveStream(youtubeChannelID string, memberName string, streamData *twitch.StreamData) *domain.Stream {
 	if streamData == nil {
 		return nil
 	}
@@ -199,6 +206,7 @@ func buildTwitchLiveStream(youtubeChannelID string, streamData *twitch.StreamDat
 	if channelName == "" {
 		channelName = strings.TrimSpace(streamData.UserLogin)
 	}
+	channelName = channelNameForMember(youtubeChannelID, memberName, channelName)
 
 	title := strings.TrimSpace(streamData.Title)
 	if title == "" {

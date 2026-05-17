@@ -81,9 +81,11 @@ func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (i
 	if err != nil {
 		return 0, err
 	}
-	record.AlarmTypes = alarmTypes
+	cacheRecord := *record
+	cacheRecord.AlarmTypes = alarmTypes
+	cacheRecord.MemberName = as.resolveCacheMemberName(ctx, cacheRecord.ChannelID, cacheRecord.MemberName)
 
-	added, err := as.cacheAlarmAtomic(ctx, record)
+	added, err := as.cacheAlarmAtomic(ctx, &cacheRecord)
 	if err == nil {
 		return added, nil
 	}

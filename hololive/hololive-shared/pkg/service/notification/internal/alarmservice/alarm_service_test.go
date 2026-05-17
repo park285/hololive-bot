@@ -69,6 +69,33 @@ func TestAddAlarm_CacheWrite(t *testing.T) {
 	assert.Equal(t, "테스트 멤버", name)
 }
 
+func TestAddAlarm_CacheWriteUsesShortKoreanMemberName(t *testing.T) {
+	t.Parallel()
+
+	as := newTestAlarmService(t)
+	as.memberData = &mockMemberDataProvider{members: []*domain.Member{{
+		ChannelID:       "UC_TEST",
+		Name:            "Juufuutei Raden",
+		NameKo:          "주후테이 라덴",
+		ShortKoreanName: "라덴",
+	}}}
+
+	added, err := as.AddAlarm(t.Context(), domain.AddAlarmRequest{
+		RoomID:     "room1",
+		UserID:     "user1",
+		ChannelID:  "UC_TEST",
+		MemberName: "Juufuutei Raden",
+		RoomName:   "테스트 방",
+		UserName:   "테스트 사용자",
+	})
+	require.NoError(t, err)
+	require.True(t, added)
+
+	name, err := as.cache.HGet(t.Context(), MemberNameKey, "UC_TEST")
+	require.NoError(t, err)
+	assert.Equal(t, "라덴", name)
+}
+
 func TestAddAlarm_ClearsEmptySubscriberCacheMarker(t *testing.T) {
 	t.Parallel()
 

@@ -25,6 +25,10 @@ var loadAllAlarmsFromRepository = func(ctx context.Context, repo *Repository) ([
 	return repo.LoadAll(ctx)
 }
 
+var loadMemberNamesFromRepository = func(ctx context.Context, repo *Repository) (map[string]string, error) {
+	return repo.GetAllMemberNames(ctx)
+}
+
 const cacheScanBatchSize int64 = 100
 
 func WarmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
@@ -32,9 +36,7 @@ func WarmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Clien
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from repository: repository is nil")
 	}
 
-	return warmSubscriberCacheFromLoader(ctx, cacheSvc, func(ctx context.Context) ([]*domain.Alarm, error) {
-		return loadAllAlarmsFromRepository(ctx, repo)
-	})
+	return warmSubscriberCacheFromRepository(ctx, cacheSvc, repo, false)
 }
 
 func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository) (CacheWarmSummary, error) {
@@ -42,9 +44,45 @@ func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Cl
 		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
 	}
 
-	return rebuildSubscriberCacheFromLoader(ctx, cacheSvc, func(ctx context.Context) ([]*domain.Alarm, error) {
-		return loadAllAlarmsFromRepository(ctx, repo)
-	})
+	return warmSubscriberCacheFromRepository(ctx, cacheSvc, repo, true)
+}
+
+func warmSubscriberCacheFromRepository(ctx context.Context, cacheSvc cache.Client, repo *Repository, rebuild bool) (CacheWarmSummary, error) {
+	operation := "warm"
+	if rebuild {
+		operation = "rebuild"
+	}
+
+	alarms, err := loadAllAlarmsFromRepository(ctx, repo)
+	if err != nil {
+		return CacheWarmSummary{}, fmt.Errorf("%s subscriber cache from repository: load alarms: %w", operation, err)
+	}
+
+	warmData := newSubscriberCacheWarmData(alarms)
+	for _, alarmRecord := range alarms {
+		warmData.addAlarm(alarmRecord)
+	}
+	warmData.summary = warmData.finish()
+
+	memberNames, err := loadMemberNamesFromRepository(ctx, repo)
+	if err != nil {
+		return CacheWarmSummary{}, fmt.Errorf("%s subscriber cache from repository: load member names: %w", operation, err)
+	}
+	if len(memberNames) > 0 {
+		warmData.memberNames = memberNames
+	}
+
+	if rebuild {
+		if err := clearSubscriberCacheNamespace(ctx, cacheSvc); err != nil {
+			return CacheWarmSummary{}, err
+		}
+	}
+
+	if err := writeSubscriberCacheWarmData(ctx, cacheSvc, warmData); err != nil {
+		return CacheWarmSummary{}, err
+	}
+
+	return warmData.summary, nil
 }
 
 func warmSubscriberCacheFromLoader(ctx context.Context, cacheSvc cache.Client, load alarmLoader) (CacheWarmSummary, error) {
