@@ -33,9 +33,9 @@ func buildAlarmDispatchKaringContentListRequests(group alarmDispatchGroup) ([]ir
 		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(items))
 		chunk := items[start:end]
 		req := iris.KaringContentListRequest{
-			Items:        chunk,
-			ExtraArgs:    buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
-			TemplateID:   alarmDispatchKaringTemplateID(len(chunk)),
+			Items:      chunk,
+			ExtraArgs:  buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
+			TemplateID: alarmDispatchKaringTemplateID(len(chunk)),
 		}
 		applyAlarmDispatchKaringReceiver(&req, group.roomID)
 		requests = append(requests, req)
