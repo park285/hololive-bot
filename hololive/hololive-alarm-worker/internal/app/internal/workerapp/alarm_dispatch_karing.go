@@ -3,6 +3,7 @@ package workerapp
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,14 +32,27 @@ func buildAlarmDispatchKaringContentListRequests(group alarmDispatchGroup) ([]ir
 	for start := 0; start < len(items); start += alarmDispatchKaringMaxItemsPerRequest {
 		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(items))
 		chunk := items[start:end]
-		requests = append(requests, iris.KaringContentListRequest{
-			ReceiverName: group.roomID,
+		req := iris.KaringContentListRequest{
 			Items:        chunk,
 			ExtraArgs:    buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
 			TemplateID:   alarmDispatchKaringTemplateID(len(chunk)),
-		})
+		}
+		applyAlarmDispatchKaringReceiver(&req, group.roomID)
+		requests = append(requests, req)
 	}
 	return requests, nil
+}
+
+func applyAlarmDispatchKaringReceiver(req *iris.KaringContentListRequest, roomID string) {
+	if req == nil {
+		return
+	}
+	trimmed := strings.TrimSpace(roomID)
+	if receiverRoomID, err := strconv.ParseInt(trimmed, 10, 64); err == nil && receiverRoomID > 0 {
+		req.ReceiverRoomID = receiverRoomID
+		return
+	}
+	req.ReceiverName = trimmed
 }
 
 func alarmDispatchKaringTemplateID(itemCount int) int64 {
