@@ -95,15 +95,17 @@ func (r alarmDispatchRunner) dispatchMessageGroup(ctx context.Context, group ala
 }
 
 func (r alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context, group alarmDispatchGroup) error {
-	req, err := buildAlarmDispatchKaringContentListRequest(group)
+	requests, err := buildAlarmDispatchKaringContentListRequests(group)
 	if err != nil {
 		return r.persistPreSendFailure(ctx, group.envelopes, err)
 	}
 	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
 		return fmt.Errorf("mark alarm dispatch sending: %w", err)
 	}
-	if err := r.sender.SendKaringContentList(ctx, group.roomID, req); err != nil {
-		return r.persistPostSendingFailure(ctx, group.envelopes, err)
+	for _, req := range requests {
+		if err := r.sender.SendKaringContentList(ctx, group.roomID, req); err != nil {
+			return r.persistPostSendingFailure(ctx, group.envelopes, err)
+		}
 	}
 	if err := r.consumer.MarkDispatched(ctx, group.envelopes); err != nil {
 		return fmt.Errorf("mark alarm dispatch sent: %w", err)
