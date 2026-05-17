@@ -1,0 +1,141 @@
+name: Verify
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  GO_REQUIRED_VERSION: "go1.26.3"
+  STATICCHECK_VERSION: "2026.1"
+  GOVULNCHECK_VERSION: "v1.3.0"
+
+jobs:
+  actionlint:
+    runs-on: [self-hosted, linux, x64, hololive-ci]
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-go@v6.4.0
+        with:
+          go-version: "1.26.3"
+
+      - name: Workflow Lint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+  repository-quality-gate:
+    runs-on: [self-hosted, linux, x64, hololive-ci]
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dispatch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dispatch_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-go@v6.4.0
+        with:
+          go-version: "1.26.3"
+          cache-dependency-path: |
+            go.work.sum
+            shared-go/go.sum
+            hololive/hololive-shared/go.sum
+            hololive/hololive-kakao-bot-go/go.sum
+            hololive/hololive-admin-api/go.sum
+            hololive/hololive-alarm-worker/go.sum
+            hololive/hololive-llm-sched/go.sum
+            hololive/hololive-stream-ingester/go.sum
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-02-23
+          components: rustfmt, clippy
+
+      - name: Install CI Tooling
+        run: |
+          if ! command -v rg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ripgrep
+          fi
+
+      - name: Repository Quality Gate
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/dispatch_test?sslmode=disable
+          RUN_DEPENDENCY_HYGIENE: "true"
+          STRICT_STATICCHECK: "true"
+          RUN_RACE_TESTS: "false"
+        run: ./scripts/ci/local-ci.sh
+
+      - name: Upload Quality Evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: repository-quality-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/architecture/go-workspace-import-graph.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  verify:
+    needs:
+      - actionlint
+      - repository-quality-gate
+    if: always()
+    runs-on: [self-hosted, linux, x64, hololive-ci]
+    timeout-minutes: 10
+
+    steps:
+      - name: Final Quality Gate Result
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python3 <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed: list[str] = []
+          lines: list[str] = []
+
+          for name, metadata in sorted(needs.items()):
+              result = metadata.get("result")
+              lines.append(f"{name}: {result}")
+              if result in {"failure", "cancelled"}:
+                  failed.append(f"{name}={result}")
+
+          print("\n".join(lines))
+
+          if failed:
+              print("Final verify failed because required gate jobs failed or were cancelled:", file=sys.stderr)
+              for item in failed:
+                  print(f"- {item}", file=sys.stderr)
+              sys.exit(1)
+
+          print("Final verify passed.")
+          PY

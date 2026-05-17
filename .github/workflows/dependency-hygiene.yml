@@ -16,7 +16,7 @@ env:
 jobs:
   dependency-audit:
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     strategy:
       fail-fast: false
       matrix:

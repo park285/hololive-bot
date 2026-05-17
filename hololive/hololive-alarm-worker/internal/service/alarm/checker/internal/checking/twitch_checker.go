@@ -63,32 +63,12 @@ func NewTwitchChecker(cacheSvc cache.Client, twitchClient *twitch.Client, logger
 
 // Check는 alarm:twitch_logins 매핑 기반으로 Twitch 라이브 알림 후보를 생성한다.
 func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
-	loginMappingsRaw, err := c.cacheSvc.HGetAll(ctx, sharedalarmkeys.TwitchLoginMapKey)
+	inputs, err := c.loadCheckInputs(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("check twitch streams: read login mappings: %w", err)
+		return nil, err
 	}
 
-	loginMappings, youtubeChannelIDs := normalizeTwitchLoginMappings(loginMappingsRaw)
-	if len(loginMappings) == 0 {
-		return []*domain.AlarmNotification{}, nil
-	}
-
-	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
-	if err != nil {
-		return nil, fmt.Errorf("check twitch streams: load subscriber rooms: %w", err)
-	}
-
-	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
-	if err != nil {
-		return nil, fmt.Errorf("check twitch streams: load member names: %w", err)
-	}
-
-	loginsToLookup := buildTwitchLookupLogins(loginMappings, subscriberMap)
-	if len(loginsToLookup) == 0 {
-		return []*domain.AlarmNotification{}, nil
-	}
-
-	streamsResponse, err := c.twitchClient.GetStreams(ctx, loginsToLookup)
+	streamsResponse, err := c.twitchClient.GetStreams(ctx, inputs.loginsToLookup)
 	if err != nil {
 		return nil, fmt.Errorf("check twitch streams: get streams batch: %w", err)
 	}
@@ -97,12 +77,48 @@ func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification,
 		return []*domain.AlarmNotification{}, nil
 	}
 
-	notifications, err := c.buildLiveNotifications(ctx, loginMappings, subscriberMap, memberNames, streamsResponse)
+	notifications, err := c.buildLiveNotifications(ctx, inputs.loginMappings, inputs.subscriberMap, inputs.memberNames, streamsResponse)
 	if err != nil {
 		return nil, fmt.Errorf("check twitch streams: build live notifications: %w", err)
 	}
 
 	return notifications, nil
+}
+
+type twitchCheckInputs struct {
+	loginMappings  map[string]string
+	subscriberMap  map[string][]string
+	memberNames    map[string]string
+	loginsToLookup []string
+}
+
+func (c *TwitchChecker) loadCheckInputs(ctx context.Context) (twitchCheckInputs, error) {
+	loginMappingsRaw, err := c.cacheSvc.HGetAll(ctx, sharedalarmkeys.TwitchLoginMapKey)
+	if err != nil {
+		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: read login mappings: %w", err)
+	}
+
+	loginMappings, youtubeChannelIDs := normalizeTwitchLoginMappings(loginMappingsRaw)
+	if len(loginMappings) == 0 {
+		return twitchCheckInputs{}, nil
+	}
+
+	subscriberMap, err := loadSubscriberRoomsByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	if err != nil {
+		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: load subscriber rooms: %w", err)
+	}
+
+	memberNames, err := loadMemberNamesByChannel(ctx, c.cacheSvc, youtubeChannelIDs)
+	if err != nil {
+		return twitchCheckInputs{}, fmt.Errorf("check twitch streams: load member names: %w", err)
+	}
+
+	return twitchCheckInputs{
+		loginMappings:  loginMappings,
+		subscriberMap:  subscriberMap,
+		memberNames:    memberNames,
+		loginsToLookup: buildTwitchLookupLogins(loginMappings, subscriberMap),
+	}, nil
 }
 
 func normalizeTwitchLoginMappings(loginMappingsRaw map[string]string) (map[string]string, []string) {
