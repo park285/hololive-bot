@@ -115,8 +115,30 @@ func (d *Dispatcher) dispatchGroup(
 	if len(validRows) == 0 {
 		return
 	}
+
+	d.dispatchClaimedGroup(ctx, group, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection, result, mu)
+}
+
+func (d *Dispatcher) dispatchClaimedGroup(
+	ctx context.Context,
+	group deliveryGroup,
+	validRows []domain.YouTubeNotificationDelivery,
+	validOutboxes []domain.YouTubeNotificationOutbox,
+	formattedMessages map[int64]string,
+	formatFailures map[int64]bool,
+	claimSelection deliveryClaimSelection,
+	result *deliveryDispatchResult,
+	mu *sync.Mutex,
+) {
 	if len(validRows) == 1 {
+		if d.dispatchClaimedRowsWithKaringIfSupported(ctx, group.roomID, group.channelID, group.kind, validRows, validOutboxes, claimSelection.claimTokens, "per_room", result, mu) {
+			return
+		}
 		d.dispatchClaimedDeliveryRow(ctx, validRows[0], validOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
+		return
+	}
+
+	if d.dispatchClaimedRowsWithKaringIfSupported(ctx, group.roomID, group.channelID, group.kind, validRows, validOutboxes, claimSelection.claimTokens, "grouped", result, mu) {
 		return
 	}
 
@@ -148,6 +170,9 @@ func (d *Dispatcher) dispatchDeliveryRow(
 	claimSelection := d.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
 	d.applyClaimSelection(result, mu, claimSelection)
 	if len(claimSelection.sendRows) == 0 {
+		return
+	}
+	if d.dispatchClaimedRowsWithKaringIfSupported(ctx, row.RoomID, outbox.ChannelID, outbox.Kind, claimSelection.sendRows, claimSelection.sendOutboxes, claimSelection.claimTokens, "per_room", result, mu) {
 		return
 	}
 

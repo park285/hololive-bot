@@ -121,7 +121,7 @@ func TestAlarmDispatchRunnerRunOnceSendsKaringContentListRequest(t *testing.T) {
 	require.Len(t, sender.karingRequests, 1)
 	req := sender.karingRequests[0]
 	assert.Equal(t, "room-1", req.ReceiverName)
-	assert.Equal(t, int64(133220), req.TemplateID)
+	assert.Equal(t, int64(133266), req.TemplateID)
 	assert.Equal(t, "라이브 시작", req.ExtraArgs["alarm_title"])
 	assert.Equal(t, "지금 시작", req.ExtraArgs["time_left"])
 	require.Len(t, req.Items, 1)
@@ -130,8 +130,8 @@ func TestAlarmDispatchRunnerRunOnceSendsKaringContentListRequest(t *testing.T) {
 	assert.Equal(t, "https://youtube.com/watch?v=stream-1", item.URL)
 	assert.Equal(t, "Test Member", item.MemberName)
 	assert.Equal(t, "Test Channel", item.ChannelName)
-	assert.Equal(t, iris.KaringStreamStatusLive, item.Status)
-	assert.Equal(t, start.Format(time.RFC3339), item.StartAt)
+	assert.Empty(t, item.Status)
+	assert.Equal(t, "05/16 21:00", item.StartAt)
 	assert.Equal(t, thumbnail, item.ThumbnailURL)
 	assert.Equal(t, "youtube", item.Platform)
 }
@@ -152,17 +152,38 @@ func TestAlarmDispatchRunnerUpcomingKaringRequestPreservesMinuteWindow(t *testin
 	assert.True(t, processed)
 	require.Len(t, sender.karingRequests, 1)
 	req := sender.karingRequests[0]
-	assert.Equal(t, int64(133220), req.TemplateID)
+	assert.Equal(t, int64(133266), req.TemplateID)
 	assert.Equal(t, "방송 10분 전 알림", req.ExtraArgs["alarm_title"])
 	assert.Equal(t, "10분 후 시작", req.ExtraArgs["time_left"])
 	require.Len(t, req.Items, 1)
 	item := req.Items[0]
-	assert.Equal(t, iris.KaringStreamStatusUpcoming, item.Status)
-	assert.Equal(t, start.Format(time.RFC3339), item.StartAt)
+	assert.Empty(t, item.Status)
+	assert.Equal(t, "05/16 21:10", item.StartAt)
+}
+
+func TestAlarmDispatchRunnerKaringRequestPreservesConfiguredNickname(t *testing.T) {
+	englishName := "Yuuki Sakuna"
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.Notification.Channel.Name = "사쿠나"
+	envelope.Notification.Channel.EnglishName = &englishName
+	envelope.Notification.Stream.Channel = envelope.Notification.Channel
+	envelope.Notification.Stream.ChannelName = "사쿠나"
+
+	requests, err := buildAlarmDispatchKaringContentListRequests(alarmDispatchGroup{
+		roomID:        "room-1",
+		notifications: []domain.AlarmNotification{envelope.Notification},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	require.Len(t, requests[0].Items, 1)
+	assert.Equal(t, "사쿠나", requests[0].Items[0].MemberName)
+	assert.Equal(t, "사쿠나", requests[0].Items[0].ChannelName)
 }
 
 func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.T) {
 	publishedAt := time.Date(2026, 5, 16, 10, 30, 0, 0, time.UTC)
+	thumbnailURL := "https://yt3.ggpht.com/community-image=s800"
 	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
 	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
 	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
@@ -174,7 +195,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.
 		Items: []domain.YouTubeOutboxItem{{
 			OutboxID:  1,
 			ContentID: "UgkxPost",
-			Payload:   `{"post_id":"UgkxPost","content_text":"새 커뮤니티 공지입니다\n두번째줄","published_at":"` + publishedAt.Format(time.RFC3339Nano) + `"}`,
+			Payload:   `{"post_id":"UgkxPost","content_text":"／\n\n새 커뮤니티 공지입니다\n두번째줄\n＼","images":[{"url":"https://yt3.ggpht.com/community-image=s288","width":288,"height":288},{"url":"` + thumbnailURL + `","width":800,"height":800}],"published_at":"` + publishedAt.Format(time.RFC3339Nano) + `"}`,
 		}},
 	}
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
@@ -189,50 +210,82 @@ func TestAlarmDispatchRunnerYouTubeOutboxCommunitySendsKaringRequest(t *testing.
 	require.Len(t, sender.karingRequests, 1)
 	req := sender.karingRequests[0]
 	assert.Equal(t, "room-1", req.ReceiverName)
-	assert.Equal(t, int64(133220), req.TemplateID)
+	assert.Equal(t, int64(133266), req.TemplateID)
 	assert.Equal(t, "커뮤니티 알림", req.ExtraArgs["alarm_title"])
 	assert.Equal(t, "새 커뮤니티", req.ExtraArgs["time_left"])
 	require.Len(t, req.Items, 1)
 	item := req.Items[0]
-	assert.Equal(t, "새 커뮤니티 공지입니다", item.Title)
+	assert.Equal(t, "새 커뮤니티 공지입니다 두번째줄", item.Title)
 	assert.Equal(t, "https://www.youtube.com/post/UgkxPost", item.URL)
 	assert.Equal(t, "Community Member", item.MemberName)
 	assert.Equal(t, "Community Member", item.ChannelName)
 	assert.Equal(t, "커뮤니티", string(item.Status))
-	assert.Equal(t, publishedAt.Format(time.RFC3339), item.StartAt)
+	assert.Equal(t, "05/16 19:30", item.StartAt)
+	assert.Equal(t, thumbnailURL, item.ThumbnailURL)
 	assert.Equal(t, "youtube", item.Platform)
+}
+
+func TestAlarmDispatchRunnerYouTubeOutboxCommunityNormalizesLiteralNewlines(t *testing.T) {
+	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
+	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
+		Kind:       domain.OutboxKindCommunityPost,
+		AlarmType:  domain.AlarmTypeCommunity,
+		ChannelID:  "UCtest",
+		MemberName: "Community Member",
+		Items: []domain.YouTubeOutboxItem{{
+			OutboxID:  1,
+			ContentID: "UgkxPost",
+			Payload:   `{"post_id":"UgkxPost","content_text":"webpicker community smoke 134905\\nthumbnail/text render check"}`,
+		}},
+	}
+
+	requests, err := buildAlarmDispatchKaringContentListRequests(alarmDispatchGroup{
+		roomID:    "room-1",
+		envelopes: []domain.AlarmQueueEnvelope{envelope},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "커뮤니티 알림", requests[0].ExtraArgs["alarm_title"])
+	require.Len(t, requests[0].Items, 1)
+	assert.Equal(t, "webpicker community smoke 134905 thumbnail/text render check", requests[0].Items[0].Title)
 }
 
 func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T) {
 	testCases := []struct {
-		name         string
-		kind         domain.OutboxKind
-		payload      string
-		wantTitle    string
-		wantStatus   string
-		wantAlarm    string
-		wantTimeLeft string
-		wantURL      string
+		name          string
+		kind          domain.OutboxKind
+		payload       string
+		wantTitle     string
+		wantStatus    string
+		wantAlarm     string
+		wantTimeLeft  string
+		wantURL       string
+		wantThumbnail string
 	}{
 		{
-			name:         "new video",
-			kind:         domain.OutboxKindNewVideo,
-			payload:      `{"video_id":"video000001","title":"새 영상 제목"}`,
-			wantTitle:    "새 영상 제목",
-			wantStatus:   "새 영상",
-			wantAlarm:    "새 영상",
-			wantTimeLeft: "새 영상",
-			wantURL:      "https://youtu.be/video000001",
+			name:          "new video",
+			kind:          domain.OutboxKindNewVideo,
+			payload:       `{"video_id":"video000001","title":"새 영상 제목","thumbnail":[{"url":"https://i.ytimg.com/vi/video000001/mqdefault.jpg","width":320,"height":180},{"url":"https://i.ytimg.com/vi/video000001/maxresdefault.jpg","width":1280,"height":720}]}`,
+			wantTitle:     "새 영상 제목",
+			wantStatus:    "새 영상",
+			wantAlarm:     "새 영상",
+			wantTimeLeft:  "새 영상",
+			wantURL:       "https://www.youtube.com/watch?v=video000001",
+			wantThumbnail: "https://i.ytimg.com/vi/video000001/maxresdefault.jpg",
 		},
 		{
-			name:         "new short",
-			kind:         domain.OutboxKindNewShort,
-			payload:      `{"video_id":"short000001","title":"쇼츠 제목"}`,
-			wantTitle:    "쇼츠 제목",
-			wantStatus:   "쇼츠",
-			wantAlarm:    "쇼츠 알림",
-			wantTimeLeft: "새 쇼츠",
-			wantURL:      "https://www.youtube.com/shorts/short000001",
+			name:          "new short",
+			kind:          domain.OutboxKindNewShort,
+			payload:       `{"video_id":"short000001","title":"쇼츠 제목","thumbnail":[{"url":"//i.ytimg.com/vi/short000001/hqdefault.jpg","width":480,"height":360}]}`,
+			wantTitle:     "쇼츠 제목",
+			wantStatus:    "쇼츠",
+			wantAlarm:     "쇼츠 알림",
+			wantTimeLeft:  "새 쇼츠",
+			wantURL:       "https://www.youtube.com/shorts/short000001",
+			wantThumbnail: "https://i.ytimg.com/vi/short000001/hqdefault.jpg",
 		},
 	}
 	for _, tc := range testCases {
@@ -260,7 +313,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T
 			assert.True(t, processed)
 			require.Len(t, sender.karingRequests, 1)
 			req := sender.karingRequests[0]
-			assert.Equal(t, int64(133220), req.TemplateID)
+			assert.Equal(t, int64(133266), req.TemplateID)
 			assert.Equal(t, tc.wantAlarm, req.ExtraArgs["alarm_title"])
 			assert.Equal(t, tc.wantTimeLeft, req.ExtraArgs["time_left"])
 			require.Len(t, req.Items, 1)
@@ -268,6 +321,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxContentKindsPreserveLabels(t *testing.T
 			assert.Equal(t, tc.wantTitle, item.Title)
 			assert.Equal(t, tc.wantStatus, string(item.Status))
 			assert.Equal(t, tc.wantURL, item.URL)
+			assert.Equal(t, tc.wantThumbnail, item.ThumbnailURL)
 		})
 	}
 }
@@ -290,11 +344,11 @@ func TestAlarmDispatchRunnerKaringChunksRequestsByFour(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, processed)
 	require.Len(t, sender.karingRequests, 2)
-	assert.Equal(t, int64(133218), sender.karingRequests[0].TemplateID)
+	assert.Equal(t, int64(133267), sender.karingRequests[0].TemplateID)
 	assert.Len(t, sender.karingRequests[0].Items, 4)
 	assert.Equal(t, "Stream 1", sender.karingRequests[0].Items[0].Title)
 	assert.Equal(t, "Stream 4", sender.karingRequests[0].Items[3].Title)
-	assert.Equal(t, int64(133220), sender.karingRequests[1].TemplateID)
+	assert.Equal(t, int64(133266), sender.karingRequests[1].TemplateID)
 	require.Len(t, sender.karingRequests[1].Items, 1)
 	assert.Equal(t, "Stream 5", sender.karingRequests[1].Items[0].Title)
 	assert.Len(t, consumer.markSending, 5)
@@ -308,15 +362,15 @@ func TestAlarmDispatchKaringRequestChunkTemplatesByItemCount(t *testing.T) {
 		wantTemplates []int64
 		wantItemCount []int
 	}{
-		{name: "one", itemCount: 1, wantTemplates: []int64{133220}, wantItemCount: []int{1}},
+		{name: "one", itemCount: 1, wantTemplates: []int64{133266}, wantItemCount: []int{1}},
 		{name: "two", itemCount: 2, wantTemplates: []int64{133223}, wantItemCount: []int{2}},
 		{name: "three", itemCount: 3, wantTemplates: []int64{133222}, wantItemCount: []int{3}},
-		{name: "four", itemCount: 4, wantTemplates: []int64{133218}, wantItemCount: []int{4}},
-		{name: "five", itemCount: 5, wantTemplates: []int64{133218, 133220}, wantItemCount: []int{4, 1}},
-		{name: "six", itemCount: 6, wantTemplates: []int64{133218, 133223}, wantItemCount: []int{4, 2}},
-		{name: "seven", itemCount: 7, wantTemplates: []int64{133218, 133222}, wantItemCount: []int{4, 3}},
-		{name: "eight", itemCount: 8, wantTemplates: []int64{133218, 133218}, wantItemCount: []int{4, 4}},
-		{name: "nine", itemCount: 9, wantTemplates: []int64{133218, 133218, 133220}, wantItemCount: []int{4, 4, 1}},
+		{name: "four", itemCount: 4, wantTemplates: []int64{133267}, wantItemCount: []int{4}},
+		{name: "five", itemCount: 5, wantTemplates: []int64{133267, 133266}, wantItemCount: []int{4, 1}},
+		{name: "six", itemCount: 6, wantTemplates: []int64{133267, 133223}, wantItemCount: []int{4, 2}},
+		{name: "seven", itemCount: 7, wantTemplates: []int64{133267, 133222}, wantItemCount: []int{4, 3}},
+		{name: "eight", itemCount: 8, wantTemplates: []int64{133267, 133267}, wantItemCount: []int{4, 4}},
+		{name: "nine", itemCount: 9, wantTemplates: []int64{133267, 133267, 133266}, wantItemCount: []int{4, 4, 1}},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -357,10 +411,10 @@ func TestAlarmDispatchKaringRequestUsesReceiverRoomID(t *testing.T) {
 }
 
 func TestAlarmDispatchKaringTemplateIDByItemCount(t *testing.T) {
-	assert.Equal(t, int64(133220), alarmDispatchKaringTemplateID(1))
+	assert.Equal(t, int64(133266), alarmDispatchKaringTemplateID(1))
 	assert.Equal(t, int64(133223), alarmDispatchKaringTemplateID(2))
 	assert.Equal(t, int64(133222), alarmDispatchKaringTemplateID(3))
-	assert.Equal(t, int64(133218), alarmDispatchKaringTemplateID(4))
+	assert.Equal(t, int64(133267), alarmDispatchKaringTemplateID(4))
 	assert.Zero(t, alarmDispatchKaringTemplateID(5))
 }
 
@@ -572,6 +626,22 @@ func TestGroupAlarmDispatchEnvelopesSeparatesScheduledMinuteBuckets(t *testing.T
 	groups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{first, second})
 
 	assert.Len(t, groups, 2)
+}
+
+func TestGroupAlarmDispatchEnvelopesForKaringCollapsesScheduledMinuteBuckets(t *testing.T) {
+	firstStart := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	secondStart := firstStart.Add(time.Minute)
+	first := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	second := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	first.Notification.MinutesUntil = 5
+	second.Notification.MinutesUntil = 5
+	first.Notification.Stream.StartScheduled = &firstStart
+	second.Notification.Stream.StartScheduled = &secondStart
+
+	groups := groupAlarmDispatchEnvelopesForKaring([]domain.AlarmQueueEnvelope{first, second}, true)
+
+	require.Len(t, groups, 1)
+	assert.Len(t, groups[0].envelopes, 2)
 }
 
 func TestRenderAlarmDispatchNotificationGroupMatchesLegacyValkeyRenderer(t *testing.T) {

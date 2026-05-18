@@ -109,6 +109,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/kapu/hololive-shared/pkg/util
+github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/park285/llm-kakao-bots/shared-go/pkg/json
 github.com/kapu/hololive-alarm-worker/internal/app/internal/workerapp -> github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle
 github.com/kapu/hololive-alarm-worker/internal/app/runtime -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-alarm-worker/internal/app/runtime -> github.com/park285/llm-kakao-bots/shared-go/pkg/runtime/lifecycle

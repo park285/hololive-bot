@@ -36,12 +36,13 @@ func buildNotificationEgress(
 	if err != nil {
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)
 	}
+	irisSender := egress.NewIrisMessageSender(irisClient)
 
 	runners := []namedRuntimeScheduler{
-		{name: "alarm-dispatch", scheduler: buildAlarmDispatchRunner(infra, egress.NewIrisMessageSender(irisClient), logger)},
+		{name: "alarm-dispatch", scheduler: buildAlarmDispatchRunner(infra, irisSender, logger)},
 		{name: "alarm-dispatch-maintenance", scheduler: buildAlarmDispatchMaintenanceRunner(infra, logger)},
-		{name: "youtube-outbox", scheduler: buildYouTubeOutboxDispatcher(infra, egress.NewIrisMessageSender(irisClient), logger)},
-		{name: "notification-delivery-outbox", scheduler: buildDeliveryOutboxDispatcher(infra, egress.NewIrisMessageSender(irisClient), logger)},
+		{name: "youtube-outbox", scheduler: buildYouTubeOutboxDispatcher(infra, newYouTubeOutboxKaringSender(irisSender), logger)},
+		{name: "notification-delivery-outbox", scheduler: buildDeliveryOutboxDispatcher(infra, irisSender, logger)},
 	}
 	return notificationEgressRunner{
 		runners:      runners,
@@ -110,12 +111,13 @@ func buildAlarmDispatchRunner(
 		}
 	}
 	return &alarmDispatchRunner{
-		consumer:      queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(maxBatch)),
-		sender:        sender,
-		karingEnabled: karingEnabled,
-		consumerMode:  "valkey",
-		maxBatch:      maxBatch,
-		logger:        logger,
+		consumer:           queue.NewConsumer(infra.Cache, logger, queue.WithMaxBatch(maxBatch)),
+		sender:             sender,
+		karingEnabled:      karingEnabled,
+		consumerMode:       "valkey",
+		postSendQuarantine: true,
+		maxBatch:           maxBatch,
+		logger:             logger,
 	}
 }
 
@@ -125,7 +127,7 @@ func parseAlarmDispatchKaringEnabled() bool {
 
 func buildYouTubeOutboxDispatcher(
 	infra *sharedmodules.InfraModule,
-	sender *egress.IrisMessageSender,
+	sender delivery.MessageSender,
 	logger *slog.Logger,
 ) runtimeAlarmScheduler {
 	if !parseBoolEnv("YOUTUBE_OUTBOX_DISPATCHER_ENABLED", false) {
