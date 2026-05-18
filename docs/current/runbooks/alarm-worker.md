@@ -99,5 +99,6 @@ curl http://127.0.0.1:30007/health
 ## Related contracts
 
 - `../contracts/alarm.md`
+- `../contracts/karing-kakaolink.md`
 - `../contracts/settings.md`
 - `../QUEUE_AND_PUBSUB_CONTRACTS.md`

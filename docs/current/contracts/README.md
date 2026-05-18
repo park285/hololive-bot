@@ -12,6 +12,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `trigger.manual` - manual notification trigger HTTP JSON
 - `alarm.http` - alarm internal HTTP JSON
 - `alarm.dispatch` - alarm dispatch Valkey queue/retry/DLQ
+- `karing.kakaolink` - alarm-worker to Iris Karing KakaoLink template send
 - `settings.update` - settings/config update Valkey Pub/Sub
 - `iris.webhook` - Iris external webhook/send boundary
 
@@ -21,6 +22,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `majorevent.md` - major event subscription HTTP JSON
 - `trigger.md` - manual notification trigger HTTP JSON
 - `alarm.md` - alarm HTTP API and alarm dispatch queue
+- `karing-kakaolink.md` - Karing KakaoLink template ID, variables, links, and smoke-test contract
 - `settings.md` - settings/config update Pub/Sub
 - `iris-boundary.md` - Iris external boundary
 
