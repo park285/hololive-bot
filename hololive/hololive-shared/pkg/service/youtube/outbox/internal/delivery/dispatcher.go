@@ -23,6 +23,7 @@ package delivery
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -86,6 +87,7 @@ type Dispatcher struct {
 	delivery  *DeliveryRepository
 	telemetry *DeliveryTelemetryRepository
 	formatter *MessageFormatter
+	karingMu  sync.Mutex
 	started   atomic.Bool
 }
 

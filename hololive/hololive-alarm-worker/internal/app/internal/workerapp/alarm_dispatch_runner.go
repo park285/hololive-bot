@@ -58,7 +58,7 @@ func (r alarmDispatchRunner) runOnce(ctx context.Context) (bool, error) {
 	if len(envelopes) == 0 {
 		return false, nil
 	}
-	return true, r.dispatchGroups(ctx, groupAlarmDispatchEnvelopes(envelopes))
+	return true, r.dispatchGroups(ctx, groupAlarmDispatchEnvelopesForKaring(envelopes, r.karingEnabled))
 }
 
 func (r alarmDispatchRunner) dispatchGroups(ctx context.Context, groups []alarmDispatchGroup) error {
@@ -165,10 +165,24 @@ type alarmDispatchGroup struct {
 }
 
 func groupAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) []alarmDispatchGroup {
+	return groupAlarmDispatchEnvelopesByKey(envelopes, alarmDispatchGroupKey)
+}
+
+func groupAlarmDispatchEnvelopesForKaring(envelopes []domain.AlarmQueueEnvelope, karingEnabled bool) []alarmDispatchGroup {
+	if !karingEnabled {
+		return groupAlarmDispatchEnvelopes(envelopes)
+	}
+	return groupAlarmDispatchEnvelopesByKey(envelopes, alarmDispatchKaringGroupKey)
+}
+
+func groupAlarmDispatchEnvelopesByKey(
+	envelopes []domain.AlarmQueueEnvelope,
+	keyFunc func(domain.AlarmQueueEnvelope) string,
+) []alarmDispatchGroup {
 	groups := make([]alarmDispatchGroup, 0, len(envelopes))
 	index := map[string]int{}
 	for _, envelope := range envelopes {
-		key := alarmDispatchGroupKey(envelope)
+		key := keyFunc(envelope)
 		groupIndex, ok := index[key]
 		if !ok {
 			index[key] = len(groups)
@@ -210,6 +224,18 @@ func alarmDispatchGroupKey(envelope domain.AlarmQueueEnvelope) string {
 		return fmt.Sprintf("%s|scheduled|%d", envelope.Notification.RoomID, minuteBucket)
 	}
 	return fmt.Sprintf("%s|minutes|%d", envelope.Notification.RoomID, envelope.Notification.MinutesUntil)
+}
+
+func alarmDispatchKaringGroupKey(envelope domain.AlarmQueueEnvelope) string {
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
+		return alarmDispatchGroupKey(envelope)
+	}
+	return fmt.Sprintf(
+		"%s|karing|%s|minutes|%d",
+		envelope.Notification.RoomID,
+		envelope.Notification.AlarmType,
+		envelope.Notification.MinutesUntil,
+	)
 }
 
 func minAlarmDispatchMinutes(current, next int) int {

@@ -6,5 +6,6 @@ trigger.manual|llm-scheduler|admin-api|http_json|/internal/trigger/majorevent-we
 alarm.http|admin-api|bot,admin-api|http_json|/internal/alarm/*|hololive/hololive-shared/pkg/service/alarm|docs/current/contracts/alarm.md
 alarm.dispatch|alarm-worker|alarm-worker|valkey_queue|alarm:dispatch:queue;alarm:dispatch:retry;alarm:dispatch:dlq|hololive/hololive-shared/pkg/contracts/alarm|docs/current/contracts/alarm.md
 youtube.outbox.egress|youtube-scraper|alarm-worker|postgres_table|youtube_notification_outbox|hololive/hololive-shared/pkg/service/youtube/outbox|docs/current/contracts/alarm.md
+karing.kakaolink|alarm-worker|iris|external_http_json+kakaolink|/karing/content-list;KakaoLink list templates|external|docs/current/contracts/karing-kakaolink.md
 settings.update|admin-api|bot,alarm-worker,llm-scheduler,stream-ingester,youtube-scraper|valkey_pubsub|config:update|hololive/hololive-shared/pkg/contracts/settings|docs/current/contracts/settings.md
 iris.webhook|iris|bot,alarm-worker|external_http_h3|webhook/reply/send|external|docs/current/contracts/iris-boundary.md
