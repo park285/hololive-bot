@@ -78,6 +78,7 @@ func (c *alarmDispatchRunnerTestConsumer) Requeue(_ context.Context, envelopes [
 
 type alarmDispatchRunnerTestSender struct {
 	fail           bool
+	karingErr      error
 	roomID         string
 	messages       []string
 	karingRoomID   string
@@ -96,6 +97,9 @@ func (s *alarmDispatchRunnerTestSender) SendMessage(_ context.Context, roomID, m
 func (s *alarmDispatchRunnerTestSender) SendKaringContentList(_ context.Context, roomID string, req iris.KaringContentListRequest) error {
 	s.karingRoomID = roomID
 	s.karingRequests = append(s.karingRequests, req)
+	if s.karingErr != nil {
+		return s.karingErr
+	}
 	if s.fail {
 		return errAlarmDispatchRunnerTestSend
 	}
@@ -478,6 +482,26 @@ func TestAlarmDispatchRunnerQuarantinesPGSendFailureAfterMarkSending(t *testing.
 	require.Len(t, consumer.quarantined, 1)
 	assert.Contains(t, consumer.quarantineReason, errAlarmDispatchRunnerTestSend.Error())
 	assert.Empty(t, consumer.scheduledRetry)
+	assert.Empty(t, consumer.movedDLQ)
+	assert.Empty(t, consumer.markDispatched)
+}
+
+func TestAlarmDispatchRunnerRetriesKaringBadGatewayAfterMarkSending(t *testing.T) {
+	karingErr := errors.New(`iris send karing content list: send iris karing content list: post /karing/content-list: iris /karing/content-list returned 502: {"message":"karing send failed"}`)
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}}}
+	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
+	runner := alarmDispatchRunner{consumer: consumer, sender: sender, karingEnabled: true, postSendQuarantine: true, maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, consumer.markSending, 1)
+	require.Len(t, consumer.scheduledRetry, 1)
+	require.NotNil(t, consumer.scheduledRetry[0].Retry)
+	assert.Equal(t, 1, consumer.scheduledRetry[0].Retry.Attempt)
+	assert.Contains(t, consumer.scheduledRetry[0].Retry.LastError, "/karing/content-list returned 502")
+	assert.Empty(t, consumer.quarantined)
 	assert.Empty(t, consumer.movedDLQ)
 	assert.Empty(t, consumer.markDispatched)
 }
