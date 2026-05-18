@@ -1,7 +1,10 @@
-name: Architecture Gates
+name: Architecture Gates Trusted
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,13 +13,13 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
-  group: architecture-gates-${{ github.ref }}
+  group: architecture-gates-trusted-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   architecture-gates:
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -86,7 +89,7 @@ jobs:
 
   alarm-dispatch-postgres-integration:
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     services:
       postgres:
         image: postgres:16

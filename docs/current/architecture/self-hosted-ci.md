@@ -1,13 +1,16 @@
-# Self-hosted CI
+# Self-hosted CI Boundary
 
-Hololive Bot GitHub Actions jobs run on a repository self-hosted Linux x64
-runner with the custom label `hololive-ci`.
+Hololive Bot GitHub Actions workflows must not run untrusted pull request code on
+repository self-hosted runners. Public or outside-contributor `pull_request`
+workflows use GitHub-hosted `ubuntu-latest` runners so PR-controlled scripts,
+tests, and package lifecycle hooks execute in GitHub-provisioned isolation.
 
-The runner must be registered in GitHub repository settings under
-`Settings` > `Actions` > `Runners`. Register it with the `hololive-ci` custom
-label and install it as a service.
+The historical repository self-hosted Linux x64 runner label is `hololive-ci`.
+Treat that runner as trusted-code only. Do not attach it to `pull_request`,
+`pull_request_target` jobs that check out PR head code, or any workflow that
+executes attacker-modifiable repository scripts.
 
-## Runner prerequisites
+## Trusted runner prerequisites
 
 - Linux x64 host with outbound HTTPS access to GitHub.
 - `bash`, `git`, `python3`, `unzip`, `strings`, `sudo`, `rg`, and Docker.
@@ -17,9 +20,17 @@ label and install it as a service.
 - Rust toolchains, or permission for `dtolnay/rust-toolchain` to install them.
 - Node.js 22, or permission for `actions/setup-node` to install it.
 
+## Workflow split
+
+- `*.yml` workflows that include `pull_request` run on `ubuntu-latest`.
+- `*-trusted.yml` workflows run equivalent trusted `push` and
+  `workflow_dispatch` gates on `[self-hosted, linux, x64, hololive-ci]`.
+- Do not add `pull_request` triggers to `*-trusted.yml` workflows.
+
 ## Blocking gates
 
-The `Verify` workflow provides the repository-level closeout gate:
+The `Verify` and `Verify Trusted` workflows provide the repository-level
+closeout gate:
 
 - `actionlint` for workflow syntax and custom runner label validation.
 - `scripts/ci/local-ci.sh` for architecture contracts, admin-dashboard
@@ -29,5 +40,7 @@ The `Verify` workflow provides the repository-level closeout gate:
 - A final `verify` job fails the workflow when any required gate fails or is
   cancelled.
 
-Self-hosted runner minutes are not charged as GitHub-hosted Actions minutes,
-but artifact and cache storage still count toward GitHub Actions storage usage.
+Self-hosted runner minutes are not charged as GitHub-hosted Actions minutes, but
+that cost saving is not a security control. Use self-hosted capacity only for
+trusted branch or manual operations where the checked-out code is already
+trusted.

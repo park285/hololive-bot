@@ -1,13 +1,16 @@
-name: Verify
+name: Verify Trusted
 
 on:
-  pull_request:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 concurrency:
-  group: verify-${{ github.ref }}
+  group: verify-trusted-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -18,7 +21,7 @@ env:
 
 jobs:
   actionlint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 10
 
     steps:
@@ -32,7 +35,7 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
   repository-quality-gate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 90
     services:
       postgres:
@@ -100,7 +103,7 @@ jobs:
       - actionlint
       - repository-quality-gate
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 10
 
     steps:

@@ -1,7 +1,9 @@
-name: Admin Dashboard Frontend
+name: Admin Dashboard Frontend Trusted
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
     paths:
       - 'admin-dashboard/frontend/**'
       - 'admin-dashboard/backend/src/**'
@@ -10,6 +12,7 @@ on:
       - 'admin-dashboard/backend/docs/swagger.json'
       - 'admin-dashboard/backend/Cargo.toml'
       - 'admin-dashboard/backend/Cargo.lock'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,7 +22,7 @@ env:
 
 jobs:
   frontend-quality:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 20
     defaults:
       run:

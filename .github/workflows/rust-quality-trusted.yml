@@ -1,15 +1,18 @@
-name: Rust Quality Gates
+name: Rust Quality Gates Trusted
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
     paths:
       - 'admin-dashboard/backend/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: rust-quality-${{ github.ref }}
+  group: rust-quality-trusted-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -20,7 +23,7 @@ env:
 jobs:
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6.0.2
@@ -31,7 +34,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6.0.2
@@ -45,7 +48,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6.0.2
@@ -57,7 +60,7 @@ jobs:
 
   deny:
     name: Dependency Audit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, hololive-ci]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.2
