@@ -1002,13 +1002,13 @@ func TestPendingPublishedAtResolver_SkipsCandidateWhenRemainingRunBudgetIsTooSma
 	resolveCalls := 0
 	resolver := &PendingPublishedAtResolver{
 		db:               db,
-		client:           newShortPublishedAtResolverDelayedClient(t, publishedAt, 80*time.Millisecond, &resolveCalls),
+		client:           newShortPublishedAtResolverDelayedClient(t, publishedAt, 180*time.Millisecond, &resolveCalls),
 		routeDecider:     func(NotificationRouteRequest) bool { return true },
 		interval:         15 * time.Second,
 		batchSize:        2,
 		maxResolvePerRun: 2,
-		maxRunDuration:   150 * time.Millisecond,
-		resolveTimeout:   100 * time.Millisecond,
+		maxRunDuration:   480 * time.Millisecond,
+		resolveTimeout:   400 * time.Millisecond,
 		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
