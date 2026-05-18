@@ -146,18 +146,6 @@ func resolveAlarmDispatchKaringChannelName(notification domain.AlarmNotification
 	return fallback
 }
 
-func resolveAlarmDispatchKaringStatus(notification domain.AlarmNotification) iris.KaringStreamStatus {
-	if notification.Stream != nil {
-		if notification.Stream.Status == domain.StreamStatusLive || notification.Stream.StartActual != nil {
-			return iris.KaringStreamStatusLive
-		}
-	}
-	if notification.MinutesUntil > 0 {
-		return iris.KaringStreamStatusUpcoming
-	}
-	return iris.KaringStreamStatusLive
-}
-
 func resolveAlarmDispatchKaringStartAt(stream *domain.Stream) string {
 	if stream == nil {
 		return ""
