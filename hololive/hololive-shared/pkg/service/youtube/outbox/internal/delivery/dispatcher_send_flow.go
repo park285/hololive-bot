@@ -1,6 +1,8 @@
 package delivery
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -99,4 +101,15 @@ func deliveryFailureReason(err error) string {
 		return "dedupe key"
 	}
 	return "send message"
+}
+
+func deliveryClientRequestID(roomID string, dedupeKeys []string) string {
+	parts := make([]string, 0, len(dedupeKeys)+2)
+	parts = append(parts, "youtube-outbox-delivery-v1")
+	parts = append(parts, strings.TrimSpace(roomID))
+	for i := range dedupeKeys {
+		parts = append(parts, strings.TrimSpace(dedupeKeys[i]))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return "hololive-outbox:" + hex.EncodeToString(sum[:16])
 }

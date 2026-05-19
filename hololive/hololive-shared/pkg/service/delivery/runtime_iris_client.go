@@ -56,6 +56,10 @@ func (c *RuntimeIrisClient) SendMessage(ctx context.Context, room, message strin
 	return client.SendMessage(ctx, room, message, opts...)
 }
 
+func (c *RuntimeIrisClient) SendMessageWithClientRequestID(ctx context.Context, room, message, clientRequestID string) error {
+	return c.SendMessage(ctx, room, message, iris.WithClientRequestID(clientRequestID))
+}
+
 func (c *RuntimeIrisClient) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	client, err := c.currentClient()
 	if err != nil {

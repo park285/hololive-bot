@@ -23,6 +23,13 @@ func (s youtubeOutboxKaringSender) SendMessage(ctx context.Context, roomID, mess
 	return s.sender.SendMessage(ctx, roomID, message)
 }
 
+func (s youtubeOutboxKaringSender) SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error {
+	if s.sender == nil {
+		return fmt.Errorf("youtube outbox karing sender: sender is nil")
+	}
+	return s.sender.SendMessageWithClientRequestID(ctx, roomID, message, clientRequestID)
+}
+
 func (s youtubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload domain.YouTubeOutboxDispatchPayload) error {
 	if s.sender == nil {
 		return fmt.Errorf("youtube outbox karing sender: sender is nil")

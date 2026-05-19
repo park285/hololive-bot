@@ -77,17 +77,28 @@ func (c *alarmDispatchRunnerTestConsumer) Requeue(_ context.Context, envelopes [
 }
 
 type alarmDispatchRunnerTestSender struct {
-	fail           bool
-	karingErr      error
-	roomID         string
-	messages       []string
-	karingRoomID   string
-	karingRequests []iris.KaringContentListRequest
+	fail             bool
+	karingErr        error
+	roomID           string
+	messages         []string
+	clientRequestIDs []string
+	karingRoomID     string
+	karingRequests   []iris.KaringContentListRequest
 }
 
 func (s *alarmDispatchRunnerTestSender) SendMessage(_ context.Context, roomID, message string) error {
 	s.roomID = roomID
 	s.messages = append(s.messages, message)
+	if s.fail {
+		return errAlarmDispatchRunnerTestSend
+	}
+	return nil
+}
+
+func (s *alarmDispatchRunnerTestSender) SendMessageWithClientRequestID(_ context.Context, roomID, message, clientRequestID string) error {
+	s.roomID = roomID
+	s.messages = append(s.messages, message)
+	s.clientRequestIDs = append(s.clientRequestIDs, clientRequestID)
 	if s.fail {
 		return errAlarmDispatchRunnerTestSend
 	}
@@ -124,6 +135,8 @@ func TestAlarmDispatchRunnerRunOnceSendsKaringContentListRequest(t *testing.T) {
 	assert.Equal(t, "room-1", sender.karingRoomID)
 	require.Len(t, sender.karingRequests, 1)
 	req := sender.karingRequests[0]
+	require.NotNil(t, req.ClientRequestID)
+	assert.Contains(t, *req.ClientRequestID, "hololive-alarm:")
 	assert.Equal(t, "room-1", req.ReceiverName)
 	assert.Equal(t, int64(133266), req.TemplateID)
 	assert.Equal(t, "라이브 시작", req.ExtraArgs["alarm_title"])
@@ -433,6 +446,8 @@ func TestAlarmDispatchRunnerRunOnceSendsAndMarksDispatched(t *testing.T) {
 	assert.True(t, processed)
 	assert.Equal(t, "room-1", sender.roomID)
 	require.Len(t, sender.messages, 1)
+	require.Len(t, sender.clientRequestIDs, 1)
+	assert.Contains(t, sender.clientRequestIDs[0], "hololive-alarm:")
 	assert.Contains(t, sender.messages[0], "방송 시작")
 	assert.Empty(t, sender.karingRequests)
 	assert.Len(t, consumer.markSending, 1)

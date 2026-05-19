@@ -42,9 +42,10 @@ import (
 )
 
 type testSender struct {
-	mu       sync.Mutex
-	failRoom map[string]bool
-	messages []string
+	mu               sync.Mutex
+	failRoom         map[string]bool
+	messages         []string
+	clientRequestIDs []string
 }
 
 type sqliteOutboxModel struct {
@@ -90,6 +91,17 @@ func (s *testSender) SendMessage(_ context.Context, roomID, message string) erro
 		return assert.AnError
 	}
 	s.messages = append(s.messages, roomID+":"+message)
+	return nil
+}
+
+func (s *testSender) SendMessageWithClientRequestID(_ context.Context, roomID, message, clientRequestID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failRoom[roomID] {
+		return assert.AnError
+	}
+	s.messages = append(s.messages, roomID+":"+message)
+	s.clientRequestIDs = append(s.clientRequestIDs, clientRequestID)
 	return nil
 }
 
