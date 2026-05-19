@@ -26,6 +26,7 @@ import (
 )
 
 type threadIDContextKey struct{}
+type replyIdentityContextKey struct{}
 
 func withThreadID(ctx context.Context, threadID string) context.Context {
 	id := strings.TrimSpace(threadID)
@@ -42,6 +43,35 @@ func threadIDFromContext(ctx context.Context) (string, bool) {
 	}
 
 	raw := ctx.Value(threadIDContextKey{})
+
+	id, ok := raw.(string)
+	if !ok {
+		return "", false
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", false
+	}
+
+	return id, true
+}
+
+func withReplyIdentity(ctx context.Context, identity string) context.Context {
+	id := strings.TrimSpace(identity)
+	if id == "" {
+		return ctx
+	}
+
+	return context.WithValue(ctx, replyIdentityContextKey{}, id)
+}
+
+func replyIdentityFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+
+	raw := ctx.Value(replyIdentityContextKey{})
 
 	id, ok := raw.(string)
 	if !ok {
