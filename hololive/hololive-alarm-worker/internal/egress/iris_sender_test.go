@@ -47,3 +47,18 @@ func TestIrisMessageSenderFallsBackToReceiverName(t *testing.T) {
 	assert.Equal(t, "room-1", client.karingRequests[0].ReceiverName)
 	assert.Zero(t, client.karingRequests[0].ReceiverRoomID)
 }
+
+func TestIrisMessageSenderPreservesKaringClientRequestID(t *testing.T) {
+	client := &irisSenderTestClient{}
+	sender := NewIrisMessageSender(client)
+	clientRequestID := "hololive-alarm:request-1"
+
+	err := sender.SendKaringContentList(t.Context(), "room-1", iris.KaringContentListRequest{
+		ClientRequestID: &clientRequestID,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, client.karingRequests, 1)
+	require.NotNil(t, client.karingRequests[0].ClientRequestID)
+	assert.Equal(t, clientRequestID, *client.karingRequests[0].ClientRequestID)
+}

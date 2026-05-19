@@ -22,7 +22,10 @@ package delivery
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -33,6 +36,10 @@ import (
 
 type MessageSender interface {
 	SendMessage(ctx context.Context, roomID, message string) error
+}
+
+type ClientRequestMessageSender interface {
+	SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error
 }
 
 type deliveryRepository interface {
@@ -241,7 +248,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		return
 	}
 
-	if err := d.sender.SendMessage(ctx, item.RoomID, p.Message); err != nil {
+	if err := d.sendMessage(ctx, item, p.Message); err != nil {
 		d.logger.Error("Failed to send outbox message",
 			slog.Int64("id", item.ID),
 			slog.String("room_id", item.RoomID),
@@ -255,4 +262,27 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))
 	}
+}
+
+func (d *Dispatcher) sendMessage(ctx context.Context, item *domain.NotificationDeliveryOutbox, message string) error {
+	if sender, ok := d.sender.(ClientRequestMessageSender); ok {
+		return sender.SendMessageWithClientRequestID(ctx, item.RoomID, message, notificationDeliveryClientRequestID(item))
+	}
+	return d.sender.SendMessage(ctx, item.RoomID, message)
+}
+
+func notificationDeliveryClientRequestID(item *domain.NotificationDeliveryOutbox) string {
+	kind := ""
+	contentID := ""
+	roomID := ""
+	if item != nil {
+		kind = string(item.Kind)
+		contentID = item.ContentID
+		roomID = item.RoomID
+	}
+	if contentID == "" && item != nil {
+		contentID = strconv.FormatInt(item.ID, 10)
+	}
+	sum := sha256.Sum256([]byte(kind + "\x00" + contentID + "\x00" + roomID))
+	return "hololive-delivery:" + hex.EncodeToString(sum[:16])
 }

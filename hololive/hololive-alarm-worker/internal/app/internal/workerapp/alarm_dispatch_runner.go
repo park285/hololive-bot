@@ -36,6 +36,10 @@ type alarmDispatchSender interface {
 	SendKaringContentList(ctx context.Context, roomID string, req iris.KaringContentListRequest) error
 }
 
+type alarmDispatchClientRequestSender interface {
+	SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error
+}
+
 type alarmDispatchRunner struct {
 	consumer           alarmDispatchConsumer
 	sender             alarmDispatchSender
@@ -85,13 +89,20 @@ func (r alarmDispatchRunner) dispatchMessageGroup(ctx context.Context, group ala
 	if err := r.consumer.MarkSending(ctx, group.envelopes); err != nil {
 		return fmt.Errorf("mark alarm dispatch sending: %w", err)
 	}
-	if err := r.sender.SendMessage(ctx, group.roomID, message); err != nil {
+	if err := sendAlarmDispatchMessage(ctx, r.sender, group, message); err != nil {
 		return r.persistPostSendingFailure(ctx, group.envelopes, err)
 	}
 	if err := r.consumer.MarkDispatched(ctx, group.envelopes); err != nil {
 		return fmt.Errorf("mark alarm dispatch sent: %w", err)
 	}
 	return nil
+}
+
+func sendAlarmDispatchMessage(ctx context.Context, sender alarmDispatchSender, group alarmDispatchGroup, message string) error {
+	if clientRequestSender, ok := sender.(alarmDispatchClientRequestSender); ok {
+		return clientRequestSender.SendMessageWithClientRequestID(ctx, group.roomID, message, alarmDispatchClientRequestID(group, 0, len(group.envelopes)))
+	}
+	return sender.SendMessage(ctx, group.roomID, message)
 }
 
 func (r alarmDispatchRunner) dispatchKaringContentListGroup(ctx context.Context, group alarmDispatchGroup) error {

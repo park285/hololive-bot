@@ -31,6 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
 type deliveryDispatchResult struct {
@@ -586,7 +587,13 @@ func (d *Dispatcher) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 	}
 	defer cancel()
 
-	if err := d.sender.SendMessage(sendCtx, req.roomID, req.message); err != nil {
+	var err error
+	if sender, ok := d.sender.(messagedelivery.ClientRequestMessageSender); ok {
+		err = sender.SendMessageWithClientRequestID(sendCtx, req.roomID, req.message, deliveryClientRequestID(req.roomID, req.dedupeKeys))
+	} else {
+		err = d.sender.SendMessage(sendCtx, req.roomID, req.message)
+	}
+	if err != nil {
 		if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
 			return fmt.Errorf("send delivery message timed out after %s: %w", d.cfg.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
 		}
