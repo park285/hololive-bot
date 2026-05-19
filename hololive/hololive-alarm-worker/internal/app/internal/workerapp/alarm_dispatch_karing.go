@@ -324,7 +324,7 @@ func buildAlarmDispatchCommunityOutboxKaringContentItem(
 	memberName := resolveAlarmDispatchOutboxMemberName(payload)
 	postID := firstNonEmptyString(data.PostID, item.ContentID)
 	return iris.KaringContentItem{
-		Title:        firstNonEmptyString(communityOutboxTitle(data.ContentText), "커뮤니티 알림"),
+		Title:        firstNonEmptyString(cleanCommunityOutboxTitle(data.ContentText), "커뮤니티 알림"),
 		URL:          fmt.Sprintf("https://www.youtube.com/post/%s", postID),
 		MemberName:   memberName,
 		ChannelName:  memberName,
@@ -394,8 +394,4 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func communityOutboxTitle(value string) string {
-	return cleanCommunityOutboxTitle(value)
 }
