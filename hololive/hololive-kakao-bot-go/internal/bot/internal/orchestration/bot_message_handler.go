@@ -22,6 +22,7 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -52,7 +53,7 @@ func (b *Bot) HandleMessage(ctx context.Context, message *iris.Message) {
 
 	cmdCtx := newCommandContextFromIngress(envelope)
 	cmdCtx.ThreadID = messageThreadID(message)
-	reqCtx := commandRequestContext(ctx, cmdCtx)
+	reqCtx := commandRequestContext(ctx, cmdCtx, message)
 
 	if shouldExecuteAsync(envelope.Parsed.Type) {
 		b.executeCommandAsync(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params, commandType, envelope.ChatID)
@@ -87,11 +88,30 @@ func messageThreadID(message *iris.Message) *string {
 	return &trimmed
 }
 
-func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext) context.Context {
-	if cmdCtx.ThreadID == nil {
-		return ctx
+func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext, message *iris.Message) context.Context {
+	if identity := messageReplyIdentity(message); identity != "" {
+		ctx = withReplyIdentity(ctx, identity)
 	}
-	return withThreadID(ctx, *cmdCtx.ThreadID)
+	if cmdCtx.ThreadID != nil {
+		ctx = withThreadID(ctx, *cmdCtx.ThreadID)
+	}
+	return ctx
+}
+
+func messageReplyIdentity(message *iris.Message) string {
+	if message == nil || message.JSON == nil {
+		return ""
+	}
+	if trimmed := strings.TrimSpace(message.JSON.MessageID); trimmed != "" {
+		return "message:" + trimmed
+	}
+	if trimmed := strings.TrimSpace(message.JSON.ChatLogID); trimmed != "" {
+		return "chat-log:" + trimmed
+	}
+	if message.JSON.SourceLogID != nil {
+		return fmt.Sprintf("source-log:%d", *message.JSON.SourceLogID)
+	}
+	return ""
 }
 
 func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) {
