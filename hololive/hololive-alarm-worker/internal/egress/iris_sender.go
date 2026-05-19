@@ -31,6 +31,16 @@ func (s *IrisMessageSender) SendMessage(ctx context.Context, roomID, message str
 	return nil
 }
 
+func (s *IrisMessageSender) SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error {
+	if s == nil || s.client == nil {
+		return fmt.Errorf("iris message sender: client is nil")
+	}
+	if err := s.client.SendMessage(ctx, roomID, message, iris.WithClientRequestID(clientRequestID)); err != nil {
+		return fmt.Errorf("iris send message: %w", err)
+	}
+	return nil
+}
+
 func (s *IrisMessageSender) SendKaringContentList(ctx context.Context, roomID string, req iris.KaringContentListRequest) error {
 	if s == nil || s.client == nil {
 		return fmt.Errorf("iris message sender: client is nil")

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -80,7 +81,8 @@ func (m *mockDeliveryRepo) Cleanup(ctx context.Context, olderThan time.Duration)
 
 // mockSender: MessageSender mock 구현
 type mockSender struct {
-	sendFn func(ctx context.Context, roomID, message string) error
+	sendFn                func(ctx context.Context, roomID, message string) error
+	sendWithClientRequest func(ctx context.Context, roomID, message, clientRequestID string) error
 }
 
 func (m *mockSender) SendMessage(ctx context.Context, roomID, message string) error {
@@ -88,6 +90,13 @@ func (m *mockSender) SendMessage(ctx context.Context, roomID, message string) er
 		return m.sendFn(ctx, roomID, message)
 	}
 	return nil
+}
+
+func (m *mockSender) SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error {
+	if m.sendWithClientRequest != nil {
+		return m.sendWithClientRequest(ctx, roomID, message, clientRequestID)
+	}
+	return m.SendMessage(ctx, roomID, message)
 }
 
 func makePayload(t *testing.T, msg string) string {
@@ -98,6 +107,44 @@ func makePayload(t *testing.T, msg string) string {
 
 func dispatcherLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func TestProcessItemPassesStableClientRequestID(t *testing.T) {
+	var gotIDs []string
+	sender := &mockSender{
+		sendWithClientRequest: func(_ context.Context, _, _, clientRequestID string) error {
+			gotIDs = append(gotIDs, clientRequestID)
+			return nil
+		},
+	}
+	repo := &mockDeliveryRepo{}
+	dispatcher := NewDispatcher(repo, sender, dispatcherLogger(), DispatcherConfig{})
+	item := &domain.NotificationDeliveryOutbox{
+		ID:        42,
+		Kind:      domain.DeliveryKindMemberNewsWeekly,
+		ContentID: "member-news-2026w20",
+		RoomID:    "room-1",
+		Payload:   makePayload(t, "hello"),
+	}
+
+	dispatcher.processItem(context.Background(), item)
+	dispatcher.processItem(context.Background(), item)
+	otherRoom := *item
+	otherRoom.RoomID = "room-2"
+	dispatcher.processItem(context.Background(), &otherRoom)
+
+	if len(gotIDs) != 3 {
+		t.Fatalf("clientRequestIDs count = %d, want 3", len(gotIDs))
+	}
+	if gotIDs[0] == "" || !strings.HasPrefix(gotIDs[0], "hololive-delivery:") {
+		t.Fatalf("clientRequestID = %q, want hololive-delivery prefix", gotIDs[0])
+	}
+	if gotIDs[0] != gotIDs[1] {
+		t.Fatalf("clientRequestID repeat = %q, want %q", gotIDs[1], gotIDs[0])
+	}
+	if gotIDs[2] == gotIDs[0] {
+		t.Fatalf("clientRequestID for different room reused %q", gotIDs[2])
+	}
 }
 
 func TestProcessOnce_E2E(t *testing.T) {

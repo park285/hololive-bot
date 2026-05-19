@@ -389,6 +389,45 @@ func TestSendDeliveryMessageRejectsBlankDedupeKeyWithoutSending(t *testing.T) {
 	}
 }
 
+func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
+	t.Parallel()
+
+	sender := &testSender{failRoom: map[string]bool{}}
+	dispatcher := newTestDispatcherForSend(t, sender)
+	req := deliverySendRequest{
+		roomID:     "room1",
+		message:    "message",
+		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-1"},
+	}
+
+	if err := dispatcher.sendDeliveryMessage(context.Background(), req); err != nil {
+		t.Fatalf("sendDeliveryMessage() error = %v", err)
+	}
+	if err := dispatcher.sendDeliveryMessage(context.Background(), req); err != nil {
+		t.Fatalf("sendDeliveryMessage() repeat error = %v", err)
+	}
+	otherRoomReq := req
+	otherRoomReq.roomID = "room2"
+	if err := dispatcher.sendDeliveryMessage(context.Background(), otherRoomReq); err != nil {
+		t.Fatalf("sendDeliveryMessage() other room error = %v", err)
+	}
+
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+	if len(sender.clientRequestIDs) != 3 {
+		t.Fatalf("clientRequestIDs count = %d, want 3", len(sender.clientRequestIDs))
+	}
+	if sender.clientRequestIDs[0] == "" || !strings.HasPrefix(sender.clientRequestIDs[0], "hololive-outbox:") {
+		t.Fatalf("clientRequestID = %q, want hololive-outbox prefix", sender.clientRequestIDs[0])
+	}
+	if sender.clientRequestIDs[0] != sender.clientRequestIDs[1] {
+		t.Fatalf("clientRequestID repeat = %q, want %q", sender.clientRequestIDs[1], sender.clientRequestIDs[0])
+	}
+	if sender.clientRequestIDs[2] == sender.clientRequestIDs[0] {
+		t.Fatalf("clientRequestID for different room reused %q", sender.clientRequestIDs[2])
+	}
+}
+
 func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 	t.Parallel()
 

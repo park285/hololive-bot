@@ -1,6 +1,8 @@
 package workerapp
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -35,14 +37,51 @@ func buildAlarmDispatchKaringContentListRequests(group alarmDispatchGroup) ([]ir
 		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(items))
 		chunk := items[start:end]
 		req := iris.KaringContentListRequest{
-			Items:      chunk,
-			ExtraArgs:  buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
-			TemplateID: alarmDispatchKaringTemplateID(len(chunk)),
+			ClientRequestID: stringPtr(alarmDispatchClientRequestID(group, start, end)),
+			Items:           chunk,
+			ExtraArgs:       buildAlarmDispatchKaringExtraArgs(group, len(chunk)),
+			TemplateID:      alarmDispatchKaringTemplateID(len(chunk)),
 		}
 		applyAlarmDispatchKaringReceiver(&req, group.roomID)
 		requests = append(requests, req)
 	}
 	return requests, nil
+}
+
+func alarmDispatchClientRequestID(group alarmDispatchGroup, start, end int) string {
+	parts := []string{
+		"alarm-dispatch-v1",
+		strings.TrimSpace(group.roomID),
+		strconv.Itoa(start),
+		strconv.Itoa(end),
+	}
+	for _, envelope := range group.envelopes {
+		parts = append(parts, alarmDispatchEnvelopeClientRequestIDParts(envelope)...)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return "hololive-alarm:" + hex.EncodeToString(sum[:16])
+}
+
+func alarmDispatchEnvelopeClientRequestIDParts(envelope domain.AlarmQueueEnvelope) []string {
+	parts := make([]string, 0, 6+len(envelope.ClaimKeys))
+	parts = append(parts,
+		strconv.FormatInt(envelope.DispatchOutboxID, 10),
+		string(envelope.SourceKind),
+		string(envelope.Notification.AlarmType),
+		strconv.Itoa(envelope.Notification.MinutesUntil),
+	)
+	parts = append(parts, envelope.ClaimKeys...)
+	if envelope.YouTubeOutbox != nil {
+		parts = append(parts, envelope.YouTubeOutbox.Identity())
+		for _, item := range envelope.YouTubeOutbox.Items {
+			parts = append(parts, strconv.FormatInt(item.OutboxID, 10), item.ContentID)
+		}
+	}
+	return parts
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func applyAlarmDispatchKaringReceiver(req *iris.KaringContentListRequest, roomID string) {
